@@ -500,23 +500,31 @@ test("the Colours tab adds a palette to the presets", async ({
   });
   const { searches } = await stubAssets(page, {
     sources: [colorSwoop, uiGradients],
-    answer: () => ({
-      pages: [
-        answered("colorswoop", [
-          {
-            ...result("colorswoop:one", "Cloud Dancer"),
-            kind: "palette",
-            licence: "unknown",
-            sourceUrl: "https://colorswoop.com/",
-            preset: {
-              kind: "palette",
-              colours: ["rgb(17, 34, 51)", "rgb(68, 85, 102)"],
-            },
+    // Only the filtered question — exactly the palette source — answers rows:
+    // an answer that outlived the filter would let the row and the action be
+    // read before the filter's own answer had landed.
+    answer: (request) =>
+      request.enabled.length === 1 && request.enabled[0] === "colorswoop"
+        ? {
+            pages: [
+              answered("colorswoop", [
+                {
+                  ...result("colorswoop:one", "Cloud Dancer"),
+                  kind: "palette",
+                  licence: "unknown",
+                  sourceUrl: "https://colorswoop.com/",
+                  preset: {
+                    kind: "palette",
+                    colours: [hexOf(17, 34, 51), hexOf(68, 85, 102)],
+                  },
+                },
+              ]),
+              answered("uigradients", []),
+            ],
+          }
+        : {
+            pages: [answered("colorswoop", []), answered("uigradients", [])],
           },
-        ]),
-        answered("uigradients", []),
-      ],
-    }),
   });
   await openFinder(page);
   await page.locator('[data-yunari-asset-tab="colour"]').click();
@@ -527,13 +535,16 @@ test("the Colours tab adds a palette to the presets", async ({
     .poll(() => searches.at(-1)?.enabled ?? [])
     .toEqual(["colorswoop"]);
 
-  await page.locator('[data-yunari-asset-row="colorswoop:one"]').click();
+  const row = page.locator('[data-yunari-asset-row="colorswoop:one"]');
+  await expect(row).toBeVisible();
+  await row.click();
   await page.locator('[data-yunari-asset-action=""]').click();
 
   const stored = await page.evaluate(() =>
     localStorage.getItem("yunari.editor.presets"),
   );
   expect(stored).toContain(hexOf(17, 34, 51));
+  expect(stored).toContain(hexOf(68, 85, 102));
   expect(bytesAsked).toBe(0);
 });
 
