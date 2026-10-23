@@ -84,7 +84,44 @@ describe("colorswoopSource", () => {
     await colorswoopSource.search("", 2, ctx);
 
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher).toHaveBeenCalledWith(CATALOGUE_URL, expect.anything());
+    expect(fetcher).toHaveBeenCalledWith(CATALOGUE_URL);
+  });
+
+  it("keeps the catalogue load when the search that started it is aborted", async () => {
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // Fails on abort the way a real fetch does, so a borrowed request signal
+    // would take the shared load down with the first search.
+    const fetcher = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new Error("aborted")),
+          );
+          void gate.then(() =>
+            resolve(new Response(catalogue([SUNSET]), { status: 200 })),
+          );
+        }),
+    ) as unknown as typeof fetch;
+
+    const first = new AbortController();
+    const firstCtx = { ...context(fetcher), signal: first.signal };
+    const secondCtx = context(fetcher);
+
+    const firstSearch = colorswoopSource.search("", 1, firstCtx);
+    // Mark it handled now: the point is the second search, not this one.
+    firstSearch.catch(() => undefined);
+    const secondSearch = colorswoopSource.search("", 1, secondCtx);
+
+    first.abort();
+    release();
+
+    const page = await secondSearch;
+    expect(page.results.map((r) => r.name)).toEqual(["Sunset Pair"]);
+    await expect(firstSearch).resolves.toMatchObject({ totalPages: 1 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("clears a failed fetch so the next search retries", async () => {

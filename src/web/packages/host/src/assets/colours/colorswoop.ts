@@ -57,7 +57,9 @@ function paletteOf(value: unknown): Palette | undefined {
 }
 
 async function load(ctx: SourceContext): Promise<readonly Palette[]> {
-  const response = await ctx.fetch(CATALOGUE_URL, { signal: ctx.signal });
+  // No request signal: the catalogue is process-lived, so one cancelled search
+  // must not abort the load every other search is waiting on.
+  const response = await ctx.fetch(CATALOGUE_URL);
   if (!response.ok) {
     throw new Error(`ColorSwoop catalogue answered ${response.status}`);
   }
