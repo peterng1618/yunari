@@ -128,14 +128,12 @@ export function spokenIn(element: Element): string[] {
     // driver's hook, not a word of copy.
     if (named.getAttribute("aria-label") === named.getAttribute("data-testid"))
       continue;
-    // A row whose content is a value — a select's chosen token, a preset
-    // row's own colour and library name — is data, exactly as the button half
-    // below excludes it.
-    if (
-      named.hasAttribute("data-yunari-value") ||
-      named.querySelector("[data-yunari-value]") !== null
-    )
-      continue;
+    // A control that *is* a value — the picker's preset row, whose own
+    // `aria-label` is the library's name for that colour — carries
+    // `data-yunari-value` itself, the way the button half below excludes it.
+    // The attribute, not a value hidden somewhere inside: the picker trigger
+    // also contains a value and its accessible name is still copy.
+    if (named.hasAttribute("data-yunari-value")) continue;
     // A `kbd`'s label is the chord the binding table prints, not a word.
     if (named.closest("kbd") !== null) continue;
     const name = named.getAttribute("aria-label") ?? "";

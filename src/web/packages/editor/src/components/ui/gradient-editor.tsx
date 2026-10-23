@@ -108,7 +108,11 @@ export function GradientEditor({
           an author wants anyway. */}
       <div className="flex flex-wrap gap-3">
         {stops.map((stop, index) => (
-          <div key={index} className="flex items-center gap-1">
+          <div
+            key={index}
+            data-yunari-gradient-stop=""
+            className="flex items-center gap-1"
+          >
             <ColourPicker
               label={`${label} stop ${index + 1}`}
               value={stop.color}

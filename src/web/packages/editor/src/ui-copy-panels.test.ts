@@ -150,19 +150,22 @@ it("leaves the three panels with no copy of their own", async () => {
   // what the pane offers (`solid`, `gradient`), read off the opened list.
   expect(paintKinds).toHaveLength(2);
   const owned = new Set(copy());
-  // The picker's row label is its caller's name for a colour: the paint pane
-  // passes a copy word, while the gradient editor composes "Gradient stop 1"
-  // from a stop's index, which is data. The picker's own accessible name is
-  // read where it is mounted on its own, in `ui-copy-surfaces.test.ts`.
-  const pickerTriggers = new Set(
+  // The gradient editor names each stop's picker "Gradient stop 1" from the
+  // stop's index, which is data; Task 8 rewrites that name. Narrowed to that
+  // surface so the paint pane's own copy word for the picker stays in the net.
+  const deferredPickerLabels = new Set(
     Array.from(
-      root.querySelectorAll<HTMLElement>('[data-testid="picker-trigger"]'),
+      root.querySelectorAll<HTMLElement>(
+        '[data-yunari-gradient-stop] [data-testid="picker-trigger"]',
+      ),
       (trigger) => trigger.id,
     ),
   );
   const spoken = [
     ...Array.from(root.querySelectorAll("label"))
-      .filter((label) => !pickerTriggers.has(label.getAttribute("for") ?? ""))
+      .filter(
+        (label) => !deferredPickerLabels.has(label.getAttribute("for") ?? ""),
+      )
       .map((label) => label.textContent),
     // Two kinds of button are excluded, both because their text is data. A token
     // well prints the document's own token name and usage figure; a select's
