@@ -192,6 +192,8 @@ export type FieldView =
 export interface RunOptionView {
   readonly id: string;
   readonly name: string;
+  /** The heading a reading sits under; absent for prompts and flat lists. */
+  readonly group?: string;
 }
 
 /**

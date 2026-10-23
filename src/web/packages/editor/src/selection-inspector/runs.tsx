@@ -7,10 +7,12 @@ import type {
 import {
   describeSemanticKey,
   formatInstant,
+  groupDescriptorsByFamily,
   instantIn,
   knownTimeZones,
   paletteTokenOptions,
   SEMANTIC_KEYS,
+  type SemanticKeyDescriptor,
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useState } from "react";
@@ -56,6 +58,13 @@ interface RunsProjection {
    * reads `textRunsOf` from here.
    */
   readonly swatchValue: (ref: string) => string | undefined;
+  /**
+   * The readings the picker offers: the host's catalogue where one was
+   * supplied, the built-in table otherwise. A plain array because the caller
+   * has already pulled it for this projection, which is also what makes a
+   * refreshed catalogue visible on the next render.
+   */
+  readonly descriptors?: readonly SemanticKeyDescriptor[];
 }
 
 /** A run's description for a list: what it is, and what it says. */
@@ -272,6 +281,18 @@ export function projectRuns(
     ...pinnedZones.filter((zone) => !zones.includes(zone)),
     ...zones,
   ];
+  // Grouped rather than flat: a discovered key sits under the heading of its
+  // own family instead of at the end of the list, and consecutive entries
+  // sharing a group render as one run.
+  const sources = [
+    ...groupDescriptorsByFamily(context.descriptors ?? SEMANTIC_KEYS),
+  ].flatMap(([group, descriptors]) =>
+    descriptors.map((descriptor) => ({
+      id: descriptor.key,
+      name: descriptor.label,
+      group,
+    })),
+  );
 
   const swatchValues: Record<string, string> = {};
   for (const option of palettes) {
@@ -301,13 +322,7 @@ export function projectRuns(
         name,
       }),
     ),
-    sources: [
-      { id: "", name: uiCopy.inspectorFields.staticText },
-      ...SEMANTIC_KEYS.map((descriptor) => ({
-        id: descriptor.key,
-        name: descriptor.label,
-      })),
-    ],
+    sources: [{ id: "", name: uiCopy.inspectorFields.staticText }, ...sources],
     zones: withPinned,
     bindable,
     removable: runs.length > 1,

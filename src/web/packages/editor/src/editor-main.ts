@@ -37,6 +37,7 @@ import {
 } from "./new-fabric-theme.js";
 import { createPublisher, type PublishSwitch } from "./publish-client.js";
 import { DEFAULT_RUN_DISPLAY_MODE } from "./run-placeholder.js";
+import { createSensorCatalogue } from "./sensor-catalogue.js";
 import { loadStarterBackdrop } from "./starter-backdrop.js";
 import { importThemePackage } from "./theme-import.js";
 import { createThemeLibraryClient } from "./theme-library-client.js";
@@ -63,6 +64,11 @@ async function start(): Promise<void> {
   // folder. The client reads empty from a host without the store, so a
   // standalone editor still browses the whole catalogue.
   const favoritesClient = createFavoritesClient();
+  // The readings the pickers offer: the built-in vocabulary until the host's
+  // sensor wire answers. One per editor, so a test can hand in its own and a
+  // disconnected editor simply keeps the table.
+  const sensors = createSensorCatalogue();
+  void sensors.refresh();
   let mode: "preview" | "live" = "preview";
   let active: ActiveEditor | undefined;
   let chartRefreshRate: ChartRefreshRate = 30;
@@ -288,6 +294,7 @@ async function start(): Promise<void> {
       },
       libraryClient,
       favoritesClient,
+      sensors,
       onBindingsChange: replaceSource,
       onNew: async (answer: NewDocumentAnswer) => {
         const fresh = createBlankFabricTheme(answer.size);

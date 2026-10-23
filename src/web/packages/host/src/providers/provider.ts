@@ -1,4 +1,10 @@
-import type { SampleEntry, SensorTier } from "@yunari/renderer-core";
+import type {
+  SampleEntry,
+  SemanticKeyDescriptor,
+  SensorTier,
+  UnitKind,
+  ValueKind,
+} from "@yunari/renderer-core";
 import type { DeviceAssignment } from "./lhm-mapping.js";
 
 /** Provider boundary: providers acquire; the host schedules and owns history. */
@@ -14,6 +20,42 @@ export interface SensorDescriptor {
   readonly label: string;
   readonly unit?: string;
   readonly tier: SensorTier;
+  /** Picker grouping; a provider may contribute a family of its own. */
+  readonly family?: string;
+  /** The conversion contract the vocabulary declares for this key. */
+  readonly unitKind?: UnitKind;
+  /** Display units a binding may pin, besides `unit`. */
+  readonly displayUnits?: readonly string[];
+  readonly valueKind?: ValueKind;
+  /** The binding renders an image URL rather than a value. */
+  readonly mediaKind?: "image";
+}
+
+/**
+ * The descriptive half of a vocabulary entry, as every shipped provider
+ * forwards it. One spelling rather than three maps repeating the same six
+ * conditional spreads.
+ */
+export function descriptorFieldsOf(
+  declared: SemanticKeyDescriptor,
+): Pick<
+  SensorDescriptor,
+  "family" | "unit" | "unitKind" | "displayUnits" | "valueKind" | "mediaKind"
+> {
+  return {
+    family: declared.family,
+    ...(declared.unit === undefined ? {} : { unit: declared.unit }),
+    ...(declared.unitKind === undefined ? {} : { unitKind: declared.unitKind }),
+    ...(declared.displayUnits === undefined
+      ? {}
+      : { displayUnits: declared.displayUnits }),
+    ...(declared.valueKind === undefined
+      ? {}
+      : { valueKind: declared.valueKind }),
+    ...(declared.mediaKind === undefined
+      ? {}
+      : { mediaKind: declared.mediaKind }),
+  };
 }
 
 /** Current provider availability; messages may reach a browser and must be redacted. */

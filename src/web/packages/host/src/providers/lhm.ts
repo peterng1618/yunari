@@ -18,7 +18,7 @@ import type {
   SensorDescriptor,
   SensorProvider,
 } from "./provider.js";
-import { redactForBrowser } from "./provider.js";
+import { descriptorFieldsOf, redactForBrowser } from "./provider.js";
 
 /**
  * LibreHardwareMonitor as an optional external program (§97): Yunari reads the
@@ -74,7 +74,7 @@ export const LHM_DESCRIPTORS: readonly SensorDescriptor[] = LHM_KEYS.map(
       sensorId: `${LHM_PROVIDER_ID}:${key}`,
       semanticKey: key,
       label: declared.label,
-      ...(declared.unit === undefined ? {} : { unit: declared.unit }),
+      ...descriptorFieldsOf(declared),
       tier: "extended" as const,
     };
   },

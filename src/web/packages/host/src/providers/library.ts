@@ -15,7 +15,7 @@ import type {
   SensorDescriptor,
   SensorProvider,
 } from "./provider.js";
-import { redactForBrowser } from "./provider.js";
+import { descriptorFieldsOf, redactForBrowser } from "./provider.js";
 
 /**
  * Hardware metrics come from `systeminformation` rather than a collector Yunari
@@ -77,7 +77,7 @@ export const LIBRARY_DESCRIPTORS: readonly SensorDescriptor[] =
       sensorId: `${LIBRARY_PROVIDER_ID}:${key}`,
       semanticKey: key,
       label: declared.label,
-      ...(declared.unit === undefined ? {} : { unit: declared.unit }),
+      ...descriptorFieldsOf(declared),
       tier: declared.expectedTier,
     };
   });

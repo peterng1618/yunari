@@ -2,6 +2,8 @@ import {
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
   type SampleSource,
+  SEMANTIC_KEYS,
+  type SemanticKeyDescriptor,
 } from "@yunari/renderer-core";
 import { sceneBoxesOf } from "@yunari/scene-fabric";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
@@ -62,6 +64,7 @@ import {
   type SelectionInspector,
 } from "./selection-inspector/index.js";
 import { isTextObject } from "./selection-inspector/view.js";
+import type { SensorCatalogue } from "./sensor-catalogue.js";
 import { ShortcutManager } from "./shortcut-manager/index.js";
 import { createSnapManager, type SnapManager } from "./snap-manager/index.js";
 import type { ThemeLibraryClient } from "./theme-library-client.js";
@@ -118,6 +121,10 @@ interface EditorSessionOptions {
   readonly thumbnail?: Uint8Array;
   readonly panelHosts: EditorPanelHosts;
   readonly libraryClient?: ThemeLibraryClient;
+  /** The readings the editor's pickers offer, from the host's sensor wire. A
+   *  session built without one still offers the built-in vocabulary, which is
+   *  what a disconnected editor has. */
+  readonly sensors?: SensorCatalogue;
   /** Where the author's favourite font trios live — the host's settings, not
    *  the document. Absent reads as none, which is what a standalone editor
    *  has. */
@@ -350,10 +357,13 @@ export class EditorSession {
     // The chart owner, built before the inspector that renders its fields: the
     // inspector is published with both halves of the port at construction, so
     // the owner has to exist by then.
+    const descriptors = (): readonly SemanticKeyDescriptor[] =>
+      options.sensors?.descriptors() ?? SEMANTIC_KEYS;
     this.charts = new ChartManager({
       editor: options.shell.editor,
       scene: options.shell.scene,
       source: options.source,
+      descriptors,
       ...(this.#document.envelope.bindings === undefined
         ? {}
         : { bindings: this.#document.envelope.bindings }),
@@ -376,6 +386,9 @@ export class EditorSession {
       // Pulled, not held: the inspector must see the source the runtime is
       // using, not the one the session was constructed with.
       sampleSource: () => this.#source,
+      // The readings the run picker offers, pulled for the same reason: a
+      // catalogue refreshed after mount is visible on the next projection.
+      descriptors,
       // The shell owns the glass handle; the inspector writes the property and
       // asks it to re-resolve.
       refreshGlass: () => options.shell.refreshGlass(),

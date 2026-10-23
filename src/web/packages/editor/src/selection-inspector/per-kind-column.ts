@@ -2,6 +2,7 @@ import type {
   Binding,
   FabricGlobals,
   SampleSource,
+  SemanticKeyDescriptor,
   SettingsSection,
 } from "@yunari/renderer-core";
 import { SETTINGS_SECTIONS } from "@yunari/renderer-core";
@@ -197,6 +198,8 @@ export interface ColumnContext {
     | ((nodeId: string, bindings: readonly Binding[]) => void)
     | undefined;
   readonly sampleSource: (() => SampleSource) | undefined;
+  /** The readings a run may name; absent keeps the built-in vocabulary. */
+  readonly descriptors?: () => readonly SemanticKeyDescriptor[];
   /**
    * The chart owner's own fields, for a chart selection. Absent when no owner
    * is mounted: a column built without one still answers every other kind, and
@@ -367,6 +370,9 @@ function contentBody(
       nodeBindings: context.nodeBindings,
       sampleSource: context.sampleSource,
       swatchValue: (ref) => resolveToken(context.globals, ref),
+      ...(context.descriptors === undefined
+        ? {}
+        : { descriptors: context.descriptors() }),
     },
   );
   if (runs !== undefined) extras.push({ kind: "runs", nodeId, runs });

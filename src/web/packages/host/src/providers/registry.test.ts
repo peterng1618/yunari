@@ -435,6 +435,54 @@ describe("ProviderRegistry", () => {
       ]);
     });
 
+    it("forwards the fields a picker needs, without interpreting them", async () => {
+      // The editor's catalogue is built from these: a family to group by, the
+      // unit's kind, the value's kind, and whether the binding is a picture.
+      // The registry only tags; it never derives a field of its own.
+      const rich: SensorProvider = {
+        id: "lhm",
+        label: "lhm",
+        describe: () =>
+          Promise.resolve([
+            {
+              sensorId: "lhm:gpu.temp",
+              semanticKey: "gpu.temp",
+              label: "GPU temperature",
+              tier: "extended",
+              family: "gpu",
+              unitKind: "temperature",
+              displayUnits: ["°C", "°F"],
+              valueKind: "number",
+            },
+            {
+              sensorId: "lhm:media.image",
+              semanticKey: "media.image",
+              label: "Picture",
+              tier: "extended",
+              family: "media",
+              mediaKind: "image",
+            },
+          ]),
+        sample: () => Promise.resolve([]),
+        health: () => ({ available: true }),
+      };
+
+      const described = await new ProviderRegistry([rich]).describe();
+
+      expect(described[0]).toMatchObject({
+        providerId: "lhm",
+        family: "gpu",
+        unitKind: "temperature",
+        displayUnits: ["°C", "°F"],
+        valueKind: "number",
+      });
+      expect(described[1]).toMatchObject({
+        providerId: "lhm",
+        family: "media",
+        mediaKind: "image",
+      });
+    });
+
     it("still lists healthy providers when one cannot describe itself", async () => {
       const broken: SensorProvider = {
         id: "broken",

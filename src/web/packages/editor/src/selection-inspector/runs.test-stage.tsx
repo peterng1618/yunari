@@ -3,6 +3,7 @@ import {
   type FabricGlobals,
   type SampleSource,
   SEMANTIC_KEYS,
+  type SemanticKeyDescriptor,
   type TextRun,
 } from "@yunari/renderer-core";
 import { YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
@@ -24,7 +25,7 @@ import {
   writeUnitDisplay,
 } from "./run-edits.js";
 import { projectRuns, RunEditor } from "./runs.js";
-import type { RunEdits } from "./view.js";
+import type { RunEdits, RunOptionView, RunsView } from "./view.js";
 
 /**
  * The run editor's test stage: a text object, the binding store a run's reading
@@ -82,6 +83,8 @@ export interface RunEditorStage {
   /** The object's whole authored text, layout fields included. */
   readonly content: () => Record<string, unknown>;
   readonly stored: () => readonly Binding[];
+  /** What the run's source picker offers, as the projection answered it. */
+  readonly sources: () => readonly RunOptionView[];
   readonly notes: () => readonly string[];
   readonly binding: () => {
     readonly text: string | undefined;
@@ -98,6 +101,8 @@ export function mountRunEditor(options: {
   /** Keys a reading has arrived for; absent means nothing has. */
   readonly arrived?: readonly string[];
   readonly declared?: readonly Binding[];
+  /** The catalogue the picker offers; absent keeps the built-in table. */
+  readonly descriptors?: () => readonly SemanticKeyDescriptor[];
 }): RunEditorStage {
   // A popup renders into `document.body`, not the host, so a case that failed
   // before disposing would leave its list open for the next one to pick an
@@ -138,6 +143,8 @@ export function mountRunEditor(options: {
     },
   });
 
+  let latest: RunsView | undefined;
+
   const render = (): void => {
     const view = projectRuns(object, nodeId, {
       globals: options.globals,
@@ -145,10 +152,14 @@ export function mountRunEditor(options: {
       nodeBindings: () => bindings,
       sampleSource,
       swatchValue: () => undefined,
+      ...(options.descriptors === undefined
+        ? {}
+        : { descriptors: options.descriptors() }),
     });
     if (view === undefined) {
       throw new Error("the object carries no authored text to edit");
     }
+    latest = view;
     flushSync(() => {
       root.render(<RunEditor runs={view} edits={edits} />);
     });
@@ -190,6 +201,7 @@ export function mountRunEditor(options: {
     content: () =>
       (object.get(YUNARI_TEXT_PROPERTY) ?? {}) as Record<string, unknown>,
     stored: () => bindings,
+    sources: () => latest?.sources ?? [],
     notes: () =>
       [...host.querySelectorAll<HTMLElement>("[data-yunari-run-note]")].map(
         (note) => note.textContent ?? "",

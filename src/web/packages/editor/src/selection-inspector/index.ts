@@ -4,6 +4,7 @@ import {
   type Binding,
   type FabricGlobals,
   type SampleSource,
+  type SemanticKeyDescriptor,
 } from "@yunari/renderer-core";
 import {
   applyAuthoredText,
@@ -119,6 +120,10 @@ interface SelectionInspectorOptions {
    * mounted for the session rather than rebuilt.
    */
   readonly sampleSource?: () => SampleSource;
+  /** The readings a run may name, pulled at render time like the sample source
+   *  so a catalogue refreshed after mount reaches the next projection. Absent
+   *  keeps the built-in vocabulary. */
+  readonly descriptors?: () => readonly SemanticKeyDescriptor[];
   /**
    * Re-resolves the glass lifecycle. The handle belongs to the shell that
    * created it and re-resolves on its own only when the canvas gains or loses
@@ -770,6 +775,9 @@ export function createSelectionInspector(
       onNodeBindingsChange: options.onNodeBindingsChange,
       sampleSource: options.sampleSource,
       canWriteFontFace: options.fontActions !== undefined,
+      ...(options.descriptors === undefined
+        ? {}
+        : { descriptors: options.descriptors }),
       ...(chartFields === undefined ? {} : { chartFields }),
     };
   };

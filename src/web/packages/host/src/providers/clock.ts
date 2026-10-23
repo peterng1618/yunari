@@ -8,6 +8,7 @@ import type {
   SensorDescriptor,
   SensorProvider,
 } from "./provider.js";
+import { descriptorFieldsOf } from "./provider.js";
 
 /**
  * Time and date as readings.
@@ -39,6 +40,7 @@ export const CLOCK_DESCRIPTORS: readonly SensorDescriptor[] = CLOCK_KEYS.map(
       sensorId: `${CLOCK_PROVIDER_ID}:${key}`,
       semanticKey: key,
       label: declared.label,
+      ...descriptorFieldsOf(declared),
       tier: "baseline" as const,
     };
   },
