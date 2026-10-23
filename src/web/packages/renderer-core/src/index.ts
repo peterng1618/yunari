@@ -197,12 +197,19 @@ export {
   parseFontStack,
   unavailableFontFamilies,
 } from "./scene/fonts.js";
-export type { ConvertedValue, MeasurementSystem } from "./scene/measurement.js";
+export type {
+  ConvertedValue,
+  MeasurementSystem,
+  UnitOverrides,
+  UnitPreferences,
+} from "./scene/measurement.js";
 export {
   convertForDisplay,
   DEFAULT_MEASUREMENT_SYSTEM,
+  DEFAULT_UNIT_PREFERENCES,
   isMeasurementSystem,
   MEASUREMENT_SYSTEMS,
+  normalizeUnitPreferences,
 } from "./scene/measurement.js";
 export type {
   ChartPlanContext,

@@ -1009,6 +1009,25 @@ const DISK_QUANTITY_LABEL = {
   { readonly text: string; readonly unit: string; readonly unitKind: UnitKind }
 >;
 
+/** The display units a disk quantity's unit kind can be pinned to. */
+function diskDisplayUnits(
+  quantity: DiskDeviceQuantity,
+): readonly string[] | undefined {
+  switch (quantity) {
+    case "used":
+    case "total":
+    case "free":
+      return DATA_UNITS;
+    case "read":
+    case "write":
+      return RATE_UNITS;
+    case "temp":
+      return TEMPERATURE_UNITS;
+    default:
+      return undefined;
+  }
+}
+
 /** `<id>` is a slug: lowercase, hyphen-separated, at most 64 characters. */
 const SLUG = "([a-z0-9][a-z0-9-]{0,63})";
 
@@ -1043,6 +1062,7 @@ export function describeDiskKey(
   const deviceId = match[1]!;
   const quantity = match[2] as DiskDeviceQuantity;
   const quantityLabel = DISK_QUANTITY_LABEL[quantity];
+  const displayUnits = diskDisplayUnits(quantity);
 
   return {
     key,
@@ -1051,6 +1071,7 @@ export function describeDiskKey(
     label: `${deviceName ?? deviceId} ${quantityLabel.text}`,
     unit: quantityLabel.unit,
     unitKind: quantityLabel.unitKind,
+    ...(displayUnits === undefined ? {} : { displayUnits }),
     expectedTier: "baseline",
     ...(quantity === "temp" ? { converts: "temperature" as const } : {}),
   };
@@ -1167,12 +1188,14 @@ const DYNAMIC_KEY_SHAPES: readonly DynamicKeyShape[] = [
       const deviceId = match[1]!;
       const quantity = match[2] as DiskDeviceQuantity;
       const quantityLabel = DISK_QUANTITY_LABEL[quantity];
+      const displayUnits = diskDisplayUnits(quantity);
 
       return {
         family: "disk",
         label: `${deviceId} ${quantityLabel.text}`,
         unit: quantityLabel.unit,
         unitKind: quantityLabel.unitKind,
+        ...(displayUnits === undefined ? {} : { displayUnits }),
         expectedTier: "baseline",
         ...(quantity === "temp" ? { converts: "temperature" as const } : {}),
       };

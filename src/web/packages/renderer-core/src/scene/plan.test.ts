@@ -212,7 +212,7 @@ describe("text (§89)", () => {
     bindings: readonly Binding[],
     runs: readonly TextRun[],
     overrides: Partial<
-      Pick<PlanInputs, "longUnits" | "measurement" | "themeLanguage">
+      Pick<PlanInputs, "longUnits" | "measurement" | "units" | "themeLanguage">
     > = {},
   ) {
     const issues: PlanIssue[] = [];
@@ -372,6 +372,42 @@ describe("text (§89)", () => {
         (segment) => segment.text,
       ),
     ).toEqual(["122.8°C"]);
+  });
+
+  it("applies the consumer's unit preferences to a bound run", () => {
+    const source = storeWith({ "cpu.clock": ok(3800, "MHz", "cpu.clock") });
+    const result = segments(
+      source,
+      [{ id: "b", semanticKey: "cpu.clock" }],
+      [{ kind: "value", bindingId: "b" }],
+      { units: { clock: "ghz" } },
+    );
+
+    expect(result.segments.map((segment) => segment.text)).toEqual(["3.8 GHz"]);
+    expect(result.issues).toEqual([]);
+  });
+
+  it("reports a bound unit the key cannot display, and keeps the reading", () => {
+    // An unsupported override is a plan-time issue: the theme still paints.
+    const binding = {
+      id: "b",
+      semanticKey: "cpu.load",
+      unit: "GHz",
+    } as Binding;
+    const result = segments(
+      storeWith({ "cpu.load": ok(42) }),
+      [binding],
+      [{ kind: "value", bindingId: "b" }],
+    );
+
+    expect(result.segments.map((segment) => segment.text)).toEqual(["42%"]);
+    expect(result.issues).toEqual([
+      {
+        code: "unsupported-unit",
+        nodeId: "t",
+        detail: 'Unit "GHz" is not displayable for "cpu.load".',
+      },
+    ]);
   });
 
   it("leaves every other family, and a gap, exactly as measured", () => {

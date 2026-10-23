@@ -29,8 +29,8 @@ import type { Sample, SensorStatus } from "../types.js";
 import { formatInstant } from "./datetime/format.js";
 import {
   convertForDisplay,
-  DEFAULT_MEASUREMENT_SYSTEM,
   type MeasurementSystem,
+  type UnitPreferences,
 } from "./measurement.js";
 
 /**
@@ -121,7 +121,7 @@ export interface PlanNode {
 
 /** Runtime frame diagnostics, not document-validation errors. */
 export interface PlanIssue {
-  readonly code: "unmapped-key" | "unresolved-global";
+  readonly code: "unmapped-key" | "unresolved-global" | "unsupported-unit";
   readonly nodeId: string;
   readonly detail: string;
 }
@@ -147,6 +147,8 @@ export interface PlanInputs {
   readonly longUnits?: Readonly<Record<string, string>>;
   /** The consumer's measurement preference; metric shows what was measured. */
   readonly measurement?: MeasurementSystem;
+  /** The consumer's full display choices; `measurement` above still wins. */
+  readonly units?: UnitPreferences;
   /**
    * The language the theme's text is written in. A runtime input like
    * `longUnits`, never persisted scene state: the theme's own `metadata` owns it.
@@ -197,7 +199,7 @@ export function resolveTextSegments(
   bindings: readonly Binding[],
   context: Pick<
     PlanInputs,
-    "source" | "longUnits" | "measurement" | "themeLanguage"
+    "source" | "longUnits" | "measurement" | "units" | "themeLanguage"
   >,
   globals: Globals,
   issues: PlanIssue[],
@@ -236,7 +238,15 @@ export function resolveTextSegments(
       return { text: MISSING_VALUE_TEXT, style };
     }
 
-    return formatValueSegment(sample, binding, run, style, context);
+    return formatValueSegment(
+      sample,
+      binding,
+      run,
+      style,
+      nodeId,
+      context,
+      issues,
+    );
   });
 }
 
@@ -245,7 +255,12 @@ function formatValueSegment(
   binding: Binding,
   run: Extract<TextRun, { kind: "value" }>,
   style: ResolvedStyle,
-  context: Pick<PlanInputs, "longUnits" | "measurement" | "themeLanguage">,
+  nodeId: string,
+  context: Pick<
+    PlanInputs,
+    "longUnits" | "measurement" | "units" | "themeLanguage"
+  >,
+  issues: PlanIssue[],
 ): PlanTextSegment {
   if (sample.status !== "ok") {
     return {
@@ -264,15 +279,24 @@ function formatValueSegment(
 
   if (typeof sample.value === "number" && Number.isFinite(sample.value)) {
     const scaled = sample.value * (binding.scale ?? 1) + (binding.offset ?? 0);
-    // The consumer's measurement preference converts what is displayed, after
-    // the binding's own scale and offset and before formatting, so a converted
+    // The consumer's unit preferences convert what is displayed, after the
+    // binding's own scale and offset and before formatting, so a converted
     // value is never fed back through a scale.
+    const overrides = bindingUnitOverrides(binding);
     const converted = convertForDisplay(
       binding.semanticKey,
       scaled,
       sample.unit,
-      context.measurement ?? DEFAULT_MEASUREMENT_SYSTEM,
+      unitPreferencesFor(context),
+      overrides,
     );
+    if (converted.unsupportedUnit === true && overrides?.unit !== undefined) {
+      issues.push({
+        code: "unsupported-unit",
+        nodeId,
+        detail: `Unit "${overrides.unit}" is not displayable for "${binding.semanticKey}".`,
+      });
+    }
     text = formatNumber(converted.value, precision, context.themeLanguage);
     shown = converted.unit;
   } else if (sample.textValue !== undefined) {
@@ -286,6 +310,42 @@ function formatValueSegment(
   const unit = formatUnit(shown, unitDisplay, context.longUnits);
 
   return { text: unit === "" ? text : `${text}${unit}`, style };
+}
+
+/**
+ * `units` carries the whole preference set; the older `measurement` field, kept
+ * for callers that only choose temperature, wins when both are present.
+ */
+function unitPreferencesFor(
+  context: Pick<PlanInputs, "measurement" | "units">,
+): UnitPreferences {
+  return context.measurement === undefined
+    ? (context.units ?? {})
+    : { ...context.units, measurement: context.measurement };
+}
+
+/**
+ * The author's per-binding unit request. The fields arrive with the binding
+ * schema, so they are read optionally: a document carrying them already paints.
+ */
+function bindingUnitOverrides(
+  binding: Binding,
+): { readonly unit?: string; readonly autoScale?: boolean } | undefined {
+  const authored = binding as Binding & {
+    readonly unit?: string;
+    readonly autoScale?: boolean;
+  };
+
+  if (authored.unit === undefined && authored.autoScale === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(authored.unit === undefined ? {} : { unit: authored.unit }),
+    ...(authored.autoScale === undefined
+      ? {}
+      : { autoScale: authored.autoScale }),
+  };
 }
 
 /**
