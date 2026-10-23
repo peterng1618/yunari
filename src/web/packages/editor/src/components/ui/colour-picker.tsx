@@ -95,7 +95,7 @@ function ChannelTrack({
       aria-valuemin={range.min}
       aria-valuemax={range.max}
       aria-valuenow={Math.round(value)}
-      className="relative h-3 w-full touch-none rounded-sm border border-edge outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      className="relative h-3 w-full touch-none rounded-sm border border-edge focus-visible:outline-2 focus-visible:outline-accent"
       style={{ background }}
       onPointerDown={(event) => {
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -273,7 +273,7 @@ export function ColourPicker({
                 aria-valuemax={100}
                 aria-valuenow={Math.round(saturation)}
                 aria-valuetext={areaValueText(api.hsva, api.text)}
-                className="relative h-32 w-full touch-none rounded-sm border border-edge outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                className="relative h-32 w-full touch-none rounded-sm border border-edge focus-visible:outline-2 focus-visible:outline-accent"
                 style={{
                   background: `linear-gradient(to top, hsl(0 0% 0%), transparent), linear-gradient(to right, hsl(0 0% 100%), hsl(${hue} 100% 50%))`,
                 }}

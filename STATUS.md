@@ -13,16 +13,17 @@ The **colour and gradient picker rebuild** ([`spec`](docs/superpowers/specs/2026
 
 ## Last completed change
 
-- **The colour and gradient picker rebuild is closed**: Task 10's browser proof landed in `2a1388fc`, `vg-405` and `vg-439` are `verified` in `docs/product/backlog-archive.jsonl`, and the plan moved to `docs/superpowers/plans/archive/`.
-- **Task 10 proves both surfaces in Chromium**: one undo entry per drag, gradient drag/number agreement, preset application, preset deletion across reload, and the focus boundary in all six palettes (5.68–18.39:1).
-- **Evidence**: `editor-colour-picker` and `editor-gradient-editor` are captured and registered; `npm run gate` and `npm run backlog:check` exit 0.
+- **The picker's focus boundary now exists and is measured**: `outline-none` poisoned Tailwind's `--tw-outline-style`, so the area and tracks drew no ring; the variant utilities alone now paint a 2px accent ring and the browser case asserts style, width and the drawn pixel before its 3:1 contrast.
+- **The two evidence rows select their cases**: the capture cases are titled `picks a palette colour in the picker…` and `builds a gradient with a drag and a number…`, and the gradient case drags a stop and types `25` before capturing.
+- **Five repaired browser cases were run**, not only the focused grep: both `editor.spec.ts` picker cases, the `keyboard.spec.ts` anchor case, `panel-labels.spec.ts`'s audit and the `glass-authoring.spec.ts` history case all pass.
+- **`vg-709` is filed open** for a drag or typed offset crossing a neighbouring stop (issue #52), from Task 10's browser proof.
 
 ## Next
 
-1. Name the next plan; `2026-10-21-asset-finder.md` and `2026-10-12-the-backlog-drain.md` are queued, not active.
+1. No plan is active until the controller names one; `2026-10-12-the-backlog-drain.md`, `2026-10-21-theme-store-origin-and-style.md` and `2026-10-23-r2-store-backend.md` are queued.
 
 ## Blockers / unverified
 
 - **The picker popup is 630px tall with twelve seeded presets** (Task 5's deferred finding): it fits neither above nor below the Tokens well at 720px, so Base UI places it to the right, clamped inside the viewport; the capture shows no clipping, but the unbounded height is unchanged.
-- **A gradient stop dragged past its neighbour still writes descending offsets** and the validator refuses the document (issue #52); the insertion half was fixed in Task 10.
-- **The gradient capture's fixed status footer overlaps the last preset row** in the scoped element screenshot; the track and the preset row the checklist names are both visible.
+- **A gradient stop moved past its neighbour still writes descending offsets** and the validator refuses the document (`vg-709`, issue #52).
+- **The gradient capture's fixed status footer overlaps the last preset row** in the scoped element screenshot; the track, the `25 %` position and the preset row are all visible.

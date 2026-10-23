@@ -193,15 +193,16 @@ test.describe("the colour picker and the gradient track", () => {
     );
 
     // A second press has no further step to walk: one drag is one entry, so it
-    // cannot rewind one pre-drag sample per pointer move.
+    // cannot rewind one pre-drag sample per pointer move. The readout is the
+    // rendered fact that settles the key; the save reads the document behind it.
     await page.keyboard.press("Control+z");
-    await page.waitForTimeout(200);
+    await expect(triggerValue).toHaveText(beforeText ?? "");
     expect(paletteOf(await saveEnvelope(page)).background?.value).toEqual(
       before,
     );
   });
 
-  test("keeps the gradient track's drag and its number in agreement", async ({
+  test("moves a gradient stop by drag and by number, then adds one on the track", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -350,23 +351,47 @@ test.describe("the colour picker and the gradient track", () => {
 
       const reading = await area.evaluate((element) => {
         const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
         return {
           focusVisible: element.matches(":focus-visible"),
-          outline: getComputedStyle(element).outlineColor,
-          point: { x: rect.left - 4, y: rect.top + rect.height / 2 },
+          outline: style.outlineColor,
+          outlineStyle: style.outlineStyle,
+          outlineWidth: style.outlineWidth,
+          groundPoint: { x: rect.left - 4, y: rect.top + rect.height / 2 },
+          outlinePoint: { x: rect.left - 1, y: rect.top + rect.height / 2 },
         };
       });
       expect(
         reading.focusVisible,
         `${palette}: the focused area does not match :focus-visible`,
       ).toBe(true);
+      // A colour alone cannot prove a boundary exists: with no outline rule
+      // `outlineColor` falls back to `currentColor` and still clears 3:1.
+      expect(
+        reading.outlineStyle,
+        `${palette}: the focused area has no outline style`,
+      ).not.toBe("none");
+      expect(
+        Number.parseFloat(reading.outlineWidth),
+        `${palette}: the focused area's outline has no width`,
+      ).toBeGreaterThan(0);
 
       // The outline is drawn outside the area's border, over the popup's own
       // padding, so the pixel beside it is the colour the boundary has to read
-      // against.
-      const pixel = await pixelAt(page, reading.point);
+      // against, and the pixel one step out is the boundary itself.
+      const pixel = await pixelAt(page, reading.groundPoint);
+      const drawn = await pixelAt(page, reading.outlinePoint);
+      const outlineChannels = channelsOf(reading.outline);
+      expect(
+        Math.max(
+          ...outlineChannels.map((channel, index) =>
+            Math.abs(channel - (drawn[index] ?? 0)),
+          ),
+        ),
+        `${palette}: the pixel beside the area is not the outline colour`,
+      ).toBeLessThanOrEqual(32);
       const ratio =
-        Math.round(contrast(channelsOf(reading.outline), pixel) * 100) / 100;
+        Math.round(contrast(outlineChannels, pixel) * 100) / 100;
       ratios.push(`${palette} focus-boundary ${ratio}:1 (${reading.outline})`);
       if (ratio < 3) {
         failures.push(
@@ -386,7 +411,7 @@ test.describe("the colour picker and the gradient track", () => {
     });
   });
 
-  test("picks a palette colour and commits it through the popover", async ({
+  test("picks a palette colour in the picker and commits it through the popover", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -407,7 +432,7 @@ test.describe("the colour picker and the gradient track", () => {
     await captureVisualReview(page, testInfo, "editor-colour-picker");
   });
 
-  test("builds a gradient with the track and its preset row visible", async ({
+  test("builds a gradient with a drag and a number while its preset row is visible", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -418,6 +443,29 @@ test.describe("the colour picker and the gradient track", () => {
     await page
       .getByTestId("gradient-preset-default-gradient-vital-ocean")
       .click();
+
+    // The registered action is a stop edited by drag *and* by number, so the
+    // picture has to show both edits rather than only the preset that seeded it.
+    const trackBox = await page.getByTestId("gradient-track").boundingBox();
+    const stopBox = await page.getByTestId("gradient-stop-0").boundingBox();
+    if (trackBox === null || stopBox === null) {
+      throw new Error("the gradient track or its first stop has no box");
+    }
+    await page.mouse.move(
+      stopBox.x + stopBox.width / 2,
+      stopBox.y + stopBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      trackBox.x + trackBox.width * 0.2,
+      trackBox.y + trackBox.height / 2,
+      { steps: 8 },
+    );
+    await page.mouse.up();
+    const offset = page.getByTestId("gradient-offset");
+    await typeIntoControl(page, offset, 25);
+    await expect(offset).toHaveValue("25");
+
     await expect(page.getByTestId("gradient-track")).toBeVisible();
     await expect(
       page.getByTestId("gradient-preset-default-gradient-vital-ocean"),
