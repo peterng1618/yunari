@@ -750,7 +750,7 @@ async function mountLandedSurfaces(): Promise<{
         value: "#123456",
         onValueChange: () => undefined,
         onValueCommit: () => undefined,
-        label: uiCopy.panels.colourPicker,
+        label: uiCopy.panels.colour,
       }),
     );
   });

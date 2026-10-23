@@ -1595,10 +1595,6 @@ export const uiCopy = {
     backgroundFlipY: "Flip vertically",
     /** A paint's own colour, as against the token it is chosen from. */
     colour: "Colour",
-    /** Shown when the browser cannot paint what was typed. Named by the value
-     *  itself, because the author has to be able to see which of several they
-     *  mistyped. */
-    colourPicker: "Pick a colour",
     /** The channels the picker's controls announce, as accessible names.
      *  `pickerSaturation` and `pickerValue` are the area's two channels, named
      *  together in its `aria-valuetext`; `pickerHue` and `pickerAlpha` are the

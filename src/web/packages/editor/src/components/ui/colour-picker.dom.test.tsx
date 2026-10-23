@@ -78,7 +78,7 @@ async function openPicker(value: string): Promise<Picker> {
     root.render(
       <ColourPicker
         value={value}
-        label={uiCopy.panels.colourPicker}
+        label={uiCopy.panels.colour}
         onValueChange={change}
         onValueCommit={settled}
       />,
@@ -194,9 +194,7 @@ it("renders a labelled trigger inside the well, and the trigger opens the popup"
   const picker = await openPicker(GREY);
 
   expect(picker.trigger.tagName).toBe("BUTTON");
-  expect(picker.trigger.getAttribute("aria-label")).toBe(
-    uiCopy.panels.colourPicker,
-  );
+  expect(picker.trigger.getAttribute("aria-label")).toBe(uiCopy.panels.colour);
   expect(
     picker.trigger.closest("[class*='bg-panel-2']"),
     "the trigger sits inside a §5 well",
