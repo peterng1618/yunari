@@ -3,6 +3,7 @@ import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createBatch,
   knownTimeZones,
@@ -27,6 +28,7 @@ import {
   ProviderRegistry,
   unionOfKeys,
 } from "./providers/registry.js";
+import { isVendoredWeatherIcon } from "./providers/weather/icons.js";
 import type { Launcher } from "./serve/display-launcher.js";
 import {
   createPublishedStore,
@@ -314,6 +316,16 @@ export interface HostServer {
 }
 
 export const DEFAULT_SAMPLE_INTERVAL_MS = 1000;
+
+/** The committed Meteocons bytes. A request names a file here only when that
+ *  exact slug is in the provider's allow-list; no request path reaches the
+ *  filesystem. */
+const WEATHER_ICON_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "vendor",
+  "weather-icons",
+);
 /** A save is JSON with base64 assets, so the wire is a third larger than the
  *  archive it replaced; the store enforces its own bounds on the decoded side. */
 export const MAX_THEME_UPLOAD_BYTES = 96 * 1024 * 1024;
@@ -2138,6 +2150,55 @@ export function createHostServer(options: HostServerOptions): HostServer {
         fetch: fetcher ?? fetch,
         readBody,
       });
+      return;
+    }
+
+    // Weather icons are committed bytes with a fixed allow-list. A display
+    // reads them, so a remote request needs the same credential as theme asset
+    // bytes; loopback is this PC and needs none. Any name not vendored is a
+    // 404 — never a neighbouring picture and never a filesystem path.
+    if (url.pathname.startsWith("/api/weather/icon/")) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+
+      const requested = url.pathname.slice("/api/weather/icon/".length);
+      const slug = requested.endsWith(".svg")
+        ? requested.slice(0, -".svg".length)
+        : "";
+
+      if (!isVendoredWeatherIcon(slug)) {
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      if (
+        !isLoopbackRemote(request.socket.remoteAddress) &&
+        (await displayFor(request, url, displays)) === undefined
+      ) {
+        sendText(response, 403, "This display is not paired with the host.");
+        return;
+      }
+
+      let bytes: Buffer;
+
+      try {
+        bytes = await fs.readFile(path.join(WEATHER_ICON_DIR, `${slug}.svg`));
+      } catch {
+        // A vendored name whose bytes are missing is an installation fault, but
+        // the answer is still an absence rather than a 500 on a display.
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      response.writeHead(200, {
+        "content-type": "image/svg+xml",
+        "content-length": bytes.byteLength,
+        "cache-control": "public, max-age=31536000, immutable",
+        "x-content-type-options": "nosniff",
+      });
+      response.end(bytes);
       return;
     }
 

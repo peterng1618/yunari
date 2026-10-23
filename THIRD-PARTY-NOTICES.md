@@ -89,6 +89,21 @@ sections: the three the editor declares in `dependencies` ship with it, and
 
 ## Vendored source
 
+### Meteocons (weather icons)
+
+`packages/host/vendor/weather-icons/` holds 23 SVGs from
+`@meteocons/svg-static` 0.1.0, `fill` style, staged by
+`npm run vendor:weather-icons -w @yunari/host`. The script pins
+<https://registry.npmjs.org/@meteocons/svg-static/-/svg-static-0.1.0.tgz> by
+its sha512 integrity and extracts only the slugs the provider's allow-list
+names; the committed bytes are what the host serves at
+`/api/weather/icon/<slug>.svg`.
+
+Licence: MIT, Copyright (c) 2020-present Bas Milius. The complete MIT text
+travels with the bytes as `packages/host/vendor/weather-icons/LICENSE`.
+Source and artwork: <https://github.com/basmilius/meteocons>; attribution
+"Meteocons by Bas Milius".
+
 `packages/editor/src/snap-manager/` and `packages/editor/src/indicator-manager/`
 contain adapted copies of `@anu3ev/fabric-image-editor` 0.10.32, taken from
 commit `9efdd78a342a29f169a8dbf1da78c95bbf1ffe77`. It is not a dependency; the

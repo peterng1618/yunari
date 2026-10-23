@@ -91,12 +91,24 @@ licence text in `THIRD-PARTY-NOTICES.md`.
 | Source | Pin | Licence | Role |
 |---|---|---|---|
 | `@anu3ev/fabric-image-editor` | 0.10.32, commit `9efdd78a34` | MIT | adapted movement-snapping and indicator source |
+| `@meteocons/svg-static` (`fill` style) | 0.1.0, `sha512-dnuXOkt1W5q+XZbyj54dzjuBcKmsC0eLv51IVaW9kzzvzwnhwv9KgNXHKgpvmdN6cX2stMo+k95iMFbcyM4x5Q==` | MIT | 23 weather SVGs staged by `packages/host/scripts/vendor-weather-icons.mjs`; served at `/api/weather/icon/<slug>.svg` |
 
 Copied, not installed: no entry appears in `package.json` and nothing enters the
 transitive graph. Licence verified from the `LICENSE` blob at that commit,
 `MIT, Copyright (c) 2025 Alexander Anufriev`. Full text in
 `THIRD-PARTY-NOTICES.md`. The note above about the removed image-editor package
 refers to the runtime dependency, which stays removed.
+
+Meteocons' `package/LICENSE` in the pinned tarball is the MIT text,
+`Copyright (c) 2020-present Bas Milius`; the vendor script copies it beside the
+icons. Source: <https://github.com/basmilius/meteocons>.
+
+Open-Meteo's data is offered under CC BY 4.0. Its licence page,
+<https://open-meteo.com/en/licence> (verified 2026-10-24), states the credit as
+"Weather data by Open-Meteo.com" linking to <https://open-meteo.com/>. That exact
+string is `OPEN_METEO_ATTRIBUTION` in
+`packages/host/src/providers/weather/open-meteo.ts`, and `weather.attribution`
+serves it to a theme.
 
 LibreHardwareMonitor/PawnIO are not current dependencies or redistributed.
 Earlier planning research found LHM MPL-2.0 and PawnIO modules under GPL/LGPL;

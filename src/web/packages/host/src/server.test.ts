@@ -8274,4 +8274,78 @@ describe("Weather settings routes", () => {
       "a valid file still reports a problem",
     ).toBe(false);
   });
+
+  it("serves a vendored weather icon and 404s every other name", async () => {
+    const { server } = await launch();
+
+    const icon = await request(
+      server,
+      "GET",
+      "/api/weather/icon/clear-day.svg",
+    );
+    expect(icon.status).toBe(200);
+    expect(icon.headers["content-type"]).toBe("image/svg+xml");
+    expect(icon.headers["cache-control"]).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(icon.headers["x-content-type-options"]).toBe("nosniff");
+    expect(icon.body.toString()).toContain("<svg");
+
+    for (const name of [
+      "nope.svg",
+      "clear-day",
+      "CLEAR-DAY.svg",
+      "..%2Fpackage.json.svg",
+      "clear-day.svg.svg",
+      "clear-day.svg/extra",
+    ]) {
+      expect(
+        (await request(server, "GET", `/api/weather/icon/${name}`)).status,
+        name,
+      ).toBe(404);
+    }
+
+    expect(
+      (await request(server, "POST", "/api/weather/icon/clear-day.svg")).status,
+    ).toBe(405);
+  });
+
+  it("lets a paired display read an icon and refuses an unpaired remote", async () => {
+    const displays = createDisplayStore(settingsDir);
+    const token = newToken();
+    await displays.create("phone", token);
+
+    const running = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: settingsDir, editor: settingsDir },
+      weather: createWeatherSettingsStore(settingsDir),
+      displays,
+    });
+    hosted = running;
+
+    const lan = { remoteAddress: "192.168.1.50" };
+    expect(
+      (
+        await request(
+          running.server,
+          "GET",
+          "/api/weather/icon/clear-day.svg",
+          undefined,
+          lan,
+        )
+      ).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await request(
+          running.server,
+          "GET",
+          "/api/weather/icon/clear-day.svg",
+          undefined,
+          { ...lan, headers: { "x-yunari-session": token } },
+        )
+      ).status,
+    ).toBe(200);
+  });
 });

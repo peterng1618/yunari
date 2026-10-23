@@ -2,7 +2,12 @@
 
 - **Date:** 2026-10-24
 - **Status:** accepted
-- **Paths:** `src/web/packages/host/src/providers/weather/`
+- **Paths:** `src/web/packages/host/src/providers/weather/provider.ts`,
+  `src/web/packages/host/src/providers/weather/conditions.ts`,
+  `src/web/packages/host/src/providers/weather/icons.ts`,
+  `src/web/packages/host/src/providers/weather/open-meteo.ts`,
+  `src/web/packages/host/src/providers/weather/open-meteo.fixture.ts`,
+  `src/web/packages/host/scripts/vendor-weather-icons.mjs`
 
 ## The problem
 

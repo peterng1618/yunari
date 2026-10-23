@@ -16,6 +16,7 @@ import { LhmSensorProvider } from "./providers/lhm.js";
 import { launchLhm, registerLhmTask } from "./providers/lhm-launcher.js";
 import { LibrarySensorProvider } from "./providers/library.js";
 import { ProviderRegistry } from "./providers/registry.js";
+import { WeatherProvider } from "./providers/weather/provider.js";
 import {
   createDisplayLauncher,
   type Launcher,
@@ -164,10 +165,16 @@ export async function run(argv: readonly string[]): Promise<number> {
   // Time is a reading from this PC, so displays agree and a wrong device clock
   // cannot mislead.
   const clockProvider = new ClockSensorProvider();
+  // Weather's place, backend and cadence are this PC's own settings, and the
+  // provider owns its timer: it is built here with the providers, not by the
+  // registry's cycle (docs/decisions/0099).
+  const weatherSettings = createWeatherSettingsStore(settingsDir);
+  const weatherProvider = new WeatherProvider({ settings: weatherSettings });
   const registry = new ProviderRegistry([
     clockProvider,
     lhmProvider,
     libraryProvider,
+    weatherProvider,
   ]);
   const here = path.dirname(fileURLToPath(import.meta.url));
   const packagesDir = path.resolve(here, "..", "..");
@@ -189,8 +196,6 @@ export async function run(argv: readonly string[]): Promise<number> {
   // The consumer's display preferences, read by the provider that acquires the
   // readings they apply to.
   const displaySettings = createDisplaySettingsStore(settingsDir);
-  // The weather place and backend the provider built in the next task reads.
-  const weatherSettings = createWeatherSettingsStore(settingsDir);
   // Which theme this host displays; consumer state beside the device choices.
   const activeTheme = createActiveThemeStore(settingsDir);
   // Which curated font trios this author reaches for. Author preference about
