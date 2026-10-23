@@ -1,4 +1,4 @@
-import { diskDeviceId } from "@yunari/renderer-core";
+import { semanticId } from "@yunari/renderer-core";
 import type { LhmSensor } from "./lhm-tree.js";
 
 /** Which LHM sensor answers which Yunari semantic key. Modelled on explicit
@@ -286,7 +286,7 @@ export function gpuDeviceReadings(
   }
 
   return [...seen].map(([hardwareId, name]) => ({
-    deviceId: diskDeviceId(name) || hardwareId,
+    deviceId: semanticId(name) || hardwareId,
     name,
   }));
 }
@@ -328,7 +328,7 @@ export function diskDeviceReadings(
 
     const usedGb = total - free;
     readings.push({
-      deviceId: diskDeviceId(name),
+      deviceId: semanticId(name),
       name,
       usedGb,
       totalGb: total,
@@ -485,7 +485,7 @@ function nodeFor(
 
   for (const sensor of sensors) {
     if (groupOf(sensor.hardwareType) === group) {
-      seen.set(sensor.hardwareId, diskDeviceId(sensor.hardwareType));
+      seen.set(sensor.hardwareId, semanticId(sensor.hardwareType));
     }
   }
 
@@ -526,7 +526,7 @@ export function lhmDeviceName(
   for (const sensor of sensors) {
     if (
       groupOf(sensor.hardwareType) === group &&
-      diskDeviceId(sensor.hardwareType) === deviceId
+      semanticId(sensor.hardwareType) === deviceId
     ) {
       return sensor.hardwareType;
     }
@@ -558,7 +558,7 @@ export function matchLhmSensorsAssigned(
       ? sensors
       : sensors.filter((sensor) => {
           const group = groupOf(sensor.hardwareType);
-          const id = diskDeviceId(sensor.hardwareType);
+          const id = semanticId(sensor.hardwareType);
 
           // Keep everything that is not one of the selected groups.
           if (group === "gpu" && gpuWanted)

@@ -1,8 +1,8 @@
 import type { Sample, SampleEntry } from "@yunari/renderer-core";
 import {
   describeSemanticKey,
-  diskDeviceId,
   diskDeviceOf,
+  semanticId,
 } from "@yunari/renderer-core";
 import { displayNameFor } from "../settings/devices.js";
 import {
@@ -238,14 +238,14 @@ export class LhmSensorProvider implements SensorProvider {
     if (gpuName !== undefined) {
       named.set(
         "gpu.name",
-        displayNameFor(names, diskDeviceId(gpuName), gpuName),
+        displayNameFor(names, semanticId(gpuName), gpuName),
       );
     }
 
     if (diskName !== undefined) {
       named.set(
         "disk.name",
-        displayNameFor(names, diskDeviceId(diskName), diskName),
+        displayNameFor(names, semanticId(diskName), diskName),
       );
     }
 

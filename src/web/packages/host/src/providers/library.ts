@@ -1,5 +1,5 @@
 import type { Sample, SampleEntry } from "@yunari/renderer-core";
-import { describeSemanticKey, diskDeviceId } from "@yunari/renderer-core";
+import { describeSemanticKey, semanticId } from "@yunari/renderer-core";
 import type { DeviceAssignment } from "./lhm-mapping.js";
 import {
   type BlockDeviceLike,
@@ -218,7 +218,7 @@ function selectGpu(
 ): GpuSelection | undefined {
   const byModel = (controller: ControllerLike): string | undefined =>
     typeof controller.model === "string" && controller.model.length > 0
-      ? diskDeviceId(controller.model)
+      ? semanticId(controller.model)
       : undefined;
 
   // An assigned card must be matchable, so only named cards can satisfy one.
@@ -571,7 +571,7 @@ export class LibrarySensorProvider implements SensorProvider {
           (model): model is string =>
             typeof model === "string" && model.length > 0,
         )
-        .map((model) => ({ id: diskDeviceId(model), name: model }));
+        .map((model) => ({ id: semanticId(model), name: model }));
 
       return {
         gpus,

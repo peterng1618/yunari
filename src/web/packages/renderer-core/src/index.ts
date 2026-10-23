@@ -160,18 +160,23 @@ export type {
   SemanticFamily,
   SemanticKeyDescriptor,
   SensorTier,
+  UnitKind,
+  ValueKind,
 } from "./data/semantic-keys.js";
 export {
+  BUILT_IN_FAMILIES,
   DISK_DEVICE_QUANTITIES,
   type DiskDeviceQuantity,
   type DiskKeyDescriptor,
   describeDiskKey,
+  describeDynamicKey,
   describeSemanticKey,
-  diskDeviceId,
   diskDeviceOf,
+  groupDescriptorsByFamily,
   isKnownSemanticKey,
   labelForSemanticKey,
   SEMANTIC_KEYS,
+  semanticId,
   semanticKeysByFamily,
 } from "./data/semantic-keys.js";
 export type { SampleSource } from "./data/source.js";

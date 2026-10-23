@@ -178,6 +178,11 @@ function colourModeOptions(
  *  A key this build does not know carries no family, so it is offered under no
  *  heading and last: an invented heading would be a word for something nothing
  *  declared (§9). */
+const familyWord = (family: string): string | undefined =>
+  (uiCopy.store.facets.sensorFamilies as Readonly<Record<string, string>>)[
+    family
+  ];
+
 function sensorOptions(items: readonly StoreItem[]): readonly FacetOption[] {
   const readingsOf =
     (family: SemanticFamily | undefined) =>
@@ -190,13 +195,17 @@ function sensorOptions(items: readonly StoreItem[]): readonly FacetOption[] {
     }[] =>
       item.facets.sensors
         .filter((sensor) => sensor.family === family)
-        .map((sensor) => ({
-          id: sensor.key,
-          name: sensor.label,
-          ...(family === undefined
-            ? {}
-            : { group: uiCopy.store.facets.sensorFamilies[family] }),
-        }));
+        .map((sensor) => {
+          // `family` is an open string now, so a provider-contributed family has
+          // no word here yet; it is drawn under no heading rather than invented.
+          const group = family === undefined ? undefined : familyWord(family);
+
+          return {
+            id: sensor.key,
+            name: sensor.label,
+            ...(group === undefined ? {} : { group }),
+          };
+        });
 
   return [
     ...[...semanticKeysByFamily().keys()].flatMap((family) =>
