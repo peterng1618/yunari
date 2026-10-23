@@ -412,6 +412,53 @@ it("adds a colour to the open row, deletes it by right-click and by Shift+F10, a
   await picker.close();
 });
 
+it("maps a channel track's pointer through the padding box its handle sits in", async () => {
+  // The handle's `left: n%` resolves against the padding box, while
+  // `getBoundingClientRect` measures the border box. With a 1px edge each side,
+  // the 25% point is `1 + 0.25 * 198`; a border-box reading would write 25.25%.
+  const picker = await openPicker(PURE_RED);
+  const hue = picker.find("picker-hue");
+  hue.style.borderLeftWidth = "1px";
+  hue.style.borderRightWidth = "1px";
+  stubRect(hue, 200, 12);
+
+  await pointer(hue, "pointerdown", 1 + 0.25 * 198, 6);
+
+  // The hue range is 0–360, so a quarter along it is 90 exactly.
+  expect(valueOf(picker, "picker-hue")).toBe(90);
+
+  await picker.close();
+});
+
+it("draws no preset group for an empty colour library", async () => {
+  const saved = presetLibrary.getSnapshot().colours;
+  const picker = await (async () => {
+    await act(async () => {
+      for (const preset of saved) {
+        presetLibrary.deletePreset("colour", preset.id);
+      }
+    });
+    return openPicker(PURE_RED);
+  })();
+  try {
+    await flush();
+    expect(
+      document.body.querySelector(
+        `[role="radiogroup"][aria-label="${uiCopy.panels.pickerPresets}"]`,
+      ),
+      "an empty library states zero rather than an empty labelled group",
+    ).toBeNull();
+  } finally {
+    await picker.close();
+    await act(async () => {
+      presetLibrary.addColours(
+        saved.map((preset) => ({ name: preset.name, value: preset.value })),
+      );
+    });
+    await flush();
+  }
+});
+
 it("renders no eyedropper where the browser has none, and Escape returns focus to the trigger", async () => {
   const picker = await openPicker(GREY);
 

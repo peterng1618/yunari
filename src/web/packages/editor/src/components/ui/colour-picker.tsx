@@ -13,6 +13,7 @@ import {
   CHANNEL_RANGES,
   type ColourChannel,
   channelValue,
+  ratioAlong,
   steppedValue,
 } from "./colour-picker-model.js";
 import { ControlChoiceRow } from "./control-choice-row.js";
@@ -76,13 +77,13 @@ function ChannelTrack({
   const range = CHANNEL_RANGES[channel];
 
   const pick = (clientX: number): void => {
-    const box = ref.current?.getBoundingClientRect();
-    if (box === undefined || box.width === 0) return;
-    const ratio = (clientX - box.left) / box.width;
-    if (!Number.isFinite(ratio)) return;
-    onValue(
-      range.min + Math.min(1, Math.max(0, ratio)) * (range.max - range.min),
-    );
+    const element = ref.current;
+    if (element === null) return;
+    // The handle's `left: n%` resolves against the padding box, so the reading
+    // is the same one the gradient track uses.
+    const ratio = ratioAlong(element, clientX);
+    if (ratio === undefined) return;
+    onValue(range.min + ratio * (range.max - range.min));
   };
 
   return (
@@ -331,62 +332,68 @@ export function ColourPicker({
                   : {})}
                 onCommit={(next) => api.commitText(next)}
               />
-              <RadioGroup
-                value={api.text}
-                onValueChange={(next) => api.choosePreset(next)}
-                aria-label={uiCopy.panels.pickerPresets}
-                className="space-y-1"
-              >
-                {presets.colours.map((preset) => (
-                  <span
-                    key={preset.id}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      openMenu(preset, event.clientX, event.clientY);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Delete") {
+              {presets.colours.length === 0 ? null : (
+                // An empty library states zero by drawing nothing: a labelled
+                // radiogroup with no members is a control the author can reach
+                // and not use, and the gradient row already hides.
+                <RadioGroup
+                  value={api.text}
+                  onValueChange={(next) => api.choosePreset(next)}
+                  aria-label={uiCopy.panels.pickerPresets}
+                  className="space-y-1"
+                >
+                  {presets.colours.map((preset) => (
+                    <span
+                      key={preset.id}
+                      onContextMenu={(event) => {
                         event.preventDefault();
-                        presetLibrary.deletePreset("colour", preset.id);
-                        return;
-                      }
-                      if (
-                        (event.key === "F10" && event.shiftKey) ||
-                        event.key === "ContextMenu"
-                      ) {
-                        event.preventDefault();
-                        const box = event.currentTarget.getBoundingClientRect();
-                        openMenu(preset, box.left, box.top);
-                      }
-                    }}
-                  >
-                    <ControlChoiceRow
-                      label={preset.name}
-                      value={preset.value}
-                      data={{
-                        "data-testid": `picker-preset-${preset.id}`,
-                        "data-yunari-value": "",
+                        openMenu(preset, event.clientX, event.clientY);
                       }}
-                      swatch={
-                        <span
-                          aria-hidden
-                          data-yunari-value=""
-                          className="size-4 flex-none rounded-sm border border-edge"
-                          style={{
-                            backgroundImage: `${CHECKERBOARD}`,
-                            backgroundSize: "0.5rem 0.5rem",
-                          }}
-                        >
+                      onKeyDown={(event) => {
+                        if (event.key === "Delete") {
+                          event.preventDefault();
+                          presetLibrary.deletePreset("colour", preset.id);
+                          return;
+                        }
+                        if (
+                          (event.key === "F10" && event.shiftKey) ||
+                          event.key === "ContextMenu"
+                        ) {
+                          event.preventDefault();
+                          const box =
+                            event.currentTarget.getBoundingClientRect();
+                          openMenu(preset, box.left, box.top);
+                        }
+                      }}
+                    >
+                      <ControlChoiceRow
+                        label={preset.name}
+                        value={preset.value}
+                        data={{
+                          "data-testid": `picker-preset-${preset.id}`,
+                          "data-yunari-value": "",
+                        }}
+                        swatch={
                           <span
-                            className="block size-full rounded-sm"
-                            style={{ background: preset.value }}
-                          />
-                        </span>
-                      }
-                    />
-                  </span>
-                ))}
-              </RadioGroup>
+                            aria-hidden
+                            data-yunari-value=""
+                            className="size-4 flex-none rounded-sm border border-edge"
+                            style={{
+                              backgroundImage: `${CHECKERBOARD}`,
+                              backgroundSize: "0.5rem 0.5rem",
+                            }}
+                          >
+                            <span
+                              className="block size-full rounded-sm"
+                              style={{ background: preset.value }}
+                            />
+                          </span>
+                        }
+                      />
+                    </span>
+                  ))}
+                </RadioGroup>
+              )}
               {api.eyedropper ? (
                 <ControlIconButton
                   label={uiCopy.panels.pickerEyedropper}

@@ -13,10 +13,10 @@ The **colour and gradient picker rebuild** ([`spec`](docs/superpowers/specs/2026
 
 ## Last completed change
 
-- **The picker's focus boundary now exists and is measured**: `outline-none` poisoned Tailwind's `--tw-outline-style`, so the area and tracks drew no ring; the variant utilities alone now paint a 2px accent ring and the browser case asserts style, width and the drawn pixel before its 3:1 contrast.
-- **The two evidence rows select their cases**: the capture cases are titled `picks a palette colour in the picker…` and `builds a gradient with a drag and a number…`, and the gradient case drags a stop and types `25` before capturing.
-- **Five repaired browser cases were run**, not only the focused grep: both `editor.spec.ts` picker cases, the `keyboard.spec.ts` anchor case, `panel-labels.spec.ts`'s audit and the `glass-authoring.spec.ts` history case all pass.
-- **`vg-709` is filed open** for a drag or typed offset crossing a neighbouring stop (issue #52), from Task 10's browser proof.
+- **Gradient stop and preset keys stop at their control**: propagation halts at the handler, so ArrowRight and Delete no longer also nudge or delete the selected object; a browser case proves both.
+- **Palette and type commits are their own undo steps**: token rename, kind switch, add, delete-token and type-preset field edits record history, so a later undo cannot silently revert them.
+- **The colour preset group hides when the library is empty**, and the channel tracks read the padding box their handles sit in.
+- **`DESIGN.md` §5 states the built sizes**: the colour area's 128px height and the gradient track's 24px height with 16px stop marks.
 
 ## Next
 

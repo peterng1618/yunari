@@ -25,6 +25,30 @@ function isPercentage(channel: ColourChannel): boolean {
   return channel !== "hue";
 }
 
+/**
+ * A pointer's position as a 0–1 fraction of an element's **padding box**.
+ *
+ * A handle's `left: n%` resolves against the padding box, while
+ * `getBoundingClientRect` measures the border box — reading that would put every
+ * handle's own centre a border-width off its value. The gradient track and the
+ * channel strips share this one reading. `undefined` when there is no width to
+ * measure, which is what a control that has not been laid out reports.
+ */
+export function ratioAlong(
+  element: HTMLElement,
+  clientX: number,
+): number | undefined {
+  const rect = element.getBoundingClientRect();
+  const style = getComputedStyle(element);
+  const left = Number.parseFloat(style.borderLeftWidth) || 0;
+  const right = Number.parseFloat(style.borderRightWidth) || 0;
+  const width = rect.width - left - right;
+  if (!(width > 0)) return undefined;
+  const ratio = (clientX - rect.left - left) / width;
+  if (!Number.isFinite(ratio)) return undefined;
+  return Math.min(1, Math.max(0, ratio));
+}
+
 export function channelValue(channel: ColourChannel, hsva: Hsva): number {
   switch (channel) {
     case "hue":
