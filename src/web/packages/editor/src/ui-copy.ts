@@ -1012,6 +1012,7 @@ export const uiCopy = {
       icon: "Icons",
       image: "Images",
       video: "Videos",
+      colour: "Colours",
       local: "Wallpaper Engine",
     } satisfies Record<ListingCategory, string>,
     action: {
@@ -1019,6 +1020,7 @@ export const uiCopy = {
       icon: "Place on canvas",
       image: "Set as background",
       video: "Set as background",
+      colour: "Add to presets",
       local: "Open in Wallpaper Engine",
     } satisfies Record<ListingCategory, string>,
     searchPlaceholder: "Search assets…",

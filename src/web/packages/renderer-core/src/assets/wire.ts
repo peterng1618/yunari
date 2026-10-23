@@ -1,6 +1,21 @@
 /** The asset finder's wire contract, spoken by the host and the editor. */
 
-export type SourceCategory = "font" | "icon" | "image" | "video";
+/** What an asset becomes when the finder adds it to the presets: a palette's
+ *  own colours, or a gradient's angle and stops. */
+export type PresetKind = "palette" | "gradient";
+
+export type AssetPreset =
+  | { readonly kind: "palette"; readonly colours: readonly string[] }
+  | {
+      readonly kind: "gradient";
+      readonly angle: number;
+      readonly stops: readonly {
+        readonly offset: number;
+        readonly color: string;
+      }[];
+    };
+
+export type SourceCategory = "font" | "icon" | "image" | "video" | "colour";
 
 /** `"local"` is a category no grid draws: it names a source that is a library
  *  on this PC rather than a provider, which is only Wallpaper Engine (R8). */
@@ -19,6 +34,8 @@ export interface AssetResult {
   /** "unknown" rather than "". */
   readonly licence: string;
   readonly sourceUrl: string;
+  /** What adding this asset to the presets writes, when its source says. */
+  readonly preset?: AssetPreset;
 }
 
 export interface AssetSourceListing {
@@ -30,6 +47,8 @@ export interface AssetSourceListing {
   /** `null` on the wire when the source needs no credential. */
   readonly requires: string | null;
   readonly configurable: boolean;
+  /** The kind of preset this source yields, or `null` when it yields none. */
+  readonly presetKind: PresetKind | null;
   /** The host a search term is sent to, named by the first-search notice (§5).
    *  `null` when the term never leaves this computer. */
   readonly host: string | null;

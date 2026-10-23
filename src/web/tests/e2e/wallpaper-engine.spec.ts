@@ -22,6 +22,7 @@ const wallpaperEngine = {
   body: "wallpaper-engine",
   requires: null,
   configurable: false,
+  presetKind: null,
   host: null,
 } as const;
 

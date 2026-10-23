@@ -65,6 +65,7 @@ function listingOf(source: AssetSource): AssetSourceListing {
     // credential" from a field the answer forgot to carry.
     requires: source.requires ?? null,
     configurable: source.configurable,
+    presetKind: source.presetKind ?? null,
     host: source.host ?? null,
   };
 }

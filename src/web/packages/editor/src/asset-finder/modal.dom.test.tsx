@@ -33,6 +33,7 @@ const lucide: AssetSourceListing = {
   body: "grid",
   requires: null,
   configurable: true,
+  presetKind: null,
   host: null,
 };
 
@@ -43,6 +44,7 @@ const fontAwesome: AssetSourceListing = {
   body: "grid",
   requires: null,
   configurable: true,
+  presetKind: null,
   host: null,
 };
 
@@ -53,6 +55,7 @@ const unsplash: AssetSourceListing = {
   body: "grid",
   requires: "unsplash",
   configurable: true,
+  presetKind: null,
   host: "api.unsplash.com",
 };
 
@@ -63,6 +66,7 @@ const curatedFonts: AssetSourceListing = {
   body: "font-picker",
   requires: null,
   configurable: true,
+  presetKind: null,
   host: null,
 };
 
@@ -73,6 +77,7 @@ const wallpaperEngine: AssetSourceListing = {
   body: "wallpaper-engine",
   requires: null,
   configurable: false,
+  presetKind: null,
   host: null,
 };
 

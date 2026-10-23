@@ -19,12 +19,14 @@ export {
 } from "./artboard.js";
 export type {
   AssetPage,
+  AssetPreset,
   AssetResult,
   AssetSearchAnswer,
   AssetSearchRequest,
   AssetSourceListing,
   CredentialRow,
   ListingCategory,
+  PresetKind,
   SourceCategory,
 } from "./assets/wire.js";
 export { parseAssetSearchRequest } from "./assets/wire.js";

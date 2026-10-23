@@ -1,4 +1,8 @@
-import type { AssetResult, ListingCategory } from "@yunari/renderer-core";
+import type {
+  AssetResult,
+  ListingCategory,
+  PresetKind,
+} from "@yunari/renderer-core";
 
 /**
  * The asset source port.
@@ -35,6 +39,8 @@ export interface AssetSource {
   readonly body: "grid" | "font-picker" | "wallpaper-engine";
   readonly requires: string | undefined;
   readonly configurable: boolean;
+  /** The kind of preset this source yields; absent when it yields none. */
+  readonly presetKind?: PresetKind;
   /** The host a search term reaches, or absent when it stays on this PC. */
   readonly host?: string;
   search(

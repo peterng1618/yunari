@@ -17,7 +17,7 @@ export const wallpaperEngineSource: AssetSource = {
   configurable: false,
   // A local library is a body, not a grid, and `searchSources` filters
   // `body === "grid"`, so the search route never asks this source.
-  search: async () => ({ results: [], next: undefined }),
+  search: async () => ({ results: [], totalPages: undefined }),
   // A row's bytes are served at `/api/wallpaper-engine/item/<id>/asset`, which
   // no consumer reaches through this port; a filename invented here would be a
   // second answer to a question this route already answers.

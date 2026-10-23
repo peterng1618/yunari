@@ -13,6 +13,7 @@ const listing: AssetSourceListing = {
   body: "grid",
   requires: null,
   configurable: true,
+  presetKind: null,
   host: null,
 };
 

@@ -1,7 +1,9 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
+import { lucideSource } from "./icons/lucide.js";
 import { type AssetRouteOptions, handleAssetRoutes } from "./routes.js";
+import type { AssetSource } from "./source.js";
 
 async function readBody(request: http.IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
@@ -49,6 +51,29 @@ afterEach(async () => {
 });
 
 describe("the asset routes", () => {
+  const colourSource: AssetSource = {
+    id: "fake-palettes",
+    label: "Palettes",
+    category: "colour",
+    body: "grid",
+    requires: undefined,
+    configurable: true,
+    presetKind: "palette",
+    search: async () => ({ results: [], totalPages: 1 }),
+    bytesOf: async () => undefined,
+  };
+
+  it("lists a colour source's preset kind and a null for the others", async () => {
+    const base = await start({ sources: [colourSource, lucideSource] });
+    const body = (await (await fetch(`${base}/api/assets/sources`)).json()) as {
+      sources: readonly { id: string; presetKind: unknown }[];
+    };
+    expect(body.sources.find((s) => s.id === "fake-palettes")?.presetKind).toBe(
+      "palette",
+    );
+    expect(body.sources.find((s) => s.id === "lucide")?.presetKind).toBeNull();
+  });
+
   it("lists the sources, with no credential needed", async () => {
     const base = await start({});
     const response = await fetch(`${base}/api/assets/sources`);
