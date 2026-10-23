@@ -186,8 +186,9 @@ export interface BatteryLike {
   readonly isCharging?: boolean;
   readonly acConnected?: boolean;
   /**
-   * Minutes left while discharging. `null` on a desktop, and `0` means the
-   * Windows path could not read it (`parseInt('0' + value)`).
+   * Minutes left while discharging. `null` when the platform does not report
+   * one (a desktop, or Windows), and macOS floors `parseInt('0' + value)`, so
+   * `0` can mean "unread" rather than "empty".
    */
   readonly timeRemaining?: number | null;
   readonly designedCapacity?: number;

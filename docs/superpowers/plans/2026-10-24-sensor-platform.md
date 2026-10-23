@@ -459,7 +459,7 @@ Fixtures come from real LHM captures in `packages/host/src/providers/__fixtures_
 
 **Interfaces:**
 - Consumes: Task 1.1 keys.
-- Produces: `wifi.ssid`, `wifi.signal`, `wifi.linkSpeed`, `system.uptime`, `system.processes`, `system.hostname`, `system.os`, `system.osBuild`, `audio.volume`, `audio.muted`, `battery.state`, `battery.charging`, `battery.timeRemaining`, `battery.ac`, `battery.health`.
+- Produces: `wifi.ssid`, `wifi.signal`, `wifi.linkSpeed`, `system.uptime`, `system.processes`, `system.hostname`, `system.os`, `system.osBuild`, `battery.state`, `battery.charging`, `battery.timeRemaining`, `battery.ac`, `battery.health`, `battery.level`, `battery.voltage`. `audio.volume`/`audio.muted` moved to Task 4.2: `si.audio()` lists devices and has no mixer reading, so they need Windows CoreAudio beside the SMTC helper.
 
 - [ ] **Step 1: Write the failing tests**
   - Wi-Fi keys are omitted when the adapter reports none; no zero SSID.
@@ -840,6 +840,7 @@ Weather runs before custom sources so the HTTP failure, cache and image paths ar
   export function createArtworkCache(directory: string, cap = 64): ArtworkCache;
   ```
   Session choice: first playing, else current, else `unavailable`.
+  Also produces `audio.volume` (`%`) and `audio.muted` (boolean) from the default endpoint's CoreAudio volume, read in the same PowerShell helper run as the SMTC poll; absent endpoint, absent keys.
 
 - [ ] **Step 1: Write the failing tests**
   - Two sessions, one playing, selects the playing one.
