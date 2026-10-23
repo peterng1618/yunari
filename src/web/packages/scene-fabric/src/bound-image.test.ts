@@ -79,6 +79,10 @@ describe("isHostRelativeImageUrl", () => {
     expect(isHostRelativeImageUrl("a.png")).toBe(false);
     // URL parsing reads the backslash as `/`, so this is an authority.
     expect(isHostRelativeImageUrl("/\\evil.example/a.png")).toBe(false);
+    // The parser strips tab and newline before it reads the authority, so a
+    // path first character cannot be trusted over the rest of the string.
+    expect(isHostRelativeImageUrl("/\n/evil.example/a.png")).toBe(false);
+    expect(isHostRelativeImageUrl("/\t/evil.example/a.png")).toBe(false);
   });
 });
 
@@ -147,6 +151,92 @@ describe("refreshBoundImages", () => {
     expect(image.getSrc()).toMatch(/\/assets\/authored\.png$/);
   });
 
+  it("restores the authored src when the reading fails", () => {
+    const image = authoredImage("/assets/authored.png");
+    const bindings = { [NODE_ID]: [BINDING] };
+
+    const live = capturedElements();
+    refreshBoundImages(
+      [image],
+      bindings,
+      sourceOf(sample("/api/media/live.png")),
+      hooks(),
+    );
+    decoded(live[0]);
+    expect(image.getSrc()).toMatch(/\/api\/media\/live\.png$/);
+
+    const restored = capturedElements();
+    refreshBoundImages(
+      [image],
+      bindings,
+      sourceOf({
+        sensorId: "media.artwork",
+        timestamp: new Date(0).toISOString(),
+        status: "error",
+      }),
+      hooks(),
+    );
+    decoded(restored[0]);
+    expect(image.getSrc()).toMatch(/\/assets\/authored\.png$/);
+  });
+
+  it("keeps the newest reading when an older load lands last", () => {
+    const image = authoredImage("/assets/authored.png");
+    const bindings = { [NODE_ID]: [BINDING] };
+    const created = capturedElements();
+    const identity = (url: string): string => url;
+
+    // Neither load has settled; the second reading is applied while the first
+    // is still in flight, which is the race the generations exist for.
+    refreshBoundImages(
+      [image],
+      bindings,
+      sourceOf(sample("/api/media/a.png")),
+      { resolve: identity },
+    );
+    refreshBoundImages(
+      [image],
+      bindings,
+      sourceOf(sample("/api/media/b.png")),
+      { resolve: identity },
+    );
+    expect(created).toHaveLength(2);
+
+    decoded(created[1]);
+    decoded(created[0]);
+    expect(image.getSrc()).toBe("http://localhost:3000/api/media/b.png");
+  });
+
+  it("does not let a stale load overwrite the restored authored src", () => {
+    const image = authoredImage("/assets/authored.png");
+    const bindings = { [NODE_ID]: [BINDING] };
+    const created = capturedElements();
+    const identity = (url: string): string => url;
+
+    // The live load is still in flight when the reading turns unavailable.
+    refreshBoundImages(
+      [image],
+      bindings,
+      sourceOf(sample("/api/media/live.png")),
+      { resolve: identity },
+    );
+    refreshBoundImages(
+      [image],
+      bindings,
+      sourceOf({
+        sensorId: "media.artwork",
+        timestamp: new Date(0).toISOString(),
+        status: "unavailable",
+      }),
+      { resolve: identity },
+    );
+    expect(created).toHaveLength(2);
+
+    decoded(created[1]);
+    decoded(created[0]);
+    expect(image.getSrc()).toMatch(/\/assets\/authored\.png$/);
+  });
+
   it("leaves the authored asset when no reading has arrived", () => {
     const image = authoredImage("/assets/authored.png");
     const created = capturedElements();
@@ -169,6 +259,23 @@ describe("refreshBoundImages", () => {
     refreshBoundImages(
       [image],
       {},
+      sourceOf(sample("/api/media/live.png")),
+      hooks(),
+    );
+
+    expect(created).toHaveLength(0);
+    expect(image.getSrc()).toMatch(/\/assets\/authored\.png$/);
+  });
+
+  it("does not touch an image bound to a non-image reading", () => {
+    const image = authoredImage("/assets/authored.png");
+    const created = capturedElements();
+
+    // A sample with a URL-shaped `textValue` is not evidence that the binding
+    // it arrived through is an image binding.
+    refreshBoundImages(
+      [image],
+      { [NODE_ID]: [{ id: "value", semanticKey: "cpu.load" }] },
       sourceOf(sample("/api/media/live.png")),
       hooks(),
     );

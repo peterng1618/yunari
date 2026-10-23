@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { expect, type Page, test } from "@playwright/test";
 import { writeThemePackage } from "@yunari/theme-package";
 import { isDesktopSurface } from "./surface.js";
@@ -18,17 +18,19 @@ import { isDesktopSurface } from "./surface.js";
  * Its own host on its own port, because a fixture theme is written into an app
  * folder this file owns. The shared host is `host-theme.ts`'s, and a spec that
  * wrote into its themes directory would race the host project's serial cases.
+ * The folder is minted under the OS temp directory and removed again, so a
+ * filesystem walk of the worktree never sees a test store.
  *
  * The stream is stubbed in the page rather than through the host: no provider
  * reports an image reading, and the source this exercises is the player's
  * transport-to-render path.
  */
 
-const here = path.dirname(fileURLToPath(import.meta.url));
 /** A port no other spec or runner owns. */
 const PORT = 4221;
-const APP_DIR = path.join(here, "..", "..", ".e2e-image-binding-app");
-const THEMES_DIR = path.join(APP_DIR, "themes");
+/** Minted per run in `beforeAll`, outside the repository. */
+let appDir = "";
+const THEMES_DIR = (): string => path.join(appDir, "themes");
 const HOST = `http://127.0.0.1:${PORT}`;
 const THEME_ID = "e2e-image-binding";
 const NODE_ID = "artwork";
@@ -113,7 +115,7 @@ function seedLibrary(): void {
   if (!result.ok)
     throw new Error(`image fixture is invalid: ${result.message}`);
 
-  const folder = path.join(THEMES_DIR, THEME_ID);
+  const folder = path.join(THEMES_DIR(), THEME_ID);
   mkdirSync(path.join(folder, "assets"), { recursive: true });
   writeFileSync(path.join(folder, "theme.json"), JSON.stringify(envelope));
   for (const [assetPath, bytes] of Object.entries(assets)) {
@@ -130,7 +132,7 @@ async function startHost(): Promise<ChildProcess> {
       "--port",
       String(PORT),
       "--app-dir",
-      APP_DIR,
+      appDir,
     ],
     { cwd: process.cwd(), stdio: "ignore" },
   );
@@ -250,14 +252,21 @@ test.describe("an image reading on a display", () => {
 
   test.beforeAll(async ({}, testInfo) => {
     if (!isDesktopSurface(testInfo)) return;
-    rmSync(APP_DIR, { recursive: true, force: true });
-    mkdirSync(THEMES_DIR, { recursive: true });
+    appDir = mkdtempSync(path.join(tmpdir(), "yunari-image-binding-"));
+    mkdirSync(THEMES_DIR(), { recursive: true });
     seedLibrary();
     host = await startHost();
   });
 
-  test.afterAll(() => {
-    host?.kill();
+  test.afterAll(async () => {
+    const child = host;
+    if (child !== undefined && child.exitCode === null) {
+      await new Promise<void>((resolve) => {
+        child.once("exit", () => resolve());
+        child.kill();
+      });
+    }
+    if (appDir !== "") rmSync(appDir, { recursive: true, force: true });
   });
 
   test("paints the authored picture, then the reading's, and refuses an absolute URL", async ({
