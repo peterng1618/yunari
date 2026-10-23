@@ -68,6 +68,9 @@ describe("colorswoopSource", () => {
     expect(page.totalPages).toBe(1);
     expect(page.results[0]?.licence).toBe("CC0-1.0");
     expect(page.results[0]?.sourceUrl).toBe(SUNSET.url);
+    // The catalogue is fetched once and filtered locally, so a search term
+    // never reaches a host.
+    expect(colorswoopSource.host).toBeNull();
 
     const byTag = await colorswoopSource.search("DUSK", 1, ctx);
     expect(byTag.results.map((r) => r.name)).toEqual(["Sunset Pair"]);

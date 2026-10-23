@@ -41,8 +41,8 @@ export interface AssetSource {
   readonly configurable: boolean;
   /** The kind of preset this source yields; absent when it yields none. */
   readonly presetKind?: PresetKind;
-  /** The host a search term reaches, or absent when it stays on this PC. */
-  readonly host?: string;
+  /** The host a search term reaches, or null when it stays on this PC. */
+  readonly host?: string | null;
   search(
     query: string,
     /** 1-based; the host asks for the page the pager shows. */

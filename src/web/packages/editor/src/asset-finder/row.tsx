@@ -113,10 +113,22 @@ export function AssetRow({
           </span>
         )}
       </span>
-      {/* The source's own second word: an icon style, or a photographer. */}
-      {result.subtitle === undefined ? null : (
+      {/* The source's own second word: an icon style, or a photographer. A
+          preset also shows the licence it arrives under, which its source can
+          only ever call `unknown`. */}
+      {result.subtitle === undefined && result.preset === undefined ? null : (
         <span className="flex min-w-0 items-center gap-[var(--space-6)]">
-          <span className="truncate text-xs text-faint">{result.subtitle}</span>
+          <span className="truncate text-xs text-faint">
+            {result.subtitle}
+            {result.subtitle !== undefined && result.preset !== undefined
+              ? " · "
+              : null}
+            {result.preset === undefined ? null : (
+              <span className="text-muted" data-yunari-asset-licence="">
+                {result.licence}
+              </span>
+            )}
+          </span>
           {markWithAuthor ? (
             <span className="ml-auto flex-none">
               <SourceMark id={sourceId} label={sourceLabel} />

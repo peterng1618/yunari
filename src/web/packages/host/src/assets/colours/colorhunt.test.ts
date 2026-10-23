@@ -79,22 +79,30 @@ describe("colorhuntSource", () => {
     expect(page.results.map((result) => result.id)).toEqual([SUNSET.code]);
   });
 
-  it("reports the last page from a short page and leaves a full page unknown", async () => {
-    const short = stubFetch(codes(2));
-    const shortPage = await colorhuntSource.search(
-      "",
-      3,
-      context(short as unknown as typeof fetch),
-    );
-    expect(shortPage.totalPages).toBe(3);
-
+  it("says the page after a full one and the page before an empty one", async () => {
     const full = stubFetch(codes(40));
-    const fullPage = await colorhuntSource.search(
+    const firstPage = await colorhuntSource.search(
       "",
       1,
       context(full as unknown as typeof fetch),
     );
-    expect(fullPage.totalPages).toBeUndefined();
+    expect(firstPage.totalPages).toBe(2);
+
+    const short = stubFetch(codes(7));
+    const secondPage = await colorhuntSource.search(
+      "",
+      2,
+      context(short as unknown as typeof fetch),
+    );
+    expect(secondPage.totalPages).toBe(2);
+
+    const empty = stubFetch([]);
+    const emptyPage = await colorhuntSource.search(
+      "",
+      2,
+      context(empty as unknown as typeof fetch),
+    );
+    expect(emptyPage.totalPages).toBe(1);
   });
 
   it("carries an unknown licence and the palette's own page", async () => {

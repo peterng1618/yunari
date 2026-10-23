@@ -415,10 +415,12 @@ export function AssetFinder({
   const kindSourcesOff =
     visibleSources.length > 0 && enabledSources.length === 0;
 
-  /** A change of question returns to page one, at the press that made it. */
+  /** A change of question returns to page one, at the press that made it. A
+   *  success sentence answers the question that was asked, so it leaves with it. */
   const reask = (): void => {
     setPage(1);
     setSelected(undefined);
+    setMessage(undefined);
   };
 
   const sourceOf = (id: string): AssetSourceListing | undefined =>
@@ -465,11 +467,10 @@ export function AssetFinder({
           value={active}
           onValueChange={(value) => {
             setActive(value as ListingCategory);
-            setSelected(undefined);
-            setPage(1);
             // A tab is a new question, so a filter from the last tab is not an
             // answer about this one.
             setPresetFilter("all");
+            reask();
           }}
           className="flex min-h-0 flex-1 flex-col"
         >
@@ -597,7 +598,12 @@ export function AssetFinder({
                               .size,
                           )}
                       {message === undefined ? null : (
-                        <span className="ml-[var(--space-8)]">{message}</span>
+                        <span
+                          className="ml-[var(--space-8)]"
+                          data-yunari-asset-message=""
+                        >
+                          {message}
+                        </span>
                       )}
                     </span>
 

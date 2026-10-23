@@ -77,7 +77,7 @@ describe("uigradientsSource", () => {
     });
   });
 
-  it("carries the MIT licence, the project page and the fetch host", async () => {
+  it("carries the MIT licence and the project page, and names no host", async () => {
     const { fetch } = stubFetch([DEEP_SEA]);
 
     const page = await uigradientsSource.search("", 1, context(fetch));
@@ -86,7 +86,9 @@ describe("uigradientsSource", () => {
     expect(page.results[0]?.sourceUrl).toBe(
       "https://github.com/ghosh/uiGradients",
     );
-    expect(uigradientsSource.host).toBe("raw.githubusercontent.com");
+    // The catalogue is fetched once and filtered locally, so a search term
+    // never reaches a host.
+    expect(uigradientsSource.host).toBeNull();
     expect(uigradientsSource.presetKind).toBe("gradient");
     expect(uigradientsSource.category).toBe("colour");
   });

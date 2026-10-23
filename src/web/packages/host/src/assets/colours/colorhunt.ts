@@ -107,8 +107,15 @@ export const colorhuntSource: AssetSource = {
 
     return {
       results,
-      // A short page proves the end; a full one cannot say how many remain.
-      totalPages: results.length < COLOUR_PAGE_SIZE ? page : undefined,
+      // The feed answers a step, never a catalogue: an empty page proves the
+      // end is behind, a short page is the end, and a full one says only that
+      // the next page exists.
+      totalPages:
+        results.length === 0
+          ? Math.max(1, page - 1)
+          : results.length < COLOUR_PAGE_SIZE
+            ? page
+            : page + 1,
     };
   },
 

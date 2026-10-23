@@ -117,7 +117,7 @@ export const colorswoopSource: AssetSource = {
   requires: undefined,
   configurable: true,
   presetKind: "palette",
-  host: "colorswoop.com",
+  host: null,
 
   async search(query, asked, ctx) {
     const palettes = await catalogue(ctx);

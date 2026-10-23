@@ -159,14 +159,16 @@ describe("webgradientsSource", () => {
     ).toEqual([0, 270, 180]);
   });
 
-  it("carries the MIT licence, the project page and the fetch host", async () => {
+  it("carries the MIT licence and the project page, and names no host", async () => {
     const { fetch } = stubFetch([NIGHT_FADE]);
 
     const page = await webgradientsSource.search("", 1, context(fetch));
 
     expect(page.results[0]?.licence).toBe("MIT");
     expect(page.results[0]?.sourceUrl).toBe("https://webgradients.com/");
-    expect(webgradientsSource.host).toBe("raw.githubusercontent.com");
+    // The catalogue is fetched once and filtered locally, so a search term
+    // never reaches a host.
+    expect(webgradientsSource.host).toBeNull();
     expect(webgradientsSource.presetKind).toBe("gradient");
     expect(webgradientsSource.category).toBe("colour");
   });

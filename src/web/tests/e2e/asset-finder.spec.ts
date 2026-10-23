@@ -540,6 +540,11 @@ test("the Colours tab adds a palette to the presets", async ({
   await row.click();
   await page.locator('[data-yunari-asset-action=""]').click();
 
+  // The action says what landed, in the bar the count already lives in.
+  await expect(page.locator("[data-yunari-asset-message]")).toHaveText(
+    "Added 2 colours",
+  );
+
   const stored = await page.evaluate(() =>
     localStorage.getItem("yunari.editor.presets"),
   );

@@ -157,6 +157,30 @@ describe("applyPreset", () => {
     expect(library.getSnapshot().colours.at(-1)?.name).toBe("Cloud Dancer 2");
   });
 
+  it("stores a four-colour palette's own hex codes in source order", () => {
+    const library = createPresetLibrary(undefined);
+    const four = {
+      ...lucide,
+      name: "Cloud Dancer",
+      preset: {
+        kind: "palette",
+        colours: ["#112233", "#445566", "#778899", "#aabbcc"],
+      },
+    } as const;
+    const before = library.getSnapshot().colours.length;
+
+    expect(applyPreset(four, library)).toEqual({
+      ok: true,
+      message: "Added 4 colours",
+    });
+    expect(library.getSnapshot().colours.slice(before)).toEqual([
+      { id: expect.any(String), name: "Cloud Dancer 1", value: "#112233" },
+      { id: expect.any(String), name: "Cloud Dancer 2", value: "#445566" },
+      { id: expect.any(String), name: "Cloud Dancer 3", value: "#778899" },
+      { id: expect.any(String), name: "Cloud Dancer 4", value: "#aabbcc" },
+    ]);
+  });
+
   it("says already stored and adds nothing on a repeat", () => {
     const library = createPresetLibrary(undefined);
     applyPreset(palette, library);

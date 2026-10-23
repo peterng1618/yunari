@@ -119,7 +119,7 @@ export const uigradientsSource: AssetSource = {
   requires: undefined,
   configurable: true,
   presetKind: "gradient",
-  host: "raw.githubusercontent.com",
+  host: null,
 
   async search(query, asked, ctx) {
     const gradients = await catalogue(ctx);

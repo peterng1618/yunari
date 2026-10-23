@@ -482,6 +482,135 @@ describe("AssetFinder's Colours tab", () => {
     expect(document.querySelector("[data-yunari-asset-empty]")).toBeNull();
   });
 
+  it("advances a lone palette source to the page the feed says exists", async () => {
+    // Color Hunt cannot say how many pages there are, but a full page does prove
+    // the next one exists; without a second source the pager is still the way
+    // there.
+    searchAssets.mockResolvedValue({
+      pages: [
+        page(
+          "colorhunt",
+          Array.from({ length: 40 }, (_, at) => result(`colorhunt:${at}`)),
+          { totalPages: 2 },
+        ),
+      ],
+    });
+
+    await render([colorhunt]);
+    await settle();
+
+    expect(
+      document.querySelector("[data-yunari-asset-page-next]"),
+    ).not.toBeNull();
+    await act(async () => pageButton(2).click());
+    await settle();
+
+    expect(searchAssets.mock.calls.at(-1)?.[0]?.pages).toEqual({
+      colorhunt: 2,
+    });
+  });
+
+  it("draws no palette chip while the Gradients filter is active", async () => {
+    await render([colorhunt, colorswoop, uigradients, webgradients]);
+    await settle();
+
+    await act(async () => kindButton("gradient").click());
+    await settle();
+
+    expect(
+      document.querySelector('[data-yunari-asset-chip="colorhunt"]'),
+    ).toBeNull();
+    expect(
+      document.querySelector('[data-yunari-asset-chip="colorswoop"]'),
+    ).toBeNull();
+    expect(
+      document.querySelector('[data-yunari-asset-chip="uigradients"]'),
+    ).not.toBeNull();
+  });
+
+  it("shows a preset's licence and hides an icon's", async () => {
+    const palette: AssetResult = {
+      ...result("colorhunt:abc"),
+      kind: "palette",
+      subtitle: "50 likes",
+      licence: "unknown",
+      preset: {
+        kind: "palette",
+        colours: ["rgb(17, 34, 51)", "rgb(68, 85, 102)"],
+      },
+    };
+    searchAssets.mockResolvedValue({
+      pages: [
+        page("colorhunt", [palette]),
+        page("lucide", [result("lucide:house")]),
+      ],
+    });
+
+    await render([colorhunt, lucide]);
+    await settle();
+
+    const licence = document.querySelector(
+      '[data-yunari-asset-row="colorhunt:abc"] [data-yunari-asset-licence]',
+    );
+    expect(licence?.textContent).toBe("unknown");
+    expect(
+      document.querySelector('[data-yunari-asset-row="colorhunt:abc"]')
+        ?.textContent,
+    ).toContain("50 likes · unknown");
+
+    await act(async () => tab("icon").click());
+    await settle();
+
+    expect(
+      document.querySelector(
+        '[data-yunari-asset-row="lucide:house"] [data-yunari-asset-licence]',
+      ),
+    ).toBeNull();
+    expect(
+      document.querySelector('[data-yunari-asset-row="lucide:house"]')
+        ?.textContent,
+    ).not.toContain("ISC");
+  });
+
+  it("clears a success sentence when the question changes", async () => {
+    const palette: AssetResult = {
+      ...result("colorhunt:abc"),
+      kind: "palette",
+      licence: "unknown",
+      preset: {
+        kind: "palette",
+        colours: ["rgb(17, 34, 51)", "rgb(68, 85, 102)"],
+      },
+    };
+    searchAssets.mockResolvedValue({
+      pages: [page("colorhunt", [palette])],
+    });
+    const onAction = vi.fn(
+      async () => ({ ok: true, message: "Added 2 colours" }) as const,
+    );
+
+    await render([colorhunt], { onAction });
+    await settle();
+
+    const row = document.querySelector<HTMLElement>(
+      '[data-yunari-asset-row="colorhunt:abc"]',
+    );
+    await act(async () => row?.click());
+    await act(async () => footerAction().click());
+    await settle();
+
+    expect(
+      document.querySelector("[data-yunari-asset-message]")?.textContent,
+    ).toBe("Added 2 colours");
+
+    await type("blue");
+    await settle();
+
+    // The sentence answered the palette just added; a new question has not
+    // been answered yet, so it cannot sit beside its count.
+    expect(document.querySelector("[data-yunari-asset-message]")).toBeNull();
+  });
+
   it("returns the kind filter to all when the tab changes", async () => {
     await render([colorhunt, uigradients, unsplash]);
     await settle();

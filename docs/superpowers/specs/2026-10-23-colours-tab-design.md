@@ -1,7 +1,7 @@
 # The Colours tab — palettes and gradients that land in the presets
 
 - **Date:** 2026-10-23
-- **Status:** draft, awaiting review
+- **Status:** landed 2026-10-24 — colour-neighbour search is phase two (§9). Plan: [`archive/2026-10-23-colours-tab.md`](../plans/archive/2026-10-23-colours-tab.md).
 - **Related:** [`2026-10-21-asset-finder-design.md`](2026-10-21-asset-finder-design.md)
   (the surface, the source port, the first-search notice), [`2026-10-12-colour-and-gradient-rebuild-design.md`](2026-10-12-colour-and-gradient-rebuild-design.md)
   (the picker rebuild and the editor-local preset library).
@@ -97,9 +97,11 @@ The feed is undocumented. A form POST with `step=<page-1>`, `sort=new`,
 result is named `Color Hunt <first 6 hex>` and its subtitle is the like count.
 The query reaches the feed's tag filter — `sunset` and `blue` both answer — so
 keyword search means *this tag*, not a free-text name match; the source cannot
-do more. `sort=new` is the site's own default. A page shorter than 40 proves the
-end and reports `totalPages`; a full page reports `undefined`, because the feed
-does not say how many pages there are.
+do more. `sort=new` is the site's own default. `totalPages` follows from the
+page's own length: a full page reports the following page number, so the pager
+can advance even though the feed does not say how many pages remain; a short
+page reports its own page as the last; an empty page reports the page before it
+(and never below one).
 
 Color Hunt labels its palettes public property, but this spec does not assert a
 licence it cannot quote, so the result carries `unknown`, which the finder
@@ -164,8 +166,8 @@ export type AssetPreset = AssetPresetPalette | AssetPresetGradient;
 - `AssetSearchRequest` is unchanged. The kind filter is expressed by which source
   ids are enabled, which is already the request's shape.
 - The adapters construct the payload from parsed source data, and the preset
-  store validates it again on add. A malformed payload is a refusal with a
-  sentence, never a partial add.
+  store validates it again on add: an invalid entry is skipped there and the
+  message counts what landed. The action never writes a partial entry itself.
 
 ## 4. Applying a preset
 
@@ -208,7 +210,7 @@ exact duplicates and persist under `yunari.editor.presets`.
 | Color Hunt's feed changes shape | that source says it failed with the parse message; no row is invented |
 | A cached catalogue fetch failed | the promise is cleared; the next search retries |
 | The query matches nothing | the finder's existing `no-results`, with Clear query |
-| A payload is malformed | the row's action refuses with a sentence; the store is untouched |
+| A palette or gradient entry is malformed | the store skips it; the message counts what landed |
 | Every palette in a result is already stored | `Already in presets`, and the store is unchanged |
 | The host serves no colour sources | no Colours tab is drawn (tabs are registry-derived) |
 | A source is switched off mid-flight | its late page is dropped by the existing ticket |
