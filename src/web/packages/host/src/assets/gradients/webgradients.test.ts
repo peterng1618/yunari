@@ -6,7 +6,7 @@ const CATALOGUE_URL =
 
 const WARM_FLAME = {
   name: "Warm Flame",
-  index: 0,
+  index: "001",
   deg: 45,
   gradient: [
     { color: "#ff9a9e", pos: 0 },
@@ -17,7 +17,7 @@ const WARM_FLAME = {
 
 const NIGHT_FADE = {
   name: "Night Fade",
-  index: 1,
+  index: "002",
   deg: 90,
   gradient: [
     { color: "#a18cd1", pos: 0 },
@@ -25,7 +25,7 @@ const NIGHT_FADE = {
   ],
 };
 
-function degreesEntry(name: string, index: number, deg: number) {
+function degreesEntry(name: string, index: string, deg: number) {
   return {
     name,
     index,
@@ -58,7 +58,11 @@ function stubFetch(entries: readonly unknown[]) {
 
 function numbered(count: number): readonly unknown[] {
   return Array.from({ length: count }, (_, index) =>
-    degreesEntry(`Gradient ${index + 1}`, index, 135),
+    degreesEntry(
+      `Gradient ${index + 1}`,
+      String(index + 1).padStart(3, "0"),
+      135,
+    ),
   );
 }
 
@@ -85,17 +89,61 @@ describe("webgradientsSource", () => {
         { offset: 1, color: "#fad0c4" },
       ],
     });
-    expect(page.results[0]?.id).toBe("0");
+    expect(page.results[0]?.id).toBe("001");
     expect(page.results[0]?.name).toBe("Warm Flame");
     expect(page.results[0]?.kind).toBe("gradient");
     expect(page.results[0]?.subtitle).toBeUndefined();
   });
 
+  it("keeps the catalogue's zero-padded string index as the result id", async () => {
+    const { fetch } = stubFetch([
+      {
+        name: "Numeric Index",
+        index: 7,
+        deg: 45,
+        gradient: [
+          { color: "#000000", pos: 0 },
+          { color: "#ffffff", pos: 100 },
+        ],
+      },
+      NIGHT_FADE,
+    ]);
+
+    const page = await webgradientsSource.search("", 1, context(fetch));
+
+    expect(page.results.map((result) => result.id)).toEqual(["7", "002"]);
+  });
+
+  it("clamps a stop's percentage into the editor's 0–1 range", async () => {
+    const { fetch } = stubFetch([
+      {
+        name: "Slick Carbon",
+        index: "010",
+        deg: 45,
+        gradient: [
+          { color: "#000000", pos: -20 },
+          { color: "#ffffff", pos: 150 },
+        ],
+      },
+    ]);
+
+    const page = await webgradientsSource.search("", 1, context(fetch));
+
+    expect(page.results[0]?.preset).toEqual({
+      kind: "gradient",
+      angle: 45,
+      stops: [
+        { offset: 0, color: "#000000" },
+        { offset: 1, color: "#ffffff" },
+      ],
+    });
+  });
+
   it("wraps deg 90, 180 and 270 without a negative angle", async () => {
     const { fetch } = stubFetch([
-      degreesEntry("Right", 0, 90),
-      degreesEntry("Down", 1, 180),
-      degreesEntry("Left", 2, 270),
+      degreesEntry("Right", "001", 90),
+      degreesEntry("Down", "002", 180),
+      degreesEntry("Left", "003", 270),
     ]);
 
     const page = await webgradientsSource.search("", 1, context(fetch));
@@ -120,7 +168,10 @@ describe("webgradientsSource", () => {
   });
 
   it("filters names case-insensitively and pages at 40", async () => {
-    const { fetch } = stubFetch([...numbered(44), WARM_FLAME]);
+    const { fetch } = stubFetch([
+      ...numbered(44),
+      { ...WARM_FLAME, index: "045" },
+    ]);
 
     const first = await webgradientsSource.search("", 1, context(fetch));
     expect(first.results).toHaveLength(40);
@@ -129,11 +180,11 @@ describe("webgradientsSource", () => {
     const second = await webgradientsSource.search("", 2, context(fetch));
     expect(second.results).toHaveLength(5);
     expect(second.results.map((result) => result.id)).toEqual([
-      "40",
-      "41",
-      "42",
-      "43",
-      "0",
+      "041",
+      "042",
+      "043",
+      "044",
+      "045",
     ]);
     expect(second.results[4]?.name).toBe("Warm Flame");
 
@@ -223,19 +274,19 @@ describe("webgradientsSource", () => {
       WARM_FLAME,
       {
         name: "One Stop",
-        index: 2,
+        index: "002",
         deg: 45,
         gradient: [{ color: "#112233", pos: 0 }],
       },
       {
         name: "No Stops",
-        index: 3,
+        index: "003",
         deg: 45,
         gradient: [],
       },
       {
         name: "Not A List",
-        index: 4,
+        index: "004",
         deg: 45,
         gradient: "#112233",
       },

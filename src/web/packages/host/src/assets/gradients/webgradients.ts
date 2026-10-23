@@ -47,7 +47,11 @@ function stopOf(value: unknown): Stop | undefined {
   if (color === undefined || !HEX.test(color)) return undefined;
   if (typeof pos !== "number" || !Number.isFinite(pos)) return undefined;
 
-  return { offset: pos / 100, color };
+  // The catalogue carries out-of-range percentages ("Slick Carbon" has 150);
+  // the editor refuses an offset outside 0..1, so clamp before normalising.
+  const offset = Math.min(100, Math.max(0, pos)) / 100;
+
+  return { offset, color };
 }
 
 /** A gradient is its own name, index and angle and at least two stops. */
@@ -58,7 +62,11 @@ function gradientOf(value: unknown): Gradient | undefined {
   const index = value.index;
   const deg = value.deg;
   if (name === undefined) return undefined;
-  if (typeof index !== "number" || !Number.isInteger(index)) return undefined;
+  // The live catalogue stores index as a zero-padded string; a number is
+  // accepted too so a numeric catalogue is still usable.
+  if (typeof index === "string" ? index === "" : !Number.isInteger(index)) {
+    return undefined;
+  }
   if (typeof deg !== "number" || !Number.isFinite(deg)) return undefined;
   if (!Array.isArray(value.gradient)) return undefined;
 
