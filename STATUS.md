@@ -1,7 +1,7 @@
 # Yunari status
 
 Updated: 2026-10-23
-Branch: `main`
+Branch: `peterng1618/Color-and-gradient-picker-rebuild`
 
 ## Current objective
 
@@ -9,17 +9,17 @@ The **colour and gradient picker rebuild** ([`spec`](docs/superpowers/specs/2026
 
 ## Active work
 
-- **Phase 0 of the plan is complete** — Tasks 1 and 3; Tasks 2 and 4–10 run next on `peterng1618/Color-and-gradient-picker-rebuild` under subagent-driven execution.
+- **Phase 0 of the plan is complete** — Tasks 1 and 3; Task 2's channel model and gradient formula have landed on this branch; Tasks 4–10 follow under subagent-driven execution.
 - **The preset library's contract is public**: `editor/src/preset-library/index.ts` (`addColours`, `addGradient`, `deletePreset`), storage `yunari.editor.presets`, seeded with 12 colours and the 15 cssgradient.io gradients.
 - **The asset finder surface is a separate spec** and calls into that library; it does not write the key.
 
 ## Last completed change
 
-- **One colour parser on culori**: `renderer-core/src/color.ts` owns `parseColor`/`formatColor`/`toHsv`/`fromHsv`; `parseHex` and its 3-tuple retire.
-- **The editor-local preset library lands**: seed-once storage under `yunari.editor.presets`, validated adds, exact-duplicate skips, delete, and a `usePresetLibrary` subscription.
-- **Ownership moves with it**: `docs/architecture/ownership.md` names both owners; culori 4.0.2 and its types are in the notices and dependency record.
-- **Gated write**: `docs/decisions/0098-colour-maths-is-culori.md` claims `charts/fill.ts` for the reuse gate.
-- **Proof:** renderer-core 642 tests, preset-library 14 tests, both package typechecks, `design:check` and `gates:self-test` — all exit 0.
+- **One channel model**: `colour-picker-model.ts` owns the channel table, read/write, ratios, keyboard stepping and the area's point mapping plus its `aria-valuetext`.
+- **One gradient formula**: `gradient-css.ts` holds the sort/round/angle string, and `paint-list.tsx` calls it instead of its local copy.
+- **Gated write**: `docs/decisions/0099-the-picker-channel-maths-and-one-gradient-formula.md` claims both new `components/ui` owners.
+- **Proof:** the two new test files plus `paint-list.dom.test.tsx` (26 tests), editor typecheck, `format:check` and the design-token ratchet — all exit 0.
+- **Not browser-proven**: the maths is unit-tested; no picker surface renders it until Tasks 4–8.
 
 ## Next
 

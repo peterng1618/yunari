@@ -10,6 +10,7 @@ import { ControlSelect } from "../../components/ui/control-select.js";
 import { ControlSlider } from "../../components/ui/control-slider.js";
 import { ControlText } from "../../components/ui/control-text.js";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
+import { gradientCss } from "../../components/ui/gradient-css.js";
 import { GradientEditor } from "../../components/ui/gradient-editor.js";
 import { newTokenPaint } from "../../new-fabric-theme-globals.js";
 import type { PaletteTokenUse } from "../../palette-manager/panel.js";
@@ -421,11 +422,7 @@ function figureFor(
  *  describes — the same `GradientEditor` draws on its own track. */
 function paintCss(value: PalettePaint): string {
   if (value.kind === "solid") return value.color;
-  const stops = [...value.stops]
-    .sort((a, b) => a.offset - b.offset)
-    .map((stop) => `${stop.color} ${Math.round(stop.offset * 100)}%`)
-    .join(", ");
-  return `linear-gradient(${90 - value.angle}deg, ${stops})`;
+  return gradientCss(value.stops, value.angle);
 }
 
 /**
