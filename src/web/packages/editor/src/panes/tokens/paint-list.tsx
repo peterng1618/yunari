@@ -3,11 +3,9 @@ import type {
   FabricPaletteEntry,
   PalettePaint,
 } from "@yunari/renderer-core";
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { ColourPicker } from "../../components/ui/colour-picker.js";
-import { ControlNumber } from "../../components/ui/control-number.js";
 import { ControlSelect } from "../../components/ui/control-select.js";
-import { ControlSlider } from "../../components/ui/control-slider.js";
 import { ControlText } from "../../components/ui/control-text.js";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
 import { gradientCss } from "../../components/ui/gradient-css.js";
@@ -220,7 +218,12 @@ function TokenFields(props: {
           onSettled={onSettled}
         />
       ) : (
-        <GradientFields entry={entry} value={entry.value} commit={commit} />
+        <GradientFields
+          entry={entry}
+          value={entry.value}
+          commit={commit}
+          onSettled={onSettled}
+        />
       )}
       <DeletionControls
         palette={palette}
@@ -260,93 +263,27 @@ function SolidFields(props: {
   );
 }
 
-/** A gradient token: its angle, the visual editor, and the numeric fields beside
- *  it — a drag cannot land on 0.37 exactly. */
+/** A gradient token: the one visual editor, which owns its own angle and stop
+ *  wells, the track being both the preview and the manipulator. */
 function GradientFields(props: {
   readonly entry: FabricPaletteEntry;
   readonly value: Extract<PalettePaint, { readonly kind: "gradient" }>;
   readonly commit: (entry: FabricPaletteEntry) => void;
+  readonly onSettled?: (() => void) | undefined;
 }): React.JSX.Element {
-  const { entry, value, commit } = props;
-  /** One stop replaced, refused when the result stops ascending — the same
-   *  monotonicity rule the imperative fields applied before either commit. */
-  const update = (
-    index: number,
-    next: { readonly offset: number; readonly color: string },
-  ): void => {
-    const stops = value.stops.map((stop, at) => (at === index ? next : stop));
-    if (stops.some((stop, at) => at > 0 && stop.offset < stops[at - 1]!.offset))
-      return;
-    commit({ ...entry, value: { ...value, stops } });
-  };
-  const last = value.stops.at(-1);
+  const { entry, value, commit, onSettled } = props;
   return (
-    <>
-      <ControlNumber
-        label={uiCopy.panels.angle}
-        data={{ "data-yunari-palette-angle": "" }}
-        value={value.angle}
-        onCommit={(angle) => {
-          if (!Number.isFinite(angle)) return;
-          commit({ ...entry, value: { ...value, angle } });
+    <div data-yunari-palette-gradient="" className="w-full">
+      <GradientEditor
+        stops={value.stops}
+        angle={value.angle}
+        label={uiCopy.panels.gradient}
+        onCommit={onSettled}
+        onChange={({ stops, angle }) => {
+          commit({ ...entry, value: { ...value, stops, angle } });
         }}
       />
-      <div data-yunari-palette-gradient="" className="w-full">
-        <GradientEditor
-          stops={value.stops}
-          angle={value.angle}
-          label={uiCopy.panels.gradient}
-          onChange={({ stops, angle }) => {
-            commit({ ...entry, value: { ...value, stops, angle } });
-          }}
-        />
-      </div>
-      {value.stops.map((stop, index) => (
-        <Fragment key={index}>
-          {/* A bounded number, so DESIGN.md §5's vocabulary gives it a track
-              (`vg-493`). The step is the offset's own: 0 and 1 are the two ends
-              of a fraction, and the control set's default step of 1 would leave
-              the track holding nothing between them. */}
-          <ControlSlider
-            label={uiCopy.panels.stopPosition(index + 1)}
-            data={{ "data-yunari-palette-stop-offset": "" }}
-            value={stop.offset}
-            min={0}
-            max={1}
-            step={0.01}
-            onCommit={(offset) => update(index, { offset, color: stop.color })}
-          />
-          <ControlText
-            label={uiCopy.panels.stopColour(index + 1)}
-            data={{ "data-yunari-palette-stop-color": "" }}
-            value={stop.color}
-            onCommit={(color) => {
-              const typed = color.trim();
-              if (typed === "") return;
-              update(index, { offset: stop.offset, color: typed });
-            }}
-          />
-        </Fragment>
-      ))}
-      {last === undefined ? null : (
-        <button
-          type="button"
-          data-yunari-palette-add-stop=""
-          className={plainButtonClasses}
-          onClick={() => {
-            commit({
-              ...entry,
-              value: {
-                ...value,
-                stops: [...value.stops, { offset: 1, color: last.color }],
-              },
-            });
-          }}
-        >
-          {uiCopy.panels.addStop}
-        </button>
-      )}
-    </>
+    </div>
   );
 }
 

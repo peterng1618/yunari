@@ -150,23 +150,17 @@ it("leaves the three panels with no copy of their own", async () => {
   // what the pane offers (`solid`, `gradient`), read off the opened list.
   expect(paintKinds).toHaveLength(2);
   const owned = new Set(copy());
-  // The gradient editor names each stop's picker "Gradient stop 1" from the
-  // stop's index, which is data; Task 8 rewrites that name. Narrowed to that
-  // surface so the paint pane's own copy word for the picker stays in the net.
-  const deferredPickerLabels = new Set(
-    Array.from(
-      root.querySelectorAll<HTMLElement>(
-        '[data-yunari-gradient-stop] [data-testid="picker-trigger"]',
-      ),
-      (trigger) => trigger.id,
-    ),
-  );
   const spoken = [
-    ...Array.from(root.querySelectorAll("label"))
-      .filter(
-        (label) => !deferredPickerLabels.has(label.getAttribute("for") ?? ""),
-      )
-      .map((label) => label.textContent),
+    ...Array.from(root.querySelectorAll("label"), (label) => label.textContent),
+    // The gradient editor's stop marks are `role="slider"` divs, not labels or
+    // buttons, so the word in their accessible name reaches this net only
+    // through the stop's own attribute. Task 5's review found it outside every
+    // net while the old editor composed it; this is that route, and the name
+    // itself is `uiCopy`'s.
+    ...Array.from(
+      root.querySelectorAll<HTMLElement>('[data-testid^="gradient-stop-"]'),
+      (stop) => stop.getAttribute("aria-label"),
+    ),
     // Two kinds of button are excluded, both because their text is data. A token
     // well prints the document's own token name and usage figure; a select's
     // trigger prints the chosen value, which on every panel here is a token's

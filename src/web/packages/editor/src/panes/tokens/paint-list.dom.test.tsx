@@ -30,6 +30,7 @@
  * palette prop, exactly as `editor-session`'s `render()` hands one back.
  */
 import type { FabricPalette } from "@yunari/renderer-core";
+import { colorAt } from "@yunari/renderer-core";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -574,13 +575,9 @@ it("carries the colour across a paint-kind switch in both directions", async () 
   });
 
   // Now the gradient's first stop has been moved, and going back to a solid
-  // takes that rather than white.
-  await type(
-    document.querySelector<HTMLInputElement>(
-      "[data-yunari-palette-stop-color]",
-    )!,
-    MOVED_FROST_PAINT,
-  );
+  // takes that rather than white. The stop's colour is the picker's, the one
+  // control the gradient editor gives a stop.
+  await commitColour(host, MOVED_FROST_PAINT);
   await chooseIn("[data-yunari-palette-kind]", "solid");
   expect(change).toHaveBeenLastCalledWith({
     frost: {
@@ -591,10 +588,10 @@ it("carries the colour across a paint-kind switch in both directions", async () 
   void host;
 });
 
-it("edits a gradient's angle, its stops and an added stop", async () => {
+it("edits a gradient's angle, its stops and an added stop through its one editor", async () => {
   const { host, change } = await mount(GLOW_GRADIENT, { usage: undefined });
 
-  await commitField("[data-yunari-palette-angle]", "45");
+  await commitField('[data-testid="gradient-angle"]', "45");
   expect(change).toHaveBeenLastCalledWith({
     glow: {
       name: "Glow",
@@ -609,14 +606,9 @@ it("edits a gradient's angle, its stops and an added stop", async () => {
     },
   });
 
-  // Both edits come from fields built once, so a handler closing over the entry
-  // it was built with would write the second stop list over the first.
-  await type(
-    document.querySelector<HTMLInputElement>(
-      "[data-yunari-palette-stop-color]",
-    )!,
-    RED_PAINT,
-  );
+  // Both edits come from one editor, so a handler closing over the entry it was
+  // built with would write the second stop list over the first.
+  await commitColour(host, RED_PAINT);
   expect(change).toHaveBeenLastCalledWith({
     glow: {
       name: "Glow",
@@ -631,7 +623,7 @@ it("edits a gradient's angle, its stops and an added stop", async () => {
     },
   });
 
-  await click(host.querySelector("[data-yunari-palette-add-stop]")!);
+  await click(host.querySelector('[data-testid="gradient-add"]')!);
   expect(change).toHaveBeenLastCalledWith({
     glow: {
       name: "Glow",
@@ -641,46 +633,35 @@ it("edits a gradient's angle, its stops and an added stop", async () => {
         stops: [
           { offset: 0, color: RED_PAINT },
           { offset: 1, color: BACKGROUND_PAINT },
-          { offset: 1, color: BACKGROUND_PAINT },
+          {
+            offset: 0.5,
+            color: colorAt(
+              [
+                { offset: 0, color: RED_PAINT },
+                { offset: 1, color: BACKGROUND_PAINT },
+              ],
+              0.5,
+            ),
+          },
         ],
       },
     },
   });
 });
 
-it("gives a gradient stop's bounded offset a track, and keeps the fraction the well types", async () => {
-  // `vg-493`. The offset is bounded at 0 and 1 — the two ends of the value's own
-  // range — and DESIGN.md §5's vocabulary gives a bounded number a track, which
-  // this row drew as a text box while the inspector's bounded numbers carried
-  // one. It is not the artboard's case: 16384 there is a validity ceiling rather
-  // than a range anyone drags, so a track with sixteen thousand steps would be
-  // no control at all.
+it("keeps the fraction the stop's own percent well types", async () => {
+  // `vg-494`: a percentage projection that rounds would show 38 for a stored
+  // 0.375 and write 0.38 back. The well is a percent, and the fraction behind
+  // it is the document's own value.
   const { host, change } = await mount(GLOW_GRADIENT, { usage: undefined });
 
-  const track = host.querySelector<HTMLInputElement>(
-    "[data-yunari-palette-stop-offset]",
+  const well = host.querySelector<HTMLInputElement>(
+    '[data-testid="gradient-offset"]',
   );
-  expect(track, "the offset is not a track's own range input").not.toBeNull();
-  expect(track?.type, "the offset is still a text box").toBe("range");
-  expect(track?.min).toBe("0");
-  expect(track?.max).toBe("1");
-  // The control set's default step of 1 would leave a 0–1 track holding only its
-  // two ends, so the offset's own granularity has to reach the slider.
-  expect(
-    Number(track?.step),
-    "a 0–1 track with no fractional step",
-  ).toBeGreaterThan(0);
-  expect(Number(track?.step)).toBeLessThan(1);
+  expect(well, "the selected stop's offset well").not.toBeNull();
+  expect(well?.value).toBe("0");
 
-  // The typed route is the same control's other half, and it is the one that
-  // carries the value unchanged: a percentage projection would show 37 for a
-  // stored 0.375, which is the shown/stored gap `vg-494` is about.
-  await type(
-    document.querySelector<HTMLInputElement>(
-      "[data-yunari-palette-stop-offset-well]",
-    )!,
-    "0.375",
-  );
+  await type(well!, "37.5");
   expect(change).toHaveBeenLastCalledWith({
     glow: {
       name: "Glow",

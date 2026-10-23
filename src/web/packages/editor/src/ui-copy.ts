@@ -1543,6 +1543,7 @@ export const uiCopy = {
     paint: "Paint",
     addColour: "Add colour",
     addStop: "Add stop",
+    removeStop: "Remove stop",
     deleteColour: "Delete colour",
     reassign: "Reassign to",
     typePresets: "Type presets",
@@ -1609,6 +1610,9 @@ export const uiCopy = {
     /** The library row inside the popup: the group's own name, never a
      *  preset's, because the preset names are the library's data. */
     pickerPresets: "Colour presets",
+    /** The gradient editor's own preset row: the group's name, never a preset's
+     *  — the preset names are the library's data, like the colour row's. */
+    gradientPresets: "Gradient presets",
     /** The action the platform's `EyeDropper` performs, drawn only when the
      *  browser has one. */
     pickerEyedropper: "Pick a colour from the screen",
