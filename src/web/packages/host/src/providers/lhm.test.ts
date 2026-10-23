@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { LHM_DESCRIPTORS, LhmSensorProvider } from "./lhm.js";
-import { matchLhmSensors } from "./lhm-mapping.js";
+import { diskDeviceReadings, matchLhmSensors } from "./lhm-mapping.js";
 import { flattenLhmSensors, type LhmSensor } from "./lhm-tree.js";
 
 /** The real v0.9.6 capture: i9-10850K + RTX 3080 Ti + Gigabyte Z590. */
@@ -1054,6 +1054,254 @@ const BATTERY_SHAPE = {
     },
   ],
 };
+
+/** One storage node with the capacity sensors LHM reports for a volume. */
+function driveNode(
+  name: string,
+  hardwareId: string,
+  totalGb: number,
+  freeGb?: number,
+) {
+  const data = [
+    {
+      Text: "Total Space",
+      SensorId: `${hardwareId}/data/2`,
+      Type: "Data",
+      RawValue: `${totalGb} GB`,
+    },
+    ...(freeGb === undefined
+      ? []
+      : [
+          {
+            Text: "Free Space",
+            SensorId: `${hardwareId}/data/1`,
+            Type: "Data",
+            RawValue: `${freeGb} GB`,
+          },
+        ]),
+  ];
+
+  return {
+    Text: name,
+    HardwareId: hardwareId,
+    Children: [{ Text: "Data", Children: data }],
+  };
+}
+
+describe("LHM per-drive readings", () => {
+  it("gives the same model twice distinct ids and its own readings", () => {
+    const sensors = flattenLhmSensors({
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [
+            driveNode("Samsung SSD 970", "/nvme/0", 400, 200),
+            driveNode("Samsung SSD 970", "/nvme/1", 400, 100),
+          ],
+        },
+      ],
+    });
+
+    expect(
+      diskDeviceReadings(sensors).map((device) => [
+        device.deviceId,
+        device.usedGb,
+      ]),
+    ).toEqual([
+      ["samsung-ssd-970", 200],
+      ["samsung-ssd-970-2", 300],
+    ]);
+  });
+
+  it("reads each drive's temperature, health, activity and byte rates", () => {
+    const values = valuesOf(flattenLhmSensors(realPayload()), [
+      "disk.lexar-500gb-ssd.temp",
+      "disk.lexar-500gb-ssd.health",
+      "disk.lexar-500gb-ssd.activity",
+      "disk.lexar-500gb-ssd.read",
+      "disk.lexar-500gb-ssd.write",
+      "disk.st4000dm004-2cv104.temp",
+    ]);
+
+    // The drive's composite figure, not its warning or critical thresholds.
+    expect(values.get("disk.lexar-500gb-ssd.temp")).toBe(43);
+    // LHM's Level sensor named `Life`.
+    expect(values.get("disk.lexar-500gb-ssd.health")).toBe(60);
+    // The drive's total activity, not its read or write share alone.
+    expect(values.get("disk.lexar-500gb-ssd.activity")).toBe(0.8);
+    // Byte-native: 635529.6 B/s is 0.64 MB/s, not 5.08 Mb/s.
+    expect(values.get("disk.lexar-500gb-ssd.read")).toBe(0);
+    expect(values.get("disk.lexar-500gb-ssd.write")).toBeCloseTo(0.6355296, 9);
+    // A drive with no Level sensor has no health key, not a zero.
+    expect(values.get("disk.st4000dm004-2cv104.temp")).toBe(41);
+  });
+
+  it("reports no health key for a drive LHM gives no Level sensor", () => {
+    expect(
+      matchLhmSensors(flattenLhmSensors(realPayload()), [
+        "disk.st4000dm004-2cv104.health",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("derives free from total minus used, and only when both are reported", async () => {
+    const provider = providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    });
+
+    const entries = await provider.sample(["disk.lexar-500gb-ssd.free"], 0);
+
+    expect(entries[0]?.sample).toMatchObject({ status: "ok", unit: "GB" });
+    expect(entries[0]?.sample.value).toBeCloseTo(194.6, 9);
+
+    // A volume LHM reports without Free Space has no used or free reading.
+    const totalOnly = {
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [driveNode("Samsung SSD 970", "/nvme/0", 400)],
+        },
+      ],
+    };
+    const missing = await providerReturning({
+      ok: true,
+      status: 200,
+      body: totalOnly,
+    }).sample(["disk.samsung-ssd-970.free"], 0);
+
+    expect(missing[0]?.sample).toMatchObject({ status: "missing" });
+    expect(missing[0]?.sample).not.toHaveProperty("value");
+  });
+
+  it("keeps a named drive's reading when another drive is assigned", async () => {
+    const entries = await providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    }).sample(["disk.st4000dm004-2cv104.temp"], 0, {
+      systemDisk: "lexar-500gb-ssd",
+    });
+
+    expect(entries[0]?.sample).toMatchObject({ status: "ok", value: 41 });
+  });
+
+  it("advertises each drive's readings with their units", async () => {
+    const descriptors = await providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    }).describe();
+    const byKey = new Map(
+      descriptors.map((descriptor) => [descriptor.semanticKey, descriptor]),
+    );
+
+    expect(byKey.get("disk.lexar-500gb-ssd.temp")).toMatchObject({
+      unit: "°C",
+      label: "Composite Temperature",
+    });
+    expect(byKey.get("disk.lexar-500gb-ssd.health")).toMatchObject({
+      unit: "%",
+      label: "Life",
+    });
+    expect(byKey.get("disk.lexar-500gb-ssd.read")).toMatchObject({
+      unit: "MB/s",
+    });
+    expect(byKey.get("disk.lexar-500gb-ssd.write")).toMatchObject({
+      unit: "MB/s",
+    });
+    expect(byKey.get("disk.lexar-500gb-ssd.activity")).toMatchObject({
+      unit: "%",
+    });
+    expect(byKey.get("disk.lexar-500gb-ssd.free")).toMatchObject({
+      unit: "GB",
+    });
+  });
+});
+
+describe("LHM per-interface network readings", () => {
+  it("answers each NIC under its own id and keeps the aggregate", () => {
+    const values = valuesOf(flattenLhmSensors(realPayload()), [
+      "network.ethernet.download",
+      "network.ethernet.upload",
+      "network.ethernet-2.download",
+      "network.download",
+    ]);
+
+    // 110172.6 B/s is 0.88 Mb/s; the link's own key carries it.
+    expect(values.get("network.ethernet.download")).toBeCloseTo(0.8813808, 9);
+    expect(values.get("network.ethernet.upload")).toBeCloseTo(0.0481816, 9);
+    expect(values.get("network.ethernet-2.download")).toBe(0);
+    // The aggregate still describes every link at once.
+    expect(values.get("network.download")).toBeCloseTo(0.8813808, 9);
+  });
+
+  it("numbers two interfaces that report the same name", () => {
+    const sensors = flattenLhmSensors({
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [nicNode("/nic/0", 125_000), nicNode("/nic/1", 250_000)],
+        },
+      ],
+    });
+    const values = valuesOf(sensors, [
+      "network.ethernet.download",
+      "network.ethernet-2.download",
+      "network.download",
+    ]);
+
+    expect(values.get("network.ethernet.download")).toBeCloseTo(1, 9);
+    expect(values.get("network.ethernet-2.download")).toBeCloseTo(2, 9);
+    // The aggregate sums both links.
+    expect(values.get("network.download")).toBeCloseTo(3, 9);
+  });
+
+  it("advertises each interface's readings", async () => {
+    const descriptors = await providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    }).describe();
+    const byKey = new Map(
+      descriptors.map((descriptor) => [descriptor.semanticKey, descriptor]),
+    );
+
+    expect(byKey.get("network.ethernet.download")).toMatchObject({
+      unit: "Mb/s",
+    });
+    expect(byKey.get("network.ethernet.upload")).toMatchObject({
+      unit: "Mb/s",
+    });
+  });
+});
+
+function nicNode(hardwareId: string, downloadBytesPerSecond: number) {
+  return {
+    Text: "Ethernet",
+    HardwareId: hardwareId,
+    Children: [
+      {
+        Text: "Throughput",
+        Children: [
+          {
+            Text: "Download Speed",
+            SensorId: `${hardwareId}/throughput/0`,
+            Type: "Throughput",
+            RawValue: `${downloadBytesPerSecond} B/s`,
+          },
+          {
+            Text: "Upload Speed",
+            SensorId: `${hardwareId}/throughput/1`,
+            Type: "Throughput",
+            RawValue: "0.0 B/s",
+          },
+        ],
+      },
+    ],
+  };
+}
 
 describe("LHM PSU and battery (structural fixtures)", () => {
   it("maps a PSU from its documented hardware path and sensor types", () => {

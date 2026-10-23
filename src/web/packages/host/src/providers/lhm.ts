@@ -283,6 +283,7 @@ export class LhmSensorProvider implements SensorProvider {
     for (const device of diskDeviceReadings(sensors)) {
       matched.set(`disk.${device.deviceId}.used`, device.usedGb);
       matched.set(`disk.${device.deviceId}.total`, device.totalGb);
+      matched.set(`disk.${device.deviceId}.free`, device.freeGb);
       matched.set(`disk.${device.deviceId}.used.percent`, device.usedPercent);
     }
 

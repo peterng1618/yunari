@@ -472,8 +472,88 @@ const DYNAMIC_BINDINGS: readonly LhmDynamicBinding[] = [
   },
 ];
 
+/**
+ * A sensor that answers one key per device, under the device's own id rather
+ * than an index. Stored separately from `DYNAMIC_BINDINGS` because the key
+ * depends on the hardware node, not on the sensor's own name.
+ */
+interface LhmDeviceBinding {
+  readonly group: "storage" | "network";
+  readonly type: LhmSensorType;
+  /** Quantity suffix after the device id. */
+  readonly quantity: string;
+  /** Accepted sensor names in priority order; the first present answers. */
+  readonly anyText: readonly string[];
+  /** A byte-per-second sensor lands in this vocabulary unit. */
+  readonly scale?: "megabyte" | "megabit";
+}
+
+const DEVICE_BINDINGS: readonly LhmDeviceBinding[] = [
+  // A drive's general temperature: NVMe calls it `Composite Temperature`, a
+  // SATA drive simply `Temperature`. Warning/critical limits are not readings.
+  {
+    group: "storage",
+    type: "Temperature",
+    quantity: "temp",
+    anyText: ["Composite Temperature", "Temperature"],
+  },
+  // LHM's storage life sensor is a `Level` named `Life`.
+  {
+    group: "storage",
+    type: "Level",
+    quantity: "health",
+    anyText: ["Life"],
+  },
+  // Byte-native: the vocabulary declares MB/s for storage rates.
+  {
+    group: "storage",
+    type: "Throughput",
+    quantity: "read",
+    anyText: ["Read Rate"],
+    scale: "megabyte",
+  },
+  {
+    group: "storage",
+    type: "Throughput",
+    quantity: "write",
+    anyText: ["Write Rate"],
+    scale: "megabyte",
+  },
+  {
+    group: "storage",
+    type: "Load",
+    quantity: "activity",
+    anyText: ["Total Activity"],
+  },
+  {
+    group: "network",
+    type: "Throughput",
+    quantity: "download",
+    anyText: ["Download Speed"],
+    scale: "megabit",
+  },
+  {
+    group: "network",
+    type: "Throughput",
+    quantity: "upload",
+    anyText: ["Upload Speed"],
+    scale: "megabit",
+  },
+];
+
+/** Per-drive capacity keys and the label each reading carries. */
+const DISK_CAPACITY_KEYS = [
+  ["used", "used"],
+  ["used.percent", "used (share)"],
+  ["total", "total"],
+  ["free", "free"],
+] as const;
+
 /** Dynamic keys this provider owns by shape, discovered per machine. */
 const SLUG = "[a-z0-9][a-z0-9-]{0,63}";
+const NETWORK_INTERFACE_KEY = new RegExp(
+  `^network\\.${SLUG}\\.(download|upload)$`,
+);
 const CPU_CORE_KEY = /^cpu\.core\.[1-9]\d*\.(load|temp|clock)$/;
 const GPU_FAN_KEY = /^gpu\.fan\.[1-9]\d*$/;
 const MOTHERBOARD_FAN_KEY = new RegExp(
@@ -492,7 +572,8 @@ export function isLhmDynamicKey(key: string): boolean {
     MOTHERBOARD_VOLTAGE_KEY.test(key) ||
     COOLING_FAN_KEY.test(key) ||
     COOLING_PUMP_KEY.test(key) ||
-    PSU_VOLTAGE_KEY.test(key)
+    PSU_VOLTAGE_KEY.test(key) ||
+    NETWORK_INTERFACE_KEY.test(key)
   );
 }
 
@@ -532,6 +613,19 @@ export function dynamicKeyReadings(
         const label = binding.label?.(sensor);
         readings.set(key, label === undefined ? { key } : { key, label });
       }
+    }
+  }
+
+  for (const reading of deviceReadings(sensors)) {
+    readings.set(reading.key, { key: reading.key, label: reading.label });
+  }
+
+  // Capacity keys come from the same per-drive derivation the sample uses, so
+  // a discovered `disk.<id>.free` and its value cannot describe different sets.
+  for (const device of diskDeviceReadings(sensors)) {
+    for (const [quantity, text] of DISK_CAPACITY_KEYS) {
+      const key = `disk.${device.deviceId}.${quantity}`;
+      readings.set(key, { key, label: `${device.name} ${text}` });
     }
   }
 
@@ -610,6 +704,114 @@ function deriveDiskUsed(sensors: readonly LhmSensor[]): number | undefined {
   return total === undefined || free === undefined ? undefined : total - free;
 }
 
+const BYTE_PER_SECOND_TO_MEGABYTE = 1 / 1_000_000;
+
+/**
+ * A stable id for every hardware node in a group, slugged from the provider's
+ * own model name. Two nodes reporting the same model get a numeric suffix, so
+ * their keys stay distinct; the suffix never comes from an array position.
+ */
+function deviceIdsOf(
+  sensors: readonly LhmSensor[],
+  group: HardwareGroup,
+): ReadonlyMap<string, string> {
+  const names = new Map<string, string>();
+
+  for (const sensor of sensors) {
+    if (
+      groupOf(sensor.hardwareType, sensor.hardwareId) === group &&
+      !names.has(sensor.hardwareId)
+    ) {
+      names.set(sensor.hardwareId, sensor.hardwareType);
+    }
+  }
+
+  const taken = new Set<string>();
+  const ids = new Map<string, string>();
+
+  for (const [hardwareId, name] of names) {
+    const base = semanticId(name) || semanticId(hardwareId) || "device";
+    let id = base;
+
+    for (let n = 2; taken.has(id); n += 1) {
+      const suffix = `-${n}`;
+      id = `${base.slice(0, 64 - suffix.length)}${suffix}`;
+    }
+
+    taken.add(id);
+    ids.set(hardwareId, id);
+  }
+
+  return ids;
+}
+
+function scaleDeviceValue(
+  scale: LhmDeviceBinding["scale"],
+  value: number,
+): number {
+  switch (scale) {
+    case "megabyte":
+      return value * BYTE_PER_SECOND_TO_MEGABYTE;
+    case "megabit":
+      return value * MEGABIT_PER_BYTE_PER_SECOND;
+    default:
+      return value;
+  }
+}
+
+interface LhmDeviceReading {
+  readonly key: string;
+  readonly sensor: LhmSensor;
+  readonly value: number;
+  /** The sensor's own name, shown as the reading's label. */
+  readonly label: string;
+}
+
+/** The per-device readings this machine reports, optionally only `wanted`. */
+function deviceReadings(
+  sensors: readonly LhmSensor[],
+  wanted?: ReadonlySet<string>,
+): readonly LhmDeviceReading[] {
+  const readings: LhmDeviceReading[] = [];
+
+  for (const binding of DEVICE_BINDINGS) {
+    const ids = deviceIdsOf(sensors, binding.group);
+    const family = binding.group === "storage" ? "disk" : "network";
+
+    for (const [hardwareId, deviceId] of ids) {
+      const key = `${family}.${deviceId}.${binding.quantity}`;
+
+      if (wanted !== undefined && !wanted.has(key)) {
+        continue;
+      }
+
+      for (const name of binding.anyText) {
+        const sensor = sensors.find(
+          (candidate) =>
+            candidate.hardwareId === hardwareId &&
+            candidate.type === binding.type &&
+            candidate.text === name &&
+            candidate.value !== undefined,
+        );
+
+        if (sensor?.value === undefined) {
+          continue;
+        }
+
+        readings.push({
+          key,
+          sensor,
+          value: scaleDeviceValue(binding.scale, sensor.value),
+          label: sensor.text,
+        });
+        break;
+      }
+    }
+  }
+
+  return readings;
+}
+
 /** A GPU this machine reports, so a consumer can choose between them. */
 interface GpuDeviceReading {
   readonly deviceId: string;
@@ -619,17 +821,17 @@ interface GpuDeviceReading {
 export function gpuDeviceReadings(
   sensors: readonly LhmSensor[],
 ): readonly GpuDeviceReading[] {
-  const seen = new Map<string, string>();
+  const names = new Map<string, string>();
 
   for (const sensor of sensors) {
     if (groupOf(sensor.hardwareType, sensor.hardwareId) === "gpu") {
-      seen.set(sensor.hardwareId, sensor.hardwareType);
+      names.set(sensor.hardwareId, sensor.hardwareType);
     }
   }
 
-  return [...seen].map(([hardwareId, name]) => ({
-    deviceId: semanticId(name) || hardwareId,
-    name,
+  return [...deviceIdsOf(sensors, "gpu")].map(([hardwareId, deviceId]) => ({
+    deviceId,
+    name: names.get(hardwareId) ?? hardwareId,
   }));
 }
 
@@ -643,23 +845,17 @@ interface DiskDeviceReading {
   readonly name: string;
   readonly usedGb: number;
   readonly totalGb: number;
+  readonly freeGb: number;
   readonly usedPercent: number;
 }
 
 export function diskDeviceReadings(
   sensors: readonly LhmSensor[],
 ): readonly DiskDeviceReading[] {
-  const names = new Map<string, string>();
-
-  for (const sensor of sensors) {
-    if (groupOf(sensor.hardwareType, sensor.hardwareId) === "storage") {
-      names.set(sensor.hardwareId, sensor.hardwareType);
-    }
-  }
-
+  const ids = deviceIdsOf(sensors, "storage");
   const readings: DiskDeviceReading[] = [];
 
-  for (const [hardwareId, name] of names) {
+  for (const [hardwareId, deviceId] of ids) {
     const own = sensors.filter((sensor) => sensor.hardwareId === hardwareId);
     const total = sumNamed(own, "storage", ["Total Space"]);
     const free = sumNamed(own, "storage", ["Free Space"]);
@@ -670,10 +866,12 @@ export function diskDeviceReadings(
 
     const usedGb = total - free;
     readings.push({
-      deviceId: semanticId(name),
-      name,
+      deviceId,
+      name: own[0]?.hardwareType ?? "",
       usedGb,
       totalGb: total,
+      // Published only beside a used figure: total and free answer both keys.
+      freeGb: free,
       usedPercent: (usedGb / total) * 100,
     });
   }
@@ -807,6 +1005,11 @@ export function matchLhmSensors(
     }
   }
 
+  // Keys that name one device by id answer that device directly.
+  for (const reading of deviceReadings(sensors, wanted)) {
+    selectReading(chosen, reading.key, reading.sensor, reading.value, false);
+  }
+
   // A summed percentage is meaningless; it must describe the same set of drives
   // that `disk.used` and `disk.total` aggregate (see `deriveDiskUsed`).
   if (wanted.has("disk.used.percent")) {
@@ -893,15 +1096,7 @@ function nodeFor(
   group: HardwareGroup,
   assigned: string | undefined,
 ): string | undefined {
-  const seen = new Map<string, string>();
-
-  for (const sensor of sensors) {
-    if (groupOf(sensor.hardwareType, sensor.hardwareId) === group) {
-      seen.set(sensor.hardwareId, semanticId(sensor.hardwareType));
-    }
-  }
-
-  const ids = [...seen.values()];
+  const ids = [...deviceIdsOf(sensors, group).values()];
   if (ids.length === 0) {
     return undefined;
   }
@@ -935,10 +1130,12 @@ export function lhmDeviceName(
     return undefined;
   }
 
+  const ids = deviceIdsOf(sensors, group);
+
   for (const sensor of sensors) {
     if (
       groupOf(sensor.hardwareType, sensor.hardwareId) === group &&
-      semanticId(sensor.hardwareType) === deviceId
+      ids.get(sensor.hardwareId) === deviceId
     ) {
       return sensor.hardwareType;
     }
@@ -964,22 +1161,47 @@ export function matchLhmSensorsAssigned(
   const gpuWanted = gpuId !== undefined || assignment.gpu !== undefined;
   const diskWanted = assignment.systemDisk !== undefined;
   const diskId = assignment.systemDisk;
+  const gpuIds = deviceIdsOf(sensors, "gpu");
+  const storageIds = deviceIdsOf(sensors, "storage");
 
   const scoped =
     !gpuWanted && !diskWanted
       ? sensors
       : sensors.filter((sensor) => {
           const group = groupOf(sensor.hardwareType, sensor.hardwareId);
-          const id = semanticId(sensor.hardwareType);
 
           // Keep everything that is not one of the selected groups.
-          if (group === "gpu" && gpuWanted)
-            return gpuId !== undefined && id === gpuId;
-          if (group === "storage" && diskWanted) return id === diskId;
+          if (group === "gpu" && gpuWanted) {
+            return (
+              gpuId !== undefined && gpuIds.get(sensor.hardwareId) === gpuId
+            );
+          }
+          if (group === "storage" && diskWanted)
+            return storageIds.get(sensor.hardwareId) === diskId;
           return true;
         });
 
-  const matched = matchLhmSensors(scoped, semanticKeys);
+  const scopedMatches = matchLhmSensors(scoped, semanticKeys);
+  // A key naming a device by id is explicit, so the display's aggregate
+  // assignment must not remove another device's reading from it.
+  const matched =
+    scoped === sensors
+      ? scopedMatches
+      : [
+          ...scopedMatches,
+          ...deviceReadings(sensors, new Set(semanticKeys))
+            .filter(
+              (reading) =>
+                !scopedMatches.some(
+                  (match) => match.semanticKey === reading.key,
+                ),
+            )
+            .map((reading) => ({
+              semanticKey: reading.key,
+              sensor: reading.sensor,
+              value: reading.value,
+            })),
+        ];
 
   // The data slot is a second disk: a theme binds one disk to the system keys
   // and one to the data keys, so neither names a drive on any machine.
