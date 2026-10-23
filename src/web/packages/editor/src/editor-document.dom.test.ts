@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import type { FabricThemeEnvelopeInput } from "@yunari/renderer-core";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AssetManager } from "./asset-manager/index.js";
 import { EditorDocument } from "./editor-document.js";
 import type { EditorShell } from "./editor-shell.js";
+import type { HistoryGlobalsPort } from "./history-manager/index.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
 
 /**
@@ -92,5 +93,51 @@ describe("EditorDocument credits", () => {
     const document = documentWith([seeded]);
 
     expect(document.credits()).toEqual([seeded]);
+  });
+});
+
+describe("EditorDocument undo", () => {
+  it("re-renders the types panel when an undo restores the globals", () => {
+    let port: HistoryGlobalsPort | undefined;
+    const typesRender = vi.fn();
+    const setGlobals = vi.fn();
+    const document = new EditorDocument({
+      source: {
+        shell: {
+          snapshot: (value: unknown) => value,
+          setGlobals,
+          editor: {
+            errorManager: { report: () => {} },
+            historyManager: {
+              attachGlobals: (attached: HistoryGlobalsPort) => {
+                port = attached;
+              },
+            },
+          },
+        } as unknown as EditorShell,
+        envelope: createNewFabricTheme() as unknown as FabricThemeEnvelopeInput,
+        assetManager: new AssetManager(),
+        onNew: async () => {},
+        onNewFromStarter: async () => {},
+        onSaved: () => {},
+      },
+      consumers: {
+        palette: () => ({ render: () => {} }),
+        types: () => ({ render: typesRender }),
+        runtime: () => ({ setGlobals }),
+        charts: () => ({ setGlobals }),
+        newObjects: () => ({ setGlobals }),
+        selection: () => ({ setGlobals }),
+      } as never,
+    });
+    if (port === undefined) throw new Error("no globals port was attached");
+
+    // A type-preset edit records an entry, so undo restores the whole bag: the
+    // envelope would hold the old presets while the pane still drew the new.
+    const presets = { heading: { name: "Heading", value: {} } } as never;
+    port.write({ typePresets: presets });
+
+    expect(typesRender).toHaveBeenCalledWith(presets);
+    document.destroy();
   });
 });

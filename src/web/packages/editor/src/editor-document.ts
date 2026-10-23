@@ -575,8 +575,9 @@ export class EditorDocument {
    *
    * No history save here: this is reached from the restore itself, and a save
    * would append a second entry per press — the undo would record the state it
-   * just undid. The palette consumer is re-rendered because the Tokens pane
-   * paints what it was last handed, not the envelope it cannot read.
+   * just undid. Both Tokens consumers are re-rendered because the pane paints
+   * what it was last handed, not the envelope it cannot read — and a type
+   * preset edit is an undo entry too, so a palette undo can carry presets.
    */
   #restoreGlobals(globals: FabricGlobals | undefined): void {
     if (globals === undefined) {
@@ -587,6 +588,9 @@ export class EditorDocument {
     }
     this.#globalsChanged();
     this.#consumers.palette().render(globals?.palette);
+    this.#consumers
+      .types()
+      .render(globals?.typePresets as TypePresets | undefined);
   }
 
   setPalette(palette: FabricPalette): void {

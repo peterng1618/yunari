@@ -18,7 +18,8 @@ The **colour and gradient picker rebuild** ([`spec`](docs/superpowers/specs/2026
 - **Undo carries the palette with the scene**: `EditorHistory` stores `{ scene, globals }` and compares both, so a palette-only edit records one entry.
 - **The document lends history the envelope**: `attachGlobals` reads `envelope.globals`, and a restore writes them back through `#restoreGlobals` with no `saveState()`, so undo appends nothing.
 - **Attaching after the shell's `reset()` patches entry 0**, so undo to the opening state restores the palette it opened with.
-- **Proof:** 4 new history cases (RED before `attachGlobals` existed, GREEN after) plus 181 editor test files — exit 0; typecheck, `format:check`, `lint`, `design:check`, `status:check` exit 0.
+- **An undo also repaints the types panel**: `#restoreGlobals` re-renders `types().render(typePresets)`, since a preset edit is an undo entry too.
+- **Proof:** 4 new history cases plus a document undo case (RED before each fix, GREEN after) and 181 editor test files — exit 0; typecheck, `format:check`, `lint`, `design:check`, `status:check` exit 0.
 
 ## Next
 
