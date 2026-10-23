@@ -1024,6 +1024,11 @@ export const uiCopy = {
       local: "Open in Wallpaper Engine",
     } satisfies Record<ListingCategory, string>,
     searchPlaceholder: "Search assets…",
+    /** The kind filter the Colours tab draws when its sources disagree about
+     *  what they yield. The options derive from the sources' own
+     *  `presetKind`, so only `all` is a fixed word. */
+    kindFilterLabel: "Filter by kind",
+    kindFilter: { all: "All", palette: "Palettes", gradient: "Gradients" },
     results: (count: number, sources: number): string =>
       `${count} ${count === 1 ? "result" : "results"} · ${sources} ${sources === 1 ? "source" : "sources"}`,
     noResults: "No results. Try another word.",

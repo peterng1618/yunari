@@ -59,6 +59,50 @@ const unsplash: AssetSourceListing = {
   host: "api.unsplash.com",
 };
 
+const colorhunt: AssetSourceListing = {
+  id: "colorhunt",
+  label: "Color Hunt",
+  category: "colour",
+  body: "grid",
+  requires: null,
+  configurable: true,
+  presetKind: "palette",
+  host: "colorhunt.co",
+};
+
+const colorswoop: AssetSourceListing = {
+  id: "colorswoop",
+  label: "ColorSwoop",
+  category: "colour",
+  body: "grid",
+  requires: null,
+  configurable: true,
+  presetKind: "palette",
+  host: "colorswoop.com",
+};
+
+const uigradients: AssetSourceListing = {
+  id: "uigradients",
+  label: "UI Gradients",
+  category: "colour",
+  body: "grid",
+  requires: null,
+  configurable: true,
+  presetKind: "gradient",
+  host: "raw.githubusercontent.com",
+};
+
+const webgradients: AssetSourceListing = {
+  id: "webgradients",
+  label: "Web Gradients",
+  category: "colour",
+  body: "grid",
+  requires: null,
+  configurable: true,
+  presetKind: "gradient",
+  host: "raw.githubusercontent.com",
+};
+
 const curatedFonts: AssetSourceListing = {
   id: "curated-fonts",
   label: "Curated fonts",
@@ -235,6 +279,14 @@ function pageButton(page: number): HTMLButtonElement {
   return found;
 }
 
+function kindButton(kind: string): HTMLButtonElement {
+  const found = document.querySelector<HTMLButtonElement>(
+    `[data-yunari-asset-kind="${kind}"]`,
+  );
+  if (found === null) throw new Error(`no ${kind} kind.`);
+  return found;
+}
+
 beforeEach(() => {
   localStorage.clear();
   vi.useFakeTimers();
@@ -359,6 +411,105 @@ describe("AssetFinder chips", () => {
     expect(searchAssets.mock.calls[0]?.[0]).toMatchObject({
       enabled: ["lucide"],
     });
+  });
+});
+
+describe("AssetFinder's Colours tab", () => {
+  it("draws the Colours tab and asks only the kind's sources", async () => {
+    await render([colorhunt, colorswoop, uigradients, webgradients]);
+    await settle();
+
+    await act(async () => tab("colour").click());
+    searchAssets.mockClear();
+    await act(async () => kindButton("palette").click());
+    await settle();
+
+    expect(searchAssets.mock.calls.at(-1)?.[0]?.enabled).toEqual([
+      "colorhunt",
+      "colorswoop",
+    ]);
+  });
+
+  it("keeps a switched-off source off when the kind filter returns to all", async () => {
+    await render([colorhunt, colorswoop, uigradients, webgradients]);
+    await settle();
+
+    const chip = document.querySelector<HTMLButtonElement>(
+      '[data-yunari-asset-chip="colorswoop"]',
+    );
+    if (chip === null) throw new Error("no ColorSwoop chip.");
+    await act(async () => chip.click());
+    await settle();
+
+    await act(async () => kindButton("gradient").click());
+    await settle();
+    await act(async () => kindButton("all").click());
+    await settle();
+
+    // The chip's persisted choice is intersected with the filter, never
+    // rewritten by it.
+    expect(searchAssets.mock.calls.at(-1)?.[0]?.enabled).toEqual([
+      "colorhunt",
+      "uigradients",
+      "webgradients",
+    ]);
+  });
+
+  it("draws a palette as swatches and a gradient as a strip", async () => {
+    const palette: AssetResult = {
+      id: "colorhunt:aabbccddeeff112233445566",
+      name: "Color Hunt AABBCC",
+      kind: "palette",
+      preview: "",
+      subtitle: undefined,
+      licence: "unknown",
+      sourceUrl: "https://colorhunt.co/palette/aabbccddeeff112233445566",
+      preset: {
+        kind: "palette",
+        colours: ["#aabbcc", "#ddeeff", "#112233", "#445566"],
+      },
+    };
+    const gradient: AssetResult = {
+      id: "uigradients:3",
+      name: "Mango",
+      kind: "gradient",
+      preview: "",
+      subtitle: undefined,
+      licence: "MIT",
+      sourceUrl: "https://github.com/ghosh/uiGradients",
+      preset: {
+        kind: "gradient",
+        angle: 45,
+        stops: [
+          { offset: 0, color: "#000000" },
+          { offset: 1, color: "#ffffff" },
+        ],
+      },
+    };
+    searchAssets.mockResolvedValue({
+      pages: [page("colorhunt", [palette]), page("uigradients", [gradient])],
+    });
+
+    await render([colorhunt, uigradients]);
+    await settle();
+
+    const paletteRow = document.querySelector(
+      '[data-yunari-asset-row="colorhunt:aabbccddeeff112233445566"]',
+    );
+    expect(paletteRow?.querySelectorAll("[data-yunari-swatch]")).toHaveLength(
+      4,
+    );
+
+    const strip = document.querySelector<HTMLElement>(
+      '[data-yunari-asset-row="uigradients:3"] [data-yunari-asset-preview="gradient"]',
+    );
+    expect(strip).not.toBeNull();
+    // jsdom may keep the shorthand as an attribute rather than a parsed
+    // `background-image`, so both readings are the same evidence.
+    expect(
+      strip?.style.backgroundImage || strip?.getAttribute("style") || "",
+    ).toContain("linear-gradient(45deg");
+    expect(strip?.getAttribute("style") ?? "").toContain("#000000 0%");
   });
 });
 

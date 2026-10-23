@@ -1,6 +1,42 @@
 import type { AssetResult } from "@yunari/renderer-core";
+import { cssArtboardPaint } from "@yunari/scene-fabric";
 import type * as React from "react";
 import { SourceMark } from "./source-mark.js";
+
+/** A preset's picture: a palette's colours or the sweep a gradient stores, in
+ *  the one CSS form the theme itself renders. */
+function presetPreview(
+  preset: NonNullable<AssetResult["preset"]>,
+): React.JSX.Element {
+  if (preset.kind === "palette") {
+    return (
+      <span
+        aria-hidden="true"
+        data-yunari-asset-preview="palette"
+        className="grid h-full w-full grid-cols-2"
+      >
+        {preset.colours.map((colour, at) => (
+          <span
+            // Two swatches may carry the same colour; the position is what
+            // makes the key unique.
+            key={`${at}-${colour}`}
+            data-yunari-swatch=""
+            style={{ background: colour }}
+          />
+        ))}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      aria-hidden="true"
+      data-yunari-asset-preview="gradient"
+      className="h-full w-full"
+      style={{ backgroundImage: cssArtboardPaint(preset) }}
+    />
+  );
+}
 
 /** One asset in the grid: its picture, its name, and the source that supplied
  *  it, marked by its own logo so a mixed grid says where each row came from. */
@@ -39,7 +75,9 @@ export function AssetRow({
       }`}
     >
       <span className="flex h-24 items-center justify-center overflow-hidden rounded-[var(--radius-sm)] bg-[var(--bg)]">
-        {result.preview === "" ? null : result.kind === "image" ? (
+        {result.preset !== undefined ? (
+          presetPreview(result.preset)
+        ) : result.preview === "" ? null : result.kind === "image" ? (
           <img
             src={result.preview}
             alt=""

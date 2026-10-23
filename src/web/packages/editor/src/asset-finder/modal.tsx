@@ -5,6 +5,7 @@ import type {
   AssetSearchAnswer,
   AssetSourceListing,
   ListingCategory,
+  PresetKind,
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
@@ -25,6 +26,9 @@ import { AssetRow } from "./row.js";
 export const SEARCH_DEBOUNCE_MS = 200;
 
 const DISABLED_KEY = "yunari.asset-finder.disabled";
+
+/** The kind filter's own value: every source, or one preset kind. */
+type KindFilter = "all" | PresetKind;
 
 export type ActionOutcome =
   | { readonly ok: true }
@@ -215,6 +219,9 @@ export function AssetFinder({
     undefined,
   );
   const [disabled, setDisabled] = useState<ReadonlySet<string>>(storedDisabled);
+  /** The Colours tab's kind filter. A palette and a gradient are different
+   *  presets, so a question about one must not be answered with the other. */
+  const [presetFilter, setPresetFilter] = useState<KindFilter>("all");
   const [selected, setSelected] = useState<Row | undefined>(undefined);
   /** The sources that failed on this page, with their own sentence. */
   const [failures, setFailures] = useState<readonly AssetPage[]>([]);
@@ -299,7 +306,22 @@ export function AssetFinder({
 
   const gridSources =
     active === undefined ? [] : gridSourcesOf(sources, active);
-  const enabledSources = gridSources.filter(
+  /** The kinds the tab's sources actually yield, never a fixed list. */
+  const kinds = [
+    ...new Set(
+      gridSources
+        .map((source) => source.presetKind)
+        .filter((kind): kind is PresetKind => kind !== null),
+    ),
+  ];
+  const kindOptions: readonly KindFilter[] = ["all", ...kinds];
+  // The filter chooses which sources are asked; the chips' own persisted
+  // choice is intersected with it, never rewritten by it.
+  const visibleSources =
+    presetFilter === "all"
+      ? gridSources
+      : gridSources.filter((source) => source.presetKind === presetFilter);
+  const enabledSources = visibleSources.filter(
     (source) => !disabled.has(source.id),
   );
   const enabledKey = enabledSources.map((source) => source.id).join("|");
@@ -310,7 +332,7 @@ export function AssetFinder({
     ticket.current += 1;
 
     // Body categories draw a component, not a search.
-    if (!open || active === undefined || gridSources.length === 0) {
+    if (!open || active === undefined || visibleSources.length === 0) {
       setAnswer(undefined);
       setFailures([]);
       return;
@@ -434,6 +456,9 @@ export function AssetFinder({
             setActive(value as ListingCategory);
             setSelected(undefined);
             setPage(1);
+            // A tab is a new question, so a filter from the last tab is not an
+            // answer about this one.
+            setPresetFilter("all");
           }}
           className="flex min-h-0 flex-1 flex-col"
         >
@@ -489,8 +514,32 @@ export function AssetFinder({
                   {/* The bar: what is being searched, what came back, and the
                       two presses that move through it. */}
                   <div className="flex flex-wrap items-center gap-[var(--space-8)] text-sm">
-                    {gridSources.length > 1
-                      ? gridSources.map((source) => {
+                    {active === "colour" && kinds.length > 1 ? (
+                      <div
+                        role="group"
+                        aria-label={uiCopy.assets.kindFilterLabel}
+                        className="flex items-center gap-[var(--space-4)]"
+                      >
+                        {kindOptions.map((kind) => (
+                          <button
+                            key={kind}
+                            type="button"
+                            aria-pressed={presetFilter === kind}
+                            data-yunari-asset-kind={kind}
+                            onClick={() => {
+                              setPresetFilter(kind);
+                              reask();
+                            }}
+                            className="rounded-full border border-edge px-[var(--space-10)] py-[var(--space-4)] text-xs aria-pressed:border-accent aria-pressed:text-accent"
+                          >
+                            {uiCopy.assets.kindFilter[kind]}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {visibleSources.length > 1
+                      ? visibleSources.map((source) => {
                           const off = disabled.has(source.id);
                           return (
                             <button
@@ -507,7 +556,7 @@ export function AssetFinder({
                                     next.delete(source.id);
                                   else if (
                                     enabledSources.length > 1 ||
-                                    !gridSources.some(
+                                    !visibleSources.some(
                                       (entry) => !next.has(entry.id),
                                     )
                                   ) {

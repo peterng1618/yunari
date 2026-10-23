@@ -14,6 +14,15 @@ const MARKS: Readonly<Record<string, string>> = {
   unsplash: "M7.5 6.75V0h9v6.75h-9zm9 3.75H24V24H0V10.5h7.5v6.75h9V10.5z",
 };
 
+/** A source with no logo anywhere still has two initials; one letter of
+ *  "Color Hunt" and "ColorSwoop" would be the same mark twice in one grid. */
+const MONOGRAMS: Readonly<Record<string, string>> = {
+  colorhunt: "CH",
+  colorswoop: "CS",
+  uigradients: "UG",
+  webgradients: "WG",
+};
+
 /** One source's mark, named for a screen reader by the source's own label. */
 export function SourceMark({
   id,
@@ -24,15 +33,18 @@ export function SourceMark({
 }): React.JSX.Element {
   const mark = MARKS[id];
   if (mark === undefined) {
+    const monogram = MONOGRAMS[id] ?? label.slice(0, 1);
     return (
       <span
         role="img"
         aria-label={label}
         title={label}
         data-yunari-asset-source={id}
-        className="inline-flex size-3.5 flex-none items-center justify-center rounded-[var(--radius-sm)] border border-edge text-xs font-medium text-muted uppercase"
+        className={`inline-flex size-3.5 flex-none items-center justify-center rounded-[var(--radius-sm)] border border-edge font-medium text-muted uppercase ${
+          monogram.length > 1 ? "text-[9px] tracking-tight" : "text-xs"
+        }`}
       >
-        {label.slice(0, 1)}
+        {monogram}
       </span>
     );
   }

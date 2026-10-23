@@ -1,3 +1,7 @@
+import { colorhuntSource } from "./colours/colorhunt.js";
+import { colorswoopSource } from "./colours/colorswoop.js";
+import { uigradientsSource } from "./gradients/uigradients.js";
+import { webgradientsSource } from "./gradients/webgradients.js";
 import { fontAwesomeSource } from "./icons/fontawesome.js";
 import { lineiconsSource } from "./icons/lineicons.js";
 import { lucideSource } from "./icons/lucide.js";
@@ -16,5 +20,9 @@ export const ASSET_SOURCES: readonly AssetSource[] = [
   lineiconsSource,
   fontAwesomeSource,
   unsplashSource,
+  colorhuntSource,
+  colorswoopSource,
+  uigradientsSource,
+  webgradientsSource,
   wallpaperEngineSource,
 ];
