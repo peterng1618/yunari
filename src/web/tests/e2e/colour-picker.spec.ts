@@ -183,6 +183,7 @@ test.describe("the colour picker and the gradient track", () => {
     expect(dragged, "the drag wrote a colour into the document").not.toEqual(
       before,
     );
+    const draggedText = await triggerValue.textContent();
 
     await page.keyboard.press("Control+z");
     // The undo is asynchronous; the trigger's readout is where the restored
@@ -193,12 +194,20 @@ test.describe("the colour picker and the gradient track", () => {
     );
 
     // A second press has no further step to walk: one drag is one entry, so it
-    // cannot rewind one pre-drag sample per pointer move. The readout is the
-    // rendered fact that settles the key; the save reads the document behind it.
+    // cannot rewind one pre-drag sample per pointer move. A no-op renders
+    // nothing, so the proof is the redo: it lands on the drag's entry only if
+    // the second undo stayed there. Had the drag recorded a sample per pointer
+    // move, the second undo would step to an earlier sample and this redo would
+    // land on the pre-drag colour instead.
     await page.keyboard.press("Control+z");
-    await expect(triggerValue).toHaveText(beforeText ?? "");
+    await page.keyboard.press("Control+z");
+    await page.keyboard.press("Control+y");
+    await expect(
+      triggerValue,
+      "the second undo did not walk into a pre-drag sample",
+    ).toHaveText(draggedText ?? "");
     expect(paletteOf(await saveEnvelope(page)).background?.value).toEqual(
-      before,
+      dragged,
     );
   });
 
@@ -210,6 +219,12 @@ test.describe("the colour picker and the gradient track", () => {
     await openTokens(page);
     await chooseIn(page, "[data-yunari-palette-token]", "background");
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
+
+    const seeded = paletteOf(await saveEnvelope(page)).background?.value;
+    if (seeded?.kind !== "gradient") {
+      throw new Error("the token is not a gradient");
+    }
+    const stopsBeforeDrag = seeded.stops.length;
 
     const track = page.getByTestId("gradient-track");
     const trackBox = await track.boundingBox();
@@ -235,6 +250,13 @@ test.describe("the colour picker and the gradient track", () => {
     expect(draggedPercent).toBeGreaterThan(10);
     expect(draggedPercent).toBeLessThan(60);
 
+    const dragged = paletteOf(await saveEnvelope(page)).background?.value;
+    if (dragged?.kind !== "gradient") {
+      throw new Error("the token is not a gradient");
+    }
+    // A drag changes where a stop sits, not how many there are.
+    expect(dragged.stops).toHaveLength(stopsBeforeDrag);
+
     await typeIntoControl(page, offset, 35);
     await expect(offset).toHaveValue("35");
 
@@ -256,6 +278,82 @@ test.describe("the colour picker and the gradient track", () => {
       throw new Error("the token is not a gradient");
     }
     expect(added.stops).toHaveLength(countBefore + 1);
+  });
+
+  test("edits a gradient stop's keys without nudging or deleting the selected object", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+    await page.goto(EDITOR);
+    await expect(
+      page.locator("#yunari-fabric-editor canvas.upper-canvas"),
+    ).toBeVisible();
+    // Selected through the bridge, so focus starts on the page rather than on a
+    // layer row — the keys below have to be the stop's own.
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          yunariEditorBridge: { selectLayer(id: string): void };
+        }
+      ).yunariEditorBridge.selectLayer("time-rule");
+    });
+    const active = (): Promise<{
+      readonly id: string | undefined;
+      readonly left: number;
+      readonly top: number;
+    }> =>
+      page.evaluate(() => {
+        const object = (
+          window as unknown as {
+            yunariEditorBridge: {
+              editor: {
+                canvas: {
+                  getActiveObject():
+                    | { id?: string; left?: number; top?: number }
+                    | undefined;
+                };
+              };
+            };
+          }
+        ).yunariEditorBridge.editor.canvas.getActiveObject();
+        if (object?.left === undefined || object.top === undefined) {
+          throw new Error("The test needs a selected object to stay selected.");
+        }
+        return { id: object.id, left: object.left, top: object.top };
+      });
+    const before = await active();
+
+    await openPane(page, "Tokens");
+    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
+    // Three stops, so Delete has one to remove while the two-stop floor holds.
+    await page.getByTestId("gradient-add").click();
+    const stop = page.getByTestId("gradient-stop-1");
+    await stop.click();
+    await expect(stop).toBeFocused();
+
+    const offset = Number(
+      await page.getByTestId("gradient-offset").inputValue(),
+    );
+    await page.keyboard.press("ArrowRight");
+    await expect(stop, "the arrow moved the stop").toHaveAttribute(
+      "aria-valuenow",
+      String(Math.round(offset) + 1),
+    );
+    // The dispatcher is a window bubble listener. Before the control stopped
+    // its keys, the same arrow also nudged the selected group by one pixel.
+    expect(await active(), "the arrow belonged to the stop").toEqual(before);
+
+    const stops = page.locator('[data-testid^="gradient-stop-"]');
+    await expect(stops).toHaveCount(3);
+    await page.keyboard.press("Delete");
+    await expect(stops, "Delete removed the stop").toHaveCount(2);
+    // And it removed *the stop*, not the selected object the dispatcher would
+    // also have deleted.
+    expect(await active(), "Delete removed the stop, not the object").toEqual(
+      before,
+    );
   });
 
   test("applies a gradient preset from the library's fifteen seeds", async ({
@@ -390,8 +488,7 @@ test.describe("the colour picker and the gradient track", () => {
         ),
         `${palette}: the pixel beside the area is not the outline colour`,
       ).toBeLessThanOrEqual(32);
-      const ratio =
-        Math.round(contrast(outlineChannels, pixel) * 100) / 100;
+      const ratio = Math.round(contrast(outlineChannels, pixel) * 100) / 100;
       ratios.push(`${palette} focus-boundary ${ratio}:1 (${reading.outline})`);
       if (ratio < 3) {
         failures.push(

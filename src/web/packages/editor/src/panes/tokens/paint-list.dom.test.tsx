@@ -31,9 +31,12 @@
  */
 import type { FabricPalette } from "@yunari/renderer-core";
 import { colorAt } from "@yunari/renderer-core";
+import type { SerialisedScene } from "@yunari/scene-fabric";
+import type { Canvas } from "fabric/es";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
+import { EditorHistory } from "../../history-manager/index.js";
 import { uiCopy } from "../../ui-copy.js";
 import { PaintList, type PaintListProps } from "./paint-list.js";
 import {
@@ -471,6 +474,70 @@ it("commits a typed colour once and settles the history exactly once", async () 
     },
   });
   expect(settled, "one gesture is one history entry").toHaveBeenCalledOnce();
+});
+
+it("records a token rename as its own step, so an unrelated undo keeps it", async () => {
+  // An undo restores the scene and the globals **together**. A rename that
+  // committed without recording an entry therefore did not just fail to be
+  // undoable: the next undo put back the palette bag captured at the previous
+  // save, silently reverting the rename. This is the ordering that proves it.
+  let palette: FabricPalette = PAINT_LIST_PALETTE;
+  let scene: SerialisedScene = { version: "7.4.0", objects: [] };
+  const canvas = {
+    fire: () => undefined,
+    getActiveObject: () => undefined,
+  } as unknown as Canvas;
+  const history = new EditorHistory({
+    canvas,
+    serialize: () => scene,
+    revive: async (_target, next) => {
+      scene = next;
+    },
+  });
+  history.reset();
+  history.attachGlobals({
+    read: () => ({ palette }),
+    write: (globals) => {
+      palette = globals?.palette ?? {};
+    },
+  });
+
+  const host = document.createElement("div");
+  document.body.append(host);
+  const mounted = createRoot(host);
+  root = mounted;
+  await act(async () => {
+    mounted.render(
+      <Harness
+        initial={PAINT_LIST_PALETTE}
+        usage={undefined}
+        onDelete={undefined}
+        onSettled={() => history.save()}
+        change={(next) => {
+          palette = next;
+        }}
+      />,
+    );
+  });
+
+  await commitField("[data-yunari-palette-name]", "Renamed background");
+  expect(palette.background?.name).toBe("Renamed background");
+
+  // A scene edit after the rename, recorded as its own entry.
+  scene = { version: "7.4.0", objects: [{ type: "Rect" }] };
+  history.save();
+
+  await history.undo();
+  expect(scene.objects).toHaveLength(0);
+  expect(
+    palette.background?.name,
+    "undoing the scene edit must not revert the rename",
+  ).toBe("Renamed background");
+
+  await history.undo();
+  expect(palette.background?.name, "the rename is its own step").toBe(
+    "Background",
+  );
 });
 
 it("emits while the area is dragged, and settles nothing until pointer-up", async () => {

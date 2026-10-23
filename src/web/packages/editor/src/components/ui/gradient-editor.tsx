@@ -6,7 +6,7 @@ import { presetLibrary } from "../../preset-library/index.js";
 import { usePresetLibrary } from "../../preset-library/use-preset-library.js";
 import { uiCopy } from "../../ui-copy.js";
 import { ColourPicker } from "./colour-picker.js";
-import { steppedValue } from "./colour-picker-model.js";
+import { ratioAlong, steppedValue } from "./colour-picker-model.js";
 import { ControlChoiceRow } from "./control-choice-row.js";
 import { ControlIconButton } from "./control-icon-button.js";
 import { ControlNumber } from "./control-number.js";
@@ -88,25 +88,10 @@ export function GradientEditor({
     });
   };
 
-  /** The pointer's position as a 0–1 fraction of the track.
-   *
-   *  Measured against the **padding box**, because that is the box a mark's
-   *  `left: n%` resolves against; `getBoundingClientRect` is the border box, and
-   *  reading it would put every mark's own centre a border-width off its
-   *  offset. */
-  const ratioAt = (clientX: number): number | undefined => {
-    const element = track.current;
-    if (element === null) return undefined;
-    const rect = element.getBoundingClientRect();
-    const style = getComputedStyle(element);
-    const left = Number.parseFloat(style.borderLeftWidth) || 0;
-    const right = Number.parseFloat(style.borderRightWidth) || 0;
-    const width = rect.width - left - right;
-    if (!(width > 0)) return undefined;
-    const ratio = (clientX - rect.left - left) / width;
-    if (!Number.isFinite(ratio)) return undefined;
-    return Math.min(1, Math.max(0, ratio));
-  };
+  /** The pointer's position as a 0–1 fraction of the track, measured against
+   *  the padding box the marks are positioned in. */
+  const ratioAt = (clientX: number): number | undefined =>
+    track.current === null ? undefined : ratioAlong(track.current, clientX);
 
   const endDrag = (): void => {
     const gesture = drag.current;
@@ -238,6 +223,10 @@ export function GradientEditor({
             onKeyDown={(event) => {
               if (event.key === "Delete") {
                 event.preventDefault();
+                // The shortcut dispatcher is a `window` bubble listener and
+                // does not read `defaultPrevented`, so preventing alone left
+                // Delete deleting the selected object too.
+                event.stopPropagation();
                 removeAt(index);
                 return;
               }
@@ -250,8 +239,10 @@ export function GradientEditor({
                 event.shiftKey,
               );
               if (next === undefined) return;
-              // A slider that lets an arrow through scrolls the panel behind it.
+              // A slider that lets an arrow through scrolls the panel behind it
+              // and nudges the selected object.
               event.preventDefault();
+              event.stopPropagation();
               put(index, { offset: next / 100, color: stop.color });
               onCommit?.();
             }}
@@ -330,6 +321,9 @@ export function GradientEditor({
               onKeyDown={(event) => {
                 if (event.key === "Delete") {
                   event.preventDefault();
+                  // Like the stop's own keys: the dispatcher would otherwise
+                  // delete the selected canvas object in the same press.
+                  event.stopPropagation();
                   presetLibrary.deletePreset("gradient", preset.id);
                   return;
                 }
@@ -338,6 +332,7 @@ export function GradientEditor({
                   event.key === "ContextMenu"
                 ) {
                   event.preventDefault();
+                  event.stopPropagation();
                   const box = event.currentTarget.getBoundingClientRect();
                   openMenu(preset, box.left, box.top);
                 }

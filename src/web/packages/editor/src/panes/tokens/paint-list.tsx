@@ -47,8 +47,10 @@ export interface PaintListProps {
     | (() => Readonly<Record<string, readonly PaletteTokenUse[]>>)
     | undefined;
   readonly onChange: (palette: FabricPalette) => void;
-  /** The settled boundary of one colour gesture: called once when the picker
-   *  commits, so a drag is one history entry rather than one per sample. */
+  /** The settled boundary of one commit: a colour gesture's end, or a discrete
+   *  edit that has no gesture — the rename, the kind switch and the new token.
+   *  Without the latter they are unundoable, and a later undo's globals restore
+   *  silently reverts them. */
   readonly onSettled?: (() => void) | undefined;
   readonly onDelete: ((id: string, replacement: string) => void) | undefined;
 }
@@ -83,6 +85,7 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
       },
     });
     setPicked(id);
+    onSettled?.();
   };
 
   return (
@@ -194,6 +197,7 @@ function TokenFields(props: {
           const trimmed = next.trim();
           if (trimmed === "") return;
           commit({ ...entry, name: trimmed });
+          onSettled?.();
         }}
       />
       <ControlSelect
@@ -208,6 +212,7 @@ function TokenFields(props: {
           const wanted = kind === "gradient" ? "gradient" : "solid";
           if (entry.value.kind === wanted) return;
           commit({ ...entry, value: seedPaint(entry.value) });
+          onSettled?.();
         }}
       />
       {entry.value.kind === "solid" ? (

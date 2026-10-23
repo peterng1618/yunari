@@ -569,6 +569,84 @@ it("removes the selected stop with Delete and never leaves fewer than two", asyn
   expect(mounted.commit).toHaveBeenCalledOnce();
 });
 
+it("stops the keys a stop owns from reaching the canvas dispatcher", async () => {
+  const mounted = await mount({
+    stops: [
+      { offset: 0, color: BLACK },
+      { offset: 0.5, color: RED },
+      { offset: 1, color: WHITE },
+    ],
+    angle: 0,
+  });
+  // The dispatcher is a `window` bubble listener, so a key the control handled
+  // still nudging or deleting the selected object is exactly an event that
+  // reached it. Stopping at the handler is the precedent the layer panel set.
+  const heard: string[] = [];
+  const listener = (event: KeyboardEvent): void => {
+    heard.push(event.key);
+  };
+  window.addEventListener("keydown", listener);
+  try {
+    const stop = mounted.find("gradient-stop-1");
+    await press(stop, "ArrowRight");
+    await press(stop, "Delete");
+
+    expect(
+      heard,
+      "the stop's own keys must not also reach the canvas dispatcher",
+    ).toEqual([]);
+    expect(
+      mounted.change,
+      "the stop still moved and was removed",
+    ).toHaveBeenCalledTimes(2);
+  } finally {
+    window.removeEventListener("keydown", listener);
+  }
+});
+
+it("stops a preset row's Delete from reaching the canvas dispatcher", async () => {
+  let added: ReturnType<typeof presetLibrary.addGradient> | undefined;
+  await act(async () => {
+    added = presetLibrary.addGradient({
+      name: "Probe dispatcher gradient",
+      angle: 0,
+      stops: [
+        { offset: 0, color: RED },
+        { offset: 1, color: BLUE },
+      ],
+    });
+  });
+  const preset = added?.library.gradients.find(
+    (candidate) => candidate.name === "Probe dispatcher gradient",
+  );
+  if (preset === undefined) throw new Error("The probe gradient was refused.");
+  const mounted = await mount({
+    stops: [
+      { offset: 0, color: BLACK },
+      { offset: 1, color: WHITE },
+    ],
+    angle: 0,
+  });
+  await flush();
+  const heard: string[] = [];
+  const listener = (event: KeyboardEvent): void => {
+    heard.push(event.key);
+  };
+  window.addEventListener("keydown", listener);
+  try {
+    await press(mounted.find(`gradient-preset-${preset.id}`), "Delete");
+    await flush();
+
+    expect(
+      heard,
+      "the preset's own key must not also reach the canvas dispatcher",
+    ).toEqual([]);
+    expect(mounted.query(`gradient-preset-${preset.id}`)).toBeNull();
+  } finally {
+    window.removeEventListener("keydown", listener);
+  }
+});
+
 it("rings a stop with §4's `--edge` boundary token, not a raw colour", async () => {
   const mounted = await mount({
     // `hsl()` rather than a hex, so this case is about the ring alone.

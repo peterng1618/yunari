@@ -96,6 +96,68 @@ describe("EditorDocument credits", () => {
   });
 });
 
+describe("EditorDocument globals commits", () => {
+  it("records the discrete globals commits and leaves the live palette samples alone", () => {
+    // A live colour gesture publishes per sample and records once at its settle
+    // callback, so saving inside `setPalette` would make every sample an entry.
+    // The discrete commits have no gesture to settle: they are an entry the
+    // moment they are written, or they are unundoable and a later undo reverts
+    // them silently.
+    const saveState = vi.fn();
+    const document = new EditorDocument({
+      source: {
+        shell: {
+          snapshot: (value: unknown) => value,
+          setGlobals: vi.fn(),
+          setBackground: vi.fn(),
+          editor: {
+            errorManager: { report: () => {} },
+            historyManager: { attachGlobals: () => {}, saveState },
+            canvas: { getObjects: () => [] },
+          },
+        } as unknown as EditorShell,
+        envelope: createNewFabricTheme() as unknown as FabricThemeEnvelopeInput,
+        assetManager: new AssetManager(),
+        onNew: async () => {},
+        onNewFromStarter: async () => {},
+        onSaved: () => {},
+      },
+      consumers: {
+        palette: () => ({ render: () => {} }),
+        types: () => ({ render: () => {} }),
+        runtime: () => ({ setGlobals: () => {} }),
+        charts: () => ({
+          setGlobals: () => {},
+          reassignPaletteReferences: () => {},
+        }),
+        newObjects: () => ({ setGlobals: () => {} }),
+        selection: () => ({ setGlobals: () => {} }),
+      } as never,
+    });
+
+    document.setPalette({
+      accent: {
+        name: "Accent",
+        value: { kind: "solid", color: "rgb(200 0 0)" },
+      },
+    } as never);
+    expect(
+      saveState,
+      "a live palette sample waits for its settle",
+    ).not.toHaveBeenCalled();
+
+    document.setTypes({});
+    expect(saveState).toHaveBeenCalledTimes(1);
+
+    document.deleteType("type", "other");
+    expect(saveState).toHaveBeenCalledTimes(2);
+
+    document.deletePalette("accent", "none");
+    expect(saveState).toHaveBeenCalledTimes(3);
+    document.destroy();
+  });
+});
+
 describe("EditorDocument undo", () => {
   it("re-renders the types panel when an undo restores the globals", () => {
     let port: HistoryGlobalsPort | undefined;
