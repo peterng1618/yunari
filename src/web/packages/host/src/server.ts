@@ -20,6 +20,7 @@ import { DEFAULT_THEMES_DIR } from "./cli/args.js";
 import type { HostBinding } from "./cli/hosting.js";
 import type { ListenableServer } from "./cli/net.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
+import { redactForBrowser } from "./providers/provider.js";
 import {
   type DisplayAsk,
   groupByAssignment,
@@ -79,6 +80,10 @@ import { requiredDeviceGroups } from "./settings/required-devices.js";
 import type { StoreSessionStore } from "./settings/store-session.js";
 import type { ThemeOriginsStore } from "./settings/theme-origins.js";
 import type { ThemeSettingsStore } from "./settings/theme-settings.js";
+import {
+  searchWeatherPlaces,
+  type WeatherSettingsStore,
+} from "./settings/weather.js";
 import { importThemePackage } from "./themes/import.js";
 import {
   type InstallRequest,
@@ -190,6 +195,9 @@ export interface HostServerOptions {
   readonly activeTheme?: ActiveThemeStore;
   /** The consumer's display preferences. Omit when the host stores none. */
   readonly display?: DisplaySettingsStore;
+  /** The weather backend, place and cadence. Omitted when the host stores
+   *  none — the routes then say so rather than serving an empty reading. */
+  readonly weather?: WeatherSettingsStore;
   /** Which curated font trios this author favours. Omit when the host stores
    *  none — the route then reports that rather than serving an empty list. */
   readonly fontFavorites?: FontFavoritesStore;
@@ -883,6 +891,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const saved = options.rememberLan;
   const devices = options.devices;
   const display = options.display;
+  const weather = options.weather;
   const fontFavorites = options.fontFavorites;
   const credentials = options.credentials;
   const knownCredentials = options.knownCredentials ?? KNOWN_CREDENTIALS;
@@ -1753,6 +1762,98 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
+    // Weather's place, backend and cadence are this PC's own facts, like the
+    // display preferences above: a display never reads them, and a place search
+    // spends this host's request on a person's own act.
+    if (
+      url.pathname === "/api/weather/settings" ||
+      url.pathname === "/api/weather/places"
+    ) {
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Weather settings are available on this PC only.",
+        );
+        return;
+      }
+
+      if (weather === undefined) {
+        sendText(
+          response,
+          404,
+          "Weather settings are not enabled on this host.",
+        );
+        return;
+      }
+
+      if (url.pathname === "/api/weather/settings") {
+        if (request.method === "GET") {
+          sendJson(response, 200, { settings: await weather.read() });
+          return;
+        }
+
+        if (request.method === "PUT") {
+          let body: unknown;
+
+          try {
+            body = JSON.parse(await readBody(request)) as unknown;
+          } catch {
+            sendText(response, 400, "That request body is not JSON.");
+            return;
+          }
+
+          try {
+            // The store normalizes before it touches the file, and its refusal
+            // names the field: a bad write leaves the stored one in place.
+            const saved = await weather.write(body);
+            sendJson(response, 200, { ok: true, settings: saved });
+          } catch (error: unknown) {
+            sendText(
+              response,
+              400,
+              error instanceof Error ? error.message : String(error),
+            );
+          }
+          return;
+        }
+
+        sendText(response, 405, "Only GET and PUT are supported.");
+        return;
+      }
+
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+
+      const query = url.searchParams.get("q")?.trim() ?? "";
+
+      if (query === "") {
+        sendText(response, 400, 'The "q" search term is required.');
+        return;
+      }
+
+      try {
+        // The injected fetcher is the asset routes' own, so a route case never
+        // reaches the network and this host makes one kind of outbound call.
+        sendJson(response, 200, {
+          places: await searchWeatherPlaces(fetcher ?? fetch, query),
+        });
+      } catch (error: unknown) {
+        // Redacted and bounded: geocoding needs no key, but an upstream's
+        // transport words are still not a browser's to read.
+        sendText(
+          response,
+          502,
+          redactForBrowser(
+            error instanceof Error ? error.message : String(error),
+          ),
+        );
+      }
+      return;
+    }
+
     // One number, so a display can tell whether what it is showing is still
     // what the author is publishing — and the theme it was assigned, so an
     // assignment made at the host reaches a display nobody walks to. A display
@@ -2003,6 +2104,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     if (url.pathname === "/api/health") {
+      let weatherProblem: string | undefined;
+
+      if (weather !== undefined) {
+        // The read is what refreshes the reason: health is a poll, not a file
+        // watch, and a rewritten valid file has to clear it.
+        await weather.read();
+        weatherProblem = weather.problem();
+      }
+
       sendJson(response, 200, {
         displays: connections.size,
         polling: unionOfKeys(
@@ -2010,6 +2120,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         ),
         unmapped: lastUnmapped,
         pairing: displays !== undefined,
+        ...(weatherProblem === undefined ? {} : { weather: weatherProblem }),
       });
       return;
     }

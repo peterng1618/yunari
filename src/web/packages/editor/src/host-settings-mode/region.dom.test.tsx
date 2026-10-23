@@ -37,6 +37,8 @@ import {
   type DisplayPreferencesWrite,
   type HostSettingsClient,
   type ThemeAnswers,
+  type WeatherPlace,
+  type WeatherSettings,
 } from "./client.js";
 import { HostSettingsRegion, type HostStatusLine } from "./region.js";
 
@@ -126,6 +128,9 @@ interface Fixture {
       }
     >
   >;
+  readonly weather?: WeatherSettings;
+  /** What the geocoder finds for a search, whatever it was asked. */
+  readonly places?: readonly WeatherPlace[];
   /** The display map's own refusal: a host that keeps its settings to itself. */
   readonly refuseDisplays?: boolean;
 }
@@ -143,6 +148,8 @@ interface Written {
     readonly answers: ThemeAnswers;
   }[];
   readonly asked: { readonly display: string; readonly theme: string }[];
+  readonly weather: WeatherSettings[];
+  readonly searches: string[];
 }
 
 function library(fixture: Fixture): ThemeLibraryClient {
@@ -174,6 +181,7 @@ function hostSettings(
     readonly devices?: string;
     readonly display?: string;
     readonly answers?: string;
+    readonly weather?: string;
   },
 ): { readonly client: HostSettingsClient; readonly wrote: Written } {
   const wrote: Written = {
@@ -181,11 +189,21 @@ function hostSettings(
     display: [],
     answers: [],
     asked: [],
+    weather: [],
+    searches: [],
   };
   const devices: DeviceSettings = fixture.devices ?? {
     available: { gpus: [], disks: [] },
     assigned: {},
     names: {},
+  };
+  const weather: WeatherSettings = fixture.weather ?? {
+    provider: "open-meteo",
+    label: "",
+    latitude: 0,
+    longitude: 0,
+    useWindowsLocation: false,
+    pollIntervalMs: 600000,
   };
 
   return {
@@ -217,6 +235,16 @@ function hostSettings(
         wrote.answers.push({ display, theme, answers });
         if (refuse?.answers !== undefined) throw new Error(refuse.answers);
         return answers;
+      },
+      readWeather: async () => weather,
+      saveWeather: async (next) => {
+        wrote.weather.push(next);
+        if (refuse?.weather !== undefined) throw new Error(refuse.weather);
+        return next;
+      },
+      searchPlaces: async (query) => {
+        wrote.searches.push(query);
+        return fixture.places ?? [];
       },
     },
   };
@@ -256,6 +284,7 @@ async function mountHost(
     readonly devices?: string;
     readonly display?: string;
     readonly answers?: string;
+    readonly weather?: string;
   },
 ): Promise<{
   readonly container: HTMLDivElement;
@@ -400,6 +429,16 @@ async function leave(field: HTMLInputElement): Promise<void> {
   await act(async () => {
     field.focus();
     field.blur();
+  });
+}
+
+/** Presses Enter in a field, which is the other act that commits a draft. */
+async function enter(field: HTMLInputElement): Promise<void> {
+  await act(async () => {
+    field.focus();
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
   });
 }
 
@@ -727,6 +766,94 @@ it("shows the store's refusal when a unit preference cannot be stored", async ()
     statusLine(published).status,
     "the store's refusal did not reach the person",
   ).toBe(uiCopy.hostSettings.status.failed(refusal));
+});
+
+/** The weather form's own rows, by the hook each publishes. */
+function weatherField(container: HTMLElement, hook: string): HTMLInputElement {
+  return must(container.querySelector<HTMLInputElement>(hook), hook);
+}
+
+const WEATHER: WeatherSettings = {
+  provider: "open-meteo",
+  label: "Berlin, Berlin, DE",
+  latitude: 52.52,
+  longitude: 13.41,
+  useWindowsLocation: false,
+  pollIntervalMs: 600000,
+};
+
+/**
+ * **The form's own units, and the one write they all travel in.** The interval
+ * is set in seconds and stored in milliseconds — the provider polls on a clock,
+ * a person sets a cadence — and every control writes the whole settings object,
+ * because the route replaces it. A searched place fills the three location
+ * fields from geocoding rather than being typed in by hand.
+ */
+it("saves the weather form in seconds and fills a searched place", async () => {
+  const { container, wrote } = await mountHost({
+    ...TWO_DISPLAYS,
+    weather: WEATHER,
+    places: [
+      {
+        label: "Paris, Ile-de-France, FR",
+        latitude: 48.86,
+        longitude: 2.35,
+      },
+    ],
+  });
+
+  const interval = weatherField(container, "[data-yunari-weather-interval]");
+  expect(
+    interval.value,
+    "a stored millisecond interval is not drawn in seconds",
+  ).toBe("600");
+  await type(interval, "120");
+  await leave(interval);
+  expect(
+    wrote.weather.at(-1)?.pollIntervalMs,
+    "seconds typed into the form were not stored as milliseconds",
+  ).toBe(120000);
+
+  await offered(
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-weather-provider]"),
+      "the weather provider select",
+    ),
+  );
+  await choose("weatherapi");
+  expect(wrote.weather.at(-1)?.provider).toBe("weatherapi");
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLElement>(
+        "[data-yunari-weather-windows-location]",
+      ),
+      "the Windows location switch",
+    ).click(),
+  );
+  expect(wrote.weather.at(-1)?.useWindowsLocation).toBe(true);
+
+  const search = weatherField(container, "[data-yunari-weather-search]");
+  await type(search, "Paris");
+  await enter(search);
+  expect(wrote.searches).toEqual(["Paris"]);
+
+  const place = must(
+    container.querySelector<HTMLElement>(
+      '[data-yunari-weather-place="Paris, Ile-de-France, FR"]',
+    ),
+    "the searched place",
+  );
+  await act(async () => place.click());
+
+  expect(
+    wrote.weather.at(-1),
+    "the searched place did not fill the form",
+  ).toMatchObject({
+    label: "Paris, Ile-de-France, FR",
+    latitude: 48.86,
+    longitude: 2.35,
+  });
 });
 
 /** A refused write is the host's own words, after the region's own lead: the

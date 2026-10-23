@@ -35,6 +35,7 @@ import { createHostingSettingsStore } from "./settings/hosting.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
 import { createThemeSettingsStore } from "./settings/theme-settings.js";
+import { createWeatherSettingsStore } from "./settings/weather.js";
 import { normalizeVideoCommand } from "./themes/normalize-video.js";
 import { createThemeStore } from "./themes/store.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
@@ -188,6 +189,8 @@ export async function run(argv: readonly string[]): Promise<number> {
   // The consumer's display preferences, read by the provider that acquires the
   // readings they apply to.
   const displaySettings = createDisplaySettingsStore(settingsDir);
+  // The weather place and backend the provider built in the next task reads.
+  const weatherSettings = createWeatherSettingsStore(settingsDir);
   // Which theme this host displays; consumer state beside the device choices.
   const activeTheme = createActiveThemeStore(settingsDir);
   // Which curated font trios this author reaches for. Author preference about
@@ -295,6 +298,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     pairingCodes,
     devices: deviceSettings,
     display: displaySettings,
+    weather: weatherSettings,
     fontFavorites,
     credentials,
     assets: { credentials },

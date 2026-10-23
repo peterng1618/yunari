@@ -543,6 +543,29 @@ export const uiCopy = {
         },
       },
     },
+    weather: {
+      heading: "Weather",
+      hint: "Where this PC's weather comes from. A manual place needs no permission; Windows location fills the gap when none is set.",
+      provider: "Backend",
+      /** What each backend costs: the three are names a person knows from the
+       *  key they bought, not descriptions of an API. */
+      providers: {
+        "open-meteo": "Open-Meteo (no key)",
+        weatherapi: "WeatherAPI (key required)",
+        openweathermap: "OpenWeatherMap (key required)",
+      },
+      label: "Place",
+      latitude: "Latitude",
+      longitude: "Longitude",
+      windowsLocation: "Use Windows location when no place is set",
+      pollInterval: "Poll every",
+      seconds: "s",
+      search: "Find a place",
+      searchPlaceholder: "Search for a city",
+      searching: "Searching for places…",
+      noResults: "No place matched that search.",
+      searchFailed: (reason: string): string => `Could not search: ${reason}`,
+    },
     /** The questions the theme on the chosen display raises. Only the ones it
      *  has not answered are drawn, so answering one is what makes it leave. */
     questions: {
@@ -567,6 +590,8 @@ export const uiCopy = {
       savedUnits:
         "Saved. Displays already open keep their old units until they reload.",
       savedAnswers: "Saved. Only this theme is affected.",
+      savedWeather:
+        "Saved. Weather readings update on the backend's next poll.",
       failed: (reason: string): string => `Could not save: ${reason}`,
     },
   },

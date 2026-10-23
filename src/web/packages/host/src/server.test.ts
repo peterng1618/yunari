@@ -58,6 +58,10 @@ import type { Monitor } from "./settings/monitors.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
 import { createThemeSettingsStore } from "./settings/theme-settings.js";
+import {
+  createWeatherSettingsStore,
+  DEFAULT_WEATHER_SETTINGS,
+} from "./settings/weather.js";
 import { createThemeStore, type ThemeContent } from "./themes/store.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
 import { encodeThemeContent } from "./themes/wire.js";
@@ -7914,5 +7918,243 @@ describe("Host Wallpaper Engine routes", () => {
     } finally {
       await hosted.close();
     }
+  });
+});
+
+describe("Weather settings routes", () => {
+  let settingsDir: string;
+  let hosted: ReturnType<typeof createHostServer> | undefined;
+
+  beforeEach(async () => {
+    settingsDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-weather-"));
+  });
+
+  afterEach(async () => {
+    await hosted?.close();
+    hosted = undefined;
+    await fs.rm(settingsDir, { recursive: true, force: true });
+  });
+
+  /** A host holding this directory's weather store, and the store itself so a
+   *  case can read what a route wrote. */
+  async function launch(
+    options: { readonly fetch?: typeof fetch } = {},
+  ): Promise<{
+    readonly server: ListenableServer;
+    readonly weather: ReturnType<typeof createWeatherSettingsStore>;
+  }> {
+    const weather = createWeatherSettingsStore(settingsDir);
+    const running = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: settingsDir, editor: settingsDir },
+      weather,
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    });
+    hosted = running;
+    return { server: running.server, weather };
+  }
+
+  const BERLIN = {
+    provider: "open-meteo",
+    label: "Berlin, Berlin, DE",
+    latitude: 52.52,
+    longitude: 13.41,
+    useWindowsLocation: false,
+    pollIntervalMs: 600000,
+  } as const;
+
+  it("answers this PC's stored weather settings, and refuses the network", async () => {
+    const { server } = await launch();
+
+    const local = await request(server, "GET", "/api/weather/settings");
+    expect(local.status).toBe(200);
+    expect((local.json() as { settings: unknown }).settings).toEqual(
+      DEFAULT_WEATHER_SETTINGS,
+    );
+
+    // A place and a polling cadence are this PC's own facts, like the display
+    // preferences beside them.
+    expect(
+      (
+        await request(server, "GET", "/api/weather/settings", undefined, {
+          remoteAddress: "192.168.1.50",
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it("stores what a PUT normalizes, and answers the stored reading", async () => {
+    const { server, weather } = await launch();
+
+    const saved = await request(
+      server,
+      "PUT",
+      "/api/weather/settings",
+      JSON.stringify({ ...BERLIN, label: "  Berlin, Berlin, DE  " }),
+    );
+    expect(saved.status).toBe(200);
+    expect((saved.json() as { settings: unknown }).settings).toEqual(BERLIN);
+    expect(await weather.read()).toEqual(BERLIN);
+
+    const read = await request(server, "GET", "/api/weather/settings");
+    expect((read.json() as { settings: unknown }).settings).toEqual(BERLIN);
+
+    // A write is an admin action too.
+    expect(
+      (
+        await request(
+          server,
+          "PUT",
+          "/api/weather/settings",
+          JSON.stringify(BERLIN),
+          { remoteAddress: "192.168.1.50" },
+        )
+      ).status,
+    ).toBe(403);
+  });
+
+  it("refuses invalid input with the normalizer's message and keeps the file", async () => {
+    const { server, weather } = await launch();
+    await weather.write(BERLIN);
+
+    const refused = await request(
+      server,
+      "PUT",
+      "/api/weather/settings",
+      JSON.stringify({ ...BERLIN, latitude: 91 }),
+    );
+    expect(refused.status).toBe(400);
+    expect(refused.text()).toMatch(/latitude/);
+
+    expect(await weather.read()).toEqual(BERLIN);
+  });
+
+  it("answers the places an injected geocoder finds, without the network", async () => {
+    const asked: string[] = [];
+    const { server } = await launch({
+      fetch: async (input) => {
+        asked.push(String(input));
+        return new Response(
+          JSON.stringify({
+            results: [
+              {
+                name: "Berlin",
+                admin1: "Berlin",
+                country_code: "DE",
+                latitude: 52.52,
+                longitude: 13.41,
+              },
+              {
+                name: "Berlin",
+                admin1: "",
+                country_code: "US",
+                latitude: 44.47,
+                longitude: -71.18,
+              },
+            ],
+          }),
+        );
+      },
+    });
+
+    const found = await request(server, "GET", "/api/weather/places?q=Berlin");
+    expect(found.status).toBe(200);
+    expect((found.json() as { places: unknown }).places).toEqual([
+      { label: "Berlin, Berlin, DE", latitude: 52.52, longitude: 13.41 },
+      // An empty part is skipped rather than printed as a gap in the label.
+      { label: "Berlin, US", latitude: 44.47, longitude: -71.18 },
+    ]);
+
+    const endpoint = new URL(asked[0] ?? "");
+    expect(endpoint.origin).toBe("https://geocoding-api.open-meteo.com");
+    expect(endpoint.pathname).toBe("/v1/search");
+    expect(endpoint.searchParams.get("name")).toBe("Berlin");
+    expect(endpoint.searchParams.get("count")).toBe("5");
+    expect(endpoint.searchParams.get("language")).toBe("en");
+    expect(endpoint.searchParams.get("format")).toBe("json");
+
+    // The search is a this-PC action, like the settings read above it.
+    expect(
+      (
+        await request(
+          server,
+          "GET",
+          "/api/weather/places?q=Berlin",
+          undefined,
+          {
+            remoteAddress: "192.168.1.50",
+          },
+        )
+      ).status,
+    ).toBe(403);
+  });
+
+  it("refuses an empty search without reaching the geocoder", async () => {
+    let called = false;
+    const { server } = await launch({
+      fetch: async () => {
+        called = true;
+        return new Response("{}");
+      },
+    });
+
+    for (const query of ["", "?q=", "?q=%20%20"]) {
+      const refused = await request(
+        server,
+        "GET",
+        `/api/weather/places${query}`,
+      );
+      expect(refused.status, query).toBe(400);
+    }
+    expect(called).toBe(false);
+  });
+
+  it("answers 502 when the geocoder fails or overruns the body cap", async () => {
+    for (const fetchImpl of [
+      (async (): Promise<Response> => {
+        throw new Error("connect ECONNREFUSED 127.0.0.1");
+      }) as typeof fetch,
+      (async (): Promise<Response> =>
+        new Response(new Uint8Array(64 * 1024 + 1))) as typeof fetch,
+      (async (): Promise<Response> =>
+        new Response("{}", { status: 500 })) as typeof fetch,
+    ]) {
+      const { server } = await launch({ fetch: fetchImpl });
+      const failed = await request(
+        server,
+        "GET",
+        "/api/weather/places?q=Berlin",
+      );
+      expect(failed.status).toBe(502);
+      // Its own sentence, so nothing undici or Open-Meteo wrote reaches a
+      // browser — geocoding needs no key, but it does not echo its transport.
+      expect(failed.text()).not.toContain("ECONNREFUSED");
+    }
+  });
+
+  it("reports an invalid weather.json through /api/health and clears it", async () => {
+    const { server } = await launch();
+    await fs.writeFile(
+      path.join(settingsDir, "weather.json"),
+      JSON.stringify({ ...BERLIN, latitude: 91 }),
+      "utf8",
+    );
+
+    const unhealthy = await request(server, "GET", "/api/health");
+    expect((unhealthy.json() as { weather?: unknown }).weather).toMatch(
+      /latitude/,
+    );
+
+    await request(
+      server,
+      "PUT",
+      "/api/weather/settings",
+      JSON.stringify(BERLIN),
+    );
+    const healthy = await request(server, "GET", "/api/health");
+    expect(
+      "weather" in (healthy.json() as Record<string, unknown>),
+      "a valid file still reports a problem",
+    ).toBe(false);
   });
 });

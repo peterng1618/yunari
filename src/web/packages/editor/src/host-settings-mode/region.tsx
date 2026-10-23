@@ -32,6 +32,8 @@ import {
   type HostSettingsClient,
   type ThemeAnswers,
 } from "./client.js";
+import { Group } from "./section-group.js";
+import { WeatherSection } from "./weather-section.js";
 
 /**
  * The Host mode's region — the third surface the shell's mode switch reaches,
@@ -136,29 +138,6 @@ function groupQuestion(
 /** A message a person can act on: the host's own words where it sent any. */
 function reason(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/** One section of the mode: §2's eyebrow, the sentence that says what it is,
- *  and the rows. Not `InspectorSection` — that one is a disclosure whose header
- *  is a button, and none of these four collapses. */
-function Group(props: {
-  readonly name: string;
-  readonly hint: string;
-  readonly testId: string;
-  readonly children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <section
-      data-yunari-host-section={props.testId}
-      className="flex flex-col gap-[var(--space-8)]"
-    >
-      <h2 className="m-0 text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
-        {props.name}
-      </h2>
-      <p className="text-xs text-muted">{props.hint}</p>
-      <div className="flex flex-col gap-[var(--space-6)]">{props.children}</div>
-    </section>
-  );
 }
 
 /**
@@ -700,6 +679,8 @@ function HostSettings(props: {
               </>
             )}
           </Group>
+
+          <WeatherSection settings={settings} report={setStatus} />
 
           {/* **Only the questions the theme on this display raises are drawn**,
               and only the ones nothing has answered: the route derives `required`
