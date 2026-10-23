@@ -43,14 +43,16 @@ an ownership decision — they decide transport, not where a preset is kept.
 
 ## Rung 4 — ecosystem
 
-Searched: how palette and gradient browsers hand a chosen preset to an editor —
-Coolors, Color Hunt, ColorSwoop, UI Gradients, WebGradients, and CSS gradient
-serialisation.
+Searched: "palette picker add to palette api", "gradient preset import editor",
+the docs and network surfaces of Coolors, Color Hunt, ColorSwoop, UI Gradients
+and WebGradients, and how CSS gradient serialisation is reused across editors.
 
-Found: the recurring shape is *copy the values into the editor's own palette
-list*. None of them models a palette as an imported binary or as an attributed
-theme asset; the closest analogue is a swatch copied into a palette panel. That
-matches a data payload, not an import.
+Found: none of them exposes a preset payload as an asset with bytes and
+attribution; the recurring shape is *copy the values into the editor's own
+palette list*, and the closest analogue is a swatch copied into a palette panel.
+Dead ends: Coolors has no public API and blocks scripted reads (403), so its
+own hand-off could not be observed; Color Hunt's feed carries no name or role,
+which is why a palette stays a bare list of colours.
 
 ## Rung 5 — comparison
 
@@ -70,8 +72,9 @@ re-checking.
 
 ## Decision
 
-`importAsset` returns `applyPreset(result)` when `result.preset` is present,
-before `assetBytes` is called. A preset is editor-local data with its own
-owner, so it must not acquire an asset reference or a credit entry; the wire
-union already says which rows are presets, so the branch costs one check and no
-new finder action.
+`importAsset` returns `applyPreset({ ...result, preset: result.preset })` when
+`result.preset` is present, before `assetBytes` is called. A preset is
+editor-local data with its own owner, so it must not acquire an asset reference
+or a `ThemeCreditsEntry` (the entry `credits.json` persists); the wire union
+already says which rows are presets, so the branch costs one check and no new
+finder action.

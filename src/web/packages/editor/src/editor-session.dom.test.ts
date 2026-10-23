@@ -3,6 +3,7 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { IText } from "fabric/es";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { presetLibrary } from "./preset-library/index.js";
 import { installReadableFile } from "./readable-file.fixture.js";
 
 installReadableFile();
@@ -1148,6 +1149,36 @@ describe("opening a theme over a document that has unsaved changes", () => {
     ).toHaveBeenCalledWith({
       media: expect.objectContaining({ bounds: "theme" }),
     });
+    extensions.destroy();
+  });
+
+  it("adds a finder palette to the presets without asking the host for bytes", async () => {
+    const extensions = sessionWith();
+
+    const outcome = await extensions.actionFacade().importAsset?.(
+      { source: "coolors", results: [], totalPages: 1, failure: undefined },
+      {
+        id: "coolors:cloud-dancer",
+        name: "Cloud Dancer",
+        kind: "palette",
+        preview: "",
+        subtitle: undefined,
+        licence: "unknown",
+        sourceUrl: "",
+        preset: { kind: "palette", colours: ["#112233", "#445566"] },
+      },
+    );
+
+    expect(outcome?.ok).toBe(true);
+    // A preset is data, not an imported asset: there are no bytes to fetch.
+    expect(assetClientMock.assetBytes).not.toHaveBeenCalled();
+    const stored = presetLibrary.getSnapshot().colours;
+    expect(stored.some((preset) => preset.name === "Cloud Dancer 1")).toBe(
+      true,
+    );
+    expect(stored.some((preset) => preset.name === "Cloud Dancer 2")).toBe(
+      true,
+    );
     extensions.destroy();
   });
 

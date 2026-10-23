@@ -14,9 +14,10 @@ import { uiCopy } from "../ui-copy.js";
 
 /** The outcome is yes or a sentence: what was placed differs by kind — an image
  *  carries an asset reference and an icon carries none — and no caller reads
- *  the difference. */
+ *  the difference. A success may carry a sentence of its own when the action
+ *  stored something instead of placing it. */
 export type ImportOutcome =
-  | { readonly ok: true }
+  | { readonly ok: true; readonly message?: string }
   | { readonly ok: false; readonly message: string };
 
 /** Where a row's consequence lands: the source's default, or the second action

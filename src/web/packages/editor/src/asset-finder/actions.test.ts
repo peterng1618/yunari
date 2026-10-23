@@ -188,13 +188,30 @@ describe("applyPreset", () => {
       ok: true,
       message: "Added gradient",
     });
-    expect(library.getSnapshot().gradients.at(-1)).toMatchObject({
+    expect(library.getSnapshot().gradients.at(-1)).toEqual({
+      id: expect.any(String),
       name: "Warm Flame",
       angle: 45,
+      stops: [
+        { offset: 0, color: "#ff0000" },
+        { offset: 1, color: "#0000ff" },
+      ],
     });
     expect(applyPreset(gradient, library)).toEqual({
       ok: true,
       message: "Already in presets",
     });
+  });
+
+  it("reports only the colours the library did not already hold", () => {
+    const library = createPresetLibrary(undefined);
+    library.addColours([{ name: "Kept", value: "#112233" }]);
+    const before = library.getSnapshot().colours.length;
+
+    expect(applyPreset(palette, library)).toEqual({
+      ok: true,
+      message: "Added 1 colour",
+    });
+    expect(library.getSnapshot().colours.length).toBe(before + 1);
   });
 });
