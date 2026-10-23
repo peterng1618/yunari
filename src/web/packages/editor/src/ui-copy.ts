@@ -1599,14 +1599,28 @@ export const uiCopy = {
      *  itself, because the author has to be able to see which of several they
      *  mistyped. */
     colourPicker: "Pick a colour",
-    /** The four tracks of the picker's popup, as accessible names. The
-     *  `data-testid` hooks (`picker-saturation` and its three siblings) stay
-     *  as they are, so a spec addresses them unchanged; the announced name is a
-     *  word rather than that selector-shaped token (`vg-336`). */
+    /** The channels the picker's controls announce, as accessible names.
+     *  `pickerSaturation` and `pickerValue` are the area's two channels, named
+     *  together in its `aria-valuetext`; `pickerHue` and `pickerAlpha` are the
+     *  two strips. The announced name is a word rather than the
+     *  selector-shaped `data-testid` (`vg-336`). */
     pickerSaturation: "Saturation",
     pickerValue: "Value",
     pickerHue: "Hue",
     pickerAlpha: "Alpha",
+    /** The saturation × brightness square, announced as one two-channel slider. */
+    pickerArea: "Saturation and brightness",
+    /** The library row inside the popup: the group's own name, never a
+     *  preset's, because the preset names are the library's data. */
+    pickerPresets: "Colour presets",
+    /** The action the platform's `EyeDropper` performs, drawn only when the
+     *  browser has one. */
+    pickerEyedropper: "Pick a colour from the screen",
+    /** The field's own name. Distinct from `colourHex`: the field accepts any
+     *  colour the parser takes, not only a hex. */
+    pickerValueField: "Value",
+    /** The library row's one destructive action. */
+    presetDelete: "Delete preset",
     /** The hex field inside the picker's popup. Named so the author who types a
      *  colour knows the field takes a hex, not the swatch's other channels. */
     colourHex: "Hex colour",

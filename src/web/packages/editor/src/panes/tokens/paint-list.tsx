@@ -269,7 +269,8 @@ function SolidFields(props: {
         <ColourPicker
           value={value.color}
           label={uiCopy.panels.colourPicker}
-          onChange={put}
+          onValueChange={put}
+          onValueCommit={put}
         />
       </div>
     </>

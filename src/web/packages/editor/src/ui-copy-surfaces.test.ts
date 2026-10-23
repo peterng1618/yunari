@@ -748,7 +748,8 @@ async function mountLandedSurfaces(): Promise<{
     pickerRoot.render(
       createElement(ColourPicker, {
         value: "#123456",
-        onChange: () => undefined,
+        onValueChange: () => undefined,
+        onValueCommit: () => undefined,
         label: uiCopy.panels.colourPicker,
       }),
     );

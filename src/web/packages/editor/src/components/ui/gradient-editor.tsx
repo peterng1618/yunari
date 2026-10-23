@@ -1,4 +1,4 @@
-import { parseColour } from "./colour-maths.js";
+import { parseColor } from "@yunari/renderer-core";
 import { ColourPicker } from "./colour-picker.js";
 
 /** One authored stop: where it sits along the gradient, and what colour it is. */
@@ -112,7 +112,15 @@ export function GradientEditor({
             <ColourPicker
               label={`${label} stop ${index + 1}`}
               value={stop.color}
-              onChange={(color) =>
+              onValueChange={(color) =>
+                onChange({
+                  angle,
+                  stops: stops.map((candidate, i) =>
+                    i === index ? { ...candidate, color } : candidate,
+                  ),
+                })
+              }
+              onValueCommit={(color) =>
                 onChange({
                   angle,
                   stops: stops.map((candidate, i) =>
@@ -123,7 +131,7 @@ export function GradientEditor({
             />
             <span className="font-mono text-xs text-neutral-300">
               {stop.color}
-              {parseColour(stop.color) === undefined
+              {parseColor(stop.color) === undefined
                 ? " — not a colour the browser can paint"
                 : ""}
             </span>

@@ -31,6 +31,7 @@ import {
   OctagonAlert,
   Palette,
   Pencil,
+  Pipette,
   Plus,
   Scan,
   Search,
@@ -130,6 +131,8 @@ export const BACKGROUND_GLYPH: LucideIcon = Wallpaper;
 export const PAGE_GLYPH: LucideIcon = FileText;
 /** The tokens palette — the rail's slot and the settings Appearance tab. */
 export const PALETTE_GLYPH: LucideIcon = Palette;
+/** The picker's eyedropper: a sample taken off the screen, not a paint pick. */
+export const PIPETTE_GLYPH: LucideIcon = Pipette;
 /** The Add slot's plus, and the camera cluster's zoom-in. */
 export const PLUS_GLYPH: LucideIcon = Plus;
 /** The camera cluster's zoom-out. */
