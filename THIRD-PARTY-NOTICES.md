@@ -35,6 +35,7 @@ where its section is one.
 | tailwind-merge 3.7.0 | MIT | editor class-name overrides |
 | better-auth 1.7.12 | MIT | store worker: OAuth sign-in, sessions and its own `user`/`session`/`account` tables |
 | aws4fetch 1.0.20 | MIT | store worker: SigV4-signs R2 presigned upload URLs |
+| culori 4.0.2 | MIT | colour parsing and conversion (no dependencies of its own) |
 
 Preserve applicable Apache-2.0 and MIT licence/NOTICE obligations.
 

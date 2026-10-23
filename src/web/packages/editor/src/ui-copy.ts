@@ -110,6 +110,19 @@ const glassRefusals: Readonly<Record<string, string>> = {
  */
 export const glassRefusalKinds: readonly string[] = Object.keys(glassRefusals);
 
+/** A row's file size. `Intl` owns the unit word, the separator and the
+ *  rounding; the only choice here is which unit the number is in. */
+const KILOBYTE = new Intl.NumberFormat(undefined, {
+  style: "unit",
+  unit: "kilobyte",
+  maximumFractionDigits: 1,
+});
+const MEGABYTE = new Intl.NumberFormat(undefined, {
+  style: "unit",
+  unit: "megabyte",
+  maximumFractionDigits: 1,
+});
+
 export const uiCopy = {
   brand: "Yunari",
   /** The rail's four slots. A slot's word is both its tooltip and its
@@ -1030,6 +1043,82 @@ export const uiCopy = {
       `The host did not send "${name}", so nothing was imported.`,
     creditsFull:
       "This theme already carries the last attribution it can hold, so the import would leave it unsavable.",
+    /** The Wallpaper Engine body. A local library is not a grid, so the host's
+     *  own absence reason is the sentence the tab draws — "not installed" and
+     *  "no library" are different problems for the person reading it. */
+    wallpaperEngine: {
+      reason: {
+        "not-installed": "Wallpaper Engine is not installed on this PC.",
+        "unsupported-platform": "Wallpaper Engine is read only on Windows.",
+        "no-library": "Wallpaper Engine holds no wallpaper library yet.",
+      } satisfies Record<
+        "not-installed" | "unsupported-platform" | "no-library",
+        string
+      >,
+      kind: {
+        image: "Image",
+        video: "Video",
+        web: "Web",
+        scene: "Scene",
+      } satisfies Record<"image" | "video" | "web" | "scene", string>,
+      size: (bytes: number): string =>
+        bytes < 1024 * 1024
+          ? KILOBYTE.format(bytes / 1024)
+          : MEGABYTE.format(bytes / (1024 * 1024)),
+      import: "Set as background",
+      openScene: "Open in Wallpaper Engine",
+      search: "Search titles",
+      filterKind: "Kind",
+      filterAll: "All",
+      noMatches: "No wallpaper matches these filters.",
+      /** §4.1: an imported image or video carries whatever its author baked in,
+       *  so the one sentence an image import needs is that it cannot be undone. */
+      imageNotice:
+        "A clock or weather label already in this picture cannot be removed, so it should not be there.",
+      webUnsupported:
+        "A web wallpaper is a page, not a file Yunari can put in a theme.",
+      empty: "This library holds no wallpapers Yunari can read.",
+      /** A scene's export sheet. The text step is an instruction, not a tip,
+       *  and the project notice is said once because it is a consequence of
+       *  the unpack the author only needs to hear before choosing to unpack. */
+      scene: {
+        title: (title: string): string => `Export “${title}”`,
+        back: "Back to the library",
+        deleteText:
+          "Delete the clock and any other dynamic text in Wallpaper Engine's editor before exporting.",
+        exportStep: "Export from Wallpaper Engine with these settings:",
+        projectNotice:
+          "The unpack leaves a project in Wallpaper Engine's own project list.",
+        /** §8 step 7: the dialog's default location is not something Yunari
+         *  controls, so the sheet names the route back when it misses. */
+        elsewhere:
+          "If the export saved somewhere else, use Add, then File, to bring it in.",
+        formatField: "Format",
+        resolutionField: "Resolution",
+        frameRateField: "Frame rate",
+        clipField: "Clip length",
+        blendField: "Blend",
+        formatName: {
+          png: "PNG",
+          mp4: "MP4",
+        } satisfies Record<"png" | "mp4", string>,
+        resolution: (width: number, height: number): string =>
+          `${width} × ${height}`,
+        perSecond: (fps: number): string => `${fps} fps`,
+        seconds: (seconds: number): string => `${seconds} s`,
+        opening: "Opening…",
+        launched: (name: string): string =>
+          `Wallpaper Engine was started. Open the project “${name}” from its own project list if it is not already selected.`,
+        ready: (name: string): string =>
+          `The project “${name}” is ready, but Wallpaper Engine's editor did not start. Open it from Wallpaper Engine's own project list.`,
+        refused: (reason: string): string =>
+          `Wallpaper Engine could not unpack this scene: ${reason}`,
+        offer: (name: string): string =>
+          `Wallpaper Engine wrote ${name}. Import it as the background?`,
+        /** The credits entry's `changes` for a file this sheet imported. */
+        changes: "Exported from Wallpaper Engine's scene editor",
+      },
+    },
   },
   /** The prompt before a document is replaced, which the author reads on the
    *  way to losing their work. */

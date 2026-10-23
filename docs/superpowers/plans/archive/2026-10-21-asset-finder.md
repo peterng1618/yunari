@@ -1,7 +1,7 @@
 # The asset finder — Implementation Plan
 
 > **Landed 2026-10-23** (Tasks 1–15, 17–19; Task 16 moved to
-> [`2026-10-21-wallpaper-engine-import.md`](../2026-10-21-wallpaper-engine-import.md),
+> [`2026-10-21-wallpaper-engine-import.md`](2026-10-21-wallpaper-engine-import.md),
 > whose amended Tasks 4, 6 and 7 build the Wallpaper Engine host module and the
 > finder's local tab). The rulings live in `.superpowers/sdd/2026-10-21-asset-finder/progress.md`.
 > Unchecked steps below are not a status: many were ticked in the work, not in the list.
@@ -18,7 +18,7 @@
 
 **Decision:** a note under `docs/decisions/`, landed in Task 1 before the first write to `host/src/server.ts` (a watchlisted path). **Take the next free number at landing** — `0089` is already the install plan's, and the queued Wallpaper Engine plan also claims `0089`, so do not pin a number here.
 
-**Status:** **Active** (2026-10-23, inline execution in `asset-finder-hub`). The Wallpaper Engine plan (`2026-10-21-wallpaper-engine-import.md`) remains queued: Task 15 absorbs its `credits.json` member, and Task 16 stays blocked until that plan's host module exists.
+**Status:** **Active** (2026-10-23, inline execution in `asset-finder-hub`). The Wallpaper Engine plan (`2026-10-21-wallpaper-engine-import.md`) has since landed and is archived beside this one: Task 15 absorbs its `credits.json` member, and Task 16 stays blocked until that plan's host module exists.
 
 **Scope change 2026-10-23 (user).** The provider list is Icons: **Lucide, Font Awesome Free, Lineicons**; Images: **Unsplash**. Free results only. **Flaticon is not built**: its official v3 API documents no premium/free flag (the Icon schema has no such field), so a free-only promise cannot be enforced; the user's decision is to leave it out. Lineicons ships as a free MIT npm package with no search API, so its manifest is generated from a **dev-only** dependency. Execution order for the remaining tasks is **5–8, 18 (Lineicons), 13 (Font Awesome), 19 (Unsplash), then 9–12, 14, 15, 17**; 16 waits on the Wallpaper Engine plan.
 

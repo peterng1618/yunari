@@ -62,6 +62,7 @@ import { createThemeStore, type ThemeContent } from "./themes/store.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
 import { encodeThemeContent } from "./themes/wire.js";
 import { createSecureOrigin } from "./tls/authority.js";
+import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
 
 /** The library is a folder, so a save is the document and its bytes (ADR-0017),
  *  plus what the client says the save is based on. */
@@ -7572,6 +7573,309 @@ describe("The host's secure origin", () => {
       const answer = await request(hosted.server, "GET", CA_CERTIFICATE_PATH);
       expect(answer.status).toBe(404);
       expect(answer.text()).toContain("no certificate");
+    } finally {
+      await hosted.close();
+    }
+  });
+});
+
+describe("Host Wallpaper Engine routes", () => {
+  let tmpDir: string;
+
+  const listingAnswer = {
+    available: true as const,
+    install: "C:\Games\Steam\steamapps\common\wallpaper_engine",
+    skipped: 2,
+    items: [
+      {
+        workshopId: "201",
+        title: "Still Scene",
+        kind: "scene" as const,
+        previewUrl: "/api/wallpaper-engine/item/201/preview",
+        filesize: 10,
+        tags: [],
+        properties: undefined,
+        stillAtRest: true,
+        hasText: true,
+      },
+    ],
+  };
+
+  const encoder = new TextEncoder();
+
+  const unpacked = {
+    ok: true as const,
+    name: "201",
+    reused: false,
+    launched: true,
+  };
+
+  function fakeSource(): WallpaperEngineSource {
+    return {
+      listing: () => Promise.resolve(listingAnswer),
+      bytesOf: (workshopId, part) => {
+        if (workshopId !== "201") {
+          return Promise.resolve(undefined);
+        }
+        return Promise.resolve(
+          part === "preview"
+            ? { bytes: encoder.encode("jpeg"), contentType: "image/jpeg" }
+            : { bytes: encoder.encode("mp4"), contentType: "video/mp4" },
+        );
+      },
+      project: (workshopId) =>
+        Promise.resolve(
+          workshopId === "201"
+            ? unpacked
+            : { ok: false as const, reason: "refused" as const },
+        ),
+      exportsSince: (since) =>
+        Promise.resolve([
+          {
+            name: `shot-${since}.png`,
+            format: "png" as const,
+            modified: since + 1,
+            size: 9,
+          },
+        ]),
+      exportBytes: (name) =>
+        Promise.resolve(
+          name === "shot.png"
+            ? { bytes: encoder.encode("png"), contentType: "image/png" }
+            : undefined,
+        ),
+    };
+  }
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-host-we-test-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  function host(source?: WallpaperEngineSource) {
+    return createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      themeStore: createThemeStore(tmpDir),
+      ...(source === undefined ? {} : { wallpaperEngine: source }),
+    });
+  }
+
+  it("answers the injected listing verbatim", async () => {
+    const hosted = host(fakeSource());
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "GET",
+        "/api/wallpaper-engine",
+      );
+      expect(answer.status).toBe(200);
+      expect(answer.json()).toEqual(listingAnswer);
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("serves preview and payload bytes, and 404 for an unknown id", async () => {
+    const hosted = host(fakeSource());
+
+    try {
+      const preview = await request(
+        hosted.server,
+        "GET",
+        "/api/wallpaper-engine/item/201/preview",
+      );
+      expect(preview.status).toBe(200);
+      expect(preview.headers["content-type"]).toBe("image/jpeg");
+      expect(preview.headers["cache-control"]).toBe("no-store");
+      expect(preview.body.toString()).toBe("jpeg");
+
+      const asset = await request(
+        hosted.server,
+        "GET",
+        "/api/wallpaper-engine/item/201/asset",
+      );
+      expect(asset.status).toBe(200);
+      expect(asset.headers["content-type"]).toBe("video/mp4");
+      expect(asset.body.toString()).toBe("mp4");
+
+      expect(
+        (
+          await request(
+            hosted.server,
+            "GET",
+            "/api/wallpaper-engine/item/999/asset",
+          )
+        ).status,
+      ).toBe(404);
+      expect(
+        (
+          await request(
+            hosted.server,
+            "GET",
+            "/api/wallpaper-engine/item/999/preview",
+          )
+        ).status,
+      ).toBe(404);
+      // Malformed percent-encoding names no item either, and is not a fault.
+      expect(
+        (
+          await request(
+            hosted.server,
+            "GET",
+            "/api/wallpaper-engine/item/%ZZ/asset",
+          )
+        ).status,
+      ).toBe(404);
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers not-installed when the host has no source", async () => {
+    const hosted = host();
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "GET",
+        "/api/wallpaper-engine",
+      );
+      expect(answer.status).toBe(200);
+      expect(answer.json()).toEqual({
+        available: false,
+        reason: "not-installed",
+      });
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("unpacks on POST /project and refuses that path on GET", async () => {
+    const hosted = host(fakeSource());
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "POST",
+        "/api/wallpaper-engine/item/201/project",
+      );
+      expect(answer.status).toBe(200);
+      expect(answer.json()).toEqual(unpacked);
+
+      // The POST-only route answers the method it does not serve rather than
+      // the 404 an unknown path gets.
+      const refused = await request(
+        hosted.server,
+        "GET",
+        "/api/wallpaper-engine/item/201/project",
+      );
+      expect(refused.status).toBe(405);
+
+      const unknown = await request(
+        hosted.server,
+        "POST",
+        "/api/wallpaper-engine/item/999/project",
+      );
+      expect(unknown.json()).toEqual({ ok: false, reason: "refused" });
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers no-install on POST /project when the host has no source", async () => {
+    const hosted = host();
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "POST",
+        "/api/wallpaper-engine/item/201/project",
+      );
+      expect(answer.json()).toEqual({ ok: false, reason: "no-install" });
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("requires an integer since on the exports listing", async () => {
+    const hosted = host(fakeSource());
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "GET",
+        "/api/wallpaper-engine/exports?since=1700000000000",
+      );
+      expect(answer.status).toBe(200);
+      expect(answer.json()).toEqual({
+        files: [
+          {
+            name: "shot-1700000000000.png",
+            format: "png",
+            modified: 1700000000001,
+            size: 9,
+          },
+        ],
+      });
+
+      // A missing since would offer every old file on the machine, so absence
+      // is a refusal rather than a default epoch.
+      for (const query of [
+        "",
+        "?since=",
+        "?since=abc",
+        "?since=1.5",
+        "?since=-1",
+        "?since=1e3",
+      ]) {
+        const refused = await request(
+          hosted.server,
+          "GET",
+          `/api/wallpaper-engine/exports${query}`,
+        );
+        expect(refused.status, query).toBe(400);
+      }
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("serves an export by name and 404s every other name", async () => {
+    const hosted = host(fakeSource());
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "GET",
+        "/api/wallpaper-engine/export?name=shot.png",
+      );
+      expect(answer.status).toBe(200);
+      expect(answer.headers["content-type"]).toBe("image/png");
+      expect(answer.headers["cache-control"]).toBe("no-store");
+      expect(answer.body.toString()).toBe("png");
+
+      // The query is decoded first, so `x%2e%2e/y.png` is the traversal the
+      // source has to refuse, not one it never sees.
+      for (const query of [
+        "",
+        "?name=",
+        "?name=../project.json",
+        "?name=a%2Fb.png",
+        "?name=x%2e%2e%2Fy.png",
+        "?name=x.jpg",
+      ]) {
+        const refused = await request(
+          hosted.server,
+          "GET",
+          `/api/wallpaper-engine/export${query}`,
+        );
+        expect(refused.status, query).toBe(404);
+      }
     } finally {
       await hosted.close();
     }

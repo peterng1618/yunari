@@ -1,39 +1,32 @@
 # Yunari status
 
 Updated: 2026-10-23
-Branch: `peterng1618/background-media-becomes-a-layer`
+Branch: `main`
 
 ## Current objective
 
-Land the **background layer** ([`spec`](docs/superpowers/specs/2026-10-23-background-layer-design.md), [`archived plan`](docs/superpowers/plans/archive/2026-10-23-background-layer.md)) on `main`, then close the **R2 store backend** plan locally: its Worker, D1 and R2 code is merged and gated, and only the owner's Cloudflare deploy and live proof remain.
+The **colour and gradient picker rebuild** ([`spec`](docs/superpowers/specs/2026-10-12-colour-and-gradient-rebuild-design.md), [`plan`](docs/superpowers/plans/2026-10-23-colour-and-gradient-rebuild.md)) replaces the Tokens pane's two paint controls with one culori-backed picker and a gradient track. **Phase 0 — the shared parser and the editor-local preset library — lands on `main` first**, so the asset finder's palettes-and-gradients spec builds against the committed location and data shape.
 
 ## Active work
 
-- **No plan is in flight**: the background-layer plan is archived, and the next plan is claimed when work starts.
-- **The R2 store backend is merged to `main`**; its plan stays in `docs/superpowers/plans/` pending the owner's acceptance.
-- **Task 5.2 is owner-run and pending**: Cloudflare resources, secrets, deploy, `/migrate`, health check, both OAuth callbacks and CPU measurement.
-- **Task 5.1's import is unrun**: the smoke item `6041df49-9c61-4d51-a184-716890560bdb` exists only in the old catalogue; the script is ready.
-- **Queued:** `2026-10-21-wallpaper-engine-import.md`; it does not start until the owner accepts the R2 plan and names it active.
-- **Open register findings:** `vg-699` stale `vite preview` reuse on a shared port, `vg-701` biome never reads `.mjs`, `vg-695` a pre-existing `server.test.ts` flake.
+- **Phase 0 of the plan is complete** — Tasks 1 and 3; Tasks 2 and 4–10 run next on `peterng1618/Color-and-gradient-picker-rebuild` under subagent-driven execution.
+- **The preset library's contract is public**: `editor/src/preset-library/index.ts` (`addColours`, `addGradient`, `deletePreset`), storage `yunari.editor.presets`, seeded with 12 colours and the 15 cssgradient.io gradients.
+- **The asset finder surface is a separate spec** and calls into that library; it does not write the key.
 
 ## Last completed change
 
-- **Tailwind's preflight was capping the media layer**: `img, video { max-width: 100%; height: auto }` pinned the placed rect's width to the layer while the inline height grew, so the picture stretched and an x offset could not widen it (user's report; the player has no preflight, which is why only the editor showed it).
-- **The child sets `max-width:none;max-height:none` inline** in `mountBackgroundMedia`, outranking any stylesheet reset; an editor e2e reads the placed rect against the source's aspect (red on 711.6 × 800.8, green on 1423 × 800.8).
-- **A background video is sized from its metadata**: `intrinsic()` gated a video on a decoded frame, so it stayed the bare box while the glass sampled the placed rect; `drawable()` keeps `drawImage`'s precondition apart from sizing.
-- **Merged `origin/main`**: 22 browser failures repaired at their causes (retired device-flow stubs, the finder's font catalogue, drawing literals, role/name overflow), CI now runs Playwright under `xvfb-run`, and the publish surface stays inside a narrow window.
+- **One colour parser on culori**: `renderer-core/src/color.ts` owns `parseColor`/`formatColor`/`toHsv`/`fromHsv`; `parseHex` and its 3-tuple retire.
+- **The editor-local preset library lands**: seed-once storage under `yunari.editor.presets`, validated adds, exact-duplicate skips, delete, and a `usePresetLibrary` subscription.
+- **Ownership moves with it**: `docs/architecture/ownership.md` names both owners; culori 4.0.2 and its types are in the notices and dependency record.
+- **Gated write**: `docs/decisions/0098-colour-maths-is-culori.md` claims `charts/fill.ts` for the reuse gate.
+- **Proof:** renderer-core 642 tests, preset-library 14 tests, both package typechecks, `design:check` and `gates:self-test` — all exit 0.
 
 ## Next
 
-1. The owner runs Task 5.2: create D1 and R2, set the secrets, deploy, `/migrate`, health check, register both OAuth callbacks.
-2. Replace the placeholder `CATALOGUE_ORIGIN` with the deployed URL, rebuild, and measure CPU for `GET /index.json` and one auth callback.
-3. Run the Task 5.1 import against the deployed origin, then the real OAuth round trip in the built editor.
-4. After the owner accepts, archive the R2 plan and name the Wallpaper Engine plan active.
-5. Drain `vg-699` in the next register pass.
+1. Continue the plan at Task 2 on the rebuild branch, then the picker, undo and gradient tasks.
+2. Build the asset finder surface against `presetLibrary.addColours` and `addGradient`.
 
 ## Blockers / unverified
 
-- **The store Worker is not deployed and no live store path has run**: no D1 database, R2 bucket, secret, real `database_id`, deploy, `/migrate`, health check, OAuth round trip, live CPU measurement or import; `CATALOGUE_ORIGIN` is still the placeholder `https://yunari-store.workers.dev`, and no normalized video has played in a browser.
-- **Version 2 now identifies two shapes**: a stored or catalogued document carrying `artboard.background`/`backgroundMedia`, or `fit`/`scale` on its media, is refused by the unknown-key check; the live catalogue's smoke theme carries the old shape and needs reseeding (owner action).
-- **Background and artboard edits are not undoable**: Fabric history serialises the scene only. Recorded, not a regression.
-- **The compact editor header is still wider than a phone**: clipping it stops the document widening, but the menubar and publish control stay unreachable below the breakpoint — `vg-707` waits on a ruling.
+- **No browser proof yet**: parser and library are unit-tested only; the picker and gradient surfaces do not exist until Tasks 4–8.
+- **Seed data transcribed, not visually reviewed**: the 15 gradients were read from cssgradient.io on 2026-10-23 and normalised to `angle: 0`.

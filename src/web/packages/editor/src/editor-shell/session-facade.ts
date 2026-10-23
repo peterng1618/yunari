@@ -25,6 +25,9 @@ export interface EditorActionFacade {
   /** The finder's Fonts body. The catalogue's data, the favourites and both
    *  writes are the session's; the shell only has somewhere to put it. */
   fontPickerBody?(): React.ReactNode;
+  /** The finder's Wallpaper Engine body: this PC's library, and the session's
+   *  import transaction for the rows that have one. */
+  wallpaperEngineBody?(): React.ReactNode;
   /** One finder row's action: the bytes, the declaration, the credit, and the
    *  kind's own consequence (place an icon, set an image as background). */
   importAsset?(page: AssetPage, result: AssetResult): Promise<ImportOutcome>;

@@ -311,7 +311,7 @@ produced, which is what the rule against citing counts is for.
 
 ## Before the first write
 
-- **A decision note at `docs/decisions/0097-*.md`** — `scripts/reuse-gate.mjs`
+- **A decision note at `docs/decisions/0098-*.md`** — `scripts/reuse-gate.mjs`
   gates `components/ui/`, so the hook refuses until a note claims the path. The
   note carries the seven rungs; the two research documents are rungs 3–5’s
   evidence, including the rungs that found nothing, and rung 4 now also records
@@ -389,7 +389,7 @@ things, each corrected in place above:
   tests the amendment above it adds to the gated list, so it could be read as
   passing with the files gated and the tests not.
 - **Placeholders:** none. The one wildcard is the decision note's path,
-  `docs/decisions/0097-*.md`. **Corrected 2026-10-23:** this review had named
+  `docs/decisions/0098-*.md`. **Corrected 2026-10-23:** this review had named
   0042 and called it free, but `docs/decisions/README.md` reserves 0006, 0034 and
   0042 as absent numbers, so 0042 was never available; the highest accepted note
   is 0096.
@@ -431,5 +431,5 @@ and the presets:
   `cssgradient.io/swatches` as its fifteen seed gradients. The library section,
   ruling 6 and the gradient table were updated together; the finder surface
   stays in its own spec.
-- **Placeholders:** none. `docs/decisions/0097-*.md` is free.
+- **Placeholders:** none. `docs/decisions/0098-*.md` is free.
 - **Scope:** one plan against `vg-405`; `vg-439` closes with the parser move.

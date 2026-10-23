@@ -1,4 +1,4 @@
-import { parseHex } from "../charts/fill.js";
+import { parseColor } from "../color.js";
 import {
   describeSemanticKey,
   type SemanticFamily,
@@ -199,10 +199,14 @@ function groundLightness(ground: Ground): number | undefined {
 
 /** WCAG relative luminance through CIE `L*`: 0 is black, 100 is white. */
 function lightnessOf(color: string): number | undefined {
-  const rgb = parseHex(color);
-  if (rgb === undefined) return undefined;
+  const rgb = parseColor(color);
+  // A translucent ground composites with whatever is behind it, so it has no
+  // single lightness to read; calling it light or dark would invent the backdrop.
+  if (rgb === undefined || rgb.a < 1) return undefined;
 
-  const [red, green, blue] = rgb;
+  const red = rgb.r;
+  const green = rgb.g;
+  const blue = rgb.b;
   const luminance =
     0.2126 * linearise(red / 255) +
     0.7152 * linearise(green / 255) +

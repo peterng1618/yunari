@@ -106,6 +106,7 @@ import {
   encodeThemeContent,
 } from "./themes/wire.js";
 import { SseConnection } from "./transport/sse.js";
+import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
 
 /** HTTP routing for bundles, discovery, sample streaming, and theme packages. */
 
@@ -201,6 +202,9 @@ export interface HostServerOptions {
   /** The asset finder's sources. Omitted when this host serves none; the
    *  routes then say so rather than falling through to the static 404. */
   readonly assets?: AssetRouteOptions;
+  /** The Wallpaper Engine library on this PC. Omitted when this host serves
+   *  none, and the listing then says it is not installed. */
+  readonly wallpaperEngine?: WallpaperEngineSource;
   /** Called after a display change so providers read readings the new way. */
   readonly onDisplayChange?: (settings: DisplaySettings) => void;
   /** Devices a consumer may choose between. Omitted when none are known. */
@@ -883,6 +887,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const credentials = options.credentials;
   const knownCredentials = options.knownCredentials ?? KNOWN_CREDENTIALS;
   const assets = options.assets;
+  const wallpaperEngine = options.wallpaperEngine;
   const activeTheme = options.activeTheme;
   const thumbnails = options.thumbnails;
   const fetcher = options.fetch;
@@ -2153,6 +2158,159 @@ export function createHostServer(options: HostServerOptions): HostServer {
         }),
         templates: SHIPPED_TEMPLATES,
       });
+      return;
+    }
+
+    // The Wallpaper Engine library this PC holds, and one item's bytes. The
+    // browser names an item by its `workshopId`; every path stays in the host
+    // (docs/decisions/0097).
+    if (url.pathname === "/api/wallpaper-engine") {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+
+      sendJson(
+        response,
+        200,
+        wallpaperEngine === undefined
+          ? { available: false, reason: "not-installed" }
+          : await wallpaperEngine.listing(),
+      );
+      return;
+    }
+
+    const wallpaperEngineMatch = url.pathname.match(
+      /^\/api\/wallpaper-engine\/item\/([^/]+)\/(preview|asset)$/,
+    );
+    if (wallpaperEngineMatch) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+
+      let workshopId: string;
+      try {
+        workshopId = decodeURIComponent(wallpaperEngineMatch[1] ?? "");
+      } catch {
+        // Malformed percent-encoding names no item, so it is the same answer
+        // as any other id the library does not hold.
+        sendText(response, 404, "No such wallpaper.");
+        return;
+      }
+      const part = wallpaperEngineMatch[2] === "preview" ? "preview" : "asset";
+      const bytes =
+        wallpaperEngine === undefined
+          ? undefined
+          : await wallpaperEngine.bytesOf(workshopId, part);
+
+      if (bytes === undefined) {
+        sendText(response, 404, "No such wallpaper.");
+        return;
+      }
+
+      response.writeHead(200, {
+        "content-type": bytes.contentType,
+        "cache-control": "no-store",
+      });
+      response.end(bytes.bytes);
+      return;
+    }
+
+    // The one write in this surface (R8): unpack the item and start the editor
+    // on it. The item id is the whole request — there is no body — so the
+    // selection itself is the trigger.
+    const wallpaperEngineProject = url.pathname.match(
+      /^\/api\/wallpaper-engine\/item\/([^/]+)\/project$/,
+    );
+    if (wallpaperEngineProject) {
+      if (request.method !== "POST") {
+        sendText(response, 405, "Only POST is supported.");
+        return;
+      }
+
+      // Creating a directory and launching a program is admin work, and a page
+      // in another origin can reach a loopback route without a credential.
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Unpacking is available on this PC only.");
+        return;
+      }
+      if (isForeignOrigin(request)) {
+        sendText(response, 403, "Unpacking is not available to another page.");
+        return;
+      }
+
+      let workshopId: string;
+      try {
+        workshopId = decodeURIComponent(wallpaperEngineProject[1] ?? "");
+      } catch {
+        sendText(response, 404, "No such wallpaper.");
+        return;
+      }
+
+      sendJson(
+        response,
+        200,
+        wallpaperEngine === undefined
+          ? { ok: false, reason: "no-install" }
+          : await wallpaperEngine.project(workshopId),
+      );
+      return;
+    }
+
+    // The files the export step watches, never a walk of the profile.
+    if (url.pathname === "/api/wallpaper-engine/exports") {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+
+      const asked = url.searchParams.get("since");
+      // A missing or non-integer `since` would offer every old media file on
+      // the machine, so absence is refused rather than read as the epoch.
+      const since =
+        asked !== null && /^[0-9]+$/.test(asked) ? Number(asked) : undefined;
+
+      if (since === undefined || !Number.isSafeInteger(since)) {
+        sendText(
+          response,
+          400,
+          "since must be an integer epoch in milliseconds.",
+        );
+        return;
+      }
+
+      sendJson(response, 200, {
+        files:
+          wallpaperEngine === undefined
+            ? []
+            : await wallpaperEngine.exportsSince(since),
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/wallpaper-engine/export") {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+
+      const name = url.searchParams.get("name");
+      const bytes =
+        name === null || wallpaperEngine === undefined
+          ? undefined
+          : await wallpaperEngine.exportBytes(name);
+
+      if (bytes === undefined) {
+        sendText(response, 404, "No such export.");
+        return;
+      }
+
+      response.writeHead(200, {
+        "content-type": bytes.contentType,
+        "cache-control": "no-store",
+      });
+      response.end(bytes.bytes);
       return;
     }
 

@@ -1,7 +1,7 @@
 # Wallpaper Engine as a source of Yunari background media — design
 
 - **Date:** 2026-10-21
-- **Status:** proposed
+- **Status:** implemented 2026-10-23 (plan archived; decision `0097`)
 - **Author:** investigation on Wallpaper Engine 2.8.42, build `2026-06-29 14:36:02`
 - **Related:** [`2026-10-12-theme-store-design.md`](2026-10-12-theme-store-design.md)
   (media normalizer, ffmpeg decision), `renderer-core`'s `BackgroundMedia`,
@@ -102,6 +102,13 @@ Measured across all 447 local item directories:
 
 447 directories in total: the 419 above, plus **28 with no readable
 `project.json`**. Those 28 are skipped, not guessed at.
+
+**Measured again 2026-10-23, and it overrides the table's scene row:** all 227
+scene descriptors name `"file": "scene.json"` (one names `gifscene.json`), 226
+of the directories carry `scene.pkg`, and none carries `scene.json`. A scene's
+payload is therefore `<directory>/scene.pkg` when that file exists; the named
+file is used only when it does not. R3 makes the disk the truth, so the scanner
+follows today's descriptor rather than the 2026-10-21 sample.
 
 **Type casing is inconsistent in the wild**: `Video` 12 / `video` 144,
 `Scene` 37 / `scene` 188, `Web` 3 / `web` 12. Every read lowercases.
@@ -499,14 +506,14 @@ of it that does not need the author's hands.
 2. **Yunari unpacks it, silently.** The host extracts `scene.pkg` into
    `projects/myprojects/<workshopId>/` and writes the item's `project.json`
    beside the members with its one packed-only field rewritten: `file` becomes
-   `scene.json`. A subscribed project says `"file": "scene.pkg"` while a source
-   project says `"file": "scene.json"` — checked against
-   `projects/defaultprojects/arsenal/project.json` — and the editor opens the
-   second shape only. With that key changed the theme is an ordinary local
-   project listed in the editor's "View all projects"; a downloaded theme cannot
-   be opened without this (§8.1). If the directory is already there, it is an
-   earlier unpack of the same item: nothing is rewritten and the flow goes
-   straight on (R8).
+   `scene.json`. A subscribed descriptor names `scene.json` too (measured
+   2026-10-23; the earlier sample recorded `scene.pkg`), but the directory beside
+   it carries only `scene.pkg`; a source project carries the editable
+   `scene.json` itself. The unpack writes the package's members — `scene.json`
+   included — beside the descriptor, which is the source shape the editor opens;
+   a downloaded theme cannot be opened without it (§8.1). If the directory is
+   already there, it is an earlier unpack of the same item: nothing is rewritten
+   and the flow goes straight on (R8).
 3. **Yunari opens the editor on it** — `wallpaperui.exe`, with `-project <path>`
    if that flag selects the project (§14.1) and otherwise with the author picking
    it from the list. A launch, not a drive (R1).

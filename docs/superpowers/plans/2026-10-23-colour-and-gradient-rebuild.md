@@ -59,7 +59,7 @@ These are the input classes most likely to bite a person, beyond what each task'
 - Modify: `docs/architecture/ownership.md`
 - Modify: `THIRD-PARTY-NOTICES.md`
 - Modify: `docs/engineering/dependencies.md`
-- Create: `docs/decisions/0097-colour-maths-is-culori.md`
+- Create: `docs/decisions/0098-colour-maths-is-culori.md`
 
 **Interfaces:**
 - Produces:
@@ -156,6 +156,8 @@ Expected: PASS.
 
 - [ ] **Step 6: Retire the second parser**
 
+**First write to `charts/fill.ts` is gated**: land `docs/decisions/0098-colour-maths-is-culori.md` (Step 8's rungs) claiming `src/web/packages/renderer-core/src/charts/fill.ts` before this step's first edit, or the reuse hook refuses it.
+
 - In `charts/fill.ts`: delete `export function parseHex`, import `parseColor` from `../color.js`, and make `mixHex` use `parseColor(...)` fields.
 - In `theme/facet-record.ts`: replace `import { parseHex } from "../charts/fill.js"` with `import { parseColor } from "../color.js"`; `lightnessOf` becomes `const rgba = parseColor(color); if (rgba === undefined) return undefined;` and uses `rgba.r/g/b`.
 - In `charts/fill.test.ts`: delete the `parseHex` describe block; add a case proving a named colour now resolves through the shared parser (`mixHex("red", "blue", 0)` is `"#ff0000"`, not the nearer-endpoint fallback `"red"`).
@@ -172,7 +174,7 @@ Expected: exit 0.
 - `docs/architecture/ownership.md`: move the “Shared colour parsing” row from the Editor table to “Shared/domain”, naming `renderer-core/src/color.ts`, “hex, rgb(), hsl() and named colours → RGBA, RGBA↔HSVA, hex formatting, and the refusal that returns `undefined`”.
 - `THIRD-PARTY-NOTICES.md`: add a Runtime/editor row `culori 4.0.2 | MIT | colour parsing and conversion (no dependencies of its own)`, and name `@types/culori 4.0.1` (MIT) in the build/test paragraph.
 - `docs/engineering/dependencies.md`: add the matching Declared dependencies row for `culori`, and a devDependency row for `@types/culori`.
-- Create `docs/decisions/0097-colour-maths-is-culori.md` from the directory's template. Rungs: (1) editor's `colour-maths.ts` plus a second tuple parser in `charts/fill.ts`; (2) no installed colour package; (3) `EyeDropper` only, no colour parsing; (4) searched npm metadata for culori, colorjs.io, chroma-js, color-convert, tinycolor2 — record the table and the dead ends; (5) culori wins on licence, zero deps, ESM tree-shaking and Node safety; (6) probe: the tests above; (7) decision. Register the claimed path `src/web/packages/editor/src/components/ui/`.
+- Create `docs/decisions/0098-colour-maths-is-culori.md` from the directory's template (written before Step 6's first write). Rungs: (1) editor's `colour-maths.ts` plus a second tuple parser in `charts/fill.ts`; (2) no installed colour package; (3) `EyeDropper` only, no colour parsing; (4) searched npm metadata for culori, colorjs.io, chroma-js, color-convert, tinycolor2 — record the table and the dead ends; (5) culori wins on licence, zero deps, ESM tree-shaking and Node safety; (6) probe: the tests above; (7) decision. Claim `src/web/packages/renderer-core/src/charts/fill.ts`; the next watchlisted path (`editor/src/components/ui/colour-picker.tsx`) is claimed by a later task's note only if that gate refuses.
 
 - [ ] **Step 9: Update status and commit**
 
@@ -184,7 +186,7 @@ git add src/web/packages/renderer-core/package.json src/web/package-lock.json \
   src/web/packages/renderer-core/src/charts/fill.ts src/web/packages/renderer-core/src/charts/fill.test.ts \
   src/web/packages/renderer-core/src/theme/facet-record.ts src/web/packages/renderer-core/src/index.ts \
   docs/architecture/ownership.md THIRD-PARTY-NOTICES.md docs/engineering/dependencies.md \
-  docs/decisions/0097-colour-maths-is-culori.md STATUS.md
+  docs/decisions/0098-colour-maths-is-culori.md STATUS.md
 git commit -m "feat(renderer): one colour parser on culori
 
 Retires the second parser in charts/fill.ts and records the dependency.

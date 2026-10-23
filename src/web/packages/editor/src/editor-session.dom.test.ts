@@ -95,6 +95,7 @@ import { EditorSession } from "./editor-session.js";
 import { fontTrio } from "./font-catalog.js";
 import { idleCrop } from "./selection-inspector/idle-crop.test-stage.js";
 import { ThemeConflictError } from "./theme-library-client.js";
+import { base64Of } from "./video-normalizer.js";
 
 /** What the chooser answered, per test. The chooser is a modal dialog with no
     jsdom implementation, so it is stubbed here and driven where it is real.
@@ -1830,6 +1831,342 @@ describe("a save that carries only what changed", () => {
     // The deliberate one is the whole theme.
     expect(save.mock.calls[1]?.[2]).toEqual({ overwrite: true });
     expect(pathsOf(save.mock.calls[1]?.[1])).toEqual(everyPath);
+    extensions.destroy();
+  });
+});
+
+describe("the Wallpaper Engine import transaction", () => {
+  const videoItem = {
+    workshopId: "202",
+    title: "Neon city",
+    kind: "video" as const,
+    previewUrl: undefined,
+    filesize: 12_582_912,
+    tags: [],
+    stillAtRest: undefined,
+    hasText: undefined,
+    attribution: undefined,
+  };
+
+  beforeEach(() => {
+    saveMock.mockReset();
+  });
+
+  /** A session whose shell records the background write, over a real manager. */
+  function wallpaperSession(
+    manager: AssetManager,
+    setBackgroundMedia: ReturnType<typeof vi.fn>,
+  ): EditorSession {
+    return new EditorSession({
+      assetManager: manager,
+      shell: {
+        editor: {
+          canvas: {
+            on: vi.fn(),
+            off: vi.fn(),
+            getActiveObject: () => undefined,
+            getObjects: () => [],
+            requestRenderAll: vi.fn(),
+          },
+          clipboardManager: { setImageImporter: vi.fn(), setBindings: vi.fn() },
+          textManager: {
+            addText: vi.fn(),
+            setAuthoringView: vi.fn(),
+            setRepaint: vi.fn(),
+          },
+          cropManager: idleCrop(),
+          historyManager: { saveState: vi.fn() },
+        },
+        scene: {},
+        snapshot: vi.fn((input) => ({ ...envelope, ...input })),
+        setBackground: vi.fn(),
+        setBackgroundMedia,
+      } as never,
+      source: {} as never,
+      envelope,
+      panelHosts: {
+        add: document.body,
+        document: document.body,
+        tokens: document.body,
+        selection: document.body,
+      },
+      onNew: vi.fn(),
+      onNewFromStarter: vi.fn(),
+      onSaved: vi.fn(),
+    });
+  }
+
+  it("posts a video to the normalizer before the manager sees it, and records the re-encode", async () => {
+    const normalizedBytes = new Uint8Array([4, 5, 6]);
+    const seen: string[] = [];
+    const manager = new AssetManager();
+    const realImport = manager.import.bind(manager);
+    const importSpy = vi
+      .spyOn(manager, "import")
+      .mockImplementation(async (file) => {
+        seen.push("import");
+        return realImport(file);
+      });
+    const setBackgroundMedia = vi.fn();
+    const extensions = wallpaperSession(manager, setBackgroundMedia);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/asset")) {
+          seen.push("asset");
+          return new Response(new Uint8Array([1, 2, 3]), {
+            status: 200,
+            headers: {
+              "content-type": "video/mp4",
+              "x-yunari-filename": "Neon city.mp4",
+            },
+          });
+        }
+        if (url === "/api/themes/normalize-video") {
+          seen.push("normalize");
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              bytesBase64: base64Of(normalizedBytes),
+              reencoded: true,
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("", { status: 404 });
+      }),
+    );
+
+    expect(await extensions.importWallpaperItem(videoItem)).toMatchObject({
+      ok: true,
+    });
+    expect(seen).toEqual(["asset", "normalize", "import"]);
+
+    const imported = importSpy.mock.calls[0]?.[0];
+    if (imported === undefined) throw new Error("the manager imported nothing");
+    expect(new Uint8Array(await imported.arrayBuffer())).toEqual(
+      normalizedBytes,
+    );
+    expect(setBackgroundMedia).toHaveBeenCalled();
+
+    await extensions.actionFacade().savePackage();
+    expect(saveMock).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      expect.objectContaining({
+        entries: [
+          expect.objectContaining({
+            changes: "Re-encoded to the publish envelope",
+            source: { workshopId: "202" },
+          }),
+        ],
+      }),
+    );
+    extensions.destroy();
+  });
+
+  it("copies a conforming video unchanged and credits it as copied", async () => {
+    const bytes = new Uint8Array([7, 8, 9]);
+    const requests: string[] = [];
+    const manager = new AssetManager();
+    const extensions = wallpaperSession(manager, vi.fn());
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.includes("/asset"))
+          return new Response(new Uint8Array([1, 2, 3]), {
+            status: 200,
+            headers: {
+              "content-type": "video/mp4",
+              "x-yunari-filename": "Neon city.mp4",
+            },
+          });
+        return new Response(
+          JSON.stringify({ ok: true, bytesBase64: base64Of(bytes) }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    expect(await extensions.importWallpaperItem(videoItem)).toMatchObject({
+      ok: true,
+    });
+    expect(requests).toContain("/api/themes/normalize-video");
+    await extensions.actionFacade().savePackage();
+    expect(saveMock).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      expect.objectContaining({
+        entries: [expect.objectContaining({ changes: "Copied unchanged" })],
+      }),
+    );
+    extensions.destroy();
+  });
+
+  it("imports nothing and credits nothing when the normalizer refuses", async () => {
+    const refusal =
+      "That video is 45000 ms long; the maximum is 30000 ms. Trim it and try again.";
+    const manager = new AssetManager();
+    const importSpy = vi.spyOn(manager, "import");
+    const setBackgroundMedia = vi.fn();
+    const extensions = wallpaperSession(manager, setBackgroundMedia);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/asset"))
+          return new Response(new Uint8Array([1, 2, 3]), {
+            status: 200,
+            headers: {
+              "content-type": "video/mp4",
+              "x-yunari-filename": "Neon city.mp4",
+            },
+          });
+        return new Response(JSON.stringify({ ok: false, message: refusal }), {
+          status: 200,
+        });
+      }),
+    );
+
+    expect(importSpy).not.toHaveBeenCalled();
+    // The constructor refreshes the artboard once; a refusal adds no second.
+    setBackgroundMedia.mockClear();
+
+    expect(await extensions.importWallpaperItem(videoItem)).toEqual({
+      ok: false,
+      message: refusal,
+    });
+    expect(importSpy).not.toHaveBeenCalled();
+    expect(setBackgroundMedia).not.toHaveBeenCalled();
+
+    await extensions.actionFacade().savePackage();
+    // A refusal writes no credit: the package's credits member never appears.
+    expect(saveMock).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      undefined,
+    );
+    extensions.destroy();
+  });
+
+  it("imports an image without asking the normalizer", async () => {
+    const requests: string[] = [];
+    const manager = new AssetManager();
+    const extensions = wallpaperSession(manager, vi.fn());
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        requests.push(url);
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: {
+            "content-type": "image/png",
+            "x-yunari-filename": "Rain on glass.png",
+          },
+        });
+      }),
+    );
+
+    expect(
+      await extensions.importWallpaperItem({ ...videoItem, kind: "image" }),
+    ).toMatchObject({ ok: true });
+    expect(requests.some((url) => url.includes("normalize-video"))).toBe(false);
+    extensions.destroy();
+  });
+
+  const sceneItem = {
+    ...videoItem,
+    workshopId: "303",
+    title: "Still lake",
+    kind: "scene" as const,
+  };
+
+  it("sends a scene's exported MP4 through the normalizer", async () => {
+    const normalizedBytes = new Uint8Array([7, 8, 9]);
+    const requests: string[] = [];
+    const manager = new AssetManager();
+    const importSpy = vi.spyOn(manager, "import");
+    const extensions = wallpaperSession(manager, vi.fn());
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        requests.push(String(input));
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            bytesBase64: base64Of(normalizedBytes),
+            reencoded: true,
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const exported = new File([new Uint8Array([1, 2, 3])], "Still lake.mp4", {
+      type: "video/mp4",
+    });
+    expect(
+      await extensions.importWallpaperExport(sceneItem, exported),
+    ).toMatchObject({
+      ok: true,
+    });
+    expect(requests).toContain("/api/themes/normalize-video");
+
+    const imported = importSpy.mock.calls[0]?.[0];
+    if (imported === undefined) throw new Error("the manager imported nothing");
+    expect(new Uint8Array(await imported.arrayBuffer())).toEqual(
+      normalizedBytes,
+    );
+
+    await extensions.actionFacade().savePackage();
+    expect(saveMock).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      expect.objectContaining({
+        entries: [
+          expect.objectContaining({
+            changes: "Re-encoded to the publish envelope",
+          }),
+        ],
+      }),
+    );
+    extensions.destroy();
+  });
+
+  it("imports a scene's exported PNG without asking the normalizer", async () => {
+    const requests: string[] = [];
+    const manager = new AssetManager();
+    const extensions = wallpaperSession(manager, vi.fn());
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        requests.push(String(input));
+        return new Response("", { status: 500 });
+      }),
+    );
+
+    const exported = new File([new Uint8Array([1, 2, 3])], "Still lake.png", {
+      type: "image/png",
+    });
+    expect(
+      await extensions.importWallpaperExport(sceneItem, exported),
+    ).toMatchObject({
+      ok: true,
+    });
+    expect(requests.some((url) => url.includes("normalize-video"))).toBe(false);
     extensions.destroy();
   });
 });

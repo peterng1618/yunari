@@ -612,7 +612,8 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
               onOpenChange={(next) => finder.set(next)}
               bodies={{
                 "font-picker": store.bridge?.session.fontPickerBody?.() ?? null,
-                "wallpaper-engine": null,
+                "wallpaper-engine":
+                  store.bridge?.session.wallpaperEngineBody?.() ?? null,
               }}
               {...(finderState.category === undefined
                 ? {}

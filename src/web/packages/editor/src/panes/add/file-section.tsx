@@ -10,6 +10,7 @@ import { ControlSelect } from "../../components/ui/control-select.js";
 import type { EditorInteraction } from "../../editor-interaction.js";
 import { FIND_GLYPH, Glyph } from "../../editor-shell/icons.js";
 import { uiCopy } from "../../ui-copy.js";
+import { requestNormalizedVideo } from "../../video-normalizer.js";
 
 /**
  * The Add pane's file path: the declared-asset library the Assets pane used to
@@ -413,80 +414,6 @@ function useHeldVideoUrl(bytes: Uint8Array | undefined): string | undefined {
 const ASSET_FILE_ACCEPT = ASSET_FILE_EXTENSIONS.map((ext) => `.${ext}`).join(
   ",",
 );
-
-/** Where the host brings a video into the publish envelope. Named once. */
-const VIDEO_NORMALIZE_PATH = "/api/themes/normalize-video";
-
-type NormalizeOutcome =
-  | { readonly ok: true; readonly bytes: Uint8Array }
-  | { readonly ok: false; readonly message: string };
-
-/**
- * Posts one video to the host, which owns the encoder and the envelope rules
- * (`POST /api/themes/normalize-video`). Every refusal is the host's own
- * sentence — it names which rule the video broke — and only a transport failure
- * with no sentence at all falls back to the pane's words.
- */
-async function requestNormalizedVideo(
-  bytes: Uint8Array,
-): Promise<NormalizeOutcome> {
-  let response: Response;
-  try {
-    response = await fetch(VIDEO_NORMALIZE_PATH, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      // No `fit`: the host's `contain` path keeps the source's own shape.
-      body: JSON.stringify({ bytesBase64: base64Of(bytes) }),
-    });
-  } catch {
-    return { ok: false, message: uiCopy.panels.videoNormalizeFailed };
-  }
-
-  if (!response.ok) {
-    const reason = await response.text().catch(() => "");
-    return {
-      ok: false,
-      message:
-        reason.trim() === ""
-          ? uiCopy.panels.videoNormalizeFailed
-          : reason.trim(),
-    };
-  }
-
-  const answer = (await response.json().catch(() => undefined)) as
-    | {
-        readonly ok?: unknown;
-        readonly bytesBase64?: unknown;
-        readonly message?: unknown;
-      }
-    | undefined;
-  if (answer?.ok === true && typeof answer.bytesBase64 === "string")
-    return { ok: true, bytes: bytesFromBase64(answer.bytesBase64) };
-  return {
-    ok: false,
-    message:
-      typeof answer?.message === "string" && answer.message.trim() !== ""
-        ? answer.message
-        : uiCopy.panels.videoNormalizeFailed,
-  };
-}
-
-/** `btoa` over the bytes, chunked so a large video cannot overflow the stack. */
-function base64Of(bytes: Uint8Array): string {
-  let binary = "";
-  for (let index = 0; index < bytes.length; index += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-  }
-  return btoa(binary);
-}
-
-function bytesFromBase64(encoded: string): Uint8Array {
-  const binary = atob(encoded);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1)
-    bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
 
 /** The kinds a canvas image can be bound to; a video or a font is declared
  *  without ever becoming an object. */
