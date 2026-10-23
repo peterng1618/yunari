@@ -912,7 +912,9 @@ This spec is implemented when:
 2. The editor can bind text, chart and image surfaces to built-in, dynamic and
    custom keys; a disconnected editor still lists the built-ins.
 3. Unit preferences visibly change clock, data, rate, fan, wind and pressure
-   formatting without changing sample values or authored thresholds.
+   **text** formatting without changing sample values or authored thresholds.
+   Charts stay canonical in this phase, because their authored ranges and
+   thresholds are written against sampled magnitudes.
 4. A machine with LHM reports its fans, role temperatures, battery, drives and
    per-interface network readings separately; a machine without them reports
    unavailable, never zero.
@@ -969,6 +971,8 @@ This spec is implemented when:
 - Steam CDN or other external box-art fetches.
 - Weather forecasts beyond today's high/low and sun times.
 - Per-fan friendly-name renaming.
+- Chart axis, gauge-range and chart-label unit conversion; charts keep canonical
+  magnitudes so authored thresholds stay valid.
 - Writing a hardware collector or replacing LHM/`systeminformation`.
 
 ## Future widget compatibility
