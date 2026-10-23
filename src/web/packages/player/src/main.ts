@@ -11,7 +11,6 @@ import {
   SAMPLE_STREAM_PATH,
   type SampleSource,
   type SceneHandle,
-  type UnitPreferences,
 } from "@yunari/renderer-core";
 import {
   applyAuthoredText,
@@ -256,7 +255,6 @@ async function startHostedTheme(
       theme.bindings ?? {},
       liveHandle.source,
       theme.globals?.palette,
-      units,
     );
     // Revived text carries the authored runs, not the sampled readings: the
     // saved scene keeps placeholders, so every cadence re-resolves the runs
@@ -440,7 +438,6 @@ function hydrateCharts(
   bindings: Readonly<Record<string, readonly Binding[]>>,
   source: SampleSource,
   palette: FabricPalette | undefined,
-  units: UnitPreferences,
 ): void {
   const issues: PlanIssue[] = [];
   for (const object of objects) {
@@ -466,7 +463,6 @@ function hydrateCharts(
             source,
             nowMs: Date.now(),
             animate: false,
-            units,
           },
           issues,
           palette,
@@ -484,7 +480,7 @@ function hydrateCharts(
     // walk goes into groups: the starter's cards are groups, and stopping at
     // the canvas would freeze every reading in the composition at load.
     if (object instanceof Group) {
-      hydrateCharts(object.getObjects(), bindings, source, palette, units);
+      hydrateCharts(object.getObjects(), bindings, source, palette);
     }
   }
   // One line per distinct cause: this runs on every refresh cadence, and a

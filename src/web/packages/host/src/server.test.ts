@@ -2613,6 +2613,41 @@ describe("Host theme routes", () => {
       ).toBe(403);
     });
 
+    it("keeps unit preferences when a page that does not draw them saves a zone", async () => {
+      // The served `/settings` page sends only the fields it draws. The route
+      // replaces the whole object, so an omitted bag must not erase what the
+      // editor's Host mode stored: a zone save is not a request to clear units.
+      expect(
+        (
+          await request(
+            paired.server,
+            "PUT",
+            "/api/display",
+            JSON.stringify({ units: { clock: "ghz" } }),
+          )
+        ).status,
+      ).toBe(200);
+
+      expect(
+        (
+          await request(
+            paired.server,
+            "PUT",
+            "/api/display",
+            JSON.stringify({ timeZone: "Asia/Tokyo", measurement: "metric" }),
+          )
+        ).status,
+      ).toBe(200);
+
+      const read = await request(paired.server, "GET", "/api/display");
+      expect(read.status).toBe(200);
+      expect((read.json() as { settings: unknown }).settings).toEqual({
+        timeZone: "Asia/Tokyo",
+        measurement: "metric",
+        units: { clock: "ghz" },
+      });
+    });
+
     it("lets a paired display read this PC's favourites, not change them", async () => {
       const token = await pair();
       const lan = { remoteAddress: "192.168.1.50" };

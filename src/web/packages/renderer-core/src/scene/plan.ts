@@ -30,6 +30,7 @@ import { formatInstant } from "./datetime/format.js";
 import {
   convertForDisplay,
   type MeasurementSystem,
+  type UnitOverrides,
   type UnitPreferences,
 } from "./measurement.js";
 
@@ -157,10 +158,7 @@ export interface PlanInputs {
 }
 
 /** Runtime inputs required to derive one authored chart's display option. */
-export type ChartPlanContext = Pick<
-  PlanInputs,
-  "source" | "nowMs" | "animate" | "units"
->;
+export type ChartPlanContext = Pick<PlanInputs, "source" | "nowMs" | "animate">;
 
 /**
  * The artboard's geometry with the background layer's colour resolved through
@@ -329,27 +327,17 @@ function unitPreferencesFor(
     : { ...context.units, measurement: context.measurement };
 }
 
-/**
- * The author's per-binding unit request. The fields arrive with the binding
- * schema, so they are read optionally: a document carrying them already paints.
- */
-function bindingUnitOverrides(
-  binding: Binding,
-): { readonly unit?: string; readonly autoScale?: boolean } | undefined {
-  const authored = binding as Binding & {
-    readonly unit?: string;
-    readonly autoScale?: boolean;
-  };
-
-  if (authored.unit === undefined && authored.autoScale === undefined) {
+/** The author's per-binding unit request, or `undefined` when none was made. */
+function bindingUnitOverrides(binding: Binding): UnitOverrides | undefined {
+  if (binding.unit === undefined && binding.autoScale === undefined) {
     return undefined;
   }
 
   return {
-    ...(authored.unit === undefined ? {} : { unit: authored.unit }),
-    ...(authored.autoScale === undefined
+    ...(binding.unit === undefined ? {} : { unit: binding.unit }),
+    ...(binding.autoScale === undefined
       ? {}
-      : { autoScale: authored.autoScale }),
+      : { autoScale: binding.autoScale }),
   };
 }
 

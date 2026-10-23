@@ -1724,7 +1724,19 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
         try {
           const body = JSON.parse(await readBody(request)) as unknown;
-          const saved = await display.write(body);
+          // **An omitted bag is not a request to clear it.** The dependency-free
+          // `/settings` page predates unit preferences and sends only the fields
+          // it draws; the route replaces the whole object, so passing that body
+          // through erased units the editor had stored. A caller that means to
+          // clear them sends `units: {}`.
+          const merged =
+            typeof body === "object" &&
+            body !== null &&
+            !Array.isArray(body) &&
+            !("units" in body)
+              ? { ...body, units: (await display.read()).units }
+              : body;
+          const saved = await display.write(merged);
           options.onDisplayChange?.(saved);
           sendJson(response, 200, { ok: true, settings: saved });
         } catch (error: unknown) {
