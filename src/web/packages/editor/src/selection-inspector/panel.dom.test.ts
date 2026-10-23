@@ -632,7 +632,7 @@ describe("panel fields in the selection inspector", () => {
           on: vi.fn(),
           off: vi.fn(),
         },
-        historyManager: { saveState },
+        historyManager: { attachGlobals: () => {}, saveState },
         errorManager: { warn: vi.fn(), error: vi.fn() },
         cropManager: idleCrop(),
       } as never,

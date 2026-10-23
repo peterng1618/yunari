@@ -19,7 +19,10 @@ function documentWith(credits?: readonly ThemeCreditsEntry[]): EditorDocument {
     source: {
       shell: {
         snapshot: (value: unknown) => value,
-        editor: { errorManager: { report: () => {} } },
+        editor: {
+          errorManager: { report: () => {} },
+          historyManager: { attachGlobals: () => {} },
+        },
       } as unknown as EditorShell,
       envelope: createNewFabricTheme() as unknown as FabricThemeEnvelopeInput,
       assetManager: new AssetManager(),

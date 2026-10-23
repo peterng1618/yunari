@@ -9,20 +9,20 @@ The **colour and gradient picker rebuild** ([`spec`](docs/superpowers/specs/2026
 
 ## Active work
 
-- **Phase 0 and Tasks 1–6 of the plan are complete**; Tasks 7–10 are queued under subagent-driven execution.
+- **Phase 0 and Tasks 1–7 of the plan are complete**; Tasks 8–10 are queued under subagent-driven execution.
 - **The preset library's contract is public**: `editor/src/preset-library/index.ts` (`addColours`, `addGradient`, `deletePreset`), storage `yunari.editor.presets`, seeded with 12 colours and the 15 cssgradient.io gradients.
 - **The picker surface consumes `useColourPicker` and the library**: `components/ui/colour-picker.tsx` and `preset-context-menu.tsx`; the Tokens pane mounts it as its only solid-colour control.
 
 ## Last completed change
 
-- **One trigger per colour in the Tokens pane**: the pane's duplicate exact-value field and swatch are gone; the only field is the popover's.
-- **`onSettled` threads panel → pane → list → solid fields**, and the session supplies `historyManager.saveState()`, so a gesture settles once.
-- **The trigger reads the colour, not its spelling**: an authored `rgb(...)` shows as `#102030` in the trigger and the field; gradients stay un-wired until Task 8.
-- **Proof:** 33 focused DOM tests plus the related picker, session, bridge and copy suites — all exit 0; editor typecheck, `format:check`, `lint`, `design:check`, `status:check` exit 0.
+- **Undo carries the palette with the scene**: `EditorHistory` stores `{ scene, globals }` and compares both, so a palette-only edit records one entry.
+- **The document lends history the envelope**: `attachGlobals` reads `envelope.globals`, and a restore writes them back through `#restoreGlobals` with no `saveState()`, so undo appends nothing.
+- **Attaching after the shell's `reset()` patches entry 0**, so undo to the opening state restores the palette it opened with.
+- **Proof:** 4 new history cases (RED before `attachGlobals` existed, GREEN after) plus 181 editor test files — exit 0; typecheck, `format:check`, `lint`, `design:check`, `status:check` exit 0.
 
 ## Next
 
-1. Continue the plan at Task 7 (undo carries the palette), then the gradient track (Task 8), §5 and browser proof.
+1. Continue the plan at Task 8 (the gradient track), then §5 and Task 10's browser proof.
 2. Build the asset finder surface against `presetLibrary.addColours` and `addGradient`.
 
 ## Blockers / unverified

@@ -85,7 +85,7 @@ describe("selection-relative arrange actions", () => {
     canvas.setActiveObject(selection);
     const editor = {
       canvas,
-      historyManager: { saveState: vi.fn() },
+      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
     } as unknown as EditorInteraction;
 
     expect(applyArrange(editor, "align-left")).toBe(true);
@@ -117,7 +117,7 @@ describe("selection-relative arrange actions", () => {
     canvas.setActiveObject(selection);
     const editor = {
       canvas,
-      historyManager: { saveState: vi.fn() },
+      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
     } as unknown as EditorInteraction;
 
     expect(applyArrange(editor, "align-left")).toBe(true);
@@ -151,7 +151,7 @@ describe("selection-relative arrange actions", () => {
     canvas.setActiveObject(selection);
     const editor = {
       canvas,
-      historyManager: { saveState: vi.fn() },
+      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
     } as unknown as EditorInteraction;
 
     expect(applyArrange(editor, "distribute-x")).toBe(true);

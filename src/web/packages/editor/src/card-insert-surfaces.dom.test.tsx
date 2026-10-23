@@ -138,7 +138,7 @@ function wiredSession(envelope: typeof BLANK = BLANK): Wired {
           onChange: () => () => undefined,
         },
         artboard: () => ({ width: 1920, height: 1080 }),
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       },
       scene: {},
       snapshot: vi.fn((input: unknown) => input),
@@ -336,7 +336,7 @@ function editorOf(
   return {
     canvas,
     artboard: () => ({ width: 1920, height: 1080 }),
-    historyManager: { saveState: vi.fn() },
+    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
     textManager: { addText: vi.fn() },
     errorManager: errors,
   } as never;

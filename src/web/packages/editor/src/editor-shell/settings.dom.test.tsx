@@ -891,7 +891,7 @@ describe("About", () => {
           requestRenderAll: vi.fn(),
         },
         groupingManager: { groupContext: () => [] },
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       },
       session: { subscribeDocumentChange: () => () => undefined },
       capture: () => undefined,

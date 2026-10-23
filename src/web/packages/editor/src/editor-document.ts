@@ -3,6 +3,7 @@ import {
   type Background,
   type Binding,
   bumpSemanticVersion,
+  type FabricGlobals,
   type FabricPalette,
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
@@ -191,6 +192,13 @@ export class EditorDocument {
       ...(source.onOpenTheme === undefined
         ? {}
         : { onOpenTheme: source.onOpenTheme }),
+    });
+    // Undo carries the palette as well as the scene. The shell captured its
+    // opening entry before this document existed, so attaching patches that
+    // entry with the globals the document opened with.
+    this.#shell.editor.historyManager.attachGlobals({
+      read: () => this.#envelope.globals,
+      write: (globals) => this.#restoreGlobals(globals),
     });
   }
 
@@ -560,6 +568,25 @@ export class EditorDocument {
     this.#consumers.charts().setGlobals(globals);
     this.#consumers.newObjects().setGlobals(globals);
     this.#consumers.selection().setGlobals(globals);
+  }
+
+  /**
+   * Puts the globals an undo entry was recorded with back.
+   *
+   * No history save here: this is reached from the restore itself, and a save
+   * would append a second entry per press — the undo would record the state it
+   * just undid. The palette consumer is re-rendered because the Tokens pane
+   * paints what it was last handed, not the envelope it cannot read.
+   */
+  #restoreGlobals(globals: FabricGlobals | undefined): void {
+    if (globals === undefined) {
+      const { globals: _globals, ...withoutGlobals } = this.#envelope;
+      this.#writeEnvelope(withoutGlobals);
+    } else {
+      this.#writeEnvelope({ ...this.#envelope, globals });
+    }
+    this.#globalsChanged();
+    this.#consumers.palette().render(globals?.palette);
   }
 
   setPalette(palette: FabricPalette): void {

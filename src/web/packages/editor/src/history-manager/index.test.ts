@@ -1,5 +1,14 @@
+import type { FabricGlobals } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { EditorHistory } from "./index.js";
+
+const canvasStub = () => ({ fire: vi.fn(), getActiveObject: () => undefined });
+
+const paletteOf = (colour: string): FabricGlobals => ({
+  palette: {
+    accent: { name: "Accent", value: { kind: "solid", color: colour } },
+  },
+});
 
 describe("EditorHistory", () => {
   it("revives an earlier authored scene without saving the revive", async () => {
@@ -114,5 +123,114 @@ describe("EditorHistory", () => {
     expect(value).toBe(0);
     await history.undo();
     expect(value).toBe(0);
+  });
+
+  it("records an entry when only the globals changed", () => {
+    const canvas = canvasStub();
+    let globals: FabricGlobals | undefined = {};
+    const history = new EditorHistory({
+      canvas: canvas as never,
+      serialize: () => ({ version: "7.4.0", objects: [] }) as never,
+      revive: async () => {},
+    });
+    history.attachGlobals({
+      read: () => globals,
+      write: (next) => {
+        globals = next;
+      },
+    });
+    history.reset();
+
+    // A palette edit touches no Fabric object, so the scene is identical and
+    // the only difference an entry can see is the envelope's half.
+    globals = paletteOf("red");
+    history.save();
+
+    expect(canvas.fire).toHaveBeenCalledWith("editor:edit-committed");
+  });
+
+  it("writes the previous globals after reviving the scene", async () => {
+    const order: string[] = [];
+    let globals: FabricGlobals | undefined = paletteOf("red");
+    const history = new EditorHistory({
+      canvas: canvasStub() as never,
+      serialize: () => ({ version: "7.4.0", objects: [] }) as never,
+      revive: async () => {
+        order.push("revive");
+      },
+    });
+    history.attachGlobals({
+      read: () => globals,
+      write: (next) => {
+        order.push("globals");
+        globals = next;
+      },
+    });
+    history.reset();
+    globals = paletteOf("blue");
+    history.save();
+
+    await history.undo();
+
+    expect(globals).toEqual(paletteOf("red"));
+    // The scene is what the globals were authored against, so it goes back
+    // first: a palette written before the revive paints the old scene.
+    expect(order).toEqual(["revive", "globals"]);
+  });
+
+  it("patches the first entry when the port attaches after reset", async () => {
+    const canvas = canvasStub();
+    let globals: FabricGlobals | undefined;
+    const history = new EditorHistory({
+      canvas: canvas as never,
+      serialize: () => ({ version: "7.4.0", objects: [] }) as never,
+      revive: async () => {},
+    });
+    history.reset();
+
+    // The shell captures the opening document before it has a document to ask,
+    // so entry 0 is recorded without globals. Undoing to it must restore the
+    // palette that was present when the port attached, not delete it.
+    const attached = paletteOf("red");
+    globals = attached;
+    history.attachGlobals({
+      read: () => globals,
+      write: (next) => {
+        globals = next;
+      },
+    });
+    expect(canvas.fire).not.toHaveBeenCalled();
+
+    globals = paletteOf("blue");
+    history.save();
+    await history.undo();
+
+    expect(globals).toEqual(attached);
+  });
+
+  it("records one entry when neither the scene nor the globals changed", async () => {
+    const canvas = canvasStub();
+    let globals: FabricGlobals | undefined = paletteOf("red");
+    const history = new EditorHistory({
+      canvas: canvas as never,
+      serialize: () => ({ version: "7.4.0", objects: [] }) as never,
+      revive: async () => {},
+    });
+    history.attachGlobals({
+      read: () => globals,
+      write: (next) => {
+        globals = next;
+      },
+    });
+    history.reset();
+    globals = paletteOf("blue");
+    history.save();
+    globals = paletteOf("blue");
+    history.save();
+
+    expect(canvas.fire).toHaveBeenCalledTimes(1);
+
+    await history.undo();
+    expect(globals).toEqual(paletteOf("red"));
   });
 });

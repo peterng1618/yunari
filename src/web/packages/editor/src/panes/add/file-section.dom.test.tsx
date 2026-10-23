@@ -159,7 +159,7 @@ async function mount(
     },
     // The artboard `cover` is pressed against, not a constant in the section.
     artboard: () => ({ width: 1920, height: 1080 }),
-    historyManager: { saveState },
+    historyManager: { attachGlobals: () => {}, saveState },
     errorManager: { error, warn: vi.fn() },
   } as unknown as EditorInteraction;
 

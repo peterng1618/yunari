@@ -99,7 +99,7 @@ function context(): ColumnContext {
         getObjects: () => [],
         requestRenderAll: () => {},
       },
-      historyManager: { saveState: () => {} },
+      historyManager: { attachGlobals: () => {}, saveState: () => {} },
       errorManager: { warn: () => {}, error: () => {} },
       cropManager: idleCrop(),
     } as never,

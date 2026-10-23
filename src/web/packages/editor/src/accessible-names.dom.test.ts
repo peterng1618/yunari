@@ -449,7 +449,7 @@ function mountPanels(): { root: HTMLElement } {
         getObjects: () => [],
       },
       artboard: () => ({ width: 1280, height: 720 }),
-      historyManager: { saveState: vi.fn() },
+      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       textManager: { addText: vi.fn() },
       errorManager: { warn: vi.fn(), error: vi.fn() },
     } as never,
@@ -628,7 +628,7 @@ function mountSelectionInspector(root: HTMLElement): void {
     canvas.setActiveObject(selection);
     const editor = {
       canvas,
-      historyManager: { saveState: vi.fn() },
+      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       errorManager: { warn: vi.fn(), error: vi.fn() },
       cropManager: { active: false, target: undefined },
     };

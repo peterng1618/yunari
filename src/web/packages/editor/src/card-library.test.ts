@@ -84,7 +84,7 @@ function editorStub(canvas: Canvas) {
   return {
     canvas,
     artboard: () => ({ width: 1672, height: 941 }),
-    historyManager: { saveState: vi.fn() },
+    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
     errorManager: { warn: vi.fn(), error: vi.fn() },
   };
 }
