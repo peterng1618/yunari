@@ -11,20 +11,18 @@ The **sensor platform** ([`spec`](docs/superpowers/specs/2026-10-24-sensor-platf
 
 ## Active work
 
-- **Phase 1 is complete** (Tasks 1.1–1.5): open vocabulary, unit conversion and preferences, provider descriptors with editor fallback, and image binding from host-relative samples.
-- **Phase 2 is next**: LHM detail mappings (Tasks 2.1–2.3) and the `systeminformation` fill (Task 2.4).
-- **Charts stay canonical** this phase; only text formatting converts, so authored thresholds remain valid.
+- **Phases 1 and 2 are complete** (Tasks 1.1–1.5, 2.1–2.4) and the Phase 2 gate ran green: `npm run gate` exit 0, 345 files / 4864 tests, worker 12 / 72.
+- **Phase 3 is next**: weather settings and manual place (3.1), Open-Meteo with WMO codes and icons (3.2), localized conditions (3.3), WeatherAPI/OpenWeatherMap BYOK (3.4), helper supervision and Windows location (3.5).
+- **Every baseline key is now answered without LHM**: Wi-Fi, system, battery and audio (audio deferred to 4.2 with media).
 
 ## Last completed change
 
-- **Image binding is hardened and reviewed**: C0/DEL/backslash are refused, an in-flight load cannot overwrite a newer or restored source, and the e2e store lives under `os.tmpdir()`.
-- **Unit preferences convert text only**: GHz precision, binary/decimal data and byte/bit rates; `Binding.unit`/`autoScale` validate in the envelope schema v2.
-- **The editor pickers read `/api/sensors`** and fall back to the built-in table; saved keys absent from the catalogue stay selectable.
-- **The host `/settings` page no longer erases stored units** when a zone changes.
+- **Task 2.4 (commit `168da93d`, fixes `b1438ee`, `987af425`, `a0f1ea3d`)**: Wi-Fi, system uptime/processes/hostname/OS, and battery state/charging/timeRemaining/AC/health/level/voltage now come from `systeminformation`, gated so a desktop or unreported field is a gap, never a zero.
+- **Rulings**: `battery.timeRemaining` converts minutes→seconds and any `<= 0` is a gap; voltage must be positive; `audio.volume`/`audio.muted` moved to Task 4.2 because `si.audio()` has no mixer.
 
 ## Next
 
-1. Dispatch Task 2.1 (CPU and GPU detail mappings) to a subagent.
+1. Dispatch Task 3.1 (weather settings and manual place) to a subagent.
 2. Review each task's diff and evidence before dispatching the next.
 3. Run the full gate at the end of each phase.
 
@@ -34,3 +32,4 @@ The **sensor platform** ([`spec`](docs/superpowers/specs/2026-10-24-sensor-platf
 - **RTSS shared memory and PresentMon streaming** are unverified on this machine, including the privilege failure path.
 - **Windows Geolocator permission behaviour** from a host-spawned PowerShell is unrun.
 - **Steam library-cache box-art naming** is unverified on this install.
+- **Task 2.4's Wi-Fi, battery and process reads** ran against injected fakes only; shapes match `systeminformation`'s typings.
