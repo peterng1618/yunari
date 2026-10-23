@@ -812,6 +812,182 @@ describe("the units a display paints with", () => {
   }
 });
 
+/**
+ * The image side of the refresh loop, driven through the real `main.ts`.
+ *
+ * jsdom never decodes an image, so what is read here is the request the pass
+ * made: the reading arrives on the stream, the loop runs, and the URL the
+ * session resolved is the one an `<img>` was asked for. That the picture then
+ * paints, and that an absolute reading never reaches one, is
+ * `tests/e2e/image-binding.spec.ts`'s.
+ */
+describe("an image reading on the display", () => {
+  const streams: ImageStreamEventSource[] = [];
+
+  beforeEach(() => {
+    vi.resetModules();
+    streams.length = 0;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  class ImageStreamEventSource {
+    readonly #listeners = new Map<
+      string,
+      ((event: { readonly data: string }) => void)[]
+    >();
+
+    constructor() {
+      streams.push(this);
+    }
+
+    addEventListener(
+      type: string,
+      listener: (event: { readonly data: string }) => void,
+    ): void {
+      const existing = this.#listeners.get(type) ?? [];
+      existing.push(listener);
+      this.#listeners.set(type, existing);
+    }
+
+    close(): void {}
+
+    emit(type: string, data: string): void {
+      for (const listener of this.#listeners.get(type) ?? []) {
+        listener({ data });
+      }
+    }
+  }
+
+  function imageEnvelope(): unknown {
+    return {
+      schemaVersion: 2,
+      fabricVersion: "7.4.0",
+      id: "images",
+      artboard: { width: 1920, height: 1080 },
+      metadata: { themeLanguage: "en" },
+      globals: {
+        palette: {
+          none: {
+            name: "None",
+            value: { kind: "solid", color: "transparent" },
+          },
+          ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
+        },
+        typePresets: {},
+      },
+      bindings: {
+        artwork: [{ id: "image", semanticKey: "media.artwork" }],
+      },
+      scene: {
+        version: "7.4.0",
+        objects: [
+          {
+            type: "Image",
+            id: "artwork",
+            left: 20,
+            top: 20,
+            width: 200,
+            height: 200,
+            // jsdom's canvas cannot draw an image, and this case is about the
+            // request the pass makes rather than the paint. The browser proof
+            // draws it (`tests/e2e/image-binding.spec.ts`).
+            opacity: 0,
+          },
+        ],
+      },
+    };
+  }
+
+  it("asks the host for the image a reading names", async () => {
+    skeleton();
+    history.replaceState({}, "", "/?theme=images");
+    vi.stubGlobal("EventSource", ImageStreamEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/document")) return json(imageEnvelope());
+        if (url === "/api/display") return json({ settings: {}, zones: [] });
+        return json({});
+      }),
+    });
+    const frames: FrameRequestCallback[] = [];
+    let frameTime = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    // Every `<img>` the refresh loop asks for, once the scene has mounted.
+    const create = document.createElement.bind(document);
+    const requested: HTMLImageElement[] = [];
+    vi.spyOn(document, "createElement").mockImplementation(((
+      name: string,
+      options?: ElementCreationOptions,
+    ) => {
+      const element = create(name, options);
+      if (name === "img") requested.push(element as HTMLImageElement);
+      return element;
+    }) as typeof document.createElement);
+
+    await import("./main.js");
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector("[data-yunari-controls]"),
+        "the display mounted",
+      ).not.toBeNull(),
+    );
+
+    streams[0]!.emit(
+      "samples",
+      JSON.stringify({
+        version: 1,
+        sentAt: new Date().toISOString(),
+        samples: [
+          {
+            semanticKey: "media.artwork",
+            sample: {
+              sensorId: "media.artwork",
+              timestamp: new Date().toISOString(),
+              status: "ok",
+              textValue: "/api/themes/images/assets/live.png",
+            },
+          },
+        ],
+      }),
+    );
+
+    for (let frame = 0; frame < 20; frame += 1) {
+      frameTime += 100;
+      const due = frames.splice(0);
+      for (const callback of due) callback(frameTime);
+    }
+
+    expect(
+      requested.some((element) =>
+        element.src.endsWith("/api/themes/images/assets/live.png"),
+      ),
+      "the reading's image was never requested",
+    ).toBe(true);
+  });
+});
+
 /** Valid to the compatibility check, so the display mounts whole and reaches
  *  the point where its chrome is built. */
 function mountedEnvelope(): unknown {

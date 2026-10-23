@@ -59,6 +59,7 @@ import {
   type CropEdits,
   editRefusal,
   type FontFaceEdits,
+  IMAGE_BINDING_FIELD_ID,
   isTextObject,
   type ProjectionPorts,
   projectSelection,
@@ -512,6 +513,20 @@ export function createSelectionInspector(
     if (fieldId === "opacity") return writeOpacity(object, value);
     if (fieldId === "flipX" || fieldId === "flipY")
       return writeFlip(object, fieldId, value);
+    if (fieldId === IMAGE_BINDING_FIELD_ID) {
+      // The binding belongs to the envelope, not the Fabric object: the session
+      // owns the map, so the funnel hands it the whole replacement. One image,
+      // one reading; the blank entry is the picker's clear.
+      const nodeId = object.get("id");
+      if (typeof nodeId !== "string" || nodeId.length === 0) return false;
+      if (typeof value !== "string") return false;
+      if (options.onNodeBindingsChange === undefined) return false;
+      options.onNodeBindingsChange(
+        nodeId,
+        value === "" ? [] : [{ id: "image", semanticKey: value }],
+      );
+      return true;
+    }
     if (GEOMETRY_KEYS.has(fieldId)) {
       write(object, fieldId as GeometryKey, value as number);
       return true;

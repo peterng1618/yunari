@@ -315,6 +315,9 @@ export const uiCopy = {
     /** A picture layer's two paint-time mirrors. */
     flipX: "Flip horizontally",
     flipY: "Flip vertically",
+    /** The reading a picture draws its image from: the catalogue's own name for
+        the key is the option, so the row names the question and not the answer. */
+    imageSensor: "Sensor",
     paint: "Paint",
     notSet: "not set",
     unresolved: "no longer resolves",

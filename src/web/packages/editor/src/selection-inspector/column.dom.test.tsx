@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
-import { SETTINGS_SECTIONS } from "@yunari/renderer-core";
-import { type FabricObject, IText, Rect } from "fabric/es";
+import {
+  type Binding,
+  SEMANTIC_KEYS,
+  SETTINGS_SECTIONS,
+} from "@yunari/renderer-core";
+import { FabricImage, type FabricObject, IText, Rect } from "fabric/es";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +15,7 @@ import { SelectionColumn } from "./column.js";
 import { idleCrop, idleCropEdits } from "./idle-crop.test-stage.js";
 import { type ColumnContext, perKindColumn } from "./per-kind-column.js";
 import {
+  type ColumnSectionView,
   type FontFaceEdits,
   type ProjectionPorts,
   projectSelection,
@@ -440,5 +445,93 @@ describe("SelectionColumn", () => {
     await act(async () => button?.click());
 
     expect(openPicker).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The image reading. An image's Content column asks which reading supplies its
+ * picture; only the catalogue's image-capable descriptors are offered, so a
+ * numeric sensor is not a choice the row can make. The write itself is the
+ * funnel's (`index.ts`), and the browser proof of a reading reaching a display
+ * is `tests/e2e/image-binding.spec.ts`.
+ */
+describe("an image's sensor field", () => {
+  function image(id?: string): FabricImage {
+    const object = new FabricImage(document.createElement("img"));
+    if (id !== undefined) object.set("id", id);
+    return object;
+  }
+
+  const imageContext = (bindings: readonly Binding[]) => {
+    const base = context();
+    return {
+      ...base,
+      descriptors: () => SEMANTIC_KEYS,
+      nodeBindings: () => bindings,
+    };
+  };
+
+  it("offers only image-capable readings and shows the bound one", () => {
+    const sections = perKindColumn(
+      image("artwork"),
+      imageContext([{ id: "image", semanticKey: "media.artwork" }]),
+    );
+    const content = sections.find((section) => section.id === "content");
+    const field = content?.fields.find(
+      (candidate) => candidate.id === "image-binding",
+    );
+
+    expect(field?.control).toBe("select");
+    if (field?.control !== "select") throw new Error("no sensor field");
+    expect(field.value).toBe("media.artwork");
+    const offered = field.options.map((option) => option.id);
+    expect(offered).toContain("media.artwork");
+    // A numeric reading is not a picture, and the list says so.
+    expect(offered).not.toContain("cpu.load");
+  });
+
+  it("is withheld from a locked image and from one with no id", () => {
+    const offersSensor = (sections: readonly ColumnSectionView[]): boolean =>
+      sections.some((section) =>
+        section.fields.some((field) => field.id === "image-binding"),
+      );
+
+    const locked = image("artwork");
+    locked.set({ locked: true });
+    expect(offersSensor(perKindColumn(locked, imageContext([])))).toBe(false);
+    // The lock is what withheld it: unlocked, the same object has the row.
+    expect(
+      offersSensor(perKindColumn(image("artwork"), imageContext([]))),
+    ).toBe(true);
+
+    expect(offersSensor(perKindColumn(image(), imageContext([])))).toBe(false);
+  });
+
+  it("is not offered to a shape", () => {
+    const content = perKindColumn(new Rect(), context()).find(
+      (section) => section.id === "content",
+    );
+    expect(content?.fields.some((field) => field.id === "image-binding")).toBe(
+      false,
+    );
+  });
+
+  it("renders the bound reading on the control a suite can locate", () => {
+    const object = image("artwork");
+    const sections = perKindColumn(
+      object,
+      imageContext([{ id: "image", semanticKey: "game.artwork" }]),
+    );
+    renderedSections(projectSelection(object, 1, ports(), sections));
+
+    const trigger = host.querySelector<HTMLElement>(
+      "[data-yunari-image-sensor]",
+    );
+    expect(trigger).not.toBeNull();
+    expect(
+      trigger
+        ?.querySelector("[data-yunari-value]")
+        ?.getAttribute("data-yunari-value"),
+    ).toBe("game.artwork");
   });
 });

@@ -98,6 +98,9 @@ export interface FieldOption {
   readonly name: string;
 }
 
+/** The field an image's reading is chosen through; its writer routes on it. */
+export const IMAGE_BINDING_FIELD_ID = "image-binding";
+
 /**
  * One half of a paired row: two numbers sharing a line, each committing its
  * own. A pair is not one control — each half has its own id, its own hook and
@@ -440,7 +443,8 @@ type WritableKind =
   | "name"
   | "boolean"
   | "text"
-  | "reference";
+  | "reference"
+  | "binding";
 const WRITABLE_FIELD_IDS: ReadonlyMap<string, WritableKind> = new Map([
   ["left", "integer"],
   ["top", "integer"],
@@ -480,6 +484,9 @@ const WRITABLE_FIELD_IDS: ReadonlyMap<string, WritableKind> = new Map([
   // holds its type, so a switch cannot smuggle a number into it.
   ["flipX", "boolean"],
   ["flipY", "boolean"],
+  // The reading an image draws from. The value is a semantic key, and `""` is
+  // the cleared picker that removes the binding.
+  [IMAGE_BINDING_FIELD_ID, "binding"],
 ]);
 
 /** Why an edit was refused; `undefined` means it may reach the write funnel. */
@@ -534,6 +541,10 @@ export function editRefusal(
       (edit.value === "" || edit.value.startsWith("palette."))
       ? undefined
       : "invalid";
+  }
+  if (kind === "binding") {
+    // A semantic key, or the empty string a cleared picker writes.
+    return typeof edit.value === "string" ? undefined : "invalid";
   }
   if (typeof edit.value !== "number" || !Number.isFinite(edit.value)) {
     // Refuse rather than coerce: a non-finite number is not a dimension.

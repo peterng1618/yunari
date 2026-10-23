@@ -19,6 +19,9 @@ blob-report/
 .e2e-display-app/
 # The publish-header proof's host store: its own theme library, on its own port.
 .e2e-publish-app/
+# The image-binding proof's host store: its own library, on its own port, so a
+# fixture theme is never written into the shared host's directory.
+.e2e-image-binding-app/
 # The secure-origin proof's host store, which is where a real CA private key is
 # minted: ignored for the reason the others are and one more (`vg-580`).
 .e2e-host-app-secure/

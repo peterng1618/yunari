@@ -34,6 +34,7 @@ import {
   type ColumnSectionView,
   type ExtraView,
   type FieldView,
+  IMAGE_BINDING_FIELD_ID,
   isTextObject,
   type PairHalfView,
 } from "./view.js";
@@ -340,6 +341,34 @@ function rotationField(
   };
 }
 
+/**
+ * The reading an image draws from: only descriptors that carry
+ * `mediaKind: "image"` are offered, so a numeric reading cannot be bound to a
+ * picture. The value is the object's first binding, and the blank entry clears
+ * it — an image with no binding keeps the asset it was authored with.
+ */
+function imageSensorField(
+  target: FabricImage,
+  context: ColumnContext,
+): FieldView {
+  const id = target.get("id");
+  const nodeId = typeof id === "string" ? id : "";
+  const bound = nodeId === "" ? undefined : context.nodeBindings?.(nodeId)[0];
+  return {
+    id: IMAGE_BINDING_FIELD_ID,
+    control: "select",
+    label: uiCopy.inspectorFields.imageSensor,
+    value: bound?.semanticKey ?? "",
+    options: [
+      { id: "", name: uiCopy.inspectorFields.notSet },
+      ...(context.descriptors?.() ?? [])
+        .filter((descriptor) => descriptor.mediaKind === "image")
+        .map((descriptor) => ({ id: descriptor.key, name: descriptor.label })),
+    ],
+    data: { "data-yunari-image-sensor": "" },
+  };
+}
+
 /** What it shows: the name, and a text object's runs, its face and its layout. */
 function contentBody(
   target: FabricObject,
@@ -351,6 +380,15 @@ function contentBody(
 
   // The name is a field that writes, so a locked object is not offered one.
   if (!locked) fields.push(nameField(target));
+
+  // A picture's reading. Withheld from a locked object like every other writing
+  // field, and from an object with no id, which gives a binding nowhere to hang.
+  if (!locked && target instanceof FabricImage) {
+    const id = target.get("id");
+    if (typeof id === "string" && id.length > 0) {
+      fields.push(imageSensorField(target, context));
+    }
+  }
 
   // The run editor is the one sub-surface the row union cannot express, so it
   // crosses as an extra carrying its projected value. `projectRuns` returns
