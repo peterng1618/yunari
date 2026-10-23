@@ -43,14 +43,33 @@ function valueKindOf(value: unknown): ValueKind | undefined {
     : undefined;
 }
 
-/**
- * Trusted-host shape, not a schema: the host is ours, and a malformed entry is
- * dropped rather than crashing the picker. `unitKind` is the one field not
- * enumerated here — an unknown kind only means the renderer shows the reading
- * as measured, which is the same path a key without a conversion takes.
- */
+/** The conversion kinds the vocabulary declares. Kept here because the wire is
+ *  unvalidated JSON: a kind the renderer does not know is dropped, not cast. */
+const UNIT_KINDS: ReadonlySet<string> = new Set<UnitKind>([
+  "percent",
+  "temperature",
+  "clock",
+  "data",
+  "dataRate",
+  "power",
+  "voltage",
+  "current",
+  "rotation",
+  "duration",
+  "speed",
+  "pressure",
+  "count",
+  "text",
+  "boolean",
+]);
+
+/** Trusted-host shape, not a schema: the host is ours, and a malformed entry is
+ *  dropped rather than crashing the picker. Every enumerated field is
+ *  whitelisted, so a kind the renderer cannot honour reads as absent. */
 function unitKindOf(value: unknown): UnitKind | undefined {
-  return typeof value === "string" ? (value as UnitKind) : undefined;
+  return typeof value === "string" && UNIT_KINDS.has(value)
+    ? (value as UnitKind)
+    : undefined;
 }
 
 function descriptorFromWire(entry: unknown): SemanticKeyDescriptor | undefined {

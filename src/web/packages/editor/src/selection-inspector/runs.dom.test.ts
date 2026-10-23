@@ -793,6 +793,26 @@ describe("which readings a run may name", () => {
     expect(cpu[at]?.index).toBe((cpu[at - 1]?.index ?? -2) + 1);
     return box.dispose();
   });
+
+  it("keeps a saved key the catalogue no longer lists, still selected", () => {
+    // A theme may name a key this host stopped reporting. Dropping it from the
+    // options would show the run as reading nothing and leave no way back to
+    // the key the document holds.
+    const box = mountRunEditor({
+      runs: [{ kind: "value", bindingId: "saved" }],
+      declared: [{ id: "saved", semanticKey: "retired.key" }],
+      descriptors: () => [fan],
+    });
+
+    expect(box.sources()).toContainEqual({
+      id: "retired.key",
+      name: "retired.key",
+    });
+    expect(valueText(box.host, 'data-yunari-run-source="0"')).toBe(
+      "retired.key",
+    );
+    return box.dispose();
+  });
 });
 
 /**

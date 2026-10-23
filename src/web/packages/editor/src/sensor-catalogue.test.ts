@@ -50,6 +50,21 @@ describe("the sensor catalogue", () => {
     );
   });
 
+  it("keeps a known unit kind and drops one the renderer cannot honour", async () => {
+    const catalogue = createSensorCatalogue(
+      responding([
+        { ...CUSTOM, semanticKey: "custom.fan", unitKind: "rotation" },
+        { ...CUSTOM, semanticKey: "custom.odd", unitKind: "furlongs" },
+      ]),
+    );
+    await catalogue.refresh();
+
+    const found = (key: string) =>
+      catalogue.descriptors().find((descriptor) => descriptor.key === key);
+    expect(found("custom.fan")?.unitKind).toBe("rotation");
+    expect(found("custom.odd")?.unitKind).toBeUndefined();
+  });
+
   it("keeps the built-in table when the request rejects", async () => {
     const catalogue = createSensorCatalogue(
       vi.fn(async () => {

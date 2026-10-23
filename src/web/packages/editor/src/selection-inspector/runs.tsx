@@ -284,15 +284,26 @@ export function projectRuns(
   // Grouped rather than flat: a discovered key sits under the heading of its
   // own family instead of at the end of the list, and consecutive entries
   // sharing a group render as one run.
+  const known = new Set<string>();
   const sources = [
     ...groupDescriptorsByFamily(context.descriptors ?? SEMANTIC_KEYS),
   ].flatMap(([group, descriptors]) =>
-    descriptors.map((descriptor) => ({
-      id: descriptor.key,
-      name: descriptor.label,
-      group,
-    })),
+    descriptors.map((descriptor) => {
+      known.add(descriptor.key);
+      return {
+        id: descriptor.key,
+        name: descriptor.label,
+        group,
+      };
+    }),
   );
+  // A theme may name a key this host no longer lists. Dropping it would show
+  // the run as reading nothing and offer no way back to the key it holds, so a
+  // declared binding the catalogue does not know stays, ungrouped, under its
+  // own spelling — the rule a chart's series options follow.
+  const retained = [...new Set(bindings.map((binding) => binding.semanticKey))]
+    .filter((key) => !known.has(key))
+    .map((key) => ({ id: key, name: key }));
 
   const swatchValues: Record<string, string> = {};
   for (const option of palettes) {
@@ -322,7 +333,11 @@ export function projectRuns(
         name,
       }),
     ),
-    sources: [{ id: "", name: uiCopy.inspectorFields.staticText }, ...sources],
+    sources: [
+      { id: "", name: uiCopy.inspectorFields.staticText },
+      ...sources,
+      ...retained,
+    ],
     zones: withPinned,
     bindable,
     removable: runs.length > 1,

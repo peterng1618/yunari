@@ -4,6 +4,8 @@
 - **Status:** accepted
 - **Paths:** `src/web/packages/host/src/providers/provider.ts`,
   `src/web/packages/host/src/providers/clock.ts`,
+  `src/web/packages/host/src/providers/library.ts`,
+  `src/web/packages/host/src/providers/lhm.ts`,
   `src/web/packages/editor/src/editor-session.ts`,
   `src/web/packages/editor/src/selection-inspector/view.ts`
 
@@ -23,7 +25,10 @@ Searched: `SEMANTIC_KEYS`, `describeSemanticKey`, `groupDescriptorsByFamily`,
 Found: the vocabulary already carries every field and a grouping helper; the
 registry already spreads a whole descriptor, so only its type lacked the fields;
 `ControlSelect` already renders grouped runs. The two pickers were the only
-places still importing the table rather than being handed one.
+places still importing the table rather than being handed one. The three shipped
+providers (`clock.ts`, `library.ts`, `lhm.ts`) each built their descriptor fields
+separately, so the shared `descriptorFieldsOf` replaced the copy in each — all
+three are claimed above.
 
 ## Rung 2 — dependencies
 Searched: editor and host `package.json` workspaces for any catalogue/store
