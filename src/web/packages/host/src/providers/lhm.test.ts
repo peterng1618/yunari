@@ -1,7 +1,29 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { LHM_DESCRIPTORS, LhmSensorProvider } from "./lhm.js";
 import { matchLhmSensors } from "./lhm-mapping.js";
-import { flattenLhmSensors } from "./lhm-tree.js";
+import { flattenLhmSensors, type LhmSensor } from "./lhm-tree.js";
+
+/** The real v0.9.6 capture: i9-10850K + RTX 3080 Ti + Gigabyte Z590. */
+function realPayload(): unknown {
+  const path = fileURLToPath(
+    new URL("./__fixtures__/real-lhm.json", import.meta.url),
+  );
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function valuesOf(
+  sensors: readonly LhmSensor[],
+  keys: readonly string[],
+): ReadonlyMap<string, number> {
+  return new Map(
+    matchLhmSensors(sensors, keys).map((match) => [
+      match.semanticKey,
+      match.value,
+    ]),
+  );
+}
 
 /** Minimal `data.json` shaped like a real LHM reply. */
 const DATA_JSON = {
@@ -434,22 +456,22 @@ describe("LHM sensor mapping", () => {
   });
 });
 
-describe("LHM provider", () => {
-  function providerReturning(
-    response: { ok: boolean; status: number; body: unknown } | Error,
-  ): LhmSensorProvider {
-    return new LhmSensorProvider({
-      fetcher: vi.fn(async () => {
-        if (response instanceof Error) throw response;
-        return {
-          ok: response.ok,
-          status: response.status,
-          text: async () => JSON.stringify(response.body),
-        };
-      }),
-    });
-  }
+function providerReturning(
+  response: { ok: boolean; status: number; body: unknown } | Error,
+): LhmSensorProvider {
+  return new LhmSensorProvider({
+    fetcher: vi.fn(async () => {
+      if (response instanceof Error) throw response;
+      return {
+        ok: response.ok,
+        status: response.status,
+        text: async () => JSON.stringify(response.body),
+      };
+    }),
+  });
+}
 
+describe("LHM provider", () => {
   it("describes the extended vocabulary it can answer", () => {
     const keys = LHM_DESCRIPTORS.map((d) => d.semanticKey);
 
@@ -620,5 +642,155 @@ describe("LHM provider", () => {
 
     expect(await provider.sample(["ram.used"], 0)).toEqual([]);
     expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe("LHM motherboard and cooler mapping", () => {
+  const sensors = flattenLhmSensors(realPayload());
+
+  it("gives every board fan header its own rpm key", () => {
+    const values = valuesOf(sensors, [
+      "motherboard.fan.fan-1.rpm",
+      "motherboard.fan.fan-2.rpm",
+      "motherboard.fan.fan-3.rpm",
+      "motherboard.fan.fan-4.rpm",
+      "motherboard.fan.fan-5.rpm",
+    ]);
+
+    // A stopped header reports 0, not a gap, and each header keeps its own
+    // reading instead of collapsing to the fastest.
+    expect(values.get("motherboard.fan.fan-1.rpm")).toBe(0);
+    expect(values.get("motherboard.fan.fan-2.rpm")).toBe(1048);
+    expect(values.get("motherboard.fan.fan-5.rpm")).toBe(1286);
+  });
+
+  it("answers each board voltage under the sensor's own id", () => {
+    const values = valuesOf(sensors, [
+      "motherboard.voltage.voltage-1",
+      "motherboard.voltage.3v-standby",
+      "motherboard.voltage.cmos-battery",
+    ]);
+
+    expect(values.get("motherboard.voltage.voltage-1")).toBe(1.212);
+    expect(values.get("motherboard.voltage.3v-standby")).toBe(3.384);
+    expect(values.get("motherboard.voltage.cmos-battery")).toBe(3.168);
+  });
+
+  it("maps the unlabelled board temperatures to motherboard.temp", () => {
+    // The ITE super-I/O reports Temperature #1..#6 because this board has no
+    // vendor label mapping; the aggregate takes the highest, like every other
+    // temperature key.
+    expect(
+      valuesOf(sensors, ["motherboard.temp"]).get("motherboard.temp"),
+    ).toBe(47);
+  });
+
+  it("maps the cooler's coolant and pump from the Kraken", () => {
+    const values = valuesOf(sensors, ["cooling.temp", "cooling.pump.pump.rpm"]);
+
+    expect(values.get("cooling.temp")).toBe(33.9);
+    expect(values.get("cooling.pump.pump.rpm")).toBe(1067);
+    // The aggregate is unchanged: cpu.temp still prefers the CPU package.
+    expect(valuesOf(sensors, ["cpu.temp"]).get("cpu.temp")).toBe(41);
+  });
+
+  it("derives a percent key only from a Control sensor", () => {
+    // Captured shapes: a Fan sensor and a Control sensor share a header label,
+    // and a Control can report a percentage while its Fan reports RPM. The
+    // Control percentages in the capture are unreadable (" %"), so this payload
+    // keeps the same shape with a readable value.
+    const withControl = flattenLhmSensors({
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [
+            {
+              Text: "ITE IT8689E",
+              HardwareId: "/lpc/it8689e/0",
+              Children: [
+                {
+                  Text: "Fans",
+                  Children: [
+                    {
+                      Text: "Fan #1",
+                      SensorId: "a",
+                      Type: "Fan",
+                      RawValue: "900 RPM",
+                    },
+                    {
+                      Text: "Fan #2",
+                      SensorId: "b",
+                      Type: "Fan",
+                      RawValue: "700 RPM",
+                    },
+                  ],
+                },
+                {
+                  Text: "Controls",
+                  Children: [
+                    {
+                      Text: "Fan #1",
+                      SensorId: "c",
+                      Type: "Control",
+                      RawValue: "45.0 %",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      valuesOf(withControl, [
+        "motherboard.fan.fan-1.rpm",
+        "motherboard.fan.fan-1.percent",
+        "motherboard.fan.fan-2.rpm",
+        "motherboard.fan.fan-2.percent",
+      ]),
+    ).toEqual(
+      new Map([
+        ["motherboard.fan.fan-1.rpm", 900],
+        ["motherboard.fan.fan-1.percent", 45],
+        ["motherboard.fan.fan-2.rpm", 700],
+      ]),
+    );
+
+    // Fan #2 has no Control sensor, so it has no percent key at all.
+    expect(
+      matchLhmSensors(withControl, ["motherboard.fan.fan-2.percent"]),
+    ).toEqual([]);
+  });
+
+  it("describes board fans, voltages and the pump with the sensor's own label", async () => {
+    const provider = providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    });
+
+    const descriptors = await provider.describe();
+    const keys = descriptors.map((descriptor) => descriptor.semanticKey);
+
+    expect(keys).toContain("motherboard.fan.fan-2.rpm");
+    expect(keys).toContain("motherboard.voltage.voltage-1");
+    expect(keys).toContain("cooling.pump.pump.rpm");
+    expect(
+      descriptors.find(
+        (descriptor) => descriptor.semanticKey === "motherboard.fan.fan-2.rpm",
+      ),
+    ).toMatchObject({
+      label: "Fan #2",
+      unit: "RPM",
+      tier: "extended",
+    });
+    expect(
+      descriptors.find(
+        (descriptor) =>
+          descriptor.semanticKey === "motherboard.voltage.cmos-battery",
+      ),
+    ).toMatchObject({ label: "CMOS Battery", unit: "V" });
   });
 });

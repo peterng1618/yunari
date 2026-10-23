@@ -51,6 +51,8 @@ const LHM_KEYS = [
   "cpu.voltage",
   "cpu.clock",
   "cpu.fan",
+  "motherboard.temp",
+  "cooling.temp",
   "gpu.load",
   "gpu.temp",
   "gpu.temp.core",
@@ -167,9 +169,13 @@ export class LhmSensorProvider implements SensorProvider {
 
       const sensors = flattenLhmSensors(JSON.parse(await response.text()));
 
-      return dynamicKeyReadings(sensors).flatMap((key) => {
+      return dynamicKeyReadings(sensors).flatMap(({ key, label }) => {
         const descriptor = descriptorFor(key);
-        return descriptor === undefined ? [] : [descriptor];
+        if (descriptor === undefined) {
+          return [];
+        }
+        // A board or cooler names its own headers; that label is shown as-is.
+        return [label === undefined ? descriptor : { ...descriptor, label }];
       });
     } catch {
       return [];

@@ -21,10 +21,17 @@ type LhmSensorType =
   | "Throughput"
   | "Level"
   | "Voltage"
-  | "Current";
+  | "Current"
+  | "Control";
 
 /** Which hardware node a binding applies to, matched against its name. */
-type HardwareGroup = "cpu" | "cooling" | "gpu" | "storage" | "network";
+type HardwareGroup =
+  | "cpu"
+  | "cooling"
+  | "gpu"
+  | "storage"
+  | "network"
+  | "motherboard";
 
 interface LhmBinding {
   readonly semanticKey: string;
@@ -37,10 +44,12 @@ interface LhmBinding {
 }
 
 const CPU_PATTERN = /intel|amd|ryzen|core i\d|threadripper/i;
-/** A liquid cooler (NZXT Kraken, Corsair, …) drives the CPU, and so do the
- * motherboard super-I/O fan headers (ITE/Nuvoton/Fintek chips). */
-const COOLING_PATTERN =
-  /kraken|corsair|nzxt|coolit|aio|liquid|ite it|nuvoton|fintek|prime|aorus|tomahawk/i;
+/** Board and super-I/O nodes. LHM names a board by its model ("Gigabyte Z590
+ * GAMING X") and its super-I/O child by the chip ("ITE IT8689E"). */
+const MOTHERBOARD_PATTERN =
+  /motherboard|gigabyte|ite it|nuvoton|fintek|prime|aorus|tomahawk/i;
+/** A liquid cooler (NZXT Kraken, Corsair, …) drives the CPU. */
+const COOLING_PATTERN = /kraken|corsair|nzxt|coolit|aio|liquid|cooler/i;
 const GPU_PATTERN = /nvidia|geforce|radeon|gpu|arc a\d/i;
 /** Drive model designations vary widely: `Lexar 500GB SSD`, `ST4000DM004`,
  * `WDC WD30NMVW`, `Samsung SSD 970`, `CT1000MX500SSD1`. */
@@ -49,13 +58,17 @@ const STORAGE_PATTERN =
 const NETWORK_PATTERN = /ethernet|wi-?fi|wireless|network|802\.11/i;
 
 function groupOf(hardwareName: string): HardwareGroup | undefined {
-  // Order matters: a "Bluetooth Network Connection" is a network node, and a GPU
-  // named "Intel Arc" must not be read as a CPU.
+  // Order matters. Network first (a "Bluetooth Network Connection" is a link),
+  // then the specific device kinds before the board: a board-vendor GPU or SSD
+  // ("Gigabyte GeForce", "AORUS NVMe") must keep its own group, a GPU named
+  // "Intel Arc" must not be read as a CPU, and a super-I/O chip sits under a
+  // board rather than a cooler.
   if (NETWORK_PATTERN.test(hardwareName)) return "network";
-  if (COOLING_PATTERN.test(hardwareName)) return "cooling";
   if (STORAGE_PATTERN.test(hardwareName)) return "storage";
   if (GPU_PATTERN.test(hardwareName)) return "gpu";
   if (CPU_PATTERN.test(hardwareName)) return "cpu";
+  if (MOTHERBOARD_PATTERN.test(hardwareName)) return "motherboard";
+  if (COOLING_PATTERN.test(hardwareName)) return "cooling";
   return undefined;
 }
 
@@ -132,6 +145,37 @@ const BINDINGS: readonly LhmBinding[] = [
       "Fan #5",
       "Fan #6",
     ],
+  },
+  // The super-I/O headers answered `cpu.fan` before the board got its own
+  // group, so they still do: an aggregate key keeps its precedence (0004).
+  {
+    semanticKey: "cpu.fan",
+    group: "motherboard",
+    type: "Fan",
+    anyText: ["Fan #1", "Fan #2", "Fan #3", "Fan #4", "Fan #5", "Fan #6"],
+  },
+
+  // Motherboard and cooler. A board LHM cannot label reports its super-I/O
+  // temperature sources as `Temperature #N`; the aggregate takes the highest,
+  // like every other temperature key.
+  {
+    semanticKey: "motherboard.temp",
+    group: "motherboard",
+    type: "Temperature",
+    anyText: [
+      "Temperature #1",
+      "Temperature #2",
+      "Temperature #3",
+      "Temperature #4",
+      "Temperature #5",
+      "Temperature #6",
+    ],
+  },
+  {
+    semanticKey: "cooling.temp",
+    group: "cooling",
+    type: "Temperature",
+    anyText: ["Liquid"],
   },
 
   // GPU
@@ -262,7 +306,9 @@ interface LhmDynamicBinding {
   readonly type: LhmSensorType;
   readonly pattern: RegExp;
   /** Builds the semantic key from the sensor's own name. */
-  readonly key: (match: RegExpExecArray) => string;
+  readonly key: (match: RegExpExecArray, sensor: LhmSensor) => string;
+  /** Descriptor label from the sensor's own name; default is the vocabulary label. */
+  readonly label?: (sensor: LhmSensor) => string;
   /** How repeated matches for one key combine. Default: highest. */
   readonly combine?: "mean";
   /** Leave the key alone when an earlier binding already answered it. */
@@ -306,25 +352,92 @@ const DYNAMIC_BINDINGS: readonly LhmDynamicBinding[] = [
     pattern: /^GPU Fan (\d+)$/,
     key: (match) => `gpu.fan.${match[1]}`,
   },
+  // Board headers: an RPM sensor and a Control sensor of the same name are two
+  // readings of one fan, so each keeps its own key rather than collapsing to a
+  // maximum. The label is the board's own ("Fan #2"), never a friendly rename.
+  {
+    group: "motherboard",
+    type: "Fan",
+    pattern: /^Fan #(\d+)$/,
+    key: (_match, sensor) => `motherboard.fan.${semanticId(sensor.text)}.rpm`,
+    label: (sensor) => sensor.text,
+  },
+  {
+    group: "motherboard",
+    type: "Control",
+    pattern: /^Fan #(\d+)$/,
+    key: (_match, sensor) =>
+      `motherboard.fan.${semanticId(sensor.text)}.percent`,
+    label: (sensor) => sensor.text,
+  },
+  {
+    group: "motherboard",
+    type: "Voltage",
+    pattern: /^.+$/,
+    key: (_match, sensor) => `motherboard.voltage.${semanticId(sensor.text)}`,
+    label: (sensor) => sensor.text,
+  },
+  // A cooler's fan headers, when it exposes them; the pump is its own key.
+  {
+    group: "cooling",
+    type: "Fan",
+    pattern: /^Pump\b/i,
+    key: (_match, sensor) => `cooling.pump.${semanticId(sensor.text)}.rpm`,
+    label: (sensor) => sensor.text,
+  },
+  {
+    group: "cooling",
+    type: "Fan",
+    pattern: /^Fan #(\d+)$/,
+    key: (_match, sensor) => `cooling.fan.${semanticId(sensor.text)}.rpm`,
+    label: (sensor) => sensor.text,
+  },
+  {
+    group: "cooling",
+    type: "Control",
+    pattern: /^Fan #(\d+)$/,
+    key: (_match, sensor) => `cooling.fan.${semanticId(sensor.text)}.percent`,
+    label: (sensor) => sensor.text,
+  },
 ];
 
 /** Dynamic keys this provider owns by shape, discovered per machine. */
+const SLUG = "[a-z0-9][a-z0-9-]{0,63}";
 const CPU_CORE_KEY = /^cpu\.core\.[1-9]\d*\.(load|temp|clock)$/;
 const GPU_FAN_KEY = /^gpu\.fan\.[1-9]\d*$/;
+const MOTHERBOARD_FAN_KEY = new RegExp(
+  `^motherboard\\.fan\\.${SLUG}\\.(rpm|percent)$`,
+);
+const MOTHERBOARD_VOLTAGE_KEY = new RegExp(`^motherboard\\.voltage\\.${SLUG}$`);
+const COOLING_FAN_KEY = new RegExp(`^cooling\\.fan\\.${SLUG}\\.(rpm|percent)$`);
+const COOLING_PUMP_KEY = new RegExp(`^cooling\\.pump\\.${SLUG}\\.rpm$`);
 
 export function isLhmDynamicKey(key: string): boolean {
-  return CPU_CORE_KEY.test(key) || GPU_FAN_KEY.test(key);
+  return (
+    CPU_CORE_KEY.test(key) ||
+    GPU_FAN_KEY.test(key) ||
+    MOTHERBOARD_FAN_KEY.test(key) ||
+    MOTHERBOARD_VOLTAGE_KEY.test(key) ||
+    COOLING_FAN_KEY.test(key) ||
+    COOLING_PUMP_KEY.test(key)
+  );
+}
+
+/** A discovered key and, when the sensor names itself, the label to show. */
+export interface LhmDynamicReading {
+  readonly key: string;
+  readonly label?: string;
 }
 
 /**
  * Every dynamic key these sensors can answer, requested or not. The provider
- * advertises these so an editor can list per-core and per-fan readings exactly
- * like built-ins.
+ * advertises these so an editor can list per-core, per-fan and per-rail readings
+ * exactly like built-ins.
  */
 export function dynamicKeyReadings(
   sensors: readonly LhmSensor[],
-): readonly string[] {
-  const keys = new Set<string>();
+): readonly LhmDynamicReading[] {
+  const readings = new Map<string, LhmDynamicReading>();
 
   for (const binding of DYNAMIC_BINDINGS) {
     for (const sensor of sensors) {
@@ -338,12 +451,14 @@ export function dynamicKeyReadings(
 
       const match = binding.pattern.exec(sensor.text);
       if (match !== null) {
-        keys.add(binding.key(match));
+        const key = binding.key(match, sensor);
+        const label = binding.label?.(sensor);
+        readings.set(key, label === undefined ? { key } : { key, label });
       }
     }
   }
 
-  return [...keys];
+  return [...readings.values()];
 }
 
 /** LHM reports `Data` in GB and `SmallData` in MB. */
@@ -580,7 +695,7 @@ export function matchLhmSensors(
         continue;
       }
 
-      const semanticKey = binding.key(match);
+      const semanticKey = binding.key(match, sensor);
       if (!wanted.has(semanticKey)) {
         continue;
       }
