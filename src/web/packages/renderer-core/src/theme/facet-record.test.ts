@@ -85,8 +85,9 @@ describe("facetRecordOf", () => {
   });
 
   it("is unclassified for a ground it cannot read", () => {
-    // No ground at all, a reference the palette does not declare, and a colour
-    // the parser rejects (8-digit hex) are three absences, not three defaults.
+    // No ground at all, a reference the palette does not declare, and a ground
+    // whose alpha leaves the backdrop showing are three absences, not three
+    // defaults.
     expect(facetRecordOf(envelope()).colourMode).toBe("unclassified");
     expect(
       facetRecordOf(

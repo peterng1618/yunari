@@ -103,9 +103,9 @@ two apart is the judgement the map cannot make for itself.
 | Glass lifecycle re-resolve, asked for by that control | `editor/src/editor-shell.ts` (`EditorShell.refreshGlass`) |
 | **Which bindings resolve** — the ones whose source has left the document, dropped on load | `editor/src/editor-shell.ts` (`dropDanglingBindings`) |
 | Type-preset authoring and reference reassignment | `editor/src/type-preset-manager/` |
+| **The editor-local colour and gradient preset library** — its storage key, seed-once rule, validation, de-duplication and add/delete API; the asset finder calls into it and never writes the key itself | `editor/src/preset-library/` |
 | Open-package asset bytes and controls | `editor/src/asset-manager/` (`index.ts` bytes), `editor/src/panes/add/file-section.tsx` (the pane) |
 | **Whether an asset is still referenced** — the reference that decides a deleted asset can go, and the walk a binding's own resolution reads with it | `editor/src/asset-manager/index.ts` (`assetReferencedBy`, `sceneObjects`) |
-| **Shared colour parsing** — hex, rgba and hsva conversion, and the refusal that returns `undefined` for a value that is not a colour | `editor/src/components/ui/colour-maths.ts` |
 | Editor runtime binding refresh | `editor/src/live-runtime.ts` |
 | v2 parsing/file boundary | `editor/src/persist.ts` |
 | Structured editor diagnostics | `editor/src/error-manager/` |
@@ -167,6 +167,7 @@ adapter does not own catalog, preview or adoption semantics.
 | Samples/status | `renderer-core/src/types.ts` |
 | Live presentation buffer | `renderer-core/src/data/live-source.ts` |
 | Theme semantic types/validation | `renderer-core/src/theme/` |
+| **Stored colour parsing and conversion** — hex, `rgb()`, `hsl()` and CSS names to RGBA, RGBA↔HSVA, and the one hex formatter; `undefined` is a refusal for a value that is not a colour | `renderer-core/src/color.ts` |
 | **What a theme *is*, read off its envelope rather than authored into it** — the colour-mode vocabulary, the aspect buckets and their tolerance, and the sensor readings and style tags the store's five facets filter on; the one layer the host's listing and a catalogue Action can both import | `renderer-core/src/theme/facet-record.ts` |
 | **Listing the document's tokens by name** — one function in the token owner, each caller passing its own filter, and the raw ref returned only for a token the author deleted | `renderer-core/src/theme/` (`paletteTokenOptions`) |
 | **The catalogue index's wire shape** — what `index.json` carries, what a malformed entry refuses with, the authored `item.json` header the generator reads, and the one kind identifier the generator and the editor's client must agree on | `renderer-core/src/theme/catalogue-index.ts` |

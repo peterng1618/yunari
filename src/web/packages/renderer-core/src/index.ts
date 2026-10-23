@@ -57,6 +57,14 @@ export type {
   ChartOptionByFamily,
 } from "./charts/engine-option.js";
 export { toEngineOption } from "./charts/engine-option.js";
+export type { Hsva, Rgba } from "./color.js";
+export {
+  formatColor,
+  fromHsv,
+  parseColor,
+  toHsv,
+} from "./color.js";
+
 export type {
   EngineColor,
   GradientDirection,

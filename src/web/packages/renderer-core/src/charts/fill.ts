@@ -1,3 +1,4 @@
+import { parseColor } from "../color.js";
 import type { Fill, GradientStop } from "../types.js";
 
 /**
@@ -132,46 +133,20 @@ export function colorAt(
   return last.color;
 }
 
-/** Mix `#rgb`/`#rrggbb`; non-hex values fall back to the nearer endpoint. */
+/** Mix two stored colours; an unparseable value falls back to the nearer endpoint. */
 export function mixHex(from: string, to: string, t: number): string {
-  const a = parseHex(from);
-  const b = parseHex(to);
+  const a = parseColor(from);
+  const b = parseColor(to);
 
   if (!a || !b) {
     return t < 0.5 ? from : to;
   }
 
-  const r = Math.round(a[0] + (b[0] - a[0]) * t);
-  const g = Math.round(a[1] + (b[1] - a[1]) * t);
-  const bl = Math.round(a[2] + (b[2] - a[2]) * t);
+  const r = Math.round(a.r + (b.r - a.r) * t);
+  const g = Math.round(a.g + (b.g - a.g) * t);
+  const bl = Math.round(a.b + (b.b - a.b) * t);
 
   return `#${toHexByte(r)}${toHexByte(g)}${toHexByte(bl)}`;
-}
-
-/** Parse `#rgb` or `#rrggbb`; reject CSS names and other formats. */
-export function parseHex(color: string): [number, number, number] | undefined {
-  const hex = color.trim().replace(/^#/, "");
-
-  if (!/^(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(hex)) {
-    return undefined;
-  }
-
-  if (hex.length === 3) {
-    const r = hex[0]!;
-    const g = hex[1]!;
-    const b = hex[2]!;
-    return [parseInt(r + r, 16), parseInt(g + g, 16), parseInt(b + b, 16)];
-  }
-
-  if (hex.length === 6) {
-    return [
-      parseInt(hex.slice(0, 2), 16),
-      parseInt(hex.slice(2, 4), 16),
-      parseInt(hex.slice(4, 6), 16),
-    ];
-  }
-
-  return undefined;
 }
 
 function toHexByte(value: number): string {
