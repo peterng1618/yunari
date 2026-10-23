@@ -396,15 +396,17 @@ export function readingsFromLibrary(input: {
   const maxCapacity = finite(battery?.maxCapacity);
   const designedCapacity = finite(battery?.designedCapacity);
   const remainingMinutes = finite(battery?.timeRemaining);
+  // Zero is the library's "not reported" for a present battery; no battery
+  // reads 0 V, so it is a gap rather than a reading.
+  const voltage = finite(battery?.voltage);
   const acConnected =
     typeof battery?.acConnected === "boolean" ? battery.acConnected : undefined;
   const isCharging =
     typeof battery?.isCharging === "boolean" ? battery.isCharging : undefined;
-  // A zero countdown while discharging is the library's "could not read",
-  // not a battery with nothing left.
+  // A non-positive countdown is unreported, not a reading: the darwin path
+  // builds it as parseInt('0' + value) and the Windows path never sets it.
   const batteryTimeRemaining =
-    remainingMinutes === undefined ||
-    (remainingMinutes <= 0 && isCharging !== true)
+    remainingMinutes === undefined || remainingMinutes <= 0
       ? undefined
       : remainingMinutes * 60;
 
@@ -457,12 +459,15 @@ export function readingsFromLibrary(input: {
       ? {}
       : { systemOsBuild: reportedText(os?.build)! }),
     ...(battery === undefined ? {} : { batteryReported: true }),
+    // `ponytail:` Windows defaults `percent` to 0 when EstimatedChargeRemaining
+    // is absent, so a laptop can read 0 % and look empty; add a platform-side
+    // charge-state check when that shows up as a real defect.
     ...(finite(battery?.percent) === undefined
       ? {}
       : { batteryLevel: finite(battery?.percent)! }),
-    ...(finite(battery?.voltage) === undefined
+    ...(voltage === undefined || voltage <= 0
       ? {}
-      : { batteryVoltage: finite(battery?.voltage)! }),
+      : { batteryVoltage: voltage }),
     ...(batteryTimeRemaining === undefined ? {} : { batteryTimeRemaining }),
     ...(maxCapacity === undefined ||
     designedCapacity === undefined ||

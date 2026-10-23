@@ -278,27 +278,46 @@ describe("battery readings", () => {
     });
   });
 
-  it("treats a zero countdown while discharging as a gap", async () => {
-    // `systeminformation` builds the Windows value as parseInt('0' + value), so
-    // zero means it could not read the countdown, not a 0-second discharge.
+  it("reports voltage as a gap when a present battery reports zero", async () => {
+    // The library leaves `voltage` at 0 when the platform does not report it;
+    // no present battery reads 0 V, so this is a fabricated zero, not a value.
     const provider = new LibrarySensorProvider(
-      fakeMachine({
-        battery: {
-          ...laptopBattery,
-          isCharging: false,
-          acConnected: false,
-          timeRemaining: 0,
-        },
-      }),
+      fakeMachine({ battery: { ...laptopBattery, voltage: 0 } }),
     );
-    const entries = await provider.sample(["battery.timeRemaining"], 0);
+    const entries = await provider.sample(["battery.voltage"], 0);
 
-    expect(sampleOf(entries, "battery.timeRemaining")).toMatchObject({
+    expect(sampleOf(entries, "battery.voltage")).toMatchObject({
       status: "missing",
     });
-    expect(sampleOf(entries, "battery.timeRemaining")).not.toHaveProperty(
-      "value",
-    );
+    expect(sampleOf(entries, "battery.voltage")).not.toHaveProperty("value");
+  });
+
+  it("treats a non-positive countdown as a gap in every power state", async () => {
+    // The darwin path builds the estimate as parseInt('0' + value) and the
+    // Windows path never sets it, so a zero or negative countdown means the
+    // estimate was not read — discharging, AC-connected or charging alike.
+    const states = [
+      { acConnected: true, isCharging: false },
+      { acConnected: false, isCharging: false },
+      { acConnected: true, isCharging: true },
+    ];
+
+    for (const state of states) {
+      const provider = new LibrarySensorProvider(
+        fakeMachine({
+          battery: { ...laptopBattery, ...state, timeRemaining: 0 },
+        }),
+      );
+      const entries = await provider.sample(["battery.timeRemaining"], 0);
+
+      expect(
+        sampleOf(entries, "battery.timeRemaining"),
+        JSON.stringify(state),
+      ).toMatchObject({ status: "missing" });
+      expect(sampleOf(entries, "battery.timeRemaining")).not.toHaveProperty(
+        "value",
+      );
+    }
   });
 
   it("carries charging and AC as booleans", async () => {
