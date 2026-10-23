@@ -271,7 +271,7 @@ function formatValueSegment(
     };
   }
 
-  const precision = run.precision ?? binding.precision;
+  const authoredPrecision = run.precision ?? binding.precision;
   const unitDisplay = run.unitDisplay ?? binding.unitDisplay ?? "short";
 
   let text: string;
@@ -297,6 +297,8 @@ function formatValueSegment(
         detail: `Unit "${overrides.unit}" is not displayable for "${binding.semanticKey}".`,
       });
     }
+    // An authored precision wins; otherwise the chosen unit supplies its own.
+    const precision = authoredPrecision ?? converted.precision;
     text = formatNumber(converted.value, precision, context.themeLanguage);
     shown = converted.unit;
   } else if (sample.textValue !== undefined) {

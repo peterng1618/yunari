@@ -104,6 +104,11 @@ export interface ConvertedValue {
   readonly value: number;
   /** The symbol for the converted form; unchanged when nothing converted. */
   readonly unit: string | undefined;
+  /**
+   * The precision the chosen unit implies, when it implies one. An authored
+   * `precision` wins; this only fills in when the author left it out.
+   */
+  readonly precision?: number;
 }
 
 /** An author's per-binding request, which wins over the display preference. */
@@ -223,11 +228,19 @@ function convertClock(
           : (preferences.clock ?? DEFAULT_UNIT_PREFERENCES.clock);
 
   if (target === "ghz" || (target === "auto" && value >= 1000)) {
-    // Keep every decimal: the formatter, not the conversion, decides precision.
-    return { value: value / 1000, unit: "GHz" };
+    return gigahertz(value);
   }
 
   return { value, unit };
+}
+
+/**
+ * GHz reads with two decimals below 10 GHz and one above; the value itself is
+ * never rounded, so an authored precision can still take more decimals.
+ */
+function gigahertz(megahertz: number): ConvertedValue {
+  const value = megahertz / 1000;
+  return { value, unit: "GHz", precision: value < 10 ? 2 : 1 };
 }
 
 interface DataUnit {
@@ -302,6 +315,7 @@ interface RateTarget {
 }
 
 function rateTarget(
+  unit: "Mb/s" | "MB/s",
   preferences: UnitPreferences,
   overrides: UnitOverrides,
 ): RateTarget {
@@ -318,7 +332,11 @@ function rateTarget(
   }
 
   return {
-    bytes: (preferences.rate ?? DEFAULT_UNIT_PREFERENCES.rate) === "bytes",
+    // A byte-native family (disk throughput) stays in bytes; `rate` chooses the
+    // form of a bit-native one (network link speed), not the other way round.
+    bytes:
+      unit === "MB/s" ||
+      (preferences.rate ?? DEFAULT_UNIT_PREFERENCES.rate) === "bytes",
     scale:
       overrides.autoScale === true
         ? "auto"
@@ -337,9 +355,9 @@ function convertRate(
   }
 
   // Canonical rates are decimal bits or bytes per second, whichever the family
-  // reports; bring both to bits so one preference can govern them.
+  // reports; bring both to bits so one scale rule can govern them.
   const bits = unit === "MB/s" ? value * 8 : value;
-  const target = rateTarget(preferences, overrides);
+  const target = rateTarget(unit, preferences, overrides);
   const magnitude = target.bytes ? bits / 8 : bits;
   const chosen =
     target.scale === "auto"

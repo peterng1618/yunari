@@ -57,7 +57,7 @@ describe("clock units", () => {
   it("pins GHz or MHz when asked", () => {
     expect(
       convertForDisplay("cpu.clock", 3800, "MHz", { clock: "ghz" }),
-    ).toEqual({ value: 3.8, unit: "GHz" });
+    ).toEqual({ value: 3.8, unit: "GHz", precision: 2 });
     expect(
       convertForDisplay("cpu.clock", 3800, "MHz", { clock: "mhz" }),
     ).toEqual({ value: 3800, unit: "MHz" });
@@ -69,15 +69,24 @@ describe("clock units", () => {
     ).toEqual({ value: 800, unit: "MHz" });
     expect(
       convertForDisplay("cpu.clock", 3800, "MHz", { clock: "auto" }),
-    ).toEqual({ value: 3.8, unit: "GHz" });
+    ).toEqual({ value: 3.8, unit: "GHz", precision: 2 });
     expect(
       convertForDisplay("cpu.clock", 12000, "MHz", { clock: "auto" }),
-    ).toEqual({ value: 12, unit: "GHz" });
+    ).toEqual({ value: 12, unit: "GHz", precision: 1 });
 
-    // Decimal places belong to the formatter: the conversion keeps them.
+    // The value keeps every decimal an authored precision may ask for.
     expect(
       convertForDisplay("cpu.clock", 12345, "MHz", { clock: "auto" }),
-    ).toEqual({ value: 12.345, unit: "GHz" });
+    ).toEqual({ value: 12.345, unit: "GHz", precision: 1 });
+  });
+
+  it("offers two decimals below 10 GHz and one above", () => {
+    expect(
+      convertForDisplay("cpu.clock", 3845, "MHz", { clock: "ghz" }),
+    ).toEqual({ value: 3.845, unit: "GHz", precision: 2 });
+    expect(
+      convertForDisplay("cpu.clock", 10000, "MHz", { clock: "ghz" }),
+    ).toEqual({ value: 10, unit: "GHz", precision: 1 });
   });
 });
 
@@ -154,6 +163,40 @@ describe("rate units", () => {
       convertForDisplay("network.download", 2500, "Mb/s", preferences),
     ).toEqual({ value: 2.5, unit: "Gb/s" });
   });
+
+  it("keeps byte-native disk throughput in bytes under the default preference", () => {
+    // A disk reads in MB/s; the bit/byte preference governs link rates only.
+    expect(convertForDisplay("disk.nvme0.read", 500, "MB/s", {})).toEqual({
+      value: 500,
+      unit: "MB/s",
+    });
+    expect(
+      convertForDisplay("disk.nvme0.read", 500, "MB/s", {
+        rate: "bits",
+      }),
+    ).toEqual({ value: 500, unit: "MB/s" });
+  });
+
+  it("still auto-scales byte-native throughput with byte prefixes", () => {
+    expect(
+      convertForDisplay("disk.nvme0.read", 500, "MB/s", {
+        rateScale: "auto",
+      }),
+    ).toEqual({ value: 500, unit: "MB/s" });
+    expect(
+      convertForDisplay("disk.nvme0.read", 1500, "MB/s", {
+        rateScale: "auto",
+      }),
+    ).toEqual({ value: 1.5, unit: "GB/s" });
+    expect(
+      convertForDisplay("disk.nvme0.read", 0.5, "MB/s", {
+        rateScale: "auto",
+      }),
+    ).toEqual({ value: 500, unit: "kB/s" });
+    expect(
+      convertForDisplay("disk.nvme0.read", 500, "MB/s", { rateScale: "g" }),
+    ).toEqual({ value: 0.5, unit: "GB/s" });
+  });
 });
 
 describe("fan units", () => {
@@ -213,7 +256,7 @@ describe("binding overrides", () => {
           unit: "GHz",
         },
       ),
-    ).toEqual({ value: 3.8, unit: "GHz" });
+    ).toEqual({ value: 3.8, unit: "GHz", precision: 2 });
   });
 
   it("lets an author ask for auto-scaling on a key with several units", () => {

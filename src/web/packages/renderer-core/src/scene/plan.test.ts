@@ -383,8 +383,60 @@ describe("text (§89)", () => {
       { units: { clock: "ghz" } },
     );
 
-    expect(result.segments.map((segment) => segment.text)).toEqual(["3.8 GHz"]);
+    expect(result.segments.map((segment) => segment.text)).toEqual([
+      "3.80 GHz",
+    ]);
     expect(result.issues).toEqual([]);
+  });
+
+  it("reads a GHz conversion at the spec's precision", () => {
+    const source = storeWith({
+      "cpu.clock": ok(3845, "MHz", "cpu.clock"),
+      "gpu.clock": ok(12000, "MHz", "gpu.clock"),
+    });
+    const result = segments(
+      source,
+      [
+        { id: "cpu", semanticKey: "cpu.clock" },
+        { id: "gpu", semanticKey: "gpu.clock" },
+      ],
+      [
+        { kind: "value", bindingId: "cpu" },
+        { kind: "literal", text: " / " },
+        { kind: "value", bindingId: "gpu" },
+      ],
+      { units: { clock: "ghz" } },
+    );
+
+    // Two decimals below 10 GHz, one above.
+    expect(result.segments.map((segment) => segment.text)).toEqual([
+      "3.85 GHz",
+      " / ",
+      "12.0 GHz",
+    ]);
+  });
+
+  it("lets an authored precision beat the unit's own", () => {
+    const result = segments(
+      storeWith({ "cpu.clock": ok(3845, "MHz", "cpu.clock") }),
+      [{ id: "b", semanticKey: "cpu.clock" }],
+      [{ kind: "value", bindingId: "b", precision: 0 }],
+      { units: { clock: "ghz" } },
+    );
+
+    expect(result.segments[0]!.text).toBe("4 GHz");
+  });
+
+  it("keeps disk throughput in bytes under the default preferences", () => {
+    const result = segments(
+      storeWith({
+        "disk.nvme0.read": ok(500, "MB/s", "disk.nvme0.read"),
+      }),
+      [{ id: "b", semanticKey: "disk.nvme0.read" }],
+      [{ kind: "value", bindingId: "b" }],
+    );
+
+    expect(result.segments[0]!.text).toBe("500 MB/s");
   });
 
   it("reports a bound unit the key cannot display, and keeps the reading", () => {
