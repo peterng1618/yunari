@@ -9,24 +9,21 @@ The **colour and gradient picker rebuild** ([`spec`](docs/superpowers/specs/2026
 
 ## Active work
 
-- **Tasks 1–8 of the plan are complete**; Tasks 9 (DESIGN.md §5 and the token gate) and 10 (browser proof) are queued under subagent-driven execution.
+- **Tasks 1–9 of the plan are complete**; Task 10 (browser proof) is queued under subagent-driven execution.
 - **The preset library's contract is public**: `editor/src/preset-library/index.ts` (`addColours`, `addGradient`, `deletePreset`), storage `yunari.editor.presets`, seeded with 12 colours and the 15 cssgradient.io gradients.
 - **The picker surface consumes `useColourPicker` and the library**: `components/ui/colour-picker.tsx` and `preset-context-menu.tsx`; the Tokens pane mounts it as its only solid-colour control.
 - **The gradient is one track**: `components/ui/gradient-editor.tsx` is the preview and the manipulator, editing the selected stop through one picker and one percent well, with the library's gradients in a labelled preset row.
 
 ## Last completed change
 
-- **The gradient track is the preview and the manipulator**: one sorted-free stop list, drag and keyboard on each `role="slider"` mark, add on the bare track and at the selected stop's midpoint, and Delete/remove refusing below two stops.
-- **One picker and one percent well edit the selected stop**, and the angle well sits beside the track; every gesture is one `onCommit` at its boundary.
-- **The library's gradients are a labelled preset row**, with the same right-click/`Shift+F10`/Delete menu the colour presets use.
-- **The pane's angle row and per-stop sliders are gone**, forwarding `onCommit={onSettled}` instead; the stop's accessible name comes from `uiCopy` and the copy net now reads it by its own attribute route.
-- **Proof:** gradient editor 16/16 and paint-list + copy net 37 green; typecheck, `format:check`, `lint`, `design:check` and `status:check` exit 0.
+- **§5 names the two new controls**: the 2-D colour area and the gradient track join the closed vocabulary, with their slider, keyboard and focus-boundary rules beside the table.
+- **Both picker surfaces join the token gate**: `colour-picker.tsx` and `gradient-editor.tsx` are gated, with the derived `.dom.test.tsx` halves still selected by rule.
+- **Proof:** `design:check`, `gates:self-test`, `format:check`, `lint` and `status:check` exit 0; the remainder holds at 2 against its ceiling of 2.
 
 ## Next
 
-1. Run Task 9: add the colour-area and gradient-track rows to DESIGN.md §5, join the gated list, and prove the gate.
-2. Run Task 10: the browser cases, drivers and capture rows, including the undo-after-drag case.
-3. Build the asset finder surface against `presetLibrary.addColours` and `addGradient`.
+1. Run Task 10: the browser cases, drivers and capture rows, including the undo-after-drag case.
+2. Build the asset finder surface against `presetLibrary.addColours` and `addGradient`.
 
 ## Blockers / unverified
 

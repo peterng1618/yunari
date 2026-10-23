@@ -496,6 +496,8 @@ The vocabulary is closed. A control is one of these, or it is not a control.
 | **Rail slot** | A 36px square at `--radius-lg`, glyph only | One of §7.2's four panes; at most one is open |
 | **Choice row** | A `--radius-md` row at `--panel-2` carrying a swatch and a name; the chosen row is lifted to `--stage` with the accent border | One member of a closed set where each member has its own colour |
 | **Checkbox choice row** | The choice row, with a 14px box and a count in place of the swatch; the chosen row is lifted to `--stage` with a `--text` check | One member of a set you may choose **several** of |
+| **2-D colour area** | A `--panel-2` well at `--radius-md` carrying a saturation × brightness plane | A pointer picks both channels, the keyboard moves one at a time, and focus paints §4's boundary role |
+| **Gradient track** | The value's own gradient painted across a `--panel-2` well at `--radius-md`, with stop marks at `--stage` ringed by `--edge` | It is both the preview and the manipulator |
 
 **`Segmented` has a bare form, and the header's mode switch is it.** §7.1's
 switch is the well this table describes — `--panel-2` inside a 1px `--edge` at
@@ -520,6 +522,8 @@ a mark whose ink is `--text` rather than the accent, because §4 rations accent 
 one filled element per region. The store mode's facet popover is where it is
 drawn; its trigger is the well with chevron, and the count beside a value is how
 many items are behind it.
+
+**The colour area and the gradient track take their sizes from §3's panel rhythm; both channels are `role="slider"`.** The keyboard is arrows 1, Shift/Page 10, Home/End, and Escape closes and returns focus; the focus boundary must measure ≥3:1 in all six palettes.
 
 **The store's search well is 180px.** A well otherwise fills its field row's value
 cell (§5 rule 2), and the store's header row is a bar rather than a field row, so
