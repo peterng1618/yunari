@@ -9,21 +9,21 @@ The **colour and gradient picker rebuild** ([`spec`](docs/superpowers/specs/2026
 
 ## Active work
 
-- **Phase 0 of the plan is complete** — Tasks 1 and 3; Task 2's channel model and gradient formula have landed on this branch; Tasks 4–10 follow under subagent-driven execution.
+- **Phase 0 of the plan is complete** — Tasks 1–4; Task 4's live/settled hook has landed on this branch; Tasks 5–10 follow under subagent-driven execution.
 - **The preset library's contract is public**: `editor/src/preset-library/index.ts` (`addColours`, `addGradient`, `deletePreset`), storage `yunari.editor.presets`, seeded with 12 colours and the 15 cssgradient.io gradients.
 - **The asset finder surface is a separate spec** and calls into that library; it does not write the key.
 
 ## Last completed change
 
-- **One channel model**: `colour-picker-model.ts` owns the channel table, read/write, ratios, keyboard stepping and the area's point mapping plus its `aria-valuetext`.
-- **One gradient formula**: `gradient-css.ts` holds the sort/round/angle string, and `paint-list.tsx` calls it instead of its local copy.
-- **Gated write**: `docs/decisions/0099-the-picker-channel-maths-and-one-gradient-formula.md` claims both new `components/ui` owners.
-- **Proof:** the two new test files plus `paint-list.dom.test.tsx` (26 tests), editor typecheck, `format:check` and the design-token ratchet — all exit 0.
-- **Not browser-proven**: the maths is unit-tested; no picker surface renders it until Tasks 4–8.
+- **One picker state owner**: `use-colour-picker.ts` holds the live `Hsva`, the shown text, a refusal that survives an outside write, and a `latest` ref so `commit()` settles on the last emitted hex.
+- **A rejected draft survives `ControlText`**: `commitText` writes the refused input back to the hook's own `text`, which is the only place it can live after the field clears its draft.
+- **Gated write**: `docs/decisions/0100-the-live-settled-picker-state-is-one-hook.md` claims the new `components/ui` owner.
+- **Proof:** 6 DOM tests in `use-colour-picker.dom.test.tsx`, editor typecheck, `format:check`, `lint` and the design-token ratchet — all exit 0.
+- **Not browser-proven**: no picker surface consumes the hook until Task 5.
 
 ## Next
 
-1. Continue the plan at Task 2 on the rebuild branch, then the picker, undo and gradient tasks.
+1. Continue the plan at Task 5 (the popover picker surface), then the undo and gradient tasks.
 2. Build the asset finder surface against `presetLibrary.addColours` and `addGradient`.
 
 ## Blockers / unverified
