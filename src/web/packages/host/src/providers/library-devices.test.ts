@@ -86,6 +86,13 @@ function fakeMachine(overrides: Fake = {}): LibraryModule {
         { mount: "C:", device: "\\\\.\\PHYSICALDRIVE1", label: "" },
         { mount: "D:", device: "\\\\.\\PHYSICALDRIVE0", label: "Data" },
       ],
+    // No Wi-Fi, no battery and no system identity: these fixtures test device
+    // selection, so the baseline extras are absent rather than invented.
+    wifiConnections: async () => [],
+    time: () => ({}),
+    processes: async () => ({}),
+    osInfo: async () => ({}),
+    battery: async () => ({}),
   };
 }
 
