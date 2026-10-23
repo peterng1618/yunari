@@ -10,6 +10,7 @@ import { createElement } from "react";
 import { applyArrange, canArrange } from "./arrange.js";
 import { type ArtboardPanel, createArtboardPanel } from "./artboard-panel.js";
 import {
+  applyPreset,
   creditOf,
   type ImportOutcome,
   importFinderResult,
@@ -737,6 +738,10 @@ export class EditorSession {
       // asset's own consequence runs — an import that places nothing still
       // carries its attribution.
       importAsset: async (page, result, placement) => {
+        // A preset is editor-local data, not an asset: no bytes, no credit.
+        const preset = result.preset;
+        if (preset !== undefined) return applyPreset({ ...result, preset });
+
         const fetched = await assetBytes(page.source, result.id);
         if (fetched === undefined)
           return {

@@ -3,8 +3,9 @@ import type { AssetPage, AssetResult } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { AssetManager } from "../asset-manager/index.js";
 import type { EditorDocument } from "../editor-document.js";
+import { createPresetLibrary } from "../preset-library/index.js";
 import { installReadableFile } from "../readable-file.fixture.js";
-import { creditOf, importFinderResult } from "./actions.js";
+import { applyPreset, creditOf, importFinderResult } from "./actions.js";
 
 installReadableFile();
 
@@ -135,6 +136,65 @@ describe("importFinderResult", () => {
       license: "ISC",
       changes: "Imported unchanged",
       source: { url: "https://lucide.dev/icons/house" },
+    });
+  });
+});
+
+describe("applyPreset", () => {
+  const palette = {
+    ...lucide,
+    name: "Cloud Dancer",
+    preset: { kind: "palette", colours: ["#112233", "#445566"] },
+  } as const;
+
+  it("adds one colour preset per swatch, named by the palette", () => {
+    const library = createPresetLibrary(undefined);
+
+    const outcome = applyPreset(palette, library);
+
+    expect(outcome).toEqual({ ok: true, message: "Added 2 colours" });
+    expect(library.getSnapshot().colours.at(-2)?.name).toBe("Cloud Dancer 1");
+    expect(library.getSnapshot().colours.at(-1)?.name).toBe("Cloud Dancer 2");
+  });
+
+  it("says already stored and adds nothing on a repeat", () => {
+    const library = createPresetLibrary(undefined);
+    applyPreset(palette, library);
+    const before = library.getSnapshot().colours.length;
+
+    expect(applyPreset(palette, library)).toEqual({
+      ok: true,
+      message: "Already in presets",
+    });
+    expect(library.getSnapshot().colours.length).toBe(before);
+  });
+
+  it("stores a gradient once with its angle and stops", () => {
+    const library = createPresetLibrary(undefined);
+    const gradient = {
+      ...lucide,
+      name: "Warm Flame",
+      preset: {
+        kind: "gradient",
+        angle: 45,
+        stops: [
+          { offset: 0, color: "#ff0000" },
+          { offset: 1, color: "#0000ff" },
+        ],
+      },
+    } as const;
+
+    expect(applyPreset(gradient, library)).toEqual({
+      ok: true,
+      message: "Added gradient",
+    });
+    expect(library.getSnapshot().gradients.at(-1)).toMatchObject({
+      name: "Warm Flame",
+      angle: 45,
+    });
+    expect(applyPreset(gradient, library)).toEqual({
+      ok: true,
+      message: "Already in presets",
     });
   });
 });

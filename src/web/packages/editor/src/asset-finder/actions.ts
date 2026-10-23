@@ -1,7 +1,15 @@
-import type { AssetPage, AssetResult } from "@yunari/renderer-core";
+import type {
+  AssetPage,
+  AssetPreset,
+  AssetResult,
+} from "@yunari/renderer-core";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import { type AssetManager, mimeOf } from "../asset-manager/index.js";
 import type { EditorDocument } from "../editor-document.js";
+import {
+  type PresetLibraryStore,
+  presetLibrary,
+} from "../preset-library/index.js";
 import { uiCopy } from "../ui-copy.js";
 
 /** The outcome is yes or a sentence: what was placed differs by kind — an image
@@ -58,6 +66,45 @@ export async function importFinderResult(input: {
       message: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+/** Adds a row's preset to the editor-local library. A preset is data, not an
+ *  imported asset: there are no bytes to declare and no author to credit. The
+ *  store owns dedupe, hex normalisation and the offset check, so its counts
+ *  are what the author is told — a palette becomes one preset per swatch. */
+export function applyPreset(
+  result: AssetResult & { readonly preset: AssetPreset },
+  library: PresetLibraryStore = presetLibrary,
+): { ok: true; message?: string } | { ok: false; message: string } {
+  const preset = result.preset;
+
+  if (preset.kind === "palette") {
+    const { added } = library.addColours(
+      preset.colours.map((value, index) => ({
+        name: `${result.name} ${index + 1}`,
+        value,
+      })),
+    );
+    return {
+      ok: true,
+      message:
+        added === 0
+          ? uiCopy.assets.presetAlreadyStored
+          : uiCopy.assets.presetAdded(added),
+    };
+  }
+
+  const { added } = library.addGradient({
+    name: result.name,
+    angle: preset.angle,
+    stops: preset.stops,
+  });
+  return {
+    ok: true,
+    message: added
+      ? uiCopy.assets.gradientAdded
+      : uiCopy.assets.presetAlreadyStored,
+  };
 }
 
 /** The attribution an imported result carries (spec R7). An image's subtitle

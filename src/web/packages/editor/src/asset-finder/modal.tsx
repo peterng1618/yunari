@@ -31,7 +31,7 @@ const DISABLED_KEY = "yunari.asset-finder.disabled";
 type KindFilter = "all" | PresetKind;
 
 export type ActionOutcome =
-  | { readonly ok: true }
+  | { readonly ok: true; readonly message?: string }
   | { readonly ok: false; readonly message: string };
 
 export interface FinderProps {
@@ -440,7 +440,7 @@ export function AssetFinder({
     setBusy(true);
     const outcome = await onAction(selected.page, selected.result, placement);
     setBusy(false);
-    setMessage(outcome.ok ? undefined : outcome.message);
+    setMessage(outcome.message);
   };
 
   return (

@@ -1060,6 +1060,12 @@ export const uiCopy = {
       `The host did not send "${name}", so nothing was imported.`,
     creditsFull:
       "This theme already carries the last attribution it can hold, so the import would leave it unsavable.",
+    /** The Colours tab's row action writes editor-local presets, so it reports
+     *  what the library accepted rather than an import's own sentences. */
+    presetAdded: (colours: number): string =>
+      `Added ${colours} ${colours === 1 ? "colour" : "colours"}`,
+    gradientAdded: "Added gradient",
+    presetAlreadyStored: "Already in presets",
     /** The Wallpaper Engine body. A local library is not a grid, so the host's
      *  own absence reason is the sentence the tab draws — "not installed" and
      *  "no library" are different problems for the person reading it. */
