@@ -1,9 +1,5 @@
 import type { Sample, SampleEntry } from "@yunari/renderer-core";
-import {
-  describeSemanticKey,
-  diskDeviceOf,
-  semanticId,
-} from "@yunari/renderer-core";
+import { describeSemanticKey, diskDeviceOf } from "@yunari/renderer-core";
 import { displayNameFor } from "../settings/devices.js";
 import {
   type DeviceAssignment,
@@ -11,7 +7,8 @@ import {
   dynamicKeyReadings,
   gpuDeviceReadings,
   isLhmDynamicKey,
-  lhmDeviceName,
+  lhmDeviceCaption,
+  lhmStorageDeviceExists,
   matchLhmSensorsAssigned,
 } from "./lhm-mapping.js";
 import { flattenLhmSensors } from "./lhm-tree.js";
@@ -291,23 +288,19 @@ export class LhmSensorProvider implements SensorProvider {
     // so a name can never sit over another device's reading. A name the
     // consumer chose wins over the model, which is what the settings page
     // edits.
-    const gpuName = lhmDeviceName(sensors, "gpu", assignment);
-    const diskName = lhmDeviceName(sensors, "storage", assignment);
+    const gpu = lhmDeviceCaption(sensors, "gpu", assignment);
+    const disk = lhmDeviceCaption(sensors, "storage", assignment);
     const names = assignment.names ?? {};
     const named = new Map<string, string>();
 
-    if (gpuName !== undefined) {
-      named.set(
-        "gpu.name",
-        displayNameFor(names, semanticId(gpuName), gpuName),
-      );
+    if (gpu !== undefined) {
+      // The settings page keys a saved name by the resolved device id, which
+      // disambiguates two identical models: `samsung-ssd-970-2`.
+      named.set("gpu.name", displayNameFor(names, gpu.deviceId, gpu.name));
     }
 
-    if (diskName !== undefined) {
-      named.set(
-        "disk.name",
-        displayNameFor(names, semanticId(diskName), diskName),
-      );
+    if (disk !== undefined) {
+      named.set("disk.name", displayNameFor(names, disk.deviceId, disk.name));
     }
 
     return owned.map((semanticKey) => {
@@ -328,14 +321,22 @@ export class LhmSensorProvider implements SensorProvider {
       }
 
       if (value === undefined) {
+        const diskId = diskDeviceOf(semanticKey);
+        let reason =
+          "this machine reports no matching LibreHardwareMonitor sensor";
+
+        if (diskId !== undefined) {
+          reason = lhmStorageDeviceExists(sensors, diskId)
+            ? "this drive reports no matching LibreHardwareMonitor sensor"
+            : "this machine has no drive with that id";
+        }
+
         return {
           semanticKey,
           sample: missing(
             `${LHM_PROVIDER_ID}:${semanticKey}`,
             timestamp,
-            diskDeviceOf(semanticKey) === undefined
-              ? "this machine reports no matching LibreHardwareMonitor sensor"
-              : "this machine has no drive with that id",
+            reason,
           ),
         };
       }

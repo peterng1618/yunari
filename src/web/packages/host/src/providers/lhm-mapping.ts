@@ -541,13 +541,8 @@ const DEVICE_BINDINGS: readonly LhmDeviceBinding[] = [
   },
 ];
 
-/** Per-drive capacity keys and the label each reading carries. */
-const DISK_CAPACITY_KEYS = [
-  ["used", "used"],
-  ["used.percent", "used (share)"],
-  ["total", "total"],
-  ["free", "free"],
-] as const;
+/** Per-drive capacity keys, beside the per-drive sensor readings. */
+const DISK_CAPACITY_KEYS = ["used", "used.percent", "total", "free"] as const;
 
 /** Dynamic keys this provider owns by shape, discovered per machine. */
 const SLUG = "[a-z0-9][a-z0-9-]{0,63}";
@@ -616,16 +611,18 @@ export function dynamicKeyReadings(
     }
   }
 
+  // Per-device keys keep the vocabulary's default label, which carries the
+  // device id: two identical models would otherwise advertise the same text.
   for (const reading of deviceReadings(sensors)) {
-    readings.set(reading.key, { key: reading.key, label: reading.label });
+    readings.set(reading.key, { key: reading.key });
   }
 
   // Capacity keys come from the same per-drive derivation the sample uses, so
   // a discovered `disk.<id>.free` and its value cannot describe different sets.
   for (const device of diskDeviceReadings(sensors)) {
-    for (const [quantity, text] of DISK_CAPACITY_KEYS) {
+    for (const quantity of DISK_CAPACITY_KEYS) {
       const key = `disk.${device.deviceId}.${quantity}`;
-      readings.set(key, { key, label: `${device.name} ${text}` });
+      readings.set(key, { key });
     }
   }
 
@@ -763,8 +760,6 @@ interface LhmDeviceReading {
   readonly key: string;
   readonly sensor: LhmSensor;
   readonly value: number;
-  /** The sensor's own name, shown as the reading's label. */
-  readonly label: string;
 }
 
 /** The per-device readings this machine reports, optionally only `wanted`. */
@@ -773,9 +768,14 @@ function deviceReadings(
   wanted?: ReadonlySet<string>,
 ): readonly LhmDeviceReading[] {
   const readings: LhmDeviceReading[] = [];
+  // Ids depend on the whole group, not on one binding, so derive them once.
+  const idsByGroup = {
+    storage: deviceIdsOf(sensors, "storage"),
+    network: deviceIdsOf(sensors, "network"),
+  } as const;
 
   for (const binding of DEVICE_BINDINGS) {
-    const ids = deviceIdsOf(sensors, binding.group);
+    const ids = idsByGroup[binding.group];
     const family = binding.group === "storage" ? "disk" : "network";
 
     for (const [hardwareId, deviceId] of ids) {
@@ -802,7 +802,6 @@ function deviceReadings(
           key,
           sensor,
           value: scaleDeviceValue(binding.scale, sensor.value),
-          label: sensor.text,
         });
         break;
       }
@@ -1108,19 +1107,26 @@ function nodeFor(
   return assigned === undefined ? ids[0] : ids.find((id) => id === assigned);
 }
 
+/** The device a caption describes, with both the id a saved name uses and the
+ * model LHM reports. */
+export interface LhmDeviceCaption {
+  readonly deviceId: string;
+  readonly name: string;
+}
+
 /**
- * The name of the device a group's unsuffixed keys describe, or undefined when
- * no single device answers them.
+ * The device a group's unsuffixed keys describe, or undefined when no single
+ * device answers them.
  *
- * The GPU group is scoped to one node either way, so it always has a name. The
- * storage group is summed across every drive until one is assigned — a
+ * The GPU group is scoped to one node either way, so it always has a caption.
+ * The storage group is summed across every drive until one is assigned — a
  * legitimate host total, and a total no one drive's name describes.
  */
-export function lhmDeviceName(
+export function lhmDeviceCaption(
   sensors: readonly LhmSensor[],
   group: "gpu" | "storage",
   assignment: DeviceAssignment,
-): string | undefined {
+): LhmDeviceCaption | undefined {
   const deviceId =
     group === "gpu"
       ? nodeFor(sensors, "gpu", assignment.gpu)
@@ -1137,11 +1143,19 @@ export function lhmDeviceName(
       groupOf(sensor.hardwareType, sensor.hardwareId) === group &&
       ids.get(sensor.hardwareId) === deviceId
     ) {
-      return sensor.hardwareType;
+      return { deviceId, name: sensor.hardwareType };
     }
   }
 
   return undefined;
+}
+
+/** Whether a drive with this id is attached, so a gap can say what is missing. */
+export function lhmStorageDeviceExists(
+  sensors: readonly LhmSensor[],
+  deviceId: string,
+): boolean {
+  return [...deviceIdsOf(sensors, "storage").values()].includes(deviceId);
 }
 
 export function matchLhmSensorsAssigned(

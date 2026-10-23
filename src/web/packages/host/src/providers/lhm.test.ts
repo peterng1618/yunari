@@ -1061,6 +1061,7 @@ function driveNode(
   hardwareId: string,
   totalGb: number,
   freeGb?: number,
+  temperatureC?: number,
 ) {
   const data = [
     {
@@ -1080,11 +1081,42 @@ function driveNode(
           },
         ]),
   ];
+  const temperatures =
+    temperatureC === undefined
+      ? []
+      : [
+          {
+            Text: "Temperature",
+            Children: [
+              {
+                Text: "Temperature",
+                SensorId: `${hardwareId}/temperature/0`,
+                Type: "Temperature",
+                RawValue: `${temperatureC} °C`,
+              },
+            ],
+          },
+        ];
 
   return {
     Text: name,
     HardwareId: hardwareId,
-    Children: [{ Text: "Data", Children: data }],
+    Children: [...temperatures, { Text: "Data", Children: data }],
+  };
+}
+
+/** Two drives reporting the same model, so only their ids distinguish them. */
+function identicalDrives() {
+  return {
+    Children: [
+      {
+        Text: "Sensor",
+        Children: [
+          driveNode("Samsung SSD 970", "/nvme/0", 400, 200, 35),
+          driveNode("Samsung SSD 970", "/nvme/1", 400, 100, 40),
+        ],
+      },
+    ],
   };
 }
 
@@ -1111,6 +1143,61 @@ describe("LHM per-drive readings", () => {
       ["samsung-ssd-970", 200],
       ["samsung-ssd-970-2", 300],
     ]);
+  });
+
+  it("labels two identical drives by their own ids", async () => {
+    const descriptors = await providerReturning({
+      ok: true,
+      status: 200,
+      body: identicalDrives(),
+    }).describe();
+    const labels = new Map(
+      descriptors.map((descriptor) => [
+        descriptor.semanticKey,
+        descriptor.label,
+      ]),
+    );
+
+    expect(labels.get("disk.samsung-ssd-970.temp")).toBe(
+      "samsung-ssd-970 temperature",
+    );
+    expect(labels.get("disk.samsung-ssd-970-2.temp")).toBe(
+      "samsung-ssd-970-2 temperature",
+    );
+    expect(labels.get("disk.samsung-ssd-970.used")).toBe(
+      "samsung-ssd-970 used",
+    );
+    expect(labels.get("disk.samsung-ssd-970-2.used")).toBe(
+      "samsung-ssd-970-2 used",
+    );
+  });
+
+  it("reports a saved name keyed by the second drive's deduped id", async () => {
+    const entries = await providerReturning({
+      ok: true,
+      status: 200,
+      body: identicalDrives(),
+    }).sample(["disk.name"], 0, {
+      systemDisk: "samsung-ssd-970-2",
+      names: { "samsung-ssd-970-2": "Games" },
+    });
+
+    expect(entries[0]?.sample).toMatchObject({
+      status: "ok",
+      textValue: "Games",
+    });
+  });
+
+  it("says an existing drive reports no matching health sensor", async () => {
+    const entries = await providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    }).sample(["disk.st4000dm004-2cv104.health"], 0);
+
+    const message = entries[0]?.sample.message ?? "";
+    expect(message).toContain("this drive reports no matching");
+    expect(message).not.toContain("no drive with that id");
   });
 
   it("reads each drive's temperature, health, activity and byte rates", () => {
@@ -1197,13 +1284,14 @@ describe("LHM per-drive readings", () => {
       descriptors.map((descriptor) => [descriptor.semanticKey, descriptor]),
     );
 
+    // The label carries the device id, so two identical models stay distinct.
     expect(byKey.get("disk.lexar-500gb-ssd.temp")).toMatchObject({
       unit: "°C",
-      label: "Composite Temperature",
+      label: "lexar-500gb-ssd temperature",
     });
     expect(byKey.get("disk.lexar-500gb-ssd.health")).toMatchObject({
       unit: "%",
-      label: "Life",
+      label: "lexar-500gb-ssd health",
     });
     expect(byKey.get("disk.lexar-500gb-ssd.read")).toMatchObject({
       unit: "MB/s",
@@ -1256,6 +1344,34 @@ describe("LHM per-interface network readings", () => {
     expect(values.get("network.ethernet-2.download")).toBeCloseTo(2, 9);
     // The aggregate sums both links.
     expect(values.get("network.download")).toBeCloseTo(3, 9);
+  });
+
+  it("labels two same-named interfaces by their own ids", async () => {
+    const descriptors = await providerReturning({
+      ok: true,
+      status: 200,
+      body: {
+        Children: [
+          {
+            Text: "Sensor",
+            Children: [nicNode("/nic/0", 125_000), nicNode("/nic/1", 250_000)],
+          },
+        ],
+      },
+    }).describe();
+    const labels = new Map(
+      descriptors.map((descriptor) => [
+        descriptor.semanticKey,
+        descriptor.label,
+      ]),
+    );
+
+    expect(labels.get("network.ethernet.download")).toBe(
+      "Network ethernet download",
+    );
+    expect(labels.get("network.ethernet-2.download")).toBe(
+      "Network ethernet-2 download",
+    );
   });
 
   it("advertises each interface's readings", async () => {
