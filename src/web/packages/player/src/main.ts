@@ -11,6 +11,7 @@ import {
   SAMPLE_STREAM_PATH,
   type SampleSource,
   type SceneHandle,
+  type UnitPreferences,
 } from "@yunari/renderer-core";
 import {
   applyAuthoredText,
@@ -199,7 +200,7 @@ async function startHostedTheme(
   declareDocumentLanguage(theme.metadata?.themeLanguage);
   // Fetch before allocating live resources so a failed font request has nothing to release.
   const fontBytes = await loadHostedFontAssets(theme.id, theme, session.fetch);
-  const measurement = await loadDisplayPreferences(session.fetch);
+  const units = await loadDisplayPreferences(session.fetch);
   const keys = boundSemanticKeys(theme);
   const liveHandle = createLiveSource({
     url: session.streamUrl(
@@ -255,6 +256,7 @@ async function startHostedTheme(
       theme.bindings ?? {},
       liveHandle.source,
       theme.globals?.palette,
+      units,
     );
     // Revived text carries the authored runs, not the sampled readings: the
     // saved scene keeps placeholders, so every cadence re-resolves the runs
@@ -264,7 +266,7 @@ async function startHostedTheme(
       theme.bindings ?? {},
       liveHandle.source,
       theme.globals,
-      measurement,
+      units,
       theme.metadata?.themeLanguage,
     );
     handle.canvas.requestRenderAll();
@@ -438,6 +440,7 @@ function hydrateCharts(
   bindings: Readonly<Record<string, readonly Binding[]>>,
   source: SampleSource,
   palette: FabricPalette | undefined,
+  units: UnitPreferences,
 ): void {
   const issues: PlanIssue[] = [];
   for (const object of objects) {
@@ -463,6 +466,7 @@ function hydrateCharts(
             source,
             nowMs: Date.now(),
             animate: false,
+            units,
           },
           issues,
           palette,
@@ -480,7 +484,7 @@ function hydrateCharts(
     // walk goes into groups: the starter's cards are groups, and stopping at
     // the canvas would freeze every reading in the composition at load.
     if (object instanceof Group) {
-      hydrateCharts(object.getObjects(), bindings, source, palette);
+      hydrateCharts(object.getObjects(), bindings, source, palette, units);
     }
   }
   // One line per distinct cause: this runs on every refresh cadence, and a

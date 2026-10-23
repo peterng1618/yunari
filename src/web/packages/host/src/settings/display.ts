@@ -4,6 +4,8 @@ import {
   isMeasurementSystem,
   isTimeZoneName,
   type MeasurementSystem,
+  normalizeUnitPreferences,
+  type UnitPreferences,
 } from "@yunari/renderer-core";
 
 /**
@@ -23,6 +25,9 @@ export interface DisplaySettings {
   readonly timeZone?: string;
   /** Absent means metric, the unit providers report in. */
   readonly measurement?: MeasurementSystem;
+  /** The consumer's per-family display units; absent means each family's own
+   *  default. */
+  readonly units?: UnitPreferences;
 }
 
 export const EMPTY_DISPLAY_SETTINGS: DisplaySettings = {};
@@ -46,7 +51,11 @@ export function normalizeDisplaySettings(input: unknown): DisplaySettings {
   }
 
   const record = input as Record<string, unknown>;
-  const settings: { timeZone?: string; measurement?: MeasurementSystem } = {};
+  const settings: {
+    timeZone?: string;
+    measurement?: MeasurementSystem;
+    units?: UnitPreferences;
+  } = {};
 
   const zone = record["timeZone"];
 
@@ -75,6 +84,18 @@ export function normalizeDisplaySettings(input: unknown): DisplaySettings {
     }
 
     settings.measurement = measurement;
+  }
+
+  const units = record["units"];
+
+  // Refused value-by-value, so a stored preference this build cannot display is
+  // an answer to the writer rather than a setting that appears to do nothing.
+  if (units !== undefined) {
+    const normalized = normalizeUnitPreferences(units);
+
+    if (Object.keys(normalized).length > 0) {
+      settings.units = normalized;
+    }
   }
 
   return settings;

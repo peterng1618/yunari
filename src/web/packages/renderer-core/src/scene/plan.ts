@@ -157,7 +157,10 @@ export interface PlanInputs {
 }
 
 /** Runtime inputs required to derive one authored chart's display option. */
-export type ChartPlanContext = Pick<PlanInputs, "source" | "nowMs" | "animate">;
+export type ChartPlanContext = Pick<
+  PlanInputs,
+  "source" | "nowMs" | "animate" | "units"
+>;
 
 /**
  * The artboard's geometry with the background layer's colour resolved through

@@ -255,6 +255,51 @@ describe("Fabric theme envelope validation", () => {
     }
   });
 
+  it("accepts an authored unit override and auto-scale on a binding", () => {
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      bindings: {
+        chart: [
+          { id: "cpu", semanticKey: "cpu.clock", unit: "GHz", autoScale: true },
+        ],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses a non-boolean auto-scale and an unknown binding key", () => {
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      bindings: {
+        chart: [
+          {
+            id: "cpu",
+            semanticKey: "cpu.clock",
+            autoScale: "yes",
+            colour: "red",
+          },
+        ],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "wrong-type",
+            path: "/bindings/chart/0/autoScale",
+          }),
+          expect.objectContaining({
+            code: "unknown-field",
+            path: "/bindings/chart/0/colour",
+          }),
+        ]),
+      );
+    }
+  });
+
   it("keeps shared semantics valid while refusing obsolete GIF assets", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),

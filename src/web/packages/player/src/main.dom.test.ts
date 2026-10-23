@@ -7,6 +7,7 @@
 // `swept.length > 0` guard is what turns the missing origin into red rather
 // than into a silent green.
 
+import type { SampleSource } from "@yunari/renderer-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PAIRING_STORAGE_KEY, readStoredPairing } from "./host-refind.js";
 
@@ -589,6 +590,226 @@ describe("the background the display mounts with", () => {
       "rgb(17, 34, 51)",
     );
   });
+});
+
+/**
+ * The units a display paints with, driven through the real `main.ts`.
+ *
+ * The host answers the preference on `/api/display`, and the reading arrives on
+ * the sample stream. What the case pins is the pairing: the text converts once,
+ * at presentation, and the sample the source holds is still the measured
+ * `3800 MHz` rather than a derived gigahertz figure.
+ */
+describe("the units a display paints with", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    streams.length = 0;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  /** An `EventSource` the case can push a batch through. */
+  const streams: RecordingEventSource[] = [];
+
+  class RecordingEventSource {
+    readonly #listeners = new Map<
+      string,
+      ((event: { readonly data: string }) => void)[]
+    >();
+
+    constructor() {
+      streams.push(this);
+    }
+
+    addEventListener(
+      type: string,
+      listener: (event: { readonly data: string }) => void,
+    ): void {
+      const existing = this.#listeners.get(type) ?? [];
+      existing.push(listener);
+      this.#listeners.set(type, existing);
+    }
+
+    close(): void {}
+
+    emit(type: string, data: string): void {
+      for (const listener of this.#listeners.get(type) ?? []) {
+        listener({ data });
+      }
+    }
+  }
+
+  it("paints a bound clock in the host's unit and keeps the sample as measured", async () => {
+    skeleton();
+    history.replaceState({}, "", "/?theme=units");
+    vi.stubGlobal("EventSource", RecordingEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/document")) return json(unitsEnvelope());
+        if (url === "/api/display") {
+          return json({ settings: { units: { clock: "ghz" } }, zones: [] });
+        }
+        return json({});
+      }),
+    });
+    // **The repaint cadence is driven here, not left to jsdom.** A sibling case
+    // in this file installs a frame driver of its own, so the real loop's clock
+    // is not a fact this case can lean on across the file's order.
+    const frames: FrameRequestCallback[] = [];
+    let frameTime = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await import("./main.js");
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector("[data-yunari-controls]"),
+        "the display mounted",
+      ).not.toBeNull(),
+    );
+
+    streams[0]!.emit(
+      "samples",
+      JSON.stringify({
+        version: 1,
+        sentAt: new Date().toISOString(),
+        samples: [
+          {
+            semanticKey: "cpu.clock",
+            sample: {
+              sensorId: "cpu.clock",
+              timestamp: new Date().toISOString(),
+              status: "ok",
+              value: 3800,
+              unit: "MHz",
+            },
+          },
+        ],
+      }),
+    );
+
+    const diagnostics = window as unknown as {
+      readonly yunari: {
+        readonly live: { readonly source: SampleSource };
+      };
+    };
+    await vi.waitFor(
+      () =>
+        expect(
+          diagnostics.yunari.live.source.latest("cpu.clock")?.value,
+          "the batch never reached the source",
+        ).toBe(3800),
+      { timeout: 5_000 },
+    );
+
+    // One second of the loop's own clock: the cadence is 30 a second, so a
+    // handful of frames is more than one repaint.
+    for (let frame = 0; frame < 20; frame += 1) {
+      frameTime += 100;
+      const due = frames.splice(0);
+      for (const callback of due) callback(frameTime);
+    }
+    expect(readoutText(), "the text did not paint the chosen unit").toBe(
+      "3.8 GHz",
+    );
+
+    expect(
+      diagnostics.yunari.live.source.latest("cpu.clock")?.value,
+      "the stored sample was converted instead of the displayed one",
+    ).toBe(3800);
+  });
+
+  /** The mounted text object's rendered string. */
+  function readoutText(): string | undefined {
+    const diagnostics = window as unknown as {
+      readonly yunari?: {
+        readonly handle: {
+          readonly canvas: {
+            readonly getObjects: () => readonly {
+              readonly id?: unknown;
+              readonly text?: unknown;
+              readonly getObjects?: () => readonly unknown[];
+            }[];
+          };
+        };
+      };
+    };
+    const objects = diagnostics.yunari?.handle.canvas.getObjects() ?? [];
+    const readout = objects.find((object) => object.id === "readout");
+    return typeof readout?.text === "string" ? readout.text : undefined;
+  }
+
+  /** One text object bound to `cpu.clock`, saved as a theme would save it. */
+  function unitsEnvelope(): unknown {
+    return {
+      schemaVersion: 2,
+      fabricVersion: "7.4.0",
+      id: "units",
+      artboard: { width: 1920, height: 1080 },
+      metadata: { themeLanguage: "en" },
+      globals: {
+        typePresets: {
+          body: { name: "Body", value: { family: "Inter", size: 24 } },
+        },
+        palette: {
+          none: {
+            name: "None",
+            value: { kind: "solid", color: "transparent" },
+          },
+          ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
+        },
+      },
+      bindings: {
+        readout: [{ id: "clock", semanticKey: "cpu.clock", precision: 1 }],
+      },
+      scene: {
+        version: "7.4.0",
+        objects: [
+          {
+            type: "Textbox",
+            id: "readout",
+            left: 20,
+            top: 20,
+            width: 400,
+            height: 80,
+            text: "--",
+            yunariText: {
+              runs: [
+                {
+                  kind: "value",
+                  bindingId: "clock",
+                  typePreset: "typePresets.body",
+                  style: { color: { ref: "palette.ink" } },
+                },
+              ],
+              box: { width: 400, height: 80 },
+              overflow: "visible",
+            },
+          },
+        ],
+      },
+    };
+  }
 });
 
 /** Valid to the compatibility check, so the display mounts whole and reaches

@@ -1,5 +1,9 @@
 import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
+import {
+  DEFAULT_UNIT_PREFERENCES,
+  type UnitPreferences,
+} from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -86,6 +90,22 @@ function devicesFor(
 function everyDevice(settings: DeviceSettings): readonly AvailableDevice[] {
   return [...settings.available.gpus, ...settings.available.disks];
 }
+
+/** The unit families the display form offers, in its order. `measurement` is
+ *  not among them: temperatures have their own row above, whose systems read
+ *  as names rather than unit marks. */
+const UNIT_FIELDS = [
+  "clock",
+  "data",
+  "dataScale",
+  "rate",
+  "rateScale",
+  "fan",
+  "windSpeed",
+  "pressure",
+] as const;
+
+type UnitField = (typeof UNIT_FIELDS)[number];
 
 /** What a device is called: the name chosen for it, else the one it reports. */
 function nameOfDevice(
@@ -399,7 +419,11 @@ function HostSettings(props: {
   };
 
   const saveDisplay = (
-    next: { readonly timeZone: string; readonly measurement: string },
+    next: {
+      readonly timeZone: string;
+      readonly measurement: string;
+      readonly units: UnitPreferences;
+    },
     saved: string,
   ): void => {
     const measurement = next.measurement;
@@ -410,6 +434,7 @@ function HostSettings(props: {
       const written = await settings.saveDisplay({
         timeZone: next.timeZone,
         measurement,
+        units: next.units,
       });
       if (mounted.current) {
         setPreferences((current) =>
@@ -418,6 +443,26 @@ function HostSettings(props: {
       }
       return saved;
     });
+  };
+
+  /** One unit family's change, merged into the bag that travels whole: the
+   *  route replaces the settings object, so sending only the changed family
+   *  would clear the rest. */
+  const saveUnit = (field: UnitField, value: string): void => {
+    if (preferences === undefined) return;
+    saveDisplay(
+      {
+        timeZone: preferences.settings.timeZone ?? "",
+        measurement: preferences.settings.measurement ?? "metric",
+        // The control offers only the values the family names, so the merge is
+        // a full preference set at the surface.
+        units: {
+          ...preferences.settings.units,
+          [field]: value,
+        } as UnitPreferences,
+      },
+      uiCopy.hostSettings.status.savedUnits,
+    );
   };
 
   const answer = (group: AssignableGroup, device: string): void => {
@@ -601,6 +646,7 @@ function HostSettings(props: {
                         timeZone: zone,
                         measurement:
                           preferences.settings.measurement ?? "metric",
+                        units: preferences.settings.units ?? {},
                       },
                       uiCopy.hostSettings.status.savedZone,
                     )
@@ -623,11 +669,34 @@ function HostSettings(props: {
                       {
                         timeZone: preferences.settings.timeZone ?? "",
                         measurement,
+                        units: preferences.settings.units ?? {},
                       },
                       uiCopy.hostSettings.status.savedUnits,
                     )
                   }
                 />
+                {UNIT_FIELDS.map((field) => {
+                  const copy = uiCopy.hostSettings.display.units[field];
+                  return (
+                    <ControlSelect
+                      key={field}
+                      id={`yunari-host-unit-${field}`}
+                      label={copy.label}
+                      data={{ "data-yunari-host-unit": field }}
+                      // An unchosen family shows the value it is already
+                      // reading in, so the control prints the effective answer
+                      // rather than an empty third state.
+                      value={
+                        preferences.settings.units?.[field] ??
+                        DEFAULT_UNIT_PREFERENCES[field]
+                      }
+                      options={Object.entries(copy.values).map(
+                        ([id, name]) => ({ id, name }),
+                      )}
+                      onChange={(value) => saveUnit(field, value)}
+                    />
+                  );
+                })}
               </>
             )}
           </Group>

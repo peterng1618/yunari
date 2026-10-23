@@ -63,6 +63,43 @@ describe("display settings", () => {
     );
   });
 
+  it("keeps the unit preferences this build can display", () => {
+    expect(
+      normalizeDisplaySettings({
+        units: { clock: "ghz", data: "decimal" },
+      }),
+    ).toEqual({ units: { clock: "ghz", data: "decimal" } });
+  });
+
+  it("refuses a unit preference it cannot display, naming the field", () => {
+    expect(() => normalizeDisplaySettings({ units: { clock: "thz" } })).toThrow(
+      /clock/,
+    );
+    expect(() =>
+      normalizeDisplaySettings({ units: { nonsense: "whirls" } }),
+    ).toThrow(/nonsense/);
+  });
+
+  it("reads a stored file without units as no unit preference", async () => {
+    await writeFile(
+      path.join(dir, "display.json"),
+      JSON.stringify({ timeZone: "Europe/Lisbon" }),
+      "utf8",
+    );
+    expect(await createDisplaySettingsStore(dir).read()).toEqual({
+      timeZone: "Europe/Lisbon",
+    });
+  });
+
+  it("round-trips unit preferences through the store", async () => {
+    const store = createDisplaySettingsStore(dir);
+
+    await store.write({ units: { clock: "ghz", pressure: "inhg" } });
+    expect(await store.read()).toEqual({
+      units: { clock: "ghz", pressure: "inhg" },
+    });
+  });
+
   it("round-trips through the store", async () => {
     const store = createDisplaySettingsStore(dir);
 

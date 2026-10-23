@@ -1,7 +1,6 @@
 import type {
   Binding,
   FabricGlobals,
-  MeasurementSystem,
   PlanBox,
   PlanNode,
   PlanTextLayout,
@@ -9,6 +8,7 @@ import type {
   SampleSource,
   TextContent,
   TextRun,
+  UnitPreferences,
 } from "@yunari/renderer-core";
 import { emptySampleSource, resolveTextSegments } from "@yunari/renderer-core";
 import {
@@ -344,7 +344,7 @@ export function refreshBoundText(
   bindings: Readonly<Record<string, readonly Binding[]>>,
   source: SampleSource,
   globals: FabricGlobals | undefined,
-  measurement?: MeasurementSystem,
+  units?: UnitPreferences,
   themeLanguage?: string,
 ): void {
   const refresh = (objects: readonly object[]): void => {
@@ -366,7 +366,7 @@ export function refreshBoundText(
             bindings[id],
             {
               source,
-              ...(measurement === undefined ? {} : { measurement }),
+              ...(units === undefined ? {} : { units }),
               ...(themeLanguage === undefined ? {} : { themeLanguage }),
             },
             globals ?? {},

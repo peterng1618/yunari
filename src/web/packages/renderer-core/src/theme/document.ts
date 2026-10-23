@@ -215,6 +215,14 @@ export interface Binding {
   readonly scale?: number;
   readonly offset?: number;
   /**
+   * The unit the author wants this reading shown in, where the key can display
+   * it. A unit the key cannot display is a plan-time issue, never a load
+   * failure: the reading still paints in what was measured.
+   */
+  readonly unit?: string;
+  /** Let the reading pick a magnitude for itself, e.g. GB to TB. */
+  readonly autoScale?: boolean;
+  /**
    * How a time/date reading is written out (`HH:mm`, `dddd DD MMMM`). How a clock
    * *reads* is design, so the author owns it; how a value *is formatted* for its
    * unit stays derived. Absent means the key's own default format.

@@ -502,6 +502,43 @@ export const uiCopy = {
        *  prints is the renderer's. */
       metric: "Celsius",
       imperial: "Fahrenheit",
+      /** The per-family units a reading can be shown in. Each family's values
+       *  are its own, and the empty answer is not offered: an unchosen family
+       *  is shown on its default, and the control prints that default. */
+      units: {
+        clock: {
+          label: "Clock speed",
+          values: { auto: "Automatic", mhz: "MHz", ghz: "GHz" },
+        },
+        data: {
+          label: "Data size",
+          values: { binary: "Binary (GiB)", decimal: "Decimal (GB)" },
+        },
+        dataScale: {
+          label: "Data scale",
+          values: { auto: "Automatic", mb: "MB", gb: "GB", tb: "TB" },
+        },
+        rate: {
+          label: "Transfer rate",
+          values: { bits: "Bits", bytes: "Bytes" },
+        },
+        rateScale: {
+          label: "Rate scale",
+          values: { auto: "Automatic", k: "kb/s", m: "Mb/s", g: "Gb/s" },
+        },
+        fan: {
+          label: "Fan speed",
+          values: { rpm: "RPM", percent: "Percent" },
+        },
+        windSpeed: {
+          label: "Wind speed",
+          values: { kmh: "km/h", mph: "mph", ms: "m/s" },
+        },
+        pressure: {
+          label: "Pressure",
+          values: { hpa: "hPa", inhg: "inHg" },
+        },
+      },
     },
     /** The questions the theme on the chosen display raises. Only the ones it
      *  has not answered are drawn, so answering one is what makes it leave. */

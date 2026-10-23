@@ -2,6 +2,8 @@ import {
   isMeasurementSystem,
   isTimeZoneName,
   type MeasurementSystem,
+  normalizeUnitPreferences,
+  type UnitPreferences,
 } from "@yunari/renderer-core";
 
 /**
@@ -65,13 +67,16 @@ export interface DisplayPreferences {
    *  absence of a choice, which the route also writes from `""`. */
   readonly timeZone?: string;
   readonly measurement?: MeasurementSystem;
+  /** The per-family display units this build can display. */
+  readonly units?: UnitPreferences;
 }
 
-/** What the display form sends: both fields always, because the route replaces
- *  the whole object and saving one field would clear the other. */
+/** What the display form sends: every field always, because the route replaces
+ *  the whole object and saving one field would clear the others. */
 export interface DisplayPreferencesWrite {
   readonly timeZone: string;
   readonly measurement: MeasurementSystem;
+  readonly units?: UnitPreferences;
 }
 
 export interface HostSettingsClient {
@@ -146,6 +151,17 @@ function readNames(input: unknown): Record<string, string> {
   return names;
 }
 
+/** The unit preferences this build can display. A stored value it cannot is
+ *  dropped rather than printed, the same refusal the zone gets: the control
+ *  would otherwise show a value it cannot offer. */
+function readUnits(input: unknown): UnitPreferences {
+  try {
+    return normalizeUnitPreferences(input ?? {});
+  } catch {
+    return {};
+  }
+}
+
 /** A refusal is the host's own words where it sent any, so the person reads the
  *  reason rather than a status code. */
 async function refusal(response: Response, what: string): Promise<Error> {
@@ -214,11 +230,13 @@ export function createHostSettingsClient(options?: {
         readonly settings?: {
           readonly timeZone?: unknown;
           readonly measurement?: unknown;
+          readonly units?: unknown;
         };
         readonly zones?: unknown;
       };
       const zone = body?.settings?.timeZone;
       const measurement = body?.settings?.measurement;
+      const units = readUnits(body?.settings?.units);
       return {
         // A stored value this runtime can no longer resolve is refused rather
         // than printed: the control would otherwise show a zone it cannot
@@ -228,6 +246,7 @@ export function createHostSettingsClient(options?: {
             ? { timeZone: zone }
             : {}),
           ...(isMeasurementSystem(measurement) ? { measurement } : {}),
+          ...(Object.keys(units).length > 0 ? { units } : {}),
         },
         zones: Array.isArray(body?.zones)
           ? body.zones.filter(
@@ -241,11 +260,12 @@ export function createHostSettingsClient(options?: {
       const response = await fetcher(`${baseUrl}/api/display`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        // Both fields travel: the route replaces the whole object, so a save of
-        // one would clear the other.
+        // Every field travels: the route replaces the whole object, so a save
+        // of one would clear the others.
         body: JSON.stringify({
           timeZone: next.timeZone,
           measurement: next.measurement,
+          units: next.units ?? {},
         }),
       });
       if (!response.ok) {
@@ -255,15 +275,18 @@ export function createHostSettingsClient(options?: {
         readonly settings?: {
           readonly timeZone?: unknown;
           readonly measurement?: unknown;
+          readonly units?: unknown;
         };
       };
       const zone = body?.settings?.timeZone;
       const measurement = body?.settings?.measurement;
+      const units = readUnits(body?.settings?.units);
       return {
         ...(typeof zone === "string" && isTimeZoneName(zone)
           ? { timeZone: zone }
           : {}),
         ...(isMeasurementSystem(measurement) ? { measurement } : {}),
+        ...(Object.keys(units).length > 0 ? { units } : {}),
       };
     },
 

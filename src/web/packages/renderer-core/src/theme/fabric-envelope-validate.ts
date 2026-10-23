@@ -1225,6 +1225,31 @@ function bindings(
           );
         }
       }
+      const unit = entry["unit"];
+      if (
+        unit !== undefined &&
+        (typeof unit !== "string" || unit.length === 0 || unit.length > 32)
+      ) {
+        issues.push(
+          issue(
+            "wrong-type",
+            `${path}/unit`,
+            "unit must be a non-empty string of at most 32 characters.",
+          ),
+        );
+      }
+      if (
+        entry["autoScale"] !== undefined &&
+        typeof entry["autoScale"] !== "boolean"
+      ) {
+        issues.push(
+          issue(
+            "wrong-type",
+            `${path}/autoScale`,
+            "autoScale must be a boolean.",
+          ),
+        );
+      }
       for (const key of ["format", "timeZone"] as const) {
         const value = entry[key];
         if (value === undefined) continue;

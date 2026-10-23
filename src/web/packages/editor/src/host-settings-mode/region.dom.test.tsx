@@ -170,7 +170,11 @@ function library(fixture: Fixture): ThemeLibraryClient {
  *  recorded. `refuse` is the sentence a write fails with, or `undefined`. */
 function hostSettings(
   fixture: Fixture,
-  refuse?: { readonly devices?: string; readonly answers?: string },
+  refuse?: {
+    readonly devices?: string;
+    readonly display?: string;
+    readonly answers?: string;
+  },
 ): { readonly client: HostSettingsClient; readonly wrote: Written } {
   const wrote: Written = {
     devices: [],
@@ -197,6 +201,7 @@ function hostSettings(
         fixture.preferences ?? { settings: {}, zones: [] },
       saveDisplay: async (next) => {
         wrote.display.push(next);
+        if (refuse?.display !== undefined) throw new Error(refuse.display);
         return next;
       },
       readQuestions: async (display, theme) => {
@@ -247,7 +252,11 @@ const DEVICES: DeviceSettings = {
  *  draws. A `undefined` entry is the region withdrawing the line as it leaves. */
 async function mountHost(
   fixture: Fixture,
-  refuse?: { readonly devices?: string; readonly answers?: string },
+  refuse?: {
+    readonly devices?: string;
+    readonly display?: string;
+    readonly answers?: string;
+  },
 ): Promise<{
   readonly container: HTMLDivElement;
   readonly wrote: Written;
@@ -311,6 +320,14 @@ function nameField(container: HTMLElement, id: string): HTMLInputElement {
     ),
     `the name row for ${id}`,
   );
+}
+
+/** The unit preference rows the display section draws, in the order it draws
+ *  them. */
+function unitRows(container: HTMLElement): readonly string[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>("[data-yunari-host-unit]"),
+  ).map((row) => row.getAttribute("data-yunari-host-unit") ?? "");
 }
 
 /** The answer rows the questions section draws, by the slot each asks about. */
@@ -626,7 +643,90 @@ it("writes both display fields together", async () => {
   expect(
     wrote.display,
     "a zone write did not carry the units beside it",
-  ).toEqual([{ timeZone: "Europe/Paris", measurement: "imperial" }]);
+  ).toEqual([{ timeZone: "Europe/Paris", measurement: "imperial", units: {} }]);
+});
+
+/**
+ * **One row per unit preference, and a save carries only the field that
+ * changed.** The route replaces the whole settings object, so the unchanged
+ * fields travel with the new one — and within `units` the untouched families
+ * are kept rather than cleared.
+ */
+it("renders a row per unit preference and writes only the changed field", async () => {
+  const { container, wrote } = await mountHost({
+    ...TWO_DISPLAYS,
+    preferences: {
+      settings: { measurement: "imperial", units: { data: "decimal" } },
+      zones: [],
+    },
+  });
+
+  expect(
+    unitRows(container),
+    "the display section does not offer every unit preference",
+  ).toEqual([
+    "clock",
+    "data",
+    "dataScale",
+    "rate",
+    "rateScale",
+    "fan",
+    "windSpeed",
+    "pressure",
+  ]);
+  expect(
+    selectValue(container, "[data-yunari-host-unit='clock']"),
+    "a family with no stored choice does not open on its own default",
+  ).toBe("auto");
+  expect(
+    selectValue(container, "[data-yunari-host-unit='data']"),
+    "a stored unit preference is not shown",
+  ).toBe("decimal");
+
+  await offered(
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-host-unit='clock']"),
+      "the clock's unit row",
+    ),
+  );
+  await choose("ghz");
+
+  expect(
+    wrote.display,
+    "a unit write did not carry the other settings, or cleared the units beside it",
+  ).toEqual([
+    {
+      timeZone: "",
+      measurement: "imperial",
+      units: { data: "decimal", clock: "ghz" },
+    },
+  ]);
+});
+
+/**
+ * **An unknown value is the store's refusal, not a default.** The control
+ * offers only values this build displays; a host that still refuses one has
+ * said so, and that sentence is what the person reads.
+ */
+it("shows the store's refusal when a unit preference cannot be stored", async () => {
+  const refusal = '"thz" is not a value for the "clock" unit preference.';
+  const { container, published } = await mountHost(
+    { ...TWO_DISPLAYS, preferences: { settings: {}, zones: [] } },
+    { display: refusal },
+  );
+
+  await offered(
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-host-unit='clock']"),
+      "the clock's unit row",
+    ),
+  );
+  await choose("ghz");
+
+  expect(
+    statusLine(published).status,
+    "the store's refusal did not reach the person",
+  ).toBe(uiCopy.hostSettings.status.failed(refusal));
 });
 
 /** A refused write is the host's own words, after the region's own lead: the
