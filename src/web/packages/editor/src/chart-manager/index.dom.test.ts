@@ -180,7 +180,7 @@ describe("ChartManager", () => {
       editor: {
         canvas,
         artboard,
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       } as unknown as EditorInteraction,
       scene: {} as SceneAdapter,
       source: createDemoSource(0),
@@ -653,7 +653,7 @@ describe("a chart that throws", () => {
       editor: {
         canvas,
         artboard,
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn, error: vi.fn() },
       } as unknown as EditorInteraction,
       scene: {} as SceneAdapter,
@@ -731,7 +731,7 @@ describe("a chart that throws", () => {
       editor: {
         canvas,
         artboard,
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn, error: vi.fn() },
       } as unknown as EditorInteraction,
       scene: {} as SceneAdapter,
@@ -783,7 +783,7 @@ describe("a chart whose reading has not moved", () => {
       editor: {
         canvas,
         artboard,
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
       } as unknown as EditorInteraction,
       scene: {} as SceneAdapter,
@@ -871,7 +871,7 @@ describe("a chart whose reading has not moved", () => {
       editor: {
         canvas,
         artboard,
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
       } as unknown as EditorInteraction,
       scene: {} as SceneAdapter,
@@ -933,7 +933,7 @@ describe("a line chart's trailing window", () => {
       editor: {
         canvas,
         artboard,
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
       } as unknown as EditorInteraction,
       scene: {} as SceneAdapter,
@@ -1025,7 +1025,7 @@ describe("a chart's series paint", () => {
       editor: {
         canvas,
         artboard,
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
       } as never,
       scene: {} as never,
@@ -1103,7 +1103,7 @@ describe("a chart control's commit", () => {
       editor: {
         canvas,
         artboard,
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
       } as never,
       scene: {} as never,
@@ -1178,7 +1178,7 @@ describe("a chart control's commit", () => {
       editor: {
         canvas,
         artboard,
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
       } as never,
       scene: {} as SceneAdapter,

@@ -359,7 +359,14 @@ export async function addColour(
   await openPane(page, "Tokens");
   await page.getByRole("button", { name: "Add colour", exact: true }).click();
   await fill(page, "[data-yunari-palette-name]", name);
-  await fill(page, "[data-yunari-palette-color]", hex);
+  // The exact-value field is the picker's, in the popover's portal: the pane
+  // itself carries one trigger and no field of its own. The marker is on the
+  // trigger button itself since Task 6 removed the wrapper, so the marker is
+  // the thing to press rather than a `button` inside it.
+  await page.locator("[data-yunari-palette-picker]").click();
+  const field = page.locator("[data-yunari-palette-color]");
+  await field.fill(hex);
+  await field.press("Enter");
 }
 
 /**

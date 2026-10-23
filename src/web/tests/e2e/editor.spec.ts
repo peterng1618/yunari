@@ -42,6 +42,7 @@ import {
   INK_PAINT,
   PALETTE_FIELD_PAINT,
   PLATE_PAINT,
+  storedColour,
 } from "./editor-fixture.js";
 import { openPane } from "./editor-rail.js";
 import { openPosition, selectLayer } from "./rebuild-driver.js";
@@ -1009,6 +1010,9 @@ test.describe("Fabric editor route", () => {
     // Tokens pane's.
     await openPane(page, "Tokens");
     await page.getByRole("button", { name: "Add colour" }).click();
+    // The pane carries one trigger and no field of its own; the exact-value
+    // field is the picker's, portalled from the popover.
+    await page.locator("[data-yunari-palette-picker]").click();
     const field = page.locator("[data-yunari-palette-color]");
     // The reason is the control set's own editable-invalid channel now
     // (`vg-263`): the field carries `aria-invalid` and describes itself by the
@@ -1023,20 +1027,22 @@ test.describe("Fabric editor route", () => {
 
     // A value the engine rejects is refused with a message that names it, and
     // `ctx.fillStyle` would have kept the PREVIOUS colour — so accepting it
-    // writes a document the renderer cannot honour. The field falls back to the
-    // colour the document still holds; the reason sits beside it.
+    // writes a document the renderer cannot honour. The refused draft stays in
+    // the field so the author can repair it (the picker's own state owns that
+    // draft); the document still holds the accepted colour.
     await field.fill("not-a-colour");
     await field.press("Tab");
     await expect(field).toHaveAttribute("aria-invalid", "true");
     const describedBy = await field.getAttribute("aria-describedby");
     expect(describedBy).not.toBeNull();
     await expect(page.locator(`#${describedBy}`)).toHaveText(/not-a-colour/);
-    await expect(field).toHaveValue(PALETTE_FIELD_PAINT);
+    await expect(field).toHaveValue("not-a-colour");
 
-    // The refusal is not sticky: a value the engine can paint clears it.
+    // The refusal is not sticky: a value the engine can paint clears it, and
+    // the field reads back the hex form the picker commits (Review Focus 1).
     await field.fill("rgb(1, 2, 3)");
     await field.press("Tab");
-    await expect(field).toHaveValue("rgb(1, 2, 3)");
+    await expect(field).toHaveValue(storedColour("rgb(1 2 3)"));
     await expect(field).not.toHaveAttribute("aria-invalid", "true");
   });
 
@@ -2087,17 +2093,21 @@ test.describe("Fabric editor route", () => {
     // The palette panel is the Tokens pane's, so it is in the Tokens pane.
     await openPane(page, "Tokens");
     await chooseIn(page, "[data-yunari-palette-token]", "background");
+    // The exact-value field is the popover's, so the trigger opens it first.
+    await page.locator("[data-yunari-palette-picker]").click();
     const color = page.locator("[data-yunari-palette-color]");
     await color.fill("rgb(16 32 48)");
     await color.press("Tab");
-    await expect(color).toHaveValue("rgb(16 32 48)");
+    // The picker reports a colour, not the document's spelling of one: the
+    // stored value is the hex form (Review Focus 1).
+    await expect(color).toHaveValue(storedColour("rgb(16 32 48)"));
 
     const envelope = (await saveEnvelope(page)) as {
       globals: { palette: { background: { value: unknown } } };
     };
     expect(envelope.globals.palette.background.value).toEqual({
       kind: "solid",
-      color: "rgb(16 32 48)",
+      color: storedColour("rgb(16 32 48)"),
     });
 
     await captureVisualReview(page, testInfo, "editor-palette-solid");

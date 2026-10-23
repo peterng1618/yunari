@@ -780,7 +780,7 @@ describe("the selection inspector", () => {
     createSelectionInspector(host, {
       editor: {
         canvas,
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
         cropManager: idleCrop(),
       } as never,
@@ -1319,7 +1319,7 @@ describe("the column's sections", () => {
   it("is a plan a test can read as data, before anything renders", () => {
     const editor = {
       canvas: canvasWith(rect),
-      historyManager: { saveState: vi.fn() },
+      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       errorManager: { warn: vi.fn(), error: vi.fn() },
       cropManager: idleCrop(),
     };
@@ -1382,7 +1382,7 @@ describe("the column's sections", () => {
     const sections = perKindColumn(chart, {
       editor: {
         canvas: canvasWith(chart),
-        historyManager: { saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
         cropManager: idleCrop(),
       } as never,

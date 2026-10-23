@@ -78,7 +78,7 @@ function stageWith(object: Path, size = 80) {
         on: vi.fn(),
         off: vi.fn(),
       },
-      historyManager: { saveState: vi.fn() },
+      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       errorManager: { warn: vi.fn(), error: vi.fn() },
       cropManager: idleCrop(),
     } as never,

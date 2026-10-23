@@ -61,11 +61,10 @@ function sourceFiles(dir = SRC): readonly string[] {
 /**
  * A file's source with its comments blanked to spaces.
  *
- * A comment that *names* an `<input>` is not one, and four files do:
- * `colour-maths.ts` and `colour-picker.tsx` explain why they do not use
- * `<input type="color">`, `control-well.tsx` says a replaced element has no
- * `::before`, and `navigation.ts` describes the ones that reach it. A raw
- * search reads every one of those as a control.
+ * A comment that *names* an `<input>` is not one, and two files do:
+ * `control-well.tsx` says a replaced element has no `::before`, and
+ * `navigation.ts` describes the ones that reach it. A raw search reads every
+ * one of those as a control.
  */
 function withoutComments(source: string): string {
   return source
@@ -121,10 +120,6 @@ const BINDS_HOOK = /const\s+(\w+)\s*=\s*useDraftCommit\s*\(/;
  * surface this change does not own.
  */
 const EXEMPT: readonly (readonly [string, string])[] = [
-  [
-    "components/ui/colour-picker.tsx",
-    "the hex field commits on each parseable keystroke, so there is no draft to commit or cancel",
-  ],
   [
     "font-picker/font-picker.tsx",
     'a `type="search"` filter and a checkbox: neither holds an authored value',

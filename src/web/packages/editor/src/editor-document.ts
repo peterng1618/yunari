@@ -3,6 +3,7 @@ import {
   type Background,
   type Binding,
   bumpSemanticVersion,
+  type FabricGlobals,
   type FabricPalette,
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
@@ -191,6 +192,13 @@ export class EditorDocument {
       ...(source.onOpenTheme === undefined
         ? {}
         : { onOpenTheme: source.onOpenTheme }),
+    });
+    // Undo carries the palette as well as the scene. The shell captured its
+    // opening entry before this document existed, so attaching patches that
+    // entry with the globals the document opened with.
+    this.#shell.editor.historyManager.attachGlobals({
+      read: () => this.#envelope.globals,
+      write: (globals) => this.#restoreGlobals(globals),
     });
   }
 
@@ -562,6 +570,29 @@ export class EditorDocument {
     this.#consumers.selection().setGlobals(globals);
   }
 
+  /**
+   * Puts the globals an undo entry was recorded with back.
+   *
+   * No history save here: this is reached from the restore itself, and a save
+   * would append a second entry per press — the undo would record the state it
+   * just undid. Both Tokens consumers are re-rendered because the pane paints
+   * what it was last handed, not the envelope it cannot read — and a type
+   * preset edit is an undo entry too, so a palette undo can carry presets.
+   */
+  #restoreGlobals(globals: FabricGlobals | undefined): void {
+    if (globals === undefined) {
+      const { globals: _globals, ...withoutGlobals } = this.#envelope;
+      this.#writeEnvelope(withoutGlobals);
+    } else {
+      this.#writeEnvelope({ ...this.#envelope, globals });
+    }
+    this.#globalsChanged();
+    this.#consumers.palette().render(globals?.palette);
+    this.#consumers
+      .types()
+      .render(globals?.typePresets as TypePresets | undefined);
+  }
+
   setPalette(palette: FabricPalette): void {
     this.#writeEnvelope({
       ...this.#envelope,
@@ -594,6 +625,9 @@ export class EditorDocument {
     this.#globalsChanged();
     this.#shell.setBackground(background);
     this.#consumers.palette().render(palette);
+    // A deletion is a discrete globals commit with no gesture to settle behind
+    // it; without an entry of its own a later undo's globals restore reverts it.
+    this.#shell.editor.historyManager.saveState();
   }
 
   setTypes(typePresets: TypePresets): void {
@@ -603,6 +637,10 @@ export class EditorDocument {
     });
     this.#globalsChanged();
     this.#consumers.types().render(typePresets);
+    // Every type-preset field edit arrives here, and each is discrete: no drag
+    // publishes samples. Recording at the commit is what makes the edit its own
+    // undo step rather than something the next undo silently reverts.
+    this.#shell.editor.historyManager.saveState();
   }
 
   deleteType(id: string, replacement: string): void {
@@ -619,6 +657,7 @@ export class EditorDocument {
     });
     this.#globalsChanged();
     this.#consumers.types().render(typePresets);
+    this.#shell.editor.historyManager.saveState();
   }
 
   async applyFontTrio(id: string): Promise<FabricThemeEnvelope> {
@@ -634,7 +673,6 @@ export class EditorDocument {
       | TypePresets
       | undefined;
     if (presets !== undefined) this.setTypes(applyFontTrio(presets, trio));
-    this.#shell.editor.historyManager.saveState();
     return this.snapshot();
   }
 
@@ -661,7 +699,6 @@ export class EditorDocument {
         },
       },
     });
-    this.#shell.editor.historyManager.saveState();
     return this.snapshot();
   }
 

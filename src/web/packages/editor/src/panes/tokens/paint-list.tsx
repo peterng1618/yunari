@@ -3,13 +3,12 @@ import type {
   FabricPaletteEntry,
   PalettePaint,
 } from "@yunari/renderer-core";
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { ColourPicker } from "../../components/ui/colour-picker.js";
-import { ControlNumber } from "../../components/ui/control-number.js";
 import { ControlSelect } from "../../components/ui/control-select.js";
-import { ControlSlider } from "../../components/ui/control-slider.js";
 import { ControlText } from "../../components/ui/control-text.js";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
+import { gradientCss } from "../../components/ui/gradient-css.js";
 import { GradientEditor } from "../../components/ui/gradient-editor.js";
 import { newTokenPaint } from "../../new-fabric-theme-globals.js";
 import type { PaletteTokenUse } from "../../palette-manager/panel.js";
@@ -48,11 +47,16 @@ export interface PaintListProps {
     | (() => Readonly<Record<string, readonly PaletteTokenUse[]>>)
     | undefined;
   readonly onChange: (palette: FabricPalette) => void;
+  /** The settled boundary of one commit: a colour gesture's end, or a discrete
+   *  edit that has no gesture — the rename, the kind switch and the new token.
+   *  Without the latter they are unundoable, and a later undo's globals restore
+   *  silently reverts them. */
+  readonly onSettled?: (() => void) | undefined;
   readonly onDelete: ((id: string, replacement: string) => void) | undefined;
 }
 
 export function PaintList(props: PaintListProps): React.JSX.Element {
-  const { palette, usage, onChange, onDelete } = props;
+  const { palette, usage, onChange, onSettled, onDelete } = props;
   // Read once per draw, so the figure beside a token and the set a deletion
   // moves are one walk of one scene.
   const uses = usage?.();
@@ -81,6 +85,7 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
       },
     });
     setPicked(id);
+    onSettled?.();
   };
 
   return (
@@ -147,6 +152,7 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
           palette={palette}
           selected={selected}
           commit={commit}
+          onSettled={onSettled}
           onDelete={onDelete}
         />
       )}
@@ -174,9 +180,10 @@ function TokenFields(props: {
   readonly palette: FabricPalette;
   readonly selected: string;
   readonly commit: (entry: FabricPaletteEntry) => void;
+  readonly onSettled?: (() => void) | undefined;
   readonly onDelete: ((id: string, replacement: string) => void) | undefined;
 }): React.JSX.Element {
-  const { entry, palette, selected, commit, onDelete } = props;
+  const { entry, palette, selected, commit, onSettled, onDelete } = props;
   return (
     <div
       data-yunari-palette-fields=""
@@ -190,6 +197,7 @@ function TokenFields(props: {
           const trimmed = next.trim();
           if (trimmed === "") return;
           commit({ ...entry, name: trimmed });
+          onSettled?.();
         }}
       />
       <ControlSelect
@@ -204,12 +212,23 @@ function TokenFields(props: {
           const wanted = kind === "gradient" ? "gradient" : "solid";
           if (entry.value.kind === wanted) return;
           commit({ ...entry, value: seedPaint(entry.value) });
+          onSettled?.();
         }}
       />
       {entry.value.kind === "solid" ? (
-        <SolidFields entry={entry} value={entry.value} commit={commit} />
+        <SolidFields
+          entry={entry}
+          value={entry.value}
+          commit={commit}
+          onSettled={onSettled}
+        />
       ) : (
-        <GradientFields entry={entry} value={entry.value} commit={commit} />
+        <GradientFields
+          entry={entry}
+          value={entry.value}
+          commit={commit}
+          onSettled={onSettled}
+        />
       )}
       <DeletionControls
         palette={palette}
@@ -220,148 +239,56 @@ function TokenFields(props: {
   );
 }
 
-/** A solid token's colour: the field the author types in, the picker beside it,
- *  and the reason when the engine cannot paint what was typed. */
+/** A solid token's colour: one trigger, and the picker's own popover holding the
+ *  area, the channels, the one exact-value field and the presets.
+ *
+ * The pane used to carry a second field and a swatch beside the picker. Two
+ * controls for one value meant two draft states, two refusals and two routes to
+ * the same token. */
 function SolidFields(props: {
   readonly entry: FabricPaletteEntry;
   readonly value: Extract<PalettePaint, { readonly kind: "solid" }>;
   readonly commit: (entry: FabricPaletteEntry) => void;
+  readonly onSettled?: (() => void) | undefined;
 }): React.JSX.Element {
-  const { entry, value, commit } = props;
-  const [error, setError] = useState<string | undefined>(undefined);
+  const { entry, value, commit, onSettled } = props;
   const put = (color: string): void => {
-    setError(undefined);
     commit({ ...entry, value: { kind: "solid", color } });
   };
   return (
-    <>
-      <ControlText
-        label={uiCopy.panels.colour}
-        data={{ "data-yunari-palette-color": "" }}
-        value={value.color}
-        // The refusal is the control set's own editable-invalid channel, so the
-        // field carries `aria-invalid` and describes itself by the reason rather
-        // than the pane drawing a sibling `<p>` nothing was associated with
-        // (`vg-263`).
-        {...(error === undefined ? {} : { invalid: error })}
-        onCommit={(next) => {
-          const typed = next.trim();
-          if (typed === "") return;
-          // The browser is the authority on what a colour is, and it already
-          // ships the answer: `CSS.supports` asks the same engine that will
-          // paint it. A value it rejects is one where `ctx.fillStyle` keeps the
-          // PREVIOUS colour, so the edit would silently do nothing while the
-          // document carried the nonsense.
-          if (
-            typeof CSS !== "undefined" &&
-            CSS.supports?.("color", typed) === false
-          ) {
-            setError(uiCopy.panels.colourUnpaintable(typed));
-            return;
-          }
-          put(typed);
-        }}
-      />
-      {/* The swatch opens the picker. The field stays, because a value can be
-          typed exactly and a picker cannot always be dragged to it. */}
-      <div data-yunari-palette-picker="" className="flex items-center">
-        <ColourPicker
-          value={value.color}
-          label={uiCopy.panels.colourPicker}
-          onChange={put}
-        />
-      </div>
-    </>
+    <ColourPicker
+      label={uiCopy.panels.colour}
+      value={value.color}
+      onValueChange={put}
+      onValueCommit={(color) => {
+        put(color);
+        onSettled?.();
+      }}
+    />
   );
 }
 
-/** A gradient token: its angle, the visual editor, and the numeric fields beside
- *  it — a drag cannot land on 0.37 exactly. */
+/** A gradient token: the one visual editor, which owns its own angle and stop
+ *  wells, the track being both the preview and the manipulator. */
 function GradientFields(props: {
   readonly entry: FabricPaletteEntry;
   readonly value: Extract<PalettePaint, { readonly kind: "gradient" }>;
   readonly commit: (entry: FabricPaletteEntry) => void;
+  readonly onSettled?: (() => void) | undefined;
 }): React.JSX.Element {
-  const { entry, value, commit } = props;
-  /** One stop replaced, refused when the result stops ascending — the same
-   *  monotonicity rule the imperative fields applied before either commit. */
-  const update = (
-    index: number,
-    next: { readonly offset: number; readonly color: string },
-  ): void => {
-    const stops = value.stops.map((stop, at) => (at === index ? next : stop));
-    if (stops.some((stop, at) => at > 0 && stop.offset < stops[at - 1]!.offset))
-      return;
-    commit({ ...entry, value: { ...value, stops } });
-  };
-  const last = value.stops.at(-1);
+  const { entry, value, commit, onSettled } = props;
   return (
-    <>
-      <ControlNumber
-        label={uiCopy.panels.angle}
-        data={{ "data-yunari-palette-angle": "" }}
-        value={value.angle}
-        onCommit={(angle) => {
-          if (!Number.isFinite(angle)) return;
-          commit({ ...entry, value: { ...value, angle } });
+    <div data-yunari-palette-gradient="" className="w-full">
+      <GradientEditor
+        stops={value.stops}
+        angle={value.angle}
+        label={uiCopy.panels.gradient}
+        onCommit={onSettled}
+        onChange={({ stops, angle }) => {
+          commit({ ...entry, value: { ...value, stops, angle } });
         }}
       />
-      <div data-yunari-palette-gradient="" className="w-full">
-        <GradientEditor
-          stops={value.stops}
-          angle={value.angle}
-          label={uiCopy.panels.gradient}
-          onChange={({ stops, angle }) => {
-            commit({ ...entry, value: { ...value, stops, angle } });
-          }}
-        />
-      </div>
-      {value.stops.map((stop, index) => (
-        <Fragment key={index}>
-          {/* A bounded number, so DESIGN.md §5's vocabulary gives it a track
-              (`vg-493`). The step is the offset's own: 0 and 1 are the two ends
-              of a fraction, and the control set's default step of 1 would leave
-              the track holding nothing between them. */}
-          <ControlSlider
-            label={uiCopy.panels.stopPosition(index + 1)}
-            data={{ "data-yunari-palette-stop-offset": "" }}
-            value={stop.offset}
-            min={0}
-            max={1}
-            step={0.01}
-            onCommit={(offset) => update(index, { offset, color: stop.color })}
-          />
-          <ControlText
-            label={uiCopy.panels.stopColour(index + 1)}
-            data={{ "data-yunari-palette-stop-color": "" }}
-            value={stop.color}
-            onCommit={(color) => {
-              const typed = color.trim();
-              if (typed === "") return;
-              update(index, { offset: stop.offset, color: typed });
-            }}
-          />
-        </Fragment>
-      ))}
-      {last === undefined ? null : (
-        <button
-          type="button"
-          data-yunari-palette-add-stop=""
-          className={plainButtonClasses}
-          onClick={() => {
-            commit({
-              ...entry,
-              value: {
-                ...value,
-                stops: [...value.stops, { offset: 1, color: last.color }],
-              },
-            });
-          }}
-        >
-          {uiCopy.panels.addStop}
-        </button>
-      )}
-    </>
+    </div>
   );
 }
 
@@ -421,11 +348,7 @@ function figureFor(
  *  describes — the same `GradientEditor` draws on its own track. */
 function paintCss(value: PalettePaint): string {
   if (value.kind === "solid") return value.color;
-  const stops = [...value.stops]
-    .sort((a, b) => a.offset - b.offset)
-    .map((stop) => `${stop.color} ${Math.round(stop.offset * 100)}%`)
-    .join(", ");
-  return `linear-gradient(${90 - value.angle}deg, ${stops})`;
+  return gradientCss(value.stops, value.angle);
 }
 
 /**

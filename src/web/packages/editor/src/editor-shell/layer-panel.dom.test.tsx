@@ -1254,7 +1254,7 @@ it("restacks the document when a row is dropped on another", async () => {
     editor: {
       canvas,
       groupingManager: { groupContext: () => [] },
-      historyManager: { saveState: vi.fn() },
+      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
     },
     // The bridge subscribes to the session's document change so a rename
     // reaches the snapshot; this test drives neither, so the stub only has to
@@ -1328,7 +1328,7 @@ it("moves a row into a group and back out, and the panel shows where it landed",
     editor: {
       canvas,
       groupingManager: { groupContext: () => [] },
-      historyManager: { saveState: vi.fn() },
+      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
     },
     session: { subscribeDocumentChange: () => () => undefined } as never,
     capture: () => undefined,
@@ -1924,7 +1924,7 @@ it("makes a group's parts reachable once its control has entered it", async () =
         save: () => undefined,
         suspend: () => () => undefined,
       }),
-      historyManager: { saveState: () => undefined },
+      historyManager: { attachGlobals: () => {}, saveState: () => undefined },
     },
     // The bridge subscribes to the session's document change so a rename
     // reaches the snapshot; this test drives neither, so the stub only has to

@@ -26,16 +26,25 @@ const PANELS = ["Theme settings", "Palette", "Type presets"];
 
 /** The Tokens pane's controls, in the states that render them all. */
 const TOKENS_CONTROLS = [
-  // Palette
+  // Palette. A solid token's one colour control is the picker's trigger in its
+  // §5 well; the exact-value field is inside the picker's popover, which the
+  // audit does not open — the trigger is what an author meets first.
   "[data-yunari-palette-token]",
   "[data-yunari-palette-name]",
   "[data-yunari-palette-kind]",
-  "[data-yunari-palette-color]",
-  "[data-yunari-palette-angle]",
-  "[data-yunari-palette-stop-offset]",
-  "[data-yunari-palette-stop-color]",
+  "[data-yunari-palette-picker]",
   "[data-yunari-palette-replacement]",
   "[data-yunari-palette-delete]",
+  // The gradient branch: one track that is the preview and the manipulator,
+  // its two stop marks, the add/remove pair, the selected stop's two wells and
+  // the angle. The setup opens this branch because it renders controls a solid
+  // token does not.
+  '[data-testid="gradient-track"]',
+  '[data-testid^="gradient-stop-"]',
+  '[data-testid="gradient-add"]',
+  '[data-testid="gradient-remove"]',
+  '[data-testid="gradient-offset"]',
+  '[data-testid="gradient-angle"]',
   // Type presets
   "[data-yunari-type-preset]",
   "[data-yunari-type-name]",
@@ -143,6 +152,9 @@ test.describe("the settings panels name every control", () => {
     // so the audit has to open the same branches an author opens. A token with
     // other tokens to reassign to is what puts the delete row on screen.
     await chooseIn(page, "[data-yunari-palette-token]", "cpu");
+    // The gradient branch renders the track, its marks and its two wells, which
+    // a solid token does not, so the audit opens the branch an author opens.
+    await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
     // The preset chooser is a plan-1 select too, so it is opened and chosen the
     // way the palette's is rather than by `selectOption`.
     await chooseIn(page, "[data-yunari-type-preset]", "20-500");

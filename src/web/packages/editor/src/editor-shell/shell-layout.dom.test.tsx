@@ -1247,7 +1247,7 @@ it("has no Insert menu, and every insertable group is still reachable from the A
         requestRenderAll: vi.fn(),
       },
       textManager: { addText: vi.fn() },
-      historyManager: { saveState: vi.fn() },
+      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       errorManager: { warn: vi.fn(), error: vi.fn() },
     } as never,
     undefined,

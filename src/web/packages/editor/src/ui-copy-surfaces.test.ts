@@ -748,8 +748,9 @@ async function mountLandedSurfaces(): Promise<{
     pickerRoot.render(
       createElement(ColourPicker, {
         value: "#123456",
-        onChange: () => undefined,
-        label: uiCopy.panels.colourPicker,
+        onValueChange: () => undefined,
+        onValueCommit: () => undefined,
+        label: uiCopy.panels.colour,
       }),
     );
   });
@@ -779,7 +780,7 @@ async function mountLandedSurfaces(): Promise<{
     createSelectionInspector(host, {
       editor: {
         canvas,
-        historyManager: { saveState: () => undefined },
+        historyManager: { attachGlobals: () => {}, saveState: () => undefined },
         errorManager: { warn: () => undefined, error: () => undefined },
         cropManager: { active: false, target: undefined },
       } as never,

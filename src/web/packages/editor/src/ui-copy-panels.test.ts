@@ -152,6 +152,15 @@ it("leaves the three panels with no copy of their own", async () => {
   const owned = new Set(copy());
   const spoken = [
     ...Array.from(root.querySelectorAll("label"), (label) => label.textContent),
+    // The gradient editor's stop marks are `role="slider"` divs, not labels or
+    // buttons, so the word in their accessible name reaches this net only
+    // through the stop's own attribute. Task 5's review found it outside every
+    // net while the old editor composed it; this is that route, and the name
+    // itself is `uiCopy`'s.
+    ...Array.from(
+      root.querySelectorAll<HTMLElement>('[data-testid^="gradient-stop-"]'),
+      (stop) => stop.getAttribute("aria-label"),
+    ),
     // Two kinds of button are excluded, both because their text is data. A token
     // well prints the document's own token name and usage figure; a select's
     // trigger prints the chosen value, which on every panel here is a token's

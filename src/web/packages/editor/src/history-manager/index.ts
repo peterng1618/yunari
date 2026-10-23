@@ -1,7 +1,21 @@
+import type { FabricGlobals } from "@yunari/renderer-core";
 import { type SerialisedScene, targetsOf } from "@yunari/scene-fabric";
 import { ActiveSelection, type Canvas, type FabricObject } from "fabric/es";
 
 type HistoryCanvas = Canvas;
+
+/** The envelope's half of undo state. The scene is the canvas's; the palette
+ *  and type presets are the document's, so history asks its host for them
+ *  rather than reaching into an envelope it does not own. */
+export interface HistoryGlobalsPort {
+  readonly read: () => FabricGlobals | undefined;
+  readonly write: (globals: FabricGlobals | undefined) => void;
+}
+
+interface HistoryEntry {
+  readonly scene: SerialisedScene;
+  readonly globals: FabricGlobals | undefined;
+}
 
 /** Owns authored Fabric-scene undo state. The selection is not undo state, but
  *  a revive replaces every object the selection held, so carrying it across is
@@ -13,10 +27,11 @@ export class EditorHistory {
     canvas: HistoryCanvas,
     scene: SerialisedScene,
   ) => Promise<void>;
-  #entries: SerialisedScene[] = [];
+  #entries: HistoryEntry[] = [];
   #index = -1;
   #suspended = 0;
   #restoring: Promise<void> = Promise.resolve();
+  #port: HistoryGlobalsPort | undefined;
 
   constructor(options: {
     readonly canvas: HistoryCanvas;
@@ -36,8 +51,19 @@ export class EditorHistory {
   }
 
   reset(): void {
-    this.#entries = [this.#serialize(this.#canvas)];
+    this.#entries = [this.#capture(this.#serialize(this.#canvas))];
     this.#index = 0;
+  }
+
+  /** Tells history where an entry's envelope half comes from. The shell resets
+   *  while creating the editor, before the document exists, so this arrives
+   *  after `reset()` and patches the entry it could not capture. Undoing to
+   *  entry 0 must restore the palette the author started with, not delete it. */
+  attachGlobals(port: HistoryGlobalsPort): void {
+    this.#port = port;
+    const entry = this.#entries[this.#index];
+    if (entry === undefined) return;
+    this.#entries[this.#index] = { ...entry, globals: port.read() };
   }
 
   /** Interactive sessions mutate the canvas before the user commits. */
@@ -53,10 +79,10 @@ export class EditorHistory {
 
   save(): void {
     if (this.#suspended > 0) return;
-    const scene = this.#serialize(this.#canvas);
-    if (sameScene(scene, this.#entries[this.#index])) return;
+    const entry = this.#capture(this.#serialize(this.#canvas));
+    if (sameEntry(entry, this.#entries[this.#index])) return;
     this.#entries.splice(this.#index + 1);
-    this.#entries.push(scene);
+    this.#entries.push(entry);
     this.#index += 1;
     // A recorded entry is the one signal that an edit landed, so it is where a
     // reason the author was given goes stale. A refused edit records nothing
@@ -89,13 +115,21 @@ export class EditorHistory {
     return next;
   }
 
+  /** `scene` and `globals` captured together, so one entry is one authored
+   *  state: the palette alone can change while no Fabric object moves. */
+  #capture(scene: SerialisedScene): HistoryEntry {
+    return { scene, globals: this.#port?.read() };
+  }
+
   async #restore(index: number): Promise<void> {
-    const scene = this.#entries[index];
-    if (scene === undefined) return;
+    const entry = this.#entries[index];
+    if (entry === undefined) return;
     const selected = selectedIds(this.#canvas);
     this.#suspended += 1;
     try {
-      await this.#revive(this.#canvas, scene);
+      await this.#revive(this.#canvas, entry.scene);
+      // After the revive: the scene is what the globals were authored against.
+      this.#port?.write(entry.globals);
       reselect(this.#canvas, selected);
       this.#index = index;
       this.#canvas.fire("editor:history-state-loaded" as never);
@@ -151,9 +185,9 @@ function reselect(canvas: HistoryCanvas, ids: readonly string[]): void {
     canvas.setActiveObject(new ActiveSelection(many, { canvas }));
 }
 
-function sameScene(
-  left: SerialisedScene,
-  right: SerialisedScene | undefined,
+function sameEntry(
+  left: HistoryEntry,
+  right: HistoryEntry | undefined,
 ): boolean {
   return right !== undefined && JSON.stringify(left) === JSON.stringify(right);
 }

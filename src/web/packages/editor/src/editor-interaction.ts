@@ -4,6 +4,7 @@ import type { CropManager } from "./crop-manager/index.js";
 import type { DeletionManager } from "./deletion-manager/index.js";
 import type { ErrorManager } from "./error-manager/index.js";
 import type { GroupingManager } from "./grouping-manager/index.js";
+import type { HistoryGlobalsPort } from "./history-manager/index.js";
 import type { ViewportManager } from "./viewport-manager/index.js";
 
 /** Product panels depend only on the editor mechanics they exercise. */
@@ -58,6 +59,9 @@ export interface EditorInteraction {
     destroy(): void;
   };
   readonly historyManager: {
+    /** Where an entry's palette comes from and goes back to; the document owns
+     *  the envelope, so history is handed it rather than importing it. */
+    attachGlobals(port: HistoryGlobalsPort): void;
     saveState(): void;
     resetHistory(): void;
     undo(): Promise<void>;
