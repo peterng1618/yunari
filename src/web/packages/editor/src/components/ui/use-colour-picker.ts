@@ -81,15 +81,18 @@ export function useColourPicker(options: ColourPickerOptions): ColourPickerApi {
   // Handlers read and write through this mirror, so two moves inside one event
   // cannot both read the same stale render's state.
   const stateRef = useRef(state);
-  // `commit()` must settle on what was last emitted, not on a render's snapshot.
-  const latest = useRef(state.text);
+  // `commit()` must settle on what was last *emitted*, never on a refused draft.
+  const latest = useRef<string | undefined>(
+    state.invalid ? undefined : state.text,
+  );
 
   let current = state;
   if (current.authored !== value) {
-    // A refusal is the person's draft: an outside write must not replace it.
+    // A refusal is the person's draft: an outside write must not replace it —
+    // and it leaves `latest` alone, so no settle can emit the refused text.
     current = current.invalid ? { ...current, authored: value } : derive(value);
     stateRef.current = current;
-    latest.current = current.text;
+    if (!current.invalid) latest.current = current.text;
     setState(current);
   }
 
@@ -136,12 +139,14 @@ export function useColourPicker(options: ColourPickerOptions): ColourPickerApi {
   };
 
   const commit = (): void => {
+    // Nothing emitted yet, or a draft is being refused: there is nothing to settle.
+    if (latest.current === undefined || stateRef.current.invalid) return;
     onValueCommit(latest.current);
   };
 
   const reset = (): void => {
     const next = derive(stateRef.current.authored);
-    latest.current = next.text;
+    latest.current = next.invalid ? undefined : next.text;
     apply(next);
   };
 

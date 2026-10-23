@@ -157,6 +157,23 @@ it("keeps a rejected draft as the field's value and calls neither callback", asy
   await picker.close();
 });
 
+it("settles nothing when an outside write lands during a refusal", async () => {
+  const picker = await mount("rgb(255 0 0)");
+  await picker.commitText("nope");
+
+  // A publication lands mid-edit and must not replace the draft — nor may the
+  // refused text leak into `latest`, where a settled commit could emit it.
+  await picker.rerender("rgb(16 32 48)");
+  expect(picker.text()).toBe("nope");
+
+  await picker.click("commit");
+
+  expect(picker.change).not.toHaveBeenCalled();
+  expect(picker.settled).not.toHaveBeenCalled();
+
+  await picker.close();
+});
+
 it("parses a multi-format value, emitting it both live and settled", async () => {
   const picker = await mount("rgb(255 0 0)");
 
