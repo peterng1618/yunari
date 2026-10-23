@@ -793,4 +793,327 @@ describe("LHM motherboard and cooler mapping", () => {
       ),
     ).toMatchObject({ label: "CMOS Battery", unit: "V" });
   });
+
+  it("advertises a Control's percent key even when its reading is unreadable", async () => {
+    // The captured board controls arrive as " %" (unit only, no number). The
+    // Control type documents a percentage, so the key is listed; the sample is
+    // a gap, never an invented zero.
+    const provider = providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    });
+
+    const keys = (await provider.describe()).map(
+      (descriptor) => descriptor.semanticKey,
+    );
+    expect(keys).toContain("motherboard.fan.fan-1.percent");
+
+    const entries = await provider.sample(["motherboard.fan.fan-1.percent"], 0);
+    expect(entries[0]?.sample).toMatchObject({ status: "missing" });
+    expect(entries[0]?.sample).not.toHaveProperty("value");
+  });
+
+  it("reads a value reported with a leading space before its unit", () => {
+    const sensors = flattenLhmSensors({
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [
+            {
+              Text: "ITE IT8689E",
+              HardwareId: "/lpc/it8689e/0",
+              Children: [
+                {
+                  Text: "Controls",
+                  Children: [
+                    {
+                      Text: "Fan #1",
+                      SensorId: "a",
+                      Type: "Control",
+                      RawValue: " 45.0 %",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      valuesOf(sensors, ["motherboard.fan.fan-1.percent"]).get(
+        "motherboard.fan.fan-1.percent",
+      ),
+    ).toBe(45);
+  });
+
+  it("does not read a board-vendor GPU or SSD as the motherboard", () => {
+    const vendor = flattenLhmSensors({
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [
+            {
+              Text: "Gigabyte GeForce RTX 4070",
+              HardwareId: "/gpu-nvidia/0",
+              Children: [
+                {
+                  Text: "Temperatures",
+                  Children: [
+                    {
+                      Text: "GPU Core",
+                      SensorId: "a",
+                      Type: "Temperature",
+                      RawValue: "50.0 °C",
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              Text: "AORUS NVMe SSD",
+              HardwareId: "/nvme/9",
+              Children: [
+                {
+                  Text: "Data",
+                  Children: [
+                    {
+                      Text: "Total Space",
+                      SensorId: "b",
+                      Type: "Data",
+                      RawValue: "100.0 GB",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const values = valuesOf(vendor, ["gpu.temp", "disk.total"]);
+    expect(values.get("gpu.temp")).toBe(50);
+    expect(values.get("disk.total")).toBe(100);
+    expect(matchLhmSensors(vendor, ["motherboard.temp"])).toEqual([]);
+  });
+});
+
+// The two payloads below are LHM-shape fixtures, not hardware captures: they
+// use the hardware paths and sensor names LHM's CorsairPsu/Battery classes
+// create (see Hardware/Psu/Corsair/CorsairPsu.cs, Hardware/Battery/Battery.cs),
+// because no capture with a PSU or battery was available.
+const PSU_SHAPE = {
+  Children: [
+    {
+      Text: "Sensor",
+      Children: [
+        {
+          Text: "Corsair HX1000i",
+          HardwareId: "/psu/corsair/0",
+          Children: [
+            {
+              Text: "Powers",
+              Children: [
+                {
+                  Text: "+12V",
+                  SensorId: "/psu/corsair/0/power/0",
+                  Type: "Power",
+                  RawValue: "300.0 W",
+                },
+                {
+                  Text: "Total watts",
+                  SensorId: "/psu/corsair/0/power/1",
+                  Type: "Power",
+                  RawValue: "420.0 W",
+                },
+              ],
+            },
+            {
+              Text: "Temperatures",
+              Children: [
+                {
+                  Text: "VRM",
+                  SensorId: "/psu/corsair/0/temperature/0",
+                  Type: "Temperature",
+                  RawValue: "45.0 °C",
+                },
+                {
+                  Text: "Case",
+                  SensorId: "/psu/corsair/0/temperature/1",
+                  Type: "Temperature",
+                  RawValue: "38.0 °C",
+                },
+              ],
+            },
+            {
+              Text: "Fans",
+              Children: [
+                {
+                  Text: "Case",
+                  SensorId: "/psu/corsair/0/fan/0",
+                  Type: "Fan",
+                  RawValue: "900 RPM",
+                },
+              ],
+            },
+            {
+              Text: "Voltages",
+              Children: [
+                {
+                  Text: "Input",
+                  SensorId: "/psu/corsair/0/voltage/0",
+                  Type: "Voltage",
+                  RawValue: "230.0 V",
+                },
+                {
+                  Text: "+12V",
+                  SensorId: "/psu/corsair/0/voltage/1",
+                  Type: "Voltage",
+                  RawValue: "12.1 V",
+                },
+                {
+                  Text: "+3.3V",
+                  SensorId: "/psu/corsair/0/voltage/2",
+                  Type: "Voltage",
+                  RawValue: "3.3 V",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const BATTERY_SHAPE = {
+  Children: [
+    {
+      Text: "Sensor",
+      Children: [
+        {
+          Text: "DELL 97WH",
+          HardwareId: "/battery/DELL-97WH_123",
+          Children: [
+            {
+              Text: "Level",
+              Children: [
+                {
+                  Text: "Charge Level",
+                  SensorId: "/battery/DELL-97WH_123/level/0",
+                  Type: "Level",
+                  RawValue: "76.0 %",
+                },
+                {
+                  Text: "Degradation Level",
+                  SensorId: "/battery/DELL-97WH_123/level/1",
+                  Type: "Level",
+                  RawValue: "4.0 %",
+                },
+              ],
+            },
+            {
+              Text: "Voltages",
+              Children: [
+                {
+                  Text: "Voltage",
+                  SensorId: "/battery/DELL-97WH_123/voltage/0",
+                  Type: "Voltage",
+                  RawValue: "12.4 V",
+                },
+              ],
+            },
+            {
+              Text: "Powers",
+              Children: [
+                {
+                  Text: "Charge/Discharge Rate",
+                  SensorId: "/battery/DELL-97WH_123/power/0",
+                  Type: "Power",
+                  RawValue: "30.0 W",
+                },
+              ],
+            },
+            {
+              Text: "Time",
+              Children: [
+                {
+                  Text: "Remaining Time (Estimated)",
+                  SensorId: "/battery/DELL-97WH_123/timespan/0",
+                  Type: "TimeSpan",
+                  RawValue: "5400 s",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+describe("LHM PSU and battery (structural fixtures)", () => {
+  it("maps a PSU from its documented hardware path and sensor types", () => {
+    const values = valuesOf(flattenLhmSensors(PSU_SHAPE), [
+      "psu.power",
+      "psu.temp",
+      "psu.fan",
+      "psu.voltage.input",
+      "psu.voltage.12v",
+      "psu.voltage.3-3v",
+    ]);
+
+    // The total, not the +12V rail alone.
+    expect(values.get("psu.power")).toBe(420);
+    // The hottest of the two documented temperature sensors.
+    expect(values.get("psu.temp")).toBe(45);
+    expect(values.get("psu.fan")).toBe(900);
+    expect(values.get("psu.voltage.input")).toBe(230);
+    expect(values.get("psu.voltage.12v")).toBe(12.1);
+    expect(values.get("psu.voltage.3-3v")).toBe(3.3);
+  });
+
+  it("maps a battery from its documented hardware path and sensor types", () => {
+    const sensors = flattenLhmSensors(BATTERY_SHAPE);
+    const values = valuesOf(sensors, [
+      "battery.level",
+      "battery.voltage",
+      "battery.rate",
+      "battery.timeRemaining",
+    ]);
+
+    // Charge Level, not the Degradation Level sensor that shares its type.
+    expect(values.get("battery.level")).toBe(76);
+    expect(values.get("battery.voltage")).toBe(12.4);
+    expect(values.get("battery.rate")).toBe(30);
+    expect(values.get("battery.timeRemaining")).toBe(5400);
+    // LHM reports no AC state, so nothing is derived for these keys.
+    expect(
+      matchLhmSensors(sensors, ["battery.ac", "battery.charging"]),
+    ).toEqual([]);
+  });
+
+  it("advertises PSU and battery keys from the structural shapes", async () => {
+    const descriptors = await providerReturning({
+      ok: true,
+      status: 200,
+      body: {
+        Children: [...PSU_SHAPE.Children, ...BATTERY_SHAPE.Children],
+      },
+    }).describe();
+    const keys = descriptors.map((descriptor) => descriptor.semanticKey);
+
+    expect(keys).toContain("psu.power");
+    expect(keys).toContain("psu.voltage.12v");
+    expect(keys).toContain("battery.level");
+    expect(keys).toContain("battery.timeRemaining");
+    expect(
+      descriptors.find(
+        (descriptor) => descriptor.semanticKey === "psu.voltage.12v",
+      ),
+    ).toMatchObject({ label: "+12V", unit: "V" });
+  });
 });

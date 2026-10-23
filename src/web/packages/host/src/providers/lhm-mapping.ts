@@ -22,16 +22,19 @@ type LhmSensorType =
   | "Level"
   | "Voltage"
   | "Current"
-  | "Control";
+  | "Control"
+  | "TimeSpan";
 
-/** Which hardware node a binding applies to, matched against its name. */
+/** Which hardware node a binding applies to, matched against its identity. */
 type HardwareGroup =
   | "cpu"
   | "cooling"
   | "gpu"
   | "storage"
   | "network"
-  | "motherboard";
+  | "motherboard"
+  | "psu"
+  | "battery";
 
 interface LhmBinding {
   readonly semanticKey: string;
@@ -57,7 +60,20 @@ const STORAGE_PATTERN =
   /ssd|hdd|nvme|disk|wdc|wd\d|\bst\d|ct\d|micron|samsung|lexar|seagate|kingston|toshiba|crucial|sandisk|intel ssd/i;
 const NETWORK_PATTERN = /ethernet|wi-?fi|wireless|network|802\.11/i;
 
-function groupOf(hardwareName: string): HardwareGroup | undefined {
+/** LHM's hardware path root names the hardware type: `Identifier("psu", …)`
+ * becomes `/psu/…` and `Identifier("battery", …)` becomes `/battery/…`. Those
+ * roots are the documented type; the node's text is the product name. */
+const PSU_ID = /^\/psu(\/|$)/;
+const BATTERY_ID = /^\/battery(\/|$)/;
+
+function groupOf(
+  hardwareName: string,
+  hardwareId: string,
+): HardwareGroup | undefined {
+  // PSU and battery come first: their node text is a product name ("Corsair
+  // HX1000i", "DELL 97WH"), so only the path root identifies the type.
+  if (PSU_ID.test(hardwareId)) return "psu";
+  if (BATTERY_ID.test(hardwareId)) return "battery";
   // Order matters. Network first (a "Bluetooth Network Connection" is a link),
   // then the specific device kinds before the board: a board-vendor GPU or SSD
   // ("Gigabyte GeForce", "AORUS NVMe") must keep its own group, a GPU named
@@ -176,6 +192,53 @@ const BINDINGS: readonly LhmBinding[] = [
     group: "cooling",
     type: "Temperature",
     anyText: ["Liquid"],
+  },
+
+  // PSU and battery. The hardware type comes from the path root above; the
+  // sensor names are the ones LHM's `CorsairPsu` and `Battery` classes create
+  // (LibreHardwareMonitorLib/Hardware/Psu/Corsair/CorsairPsu.cs and
+  // Hardware/Battery/Battery.cs), not names invented for this fixture.
+  {
+    semanticKey: "psu.power",
+    group: "psu",
+    type: "Power",
+    anyText: ["Total watts", "Total Output"],
+  },
+  {
+    semanticKey: "psu.temp",
+    group: "psu",
+    type: "Temperature",
+    anyText: ["VRM", "Case"],
+  },
+  {
+    semanticKey: "psu.fan",
+    group: "psu",
+    type: "Fan",
+    anyText: ["Case"],
+  },
+  {
+    semanticKey: "battery.level",
+    group: "battery",
+    type: "Level",
+    anyText: ["Charge Level"],
+  },
+  {
+    semanticKey: "battery.voltage",
+    group: "battery",
+    type: "Voltage",
+    anyText: ["Voltage"],
+  },
+  {
+    semanticKey: "battery.rate",
+    group: "battery",
+    type: "Power",
+    anyText: ["Charge/Discharge Rate"],
+  },
+  {
+    semanticKey: "battery.timeRemaining",
+    group: "battery",
+    type: "TimeSpan",
+    anyText: ["Remaining Time (Estimated)"],
   },
 
   // GPU
@@ -399,6 +462,14 @@ const DYNAMIC_BINDINGS: readonly LhmDynamicBinding[] = [
     key: (_match, sensor) => `cooling.fan.${semanticId(sensor.text)}.percent`,
     label: (sensor) => sensor.text,
   },
+  // A PSU's rails each carry their own id: `Input`, `+12V`, `+5V`, `+3.3V`.
+  {
+    group: "psu",
+    type: "Voltage",
+    pattern: /^.+$/,
+    key: (_match, sensor) => `psu.voltage.${semanticId(sensor.text)}`,
+    label: (sensor) => sensor.text,
+  },
 ];
 
 /** Dynamic keys this provider owns by shape, discovered per machine. */
@@ -411,6 +482,7 @@ const MOTHERBOARD_FAN_KEY = new RegExp(
 const MOTHERBOARD_VOLTAGE_KEY = new RegExp(`^motherboard\\.voltage\\.${SLUG}$`);
 const COOLING_FAN_KEY = new RegExp(`^cooling\\.fan\\.${SLUG}\\.(rpm|percent)$`);
 const COOLING_PUMP_KEY = new RegExp(`^cooling\\.pump\\.${SLUG}\\.rpm$`);
+const PSU_VOLTAGE_KEY = new RegExp(`^psu\\.voltage\\.${SLUG}$`);
 
 export function isLhmDynamicKey(key: string): boolean {
   return (
@@ -419,7 +491,8 @@ export function isLhmDynamicKey(key: string): boolean {
     MOTHERBOARD_FAN_KEY.test(key) ||
     MOTHERBOARD_VOLTAGE_KEY.test(key) ||
     COOLING_FAN_KEY.test(key) ||
-    COOLING_PUMP_KEY.test(key)
+    COOLING_PUMP_KEY.test(key) ||
+    PSU_VOLTAGE_KEY.test(key)
   );
 }
 
@@ -433,6 +506,10 @@ export interface LhmDynamicReading {
  * Every dynamic key these sensors can answer, requested or not. The provider
  * advertises these so an editor can list per-core, per-fan and per-rail readings
  * exactly like built-ins.
+ *
+ * A Control sensor stays discoverable when LHM reports no number for it: the
+ * captured board controls arrive as `" %"` (unit only), and the type documents
+ * a percentage. Its sample is still a gap — the key exists, the value does not.
  */
 export function dynamicKeyReadings(
   sensors: readonly LhmSensor[],
@@ -442,9 +519,9 @@ export function dynamicKeyReadings(
   for (const binding of DYNAMIC_BINDINGS) {
     for (const sensor of sensors) {
       if (
-        sensor.value === undefined ||
+        (sensor.value === undefined && sensor.type !== "Control") ||
         sensor.type !== binding.type ||
-        groupOf(sensor.hardwareType) !== binding.group
+        groupOf(sensor.hardwareType, sensor.hardwareId) !== binding.group
       ) {
         continue;
       }
@@ -481,7 +558,7 @@ function scaleFor(binding: LhmBinding, value: number): number {
 function matches(binding: LhmBinding, sensor: LhmSensor): boolean {
   return (
     sensor.type === binding.type &&
-    groupOf(sensor.hardwareType) === binding.group &&
+    groupOf(sensor.hardwareType, sensor.hardwareId) === binding.group &&
     binding.anyText.includes(sensor.text)
   );
 }
@@ -504,7 +581,7 @@ function sumNamed(
   for (const sensor of sensors) {
     if (
       sensor.value === undefined ||
-      groupOf(sensor.hardwareType) !== group ||
+      groupOf(sensor.hardwareType, sensor.hardwareId) !== group ||
       !names.includes(sensor.text)
     ) {
       continue;
@@ -545,7 +622,7 @@ export function gpuDeviceReadings(
   const seen = new Map<string, string>();
 
   for (const sensor of sensors) {
-    if (groupOf(sensor.hardwareType) === "gpu") {
+    if (groupOf(sensor.hardwareType, sensor.hardwareId) === "gpu") {
       seen.set(sensor.hardwareId, sensor.hardwareType);
     }
   }
@@ -575,7 +652,7 @@ export function diskDeviceReadings(
   const names = new Map<string, string>();
 
   for (const sensor of sensors) {
-    if (groupOf(sensor.hardwareType) === "storage") {
+    if (groupOf(sensor.hardwareType, sensor.hardwareId) === "storage") {
       names.set(sensor.hardwareId, sensor.hardwareType);
     }
   }
@@ -685,7 +762,7 @@ export function matchLhmSensors(
       if (
         reading === undefined ||
         sensor.type !== binding.type ||
-        groupOf(sensor.hardwareType) !== binding.group
+        groupOf(sensor.hardwareType, sensor.hardwareId) !== binding.group
       ) {
         continue;
       }
@@ -819,7 +896,7 @@ function nodeFor(
   const seen = new Map<string, string>();
 
   for (const sensor of sensors) {
-    if (groupOf(sensor.hardwareType) === group) {
+    if (groupOf(sensor.hardwareType, sensor.hardwareId) === group) {
       seen.set(sensor.hardwareId, semanticId(sensor.hardwareType));
     }
   }
@@ -860,7 +937,7 @@ export function lhmDeviceName(
 
   for (const sensor of sensors) {
     if (
-      groupOf(sensor.hardwareType) === group &&
+      groupOf(sensor.hardwareType, sensor.hardwareId) === group &&
       semanticId(sensor.hardwareType) === deviceId
     ) {
       return sensor.hardwareType;
@@ -892,7 +969,7 @@ export function matchLhmSensorsAssigned(
     !gpuWanted && !diskWanted
       ? sensors
       : sensors.filter((sensor) => {
-          const group = groupOf(sensor.hardwareType);
+          const group = groupOf(sensor.hardwareType, sensor.hardwareId);
           const id = semanticId(sensor.hardwareType);
 
           // Keep everything that is not one of the selected groups.
