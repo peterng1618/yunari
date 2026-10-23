@@ -8132,6 +8132,123 @@ describe("Weather settings routes", () => {
     }
   });
 
+  it("redacts a read error's path from the network-visible health answer", async () => {
+    const weather = createWeatherSettingsStore(settingsDir);
+    const leaking = {
+      ...weather,
+      problem: () =>
+        "EACCES: permission denied, open 'C:\\Users\\peter\\secret\\weather.json'",
+    };
+    const running = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: settingsDir, editor: settingsDir },
+      weather: leaking,
+    });
+    hosted = running;
+
+    const answer = await request(running.server, "GET", "/api/health");
+    const reason = String(
+      (answer.json() as { readonly weather?: unknown }).weather,
+    );
+
+    // `/api/health` has no pairing guard, so an OS error's own path — the
+    // person's home directory — must not travel over the network.
+    expect(reason).not.toContain("peter");
+    expect(reason).not.toContain(String.raw`C:\Users`);
+    expect(reason).toContain("its configured address");
+  });
+
+  it("refuses a geocoder body over the cap, however it arrives", async () => {
+    const { server } = await launch({
+      // No `content-length`, three chunks: the cap has to be counted while
+      // reading, and a cap checked only from the declared length sees nothing.
+      fetch: async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              for (let chunk = 0; chunk < 3; chunk += 1) {
+                controller.enqueue(new Uint8Array(32 * 1024).fill(0x20));
+              }
+              controller.close();
+            },
+          }),
+        ),
+    });
+
+    const failed = await request(server, "GET", "/api/weather/places?q=Berlin");
+
+    expect(failed.status).toBe(502);
+    // The specific sentence: an implementation that read the whole body and
+    // rejected its JSON would answer "something unexpected" instead.
+    expect(failed.text()).toMatch(/more than it should/);
+  });
+
+  it("refuses a long search term and a foreign page before the geocoder", async () => {
+    let called = false;
+    const { server } = await launch({
+      fetch: async () => {
+        called = true;
+        return new Response("{}");
+      },
+    });
+
+    const long = await request(
+      server,
+      "GET",
+      `/api/weather/places?q=${"a".repeat(201)}`,
+    );
+    expect(long.status).toBe(400);
+    expect(long.text()).toMatch(/200 characters/);
+
+    // A foreign page must not spend this PC's outbound request.
+    const foreign = await request(
+      server,
+      "GET",
+      "/api/weather/places?q=Berlin",
+      undefined,
+      { headers: { origin: "https://evil.example" } },
+    );
+    expect(foreign.status).toBe(403);
+    expect(called).toBe(false);
+  });
+
+  it("answers 413, not 400, for a body over the limit", async () => {
+    const { server } = await launch();
+
+    const refused = await request(
+      server,
+      "PUT",
+      "/api/weather/settings",
+      JSON.stringify({ label: "a".repeat(64 * 1024) }),
+    );
+
+    expect(refused.status).toBe(413);
+    expect(refused.text()).toMatch(/too large/);
+  });
+
+  it("redacts a failing geocoder body's own words", async () => {
+    const { server } = await launch({
+      fetch: async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(
+                new Error(
+                  "EACCES: permission denied, open 'C:\\Users\\peter\\secret\\weather.json'",
+                ),
+              );
+            },
+          }),
+        ),
+    });
+
+    const failed = await request(server, "GET", "/api/weather/places?q=Berlin");
+
+    expect(failed.status).toBe(502);
+    expect(failed.text()).not.toContain("peter");
+    expect(failed.text()).not.toContain("C:\\\\");
+  });
+
   it("reports an invalid weather.json through /api/health and clears it", async () => {
     const { server } = await launch();
     await fs.writeFile(

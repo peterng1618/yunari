@@ -150,6 +150,9 @@ interface ActiveDisplay {
  */
 const LOCAL_DISPLAY_LABEL = "This PC";
 
+/** A search term longer than this is a paste, not a place. */
+const MAX_PLACE_QUERY_LENGTH = 200;
+
 export interface BundleRoots {
   readonly player: string;
   readonly editor: string;
@@ -1794,10 +1797,25 @@ export function createHostServer(options: HostServerOptions): HostServer {
         }
 
         if (request.method === "PUT") {
+          let raw: string;
+
+          try {
+            raw = await readBody(request);
+          } catch (error: unknown) {
+            // The body's size is its own refusal: a body this host will not
+            // read is not a malformed one it read and rejected.
+            sendText(
+              response,
+              413,
+              error instanceof Error ? error.message : String(error),
+            );
+            return;
+          }
+
           let body: unknown;
 
           try {
-            body = JSON.parse(await readBody(request)) as unknown;
+            body = JSON.parse(raw) as unknown;
           } catch {
             sendText(response, 400, "That request body is not JSON.");
             return;
@@ -1827,10 +1845,30 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
+      // A foreign page must not spend this PC's outbound request: the search
+      // is an admin action like the write above it, not a display's read.
+      if (isForeignOrigin(request)) {
+        sendText(
+          response,
+          403,
+          "Weather settings are not available to another page.",
+        );
+        return;
+      }
+
       const query = url.searchParams.get("q")?.trim() ?? "";
 
       if (query === "") {
         sendText(response, 400, 'The "q" search term is required.');
+        return;
+      }
+
+      if (query.length > MAX_PLACE_QUERY_LENGTH) {
+        sendText(
+          response,
+          400,
+          `The "q" search term must be ${MAX_PLACE_QUERY_LENGTH} characters at most.`,
+        );
         return;
       }
 
@@ -2110,7 +2148,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // The read is what refreshes the reason: health is a poll, not a file
         // watch, and a rewritten valid file has to clear it.
         await weather.read();
-        weatherProblem = weather.problem();
+        const problem = weather.problem();
+        // `/api/health` answers anyone on the network, and a read error's own
+        // message carries the path it failed on — the person's home directory.
+        weatherProblem =
+          problem === undefined ? undefined : redactForBrowser(problem);
       }
 
       sendJson(response, 200, {

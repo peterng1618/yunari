@@ -561,7 +561,6 @@ export const uiCopy = {
       pollInterval: "Poll every",
       seconds: "s",
       search: "Find a place",
-      searchPlaceholder: "Search for a city",
       searching: "Searching for places…",
       noResults: "No place matched that search.",
       searchFailed: (reason: string): string => `Could not search: ${reason}`,

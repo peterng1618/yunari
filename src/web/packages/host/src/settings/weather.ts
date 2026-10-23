@@ -90,7 +90,11 @@ export function normalizeWeatherSettings(input: unknown): WeatherSettings {
 
   const record = input as Record<string, unknown>;
 
-  const provider = record["provider"] ?? DEFAULT_WEATHER_SETTINGS.provider;
+  // Only an absent field takes the default: `null` is a value the writer sent,
+  // and reading it as "open-meteo" would store a choice nobody made.
+  const offered = record["provider"];
+  const provider =
+    offered === undefined ? DEFAULT_WEATHER_SETTINGS.provider : offered;
 
   if (!isProvider(provider)) {
     throw new Error(
@@ -98,8 +102,8 @@ export function normalizeWeatherSettings(input: unknown): WeatherSettings {
     );
   }
 
-  const offered = record["label"];
-  const label = offered === undefined ? "" : offered;
+  const offeredLabel = record["label"];
+  const label = offeredLabel === undefined ? "" : offeredLabel;
 
   if (typeof label !== "string") {
     throw new Error("The weather label must be text.");
@@ -107,7 +111,7 @@ export function normalizeWeatherSettings(input: unknown): WeatherSettings {
 
   // An absent label is no manual place; a present empty one is a place with
   // nothing to call it, and a reading would then have no location to name.
-  if (offered !== undefined && label.trim() === "") {
+  if (offeredLabel !== undefined && label.trim() === "") {
     throw new Error("The weather label is required.");
   }
 
@@ -301,38 +305,53 @@ export async function searchWeatherPlaces(
   url.searchParams.set("format", "json");
 
   let response: Response;
+  // A controller rather than `AbortSignal.timeout`, so the deadline is a JS
+  // timer a test can advance; the signal still covers the body read below.
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), GEOCODING_TIMEOUT_MS);
 
   try {
-    // The signal bounds the whole exchange: an upstream that accepts the
-    // connection and then stalls would otherwise hold a route forever.
-    response = await fetcher(url, {
-      signal: AbortSignal.timeout(GEOCODING_TIMEOUT_MS),
-    });
-  } catch {
-    throw new Error("The place search could not reach Open-Meteo.");
-  }
-
-  if (!response.ok) {
-    throw new Error(`The place search was refused (HTTP ${response.status}).`);
-  }
-
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(await readGeocodingBody(response));
-  } catch (error: unknown) {
-    if (error instanceof SyntaxError) {
-      throw new Error("The place search answered something unexpected.");
+    try {
+      response = await fetcher(url, {
+        signal: controller.signal,
+        // A redirect is not the geocoder this host asked: following one would
+        // let another host answer a request this PC made to Open-Meteo.
+        redirect: "error",
+      });
+    } catch {
+      throw new Error("The place search could not reach Open-Meteo.");
     }
-    throw error;
+
+    if (!response.ok) {
+      throw new Error(
+        `The place search was refused (HTTP ${response.status}).`,
+      );
+    }
+
+    let parsed: unknown;
+
+    try {
+      parsed = JSON.parse(await readGeocodingBody(response));
+    } catch (error: unknown) {
+      if (error instanceof SyntaxError) {
+        throw new Error("The place search answered something unexpected.");
+      }
+      throw error;
+    }
+
+    const results = (parsed as { readonly results?: unknown } | null)?.results;
+
+    if (!Array.isArray(results)) return [];
+
+    // Five is the endpoint's own suggestion and the form's whole list; the
+    // body cap alone would still admit a reply that ignored `count`.
+    return results
+      .flatMap((entry) => {
+        const place = placeOf(entry);
+        return place === undefined ? [] : [place];
+      })
+      .slice(0, 5);
+  } finally {
+    clearTimeout(deadline);
   }
-
-  const results = (parsed as { readonly results?: unknown } | null)?.results;
-
-  if (!Array.isArray(results)) return [];
-
-  return results.flatMap((entry) => {
-    const place = placeOf(entry);
-    return place === undefined ? [] : [place];
-  });
 }

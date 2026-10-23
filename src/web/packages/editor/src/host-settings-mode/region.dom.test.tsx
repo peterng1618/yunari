@@ -809,10 +809,14 @@ it("saves the weather form in seconds and fills a searched place", async () => {
   ).toBe("600");
   await type(interval, "120");
   await leave(interval);
+  // **Every commit carries the whole object**, because the route replaces it:
+  // a client that sent only the changed field would pass a per-field check and
+  // silently clear the rest.
+  const timed = { ...WEATHER, pollIntervalMs: 120000 };
   expect(
-    wrote.weather.at(-1)?.pollIntervalMs,
-    "seconds typed into the form were not stored as milliseconds",
-  ).toBe(120000);
+    wrote.weather.at(-1),
+    "seconds typed into the form were not stored as milliseconds, or the rest of the object was dropped",
+  ).toEqual(timed);
 
   await offered(
     must(
@@ -821,7 +825,10 @@ it("saves the weather form in seconds and fills a searched place", async () => {
     ),
   );
   await choose("weatherapi");
-  expect(wrote.weather.at(-1)?.provider).toBe("weatherapi");
+  const repointed = { ...timed, provider: "weatherapi" as const };
+  expect(wrote.weather.at(-1), "the provider save was not whole").toEqual(
+    repointed,
+  );
 
   await act(async () =>
     must(
@@ -831,7 +838,11 @@ it("saves the weather form in seconds and fills a searched place", async () => {
       "the Windows location switch",
     ).click(),
   );
-  expect(wrote.weather.at(-1)?.useWindowsLocation).toBe(true);
+  const located = { ...repointed, useWindowsLocation: true };
+  expect(
+    wrote.weather.at(-1),
+    "the Windows location save was not whole",
+  ).toEqual(located);
 
   const search = weatherField(container, "[data-yunari-weather-search]");
   await type(search, "Paris");
@@ -848,12 +859,38 @@ it("saves the weather form in seconds and fills a searched place", async () => {
 
   expect(
     wrote.weather.at(-1),
-    "the searched place did not fill the form",
-  ).toMatchObject({
+    "the searched place did not fill the form and save the whole object",
+  ).toEqual({
+    ...located,
     label: "Paris, Ile-de-France, FR",
     latitude: 48.86,
     longitude: 2.35,
   });
+});
+
+/**
+ * **An emptied interval is a refusal, not a zero.** Milliseconds of `0` are
+ * below the host's own floor and `NaN` is not JSON, so a cleared field must
+ * keep the draft and send nothing — the same rule every number control in the
+ * editor follows.
+ */
+it("does not save an emptied poll interval as zero or NaN", async () => {
+  const { container, wrote } = await mountHost({
+    ...TWO_DISPLAYS,
+    weather: WEATHER,
+  });
+
+  const interval = weatherField(container, "[data-yunari-weather-interval]");
+  await type(interval, "");
+  await leave(interval);
+
+  expect(wrote.weather, "a cleared interval was written as a number").toEqual(
+    [],
+  );
+  expect(
+    interval.getAttribute("aria-invalid"),
+    "the cleared field did not report itself as refused",
+  ).toBe("true");
 });
 
 /** A refused write is the host's own words, after the region's own lead: the

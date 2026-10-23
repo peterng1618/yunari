@@ -149,3 +149,46 @@ it("answers a refusal that carried no words with its own sentence", async () => 
     createHostSettingsClient({ fetch }).readDisplay(),
   ).rejects.toThrow("Could not read the display settings (500).");
 });
+
+it("sends the whole weather object, omitting a blank label", async () => {
+  let body: Record<string, unknown> | undefined;
+  const { fetch, calls } = host((_url, init) => {
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return json({ ok: true, settings: body });
+  });
+
+  const settings = createHostSettingsClient({ fetch });
+
+  // **An absent label is no manual place; an empty one is refused.** The host
+  // normalizer refuses `label: ""`, so the blank has to leave the wire, while
+  // every other field still travels because the route replaces the object.
+  await settings.saveWeather({
+    provider: "weatherapi",
+    label: "",
+    latitude: 52.52,
+    longitude: 13.41,
+    useWindowsLocation: false,
+    pollIntervalMs: 120000,
+  });
+
+  expect(calls).toEqual(["PUT /api/weather/settings"]);
+  expect(body).toEqual({
+    provider: "weatherapi",
+    latitude: 52.52,
+    longitude: 13.41,
+    useWindowsLocation: false,
+    pollIntervalMs: 120000,
+  });
+  expect(body !== undefined && "label" in body).toBe(false);
+
+  // A chosen place is sent, and only the blank is ever omitted.
+  await settings.saveWeather({
+    provider: "weatherapi",
+    label: "Berlin, Berlin, DE",
+    latitude: 52.52,
+    longitude: 13.41,
+    useWindowsLocation: false,
+    pollIntervalMs: 120000,
+  });
+  expect(body?.label).toBe("Berlin, Berlin, DE");
+});
