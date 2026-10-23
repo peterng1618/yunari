@@ -82,8 +82,10 @@ export interface SemanticKeyDescriptor {
 
 const TEMPERATURE_UNITS = ["°C", "°F"] as const;
 const CLOCK_UNITS = ["MHz", "GHz"] as const;
-const DATA_UNITS = ["MB", "GB", "TB"] as const;
-const RATE_UNITS = ["kb/s", "Mb/s", "Gb/s"] as const;
+// Decimal and binary capacity labels, and both bit and byte rate prefixes:
+// a binding may pin any of these (spec, "Binding overrides").
+const DATA_UNITS = ["MB", "GB", "TB", "MiB", "GiB", "TiB"] as const;
+const RATE_UNITS = ["kb/s", "Mb/s", "Gb/s", "kB/s", "MB/s", "GB/s"] as const;
 
 /** `family.quantity[.qualifier]`; availability is discovered separately. */
 export const SEMANTIC_KEYS: readonly SemanticKeyDescriptor[] = [

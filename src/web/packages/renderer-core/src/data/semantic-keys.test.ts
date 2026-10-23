@@ -179,6 +179,20 @@ describe("the added descriptor fields", () => {
     expect(declared?.converts).toBe("temperature");
   });
 
+  it("offers every unit a binding may pin for data and rate keys", () => {
+    const data = describeSemanticKey("ram.total");
+    expect(data?.unit).toBe("GB");
+    for (const unit of ["MB", "GB", "TB", "MiB", "GiB", "TiB"]) {
+      expect(data?.displayUnits, unit).toContain(unit);
+    }
+
+    const rate = describeSemanticKey("network.download");
+    expect(rate?.unit).toBe("Mb/s");
+    for (const unit of ["kb/s", "Mb/s", "Gb/s", "kB/s", "MB/s", "GB/s"]) {
+      expect(rate?.displayUnits, unit).toContain(unit);
+    }
+  });
+
   it("keeps the existing 31 keys' unit, converts and instant values", () => {
     const contracts: readonly (readonly [
       string,
