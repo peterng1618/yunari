@@ -596,7 +596,7 @@ Weather runs before custom sources so the HTTP failure, cache and image paths ar
   Expected: FAIL, module not found.
 
 - [ ] **Step 4: Implement the provider and route**
-  Cached acquisition: `sample()` returns the cache and marks demand; one timer per provider; stop after the grace period with no demand; back off on failure. The icon route reads only a filename from the vendored set and refuses anything else.
+  Cached acquisition: `sample()` returns the cache and marks demand; one timer per provider; stop after the grace period with no demand; back off on failure. The icon route reads only a filename from the vendored set and refuses anything else. It is reachable by a paired display through the same session token as theme asset bytes; a request without a valid display session is refused.
 - [ ] **Step 5: Run the tests**
 
   Run: `npx vitest run packages/host/src/providers/weather`
@@ -856,7 +856,7 @@ Weather runs before custom sources so the HTTP failure, cache and image paths ar
   Expected: FAIL, module not found.
 
 - [ ] **Step 3: Implement the provider and cache**
-  Cache under the host cache directory, content-hashed, never in a theme or settings file. Metadata is re-read only when session/track identity changes; artwork only on a track change while demanded.
+  Cache under the host cache directory, content-hashed, never in a theme or settings file. Metadata is re-read only when session/track identity changes; artwork only on a track change while demanded. The artwork route is reachable by a paired display through the same session token as theme asset bytes; a request without a valid display session is refused.
 - [ ] **Step 4: Run the tests**
 
   Run: `npx vitest run packages/host/src/providers/media packages/host/src/server.test.ts`
@@ -1312,7 +1312,7 @@ Weather runs before custom sources so the HTTP failure, cache and image paths ar
   Expected: FAIL, module not found.
 
 - [ ] **Step 3: Implement the route and image key**
-  Serve bytes from disk with an image content type and bounded caching; a missing file is a 404, which the image binding treats as a load error and leaves the authored asset.
+  Serve bytes from disk with an image content type and bounded caching; a missing file is a 404, which the image binding treats as a load error and leaves the authored asset. The route is reachable by a paired display through the same session token as theme asset bytes; a request without a valid display session is refused.
 - [ ] **Step 4: Write and run the browser proof**
   Fixture provider emits `game.name` and `game.artwork`; assert the image renders, then emits `unavailable` and assert the authored asset returns.
 
