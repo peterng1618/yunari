@@ -78,7 +78,11 @@ describe("webgradientsSource", () => {
   it("converts a CSS degree to the editor's stored angle", async () => {
     const { fetch } = stubFetch([WARM_FLAME]);
 
-    const page = await webgradientsSource.search("Warm Flame", 1, context(fetch));
+    const page = await webgradientsSource.search(
+      "Warm Flame",
+      1,
+      context(fetch),
+    );
 
     expect(page.results[0]?.preset).toEqual({
       kind: "gradient",

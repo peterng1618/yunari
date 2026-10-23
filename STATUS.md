@@ -1,39 +1,36 @@
 # Yunari status
 
-Updated: 2026-10-23
+Updated: 2026-10-24
 Branch: `peterng1618/asset-finder-hub`
 
 ## Current objective
 
-Implement the **Colours tab** ([`plan`](docs/superpowers/plans/2026-10-23-colours-tab.md), [`spec`](docs/superpowers/specs/2026-10-23-colours-tab-design.md)): palettes and gradients from four live sources become presets in the editor-local library.
+The Colours tab is closed; the next objective is the queued **Colour Picker and Gradient Editor Rebuild** ([`plan`](docs/superpowers/plans/2026-10-23-colour-and-gradient-rebuild.md)), then the **backlog drain** ([`plan`](docs/superpowers/plans/2026-10-12-the-backlog-drain.md)).
 
 ## Active work
 
-- **The Colours tab plan is the one active implementation plan**; every other incomplete plan is queued.
-- **Phase 1 (Tasks 1–5)** adds the `colour` category, the optional `preset` wire member and the four host adapters.
-- **Phase 2 (Tasks 6–8)** adds the tab and kind filter, the Add-to-presets action and the browser proof.
+- **No implementation plan is in flight**: the Colours tab plan completed all eight tasks and its spec is discharged.
+- **The colour picker and gradient editor rebuild is the queued next plan**; its Phase 0 Tasks 1 and 3 already landed on `main`.
+- **The backlog drain stays queued** behind the picker rebuild.
 - **Sources:** Color Hunt and ColorSwoop (palettes), UI Gradients and WebGradients (gradients); Coolors is excluded by its terms.
-- **Dispatch records:** `.superpowers/sdd/2026-10-23-colours-tab/`, deleted when a task completes.
 - **Open register findings:** `vg-699` stale `vite preview` reuse on a shared port, `vg-701` biome never reads `.mjs`, `vg-695` a pre-existing `server.test.ts` flake, `vg-708` a theme's credits are written but never drawn.
 
 ## Last completed change
 
-- **The Colours tab spec and plan are committed**: four live sources, one `preset` payload, one preset-library action, and colour-neighbour search deferred to phase two.
-- **One colour parser on culori**: `renderer-core/src/color.ts` owns `parseColor`/`formatColor`/`toHsv`/`fromHsv`; `parseHex` and its 3-tuple retire.
-- **The editor-local preset library lands**: seed-once storage under `yunari.editor.presets`, validated adds, exact-duplicate skips, delete, and a `usePresetLibrary` subscription.
-- **Ownership moves with it**: `docs/architecture/ownership.md` names both owners; culori 4.0.2 and its types are in the notices and dependency record.
-- **Proof:** renderer-core 642 tests, preset-library 14 tests, both package typechecks, `design:check` and `gates:self-test` — all exit 0.
+- **The Colours tab closes in a browser proof**: a ColorSwoop palette passes the kind filter and lands in `yunari.editor.presets`, with no bytes request.
+- **Ownership names the sources**: the registry, the four colour adapters and the finder's `colour` surface are rows in `docs/architecture/ownership.md`.
+- **Proof:** the focused browser test 1 passed (1 phone skip), `asset-finder.spec.ts` whole 17 passed and 17 skipped, and `npm run gate` exited 0.
 
 ## Next
 
-1. Execute Phase 1 Tasks 1–5 through subagents, one task and one review at a time.
-2. Execute Phase 2 Tasks 6–8, then the whole-branch review and `npm run gate`.
-3. The owner's R2 Task 5.2 deploy and the Wallpaper Engine live export still wait outside this plan.
+1. Make the colour picker and gradient editor rebuild the one plan in flight and execute it task by task.
+2. Then drain the backlog register.
+3. The owner's R2 Task 5.2 deploy and the Wallpaper Engine live export still wait outside any plan.
 
 ## Blockers / unverified
 
-- **No Colours-tab browser proof yet**: the tab, the filter and the preset write are unbuilt until Phase 2.
-- **The store Worker is not deployed and no live store path has run**; `CATALOGUE_ORIGIN` is still the placeholder and no normalized video has played in a browser.
+- **The Colours sources are routed fixtures in the browser proof**: no live ColorSwoop, Color Hunt, UI Gradients or WebGradients response was fetched.
+- **The store Worker is not deployed and no live store path has run**; `CATALOGUE_ORIGIN` is the placeholder and no normalized video has played in a browser.
 - **No live Wallpaper Engine export has been offered by the sheet**, and the compact editor header stays wider than a phone (`vg-707` waits on a ruling).
 - **A theme's `credits.json` does not survive the host library** (`vg-698`), and `server.test.ts` flakes pre-existing (`vg-695`).
 - **Colour-neighbour search is deferred** to phase two, after the picker rebuild merges.

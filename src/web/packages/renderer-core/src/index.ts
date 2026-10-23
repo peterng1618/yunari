@@ -59,14 +59,6 @@ export type {
   ChartOptionByFamily,
 } from "./charts/engine-option.js";
 export { toEngineOption } from "./charts/engine-option.js";
-export type { Hsva, Rgba } from "./color.js";
-export {
-  formatColor,
-  fromHsv,
-  parseColor,
-  toHsv,
-} from "./color.js";
-
 export type {
   EngineColor,
   GradientDirection,
@@ -79,16 +71,13 @@ export {
   resolveThresholdColor,
   toLinearGradient,
 } from "./charts/fill.js";
-
 export type { GaugeOption } from "./charts/gauge.js";
-
 export {
   approximateGradient,
   buildGaugeOption,
   mixHex,
   toColorSegments,
 } from "./charts/gauge.js";
-
 export type {
   Interpolation,
   LineOption,
@@ -96,7 +85,6 @@ export type {
   SeriesInput,
   SeriesPoint,
 } from "./charts/line.js";
-
 export {
   buildLineOption,
   defaultLineSettings,
@@ -143,6 +131,13 @@ export {
   removeSetting,
   writeSetting,
 } from "./charts/settings-path.js";
+export type { Hsva, Rgba } from "./color.js";
+export {
+  formatColor,
+  fromHsv,
+  parseColor,
+  toHsv,
+} from "./color.js";
 export type {
   EventSourceLike,
   LiveSourceHandle,

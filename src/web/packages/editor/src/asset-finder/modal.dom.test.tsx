@@ -510,7 +510,12 @@ describe("AssetFinder's Colours tab", () => {
       sourceUrl: "https://colorhunt.co/palette/aabbccddeeff112233445566",
       preset: {
         kind: "palette",
-        colours: ["#aabbcc", "#ddeeff", "#112233", "#445566"],
+        colours: [
+          "rgb(170, 187, 204)",
+          "rgb(221, 238, 255)",
+          "rgb(17, 34, 51)",
+          "rgb(68, 85, 102)",
+        ],
       },
     };
     const fiveColourPalette: AssetResult = {
@@ -523,7 +528,13 @@ describe("AssetFinder's Colours tab", () => {
       sourceUrl: "https://colorhunt.co/palette/112233445566778899aabbcc",
       preset: {
         kind: "palette",
-        colours: ["#111111", "#222222", "#333333", "#444444", "#555555"],
+        colours: [
+          "rgb(17, 17, 17)",
+          "rgb(34, 34, 34)",
+          "rgb(51, 51, 51)",
+          "rgb(68, 68, 68)",
+          "rgb(85, 85, 85)",
+        ],
       },
     };
     const gradient: AssetResult = {
@@ -538,8 +549,8 @@ describe("AssetFinder's Colours tab", () => {
         kind: "gradient",
         angle: 30,
         stops: [
-          { offset: 0, color: "#000000" },
-          { offset: 1, color: "#ffffff" },
+          { offset: 0, color: "rgb(0, 0, 0)" },
+          { offset: 1, color: "rgb(255, 255, 255)" },
         ],
       },
     };
@@ -577,7 +588,7 @@ describe("AssetFinder's Colours tab", () => {
     expect(
       strip?.style.backgroundImage || strip?.getAttribute("style") || "",
     ).toContain("linear-gradient(60deg");
-    expect(strip?.getAttribute("style") ?? "").toContain("#000000 0%");
+    expect(strip?.getAttribute("style") ?? "").toContain("rgb(0, 0, 0) 0%");
   });
 });
 

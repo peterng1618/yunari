@@ -41,7 +41,7 @@ export function SourceMark({
         title={label}
         data-yunari-asset-source={id}
         className={`inline-flex size-3.5 flex-none items-center justify-center rounded-[var(--radius-sm)] border border-edge font-medium text-muted uppercase ${
-          monogram.length > 1 ? "text-[9px] tracking-tight" : "text-xs"
+          monogram.length > 1 ? "text-[10px] tracking-tight" : "text-xs"
         }`}
       >
         {monogram}

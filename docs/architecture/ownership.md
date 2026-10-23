@@ -104,6 +104,7 @@ two apart is the judgement the map cannot make for itself.
 | **Which bindings resolve** — the ones whose source has left the document, dropped on load | `editor/src/editor-shell.ts` (`dropDanglingBindings`) |
 | Type-preset authoring and reference reassignment | `editor/src/type-preset-manager/` |
 | **The editor-local colour and gradient preset library** — its storage key, seed-once rule, validation, de-duplication and add/delete API; the asset finder calls into it and never writes the key itself | `editor/src/preset-library/` |
+| **The finder's `colour` category surface** — the Colours tab, its palette/gradient kind filter, and its preset previews and Add action | `editor/src/asset-finder/` |
 | Open-package asset bytes and controls | `editor/src/asset-manager/` (`index.ts` bytes), `editor/src/panes/add/file-section.tsx` (the pane) |
 | **Whether an asset is still referenced** — the reference that decides a deleted asset can go, and the walk a binding's own resolution reads with it | `editor/src/asset-manager/index.ts` (`assetReferencedBy`, `sceneObjects`) |
 | Editor runtime binding refresh | `editor/src/live-runtime.ts` |
@@ -218,6 +219,11 @@ adapter does not own catalog, preview or adoption semantics.
 | CLI flags | `host/src/cli/args.ts` |
 | HTTP routing | `host/src/server.ts` |
 | Declared package-asset HTTP reads | `host/src/server.ts` |
+| **Which asset sources exist** — the registry's members, and each one's category and the `presetKind` its rows become | `host/src/assets/sources.ts` (`ASSET_SOURCES`) |
+| ColorSwoop palettes, their catalogue cache and page filtering | `host/src/assets/colours/colorswoop.ts` |
+| Color Hunt palettes, read from its tag feed | `host/src/assets/colours/colorhunt.ts` |
+| UI Gradients gradient presets, with their own stops | `host/src/assets/gradients/uigradients.ts` |
+| WebGradients gradient presets, with their own angles and stops | `host/src/assets/gradients/webgradients.ts` |
 | **The host's first-run page, and the route that serves it** — the page a fresh install reads | `host/src/server.ts` (`firstRunPage`) |
 | Static-path safety | `host/src/serve/static-path.ts` |
 | SSE connection/keep-latest | `host/src/transport/` |

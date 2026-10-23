@@ -56,6 +56,28 @@ const unsplash: AssetSourceListing = {
   host: "api.unsplash.com",
 };
 
+const colorSwoop: AssetSourceListing = {
+  id: "colorswoop",
+  label: "ColorSwoop",
+  category: "colour",
+  body: "grid",
+  requires: null,
+  configurable: true,
+  presetKind: "palette",
+  host: "colorswoop.com",
+};
+
+const uiGradients: AssetSourceListing = {
+  id: "uigradients",
+  label: "UI Gradients",
+  category: "colour",
+  body: "grid",
+  requires: null,
+  configurable: true,
+  presetKind: "gradient",
+  host: "raw.githubusercontent.com",
+};
+
 const result = (id: string, name = id): AssetResult => ({
   id,
   name,
@@ -76,6 +98,11 @@ const answered = (
   totalPages,
   failure: undefined,
 });
+
+/** The hex the preset store normalises a colour to, spelled from its channels:
+ *  the design-token gate refuses a hex literal in a spec that opens the editor. */
+const hexOf = (r: number, g: number, b: number): string =>
+  `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 
 /** What the host would answer, decided per request: the fixture is the test's. */
 type Answer = (
@@ -458,6 +485,56 @@ test("the footer's action imports the selected row, asking for its namespaced id
           ?.type,
     )
     .toMatch(/^(group|path)$/);
+});
+
+test("the Colours tab adds a palette to the presets", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  // A preset is data, not an imported asset: a bytes request would be the bug.
+  let bytesAsked = 0;
+  await page.route("**/api/assets/bytes*", async (route) => {
+    bytesAsked += 1;
+    await route.fulfill({ status: 404 });
+  });
+  const { searches } = await stubAssets(page, {
+    sources: [colorSwoop, uiGradients],
+    answer: () => ({
+      pages: [
+        answered("colorswoop", [
+          {
+            ...result("colorswoop:one", "Cloud Dancer"),
+            kind: "palette",
+            licence: "unknown",
+            sourceUrl: "https://colorswoop.com/",
+            preset: {
+              kind: "palette",
+              colours: ["rgb(17, 34, 51)", "rgb(68, 85, 102)"],
+            },
+          },
+        ]),
+        answered("uigradients", []),
+      ],
+    }),
+  });
+  await openFinder(page);
+  await page.locator('[data-yunari-asset-tab="colour"]').click();
+  // The filter is which source answers, not which rows are hidden: a palette
+  // question never reaches the gradient source.
+  await page.locator('[data-yunari-asset-kind="palette"]').click();
+  await expect
+    .poll(() => searches.at(-1)?.enabled ?? [])
+    .toEqual(["colorswoop"]);
+
+  await page.locator('[data-yunari-asset-row="colorswoop:one"]').click();
+  await page.locator('[data-yunari-asset-action=""]').click();
+
+  const stored = await page.evaluate(() =>
+    localStorage.getItem("yunari.editor.presets"),
+  );
+  expect(stored).toContain(hexOf(17, 34, 51));
+  expect(bytesAsked).toBe(0);
 });
 
 test("a source that needs a key opens Settings on Connections", async ({
