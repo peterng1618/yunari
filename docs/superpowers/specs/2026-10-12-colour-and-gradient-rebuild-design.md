@@ -1,8 +1,8 @@
 # The colour picker and the gradient editor, rebuilt
 
-- **Status:** draft, awaiting the owner's review. **No code is written from this
-  spec yet**, and it queues behind the active plan — `STATUS.md` names
-  `2026-10-12-the-backlog-drain.md` as the only execution plan.
+- **Status:** **approved 2026-10-23.** The owner reviewed this spec, confirmed
+  the ReUI port, and settled the two open questions; the implementation plan is
+  written from it. No code existed before that review.
 - **Specifies work against:** [`DESIGN.md`](../../DESIGN.md) — §3 (the scales),
   §4 (colour roles), §5 (the closed control vocabulary). This spec amends §5;
   it changes no `§N` marker and adds no step to §3.
@@ -47,12 +47,15 @@ manipulator, a stop per stop movable by drag *and* by a numeric position, an
 explicit add and remove, and beside the track an opacity channel, a midpoint
 between adjacent stops, an angle and a set of presets. Figma, Photoshop,
 Illustrator’s Gradient Forge, Blender’s Color Ramp and CSS itself all agree on
-that much; the disagreements are the forks listed at the end.
+that much; the disagreements are the forks listed at the end. **The midpoint is
+surveyed but not built**, because none of this repo’s three gradient painters
+can honour it (see “The gradient editor”).
 
 ## The decisions
 
-Four are the owner’s rulings of 2026-10-12 and are not open again here. Three
-more are this spec’s, argued from those rulings and from the survey.
+Seven are the owner’s rulings — four of 2026-10-12, three of 2026-10-23 — and
+are not open again here. Three more are this spec’s, argued from those rulings
+and from the survey.
 
 ### Ruled by the owner
 
@@ -72,25 +75,44 @@ more are this spec’s, argued from those rulings and from the survey.
    it does its own maths — and it already has the ruled channel set and the
    ruled live/settled pair (`onValueChange` per change, `onValueCommit` once per
    settled interaction). It is a copy-in shadcn registry block, not a package,
-   and it ships **no tests at all**.
+   and it ships **no tests at all**. After ruling 7 it is the **reference for the
+   interaction model only**; none of its source is copied.
+5. **One trigger per colour.** The pane’s row is one well carrying a swatch and
+   the stored value, and it opens the picker; the exact-value field lives inside
+   the popover. The standalone 28px swatch beside the field and the pane’s own
+   hex field are both removed, so one colour has one field rather than three
+   across the pane, the picker and the gradient’s per-stop row.
+6. **The preset rows are editor-local data** (owner ruling, 2026-10-23). A
+   fixed design set — a neutral ramp and the hues — **seeds** the colour row on
+   first run, but the row is a persisted library: the asset finder’s palettes
+   and gradients surface adds to it, and a right-click on a preset deletes it.
+   The library is **editor-local, not theme data** (owner ruling, 2026-10-23):
+   it survives documents, is not in the document undo history, and is not part
+   of a saved theme. The finder surface itself is a separate spec.
+7. **Colour maths comes from culori, not from ported ReUI source.** Asked by the
+   owner on 2026-10-23 whether a library existed instead of doing our own maths.
+   Checked against package metadata: culori 4.0.2 is MIT, has **no
+   dependencies**, is ESM and tree-shakeable through `culori/fn`, runs in Node,
+   and parses CSS Color 4 plus named colours with an HSV mode and `formatHex8`.
+   It replaces parsing, conversion and formatting. ReUI stays the reference for
+   the **interaction model** — the channel decomposition, the ARIA and the
+   keyboard table — and its source is not vendored.
 
 ### This spec’s decisions
 
-5. **The ReUI source is ported as vendored MIT source onto this repo’s Base UI
-   wrappers; it is not installed through the shadcn CLI.** Reason: installing it
-   would pull the primitive set `ADR-0038` removed. The registry item’s
-   `registryDependencies` are bare shadcn names and this repo’s
-   `components.json` style is `new-york`, so the CLI resolves them to
+8. **The picker is built on this repo’s Base UI wrappers, not installed through
+   the shadcn CLI.** Installing ReUI would pull the primitive set `ADR-0038`
+   removed: the registry item’s `registryDependencies` are bare shadcn names and
+   this repo’s `components.json` style is `new-york`, so the CLI resolves them to
    `@radix-ui/react-slot`, `-popover`, `-dropdown-menu` and `-separator` and
    their transitives. The published file also imports
    `@/app/(create)/components/icon-placeholder`, a module that exists only
-   inside ReUI’s own Next.js app, so it does not compile as shipped. **What is
-   ported is the interaction contract and the maths — the ARIA, the keyboard
-   model, the channel decomposition, `parseColor`/`formatColor` — and the
-   surfaces are rewritten in §5’s vocabulary.** A 2,996-line file does not enter
-   this repo whole; `AGENTS.md`’s 800-line stop applies, and no file in this work
-   is exempt from it.
-6. **Interpolation is not exposed.** Photoshop and Figma’s shader surfaces offer
+   inside ReUI’s own Next.js app, so it does not compile as shipped. The ported
+   part is therefore the interaction contract — the ARIA, the keyboard model and
+   the channel decomposition — rewritten in §5’s vocabulary. A 2,996-line file
+   does not enter this repo whole; `AGENTS.md`’s 800-line stop applies, and no
+   file in this work is exempt from it.
+9. **Interpolation is not exposed.** Photoshop and Figma’s shader surfaces offer
    an interpolation space and CSS now defaults to Oklab, but **this repo’s
    renderer draws CSS gradient strings in sRGB through ECharts and Fabric**, so a
    control offering Oklab would promise something nothing honours — the failure
@@ -99,7 +121,7 @@ more are this spec’s, argued from those rulings and from the survey.
    noted by the user 2026-10-20, filed `vg-644`. The condition to build it
    differs by renderer: a DOM gradient can carry `in oklab`, a canvas one
    cannot, since `CanvasGradient.addColorStop` takes no colour space.
-7. **Stops keep free positions and duplicates are represented, not refused.**
+10. **Stops keep free positions and duplicates are represented, not refused.**
    Figma, CSS and Illustrator all treat a position as a free value and a stacked
    stop as a deliberate hard edge. Refusing a non-ascending entry would silently
    destroy an author’s work, and the drag path and the numeric path must agree
@@ -133,6 +155,45 @@ arbitrary gradient cannot satisfy that by construction, so each channel paints
 before the work is called done** — it is unmeasured today, and this spec does not
 assert a number it has not taken.
 
+## The preset library
+
+**It is editor-local data, and one owner owns it.** `preset-library/index.ts`
+holds the store; the picker and the gradient editor subscribe to it; the asset
+finder’s palettes-and-gradients surface (a separate spec) calls its add
+functions. It is stored under `yunari.editor.presets` as
+`{ version: 1, colours: [{ id, name, value }], gradients: [{ id, name, angle, stops }] }`.
+It is **not** in the theme envelope, **not** in the document undo history, and
+**not** saved with a theme.
+
+- **Seeding is once.** When the key is absent, the colour list starts as the
+  fixed design set (the neutral ramp and the hues) and the gradient list starts
+  as the fifteen named swatches from <https://cssgradient.io/swatches/>, read on
+  2026-10-23 and transcribed in `preset-library/defaults.ts`. A CSS `90deg`
+  gradient persists as `angle: 0`, because the editor's stored angle is
+  `90 - cssDegrees`. The seed values are authored as `rgb(r g b)` strings, not
+  hex literals: `defaults.ts` is editor source inside the token gate's reach and
+  the gate's remainder is already at its ceiling, so the store normalises the
+  seeds to hex when it reads them. Deleting every preset
+  writes an empty list, and the defaults do **not** come back: presence of the
+  key, not emptiness, is what seeding tests.
+- **Adds are validated and de-duplicated.** `addColours(entries)` formats each
+  value through `parseColor`/`formatColor`, skips an entry that is not a colour
+  and one whose value already exists, and returns
+  `{ added: number, library }`. `addGradient(entry)` accepts a finite angle and
+  at least two stops whose offsets are finite and inside `0–1` and whose colours
+  parse; a duplicate angle-and-stops pair is skipped; it returns
+  `{ added: boolean, library }`. Refusal is a skip, never a coerced value.
+- **Deleting is a first-class action.** Right-clicking a preset opens the same
+  controlled Base UI `ContextMenu` the canvas uses, with one row, **Delete
+  preset**, in `--hot`. `Shift+F10` and the ContextMenu key open it from the
+  focused preset, and Delete on a focused preset performs the same removal, so
+  the action is not pointer-only.
+- **An empty library draws no row.** A true zero is stated by the absence of the
+  section, not by a placeholder or a fabricated default.
+- **Storage failure is not data.** A refused read falls back to the in-memory
+  snapshot, and a refused write keeps the in-memory change for the session; the
+  store never invents entries.
+
 ## The gradient editor
 
 **One row, one owner.** The track is the preview *and* the manipulator; the stops
@@ -147,21 +208,33 @@ is the shape the current file already suffers from).
 | A stop | a stop mark on the track; selected by click and by keyboard, movable by drag and by a numeric **Well with unit** (`ControlNumber`, `%`) |
 | Adding a stop | a click on the track, or the add **Icon button** |
 | Removing a stop | the remove **Icon button**, or Delete — never drag-away alone, because a pointer-only gesture is unreachable for a keyboard author |
-| Midpoint between two stops | a draggable mark on the track between them, with its own numeric well |
 | Angle | **Well with unit** (`ControlNumber`, `deg`) |
-| Presets | **Choice row**, the same registry the picker’s swatches use |
+| Presets | **Choice row** from the editor-local gradient library; choosing one applies its angle and stops as one settled change |
 
-**Alpha is inside the stop’s colour** — the repo already stores 8-digit hex
-(`colour-maths.ts`), CSS and DevTools put alpha inside the value, and a separate
+**Midpoints are deliberately not built (owner ruling, 2026-10-23).** A palette
+gradient persists as `{angle, stops[{offset, color}]}` and is painted by
+Fabric’s `Gradient`, a CSS `linear-gradient()` string and
+`CanvasGradient.addColorStop` — none of them accepts a midpoint, so the control
+could not change a single rendered pixel. Building it means adding midpoint
+state to the theme schema and synthesising stops in all three paths, a separate
+feature with its own migration. **The condition to build it** is a renderer that
+honours a colour hint, or a decision to synthesise stops.
+
+**Gradient presets are built** because the asset finder now supplies their
+content: a picked gradient appends to the editor-local library, the row draws
+one choice row per preset, and choosing a row applies `{angle, stops}`.
+
+**Alpha is inside the stop’s colour** — the theme already stores 8-digit hex,
+CSS and DevTools put alpha inside the value, and a separate
 opacity-stop model (Photoshop’s) is a second stop list this product does not
 need.
 
 ## One owner for the value
 
 The three text inputs for one colour become **one commit path**: the pane’s
-swatch is the picker’s trigger, the picker’s field edits the same stored value,
-and both go through the same parse, the same refusal channel and the same
-settled-write boundary. Concretely:
+single well is the picker’s trigger, the picker’s field is the only place the
+value is typed, and both go through the same parse, the same refusal channel and
+the same settled-write boundary (ruling 5). Concretely:
 
 - **The colour parser gets one owner, and the owner sits below both
   consumers.** Measured at the base: `parseHex` and `parseColour` live in
@@ -172,11 +245,16 @@ settled-write boundary. Concretely:
   owns it and `fill.ts` consumes it — cannot be built**: `renderer-core` imports
   nothing from `editor` and the editor bundles `renderer-core` from source
   through a Vite alias, so that direction is a cycle. The primitive therefore
-  moves **down**: `renderer-core` owns turning a value into channels and
-  refusing what is not a colour; `colour-maths.ts` keeps the richer conversions
-  (`Hsva`, `rgbaToHsva`, `hsvaToRgba`, `toHex`) and consumes the primitive; and
-  `fill.ts`'s second copy retires into it, with the two signatures reconciled on
-  the shape the chart path already returns. `ownership.md`'s Editor row for
+  moves **down** into `renderer-core/src/color.ts`, which wraps culori
+  (ruling 7): it owns turning a value into channels and refusing what is not a
+  colour, formatting back to 8-digit hex, and exposing HSV channels (culori’s
+  `hsv` mode). **`colour-maths.ts` retires rather than moving**: every conversion
+  in it is culori’s, so the editor keeps no hand-written colour maths at all.
+  `fill.ts`’s second parser retires into the wrapper. **The shared
+  contract is the `Rgba` object, not the chart path’s 3-tuple** (amended
+  2026-10-23): alpha is authored state and a 3-tuple silently drops it, so
+  `fill.ts` and `facet-record.ts` read `r`, `g`, `b` off the returned object
+  instead of indexing a tuple. `ownership.md`’s Editor row for
   “shared colour parsing” moves with the primitive, because the map is the owner
   of record and a row that names the old home is the contradiction the map
   exists to prevent.
@@ -197,7 +275,12 @@ settled-write boundary. Concretely:
   `onValueCommit` provides. Whether palette edits enter `EditorHistory` at all is
   answered by the owner’s ruling 2: they do, once per settled change, which means
   the history owner must be able to serialise a palette change — today it
-  serialises the Fabric scene only.
+  serialises the Fabric scene only. **Decided 2026-10-23:** an `EditorHistory`
+  entry carries `{ scene, globals }`. `EditorDocument` attaches a globals port
+  (`read`/`write`) to the history manager after construction, because the shell
+  is built before the document. Undo restores the scene and the globals
+  together; a live drag writes without saving, and the settled callback records
+  one entry.
 
 ## What this amends in `DESIGN.md`
 
@@ -228,31 +311,37 @@ produced, which is what the rule against citing counts is for.
 
 ## Before the first write
 
-- **A decision note at `docs/decisions/0042-*.md`** — `scripts/reuse-gate.mjs`
+- **A decision note at `docs/decisions/0097-*.md`** — `scripts/reuse-gate.mjs`
   gates `components/ui/`, so the hook refuses until a note claims the path. The
   note carries the seven rungs; the two research documents are rungs 3–5’s
-  evidence, including the rungs that found nothing.
-- **Licence provenance**: the MIT notice into `THIRD-PARTY-NOTICES.md` and a
-  `## Vendored source` row in `docs/engineering/dependencies.md`, alongside the
-  existing `@anu3ev/fabric-image-editor` entry.
-- **The owner confirms the port.** Vendoring ~3,000 lines of someone else’s
-  interaction code is a change in kind — this repo owns it forever, there is no
-  upstream to pull from and no upstream test suite to inherit — so it is put to
-  the owner explicitly rather than assumed from a pointer at a link. The
-  fallback is hand-rolling on Base UI with the ported source as the reference.
+  evidence, including the rungs that found nothing, and rung 4 now also records
+  the culori comparison and why it beat the alternatives.
+- **Licence provenance**: culori’s MIT notice into `THIRD-PARTY-NOTICES.md` and a
+  `## Dependencies` row in `docs/engineering/dependencies.md`. No vendored-source
+  row is added, because no ReUI source is copied.
+- **The owner confirms the approach.** Done 2026-10-23: the owner first
+  confirmed the ReUI port, then (after asking whether a colour library existed)
+  chose culori for the maths. ReUI remains the interaction reference only.
 
 ## What this does not cover
 
-- **Colour-space switching.** Entry is hex, `rgb()` and `hsl()`, with HSV implied
-  by the area — the universal set. A DevTools-style space switcher is not built,
-  and the picker’s own parser, not `CSS.supports`, is the authority for what is
+- **Colour-space switching.** The field accepts what culori parses — hex,
+  `rgb()`, `hsl()`, named colours and the rest of CSS Color 4 — but the value is
+  stored and shown as 8-digit sRGB hex, so a wide-gamut input is clamped rather
+  than preserved. A DevTools-style space switcher is not built, and the
+  `renderer-core` wrapper, not `CSS.supports`, is the authority for what is
   accepted.
+- **Gradient midpoints.** Dropped by the owner’s ruling of 2026-10-23; the
+  condition to build one is stated under “The gradient editor”.
+- **The asset finder’s palettes-and-gradients surface.** The owner builds that
+  surface under a separate spec; this spec owns only the library it feeds and
+  the rows that read it.
 - **The rest of the Tokens pane.** Its own layout, its list and its binding
   readout are the redesign’s, not this spec’s.
 - **The chart paint path.** `renderer-core` consumes whatever value the picker
   stores; it does not gain a picker.
-- **Screen-reader proof.** The ported ARIA and key tables come from the source
-  and its documentation, and the upstream project has no tests. The behaviour is
+- **Screen-reader proof.** The ARIA and key tables follow ReUI’s documented
+  model, and the upstream project has no tests. The behaviour is
   **unverified here until this repo renders it and inspects it** — it is
   acceptance, not an assumption.
 
@@ -274,6 +363,10 @@ produced, which is what the rule against citing counts is for.
    the amendment above states and what `vg-286`'s ruling requires.
 8. The browser evidence is captured for the picker and the gradient editor per
    `docs/evidence/screenshots/README.md`.
+9. A colour list added through `addColours` appears in the picker’s row, a
+   gradient added through `addGradient` appears in the gradient editor’s row,
+   right-clicking or pressing Delete removes a preset, and all three survive a
+   reload because the library is editor-local storage.
 
 ## Self-review, 2026-10-13
 
@@ -296,20 +389,47 @@ things, each corrected in place above:
   tests the amendment above it adds to the gated list, so it could be read as
   passing with the files gated and the tests not.
 - **Placeholders:** none. The one wildcard is the decision note's path,
-  `docs/decisions/0042-*.md`, and 0042 is free — 0041 and 0043 exist, 0042 does
-  not.
+  `docs/decisions/0097-*.md`. **Corrected 2026-10-23:** this review had named
+  0042 and called it free, but `docs/decisions/README.md` reserves 0006, 0034 and
+  0042 as absent numbers, so 0042 was never available; the highest accepted note
+  is 0096.
 - **Scope:** one plan. The picker, the gradient editor, the one owner for the
   value, the `DESIGN.md` amendment and the gate membership are one workstream
   against one verdict, `vg-405`.
 
-## Open questions for the owner
+## Resolved by the owner, 2026-10-23
 
-Neither blocks the §5 amendment or the interaction contract; both change what is
-built.
+Both questions below were answered before the plan was written; neither is open.
 
-1. **Does the picker keep a swatch of its own beside the pane’s field**, or does
-   the pane’s field become the only trigger (the VS Code and Figma shape)? The
-   recommendation is the second, and it is what “one commit path” above assumes.
-2. **Which presets ship in the two Choice rows** — the palette’s own tokens, a
-   fixed design set, or both as two groups. This is product content and this spec
-   leaves it to the owner rather than inventing swatches.
+1. **Trigger:** one trigger per colour. The pane’s well carries a swatch and the
+   stored value and opens the picker; exact entry lives in the popover (ruling
+   5). The separate swatch and the pane’s own hex field are removed.
+2. **Presets:** a fixed design set, defined in `colour-presets.ts` (ruling 6).
+
+## Self-review, 2026-10-23
+
+Run again after the owner’s review changed the maths source, the trigger shape
+and the presets:
+
+- **Dependency, and the one that changed the plan.** Ruling 7 replaces the
+  ported ReUI maths with culori. The parser still has one owner —
+  `renderer-core/src/color.ts` — but it is now a wrapper over culori rather than
+  a moved hand-written parser, and `fill.ts`/`facet-record.ts` consume the same
+  wrapper. No ReUI source is copied, so no vendored-source row and no ReUI
+  licence notice are needed.
+- **Consistency.** The picker’s paragraph still described three inputs for one
+  colour and a separate swatch trigger; ruling 5 and the rewritten “One owner for
+  the value” paragraph now say one well, one field in the popover.
+- **Undo.** The history bullet now names the mechanism (`{scene, globals}`
+  entries and a globals port onto the history manager) instead of leaving it as
+  a requirement.
+- **Feasibility, found while writing the plan.** Midpoints cannot be honoured by
+  any of the three painters; they are removed and the upgrade condition
+  recorded, by the owner’s ruling of 2026-10-23.
+- **Revised the same day.** The owner then made presets editor-local data fed by
+  the asset finder, restored the gradient preset row, and chose
+  `cssgradient.io/swatches` as its fifteen seed gradients. The library section,
+  ruling 6 and the gradient table were updated together; the finder surface
+  stays in its own spec.
+- **Placeholders:** none. `docs/decisions/0097-*.md` is free.
+- **Scope:** one plan against `vg-405`; `vg-439` closes with the parser move.
