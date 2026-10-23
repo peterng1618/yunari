@@ -11,20 +11,20 @@ The **sensor platform** ([`spec`](docs/superpowers/specs/2026-10-24-sensor-platf
 
 ## Active work
 
-- **Phase 1 has not started**; the plan's 27 tasks run in order, one dispatch per task.
-- **Every task commits its own tests and evidence**; no task starts before the previous one is reviewed.
-- **The spec's probes stay open** until their phase runs: RTSS, PresentMon, Geolocator and live BYOK weather are unverified on this box.
-- **The Wallpaper Engine work is merged**; its owner-run export remains, outside this plan.
+- **Phase 1 is complete** (Tasks 1.1–1.5): open vocabulary, unit conversion and preferences, provider descriptors with editor fallback, and image binding from host-relative samples.
+- **Phase 2 is next**: LHM detail mappings (Tasks 2.1–2.3) and the `systeminformation` fill (Task 2.4).
+- **Charts stay canonical** this phase; only text formatting converts, so authored thresholds remain valid.
 
 ## Last completed change
 
-- **The sensor platform spec is approved and its plan is written**; both live under `docs/superpowers/`.
-- **The plan keeps canonical sample values and schema v2**, and defers the widget runtime.
-- **SMTC browser coverage is verified** on this PC through Chrome/YouTube, including PNG artwork bytes.
+- **Image binding is hardened and reviewed**: C0/DEL/backslash are refused, an in-flight load cannot overwrite a newer or restored source, and the e2e store lives under `os.tmpdir()`.
+- **Unit preferences convert text only**: GHz precision, binary/decimal data and byte/bit rates; `Binding.unit`/`autoScale` validate in the envelope schema v2.
+- **The editor pickers read `/api/sensors`** and fall back to the built-in table; saved keys absent from the catalogue stay selectable.
+- **The host `/settings` page no longer erases stored units** when a zone changes.
 
 ## Next
 
-1. Dispatch Task 1.1 (open family set and dynamic keys) to a subagent.
+1. Dispatch Task 2.1 (CPU and GPU detail mappings) to a subagent.
 2. Review each task's diff and evidence before dispatching the next.
 3. Run the full gate at the end of each phase.
 
