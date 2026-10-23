@@ -49,11 +49,14 @@ export interface PaintListProps {
     | (() => Readonly<Record<string, readonly PaletteTokenUse[]>>)
     | undefined;
   readonly onChange: (palette: FabricPalette) => void;
+  /** The settled boundary of one colour gesture: called once when the picker
+   *  commits, so a drag is one history entry rather than one per sample. */
+  readonly onSettled?: (() => void) | undefined;
   readonly onDelete: ((id: string, replacement: string) => void) | undefined;
 }
 
 export function PaintList(props: PaintListProps): React.JSX.Element {
-  const { palette, usage, onChange, onDelete } = props;
+  const { palette, usage, onChange, onSettled, onDelete } = props;
   // Read once per draw, so the figure beside a token and the set a deletion
   // moves are one walk of one scene.
   const uses = usage?.();
@@ -148,6 +151,7 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
           palette={palette}
           selected={selected}
           commit={commit}
+          onSettled={onSettled}
           onDelete={onDelete}
         />
       )}
@@ -175,9 +179,10 @@ function TokenFields(props: {
   readonly palette: FabricPalette;
   readonly selected: string;
   readonly commit: (entry: FabricPaletteEntry) => void;
+  readonly onSettled?: (() => void) | undefined;
   readonly onDelete: ((id: string, replacement: string) => void) | undefined;
 }): React.JSX.Element {
-  const { entry, palette, selected, commit, onDelete } = props;
+  const { entry, palette, selected, commit, onSettled, onDelete } = props;
   return (
     <div
       data-yunari-palette-fields=""
@@ -208,7 +213,12 @@ function TokenFields(props: {
         }}
       />
       {entry.value.kind === "solid" ? (
-        <SolidFields entry={entry} value={entry.value} commit={commit} />
+        <SolidFields
+          entry={entry}
+          value={entry.value}
+          commit={commit}
+          onSettled={onSettled}
+        />
       ) : (
         <GradientFields entry={entry} value={entry.value} commit={commit} />
       )}
@@ -221,59 +231,32 @@ function TokenFields(props: {
   );
 }
 
-/** A solid token's colour: the field the author types in, the picker beside it,
- *  and the reason when the engine cannot paint what was typed. */
+/** A solid token's colour: one trigger, and the picker's own popover holding the
+ *  area, the channels, the one exact-value field and the presets.
+ *
+ * The pane used to carry a second field and a swatch beside the picker. Two
+ * controls for one value meant two draft states, two refusals and two routes to
+ * the same token. */
 function SolidFields(props: {
   readonly entry: FabricPaletteEntry;
   readonly value: Extract<PalettePaint, { readonly kind: "solid" }>;
   readonly commit: (entry: FabricPaletteEntry) => void;
+  readonly onSettled?: (() => void) | undefined;
 }): React.JSX.Element {
-  const { entry, value, commit } = props;
-  const [error, setError] = useState<string | undefined>(undefined);
+  const { entry, value, commit, onSettled } = props;
   const put = (color: string): void => {
-    setError(undefined);
     commit({ ...entry, value: { kind: "solid", color } });
   };
   return (
-    <>
-      <ControlText
-        label={uiCopy.panels.colour}
-        data={{ "data-yunari-palette-color": "" }}
-        value={value.color}
-        // The refusal is the control set's own editable-invalid channel, so the
-        // field carries `aria-invalid` and describes itself by the reason rather
-        // than the pane drawing a sibling `<p>` nothing was associated with
-        // (`vg-263`).
-        {...(error === undefined ? {} : { invalid: error })}
-        onCommit={(next) => {
-          const typed = next.trim();
-          if (typed === "") return;
-          // The browser is the authority on what a colour is, and it already
-          // ships the answer: `CSS.supports` asks the same engine that will
-          // paint it. A value it rejects is one where `ctx.fillStyle` keeps the
-          // PREVIOUS colour, so the edit would silently do nothing while the
-          // document carried the nonsense.
-          if (
-            typeof CSS !== "undefined" &&
-            CSS.supports?.("color", typed) === false
-          ) {
-            setError(uiCopy.panels.colourUnpaintable(typed));
-            return;
-          }
-          put(typed);
-        }}
-      />
-      {/* The swatch opens the picker. The field stays, because a value can be
-          typed exactly and a picker cannot always be dragged to it. */}
-      <div data-yunari-palette-picker="" className="flex items-center">
-        <ColourPicker
-          value={value.color}
-          label={uiCopy.panels.colourPicker}
-          onValueChange={put}
-          onValueCommit={put}
-        />
-      </div>
-    </>
+    <ColourPicker
+      label={uiCopy.panels.colourPicker}
+      value={value.color}
+      onValueChange={put}
+      onValueCommit={(color) => {
+        put(color);
+        onSettled?.();
+      }}
+    />
   );
 }
 

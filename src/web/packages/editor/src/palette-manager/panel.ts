@@ -23,6 +23,11 @@ export interface PalettePanelOptions {
    * while an object is painted with it.
    */
   readonly usage?: () => Readonly<Record<string, readonly PaletteTokenUse[]>>;
+  /**
+   * The settled boundary of a colour edit — the session's history save. Live
+   * changes call the panel's `onChange` repeatedly; this fires once per gesture.
+   */
+  readonly onSettled?: (() => void) | undefined;
 }
 
 export interface PalettePanel {
@@ -67,6 +72,7 @@ export function createPalettePanel(
           palette: palette ?? {},
           usage: options.usage,
           onChange,
+          onSettled: options.onSettled,
           onDelete,
         }),
       );

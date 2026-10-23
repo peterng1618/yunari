@@ -12,7 +12,7 @@
  */
 import type { FabricPalette } from "@yunari/renderer-core";
 import { act } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createPalettePanel } from "./panel.js";
 
 const palette = {
@@ -39,15 +39,23 @@ globalThis.ResizeObserver ??= class {
 } as never;
 Element.prototype.getAnimations ??= (): never[] => [];
 window.PointerEvent ??= MouseEvent as never;
-// jsdom ships no `CSS`; the colour guard asks the platform by name.
-(globalThis as { CSS?: unknown }).CSS = {
-  supports: (_property: string, value: string): boolean =>
-    /^(#[0-9a-f]{3,8}|rgb|hsl|transparent|white|black)/i.test(value),
-};
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
+
+beforeAll(() => {
+  // jsdom's selector engine cannot answer `:modal`/`:popover-open`, and
+  // Base UI's focus manager asks for both when a popup opens.
+  const matches = Element.prototype.matches;
+  Element.prototype.matches = Object.assign(function (
+    this: Element,
+    selector: string,
+  ): boolean {
+    if (selector === ":modal" || selector === ":popover-open") return false;
+    return matches.call(this, selector);
+  }, matches);
+});
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -73,6 +81,26 @@ async function commitField(control: string, value: string): Promise<void> {
   });
 }
 
+/** Opens the picker's popover, fills its one colour field and commits by
+ *  leaving the field — the pane owns no exact-value field of its own. */
+async function commitColour(value: string): Promise<void> {
+  const trigger = document.querySelector<HTMLButtonElement>(
+    "[data-yunari-palette-picker]",
+  );
+  if (trigger === null) throw new Error("the panel rendered no picker trigger");
+  await act(async () => {
+    trigger.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+  });
+  for (let round = 0; round < 3; round += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+  await commitField("[data-yunari-palette-color]", value);
+}
+
 describe("palette panel", () => {
   it("paints the tokens on render without waiting for a frame", () => {
     const panel = createPalettePanel(document.body, vi.fn());
@@ -95,17 +123,32 @@ describe("palette panel", () => {
 
   it("commits an edit under the token's stable id, through the callback it was built with", async () => {
     const change = vi.fn();
-    const panel = createPalettePanel(document.body, change);
+    const settled = vi.fn();
+    const panel = createPalettePanel(document.body, change, undefined, {
+      onSettled: settled,
+    });
     panel.render(palette);
 
-    await commitField("[data-yunari-palette-color]", "rgb(16 32 48)");
+    await commitColour("rgb(16 32 48)");
 
+    // The picker reports a colour, not the document's spelling of one: the
+    // stored value is the hex form (Review Focus 1).
     expect(change).toHaveBeenLastCalledWith({
       ...palette,
       background: {
         name: "Background",
-        value: { kind: "solid", color: "rgb(16 32 48)" },
+        value: { kind: "solid", color: "#102030" },
       },
+    });
+    expect(
+      settled,
+      "the pane forwards the session's settled boundary",
+    ).toHaveBeenCalledOnce();
+
+    // The popover's portal is open; releasing the root is what removes it from
+    // `body` before the next case's cleanup.
+    await act(async () => {
+      panel.destroy();
     });
   });
 

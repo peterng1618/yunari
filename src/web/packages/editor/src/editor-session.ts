@@ -312,6 +312,9 @@ export class EditorSession {
             options.shell.editor.canvas,
             this.#document.envelope.globals?.palette ?? {},
           ),
+        // Live edits publish on every sample; the history entry is made once,
+        // when the picker says the gesture ended.
+        onSettled: () => options.shell.editor.historyManager.saveState(),
       },
     );
     this.#palette.render(this.#document.envelope.globals?.palette);

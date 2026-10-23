@@ -229,6 +229,7 @@ export function ColourPicker({
               id={ids.control}
               type="button"
               data-testid="picker-trigger"
+              data-yunari-palette-picker=""
               aria-label={label}
               className="flex h-full w-full min-w-0 items-center gap-[var(--space-6)] bg-transparent text-left"
             >
@@ -249,7 +250,9 @@ export function ColourPicker({
                 data-yunari-value=""
                 className="truncate font-mono text-xs text-text"
               >
-                {value}
+                {/* The colour, not the document's spelling of it: an authored
+                    `rgb()` reads as the hex the field commits (Review Focus 1). */}
+                {api.text}
               </span>
             </Popover.Trigger>
           </ControlWell>

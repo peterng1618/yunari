@@ -36,6 +36,9 @@ import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { uiCopy } from "../../ui-copy.js";
 import { PaintList, type PaintListProps } from "./paint-list.js";
 import {
+  AUTHORED_RGB_HEX,
+  AUTHORED_RGB_PAINT,
+  AUTHORED_RGB_PALETTE,
   BACKGROUND_PAINT,
   EDITED_ACCENT_PAINT,
   FROST_PAINT,
@@ -57,20 +60,13 @@ globalThis.ResizeObserver ??= class {
 Element.prototype.getAnimations ??= (): never[] => [];
 window.PointerEvent ??= MouseEvent as never;
 
-// jsdom ships no `CSS` at all, and the colour guard asks the platform by name
-// (`CSS.supports("color", …)`) because the browser is the authority on what it
-// can paint. This shim answers for the values these cases use, so the refusal
-// path is exercised rather than skipped.
-(globalThis as { CSS?: unknown }).CSS = {
-  supports: (_property: string, value: string): boolean =>
-    /^(#[0-9a-f]{3,8}|rgb|hsl|transparent|white|black)/i.test(value),
-};
-
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 beforeAll(() => {
+  Element.prototype.setPointerCapture ??= () => undefined;
+  Element.prototype.releasePointerCapture ??= () => undefined;
   const matches = Element.prototype.matches;
   Element.prototype.matches = Object.assign(function (
     this: Element,
@@ -96,6 +92,7 @@ function Harness(props: {
   readonly initial: FabricPalette;
   readonly usage: PaintListProps["usage"];
   readonly onDelete: PaintListProps["onDelete"];
+  readonly onSettled: PaintListProps["onSettled"];
   readonly change: (palette: FabricPalette) => void;
 }): React.JSX.Element {
   const [palette, setPalette] = useState(props.initial);
@@ -104,6 +101,7 @@ function Harness(props: {
       palette={palette}
       usage={props.usage}
       onDelete={props.onDelete}
+      onSettled={props.onSettled}
       onChange={(next) => {
         props.change(next);
         setPalette(next);
@@ -121,6 +119,7 @@ async function mount(
 ): Promise<{
   readonly host: HTMLElement;
   readonly change: ReturnType<typeof vi.fn>;
+  readonly settled: ReturnType<typeof vi.fn>;
 }> {
   if (root !== undefined) await act(async () => root?.unmount());
   root = undefined;
@@ -128,6 +127,7 @@ async function mount(
   const host = document.createElement("div");
   document.body.append(host);
   const change = vi.fn();
+  const settled = vi.fn();
   const mounted = createRoot(host);
   root = mounted;
   await act(async () => {
@@ -136,11 +136,12 @@ async function mount(
         initial={initial}
         usage={options.usage}
         onDelete={options.onDelete}
+        onSettled={settled}
         change={change}
       />,
     );
   });
-  return { host, change };
+  return { host, change, settled };
 }
 
 /** React and floating-ui schedule outside `act`, so a popup is flushed with
@@ -250,6 +251,94 @@ const pickerHost = (host: HTMLElement): Element | null =>
 const fieldsHost = (host: HTMLElement): Element | null =>
   host.querySelector("[data-yunari-palette-fields]");
 
+/** The picker's one exact-value field, which lives in the popup's portal rather
+ *  than in the pane (the `host` query stays null for exactly that reason). */
+function popupField(): HTMLInputElement | null {
+  return document.querySelector<HTMLInputElement>(
+    "[data-yunari-palette-color]",
+  );
+}
+
+/** Types into the popup field and presses Enter, the way §5's text control
+ *  commits — no blur, because the press is what settles the gesture. */
+async function typeAndEnter(
+  input: HTMLInputElement,
+  value: string,
+): Promise<void> {
+  await act(async () => {
+    input.focus();
+    const setter = Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(input) as object,
+      "value",
+    )?.set;
+    if (setter === undefined) input.value = value;
+    else setter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+}
+
+/** Opens the picker the way an author does, and hands back its value field. */
+async function openPicker(host: HTMLElement): Promise<HTMLInputElement> {
+  const trigger = pickerHost(host);
+  if (trigger === null) throw new Error("The pane rendered no picker trigger.");
+  await click(trigger);
+  await flush();
+  const field = popupField();
+  if (field === null) throw new Error("The picker rendered no value field.");
+  return field;
+}
+
+/** A colour typed exactly into the one field: trigger, fill, Enter. */
+async function commitColour(host: HTMLElement, value: string): Promise<void> {
+  await typeAndEnter(await openPicker(host), value);
+}
+
+/** jsdom reports a zero rect; the area's maths needs a real one. */
+function stubRect(element: HTMLElement, width: number, height: number): void {
+  element.getBoundingClientRect = () =>
+    ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: width,
+      bottom: height,
+      width,
+      height,
+      toJSON: () => ({}),
+    }) as DOMRect;
+}
+
+/** A pointer event under the name React listens for on a pointer handler. */
+async function pointer(
+  element: HTMLElement,
+  type: string,
+  x: number,
+  y: number,
+  buttons = 1,
+): Promise<void> {
+  await act(async () => {
+    element.dispatchEvent(
+      new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        buttons,
+      }),
+    );
+  });
+}
+
 it("lists every token with its name and its usage figure, and skips the none token", async () => {
   const { host } = await mount(PAINT_LIST_PALETTE, {
     usage: usageWith({
@@ -282,16 +371,37 @@ it("states a missing reading rather than fabricating a zero when there is no sce
   expect(host.querySelector("[data-yunari-palette-users]")).toBeNull();
 });
 
+it("renders one trigger per colour, and no exact-value field of the pane's own", async () => {
+  const { host } = await mount(PAINT_LIST_PALETTE, { usage: undefined });
+
+  const triggers = host.querySelectorAll("[data-yunari-palette-picker]");
+  expect(triggers, "one colour, one trigger").toHaveLength(1);
+  expect(triggers[0]?.tagName).toBe("BUTTON");
+  // The exact-value field is the popover's, so it is not in the pane at all
+  // until the trigger is opened — and not in the document before that either.
+  expect(host.querySelector("[data-yunari-palette-color]")).toBeNull();
+  expect(popupField()).toBeNull();
+});
+
+it("opens the popup's one value field from the trigger", async () => {
+  const { host } = await mount(PAINT_LIST_PALETTE, { usage: undefined });
+
+  const field = await openPicker(host);
+
+  expect(field).toBe(popupField());
+  // Portalled: the pane does not own it.
+  expect(host.querySelector("[data-yunari-palette-color]")).toBeNull();
+  expect(field.value).toBe(BACKGROUND_PAINT);
+});
+
 it("keeps the picker's element standing while a value changes", async () => {
   const { host } = await mount(PAINT_LIST_PALETTE, { usage: undefined });
   const beforeHost = pickerHost(host);
   const beforeFields = fieldsHost(host);
-  const beforeTrigger = host.querySelector(
-    "[data-yunari-palette-picker] button",
-  );
+  const beforeTrigger = pickerHost(host);
   expect(beforeHost).not.toBeNull();
 
-  await commitField("[data-yunari-palette-color]", TYPED_PAINT);
+  await commitColour(host, TYPED_PAINT);
 
   expect(pickerHost(host), "a colour change re-renders in place").toBe(
     beforeHost,
@@ -300,7 +410,7 @@ it("keeps the picker's element standing while a value changes", async () => {
     beforeFields,
   );
   expect(
-    host.querySelector("[data-yunari-palette-picker] button"),
+    pickerHost(host),
     "the trigger the popover is anchored to is still the same node",
   ).toBe(beforeTrigger);
 });
@@ -342,19 +452,66 @@ it("rebuilds the field set when the token changes, so the picker cannot show the
   );
 });
 
-it("refuses a colour the engine cannot paint, and associates the reason with the field", async () => {
-  const { host, change } = await mount(PAINT_LIST_PALETTE, {
+it("commits a typed colour once and settles the history exactly once", async () => {
+  const { host, change, settled } = await mount(PAINT_LIST_PALETTE, {
     usage: undefined,
   });
 
-  await commitField("[data-yunari-palette-color]", "not-a-colour");
+  await commitColour(host, AUTHORED_RGB_PAINT);
+
+  // A colour typed in `rgb()` is stored as the hex the picker reports, and it
+  // is the token that was being edited — not the rest of the palette
+  // (Review Focus 1).
+  expect(change).toHaveBeenLastCalledWith({
+    ...PAINT_LIST_PALETTE,
+    background: {
+      name: "Background",
+      value: { kind: "solid", color: AUTHORED_RGB_HEX },
+    },
+  });
+  expect(settled, "one gesture is one history entry").toHaveBeenCalledOnce();
+});
+
+it("emits while the area is dragged, and settles nothing until pointer-up", async () => {
+  const { host, change, settled } = await mount(PAINT_LIST_PALETTE, {
+    usage: undefined,
+  });
+  await openPicker(host);
+  const area = document.querySelector<HTMLElement>(
+    '[data-testid="picker-area"]',
+  );
+  if (area === null) throw new Error("The picker rendered no area.");
+  stubRect(area, 200, 200);
+
+  await pointer(area, "pointerdown", 20, 20);
+  for (const [x, y] of [
+    [40, 40],
+    [60, 60],
+    [80, 80],
+  ] as const) {
+    await pointer(area, "pointermove", x, y);
+  }
+
+  expect(
+    change.mock.calls.length,
+    "each sample of the gesture is a live edit",
+  ).toBeGreaterThan(1);
+  expect(
+    settled,
+    "a gesture still under the pointer is not a history entry",
+  ).not.toHaveBeenCalled();
+});
+
+it("refuses a value that is not a colour, and associates the reason with the field", async () => {
+  const { host, change, settled } = await mount(PAINT_LIST_PALETTE, {
+    usage: undefined,
+  });
+
+  const field = await openPicker(host);
+  await typeAndEnter(field, "not-a-colour");
 
   expect(change).not.toHaveBeenCalled();
-  const field = host.querySelector<HTMLInputElement>(
-    "[data-yunari-palette-color]",
-  );
-  expect(field, "the colour field is not an input").not.toBeNull();
-  if (field === null) return;
+  expect(settled).not.toHaveBeenCalled();
   // The control set's editable-invalid channel (`vg-263`): the refusal is
   // announced — `aria-invalid` plus a described-by reason — and the field stays
   // editable, so the author can type a different colour. Before this the pane
@@ -369,13 +526,22 @@ it("refuses a colour the engine cannot paint, and associates the reason with the
   expect(described).toContain("not-a-colour");
 });
 
+it("shows an authored rgb() token as its hex form, in the trigger and the field", async () => {
+  // Review Focus 1: the picker's one field is a colour, not a copy of the
+  // document's spelling. The stored value's shape stays untouched elsewhere.
+  const { host } = await mount(AUTHORED_RGB_PALETTE, { usage: undefined });
+
+  expect(pickerHost(host)?.textContent).toContain(AUTHORED_RGB_HEX);
+  expect((await openPicker(host)).value).toBe(AUTHORED_RGB_HEX);
+});
+
 it("edits the token the author picks, and commits it under its own stable id", async () => {
   const { host, change } = await mount(PAINT_LIST_PALETTE, {
     usage: undefined,
   });
 
   await click(host.querySelector('[data-yunari-palette-token-row="accent"]')!);
-  await commitField("[data-yunari-palette-color]", EDITED_ACCENT_PAINT);
+  await commitColour(host, EDITED_ACCENT_PAINT);
 
   expect(change).toHaveBeenLastCalledWith({
     ...PAINT_LIST_PALETTE,

@@ -33,6 +33,22 @@ export const MOVED_FROST_PAINT = "#0a16234d";
 /** The colour the glow gradient's first stop is edited to. */
 export const RED_PAINT = "#ff0000";
 
+/** A colour typed in `rgb()` form, as an author or an older document writes it. */
+export const AUTHORED_RGB_PAINT = "rgb(16 32 48)";
+
+/** The same colour in the hex form the picker shows and stores. */
+export const AUTHORED_RGB_HEX = "#102030";
+
+/** A palette whose background token is authored in `rgb()`: the picker is one
+ *  field reading a colour, so it shows that colour's hex form. */
+export const AUTHORED_RGB_PALETTE: FabricPalette = {
+  none: { name: "None", value: { kind: "solid", color: "transparent" } },
+  background: {
+    name: "Background",
+    value: { kind: "solid", color: AUTHORED_RGB_PAINT },
+  },
+};
+
 /** The three tokens the list is mounted over: one reserved, one used, one not. */
 export const PAINT_LIST_PALETTE: FabricPalette = {
   none: { name: "None", value: { kind: "solid", color: "transparent" } },
