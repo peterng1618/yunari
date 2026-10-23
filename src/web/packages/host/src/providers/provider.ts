@@ -120,15 +120,21 @@ export interface SensorProvider {
    *
    * The assignment is the one resolved for the display this sample is for, so
    * a provider answers for the screen that asked rather than for whichever
-   * screen was served last. Omitted by a caller with no display: the machine's
-   * own global choice alone, which is what an unassigned provider answered
-   * before assignments were passed.
+   * screen was served last. The language is the one that display's connections
+   * last declared; a provider that renders words uses it, and one that renders
+   * numbers ignores it. Omitted by a caller with no display.
    */
   sample(
     semanticKeys: readonly string[],
     nowMs: number,
-    assignment?: DeviceAssignment,
+    context?: SampleContext,
   ): Promise<readonly SampleEntry[]>;
 
   health(): ProviderHealth;
+}
+
+/** What a sample is for: the display's devices, and the language it reads. */
+export interface SampleContext {
+  readonly assignment?: DeviceAssignment;
+  readonly language?: string;
 }

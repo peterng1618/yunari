@@ -2,7 +2,6 @@ import type { Sample, SampleEntry } from "@yunari/renderer-core";
 import { describeSemanticKey, diskDeviceOf } from "@yunari/renderer-core";
 import { displayNameFor } from "../settings/devices.js";
 import {
-  type DeviceAssignment,
   diskDeviceReadings,
   dynamicKeyReadings,
   gpuDeviceReadings,
@@ -14,6 +13,7 @@ import {
 import { flattenLhmSensors } from "./lhm-tree.js";
 import type {
   ProviderHealth,
+  SampleContext,
   SensorDescriptor,
   SensorProvider,
 } from "./provider.js";
@@ -220,8 +220,9 @@ export class LhmSensorProvider implements SensorProvider {
   async sample(
     semanticKeys: readonly string[],
     nowMs: number,
-    assignment: DeviceAssignment = {},
+    context: SampleContext = {},
   ): Promise<readonly SampleEntry[]> {
+    const assignment = context.assignment ?? {};
     // Per-device keys (disk dot id dot used, cpu.core.n.*, gpu.fan.n) are
     // discovered at runtime, so they are accepted by shape rather than by
     // membership in the fixed list.

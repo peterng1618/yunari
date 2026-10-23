@@ -9,14 +9,15 @@ export class SseConnection {
   private closed = false;
 
   /**
-   * Keys requested by this display, and the display itself: the host resolves
-   * each display's own device assignment and polls their union across
-   * connections.
+   * Keys requested by this display, the display itself, and the language it
+   * declared: the host resolves each display's own device assignment and polls
+   * their union across connections, and localizes text per display.
    */
   constructor(
     private readonly response: ServerResponse,
     readonly semanticKeys: readonly string[],
     readonly display: string,
+    readonly language?: string,
   ) {
     response.writeHead(200, {
       "content-type": "text/event-stream",

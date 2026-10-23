@@ -25,7 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
 import { type ListenableServer, listenWithFallback } from "./cli/net.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
-import type { SensorProvider } from "./providers/provider.js";
+import type { SampleContext, SensorProvider } from "./providers/provider.js";
 import { ProviderRegistry } from "./providers/registry.js";
 import { createDisplayLauncher } from "./serve/display-launcher.js";
 import {
@@ -334,13 +334,16 @@ function streamStatus(
  */
 function assignmentEcho(): SensorProvider & {
   readonly assignments: DeviceAssignment[];
+  readonly contexts: SampleContext[];
 } {
   const assignments: DeviceAssignment[] = [];
+  const contexts: SampleContext[] = [];
 
   return {
     id: "echo",
     label: "echo",
     assignments,
+    contexts,
     describe: () =>
       Promise.resolve([
         {
@@ -350,8 +353,10 @@ function assignmentEcho(): SensorProvider & {
           tier: "baseline" as const,
         },
       ]),
-    sample(semanticKeys, nowMs, assignment = {}) {
+    sample(semanticKeys, nowMs, context = {}) {
+      const assignment = context.assignment ?? {};
       assignments.push(assignment);
+      contexts.push(context);
 
       return Promise.resolve(
         semanticKeys
@@ -5858,6 +5863,34 @@ describe("The assignment a display is served", () => {
     expect(await servedCard(one)).toBe("gpu-0");
     expect(await servedCard(two)).toBe("gpu-0");
     expect(await servedCard(three)).toBe("gpu-1");
+  });
+
+  it("passes a connection's declared language into that display's ask", async () => {
+    sampleStream(
+      hosted.server,
+      `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=de-DE`,
+    );
+
+    await vi.waitFor(() =>
+      expect(echo.contexts.at(-1)).toMatchObject({ language: "de-DE" }),
+    );
+  });
+
+  it("opens the stream when lang is unusable, and asks without a language", async () => {
+    // A malformed tag and a syntactically valid one past the length ceiling:
+    // both are dropped, and neither refusal closes the stream.
+    for (const lang of ["de_DE", "de-Latn-DE-1996-yunari-display-extra"]) {
+      const answer = await streamStatus(
+        hosted.server,
+        `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=${lang}`,
+        "127.0.0.1",
+      );
+
+      expect(answer.status).toBe(200);
+    }
+
+    await vi.waitFor(() => expect(echo.contexts.length).toBeGreaterThan(0));
+    expect(echo.contexts.at(-1)).not.toHaveProperty("language");
   });
 });
 

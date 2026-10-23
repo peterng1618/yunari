@@ -197,16 +197,20 @@ async function startHostedTheme(
   theme: FabricThemeEnvelope,
   session: DisplaySessionToken,
 ): Promise<void> {
-  declareDocumentLanguage(theme.metadata?.themeLanguage);
+  const language = theme.metadata?.themeLanguage;
+  declareDocumentLanguage(language);
   // Fetch before allocating live resources so a failed font request has nothing to release.
   const fontBytes = await loadHostedFontAssets(theme.id, theme, session.fetch);
   const units = await loadDisplayPreferences(session.fetch);
   const keys = boundSemanticKeys(theme);
+  // The host localizes per display and does not read this theme to learn its
+  // language, so the already-loaded value rides the request. The host validates.
+  const streamParameters = new URLSearchParams({ keys: keys.join(",") });
+  if (language !== undefined && language.length > 0) {
+    streamParameters.set("lang", language);
+  }
   const liveHandle = createLiveSource({
-    url: session.streamUrl(
-      SAMPLE_STREAM_PATH,
-      new URLSearchParams({ keys: keys.join(",") }),
-    ),
+    url: session.streamUrl(SAMPLE_STREAM_PATH, streamParameters),
     onStatus: (status, detail) =>
       showConnectionState(status, keys.length, detail),
   });

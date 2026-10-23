@@ -194,6 +194,36 @@ describe("WeatherProvider", () => {
     });
   });
 
+  it("localizes the condition text and leaves every number identical", async () => {
+    const now = Date.now();
+    const provider = host(settingsStore(), fetcherOf().fetcher);
+    const keys = ["weather.temp", "weather.condition"];
+
+    await sampleAt(provider, ["weather.temp"], now);
+    await settle();
+
+    const en = await provider.sample(keys, now, { language: "en" });
+    const de = await provider.sample(keys, now, { language: "de" });
+    const sampleOf = (
+      entries: readonly SampleEntry[],
+      key: string,
+    ): SampleEntry["sample"] | undefined =>
+      entries.find((entry) => entry.semanticKey === key)?.sample;
+
+    expect(sampleOf(en, "weather.condition")).toMatchObject({
+      textValue: "Overcast",
+    });
+    expect(sampleOf(de, "weather.condition")).toMatchObject({
+      textValue: "Bedeckt",
+    });
+    // The reading is one measurement in two languages, not two readings.
+    expect(sampleOf(de, "weather.temp")).toMatchObject({
+      value: 11.3,
+      unit: "°C",
+    });
+    expect(sampleOf(de, "weather.temp")).toEqual(sampleOf(en, "weather.temp"));
+  });
+
   it("reports no place as unavailable and never fetches", async () => {
     const { fetcher, calls } = fetcherOf();
     const provider = host(

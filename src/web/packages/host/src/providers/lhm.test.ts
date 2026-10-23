@@ -1178,8 +1178,10 @@ describe("LHM per-drive readings", () => {
       status: 200,
       body: identicalDrives(),
     }).sample(["disk.name"], 0, {
-      systemDisk: "samsung-ssd-970-2",
-      names: { "samsung-ssd-970-2": "Games" },
+      assignment: {
+        systemDisk: "samsung-ssd-970-2",
+        names: { "samsung-ssd-970-2": "Games" },
+      },
     });
 
     expect(entries[0]?.sample).toMatchObject({
@@ -1268,7 +1270,7 @@ describe("LHM per-drive readings", () => {
       status: 200,
       body: realPayload(),
     }).sample(["disk.st4000dm004-2cv104.temp"], 0, {
-      systemDisk: "lexar-500gb-ssd",
+      assignment: { systemDisk: "lexar-500gb-ssd" },
     });
 
     expect(entries[0]?.sample).toMatchObject({ status: "ok", value: 41 });

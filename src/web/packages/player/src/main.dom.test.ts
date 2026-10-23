@@ -1168,3 +1168,75 @@ describe("the pairing a load remembers", () => {
     ]);
   });
 });
+
+/**
+ * The language half of the sample stream's wire shape, driven through the real
+ * `main.ts`: the host localizes per display and never reads a theme record to
+ * learn this display's language, so the loaded theme's own `themeLanguage` has
+ * to ride the URL beside `keys`.
+ */
+describe("the language a display sends with its samples", () => {
+  const urls: string[] = [];
+
+  class RecordingEventSource {
+    constructor(url: string | URL) {
+      urls.push(String(url));
+    }
+
+    addEventListener(): void {}
+    close(): void {}
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    urls.length = 0;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /** Mounts a display showing a theme whose declared language is `language`,
+   *  and returns the sample stream URL it opened. */
+  async function mountWithLanguage(language: string): Promise<URL> {
+    skeleton();
+    history.replaceState({}, "", "/?theme=living-room");
+    vi.stubGlobal("EventSource", RecordingEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+
+    const envelope = mountedEnvelope() as Record<string, unknown>;
+    envelope["metadata"] = { themeLanguage: language };
+
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/document")) return json(envelope);
+        return json({});
+      }),
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await import("./main.js");
+    await vi.waitFor(() => expect(urls.length).toBeGreaterThan(0));
+
+    return new URL(urls[0]!, window.location.href);
+  }
+
+  it("sends the loaded theme's language beside the keys", async () => {
+    const url = await mountWithLanguage("de-DE");
+
+    expect(url.pathname).toBe("/ws");
+    expect(url.searchParams.has("keys")).toBe(true);
+    expect(url.searchParams.get("lang")).toBe("de-DE");
+  });
+});

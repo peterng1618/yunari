@@ -1,6 +1,5 @@
 import type { Sample, SampleEntry } from "@yunari/renderer-core";
 import { describeSemanticKey, semanticId } from "@yunari/renderer-core";
-import type { DeviceAssignment } from "./lhm-mapping.js";
 import {
   type BlockDeviceLike,
   type DriveLayoutLike as DiskLayoutLike,
@@ -12,6 +11,7 @@ import {
 } from "./library-devices.js";
 import type {
   ProviderHealth,
+  SampleContext,
   SensorDescriptor,
   SensorProvider,
 } from "./provider.js";
@@ -899,8 +899,9 @@ export class LibrarySensorProvider implements SensorProvider {
   async sample(
     semanticKeys: readonly string[],
     nowMs: number,
-    assignment: DeviceAssignment = {},
+    context: SampleContext = {},
   ): Promise<readonly SampleEntry[]> {
+    const assignment = context.assignment ?? {};
     const owned = semanticKeys.filter((key) =>
       (LIBRARY_KEYS as readonly string[]).includes(key),
     );

@@ -1,6 +1,10 @@
 import type { SampleEntry } from "@yunari/renderer-core";
 import type { DeviceAssignment } from "./lhm-mapping.js";
-import type { SensorDescriptor, SensorProvider } from "./provider.js";
+import type {
+  SampleContext,
+  SensorDescriptor,
+  SensorProvider,
+} from "./provider.js";
 
 /** Scheduler: polls the requested-key union once and isolates provider failures. */
 
@@ -40,48 +44,54 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** One display's ask: what its connections want, and the devices it resolved to. */
+/** One display's ask: what its connections want, and the devices and language
+ *  it resolved to. */
 export interface DisplayAsk {
   readonly display: string;
   readonly semanticKeys: readonly string[];
   readonly assignment: DeviceAssignment;
+  readonly language?: string;
 }
 
-/** One distinct assignment, and every display that resolved to it. */
-export interface AssignmentGroup {
+/** One distinct assignment and language, and every display that resolved to it. */
+export interface AskGroup {
   readonly assignment: DeviceAssignment;
   readonly semanticKeys: readonly string[];
+  readonly language?: string;
   readonly displays: readonly string[];
 }
 
 /**
- * One group per distinct assignment, so two displays holding the same devices
- * cost one poll rather than two: a poll is this PC's work, and the devices are
- * what it reads, not the screens.
+ * One group per distinct assignment and language, so two displays holding the
+ * same devices cost one poll rather than two: a poll is this PC's work, and the
+ * devices are what it reads, not the screens. The language is part of the key
+ * because it changes the words a provider puts beside those readings, and one
+ * poll has one answer.
  *
  * Keyed by the assignment's own JSON. `currentAssignment` builds the object in
  * one shape, so two displays that resolved the same devices serialize alike.
  * The keys are unioned, as they were across every connection before.
  */
-export function groupByAssignment(
-  asks: readonly DisplayAsk[],
-): readonly AssignmentGroup[] {
+export function groupByAsk(asks: readonly DisplayAsk[]): readonly AskGroup[] {
   const groups = new Map<
     string,
     {
       assignment: DeviceAssignment;
+      language: string | undefined;
       keys: Set<string>;
       displays: string[];
     }
   >();
 
   for (const ask of asks) {
-    const key = JSON.stringify(ask.assignment);
+    const key =
+      JSON.stringify(ask.assignment) + "\u0000" + (ask.language ?? "");
     const group = groups.get(key);
 
     if (group === undefined) {
       groups.set(key, {
         assignment: ask.assignment,
+        language: ask.language,
         keys: new Set(ask.semanticKeys),
         displays: [ask.display],
       });
@@ -95,6 +105,7 @@ export function groupByAssignment(
   return [...groups.values()].map((group) => ({
     assignment: group.assignment,
     semanticKeys: [...group.keys].sort(),
+    ...(group.language === undefined ? {} : { language: group.language }),
     displays: group.displays,
   }));
 }
@@ -122,13 +133,13 @@ export class ProviderRegistry {
 
   /**
    * Polls providers concurrently and preserves successful results when another
-   * fails. `assignment` is the one resolved for the display this cycle answers,
-   * passed through to every provider.
+   * fails. `context` carries the devices resolved for the display this cycle
+   * answers, and that display's language, passed through to every provider.
    */
   async sample(
     semanticKeys: readonly string[],
     nowMs: number,
-    assignment?: DeviceAssignment,
+    context?: SampleContext,
   ): Promise<SampleCycle> {
     if (semanticKeys.length === 0) {
       return { entries: [], failures: [], unmapped: [] };
@@ -136,7 +147,7 @@ export class ProviderRegistry {
 
     const settled = await Promise.allSettled(
       this.providers.map((provider) =>
-        provider.sample(semanticKeys, nowMs, assignment),
+        provider.sample(semanticKeys, nowMs, context),
       ),
     );
 

@@ -9,6 +9,7 @@ import type {
 } from "../../settings/weather.js";
 import type {
   ProviderHealth,
+  SampleContext,
   SensorDescriptor,
   SensorProvider,
 } from "../provider.js";
@@ -138,6 +139,7 @@ export class WeatherProvider implements SensorProvider {
   async sample(
     semanticKeys: readonly string[],
     nowMs: number,
+    context: SampleContext = {},
   ): Promise<readonly SampleEntry[]> {
     const wanted = WEATHER_KEYS.filter((key) => semanticKeys.includes(key));
 
@@ -155,9 +157,11 @@ export class WeatherProvider implements SensorProvider {
 
     const settings = this.#settings ?? (await this.#refreshSettings());
 
+    // Only the cached reading's text is localized here: the clock above owns
+    // acquisition, and the language must never reach it.
     return wanted.map((semanticKey) => ({
       semanticKey,
-      sample: this.#sampleOf(semanticKey, settings, nowMs),
+      sample: this.#sampleOf(semanticKey, settings, nowMs, context.language),
     }));
   }
 
@@ -244,6 +248,7 @@ export class WeatherProvider implements SensorProvider {
     semanticKey: string,
     settings: WeatherSettings,
     nowMs: number,
+    language: string | undefined,
   ): Sample {
     const sensorId = `${WEATHER_PROVIDER_ID}:${semanticKey}`;
     const timestamp = new Date(nowMs).toISOString();
@@ -273,7 +278,13 @@ export class WeatherProvider implements SensorProvider {
       return { sensorId, timestamp, status: "stale", message: STALE_MESSAGE };
     }
 
-    return this.#readingSample(semanticKey, sensorId, timestamp, settings);
+    return this.#readingSample(
+      semanticKey,
+      sensorId,
+      timestamp,
+      settings,
+      language,
+    );
   }
 
   #readingSample(
@@ -281,6 +292,7 @@ export class WeatherProvider implements SensorProvider {
     sensorId: string,
     timestamp: string,
     settings: WeatherSettings,
+    language: string | undefined,
   ): Sample {
     const reading = this.#lastGood?.reading;
 
@@ -324,9 +336,7 @@ export class WeatherProvider implements SensorProvider {
       case "weather.conditionCode":
         return numeric(reading.code);
       case "weather.condition":
-        // The theme's own language is Task 3.3; until then the vocabulary's
-        // English table answers.
-        return text(conditionText(reading.code, undefined));
+        return text(conditionText(reading.code, language));
       case "weather.icon": {
         const url = weatherIconUrl(reading.code, reading.isDay);
         return url === undefined

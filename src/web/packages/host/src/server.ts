@@ -24,7 +24,7 @@ import type { DeviceAssignment } from "./providers/lhm-mapping.js";
 import { redactForBrowser } from "./providers/provider.js";
 import {
   type DisplayAsk,
-  groupByAssignment,
+  groupByAsk,
   ProviderRegistry,
   unionOfKeys,
 } from "./providers/registry.js";
@@ -491,6 +491,31 @@ export async function displayKeyFor(
   }
 
   return (await displayFor(request, url, displays))?.id ?? DEFAULT_DISPLAY;
+}
+
+/** A BCP-47-shaped tag, bounded: enough for `de`, `de-DE`, `zh-Hant-TW`. */
+const LANGUAGE_TAG = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
+const MAX_LANGUAGE_LENGTH = 35;
+
+/**
+ * The language a display declares on its stream URL, or none.
+ *
+ * The player sends the theme it has already loaded; the host never reads a
+ * theme record to learn it. A malformed or over-long value is dropped rather
+ * than refused — a display that mistranslates its own text still opens.
+ */
+function streamLanguage(url: URL): string | undefined {
+  const language = url.searchParams.get("lang");
+
+  if (
+    language === null ||
+    language.length > MAX_LANGUAGE_LENGTH ||
+    !LANGUAGE_TAG.test(language)
+  ) {
+    return undefined;
+  }
+
+  return language;
 }
 
 /**
@@ -3518,7 +3543,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
     request.on("error", noteGone);
 
     const display = await displayKeyFor(request, url, displays);
-    const connection = new SseConnection(response, keys, display);
+    const connection = new SseConnection(
+      response,
+      keys,
+      display,
+      streamLanguage(url),
+    );
 
     request.off("close", noteGone);
     request.off("error", noteGone);
@@ -3568,12 +3598,20 @@ export function createHostServer(options: HostServerOptions): HostServer {
     const asks: DisplayAsk[] = [];
 
     for (const [display, held] of byDisplay) {
+      // The newest connection that declares a language speaks for the display;
+      // a theme change follows a re-connect, so only disagreement is transient.
+      let language: string | undefined;
+      for (const connection of held) {
+        if (connection.language !== undefined) language = connection.language;
+      }
+
       asks.push({
         display,
         semanticKeys: unionOfKeys(
           held.map((connection) => connection.semanticKeys),
         ),
         assignment: await currentAssignment(display),
+        ...(language === undefined ? {} : { language }),
       });
     }
 
@@ -3582,12 +3620,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // comparable, which is what a batch's `sentAt` and its samples promise.
     const at = now();
 
-    for (const group of groupByAssignment(asks)) {
-      const cycle = await registry.sample(
-        group.semanticKeys,
-        at,
-        group.assignment,
-      );
+    for (const group of groupByAsk(asks)) {
+      const cycle = await registry.sample(group.semanticKeys, at, {
+        assignment: group.assignment,
+        ...(group.language === undefined ? {} : { language: group.language }),
+      });
 
       // A key no provider even considers would otherwise be absent from the frame
       // entirely, so a display cannot tell "nothing reports this" from "no data

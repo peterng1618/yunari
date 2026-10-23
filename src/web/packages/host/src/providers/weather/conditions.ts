@@ -37,21 +37,61 @@ export const WMO_CONDITIONS: Readonly<Record<number, string>> = {
   99: "Thunderstorm with heavy hail",
 };
 
-/** A closed vocabulary, not a translation platform: 3.3 adds the consumer's
- *  language here, and anything absent reads in English. */
+/** The German names for the same 28 codes, kept beside the source vocabulary
+ *  rather than translated at runtime: a table is what a reviewer can check. */
+const DE_CONDITIONS: Readonly<Record<number, string>> = {
+  0: "Klarer Himmel",
+  1: "Überwiegend klar",
+  2: "Teilweise bewölkt",
+  3: "Bedeckt",
+  45: "Nebel",
+  48: "Reifnebel",
+  51: "Leichter Nieselregen",
+  53: "Mäßiger Nieselregen",
+  55: "Dichter Nieselregen",
+  56: "Leichter gefrierender Nieselregen",
+  57: "Dichter gefrierender Nieselregen",
+  61: "Leichter Regen",
+  63: "Mäßiger Regen",
+  65: "Starker Regen",
+  66: "Leichter gefrierender Regen",
+  67: "Starker gefrierender Regen",
+  71: "Leichter Schneefall",
+  73: "Mäßiger Schneefall",
+  75: "Starker Schneefall",
+  77: "Schneegriesel",
+  80: "Leichte Regenschauer",
+  81: "Mäßige Regenschauer",
+  82: "Heftige Regenschauer",
+  85: "Leichte Schneeschauer",
+  86: "Starke Schneeschauer",
+  95: "Gewitter",
+  96: "Gewitter mit leichtem Hagel",
+  99: "Gewitter mit starkem Hagel",
+};
+
+/** A closed vocabulary, not a translation platform: anything absent reads in
+ *  English. */
 const CONDITION_TEXT: Readonly<
   Record<string, Readonly<Record<number, string>>>
 > = {
   en: WMO_CONDITIONS,
+  de: DE_CONDITIONS,
 };
 
 const UNKNOWN = "Unknown";
+
+/** `de-DE` reads the German table: a region tag differs from its language only
+ *  where this vocabulary has no word for it. */
+function primarySubtag(language: string | undefined): string {
+  return (language ?? "").split("-")[0]?.toLowerCase() ?? "";
+}
 
 export function conditionText(
   code: number,
   language: string | undefined,
 ): string {
-  const table = CONDITION_TEXT[language ?? "en"] ?? WMO_CONDITIONS;
+  const table = CONDITION_TEXT[primarySubtag(language)] ?? WMO_CONDITIONS;
   return table[code] ?? UNKNOWN;
 }
 
