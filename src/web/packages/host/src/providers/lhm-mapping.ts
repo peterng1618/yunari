@@ -263,17 +263,30 @@ interface LhmDynamicBinding {
   readonly pattern: RegExp;
   /** Builds the semantic key from the sensor's own name. */
   readonly key: (match: RegExpExecArray) => string;
+  /** How repeated matches for one key combine. Default: highest. */
+  readonly combine?: "mean";
+  /** Leave the key alone when an earlier binding already answered it. */
+  readonly whenAbsent?: boolean;
 }
 
 const DYNAMIC_BINDINGS: readonly LhmDynamicBinding[] = [
   {
     group: "cpu",
     type: "Load",
-    // This capture names load per logical processor, not per core, so a core
-    // reads its hottest thread. If LHM ever names a core-load sensor directly,
-    // add it here ahead of the thread pattern rather than changing the key.
+    // The vocabulary's per-core Load sensor, named directly by the spec's table.
+    pattern: /^CPU Core #(\d+)$/,
+    key: (match) => `cpu.core.${match[1]}.load`,
+  },
+  {
+    group: "cpu",
+    type: "Load",
+    // Other LHM builds name load per logical processor only. A core then reads
+    // the mean of its threads — the conventional per-core utilization — so a
+    // core's gauge cannot exceed the aggregate by taking its busiest thread.
     pattern: /^CPU Core #(\d+) Thread #\d+$/,
     key: (match) => `cpu.core.${match[1]}.load`,
+    combine: "mean",
+    whenAbsent: true,
   },
   {
     group: "cpu",
@@ -301,6 +314,36 @@ const GPU_FAN_KEY = /^gpu\.fan\.[1-9]\d*$/;
 
 export function isLhmDynamicKey(key: string): boolean {
   return CPU_CORE_KEY.test(key) || GPU_FAN_KEY.test(key);
+}
+
+/**
+ * Every dynamic key these sensors can answer, requested or not. The provider
+ * advertises these so an editor can list per-core and per-fan readings exactly
+ * like built-ins.
+ */
+export function dynamicKeyReadings(
+  sensors: readonly LhmSensor[],
+): readonly string[] {
+  const keys = new Set<string>();
+
+  for (const binding of DYNAMIC_BINDINGS) {
+    for (const sensor of sensors) {
+      if (
+        sensor.value === undefined ||
+        sensor.type !== binding.type ||
+        groupOf(sensor.hardwareType) !== binding.group
+      ) {
+        continue;
+      }
+
+      const match = binding.pattern.exec(sensor.text);
+      if (match !== null) {
+        keys.add(binding.key(match));
+      }
+    }
+  }
+
+  return [...keys];
 }
 
 /** LHM reports `Data` in GB and `SmallData` in MB. */
@@ -517,9 +560,15 @@ export function matchLhmSensors(
   // Dynamic keys depend on which sensors this machine reports, so only the
   // requested ones are produced; a request for an absent device stays absent.
   for (const binding of DYNAMIC_BINDINGS) {
+    const groups = new Map<
+      string,
+      { sensor: LhmSensor; sum: number; max: number; count: number }
+    >();
+
     for (const sensor of sensors) {
+      const reading = sensor.value;
       if (
-        sensor.value === undefined ||
+        reading === undefined ||
         sensor.type !== binding.type ||
         groupOf(sensor.hardwareType) !== binding.group
       ) {
@@ -536,9 +585,33 @@ export function matchLhmSensors(
         continue;
       }
 
-      // Dynamic readings are percentages, temperatures, clocks and fans; only
-      // a repeated CPU core or GPU fan can match twice, and the highest wins.
-      selectReading(chosen, semanticKey, sensor, sensor.value, false);
+      const group = groups.get(semanticKey);
+      if (group === undefined) {
+        groups.set(semanticKey, {
+          sensor,
+          sum: reading,
+          max: reading,
+          count: 1,
+        });
+      } else {
+        group.sum += reading;
+        group.max = Math.max(group.max, reading);
+        group.count += 1;
+      }
+    }
+
+    for (const [semanticKey, group] of groups) {
+      if (binding.whenAbsent === true && chosen.has(semanticKey)) {
+        continue;
+      }
+
+      selectReading(
+        chosen,
+        semanticKey,
+        group.sensor,
+        binding.combine === "mean" ? group.sum / group.count : group.max,
+        false,
+      );
     }
   }
 

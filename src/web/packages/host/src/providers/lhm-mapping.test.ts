@@ -43,8 +43,92 @@ describe("per-core readings", () => {
 
     expect(values.get("cpu.core.1.temp")).toBe(38);
     expect(values.get("cpu.core.1.clock")).toBe(4800);
-    // Load arrives per logical processor; a core reads its hottest thread.
-    expect(values.get("cpu.core.2.load")).toBe(4.7);
+    // Load arrives per logical processor; a core reads the mean of its threads.
+    expect(values.get("cpu.core.2.load")).toBeCloseTo((4.7 + 1.6) / 2, 6);
+  });
+
+  it("reads a half-busy two-thread core as 50 %, not 100 %", () => {
+    const threads = flattenLhmSensors({
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [
+            {
+              Text: "Intel Core i9-10850K",
+              HardwareId: "/intelcpu/0",
+              Children: [
+                {
+                  Text: "Load",
+                  Children: [
+                    {
+                      Text: "CPU Core #1 Thread #1",
+                      SensorId: "a",
+                      Type: "Load",
+                      RawValue: "100.0 %",
+                    },
+                    {
+                      Text: "CPU Core #1 Thread #2",
+                      SensorId: "b",
+                      Type: "Load",
+                      RawValue: "0.0 %",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(valuesOf(threads, ["cpu.core.1.load"]).get("cpu.core.1.load")).toBe(
+      50,
+    );
+  });
+
+  it("prefers a directly named per-core Load sensor over its threads", () => {
+    const direct = flattenLhmSensors({
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [
+            {
+              Text: "Intel Core i9-10850K",
+              HardwareId: "/intelcpu/0",
+              Children: [
+                {
+                  Text: "Load",
+                  Children: [
+                    {
+                      Text: "CPU Core #1",
+                      SensorId: "a",
+                      Type: "Load",
+                      RawValue: "40.0 %",
+                    },
+                    {
+                      Text: "CPU Core #1 Thread #1",
+                      SensorId: "b",
+                      Type: "Load",
+                      RawValue: "100.0 %",
+                    },
+                    {
+                      Text: "CPU Core #1 Thread #2",
+                      SensorId: "c",
+                      Type: "Load",
+                      RawValue: "0.0 %",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(valuesOf(direct, ["cpu.core.1.load"]).get("cpu.core.1.load")).toBe(
+      40,
+    );
   });
 
   it("removes a core's keys when its sensors are removed", () => {

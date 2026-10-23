@@ -61,13 +61,13 @@ const DATA_JSON = {
                   Text: "CPU Core #1 Thread #1",
                   SensorId: "/intelcpu/0/load/0",
                   Type: "Load",
-                  RawValue: "10.0 %",
+                  RawValue: "100.0 %",
                 },
                 {
                   Text: "CPU Core #1 Thread #2",
                   SensorId: "/intelcpu/0/load/1",
                   Type: "Load",
-                  RawValue: "20.0 %",
+                  RawValue: "0.0 %",
                 },
                 {
                   Text: "CPU Core #2 Thread #1",
@@ -462,6 +462,50 @@ describe("LHM provider", () => {
     expect(LHM_DESCRIPTORS.every((d) => d.tier === "extended")).toBe(true);
   });
 
+  it("describes the dynamic keys this machine reports", async () => {
+    const provider = providerReturning({
+      ok: true,
+      status: 200,
+      body: DATA_JSON,
+    });
+
+    const descriptors = await provider.describe();
+    const keys = descriptors.map((descriptor) => descriptor.semanticKey);
+    // Derived from the payload rather than hard-coded, so the test still holds
+    // when the fixture gains or loses a core.
+    const cores = new Set(
+      flattenLhmSensors(DATA_JSON).flatMap((sensor) => {
+        const match = /^CPU Core #(\d+)(?: Thread #\d+)?$/.exec(sensor.text);
+        return match === null ? [] : [Number(match[1])];
+      }),
+    );
+
+    expect(cores.size).toBeGreaterThan(1);
+    for (const core of cores) {
+      for (const quantity of ["load", "temp", "clock"]) {
+        expect(keys).toContain(`cpu.core.${core}.${quantity}`);
+      }
+    }
+    expect(keys.filter((key) => key.startsWith("cpu.core."))).toHaveLength(
+      cores.size * 3,
+    );
+    expect(
+      descriptors.find(
+        (descriptor) => descriptor.semanticKey === "cpu.core.1.load",
+      ),
+    ).toMatchObject({ unit: "%", tier: "extended" });
+    expect(keys).toContain("gpu.fan.1");
+    expect(keys).toContain("gpu.fan.2");
+  });
+
+  it("falls back to the static list when discovery fails", async () => {
+    const unreachable = providerReturning(new Error("connect ECONNREFUSED"));
+    const refused = providerReturning({ ok: false, status: 500, body: {} });
+
+    expect(await unreachable.describe()).toEqual(LHM_DESCRIPTORS);
+    expect(await refused.describe()).toEqual(LHM_DESCRIPTORS);
+  });
+
   it("maps a live answer onto vocabulary units", async () => {
     const provider = providerReturning({
       ok: true,
@@ -489,13 +533,22 @@ describe("LHM provider", () => {
     });
 
     const entries = await provider.sample(
-      ["cpu.core.1.temp", "cpu.core.2.load", "gpu.fan.2", "cpu.voltage"],
+      [
+        "cpu.core.1.temp",
+        "cpu.core.1.load",
+        "cpu.core.2.load",
+        "gpu.fan.2",
+        "cpu.voltage",
+      ],
       Date.UTC(2026, 8, 24),
     );
 
     expect(entries.map((entry) => entry.sample)).toMatchObject([
       { status: "ok", value: 55, unit: "°C" },
-      { status: "ok", value: 7, unit: "%" },
+      // 100 % and 0 % threads: the core is half utilized, not fully.
+      { status: "ok", value: 50, unit: "%" },
+      // 5 % and 7 % threads.
+      { status: "ok", value: 6, unit: "%" },
       { status: "ok", value: 1300, unit: "RPM" },
       { status: "ok", value: 1.362, unit: "V" },
     ]);

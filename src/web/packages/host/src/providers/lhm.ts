@@ -8,6 +8,7 @@ import { displayNameFor } from "../settings/devices.js";
 import {
   type DeviceAssignment,
   diskDeviceReadings,
+  dynamicKeyReadings,
   gpuDeviceReadings,
   isLhmDynamicKey,
   lhmDeviceName,
@@ -72,21 +73,31 @@ const LHM_KEYS = [
   "network.upload",
 ] as const;
 
+function descriptorFor(key: string): SensorDescriptor | undefined {
+  const declared = describeSemanticKey(key);
+
+  if (declared === undefined) {
+    return undefined;
+  }
+
+  return {
+    sensorId: `${LHM_PROVIDER_ID}:${key}`,
+    semanticKey: key,
+    label: declared.label,
+    ...descriptorFieldsOf(declared),
+    tier: "extended" as const,
+  };
+}
+
 export const LHM_DESCRIPTORS: readonly SensorDescriptor[] = LHM_KEYS.map(
   (key) => {
-    const declared = describeSemanticKey(key);
+    const descriptor = descriptorFor(key);
 
-    if (declared === undefined) {
+    if (descriptor === undefined) {
       throw new Error(`${key} is not in the semantic key vocabulary`);
     }
 
-    return {
-      sensorId: `${LHM_PROVIDER_ID}:${key}`,
-      semanticKey: key,
-      label: declared.label,
-      ...descriptorFieldsOf(declared),
-      tier: "extended" as const,
-    };
+    return descriptor;
   },
 );
 
@@ -137,8 +148,32 @@ export class LhmSensorProvider implements SensorProvider {
       options.fetcher ?? boundedFetcher(options.timeoutMs ?? LHM_TIMEOUT_MS);
   }
 
+  /**
+   * Static keys plus the dynamic ones this machine actually reports, so the
+   * editor catalogue can list per-core and per-fan readings like built-ins.
+   * Discovery is best-effort: an absent LHM leaves the static list intact.
+   */
   async describe(): Promise<readonly SensorDescriptor[]> {
-    return LHM_DESCRIPTORS;
+    return [...LHM_DESCRIPTORS, ...(await this.describeDynamic())];
+  }
+
+  private async describeDynamic(): Promise<readonly SensorDescriptor[]> {
+    try {
+      const response = await this.fetcher(`${this.baseUrl}/data.json`);
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const sensors = flattenLhmSensors(JSON.parse(await response.text()));
+
+      return dynamicKeyReadings(sensors).flatMap((key) => {
+        const descriptor = descriptorFor(key);
+        return descriptor === undefined ? [] : [descriptor];
+      });
+    } catch {
+      return [];
+    }
   }
 
   /**
