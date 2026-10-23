@@ -9,6 +9,7 @@ import {
   type DeviceAssignment,
   diskDeviceReadings,
   gpuDeviceReadings,
+  isLhmDynamicKey,
   lhmDeviceName,
   matchLhmSensorsAssigned,
 } from "./lhm-mapping.js";
@@ -42,18 +43,27 @@ const LHM_KEYS = [
   "disk.data.used.percent",
   "disk.data.total",
   "cpu.temp",
+  "cpu.temp.package",
+  "cpu.temp.core.max",
+  "cpu.temp.core.avg",
   "cpu.power",
+  "cpu.voltage",
   "cpu.clock",
   "cpu.fan",
   "gpu.load",
   "gpu.temp",
+  "gpu.temp.core",
+  "gpu.temp.hotspot",
   "gpu.power",
+  "gpu.voltage",
   "gpu.clock",
+  "gpu.clock.memory",
   "gpu.fan",
   "gpu.name",
   "vram.used",
   "vram.used.percent",
   "vram.total",
+  "vram.temp",
   "disk.used",
   "disk.used.percent",
   "disk.total",
@@ -167,11 +177,13 @@ export class LhmSensorProvider implements SensorProvider {
     nowMs: number,
     assignment: DeviceAssignment = {},
   ): Promise<readonly SampleEntry[]> {
-    // Per-device keys (disk dot id dot used) are discovered at runtime, so they
-    // are accepted by shape rather than by membership in the fixed list.
+    // Per-device keys (disk dot id dot used, cpu.core.n.*, gpu.fan.n) are
+    // discovered at runtime, so they are accepted by shape rather than by
+    // membership in the fixed list.
     const owned = semanticKeys.filter(
       (key) =>
         (LHM_KEYS as readonly string[]).includes(key) ||
+        isLhmDynamicKey(key) ||
         diskDeviceOf(key) !== undefined,
     );
 

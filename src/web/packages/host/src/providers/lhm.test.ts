@@ -28,6 +28,87 @@ const DATA_JSON = {
                   Type: "Temperature",
                   RawValue: "55.0 °C",
                 },
+                {
+                  Text: "Core Max",
+                  SensorId: "/intelcpu/0/temperature/2",
+                  Type: "Temperature",
+                  RawValue: "61.0 °C",
+                },
+                {
+                  Text: "Core Average",
+                  SensorId: "/intelcpu/0/temperature/3",
+                  Type: "Temperature",
+                  RawValue: "57.0 °C",
+                },
+                {
+                  Text: "CPU Core #1",
+                  SensorId: "/intelcpu/0/temperature/4",
+                  Type: "Temperature",
+                  RawValue: "55.0 °C",
+                },
+                {
+                  Text: "CPU Core #2",
+                  SensorId: "/intelcpu/0/temperature/5",
+                  Type: "Temperature",
+                  RawValue: "58.0 °C",
+                },
+              ],
+            },
+            {
+              Text: "Load",
+              Children: [
+                {
+                  Text: "CPU Core #1 Thread #1",
+                  SensorId: "/intelcpu/0/load/0",
+                  Type: "Load",
+                  RawValue: "10.0 %",
+                },
+                {
+                  Text: "CPU Core #1 Thread #2",
+                  SensorId: "/intelcpu/0/load/1",
+                  Type: "Load",
+                  RawValue: "20.0 %",
+                },
+                {
+                  Text: "CPU Core #2 Thread #1",
+                  SensorId: "/intelcpu/0/load/2",
+                  Type: "Load",
+                  RawValue: "5.0 %",
+                },
+                {
+                  Text: "CPU Core #2 Thread #2",
+                  SensorId: "/intelcpu/0/load/3",
+                  Type: "Load",
+                  RawValue: "7.0 %",
+                },
+              ],
+            },
+            {
+              Text: "Clock",
+              Children: [
+                {
+                  Text: "CPU Core #1",
+                  SensorId: "/intelcpu/0/clock/0",
+                  Type: "Clock",
+                  RawValue: "4800.0 MHz",
+                },
+                {
+                  Text: "CPU Core #2",
+                  SensorId: "/intelcpu/0/clock/1",
+                  Type: "Clock",
+                  RawValue: "4700.0 MHz",
+                },
+              ],
+            },
+            {
+              Text: "Voltage",
+              Children: [
+                {
+                  Text: "CPU Core",
+                  SensorId: "/intelcpu/0/voltage/0",
+                  Type: "Voltage",
+                  RawValue: "1.362 V",
+                },
               ],
             },
             {
@@ -89,6 +170,23 @@ const DATA_JSON = {
                   SensorId: "/gpu-nvidia/0/data/1",
                   Type: "SmallData",
                   RawValue: "12288.0 MB",
+                },
+              ],
+            },
+            {
+              Text: "Fan",
+              Children: [
+                {
+                  Text: "GPU Fan 1",
+                  SensorId: "/gpu-nvidia/0/fan/0",
+                  Type: "Fan",
+                  RawValue: "1100 RPM",
+                },
+                {
+                  Text: "GPU Fan 2",
+                  SensorId: "/gpu-nvidia/0/fan/1",
+                  Type: "Fan",
+                  RawValue: "1300 RPM",
                 },
               ],
             },
@@ -272,6 +370,18 @@ describe("LHM sensor mapping", () => {
     expect(matchLhmSensors(twoGpus, ["gpu.load"])[0]?.value).toBe(70);
   });
 
+  it("numbers each GPU fan while the aggregate keeps the first", () => {
+    const matched = new Map(
+      matchLhmSensors(sensors, ["gpu.fan", "gpu.fan.1", "gpu.fan.2"]).map(
+        (match) => [match.semanticKey, match.value],
+      ),
+    );
+
+    expect(matched.get("gpu.fan.1")).toBe(1100);
+    expect(matched.get("gpu.fan.2")).toBe(1300);
+    expect(matched.get("gpu.fan")).toBe(1100);
+  });
+
   it("sums throughput across links rather than reporting one", () => {
     const twoNics = flattenLhmSensors({
       Children: [
@@ -341,7 +451,14 @@ describe("LHM provider", () => {
   }
 
   it("describes the extended vocabulary it can answer", () => {
-    expect(LHM_DESCRIPTORS.map((d) => d.semanticKey)).toContain("cpu.temp");
+    const keys = LHM_DESCRIPTORS.map((d) => d.semanticKey);
+
+    expect(keys).toContain("cpu.temp");
+    expect(keys).toContain("cpu.temp.package");
+    expect(keys).toContain("cpu.voltage");
+    expect(keys).toContain("gpu.temp.hotspot");
+    expect(keys).toContain("gpu.clock.memory");
+    expect(keys).toContain("vram.temp");
     expect(LHM_DESCRIPTORS.every((d) => d.tier === "extended")).toBe(true);
   });
 
@@ -362,6 +479,39 @@ describe("LHM provider", () => {
       { status: "ok", value: 10, unit: "Mb/s" },
     ]);
     expect(provider.health().available).toBe(true);
+  });
+
+  it("answers per-core and per-fan keys requested by name", async () => {
+    const provider = providerReturning({
+      ok: true,
+      status: 200,
+      body: DATA_JSON,
+    });
+
+    const entries = await provider.sample(
+      ["cpu.core.1.temp", "cpu.core.2.load", "gpu.fan.2", "cpu.voltage"],
+      Date.UTC(2026, 8, 24),
+    );
+
+    expect(entries.map((entry) => entry.sample)).toMatchObject([
+      { status: "ok", value: 55, unit: "°C" },
+      { status: "ok", value: 7, unit: "%" },
+      { status: "ok", value: 1300, unit: "RPM" },
+      { status: "ok", value: 1.362, unit: "V" },
+    ]);
+  });
+
+  it("reports a dynamic key the machine cannot answer as a gap", async () => {
+    const provider = providerReturning({
+      ok: true,
+      status: 200,
+      body: DATA_JSON,
+    });
+
+    const entries = await provider.sample(["cpu.core.9.temp"], 0);
+
+    expect(entries[0]?.sample).toMatchObject({ status: "missing" });
+    expect(entries[0]?.sample).not.toHaveProperty("value");
   });
 
   it("reports LHM being absent as a gap with a reason, never a reading", async () => {

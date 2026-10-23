@@ -74,6 +74,26 @@ const BINDINGS: readonly LhmBinding[] = [
     type: "Temperature",
     anyText: ["Liquid"],
   },
+  // The package figure and the core extremes, beside the aggregate rather than
+  // replacing it: a theme bound to `cpu.temp` keeps reading what it always did.
+  {
+    semanticKey: "cpu.temp.package",
+    group: "cpu",
+    type: "Temperature",
+    anyText: ["CPU Package"],
+  },
+  {
+    semanticKey: "cpu.temp.core.max",
+    group: "cpu",
+    type: "Temperature",
+    anyText: ["Core Max"],
+  },
+  {
+    semanticKey: "cpu.temp.core.avg",
+    group: "cpu",
+    type: "Temperature",
+    anyText: ["Core Average"],
+  },
   {
     semanticKey: "cpu.power",
     group: "cpu",
@@ -85,6 +105,12 @@ const BINDINGS: readonly LhmBinding[] = [
     group: "cpu",
     type: "Clock",
     anyText: ["Cores (Average)", "Core Average", "CPU Core #1", "Bus Speed"],
+  },
+  {
+    semanticKey: "cpu.voltage",
+    group: "cpu",
+    type: "Voltage",
+    anyText: ["CPU Core"],
   },
   // Only an explicit CPU fan name answers this; a case or AIO fan does not.
   {
@@ -122,16 +148,40 @@ const BINDINGS: readonly LhmBinding[] = [
     anyText: ["GPU Core"],
   },
   {
+    semanticKey: "gpu.temp.core",
+    group: "gpu",
+    type: "Temperature",
+    anyText: ["GPU Core"],
+  },
+  {
+    semanticKey: "gpu.temp.hotspot",
+    group: "gpu",
+    type: "Temperature",
+    anyText: ["GPU Hot Spot"],
+  },
+  {
     semanticKey: "gpu.power",
     group: "gpu",
     type: "Power",
     anyText: ["GPU Package", "GPU Power"],
   },
   {
+    semanticKey: "gpu.voltage",
+    group: "gpu",
+    type: "Voltage",
+    anyText: ["GPU Core Voltage"],
+  },
+  {
     semanticKey: "gpu.clock",
     group: "gpu",
     type: "Clock",
     anyText: ["GPU Core"],
+  },
+  {
+    semanticKey: "gpu.clock.memory",
+    group: "gpu",
+    type: "Clock",
+    anyText: ["GPU Memory"],
   },
   {
     semanticKey: "gpu.fan",
@@ -158,6 +208,12 @@ const BINDINGS: readonly LhmBinding[] = [
     group: "gpu",
     type: "Load",
     anyText: ["GPU Memory"],
+  },
+  {
+    semanticKey: "vram.temp",
+    group: "gpu",
+    type: "Temperature",
+    anyText: ["GPU Memory Junction"],
   },
 
   // Disk capacity. `Used Space` is typed Load but carries a percentage, so it
@@ -195,6 +251,57 @@ const BINDINGS: readonly LhmBinding[] = [
     anyText: ["Upload Speed"],
   },
 ];
+
+/**
+ * A binding whose key carries the sensor's own identity, so the key set depends
+ * on the machine rather than on the vocabulary. Numbers come from LHM's own
+ * name and are 1-based; a name absent from the capture produces no key.
+ */
+interface LhmDynamicBinding {
+  readonly group: HardwareGroup;
+  readonly type: LhmSensorType;
+  readonly pattern: RegExp;
+  /** Builds the semantic key from the sensor's own name. */
+  readonly key: (match: RegExpExecArray) => string;
+}
+
+const DYNAMIC_BINDINGS: readonly LhmDynamicBinding[] = [
+  {
+    group: "cpu",
+    type: "Load",
+    // This capture names load per logical processor, not per core, so a core
+    // reads its hottest thread. If LHM ever names a core-load sensor directly,
+    // add it here ahead of the thread pattern rather than changing the key.
+    pattern: /^CPU Core #(\d+) Thread #\d+$/,
+    key: (match) => `cpu.core.${match[1]}.load`,
+  },
+  {
+    group: "cpu",
+    type: "Temperature",
+    pattern: /^CPU Core #(\d+)$/,
+    key: (match) => `cpu.core.${match[1]}.temp`,
+  },
+  {
+    group: "cpu",
+    type: "Clock",
+    pattern: /^CPU Core #(\d+)$/,
+    key: (match) => `cpu.core.${match[1]}.clock`,
+  },
+  {
+    group: "gpu",
+    type: "Fan",
+    pattern: /^GPU Fan (\d+)$/,
+    key: (match) => `gpu.fan.${match[1]}`,
+  },
+];
+
+/** Dynamic keys this provider owns by shape, discovered per machine. */
+const CPU_CORE_KEY = /^cpu\.core\.[1-9]\d*\.(load|temp|clock)$/;
+const GPU_FAN_KEY = /^gpu\.fan\.[1-9]\d*$/;
+
+export function isLhmDynamicKey(key: string): boolean {
+  return CPU_CORE_KEY.test(key) || GPU_FAN_KEY.test(key);
+}
 
 /** LHM reports `Data` in GB and `SmallData` in MB. */
 const MIB_PER_GB = 1024;
@@ -339,6 +446,27 @@ export function diskDeviceReadings(
   return readings;
 }
 
+/** Records a reading, combining repeated hardware by the binding's rule. */
+function selectReading(
+  chosen: Map<string, LhmMatch>,
+  semanticKey: string,
+  sensor: LhmSensor,
+  value: number,
+  sums: boolean,
+): void {
+  const existing = chosen.get(semanticKey);
+
+  if (existing === undefined) {
+    chosen.set(semanticKey, { semanticKey, sensor, value });
+    return;
+  }
+
+  chosen.set(semanticKey, {
+    ...existing,
+    value: sums ? existing.value + value : Math.max(existing.value, value),
+  });
+}
+
 /**
  * First sensor that answers each key. Where the set it is given holds several
  * instances of one group, capacity and throughput sum while a percentage,
@@ -370,28 +498,47 @@ export function matchLhmSensors(
         continue;
       }
 
-      const value = scaleFor(binding, sensor.value);
-      const existing = chosen.get(binding.semanticKey);
-
-      if (existing === undefined) {
-        chosen.set(binding.semanticKey, {
-          semanticKey: binding.semanticKey,
-          sensor,
-          value,
-        });
-        continue;
-      }
-
-      const combines =
+      const sums =
         binding.combine === "sum" ||
         binding.type === "Data" ||
         binding.type === "SmallData" ||
         binding.type === "Throughput";
-      const next = combines
-        ? existing.value + value
-        : Math.max(existing.value, value);
 
-      chosen.set(binding.semanticKey, { ...existing, value: next });
+      selectReading(
+        chosen,
+        binding.semanticKey,
+        sensor,
+        scaleFor(binding, sensor.value),
+        sums,
+      );
+    }
+  }
+
+  // Dynamic keys depend on which sensors this machine reports, so only the
+  // requested ones are produced; a request for an absent device stays absent.
+  for (const binding of DYNAMIC_BINDINGS) {
+    for (const sensor of sensors) {
+      if (
+        sensor.value === undefined ||
+        sensor.type !== binding.type ||
+        groupOf(sensor.hardwareType) !== binding.group
+      ) {
+        continue;
+      }
+
+      const match = binding.pattern.exec(sensor.text);
+      if (match === null) {
+        continue;
+      }
+
+      const semanticKey = binding.key(match);
+      if (!wanted.has(semanticKey)) {
+        continue;
+      }
+
+      // Dynamic readings are percentages, temperatures, clocks and fans; only
+      // a repeated CPU core or GPU fan can match twice, and the highest wins.
+      selectReading(chosen, semanticKey, sensor, sensor.value, false);
     }
   }
 
