@@ -455,6 +455,50 @@ describe("AssetFinder's Colours tab", () => {
     ]);
   });
 
+  it("says a kind's sources are all switched off rather than no results", async () => {
+    await render([colorhunt, colorswoop, uigradients, webgradients]);
+    await settle();
+
+    for (const id of ["uigradients", "webgradients"]) {
+      const chip = document.querySelector<HTMLButtonElement>(
+        `[data-yunari-asset-chip="${id}"]`,
+      );
+      if (chip === null) throw new Error(`no ${id} chip.`);
+      await act(async () => chip.click());
+      await settle();
+    }
+
+    // The kind-off state has no question to ask: choosing it must not issue an
+    // empty search and then blame the author's query.
+    searchAssets.mockClear();
+    await act(async () => kindButton("gradient").click());
+    await settle();
+
+    expect(searchAssets).not.toHaveBeenCalled();
+    expect(
+      document.querySelector("[data-yunari-asset-kind-off]")?.textContent,
+    ).toContain(uiCopy.assets.kindSourcesOff);
+    expect(document.querySelector("[data-yunari-asset-grid]")).toBeNull();
+    expect(document.querySelector("[data-yunari-asset-empty]")).toBeNull();
+  });
+
+  it("returns the kind filter to all when the tab changes", async () => {
+    await render([colorhunt, uigradients, unsplash]);
+    await settle();
+
+    await act(async () => kindButton("gradient").click());
+    await settle();
+    expect(kindButton("gradient").getAttribute("aria-pressed")).toBe("true");
+
+    await act(async () => tab("image").click());
+    await settle();
+    await act(async () => tab("colour").click());
+    await settle();
+
+    expect(kindButton("all").getAttribute("aria-pressed")).toBe("true");
+    expect(kindButton("gradient").getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("draws a palette as swatches and a gradient as a strip", async () => {
     const palette: AssetResult = {
       id: "colorhunt:aabbccddeeff112233445566",
@@ -469,6 +513,19 @@ describe("AssetFinder's Colours tab", () => {
         colours: ["#aabbcc", "#ddeeff", "#112233", "#445566"],
       },
     };
+    const fiveColourPalette: AssetResult = {
+      id: "colorhunt:112233445566778899aabbcc",
+      name: "Color Hunt 112233",
+      kind: "palette",
+      preview: "",
+      subtitle: undefined,
+      licence: "unknown",
+      sourceUrl: "https://colorhunt.co/palette/112233445566778899aabbcc",
+      preset: {
+        kind: "palette",
+        colours: ["#111111", "#222222", "#333333", "#444444", "#555555"],
+      },
+    };
     const gradient: AssetResult = {
       id: "uigradients:3",
       name: "Mango",
@@ -479,7 +536,7 @@ describe("AssetFinder's Colours tab", () => {
       sourceUrl: "https://github.com/ghosh/uiGradients",
       preset: {
         kind: "gradient",
-        angle: 45,
+        angle: 30,
         stops: [
           { offset: 0, color: "#000000" },
           { offset: 1, color: "#ffffff" },
@@ -487,7 +544,10 @@ describe("AssetFinder's Colours tab", () => {
       },
     };
     searchAssets.mockResolvedValue({
-      pages: [page("colorhunt", [palette]), page("uigradients", [gradient])],
+      pages: [
+        page("colorhunt", [palette, fiveColourPalette]),
+        page("uigradients", [gradient]),
+      ],
     });
 
     await render([colorhunt, uigradients]);
@@ -499,6 +559,14 @@ describe("AssetFinder's Colours tab", () => {
     expect(paletteRow?.querySelectorAll("[data-yunari-swatch]")).toHaveLength(
       4,
     );
+    // A fifth colour is stored with the preset but not drawn: the preview is
+    // always the same 2×2 block.
+    const fiveColourRow = document.querySelector(
+      '[data-yunari-asset-row="colorhunt:112233445566778899aabbcc"]',
+    );
+    expect(
+      fiveColourRow?.querySelectorAll("[data-yunari-swatch]"),
+    ).toHaveLength(4);
 
     const strip = document.querySelector<HTMLElement>(
       '[data-yunari-asset-row="uigradients:3"] [data-yunari-asset-preview="gradient"]',
@@ -508,7 +576,7 @@ describe("AssetFinder's Colours tab", () => {
     // `background-image`, so both readings are the same evidence.
     expect(
       strip?.style.backgroundImage || strip?.getAttribute("style") || "",
-    ).toContain("linear-gradient(45deg");
+    ).toContain("linear-gradient(60deg");
     expect(strip?.getAttribute("style") ?? "").toContain("#000000 0%");
   });
 });

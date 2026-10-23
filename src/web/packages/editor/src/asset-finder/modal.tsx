@@ -331,8 +331,14 @@ export function AssetFinder({
     // debounce would: a chip switched off mid-flight must not land its late page.
     ticket.current += 1;
 
-    // Body categories draw a component, not a search.
-    if (!open || active === undefined || visibleSources.length === 0) {
+    // Body categories draw a component, not a search; a kind whose every
+    // source is switched off has no question to ask either.
+    if (
+      !open ||
+      active === undefined ||
+      visibleSources.length === 0 ||
+      enabledSources.length === 0
+    ) {
       setAnswer(undefined);
       setFailures([]);
       return;
@@ -403,6 +409,11 @@ export function AssetFinder({
     failures.length === 0 &&
     rows.length === 0 &&
     total <= 1;
+  /** A kind filter can leave every one of its sources switched off. The chips
+   *  are the only writer of that choice, so the panel says how to undo it
+   *  rather than giving no-results advice no query could fix. */
+  const kindSourcesOff =
+    visibleSources.length > 0 && enabledSources.length === 0;
 
   /** A change of question returns to page one, at the press that made it. */
   const reask = (): void => {
@@ -666,7 +677,14 @@ export function AssetFinder({
                     );
                   })}
 
-                  {empty ? (
+                  {kindSourcesOff ? (
+                    <p
+                      className="text-sm text-muted"
+                      data-yunari-asset-kind-off=""
+                    >
+                      {uiCopy.assets.kindSourcesOff}
+                    </p>
+                  ) : empty ? (
                     <p
                       className="flex flex-col items-start gap-[var(--space-8)] text-sm text-muted"
                       data-yunari-asset-empty=""

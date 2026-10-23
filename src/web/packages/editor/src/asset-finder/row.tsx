@@ -15,7 +15,10 @@ function presetPreview(
         data-yunari-asset-preview="palette"
         className="grid h-full w-full grid-cols-2"
       >
-        {preset.colours.map((colour, at) => (
+        {/* Four keeps the 2×2 preview identical for every palette: a third or
+            fifth colour would leave a gap or spill out of the grid. Adding the
+            preset still stores every colour. */}
+        {preset.colours.slice(0, 4).map((colour, at) => (
           <span
             // Two swatches may carry the same colour; the position is what
             // makes the key unique.

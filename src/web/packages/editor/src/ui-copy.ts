@@ -1032,6 +1032,8 @@ export const uiCopy = {
     results: (count: number, sources: number): string =>
       `${count} ${count === 1 ? "result" : "results"} · ${sources} ${sources === 1 ? "source" : "sources"}`,
     noResults: "No results. Try another word.",
+    kindSourcesOff:
+      "Every source for this kind is switched off. Turn one on above.",
     clearQuery: "Clear query",
     noSource: "No source serves this category.",
     sourceFailed: (label: string, message: string): string =>
