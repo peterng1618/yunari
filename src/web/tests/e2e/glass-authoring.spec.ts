@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
 import { chooseIn, typeIntoControl } from "./control-set.js";
 import { captureVisualReview, clientOfScene } from "./editor-canvas.js";
+import { storedColour } from "./editor-fixture.js";
 import { openPane } from "./editor-rail.js";
 import {
   AUTHORING_PANEL_ID,
@@ -397,10 +398,12 @@ test.describe("authoring frosted glass through the inspector", () => {
     // palette panel is the Tokens pane's, so it is in the Tokens pane.
     await openPane(page, "Tokens");
     await chooseIn(page, "[data-yunari-palette-token]", "edge");
+    // The pane has one trigger and the exact-value field lives in its popover.
+    await page.locator("[data-yunari-palette-picker]").click();
     const colour = page.locator("[data-yunari-palette-color]");
     await colour.fill("rgb(200 220 255)");
     await colour.press("Tab");
-    await expect(colour).toHaveValue("rgb(200 220 255)");
+    await expect(colour).toHaveValue(storedColour("rgb(200 220 255)"));
 
     expect((await treatmentOf(page, AUTHORING_PANEL_ID)) as unknown).toEqual({
       blurRadius: 24,

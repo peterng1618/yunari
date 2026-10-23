@@ -632,7 +632,8 @@ it("edits a gradient's angle, its stops and an added stop through its one editor
         angle: 45,
         stops: [
           { offset: 0, color: RED_PAINT },
-          { offset: 1, color: BACKGROUND_PAINT },
+          // The midpoint is inserted between the two, where its offset sorts:
+          // the document's validator requires the offsets to ascend.
           {
             offset: 0.5,
             color: colorAt(
@@ -643,6 +644,7 @@ it("edits a gradient's angle, its stops and an added stop through its one editor
               0.5,
             ),
           },
+          { offset: 1, color: BACKGROUND_PAINT },
         ],
       },
     },

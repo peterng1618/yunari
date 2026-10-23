@@ -1,3 +1,5 @@
+import { formatColor, parseColor } from "@yunari/renderer-core";
+
 /**
  * The paints the editor spec's fixture documents are authored with.
  *
@@ -7,6 +9,17 @@
  * object's resolved `fill` and the `palette.accent` entry behind it), so both
  * read it here rather than each spelling it.
  */
+
+/**
+ * The stored spelling of an authored colour. The picker commits `formatColor`'s
+ * form, so a spec that compares a saved envelope states the colour it typed and
+ * derives the hex the document keeps rather than copying it.
+ */
+export function storedColour(css: string): string {
+  const rgba = parseColor(css);
+  if (rgba === undefined) throw new Error(`not a colour: ${css}`);
+  return formatColor(rgba);
+}
 
 /** The colour typed into the palette field, and read back out of it. */
 export const PALETTE_FIELD_PAINT = "#123456";

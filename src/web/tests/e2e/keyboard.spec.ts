@@ -501,17 +501,32 @@ test("the palette picker lands beside its trigger, and its tracks answer the arr
   // popup moved from Radix's `Content`, which positions itself, to Base UI's
   // `Positioner`; a `Popup` placed straight in the portal renders unpositioned,
   // and the same class of mistake put this control's popover in the top-left
-  // corner of the window once before (`panel.dom.test.ts:187-192`). Anchored to
-  // a 28px swatch with a 6px offset, so the popup's top is just under it.
-  const [swatch, popup] = await Promise.all([
+  // corner of the window once before (`panel.dom.test.ts:187-192`). The trigger
+  // fills its §5 well since Task 6 removed the swatch wrapper, so the anchor is
+  // the well's own box and the positioner's 6px offset is measured from it.
+  const [well, popup] = await Promise.all([
     trigger.boundingBox(),
     popover.boundingBox(),
   ]);
-  expect(swatch).not.toBeNull();
+  expect(well).not.toBeNull();
   expect(popup).not.toBeNull();
+  // **Which side is the viewport's, not the assertion's.** Twelve seeded
+  // presets make the popup 630px tall in a 720px window, so it fits neither
+  // above nor below the well and the positioner places it to the right, flush
+  // with the pane's edge and clamped inside the viewport. The anchor is the
+  // well on whichever side the room is, with the positioner's 6px offset; a
+  // popup at the window's own corner matches none of the four.
+  const anchor = well!;
+  const panel = popup!;
+  const offsets = [
+    Math.abs(panel.y - (anchor.y + anchor.height + 6)), // below
+    Math.abs(panel.y + panel.height - (anchor.y - 6)), // above
+    Math.abs(panel.x - (anchor.x + anchor.width + 6)), // right
+    Math.abs(panel.x + panel.width - (anchor.x - 6)), // left
+  ];
   expect(
-    Math.abs(popup!.y - (swatch!.y + swatch!.height + 6)),
-    "the popup is anchored to the swatch, not to the window",
+    Math.min(...offsets),
+    "the popup is anchored to the pane's well, on the side with room",
   ).toBeLessThanOrEqual(12);
 
   // `vg-194` in a browser rather than in jsdom: the role promises a range and a
@@ -522,7 +537,10 @@ test("the palette picker lands beside its trigger, and its tracks answer the arr
   await expect(alpha).toHaveAttribute("aria-valuemin", "0");
   await expect(alpha).toHaveAttribute("aria-valuemax", "100");
   const before = Number(await alpha.getAttribute("aria-valuenow"));
-  const readout = popover.locator("p");
+  // The value the author reads is the trigger's own hex readout, not a
+  // paragraph in the popup: Task 6 made the trigger the only place the colour
+  // is printed.
+  const readout = trigger.locator("[data-yunari-value]");
   const said = await readout.textContent();
 
   await alpha.focus();

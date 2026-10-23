@@ -6,10 +6,6 @@ import { Glyph, PIPETTE_GLYPH } from "../../editor-shell/icons.js";
 import { presetLibrary } from "../../preset-library/index.js";
 import { usePresetLibrary } from "../../preset-library/use-preset-library.js";
 import { uiCopy } from "../../ui-copy.js";
-import { ControlChoiceRow } from "./control-choice-row.js";
-import { ControlIconButton } from "./control-icon-button.js";
-import { ControlText } from "./control-text.js";
-import { ControlRow, ControlWell, useControlIds } from "./control-well.js";
 import {
   areaFromPoint,
   areaPoint,
@@ -19,6 +15,10 @@ import {
   channelValue,
   steppedValue,
 } from "./colour-picker-model.js";
+import { ControlChoiceRow } from "./control-choice-row.js";
+import { ControlIconButton } from "./control-icon-button.js";
+import { ControlText } from "./control-text.js";
+import { ControlRow, ControlWell, useControlIds } from "./control-well.js";
 import {
   PresetContextMenu,
   type PresetMenuTarget,

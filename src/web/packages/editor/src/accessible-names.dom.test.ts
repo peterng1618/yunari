@@ -238,11 +238,31 @@ describe("editor panels", () => {
       "INPUT[type=][aria-hidden]", // Ratio
       "INPUT[type=][aria-hidden]", // Orientation
       "INPUT[type=][aria-hidden]", // Resolution
-      // The Tokens pane's three: the token chooser, the paint-kind chooser and
-      // the reassignment chooser, each a `ControlSelect`'s value carrier. The
-      // imperative panel's natives were not skipped at all.
+      // The Tokens pane's token and paint-kind choosers, each a `ControlSelect`'s
+      // value carrier; the reassignment chooser is the same primitive but
+      // renders after the paint fields, so it sits below. The imperative
+      // panel's natives were not skipped at all.
       "INPUT[type=][aria-hidden]", // Colour token
       "INPUT[type=][aria-hidden]", // Paint kind
+      // The gradient editor's fifteen preset rows, each a Base UI `Radio`'s
+      // value carrier. The `glow` token below is a gradient, so the row is
+      // mounted and its radios are focusable inputs the census looks away from.
+      "INPUT[type=radio][aria-hidden]", // Vital Ocean
+      "INPUT[type=radio][aria-hidden]", // Kale Salad
+      "INPUT[type=radio][aria-hidden]", // Disco Club
+      "INPUT[type=radio][aria-hidden]", // Shady Lane
+      "INPUT[type=radio][aria-hidden]", // Retro Wagon
+      "INPUT[type=radio][aria-hidden]", // Fresco Crush
+      "INPUT[type=radio][aria-hidden]", // Cucumber Water
+      "INPUT[type=radio][aria-hidden]", // Sea Salt
+      "INPUT[type=radio][aria-hidden]", // Par Four
+      "INPUT[type=radio][aria-hidden]", // Ooey Gooey
+      "INPUT[type=radio][aria-hidden]", // Bloody Mimosa
+      "INPUT[type=radio][aria-hidden]", // Lovely Lilly
+      "INPUT[type=radio][aria-hidden]", // Aqua Spray
+      "INPUT[type=radio][aria-hidden]", // Mello Yellow
+      "INPUT[type=radio][aria-hidden]", // Dusty Cactus
+      // The palette's reassignment chooser, rendered after the paint fields.
       "INPUT[type=][aria-hidden]", // Reassign (palette)
       // The Tokens pane's preset library, four by the same primitive: the preset
       // chooser, the curated face, the trio and the reassignment chooser. The
@@ -349,8 +369,8 @@ describe("editor panels", () => {
       root.querySelectorAll<HTMLElement>("[data-testid^='gradient-stop-']"),
     );
     expect(handles.map((handle) => accessibleName(handle))).toEqual([
-      `${uiCopy.panels.gradient} stop 1`,
-      `${uiCopy.panels.gradient} stop 2`,
+      uiCopy.panels.stopPosition(1),
+      uiCopy.panels.stopPosition(2),
     ]);
   });
 });

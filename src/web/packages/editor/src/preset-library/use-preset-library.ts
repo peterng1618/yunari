@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { presetLibrary, type PresetLibrary } from "./index.js";
+import { type PresetLibrary, presetLibrary } from "./index.js";
 
 export function usePresetLibrary(): PresetLibrary {
   return useSyncExternalStore(

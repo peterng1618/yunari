@@ -116,8 +116,16 @@ export function GradientEditor({
   };
 
   const addAt = (offset: number): void => {
-    const next = [...stops, { offset, color: colorAt(stops, offset) }];
-    setSelected(next.length - 1);
+    // **Inserted in the position its offset sorts to, never appended.** The
+    // document's validator requires the stops' offsets to ascend, and a stop
+    // pressed between two existing ones — or added at the midpoint while the
+    // last stop is selected — appended a lower offset after a higher one and
+    // produced a theme the editor then refused to save.
+    const at = stops.findIndex((stop) => stop.offset > offset);
+    const index = at === -1 ? stops.length : at;
+    const next = [...stops];
+    next.splice(index, 0, { offset, color: colorAt(stops, offset) });
+    setSelected(index);
     onChange({ angle, stops: next });
     onCommit?.();
   };

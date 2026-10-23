@@ -19,8 +19,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { presetLibrary } from "../../preset-library/index.js";
 import { uiCopy } from "../../ui-copy.js";
-import { GradientEditor } from "./gradient-editor.js";
 import { gradientCss } from "./gradient-css.js";
+import { GradientEditor } from "./gradient-editor.js";
 
 globalThis.ResizeObserver ??= class {
   observe(): void {}
@@ -440,9 +440,11 @@ it("adds a stop where the track is pressed, with the gradient's colour there", a
 
   const expected = colorAt(stops, 0.5);
   expect(mounted.change).toHaveBeenCalledOnce();
+  // Inserted between the two, because the document's validator requires the
+  // offsets to ascend — appending put 0.5 after 1.
   expect(mounted.change).toHaveBeenLastCalledWith({
     angle: 0,
-    stops: [...stops, { offset: 0.5, color: expected }],
+    stops: [stops[0], { offset: 0.5, color: expected }, stops[1]],
   });
   expect(mounted.commit).toHaveBeenCalledOnce();
   // The new stop is the selected one, so the well edits it.
@@ -458,9 +460,11 @@ it("adds at the midpoint after the selection and removes it again", async () => 
 
   await click(mounted.find("gradient-add"));
   const expected = colorAt(stops, 0.5);
+  // The midpoint sorts between the two, so it is inserted there rather than
+  // appended after the higher offset.
   expect(mounted.change).toHaveBeenLastCalledWith({
     angle: 0,
-    stops: [...stops, { offset: 0.5, color: expected }],
+    stops: [stops[0], { offset: 0.5, color: expected }, stops[1]],
   });
   expect(mounted.commit).toHaveBeenCalledOnce();
 
