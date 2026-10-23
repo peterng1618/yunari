@@ -16,7 +16,7 @@ The **colour and gradient picker rebuild** ([`spec`](docs/superpowers/specs/2026
 
 ## Last completed change
 
-- **§5 names the two new controls**: the 2-D colour area and the gradient track join the closed vocabulary, with their slider, keyboard and focus-boundary rules beside the table.
+- **§5 names the two new controls as built**: the 2-D colour area and the gradient track join the closed vocabulary at `--radius-sm` with their slider, keyboard and focus-boundary rules beside the table.
 - **Both picker surfaces join the token gate**: `colour-picker.tsx` and `gradient-editor.tsx` are gated, with the derived `.dom.test.tsx` halves still selected by rule.
 - **Proof:** `design:check`, `gates:self-test`, `format:check`, `lint` and `status:check` exit 0; the remainder holds at 2 against its ceiling of 2.
 
