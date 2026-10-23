@@ -111,6 +111,9 @@ export interface PairHalfView {
   readonly value: number;
   readonly data: FieldHooks;
   readonly integer?: boolean;
+  /** The stored value is a fraction the field shows as a percentage; the commit
+      converts back, so the write boundary still receives the fraction. */
+  readonly percent?: boolean;
 }
 
 export type FieldView =
@@ -135,6 +138,12 @@ export type FieldView =
        * that converts its own geometry fields.
        */
       readonly integer?: boolean;
+      /**
+       * The stored value is a fraction the field shows as a percentage — the
+       * background's offsets. The control multiplies on the way in and
+       * divides on the way out, so the write boundary still receives a fraction.
+       */
+      readonly percent?: boolean;
     })
   | (FieldBase & {
       readonly control: "pair";
@@ -465,6 +474,10 @@ const WRITABLE_FIELD_IDS: ReadonlyMap<string, WritableKind> = new Map([
   ["panel-shadow-offset", "integer"],
   ["glass-enabled", "boolean"],
   ["glass-blur", "integer"],
+  // A picture's paint-time mirrors. Fabric owns the property; the boundary only
+  // holds its type, so a switch cannot smuggle a number into it.
+  ["flipX", "boolean"],
+  ["flipY", "boolean"],
 ]);
 
 /** Why an edit was refused; `undefined` means it may reach the write funnel. */
@@ -559,7 +572,7 @@ export function readField(object: FabricObject, key: GeometryKey): number {
   return object.angle;
 }
 
-/** The word the column shows for each kind of thing it can describe. The five
+/** The word the column shows for each kind of thing it can describe. The six
     layer kinds keep their one owner; a multi-selection has no layer kind and is
     named by the copy table's own word for a selection. */
 const KIND_WORD: Readonly<Record<SelectionKind, string>> = {
@@ -569,6 +582,9 @@ const KIND_WORD: Readonly<Record<SelectionKind, string>> = {
   group: uiCopy.panels.layerKinds.group,
   image: uiCopy.panels.layerKinds.image,
   activeSelection: uiCopy.inspectorFields.selection,
+  // `selectionKindOf` never answers "background" — it is no Fabric object — but
+  // the union carries it so the subject can name one.
+  background: uiCopy.panels.layerKinds.background,
 };
 
 /**

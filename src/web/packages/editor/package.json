@@ -28,6 +28,11 @@
     "tailwind-merge": "^3.7.0",
     "tailwindcss": "^4.3.3"
   },
+  "optionalDependencies": {
+    "@tailwindcss/oxide-linux-x64-gnu": "^4.3.3",
+    "@tailwindcss/oxide-win32-x64-msvc": "^4.3.3"
+  },
+  "//optionalDependencies": "npm's lockfile records an optional native package only for the platform that generated it (npm/cli#4828), so a Windows-generated lock leaves the Linux runner's oxide binding out and `npm ci` cannot install it. Naming both platforms here keeps each one in the lock.",
   "//": "The editor adds interaction and inspectors over @yunari/renderer-core, and is migrating its rendering and interaction onto Fabric — see spec 0013. Fabric IS an expected dependency here now; the 2026-09 prohibition is reversed, because Fabric renders the player too and §31's one-renderer rule is satisfied rather than waived. Import from 'fabric/es', never bare 'fabric': the default entry is one pre-bundled file no tree-shaker can see into and costs 45 KB gzip more for identical imports. Still no UI framework: one is worth adding when the inspector surface is real enough to judge the trade.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

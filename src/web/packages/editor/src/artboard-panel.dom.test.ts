@@ -73,8 +73,7 @@ interface Mounted {
 }
 
 async function mount(
-  globals?: Parameters<typeof createArtboardPanel>[1],
-  options: Parameters<typeof createArtboardPanel>[3] = {},
+  options: Parameters<typeof createArtboardPanel>[2] = {},
 ): Promise<Mounted> {
   if (panel !== undefined) await act(async () => panel?.destroy());
   panel = undefined;
@@ -82,7 +81,7 @@ async function mount(
   const metadataChange = vi.fn();
   const change = vi.fn();
   await act(async () => {
-    panel = createArtboardPanel(document.body, globals, change, {
+    panel = createArtboardPanel(document.body, change, {
       onMetadataChange: metadataChange,
       ...options,
     });
@@ -242,6 +241,16 @@ function canvasStub(): {
 }
 
 describe("artboard panel", () => {
+  it("owns no document globals or asset list, which the background column reads", async () => {
+    await mount();
+
+    // The board's colour, media and fit are the background layer's, asked of
+    // the envelope and the asset manager where they live; a panel that held a
+    // copy of either would be a second owner that goes stale.
+    expect("setGlobals" in panel!).toBe(false);
+    expect("setAssets" in panel!).toBe(false);
+  });
+
   it("shows and returns valid artboard properties", async () => {
     const { change } = await mount();
     await draw({ width: 1280, height: 720 });
@@ -310,53 +319,8 @@ describe("artboard panel", () => {
     expect(change).toHaveBeenLastCalledWith({ width: 1600, height: 720 });
   });
 
-  it("selects persisted palette tokens for artboard paint", async () => {
-    const { change } = await mount({
-      palette: {
-        background: { name: "Background", value: "#101216" },
-        bars: { name: "Bars", value: "#000000" },
-      },
-    });
-    await draw({
-      width: 1280,
-      height: 720,
-      background: { ref: "palette.background" },
-    });
-
-    expect(choiceOf("[data-yunari-artboard-background]")).toBe(
-      "palette.background",
-    );
-
-    await chooseIn("[data-yunari-artboard-background]", "palette.bars");
-    expect(change).toHaveBeenLastCalledWith(
-      expect.objectContaining({ background: { ref: "palette.bars" } }),
-    );
-  });
-
-  it("keeps an uneditable literal background paint when another artboard field changes", async () => {
-    const { change } = await mount({
-      palette: { background: { name: "Background", value: "#101216" } },
-    });
-    await draw({
-      width: 1280,
-      height: 720,
-      background: { value: "#e20074" },
-    });
-
-    await commitField("[data-yunari-artboard-width]", "1000");
-
-    expect(change).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        width: 1000,
-        background: { value: "#e20074" },
-      }),
-    );
-  });
-
-  it("emits declared background media and theme metadata", async () => {
-    const { change, metadataChange } = await mount(undefined, {
-      assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
-    });
+  it("emits declared theme metadata", async () => {
+    const { metadataChange } = await mount();
     await draw({ width: 1280, height: 720 }, { name: "Before" });
 
     await commitField("[data-yunari-theme-name]", "Living Room");
@@ -364,13 +328,6 @@ describe("artboard panel", () => {
       name: "Living Room",
       themeLanguage: "en",
     });
-
-    await chooseIn("[data-yunari-background-asset]", "clip");
-    expect(change).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        backgroundMedia: { assetId: "clip", fit: "theme" },
-      }),
-    );
   });
 
   it("preserves the displayed release version during metadata edits", async () => {
@@ -443,26 +400,6 @@ describe("artboard panel", () => {
       `label[for="${fieldElement.id}"]`,
     );
     expect(label?.textContent).toBe("Description");
-  });
-
-  it("offers the media's fit and no fit control of its own", async () => {
-    await mount();
-    await draw({ width: 1280, height: 720, contentFit: "cover" });
-
-    // The artboard's own fit is the *content's*, it is always contain, and an
-    // author cannot set it. Beside "Media fit" it was labelled "Preview fit",
-    // so one panel offered two controls choosing between the same two words for
-    // two different subjects — read as "how my picture looks in the preview",
-    // which it never was.
-    expect(
-      document.querySelector("[data-yunari-artboard-fit-mode]"),
-    ).toBeNull();
-
-    const options = await openControl("[data-yunari-background-media-fit]");
-    expect(options.map((option) => option.textContent)).toEqual([
-      "Fill theme",
-      "Fill display",
-    ]);
   });
 
   it("says on screen that the date is a sample of the chosen language", async () => {
@@ -659,7 +596,7 @@ describe("artboard presets in the panel", () => {
         depth: 0,
       },
     ];
-    await mount(undefined, { sceneBoxes: () => boxes });
+    await mount({ sceneBoxes: () => boxes });
     const note = (): string =>
       document.querySelector("[data-yunari-artboard-note]")?.textContent ?? "";
 
@@ -687,7 +624,7 @@ describe("artboard presets in the panel", () => {
     // and the two assertions below would still pass — a draft survives a redraw
     // that never happened, which is the failure this case exists to catch.
     const boxes = vi.fn((): readonly SceneBox[] => []);
-    const { change } = await mount(undefined, {
+    const { change } = await mount({
       canvasEvents: canvas.events,
       sceneBoxes: boxes,
     });
@@ -730,7 +667,7 @@ describe("artboard presets in the panel", () => {
       },
     ];
     const read = vi.fn((): readonly SceneBox[] => boxes);
-    await mount(undefined, { canvasEvents: canvas.events, sceneBoxes: read });
+    await mount({ canvasEvents: canvas.events, sceneBoxes: read });
     const note = (): string =>
       document.querySelector("[data-yunari-artboard-note]")?.textContent ?? "";
 
@@ -780,7 +717,7 @@ describe("artboard presets in the panel", () => {
         depth: 0,
       },
     ];
-    await mount(undefined, {
+    await mount({
       canvasEvents: canvas.events,
       sceneBoxes: () => boxes,
     });

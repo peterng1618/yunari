@@ -348,6 +348,33 @@ describe("identity survives a round trip", () => {
     });
   });
 
+  it("persists a flip only while it is on, and revives it", async () => {
+    // Fabric owns `flipX`/`flipY`, so with defaults stripped the key is the
+    // flip: absent is off, and nothing had to be added to the format.
+    const source = image();
+    setObjectAssetReference(source, { assetId: "picture", kind: "image" });
+    expect(keysOf(serialiseScene(canvasOf(source)))).not.toContain("flipX");
+
+    source.set({ flipX: true });
+    const scene = serialiseScene(canvasOf(source));
+    expect(scene.objects[0]!["flipX"]).toBe(true);
+    expect(scene.objects[0]).not.toHaveProperty("flipY");
+
+    const revived = new StaticCanvas(undefined, { width: 400, height: 300 });
+    await reviveScene(revived, scene);
+    expect(revived.getObjects()[0]!.flipX).toBe(true);
+  });
+
+  it("keeps a group member's flip on the member, not on the group", () => {
+    const inside = image();
+    inside.set({ flipX: true });
+    const scene = serialiseScene(canvasOf(new Group([inside])));
+    const children = scene.objects[0]!["objects"] as Record<string, unknown>[];
+
+    expect(children[0]!["flipX"]).toBe(true);
+    expect(scene.objects[0]).not.toHaveProperty("flipX");
+  });
+
   it("does not persist the URL an asset-referenced image was decoded from", () => {
     // Fabric writes `src` on every image whatever the caller asked for, so it
     // has to be taken back off. What it wrote was the `blob:` handle of

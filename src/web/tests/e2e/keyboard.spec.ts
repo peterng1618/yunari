@@ -439,10 +439,11 @@ test("? opens the sheet, and the document behind it does not change", async ({
   await expect(sheet).toBeVisible();
   // Every action is listed, which is the sheet's whole promise: §7's figure for
   // the table is eighteen, Task 3.3's `?` row makes it nineteen, Task 3.1's
-  // `publish.surface` row makes it twenty, and the row count is a property of the
-  // projection rather than of this test — one `kbd` per action, joined aliases
-  // and all.
-  await expect(sheet.locator("kbd")).toHaveCount(20);
+  // `publish.surface` row makes it twenty, and the asset finder's
+  // `file.findAssets` row makes it twenty-one. The row count is a property of
+  // the projection rather than of this test — one `kbd` per action, joined
+  // aliases and all.
+  await expect(sheet.locator("kbd")).toHaveCount(21);
 
   // The capture is taken **here, with the sheet open**, because a shot named
   // for the reference that shows no reference is not evidence of one. Its

@@ -228,17 +228,16 @@ describe("editor panels", () => {
           }`,
       );
     expect(skipped).toEqual([
-      // The Document pane's seven, and it leads the list because it is the first
+      // The Document pane's four, and it leads the list because it is the first
       // thing in `root` that renders one. The artboard panel was imperative
       // until Task 8, so its natives were not skipped at all; every control on it
-      // is `ControlSelect` now, and each is a Base UI value carrier.
+      // is `ControlSelect` now, and each is a Base UI value carrier. It held
+      // three more until the background's colour, media and fit moved to the
+      // inspector's own column.
       "INPUT[type=][aria-hidden]", // Theme language
       "INPUT[type=][aria-hidden]", // Ratio
       "INPUT[type=][aria-hidden]", // Orientation
       "INPUT[type=][aria-hidden]", // Resolution
-      "INPUT[type=][aria-hidden]", // Background
-      "INPUT[type=][aria-hidden]", // Background media
-      "INPUT[type=][aria-hidden]", // Media fit
       // The Tokens pane's three: the token chooser, the paint-kind chooser and
       // the reassignment chooser, each a `ControlSelect`'s value carrier. The
       // imperative panel's natives were not skipped at all.
@@ -390,20 +389,9 @@ function mountPanels(): { root: HTMLElement } {
   const root = document.createElement("div");
   document.body.append(root);
 
-  createArtboardPanel(
-    root,
-    {
-      palette: {
-        background: { name: "Background", value: "#101216" },
-        bars: { name: "Bars", value: "#000000" },
-      },
-    },
-    () => undefined,
-    {
-      assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
-      onMetadataChange: () => undefined,
-    },
-  ).render(
+  createArtboardPanel(root, () => undefined, {
+    onMetadataChange: () => undefined,
+  }).render(
     { width: 1280, height: 720 },
     { name: "Living Room", version: "1.2.3", themeLanguage: "en" },
   );

@@ -103,7 +103,7 @@ export function validateFabricThemeEnvelope(
   styleTags(input["metadata"], issues);
   remixOf(input["metadata"], issues);
   v2Globals(input["globals"], issues);
-  artboardPaintReferences(input["artboard"], input["globals"], issues);
+  backgroundPaintReferences(input["background"], input["globals"], issues);
   paletteNone(input["globals"], issues);
   palettePaints(input["globals"], issues);
   editorMetadata(input["editorMetadata"], issues);
@@ -534,18 +534,18 @@ function v2Globals(value: unknown, issues: ValidationIssue[]): void {
   );
 }
 
-/** Artboard paint is authored through palette tokens, never a local literal. */
-function artboardPaintReferences(
-  artboard: unknown,
+/** Background paint is authored through palette tokens, never a local literal. */
+function backgroundPaintReferences(
+  background: unknown,
   globals: unknown,
   issues: ValidationIssue[],
 ): void {
-  if (!isRecord(artboard)) return;
+  if (!isRecord(background)) return;
   const palette =
     isRecord(globals) && isRecord(globals["palette"])
       ? globals["palette"]
       : undefined;
-  const value = artboard["background"];
+  const value = background["color"];
   if (value === undefined) return;
   const ref = isRecord(value) ? value["ref"] : undefined;
   if (
@@ -556,7 +556,7 @@ function artboardPaintReferences(
     issues.push(
       issue(
         "unresolved-global-ref",
-        "/artboard/background",
+        "/background/color",
         "background must reference an existing palette token.",
       ),
     );

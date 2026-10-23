@@ -12,6 +12,7 @@
     "id": { "$ref": "#/$defs/stableId" },
     "metadata": { "$ref": "#/$defs/metadata" },
     "artboard": { "$ref": "#/$defs/artboard" },
+    "background": { "$ref": "#/$defs/background" },
     "globals": { "$ref": "#/$defs/globals" },
     "assets": { "type": "array", "items": { "$ref": "#/$defs/assetReference" } },
     "bindings": {
@@ -56,12 +57,28 @@
       "properties": {
         "width": { "type": "number", "exclusiveMinimum": 0, "maximum": 16384 },
         "height": { "type": "number", "exclusiveMinimum": 0, "maximum": 16384 },
-        "background": { "$ref": "#/$defs/paletteReference" },
-        "contentFit": { "enum": ["contain", "cover"] },
-        "backgroundMedia": { "$ref": "#/$defs/backgroundMedia" }
+        "contentFit": { "enum": ["contain", "cover"] }
       }
     },
-    "backgroundMedia": { "type": "object", "additionalProperties": false, "required": ["assetId", "fit"], "properties": { "assetId": { "$ref": "#/$defs/stableId" }, "fit": { "enum": ["theme", "display"] } } },
+    "background": {
+      "description": "The bottom-most layer: a colour behind the board and optional media clipped to its bounds.",
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "color": { "$ref": "#/$defs/paletteReference" },
+        "media": { "$ref": "#/$defs/backgroundMedia" }
+      }
+    },
+    "backgroundMedia": {
+      "type": "object", "additionalProperties": false, "required": ["assetId", "bounds"],
+      "properties": {
+        "assetId": { "$ref": "#/$defs/stableId" },
+        "bounds": { "enum": ["theme", "display"] },
+        "offsetX": { "type": "number", "minimum": -1, "maximum": 1 },
+        "offsetY": { "type": "number", "minimum": -1, "maximum": 1 },
+        "flipX": { "type": "boolean" },
+        "flipY": { "type": "boolean" }
+      }
+    },
     "globals": {
       "type": "object", "additionalProperties": false,
       "properties": {

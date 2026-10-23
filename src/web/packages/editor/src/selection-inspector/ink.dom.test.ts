@@ -21,7 +21,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { starterIcons } from "../new-fabric-theme-icons.js";
 import { createNewShape } from "../new-object-defaults.js";
 import { idleCrop } from "./idle-crop.test-stage.js";
-import { createSelectionInspector } from "./index.js";
+import { createSelectionInspector, type SelectionInspector } from "./index.js";
 // The panel fill is a plan-1 `ControlSwatch` now, not a native `<select>`: a raw
 // `change` event on the element no longer commits it.
 import { choose } from "./runs.test-stage.js";
@@ -69,7 +69,7 @@ function stageWith(object: Path, size = 80) {
   // Attached: a plan-1 select portals its list and commits only a real
   // interaction, and none of that reaches an element outside the document.
   document.body.append(host);
-  createSelectionInspector(host, {
+  live = createSelectionInspector(host, {
     editor: {
       canvas: {
         getActiveObject: () => object,
@@ -100,8 +100,13 @@ function alphaAt(canvas: StaticCanvas, x: number, y: number): number {
 }
 
 // Each `stageWith` attaches its host so a converted control can open its list;
-// the body is emptied between cases so the hosts do not pile up.
+// the body is emptied between cases so the hosts do not pile up. The root is
+// unmounted first: a portal is removed against the container it was opened in,
+// and a container wiped before React closes it makes the removal throw.
+let live: SelectionInspector | undefined;
 afterEach(() => {
+  live?.destroy();
+  live = undefined;
   document.body.replaceChildren();
 });
 

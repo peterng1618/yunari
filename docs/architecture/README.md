@@ -39,8 +39,9 @@ document that composition edits: the authored envelope and every write to it,
 the fan-out each write makes, the picture a save ships, and the file protocol
 that creates, opens, saves and releases a package, the replacement question
 included. `scene-fabric`'s `FabricSceneHandle` exposes `updateArtboard` for
-document-level artboard changes that a `ScenePlan` cannot carry (it never
-carries `backgroundMedia`).
+document-level artboard geometry a `ScenePlan` cannot carry, and
+`updateBackground` for the background layer's own writes: a `ScenePlan` carries
+only the background's resolved colour, never its media.
 
 `editor-shell/` is React chrome over that boundary: it owns the header menus,
 rail, pane bar and canvas dock, and React re-renders only on selection

@@ -208,8 +208,10 @@ function packageFor(scene: Scene, backdrop: Backdrop): Uint8Array {
       artboard: {
         ...(backdrop === "photograph" ? PHOTOGRAPH : STRIPES),
         contentFit: "contain" as const,
-        background: { ref: "palette.none" as const },
-        backgroundMedia: { assetId: asset.id, fit: "theme" as const },
+      },
+      background: {
+        color: { ref: "palette.none" as const },
+        media: { assetId: asset.id, bounds: "theme" as const },
       },
       globals: {
         palette: {

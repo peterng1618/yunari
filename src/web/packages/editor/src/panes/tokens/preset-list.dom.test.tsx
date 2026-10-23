@@ -395,6 +395,20 @@ it("reads a group or a multi-selection as its children's presets, not as none", 
   expect(binding(host).textContent).toContain(withNumbers["24-400"]!.name);
 });
 
+it("reads a background selection as nothing selected, because it has no type", async () => {
+  // The background is a layer rather than a Fabric object: it carries no type
+  // preset, and calling that a failed lookup would name a preset the author
+  // never had. `target().kind` is "none" for it, which is the same answer.
+  const selection = stage();
+  const { host } = await mount(withNumbers, { selection: selection.source });
+
+  await act(async () => selection.set(undefined, true, "background"));
+
+  const text = binding(host).textContent;
+  expect(text).toContain(uiCopy.panels.selectionEmpty);
+  expect(text).not.toContain(uiCopy.panels.selectionNoType);
+});
+
 it("reads a dangling reference as unresolved, which is neither empty answer", async () => {
   // A third answer: the author chose a preset the document no longer declares,
   // so the pane must not fold it into "carries none" or into "nothing

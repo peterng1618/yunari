@@ -246,8 +246,26 @@ test("every literal the checked drawings declare is on §3's scale or §2's", ()
     (value.endsWith("%") ||
       (/^-?[\d.]+px$/.test(value) &&
         (value.startsWith("-") || value.includes("."))));
+  /** The largest step the table names, which is where a positioning offset
+   *  stops being a gutter at all. */
+  const LARGEST_STEP = Math.max(...SPACING);
+  /** A **positioning offset larger than the table can express** is geometry,
+   *  not a gutter. §3's step list stops at 32, so a panel inset inside a fixed
+   *  1180×900 drawing (`top:74px;left:170px`) has no legal step to be moved to;
+   *  reading it as an off-scale gutter would say the same thing about the same
+   *  number spelled `width`, which this row has never read. The bound is the
+   *  table's own largest step rather than a number chosen here, and a *small*
+   *  off-scale offset (a mis-derived inset) is still refused. */
+  const isGeometry = (value: string, property: string): boolean => {
+    if (!ANCHOR_PROPERTY.test(property)) return false;
+    const parsed = /^(\d+(?:\.\d+)?)px$/.exec(value);
+    return (
+      parsed !== null && Number.parseFloat(parsed[1] ?? "NaN") > LARGEST_STEP
+    );
+  };
   const spacingAllowed = (value: string, property: string): boolean => {
     if (SPACING_DEGENERATE.has(value) || isAnchor(value, property)) return true;
+    if (isGeometry(value, property)) return true;
     const parsed = /^(\d+(?:\.\d+)?)px$/.exec(value);
     return (
       parsed !== null && SPACING.has(Number.parseFloat(parsed[1] ?? "NaN"))

@@ -1462,8 +1462,8 @@ const STORE_LIBRARY = Array.from({ length: 30 }, (_unused, at) => {
     artboard: {
       width: portrait ? 1080 : 1920,
       height: portrait ? 1920 : 1080,
-      background: { value: DARK_GROUND },
     },
+    background: { color: { value: DARK_GROUND } },
     metadata: { name, themeLanguage: "en", author },
     scene: { version: "7.4.0", objects: [] },
   };
@@ -1864,8 +1864,8 @@ function boundaryEnvelope(input: {
     artboard: {
       width: input.width,
       height: input.height,
-      background: { value: DARK_GROUND },
     },
+    background: { color: { value: DARK_GROUND } },
     metadata: {
       name: input.name,
       themeLanguage: "en",
@@ -2863,17 +2863,10 @@ async function openLibraryItem(page: Page, id: string): Promise<Locator> {
 }
 
 /** The host's answer for the device flow these three cases stand in for. */
-const DEVICE_FLOW = {
-  userCode: "ABCD-1234",
-  verificationUri: "https://github.com/login/device",
-  expiresIn: 900,
-  interval: 1,
-};
+/** The address the host's own sign-in window is opened at. */
+const SIGN_IN_URL = "https://store.test/auth/start?provider=github";
 
-/** The pull request the host's second answer names. */
-const SUBMITTED_PR = "https://github.com/peterng1618/yunari-store/pull/42";
-
-test("signing in shows the host's one-time code and its verification link", async ({
+test("a missing identity opens the host's sign-in window and names the author's part", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -2884,11 +2877,13 @@ test("signing in shows the host's one-time code and its verification link", asyn
   await page.route("**/api/themes/submit", (route) =>
     route.fulfill({ status: 401, body: "" }),
   );
-  await page.route("**/api/github/device", (route) =>
-    route.fulfill({ json: DEVICE_FLOW }),
-  );
-  await page.route("**/api/github/device/poll", (route) =>
-    route.fulfill({ json: { state: "pending" } }),
+  let starts = 0;
+  await page.route("**/api/store/auth/start", (route) => {
+    starts += 1;
+    return route.fulfill({ json: { url: SIGN_IN_URL } });
+  });
+  await page.route("**/api/store/session", (route) =>
+    route.fulfill({ json: { signedIn: false } }),
   );
 
   const submit = modal.locator("[data-yunari-store-item-submit]");
@@ -2906,36 +2901,25 @@ test("signing in shows the host's one-time code and its verification link", asyn
     submit,
     "the control is live while the flow waits",
   ).toBeDisabled();
-
-  // **The host's own code and link, drawn as the sentence `uiCopy` owns**, so a
-  // renamed or reordered sentence fails here rather than reading as correct.
-  const code = modal.locator("[data-yunari-store-item-submit-code]");
+  // **The host owns the conversation**: its window holds the code and the
+  // link, so the surface prints neither and states only the author's part.
   await expect(
-    code,
-    "the sign-in does not state the one-time code and where to type it",
-  ).toHaveText(
-    "Enter ABCD-1234 at github.com to approve this submission. Open github.com to approve",
-  );
-  const open = modal.locator("[data-yunari-store-item-submit-open]");
-  await expect(open, "the code is not accompanied by a link").toHaveAttribute(
-    "href",
-    DEVICE_FLOW.verificationUri,
-  );
-  await expect(open, "the sign-in link carries no words").toHaveText(
-    "Open github.com to approve",
-  );
+    submit,
+    "the control does not state the author's part while the window is open",
+  ).toHaveText("Waiting for you to sign in…");
+  expect(starts, "the surface did not ask the host to start a sign-in").toBe(1);
 
   await captureVisualReview(page, testInfo, "store-submit-code", modal);
 });
 
-test("a submitted theme shows its pull request link and the control no longer offers Submit", async ({
+test("a submitted theme states the store's status word and the control no longer offers Submit", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   const modal = await openLibraryItem(page, "boundary-plain");
-  // The host answers the first press with no identity, the retry with a pull
-  // request; the poll waits once and then authorises, as the real flow does.
+  // The host answers the first press with no identity and the retry with the
+  // store's own status and version; the session poll authorises once.
   let submits = 0;
   await page.route("**/api/themes/submit", (route) => {
     submits += 1;
@@ -2944,19 +2928,19 @@ test("a submitted theme shows its pull request link and the control no longer of
       : route.fulfill({
           json: {
             ok: true,
-            url: SUBMITTED_PR,
+            status: "pending",
             version: { from: "1.4.0", to: "1.4.1", level: "patch" },
           },
         });
   });
-  await page.route("**/api/github/device", (route) =>
-    route.fulfill({ json: DEVICE_FLOW }),
+  await page.route("**/api/store/auth/start", (route) =>
+    route.fulfill({ json: { url: SIGN_IN_URL } }),
   );
   let polls = 0;
-  await page.route("**/api/github/device/poll", (route) => {
+  await page.route("**/api/store/session", (route) => {
     polls += 1;
     return route.fulfill({
-      json: polls === 1 ? { state: "pending" } : { state: "ok", login: "ada" },
+      json: polls === 1 ? { signedIn: false } : { signedIn: true },
     });
   });
 
@@ -2974,17 +2958,17 @@ test("a submitted theme shows its pull request link and the control no longer of
     submitted,
     "a submitted theme's control still offers another submission",
   ).toBeDisabled();
+  // The store's own word for what happens next, beside the version the host
+  // published: a new author's first item waits for the owner.
+  await expect(
+    modal.locator("[data-yunari-store-item-submit-status]"),
+    "the footer does not state the state the store landed",
+  ).toHaveText("Pending");
   await expect(
     modal,
-    "the surface does not state the pull request",
-  ).toContainText("Pull request opened.");
-  const url = modal.locator("[data-yunari-store-item-submit-url]");
-  await expect(url, "the pull request is not linked").toHaveAttribute(
-    "href",
-    SUBMITTED_PR,
-  );
-  await expect(url, "the pull request link does not name its URL").toHaveText(
-    SUBMITTED_PR,
+    "the surface does not say what happens to a new author's item",
+  ).toContainText(
+    "Submitted. The owner reviews new authors' items before they are listed.",
   );
 
   await captureVisualReview(page, testInfo, "store-submit-submitted", modal);
@@ -2999,13 +2983,13 @@ test("a refused submission states the host's own sentence", async ({
   // A sentence only the host could write: a local composer that paraphrased it
   // would pass a test that asserted its own copy instead.
   const reason = "This host has no GitHub token to open a pull request.";
-  let deviceCalls = 0;
+  let starts = 0;
   await page.route("**/api/themes/submit", (route) =>
     route.fulfill({ status: 503, body: reason }),
   );
-  await page.route("**/api/github/device", (route) => {
-    deviceCalls += 1;
-    return route.fulfill({ json: DEVICE_FLOW });
+  await page.route("**/api/store/auth/start", (route) => {
+    starts += 1;
+    return route.fulfill({ json: { url: SIGN_IN_URL } });
   });
 
   const submit = modal.locator("[data-yunari-store-item-submit]");
@@ -3024,7 +3008,7 @@ test("a refused submission states the host's own sentence", async ({
     after,
     "a refused submission left the control dead",
   ).toBeEnabled();
-  expect(deviceCalls, "a refusal that is not a 401 started a sign-in").toBe(0);
+  expect(starts, "a refusal that is not a 401 started a sign-in").toBe(0);
 
   await captureVisualReview(page, testInfo, "store-submit-refused", modal);
 });
@@ -3052,7 +3036,7 @@ test("a submitted theme states the version it published, and the caption reads i
     route.fulfill({
       json: {
         ok: true,
-        url: SUBMITTED_PR,
+        status: "published",
         version: { from: "1.4.0", to: "1.5.0", level: "minor" },
       },
     }),
@@ -3628,19 +3612,19 @@ test("normalizes a declared video without replacing its master", async ({
     buffer: Buffer.from("mp4-source"),
   });
 
-  // The artboard's background media is the one surface that renders a video.
-  await openPane(page, "Document");
+  // The artboard's background media is the one surface that renders a video,
+  // and it is the background layer's, so it is chosen where that layer is
+  // selected; the Add pane was showing, so the selection is a real pane swap.
+  await selectLayer(page, "Background");
   await chooseIn(page, "[data-yunari-background-asset]", "clip");
   await openPane(page, "Add");
   await chooseIn(page, "[data-yunari-asset-select]", "clip");
 
   const normalize = page.locator("[data-yunari-asset-normalize]");
-  const fill = page.locator("[data-yunari-asset-fill]");
   const useCopy = page.locator("[data-yunari-asset-use-normalized]");
   const alert = page.locator('[data-yunari-panel="add"] [role="alert"]');
-  // Both modes are offered; one standing for the other would hide a capability.
+  // One action, keeping the whole frame: the layer crops at render time (0095).
   await expect(normalize).toBeVisible();
-  await expect(fill).toBeVisible();
 
   const posted: unknown[] = [];
   let answer: Record<string, unknown> = {
@@ -3660,9 +3644,8 @@ test("normalizes a declared video without replacing its master", async ({
   // The host's sentence, not one composed by the pane.
   await expect(alert).toHaveText("That video is not an H.264 MP4.");
   await expect(useCopy).toHaveCount(0);
-  // A refusal is an answer, not a broken run: both modes stay pressable.
+  // A refusal is an answer, not a broken run: the control stays pressable.
   await expect(normalize).toBeEnabled();
-  await expect(fill).toBeEnabled();
   // The section is the pane's foot, so a capture of the pane has to be told to
   // bring the refusal into frame rather than cropping it below the fold.
   await alert.scrollIntoViewIfNeeded();
@@ -3708,8 +3691,8 @@ test("normalizes a declared video without replacing its master", async ({
     saved.parsed.envelope.assets?.filter((asset) => asset.id === "clip"),
   ).toMatchObject([{ id: "clip", kind: "video", path: "assets/clip.mp4" }]);
   expect(saved.parsed.assets["assets/clip.mp4"]).toEqual(normalized);
-  // The plain press asked for the shape-preserving mode.
-  expect(posted[0]).toMatchObject({ fit: "contain" });
+  // The press asked for no crop, so the host keeps the source's own shape.
+  expect(posted[0]).not.toHaveProperty("fit");
 });
 
 /** Saves the open document through the File menu, as the author does. */

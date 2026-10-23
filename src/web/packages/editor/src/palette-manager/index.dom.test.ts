@@ -1,20 +1,18 @@
 // @vitest-environment jsdom
-import type { Artboard } from "@yunari/renderer-core";
+import type { Background } from "@yunari/renderer-core";
 import { YUNARI_PAINT_PROPERTY } from "@yunari/scene-fabric";
 import { Canvas, Group, Rect, Shadow } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import { paletteTokenUsage, reassignPaletteToken } from "./index.js";
 
 describe("reassignPaletteToken", () => {
-  it("rewrites canvas paint refs, artboard refs and drops the palette entry", () => {
+  it("rewrites canvas paint refs, background refs and drops the palette entry", () => {
     const canvas = new Canvas(document.createElement("canvas"));
     const shape = new Rect({ id: "panel" });
     shape.set(YUNARI_PAINT_PROPERTY, { fill: "palette.old" });
     canvas.add(shape);
-    const artboard: Artboard = {
-      width: 100,
-      height: 100,
-      background: { ref: "palette.old" },
+    const background: Background = {
+      color: { ref: "palette.old" },
     };
     const palette = {
       old: { name: "Old", value: { kind: "solid", color: "#000" } as const },
@@ -23,14 +21,14 @@ describe("reassignPaletteToken", () => {
 
     const result = reassignPaletteToken(
       canvas,
-      artboard,
+      background,
       palette,
       "old",
       "new",
     );
 
     expect(shape.get(YUNARI_PAINT_PROPERTY)).toEqual({ fill: "palette.new" });
-    expect(result.artboard.background).toEqual({ ref: "palette.new" });
+    expect(result.background?.color).toEqual({ ref: "palette.new" });
     expect(result.palette).toEqual({ new: palette.new });
     expect(result.from).toBe("palette.old");
     expect(result.to).toBe("palette.new");
@@ -47,13 +45,12 @@ describe("reassignPaletteToken", () => {
       shadowColor: "palette.old",
     });
     canvas.add(panel);
-    const artboard: Artboard = { width: 100, height: 100 };
     const palette = {
       old: { name: "Old", value: { kind: "solid", color: "#000" } as const },
       new: { name: "New", value: { kind: "solid", color: "#fff" } as const },
     };
 
-    reassignPaletteToken(canvas, artboard, palette, "old", "new");
+    reassignPaletteToken(canvas, undefined, palette, "old", "new");
 
     // A panel carries three authored references, and a deleted token that
     // reached only the fill would leave a border and a shadow pointing at a
@@ -69,12 +66,10 @@ describe("reassignPaletteToken", () => {
     expect((panel.get("shadow") as Shadow).blur).toBe(12);
   });
 
-  it("leaves an unrelated artboard reference untouched", () => {
+  it("leaves an unrelated background reference untouched", () => {
     const canvas = new Canvas(document.createElement("canvas"));
-    const artboard: Artboard = {
-      width: 100,
-      height: 100,
-      background: { ref: "palette.other" },
+    const background: Background = {
+      color: { ref: "palette.other" },
     };
     const palette = {
       old: { name: "Old", value: { kind: "solid", color: "#000" } as const },
@@ -83,13 +78,13 @@ describe("reassignPaletteToken", () => {
 
     const result = reassignPaletteToken(
       canvas,
-      artboard,
+      background,
       palette,
       "old",
       "new",
     );
 
-    expect(result.artboard.background).toEqual({ ref: "palette.other" });
+    expect(result.background?.color).toEqual({ ref: "palette.other" });
   });
 
   it("reports the same objects the delete moves, at any depth", () => {
@@ -113,13 +108,7 @@ describe("reassignPaletteToken", () => {
       paletteTokenUsage(canvas, palette)["old"]?.map((use) => use.objectId),
     ).toEqual(["inner"]);
 
-    reassignPaletteToken(
-      canvas,
-      { width: 10, height: 10 },
-      palette,
-      "old",
-      "spare",
-    );
+    reassignPaletteToken(canvas, undefined, palette, "old", "spare");
 
     expect(paletteTokenUsage(canvas, palette)["old"]).toEqual([]);
   });

@@ -1,6 +1,7 @@
 import {
   type Artboard,
   type AssetReference,
+  type Background,
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
   type Globals,
@@ -92,6 +93,12 @@ export interface EditorShell {
    */
   refreshGlass(): void;
   setArtboard(artboard: Artboard): void;
+  /**
+   * The background layer moves. Its colour repaints the host and the plate, its
+   * media re-places (or remounts, when the asset changed) — the scene itself is
+   * untouched, because the layer is a DOM sibling rather than a scene object.
+   */
+  setBackground(background: Background | undefined): void;
   setBackgroundMedia(
     assets: readonly AssetReference[],
     resolveAsset: (assetId: string) => BackgroundMediaSource | undefined,
@@ -220,24 +227,25 @@ function applyArtboardPaint(
   editor: EditorInteraction,
   host: HTMLElement,
   artboard: Artboard,
+  documentBackground: Background | undefined,
   globals: Globals | undefined,
   memo: PaintMemo,
 ): unknown {
   const issues: Parameters<typeof resolveStyleValue>[3] = [];
-  const resolve = (value: Artboard["background"]): unknown => {
-    return resolveStyleValue(value, globals ?? {}, "artboard", issues);
+  const resolve = (value: Parameters<typeof resolveStyleValue>[0]): unknown => {
+    return resolveStyleValue(value, globals ?? {}, "background", issues);
   };
-  const background = resolve(artboard.background);
+  const paint = resolve(documentBackground?.color);
   // A gradient is rebuilt only when the paint or the board's size changes, the
   // same memo the player keeps. The plate is rebuilt whenever it is missing,
   // because `loadFromJSON` clears the canvas it lived on.
-  const paintKey = `${artboardPaintKey(background)}:${artboard.width}x${artboard.height}`;
+  const paintKey = `${artboardPaintKey(paint)}:${artboard.width}x${artboard.height}`;
   // **With background media declared there is no plate at all (0080).** The
   // plate is on the canvas, which sits above the media layer, so it covers the
   // media exactly as the player's canvas fill did; the host's background, set
   // below, is the board's colour instead — and it is behind the layer, which is
   // the order the reader needs.
-  const wantsPlate = artboard.backgroundMedia === undefined;
+  const wantsPlate = documentBackground?.media === undefined;
   if (!wantsPlate) {
     memo.background = undefined;
     // `delete` rather than `= undefined`: the property is optional and
@@ -251,7 +259,7 @@ function applyArtboardPaint(
     !(editor.canvas.backgroundImage instanceof Rect)
   ) {
     memo.background = paintKey;
-    editor.canvas.backgroundImage = artboardPlate(artboard, background);
+    editor.canvas.backgroundImage = artboardPlate(artboard, paint);
   }
   // Same shape as the plate's guard: rebuilt when the board is resized, and
   // whenever it is missing, which is what `loadFromJSON` — and so every undo —
@@ -265,7 +273,7 @@ function applyArtboardPaint(
   // A revived envelope from before the camera carried the artboard paint here;
   // left set it would cover the pasteboard again.
   editor.canvas.backgroundColor = "";
-  host.style.background = cssArtboardPaint(background) ?? "#000";
+  host.style.background = cssArtboardPaint(paint) ?? "#000";
   applyObjectPalettePaints(editor.canvas, globals, {
     // A document may ask for paint the product will not draw — a filled arc, say.
     // Said through the shell's own warning channel, beside the glass and media
@@ -276,7 +284,7 @@ function applyArtboardPaint(
   editor.canvas.requestRenderAll();
   // The caller keeps this: it is what the glass backdrop composes the media
   // over, and re-resolving it there would put a second owner on the paint.
-  return background;
+  return paint;
 }
 
 /** Whether `object` is the entered group or one of its direct children. Mirrors
@@ -461,6 +469,7 @@ export async function mountEditorShell({
   container.style.inset = "0";
   container.style.visibility = "hidden";
   let currentArtboard = artboard;
+  let currentBackground: Background | undefined = envelope?.background;
   let globals: Globals | undefined = envelope?.globals;
   host.append(container);
   const paintMemo: PaintMemo = { background: undefined, clip: undefined };
@@ -482,6 +491,7 @@ export async function mountEditorShell({
         editor,
         host,
         currentArtboard,
+        currentBackground,
         globals,
         paintMemo,
       );
@@ -541,6 +551,7 @@ export async function mountEditorShell({
         ? undefined
         : mountBackgroundMedia({
             host: container,
+            background: currentBackground,
             artboard: currentArtboard,
             assets: mediaAssets,
             resolveAsset: mediaResolve,
@@ -636,14 +647,17 @@ export async function mountEditorShell({
         // player's letterbox, which the editor no longer draws.
         editor.viewport.zoomToFit();
         paintArtboard();
-        if (media !== undefined && mediaResolve !== undefined) {
-          media.update({
-            artboard: currentArtboard,
-            assets: mediaAssets,
-            resolveAsset: mediaResolve,
-          });
-          placeMedia();
-        }
+        // The media is a layer over the board rather than part of the scene, so
+        // it takes the new size and the new camera box directly; nothing about
+        // it changed except where it sits.
+        media?.setArtboardSize(currentArtboard);
+        placeMedia();
+      },
+      setBackground(nextBackground) {
+        currentBackground = nextBackground;
+        paintArtboard();
+        media?.setBackground(currentBackground);
+        placeMedia();
       },
       setBackgroundMedia(nextAssets, nextResolveAsset) {
         media?.destroy();

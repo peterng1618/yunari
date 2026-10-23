@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 
 import { createDemoSource } from "@yunari/fake-source";
-import { objectName } from "@yunari/renderer-core";
+import {
+  type AssetReference,
+  type Background,
+  objectName,
+} from "@yunari/renderer-core";
 import { isLocked, serialiseScene } from "@yunari/scene-fabric";
 import { FabricImage, type FabricObject, Group, Rect } from "fabric/es";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EditorDocument } from "./editor-document.js";
 import { createEditorShellBridge } from "./editor-shell/bridge.js";
 import { mountEditorShell } from "./editor-shell.js";
 import { LiveRuntime } from "./live-runtime.js";
@@ -475,11 +480,7 @@ describe("native editor shell", () => {
     document.body.append(host);
     const shell = await mount({
       host,
-      artboard: {
-        width: 1280,
-        height: 720,
-        background: { kind: "solid", color: "#000" },
-      } as never,
+      artboard: { width: 1280, height: 720 },
     });
     expect(shell.editor.viewport.zoom()).toBeGreaterThan(0);
     // The canvas fills the host, not the artboard: a canvas sized to the
@@ -487,6 +488,137 @@ describe("native editor shell", () => {
     // host instead.
     expect(shell.editor.canvas.getWidth()).toBe(1000);
     expect(shell.editor.canvas.getHeight()).toBe(400);
+  });
+});
+
+const ARTBOARD = { width: 100, height: 100 } as const;
+
+/** The shell derives its background from the document, so a case about it
+ *  authors one rather than the artboard that no longer carries it. The palette
+ *  token is what the validator requires a background colour to name. */
+function envelopeWith(
+  background: Background,
+  assets: readonly AssetReference[] = [],
+): NonNullable<Parameters<typeof mountEditorShell>[0]["envelope"]> {
+  return {
+    schemaVersion: 2,
+    fabricVersion: "7.4.0",
+    id: "background-probe",
+    artboard: ARTBOARD,
+    background,
+    globals: {
+      palette: {
+        none: { name: "None", value: { kind: "solid", color: "transparent" } },
+        ink: { name: "Ink", value: { kind: "solid", color: "#112233" } },
+      },
+    },
+    assets,
+    metadata: { themeLanguage: "en" },
+    scene: { version: "7.4.0", objects: [] },
+  } as unknown as NonNullable<
+    Parameters<typeof mountEditorShell>[0]["envelope"]
+  >;
+}
+
+describe("the background layer", () => {
+  it("paints the background colour on the host and sizes the media layer", async () => {
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const assets = [
+      { id: "loop", kind: "video" as const, path: "assets/loop.webm" },
+    ];
+    const shell = await mount({
+      host,
+      artboard: ARTBOARD,
+      envelope: envelopeWith(
+        {
+          color: { ref: "palette.ink" },
+          media: { assetId: "loop", bounds: "theme" },
+        },
+        assets,
+      ),
+      resolveAsset: () => ({ url: "blob:loop" }),
+    });
+
+    expect(host.style.background).toBe("rgb(17, 34, 51)");
+    expect(host.querySelector("[data-yunari-background-media]")).toBeTruthy();
+    shell.destroy();
+  });
+
+  it("setBackground re-paints without remounting the scene", async () => {
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const shell = await mount({ host, artboard: ARTBOARD });
+    const before = host.querySelector("canvas");
+    expect(
+      before,
+      "the scene mounted before the background moved",
+    ).not.toBeNull();
+
+    shell.setBackground({ color: { value: "#445566" } });
+
+    expect(host.querySelector("canvas")).toBe(before);
+    expect(host.style.background).toBe("rgb(68, 85, 102)");
+    shell.destroy();
+  });
+
+  it("keeps the media element across a board-size change", async () => {
+    // The document used to re-run `refreshBackgroundMedia` on every artboard
+    // change, which destroys and remounts the layer — so a background video
+    // restarted on a ratio change even though no asset declaration moved. The
+    // shell re-places the layer itself now, so what this pins is that the
+    // document does not remount it behind the shell's back.
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const assets = [
+      { id: "loop", kind: "video" as const, path: "assets/loop.webm" },
+    ];
+    const envelope = envelopeWith(
+      { media: { assetId: "loop", bounds: "theme" } },
+      assets,
+    );
+    const shell = await mount({
+      host,
+      artboard: ARTBOARD,
+      envelope,
+      assets,
+      resolveAsset: () => ({ url: "blob:loop" }),
+    });
+    const themeDocument = new EditorDocument({
+      source: {
+        shell,
+        envelope,
+        assetManager: {
+          assets: {},
+          declarations: assets,
+          backgroundSource: () => ({ url: "blob:loop" }),
+        } as never,
+        onNew: async () => undefined,
+        onNewFromStarter: async () => undefined,
+        onSaved: () => undefined,
+      },
+      consumers: { artboard: () => ({ render: () => undefined }) } as never,
+    });
+    const before = host.querySelector("[data-yunari-background-media] video");
+    expect(before, "the media layer mounted").not.toBeNull();
+
+    themeDocument.setArtboard({ width: 160, height: 120 });
+
+    expect(
+      host.querySelector("[data-yunari-background-media] video"),
+      "a board-size change is not a reason to restart the video",
+    ).toBe(before);
+    themeDocument.destroy();
+    shell.destroy();
   });
 });
 
@@ -532,16 +664,15 @@ describe("editor background media", () => {
     const video = [
       { id: "loop", kind: "video" as const, path: "assets/loop.webm" },
     ];
-    const artboard = {
-      width: 100,
-      height: 100,
-      backgroundMedia: { assetId: "loop", fit: "theme" as const },
-    };
 
     try {
       const shell = await mount({
         host,
-        artboard,
+        artboard: ARTBOARD,
+        envelope: envelopeWith(
+          { media: { assetId: "loop", bounds: "theme" } },
+          video,
+        ),
         assets: video,
         resolveAsset: () => ({ url: "blob:loop" }),
       });
@@ -580,11 +711,11 @@ describe("editor background media", () => {
 
     const shell = await mount({
       host,
-      artboard: {
-        width: 100,
-        height: 100,
-        backgroundMedia: { assetId: "hero", fit: "theme" },
-      },
+      artboard: ARTBOARD,
+      envelope: envelopeWith(
+        { media: { assetId: "hero", bounds: "theme" } },
+        hero,
+      ),
       assets: hero,
       resolveAsset: () => ({ url: "blob:hero" }),
     });
@@ -625,11 +756,10 @@ describe("editor background media", () => {
     });
     const shell = await mount({
       host,
-      artboard: {
-        width: 100,
-        height: 100,
-        backgroundMedia: { assetId: "hero", fit: "theme" },
-      },
+      artboard: ARTBOARD,
+      envelope: envelopeWith({ media: { assetId: "hero", bounds: "theme" } }, [
+        { id: "hero", kind: "image", path: "assets/hero.png" },
+      ]),
       assets: [{ id: "hero", kind: "image", path: "assets/hero.png" }],
       resolveAsset: () => ({ url: "blob:hero" }),
     });

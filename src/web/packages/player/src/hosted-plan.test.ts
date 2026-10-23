@@ -14,7 +14,9 @@ function envelope(paint: { readonly kind: "solid"; readonly color: string }) {
     artboard: {
       width: 640,
       height: 360,
-      background: { ref: "palette.paper" as const },
+    },
+    background: {
+      color: { ref: "palette.paper" as const },
     },
     globals: {
       palette: {

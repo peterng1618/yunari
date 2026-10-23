@@ -14,6 +14,7 @@ import type { SampleSource } from "../data/source.js";
 import type {
   Artboard,
   AssetKind,
+  Background,
   Binding,
   ChartContent,
   ChartFamily,
@@ -157,8 +158,8 @@ export interface PlanInputs {
 export type ChartPlanContext = Pick<PlanInputs, "source" | "nowMs" | "animate">;
 
 /**
- * The artboard's geometry with its two paints resolved through `globals`, the way
- * a node's style is.
+ * The artboard's geometry with the background layer's colour resolved through
+ * `globals`, the way a node's style is.
  *
  * **The one owner of artboard paint resolution.** The player's
  * `hosted-plan.ts` is the other builder of a `ScenePlan`, from a hosted
@@ -166,11 +167,14 @@ export type ChartPlanContext = Pick<PlanInputs, "source" | "nowMs" | "animate">;
  * builder came to pass a palette reference through unresolved, which paints
  * nothing at all. Keep both on this.
  *
- * `scene-fabric` accepts the resolved forms only: a CSS string or a
- * `{ kind: "solid" | "gradient" }` object, never a reference.
+ * The background is its own envelope section, so its colour arrives beside the
+ * artboard rather than inside it. `scene-fabric` accepts the resolved forms
+ * only: a CSS string or a `{ kind: "solid" | "gradient" }` object, never a
+ * reference.
  */
 export function planArtboard(
   artboard: Artboard,
+  background: Background | undefined,
   globals: Globals,
   issues: PlanIssue[],
 ): ScenePlan["artboard"] {
@@ -179,9 +183,9 @@ export function planArtboard(
     height: artboard.height,
     contentFit: artboard.contentFit ?? "contain",
     background: resolveStyleValue(
-      artboard.background,
+      background?.color,
       globals,
-      "artboard",
+      "background",
       issues,
     ),
   };

@@ -141,12 +141,12 @@ function tagsOf(envelope: FabricThemeEnvelope): string[] {
  * `undefined`, which is the same absence as no ground at all.
  */
 function groundOf(envelope: FabricThemeEnvelope): Ground | undefined {
-  if (envelope.artboard.backgroundMedia !== undefined) return undefined;
+  if (envelope.background?.media !== undefined) return undefined;
 
   const resolved = resolveStyleValue(
-    envelope.artboard.background,
+    envelope.background?.color,
     envelope.globals ?? {},
-    "artboard",
+    "background",
     [],
   );
   if (typeof resolved === "string") return { kind: "solid", color: resolved };

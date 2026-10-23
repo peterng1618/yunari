@@ -144,11 +144,7 @@ describe("Fabric theme envelope validation", () => {
       validateFabricThemeEnvelope({
         ...envelope(),
         metadata: { version: "1.2.3", themeLanguage: "en" },
-        artboard: {
-          width: 400,
-          height: 300,
-          backgroundMedia: { assetId: "clip", fit: "theme" },
-        },
+        background: { media: { assetId: "clip", bounds: "theme" } },
         assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
       }),
     ).toMatchObject({ ok: true });
@@ -158,10 +154,8 @@ describe("Fabric theme envelope validation", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),
       metadata: { version: "v1.2.3", themeLanguage: "en" },
-      artboard: {
-        width: 400,
-        height: 300,
-        backgroundMedia: { assetId: "font", fit: "stretch" },
+      background: {
+        media: { assetId: "font", bounds: "stretch" },
       },
       assets: [{ id: "font", kind: "font", path: "assets/body.woff2" }],
     });
@@ -170,8 +164,8 @@ describe("Fabric theme envelope validation", () => {
       ok: false,
       issues: expect.arrayContaining([
         expect.objectContaining({ path: "/metadata/version" }),
-        expect.objectContaining({ path: "/artboard/backgroundMedia/fit" }),
-        expect.objectContaining({ path: "/artboard/backgroundMedia/assetId" }),
+        expect.objectContaining({ path: "/background/media/bounds" }),
+        expect.objectContaining({ path: "/background/media/assetId" }),
       ]),
     });
   });
@@ -847,10 +841,10 @@ describe("Fabric theme envelope validation", () => {
     });
   });
 
-  it("rejects transitional globals and literal artboard paint", () => {
+  it("rejects transitional globals and literal background paint", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),
-      artboard: { width: 400, height: 300, background: { value: "#101216" } },
+      background: { color: { value: "#101216" } },
       globals: { fonts: { body: { name: "Body", value: "Inter" } } },
     });
 
@@ -863,7 +857,7 @@ describe("Fabric theme envelope validation", () => {
         }),
         expect.objectContaining({
           code: "unresolved-global-ref",
-          path: "/artboard/background",
+          path: "/background/color",
         }),
       ]),
     });

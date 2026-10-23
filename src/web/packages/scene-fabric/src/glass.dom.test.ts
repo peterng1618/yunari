@@ -341,11 +341,12 @@ describe("glass composition", () => {
   });
 
   it("maps a display-filled backdrop's own rect, not the artboard, onto the surface", () => {
-    // 0075's case, and the one nothing else here reaches: under `fit: "display"`
-    // the layer covers the display box, which is larger than the artboard and
-    // starts outside it, so `media.rect.left`/`top` are non-zero. Every other
-    // case on this stage builds a theme rect (`{0, 0, artboard}`), which
-    // exercises those two terms at zero and would not notice them dropped.
+    // 0075's case, and the one nothing else here reaches: under
+    // `bounds: "display"` the layer covers the display box, which is larger
+    // than the artboard and starts outside it, so `media.rect.left`/`top` are
+    // non-zero. Every other case on this stage builds a theme rect
+    // (`{0, 0, artboard}`), which exercises those two terms at zero and would
+    // not notice them dropped.
     const s = stage({
       // Big enough for the panel once the viewport transform has moved it.
       size: 400,
@@ -377,11 +378,8 @@ describe("glass composition", () => {
     const host = document.createElement("div");
     const media = mountBackgroundMedia({
       host,
-      artboard: {
-        width: 400,
-        height: 200,
-        backgroundMedia: { assetId: "hero", fit: "display" },
-      },
+      artboard: { width: 400, height: 200 },
+      background: { media: { assetId: "hero", bounds: "display" } },
       assets: [{ id: "hero", kind: "image", path: "assets/hero.png" }],
       resolveAsset: () => ({ url: "blob:hero" }),
     });

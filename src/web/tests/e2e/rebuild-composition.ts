@@ -728,12 +728,12 @@ export async function importBackdrop(page: Page, file: string): Promise<void> {
     })
     .not.toBeUndefined();
 
-  // The artboard panel is a *document* panel, so it lives in the left column's
-  // Document pane and is hidden until the pane is asked for. The Add pane was
-  // the last one shown, so this is a real swap, not a no-op.
-  await openPane(page, "Document");
+  // The picture and its box are the background layer's properties, so they are
+  // written where that layer is selected. Selecting it opens Composition, so
+  // this is a real swap from the Add pane, not a no-op.
+  await selectLayer(page, "Background");
   // Both are plan 1's selects — a button opening a listbox, not a `select` — so
   // they are driven the way an author drives them.
   await chooseIn(page, "[data-yunari-background-asset]", assetId ?? "");
-  await chooseIn(page, "[data-yunari-background-media-fit]", "theme");
+  await chooseIn(page, "[data-yunari-background-bounds]", "theme");
 }

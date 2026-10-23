@@ -102,14 +102,12 @@ export function rendersExtra(extra: ExtraView): boolean {
  * its own here, and folding it into `group` would make the column describe a
  * multi-selection as though the author had selected a single thing.
  *
- * **Total by construction**, and two owners hold that up rather than this
- * docblock: `view.ts`'s `KIND_WORD` is a record over this union, so a kind added
- * here fails to compile until it is given a word, and `index.dom.test.ts`'s
- * `EXAMPLE` record — also over the union — drives "answers a %s with a column
- * rather than an empty one", which asks every kind for a column and fails one
- * that yields an empty section. The per-kind question record that used to gate
- * this here went with the read-only section, whose "is this appearance its
- * children's" was its only question.
+ * **`background` is the union's one member absent from this list.** It is a
+ * selected subject and `KIND_WORD` is a record over the union, so it cannot go
+ * unworded — but it is no Fabric object: `selectionKindOf` never answers for it
+ * and `backgroundColumn` describes it, so no per-kind example can be built for
+ * it. `KIND_WORD`'s totality is the compile-time half; the per-kind suites
+ * enumerate this list, which is the runnable half.
  */
 export const SELECTION_KINDS = [
   "shape",
@@ -120,7 +118,7 @@ export const SELECTION_KINDS = [
   "activeSelection",
 ] as const;
 
-export type SelectionKind = (typeof SELECTION_KINDS)[number];
+export type SelectionKind = (typeof SELECTION_KINDS)[number] | "background";
 
 /** Fabric lowercases `type` on the instance, so these are its own spellings. */
 function isTextKind(object: FabricObject): boolean {
@@ -133,9 +131,13 @@ function isTextKind(object: FabricObject): boolean {
  *
  * Ordered so the two containers are named before the class they extend: Fabric's
  * `ActiveSelection` **is** a `Group`, so a group tested first would answer for a
- * selection the author made across several objects.
+ * selection the author made across several objects. It never answers
+ * `"background"`: the background is no Fabric object, and its column is
+ * `backgroundColumn`'s.
  */
-export function selectionKindOf(target: FabricObject): SelectionKind {
+export function selectionKindOf(
+  target: FabricObject,
+): Exclude<SelectionKind, "background"> {
   if (target instanceof ActiveSelection) return "activeSelection";
   if (target instanceof YunariChart) return "chart";
   if (target instanceof Group) return "group";
@@ -231,6 +233,25 @@ function sectionOrder(id: ColumnSectionId): number {
 function titleOf(id: ColumnSectionId): string {
   if (id === "advanced") return uiCopy.inspectorFields.advanced;
   return SETTINGS_SECTIONS.find((entry) => entry.id === id)?.label ?? id;
+}
+
+/** One section as the column renders it. Exported because `backgroundColumn`
+ *  answers the same two questions for a subject that is no Fabric object, and a
+ *  second copy of the title and the count would be a second owner. Order is the
+ *  caller's: each column states its own, `perKindColumn` through `sectionOrder`. */
+export function sectionView(
+  id: ColumnSectionId,
+  fields: readonly FieldView[] = [],
+  extras: readonly ExtraView[] = [],
+): ColumnSectionView {
+  return {
+    id,
+    title: titleOf(id),
+    defaultOpen: defaultOpenOf(id),
+    count: fields.length + extras.filter(rendersExtra).length,
+    fields,
+    extras,
+  };
 }
 
 /** The appearance context the field builders take. */
@@ -420,16 +441,43 @@ function positionBody(
   return { fields, extras };
 }
 
-/** How it presents: rotation, and opacity. */
+/** One paint-time mirror. Fabric owns the property, so the row reads and the
+    writer writes the same name; a group member flips alone. */
+function flipField(image: FabricImage, axis: "flipX" | "flipY"): FieldView {
+  return axis === "flipX"
+    ? {
+        id: "flipX",
+        control: "toggle",
+        label: uiCopy.inspectorFields.flipX,
+        checked: image.flipX,
+        data: { "data-yunari-flip-x": "" },
+      }
+    : {
+        id: "flipY",
+        control: "toggle",
+        label: uiCopy.inspectorFields.flipY,
+        checked: image.flipY,
+        data: { "data-yunari-flip-y": "" },
+      };
+}
+
+/** How it presents: rotation, opacity, and — for a picture — its two mirrors. */
 function layerBody(
   target: FabricObject,
   context: ColumnContext,
   locked: boolean,
 ): SectionParts {
   if (locked) return { fields: [] };
-  return {
-    fields: [rotationField(context, target), opacityField(target)],
-  };
+  const fields: FieldView[] = [
+    rotationField(context, target),
+    opacityField(target),
+  ];
+  // A raster image and an SVG icon are both a `FabricImage`, so one gate covers
+  // the whole image kind; text, shape, chart and group have nothing to mirror.
+  if (target instanceof FabricImage) {
+    fields.push(flipField(target, "flipX"), flipField(target, "flipY"));
+  }
+  return { fields };
 }
 
 /** What ink: the panel's material, the frosted-glass treatment, and a chart's
@@ -498,12 +546,7 @@ export function perKindColumn(
   return bodies
     .filter(([, parts]) => sizeOf(parts) > 0)
     .sort(([left], [right]) => sectionOrder(left) - sectionOrder(right))
-    .map(([id, parts]) => ({
-      id,
-      title: titleOf(id),
-      defaultOpen: defaultOpenOf(id),
-      count: sizeOf(parts),
-      fields: parts.fields ?? [],
-      extras: parts.extras ?? [],
-    }));
+    .map(([id, parts]) =>
+      sectionView(id, parts.fields ?? [], parts.extras ?? []),
+    );
 }

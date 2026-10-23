@@ -7,24 +7,23 @@
  * The Document pane, measured against the enumeration taken from the imperative
  * panel before a line of it was rewritten.
  *
- * The three cases below are the ones the brief names, and they are the whole
- * point of the rewrite: **every hook the panel carried is still there**, the
- * size note is **derived from the scene** rather than printed from a stored
- * figure, and **no native select survives** — a `select` is the control the
- * shell's own set replaced, and `input[type=range]` is the slider primitive's
- * hidden thumb rather than a control this pane may hold.
+ * **Every hook the pane kept is still there**, the size note is **derived from
+ * the scene** rather than printed from a stored figure, and **no native select
+ * survives** — a `select` is the control the shell's own set replaced, and
+ * `input[type=range]` is the slider primitive's hidden thumb rather than a
+ * control this pane may hold.
+ *
+ * The board's colour, media and position are not this pane's any more: they are the
+ * background layer's, and the selection inspector's `backgroundColumn` renders
+ * them. This file asserts both halves — the size controls remain, and none of
+ * the background hooks is here.
  *
  * The pane is mounted the way the session mounts it — through
  * `createArtboardPanel`, whose `root`/`render` pair is the contract
  * `editor-session.ts` keeps — so a hook asserted here is a hook the editor's own
  * wiring really reaches.
  */
-import {
-  type Artboard,
-  type AssetReference,
-  BACKGROUND_MEDIA_FITS,
-  type ThemeMetadata,
-} from "@yunari/renderer-core";
+import { type Artboard, type ThemeMetadata } from "@yunari/renderer-core";
 import { outsideCount, type SceneBox } from "@yunari/scene-fabric";
 import { act } from "react";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -69,14 +68,12 @@ afterEach(async () => {
 });
 
 /**
- * Step 1's checklist, verbatim: every `data-yunari-*` hook the imperative panel
- * rendered, in the order it rendered them. A field the rewrite dropped is a
- * missing hook, and this list is the only thing that catches it.
+ * Every `data-yunari-*` hook this pane still renders, in the order it renders
+ * them. A field the pane drops is a missing hook, and this list is the only
+ * thing that catches it.
  *
- * `background-media-fit` is in the list because the panel renders it in every
- * state — the branch a single render hides is the *offer*, the declared assets
- * the media control lists, and the case below drives that rather than assuming
- * it.
+ * The background's three hooks are deliberately absent: they left with the
+ * controls, which `backgroundColumn` now owns.
  */
 const enumeratedHooks = [
   // Metadata: the theme's own description.
@@ -94,34 +91,19 @@ const enumeratedHooks = [
   "artboard-width",
   "artboard-height",
   "artboard-note",
-  // The board's one paint, the media behind it, and how that media fills it.
-  "artboard-background",
-  "background-asset",
-  "background-media-fit",
 ] as const;
 
-const ASSETS: readonly AssetReference[] = [
-  { id: "clip", kind: "video", path: "assets/clip.mp4" },
-];
-
-const GLOBALS = {
-  palette: {
-    background: {
-      name: "Background",
-      value: { kind: "solid", color: "transparent" } as const,
-    },
-    bars: {
-      name: "Bars",
-      value: { kind: "solid", color: "transparent" } as const,
-    },
-  },
-};
+/** The controls the background layer took with it. The pane offers no second
+ *  surface for a value the inspector already asks. */
+const BACKGROUND_HOOKS = [
+  "artboard-background",
+  "background-asset",
+  "background-bounds",
+  "background-flip-x",
+] as const;
 
 async function mount(
-  options: {
-    readonly sceneBoxes?: () => readonly SceneBox[];
-    readonly assets?: readonly AssetReference[];
-  } = {},
+  options: { readonly sceneBoxes?: () => readonly SceneBox[] } = {},
 ): Promise<{
   readonly host: HTMLElement;
   readonly change: ReturnType<typeof vi.fn>;
@@ -135,8 +117,7 @@ async function mount(
   document.body.append(host);
   const change = vi.fn();
   await act(async () => {
-    panel = createArtboardPanel(host, GLOBALS, change, {
-      assets: ASSETS,
+    panel = createArtboardPanel(host, change, {
       onMetadataChange: vi.fn(),
       ...options,
     });
@@ -147,53 +128,6 @@ async function mount(
 async function draw(artboard: Artboard, metadata?: ThemeMetadata) {
   if (panel === undefined) throw new Error("no panel mounted");
   await act(async () => panel?.render(artboard, metadata));
-}
-
-/** React and floating-ui schedule outside `act`, so a popup is flushed with
- *  macrotasks rather than one. */
-async function flush(): Promise<void> {
-  for (let round = 0; round < 3; round += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-}
-
-async function click(target: Element, detail = 0): Promise<void> {
-  await act(async () => {
-    target.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true, detail }),
-    );
-  });
-}
-
-/** Base UI commits a list item only when the press that precedes the click
- *  started on it, so the press is part of the interaction. */
-async function pointerDown(target: Element): Promise<void> {
-  await act(async () => {
-    target.dispatchEvent(
-      new PointerEvent("pointerdown", {
-        bubbles: true,
-        cancelable: true,
-        pointerType: "mouse",
-        button: 0,
-      }),
-    );
-  });
-}
-
-/** Picks the option whose value is `id` — the id the control commits, never the
- *  label it prints. */
-async function chooseIn(control: string, id: string): Promise<void> {
-  const trigger = document.querySelector<HTMLElement>(control);
-  if (trigger === null) throw new Error(`no control matches ${control}`);
-  await click(trigger);
-  await flush();
-  const option = Array.from(document.querySelectorAll('[role="option"]')).find(
-    (candidate) => candidate.getAttribute("data-yunari-option") === id,
-  );
-  if (option === undefined) throw new Error(`no option ${id} in ${control}`);
-  await pointerDown(option);
-  await click(option, 1);
-  await flush();
 }
 
 /** The boxes a scene reports: one object, outside the 1000 × 1000 board when
@@ -231,54 +165,20 @@ function note(host: HTMLElement): string {
   return host.querySelector("[data-yunari-artboard-note]")?.textContent ?? "";
 }
 
-it("renders every field the panel rendered, including the branch that needs a background asset", async () => {
-  const { host, change } = await mount();
+it("renders the board's size controls, and none of the background's", async () => {
+  const { host } = await mount();
   await draw({ width: 1280, height: 720 }, { name: "Living Room" });
 
   for (const hook of enumeratedHooks) {
     expect(host.querySelector(`[data-yunari-${hook}]`), hook).not.toBeNull();
   }
 
-  // The branch a single render hides: with no asset declared the media control
-  // offers nothing but the blank reading, so the state that has one is driven
-  // rather than assumed. The fit control is asserted in **this** state, and the
-  // commit that follows is one only an asset can produce.
-  await chooseIn("[data-yunari-background-asset]", "clip");
-  expect(
-    host.querySelector("[data-yunari-background-media-fit]"),
-  ).not.toBeNull();
-  await chooseIn("[data-yunari-background-media-fit]", "display");
-
-  expect(change).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      backgroundMedia: { assetId: "clip", fit: "display" },
-    }),
-  );
-});
-
-it("offers exactly the fits the model publishes", async () => {
-  // The panel is the third end of the set, and the one a quoted-string search
-  // cannot see: `fitOptions` maps the model's own list, so a mode added there is
-  // offered here and one removed there stops being offered. With a second copy
-  // in this file the panel would go on offering two while the validator and the
-  // published schema accepted three, and nothing else would be red.
-  const { host } = await mount();
-  await draw({ width: 1280, height: 720 });
-
-  // No asset is chosen, so this control is the only popup the document holds and
-  // the options read below are its own.
-  const trigger = host.querySelector<HTMLElement>(
-    "[data-yunari-background-media-fit]",
-  );
-  if (trigger === null) throw new Error("the fit control is missing");
-  await click(trigger);
-  await flush();
-
-  const offered = Array.from(
-    document.querySelectorAll('[role="option"][data-yunari-option]'),
-  ).map((option) => option.getAttribute("data-yunari-option"));
-
-  expect(offered).toEqual([...BACKGROUND_MEDIA_FITS]);
+  // The background layer's colour, media and position are the selection inspector's
+  // rows now (`backgroundColumn`), so the Document pane holds no control for
+  // them — a second surface for one value is a second owner of it.
+  for (const hook of BACKGROUND_HOOKS) {
+    expect(host.querySelector(`[data-yunari-${hook}]`), hook).toBeNull();
+  }
 });
 
 it("derives the size note rather than printing a stored figure", async () => {

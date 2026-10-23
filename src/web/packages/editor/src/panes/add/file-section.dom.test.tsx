@@ -693,19 +693,18 @@ describe("the Add pane's file section", () => {
   });
 
   /**
-   * **Both controls, and only on a video.** The two modes the host offers are
-   * both the author's to choose — `Normalize video` keeps the picture's own
-   * shape, `Fill the artboard` crops it to the theme — so one control standing
-   * for the other would hide half the capability. An image, an SVG or a font
-   * has no video envelope to normalize, so neither control may appear for it.
+   * **Only a video, and only one action.** Normalizing brings the file inside
+   * the publish envelope and keeps the whole frame: cropping is the background
+   * layer's job at render time (0095), so there is no second mode. An image, an
+   * SVG or a font has no video envelope to normalize, so no control may appear
+   * for it.
    */
-  it("offers the normalize controls only for a declared video", async () => {
+  it("offers the normalize control only for a declared video", async () => {
     const { host } = await mount();
 
     await importFile(host, IMAGE_FILE);
     await selectAsset(host, "logo");
     expect(normalizeControl(host)).toBeNull();
-    expect(fillControl(host)).toBeNull();
 
     await importFile(host, FONT_FILE);
     await selectAsset(host, "body");
@@ -714,11 +713,9 @@ describe("the Add pane's file section", () => {
     await importFile(host, VIDEO_FILE);
     await selectAsset(host, "clip");
     expect(normalizeControl(host)).not.toBeNull();
-    expect(fillControl(host)).not.toBeNull();
     expect(normalizeControl(host)?.textContent).toBe(
       uiCopy.panels.normalizeVideo,
     );
-    expect(fillControl(host)?.textContent).toBe(uiCopy.panels.fillArtboard);
   });
 
   /**
@@ -744,8 +741,8 @@ describe("the Add pane's file section", () => {
     );
     expect(useControl(host)).toBeNull();
     expect(saveState.mock.calls.length).toBe(afterImport);
-    // `contain` is the shape-preserving mode, which is the plain press.
-    expect(postedBody(fetchStub)).toMatchObject({ fit: "contain" });
+    // No `fit` is sent, so the host keeps the source's own shape.
+    expect(postedBody(fetchStub)).not.toHaveProperty("fit");
   });
 
   /**
@@ -831,7 +828,7 @@ describe("the Add pane's file section", () => {
     expect(useControl(host)).not.toBeNull();
     const afterImport = saveState.mock.calls.length;
 
-    await press(host, "[data-yunari-asset-fill]");
+    await press(host, "[data-yunari-asset-normalize]");
 
     expect(alert(host).textContent).toBe(sentence);
     expect(useControl(host)).toBeNull();
@@ -926,9 +923,9 @@ describe("the Add pane's file section", () => {
     expect(saveState.mock.calls.length).toBe(afterImport);
   });
 
-  /** `cover` is only meaningful against a frame, so the artboard's own aspect is
-   *  sent rather than guessed or omitted. The host refuses a cover without one. */
-  it("fills the artboard by sending cover with the artboard's aspect", async () => {
+  /** The press asks for no crop: the host's `contain` path keeps the source's
+   *  own shape, so the published file still has the pixels a pan can move. */
+  it("asks the host for the whole frame, not a crop", async () => {
     const fetchStub = stubNormalize(() =>
       normalizeAnswer({
         ok: false,
@@ -939,12 +936,10 @@ describe("the Add pane's file section", () => {
 
     await importFile(host, VIDEO_FILE);
     await selectAsset(host, "clip");
-    await press(host, "[data-yunari-asset-fill]");
+    await press(host, "[data-yunari-asset-normalize]");
 
-    expect(postedBody(fetchStub)).toMatchObject({
-      fit: "cover",
-      aspect: { width: 1920, height: 1080 },
-    });
+    expect(postedBody(fetchStub)).not.toHaveProperty("fit");
+    expect(postedBody(fetchStub)).not.toHaveProperty("aspect");
   });
 
   /** The author sees the wait, because a re-encode of a large video outlives the
@@ -1019,8 +1014,6 @@ function postedBody(fetchStub: ReturnType<typeof vi.fn>): unknown {
 
 const normalizeControl = (host: HTMLElement): HTMLButtonElement | null =>
   host.querySelector<HTMLButtonElement>("[data-yunari-asset-normalize]");
-const fillControl = (host: HTMLElement): HTMLButtonElement | null =>
-  host.querySelector<HTMLButtonElement>("[data-yunari-asset-fill]");
 const useControl = (host: HTMLElement): HTMLButtonElement | null =>
   host.querySelector<HTMLButtonElement>("[data-yunari-asset-use-normalized]");
 

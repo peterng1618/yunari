@@ -313,7 +313,9 @@ describe("ThemeStore", () => {
       artboard: {
         width: 1920,
         height: 1080,
-        backgroundMedia: { assetId: "loop", fit: "theme" },
+      },
+      background: {
+        media: { assetId: "loop", bounds: "theme" },
       },
       assets: [
         {
@@ -351,8 +353,8 @@ describe("ThemeStore", () => {
         artboard: {
           width: 1080,
           height: 1920,
-          background: { ref: "palette.night" },
         },
+        background: { color: { ref: "palette.night" } },
         globals: {
           palette: {
             // The immutable fallback every palette must carry.
@@ -420,8 +422,8 @@ describe("ThemeStore", () => {
         artboard: {
           width: 1920,
           height: 1080,
-          background: { ref: "palette.night" },
         },
+        background: { color: { ref: "palette.night" } },
         globals: {
           palette: {
             none: {
@@ -446,8 +448,10 @@ describe("ThemeStore", () => {
         artboard: {
           width: 1920,
           height: 1080,
-          background: { ref: "palette.night" },
-          backgroundMedia: { assetId: "loop", fit: "theme" },
+        },
+        background: {
+          color: { ref: "palette.night" },
+          media: { assetId: "loop", bounds: "theme" },
         },
         globals: {
           palette: {
@@ -497,8 +501,8 @@ describe("ThemeStore", () => {
         artboard: {
           width: 1920,
           height: 1080,
-          background: { ref: "palette.dusk" },
         },
+        background: { color: { ref: "palette.dusk" } },
         globals: {
           palette: {
             none: {

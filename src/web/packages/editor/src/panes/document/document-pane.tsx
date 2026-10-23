@@ -1,9 +1,4 @@
-import type {
-  Artboard,
-  AssetReference,
-  Globals,
-  ThemeMetadata,
-} from "@yunari/renderer-core";
+import type { Artboard, ThemeMetadata } from "@yunari/renderer-core";
 import type { SceneBox } from "@yunari/scene-fabric";
 import { InspectorSection } from "../../components/ui/inspector-section.js";
 import { uiCopy } from "../../ui-copy.js";
@@ -27,15 +22,13 @@ import { MetadataFields } from "./metadata-fields.js";
  * disclosure chrome's `▾` would arrive in that text beside the title.
  *
  * §8's ordering, most likely first: what the theme is, then the board it is
- * drawn on — the size and the presets that set it, then the paint and the media,
- * which are the once-in-a-while controls and are disclosed under their own
- * heading rather than removed.
+ * drawn on — the size and the presets that set it. The board's paint and the
+ * media behind it are the background layer's, authored in the selection
+ * inspector's column rather than here.
  */
 interface DocumentPaneProps {
   readonly artboard: Artboard;
   readonly metadata: ThemeMetadata | undefined;
-  readonly globals: Globals | undefined;
-  readonly assets: readonly AssetReference[];
   /** The scene as `sceneBoxes` last read it, or `undefined` when the panel has
    *  none to read. */
   readonly boxes: readonly SceneBox[] | undefined;
@@ -44,7 +37,7 @@ interface DocumentPaneProps {
 }
 
 export function DocumentPane(props: DocumentPaneProps): React.JSX.Element {
-  const { artboard, metadata, globals, assets, boxes } = props;
+  const { artboard, metadata, boxes } = props;
   return (
     <div className="flex flex-col gap-[var(--space-8)]">
       <h2 className="text-xs font-semibold tracking-[0.11em] text-muted uppercase">
@@ -56,8 +49,6 @@ export function DocumentPane(props: DocumentPaneProps): React.JSX.Element {
       <InspectorSection id="artboard" title={uiCopy.panels.artboard}>
         <ArtboardFields
           artboard={artboard}
-          globals={globals}
-          assets={assets}
           boxes={boxes}
           onCommit={props.onArtboard}
         />

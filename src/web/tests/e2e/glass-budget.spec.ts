@@ -34,12 +34,16 @@ const BUDGET_ARTBOARD = { width: 1672, height: 941 };
 /** The scene Task 1's figure is quoted against, and its no-media twin. */
 function fixture(withMedia: boolean) {
   const artboard = { ...GLASS_ENVELOPE.artboard, ...BUDGET_ARTBOARD };
-  // The key is absent, not `undefined`: `backgroundMedia: undefined` is not the
-  // same document, and the validator says so.
-  if (!withMedia)
-    delete (artboard as unknown as Record<string, unknown>)["backgroundMedia"];
+  // The key is absent, not `undefined`: `media: undefined` is not the same
+  // document, and the validator says so.
+  const envelope = withMedia
+    ? GLASS_ENVELOPE
+    : {
+        ...GLASS_ENVELOPE,
+        background: { color: GLASS_ENVELOPE.background.color },
+      };
   const written = writeThemePackage({
-    envelope: { ...GLASS_ENVELOPE, artboard },
+    envelope: { ...envelope, artboard },
     assets: { "assets/stripes.png": glassStripesPng() },
   });
   if (!written.ok) throw new Error(written.message);

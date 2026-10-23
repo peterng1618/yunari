@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import type { Binding, ChartContent, ChartFamily } from "@yunari/renderer-core";
+import type {
+  AssetReference,
+  Background,
+  Binding,
+  ChartContent,
+  ChartFamily,
+} from "@yunari/renderer-core";
 import {
   defaultGaugeSettings,
   instantIn,
@@ -43,6 +49,10 @@ import {
   selectionKindOf,
 } from "./per-kind-column.js";
 import { click, slide } from "./runs.test-stage.js";
+
+// jsdom has never had a `PointerEvent`, and Base UI re-dispatches a click
+// through one to carry modifier state; a toggle click throws without it.
+window.PointerEvent ??= MouseEvent as never;
 
 // The column's sections keep their open state in React now, and React only
 // flushes a click's update inside `act` — so the one test that clicks a header
@@ -107,6 +117,10 @@ function setup(
       bindings: readonly Binding[],
     ) => void;
     readonly objects?: () => readonly unknown[];
+    readonly backgroundSelected?: () => boolean;
+    readonly background?: () => Background | undefined;
+    readonly assets?: () => readonly AssetReference[];
+    readonly onBackgroundChange?: (next: Background | undefined) => void;
   } = {},
 ) {
   const history = { saveState: vi.fn() };
@@ -218,6 +232,112 @@ describe("the selection inspector", () => {
     ).toBe(uiCopy.inspectorFields.nothingSelected);
     expect(host.querySelectorAll("[data-yunari-section]")).toHaveLength(0);
     expect(host.querySelectorAll("[data-yunari-geometry]")).toHaveLength(0);
+  });
+
+  /**
+   * The background is a selected subject that is no Fabric object, so the
+   * column describes it through `backgroundColumn` rather than through
+   * `perKindColumn` — and its writes leave through the document setter, because
+   * there is no object to save a Fabric history entry for.
+   */
+  describe("the background layer", () => {
+    function backgroundSelected(
+      background: Background = {
+        media: { assetId: "loop", bounds: "theme" },
+      },
+    ) {
+      const onBackgroundChange = vi.fn();
+      const built = setup(undefined, {
+        backgroundSelected: () => true,
+        background: () => background,
+        assets: () => [],
+        onBackgroundChange,
+      });
+      return { ...built, onBackgroundChange };
+    }
+
+    it("describes the background when the bridge says it is selected", () => {
+      const { host } = backgroundSelected();
+
+      expect(host.textContent).toContain("Background");
+      expect(host.querySelector("[data-yunari-background]")).toBeTruthy();
+    });
+
+    it("writes a background edit through the document setter and no Fabric field", async () => {
+      const { host, history, onBackgroundChange } = backgroundSelected();
+      const flipX = host.querySelector<HTMLButtonElement>(
+        "[data-yunari-background-flip-x]",
+      )!;
+
+      await click(flipX);
+
+      expect(onBackgroundChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          media: expect.objectContaining({ flipX: true }),
+        }),
+      );
+      // A background write is envelope state, not a Fabric edit: no scene
+      // history entry records it.
+      expect(history.saveState).not.toHaveBeenCalled();
+    });
+
+    it("refuses an offset outside -1..1 at the write boundary", async () => {
+      // A paired half carries no bounds (`PairHalfView` has none), so the only
+      // guard for this value is the one behind the commit.
+      const { host, editor, onBackgroundChange } = backgroundSelected();
+      const offsetX = host.querySelector<HTMLInputElement>(
+        "[data-yunari-background-offset-x]",
+      )!;
+      expect(offsetX.value).toBe("0");
+
+      await edit(offsetX, "150");
+
+      expect(onBackgroundChange).not.toHaveBeenCalled();
+      expect(editor.errorManager.warn).toHaveBeenCalled();
+    });
+
+    it("refuses a background edit when no write port is mounted, without moving the revision", async () => {
+      // A build with no document setter cannot write, so the field reports a
+      // refusal rather than a success that changed nothing. The revision is part
+      // of every row's key, so a bump would remount the control: the same node
+      // still standing is what says the failed write did not move it.
+      const built = setup(undefined, {
+        backgroundSelected: () => true,
+        background: () => ({ media: { assetId: "loop", bounds: "theme" } }),
+        assets: () => [],
+      });
+      const offset = built.host.querySelector<HTMLInputElement>(
+        "[data-yunari-background-offset-x]",
+      )!;
+      expect(offset.value).toBe("0");
+
+      await edit(offset, "50");
+
+      expect(built.editor.errorManager.warn).toHaveBeenCalled();
+      expect(
+        built.host.querySelector("[data-yunari-background-offset-x]"),
+        "the refusal did not bump the revision",
+      ).toBe(offset);
+    });
+
+    it("commits an offset inside -1..1", async () => {
+      // The refusal above is only half a rule: a switch that refused every
+      // offset would satisfy it, so a valid move is asserted beside it. The
+      // field prints a percentage, so 50 is the 0.5 the document holds.
+      const { host, onBackgroundChange } = backgroundSelected();
+      const offsetX = host.querySelector<HTMLInputElement>(
+        "[data-yunari-background-offset-x]",
+      )!;
+      expect(offsetX.value).toBe("0");
+
+      await edit(offsetX, "50");
+
+      expect(onBackgroundChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          media: expect.objectContaining({ offsetX: 0.5 }),
+        }),
+      );
+    });
   });
 
   it("shows the selected object's geometry in whole units", () => {
@@ -1156,6 +1276,46 @@ describe("the column's sections", () => {
     expect(inSection("position", "[data-yunari-bleeds]")).toBeNull();
   });
 
+  it("offers an image both flips under Layer, one press each", async () => {
+    const image = new FabricImage("", {
+      left: 0,
+      top: 0,
+      width: 40,
+      height: 40,
+    });
+    const { host, history } = setup(image);
+    const flip = (axis: "x" | "y"): HTMLElement | null =>
+      host.querySelector<HTMLElement>(
+        `[data-yunari-section="layer"] [data-yunari-flip-${axis}]`,
+      );
+
+    expect(flip("x")?.getAttribute("aria-checked")).toBe("false");
+    expect(flip("y")?.getAttribute("aria-checked")).toBe("false");
+
+    await click(flip("x")!);
+    expect(image.flipX).toBe(true);
+    await click(flip("y")!);
+    expect(image.flipY).toBe(true);
+    await click(flip("x")!);
+    expect(image.flipX).toBe(false);
+    // Three presses, three entries: a flip is one write through the same
+    // commit funnel every other object field uses, so one undo step each.
+    expect(history.saveState).toHaveBeenCalledTimes(3);
+  });
+
+  it("offers flips to an image and to no other kind", () => {
+    expect(
+      setup(
+        new Rect({ left: 0, top: 0, width: 40, height: 20 }),
+      ).host.querySelector("[data-yunari-flip-x]"),
+    ).toBeNull();
+    expect(
+      setup(
+        new FabricImage("", { left: 0, top: 0, width: 40, height: 40 }),
+      ).host.querySelector("[data-yunari-flip-x]"),
+    ).not.toBeNull();
+  });
+
   it("is a plan a test can read as data, before anything renders", () => {
     const editor = {
       canvas: canvasWith(rect),
@@ -1525,9 +1685,13 @@ describe("the column a kind gets", () => {
    * One live example per kind, in the brief's own terms: a `Wedge`, a text box,
    * a chart, an image, a group, and a selection spanning two kinds. The list is
    * the driver — a kind added to `SELECTION_KINDS` arrives here without an
-   * example and fails to compile, rather than passing unnoticed.
+   * example and fails to compile, rather than passing unnoticed. The background
+   * is not one of these: it is no Fabric object, and `background-column.test.ts`
+   * describes it.
    */
-  const EXAMPLE: Readonly<Record<SelectionKind, () => FabricObject>> = {
+  const EXAMPLE: Readonly<
+    Record<Exclude<SelectionKind, "background">, () => FabricObject>
+  > = {
     shape: () =>
       new Wedge({
         left: 0,
@@ -1607,7 +1771,9 @@ describe("the column a kind gets", () => {
     "[data-yunari-opacity]",
   ];
 
-  const PRE_PLAN: Readonly<Record<SelectionKind, readonly string[]>> = {
+  const PRE_PLAN: Readonly<
+    Record<Exclude<SelectionKind, "background">, readonly string[]>
+  > = {
     shape: [
       ...EVERY_OBJECT,
       // This kind's row alone: a `Wedge` is a region, so the treatment reaches

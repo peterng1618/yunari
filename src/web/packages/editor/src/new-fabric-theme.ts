@@ -58,12 +58,14 @@ export function createNewFabricTheme(): FabricThemeEnvelope {
     artboard: {
       width: 1672,
       height: 941,
-      // Transparent, because the backdrop is a media layer mounted *below* the
-      // canvas: an opaque artboard paint is exactly what would hide it. The
-      // letterbox is this same paint, so the bars are not painted either and the
-      // stage shows through them.
-      background: { ref: "palette.none" },
-      backgroundMedia: { assetId: starterBackdrop.id, fit: "theme" },
+    },
+    // The backdrop is a media layer mounted *below* the canvas: an opaque
+    // artboard paint is exactly what would hide it. The colour is transparent
+    // because the letterbox is this same paint, so the bars are not painted
+    // either and the stage shows through them.
+    background: {
+      color: { ref: "palette.none" },
+      media: { assetId: starterBackdrop.id, bounds: "theme" },
     },
     globals: {
       palette: starterPalette,
@@ -277,20 +279,21 @@ export function createBlankFabricTheme(
     artboard: {
       width: artboard.width,
       height: artboard.height,
-      // A blank theme has no backdrop, so the artboard paints itself, and the
-      // page it paints is a choice the palette has to earn. Measured against
-      // the stage the canvas sits on (#26241f), `chartTrack` is the only token
-      // in the minimal set that reads as a page *and* keeps every ink legible
-      // on it: `text` 12.1:1, `dim` 6.9:1, `rule` 6.5:1, `frostInk` 10.9:1.
-      // `panel` is a card material and makes a card on the page 1.02:1 —
-      // invisible; `dim` puts `text` on the page at 1.74:1, unreadable.
-      //
-      // This one paint is also the letterbox around the board. `backgroundMedia`
-      // is dropped with the assets — a declaration pointing at bytes this
-      // document does not carry is a theme the validator refuses and the player
-      // renders nothing behind.
-      background: { ref: "palette.chartTrack" },
     },
+    // A blank theme has no backdrop, so the background layer paints its board
+    // instead, and the page it paints is a choice the palette has to earn.
+    // Measured against the stage the canvas sits on (#26241f), `chartTrack` is
+    // the only token in the minimal set that reads as a page *and* keeps every
+    // ink legible on it: `text` 12.1:1, `dim` 6.9:1, `rule` 6.5:1, `frostInk`
+    // 10.9:1. `panel` is a card material and makes a card on the page 1.02:1 —
+    // invisible; `dim` puts `text` on the page at 1.74:1, unreadable.
+    //
+    // This one paint is also the letterbox around the board. The starter's
+    // media is dropped with the assets: a declaration pointing at bytes this
+    // document does not carry is a theme the validator refuses and the player
+    // renders nothing behind. Replacing the whole `background` is also what
+    // keeps the starter's backdrop from leaking through the spread.
+    background: { color: { ref: "palette.chartTrack" } },
     globals: {
       palette,
       ...(starter.globals?.typePresets === undefined

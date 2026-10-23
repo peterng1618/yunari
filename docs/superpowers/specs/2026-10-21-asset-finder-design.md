@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-21
 - **Status:** landed — except the Wallpaper Engine tab (§3's local source, §8's
-  absence row), which the [Wallpaper Engine plan](../plans/2026-10-21-wallpaper-engine-import.md)
+  absence row), which the [Wallpaper Engine plan](../plans/archive/2026-10-21-wallpaper-engine-import.md)
   now owns: it builds the host module and the tab's body, and this spec's tab entry
   is drawn when that plan lands.
 - **Related:** [`2026-10-21-wallpaper-engine-import-design.md`](2026-10-21-wallpaper-engine-import-design.md)

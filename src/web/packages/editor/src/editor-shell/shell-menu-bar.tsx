@@ -122,20 +122,35 @@ function ViewSetting<T extends string | number>({
 export const EDIT_MENU_ROWS: readonly {
   readonly label: string;
   readonly shortcut: ProductShortcutId;
+  /** Acts on the selected object, so a layer selection disables it. Undo and
+   *  redo are the document's, not an object's, and stay enabled. */
+  readonly objectScoped?: boolean;
   readonly run: (session: EditorActionFacade | undefined) => void;
 }[] = [
   { label: uiCopy.actions.undo, shortcut: "edit.undo", run: (s) => s?.undo() },
   { label: uiCopy.actions.redo, shortcut: "edit.redo", run: (s) => s?.redo() },
-  { label: uiCopy.actions.copy, shortcut: "edit.copy", run: (s) => s?.copy() },
-  { label: uiCopy.actions.cut, shortcut: "edit.cut", run: (s) => s?.cut() },
+  {
+    label: uiCopy.actions.copy,
+    shortcut: "edit.copy",
+    objectScoped: true,
+    run: (s) => s?.copy(),
+  },
+  {
+    label: uiCopy.actions.cut,
+    shortcut: "edit.cut",
+    objectScoped: true,
+    run: (s) => s?.cut(),
+  },
   {
     label: uiCopy.actions.duplicate,
     shortcut: "edit.duplicate",
+    objectScoped: true,
     run: (s) => s?.duplicate(),
   },
   {
     label: uiCopy.actions.delete,
     shortcut: "edit.delete",
+    objectScoped: true,
     run: (s) => s?.deleteActive(),
   },
 ];
@@ -157,6 +172,11 @@ export function ShellMenuBar({
   // leaving a mark that runs a different action.
   useSyncExternalStore(subscribeShortcuts, activeShortcuts, activeShortcuts);
   const kind = selection.activeKind;
+  // A background selection is a layer, not an object: the object-scoped Edit
+  // commands would reach managers with nothing of the kind to act on and
+  // silently no-op. Undo and redo act on the document, so they stay enabled.
+  const noSelection = kind === "none";
+  const noObject = noSelection || kind === "background";
   const session = store.bridge?.session;
   const [source, setSource] = useState<"preview" | "live">("preview");
   const [rate, setRate] = useState<1 | 30>(30);
@@ -235,7 +255,7 @@ export function ShellMenuBar({
           item(
             row.label,
             () => row.run(session),
-            kind === "none",
+            row.objectScoped === true ? noObject : noSelection,
             row.shortcut,
           ),
         )}

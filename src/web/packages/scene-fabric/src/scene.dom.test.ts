@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { type Artboard, type ScenePlan } from "@yunari/renderer-core";
+import type { Background, ScenePlan } from "@yunari/renderer-core";
 import { Group, Rect } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import { type FabricSceneHandle, mountFabricScene } from "./scene.js";
@@ -27,14 +27,19 @@ function host(): HTMLElement {
   return element;
 }
 
-describe("mountFabricScene updateArtboard", () => {
+/** A background bag naming one media, which is all the scene reads of it. */
+function backgroundWith(assetId: string): Background {
+  return { media: { assetId, bounds: "theme" } };
+}
+
+describe("mountFabricScene's background", () => {
   it("swaps background media without remounting scene", () => {
     const element = host();
-    const artboard: Artboard = { width: 400, height: 300 };
     const scene = mountFabricScene({
       host: element,
       plan: plan(),
-      artboard,
+      artboard: { width: 400, height: 300 },
+      background: backgroundWith("a"),
       assets: [
         { id: "a", kind: "image", path: "assets/a.png" },
         { id: "b", kind: "image", path: "assets/b.png" },
@@ -42,10 +47,9 @@ describe("mountFabricScene updateArtboard", () => {
       resolveAsset: (assetId) => ({ url: `blob:${assetId}` }),
     });
 
-    scene.updateArtboard({
-      ...artboard,
-      backgroundMedia: { assetId: "b", fit: "theme" },
-    });
+    // The background is its own state, so a media change arrives through its
+    // own entry and not through the artboard.
+    scene.updateBackground(backgroundWith("b"));
 
     const media = element.querySelector<HTMLImageElement>(
       "[data-yunari-background-media] img",
@@ -58,14 +62,15 @@ describe("mountFabricScene updateArtboard", () => {
   it("re-fits the media layer when the artboard's own size changes", () => {
     // The host is 400x300, so the 400x300 board mounts at 1:1 and the 200x300
     // one that follows fits at 1:1 too, centred — the layer's box halves.
-    // `media.update` re-places against the bounds the last `fit()` set, so
-    // without a re-fit the layer keeps the old box and `fit: "theme"` means the
-    // box the board no longer has.
+    // `setArtboardSize` re-places against the bounds the last `fit()` set, so
+    // without a re-fit the layer keeps the old box and `bounds: "theme"` means
+    // the box the board no longer has.
     const element = host();
     const scene = mountFabricScene({
       host: element,
       plan: plan(),
       artboard: { width: 400, height: 300 },
+      background: backgroundWith("b"),
       assets: [{ id: "b", kind: "image", path: "assets/b.png" }],
       resolveAsset: (assetId) => ({ url: `blob:${assetId}` }),
     });
@@ -73,11 +78,7 @@ describe("mountFabricScene updateArtboard", () => {
       "[data-yunari-background-media]",
     );
 
-    scene.updateArtboard({
-      width: 200,
-      height: 300,
-      backgroundMedia: { assetId: "b", fit: "theme" },
-    });
+    scene.updateArtboard({ width: 200, height: 300 });
 
     expect([
       layer?.style.left,
@@ -94,13 +95,10 @@ describe("mountFabricScene updateArtboard", () => {
     const element = host();
     const scene = mountFabricScene({ host: element, plan: plan() });
 
-    expect(() =>
-      scene.updateArtboard({
-        width: 400,
-        height: 300,
-        backgroundMedia: { assetId: "b", fit: "theme" },
-      }),
-    ).not.toThrow();
+    expect(() => {
+      scene.updateArtboard({ width: 400, height: 300 });
+      scene.updateBackground(backgroundWith("b"));
+    }).not.toThrow();
     expect(element.querySelector("[data-yunari-background-media]")).toBeNull();
 
     scene.dispose();
@@ -150,11 +148,8 @@ describe("mountFabricScene's artboard paint", () => {
     const withMedia = mountFabricScene({
       host: mediaHost,
       plan: plan({ background: "#101216" }),
-      artboard: {
-        width: 400,
-        height: 300,
-        backgroundMedia: { assetId: "loop", fit: "theme" },
-      },
+      artboard: { width: 400, height: 300 },
+      background: backgroundWith("loop"),
       assets: [{ id: "loop", kind: "video", path: "assets/loop.webm" }],
       resolveAsset: () => ({ url: "blob:loop" }),
     });
@@ -198,13 +193,9 @@ describe("mountFabricScene's video repaint", () => {
       host: element,
       plan: plan(),
       artboard: { width: 400, height: 300 },
+      background: backgroundWith("loop"),
       assets: [{ id: "loop", kind: "video", path: "assets/loop.webm" }],
       resolveAsset: () => ({ url: "blob:loop" }),
-    });
-    scene.updateArtboard({
-      width: 400,
-      height: 300,
-      backgroundMedia: { assetId: "loop", fit: "theme" },
     });
 
     if (options.glass) {
@@ -303,15 +294,11 @@ describe("mountFabricScene disposal", () => {
         host: element,
         plan: plan(),
         artboard: { width: 400, height: 300 },
+        background: backgroundWith("loop"),
         assets: [{ id: "loop", kind: "video", path: "assets/loop.webm" }],
         resolveAsset: () => ({ url: "blob:loop" }),
       });
-      const artboard: Artboard = {
-        width: 400,
-        height: 300,
-        backgroundMedia: { assetId: "loop", fit: "theme" },
-      };
-      scene.updateArtboard(artboard);
+      scene.updateArtboard({ width: 400, height: 300 });
 
       expect(
         element.querySelector("[data-yunari-background-media] video"),
@@ -372,13 +359,9 @@ describe("mountFabricScene disposal", () => {
       host: element,
       plan: plan(),
       artboard: { width: 400, height: 300 },
+      background: backgroundWith("hero"),
       assets: [{ id: "hero", kind: "image", path: "assets/hero.png" }],
       resolveAsset: () => ({ url: "blob:hero" }),
-    });
-    scene.updateArtboard({
-      width: 400,
-      height: 300,
-      backgroundMedia: { assetId: "hero", fit: "theme" },
     });
     scene.canvas.add(
       new Rect({
@@ -433,14 +416,11 @@ describe("mountFabricScene disposal", () => {
           host: element,
           plan: plan(),
           artboard: { width: 400, height: 300 },
+          background: backgroundWith("hero"),
           assets: [{ id: "hero", kind: "image", path: "assets/hero.png" }],
           resolveAsset: () => ({ url: "blob:hero" }),
         });
-        scene.updateArtboard({
-          width: 400,
-          height: 300,
-          backgroundMedia: { assetId: "hero", fit: "theme" },
-        });
+        scene.updateArtboard({ width: 400, height: 300 });
         const before = created.length;
         scene.canvas.add(
           new Rect({
@@ -510,13 +490,9 @@ describe("mountFabricScene disposal", () => {
       host: element,
       plan: plan(),
       artboard: { width: 400, height: 300 },
+      background: backgroundWith("hero"),
       assets: [{ id: "hero", kind: "image", path: "assets/hero.png" }],
       resolveAsset: () => ({ url: "blob:hero" }),
-    });
-    scene.updateArtboard({
-      width: 400,
-      height: 300,
-      backgroundMedia: { assetId: "hero", fit: "theme" },
     });
     expect(
       element.querySelector("[data-yunari-background-media] img"),
@@ -545,11 +521,8 @@ describe("mountFabricScene disposal", () => {
       expect(() => {
         scene.resize();
         scene.update(plan());
-        scene.updateArtboard({
-          width: 400,
-          height: 300,
-          backgroundMedia: { assetId: "hero", fit: "display" },
-        });
+        scene.updateArtboard({ width: 400, height: 300 });
+        scene.updateBackground(backgroundWith("hero"));
       }).not.toThrow();
       // The DOM cannot show the leak, because `destroy()` removed the layer and
       // anything re-appended lands on a detached node. What it *does* show is

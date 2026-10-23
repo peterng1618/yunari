@@ -59,14 +59,20 @@ describe("LHM launcher", () => {
     child.kill();
   });
 
-  it("refuses to register a task for a missing executable", async () => {
-    const outcome = await registerLhmTask("/definitely/not/here.exe");
+  // Registration is the Windows startup task, so the missing-executable
+  // sentence only exists behind the platform guard; elsewhere the launcher
+  // answers that LHM does not run here at all.
+  it.skipIf(process.platform !== "win32")(
+    "refuses to register a task for a missing executable",
+    async () => {
+      const outcome = await registerLhmTask("/definitely/not/here.exe");
 
-    expect(outcome.ok).toBe(false);
-    expect(outcome.message).toContain("was not found");
-    // Never a silent success: the caller must see why it failed.
-    expect(outcome.message.length).toBeGreaterThan(20);
-  });
+      expect(outcome.ok).toBe(false);
+      expect(outcome.message).toContain("was not found");
+      // Never a silent success: the caller must see why it failed.
+      expect(outcome.message.length).toBeGreaterThan(20);
+    },
+  );
 
   it("leaves an LHM that is already answering alone", async () => {
     const spawnProcess = vi.fn();

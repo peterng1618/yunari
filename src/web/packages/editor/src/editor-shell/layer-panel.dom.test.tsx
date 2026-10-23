@@ -37,6 +37,7 @@ function markFor(kind: LayerKind): LayerMark {
     case "text":
     case "image":
     case "group":
+    case "background":
       return { kind };
   }
 }
@@ -53,6 +54,7 @@ function roleFor(kind: LayerKind): LayerRole {
     case "text":
     case "shape":
     case "image":
+    case "background":
       return { kind };
   }
 }
@@ -108,6 +110,7 @@ function bridge(rows: readonly LayerRow[], overrides = {}): EditorShellBridge {
     // Completed here rather than in twenty fixtures: `layerRow` fills only what
     // a fixture left out, so a row that names its own treatment still has it.
     layers: () => rows.map((row) => layerRow(row)) as never,
+    backgroundSelected: () => false,
     groupContext: () => [],
     selectLayers: vi.fn(),
     selectLayer: vi.fn(),
@@ -1277,8 +1280,9 @@ it("restacks the document when a row is dropped on another", async () => {
 
   const before = order();
   expect(before).toEqual(["alpha", "beta"]);
-  // The panel paints topmost-first, so `beta` is the row above `alpha`.
-  expect(panelOrder()).toEqual(["beta", "alpha"]);
+  // The panel paints topmost-first, so `beta` is the row above `alpha`; the
+  // background row is appended below both.
+  expect(panelOrder()).toEqual(["beta", "alpha", "$background"]);
 
   await act(async () => row("alpha").dispatchEvent(dragEvent("dragstart")));
   const over = await act(async () => {
@@ -1295,7 +1299,7 @@ it("restacks the document when a row is dropped on another", async () => {
   expect(order()).not.toEqual(before);
   // And the list the author reads followed the document, rather than the panel
   // re-rendering the order it was handed a moment earlier.
-  expect(panelOrder()).toEqual(["alpha", "beta"]);
+  expect(panelOrder()).toEqual(["alpha", "beta", "$background"]);
 
   host.remove();
 });
@@ -1348,14 +1352,15 @@ it("moves a row into a group and back out, and the panel shows where it landed",
         `${element.getAttribute("data-yunari-layer")}@${element.style.getPropertyValue("--layer-depth")}`,
     );
 
-  // A group is shut until it is opened, so the child is not a row yet.
-  expect(read()).toEqual(["loose@0", "grp@0"]);
+  // A group is shut until it is opened, so the child is not a row yet. The
+  // background row is always last.
+  expect(read()).toEqual(["loose@0", "grp@0", "$background@0"]);
   // The twisty is the group row's own control: a row with children draws it and
   // a leaf draws a spacer, so this is the one button on that row.
   const twisty = row("grp").querySelector<HTMLButtonElement>("button");
   expect(twisty?.getAttribute("aria-label")).toContain(uiCopy.panels.expand);
   await act(async () => twisty?.click());
-  expect(read()).toEqual(["loose@0", "grp@0", "inner@1"]);
+  expect(read()).toEqual(["loose@0", "grp@0", "inner@1", "$background@0"]);
 
   // Into the group: dropped on its first child, so the loose row lands beside
   // it inside the group's own plane.
@@ -1367,7 +1372,7 @@ it("moves a row into a group and back out, and the panel shows where it landed",
   expect(loose.parent).toBe(group);
   // The rendered half: the row indented under the group it now belongs to, and
   // above the child it was dropped on — the panel paints topmost first.
-  expect(read()).toEqual(["grp@0", "loose@1", "inner@1"]);
+  expect(read()).toEqual(["grp@0", "loose@1", "inner@1", "$background@0"]);
 
   // And back out, dropped on the group row itself — an anchor at the root puts
   // the row beside it there.
@@ -1377,7 +1382,7 @@ it("moves a row into a group and back out, and the panel shows where it landed",
   expect(group.getObjects()).toEqual([inner]);
   expect(canvas.getObjects()).toEqual([group, loose]);
   expect(loose.parent).toBeUndefined();
-  expect(read()).toEqual(["loose@0", "grp@0", "inner@1"]);
+  expect(read()).toEqual(["loose@0", "grp@0", "inner@1", "$background@0"]);
   // The group is left where it was, so the row that moved is the loose one and
   // nothing else in the document followed it.
   expect(has("grp")).toBe(true);
@@ -1960,4 +1965,58 @@ it("makes a group's parts reachable once its control has entered it", async () =
 
   await click("part");
   expect(canvas.getActiveObject()?.get("id")).toBe("part");
+});
+
+const backgroundRowFixture = (): LayerRow =>
+  layerRow({
+    id: "$background",
+    name: uiCopy.panels.layerKinds.background,
+    kind: "background",
+  });
+
+it("does not let the background row start a drag or open a rename", async () => {
+  const host = await renderPanel([backgroundRowFixture()]);
+  const row = host.querySelector<HTMLElement>(
+    '[data-yunari-layer="$background"]',
+  );
+  expect(row).not.toBeNull();
+
+  expect(row?.getAttribute("draggable")).toBe("false");
+  await act(async () =>
+    row?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
+  );
+  expect(row?.querySelector("input")).toBeNull();
+  // No twisty, no enter, no visibility or lock: the background has no state
+  // those controls could change.
+  expect(row?.querySelectorAll("button")).toHaveLength(0);
+});
+
+it("selects the background with Space", async () => {
+  const selectLayer = vi.fn();
+  const host = await renderPanel([backgroundRowFixture()], { selectLayer });
+  await act(async () =>
+    host
+      .querySelector<HTMLElement>('[data-yunari-layer="$background"]')
+      ?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: " ", bubbles: true }),
+      ),
+  );
+  expect(selectLayer).toHaveBeenCalledWith("$background");
+});
+
+it("keeps the background reachable while a group is entered", async () => {
+  // It is not inside any group, so entering one must not dim it: the row stays
+  // a target for the tree click that selects it.
+  const host = await renderPanel(
+    [
+      layerRow({ id: "card", kind: "group", hasChildren: true }),
+      layerRow({ id: "part", kind: "text", depth: 1, parentId: "card" }),
+      backgroundRowFixture(),
+    ],
+    { groupContext: () => ["card"] },
+  );
+  const row = host.querySelector<HTMLElement>(
+    '[data-yunari-layer="$background"]',
+  );
+  expect(row?.hasAttribute("data-context")).toBe(false);
 });

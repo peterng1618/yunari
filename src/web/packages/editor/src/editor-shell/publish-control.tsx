@@ -168,6 +168,34 @@ export function PublishControl({
         <Popover.Positioner
           sideOffset={6}
           align="end"
+          // **Eight pixels of the window are never the popup's.** Base UI's
+          // default avoids collisions against the nearest clipping container,
+          // and the header's own content overflows a 390px window — so the
+          // surface was clamped to the overrun rather than to the window and
+          // ended a few pixels past it. Asking for the inset states the fact
+          // this surface owes: it is reachable inside the window it was opened
+          // in.
+          collisionPadding={8}
+          // **`side` is named even though the surface stays below the trigger.**
+          // Base UI 1.8 only turns on alignment-axis shifting when the side
+          // avoidance is `"shift"` (`crossAxisShiftEnabled` in
+          // `useAnchorPositioning`); with the default `"flip"`, `align: "shift"`
+          // alone left the popup at the trigger's own off-screen right edge —
+          // why a 390px window still measured 403px. `side: "shift"` keeps the
+          // popover under the header and still never flips it.
+          collisionAvoidance={{ side: "shift", align: "shift" }}
+          // **`sticky` is what lets the shift go all the way.** Without it
+          // Base UI adds floating-ui's `limitShift`, which stops the popup once
+          // it would stop overlapping the anchor — and a trigger that sits past
+          // the window's right edge leaves the popup parked against that edge,
+          // still outside. Sticky drops the limiter so the surface can reach the
+          // window it was opened in; the popover still tracks the trigger.
+          sticky
+          // **The viewport is the boundary, not the nearest clipping ancestor.**
+          // An empty list is floating-ui's own spelling for the viewport (Base
+          // UI passes it through); the ancestor it would otherwise pick is the
+          // document, whose box a header that overflows the window widens.
+          collisionBoundary={[]}
           className="editor-shell-positioner"
         >
           <Popover.Popup

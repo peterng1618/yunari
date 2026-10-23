@@ -155,7 +155,7 @@ export class ThemeAssetLimitError extends Error {
 
 /**
  * A stored theme whose `theme.json` is present and does not validate — a stale
- * locale key, a stray `backgroundMedia.scale`. The read-side sibling of the two
+ * locale key, a stray `media.rotation`. The read-side sibling of the two
  * refusals above: the file is there, the validator's own diagnosis already
  * exists, and answering the `undefined` an absent theme answers with is what
  * throws that diagnosis away one layer below the reader (vg-110, ADR-0043).
@@ -637,9 +637,9 @@ async function readEnvelope(
 }
 
 /**
- * The artboard's paint, read the document's own way and converted at the CSS
- * boundary — the resolver the plan and the player both read, so a reference is
- * resolved here exactly as it is on the artboard.
+ * The background layer's paint, read the document's own way and converted at
+ * the CSS boundary — the resolver the plan and the player both read, so a
+ * reference is resolved here exactly as it is on the artboard.
  *
  * **Media behind the board is `undefined`, not the token's paint.** With a
  * background media layer a picture is the ground and the token is not what a
@@ -647,12 +647,12 @@ async function readEnvelope(
  * for that document.
  */
 function groundOf(envelope: FabricThemeEnvelope): string | undefined {
-  if (envelope.artboard.backgroundMedia !== undefined) return undefined;
+  if (envelope.background?.media !== undefined) return undefined;
   return cssArtboardPaint(
     resolveStyleValue(
-      envelope.artboard.background,
+      envelope.background?.color,
       envelope.globals ?? {},
-      "artboard",
+      "background",
       [],
     ),
   );

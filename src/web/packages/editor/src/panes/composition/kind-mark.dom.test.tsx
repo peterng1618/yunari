@@ -32,6 +32,7 @@ const ARMS: readonly LayerMark[] = [
   { kind: "shape", shape: "rect" },
   { kind: "image" },
   { kind: "group" },
+  { kind: "background" },
 ];
 
 function render(mark: LayerMark): HTMLElement {

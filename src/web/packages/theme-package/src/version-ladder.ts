@@ -355,7 +355,7 @@ function compareSceneNode(
   return merged(changes);
 }
 
-const ARTBOARD_VOLATILE_KEYS = ["width", "height", "backgroundMedia"] as const;
+const ARTBOARD_VOLATILE_KEYS = ["width", "height"] as const;
 
 function artboardChange(
   before: unknown,
@@ -364,18 +364,33 @@ function artboardChange(
   const a = isRecord(before) ? before : {};
   const b = isRecord(after) ? after : {};
   const canvas = a["width"] !== b["width"] || a["height"] !== b["height"];
-  const backdrop =
-    stable(a["backgroundMedia"]) !== stable(b["backgroundMedia"]);
   const content =
     stable(withoutKeys(a, ARTBOARD_VOLATILE_KEYS)) !==
     stable(withoutKeys(b, ARTBOARD_VOLATILE_KEYS));
   const reasons: ChangeReason[] = [];
   if (canvas) reasons.push("canvas");
+  if (content) reasons.push("content");
+  return reasons.length === 0
+    ? undefined
+    : change(canvas ? "major" : "patch", ...reasons);
+}
+
+/** The background layer's media is the ground a viewer sees, so swapping it is
+ *  a minor change; its colour alone is content. */
+function backgroundChange(
+  before: unknown,
+  after: unknown,
+): ThemeChange | undefined {
+  const a = isRecord(before) ? before : {};
+  const b = isRecord(after) ? after : {};
+  const backdrop = stable(a["media"]) !== stable(b["media"]);
+  const content = stable(a["color"]) !== stable(b["color"]);
+  const reasons: ChangeReason[] = [];
   if (backdrop) reasons.push("backdrop");
   if (content) reasons.push("content");
   return reasons.length === 0
     ? undefined
-    : change(canvas ? "major" : backdrop ? "minor" : "patch", ...reasons);
+    : change(backdrop ? "minor" : "patch", ...reasons);
 }
 
 function bindingsChange(
@@ -506,6 +521,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   schemaVersion: (before, after) =>
     before === after ? undefined : change("major", "schema"),
   artboard: artboardChange,
+  background: backgroundChange,
   globals: globalsChange,
   assets: assetsChange,
   bindings: bindingsChange,

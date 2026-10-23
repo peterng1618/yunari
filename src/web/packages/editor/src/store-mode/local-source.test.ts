@@ -37,8 +37,8 @@ function envelope(
     artboard: {
       width: 1920,
       height: 1080,
-      background: { value: { kind: "solid", color: "#101014" } },
     },
+    background: { color: { value: { kind: "solid", color: "#101014" } } },
     metadata: {
       name: "Living room",
       themeLanguage: "en",
@@ -346,8 +346,10 @@ describe("narrowing by a facet", () => {
         artboard: {
           width: 1920,
           height: 1080,
-          background: { value: { kind: "solid", color: "#101014" } },
-          backgroundMedia: { assetId: "loop", fit: "theme" },
+        },
+        background: {
+          color: { value: { kind: "solid", color: "#101014" } },
+          media: { assetId: "loop", bounds: "theme" },
         },
       }),
     );
@@ -357,8 +359,8 @@ describe("narrowing by a facet", () => {
         artboard: {
           width: 1920,
           height: 1080,
-          background: { value: { kind: "solid", color: "#f7f7f7" } },
         },
+        background: { color: { value: { kind: "solid", color: "#f7f7f7" } } },
       }),
     );
     const dark = await item(envelope());

@@ -1,9 +1,4 @@
-import type {
-  Artboard,
-  AssetReference,
-  Globals,
-  ThemeMetadata,
-} from "@yunari/renderer-core";
+import type { Artboard, ThemeMetadata } from "@yunari/renderer-core";
 import type { SceneBox } from "@yunari/scene-fabric";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
@@ -25,14 +20,11 @@ interface CanvasEvents {
 export interface ArtboardPanel {
   readonly root: HTMLElement;
   render(artboard: Artboard, metadata?: ThemeMetadata): void;
-  setGlobals(globals: Globals | undefined): void;
-  setAssets(assets: readonly AssetReference[]): void;
   /** Releases the canvas subscription and the React tree. */
   destroy(): void;
 }
 
 export interface ThemeSettingsOptions {
-  readonly assets?: readonly AssetReference[];
   readonly onMetadataChange?: (metadata: ThemeMetadata) => void;
 }
 
@@ -40,15 +32,18 @@ export interface ThemeSettingsOptions {
  * Product-owned document settings: the theme's metadata and the artboard it is
  * drawn on.
  *
- * The factory keeps its signature and its `root`/`render` pair, so
- * `editor-session.ts` keeps its construction site; what changed is the
- * rendering, which is the Document pane's React tree. The panel holds the two
- * values the session hands it — the artboard and the metadata — and every field
- * is a child of that tree rather than a `createRoot` of its own.
+ * The factory keeps its `root`/`render` pair, so `editor-session.ts` keeps its
+ * construction site; what changed is the rendering, which is the Document
+ * pane's React tree. The panel holds the two values the session hands it — the
+ * artboard and the metadata — and every field is a child of that tree rather
+ * than a `createRoot` of its own.
+ *
+ * **It holds no palette and no asset list.** The board's colour, media and fit
+ * are the background layer's, and the selection inspector's `backgroundColumn`
+ * asks the document and the asset manager for them.
  */
 export function createArtboardPanel(
   host: HTMLElement,
-  globals: Globals | undefined,
   onChange: (artboard: Artboard) => void,
   options: ThemeSettingsOptions & {
     /** The scene, so the panel can say how much of it the frame now holds.
@@ -69,8 +64,6 @@ export function createArtboardPanel(
 
   let current: Artboard | undefined;
   let metadata: ThemeMetadata | undefined;
-  let currentGlobals = globals;
-  let assets = options.assets ?? [];
 
   const reactRoot: Root = createRoot(root);
 
@@ -88,8 +81,6 @@ export function createArtboardPanel(
         createElement(DocumentPane, {
           artboard: shown,
           metadata,
-          globals: currentGlobals,
-          assets,
           // Read at the moment of the draw: a fresh reading is what makes the
           // note follow the scene, and this is the only place that knows a draw
           // happened. It is also why an `object:modified` — or the frame of a
@@ -141,14 +132,6 @@ export function createArtboardPanel(
     ) {
       current = artboard;
       metadata = nextMetadata;
-      draw();
-    },
-    setGlobals(nextGlobals) {
-      currentGlobals = nextGlobals;
-      draw();
-    },
-    setAssets(next) {
-      assets = next;
       draw();
     },
     destroy() {

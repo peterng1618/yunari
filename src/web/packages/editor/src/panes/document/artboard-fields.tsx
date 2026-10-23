@@ -1,12 +1,4 @@
-import {
-  type Artboard,
-  type AssetReference,
-  BACKGROUND_MEDIA_FITS,
-  type FabricPalette,
-  type Globals,
-  MAX_ARTBOARD_DIMENSION,
-  paletteTokenOptions,
-} from "@yunari/renderer-core";
+import { type Artboard, MAX_ARTBOARD_DIMENSION } from "@yunari/renderer-core";
 import { outsideCount, type SceneBox } from "@yunari/scene-fabric";
 import { useId } from "react";
 import {
@@ -25,14 +17,17 @@ import {
 import { uiCopy } from "../../ui-copy.js";
 
 /**
- * The board the theme is drawn on: the size, the three controls that derive one,
- * the paint behind it and the media under that.
+ * The board the theme is drawn on: the size, and the three controls that derive
+ * one.
  *
  * **The document is the state.** Every value here is read from `artboard` and
  * every edit leaves as a whole new artboard, so a control cannot hold a reading
- * the document does not — which is what the imperative panel had to repair by
- * hand, re-applying the palette references on every commit because the selects
- * were the only place they lived.
+ * the document does not.
+ *
+ * **The board's colour and media are not here.** They are the background
+ * layer's, and the selection inspector's `backgroundColumn` renders them — one
+ * surface per value, reachable by selecting the layer rather than by opening a
+ * pane.
  *
  * **The note is derived, never stored.** What a size costs comes from
  * `scene-fabric`'s own count over the boxes the scene reports, so the editor and
@@ -43,14 +38,12 @@ import { uiCopy } from "../../ui-copy.js";
  */
 interface ArtboardFieldsProps {
   readonly artboard: Artboard;
-  readonly globals: Globals | undefined;
-  readonly assets: readonly AssetReference[];
   readonly boxes: readonly SceneBox[] | undefined;
   readonly onCommit: (next: Artboard) => void;
 }
 
 export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
-  const { artboard, globals, assets, boxes, onCommit } = props;
+  const { artboard, boxes, onCommit } = props;
   // The size note's id, minted here because this component renders the note and
   // hands the id to the controls it describes.
   const noteId = `yunari-artboard-note-${useId().replace(/[^\w-]/g, "")}`;
@@ -98,39 +91,6 @@ export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
       chosen.orientation,
     );
     commit({ width: derived.width, height: derived.height });
-  };
-
-  /** A palette reference, or the removal of one. A literal is in no option of
-   *  this control, so the blank reading is the author clearing a reference and
-   *  never a literal being dropped behind their back. */
-  const commitPalette = (value: string): void => {
-    const next = { ...artboard };
-    setPaletteReference(next, value, artboard.background);
-    onCommit(next);
-  };
-
-  const commitMedia = (assetId: string): void => {
-    if (assetId === "") {
-      const { backgroundMedia: _dropped, ...withoutMedia } = artboard;
-      onCommit(withoutMedia);
-      return;
-    }
-    commit({
-      backgroundMedia: {
-        assetId,
-        fit: artboard.backgroundMedia?.fit ?? "theme",
-      },
-    });
-  };
-
-  /** A mode this control did not offer is refused rather than clamped: the
-   *  options come from the same list the model publishes, so a string that is
-   *  not in it is a stale control and not a third mode. */
-  const commitFit = (fit: string): void => {
-    const assetId = artboard.backgroundMedia?.assetId;
-    const next = BACKGROUND_MEDIA_FITS.find((mode) => mode === fit);
-    if (assetId === undefined || next === undefined) return;
-    commit({ backgroundMedia: { assetId, fit: next } });
   };
 
   return (
@@ -194,27 +154,6 @@ export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
       >
         {sizeNote(artboard, boxes)}
       </p>
-      <ControlSelect
-        label={uiCopy.panels.background}
-        data={{ "data-yunari-artboard-background": "" }}
-        value={paletteReference(artboard.background)}
-        options={paletteOptions(globals)}
-        onChange={commitPalette}
-      />
-      <ControlSelect
-        label={uiCopy.panels.backgroundMedia}
-        data={{ "data-yunari-background-asset": "" }}
-        value={artboard.backgroundMedia?.assetId ?? ""}
-        options={mediaOptions(assets)}
-        onChange={commitMedia}
-      />
-      <ControlSelect
-        label={uiCopy.panels.mediaFit}
-        data={{ "data-yunari-background-media-fit": "" }}
-        value={artboard.backgroundMedia?.fit ?? "theme"}
-        options={fitOptions()}
-        onChange={commitFit}
-      />
     </div>
   );
 }
@@ -275,53 +214,6 @@ function resolutionOptions(): readonly ControlOption[] {
   ];
 }
 
-/** The two boxes the media can fill, both with `cover`. The artboard's own
- *  content fit is a guarantee of the model and not a choice, so this is the only
- *  fit control the panel has.
- *
- *  The list is the model's own, so a mode added there is offered here and a mode
- *  removed there stops being offered — the panel is the third end of the set,
- *  not a copy of it. */
-function fitOptions(): readonly ControlOption[] {
-  return BACKGROUND_MEDIA_FITS.map((fit) => ({
-    id: fit,
-    name: uiCopy.fitModes[fit],
-  }));
-}
-
-/** The palette tokens, plus the blank reading that clears the reference.
- *  `setGlobals` and an edit both redraw, so the list is never a stale copy.
- *  Every token is offered and named by the token owner's one list. */
-function paletteOptions(
-  globals: Globals | undefined,
-): readonly ControlOption[] {
-  return [
-    { id: "", name: uiCopy.panels.notSet },
-    // `Globals` types every group's values as `unknown`; the palette is the one
-    // group whose values are `PalettePaint`, which is the cast the inspector's
-    // own resolvers already make.
-    ...paletteTokenOptions(globals?.palette as FabricPalette | undefined),
-  ];
-}
-
-/** The declared assets a background can be: an image, an SVG or a video. A font
- *  is not a picture, and the artboard's `none` is the blank reading. */
-function mediaOptions(
-  assets: readonly AssetReference[],
-): readonly ControlOption[] {
-  return [
-    { id: "", name: uiCopy.panels.none },
-    ...assets
-      .filter(
-        (asset) =>
-          asset.kind === "image" ||
-          asset.kind === "svg" ||
-          asset.kind === "video",
-      )
-      .map((asset) => ({ id: asset.id, name: asset.id })),
-  ];
-}
-
 /** A preset id read back from one of the three controls. The Custom entry is
  *  disabled, so a blank id is not a choice an author can make; the fallback
  *  stands for the reading, not for an edit. */
@@ -333,34 +225,6 @@ function presetId<T extends string>(id: string, fallback: T): T {
  *  when it is not — the two other controls' half of a single choice. */
 function shown<T extends string>(value: T | undefined, fallback: T): T {
   return value ?? fallback;
-}
-
-function paletteReference(value: Artboard["background"]): string {
-  return value !== undefined &&
-    "ref" in value &&
-    value.ref.startsWith("palette.")
-    ? value.ref
-    : "";
-}
-
-/** A value the control offers, or the removal of the reference. A literal — a
- *  hand-edited theme's colour, which is in no option here — survives every edit
- *  of this panel: the control never showed it, so the blank reading cannot be
- *  the author asking for it to go. */
-function setPaletteReference(
-  artboard: { background?: Artboard["background"] },
-  value: string,
-  current: Artboard["background"],
-): void {
-  if (value === "") {
-    if (
-      current === undefined ||
-      ("ref" in current && current.ref.startsWith("palette."))
-    )
-      delete artboard.background;
-    return;
-  }
-  artboard.background = { ref: value as `palette.${string}` };
 }
 
 function isDimension(value: number): boolean {

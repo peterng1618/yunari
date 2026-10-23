@@ -45,6 +45,7 @@ import {
   Type,
   Unlock,
   Upload,
+  Wallpaper,
   X,
 } from "lucide-react";
 import type * as React from "react";
@@ -120,6 +121,10 @@ export function Glyph(props: {
  *  three planes smudge at 13px, the layer row's size, and the drawing stacks
  *  two. */
 export const STACK_GLYPH: LucideIcon = Layers2;
+
+/** The background row's mark. It is the page's wallpaper rather than the image
+ *  kind's picture, so a background and an image layer never wear one glyph. */
+export const BACKGROUND_GLYPH: LucideIcon = Wallpaper;
 
 /** §7.2's page, the Document slot. */
 export const PAGE_GLYPH: LucideIcon = FileText;
@@ -273,6 +278,7 @@ export const KIND_GLYPHS = {
   chart: ChartNoAxesCombined,
   group: STACK_GLYPH,
   image: ImageIcon,
+  background: BACKGROUND_GLYPH,
 } satisfies Readonly<Record<LayerKind, LucideIcon>>;
 
 /** The tree's open/closed chevrons. Each points the way the press goes, and the

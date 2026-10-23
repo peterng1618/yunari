@@ -765,22 +765,33 @@ test.describe("hosted player over the real host", () => {
 
     // The card shows what the host said about the card, verbatim: a caption
     // painted from anything else is the misattribution this key exists to stop.
+    //
+    // **A host without that sensor is the other half of the claim.** Linux CI
+    // has no LHM and no GPU name, so `gpu.name` never reports; the rule there is
+    // the product's own — a missing reading is not fabricated (§ providers), so
+    // the caption must stay the gap. Requiring a reading made this case a
+    // statement about the runner's hardware rather than about the wiring.
     await expect
       .poll(
         async () => {
           const { caption, reported } = await read();
-          return caption === reported && reported.length > 0;
+          return reported.length === 0 ? caption === "—" : caption === reported;
         },
         { timeout: 20_000 },
       )
       .toBe(true);
 
-    // And it is a real name rather than the gap a missing reading would show,
-    // with a live figure beside it from the same card.
+    // On a host that does report the card, it is a real name rather than the
+    // gap, with a live figure beside it from the same card.
     const settled = await read();
-    expect(settled.status).toBe("ok");
-    expect(settled.caption).not.toBe("—");
-    expect(settled.temperature).toMatch(/\d+°C$/);
+    if (settled.reported.length === 0) {
+      expect(settled.status, "no reading, so no `ok`").not.toBe("ok");
+      expect(settled.caption, "a missing reading is not invented").toBe("—");
+    } else {
+      expect(settled.status).toBe("ok");
+      expect(settled.caption).not.toBe("—");
+      expect(settled.temperature).toMatch(/\d+°C$/);
+    }
   });
 
   test("renders a hosted theme in the player and streams live samples", async ({
@@ -1048,6 +1059,18 @@ test.describe("a paused clock on one chart", () => {
           { timeout: 30_000 },
         )
         .toBeGreaterThan(0);
+      // **The connection strip is the readiness the ink check misses.** The
+      // player re-resolves its theme with a navigation, and the new document
+      // boots to "Connecting to the host" — a frame with ink already on its
+      // chart canvas but nothing of the theme drawn, which is what made one
+      // capture in six a blank frame under load. The strip is removed when the
+      // source is live, so its absence, held past the window in which a
+      // re-resolve remounts the page, is the settled document.
+      await expect(page.locator("#yunari-connection")).toHaveCount(0, {
+        timeout: 20_000,
+      });
+      await page.waitForTimeout(1_000);
+      await expect(page.locator("#yunari-connection")).toHaveCount(0);
       await page.evaluate(() => document.fonts.ready);
       const shot = await page
         .locator("#artboard canvas.lower-canvas")
@@ -2335,6 +2358,7 @@ test.describe("the real player at the sizes and shapes it is read at", () => {
     ): Promise<{
       surface: Awaited<ReturnType<typeof playerSurface>>;
       arcs: Record<string, number>;
+      datum: Record<string, boolean>;
       barInk: number;
       barChroma: number;
       wordmark: Awaited<ReturnType<typeof glyphCoverage>>;
@@ -2360,6 +2384,18 @@ test.describe("the real player at the sizes and shapes it is read at", () => {
           "ram-gauge": ratio("ram-gauge", "chroma"),
           "vram-gauge": ratio("vram-gauge", "chroma"),
         },
+        // **A gauge without a datum draws no arc, and that is the rule, not a
+        // failure** (`0008`): the reading's text is the gap `—%` until the host
+        // reports one. Linux CI has no VRAM provider, so the floor below is
+        // asserted only where a datum exists.
+        datum: {
+          "ram-gauge": /^\d+%$/.test(
+            String(await canvasProp(page, "ram-value", "text")),
+          ),
+          "vram-gauge": /^\d+%$/.test(
+            String(await canvasProp(page, "vram-value", "text")),
+          ),
+        },
         barInk: ratio("storage-bar", "ink"),
         barChroma: ratio("storage-bar", "chroma"),
         wordmark: await glyphCoverage(page, "wordmark"),
@@ -2377,9 +2413,12 @@ test.describe("the real player at the sizes and shapes it is read at", () => {
     );
     expect(fitted.surface.dpr, "the first read is at one device pixel").toBe(1);
     for (const [id, share] of Object.entries(fitted.arcs))
-      expect(share, `${id} draws its arc at a fitted viewport`).toBeGreaterThan(
-        0.002,
-      );
+      if (fitted.datum[id])
+        expect(
+          share,
+          `${id} draws its arc at a fitted viewport`,
+        ).toBeGreaterThan(0.002);
+    expect(fitted.datum["ram-gauge"], "ram reports on every host").toBe(true);
     expect(
       fitted.barInk,
       "the storage bar has fill at a fitted viewport",
@@ -2418,9 +2457,11 @@ test.describe("the real player at the sizes and shapes it is read at", () => {
       "the artboard canvas is allocated at two device pixels per CSS pixel",
     ).toBeCloseTo(2, 1);
     for (const [id, share] of Object.entries(retina.arcs))
-      expect(share, `${id} draws its arc at two device pixels`).toBeGreaterThan(
-        0.002,
-      );
+      if (retina.datum[id])
+        expect(
+          share,
+          `${id} draws its arc at two device pixels`,
+        ).toBeGreaterThan(0.002);
     expect(
       retina.barInk,
       "the storage bar has fill at two device pixels",

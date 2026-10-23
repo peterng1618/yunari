@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChartEdits } from "../chart-manager/chart-fields.js";
 import { uiCopy } from "../ui-copy.js";
+import { backgroundColumn } from "./background-column.js";
 import { SelectionColumn } from "./column.js";
 import { idleCrop, idleCropEdits } from "./idle-crop.test-stage.js";
 import { type ColumnContext, perKindColumn } from "./per-kind-column.js";
@@ -18,6 +19,10 @@ import {
   type SelectionEdits,
   type SelectionView,
 } from "./view.js";
+
+// jsdom has never had a `PointerEvent`, and Base UI re-dispatches a click
+// through one to carry modifier state; a toggle click throws without it.
+window.PointerEvent ??= MouseEvent as never;
 
 /**
  * The section chrome the column owns now that it is React: the order the
@@ -160,6 +165,26 @@ const headerOf = (id: string): HTMLButtonElement =>
 
 const isOpen = (id: string): boolean =>
   headerOf(id).getAttribute("aria-expanded") === "true";
+
+/** A real edit, as React sees one: the prototype setter, because React's own
+ *  tracker would suppress a plain assignment, and the blur is the commit. */
+async function typeInto(input: HTMLInputElement, value: string): Promise<void> {
+  await act(async () => {
+    input.focus();
+    const setter = Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(input) as HTMLInputElement,
+      "value",
+    )?.set;
+    if (setter === undefined) input.value = value;
+    else setter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    // `focusout` is the event React's `onBlur` is delegated from; the host is
+    // detached here, so `blur()` would have nothing to move focus from.
+    input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  });
+}
 
 describe("SelectionColumn", () => {
   it("renders the questions in the order SETTINGS_SECTIONS decides", () => {
@@ -314,6 +339,67 @@ describe("SelectionColumn", () => {
   });
 
   /**
+   * The background's percent fields: a fraction is stored, a percentage is
+   * shown, and the number the write boundary receives is the fraction again.
+   */
+  it("renders a stored fraction as a percentage and commits the fraction", async () => {
+    const commit = vi.fn(() => false);
+    const port: SelectionEdits = {
+      commit,
+      preview: () => false,
+      cancelPreview: () => {},
+    };
+    const view: SelectionView = {
+      targetRevision: 1,
+      subject: { name: "Background", kind: "background", key: undefined },
+      locked: false,
+      sections: backgroundColumn({
+        background: {
+          media: { assetId: "a", bounds: "theme", offsetX: 0.25 },
+        },
+        assets: [],
+        globals: undefined,
+      }),
+    };
+    act(() => {
+      root.render(
+        <SelectionColumn
+          view={view}
+          edits={port}
+          runs={runs}
+          chart={chart}
+          crop={crop}
+          font={font}
+        />,
+      );
+    });
+
+    const offsetX = host.querySelector<HTMLInputElement>(
+      "[data-yunari-background-offset-x]",
+    )!;
+    expect(offsetX.value).toBe("25");
+    // The number is scaled, so the well says into what (0096): a bare "25"
+    // reads as a pixel offset.
+    expect(offsetX.parentElement?.textContent).toContain("%");
+
+    // The pair's own divide: a percentage typed here has to reach the model as
+    // the fraction the field stores.
+    await typeInto(offsetX, "50");
+    expect(commit).toHaveBeenCalledWith(1, "background.offsetX", 0.5);
+
+    const flipX = host.querySelector<HTMLButtonElement>(
+      "[data-yunari-background-flip-x]",
+    )!;
+    flipX.click();
+    expect(commit).toHaveBeenCalledWith(1, "background.flipX", true);
+  });
+
+  /**
+   * `vg-268`/`vg-283`: the face picker the font catalogue plan shipped is
+   * mounted on the field the ruling named as its owner, and the face it picks is
+   * applied to the preset the object is set in — a text object has no face of
+   * its own, a run names a preset and the preset carries the face. This pins the
+   * mount and the write, which is the whole of what the two rows asked for.
    * The face field is a button now: the catalogue browser it used to mount
    * lives in the finder's Fonts body (task 12), so the field's whole job is to
    * ask for that surface. The preset a face applies to is read where the write

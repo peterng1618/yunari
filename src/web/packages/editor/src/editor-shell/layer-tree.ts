@@ -9,7 +9,18 @@ import { type FabricObject, Group } from "fabric/es";
 import type { ShapeKind } from "../new-object-defaults.js";
 import { uiCopy } from "../ui-copy.js";
 
-export type LayerKind = "text" | "shape" | "chart" | "group" | "image";
+export type LayerKind =
+  | "text"
+  | "shape"
+  | "chart"
+  | "group"
+  | "image"
+  | "background";
+
+/** The background is not a Fabric object, so it has no object id. `$` is
+ *  outside `STABLE_ID_PATTERN`, so no object can carry this id and no validator
+ *  accepts it as one. */
+export const BACKGROUND_LAYER_ID = "$background";
 
 /**
  * What a row draws in place of its name: the kind's glyph, and the one fact a
@@ -33,7 +44,8 @@ export type LayerMark =
   | { readonly kind: "chart"; readonly family: ChartFamily | undefined }
   | { readonly kind: "shape"; readonly shape: ShapeKind | undefined }
   | { readonly kind: "image" }
-  | { readonly kind: "group" };
+  | { readonly kind: "group" }
+  | { readonly kind: "background" };
 
 /**
  * What the document says a row is, in the document's own terms.
@@ -61,7 +73,8 @@ export type LayerRole =
   | { readonly kind: "group"; readonly unit: string | undefined }
   | { readonly kind: "text" }
   | { readonly kind: "shape" }
-  | { readonly kind: "image" };
+  | { readonly kind: "image" }
+  | { readonly kind: "background" };
 
 export interface LayerRow {
   readonly id: string;
@@ -273,6 +286,10 @@ function roleOf(
       return { kind: "shape" };
     case "image":
       return { kind: "image" };
+    // A projected object cannot be the background — the row is appended by the
+    // bridge — but the arm keeps the switch total over the kind union.
+    case "background":
+      return { kind: "background" };
   }
 }
 
@@ -292,7 +309,35 @@ function markOf(object: FabricObject, kind: LayerKind): LayerMark {
       return { kind: "image" };
     case "group":
       return { kind: "group" };
+    // Unreachable through the projection; see `roleOf`.
+    case "background":
+      return { kind: "background" };
   }
+}
+
+/**
+ * The background's own row: the bottom-most layer, and not a Fabric object.
+ *
+ * The bridge appends it after the projection rather than projecting it, so it
+ * is structurally last and no restack or drop path can move it. It carries no
+ * authored state, so every field but `selected` is a constant.
+ */
+export function backgroundRow(input: { readonly selected: boolean }): LayerRow {
+  return {
+    id: BACKGROUND_LAYER_ID,
+    name: uiCopy.panels.layerKinds.background,
+    kind: "background",
+    mark: { kind: "background" },
+    role: { kind: "background" },
+    bound: [],
+    depth: 0,
+    parentId: undefined,
+    hasChildren: false,
+    collapsed: false,
+    visible: true,
+    locked: false,
+    selected: input.selected,
+  };
 }
 
 /**

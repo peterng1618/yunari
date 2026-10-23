@@ -14,6 +14,7 @@ import {
 } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
 import { GLASS_ENVELOPE, glassStripesPng } from "./glass-fixture.js";
+import { selectLayer } from "./rebuild-driver.js";
 import {
   EDGE_OBJECT_FILL,
   REFERENCE_BADGE_SVG,
@@ -292,10 +293,15 @@ async function savePackage(page: Page): Promise<{
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: "Save package" }).click();
+  // **The download is the save's own signal**, so it is what this waits for:
+  // building the package on a loaded CI runner outran the status line's 5 s
+  // default, and the assertion failed while the same save was still landing.
+  const landed = await download;
   await expect(page.locator("#status-message")).toHaveText(
     "Theme package saved",
+    { timeout: 15_000 },
   );
-  const stream = await (await download).createReadStream();
+  const stream = await landed.createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
   const parsed = readThemePackage(Buffer.concat(chunks));
@@ -2489,9 +2495,10 @@ test.describe("background media", () => {
       mimeType: "image/png",
       buffer: PIXEL_PNG,
     });
-    // The artboard's own panel is a document panel, so it is in the Document
-    // pane; the Add pane was showing, so this is a real swap.
-    await openPane(page, "Document");
+    // The picture is the background layer's, so the control is in the selection
+    // inspector, which renders while that layer is selected. The Add pane was
+    // showing, so selecting the layer is a real pane swap.
+    await selectLayer(page, "Background");
     await chooseIn(page, "[data-yunari-background-asset]", "hero");
     await expect(
       page.locator("[data-yunari-background-asset] [data-yunari-value]"),
@@ -2514,13 +2521,12 @@ test.describe("background media", () => {
     // The declared ids, read from the media control's own opened list: it is
     // plan 1's select, so it has no `option` elements to evaluate.
     //
-    // **The pane is opened before the read, as it is for the first image.** The
-    // control lives in the Document pane, so a read taken while the Add pane is
-    // showing resolves to the hidden Document control — still in the document,
-    // never becoming visible — and the read waits there until the case times
-    // out. The row filed this as "the background-media row never becomes
-    // visible"; the control is present and fine, and the step order was stale.
-    await openPane(page, "Document");
+    // **The control is mounted while the background is selected, and the import
+    // just took the selection.** An imported image is placed on the canvas and
+    // arrives selected, so the layer is chosen again before its control is
+    // read; a read taken with the image selected would wait until the case
+    // times out.
+    await selectLayer(page, "Background");
     const ids = await optionsOf(page, "[data-yunari-background-asset]");
     expect(ids).toEqual(expect.arrayContaining(["hero", "hero-2"]));
     expect(ids.filter((id) => id.startsWith("hero"))).toHaveLength(2);
@@ -2534,8 +2540,10 @@ test.describe("background media", () => {
 
     const saved = await savePackage(page);
     const background = (
-      saved.envelope["artboard"] as { backgroundMedia?: { assetId: string } }
-    ).backgroundMedia;
+      saved.envelope["background"] as
+        | { media?: { assetId: string } }
+        | undefined
+    )?.media;
     expect(background?.assetId).toBe("hero-2");
     // Whatever the artboard names is a declared asset, and the layer is
     // showing that one — the reference, not a count.
@@ -2559,8 +2567,9 @@ test.describe("background media", () => {
       mimeType: "video/mp4",
       buffer: Buffer.from("not a decodable video"),
     });
-    // The artboard's own panel is a document panel, so it is in the Document pane.
-    await openPane(page, "Document");
+    // The picture is the background layer's, so it is chosen where that layer
+    // is selected.
+    await selectLayer(page, "Background");
     await chooseIn(page, "[data-yunari-background-asset]", "loop");
     await expect(
       page.locator("[data-yunari-background-asset] [data-yunari-value]"),
@@ -2584,8 +2593,11 @@ test.describe("background media", () => {
       expect.objectContaining({ id: "loop", kind: "video" }),
     );
     expect(
-      (saved.envelope["artboard"] as { backgroundMedia?: { assetId: string } })
-        .backgroundMedia?.assetId,
+      (
+        saved.envelope["background"] as
+          | { media?: { assetId: string } }
+          | undefined
+      )?.media?.assetId,
     ).toBe("loop");
   });
 });

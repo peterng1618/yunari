@@ -30,6 +30,8 @@ export function ControlPair(props: {
     readonly label: string;
     readonly value: number;
     readonly data?: Readonly<Record<`data-${string}`, string>>;
+    /** A percentage half says so; the number it shows is already scaled. */
+    readonly unit?: string;
     readonly integer?: boolean;
     /** The pair's own bounds, on both halves: a width and a height the same
      *  document holds are the same size. */
@@ -57,6 +59,7 @@ export function ControlPair(props: {
             {...(density === undefined ? {} : { density })}
             {...(describedById === undefined ? {} : { describedById })}
             {...(half.data === undefined ? {} : { data: half.data })}
+            {...(half.unit === undefined ? {} : { unit: half.unit })}
             {...(half.integer === undefined ? {} : { integer: half.integer })}
             {...(half.min === undefined ? {} : { min: half.min })}
             {...(half.max === undefined ? {} : { max: half.max })}

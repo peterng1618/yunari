@@ -1,4 +1,4 @@
-import type { Artboard, FabricPalette } from "@yunari/renderer-core";
+import type { Background, FabricPalette } from "@yunari/renderer-core";
 import {
   objectPaletteReferences,
   reassignObjectPaletteReferences,
@@ -9,7 +9,7 @@ import type { PaletteTokenUse } from "./panel.js";
 export interface PaletteTokenReassignment {
   readonly from: `palette.${string}`;
   readonly to: `palette.${string}`;
-  readonly artboard: Artboard;
+  readonly background: Background | undefined;
   readonly palette: FabricPalette;
 }
 
@@ -37,10 +37,10 @@ export function paletteTokenUsage(
   return usage;
 }
 
-/** Rewrites every canvas/artboard reference to a deleted palette token and drops it. */
+/** Rewrites every canvas/background reference to a deleted palette token and drops it. */
 export function reassignPaletteToken(
   canvas: Canvas,
-  artboard: Artboard,
+  background: Background | undefined,
   palette: FabricPalette,
   id: string,
   replacement: string,
@@ -48,13 +48,16 @@ export function reassignPaletteToken(
   const from = `palette.${id}` as const;
   const to = `palette.${replacement}` as const;
   reassignObjectPaletteReferences(canvas, from, to);
-  const nextArtboard = { ...artboard };
-  const value = nextArtboard.background;
-  if (value !== undefined && "ref" in value && value.ref === from)
-    nextArtboard.background = { ref: to };
+  const color = background?.color;
+  const nextBackground: Background | undefined =
+    background === undefined
+      ? undefined
+      : color !== undefined && "ref" in color && color.ref === from
+        ? { ...background, color: { ref: to } }
+        : background;
   const nextPalette = { ...palette };
   delete nextPalette[id];
-  return { from, to, artboard: nextArtboard, palette: nextPalette };
+  return { from, to, background: nextBackground, palette: nextPalette };
 }
 
 export {

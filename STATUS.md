@@ -5,37 +5,32 @@ Branch: `peterng1618/asset-finder-hub`
 
 ## Current objective
 
-Close the **R2 store backend** plan ([`2026-10-23-r2-store-backend.md`](docs/superpowers/plans/2026-10-23-r2-store-backend.md)) locally: the Worker, D1 and R2 code is merged and gated, and only the owner's Cloudflare deploy and live proof remain.
+The **Wallpaper Engine import** ([`spec`](docs/superpowers/specs/2026-10-21-wallpaper-engine-import-design.md), [`plan`](docs/superpowers/plans/archive/2026-10-21-wallpaper-engine-import.md)) is merged into `main`; the owner-run live export and the queued work remain: the host reads the local Steam library and serves the item list, and the asset finder imports images and videos and guides a scene's PNG/MP4 export.
 
 ## Active work
 
-- **The R2 store backend is merged to `main`**; its plan stays in `docs/superpowers/plans/` pending the owner's acceptance.
-- **Task 5.2 is owner-run and pending**: Cloudflare resources, secrets, deploy, `/migrate`, health check, both OAuth callbacks and CPU measurement.
+- **The plan is complete and merged** — Tasks 1–9, the whole-branch review and its fix pass closed clean; the Orca worktree stays until it is retired.
+- **The R2 store backend stays merged**; its owner-run Task 5.2 deploy and live proof remain pending and are not part of this plan.
 - **Task 5.1's import is unrun**: the smoke item `6041df49-9c61-4d51-a184-716890560bdb` exists only in the old catalogue; the script is ready.
-- **The asset finder landed before this merge**; its spec and archived plan are unchanged, and Lineicons stays dev-only (`lineicons@1.3.2`, MIT).
-- **Queued:** `2026-10-21-wallpaper-engine-import.md`; it does not start until the owner accepts this plan and names it active.
-- **Open register findings:** `vg-699` stale `vite preview` reuse on a shared port, `vg-701` biome never reads `.mjs`, `vg-695` a pre-existing `server.test.ts` flake.
+- **Open register findings:** `vg-699` stale `vite preview` reuse on a shared port, `vg-701` biome never reads `.mjs`, `vg-695` a pre-existing `server.test.ts` flake, `vg-708` a theme's credits are written but never drawn.
 
 ## Last completed change
 
-- **The finder pages like the theme store**: 1-based page numbers over the wire (`pages` / `totalPages`), 50 icons a page, 30 images (Unsplash's per-page ceiling), and the first page is all the modal loads on open.
-- **One bar carries the question and the answer**: tabs and search share the header row, then sources → result count → numbered pager and actions; the licence word is gone and each card marks its source logo beside its name or author.
-- **The window's way out is an ×** in the corner, and a multi-subpath icon now imports as one joined `Path` carrying its paint token, like the other two sources.
-- **An image offers "Place on canvas"** beside "Set as background": `importAsset` takes a placement, absent meaning the kind's own default.
-- Evidence: `npm run gate` exit 0 (unit 4559/4559, worker 72/72, typecheck/biome/design/status/docs all 0); asset-finder e2e 13 passed / 16 phone-skipped on rebuilt bundles; icons, failure and fonts screenshots recaptured.
+- **`main` is synced into the finder branch**: the finder's page numbers, one source bar and joined icon path merge with the Wallpaper Engine import and the background layer.
+- **An image still lands in the theme's background layer** unless "Place on canvas" was pressed; the merge keeps main's `setBackground` and the finder's `placement`.
+- **The Wallpaper Engine import is merged into `main`**: the plan is archived, the spec is implemented, and the Orca worktree and branch remain for cleanup.
+- **A scene's exported MP4 and a video item both cross the host's normalizer**; a refusal writes no credit and no background.
+- **Final gate before the merge:** `npm run gate` exit 0 — 341 files / 4728 tests, worker 12 files / 72 tests.
 
 ## Next
 
-1. The owner runs Task 5.2: create D1 and R2, set the secrets, deploy, `/migrate`, health check, register both OAuth callbacks.
-2. Replace the placeholder `CATALOGUE_ORIGIN` with the deployed URL, rebuild, and measure CPU for `GET /index.json` and one auth callback.
-3. Run the Task 5.1 import against the deployed origin, then the real OAuth round trip in the built editor.
-4. After the owner accepts, archive the plan and name the Wallpaper Engine plan active.
-5. Drain `vg-699` in the next register pass.
+1. One owner-run real export (PNG or MP4) through the sheet, to prove the flow's last step.
+2. The owner's R2 Task 5.2 deploy, live proof and import still wait, and so does `vg-699`.
 
 ## Blockers / unverified
 
-- **The store Worker is not deployed**: no D1 database, R2 bucket, secret, real `database_id`, deploy, `/migrate` or health check has run.
-- **No live store path has run**: the real OAuth round trip, live CPU against the 10 ms Free tier, deployed cache behaviour and the import are unverified.
-- **`CATALOGUE_ORIGIN` is still the placeholder** `https://yunari-store.workers.dev`, and no normalized video has been played in a browser.
-- **A theme's `credits.json` does not survive the host library** (`vg-698`): a library-saved theme reopens with an empty credits collection.
-- **`server.test.ts` flakes on assignment cases** in about one full run in three, measured pre-existing at `5e5be86f` (`vg-695`).
+- **The store Worker is not deployed and no live store path has run**: no D1 database, R2 bucket, secret, real `database_id`, deploy, `/migrate`, health check, OAuth round trip, live CPU measurement or import; `CATALOGUE_ORIGIN` is still the placeholder `https://yunari-store.workers.dev`, and no normalized video has played in a browser.
+- **Version 2 now identifies two shapes**: a stored or catalogued document carrying `artboard.background`/`backgroundMedia`, or `fit`/`scale` on its media, is refused by the unknown-key check; the live catalogue's smoke theme carries the old shape and needs reseeding (owner action).
+- **No live Wallpaper Engine export has been offered by the sheet**: the scene flow's last step is owner-run, and the export dialog's default location is unverified.
+- **The listing re-reads and reclassifies every scene package on each mount** (no facts cache), and a video import posts the file as base64 to the host.
+- **Background and artboard edits are not undoable**, and the compact editor header stays wider than a phone — `vg-707` waits on a ruling.

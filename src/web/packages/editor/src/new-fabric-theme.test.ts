@@ -143,10 +143,11 @@ describe("the new Fabric document", () => {
     // The gradient plate it replaced was a scene object sitting on the canvas
     // and an opaque artboard paint behind it, so the media layer mounted below
     // the canvas could not have been seen through either. Both are gone, and
-    // the artboard paint is now the transparent token the media needs.
-    expect(document_.artboard).toMatchObject({
-      background: { ref: "palette.none" },
-      backgroundMedia: { assetId: "starter-backdrop", fit: "theme" },
+    // the background layer's colour is now the transparent token the media
+    // needs.
+    expect(document_.background).toMatchObject({
+      color: { ref: "palette.none" },
+      media: { assetId: "starter-backdrop", bounds: "theme" },
     });
     expect(objectsOf(document_).map((object) => object["id"])).not.toContain(
       "background",
@@ -785,11 +786,11 @@ describe("the new Fabric document", () => {
     // `artboard` and `assets` data, not a Fabric object, so nothing on the
     // canvas would complain if either were lost.
     const saved = serialiseThemeEnvelope(canvas, theme);
-    expect(saved.artboard.backgroundMedia).toEqual({
+    expect(saved.background?.media).toEqual({
       assetId: "starter-backdrop",
-      fit: "theme",
+      bounds: "theme",
     });
-    expect(saved.artboard.background).toEqual({ ref: "palette.none" });
+    expect(saved.background?.color).toEqual({ ref: "palette.none" });
     expect(saved.assets).toEqual(theme.assets);
 
     const chart = fabricObjectsOf(canvas).find(
@@ -1081,7 +1082,7 @@ describe("the blank Fabric document", () => {
     // The backdrop is a packaged asset, so dropping the objects has to drop it
     // too — a declaration without bytes is a theme the player renders nothing
     // behind and the validator refuses.
-    expect(blank.artboard["backgroundMedia"]).toBeUndefined();
+    expect(blank.background?.media).toBeUndefined();
   });
 
   it("starts from exactly the minimal token set, taken by id from the starter", () => {
@@ -1108,7 +1109,7 @@ describe("the blank Fabric document", () => {
     const ids = (value: unknown): string[] =>
       value === undefined ? [] : [String((value as { ref: string }).ref)];
 
-    for (const ref of ids(blank.artboard.background)) {
+    for (const ref of ids(blank.background?.color)) {
       expect(ref.startsWith("palette."), ref).toBe(true);
       expect(palette[ref.slice("palette.".length)], ref).toBeDefined();
     }
@@ -1135,7 +1136,9 @@ describe("the blank Fabric document", () => {
     const cardFill = token(card.yunariPaint?.fill);
     const track = token((chart.track as { ref?: string } | undefined)?.ref);
     const progress = token((chart.progress as { ref?: string }).ref);
-    const page = token((blank.artboard.background as { ref?: string }).ref);
+    const page = token(
+      (blank.background?.color as { ref?: string } | undefined)?.ref,
+    );
 
     for (const id of [cardFill, track, progress]) {
       expect(palette[id], id).toBeDefined();

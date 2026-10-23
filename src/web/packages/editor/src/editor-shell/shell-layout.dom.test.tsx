@@ -146,6 +146,7 @@ function bridgeStub(
     can: () => false,
     canArrange: () => false,
     layers: () => [],
+    backgroundSelected: () => false,
     groupContext: () => [],
     selectLayers: vi.fn(),
     selectLayer: vi.fn(),
@@ -1328,6 +1329,37 @@ it("prints the chord on the menu rows the shortcut table binds", async () => {
     setActiveShortcuts(resolveShortcuts({ "edit.undo": moved }));
   });
   expect(openPopup().querySelector("kbd")?.textContent).toBe("Ctrl+J");
+
+  layout.destroy();
+});
+
+it("disables the Edit commands for a background selection, which has no object", async () => {
+  const root = document.createElement("div");
+  const layout = createShellLayout(root);
+  layout.setBridge(
+    bridgeStub({
+      snapshot: () => ({
+        objectCount: 0,
+        tokenCount: 0,
+        selectedCount: 1,
+        locked: false,
+        activeKind: "background",
+        documentName: undefined,
+        selectionPresetId: undefined,
+      }),
+    }),
+    undefined,
+  );
+  menubarEntry(root, uiCopy.menus.edit).click();
+  await Promise.resolve();
+
+  // The four object-scoped rows reach a Fabric manager, and a background has no
+  // object for any of them, so the menu says so rather than dispatching a
+  // silent no-op. Undo and redo act on the document and keep working — their
+  // chords already did, so greying them was the menu disagreeing with itself.
+  expect(menuItems().map((item) => item.getAttribute("aria-disabled"))).toEqual(
+    [null, null, "true", "true", "true", "true"],
+  );
 
   layout.destroy();
 });

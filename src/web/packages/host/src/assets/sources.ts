@@ -3,6 +3,7 @@ import { lineiconsSource } from "./icons/lineicons.js";
 import { lucideSource } from "./icons/lucide.js";
 import { unsplashSource } from "./images/unsplash.js";
 import type { AssetSource } from "./source.js";
+import { wallpaperEngineSource } from "./wallpaper-engine.js";
 
 /**
  * The one registry: adding a source is one entry here plus its adapter.
@@ -15,4 +16,5 @@ export const ASSET_SOURCES: readonly AssetSource[] = [
   lineiconsSource,
   fontAwesomeSource,
   unsplashSource,
+  wallpaperEngineSource,
 ];

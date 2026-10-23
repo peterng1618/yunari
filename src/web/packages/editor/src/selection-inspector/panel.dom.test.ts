@@ -18,7 +18,7 @@ import { createNewShape } from "../new-object-defaults.js";
 import { uiCopy } from "../ui-copy.js";
 import { supportsGlassControl } from "./glass.js";
 import { idleCrop } from "./idle-crop.test-stage.js";
-import { createSelectionInspector } from "./index.js";
+import { createSelectionInspector, type SelectionInspector } from "./index.js";
 import { writePanelField, writeShapeGeometryField } from "./panel.js";
 // The shared React drivers: a converted field is a plan-1 control, so a raw
 // `change` event no longer commits it — the picker is opened and an entry
@@ -38,7 +38,12 @@ import { choose, flush, optionsOf, slide } from "./runs.test-stage.js";
 // settled and then emptied between cases: `flush` lets a plan-1 select close
 // its portal through React before the wipe detaches it, and emptying stops a
 // stale popup's options from being found by the next case's global query.
+// Unmounting first is what makes that deterministic: a portal closed after the
+// wipe removes a node from a container that no longer holds it.
+let live: SelectionInspector | undefined;
 afterEach(async () => {
+  live?.destroy();
+  live = undefined;
   await flush();
   document.body.replaceChildren();
 });
@@ -98,6 +103,7 @@ function setup(active: unknown, others: readonly unknown[] = []) {
     globals,
     refreshGlass: vi.fn(),
   });
+  live = inspector;
   const field = <T extends HTMLElement>(selector: string): T =>
     host.querySelector<T>(selector)!;
   return { host, history, editor, inspector, field };

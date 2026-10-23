@@ -2,6 +2,7 @@ import {
   type Artboard,
   type ArtboardTransform,
   type AssetReference,
+  type Background,
   computeArtboardTransform,
   type SceneHandle,
   type ScenePlan,
@@ -28,25 +29,26 @@ import { clampRenderScale } from "./render-scale.js";
  */
 
 /**
- * The part of a document artboard this scene applies: its geometry and the media
- * layer under it.
+ * The part of a document artboard this scene applies: its geometry and how its
+ * content fits.
  *
- * **Never its `background`.** A document artboard's paint is a palette reference
- * (`schema/theme-document.schema.json` publishes it as one) and only
- * `planArtboard` can resolve it through `globals`, so the scene takes the
- * resolved paint from the plan. The narrower type is what stops a caller handing
- * this handle a paint it would silently ignore.
+ * **Never its paint or its media.** The background is its own envelope section,
+ * so a document-level artboard change and a background change are two different
+ * events: the artboard arrives here, the background through `updateBackground`.
+ * `planArtboard` owns resolving either through `globals`, so this scene takes
+ * the resolved paint from the plan and the media bag as it was authored.
  */
-export type SceneArtboard = Pick<
-  Artboard,
-  "width" | "height" | "contentFit" | "backgroundMedia"
->;
+export type SceneArtboard = Pick<Artboard, "width" | "height" | "contentFit">;
 
 export interface FabricSceneOptions
   extends Omit<SceneAdapterOptions, "canvas"> {
   readonly host: HTMLElement;
   readonly plan: ScenePlan;
   readonly artboard?: SceneArtboard;
+  /** The authored background bag, beside the plan rather than inside it: the
+   * plan carries its resolved colour, while the media is a DOM layer the scene
+   * mounts and re-places itself. */
+  readonly background?: Background;
   readonly assets?: readonly AssetReference[];
   readonly resolveAsset?: (
     assetId: string,
@@ -63,17 +65,22 @@ export interface FabricSceneHandle extends SceneHandle {
   readonly canvas: StaticCanvas;
   readonly adapter: SceneAdapter;
   /**
-   * `ScenePlan` never carries `backgroundMedia`, so a document-level artboard
-   * change cannot travel through `update()`.
+   * The artboard's geometry changes. `ScenePlan` cannot carry a document-level
+   * change, so this is how one arrives.
    *
    * **A geometry change, so everything geometry drives follows it.** The
    * viewport is re-fitted and the render scale re-derived, not only the media
    * layer; `contentFit` comes from the artboard passed in rather than from the
    * plan's; and it is no longer a no-op on a scene mounted without an asset
-   * resolver. The one field it does not apply is `background` — see
-   * `SceneArtboard`.
+   * resolver. The background is not part of it — see `SceneArtboard`.
    */
   updateArtboard(artboard: SceneArtboard): void;
+  /**
+   * The background's media changes. The colour is the plan's (only `planArtboard`
+   * can resolve a palette reference), so it arrives through `update()`; this is
+   * the authored bag, and the layer re-places rather than restarts a video.
+   */
+  updateBackground(background: Background | undefined): void;
 }
 
 export function mountFabricScene(
@@ -139,6 +146,7 @@ export function mountFabricScene(
   if (options.resolveAsset !== undefined && currentArtboard !== undefined) {
     media = mountBackgroundMedia({
       host,
+      background: options.background,
       artboard: currentArtboard,
       assets: options.assets,
       resolveAsset: options.resolveAsset,
@@ -248,17 +256,20 @@ export function mountFabricScene(
     updateArtboard(artboard: SceneArtboard): void {
       if (disposed) return;
       currentArtboard = artboard;
-      if (media !== undefined && options.resolveAsset !== undefined)
-        media.update({
-          artboard,
-          assets: options.assets,
-          resolveAsset: options.resolveAsset,
-        });
-      // `media.update` re-places the layer against the bounds the last `fit()`
-      // set, so an artboard whose size changed would keep the old box — and
-      // which box the layer is on is what `fit: "theme"` means. Re-fit before
-      // returning, and repaint because the viewport transform moved with it.
+      // The size reaches the media, and `fit()` below re-places it against the
+      // bounds the new geometry produces: `setArtboardSize` alone would place
+      // the layer against the box the board no longer has, which is what
+      // `bounds: "theme"` means.
+      media?.setArtboardSize(artboard);
       currentTransform = fit();
+      canvas.requestRenderAll();
+    },
+
+    updateBackground(background: Background | undefined): void {
+      if (disposed) return;
+      // Same asset re-places the mounted element; a different one remounts,
+      // because a remount is what restarts a video (Task 5's handle).
+      media?.setBackground(background);
       canvas.requestRenderAll();
     },
 

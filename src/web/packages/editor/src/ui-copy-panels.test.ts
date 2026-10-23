@@ -82,15 +82,9 @@ it("leaves the three panels with no copy of their own", async () => {
   const root = document.createElement("div");
   document.body.append(root);
 
-  createArtboardPanel(
-    root,
-    { palette: { bars: { name: "Bars", value: "#000" } } },
-    () => undefined,
-    {
-      assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
-      onMetadataChange: () => undefined,
-    },
-  ).render(
+  createArtboardPanel(root, () => undefined, {
+    onMetadataChange: () => undefined,
+  }).render(
     { width: 1280, height: 720 },
     { name: "Living Room", themeLanguage: "en" },
   );

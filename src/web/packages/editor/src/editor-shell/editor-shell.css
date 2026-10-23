@@ -844,7 +844,11 @@ body,
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 34ch;
+  /* **Never wider than the window it opened in.** `34ch` is the reading width;
+     a narrow window is the harder limit, because the surface anchors to a
+     trigger the header can push past the right edge (§7.1's row does not fit
+     at 390px), and a popup wider than the window is one nobody can read. */
+  max-width: min(34ch, calc(100vw - 16px));
   padding: 12px;
   border-radius: 10px;
   border: 1px solid var(--shell-edge);
@@ -886,6 +890,10 @@ body,
   color: var(--shell-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
+  /* The address is one unbroken token and the widest thing in the popup. Let it
+     break rather than set the popup's min-content width, which is what put the
+     surface past a 390px window on a font whose glyphs run wider. */
+  overflow-wrap: anywhere;
 }
 /* The one-time code, read off this screen and typed on a phone: monospace and
    spaced so a glyph is a glyph and not a word, and larger than the address
@@ -2377,7 +2385,7 @@ body,
   display: inline-flex;
   justify-content: center;
 }
-/* The kind, drawn as one glyph. One slot for all five arms, so every row's
+/* The kind, drawn as one glyph. One slot for all six arms, so every row's
    name starts on the same left edge — which is what makes a column of them
    scannable at all.
 
@@ -2410,12 +2418,15 @@ body,
 }
 /* The name is the row's identity and it is the first column to yield, because
    DESIGN.md §7.3 orders the whole row: "A row yields its name and its key before
-   it yields a control, and it yields the role last." The `6ch` floor below is
-   the *resting* row's — a row that draws no control has no strip to pay for, and
-   the floor is what keeps a deep, key-heavy row from crushing its name. */
+   it yields a control, and it yields the role last." **No width floor here**,
+   rest row or attended: a floor is still a width the row may not have, and the
+   role is the column that never gives up a glyph — so a name that kept 6ch
+   while the role had nowhere to go pushed the role past the row's own edge on
+   a font whose glyphs run wider than the one this was measured in. The name
+   gives up width first and completely, which is what §7.3 orders. */
 .yunari-layer-name {
   flex: 1 1 auto;
-  min-width: 6ch;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2934,6 +2945,17 @@ body,
    feature value cannot be a custom property — the query is resolved from
    `--breakpoint-compact` at build time. */
 @media (max-width: theme(--breakpoint-compact)) {
+  /* §7.1's row does not fit a phone-width window — the brand, the three-label
+     mode switch, the menubar and the publish control are wider together than
+     the glass — and `overflow: hidden` is what keeps that fact inside the
+     header: without it the whole document widens, `documentElement.scrollWidth`
+     exceeds the viewport, and every popup positioned against the viewport then
+     believes there is room past the edge. Which of §7.1's four regions a
+     compact header keeps is a ruling this file does not make; the row's own
+     reachability is tracked on vg-707. */
+  .editor-shell-header {
+    overflow: hidden;
+  }
   .editor-shell-body {
     grid-template-areas: "rail panel stage";
     /* 280px rather than the wide layout's 246px, because the stage is sharing

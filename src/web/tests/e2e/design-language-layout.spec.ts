@@ -430,7 +430,7 @@ test("captures each pane of the four-slot rail in the design language", async ({
  * A `--grep` that matches nothing exits 0 with zero tests, so the run's own
  * summary — "1 test", this file — is the proof it ran at all.
  */
-test("captures the settings modal's three tabs in the design language", async ({
+test("captures the settings modal's four tabs in the design language", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -455,9 +455,9 @@ test("captures the settings modal's three tabs in the design language", async ({
   const dialog = page.getByRole("dialog", SETTINGS_DIALOG);
   await expect(dialog).toBeVisible();
 
-  // §7's three tabs, by the words the modal prints, and one panel out.
-  await expect(dialog.getByRole("tab")).toHaveCount(3);
-  for (const name of ["Appearance", "Keyboard", "About"]) {
+  // §7's four tabs, by the words the modal prints, and one panel out.
+  await expect(dialog.getByRole("tab")).toHaveCount(4);
+  for (const name of ["Appearance", "Keyboard", "Connections", "About"]) {
     await expect(dialog.getByRole("tab", { name })).toBeVisible();
   }
   await expect(dialog.locator('[role="tabpanel"]:visible')).toHaveCount(1);

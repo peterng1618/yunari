@@ -18,7 +18,12 @@ export function envelopePlan(theme: FabricThemeEnvelope): ScenePlan {
   const issues: PlanIssue[] = [];
 
   return {
-    artboard: planArtboard(theme.artboard, theme.globals ?? {}, issues),
+    artboard: planArtboard(
+      theme.artboard,
+      theme.background,
+      theme.globals ?? {},
+      issues,
+    ),
     nodes: [],
     issues,
   };

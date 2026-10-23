@@ -69,36 +69,43 @@ describe("createHostBinding", () => {
     expect((await binding.state()).port).toBe(port);
   });
 
-  it("keeps the port when the interface will not take it, and says so", async () => {
-    const { server, port } = await listening("127.0.0.1");
-    // The squatter **answers**, and that is not decoration. It is bound to
-    // `0.0.0.0:port`, so if the host's own socket is ever lost this one accepts
-    // the connection instead — with no request listener the probe hangs until
-    // the 20 s timeout, which reads as a slow suite rather than a wrong answer.
-    const squatter = http.createServer((_request, response) =>
-      response.end("squatter"),
-    );
-    open.push(squatter);
-    // `error` is handled because this bind is the one that can legitimately
-    // fail: loopback and wildcard coexist on this platform, but that is a
-    // platform behaviour rather than a guarantee, and an unhandled 'error' here
-    // leaves the promise unsettled and the suite hanging instead of red.
-    await new Promise<void>((resolve, reject) => {
-      squatter.once("error", reject);
-      squatter.listen(port, "0.0.0.0", () => resolve());
-    });
+  // Loopback and wildcard coexist on Windows, which is what lets a squatter
+  // hold `0.0.0.0:<port>` beside the host's `127.0.0.1:<port>`. Linux refuses
+  // the wildcard bind while a specific address holds the port, so the squatter
+  // cannot be placed there and the case has nothing to measure.
+  it.skipIf(process.platform !== "win32")(
+    "keeps the port when the interface will not take it, and says so",
+    async () => {
+      const { server, port } = await listening("127.0.0.1");
+      // The squatter **answers**, and that is not decoration. It is bound to
+      // `0.0.0.0:port`, so if the host's own socket is ever lost this one accepts
+      // the connection instead — with no request listener the probe hangs until
+      // the 20 s timeout, which reads as a slow suite rather than a wrong answer.
+      const squatter = http.createServer((_request, response) =>
+        response.end("squatter"),
+      );
+      open.push(squatter);
+      // `error` is handled because this bind is the one that can legitimately
+      // fail: loopback and wildcard coexist on this platform, but that is a
+      // platform behaviour rather than a guarantee, and an unhandled 'error' here
+      // leaves the promise unsettled and the suite hanging instead of red.
+      await new Promise<void>((resolve, reject) => {
+        squatter.once("error", reject);
+        squatter.listen(port, "0.0.0.0", () => resolve());
+      });
 
-    const binding = createHostBinding(server, { port, host: "127.0.0.1" });
-    const turned = await binding.setLan(true);
+      const binding = createHostBinding(server, { port, host: "127.0.0.1" });
+      const turned = await binding.setLan(true);
 
-    expect(turned.ok).toBe(false);
-    // The host is still answering where it was, which is the whole point of
-    // refusing rather than falling back to another port — and the only
-    // assertion here that can tell a restored socket from a closed one. With
-    // the restore line gone this resolves "squatter", not "ok": the failure is
-    // a wrong answer rather than a hang.
-    expect(await reachable(port)).toBe("ok");
-    expect((await binding.state()).lan).toBe(false);
-    expect((await binding.state()).port).toBe(port);
-  });
+      expect(turned.ok).toBe(false);
+      // The host is still answering where it was, which is the whole point of
+      // refusing rather than falling back to another port — and the only
+      // assertion here that can tell a restored socket from a closed one. With
+      // the restore line gone this resolves "squatter", not "ok": the failure is
+      // a wrong answer rather than a hang.
+      expect(await reachable(port)).toBe("ok");
+      expect((await binding.state()).lan).toBe(false);
+      expect((await binding.state()).port).toBe(port);
+    },
+  );
 });

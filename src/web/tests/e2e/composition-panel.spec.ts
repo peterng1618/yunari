@@ -261,11 +261,12 @@ test("the state slot does not cover the role, at rest or with the row attended",
 
   // **The attended row, and it is the same predicate.** Hovering is what draws
   // a row's controls, so the slot paints a real surface over the row's right
-  // edge and the row that pays is the one the pointer is on. `vg-447`'s ruling
-  // is what makes this hold: the name's `6ch` floor is the *resting* row's, and
-  // an attended row lowers it to zero so the name ellipsises rather than the
-  // slot painting over the role (DESIGN.md §7.3 — "A row yields its name and its
-  // key before it yields a control, and it yields the role last").
+  // edge and the row that pays is the one the pointer is on. The name has no
+  // width floor at rest or attended — a floor is still a width the row may not
+  // have, and on a font whose glyphs run wider than the one it was measured in
+  // it pushed the role past the row's edge — so the name ellipsises while the
+  // role keeps its glyphs (DESIGN.md §7.3: "A row yields its name and its key
+  // before it yields a control, and it yields the role last").
   //
   // Every row is walked rather than a hand-picked sample, because which row is
   // over budget is the row's own role and key rather than a property of the
@@ -971,18 +972,23 @@ test("two hundred loose shapes, re-measured", async ({ page }, testInfo) => {
 
   const rows = page.locator("[data-yunari-layer]");
   const rowsStarted = Date.now();
-  await expect.poll(() => rows.count(), { timeout: 30_000 }).toBe(200);
+  // 200 root objects, plus the synthetic background row appended below them.
+  await expect.poll(() => rows.count(), { timeout: 30_000 }).toBe(201);
   const msToRows = msSince(rowsStarted);
 
-  // 200 root objects, 200 unique ids, and the order plan 1 recorded: the
-  // projection reverses the root array, so the last object is the first row.
+  // 200 root objects, 200 unique object ids, plus the background row, and the
+  // order plan 1 recorded: the projection reverses the root array, so the last
+  // object is the first row and the background is the last row.
   const ids = await rows.evaluateAll((elements) =>
     elements.map((element) => element.getAttribute("data-yunari-layer") ?? ""),
   );
-  expect(ids).toHaveLength(200);
-  expect(new Set(ids).size, "every row a distinct id").toBe(200);
+  expect(ids).toHaveLength(201);
+  expect(new Set(ids).size, "every row a distinct id").toBe(201);
   expect(ids[0], "the first row is the last object").toBe("shape-199");
-  expect(ids[199], "the last row is the first object").toBe("shape-0");
+  expect(ids[199], "the last object is the row above the background").toBe(
+    "shape-0",
+  );
+  expect(ids[200], "the background is the last row").toBe("$background");
 
   await captureVisualReview(page, testInfo, "composition-panel-two-hundred");
 
@@ -1155,7 +1161,8 @@ test("a group entered inside a large document", async ({ page }, testInfo) => {
   );
 
   const rows = page.locator("[data-yunari-layer]");
-  await expect.poll(() => rows.count(), { timeout: 30_000 }).toBe(200);
+  // 199 loose shapes, one group, and the background row.
+  await expect.poll(() => rows.count(), { timeout: 30_000 }).toBe(201);
 
   // Entering the group is the whole act: it re-projects the tree around the
   // context, so the group's five parts become rows that reach the canvas.
@@ -1163,7 +1170,7 @@ test("a group entered inside a large document", async ({ page }, testInfo) => {
   await enterLayer(page, "group-large");
   const enterMs = msSince(enterStarted);
   expect(await enteredGroups(page)).toContain("group-large");
-  await expect.poll(() => rows.count()).toBe(205);
+  await expect.poll(() => rows.count()).toBe(206);
 
   // **The through-selection flags**, read off the rows themselves: the entered
   // group and its descendants are the reachable ones, and everything else is
@@ -1427,7 +1434,8 @@ test("shift extends a range and ctrl toggles one, and the list's own selection r
   await openBareEditor(page);
 
   const ids = await layerIds(page);
-  expect(ids.length, "the starter's ten top-level rows").toBe(10);
+  // The starter's ten top-level objects, plus the background's own row.
+  expect(ids.length, "the starter's ten top-level rows").toBe(11);
   const first = ids[0]!;
   const fourth = ids[3]!;
   const sixth = ids[5]!;

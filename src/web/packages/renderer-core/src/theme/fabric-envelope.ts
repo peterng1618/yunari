@@ -1,6 +1,7 @@
 import type {
   Artboard,
   AssetReference,
+  Background,
   Binding,
   Globals,
   PalettePaint,
@@ -32,6 +33,7 @@ export interface FabricThemeEnvelope {
   readonly fabricVersion: string;
   readonly id: string;
   readonly artboard: Artboard;
+  readonly background?: Background;
   readonly scene: Readonly<Record<string, unknown>>;
   readonly metadata?: ThemeMetadata;
   readonly globals?: FabricGlobals;

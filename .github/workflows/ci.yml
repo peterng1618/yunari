@@ -128,7 +128,13 @@ jobs:
       - name: Display tests (browser)
         # Every project, not just desktop-chromium: the host specs live in their
         # own serial projects now, so naming one project would silently drop them.
-        run: npx playwright test
+        #
+        # `xvfb-run` because two specs launch a **headed** browser on purpose:
+        # `host-secure-origin.spec.ts` reads a wake lock, which Chromium refuses
+        # headless, and `host-pwa.spec.ts` installs a persistent profile. Without
+        # a display those launch calls fail as "Missing X server or $DISPLAY",
+        # which is a fact about the runner rather than about the product.
+        run: xvfb-run --auto-servernum npx playwright test
 
   licences:
     name: Licence notices present

@@ -42,15 +42,15 @@ function hasGlass(scene: unknown): boolean {
 }
 
 /**
- * The declared kind of the asset the artboard's background names, or undefined
- * when the envelope does not say. `gif` needs no case of its own: a background
+ * The declared kind of the asset the background layer names, or undefined when
+ * the envelope does not say. `gif` needs no case of its own: a background
  * accepts only image, SVG and video, so "video" is the whole of the test.
  */
 function backgroundAssetKind(document: Record<string, unknown>): unknown {
-  const artboard = document["artboard"];
-  if (typeof artboard !== "object" || artboard === null) return undefined;
+  const background = document["background"];
+  if (typeof background !== "object" || background === null) return undefined;
 
-  const media = (artboard as Record<string, unknown>)["backgroundMedia"];
+  const media = (background as Record<string, unknown>)["media"];
   if (typeof media !== "object" || media === null) return undefined;
 
   const assetId = (media as Record<string, unknown>)["assetId"];

@@ -9,12 +9,13 @@ const EDITOR = "http://127.0.0.1:4174/";
  * The lifecycle property, measured on the real editor and the real fixture.
  *
  * **Not** "zero repaints in 1000 ms". Task 1 measured that on a bare
- * `StaticCanvas`; the editor runs a 30 Hz chart-refresh loop of its own, so an
- * idle editor repaints about 22 times a second whatever glass is doing.
- * Asserting zero here would assert a fact about a loop this task does not
- * own, and it would fail for a reason unrelated to glass. Measured, not
- * assumed: every one of those 22 requests stacks to `LiveRuntime.refresh`
- * and `ChartManager.refresh`.
+ * `StaticCanvas`; the editor runs a refresh loop of its own, so an idle editor
+ * repaints whatever glass is doing. That loop no longer repaints every frame:
+ * `LiveRuntime.tick` paints text on its data's cadence (4 Hz sample pass, 1 Hz
+ * authored heartbeat) and asks for a render only when it painted, so a scene
+ * with no charts repaints a handful of times a second rather than twenty-two
+ * (`38cbfe3e`). Asserting zero here would assert a fact about a loop this task
+ * does not own, and it would fail for a reason unrelated to glass.
  *
  * The property that *is* this task's is the **delta**: a glass panel must not
  * add a repaint of its own. That is measured by comparing the same scene with
@@ -129,15 +130,19 @@ test.describe("glass lifecycle in the real editor", () => {
       // counts are the thing to read if this ever fails intermittently.
       let withPanelMin = Number.POSITIVE_INFINITY;
       let withoutPanelMin = Number.POSITIVE_INFINITY;
+      let withPanelMax = 0;
+      let withoutPanelMax = 0;
       for (let round = 0; round < 3; round += 1) {
         renders = 0;
         await new Promise((resolve) => setTimeout(resolve, 1000));
         withPanelMin = Math.min(withPanelMin, renders);
+        withPanelMax = Math.max(withPanelMax, renders);
 
         canvas.remove(panel);
         renders = 0;
         await new Promise((resolve) => setTimeout(resolve, 1000));
         withoutPanelMin = Math.min(withoutPanelMin, renders);
+        withoutPanelMax = Math.max(withoutPanelMax, renders);
         canvas.add(panel);
       }
 
@@ -153,6 +158,8 @@ test.describe("glass lifecycle in the real editor", () => {
       return {
         withPanelMin,
         withoutPanelMin,
+        withPanelMax,
+        withoutPanelMax,
         compositesInOneFrame,
         compositesWithoutPanel,
       };
@@ -160,15 +167,17 @@ test.describe("glass lifecycle in the real editor", () => {
 
     // Match set: the editor's own refresh really is running in both windows,
     // so a zero here would mean the scene was static rather than that glass
-    // is free.
+    // is free. Read from the best round, not the worst: the loop renders only
+    // when a pass painted, so its idle floor moves with the data's cadence and
+    // the alive-at-all claim is answered by any window that rendered.
     expect(
-      measurement.withPanelMin,
+      measurement.withPanelMax,
       "the editor is repainting at all",
-    ).toBeGreaterThan(10);
+    ).toBeGreaterThan(0);
     expect(
-      measurement.withoutPanelMin,
+      measurement.withoutPanelMax,
       "and keeps repainting with the panel removed",
-    ).toBeGreaterThan(10);
+    ).toBeGreaterThan(0);
     // Match set: the panel is really compositing, and stops being when it is
     // gone. Without this the delta below would also be satisfied by a
     // `createGlass` that never ran.

@@ -29,7 +29,7 @@ function shaped(width: number, height: number): FabricThemeEnvelope {
 /** A ground written as a literal, which is the shape the editor saves. */
 function ground(value: unknown): FabricThemeEnvelope {
   return envelope({
-    artboard: { width: 1920, height: 1080, background: { value } },
+    background: { color: { value } },
   });
 }
 
@@ -44,11 +44,7 @@ describe("facetRecordOf", () => {
 
   it("resolves a ground written as a palette reference", () => {
     const document = envelope({
-      artboard: {
-        width: 1920,
-        height: 1080,
-        background: { ref: "palette.ink" },
-      },
+      background: { color: { ref: "palette.ink" } },
       globals: {
         palette: {
           ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
@@ -79,11 +75,9 @@ describe("facetRecordOf", () => {
 
   it("never guesses when there is media behind it", () => {
     const document = envelope({
-      artboard: {
-        width: 1920,
-        height: 1080,
-        background: { value: "#000000" },
-        backgroundMedia: { assetId: "photo", fit: "cover" },
+      background: {
+        color: { value: "#000000" },
+        media: { assetId: "photo", bounds: "theme" },
       },
     } as unknown as Partial<FabricThemeEnvelope>);
 
@@ -97,11 +91,7 @@ describe("facetRecordOf", () => {
     expect(
       facetRecordOf(
         envelope({
-          artboard: {
-            width: 1920,
-            height: 1080,
-            background: { ref: "palette.gone" },
-          },
+          background: { color: { ref: "palette.gone" } },
         } as unknown as Partial<FabricThemeEnvelope>),
       ).colourMode,
     ).toBe("unclassified");

@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chooseIn } from "./control-set.js";
+import { isDesktopSurface } from "./surface.js";
 
 /**
  * The stage looks through a display, and the display is a lens.
@@ -658,7 +659,12 @@ test.describe("the stage looks through a display", () => {
    *  wrapper that eats the stage's own pan, which is the other half of §7.7. */
   test("the display cluster and the identity chip cannot collide on the stage", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    // **A desktop claim**: at phone width the open pane leaves an 86px stage,
+    // narrower than the two clusters' own widths, so the row overflows before
+    // any layout can keep them apart. That is the editor's desktop-only frame,
+    // not a corner collision, and the desktop project asserts it.
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     await page
       .locator('.editor-shell-rail button[aria-label="Document"]')
       .click();

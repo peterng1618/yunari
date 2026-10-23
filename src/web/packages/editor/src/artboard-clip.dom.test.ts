@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
-import { YUNARI_NAME_PROPERTY } from "@yunari/renderer-core";
+import {
+  type AssetReference,
+  YUNARI_NAME_PROPERTY,
+} from "@yunari/renderer-core";
 import { serialiseScene } from "@yunari/scene-fabric";
 import {
   type Canvas as FabricCanvas,
@@ -356,6 +359,39 @@ describe("the clip does not change what the scene root means", () => {
 });
 
 describe("the stage's artboard paint", () => {
+  /** The background is an envelope section now, so the painter is exercised
+   *  through a document that authors one. */
+  function envelopeWith(
+    background: NonNullable<
+      NonNullable<
+        Parameters<typeof mountEditorShell>[0]["envelope"]
+      >["background"]
+    >,
+    assets: readonly AssetReference[] = [],
+  ): NonNullable<Parameters<typeof mountEditorShell>[0]["envelope"]> {
+    return {
+      schemaVersion: 2,
+      fabricVersion: "7.4.0",
+      id: "paint-probe",
+      artboard: ARTBOARD,
+      background,
+      globals: {
+        palette: {
+          none: {
+            name: "None",
+            value: { kind: "solid", color: "transparent" },
+          },
+          ink: { name: "Ink", value: { kind: "solid", color: "#112233" } },
+        },
+      },
+      assets,
+      metadata: { themeLanguage: "en" },
+      scene: { version: "7.4.0", objects: [] },
+    } as unknown as NonNullable<
+      Parameters<typeof mountEditorShell>[0]["envelope"]
+    >;
+  }
+
   it("drops the plate once the board declares background media", async () => {
     // 0080. The plate is a `Rect` on the canvas, and the canvas sits above the
     // media layer, so a plate covers the media exactly as the player's canvas
@@ -363,13 +399,14 @@ describe("the stage's artboard paint", () => {
     // behind the layer instead, so it is the board's colour and the letterbox
     // both. Both arms asserted, because a plate reappearing here is the defect
     // returning in silence.
-    const artboard = {
-      ...ARTBOARD,
-      background: { value: { kind: "solid", color: "#112233" } },
-    };
+    const color = { ref: "palette.ink" as const };
 
     const plainHost = stageHost();
-    const plain = await mountEditorShell({ host: plainHost, artboard });
+    const plain = await mountEditorShell({
+      host: plainHost,
+      artboard: ARTBOARD,
+      envelope: envelopeWith({ color }),
+    });
     expect(
       plain.editor.canvas.backgroundImage,
       "with no media, the plate is the board's paint",
@@ -379,13 +416,17 @@ describe("the stage's artboard paint", () => {
     plainHost.remove();
 
     const mediaHost = stageHost();
+    const assets = [
+      { id: "loop", kind: "video" as const, path: "assets/loop.webm" },
+    ];
     const withMedia = await mountEditorShell({
       host: mediaHost,
-      artboard: {
-        ...artboard,
-        backgroundMedia: { assetId: "loop", fit: "theme" },
-      },
-      assets: [{ id: "loop", kind: "video", path: "assets/loop.webm" }],
+      artboard: ARTBOARD,
+      envelope: envelopeWith(
+        { color, media: { assetId: "loop", bounds: "theme" } },
+        assets,
+      ),
+      assets,
       resolveAsset: () => ({ url: "blob:loop" }),
     });
     expect(

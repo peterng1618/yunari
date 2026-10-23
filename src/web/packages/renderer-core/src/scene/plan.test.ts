@@ -52,7 +52,7 @@ function artboardWith(overrides: Partial<Artboard> = {}): Artboard {
 
 describe("artboard", () => {
   it("carries size and fit mode through", () => {
-    expect(planArtboard(artboardWith(), {}, [])).toMatchObject({
+    expect(planArtboard(artboardWith(), undefined, {}, [])).toMatchObject({
       width: 800,
       height: 480,
       contentFit: "contain",
@@ -60,41 +60,51 @@ describe("artboard", () => {
   });
 
   it("defaults fit mode to contain", () => {
-    expect(planArtboard({ width: 100, height: 100 }, {}, []).contentFit).toBe(
-      "contain",
-    );
+    expect(
+      planArtboard({ width: 100, height: 100 }, undefined, {}, []).contentFit,
+    ).toBe("contain");
   });
 
-  it("resolves the background through globals", () => {
+  // The background is its own envelope section; the artboard no longer carries
+  // a paint, so the plan takes the layer's colour as the second argument.
+  it("resolves the background colour through the palette", () => {
     const globals: Globals = {
-      palette: { bg: { name: "Background", value: "#101216" } },
+      palette: {
+        ink: { name: "Ink", value: { kind: "solid", color: "#101216" } },
+      },
     };
 
     expect(
       planArtboard(
-        artboardWith({ background: { ref: "palette.bg" } }),
+        { width: 100, height: 100 },
+        { color: { ref: "palette.ink" } },
         globals,
         [],
       ).background,
     ).toBe("#101216");
   });
 
-  // The palette's other shape — `{ kind: "solid" }` rather than a bare colour.
-  // A solid paint resolves to its colour, which is the form the renderer paints.
-  it("resolves a structured palette value", () => {
+  // The palette's other shape — a bare colour rather than `{ kind: "solid" }`.
+  // Both resolve to the colour string, which is the form the renderer paints.
+  it("resolves a bare palette colour", () => {
     const globals: Globals = {
-      palette: {
-        paper: { name: "Paper", value: { kind: "solid", color: "#e8e4da" } },
-      },
+      palette: { bg: { name: "Background", value: "#101216" } },
     };
 
     expect(
       planArtboard(
-        artboardWith({ background: { ref: "palette.paper" } }),
+        artboardWith(),
+        { color: { ref: "palette.bg" } },
         globals,
         [],
       ).background,
-    ).toBe("#e8e4da");
+    ).toBe("#101216");
+  });
+
+  it("paints nothing when the envelope has no background", () => {
+    expect(planArtboard(artboardWith(), undefined, {}, []).background).toBe(
+      undefined,
+    );
   });
 });
 

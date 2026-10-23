@@ -503,6 +503,94 @@ describe("a rejection that arrives after the scene mounted", () => {
   });
 });
 
+/**
+ * The display mounts the background it was served.
+ *
+ * The theme's background is its own envelope section now, so the player has to
+ * hand it to the scene beside the artboard; the colour is the plan's paint and
+ * the media is the scene's own layer. Both are read off the mounted document,
+ * because the failure this pins is a background that validates and then paints
+ * nothing.
+ */
+describe("the background the display mounts with", () => {
+  beforeEach(() => {
+    // `main.ts` runs on import and a case above has already evaluated it; a
+    // cached module would never run its start sequence against this stub.
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it("paints the authored colour and mounts its media", async () => {
+    const host = skeleton();
+    history.replaceState({}, "", "/?theme=living-room");
+    vi.stubGlobal("EventSource", SilentEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    vi.spyOn(window, "requestAnimationFrame").mockReturnValue(0);
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(
+      () => undefined,
+    );
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) =>
+        String(input).endsWith("/document")
+          ? json({
+              ...(mountedEnvelope() as Record<string, unknown>),
+              background: {
+                color: { ref: "palette.ink" },
+                media: { assetId: "bg", bounds: "theme" },
+              },
+              globals: {
+                palette: {
+                  none: {
+                    name: "None",
+                    value: { kind: "solid", color: "transparent" },
+                  },
+                  ink: {
+                    name: "Ink",
+                    value: { kind: "solid", color: "#112233" },
+                  },
+                },
+              },
+              assets: [{ id: "bg", kind: "image", path: "assets/bg.png" }],
+            })
+          : json({}),
+      ),
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await import("./main.js");
+    await vi.waitFor(
+      () =>
+        expect(
+          host.querySelector("[data-yunari-background-media] img"),
+          "the media layer mounted",
+        ).not.toBeNull(),
+      { timeout: 10_000 },
+    );
+
+    expect(
+      document.querySelector("[data-yunari-load-failure]"),
+      "the display mounted",
+    ).toBeNull();
+    expect(host.style.background, "the plan painted the authored colour").toBe(
+      "rgb(17, 34, 51)",
+    );
+  });
+});
+
 /** Valid to the compatibility check, so the display mounts whole and reaches
  *  the point where its chrome is built. */
 function mountedEnvelope(): unknown {

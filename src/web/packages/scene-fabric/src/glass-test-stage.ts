@@ -105,7 +105,7 @@ export function stage(options: {
   readonly texture?: boolean;
   readonly artboard?: { readonly width: number; readonly height: number };
   /** The rect the media layer covers, in artboard units, when it is not the
-   *  artboard itself — a `fit: "display"` layer is larger than the board and
+   *  artboard itself — a `bounds: "display"` layer is larger than the board and
    *  starts outside it, which is the only way the rect's own left/top are
    *  non-zero. */
   readonly backdropRect?: ArtboardRect;

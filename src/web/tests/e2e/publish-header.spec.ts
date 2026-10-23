@@ -51,8 +51,8 @@ const envelope = {
     width: 640,
     height: 360,
     contentFit: "contain" as const,
-    background: { ref: "palette.bar" as const },
   },
+  background: { color: { ref: "palette.bar" as const } },
   globals: {
     palette: {
       // The immutable transparent token every package must carry.
@@ -221,10 +221,14 @@ test.describe("the header's publish surface", () => {
     ] as const) {
       const box = await where.boundingBox();
       expect(box, `${what} is rendered`).not.toBeNull();
+      // **A pixel of fractional layout, not of repair.** The layout viewport is
+      // fractional (390.265 at this width) while `innerWidth` reports the
+      // integer 390, so a surface flush to the true edge reads as 0.3px past
+      // the rounded one. Anything larger is the overrun this assertion is for.
       expect(
         (box?.x ?? 0) + (box?.width ?? 0),
         `${what} ends inside the window rather than past it`,
-      ).toBeLessThanOrEqual(windowWidth);
+      ).toBeLessThanOrEqual(windowWidth + 1);
       expect(
         box?.x ?? -1,
         `${what} begins inside the window too`,

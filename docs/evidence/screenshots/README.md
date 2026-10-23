@@ -161,9 +161,12 @@ result, not merely a mounted editor.
 | Assets | Read a source's failure beside the other source's rows | `editor-finder-failure` / `captures the finder's failed source` |
 | Assets | Read the Connections tab's provider row | `editor-finder-connections` / `captures the Connections tab's provider row` |
 | Assets | Normalize a declared video and read the host's refusal beside it | `editor-video-normalize` / `normalizes a declared video without replacing its master` |
+| Assets | Browse this PC's Wallpaper Engine library and read each kind's own action | `editor-finder-wallpaper-engine` / `captures the finder on Wallpaper Engine` |
+| Assets | Open a still scene and read the PNG settings and the text step | `editor-finder-scene-still` / `captures a still scene's export sheet` |
+| Assets | Open an animated scene and read the five-second MP4 settings | `editor-finder-scene-animated` / `captures an animated scene's export sheet` |
 | Palette | Edit or reassign a palette token | `editor-palette-solid` or `editor-palette-reassignment` / `edits an artboard palette token|reassigns palette references` |
 | Type presets | Edit, reassign or apply a font trio | `editor-type-preset`, `editor-type-reassignment` or `editor-font-trio` / `edits a global type preset|reassigns text type presets|captures curated font trio` — two files, `-desktop-chromium` (graphite) and `-editorial-desktop-chromium`, because the face and trio choosers are wells whose boundary and popup read against the paper they sit on |
-| Theme settings | Author a background image | `editor-background-media` / `authors a packaged background image` |
+| Background layer | Author a background image in the selection inspector's background column | `editor-background-media` / `authors a packaged background image through the inspector` |
 | Viewport | Resize or change zoom | `editor-zoom-readout` / `tracks the camera's zoom in the stage readout` |
 | Viewport | Read the same composition at a two-device-pixel ratio | `editor-reference-dpr2` / `the fitted, reference-size and DPR views` |
 | Glass authoring | Turn a second panel's treatment on over an already-treated one | `editor-reference-overlap` / `rotated and overlapping panels both keep compositing` |
@@ -174,7 +177,7 @@ result, not merely a mounted editor.
 | Keyboard | Read the reference sheet, opened with `?` over an entered group | `keyboard-reference` / `? opens the sheet, and the document behind it does not change` |
 | Keyboard | Arm a row in the settings modal's Keyboard tab and read its ring | `keyboard-armed-row` / `the Keyboard tab arms a row into the modal's trap, on a ring that clears contrast on every palette` |
 | Shell appearance | Choose each of the six palettes and read the surface | `shell-palette-` / `captures each palette's own surface` |
-| Settings modal | Open the rail's gear and read each tab, in both palettes | `settings-appearance`, `settings-keyboard`, `settings-about` / `captures the settings modal's three tabs` — six files from one action, each tab in graphite and `-editorial` |
+| Settings modal | Open the rail's gear and read each tab, in both palettes | `settings-appearance`, `settings-keyboard`, `settings-about` / `captures the settings modal's four tabs` — six files from one action, each tab in graphite and `-editorial` |
 | Shell | Mount the shell with the Add slot open and nothing selected | `editor-shell-add` / `captures the shell with the Add pane open` |
 | Panes | Show each of the four rail panes and read its own surface | `pane-composition`, `pane-add`, `pane-tokens` and `pane-document` / `captures each pane of the four-slot rail` — four files from one action |
 | Glyphs | Mount the shell with the Add slot open and read every glyph's weight and every icon-only control's tooltip | `editor-shell-glyphs` / `captures the shell glyphs and words` |

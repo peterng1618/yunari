@@ -111,7 +111,14 @@ describe("installCatalogueItem", () => {
     originsDir = await fs.mkdtemp(
       path.join(os.tmpdir(), "yunari-install-origins-"),
     );
-    store = createThemeStore(libraryDir);
+    // A real trash needs `powershell.exe`, Finder or `gio`, so a runner has
+    // none of them. These cases measure the install refusals, not the trash
+    // route; `trash.test.ts` owns that.
+    store = createThemeStore(libraryDir, {
+      trash: async (folder) => {
+        await fs.rm(folder, { recursive: true, force: true });
+      },
+    });
     origins = createThemeOriginsStore(originsDir);
   });
 

@@ -85,6 +85,20 @@ describe("undo keeps the author's selection", () => {
     expect([...selectedIds(canvas)].sort()).toEqual(["first", "second"]);
   });
 
+  it("undoes a flip in one step", async () => {
+    // The flip is a Fabric property the inspector writes through the ordinary
+    // commit path, so it is one entry — one undo returns the object, not a
+    // half-restored one.
+    const canvas = stageWith(["picture"]);
+    const history = historyFor(canvas);
+
+    canvas.item(0)!.set({ flipX: true });
+    history.save();
+    await history.undo();
+
+    expect(canvas.item(0)!.flipX).toBe(false);
+  });
+
   it("leaves an undone deletion unselected, because Fabric cleared it", async () => {
     const canvas = stageWith(["first", "second"]);
     const history = historyFor(canvas);

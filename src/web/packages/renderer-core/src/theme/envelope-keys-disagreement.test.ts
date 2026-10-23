@@ -81,6 +81,7 @@ const KNOWN_KEY_SHAPES: Partial<Record<KnownKeyShape, readonly string[][]>> = {
 const ENVELOPE_BAGS: Record<EnvelopeKeyBag, readonly string[][]> = {
   envelope: [[]],
   globals: [["$defs", "globals"]],
+  background: [["$defs", "background"]],
   backgroundMedia: [["$defs", "backgroundMedia"]],
 };
 
@@ -91,6 +92,7 @@ function envelope(): Record<string, unknown> {
     id: "theme",
     metadata: { themeLanguage: "en" },
     artboard: { width: 400, height: 300 },
+    background: {},
     bindings: { chart: [{ id: "cpu", semanticKey: "cpu.load", precision: 0 }] },
     scene: {
       version: "7.4.0",
@@ -184,19 +186,17 @@ describe("one document, two registries, one answer", () => {
     );
   });
 
-  it("refuses the same stale key in the artboard media bag", () => {
+  it("refuses the same stale key in the background media bag", () => {
     const stale = {
       ...envelope(),
-      artboard: {
-        width: 400,
-        height: 300,
-        backgroundMedia: { assetId: "backdrop", fit: "theme", scale: 2 },
+      background: {
+        media: { assetId: "backdrop", bounds: "theme", rotation: 1 },
       },
     };
 
-    expect(refusedByCode(stale)).toContain("/artboard/backgroundMedia/scale");
+    expect(refusedByCode(stale)).toContain("/background/media/rotation");
     expect(publishedKeys(at(["$defs", "backgroundMedia"]))).not.toContain(
-      "scale",
+      "rotation",
     );
   });
 });

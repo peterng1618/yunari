@@ -338,6 +338,13 @@ test("control targets have non-overlapping 24×24 hit areas (§5)", async ({
       ),
     ];
     for (const target of targets) {
+      // **Scroll it in before reading its box.** A target straddling the fold
+      // cannot be hit-tested: `elementFromPoint` answers `null` for the part
+      // below the window, so the bottom row of samples reads as "misses ->
+      // nothing". The fixture has no fixed chrome to scroll under, and the
+      // sample box is centred on the target's own box, so a person reaching
+      // this control scrolls exactly the same way.
+      target.scrollIntoView({ block: "center", inline: "nearest" });
       const rect = target.getBoundingClientRect();
       const visible =
         rect.width >= 2 &&

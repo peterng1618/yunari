@@ -216,6 +216,9 @@ async function startHostedTheme(
     host,
     plan: envelopePlan(theme),
     artboard: theme.artboard,
+    // The colour is in the plan, resolved; this is the authored bag the scene
+    // mounts and places as its own DOM layer.
+    ...(theme.background === undefined ? {} : { background: theme.background }),
     assets: theme.assets ?? [],
     resolveAsset: (assetId) => {
       const url = resolveAsset(assetId);

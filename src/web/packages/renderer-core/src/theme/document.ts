@@ -153,27 +153,57 @@ export type Globals = Readonly<Partial<Record<GlobalGroupName, GlobalGroup>>>;
 export interface Artboard {
   readonly width: number;
   readonly height: number;
-  /** The board's fill, and the colour behind it. One paint, so the board and
-   *  the letterbox bars around it cannot disagree. */
-  readonly background?: StyleValue;
   /**
-   * How the artboard's *content* fills the viewport. Not the background media's
-   * own `fit`, which is the only fit an author sets; this is a guarantee of the
-   * model rather than a choice, and absent means contain.
+   * How the artboard's *content* fills the viewport. Not the background media,
+   * which is always `cover` and has no fit of its own; this is a guarantee of
+   * the model rather than a choice, and absent means contain.
    */
   readonly contentFit?: "contain" | "cover";
-  readonly backgroundMedia?: BackgroundMedia;
 }
+
 /** The two boxes a background media layer can be sized to. Exported because the
  *  validator and the published schema both name this set, and the schema test
  *  holds them to this list rather than to a copy of it. */
-export const BACKGROUND_MEDIA_FITS = ["theme", "display"] as const;
+export const BACKGROUND_MEDIA_BOUNDS = ["theme", "display"] as const;
+export type BackgroundMediaBounds = (typeof BACKGROUND_MEDIA_BOUNDS)[number];
+
+/** Refused, never clamped: an offset outside these is an authoring bug, not a
+ *  reading to round into range. */
+export const MIN_BACKGROUND_OFFSET = -1;
+export const MAX_BACKGROUND_OFFSET = 1;
+
+/** The values that reproduce the centred cover the renderer painted before the
+ *  media had geometry of its own. Flips default to false, i.e. omitted. */
+export const BACKGROUND_MEDIA_DEFAULTS = {
+  offsetX: 0,
+  offsetY: 0,
+} as const;
 
 export interface BackgroundMedia {
   readonly assetId: string;
-  /** The box the media fills, both with `object-fit: cover`: the theme's own
-   *  artboard ratio, or the display's. */
-  readonly fit: (typeof BACKGROUND_MEDIA_FITS)[number];
+  /** The box the layer is clipped to: the artboard rect or the display rect. */
+  readonly bounds: BackgroundMediaBounds;
+  /** Moves the centre by a fraction of the box's own dimensions; absent means 0.
+   *  Placement bounds the pan to the cover rect's overhang, so it cannot expose
+   *  the box. */
+  readonly offsetX?: number;
+  readonly offsetY?: number;
+  /** A paint-time mirror about the placed rect's centre; absent means false. */
+  readonly flipX?: boolean;
+  readonly flipY?: boolean;
+}
+
+/**
+ * The bottom-most layer of the composition.
+ *
+ * `color` fills the board and the letterbox bars around it under
+ * `bounds: "theme"` — one paint, so the two cannot disagree. It sits behind the
+ * media, so it shows wherever the media does not cover; with `cover` that is
+ * never inside the media's box.
+ */
+export interface Background {
+  readonly color?: StyleValue;
+  readonly media?: BackgroundMedia;
 }
 
 /** Themes bind semantic keys, never provider-instance IDs. */

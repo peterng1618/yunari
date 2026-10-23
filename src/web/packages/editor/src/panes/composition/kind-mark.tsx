@@ -79,7 +79,7 @@ export function KindMark({
   return <span className="yunari-layer-mark">{treatment(mark)}</span>;
 }
 
-/** The five arms: one glyph each, and nothing drawn beside it. */
+/** The six arms: one glyph each, and nothing drawn beside it. */
 function treatment(mark: LayerMark): React.JSX.Element {
   switch (mark.kind) {
     case "text":
@@ -95,6 +95,8 @@ function treatment(mark: LayerMark): React.JSX.Element {
     // bespoke per-card diagram from growing back in behind a data field.
     case "group":
       return markGlyph(mark.kind, STACK_GLYPH);
+    case "background":
+      return markGlyph(mark.kind, KIND_GLYPHS.background);
   }
 }
 

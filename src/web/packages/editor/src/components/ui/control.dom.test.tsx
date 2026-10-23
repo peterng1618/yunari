@@ -151,6 +151,10 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     "the search field is a filter that re-runs on a debounce: nothing is authored to commit or cancel",
   ],
   [
+    "asset-finder/wallpaper-engine-body.tsx",
+    "the search field filters the in-memory listing: nothing is authored to commit or cancel",
+  ],
+  [
     "editor-shell/settings.tsx",
     "the credential field commits through its own Save button and is cleared there, never on blur or Enter",
   ],

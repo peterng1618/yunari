@@ -1,6 +1,7 @@
 import { expect, type Locator, test } from "@playwright/test";
 import { chooseIn } from "./control-set.js";
 import { openPane } from "./editor-rail.js";
+import { selectLayer } from "./rebuild-driver.js";
 import { openAppearance } from "./shell-palette.js";
 import { compactViewportMaxPx } from "./shell-tokens.js";
 import { isDesktopSurface } from "./surface.js";
@@ -60,11 +61,23 @@ const DOCUMENT_CONTROLS = [
   "[data-yunari-artboard-ratio]",
   "[data-yunari-artboard-orientation]",
   "[data-yunari-artboard-resolution]",
-  "[data-yunari-artboard-background]",
-  "[data-yunari-background-asset]",
-  "[data-yunari-background-media-fit]",
   "[data-yunari-artboard-width]",
   "[data-yunari-artboard-height]",
+];
+
+/** The selected background layer's controls, in the selection inspector. The
+ *  background's paint, picture and geometry left the Document pane when the
+ *  background became a layer, so their names are audited where they live. The
+ *  media is always cover, so the geometry is the bounds, the offset pair and the
+ *  two mirrors. */
+const BACKGROUND_CONTROLS = [
+  "[data-yunari-background]",
+  "[data-yunari-background-asset]",
+  "[data-yunari-background-bounds]",
+  "[data-yunari-background-offset-x]",
+  "[data-yunari-background-offset-y]",
+  "[data-yunari-background-flip-x]",
+  "[data-yunari-background-flip-y]",
 ];
 
 /** §7's Appearance tab, which is not one of the three panels either.
@@ -164,6 +177,11 @@ test.describe("the settings panels name every control", () => {
     await audit(TOKENS_CONTROLS);
     await openPane(page, "Document");
     await audit(DOCUMENT_CONTROLS);
+    // The background's controls are the selection inspector's, which renders
+    // while the background layer is selected; selecting it opens Composition,
+    // so this audit comes last of the panes.
+    await selectLayer(page, "Background");
+    await audit(BACKGROUND_CONTROLS);
     // Last, because an open modal is modal: the controls behind it are inert
     // and the panes' own audit above measures them as an author reaches them.
     const dialog = await openAppearance(page);

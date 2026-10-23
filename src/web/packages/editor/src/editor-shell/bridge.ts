@@ -18,6 +18,8 @@ import {
 import { paletteTokenIds } from "../palette-manager/token-list.js";
 import { typePresetOf } from "../selection-inspector/appearance.js";
 import {
+  BACKGROUND_LAYER_ID,
+  backgroundRow,
   findById,
   type LayerRow,
   ownerOf,
@@ -27,8 +29,10 @@ import {
 
 import type { EditorActionFacade } from "./session-facade.js";
 
-/** Selection-kind routing for menu/tab eligibility. Transient, never persisted. */
-export type ActiveKind = "none" | "object" | "group" | "chart";
+/** Selection-kind routing for menu/tab eligibility. Transient, never persisted.
+ *  `background` is a layer selection rather than a Fabric one: it is outside
+ *  every object action's kind, so those are ineligible by construction. */
+export type ActiveKind = "none" | "object" | "group" | "chart" | "background";
 
 /** The object actions the shell can run; the registry owns the ids. */
 type ShellAction = ObjectActionId;
@@ -96,8 +100,12 @@ export interface EditorShellBridge {
   target(): ObjectTarget;
   can(action: ShellAction): boolean;
   canArrange(action: ArrangeAction): boolean;
-  /** The layer tree, projected from Fabric on demand (§172). */
+  /** The layer tree, projected from Fabric on demand (§172), plus the
+   *  background's synthetic bottom row. */
   layers(): readonly LayerRow[];
+  /** Whether the background is selected. Mutually exclusive with a Fabric
+   *  selection: selecting one always clears the other. */
+  backgroundSelected(): boolean;
   /** Ids of the entered group, as the panel reads them — never Fabric objects.
    * The group's descendants are inside the context too, which the panel derives
    * from the projection's own parent links. */
@@ -216,15 +224,26 @@ export function createEditorShellBridge(input: {
   const notify = (): void => {
     for (const listener of listeners) listener();
   };
+  // The background is not a Fabric object, so its selection lives beside the
+  // canvas's. The two are mutually exclusive; the events below enforce it.
+  let backgroundSelected = false;
   // The projection reads object state — the display name lives on the object
   // beside the id — so a change to an object republishes the rows. Selection
   // alone is not enough: renaming from the inspector moves no selection, and a
   // stale row would leave the layer list disagreeing with the field that
   // changed it.
-  const events = [
+  // A Fabric selection always clears the background: the two are never mixed
+  // into one set, whichever surface raised the selection.
+  const settleSelection = (): void => {
+    backgroundSelected = false;
+    notify();
+  };
+  const selectionEvents = [
     "selection:created",
     "selection:updated",
     "selection:cleared",
+  ] as const;
+  const events = [
     "object:modified",
     // A deleted object fires no selection event, so the layer list kept
     // showing a row for something the canvas no longer had — and the inspector
@@ -236,6 +255,8 @@ export function createEditorShellBridge(input: {
     // for it — the panel would repaint only when something unrelated did.
     GROUP_CONTEXT_EVENT,
   ] as const;
+  for (const event of selectionEvents)
+    canvas.on(event as never, settleSelection);
   for (const event of events) canvas.on(event as never, notify);
   // A rename moves no object, so none of the canvas events above fire for it —
   // the session's own document change is the only signal that the name it
@@ -263,14 +284,17 @@ export function createEditorShellBridge(input: {
       // Counted through the palette's own membership rule, so the pane's title
       // bar and its rows are one list rather than two that must agree.
       tokenCount: paletteTokenIds(input.palette?.() ?? {}).length,
-      selectedCount:
-        active instanceof ActiveSelection
+      selectedCount: backgroundSelected
+        ? 1
+        : active instanceof ActiveSelection
           ? active.getObjects().length
           : active === undefined
             ? 0
             : 1,
-      locked: active !== undefined && isLocked(active),
-      activeKind: activeKindOf(active),
+      locked: backgroundSelected
+        ? false
+        : active !== undefined && isLocked(active),
+      activeKind: backgroundSelected ? "background" : activeKindOf(active),
       // The fallback is taken on `""` as well as on an absent name: the schema
       // now refuses an empty one and the loader supplies a name (`vg-221`), but
       // this is a reading of whatever the document holds, by the one reading the
@@ -285,7 +309,9 @@ export function createEditorShellBridge(input: {
     const base = snapshot();
     const active = canvas.getActiveObject();
     return {
-      kind: base.activeKind,
+      // The background has no Fabric subject, so the action gate sees none and
+      // every object action is refused by construction.
+      kind: base.activeKind === "background" ? "none" : base.activeKind,
       locked: base.locked,
       memberCount: base.selectedCount,
       // ActiveSelection extends Group, so the negative case has to be explicit:
@@ -353,15 +379,20 @@ export function createEditorShellBridge(input: {
         : active === undefined
           ? []
           : [active];
-    return projectLayers({
-      root: canvas.getObjects(),
-      selected,
-      expanded: expansionFor(),
-      // Pulled, never held: bindings are envelope state the session owns, and a
-      // row whose bound key went stale after an edit would name a key the
-      // document no longer declares.
-      ...(input.bindings === undefined ? {} : { bindings: input.bindings() }),
-    });
+    return [
+      ...projectLayers({
+        root: canvas.getObjects(),
+        selected,
+        expanded: expansionFor(),
+        // Pulled, never held: bindings are envelope state the session owns, and
+        // a row whose bound key went stale after an edit would name a key the
+        // document no longer declares.
+        ...(input.bindings === undefined ? {} : { bindings: input.bindings() }),
+      }),
+      // Appended, not projected: the background is structurally last, so no
+      // restack or drop path can move it below or above an object.
+      backgroundRow({ selected: backgroundSelected }),
+    ];
   };
   /**
    * The rows named, as one selection.
@@ -372,6 +403,20 @@ export function createEditorShellBridge(input: {
    * select.
    */
   const selectLayers = (ids: readonly string[]): void => {
+    // The background is a selection of its own, never a set member: a shift or
+    // ctrl gesture that would include it selects it alone.
+    if (ids.includes(BACKGROUND_LAYER_ID)) {
+      // Ordered after the discard: Fabric fires `selection:cleared` from it,
+      // and `settleSelection` would otherwise clear the flag just set.
+      canvas.discardActiveObject();
+      backgroundSelected = true;
+      canvas.requestRenderAll();
+      notify();
+      return;
+    }
+    // Every other selection — including the empty clear gesture — puts the
+    // background down, so the two are never both selected.
+    backgroundSelected = false;
     const root = canvas.getObjects();
     // An empty list is the clear gesture, and it is the only route to one: the
     // pane sends `[]` when a toggle takes the last row out.
@@ -677,6 +722,7 @@ export function createEditorShellBridge(input: {
     can,
     canArrange: canArrangeAction,
     layers,
+    backgroundSelected: () => backgroundSelected,
     groupContext,
     selectLayers,
     selectLayer,
@@ -741,6 +787,8 @@ export function createEditorShellBridge(input: {
       notify();
     },
     destroy() {
+      for (const event of selectionEvents)
+        canvas.off(event as never, settleSelection);
       for (const event of events) canvas.off(event as never, notify);
       offDocumentChange();
       listeners.clear();

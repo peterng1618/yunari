@@ -1,7 +1,9 @@
-import type {
-  Binding,
-  FabricGlobals,
-  SampleSource,
+import {
+  type AssetReference,
+  type Background,
+  type Binding,
+  type FabricGlobals,
+  type SampleSource,
 } from "@yunari/renderer-core";
 import {
   applyAuthoredText,
@@ -23,6 +25,7 @@ import {
 import { OBJECT_LOCK_CHANGED_EVENT } from "../object-lock-manager/index.js";
 import type { TypePresetFontActions } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
+import { backgroundColumn, writeBackgroundField } from "./background-column.js";
 import { createSelectionColumnRoot } from "./column.js";
 import { glassRefusal, writeGlassField } from "./glass.js";
 import { createInspectorRoot } from "./inspector.js";
@@ -61,6 +64,7 @@ import {
   type RunEdits,
   readField,
   type SelectionEdits,
+  type SelectionView,
 } from "./view.js";
 
 /**
@@ -88,6 +92,10 @@ export interface SelectionInspector {
   setGlobals(next: FabricGlobals | undefined): void;
   /** The document's language changed, so a formatted preview may have too. */
   setLocale(next: string | undefined): void;
+  /** Unmounts the three trees and detaches the column. A host that replaces the
+   *  inspector needs this: a portal is removed against the container it was
+   *  opened in, and a detached container makes that removal throw. */
+  destroy(): void;
 }
 
 interface SelectionInspectorOptions {
@@ -156,6 +164,22 @@ interface SelectionInspectorOptions {
    * answer rather than a failure.
    */
   readonly favoritesClient?: FavoritesClient;
+  /**
+   * Whether the shell's selection is the background layer. The background is no
+   * Fabric object, so this is the only way the column can describe it, and the
+   * shell is the one owner of the flag (`EditorShellBridge.backgroundSelected`).
+   */
+  readonly backgroundSelected?: () => boolean;
+  /**
+   * The live background, pulled rather than held: it is envelope state the
+   * document owns, and a copy taken when the panel was built would go stale on
+   * the first write.
+   */
+  readonly background?: () => Background | undefined;
+  /** The declared pictures the background's media field offers. */
+  readonly assets?: () => readonly AssetReference[];
+  /** Writes a whole background through the document, which owns the envelope. */
+  readonly onBackgroundChange?: (next: Background | undefined) => void;
   /** Opens the finder on Fonts, where the catalogue now lives. Absent in a
    *  panel built without the shell's finder. */
   readonly onOpenFontPicker?: () => void;
@@ -226,6 +250,17 @@ export function createSelectionInspector(
    */
   let targetRevision = 0;
   let described: FabricObject | undefined;
+
+  /**
+   * The revision the background's column is published at. The background is
+   * envelope state rather than a Fabric object, so it cannot share
+   * `targetRevision`: this moves when the subject becomes the background and
+   * after every commit, which is what re-keys the rows and discards a draft
+   * written against the value that has since changed.
+   */
+  let backgroundRevision = 0;
+  /** Whether the previous publish described the background. */
+  let describingBackground = false;
 
   const objectById = (id: unknown): FabricObject | undefined => {
     if (typeof id !== "string") {
@@ -435,6 +470,21 @@ export function createSelectionInspector(
   };
 
   /**
+   * A flip is Fabric's own property on the object, so it is written where every
+   * other object field is. A group member is its own object, so it mirrors alone.
+   */
+  const writeFlip = (
+    object: FabricObject,
+    axis: "flipX" | "flipY",
+    value: string | number | boolean,
+  ): boolean => {
+    if (typeof value !== "boolean") return false;
+    object.set(axis, value);
+    object.setCoords();
+    return true;
+  };
+
+  /**
    * One field, written by the owner that owns it: the funnel a slider's preview
    * and its release share, so the two cannot take different routes to the
    * document (`vg-254`).
@@ -455,6 +505,8 @@ export function createSelectionInspector(
       return true;
     }
     if (fieldId === "opacity") return writeOpacity(object, value);
+    if (fieldId === "flipX" || fieldId === "flipY")
+      return writeFlip(object, fieldId, value);
     if (GEOMETRY_KEYS.has(fieldId)) {
       write(object, fieldId as GeometryKey, value as number);
       return true;
@@ -532,6 +584,22 @@ export function createSelectionInspector(
     return writeField(object, fieldId, value, settled);
   };
 
+  /** Hands a whole background to the document, which owns the envelope. The
+   *  field's own rule is `writeBackgroundField`'s, beside the column that
+   *  projects it; `undefined` is the model refusing the value. A build with no
+   *  write port is no more able to write than a refused value is, so it reports
+   *  the same `false` rather than a success that changed nothing. */
+  const applyBackground = (
+    fieldId: string,
+    value: string | number | boolean,
+  ): boolean => {
+    const next = writeBackgroundField(options.background?.(), fieldId, value);
+    if (next === undefined || options.onBackgroundChange === undefined)
+      return false;
+    options.onBackgroundChange(next);
+    return true;
+  };
+
   /**
    * The column's three write routes, on one funnel.
    *
@@ -539,9 +607,35 @@ export function createSelectionInspector(
    * writes the field and repaints without re-publishing the column, so the
    * control's moving value stays its own state; the cancel writes the start
    * value back and re-publishes once. Neither records a history entry.
+   *
+   * A `background.*` id is routed by prefix before the funnel is reached: the
+   * background is envelope state, not a Fabric object, so there is no object
+   * for `writeField` to write.
    */
   const edits: SelectionEdits = {
     commit(expectedRevision, fieldId, value) {
+      // Routed by prefix, so a background field can never reach `writeField`'s
+      // Fabric path: there is no object for it to write.
+      if (fieldId.startsWith("background.")) {
+        if (
+          expectedRevision !== backgroundRevision ||
+          options.backgroundSelected?.() !== true
+        ) {
+          render();
+          return false;
+        }
+        if (!applyBackground(fieldId, value)) {
+          editor.errorManager.warn(
+            "controls",
+            uiCopy.inspectorFields.invalidValue,
+          );
+          render();
+          return false;
+        }
+        backgroundRevision += 1;
+        render();
+        return true;
+      }
       if (!applyField(expectedRevision, fieldId, value, true)) {
         render();
         return false;
@@ -551,11 +645,15 @@ export function createSelectionInspector(
       return true;
     },
     preview(expectedRevision, fieldId, value) {
+      // The background's controls commit on change: there is no gesture whose
+      // in-flight value would be previewed.
+      if (fieldId.startsWith("background.")) return false;
       if (!applyField(expectedRevision, fieldId, value, false)) return false;
       editor.canvas.requestRenderAll();
       return true;
     },
     cancelPreview(expectedRevision, fieldId, value) {
+      if (fieldId.startsWith("background.")) return;
       if (!applyField(expectedRevision, fieldId, value, false)) return;
       editor.canvas.requestRenderAll();
       render();
@@ -746,12 +844,59 @@ export function createSelectionInspector(
   };
 
   /**
+   * Publishes the background's column. Its sections are `backgroundColumn`'s
+   * values, exactly the shape `perKindColumn` returns, so the same section root
+   * renders them and the background is not a lesser surface. There is no lead:
+   * the layer has no arrange actions and no glass refusal to carry.
+   */
+  const renderBackground = (): void => {
+    if (!describingBackground) {
+      describingBackground = true;
+      backgroundRevision += 1;
+    }
+
+    const view: SelectionView = {
+      targetRevision: backgroundRevision,
+      subject: {
+        name: uiCopy.panels.layerKinds.background,
+        kind: "background",
+        key: undefined,
+      },
+      locked: false,
+      sections: backgroundColumn({
+        background: options.background?.(),
+        assets: options.assets?.() ?? [],
+        globals,
+      }),
+    };
+
+    column.publish(view, edits);
+    lead.publish({ glassRefusal: undefined, arrange: [] }, runArrange);
+    sectionColumn.publish(
+      view,
+      edits,
+      runEdits,
+      chartEdits(),
+      cropEdits,
+      fontEdits,
+    );
+  };
+
+  /**
    * Projects the described object and publishes it to React. Every row, the
    * reveal a section may carry and the lead's two questions are the roots' to
    * render — there is nothing left for this module to mount into a rendered
    * container.
    */
   const render = (): void => {
+    // The background is no Fabric object: `target()` has nothing to describe
+    // for it, so the branch is decided before the Fabric path is entered.
+    if (options.backgroundSelected?.() === true) {
+      renderBackground();
+      return;
+    }
+    describingBackground = false;
+
     const object = target();
     if (object !== described) {
       described = object;
@@ -837,6 +982,12 @@ export function createSelectionInspector(
     setLocale(next) {
       locale = next;
       render();
+    },
+    destroy() {
+      column.destroy();
+      lead.destroy();
+      sectionColumn.destroy();
+      root.remove();
     },
   };
 }

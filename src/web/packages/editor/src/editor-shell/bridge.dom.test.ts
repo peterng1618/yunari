@@ -598,12 +598,14 @@ it("expands the entered group in the projection, so the panel agrees with the ca
     groupingManager: { groupContext: () => entered },
   });
 
+  // The background row is appended to every projection, so the group's rows
+  // are the ones before it.
   const ids = (): readonly string[] =>
     bridge.layers().map((row: { id: string }) => row.id);
-  expect(ids()).toEqual(["group"]);
+  expect(ids()).toEqual(["group", "$background"]);
 
   entered = [group];
-  expect(ids()).toEqual(["group", "child"]);
+  expect(ids()).toEqual(["group", "child", "$background"]);
   expect(
     bridge.layers().find((row: { id: string }) => row.id === "group")
       ?.collapsed,
@@ -613,7 +615,7 @@ it("expands the entered group in the projection, so the panel agrees with the ca
   // is derived, not recorded, so a group the author had opened themselves is
   // still open when they come back out of some *other* group.
   entered = [];
-  expect(ids()).toEqual(["group"]);
+  expect(ids()).toEqual(["group", "$background"]);
 });
 
 it("enters the group a row names, so its children become the reachable rows", () => {
@@ -632,14 +634,21 @@ it("enters the group a row names, so its children become the reachable rows", ()
   });
 
   // Shut until entered, because a group is the default view state (§67).
-  expect(bridge.layers().map((row) => row.id)).toEqual(["group"]);
+  expect(bridge.layers().map((row) => row.id)).toEqual([
+    "group",
+    "$background",
+  ]);
   bridge.enterGroup("group");
 
   expect(enterGroup).toHaveBeenCalledWith({ object: group });
   // Asserted through the projection the panel reads, not through the manager:
   // the part the author is inside is a row now, on one click from the tree.
   expect(bridge.groupContext()).toEqual(["group"]);
-  expect(bridge.layers().map((row) => row.id)).toEqual(["group", "child"]);
+  expect(bridge.layers().map((row) => row.id)).toEqual([
+    "group",
+    "child",
+    "$background",
+  ]);
 });
 
 it("enters the group a nested row names, not the group that owns it", () => {
@@ -696,7 +705,10 @@ it("enters nothing for an id the tree no longer holds", () => {
 
   expect(enterGroup).not.toHaveBeenCalled();
   expect(bridge.groupContext()).toEqual([]);
-  expect(bridge.layers().map((row) => row.id)).toEqual(["group"]);
+  expect(bridge.layers().map((row) => row.id)).toEqual([
+    "group",
+    "$background",
+  ]);
 });
 
 it("enters nothing for a row that is not a group", () => {
@@ -750,15 +762,15 @@ it("leaves the entered group, and leaves an empty context alone", () => {
   // republishes, as `selectLayer` does for a selection it refused.
   bridge.exitGroup();
   expect(bridge.groupContext()).toEqual([]);
-  expect(rows()).toEqual(["group"]);
+  expect(rows()).toEqual(["group", "$background"]);
 
   entered = [group];
-  expect(rows()).toEqual(["group", "child"]);
+  expect(rows()).toEqual(["group", "child", "$background"]);
   bridge.exitGroup();
 
   expect(exitGroup).toHaveBeenCalledTimes(2);
   expect(bridge.groupContext()).toEqual([]);
-  expect(rows()).toEqual(["group"]);
+  expect(rows()).toEqual(["group", "$background"]);
 });
 
 it("reveals a hidden ancestor path but hides only the requested object", () => {
@@ -813,12 +825,22 @@ it("keeps collapse in the bridge, and opens a group shut to begin with", () => {
   // Shut on open, because a group is the default rather than a state the shell
   // has to record (§67). The flag still lives here, so a remount keeps what the
   // author opened rather than re-asking them.
-  expect(bridge.layers().map((row) => row.id)).toEqual(["group"]);
+  expect(bridge.layers().map((row) => row.id)).toEqual([
+    "group",
+    "$background",
+  ]);
   expect(bridge.layers()[0]?.collapsed).toBe(true);
   bridge.setCollapsed("group", false);
-  expect(bridge.layers().map((row) => row.id)).toEqual(["group", "child"]);
+  expect(bridge.layers().map((row) => row.id)).toEqual([
+    "group",
+    "child",
+    "$background",
+  ]);
   bridge.setCollapsed("group", true);
-  expect(bridge.layers().map((row) => row.id)).toEqual(["group"]);
+  expect(bridge.layers().map((row) => row.id)).toEqual([
+    "group",
+    "$background",
+  ]);
 });
 
 it("notifies subscribers when a layer command changes the projection", () => {
@@ -1310,4 +1332,105 @@ it("reorders inside a group without lifting the child out of it", () => {
   expect(ids(group.getObjects())).toEqual(["peer", "child"]);
   expect(child.group).toBe(group);
   expect(saveState).toHaveBeenCalledTimes(1);
+});
+
+/** A canvas stub whose active object actually moves, so selecting the
+ *  background has to clear it rather than merely not set it. */
+function selectionCanvas(initial: FabricObject | undefined): {
+  readonly canvas: Record<string, unknown>;
+  readonly active: () => FabricObject | undefined;
+} {
+  let active = initial;
+  return {
+    canvas: {
+      getActiveObject: () => active,
+      setActiveObject: (object: FabricObject) => {
+        active = object;
+      },
+      discardActiveObject: () => {
+        active = undefined;
+      },
+    },
+    active: () => active,
+  };
+}
+
+it("selecting the background clears the Fabric selection", () => {
+  const rect = new Rect({ id: "rect", width: 10, height: 10 });
+  const { canvas: stub, active } = selectionCanvas(rect);
+  const { bridge } = bridgeFor(rect, {}, {}, stub as Record<string, unknown>);
+
+  bridge.selectLayer("$background");
+
+  expect(active()).toBeUndefined();
+  expect(bridge.backgroundSelected()).toBe(true);
+  expect(bridge.snapshot().activeKind).toBe("background");
+  expect(bridge.snapshot().selectedCount).toBe(1);
+  expect(bridge.snapshot().locked).toBe(false);
+  // There is no Fabric subject behind the background, so the action gate sees
+  // no selection rather than a selection it cannot act on.
+  expect(bridge.target().kind).toBe("none");
+  expect(bridge.layers().at(-1)?.id).toBe("$background");
+  expect(bridge.layers().at(-1)?.selected).toBe(true);
+  // The row is not a scene object, so the object total does not move.
+  expect(bridge.snapshot().objectCount).toBe(1);
+});
+
+it("any object selection clears the background", () => {
+  const rect = new Rect({ id: "rect", width: 10, height: 10 });
+  const { canvas: stub, active } = selectionCanvas(rect);
+  const { bridge } = bridgeFor(rect, {}, {}, stub as Record<string, unknown>);
+
+  bridge.selectLayer("$background");
+  bridge.selectLayer("rect");
+
+  expect(bridge.backgroundSelected()).toBe(false);
+  expect(active()).toBe(rect);
+  expect(bridge.snapshot().activeKind).toBe("object");
+  expect(bridge.layers().at(-1)?.selected).toBe(false);
+});
+
+it("cannot be mixed into a multi-selection", () => {
+  const rect = new Rect({ id: "rect", width: 10, height: 10 });
+  const { canvas: stub, active } = selectionCanvas(rect);
+  let setActiveObject = 0;
+  const { bridge } = bridgeFor(
+    rect,
+    {},
+    {},
+    {
+      ...stub,
+      setActiveObject: (object: FabricObject) => {
+        setActiveObject += 1;
+        (stub.setActiveObject as (object: FabricObject) => void)(object);
+      },
+    },
+  );
+
+  bridge.selectLayers(["rect", "$background"]);
+
+  expect(bridge.backgroundSelected()).toBe(true);
+  expect(active()).toBeUndefined();
+  // The background alone, not a set: a gesture naming it never selects a
+  // Fabric object beside it.
+  expect(setActiveObject).toBe(0);
+  expect(bridge.snapshot().selectedCount).toBe(1);
+});
+
+it("a Fabric selection event clears the background", () => {
+  const { canvas: stub } = selectionCanvas(undefined);
+  const { bridge, canvas } = bridgeFor(
+    undefined,
+    {},
+    {},
+    stub as Record<string, unknown>,
+  );
+  bridge.selectLayer("$background");
+  expect(bridge.backgroundSelected()).toBe(true);
+
+  // A canvas drag or a programmatic selection is Fabric's own event, not a
+  // `selectLayers` call, and it clears the flag the same way.
+  canvas.fire("selection:created");
+  expect(bridge.backgroundSelected()).toBe(false);
+  expect(bridge.snapshot().activeKind).toBe("none");
 });

@@ -128,8 +128,10 @@ function envelope(kinds: readonly Kind[]) {
       width: ARTBOARD.width,
       height: ARTBOARD.height,
       contentFit: "contain" as const,
-      background: { ref: "palette.none" as const },
-      backgroundMedia: { assetId: "stripes", fit: "theme" as const },
+    },
+    background: {
+      color: { ref: "palette.none" as const },
+      media: { assetId: "stripes", bounds: "theme" as const },
     },
     globals: {
       palette: {

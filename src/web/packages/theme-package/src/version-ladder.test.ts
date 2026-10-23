@@ -375,42 +375,38 @@ describe("classifyThemeChange — metadata tags", () => {
   });
 });
 
-describe("classifyThemeChange — artboard background media", () => {
-  const artboard = (backgroundMedia?: unknown) =>
-    ({
-      width: 1280,
-      height: 720,
-      contentFit: "contain",
-      ...(backgroundMedia === undefined ? {} : { backgroundMedia }),
-    }) as FabricThemeEnvelope["artboard"];
+describe("classifyThemeChange — the background layer", () => {
+  const media = (bounds: "theme" | "display") => ({
+    media: { assetId: "hero", bounds },
+  });
   it("is minor when background media is added", () => {
-    const next = base({
-      artboard: artboard({ assetId: "hero", fit: "theme" }),
-    });
+    const next = base({ background: media("theme") });
     expect(classifyThemeChange(base(), next)).toEqual({
       level: "minor",
       reasons: ["backdrop"],
     });
   });
   it("is minor when background media is removed", () => {
-    const before = base({
-      artboard: artboard({ assetId: "hero", fit: "theme" }),
-    });
+    const before = base({ background: media("theme") });
     expect(classifyThemeChange(before, base())).toEqual({
       level: "minor",
       reasons: ["backdrop"],
     });
   });
   it("is minor when background media changes", () => {
-    const before = base({
-      artboard: artboard({ assetId: "hero", fit: "theme" }),
-    });
-    const after = base({
-      artboard: artboard({ assetId: "hero", fit: "display" }),
-    });
+    const before = base({ background: media("theme") });
+    const after = base({ background: media("display") });
     expect(classifyThemeChange(before, after)).toEqual({
       level: "minor",
       reasons: ["backdrop"],
+    });
+  });
+  it("is patch when the background colour changes", () => {
+    const before = base({ background: { color: { value: "#fff" } } });
+    const after = base({ background: { color: { value: "#000" } } });
+    expect(classifyThemeChange(before, after)).toEqual({
+      level: "patch",
+      reasons: ["content"],
     });
   });
 });
@@ -446,26 +442,6 @@ describe("classifyThemeChange — metadata fields", () => {
     expect(classifyThemeChange(first, second)).toEqual({
       level: "patch",
       reasons: ["metadata"],
-    });
-  });
-  it("is patch when artboard.background changes", () => {
-    const before = base({
-      artboard: {
-        width: 1280,
-        height: 720,
-        background: { value: "#fff" },
-      },
-    });
-    const after = base({
-      artboard: {
-        width: 1280,
-        height: 720,
-        background: { value: "#000" },
-      },
-    });
-    expect(classifyThemeChange(before, after)).toEqual({
-      level: "patch",
-      reasons: ["content"],
     });
   });
 });

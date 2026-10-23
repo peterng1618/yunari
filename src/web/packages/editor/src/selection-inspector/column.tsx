@@ -58,6 +58,18 @@ import type {
  * re-publish of the same object keeps the row — and the caret — in place.
  */
 
+/** A stored fraction, shown as a percentage. The multiply can land a hair off
+ *  (`1.4 × 100` is not exactly 140), so the display is rounded rather than
+ *  printing the noise; the commit divides back, so the boundary gets the
+ *  fraction the model stores. */
+function shownNumber(percent: boolean | undefined, value: number): number {
+  return percent === true ? Math.round(value * 100 * 1e6) / 1e6 : value;
+}
+
+function committedNumber(percent: boolean | undefined, value: number): number {
+  return percent === true ? value / 100 : value;
+}
+
 /** The revision guard makes every write carry the view it was projected from. */
 function fieldControl(
   field: FieldView,
@@ -92,10 +104,17 @@ function fieldControl(
           label={field.label}
           halves={field.halves.map((half) => ({
             label: half.label,
-            value: half.value,
+            value: shownNumber(half.percent, half.value),
             data: half.data,
+            // The number is already the percentage; the suffix is what says so.
+            ...(half.percent === true ? { unit: "%" } : {}),
             ...(half.integer === undefined ? {} : { integer: half.integer }),
-            onCommit: (value: number) => edits.commit(revision, half.id, value),
+            onCommit: (value: number) =>
+              edits.commit(
+                revision,
+                half.id,
+                committedNumber(half.percent, value),
+              ),
           }))}
         />
       );
@@ -104,11 +123,14 @@ function fieldControl(
         <ControlNumber
           label={field.label}
           data={field.data}
-          value={field.value}
-          onCommit={(value) => commit(value)}
+          value={shownNumber(field.percent, field.value)}
+          onCommit={(value) => commit(committedNumber(field.percent, value))}
           {...(field.min === undefined ? {} : { min: field.min })}
           {...(field.max === undefined ? {} : { max: field.max })}
-          {...(field.unit === undefined ? {} : { unit: field.unit })}
+          {...((field.unit ?? (field.percent === true ? "%" : undefined)) ===
+          undefined
+            ? {}
+            : { unit: field.unit ?? "%" })}
           {...(field.integer === undefined ? {} : { integer: field.integer })}
           {...refused}
         />

@@ -251,7 +251,7 @@ settings gear pinned to the foot. **Four slots:**
 | Composition | stack | The scene tree, and the object actions that act on it |
 | Add | plus | Everything insertable, and placing a file |
 | Tokens | palette | The theme's paints and type presets — created and edited here |
-| Document | page | Artboard, background, metadata, references |
+| Document | page | Artboard, metadata |
 
 **At most one slot is open at a time.** Asking for the open slot closes it;
 asking for another replaces it. The pane occupies its own layout track beside

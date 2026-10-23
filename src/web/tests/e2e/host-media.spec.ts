@@ -48,8 +48,10 @@ const envelope = (id: string) => ({
     width: ARTBOARD.width,
     height: ARTBOARD.height,
     contentFit: "cover" as const,
-    background: { ref: "palette.none" as const },
-    backgroundMedia: { assetId: "loop", fit: "theme" as const },
+  },
+  background: {
+    color: { ref: "palette.none" as const },
+    media: { assetId: "loop", bounds: "theme" as const },
   },
   globals: {
     palette: {
@@ -707,14 +709,17 @@ test.describe("the video frame callback on the real player", () => {
       "and the product's chain ended, so nothing was delivered in this window",
     ).toBe(0);
     // **The claim.** The display keeps repainting on its own cadence, so the
-    // render count does not collapse. 0.4 is a floor chosen to hold on both
-    // ends of the machine range rather than a measured ratio: on this host the
-    // two phases are within 30 % of each other, and on a host whose
-    // compositor runs faster than the 30 Hz cap the ratio approaches 0.5.
+    // render count does not collapse to the frames' — it falls back to the
+    // loop's. **The two counts are not the same kind of number**: this page is
+    // served to loopback, which resolves to the machine's own display, whose
+    // rate is 1 fps by default (`chartFpsFor`), while phase A also renders once
+    // per delivered video frame (~30/s). Comparing a ratio would measure the
+    // video's cadence, not the loop's. Three seconds at 1 fps owes about three
+    // renders; `>= 2` is that budget with one window of slack.
     expect(
       idle.renders,
       `the player still repaints with no video frames delivered (${idle.renders} against ${armed.renders} armed)`,
-    ).toBeGreaterThan(armed.renders * 0.4);
+    ).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -865,10 +870,11 @@ test.describe("changing media on the real player", () => {
     // The video is running and the badge is not on screen.
     expect(await compositedInk(page, BADGE_INK)).toBeLessThan(200);
 
-    // **The replacement.** `updateArtboard` is the scene handle's own entry for
-    // a document-level artboard change — `ScenePlan` cannot carry one. This is
-    // the editor's replacement path reached on the player's mount, so the
-    // player's resolver builds the *new* asset's URL and the host serves it.
+    // **The replacement.** Two entries now, because the background is its own
+    // state: `updateArtboard` takes the document's geometry (its media is no
+    // longer an artboard field), and `updateBackground` takes the authored bag.
+    // This is the editor's replacement path reached on the player's mount, so
+    // the player's resolver builds the *new* asset's URL and the host serves it.
     const swapped = await page.evaluate(
       async ([panelId, left, top, width, height]) => {
         const handle = (
@@ -876,20 +882,22 @@ test.describe("changing media on the real player", () => {
             yunari?: {
               handle: {
                 updateArtboard(artboard: unknown): void;
+                updateBackground(background: unknown): void;
                 canvas: { getObjects(): Array<{ get(n: string): unknown }> };
               };
             };
           }
         ).yunari?.handle;
         if (handle === undefined) throw new Error("the player has not mounted");
-        const artboard = {
+        handle.updateArtboard({
           width: 640,
           height: 360,
           contentFit: "cover",
-          background: { ref: "palette.none" },
-          backgroundMedia: { assetId: "badge", fit: "display" },
-        };
-        handle.updateArtboard(artboard);
+        });
+        handle.updateBackground({
+          color: { ref: "palette.none" },
+          media: { assetId: "badge", bounds: "display" },
+        });
         const layer = document.querySelector("[data-yunari-background-media]");
         const image = layer?.querySelector("img");
         for (let attempt = 0; attempt < 100; attempt += 1) {

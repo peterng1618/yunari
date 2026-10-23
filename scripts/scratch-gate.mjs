@@ -112,9 +112,21 @@ function posix(p) {
 }
 
 function under(path, root) {
-  const p = posix(resolve(path)).toLowerCase();
-  const r = posix(resolve(root)).toLowerCase().replace(/\/$/, "");
+  const p = posix(path).toLowerCase().replace(/\/$/, "");
+  const r = posix(root).toLowerCase().replace(/\/$/, "");
   return p === r || p.startsWith(`${r}/`);
+}
+
+/**
+ * A Windows path is judged with Windows rules on every host. A session on the
+ * runner or on a POSIX machine still reads hooks written for `D:\`, and the
+ * host `path` module would otherwise resolve `D:\foo` as a *relative* segment
+ * of the repository.
+ */
+const WINDOWS_ABSOLUTE = /^(?:[A-Za-z]:[\\/]|\\\\)/;
+
+function absolute(path) {
+  return WINDOWS_ABSOLUTE.test(path) ? path : resolve(ROOT, path);
 }
 
 /**
@@ -123,7 +135,7 @@ function under(path, root) {
  */
 function refuse(path) {
   if (typeof path !== "string" || path.trim() === "") return undefined;
-  const target = resolve(ROOT, path);
+  const target = absolute(path);
 
   if (!under(target, ROOT)) {
     if (SANCTIONED.some((root) => under(target, root))) return undefined;
@@ -259,8 +271,8 @@ function selfTest() {
     ["D:\\yunari-tester\\aspect.mjs", true],
     ["D:\\scratch\\fontpicker-mut\\mutate.mjs", true],
     ["C:\\tmp\\yunari\\probe.mjs", false],
-    ["C:\\Users\\peter\\AppData\\Local\\Temp\\claude\\x\\probe.mjs", false],
-    ["C:\\Users\\peter\\.claude\\projects\\x\\memory\\note.md", false],
+    [join(tmpdir(), "claude", "x", "probe.mjs"), false],
+    [join(homedir(), ".claude", "projects", "x", "memory", "note.md"), false],
     ["C:\\Users\\peter\\Documents\\probe.mjs", true],
   ];
   let failed = 0;

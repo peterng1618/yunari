@@ -38,9 +38,9 @@ export interface FixtureTheme {
   readonly version?: string;
   readonly width?: number;
   readonly height?: number;
-  /** The artboard's paint, as a document stores it. **Absent is a document with
-   *  no paint at all**, which the record reads as `unclassified` — the one
-   *  colour mode no facet offers and no pill is drawn for. */
+  /** The document's background paint, as the envelope stores it. **Absent is a
+   *  document with no paint at all**, which the record reads as `unclassified` —
+   *  the one colour mode no facet offers and no pill is drawn for. */
   readonly ground?: string;
   /** What the theme binds, keyed the way a document keys them. */
   readonly bindings?: FabricThemeEnvelope["bindings"];
@@ -59,10 +59,11 @@ export function fixtureEnvelope(theme: FixtureTheme): FabricThemeEnvelope {
     artboard: {
       width: theme.width ?? 1920,
       height: theme.height ?? 1080,
-      ...(theme.ground === undefined
-        ? {}
-        : { background: { value: theme.ground } }),
     },
+    // The background is the envelope's own layer, not the artboard's paint.
+    ...(theme.ground === undefined
+      ? {}
+      : { background: { color: { value: theme.ground } } }),
     metadata: {
       name: theme.name ?? theme.id,
       themeLanguage: "en",

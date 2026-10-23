@@ -175,7 +175,13 @@ export function PresetList(props: PresetListProps): React.JSX.Element {
           edit below never claims to have applied it to the selection. */}
       <Binding
         presetId={stage.selectionPresetId}
-        hasSelection={stage.selectedCount > 0}
+        // The background is a layer, not an object with a type: it has no
+        // preset, so the readout says nothing is selected rather than naming a
+        // failed lookup. Equivalent to `target().kind !== "none"`, which is the
+        // gate the layer footer uses.
+        hasSelection={
+          stage.selectedCount > 0 && stage.activeKind !== "background"
+        }
         activeKind={stage.activeKind}
         presets={presets}
       />

@@ -30,7 +30,7 @@ const KNOWN_KEYS = {
     "tags",
     "remixOf",
   ],
-  artboard: ["width", "height", "background", "contentFit", "backgroundMedia"],
+  artboard: ["width", "height", "contentFit"],
   // `format` and `timeZone` are validated below and authored by the editor's
   // runs panel; omitting them here refused the key before that code ran.
   binding: [
@@ -93,6 +93,7 @@ const ENVELOPE_KEYS = {
     "id",
     "metadata",
     "artboard",
+    "background",
     "globals",
     "assets",
     "bindings",
@@ -100,7 +101,15 @@ const ENVELOPE_KEYS = {
     "scene",
   ],
   globals: ["palette", "typePresets"],
-  backgroundMedia: ["assetId", "fit"],
+  background: ["color", "media"],
+  backgroundMedia: [
+    "assetId",
+    "bounds",
+    "offsetX",
+    "offsetY",
+    "flipX",
+    "flipY",
+  ],
 } as const;
 
 export type EnvelopeKeyBag = keyof typeof ENVELOPE_KEYS;
@@ -118,8 +127,12 @@ export function nearestKey(
   key: string,
   allowed: readonly string[],
 ): string | undefined {
+  // Provisional budget: a suggestion must be a plausible typo of *this* key, not
+  // merely the closest of a short list. The removed media key `fit` is three
+  // edits from `flipX`, and offering the mirror in place of "this key is gone"
+  // misleads the author.
   let best: string | undefined;
-  let bestDistance = 4;
+  let bestDistance = Math.max(1, Math.floor(key.length / 2)) + 1;
 
   for (const candidate of allowed) {
     const distance = editDistance(key.toLowerCase(), candidate.toLowerCase());

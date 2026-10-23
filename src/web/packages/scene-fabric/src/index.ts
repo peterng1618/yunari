@@ -30,7 +30,6 @@ export {
   type BackgroundMediaHandle,
   type BackgroundMediaOptions,
   type BackgroundMediaSource,
-  mediaDrawArgs,
   mountBackgroundMedia,
 } from "./background-media.js";
 export type {

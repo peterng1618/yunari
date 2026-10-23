@@ -39,6 +39,7 @@ import { normalizeVideoCommand } from "./themes/normalize-video.js";
 import { createThemeStore } from "./themes/store.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
 import { createSecureOrigin, type SecureOrigin } from "./tls/authority.js";
+import { createWallpaperEngineSource } from "./wallpaper-engine/source.js";
 
 /** Launcher: bind, verify reachability, then print/open URLs. */
 
@@ -276,6 +277,9 @@ export async function run(argv: readonly string[]): Promise<number> {
       admin: path.join(packagesDir, "host", "public"),
     },
     themeStore: createThemeStore(themesDir),
+    // The Steam library on this PC, read on demand: the install is located per
+    // listing, because a library can appear while the editor is open.
+    wallpaperEngine: createWallpaperEngineSource(),
     // A thumbnail is this machine's rendering of a theme, so it lives in that
     // theme's own folder rather than in a directory of its own. The editor
     // writes it after the save that replaced the folder, which is why the

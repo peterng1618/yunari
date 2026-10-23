@@ -32,6 +32,8 @@ function roleText(role: LayerRole): string {
       return uiCopy.panels.layerRoles.shape();
     case "image":
       return uiCopy.panels.layerRoles.image();
+    case "background":
+      return uiCopy.panels.layerRoles.background();
     case "group":
       return uiCopy.panels.layerRoles.group(role.unit);
     case "chart":
@@ -396,8 +398,14 @@ export function CompositionPane({
           // Entry is not a toggle: the entered group carries the way *out*, so
           // the row the author is inside draws this one without being attended.
           const isEntered = entered.includes(row.id);
+          // The background is not a scene object: it has no name, no children
+          // and no authored state, so the row drops every gesture and control
+          // that would write one. Selecting is all it offers.
+          const isBackground = row.kind === "background";
           const showEnter =
-            expandable && (attended || row.selected || isEntered);
+            !isBackground &&
+            expandable &&
+            (attended || row.selected || isEntered);
           const entry = isEntered ? uiCopy.panels.leave : uiCopy.panels.enter;
           return (
             <div
@@ -419,7 +427,15 @@ export function CompositionPane({
               // boolean `data-*` as the string "false", which is the value the
               // stylesheet rule dims on, and a tree greyed out on open would
               // claim every selectable top-level layer is unreachable.
-              data-context={context.size > 0 ? context.has(row.id) : undefined}
+              // The background sits outside every group, so entering one must
+              // not dim it: it stays reachable.
+              data-context={
+                isBackground
+                  ? undefined
+                  : context.size > 0
+                    ? context.has(row.id)
+                    : undefined
+              }
               // A group is a container, and a bold name says so without a mark
               // repeating it. The stylesheet dims on this rather than on a
               // class, so the state survives the row's own class list changing.
@@ -456,9 +472,11 @@ export function CompositionPane({
                 setFocused(undefined);
               }}
               // A row being renamed is a text field: its own drag gesture is
-              // selecting text, not restacking the layer.
-              draggable={editing !== row.id}
+              // selecting text, not restacking the layer. The background has no
+              // position to restack and is never a drop anchor.
+              draggable={!isBackground && editing !== row.id}
               onDragStart={(event) => {
+                if (isBackground) return;
                 // Chrome will not start a drag without payload, and one of our
                 // own rows is the only thing that may start one.
                 event.dataTransfer.setData(
@@ -482,6 +500,7 @@ export function CompositionPane({
               // drop indicator at this row is the same thing as a pointer aimed
               // between this row and the one above it.
               onDragOver={(event) => {
+                if (isBackground) return;
                 const active = drag.current;
                 if (active === undefined) return;
                 if (active.anchor === row.id) return;
@@ -545,6 +564,7 @@ export function CompositionPane({
                 );
               }}
               onDrop={(event) => {
+                if (isBackground) return;
                 const active = drag.current;
                 const anchor = active?.anchor;
                 unmark();
@@ -552,7 +572,7 @@ export function CompositionPane({
                 event.preventDefault();
                 store.mutate(() => bridge?.moveLayer(active.from, anchor));
               }}
-              onDragEnd={unmark}
+              onDragEnd={isBackground ? undefined : unmark}
               style={
                 {
                   "--layer-depth": String(row.depth),
@@ -561,6 +581,7 @@ export function CompositionPane({
               }
               onClick={(event) => clickRow(event, row.id)}
               onDoubleClick={() => {
+                if (isBackground) return;
                 cancelled.current = false;
                 setEditing(row.id);
               }}
@@ -572,7 +593,10 @@ export function CompositionPane({
                 // No arrow-key focus movement: the window-level nudge handler
                 // owns the arrow keys, and two owners for one key would nudge an
                 // object and move focus on the same press.
-                if (event.key === "F2" || event.key === "Enter") {
+                if (
+                  !isBackground &&
+                  (event.key === "F2" || event.key === "Enter")
+                ) {
                   event.preventDefault();
                   cancelled.current = false;
                   setEditing(row.id);
@@ -732,20 +756,22 @@ export function CompositionPane({
                     )}
                   </RowIconButton>
                 ) : null}
-                <RowAffordances
-                  row={row}
-                  attended={attended}
-                  onToggleVisible={() =>
-                    store.mutate(() =>
-                      bridge?.setLayerVisible(row.id, !row.visible),
-                    )
-                  }
-                  onToggleLocked={() =>
-                    store.mutate(() =>
-                      bridge?.setLayerLocked(row.id, !row.locked),
-                    )
-                  }
-                />
+                {isBackground ? null : (
+                  <RowAffordances
+                    row={row}
+                    attended={attended}
+                    onToggleVisible={() =>
+                      store.mutate(() =>
+                        bridge?.setLayerVisible(row.id, !row.visible),
+                      )
+                    }
+                    onToggleLocked={() =>
+                      store.mutate(() =>
+                        bridge?.setLayerLocked(row.id, !row.locked),
+                      )
+                    }
+                  />
+                )}
               </span>
             </div>
           );

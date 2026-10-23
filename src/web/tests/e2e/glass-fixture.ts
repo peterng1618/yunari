@@ -94,10 +94,12 @@ export const GLASS_ENVELOPE = {
     width: GLASS_ARTBOARD.width,
     height: GLASS_ARTBOARD.height,
     contentFit: "contain" as const,
-    // Transparent, or the artboard paint would hide the media layer the glass
-    // has to sample, on screen and in the sampled region alike.
-    background: { ref: "palette.none" as const },
-    backgroundMedia: { assetId: "stripes", fit: "theme" as const },
+  },
+  // Transparent, or the background paint would hide the media layer the glass
+  // has to sample, on screen and in the sampled region alike.
+  background: {
+    color: { ref: "palette.none" as const },
+    media: { assetId: "stripes", bounds: "theme" as const },
   },
   globals: {
     palette: {

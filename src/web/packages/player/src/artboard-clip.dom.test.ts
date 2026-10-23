@@ -40,7 +40,10 @@ function envelope(): FabricThemeEnvelope {
     schemaVersion: 2,
     fabricVersion: "7.4.0",
     id: "clip-probe",
-    artboard: { ...ARTBOARD, background: "#112233" },
+    artboard: { ...ARTBOARD },
+    // The background is its own envelope section now, so revival is exercised
+    // with one present: `loadFromJSON` must not carry it onto the canvas.
+    background: { color: { value: "#112233" } },
     globals: { palette: {} },
     bindings: {},
     assets: [],
@@ -100,7 +103,7 @@ describe("reviving a hosted scene keeps the artboard", () => {
   });
 
   it("still clips to the artboard after the scene is revived", async () => {
-    const { scene } = mount();
+    const { element, scene } = mount();
 
     await reviveThemeEnvelope(scene.canvas, envelope());
 
@@ -115,6 +118,10 @@ describe("reviving a hosted scene keeps the artboard", () => {
       String(scene.canvas.backgroundColor),
       "a revived document's own fill covers the media layer",
     ).toBe("");
+    expect(
+      element.style.background,
+      "the background bag is the plan's to paint, not the revived scene's",
+    ).toBe("rgb(17, 34, 51)");
 
     scene.dispose();
   });

@@ -892,11 +892,11 @@ Four rules that keep the normalizer honest:
    resolution.** Artboard resolution moves — `§53` fit modes and the device-lens
    work were about a theme rendering at different shapes. A crop baked to today's
    artboard is silently wrong after an artboard edit, and re-normalizing costs a
-   generation. Offer `cover` and `contain`, default to preserving the source
-   aspect, and let the scene do the framing. `cover` is the one exception: the
-   author's explicit `Fill the artboard` press takes the artboard's aspect as its
-   target. The normalizer itself never guesses a target shape, and an artboard
-   edit is re-normalized by another explicit press.
+   generation. Preserve the source aspect and let the scene do the framing: the
+   background layer covers, crops and zooms the whole frame at render time
+   (`decisions/0095`), so the normalizer never bakes a crop. The `cover` / `Fill
+   the artboard` press is withdrawn — it threw away the pixels a later pan has to
+   move through, and it upscaled small sources to the cap.
 2. **Verify by probe; never re-encode to validate.** CI cannot re-encode
    deterministically across ffmpeg versions. The author normalizes locally and
    the store **probes** the result against the envelope, rejecting out-of-bounds

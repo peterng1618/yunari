@@ -23,6 +23,8 @@ import { CARD_LIBRARY, instantiateCard } from "../card-library.js";
 import { createNewFabricTheme } from "../new-fabric-theme.js";
 import { uiCopy } from "../ui-copy.js";
 import {
+  BACKGROUND_LAYER_ID,
+  backgroundRow,
   findById,
   type LayerKind,
   type LayerRole,
@@ -968,7 +970,9 @@ describe("the row's role, in the document's own terms", () => {
     // gap is a compile failure and not an unfilled field.
     const group = new Group([]);
     group.set("id", "group-1");
-    const examples: Record<LayerKind, FabricObject> = {
+    // The background is not a Fabric object, so the projection never returns it;
+    // the row is appended by the bridge instead.
+    const examples: Record<Exclude<LayerKind, "background">, FabricObject> = {
       text: new Textbox("hi", { id: "text-1" }),
       shape: new Rect({ id: "shape-1", width: 10, height: 10 }),
       chart: new YunariChart({
@@ -985,14 +989,14 @@ describe("the row's role, in the document's own terms", () => {
         height: 10,
       }),
     };
-    for (const kind of Object.keys(examples) as LayerKind[]) {
+    for (const kind of Object.keys(examples) as (keyof typeof examples)[]) {
       const rows = projectLayers({ ...base, root: [examples[kind]] });
       expect(rows[0]?.kind, kind).toBe(kind);
       expect(rows[0]?.role.kind, kind).toBe(kind);
     }
   });
 
-  it("keeps the five kind words out of the projection", () => {
+  it("keeps the six kind words out of the projection", () => {
     // Read from the source rather than from a rendered row: the assertion is
     // that the words have one owner, `uiCopy.panels.layerKinds`, and that a
     // private copy is not sitting beside the projection waiting to drift.
@@ -1003,13 +1007,16 @@ describe("the row's role, in the document's own terms", () => {
       resolve(dirname(fileURLToPath(import.meta.url)), "layer-tree.ts"),
       "utf8",
     );
-    expect(source).not.toMatch(/["'](Text|Shape|Chart|Group|Image)["']/);
+    expect(source).not.toMatch(
+      /["'](Text|Shape|Chart|Group|Image|Background)["']/,
+    );
     expect(uiCopy.panels.layerKinds).toEqual({
       text: "Text",
       shape: "Shape",
       chart: "Chart",
       group: "Group",
       image: "Image",
+      background: "Background",
     });
   });
 
@@ -1022,5 +1029,38 @@ describe("the row's role, in the document's own terms", () => {
     // the library would be a second owner of the unit's words, and it would make
     // a document written by another version read as one this build recognises.
     expect(source).not.toMatch(/card-library/);
+  });
+});
+
+describe("the background row", () => {
+  it("places the background last and below every object", () => {
+    // The bridge appends this row after the projection rather than projecting
+    // it, so nothing in the object tree can restack the bottom-most layer.
+    const rows = projectLayers({
+      ...base,
+      root: [new Rect({ id: "rect", width: 10, height: 10 })],
+    });
+    const withBackground = [...rows, backgroundRow({ selected: false })];
+    expect(BACKGROUND_LAYER_ID).toBe("$background");
+    expect(withBackground.at(-1)?.id).toBe("$background");
+    expect(withBackground.at(-1)?.kind).toBe("background");
+    expect(withBackground.at(-1)).toMatchObject({
+      depth: 0,
+      parentId: undefined,
+      hasChildren: false,
+      collapsed: false,
+      locked: false,
+    });
+  });
+
+  it("keeps the background row when the theme has no background at all", () => {
+    // The row is the layer, not the media: a theme with no background still
+    // has a bottom-most plane the author can select and configure.
+    expect(backgroundRow({ selected: false }).visible).toBe(true);
+  });
+
+  it("reads its selection from the flag rather than from Fabric", () => {
+    expect(backgroundRow({ selected: true }).selected).toBe(true);
+    expect(backgroundRow({ selected: false }).selected).toBe(false);
   });
 });

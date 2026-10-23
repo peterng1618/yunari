@@ -76,8 +76,8 @@ const envelope = {
     width: 640,
     height: 360,
     contentFit: "contain" as const,
-    background: { ref: "palette.paper" as const },
   },
+  background: { color: { ref: "palette.paper" as const } },
   globals: {
     palette: {
       // The immutable transparent token every package must carry.
@@ -204,6 +204,21 @@ async function readPublishedId(page: Page): Promise<string | null | undefined> {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Clear the host's published overlay.
+ *
+ * **The overlay outlives a browser context.** Playwright tears a context down
+ * by killing its pages, which does not run `pagehide`, so a test that published
+ * leaves the document up for the next one. A test about *this* editor closing
+ * has to start from the host holding nothing, or its poll can pass on what a
+ * closed tab published — and that editor's own clear is a no-op when it never
+ * PUT anything. `DELETE /api/publish` is the editor's own clear route;
+ * `/api/published` is the display's read and ignores the method.
+ */
+async function clearPublished(): Promise<void> {
+  await fetch(`${HOST}/api/publish`, { method: "DELETE" });
 }
 
 /** The artboard of the document the host serves for the published id, or
@@ -351,6 +366,12 @@ test.describe("the publish loop", () => {
   }) => {
     test.setTimeout(180_000);
 
+    // **Start from the host holding nothing.** Playwright's context teardown
+    // kills pages without running `pagehide`, so the previous test's overlay is
+    // still up here; cleared before this page exists, the id that appears after
+    // it can only be this tab's.
+    await clearPublished();
+
     await page.goto(`${HOST}/editor/`);
     await startPublishing(page);
 
@@ -434,6 +455,10 @@ test.describe("the publish loop", () => {
     page,
   }) => {
     test.setTimeout(180_000);
+
+    // The same clean host as the close test: the overlay is the host's, and an
+    // editor that never put anything up has nothing to take down.
+    await clearPublished();
 
     await page.goto(`${HOST}/editor/`);
     await startPublishing(page);

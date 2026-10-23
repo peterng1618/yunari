@@ -42,6 +42,7 @@ import { uiCopy } from "../ui-copy.js";
 import type { ViewportManager } from "../viewport-manager/index.js";
 import { DisplaySwitch } from "./display-switch.js";
 import {
+  BACKGROUND_GLYPH,
   CHART_BAR_GLYPH,
   CHART_GAUGE_GLYPH,
   CHART_LINE_GLYPH,
@@ -159,6 +160,7 @@ type Drawn = {
  *  that happens to draw only the ones somebody thought of. */
 const VOCABULARY: readonly Drawn[] = [
   { icon: STACK_GLYPH, size: 13 },
+  { icon: BACKGROUND_GLYPH, size: 13 },
   { icon: PAGE_GLYPH, size: 14 },
   { icon: PALETTE_GLYPH, size: 14 },
   { icon: PLUS_GLYPH, size: 15 },
@@ -192,7 +194,7 @@ const VOCABULARY: readonly Drawn[] = [
   { icon: TWISTY_GLYPHS.expanded, size: 13 },
 ];
 
-/** Every mark a row can carry, so all five arms are drawn — and the shape arm
+/** Every mark a row can carry, so all six arms are drawn — and the shape arm
  *  with a primitive of its own, since its glyph comes from `SHAPE_GLYPHS`
  *  rather than from the kind map. */
 const MARKS: readonly LayerMark[] = [
@@ -201,6 +203,7 @@ const MARKS: readonly LayerMark[] = [
   { kind: "shape", shape: "wedge" },
   { kind: "image" },
   { kind: "group" },
+  { kind: "background" },
 ];
 
 function row(over: Partial<LayerRow> = {}): LayerRow {
