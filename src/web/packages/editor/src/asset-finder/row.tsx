@@ -1,19 +1,26 @@
 import type { AssetResult } from "@yunari/renderer-core";
 import type * as React from "react";
+import { SourceMark } from "./source-mark.js";
 
-/** One asset in the grid: its picture, its name, the source that supplied it
- *  and the licence the author takes on by choosing it. */
+/** One asset in the grid: its picture, its name, and the source that supplied
+ *  it, marked by its own logo so a mixed grid says where each row came from. */
 export function AssetRow({
   result,
+  sourceId,
   sourceLabel,
   selected,
   onSelect,
 }: {
   readonly result: AssetResult;
+  readonly sourceId: string;
   readonly sourceLabel: string;
   readonly selected: boolean;
   readonly onSelect: () => void;
 }): React.JSX.Element {
+  // An image's mark rides beside its photographer — the author names the row
+  // — while an icon's rides beside its name, which is all an icon has.
+  const markWithAuthor =
+    result.kind === "image" && result.subtitle !== undefined;
   return (
     <button
       type="button"
@@ -57,15 +64,25 @@ export function AssetRow({
           />
         )}
       </span>
-      <span className="truncate text-sm">{result.name}</span>
+      <span className="flex min-w-0 items-center gap-[var(--space-6)]">
+        <span className="truncate text-sm">{result.name}</span>
+        {markWithAuthor ? null : (
+          <span className="ml-auto flex-none">
+            <SourceMark id={sourceId} label={sourceLabel} />
+          </span>
+        )}
+      </span>
       {/* The source's own second word: an icon style, or a photographer. */}
       {result.subtitle === undefined ? null : (
-        <span className="truncate text-xs text-faint">{result.subtitle}</span>
+        <span className="flex min-w-0 items-center gap-[var(--space-6)]">
+          <span className="truncate text-xs text-faint">{result.subtitle}</span>
+          {markWithAuthor ? (
+            <span className="ml-auto flex-none">
+              <SourceMark id={sourceId} label={sourceLabel} />
+            </span>
+          ) : null}
+        </span>
       )}
-      <span className="flex items-center justify-between gap-[var(--space-6)] text-xs text-muted">
-        <span className="truncate">{sourceLabel}</span>
-        <span className="shrink-0">{result.licence}</span>
-      </span>
     </button>
   );
 }

@@ -38,14 +38,18 @@ export interface AssetSourceListing {
 export interface AssetSearchRequest {
   readonly query: string;
   readonly enabled: readonly string[];
-  readonly cursors: Readonly<Record<string, string>>;
+  /** The page each source is asked for, 1-based. Absent means page 1, which is
+   *  the question a freshly opened grid asks. */
+  readonly pages: Readonly<Record<string, number>>;
 }
 
 export interface AssetPage {
   readonly source: string;
   /** Ids already prefixed "<source>:<id>". */
   readonly results: readonly AssetResult[];
-  readonly next: string | undefined;
+  /** How many pages this source has for this question, or undefined when it
+   *  cannot say (a failure, or a source that does not page). */
+  readonly totalPages: number | undefined;
   readonly failure:
     | { readonly reason: "failed"; readonly message: string }
     | { readonly reason: "needs-credential"; readonly credential: string }
@@ -87,7 +91,7 @@ export function parseAssetSearchRequest(
 ): AssetSearchRequest | undefined {
   if (!isObject(value)) return undefined;
 
-  const { query, enabled, cursors } = value;
+  const { query, enabled, pages } = value;
 
   if (typeof query !== "string" || !Array.isArray(enabled)) return undefined;
 
@@ -96,18 +100,23 @@ export function parseAssetSearchRequest(
     (id): id is string => typeof id === "string" && knownIds.has(id),
   );
 
-  const parsedCursors: [string, string][] = [];
-  if (isObject(cursors)) {
-    for (const [id, cursor] of Object.entries(cursors)) {
-      if (typeof cursor === "string") parsedCursors.push([id, cursor]);
+  const parsedPages: [string, number][] = [];
+  if (isObject(pages)) {
+    for (const [id, page] of Object.entries(pages)) {
+      // A page is a whole number from one: a fraction, a zero or a negative is
+      // not a page any source can answer, so it asks page one rather than
+      // being coerced into a question nobody made.
+      if (typeof page === "number" && Number.isInteger(page) && page >= 1) {
+        parsedPages.push([id, page]);
+      }
     }
   }
 
   // `fromEntries` rather than assignment: `__proto__` is a legal source id and
-  // assignment would reach the map's prototype instead of storing the cursor.
+  // assignment would reach the map's prototype instead of storing the page.
   return {
     query,
     enabled: enabledIds,
-    cursors: Object.fromEntries(parsedCursors),
+    pages: Object.fromEntries(parsedPages),
   };
 }

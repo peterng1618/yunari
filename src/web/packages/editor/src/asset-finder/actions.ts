@@ -11,6 +11,10 @@ export type ImportOutcome =
   | { readonly ok: true }
   | { readonly ok: false; readonly message: string };
 
+/** Where a row's consequence lands: the source's default, or the second action
+ *  an image offers — the theme's background or the canvas. */
+export type AssetPlacement = "place" | "background";
+
 /** The finder's action for one row: bytes in, declared asset and credit out.
  *
  * The asset manager keeps its caps and its SVG sanitising, unchanged; the

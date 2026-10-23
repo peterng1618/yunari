@@ -66,11 +66,11 @@ const result = (id: string, name = id): AssetResult => ({
 const answered = (
   source: string,
   results: readonly AssetResult[],
-  next?: string,
+  totalPages?: number,
 ): AssetPage => ({
   source,
   results,
-  next,
+  totalPages,
   failure: undefined,
 });
 
@@ -139,8 +139,13 @@ test("one search with both icon sources answers rows from both, and no id is sha
   // Each row names its own source, and the two answers' ids never collide
   // because the host namespaces them by source.
   const rows = page.locator("[data-yunari-asset-row]");
-  await expect(rows.nth(0)).toContainText("Lucide");
-  await expect(rows.nth(1)).toContainText("Font Awesome Free");
+  // Each row names its source with the source's own mark, not a licence word.
+  await expect(
+    rows.nth(0).locator('[data-yunari-asset-source="lucide"]'),
+  ).toHaveAttribute("aria-label", "Lucide");
+  await expect(
+    rows.nth(1).locator('[data-yunari-asset-source="fontawesome-free"]'),
+  ).toHaveAttribute("aria-label", "Font Awesome Free");
   // A card is its content, not a share of the grid's height: a single row of
   // results used to stretch to the footer.
   const box = await rows.nth(0).boundingBox();
@@ -185,7 +190,7 @@ test("a failed source leaves the other's rows and names itself", async ({
         {
           source: "lucide",
           results: [],
-          next: undefined,
+          totalPages: 1,
           failure: { reason: "failed", message: "Lucide answered 500." },
         },
         answered("fontawesome-free", [result("fontawesome-free:house")]),
@@ -221,53 +226,42 @@ test("a failed source and an empty answer are not read as 'no results'", async (
   );
 });
 
-test("Load more appends each page's new rows after the ones already shown", async ({
+test("the pager shows one page at a time and asks for the page it numbers", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   const { searches } = await stubAssets(page, {
     sources: [lucide, fontAwesome],
-    answer: (request) =>
-      request.cursors["lucide"] === undefined
-        ? {
-            pages: [
-              answered("lucide", [result("lucide:house")], "L1"),
-              answered(
-                "fontawesome-free",
-                [result("fontawesome-free:house")],
-                "F1",
-              ),
-            ],
-          }
-        : {
-            pages: [
-              answered("lucide", [result("lucide:star")]),
-              answered("fontawesome-free", [result("fontawesome-free:star")]),
-            ],
-          },
+    answer: (request) => ({
+      pages: [
+        answered(
+          "lucide",
+          [result(`lucide:${request.pages["lucide"] ?? 1}`)],
+          2,
+        ),
+        answered(
+          "fontawesome-free",
+          [result(`fontawesome-free:${request.pages["lucide"] ?? 1}`)],
+          2,
+        ),
+      ],
+    }),
   });
   await openFinder(page);
   await expect
     .poll(() => rowIds(page))
-    .toEqual(["lucide:house", "fontawesome-free:house"]);
+    .toEqual(["lucide:1", "fontawesome-free:1"]);
 
-  await page.locator("[data-yunari-asset-more]").click();
+  await page.locator('[data-yunari-asset-page="2"]').click();
 
   await expect
     .poll(() => rowIds(page))
-    .toEqual([
-      "lucide:house",
-      "fontawesome-free:house",
-      "lucide:star",
-      "fontawesome-free:star",
-    ]);
-  // Each source's cursor is its own, and the pager is gone once neither has one.
-  expect(searches.at(-1)?.cursors).toEqual({
-    lucide: "L1",
-    "fontawesome-free": "F1",
+    .toEqual(["lucide:2", "fontawesome-free:2"]);
+  expect(searches.at(-1)?.pages).toEqual({
+    lucide: 2,
+    "fontawesome-free": 2,
   });
-  await expect(page.locator("[data-yunari-asset-more]")).toHaveCount(0);
 });
 
 test("a later search never shows an earlier answer that arrives last", async ({
@@ -405,7 +399,7 @@ test("captures the finder's failed source", async ({ page }, testInfo) => {
         {
           source: "lucide",
           results: [],
-          next: undefined,
+          totalPages: 1,
           failure: { reason: "failed", message: "Lucide answered 500." },
         },
         answered("fontawesome-free", [result("fontawesome-free:house")]),
@@ -478,7 +472,7 @@ test("a source that needs a key opens Settings on Connections", async ({
         {
           source: "unsplash",
           results: [],
-          next: undefined,
+          totalPages: 1,
           failure: { reason: "needs-credential", credential: "unsplash" },
         },
       ],

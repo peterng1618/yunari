@@ -15,7 +15,7 @@ const row = (id: string): AssetResult => ({
 const page = (source: string, ids: readonly string[]): AssetPage => ({
   source,
   results: ids.map(row),
-  next: undefined,
+  totalPages: 1,
   failure: undefined,
 });
 

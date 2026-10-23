@@ -93,7 +93,7 @@ const page = (
 ): AssetPage => ({
   source,
   results,
-  next: undefined,
+  totalPages: undefined,
   failure: undefined,
   ...extra,
 });
@@ -222,11 +222,11 @@ function footerAction(): HTMLButtonElement {
   return found;
 }
 
-function moreButton(): HTMLButtonElement {
+function pageButton(page: number): HTMLButtonElement {
   const found = document.querySelector<HTMLButtonElement>(
-    "[data-yunari-asset-more]",
+    `[data-yunari-asset-page="${page}"]`,
   );
-  if (found === null) throw new Error("no Load more.");
+  if (found === null) throw new Error(`no page ${page}.`);
   return found;
 }
 
@@ -441,53 +441,62 @@ describe("AssetFinder search", () => {
     ).toContain("api.unsplash.com");
   });
 
-  it("keeps a failed source's sentence when Load more pages the survivors", async () => {
-    searchAssets.mockImplementation(async (request) =>
-      request.cursors["fontawesome-free"] === undefined
-        ? {
-            pages: [
-              page("lucide", [], {
-                failure: { reason: "failed", message: "Lucide answered 500." },
-              }),
-              page("fontawesome-free", [result("fontawesome-free:house")], {
-                next: "F1",
-              }),
-            ],
-          }
-        : {
-            pages: [
-              page("fontawesome-free", [result("fontawesome-free:star")]),
-            ],
-          },
-    );
+  it("asks every enabled source for the page the pager shows", async () => {
+    searchAssets
+      .mockResolvedValueOnce({
+        pages: [
+          page("lucide", [result("lucide:a")], { totalPages: 2 }),
+          page("fontawesome-free", [result("fontawesome-free:b")], {
+            totalPages: 2,
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        pages: [
+          page("lucide", [result("lucide:c")], { totalPages: 2 }),
+          page("fontawesome-free", [result("fontawesome-free:d")], {
+            totalPages: 2,
+          }),
+        ],
+      });
 
     await render([lucide, fontAwesome]);
     await settle();
-    await act(async () => moreButton().click());
+
+    expect(searchAssets.mock.calls[0]?.[0]?.pages).toEqual({
+      lucide: 1,
+      "fontawesome-free": 1,
+    });
+
+    await act(async () => pageButton(2).click());
     await settle();
 
-    // The paged answer carries no Lucide page at all; its failure is still the
-    // state of the grid, not a property of the last answer.
-    expect(
-      document.querySelector('[data-yunari-asset-failure="lucide"]')
-        ?.textContent,
-    ).toContain("Lucide answered 500.");
-    expect(rowIds()).toEqual([
-      "fontawesome-free:house",
-      "fontawesome-free:star",
-    ]);
+    expect(searchAssets.mock.calls[1]?.[0]?.pages).toEqual({
+      lucide: 2,
+      "fontawesome-free": 2,
+    });
+    // A page replaces the one before it: the grid never shows two pages at once.
+    expect(rowIds()).toEqual(["lucide:c", "fontawesome-free:d"]);
   });
 
-  it("does not read an empty page with a cursor as the end", async () => {
+  it("returns to the first page when the question changes", async () => {
     searchAssets.mockResolvedValue({
-      pages: [page("lucide", [], { next: "C1" })],
+      pages: [page("lucide", [result("lucide:a")], { totalPages: 3 })],
     });
 
     await render([lucide]);
     await settle();
+    await act(async () => pageButton(3).click());
+    await settle();
 
-    expect(document.querySelector("[data-yunari-asset-empty]")).toBeNull();
-    expect(moreButton()).not.toBeNull();
+    expect(document.querySelector("[aria-current='page']")?.textContent).toBe(
+      "3",
+    );
+
+    await type("house");
+    await settle();
+
+    expect(searchAssets.mock.calls.at(-1)?.[0]?.pages).toEqual({ lucide: 1 });
   });
 
   it("prints the result's own second word, which distinguishes a style or an author", async () => {
@@ -585,8 +594,14 @@ describe("AssetFinder's mixed grid", () => {
     await settle();
 
     expect(rowIds()).toEqual(["lucide:a", "fontawesome-free:b", "lucide:c"]);
-    const rows = [...document.querySelectorAll("[data-yunari-asset-row]")];
-    expect(rows[1]?.textContent).toContain("Font Awesome Free");
+    // The source is a mark, named for a screen reader and never a licence word.
+    expect(
+      document
+        .querySelector('[data-yunari-asset-row="fontawesome-free:b"]')
+        ?.querySelector('[data-yunari-asset-source="fontawesome-free"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("Font Awesome Free");
+    expect(document.body.textContent).not.toContain("ISC");
   });
 
   it("keeps two sources' identical ids apart", async () => {
@@ -603,64 +618,33 @@ describe("AssetFinder's mixed grid", () => {
     expect(rowIds()).toEqual(["lucide:x", "fontawesome-free:x"]);
   });
 
-  it("appends a later page after the rows already shown", async () => {
-    searchAssets
-      .mockResolvedValueOnce({
-        pages: [
-          page("lucide", [result("lucide:a")], { next: "L1" }),
-          page("fontawesome-free", [result("fontawesome-free:b")], {
-            next: "F1",
-          }),
-        ],
-      })
-      .mockResolvedValueOnce({
-        pages: [
-          page("lucide", [result("lucide:c")]),
-          page("fontawesome-free", [result("fontawesome-free:d")]),
-        ],
-      });
+  it("clamps a page the answer no longer reaches", async () => {
+    // Page one says there are two pages; page two's own answer says one. Rather
+    // than leave an empty grid under a numeral nothing reaches, the pager lands
+    // on the last page the answer has.
+    searchAssets.mockImplementation(async (request) =>
+      request.pages["lucide"] === 2
+        ? {
+            pages: [page("lucide", [result("lucide:only")], { totalPages: 1 })],
+          }
+        : { pages: [page("lucide", [result("lucide:a")], { totalPages: 2 })] },
+    );
 
-    await render([lucide, fontAwesome]);
+    await render([lucide]);
     await settle();
-    await act(async () => moreButton().click());
+    await act(async () => pageButton(2).click());
+    await settle();
+    // The clamp's own answer is a second request, after React flushes the page
+    // it moved to.
     await settle();
 
-    expect(rowIds()).toEqual([
-      "lucide:a",
-      "fontawesome-free:b",
-      "lucide:c",
-      "fontawesome-free:d",
-    ]);
-    // Each source's cursor is its own: the second request carries both.
-    expect(searchAssets.mock.calls[1]?.[0]?.cursors).toEqual({
-      lucide: "L1",
-      "fontawesome-free": "F1",
-    });
-    expect(document.querySelector("[data-yunari-asset-more]")).toBeNull();
-  });
-
-  it("stops asking a source that answered no cursor", async () => {
-    searchAssets
-      .mockResolvedValueOnce({
-        pages: [
-          page("lucide", [result("lucide:a")], { next: "L1" }),
-          page("fontawesome-free", [result("fontawesome-free:b")]),
-        ],
-      })
-      .mockResolvedValueOnce({
-        pages: [page("lucide", [result("lucide:c")])],
-      });
-
-    await render([lucide, fontAwesome]);
-    await settle();
-    await act(async () => moreButton().click());
-    await settle();
-
-    expect(searchAssets.mock.calls[1]?.[0]).toMatchObject({
-      enabled: ["lucide"],
-      cursors: { lucide: "L1" },
-    });
-    expect(rowIds()).toEqual(["lucide:a", "fontawesome-free:b", "lucide:c"]);
+    // It lands back on page one and asks for it, rather than sitting on a page
+    // no answer has.
+    expect(document.querySelector("[aria-current='page']")?.textContent).toBe(
+      "1",
+    );
+    expect(rowIds()).toEqual(["lucide:a"]);
+    expect(searchAssets.mock.calls.at(-1)?.[0]?.pages).toEqual({ lucide: 1 });
   });
 
   it("names the host once, on the first search only", async () => {
@@ -726,6 +710,43 @@ describe("AssetFinder footer", () => {
 
     expect(footerAction().textContent).toBe(uiCopy.assets.action.image);
   });
+
+  it("offers an image a second action that places it on the canvas", async () => {
+    const onAction = vi.fn(async () => ({ ok: true }) as const);
+    searchAssets.mockResolvedValue({
+      pages: [
+        page("unsplash", [
+          {
+            ...result("unsplash:photo"),
+            kind: "image",
+            preview: "https://images.unsplash.com/photo-small",
+          },
+        ]),
+      ],
+    });
+
+    await render([unsplash], { onAction, initialCategory: "image" });
+    await settle();
+
+    const row = document.querySelector<HTMLElement>(
+      '[data-yunari-asset-row="unsplash:photo"]',
+    );
+    await act(async () => row?.click());
+
+    const place = document.querySelector<HTMLButtonElement>(
+      "[data-yunari-asset-place]",
+    );
+    expect(place?.textContent).toBe(uiCopy.assets.placeOnCanvas);
+
+    await act(async () => place?.click());
+    await settle();
+
+    expect(onAction).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "unsplash" }),
+      expect.objectContaining({ id: "unsplash:photo" }),
+      "place",
+    );
+  });
 });
 
 describe("AssetFinder's own controls", () => {
@@ -734,10 +755,12 @@ describe("AssetFinder's own controls", () => {
     await render([lucide], { onOpenChange });
     await settle();
 
-    const close = [...document.querySelectorAll("button")].find(
-      (button) => button.textContent === uiCopy.assets.close,
+    const close = document.querySelector<HTMLButtonElement>(
+      `button[aria-label="${uiCopy.assets.close}"]`,
     );
-    expect(close).toBeDefined();
+    expect(close).not.toBeNull();
+    // It is a mark, not the word: the window has no title bar to put one in.
+    expect(close?.textContent).toBe("");
     await act(async () => close?.click());
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
@@ -774,13 +797,6 @@ describe("AssetFinder's own controls", () => {
             preview: "data:image/svg+xml;base64,PHN2Zy8+",
           },
         ]),
-        page("unsplash", [
-          {
-            ...result("unsplash:photo"),
-            kind: "image",
-            preview: "https://images.unsplash.com/photo-small",
-          },
-        ]),
       ],
     });
     await settle();
@@ -793,6 +809,22 @@ describe("AssetFinder's own controls", () => {
     expect(
       document.querySelector('[data-yunari-asset-row="lucide:house"] img'),
     ).toBeNull();
+
+    // The Images tab's own answer: a photo is a picture, never a mask.
+    searchAssets.mockResolvedValue({
+      pages: [
+        page("unsplash", [
+          {
+            ...result("unsplash:photo"),
+            kind: "image",
+            preview: "https://images.unsplash.com/photo-small",
+          },
+        ]),
+      ],
+    });
+    await act(async () => tab("image").click());
+    await settle();
+
     expect(
       document.querySelector('[data-yunari-asset-row="unsplash:photo"] img'),
     ).not.toBeNull();

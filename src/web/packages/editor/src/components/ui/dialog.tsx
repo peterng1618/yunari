@@ -1,5 +1,6 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import type * as React from "react";
+import { CLOSE_GLYPH, Glyph } from "../../editor-shell/icons.js";
 
 /** The one control treatment a dialog's own buttons share, in tokens.
  *
@@ -32,13 +33,16 @@ export const ACTION_BUTTON =
  * **`closeLabel` renders the one way out that needs no Escape key.** Base UI's
  * own contract for a modal is a `Dialog.Close` inside the popup so a touch
  * screen reader can leave it; a caller that wants that control passes the word
- * for it, and a caller that draws its own (the sheet below) omits it.
+ * for it, and a caller that draws its own (the sheet below) omits it. A caller
+ * whose window has no title bar to put the word in passes `closeIcon` and gets
+ * the same control as an ×.
  */
 export function Dialog({
   open,
   onOpenChange,
   label,
   closeLabel,
+  closeIcon = false,
   className,
   children,
 }: {
@@ -46,6 +50,9 @@ export function Dialog({
   readonly onOpenChange: (open: boolean) => void;
   readonly label: string;
   readonly closeLabel?: string;
+  /** Draw the way out as a mark rather than a word, for a window with no title
+   *  bar: the finder is nearly the whole editor and has no footer either. */
+  readonly closeIcon?: boolean;
   /** An extra class on the popup, for a dialog that sizes itself. */
   readonly className?: string;
   readonly children: React.ReactNode;
@@ -75,7 +82,7 @@ export function Dialog({
               className="editor-shell-dialog-close"
               aria-label={closeLabel}
             >
-              {closeLabel}
+              {closeIcon ? <Glyph icon={CLOSE_GLYPH} size={16} /> : closeLabel}
             </DialogPrimitive.Close>
           )}
         </DialogPrimitive.Popup>

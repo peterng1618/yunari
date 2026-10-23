@@ -54,7 +54,17 @@ describe("iconObject and placeIcon", () => {
 
     placeIcon(object, ARTBOARD, 0.12);
 
+    // Two subpaths, one object: a group would need ungrouping to recolour.
+    expect(object.type).toBe("path");
     expect(object.get("name")).toBe("house");
+    expect(object.get("stroke")).toBe(INK.color);
+    // The paint token rides the join: a stroke without it is a document the
+    // validator refuses to save.
+    expect(object.get("yunariPaint")).toEqual({ stroke: INK.ref });
+    // Both subpaths' commands, not the first one's alone.
+    expect(
+      (object as unknown as { path: readonly unknown[] }).path.length,
+    ).toBeGreaterThan(3);
     // 12% of 1080 is the glyph's box on its longer edge.
     expect(
       Math.round(Math.max(object.width, object.height) * object.scaleX),

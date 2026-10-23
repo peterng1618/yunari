@@ -14,7 +14,7 @@ function failed(source: string, message: string): AssetPage {
   return {
     source,
     results: [],
-    next: undefined,
+    totalPages: undefined,
     failure: { reason: "failed", message },
   };
 }
@@ -34,7 +34,7 @@ async function pageOf(
     return {
       source: source.id,
       results: [],
-      next: undefined,
+      totalPages: undefined,
       failure: { reason: "needs-credential", credential: source.requires },
     };
   }
@@ -42,7 +42,7 @@ async function pageOf(
   try {
     const page = await source.search(
       request.query,
-      request.cursors[source.id],
+      request.pages[source.id] ?? 1,
       ctx,
     );
 
@@ -54,7 +54,7 @@ async function pageOf(
         // origin without a lookup.
         id: `${source.id}:${entry.id}`,
       })),
-      next: page.next,
+      totalPages: page.totalPages,
       failure: undefined,
     };
   } catch (error: unknown) {

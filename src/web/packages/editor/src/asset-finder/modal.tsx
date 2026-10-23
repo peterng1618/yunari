@@ -9,7 +9,14 @@ import type {
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { Dialog } from "../components/ui/dialog.js";
+import {
+  Glyph,
+  NEXT_PAGE_GLYPH,
+  PREVIOUS_PAGE_GLYPH,
+} from "../editor-shell/icons.js";
+import { pageNumbers } from "../store-mode/pager.js";
 import { uiCopy } from "../ui-copy.js";
+import { type AssetPlacement } from "./actions.js";
 import { type ClientOptions, listSources, searchAssets } from "./client.js";
 import { interleave } from "./interleave.js";
 import { AssetRow } from "./row.js";
@@ -30,9 +37,13 @@ export interface FinderProps {
   readonly bodies: Readonly<
     Record<"font-picker" | "wallpaper-engine", React.ReactNode>
   >;
+  /** One row's action. `placement` names a second action — an image can be set
+   *  as the theme's background or placed on the canvas — and is absent for the
+   *  kind's own default. */
   readonly onAction: (
     page: AssetPage,
     result: AssetResult,
+    placement?: AssetPlacement,
   ) => Promise<ActionOutcome>;
   /** Opens Settings on Connections; absent until the shell wires it. */
   readonly onOpenConnections?: () => void;
@@ -75,42 +86,110 @@ function sourceIdOf(result: AssetResult): string {
 type Row = { readonly page: AssetPage; readonly result: AssetResult };
 
 /** The interleaved rows, each still paired with the page it answered on, so a
- *  row's action and its source label need no second lookup. */
-function rowsAfter(
-  pages: readonly AssetPage[],
-  previous: readonly Row[],
-): readonly Row[] {
+ *  row's action and its source mark need no second lookup. */
+function rowsIn(pages: readonly AssetPage[]): readonly Row[] {
   const pagesOf = new Map<AssetResult, AssetPage>();
-  for (const row of previous) pagesOf.set(row.result, row.page);
   for (const page of pages) {
     for (const result of page.results) pagesOf.set(result, page);
   }
 
-  return interleave(
-    pages,
-    previous.map((row) => row.result),
-  ).flatMap((result) => {
+  return interleave(pages, []).flatMap((result) => {
     const page = pagesOf.get(result);
     return page === undefined ? [] : [{ page, result }];
   });
 }
 
-/** Each answered page moves its own cursor, and clears it when it has none. */
-function cursorsAfter(
-  current: Readonly<Record<string, string>>,
-  pages: readonly AssetPage[],
-): Readonly<Record<string, string>> {
-  const next = { ...current };
+/** How many pages the answer has: the furthest its sources reach. A source that
+ *  cannot say — Unsplash on a blank term — leaves the count at what it was. */
+function totalPagesOf(pages: readonly AssetPage[]): number {
+  let total = 1;
   for (const page of pages) {
-    if (page.next === undefined) delete next[page.source];
-    else next[page.source] = page.next;
+    if (page.totalPages !== undefined) total = Math.max(total, page.totalPages);
   }
-  return next;
+  return total;
+}
+
+/** The numbered pages, the theme store's own numerals and window. */
+function FinderPager({
+  page,
+  total,
+  onPage,
+}: {
+  readonly page: number;
+  readonly total: number;
+  readonly onPage: (page: number) => void;
+}): React.JSX.Element {
+  const step =
+    "inline-flex size-[26px] flex-none items-center justify-center rounded-md border border-transparent text-sm disabled:text-faint";
+  return (
+    <nav
+      aria-label={uiCopy.assets.pager.pages}
+      data-yunari-asset-pager=""
+      className="flex items-center gap-[var(--space-4)]"
+    >
+      <button
+        type="button"
+        aria-label={uiCopy.assets.pager.previous}
+        data-yunari-asset-page-previous=""
+        disabled={page <= 1}
+        onClick={() => onPage(page - 1)}
+        className={`${step} text-muted hover:border-edge`}
+      >
+        <Glyph icon={PREVIOUS_PAGE_GLYPH} size={14} />
+      </button>
+      {pageNumbers(page, total).map((entry, at) =>
+        entry === "gap" ? (
+          <span
+            // The index is the key: two gaps can be drawn at once and neither is
+            // a page the pager could name.
+            key={`gap-${at}`}
+            aria-hidden="true"
+            data-yunari-asset-page-gap=""
+            className="inline-flex size-[26px] flex-none items-center justify-center text-sm text-muted"
+          >
+            …
+          </span>
+        ) : (
+          <button
+            key={entry}
+            type="button"
+            aria-label={uiCopy.assets.pager.page(entry)}
+            aria-current={entry === page ? "page" : undefined}
+            data-yunari-asset-page={entry}
+            onClick={() => onPage(entry)}
+            className={`${step} font-mono ${
+              entry === page
+                ? "[background:var(--stage)] font-medium text-text"
+                : "text-muted hover:border-edge"
+            }`}
+          >
+            {entry}
+          </button>
+        ),
+      )}
+      <button
+        type="button"
+        aria-label={uiCopy.assets.pager.next}
+        data-yunari-asset-page-next=""
+        disabled={page >= total}
+        onClick={() => onPage(page + 1)}
+        className={`${step} text-muted hover:border-edge`}
+      >
+        <Glyph icon={NEXT_PAGE_GLYPH} size={14} />
+      </button>
+    </nav>
+  );
 }
 
 /**
  * The finder: one modal, tabs derived from the registry's categories, one
  * mixed grid per grid category and a body per category that owns a component.
+ *
+ * **One page at a time, numbered like the store's catalogue.** Every source is
+ * asked for the same page, the grid shows exactly that page, and the pager's
+ * count is the furthest source's — a source that ends sooner simply stops
+ * contributing. A question — a term, a chip, a tab — returns to page one,
+ * because a page the new question never had is not a page.
  *
  * A late answer is dropped by comparing a ticket on resolve; an abort alone
  * does not stop a response already in flight, so two searches racing would
@@ -131,24 +210,19 @@ export function AssetFinder({
   );
   const [active, setActive] = useState<ListingCategory | undefined>(undefined);
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
   const [answer, setAnswer] = useState<AssetSearchAnswer | undefined>(
     undefined,
   );
   const [disabled, setDisabled] = useState<ReadonlySet<string>>(storedDisabled);
-  const [selected, setSelected] = useState<
-    { readonly page: AssetPage; readonly result: AssetResult } | undefined
-  >(undefined);
-  const [shown, setShown] = useState<readonly Row[]>([]);
-  const [cursors, setCursors] = useState<Readonly<Record<string, string>>>({});
-  /** The pages that failed, kept across Load more: a paged answer carries only
-   *  the sources it asked, so the latest answer is not the whole state. */
+  const [selected, setSelected] = useState<Row | undefined>(undefined);
+  /** The sources that failed on this page, with their own sentence. */
   const [failures, setFailures] = useState<readonly AssetPage[]>([]);
   /** The hosts the first host-contacting search reached, shown once (spec §5).
    *  A search that reached none is not the disclosure: a person is told before
    *  the term leaves, not after. */
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const announced = useRef(false);
-  const [moreBusy, setMoreBusy] = useState(false);
   const [message, setMessage] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const ticket = useRef(0);
@@ -232,96 +306,86 @@ export function AssetFinder({
 
   useEffect(() => {
     // Any change of question discards an answer already in flight, before the
-    // debounce would: a source disabled mid-flight must not land its late page.
+    // debounce would: a chip switched off mid-flight must not land its late page.
     ticket.current += 1;
 
     // Body categories draw a component, not a search.
     if (!open || active === undefined || gridSources.length === 0) {
       setAnswer(undefined);
-      setShown([]);
-      setCursors({});
       setFailures([]);
       return;
     }
 
     const enabled = enabledSources.map((source) => source.id);
-    // A chip switched off drops that source's rows and cursor at once, rather
-    // than leaving them until the next answer.
-    setShown((current) =>
-      current.filter((row) => enabled.includes(sourceIdOf(row.result))),
-    );
-    setCursors((current) =>
-      Object.fromEntries(
-        Object.entries(current).filter(([id]) => enabled.includes(id)),
-      ),
-    );
-
     const issued = ticket.current;
     const timer = setTimeout(() => {
-      void searchAssets({ query, enabled, cursors: {} }, client).then(
-        (next) => {
-          if (issued !== ticket.current) return;
-          setAnswer(next);
-          setShown(rowsAfter(next.pages, []));
-          setCursors(cursorsAfter({}, next.pages));
-          setFailures(next.pages.filter((page) => page.failure !== undefined));
-          const reached = [
-            ...new Set(
-              enabledSources
-                .filter((source) => enabled.includes(source.id))
-                .map((source) => source.host)
-                .filter((host): host is string => host !== null),
-            ),
-          ];
-          if (!announced.current && reached.length > 0) {
-            announced.current = true;
-            setNotice(reached.join(", "));
-          } else if (announced.current) {
-            setNotice(undefined);
-          }
-          setSelected(undefined);
+      void searchAssets(
+        {
+          query,
+          enabled,
+          pages: Object.fromEntries(enabled.map((id) => [id, page])),
         },
-      );
+        client,
+      ).then((next) => {
+        if (issued !== ticket.current) return;
+        setAnswer(next);
+        setFailures(next.pages.filter((page) => page.failure !== undefined));
+        // A page past the end is the answer's own: land on the last page it
+        // does have rather than leave an empty grid under a numeral nothing
+        // reaches.
+        const total = totalPagesOf(next.pages);
+        if (page > total) {
+          setPage(total);
+          return;
+        }
+        const reached = [
+          ...new Set(
+            enabledSources
+              .filter((source) => enabled.includes(source.id))
+              .map((source) => source.host)
+              .filter((host): host is string => host !== null),
+          ),
+        ];
+        if (!announced.current && reached.length > 0) {
+          announced.current = true;
+          setNotice(reached.join(", "));
+        } else if (announced.current) {
+          setNotice(undefined);
+        }
+        setSelected(undefined);
+      });
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
     // `enabledKey` stands for the enabled list; `enabledSources` is a new array
     // every render and would restart the timer on unrelated state.
-  }, [open, active, query, enabledKey, sources.length, client]);
+  }, [open, active, query, enabledKey, sources.length, client, page]);
 
-  const rows = shown;
+  // A source switched off after its answer left the host is dropped from the
+  // grid at once, not on the next round trip.
+  const enabledIds = new Set(enabledSources.map((source) => source.id));
+  const rows =
+    answer === undefined
+      ? []
+      : rowsIn(answer.pages.filter((page) => enabledIds.has(page.source)));
+  const total =
+    answer === undefined
+      ? 1
+      : totalPagesOf(
+          answer.pages.filter((page) => enabledIds.has(page.source)),
+        );
+  // An empty page with more pages behind it is not "no results": the author is
+  // looking at a slice, and the pager is how they leave it.
   const empty =
     answer !== undefined &&
     failures.length === 0 &&
     rows.length === 0 &&
-    !enabledSources.some((source) => cursors[source.id] !== undefined);
+    total <= 1;
 
-  const more = enabledSources.some(
-    (source) => cursors[source.id] !== undefined,
-  );
-
-  /** The next page of every source that still has a cursor: a source that
-   *  answered none is asked nothing, so its first page cannot come twice. */
-  const loadMore = async (): Promise<void> => {
-    const enabled = enabledSources
-      .filter((source) => cursors[source.id] !== undefined)
-      .map((source) => source.id);
-    if (enabled.length === 0) return;
-
-    setMoreBusy(true);
-    const issued = ++ticket.current;
-    const next = await searchAssets({ query, enabled, cursors }, client);
-    setMoreBusy(false);
-    if (issued !== ticket.current) return;
-
-    setAnswer(next);
-    setShown((current) => rowsAfter(next.pages, current));
-    setCursors((current) => cursorsAfter(current, next.pages));
-    // A source the pager did not ask keeps the sentence it already had.
-    setFailures((current) => [
-      ...current.filter((page) => !enabled.includes(page.source)),
-      ...next.pages.filter((page) => page.failure !== undefined),
-    ]);
+  /** A change of question returns to page one, at the press that made it. */
+  const reask = (): void => {
+    setPage(1);
+    setSelected(undefined);
   };
 
   const sourceOf = (id: string): AssetSourceListing | undefined =>
@@ -337,11 +401,11 @@ export function AssetFinder({
         ? "font-picker"
         : "wallpaper-engine");
 
-  const runAction = async (): Promise<void> => {
+  const runAction = async (placement?: AssetPlacement): Promise<void> => {
     if (selected === undefined) return;
 
     setBusy(true);
-    const outcome = await onAction(selected.page, selected.result);
+    const outcome = await onAction(selected.page, selected.result, placement);
     setBusy(false);
     setMessage(outcome.ok ? undefined : outcome.message);
   };
@@ -352,6 +416,7 @@ export function AssetFinder({
       onOpenChange={onOpenChange}
       label={uiCopy.assets.title}
       closeLabel={uiCopy.assets.close}
+      closeIcon
       className="editor-shell-dialog--finder"
     >
       {listing === "failed" ? (
@@ -368,21 +433,40 @@ export function AssetFinder({
           onValueChange={(value) => {
             setActive(value as ListingCategory);
             setSelected(undefined);
+            setPage(1);
           }}
           className="flex min-h-0 flex-1 flex-col"
         >
-          <Tabs.List className="flex gap-[var(--space-4)] border-b border-edge px-[var(--space-16)] pt-[var(--space-12)]">
-            {categories.map((category) => (
-              <Tabs.Tab
-                key={category}
-                value={category}
-                data-yunari-asset-tab={category}
-                className="rounded-t-[var(--radius-sm)] px-[var(--space-12)] py-[var(--space-8)] text-sm text-muted data-[selected]:bg-[var(--panel-2)] data-[selected]:text-text"
-              >
-                {uiCopy.assets.category[category]}
-              </Tabs.Tab>
-            ))}
-          </Tabs.List>
+          {/* The tabs and the search share one bar, and the window's own way out
+              owns the corner the bar leaves for it. */}
+          <div className="flex items-center gap-[var(--space-12)] border-b border-edge px-[var(--space-16)] pr-[calc(var(--space-32)+var(--space-4))] pt-[var(--space-12)]">
+            <Tabs.List className="flex gap-[var(--space-4)]">
+              {categories.map((category) => (
+                <Tabs.Tab
+                  key={category}
+                  value={category}
+                  data-yunari-asset-tab={category}
+                  className="rounded-t-[var(--radius-sm)] px-[var(--space-12)] py-[var(--space-8)] text-sm text-muted data-[selected]:bg-[var(--panel-2)] data-[selected]:text-text"
+                >
+                  {uiCopy.assets.category[category]}
+                </Tabs.Tab>
+              ))}
+            </Tabs.List>
+            {gridSources.length === 0 ? null : (
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  reask();
+                }}
+                placeholder={uiCopy.assets.searchPlaceholder}
+                aria-label={uiCopy.assets.searchPlaceholder}
+                data-yunari-asset-search=""
+                className="ml-auto w-64 rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-10)] py-[var(--space-6)] text-sm"
+              />
+            )}
+          </div>
 
           {active === undefined ? null : (
             <Tabs.Panel
@@ -402,51 +486,94 @@ export function AssetFinder({
                 </div>
               ) : (
                 <>
-                  <input
-                    type="search"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder={uiCopy.assets.searchPlaceholder}
-                    aria-label={uiCopy.assets.searchPlaceholder}
-                    data-yunari-asset-search=""
-                    className="rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-10)] py-[var(--space-6)] text-sm"
-                  />
+                  {/* The bar: what is being searched, what came back, and the
+                      two presses that move through it. */}
+                  <div className="flex flex-wrap items-center gap-[var(--space-8)] text-sm">
+                    {gridSources.length > 1
+                      ? gridSources.map((source) => {
+                          const off = disabled.has(source.id);
+                          return (
+                            <button
+                              key={source.id}
+                              type="button"
+                              aria-pressed={!off}
+                              data-yunari-asset-chip={source.id}
+                              data-disabled={off ? "" : undefined}
+                              disabled={!source.configurable}
+                              onClick={() => {
+                                setDisabled((current) => {
+                                  const next = new Set(current);
+                                  if (next.has(source.id))
+                                    next.delete(source.id);
+                                  else if (
+                                    enabledSources.length > 1 ||
+                                    !gridSources.some(
+                                      (entry) => !next.has(entry.id),
+                                    )
+                                  ) {
+                                    next.add(source.id);
+                                  }
+                                  return next;
+                                });
+                                reask();
+                              }}
+                              className="rounded-full border border-edge px-[var(--space-10)] py-[var(--space-4)] text-xs aria-pressed:border-accent aria-pressed:text-accent data-[disabled]:text-faint"
+                            >
+                              {source.label}
+                            </button>
+                          );
+                        })
+                      : null}
 
-                  {gridSources.length > 1 ? (
-                    <div className="flex flex-wrap gap-[var(--space-6)]">
-                      {gridSources.map((source) => {
-                        const off = disabled.has(source.id);
-                        return (
-                          <button
-                            key={source.id}
-                            type="button"
-                            aria-pressed={!off}
-                            data-yunari-asset-chip={source.id}
-                            data-disabled={off ? "" : undefined}
-                            disabled={!source.configurable}
-                            onClick={() =>
-                              setDisabled((current) => {
-                                const next = new Set(current);
-                                if (next.has(source.id)) next.delete(source.id);
-                                else if (
-                                  enabledSources.length > 1 ||
-                                  !gridSources.some(
-                                    (entry) => !next.has(entry.id),
-                                  )
-                                ) {
-                                  next.add(source.id);
-                                }
-                                return next;
-                              })
-                            }
-                            className="rounded-full border border-edge px-[var(--space-10)] py-[var(--space-4)] text-xs aria-pressed:border-accent aria-pressed:text-accent data-[disabled]:text-faint"
-                          >
-                            {source.label}
-                          </button>
-                        );
-                      })}
+                    <span
+                      className="text-xs text-muted"
+                      data-yunari-asset-count=""
+                    >
+                      {answer === undefined
+                        ? ""
+                        : uiCopy.assets.results(
+                            rows.length,
+                            new Set(rows.map((row) => sourceIdOf(row.result)))
+                              .size,
+                          )}
+                      {message === undefined ? null : (
+                        <span className="ml-[var(--space-8)]">{message}</span>
+                      )}
+                    </span>
+
+                    <span className="flex-1" />
+
+                    {answer === undefined || total <= 1 ? null : (
+                      <FinderPager page={page} total={total} onPage={setPage} />
+                    )}
+
+                    <div className="flex items-center gap-[var(--space-8)]">
+                      {active === "image" ? (
+                        <button
+                          type="button"
+                          disabled={selected === undefined || busy}
+                          onClick={() => void runAction("place")}
+                          data-yunari-asset-place=""
+                          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-12)] py-[var(--space-6)] disabled:text-faint"
+                        >
+                          {uiCopy.assets.placeOnCanvas}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={selected === undefined || busy}
+                        onClick={() =>
+                          void runAction(
+                            active === "image" ? "background" : undefined,
+                          )
+                        }
+                        data-yunari-asset-action=""
+                        className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-12)] py-[var(--space-6)] disabled:text-faint"
+                      >
+                        {uiCopy.assets.action[active]}
+                      </button>
                     </div>
-                  ) : null}
+                  </div>
 
                   {notice === undefined ? null : (
                     <p
@@ -498,7 +625,10 @@ export function AssetFinder({
                       {uiCopy.assets.noResults}
                       <button
                         type="button"
-                        onClick={() => setQuery("")}
+                        onClick={() => {
+                          setQuery("");
+                          reask();
+                        }}
                         data-yunari-asset-clear-query=""
                         className="underline"
                       >
@@ -514,6 +644,7 @@ export function AssetFinder({
                         <AssetRow
                           key={`${page.source}:${result.id}`}
                           result={result}
+                          sourceId={page.source}
                           sourceLabel={
                             sourceOf(page.source)?.label ?? page.source
                           }
@@ -526,43 +657,6 @@ export function AssetFinder({
                       ))}
                     </div>
                   )}
-
-                  <footer className="flex items-center justify-between gap-[var(--space-12)] border-t border-edge pt-[var(--space-10)] text-sm">
-                    <span className="text-muted" data-yunari-asset-count="">
-                      {answer === undefined
-                        ? ""
-                        : uiCopy.assets.results(
-                            rows.length,
-                            new Set(rows.map((row) => sourceIdOf(row.result)))
-                              .size,
-                          )}
-                      {message === undefined ? null : (
-                        <span className="ml-[var(--space-8)]">{message}</span>
-                      )}
-                    </span>
-                    <div className="flex items-center gap-[var(--space-8)]">
-                      {more ? (
-                        <button
-                          type="button"
-                          disabled={moreBusy}
-                          onClick={() => void loadMore()}
-                          data-yunari-asset-more=""
-                          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-12)] py-[var(--space-6)] disabled:text-faint"
-                        >
-                          {uiCopy.assets.loadMore}
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        disabled={selected === undefined || busy}
-                        onClick={() => void runAction()}
-                        data-yunari-asset-action=""
-                        className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-12)] py-[var(--space-6)] disabled:text-faint"
-                      >
-                        {uiCopy.assets.action[active]}
-                      </button>
-                    </div>
-                  </footer>
                 </>
               )}
             </Tabs.Panel>

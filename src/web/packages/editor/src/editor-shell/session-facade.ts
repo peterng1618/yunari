@@ -6,7 +6,7 @@ import type {
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import type { ArrangeAction } from "../arrange.js";
-import type { ImportOutcome } from "../asset-finder/actions.js";
+import type { AssetPlacement, ImportOutcome } from "../asset-finder/actions.js";
 import type { ShapeKind } from "../new-object-defaults.js";
 import type { RunDisplayMode } from "../run-placeholder.js";
 
@@ -26,8 +26,14 @@ export interface EditorActionFacade {
    *  writes are the session's; the shell only has somewhere to put it. */
   fontPickerBody?(): React.ReactNode;
   /** One finder row's action: the bytes, the declaration, the credit, and the
-   *  kind's own consequence (place an icon, set an image as background). */
-  importAsset?(page: AssetPage, result: AssetResult): Promise<ImportOutcome>;
+   *  kind's own consequence (place an icon, set an image as background). An
+   *  image can be asked for the other consequence — `placement: "place"` puts
+   *  it on the canvas instead. */
+  importAsset?(
+    page: AssetPage,
+    result: AssetResult,
+    placement?: AssetPlacement,
+  ): Promise<ImportOutcome>;
   /** One theme the library already holds, by id: the store's own route, which
    *  has read the theme's name off the listing it drew. `onAccepted` runs once
    *  the replacement question is answered and before the theme is read, so a

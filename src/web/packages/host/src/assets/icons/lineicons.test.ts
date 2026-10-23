@@ -25,17 +25,16 @@ describe("the Lineicons manifest", () => {
 describe("searchLineicons", () => {
   it("treats a space and a hyphen as one separator", () => {
     expect(
-      searchLineicons("arrow down", undefined).results.map((entry) => entry.id),
+      searchLineicons("arrow down", 1).results.map((entry) => entry.id),
     ).toContain("arrow-downward");
   });
 
-  it("pages by offset and never repeats a page", () => {
-    const first = searchLineicons("", undefined);
-    expect(first.results).toHaveLength(40);
-    expect(first.next).toBe("40");
+  it("pages fifty at a time and never repeats a page", () => {
+    const first = searchLineicons("", 1);
+    expect(first.results).toHaveLength(50);
+    expect(first.totalPages).toBe(Math.ceil(LINEICONS_ICONS.length / 50));
 
-    const second = searchLineicons("", first.next);
-    expect(second.results).toHaveLength(40);
+    const second = searchLineicons("", 2);
     expect(
       second.results.some((entry) =>
         first.results.some((previous) => previous.id === entry.id),
@@ -43,9 +42,12 @@ describe("searchLineicons", () => {
     ).toBe(false);
   });
 
-  it("answers the first page for a cursor that is not an offset", () => {
-    expect(searchLineicons("", "nope").results).toEqual(
-      searchLineicons("", undefined).results,
+  it("answers the first page for a page that is not a page number", () => {
+    expect(searchLineicons("", 0).results).toEqual(
+      searchLineicons("", 1).results,
+    );
+    expect(searchLineicons("", Number.NaN).results).toEqual(
+      searchLineicons("", 1).results,
     );
   });
 });

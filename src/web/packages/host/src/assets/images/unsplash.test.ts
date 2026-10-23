@@ -87,7 +87,7 @@ describe("unsplashSource", () => {
       total_pages: 1,
     });
 
-    await unsplashSource.search("cat", undefined, context(fetcher));
+    await unsplashSource.search("cat", 1, context(fetcher));
 
     const search = calls.find((call) => call.url.startsWith(`${API}search/`));
     expect(search?.url).toContain("query=cat");
@@ -109,11 +109,7 @@ describe("unsplashSource", () => {
       total_pages: 1,
     });
 
-    const page = await unsplashSource.search(
-      "cat",
-      undefined,
-      context(fetcher),
-    );
+    const page = await unsplashSource.search("cat", 1, context(fetcher));
 
     expect(page.results.map((entry) => entry.id)).toEqual(["p1"]);
   });
@@ -121,11 +117,7 @@ describe("unsplashSource", () => {
   it("maps a free photo to its preview, photographer and licence", async () => {
     const { fetcher } = stubFetch({ results: [photo()], total_pages: 1 });
 
-    const page = await unsplashSource.search(
-      "cat",
-      undefined,
-      context(fetcher),
-    );
+    const page = await unsplashSource.search("cat", 1, context(fetcher));
 
     expect(page.results[0]).toEqual({
       id: "p1",
@@ -138,15 +130,20 @@ describe("unsplashSource", () => {
     });
   });
 
-  it("carries the next page while one remains", async () => {
-    const { fetcher } = stubFetch({ results: [photo()], total_pages: 3 });
+  it("carries the page count and asks for the page it was given", async () => {
+    const { fetcher, calls } = stubFetch({
+      results: [photo()],
+      total_pages: 3,
+    });
 
     expect(
-      await unsplashSource.search("cat", "2", context(fetcher)),
-    ).toMatchObject({ next: "3" });
+      await unsplashSource.search("cat", 2, context(fetcher)),
+    ).toMatchObject({ totalPages: 3 });
+    const asked = calls.find((call) => call.url.startsWith(`${API}search/`));
+    expect(asked?.url).toContain("page=2");
     expect(
-      await unsplashSource.search("cat", "3", context(fetcher)),
-    ).toMatchObject({ next: undefined });
+      await unsplashSource.search("cat", Number.NaN, context(fetcher)),
+    ).toMatchObject({ totalPages: 3 });
   });
 
   it("asks the API nothing when the term is blank", async () => {
@@ -157,9 +154,10 @@ describe("unsplashSource", () => {
 
     // The finder opens with an empty query, and Unsplash answers a missing
     // `query` with 400: a search the API cannot serve is not a failure.
-    expect(
-      await unsplashSource.search("   ", undefined, context(fetcher)),
-    ).toEqual({ results: [], next: undefined });
+    expect(await unsplashSource.search("   ", 1, context(fetcher))).toEqual({
+      results: [],
+      totalPages: undefined,
+    });
     expect(calls).toHaveLength(0);
   });
 
@@ -175,7 +173,7 @@ describe("unsplashSource", () => {
     ) as unknown as typeof fetch;
 
     const outcome = await searchSources(
-      { query: "cat", enabled: ["unsplash"], cursors: {} },
+      { query: "cat", enabled: ["unsplash"], pages: {} },
       context(fetcher),
       [unsplashSource],
     );
@@ -192,7 +190,7 @@ describe("unsplashSource", () => {
     ) as unknown as typeof fetch;
 
     const outcome = await searchSources(
-      { query: "cat", enabled: ["unsplash"], cursors: {} },
+      { query: "cat", enabled: ["unsplash"], pages: {} },
       context(fetcher),
       [unsplashSource],
     );

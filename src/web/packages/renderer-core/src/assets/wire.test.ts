@@ -5,13 +5,13 @@ describe("parseAssetSearchRequest", () => {
   it("parses a well-formed search", () => {
     expect(
       parseAssetSearchRequest(
-        { query: "arrow", enabled: ["lucide"], cursors: { lucide: "40" } },
+        { query: "arrow", enabled: ["lucide"], pages: { lucide: 2 } },
         ["lucide", "fontawesome-free"],
       ),
     ).toEqual({
       query: "arrow",
       enabled: ["lucide"],
-      cursors: { lucide: "40" },
+      pages: { lucide: 2 },
     });
   });
 
@@ -22,7 +22,7 @@ describe("parseAssetSearchRequest", () => {
       parseAssetSearchRequest({ query: "arrow", enabled: ["gone", "lucide"] }, [
         "lucide",
       ]),
-    ).toEqual({ query: "arrow", enabled: ["lucide"], cursors: {} });
+    ).toEqual({ query: "arrow", enabled: ["lucide"], pages: {} });
   });
 
   it("refuses a body with no query", () => {
@@ -42,35 +42,35 @@ describe("parseAssetSearchRequest", () => {
     ).toBeUndefined();
   });
 
-  it("drops a cursor that is not a string", () => {
+  it("drops a page that is not a whole page number", () => {
     expect(
       parseAssetSearchRequest(
         {
           query: "arrow",
           enabled: ["lucide"],
-          cursors: { lucide: 40, "fontawesome-free": "2", extra: null },
+          pages: { lucide: 0, "fontawesome-free": 2, extra: null, gone: 3 },
         },
         ["lucide", "fontawesome-free"],
       ),
     ).toEqual({
       query: "arrow",
       enabled: ["lucide"],
-      cursors: { "fontawesome-free": "2" },
+      pages: { "fontawesome-free": 2, gone: 3 },
     });
   });
 
-  it("answers no cursors when the field is absent or not an object", () => {
+  it("answers no pages when the field is absent or not an object", () => {
     expect(parseAssetSearchRequest({ query: "", enabled: [] }, [])).toEqual({
       query: "",
       enabled: [],
-      cursors: {},
+      pages: {},
     });
     expect(
       parseAssetSearchRequest(
-        { query: "", enabled: [], cursors: ["lucide"] },
+        { query: "", enabled: [], pages: ["lucide"] },
         [],
       ),
-    ).toEqual({ query: "", enabled: [], cursors: {} });
+    ).toEqual({ query: "", enabled: [], pages: {} });
   });
 
   it("refuses a value that is not an object", () => {

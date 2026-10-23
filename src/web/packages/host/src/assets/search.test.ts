@@ -30,7 +30,7 @@ function fakeSource(
     body: "grid",
     requires: undefined,
     configurable: true,
-    search: async () => ({ results: [result("1")], next: undefined }),
+    search: async () => ({ results: [result("1")], totalPages: 1 }),
     bytesOf: async () => undefined,
     ...overrides,
   };
@@ -39,18 +39,18 @@ function fakeSource(
 const request = (enabled: string[]) => ({
   query: "arrow",
   enabled,
-  cursors: {},
+  pages: {},
 });
 
 describe("searchSources", () => {
   it("calls only the enabled sources", async () => {
     const used = vi.fn(async () => ({
       results: [result("1")],
-      next: undefined,
+      totalPages: 1,
     }));
     const spared = vi.fn(async () => ({
       results: [result("2")],
-      next: undefined,
+      totalPages: 1,
     }));
 
     await searchSources(request(["fake-a"]), context(), [
@@ -65,7 +65,7 @@ describe("searchSources", () => {
   it("leaves a picker body to the editor", async () => {
     const called = vi.fn(async () => ({
       results: [result("1")],
-      next: undefined,
+      totalPages: 1,
     }));
 
     const outcome = await searchSources(request(["font-picker"]), context(), [
@@ -92,7 +92,7 @@ describe("searchSources", () => {
       search: () =>
         new Promise((resolve) =>
           setTimeout(
-            () => resolve({ results: [result("1")], next: undefined }),
+            () => resolve({ results: [result("1")], totalPages: 1 }),
             10,
           ),
         ),
@@ -136,7 +136,7 @@ describe("searchSources", () => {
   it("answers needs-credential without calling a keyed source", async () => {
     const called = vi.fn(async () => ({
       results: [result("1")],
-      next: undefined,
+      totalPages: 1,
     }));
 
     const outcome = await searchSources(request(["keyed"]), context(), [
@@ -153,7 +153,7 @@ describe("searchSources", () => {
   it("calls a keyed source when the credential is set", async () => {
     const called = vi.fn(async () => ({
       results: [result("1")],
-      next: undefined,
+      totalPages: 1,
     }));
 
     await searchSources(

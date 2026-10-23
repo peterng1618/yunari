@@ -21,17 +21,16 @@ describe("the Lucide manifest", () => {
 describe("searchLucide", () => {
   it("treats a space and a hyphen as one separator", () => {
     expect(
-      searchLucide("arrow down", undefined).results.map((entry) => entry.id),
+      searchLucide("arrow down", 1).results.map((entry) => entry.id),
     ).toContain("arrow-down");
   });
 
-  it("pages by offset and never repeats a page", async () => {
-    const first = searchLucide("", undefined);
-    expect(first.results).toHaveLength(40);
-    expect(first.next).toBe("40");
+  it("pages fifty at a time and never repeats a page", () => {
+    const first = searchLucide("", 1);
+    expect(first.results).toHaveLength(50);
+    expect(first.totalPages).toBe(Math.ceil(LUCIDE_ICONS.length / 50));
 
-    const second = searchLucide("", first.next);
-    expect(second.results).toHaveLength(40);
+    const second = searchLucide("", 2);
     expect(second.results[0]?.id).not.toBe(first.results[0]?.id);
     expect(
       second.results.some((entry) =>
@@ -40,9 +39,10 @@ describe("searchLucide", () => {
     ).toBe(false);
   });
 
-  it("answers the first page for a cursor that is not an offset", () => {
-    expect(searchLucide("", "nope").results).toEqual(
-      searchLucide("", undefined).results,
+  it("answers the first page for a page that is not a page number", () => {
+    expect(searchLucide("", 0).results).toEqual(searchLucide("", 1).results);
+    expect(searchLucide("", Number.NaN).results).toEqual(
+      searchLucide("", 1).results,
     );
   });
 });

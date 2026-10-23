@@ -40,7 +40,7 @@ function failed(source: string, message: string): AssetPage {
   return {
     source,
     results: [],
-    next: undefined,
+    totalPages: undefined,
     failure: { reason: "failed", message },
   };
 }

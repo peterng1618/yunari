@@ -1017,7 +1017,15 @@ export const uiCopy = {
     openFontPicker: "Browse the font catalogue",
     remoteHostNotice: (hosts: string): string =>
       `Search terms go to ${hosts}. Nothing else leaves this computer.`,
-    loadMore: "Load more",
+    /** An image's second action: the theme's background is one thing an author
+     *  wants, a picture on the canvas is another, and both are one press. */
+    placeOnCanvas: "Place on canvas",
+    pager: {
+      pages: "Pages",
+      previous: "Previous page",
+      next: "Next page",
+      page: (page: number): string => `Page ${page}`,
+    },
     unknownAssetFile: "That asset is not a file type the editor can import.",
     hostUnavailable: "The host is not connected.",
     emptyIcon: "That icon had no shape to place.",

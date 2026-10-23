@@ -25,7 +25,7 @@ const lucide: AssetResult = {
 const page: AssetPage = {
   source: "lucide",
   results: [lucide],
-  next: undefined,
+  totalPages: 1,
   failure: undefined,
 };
 

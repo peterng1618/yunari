@@ -9,6 +9,7 @@ import type {
 export const UNSPLASH_VERSION = "v1";
 
 const API = `https://api.unsplash.com/`;
+/** The API's documented `per_page` ceiling; a larger ask is a 400. */
 const PER_PAGE = 30;
 const LICENCE = "Unsplash License";
 const PHOTO_ID = /^[A-Za-z0-9_-]+$/;
@@ -68,8 +69,8 @@ function isFree(photo: UnsplashPhoto): boolean {
   );
 }
 
-function pageOf(cursor: string | undefined): number {
-  return cursor !== undefined && /^\d+$/.test(cursor) ? Number(cursor) : 1;
+function pageOf(page: number): number {
+  return Number.isInteger(page) && page >= 1 ? page : 1;
 }
 
 /** The API's own words for a refusal, which name the fault a status cannot:
@@ -133,13 +134,13 @@ export const unsplashSource: AssetSource = {
   // The one host that receives the term (spec §5).
   host: "api.unsplash.com",
 
-  async search(query, cursor, ctx): Promise<SearchPage> {
+  async search(query, asked, ctx): Promise<SearchPage> {
     // The finder opens with an empty term, and `query` is the endpoint's one
     // required parameter: Unsplash answers its absence with 400.
-    if (query.trim() === "") return { results: [], next: undefined };
+    if (query.trim() === "") return { results: [], totalPages: undefined };
 
     const key = keyOf(ctx);
-    const page = pageOf(cursor);
+    const page = pageOf(asked);
     const url = new URL("search/photos", API);
     url.searchParams.set("query", query);
     url.searchParams.set("page", String(page));
@@ -161,11 +162,10 @@ export const unsplashSource: AssetSource = {
       if (result !== undefined) results.push(result);
     }
 
-    const totalPages =
-      typeof answer.total_pages === "number" ? answer.total_pages : page;
     return {
       results,
-      next: page < totalPages ? String(page + 1) : undefined,
+      totalPages:
+        typeof answer.total_pages === "number" ? answer.total_pages : undefined,
     };
   },
 

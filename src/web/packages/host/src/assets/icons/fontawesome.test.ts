@@ -67,11 +67,7 @@ describe("fontAwesomeSource", () => {
   it("turns metadata into one result per style, credited from the fetched package", async () => {
     const { fetcher } = stubFetch();
 
-    const page = await fontAwesomeSource.search(
-      "house",
-      undefined,
-      context(fetcher),
-    );
+    const page = await fontAwesomeSource.search("house", 1, context(fetcher));
 
     expect(page.results.map((entry) => entry.id)).toEqual([
       "solid:house",
@@ -93,29 +89,25 @@ describe("fontAwesomeSource", () => {
 
     const byLabel = await fontAwesomeSource.search(
       "arrow down",
-      undefined,
+      1,
       context(fetcher),
     );
     expect(byLabel.results.map((entry) => entry.name)).toEqual(["arrow-down"]);
 
-    const byName = await fontAwesomeSource.search(
-      "HOUSE",
-      undefined,
-      context(fetcher),
-    );
+    const byName = await fontAwesomeSource.search("HOUSE", 1, context(fetcher));
     expect(byName.results).toHaveLength(2);
   });
 
-  it("answers an empty page with no cursor when nothing matches", async () => {
+  it("answers one empty page when nothing matches", async () => {
     const { fetcher } = stubFetch();
 
     const page = await fontAwesomeSource.search(
       "nothing-like-this",
-      undefined,
+      1,
       context(fetcher),
     );
 
-    expect(page).toEqual({ results: [], next: undefined });
+    expect(page).toEqual({ results: [], totalPages: 1 });
   });
 
   it("fails with the status when metadata is missing", async () => {
@@ -124,15 +116,15 @@ describe("fontAwesomeSource", () => {
     });
 
     await expect(
-      fontAwesomeSource.search("house", undefined, context(fetcher)),
+      fontAwesomeSource.search("house", 1, context(fetcher)),
     ).rejects.toThrow(/404/);
   });
 
   it("fetches the metadata once for repeated searches", async () => {
     const { fetcher, calls } = stubFetch();
 
-    await fontAwesomeSource.search("house", undefined, context(fetcher));
-    await fontAwesomeSource.search("github", undefined, context(fetcher));
+    await fontAwesomeSource.search("house", 1, context(fetcher));
+    await fontAwesomeSource.search("github", 1, context(fetcher));
 
     expect(
       calls.filter((url) => url.endsWith("/metadata/icon-families.json")),

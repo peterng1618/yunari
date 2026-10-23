@@ -4,6 +4,7 @@ import {
   type Gradient,
   Group,
   loadSVGFromString,
+  Path,
 } from "fabric/es";
 
 /** The theme paint an imported icon draws with, and the reference it came from. */
@@ -55,29 +56,69 @@ export async function iconShapes(
   return shapes;
 }
 
-/** One object for the whole glyph: the path itself, or a group of them.
+/** One object for the whole glyph: one path, or a group when a shape the path
+ *  grammar cannot carry (a text or an image an exotic set embeds) is present.
  *
- *  Lucide draws a glyph in several subpaths and Font Awesome in one, so a
- *  multi-path icon arrives as a group rather than as loose objects an author
- *  would have to select together. */
+ *  A glyph drawn in several subpaths is **joined into one path**, not grouped:
+ *  a group is a container an author has to ungroup to recolour, and the
+ *  composition panel lists it as a group rather than as a shape — the starter
+ *  theme's icons are one path for the same reason. Fabric's own path commands
+ *  are the join: they are already in the SVG's coordinates, so concatenating
+ *  them is the whole merge. */
 export function iconObject(
   shapes: readonly FabricObject[],
   name: string,
   id: string,
 ): FabricObject {
-  // Every object the scene holds needs its own id — the document's validator
-  // refuses one without — so a glyph's subpaths are numbered under the glyph's
-  // own id rather than left blank by the SVG parser.
-  shapes.forEach((shape, index) => {
-    shape.set("name", name);
-    shape.set("id", `${id}-${index + 1}`);
-  });
+  const joined = joinedPath(shapes);
+  let object: FabricObject;
+  if (joined !== undefined) {
+    object = joined;
+  } else if (shapes.length === 1) {
+    object = shapes[0] as FabricObject;
+  } else {
+    // A group is the fallback only: every object the scene holds needs its own
+    // id — the document's validator refuses one without — so the children are
+    // numbered under the glyph's id.
+    shapes.forEach((shape, index) => {
+      shape.set("id", `${id}-${index + 1}`);
+    });
+    object = new Group([...shapes]);
+  }
 
-  const object =
-    shapes.length === 1 ? (shapes[0] as FabricObject) : new Group([...shapes]);
   object.set("name", name);
   object.set("id", id);
   return object;
+}
+
+/** The shapes' paths as one path, or nothing where one shape is not a path. */
+function joinedPath(shapes: readonly FabricObject[]): FabricObject | undefined {
+  if (shapes.length < 2) return undefined;
+
+  const commands: unknown[] = [];
+  for (const shape of shapes) {
+    if (shape.type !== "path") return undefined;
+    commands.push(...(shape as Path).path);
+  }
+
+  // The first subpath's own object carries the ink, the stroke width and the
+  // caps the parser derived; only the geometry is replaced. The paint token is
+  // a custom property, so it is asked for by name — a serialised path without
+  // it is a stroke the document refuses to save.
+  const [first] = shapes as readonly Path[];
+  if (first === undefined) return undefined;
+  const options: Record<string, unknown> = { ...first.toObject() };
+  const paint = (first as unknown as { get(key: string): unknown }).get(
+    YUNARI_PAINT_PROPERTY,
+  );
+  if (paint !== undefined) options[YUNARI_PAINT_PROPERTY] = paint;
+  // A serialised path names its own type; Fabric's constructor derives that
+  // from the class and warns when it is handed one.
+  delete options.type;
+  return new Path(
+    commands as Path["path"],
+    options as unknown as ConstructorParameters<typeof Path>[1],
+  );
 }
 
 /** Centred on the artboard and sized as a share of its shorter edge.

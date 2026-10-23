@@ -19,7 +19,7 @@ const listing: AssetSourceListing = {
 const request: AssetSearchRequest = {
   query: "house",
   enabled: ["lucide"],
-  cursors: {},
+  pages: {},
 };
 
 function stub(

@@ -607,7 +607,7 @@ export class EditorSession {
       // keeps its caps and sanitising, and the credit is written before the
       // asset's own consequence runs — an import that places nothing still
       // carries its attribution.
-      importAsset: async (page, result) => {
+      importAsset: async (page, result, placement) => {
         const fetched = await assetBytes(page.source, result.id);
         if (fetched === undefined)
           return {
@@ -668,7 +668,9 @@ export class EditorSession {
           manager: this.#assets,
           document: this.#document,
           place: (assetId) => {
-            if (result.kind === "image") {
+            // An image lands in the theme's background unless the author asked
+            // for the canvas, which is the second press the finder offers.
+            if (result.kind === "image" && placement !== "place") {
               const artboard = this.#document.envelope.artboard;
               this.#document.setArtboard({
                 ...artboard,

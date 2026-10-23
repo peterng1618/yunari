@@ -22,7 +22,9 @@ export interface SourceBytes {
 
 export interface SearchPage {
   readonly results: readonly AssetResult[];
-  readonly next: string | undefined;
+  /** How many pages this question has for this source, or undefined when the
+   *  source cannot say. The pager draws no numeral without it. */
+  readonly totalPages: number | undefined;
 }
 
 export interface AssetSource {
@@ -37,7 +39,8 @@ export interface AssetSource {
   readonly host?: string;
   search(
     query: string,
-    cursor: string | undefined,
+    /** 1-based; the host asks for the page the pager shows. */
+    page: number,
     ctx: SourceContext,
   ): Promise<SearchPage>;
   bytesOf(

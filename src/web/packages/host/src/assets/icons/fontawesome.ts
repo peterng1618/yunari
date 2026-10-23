@@ -13,6 +13,8 @@ const HOME = "https://fontawesome.com/icons/";
 /** A style and a name both become a path segment; nothing else may. */
 const STYLE = /^[a-z]+$/;
 const NAME = /^[a-z0-9-]+$/;
+/** One page of the grid; the whole free set answers in one slice, not at once. */
+const PAGE = 50;
 
 /** One entry of `metadata/icon-families.json`: the styles are the keys of the
  *  classic family, which is the one the free package ships. */
@@ -110,11 +112,11 @@ export const fontAwesomeSource: AssetSource = {
   requires: undefined,
   configurable: true,
 
-  async search(query, _cursor, ctx): Promise<SearchPage> {
+  async search(query, asked, ctx): Promise<SearchPage> {
     const { icons, licence } = await metadataOf(ctx);
     const wanted = normalize(query);
 
-    const results: AssetResult[] = [];
+    const matches: AssetResult[] = [];
     for (const [name, entry] of icons) {
       if (
         wanted !== "" &&
@@ -125,12 +127,16 @@ export const fontAwesomeSource: AssetSource = {
       }
 
       for (const style of Object.keys(entry.svgs?.classic ?? {})) {
-        if (STYLE.test(style)) results.push(resultOf(name, style, licence));
+        if (STYLE.test(style)) matches.push(resultOf(name, style, licence));
       }
     }
 
-    // The whole free set is small enough to answer in one page.
-    return { results, next: undefined };
+    const page = Number.isInteger(asked) && asked >= 1 ? asked : 1;
+    const offset = (page - 1) * PAGE;
+    return {
+      results: matches.slice(offset, offset + PAGE),
+      totalPages: Math.max(1, Math.ceil(matches.length / PAGE)),
+    };
   },
 
   async bytesOf(resultId, ctx): Promise<SourceBytes | undefined> {

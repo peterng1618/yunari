@@ -117,6 +117,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+### Source marks
+
+`packages/editor/src/asset-finder/source-mark.tsx` carries the Lucide, Font
+Awesome and Unsplash marks' path data from Simple Icons (CC0 1.0,
+<https://github.com/simple-icons/simple-icons>). CC0 asks for no attribution;
+this entry records provenance. The marks are their owners' trademarks, used only
+to label which source each result came from.
+
 ## Runtime icons
 
 `lucide-react` 1.48.0 supplies the editor's action-bar icons, imported per-icon

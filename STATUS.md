@@ -1,7 +1,7 @@
 # Yunari status
 
 Updated: 2026-10-23
-Branch: `main`
+Branch: `peterng1618/asset-finder-hub`
 
 ## Current objective
 
@@ -18,11 +18,11 @@ Close the **R2 store backend** plan ([`2026-10-23-r2-store-backend.md`](docs/sup
 
 ## Last completed change
 
-- **The finder's reported defects are fixed**: Font Awesome reads 6.7's `icon-families.json` (the old `icons.json` 404s) and Unsplash is never asked for a blank term.
-- **Icons import as geometry**: the theme's ink, a stroke width, a centred 12%-of-the-shorter-edge box, and a path/group in the composition panel — no longer an image.
-- **The grid** draws monochrome icons as theme-coloured masks in one fixed box, and the selected row carries the accent edge.
-- **The finder is near-full-screen**, inset so the header, rail and status bar stay visible, and it renders the dialog's Close control.
-- Unsplash's own error text now rides beside the status, so a refusal names its cause.
+- **The finder pages like the theme store**: 1-based page numbers over the wire (`pages` / `totalPages`), 50 icons a page, 30 images (Unsplash's per-page ceiling), and the first page is all the modal loads on open.
+- **One bar carries the question and the answer**: tabs and search share the header row, then sources → result count → numbered pager and actions; the licence word is gone and each card marks its source logo beside its name or author.
+- **The window's way out is an ×** in the corner, and a multi-subpath icon now imports as one joined `Path` carrying its paint token, like the other two sources.
+- **An image offers "Place on canvas"** beside "Set as background": `importAsset` takes a placement, absent meaning the kind's own default.
+- Evidence: `npm run gate` exit 0 (unit 4559/4559, worker 72/72, typecheck/biome/design/status/docs all 0); asset-finder e2e 13 passed / 16 phone-skipped on rebuilt bundles; icons, failure and fonts screenshots recaptured.
 
 ## Next
 

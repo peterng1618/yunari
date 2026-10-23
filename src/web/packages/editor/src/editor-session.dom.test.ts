@@ -1124,7 +1124,7 @@ describe("opening a theme over a document that has unsaved changes", () => {
     const setAssets = (panels.last as ReturnType<typeof panel>).setAssets;
 
     const outcome = await extensions.actionFacade().importAsset?.(
-      { source: "lucide", results: [], next: undefined, failure: undefined },
+      { source: "lucide", results: [], totalPages: 1, failure: undefined },
       {
         id: "unsplash:photo",
         name: "photo",
@@ -1170,7 +1170,7 @@ describe("opening a theme over a document that has unsaved changes", () => {
     ).editor.canvas;
 
     const outcome = await extensions.actionFacade().importAsset?.(
-      { source: "lucide", results: [], next: undefined, failure: undefined },
+      { source: "lucide", results: [], totalPages: 1, failure: undefined },
       {
         id: "lucide:house",
         name: "house",
@@ -1186,22 +1186,20 @@ describe("opening a theme over a document that has unsaved changes", () => {
       "imported",
     );
     // A picture would bake `currentColor` to black; a path carries the theme's
-    // token, its stroke width and the frame-relative size the author gets.
+    // token, its stroke width and the frame-relative size the author gets. A
+    // glyph drawn in several subpaths is one path, not a group of them.
     const placed = canvas.add.mock.calls[0]?.[0] as {
       type: string;
       get(name: string): unknown;
-      getObjects(): { get(name: string): unknown }[];
       width: number;
       scaleX: number;
     };
-    expect(placed.type).toBe("group");
+    expect(placed.type).toBe("path");
     expect(placed.get("name")).toBe("house");
+    expect(placed.get("stroke")).toBe("#ecf5ff");
     expect(Math.round(placed.width * placed.scaleX)).toBe(
       Math.round(1080 * 0.12),
     );
-    const shapes = placed.getObjects();
-    expect(shapes).toHaveLength(2);
-    for (const shape of shapes) expect(shape.get("stroke")).toBe("#ecf5ff");
     extensions.destroy();
   });
 
