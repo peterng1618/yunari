@@ -160,6 +160,7 @@ async function pointer(
   type: string,
   x: number,
   buttons = 1,
+  button = 0,
 ): Promise<void> {
   await act(async () => {
     element.dispatchEvent(
@@ -169,6 +170,7 @@ async function pointer(
         clientX: x,
         clientY: 12,
         buttons,
+        button,
       }),
     );
   });
@@ -342,6 +344,87 @@ it("emits through a drag and settles exactly once at pointer-up", async () => {
   ).not.toHaveBeenCalled();
 
   await pointer(first, "pointerup", 140, 0);
+  expect(mounted.commit).toHaveBeenCalledOnce();
+});
+
+it("selects a stop on a press-and-release without moving it", async () => {
+  // The review's case: pressing a mark at its own centre is a *selection*, not
+  // an edit. The mark sits at the padding box's 50%, so its centre is half the
+  // stubbed 200px track — and writing the offset a press computes there would
+  // be a real document edit and a real history entry.
+  const mounted = await mount({
+    stops: [
+      { offset: 0, color: BLACK },
+      { offset: 0.5, color: RED },
+      { offset: 1, color: WHITE },
+    ],
+    angle: 0,
+  });
+  stubRect(mounted.find("gradient-track"), 200);
+  const middle = mounted.find("gradient-stop-1");
+
+  await pointer(middle, "pointerdown", 100);
+  await pointer(middle, "pointerup", 100, 0);
+
+  expect(
+    mounted.change,
+    "a press selects, it does not write",
+  ).not.toHaveBeenCalled();
+  expect(
+    mounted.commit,
+    "and it is not a history entry",
+  ).not.toHaveBeenCalled();
+});
+
+it("ignores a secondary-button press", async () => {
+  const mounted = await mount({
+    stops: [
+      { offset: 0, color: BLACK },
+      { offset: 0.5, color: RED },
+      { offset: 1, color: WHITE },
+    ],
+    angle: 0,
+  });
+  stubRect(mounted.find("gradient-track"), 200);
+  const middle = mounted.find("gradient-stop-1");
+
+  await pointer(middle, "pointerdown", 100, 2, 2);
+  await pointer(middle, "pointermove", 40, 2);
+  await pointer(middle, "pointerup", 40, 2, 2);
+
+  expect(
+    mounted.change,
+    "the primary button owns the drag",
+  ).not.toHaveBeenCalled();
+  expect(mounted.commit).not.toHaveBeenCalled();
+});
+
+it("maps the pointer through the padding box the marks are positioned in", async () => {
+  // A mark's `left: 50%` resolves against the padding box, while
+  // `getBoundingClientRect` measures the border box. With a 1px edge each side,
+  // the 25% point is `1 + 0.25 * 198`, not `0.25 * 200`; a border-box reading
+  // would write 0.2525 for a mark that sits at 0.25.
+  const mounted = await mount({
+    stops: [
+      { offset: 0, color: BLACK },
+      { offset: 1, color: WHITE },
+    ],
+    angle: 0,
+  });
+  const track = mounted.find("gradient-track");
+  track.style.borderLeftWidth = "1px";
+  track.style.borderRightWidth = "1px";
+  stubRect(track, 200);
+  const first = mounted.find("gradient-stop-0");
+
+  await pointer(first, "pointerdown", 1);
+  await pointer(first, "pointermove", 1 + 0.25 * 198);
+
+  const written = mounted.change.mock.calls.at(-1)?.[0] as
+    | { stops: Stops }
+    | undefined;
+  expect(written?.stops[0]?.offset).toBeCloseTo(0.25, 5);
+  await pointer(first, "pointerup", 1 + 0.25 * 198, 0);
   expect(mounted.commit).toHaveBeenCalledOnce();
 });
 

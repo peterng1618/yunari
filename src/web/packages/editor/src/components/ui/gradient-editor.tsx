@@ -22,6 +22,17 @@ interface GradientStop {
   readonly color: string;
 }
 
+/** A press selects; the pointer has to travel this far before it is a drag, so
+ *  a click on a mark's own centre writes nothing. */
+const DRAG_THRESHOLD = 2;
+
+/** The pointer gesture under way on one mark, if any. */
+interface Drag {
+  readonly index: number;
+  readonly startX: number;
+  moved: boolean;
+}
+
 /** A stop's offset as the percentage its well shows, at two decimals — an
  *  exact fraction the author can read back, not a rounded projection. */
 function percentOf(offset: number): number {
@@ -60,6 +71,7 @@ export function GradientEditor({
   const [selected, setSelected] = useState(0);
   const [menu, setMenu] = useState<PresetMenuTarget | undefined>(undefined);
   const track = useRef<HTMLDivElement | null>(null);
+  const drag = useRef<Drag | null>(null);
 
   // Derived rather than stored, so a shorter stop list clamps the selection
   // without an effect and there is one answer rather than two.
@@ -76,13 +88,31 @@ export function GradientEditor({
     });
   };
 
-  /** The pointer's position as a 0–1 fraction of the track. */
+  /** The pointer's position as a 0–1 fraction of the track.
+   *
+   *  Measured against the **padding box**, because that is the box a mark's
+   *  `left: n%` resolves against; `getBoundingClientRect` is the border box, and
+   *  reading it would put every mark's own centre a border-width off its
+   *  offset. */
   const ratioAt = (clientX: number): number | undefined => {
-    const box = track.current?.getBoundingClientRect();
-    if (box === undefined || box.width === 0) return undefined;
-    const ratio = (clientX - box.left) / box.width;
+    const element = track.current;
+    if (element === null) return undefined;
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const left = Number.parseFloat(style.borderLeftWidth) || 0;
+    const right = Number.parseFloat(style.borderRightWidth) || 0;
+    const width = rect.width - left - right;
+    if (!(width > 0)) return undefined;
+    const ratio = (clientX - rect.left - left) / width;
     if (!Number.isFinite(ratio)) return undefined;
     return Math.min(1, Math.max(0, ratio));
+  };
+
+  const endDrag = (): void => {
+    const gesture = drag.current;
+    drag.current = null;
+    // A press that never travelled is a selection, not an edit.
+    if (gesture?.moved === true) onCommit?.();
   };
 
   const addAt = (offset: number): void => {
@@ -170,20 +200,33 @@ export function GradientEditor({
             onClick={() => setSelected(index)}
             onFocus={() => setSelected(index)}
             onPointerDown={(event) => {
+              // The primary button owns the gesture; a secondary press is a
+              // menu candidate and must not move or select the stop.
+              if (event.button !== 0) return;
               event.currentTarget.setPointerCapture(event.pointerId);
               setSelected(index);
-              const offset = ratioAt(event.clientX);
-              if (offset !== undefined)
-                put(index, { offset, color: stop.color });
+              drag.current = {
+                index,
+                startX: event.clientX,
+                moved: false,
+              };
             }}
             onPointerMove={(event) => {
+              const gesture = drag.current;
+              if (gesture === null || gesture.index !== index) return;
               if (event.buttons === 0) return;
+              if (
+                !gesture.moved &&
+                Math.abs(event.clientX - gesture.startX) < DRAG_THRESHOLD
+              )
+                return;
+              gesture.moved = true;
               const offset = ratioAt(event.clientX);
               if (offset !== undefined)
                 put(index, { offset, color: stop.color });
             }}
-            onPointerUp={() => onCommit?.()}
-            onPointerCancel={() => onCommit?.()}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
             onKeyDown={(event) => {
               if (event.key === "Delete") {
                 event.preventDefault();
