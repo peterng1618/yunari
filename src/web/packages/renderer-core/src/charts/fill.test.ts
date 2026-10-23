@@ -4,7 +4,6 @@ import {
   type LinearGradientColor,
   mixHex,
   normalizePosition,
-  parseHex,
   resolveFlatColor,
   resolveThresholdColor,
   toLinearGradient,
@@ -162,23 +161,12 @@ describe("mixHex", () => {
     expect(mixHex("#ff0000", "#0000ff", 1)).toBe("#0000ff");
   });
 
-  it("falls back to the nearer endpoint for a colour it cannot parse", () => {
+  it("mixes colours beyond hex, and falls back for one it cannot parse", () => {
     // Emitting an invalid colour would paint nothing; returning an endpoint at
-    // least keeps the element visible. The schema restricts stops to hex.
-    expect(mixHex("rgb(0 0 0)", "#ffffff", 0.2)).toBe("rgb(0 0 0)");
-    expect(mixHex("rgb(0 0 0)", "#ffffff", 0.8)).toBe("#ffffff");
-  });
-});
-
-describe("parseHex", () => {
-  it("accepts #rgb and #rrggbb, with or without the hash", () => {
-    expect(parseHex("#f00")).toEqual([255, 0, 0]);
-    expect(parseHex("00ff00")).toEqual([0, 255, 0]);
-  });
-
-  it("rejects anything else", () => {
-    expect(parseHex("#ff00")).toBeUndefined();
-    expect(parseHex("red")).toBeUndefined();
+    // least keeps the element visible.
+    expect(mixHex("rgb(0 0 0)", "#ffffff", 0.2)).toBe("#333333");
+    expect(mixHex("nope", "#ffffff", 0.2)).toBe("nope");
+    expect(mixHex("nope", "#ffffff", 0.8)).toBe("#ffffff");
   });
 });
 

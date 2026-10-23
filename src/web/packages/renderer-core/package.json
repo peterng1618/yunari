@@ -14,7 +14,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "culori": "4.0.2",
     "echarts": "6.1.0"
   },
-  "//": "IMPORTANT: this package must never depend on editor UI, inspectors or a component framework. §47 requires the display-only bundle to exclude all of that, and a dependency here would pull it in. Editor-only behaviour belongs in @yunari/editor. It must also stay FABRIC-FREE: the host imports runtime values from this package's barrel and runs in Node, so a Fabric import reachable from here would put a browser scene graph in the host bundle. Fabric lives in @yunari/scene-fabric, which the host does not depend on."
+  "//": "IMPORTANT: this package must never depend on editor UI, inspectors or a component framework. §47 requires the display-only bundle to exclude all of that, and a dependency here would pull it in. Editor-only behaviour belongs in @yunari/editor. It must also stay FABRIC-FREE: the host imports runtime values from this package's barrel and runs in Node, so a Fabric import reachable from here would put a browser scene graph in the host bundle. Fabric lives in @yunari/scene-fabric, which the host does not depend on.",
+  "devDependencies": {
+    "@types/culori": "4.0.1"
+  }
 }

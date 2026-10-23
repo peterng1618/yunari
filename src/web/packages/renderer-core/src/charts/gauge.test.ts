@@ -190,11 +190,13 @@ describe("mixHex", () => {
     expect(mixHex("#000", "#fff", 1)).toBe("#ffffff");
   });
 
-  it("falls back to the nearer endpoint for uninterpolatable colours", () => {
-    // Named colours cannot be mixed here; returning a valid endpoint beats
-    // emitting a malformed colour the engine would silently drop.
-    expect(mixHex("rebeccapurple", "#ffffff", 0.2)).toBe("rebeccapurple");
-    expect(mixHex("rebeccapurple", "#ffffff", 0.8)).toBe("#ffffff");
+  it("mixes a named colour, and falls back for one it cannot parse", () => {
+    // A named colour is readable now that the shared parser owns the grammar;
+    // an unreadable value still returns a valid endpoint rather than a
+    // malformed colour the engine would silently drop.
+    expect(mixHex("rebeccapurple", "#ffffff", 0.8)).toBe("#e0d6eb");
+    expect(mixHex("nope", "#ffffff", 0.2)).toBe("nope");
+    expect(mixHex("nope", "#ffffff", 0.8)).toBe("#ffffff");
   });
 });
 

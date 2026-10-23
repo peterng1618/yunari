@@ -15,6 +15,8 @@ declares. The closure half is this file's own **Release rule** below.
 | Package | Version/pin | Licence | Role |
 |---|---|---|---|
 | `echarts` | 6.1.0 | Apache-2.0 | charts |
+| `culori` | 4.0.2 | MIT | colour parsing, conversion and hex formatting; no dependencies of its own |
+| `@types/culori` | 4.0.1 | MIT | devDependency: types for culori 4, which ships none |
 | `fabric` | 7.4.0 | MIT | scene graph |
 | `lucide-react` | 1.48.0 | ISC, plus MIT for Feather-derived icons used | editor action-bar icons |
 | `lineicons` | 1.3.2 | MIT | devDependency: the finder's Lineicons results, read by `scripts/generate-lineicons.mjs` into a generated manifest; no runtime import |
