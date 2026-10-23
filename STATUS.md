@@ -17,9 +17,10 @@ The Colours tab is closed; the next objective is the queued **Colour Picker and 
 
 ## Last completed change
 
-- **The Colours tab closes in a browser proof**: a ColorSwoop palette passes the kind filter and lands in `yunari.editor.presets`, with no bytes request.
-- **Ownership names the sources**: the registry, the four colour adapters and the finder's `colour` surface are rows in `docs/architecture/ownership.md`.
-- **Proof:** the focused browser test 1 passed (1 phone skip), `asset-finder.spec.ts` whole 17 passed and 17 skipped, and `npm run gate` exited 0.
+- **The Colours tab lands in the editor**: four live sources draw a Colours tab, a kind filter picks which are asked, and Add to presets stores palettes and gradients in `yunari.editor.presets`.
+- **Color Hunt pages**: a full 40-row page reports the next page so the pager reaches it; an empty page steps back rather than stranding the author.
+- **The surface tells the truth**: cached catalogues no longer claim to receive the search term, a preset row shows its licence, and a success sentence clears when the question changes.
+- **Proof:** the focused browser spec passed 1 (1 phone skip) on two independent runs, `asset-finder.spec.ts` 17 passed and 17 skipped, and `npm run gate` exited 0 (348 unit files / 4792 tests; worker 12 / 72).
 
 ## Next
 

@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Vitest, Base UI tabs, React 19, host `fetch`, the editor-local `presetLibrary`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-23-colours-tab-design.md`](../specs/2026-10-23-colours-tab-design.md)
+**Spec:** [`docs/superpowers/specs/2026-10-23-colours-tab-design.md`](../../specs/2026-10-23-colours-tab-design.md)
 
 ## Global Constraints
 

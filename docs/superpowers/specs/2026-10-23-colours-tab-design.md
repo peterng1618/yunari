@@ -166,8 +166,10 @@ export type AssetPreset = AssetPresetPalette | AssetPresetGradient;
 - `AssetSearchRequest` is unchanged. The kind filter is expressed by which source
   ids are enabled, which is already the request's shape.
 - The adapters construct the payload from parsed source data, and the preset
-  store validates it again on add: an invalid entry is skipped there and the
-  message counts what landed. The action never writes a partial entry itself.
+  store validates it again on add: an invalid palette colour is skipped there
+  and the message counts what landed, while a malformed gradient is refused
+  whole and reports `Already in presets`. The action never writes a partial
+  entry itself.
 
 ## 4. Applying a preset
 
@@ -210,7 +212,8 @@ exact duplicates and persist under `yunari.editor.presets`.
 | Color Hunt's feed changes shape | that source says it failed with the parse message; no row is invented |
 | A cached catalogue fetch failed | the promise is cleared; the next search retries |
 | The query matches nothing | the finder's existing `no-results`, with Clear query |
-| A palette or gradient entry is malformed | the store skips it; the message counts what landed |
+| A palette colour is malformed | the store skips it and the message counts what landed |
+| A gradient is malformed | the store refuses it whole; `Already in presets` |
 | Every palette in a result is already stored | `Already in presets`, and the store is unchanged |
 | The host serves no colour sources | no Colours tab is drawn (tabs are registry-derived) |
 | A source is switched off mid-flight | its late page is dropped by the existing ticket |
