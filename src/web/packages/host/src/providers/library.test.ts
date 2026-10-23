@@ -35,6 +35,25 @@ const laptopBattery: BatteryLike = {
   timeRemaining: 90,
   designedCapacity: 80000,
   maxCapacity: 60000,
+  percent: 76,
+  voltage: 12.4,
+};
+
+/**
+ * The library's desktop default, field for field: `hasBattery` is false but the
+ * rest are concrete (`isCharging: false`, `acConnected: true`, zeros, a null
+ * countdown). Without the gate those fields would answer `ok` booleans and a
+ * `0 %` level — fabricated telemetry on a machine with no battery.
+ */
+const desktopBattery: BatteryLike = {
+  hasBattery: false,
+  isCharging: false,
+  acConnected: true,
+  designedCapacity: 0,
+  maxCapacity: 0,
+  percent: 0,
+  voltage: 0,
+  timeRemaining: null,
 };
 
 interface Fake {
@@ -57,8 +76,9 @@ function fakeMachine(overrides: Fake = {}): LibraryModule {
     cpu: async () => ({}),
     diskLayout: async () => [],
     blockDevices: async () => [],
-    time: () => ({ uptime: overrides.uptime ?? 3600 }),
-    processes: async () => ({ all: overrides.processes ?? 321 }),
+    // Fractional on purpose: the provider promises integer seconds and a count.
+    time: () => ({ uptime: overrides.uptime ?? 3599.6 }),
+    processes: async () => ({ all: overrides.processes ?? 321.9 }),
     osInfo: async () => overrides.os ?? osReport,
     battery: async () => overrides.battery ?? laptopBattery,
     wifiConnections: async () => overrides.wifi ?? [wifi],
@@ -66,11 +86,13 @@ function fakeMachine(overrides: Fake = {}): LibraryModule {
 }
 
 const BATTERY_KEYS = [
+  "battery.level",
   "battery.state",
   "battery.charging",
   "battery.timeRemaining",
   "battery.ac",
   "battery.health",
+  "battery.voltage",
 ];
 
 const WIFI_KEYS = ["wifi.ssid", "wifi.signal", "wifi.linkSpeed"];
@@ -85,6 +107,7 @@ function sampleOf(
       textValue?: string;
       booleanValue?: boolean;
       unit?: string;
+      message?: string;
     };
   }[],
   key: string,
@@ -225,10 +248,57 @@ describe("battery readings", () => {
       sampleOf(await discharging.sample(["battery.state"], 0), "battery.state")
         ?.textValue,
     ).toBe("discharging");
-    // Full versus idle is not reported, so the state is a gap rather than a guess.
-    expect(
-      sampleOf(await idle.sample(["battery.state"], 0), "battery.state"),
-    ).toMatchObject({ status: "missing" });
+    // Full versus idle is not reported, so the state is a gap rather than a
+    // guess — and the reason names that gap, not absent battery hardware.
+    const idleState = sampleOf(
+      await idle.sample(["battery.state"], 0),
+      "battery.state",
+    );
+    expect(idleState).toMatchObject({ status: "missing" });
+    expect(idleState?.message).toContain("neither charging nor discharging");
+    expect(idleState?.message).not.toContain("no battery");
+  });
+
+  it("reports level and voltage from the battery", async () => {
+    const provider = new LibrarySensorProvider(fakeMachine());
+    const entries = await provider.sample(
+      ["battery.level", "battery.voltage"],
+      0,
+    );
+
+    expect(sampleOf(entries, "battery.level")).toMatchObject({
+      status: "ok",
+      value: 76,
+      unit: "%",
+    });
+    expect(sampleOf(entries, "battery.voltage")).toMatchObject({
+      status: "ok",
+      value: 12.4,
+      unit: "V",
+    });
+  });
+
+  it("treats a zero countdown while discharging as a gap", async () => {
+    // `systeminformation` builds the Windows value as parseInt('0' + value), so
+    // zero means it could not read the countdown, not a 0-second discharge.
+    const provider = new LibrarySensorProvider(
+      fakeMachine({
+        battery: {
+          ...laptopBattery,
+          isCharging: false,
+          acConnected: false,
+          timeRemaining: 0,
+        },
+      }),
+    );
+    const entries = await provider.sample(["battery.timeRemaining"], 0);
+
+    expect(sampleOf(entries, "battery.timeRemaining")).toMatchObject({
+      status: "missing",
+    });
+    expect(sampleOf(entries, "battery.timeRemaining")).not.toHaveProperty(
+      "value",
+    );
   });
 
   it("carries charging and AC as booleans", async () => {
@@ -279,7 +349,7 @@ describe("battery readings", () => {
 
   it("reports every battery key as a gap on a desktop, never zero", async () => {
     const provider = new LibrarySensorProvider(
-      fakeMachine({ battery: { hasBattery: false } }),
+      fakeMachine({ battery: desktopBattery }),
     );
     const entries = await provider.sample(BATTERY_KEYS, 0);
 
@@ -289,6 +359,7 @@ describe("battery readings", () => {
       expect(sampleOf(entries, key), key).not.toHaveProperty("textValue");
       expect(sampleOf(entries, key), key).not.toHaveProperty("booleanValue");
     }
+    expect(sampleOf(entries, "battery.state")?.message).toContain("no battery");
   });
 });
 

@@ -75,11 +75,13 @@ const LIBRARY_KEYS = [
   "system.hostname",
   "system.os",
   "system.osBuild",
+  "battery.level",
   "battery.state",
   "battery.charging",
   "battery.timeRemaining",
   "battery.ac",
   "battery.health",
+  "battery.voltage",
 ] as const;
 
 export const LIBRARY_DESCRIPTORS: readonly SensorDescriptor[] =
@@ -125,6 +127,10 @@ export interface LibraryReadings {
   readonly systemHostname?: string;
   readonly systemOs?: string;
   readonly systemOsBuild?: string;
+  readonly batteryLevel?: number;
+  readonly batteryVoltage?: number;
+  /** The machine reports battery hardware, so its gaps are field gaps. */
+  readonly batteryReported?: boolean;
   /** Minutes are the library's unit; seconds is the vocabulary's. */
   readonly batteryTimeRemaining?: number;
   readonly batteryHealth?: number;
@@ -179,10 +185,15 @@ export interface BatteryLike {
   readonly hasBattery?: boolean;
   readonly isCharging?: boolean;
   readonly acConnected?: boolean;
-  /** Minutes left while discharging. */
-  readonly timeRemaining?: number;
+  /**
+   * Minutes left while discharging. `null` on a desktop, and `0` means the
+   * Windows path could not read it (`parseInt('0' + value)`).
+   */
+  readonly timeRemaining?: number | null;
   readonly designedCapacity?: number;
   readonly maxCapacity?: number;
+  readonly percent?: number;
+  readonly voltage?: number;
 }
 
 /** The CPU identity fields the library reports, all three of which differ. */
@@ -389,6 +400,13 @@ export function readingsFromLibrary(input: {
     typeof battery?.acConnected === "boolean" ? battery.acConnected : undefined;
   const isCharging =
     typeof battery?.isCharging === "boolean" ? battery.isCharging : undefined;
+  // A zero countdown while discharging is the library's "could not read",
+  // not a battery with nothing left.
+  const batteryTimeRemaining =
+    remainingMinutes === undefined ||
+    (remainingMinutes <= 0 && isCharging !== true)
+      ? undefined
+      : remainingMinutes * 60;
 
   return {
     ...(finite(input.load?.currentLoad) === undefined
@@ -438,10 +456,14 @@ export function readingsFromLibrary(input: {
     ...(reportedText(os?.build) === undefined
       ? {}
       : { systemOsBuild: reportedText(os?.build)! }),
-    // Minutes are the library's unit; the vocabulary declares seconds.
-    ...(remainingMinutes === undefined
+    ...(battery === undefined ? {} : { batteryReported: true }),
+    ...(finite(battery?.percent) === undefined
       ? {}
-      : { batteryTimeRemaining: remainingMinutes * 60 }),
+      : { batteryLevel: finite(battery?.percent)! }),
+    ...(finite(battery?.voltage) === undefined
+      ? {}
+      : { batteryVoltage: finite(battery?.voltage)! }),
+    ...(batteryTimeRemaining === undefined ? {} : { batteryTimeRemaining }),
     ...(maxCapacity === undefined ||
     designedCapacity === undefined ||
     maxCapacity <= 0 ||
@@ -469,7 +491,11 @@ export function samplesFromLibrary(
   const timestamp = new Date(nowMs).toISOString();
   const entries: SampleEntry[] = [];
 
-  const push = (semanticKey: string, value: number | undefined): void => {
+  const push = (
+    semanticKey: string,
+    value: number | undefined,
+    gap = "this machine reports no reading for that sensor",
+  ): void => {
     if (!semanticKeys.includes(semanticKey)) {
       return;
     }
@@ -480,12 +506,7 @@ export function samplesFromLibrary(
     if (value === undefined) {
       entries.push({
         semanticKey,
-        sample: {
-          sensorId,
-          timestamp,
-          status: "missing",
-          message: "this machine reports no reading for that sensor",
-        },
+        sample: { sensorId, timestamp, status: "missing", message: gap },
       });
       return;
     }
@@ -635,10 +656,23 @@ export function samplesFromLibrary(
   pushText("system.hostname", readings.systemHostname, systemTextGap);
   pushText("system.os", readings.systemOs, systemTextGap);
   pushText("system.osBuild", readings.systemOsBuild, systemTextGap);
-  push("battery.timeRemaining", readings.batteryTimeRemaining);
-  push("battery.health", readings.batteryHealth);
-  const batteryGap = "this machine reports no battery reading";
-  pushText("battery.state", readings.batteryState, batteryGap);
+  // A desktop and a reported-but-silent battery are different gaps: the first
+  // has no battery hardware, the second has nothing to say about this field.
+  const batteryGap =
+    readings.batteryReported === true
+      ? "this machine reports no such battery reading"
+      : "this machine reports no battery";
+  push("battery.level", readings.batteryLevel, batteryGap);
+  push("battery.voltage", readings.batteryVoltage, batteryGap);
+  push("battery.timeRemaining", readings.batteryTimeRemaining, batteryGap);
+  push("battery.health", readings.batteryHealth, batteryGap);
+  pushText(
+    "battery.state",
+    readings.batteryState,
+    readings.batteryReported === true
+      ? "the battery reports neither charging nor discharging"
+      : batteryGap,
+  );
   pushBoolean("battery.charging", readings.batteryCharging, batteryGap);
   pushBoolean("battery.ac", readings.batteryAc, batteryGap);
 
@@ -837,8 +871,9 @@ export class LibrarySensorProvider implements SensorProvider {
       return {};
     }
 
-    this.processReads = { count: Math.trunc(count), atMs: nowMs };
-    return { all: Math.trunc(count) };
+    // The count is coerced once, where readings are mapped.
+    this.processReads = { count, atMs: nowMs };
+    return { all: count };
   }
 
   /** Loaded lazily so a host that never needs metrics does not pay for it. */
