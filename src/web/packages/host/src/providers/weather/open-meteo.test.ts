@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BERLIN, OPEN_METEO_BERLIN_CAPTURE } from "./open-meteo.fixture.js";
 import {
   fetchOpenMeteo,
@@ -9,13 +9,20 @@ import {
 function fetcherOf(
   body: BodyInit,
   status = 200,
-): { fetcher: typeof fetch; asked: () => URL | undefined } {
+): {
+  fetcher: typeof fetch;
+  asked: () => URL | undefined;
+  init: () => RequestInit | undefined;
+} {
   let asked: URL | undefined;
+  let init: RequestInit | undefined;
 
   return {
     asked: () => asked,
-    fetcher: (async (input: string | URL | Request) => {
+    init: () => init,
+    fetcher: (async (input: string | URL | Request, options?: RequestInit) => {
       asked = new URL(String(input));
+      init = options;
       return new Response(body, { status });
     }) as unknown as typeof fetch,
   };
@@ -24,11 +31,19 @@ function fetcherOf(
 const CAPTURE = JSON.stringify(OPEN_METEO_BERLIN_CAPTURE);
 
 describe("fetchOpenMeteo", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("asks the documented endpoint in metric units", async () => {
-    const { fetcher, asked } = fetcherOf(CAPTURE);
+    const { fetcher, asked, init } = fetcherOf(CAPTURE);
 
     await fetchOpenMeteo(fetcher, BERLIN);
 
+    // A redirect is another host answering a request this PC made to
+    // Open-Meteo, so the fetch must refuse to follow one.
+    expect(init()?.redirect).toBe("error");
+    expect(init()?.signal).toBeInstanceOf(AbortSignal);
     const url = asked();
     expect(url === undefined ? "" : url.origin + url.pathname).toBe(
       OPEN_METEO_ENDPOINT,
@@ -100,5 +115,42 @@ describe("fetchOpenMeteo", () => {
     await expect(
       fetchOpenMeteo(fetcherOf(JSON.stringify(broken)).fetcher, BERLIN),
     ).rejects.toThrow(/pressure_msl/);
+  });
+
+  it("reads daylight from is_day", async () => {
+    const daylight = structuredClone(OPEN_METEO_BERLIN_CAPTURE) as {
+      current: { is_day: number };
+    };
+    daylight.current.is_day = 1;
+
+    const reading = await fetchOpenMeteo(
+      fetcherOf(JSON.stringify(daylight)).fetcher,
+      BERLIN,
+    );
+
+    expect(reading.isDay).toBe(true);
+  });
+
+  it("aborts a request after ten seconds", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    let settle: ((response: Response) => void) | undefined;
+
+    const fetcher = ((_input: string | URL | Request, init?: RequestInit) => {
+      signal = init?.signal ?? undefined;
+      return new Promise<Response>((resolve) => {
+        settle = resolve;
+      });
+    }) as unknown as typeof fetch;
+
+    const pending = fetchOpenMeteo(fetcher, BERLIN);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(signal?.aborted).toBe(true);
+
+    // Settle the fetch so the rejected promise is observed rather than left
+    // pending; the abort is what this case binds.
+    settle?.(new Response("{}"));
+    await expect(pending).rejects.toThrow(/unexpected/);
   });
 });

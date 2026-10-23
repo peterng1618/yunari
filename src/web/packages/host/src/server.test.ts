@@ -8343,6 +8343,18 @@ describe("Weather settings routes", () => {
           "GET",
           "/api/weather/icon/clear-day.svg",
           undefined,
+          { ...lan, headers: { "x-yunari-session": "not-a-live-token" } },
+        )
+      ).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await request(
+          running.server,
+          "GET",
+          "/api/weather/icon/clear-day.svg",
+          undefined,
           { ...lan, headers: { "x-yunari-session": token } },
         )
       ).status,

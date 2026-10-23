@@ -556,7 +556,7 @@ Weather runs before custom sources so the HTTP failure, cache and image paths ar
 - Create: `packages/host/src/providers/weather/conditions.test.ts`
 - Create: `packages/host/vendor/weather-icons/` (verified licence)
 - Add: `packages/host/scripts/vendor-weather-icons.mjs`
-- Modify: `packages/host/src/server.ts` (`/api/weather/icon/<code>.svg`)
+- Modify: `packages/host/src/server.ts` (`/api/weather/icon/<slug>.svg`)
 - Modify: `packages/host/src/main.ts` (register provider)
 - Modify: `THIRD-PARTY-NOTICES.md`, `docs/engineering/dependencies.md`
 
@@ -585,7 +585,7 @@ Weather runs before custom sources so the HTTP failure, cache and image paths ar
   - An Open-Meteo fixture produces every `weather.*` reading with `°C`, `%`, `hPa`, `mm`, `km/h` and ISO sun times.
   - `conditionText(0)` is `Clear sky` in English; an unknown language falls back to English, never the number.
   - `windCompass(0)` `N`, `windCompass(90)` `E`, `windCompass(348.75)` `N`.
-  - `weather.icon` is `/api/weather/icon/<code>-<day|night>.svg`; an unmapped code yields `unavailable`.
+  - `weather.icon` is `/api/weather/icon/<slug>.svg`, where the slug is the vendored file the WMO table selects for that code and day/night state; an unmapped code yields `unavailable`.
   - `weather.attribution` is the selected backend's required attribution text; `weather.location` is the stored place label.
   - A non-2xx response, a body over 1 MiB, and an invalid JSON body each produce `error` with a redacted reason.
   - The poller does not fetch while no `weather.*` key is demanded; after demand it fetches on the configured interval.

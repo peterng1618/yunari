@@ -284,11 +284,6 @@ describe("WeatherProvider", () => {
     let calls = 0;
     const fetcher = (async () => {
       calls += 1;
-      if (calls === 1) {
-        return new Response(JSON.stringify(OPEN_METEO_BERLIN_CAPTURE), {
-          status: 200,
-        });
-      }
       return new Response("no", { status: 503 });
     }) as unknown as typeof fetch;
 
@@ -301,19 +296,31 @@ describe("WeatherProvider", () => {
     await settle();
     expect(calls).toBe(1);
 
-    // First failure schedules 2 × the interval = 120 s.
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(calls).toBe(2);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(calls).toBe(2);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(calls).toBe(3);
+    /** Keeps a display demanding the key while the clock moves, as a real one
+     *  does every poll cycle; otherwise the idle window stops the timer long
+     *  before the backoff cap is reachable. */
+    const demandAndAdvance = async (totalMs: number): Promise<void> => {
+      let remaining = totalMs;
 
-    // Second failure schedules 4 × 60 s = 240 s.
-    await vi.advanceTimersByTimeAsync(120_000);
-    expect(calls).toBe(3);
-    await vi.advanceTimersByTimeAsync(120_000);
-    expect(calls).toBe(4);
+      while (remaining > 0) {
+        const step = Math.min(remaining, 60_000);
+        await sampleAt(provider, ["weather.temp"], Date.now());
+        await vi.advanceTimersByTimeAsync(step);
+        remaining -= step;
+      }
+    };
+
+    // Failures one to five schedule 2, 4, 8, 16 and 32 minutes. The sixth
+    // would schedule 64, and the cap makes it exactly 60.
+    for (const delay of [120_000, 240_000, 480_000, 960_000, 1_920_000]) {
+      await demandAndAdvance(delay);
+    }
+    expect(calls).toBe(6);
+
+    await demandAndAdvance(3_599_000);
+    expect(calls).toBe(6);
+    await demandAndAdvance(1_000);
+    expect(calls).toBe(7);
   });
 
   it("marks a last-good reading stale after three intervals or thirty minutes, whichever is longer", async () => {
@@ -342,6 +349,33 @@ describe("WeatherProvider", () => {
     expect(past[0]?.sample.status).toBe("stale");
     expect(past[0]?.sample).not.toHaveProperty("value");
     expect(past[0]?.sample).not.toHaveProperty("textValue");
+  });
+
+  it("uses three intervals when that is longer than thirty minutes", async () => {
+    const now = Date.now();
+    const { fetcher } = fetcherOf();
+    const provider = host(
+      settingsStore({ ...BERLIN, pollIntervalMs: 3_600_000 }),
+      fetcher,
+    );
+
+    await sampleAt(provider, ["weather.temp"], now);
+    await settle();
+
+    // A one-hour cadence makes the window three hours, not thirty minutes.
+    const atBoundary = await sampleAt(
+      provider,
+      ["weather.temp"],
+      now + 3 * 3_600_000,
+    );
+    expect(atBoundary[0]?.sample.status).toBe("ok");
+
+    const past = await sampleAt(
+      provider,
+      ["weather.temp"],
+      now + 3 * 3_600_000 + 1,
+    );
+    expect(past[0]?.sample.status).toBe("stale");
   });
 
   it("stops polling after the longer of three intervals and thirty minutes without demand", async () => {

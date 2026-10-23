@@ -38,4 +38,11 @@ describe("windCompass", () => {
     expect(windCompass(361)).toBe("N");
     expect(windCompass(161)).toBe("SSE");
   });
+
+  it("wraps a negative bearing and one past a full turn", () => {
+    expect(windCompass(-90)).toBe("W");
+    expect(windCompass(-450)).toBe("W");
+    expect(windCompass(450)).toBe("E");
+    expect(windCompass(720)).toBe("N");
+  });
 });
