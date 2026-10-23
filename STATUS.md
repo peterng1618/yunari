@@ -1,36 +1,36 @@
 # Yunari status
 
-Updated: 2026-10-23
-Branch: `main`
+Updated: 2026-10-24
+Branch: `peterng1618/Review-sensor-dictionary`
 
 ## Current objective
 
-The **Wallpaper Engine import** ([`spec`](docs/superpowers/specs/2026-10-21-wallpaper-engine-import-design.md), [`plan`](docs/superpowers/plans/archive/2026-10-21-wallpaper-engine-import.md)) is merged into `main`; the owner-run live export and the queued work remain: the host reads the local Steam library and serves the item list, and the asset finder imports images and videos and guides a scene's PNG/MP4 export.
+The **sensor platform** ([`spec`](docs/superpowers/specs/2026-10-24-sensor-platform-design.md), [`plan`](docs/superpowers/plans/2026-10-24-sensor-platform.md)) is the active plan: six phases from vocabulary/units/image binding through hardware, weather, media, custom sources, and frame/game presence.
+
+- **Active plan:** `docs/superpowers/plans/2026-10-24-sensor-platform.md`
 
 ## Active work
 
-- **The plan is complete and merged** — Tasks 1–9, the whole-branch review and its fix pass closed clean; the Orca worktree stays until it is retired.
-- **The R2 store backend stays merged**; its owner-run Task 5.2 deploy and live proof remain pending and are not part of this plan.
-- **Task 5.1's import is unrun**: the smoke item `6041df49-9c61-4d51-a184-716890560bdb` exists only in the old catalogue; the script is ready.
-- **Open register findings:** `vg-699` stale `vite preview` reuse on a shared port, `vg-701` biome never reads `.mjs`, `vg-695` a pre-existing `server.test.ts` flake, `vg-708` a theme's credits are written but never drawn.
+- **Phase 1 has not started**; the plan's 27 tasks run in order, one dispatch per task.
+- **Every task commits its own tests and evidence**; no task starts before the previous one is reviewed.
+- **The spec's probes stay open** until their phase runs: RTSS, PresentMon, Geolocator and live BYOK weather are unverified on this box.
+- **The Wallpaper Engine work is merged**; its owner-run export remains, outside this plan.
 
 ## Last completed change
 
-- **The Wallpaper Engine import is merged into `main`**: the plan is archived, the spec is implemented, and the Orca worktree and branch remain for cleanup.
-- **A scene's exported MP4 and a video item both cross the host's normalizer**; a refusal writes no credit and no background.
-- **The finder lists the library with a kind filter and title search**, states once that a baked-in clock cannot be removed, and guides a still scene to PNG and an animated one to MP4.
-- **Tailwind's preflight no longer caps the media layer**: `max-width`/`max-height: none` is inline in `mountBackgroundMedia`, and a background video is sized from its metadata.
-- **Final gate before the merge:** `npm run gate` exit 0 — 341 files / 4728 tests, worker 12 files / 72 tests.
+- **The sensor platform spec is approved and its plan is written**; both live under `docs/superpowers/`.
+- **The plan keeps canonical sample values and schema v2**, and defers the widget runtime.
+- **SMTC browser coverage is verified** on this PC through Chrome/YouTube, including PNG artwork bytes.
 
 ## Next
 
-1. One owner-run real export (PNG or MP4) through the sheet, to prove the flow's last step.
-2. The owner's R2 Task 5.2 deploy, live proof and import still wait, and so does `vg-699`.
+1. Dispatch Task 1.1 (open family set and dynamic keys) to a subagent.
+2. Review each task's diff and evidence before dispatching the next.
+3. Run the full gate at the end of each phase.
 
 ## Blockers / unverified
 
-- **The store Worker is not deployed and no live store path has run**: no D1 database, R2 bucket, secret, real `database_id`, deploy, `/migrate`, health check, OAuth round trip, live CPU measurement or import; `CATALOGUE_ORIGIN` is still the placeholder `https://yunari-store.workers.dev`, and no normalized video has played in a browser.
-- **Version 2 now identifies two shapes**: a stored or catalogued document carrying `artboard.background`/`backgroundMedia`, or `fit`/`scale` on its media, is refused by the unknown-key check; the live catalogue's smoke theme carries the old shape and needs reseeding (owner action).
-- **No live Wallpaper Engine export has been offered by the sheet**: the scene flow's last step is owner-run, and the export dialog's default location is unverified.
-- **The listing re-reads and reclassifies every scene package on each mount** (no facts cache), and a video import posts the file as base64 to the host.
-- **Background and artboard edits are not undoable**, and the compact editor header stays wider than a phone — `vg-707` waits on a ruling.
+- **No live WeatherAPI or OpenWeatherMap response** has run; both need user keys.
+- **RTSS shared memory and PresentMon streaming** are unverified on this machine, including the privilege failure path.
+- **Windows Geolocator permission behaviour** from a host-spawned PowerShell is unrun.
+- **Steam library-cache box-art naming** is unverified on this install.
