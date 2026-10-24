@@ -120,6 +120,12 @@ export interface PairHalfView {
   readonly value: number;
   readonly data: FieldHooks;
   readonly integer?: boolean;
+  /**
+   * The half shows a measurement its owner refuses to write. It still renders
+   * the number and stays focusable; only the commit is refused, because the
+   * size follows the content instead of the content following a box.
+   */
+  readonly readOnly?: boolean;
   /** The stored value is a fraction the field shows as a percentage; the commit
       converts back, so the write boundary still receives the fraction. */
   readonly percent?: boolean;
@@ -254,6 +260,12 @@ export interface RunRowView {
 export interface RunsView {
   readonly nodeId: string;
   readonly runs: readonly RunRowView[];
+  /**
+   * Whether the selected object is the class that owns a box. Copied from the
+   * projection's own reading of the Fabric class, so the editor hides the
+   * controls whose writes that class would never paint.
+   */
+  readonly wraps: boolean;
   readonly layout: {
     readonly align: string;
     readonly verticalAlign: string;

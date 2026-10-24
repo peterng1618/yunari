@@ -287,6 +287,35 @@ describe("binding a text run to a sensor", () => {
     return box.dispose();
   });
 
+  it("hides overflow and vertical alignment on a text, which has no box", async () => {
+    // A point text has no authored height to clip or place inside, so both
+    // controls would accept an edit the renderer never reads.
+    const box = mountRunEditor({ runs: literalClock, kind: "text" });
+
+    expect(box.host.querySelector("[data-yunari-text-align]")).not.toBeNull();
+    expect(box.host.querySelector("[data-yunari-runs]")).not.toBeNull();
+    expect(box.host.querySelector("[data-yunari-run-add]")).not.toBeNull();
+    expect(
+      box.host.querySelector("[data-yunari-text-vertical-align]"),
+    ).toBeNull();
+    expect(box.host.querySelector("[data-yunari-text-overflow]")).toBeNull();
+    return box.dispose();
+  });
+
+  it("keeps overflow and vertical alignment on a text box", async () => {
+    // The other class, so the case above cannot pass by hiding the controls
+    // from everything.
+    const box = mountRunEditor({ runs: literalClock, kind: "textbox" });
+
+    expect(
+      box.host.querySelector("[data-yunari-text-vertical-align]"),
+    ).not.toBeNull();
+    expect(
+      box.host.querySelector("[data-yunari-text-overflow]"),
+    ).not.toBeNull();
+    return box.dispose();
+  });
+
   it("writes vertical alignment into the object's authored text", async () => {
     const box = mountRunEditor({ runs: literalClock });
 

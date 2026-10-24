@@ -1694,6 +1694,101 @@ describe("the size of a text object", () => {
   });
 });
 
+describe("the class the inspector states", () => {
+  /** A point text: its size is measured from what it says, and it has no box. */
+  function autoText(id: string): IText {
+    const text = new IText("Hi", { left: 0, top: 0, id });
+    text.set({
+      yunariText: {
+        runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+      },
+    });
+    return text;
+  }
+
+  /** A text box: the one class whose W/H are an authored box. */
+  function textBox(id: string): Textbox {
+    const text = new Textbox("Hi", { left: 0, top: 0, width: 120, id });
+    text.set({
+      yunariText: {
+        runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+      },
+    });
+    return text;
+  }
+
+  it("shows a text's measured W/H read-only and commits nothing typed", async () => {
+    const text = autoText("label-1");
+    const measured = {
+      width: Math.round(text.width * text.scaleX),
+      height: Math.round(text.height * text.scaleY),
+    };
+    const { host, history } = setup(text);
+    const half = (key: "width" | "height"): HTMLInputElement =>
+      host.querySelector<HTMLInputElement>(`[data-yunari-geometry="${key}"]`)!;
+
+    // Read-only, not blank and not disabled: the number the canvas draws is
+    // still the number the author reads, and it stays focusable.
+    expect(half("width").value).toBe(String(measured.width));
+    expect(half("height").value).toBe(String(measured.height));
+    expect(half("width").readOnly).toBe(true);
+    expect(half("height").readOnly).toBe(true);
+    expect(half("width").disabled).toBe(false);
+
+    // The input's own readOnly is the browser's guard; the commit path has to
+    // refuse too, because a draft can reach it without a keystroke.
+    await edit(half("width"), "300");
+    await edit(half("height"), "80");
+
+    expect(half("width").value).toBe(String(measured.width));
+    expect(Math.round(text.width * text.scaleX)).toBe(measured.width);
+    expect(Math.round(text.height * text.scaleY)).toBe(measured.height);
+    expect(text.scaleX).toBe(1);
+    expect(text.scaleY).toBe(1);
+    expect(
+      (text.get("yunariText") as { readonly box?: unknown }).box,
+    ).toBeUndefined();
+    expect(history.saveState).not.toHaveBeenCalled();
+  });
+
+  it("leaves a text box's W/H editable", () => {
+    const { host } = setup(textBox("label-2"));
+    const half = (key: "width" | "height"): HTMLInputElement =>
+      host.querySelector<HTMLInputElement>(`[data-yunari-geometry="${key}"]`)!;
+
+    expect(half("width").readOnly).toBe(false);
+    expect(half("height").readOnly).toBe(false);
+  });
+
+  it("switches to the auto contract when the selection moves to a text", () => {
+    const box = textBox("label-3");
+    const text = autoText("label-4");
+    let active: FabricObject = box;
+    const { host, inspector } = setup(() => active);
+
+    expect(
+      host.querySelector("[data-yunari-text-vertical-align]"),
+    ).not.toBeNull();
+    expect(
+      host.querySelector<HTMLInputElement>('[data-yunari-geometry="width"]')
+        ?.readOnly,
+    ).toBe(false);
+
+    active = text;
+    inspector.render();
+
+    // No stale control survives the class change, and the measured halves are
+    // the new object's rather than the box's.
+    expect(host.querySelector("[data-yunari-text-vertical-align]")).toBeNull();
+    expect(host.querySelector("[data-yunari-text-overflow]")).toBeNull();
+    expect(host.querySelector("[data-yunari-text-align]")).not.toBeNull();
+    expect(
+      host.querySelector<HTMLInputElement>('[data-yunari-geometry="width"]')
+        ?.readOnly,
+    ).toBe(true);
+  });
+});
+
 describe("the column a kind gets", () => {
   /** A shape that carries a paint reference, so a container built from it has
       something for its own appearance question to read. */

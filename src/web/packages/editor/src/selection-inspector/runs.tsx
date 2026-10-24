@@ -288,6 +288,7 @@ export function projectRuns(
   return {
     nodeId,
     runs: rows,
+    wraps: context.wraps,
     layout: {
       align: typeof content["align"] === "string" ? content["align"] : "left",
       verticalAlign:
@@ -595,23 +596,29 @@ export function RunEditor(props: {
         options={ALIGN_OPTIONS}
         onChange={(align: string) => edits.writeLayout({ align })}
       />
-      <ControlSegmented
-        label={uiCopy.inspectorFields.verticalAlign}
-        data={{ "data-yunari-text-vertical-align": "" }}
-        value={view.layout.verticalAlign}
-        options={VERTICAL_OPTIONS}
-        onChange={(verticalAlign: string) =>
-          edits.writeLayout({ verticalAlign })
-        }
-      />
-      <ControlSegmented
-        label={uiCopy.inspectorFields.overflow}
-        data={{ "data-yunari-text-overflow": "" }}
-        value={view.layout.overflow}
-        options={OVERFLOW_OPTIONS}
-        onChange={(overflow: string) => edits.writeLayout({ overflow })}
-      />
-
+      {/* Width, overflow and vertical placement are the box's contract: a point
+          text has no authored height to clip or place inside, so the two
+          controls that write them would accept an edit nothing paints. */}
+      {view.wraps ? (
+        <>
+          <ControlSegmented
+            label={uiCopy.inspectorFields.verticalAlign}
+            data={{ "data-yunari-text-vertical-align": "" }}
+            value={view.layout.verticalAlign}
+            options={VERTICAL_OPTIONS}
+            onChange={(verticalAlign: string) =>
+              edits.writeLayout({ verticalAlign })
+            }
+          />
+          <ControlSegmented
+            label={uiCopy.inspectorFields.overflow}
+            data={{ "data-yunari-text-overflow": "" }}
+            value={view.layout.overflow}
+            options={OVERFLOW_OPTIONS}
+            onChange={(overflow: string) => edits.writeLayout({ overflow })}
+          />
+        </>
+      ) : null}
       {view.runs.map((row) => (
         <RunRow key={row.id} row={row} view={view} edits={edits} />
       ))}

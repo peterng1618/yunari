@@ -127,6 +127,16 @@ function isTextKind(object: FabricObject): boolean {
 }
 
 /**
+ * A text whose size is measured rather than authored: every text class but
+ * `Textbox`, which is the one that owns a box. The projection reads it to mark
+ * the Size halves read-only and `index.ts`'s write funnel reads it to refuse
+ * the write, so the two halves of the contract cannot disagree.
+ */
+export function isAutoText(object: FabricObject): boolean {
+  return isTextKind(object) && !(object instanceof Textbox);
+}
+
+/**
  * Which kind a selection is.
  *
  * Ordered so the two containers are named before the class they extend: Fabric's
@@ -290,6 +300,7 @@ function geometryPair(
   rowLabel: string,
   first: GeometryKey,
   second: GeometryKey,
+  readOnly = false,
 ): FieldView {
   const half = (key: GeometryKey): PairHalfView => ({
     id: key,
@@ -297,6 +308,7 @@ function geometryPair(
     value: Math.round(context.geometry.read(object, key)),
     integer: true,
     data: { "data-yunari-geometry": key },
+    ...(readOnly ? { readOnly: true } : {}),
   });
   return {
     id: `${first}-${second}`,
@@ -425,6 +437,9 @@ function positionBody(
       uiCopy.inspectorFields.size,
       "width",
       "height",
+      // A point text's W/H are measurements the text pass refreshes; the box
+      // class is the only one whose size the author sets.
+      isAutoText(target),
     ),
   ];
 

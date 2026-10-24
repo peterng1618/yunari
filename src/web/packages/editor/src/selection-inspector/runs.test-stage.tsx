@@ -6,7 +6,7 @@ import {
   type TextRun,
 } from "@yunari/renderer-core";
 import { YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
-import { Canvas, Textbox } from "fabric/es";
+import { Canvas, IText, Textbox } from "fabric/es";
 import { act } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -75,7 +75,7 @@ export function sourceLabel(key: string): string {
 
 export interface RunEditorStage {
   readonly host: HTMLElement;
-  readonly object: Textbox;
+  readonly object: IText | Textbox;
   /** Re-projects the object and re-renders, as the editor's own re-publish does. */
   readonly render: () => void;
   readonly runs: () => readonly TextRun[];
@@ -98,6 +98,8 @@ export function mountRunEditor(options: {
   /** Keys a reading has arrived for; absent means nothing has. */
   readonly arrived?: readonly string[];
   readonly declared?: readonly Binding[];
+  /** The Fabric class under test: `Textbox` wraps and `IText` does not. */
+  readonly kind?: "text" | "textbox";
 }): RunEditorStage {
   // A popup renders into `document.body`, not the host, so a case that failed
   // before disposing would leave its list open for the next one to pick an
@@ -105,7 +107,10 @@ export function mountRunEditor(options: {
   document.body.replaceChildren();
 
   const canvas = new Canvas(document.createElement("canvas"));
-  const object = new Textbox("", { id: "clock-label" });
+  const object =
+    options.kind === "text"
+      ? new IText("", { id: "clock-label" })
+      : new Textbox("", { id: "clock-label" });
   object.set(YUNARI_TEXT_PROPERTY, { runs: options.runs });
   canvas.add(object);
 

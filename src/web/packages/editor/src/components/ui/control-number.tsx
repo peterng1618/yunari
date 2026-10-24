@@ -46,6 +46,12 @@ export function ControlNumber(
     /** The owner asked for whole numbers; a fraction is refused like out-of-bounds. */
     readonly integer?: boolean;
     /**
+     * A measurement, not a setting: the number is shown and nothing commits.
+     * Different from `refused` in what it says — this is not a capability the
+     * selection lacks, it is a value the selection does not own.
+     */
+    readonly readOnly?: boolean;
+    /**
      * A half of a paired row: the label and the well without a row of their own,
      * so two of these can share one line. `ControlPair` is the only caller — a
      * lone number field wants its own row.
@@ -78,6 +84,7 @@ export function ControlNumber(
     min,
     max,
     integer,
+    readOnly,
     inline,
     labelledById,
     wellClassName,
@@ -95,6 +102,13 @@ export function ControlNumber(
     // that was merely tabbed through must not accuse the author of anything.
     if (draft === null) return;
     const text = draft.trim();
+    // A read-only half holds a measurement, so it keeps showing it: a draft
+    // that reached it anyway — a script, a stale row — is dropped, not written.
+    if (readOnly === true) {
+      setDraft(null);
+      setInvalid(undefined);
+      return;
+    }
     if (blocked) return;
     if (text === "") {
       if (onClear !== undefined) {
@@ -152,7 +166,7 @@ export function ControlNumber(
           inputMode="decimal"
           className="h-full w-full bg-transparent text-right font-mono text-sm text-text outline-none"
           value={shown}
-          readOnly={refused !== undefined}
+          readOnly={readOnly === true || refused !== undefined}
           disabled={disabled}
           aria-disabled={refused === undefined ? undefined : true}
           {...(inline === true && labelledById !== undefined

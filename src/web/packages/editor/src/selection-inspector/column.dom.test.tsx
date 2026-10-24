@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { SETTINGS_SECTIONS } from "@yunari/renderer-core";
-import { type FabricObject, IText, Rect } from "fabric/es";
+import { type FabricObject, IText, Rect, Textbox } from "fabric/es";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -260,6 +260,57 @@ describe("SelectionColumn", () => {
           "now run together",
       ).toContain("border-t");
     }
+  });
+
+  it("marks the Size halves read-only for a text, and editable for a text box", () => {
+    const runs = {
+      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+    };
+    const auto = new IText("Hi", { left: 0, top: 0 });
+    auto.set("yunariText", runs);
+    const box = new Textbox("Hi", { left: 0, top: 0, width: 120 });
+    box.set("yunariText", runs);
+
+    const sizeHalves = (object: FabricObject) => {
+      const position = viewOf(object).sections.find(
+        (section) => section.id === "position",
+      );
+      const pair = position?.fields.find(
+        (field) => field.id === "width-height",
+      );
+      if (pair?.control !== "pair") throw new Error("no Size pair");
+      return pair.halves;
+    };
+
+    // A text's W/H are measurements it grows from: the column states that by
+    // making both halves read-only, while the box keeps the box writes.
+    expect(sizeHalves(auto).map((half) => half.readOnly)).toEqual([true, true]);
+    expect(sizeHalves(box).map((half) => "readOnly" in half)).toEqual([
+      false,
+      false,
+    ]);
+  });
+
+  it("renders the Size halves as read-only inputs for a text", () => {
+    const text = new IText("Hi", { left: 0, top: 0 });
+    text.set("yunariText", {
+      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+    });
+    renderedSections(viewOf(text));
+
+    expect(
+      host.querySelector<HTMLInputElement>('[data-yunari-geometry="width"]')
+        ?.readOnly,
+    ).toBe(true);
+    expect(
+      host.querySelector<HTMLInputElement>('[data-yunari-geometry="height"]')
+        ?.readOnly,
+    ).toBe(true);
+    // Position is not the class's contract: it stays editable.
+    expect(
+      host.querySelector<HTMLInputElement>('[data-yunari-geometry="left"]')
+        ?.readOnly,
+    ).toBe(false);
   });
 
   it("keeps the disclosure the author chose across a re-publish", () => {

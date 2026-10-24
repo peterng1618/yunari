@@ -16,13 +16,14 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- Every text surface now arms one session route: the Add tile, canvas context menu and footer carry no placement of their own, and `addText` no longer constructs at the click.
-- At the gesture's end a click constructs an `IText` at the point and a drag a `Textbox` from the drawn box, named `Text`/`Text box`, reported once if the theme refuses.
-- Shapes, charts and cards keep their cascade placement; text no longer calls `nextNewObjectPlacement`.
+- Auto text hides Overflow and vertical align in the run editor and shows measured W/H read-only; a `Textbox` keeps both.
+- `PairHalfView.readOnly` renders the half's value and commits nothing, through `ControlNumber`/`ControlPair`.
+- The geometry funnel refuses width/height for a non-`Textbox`, so an auto text's size follows its content.
+- Selecting a Text box then a Text republishes the auto contract with no stale control.
 
 ## Next
 
-1. Task 2.2: the inspector states the class's remaining contract.
+1. Task 2.3: the runs strip as numbered tabs.
 
 ## Blockers / unverified
 
