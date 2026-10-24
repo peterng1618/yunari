@@ -122,9 +122,13 @@ it("stages the weather icons but no ignored vendor binaries", () => {
   expect(stage(tree).ok).toBe(true);
 
   expect(
-    existsSync(path.join(tree.out, "packages/host/vendor/weather-icons/clear-day.svg")),
+    existsSync(
+      path.join(tree.out, "packages/host/vendor/weather-icons/clear-day.svg"),
+    ),
   ).toBe(true);
-  expect(existsSync(path.join(tree.out, "packages/host/vendor/lhm"))).toBe(false);
+  expect(existsSync(path.join(tree.out, "packages/host/vendor/lhm"))).toBe(
+    false,
+  );
 });
 
 it("writes the source manifest's version and the release manifest fields", () => {
