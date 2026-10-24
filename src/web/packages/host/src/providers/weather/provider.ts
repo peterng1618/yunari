@@ -8,6 +8,10 @@ import type {
   WeatherSettings,
   WeatherSettingsStore,
 } from "../../settings/weather.js";
+import {
+  type GeoPosition,
+  requestWindowsPosition,
+} from "../helpers/location.js";
 import type {
   ProviderHealth,
   SampleContext,
@@ -86,6 +90,12 @@ const NO_ICON_MESSAGE = "No icon is available for this condition.";
 const WAITING_MESSAGE = "Waiting for the first weather reading.";
 const STALE_MESSAGE = "The last weather reading is out of date.";
 
+/** What `weather.location` says when the place came from Windows. The
+ *  coordinates themselves never enter a sample. */
+const WINDOWS_LOCATION_LABEL = "Windows location";
+/** One fix is reused for a day; a person does not move between polls. */
+const POSITION_TTL_MS = 24 * 60 * 60_000;
+
 const MIN_IDLE_WINDOW_MS = 30 * 60_000;
 const MAX_BACKOFF_MS = 60 * 60_000;
 
@@ -101,6 +111,9 @@ export interface WeatherProviderOptions {
   readonly credentials?: CredentialStore;
   readonly fetcher?: typeof fetch;
   readonly now?: () => number;
+  /** Where a position comes from when no manual place is set; injected so a
+   *  test never starts a helper. */
+  readonly locate?: () => Promise<GeoPosition>;
 }
 
 interface CachedReading {
@@ -116,6 +129,14 @@ export class WeatherProvider implements SensorProvider {
   readonly #credentials: CredentialStore | undefined;
   readonly #fetcher: typeof fetch;
   readonly #now: () => number;
+  readonly #locate: () => Promise<GeoPosition>;
+
+  /** The last Windows fix, and when it was taken. */
+  #position:
+    | { readonly position: GeoPosition; readonly fetchedAtMs: number }
+    | undefined;
+  /** What `weather.location` names for the place the poll resolved. */
+  #placeLabel: string | undefined;
 
   /** Last good reading, dropped when the backend or place changes. */
   #lastGood: CachedReading | undefined;
@@ -135,6 +156,7 @@ export class WeatherProvider implements SensorProvider {
     this.#credentials = options.credentials;
     this.#fetcher = options.fetcher ?? fetch;
     this.#now = options.now ?? (() => Date.now());
+    this.#locate = options.locate ?? (() => requestWindowsPosition());
   }
 
   async describe(): Promise<readonly SensorDescriptor[]> {
@@ -196,6 +218,7 @@ export class WeatherProvider implements SensorProvider {
       settings.label,
       settings.latitude,
       settings.longitude,
+      settings.useWindowsLocation ? "location" : "manual",
     ].join("\u0000");
 
     if (identity === this.#lastIdentity) return false;
@@ -209,6 +232,7 @@ export class WeatherProvider implements SensorProvider {
     this.#lastGood = undefined;
     this.#failure = undefined;
     this.#failures = 0;
+    this.#placeLabel = undefined;
     return true;
   }
 
@@ -242,29 +266,39 @@ export class WeatherProvider implements SensorProvider {
         return;
       }
 
-      if (settings.label === "") {
-        // No place, so there is nothing to ask for. The timer keeps ticking so
-        // a place saved later is picked up without a restart.
+      if (settings.label === "" && !settings.useWindowsLocation) {
+        // No place and no permission to look one up, so there is nothing to
+        // ask for. The timer keeps ticking so a place saved later is picked up
+        // without a restart.
         delayMs = intervalMs;
       } else {
         try {
-          const reading = await WEATHER_BACKENDS[settings.provider].fetch(
-            { latitude: settings.latitude, longitude: settings.longitude },
-            this.#fetcher,
-            settings.provider === "open-meteo"
-              ? undefined
-              : await this.#credentials?.valueOf(settings.provider),
-          );
+          const place = await this.#placeOf(settings);
 
           if (generation !== this.#generation) {
             // The backend or place moved while this request was in flight; the
             // change already asked for a poll, and the old reading must not win.
             delayMs = 0;
           } else {
-            this.#lastGood = { reading, fetchedAtMs: this.#now() };
-            this.#failure = undefined;
-            this.#failures = 0;
-            delayMs = intervalMs;
+            const reading = await WEATHER_BACKENDS[settings.provider].fetch(
+              place,
+              this.#fetcher,
+              settings.provider === "open-meteo"
+                ? undefined
+                : await this.#credentials?.valueOf(settings.provider),
+            );
+
+            if (generation !== this.#generation) {
+              // The backend or place moved while this request was in flight;
+              // the change already asked for a poll, and the old reading must
+              // not win.
+              delayMs = 0;
+            } else {
+              this.#lastGood = { reading, fetchedAtMs: this.#now() };
+              this.#failure = undefined;
+              this.#failures = 0;
+              delayMs = intervalMs;
+            }
           }
         } catch (error: unknown) {
           if (generation !== this.#generation) {
@@ -298,6 +332,33 @@ export class WeatherProvider implements SensorProvider {
     this.#schedule(delayMs);
   }
 
+  /**
+   * The place this poll is for. A manual place always wins, so location is
+   * never requested beside it; a Windows fix is reused for a day, and a
+   * refusal is thrown as a reason rather than replaced by `0,0`.
+   */
+  async #placeOf(settings: WeatherSettings): Promise<GeoPosition> {
+    if (settings.label !== "") {
+      this.#placeLabel = settings.label;
+      return { latitude: settings.latitude, longitude: settings.longitude };
+    }
+
+    const cached = this.#position;
+
+    if (
+      cached !== undefined &&
+      this.#now() - cached.fetchedAtMs < POSITION_TTL_MS
+    ) {
+      this.#placeLabel = WINDOWS_LOCATION_LABEL;
+      return cached.position;
+    }
+
+    const position = await this.#locate();
+    this.#position = { position, fetchedAtMs: this.#now() };
+    this.#placeLabel = WINDOWS_LOCATION_LABEL;
+    return position;
+  }
+
   #schedule(delayMs: number): void {
     if (!this.#running) return;
 
@@ -326,7 +387,7 @@ export class WeatherProvider implements SensorProvider {
     const sensorId = `${WEATHER_PROVIDER_ID}:${semanticKey}`;
     const timestamp = new Date(nowMs).toISOString();
 
-    if (settings.label === "") {
+    if (settings.label === "" && !settings.useWindowsLocation) {
       return {
         sensorId,
         timestamp,
@@ -397,7 +458,7 @@ export class WeatherProvider implements SensorProvider {
 
     switch (semanticKey) {
       case "weather.location":
-        return text(settings.label);
+        return text(this.#placeLabel ?? settings.label);
       case "weather.temp":
         return numeric(reading.tempC);
       case "weather.feelsLike":

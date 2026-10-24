@@ -14,6 +14,13 @@ import {
 import { OPEN_METEO_BERLIN_CAPTURE } from "./open-meteo.fixture.js";
 import { WEATHER_KEYS, WeatherProvider } from "./provider.js";
 
+/** No manual place; Windows location is the only source. */
+const UNPLACED: WeatherSettings = normalizeWeatherSettings({
+  provider: "open-meteo",
+  useWindowsLocation: true,
+  pollIntervalMs: 600_000,
+});
+
 const BERLIN: WeatherSettings = normalizeWeatherSettings({
   provider: "open-meteo",
   label: "Berlin, Berlin, DE",
@@ -640,6 +647,135 @@ describe("WeatherProvider", () => {
     // Open-Meteo request would not have happened at all.
     expect(hosts).toEqual(["api.weatherapi.com", "api.open-meteo.com"]);
     expect(provider.health().available).toBe(true);
+  });
+
+  it("never asks Windows for a place when a manual one is set", async () => {
+    const locate = vi.fn(async () => ({ latitude: 1, longitude: 2 }));
+    const { fetcher, calls } = fetcherOf();
+    const provider = new WeatherProvider({
+      settings: settingsStore({ ...BERLIN, useWindowsLocation: true }),
+      fetcher,
+      locate,
+    });
+
+    await sampleAt(provider, ["weather.temp"], Date.now());
+    await settle();
+
+    expect(locate).not.toHaveBeenCalled();
+    expect(calls()).toBe(1);
+  });
+
+  it("asks Windows for one place and polls with it when none is set", async () => {
+    const locate = vi.fn(async () => ({ latitude: 48.86, longitude: 2.35 }));
+    const asks: string[] = [];
+    const fetcher = (async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      asks.push(
+        `${url.searchParams.get("latitude")},${url.searchParams.get("longitude")}`,
+      );
+      return new Response(JSON.stringify(OPEN_METEO_BERLIN_CAPTURE), {
+        status: 200,
+      });
+    }) as unknown as typeof fetch;
+    const provider = new WeatherProvider({
+      settings: settingsStore(UNPLACED),
+      fetcher,
+      locate,
+    });
+
+    await sampleAt(provider, ["weather.temp"], Date.now());
+    await settle();
+
+    expect(locate).toHaveBeenCalledTimes(1);
+    expect(asks).toEqual(["48.86,2.35"]);
+
+    const entries = await sampleAt(
+      provider,
+      ["weather.location", "weather.temp"],
+      Date.now(),
+    );
+    const byKey = new Map(entries.map((e) => [e.semanticKey, e.sample]));
+    // The coordinates never enter a sample; only the derived reading does.
+    expect(byKey.get("weather.location")).toMatchObject({
+      status: "ok",
+      textValue: "Windows location",
+    });
+    expect(byKey.get("weather.location")?.textValue).not.toContain("48.86");
+    expect(byKey.get("weather.temp")).toMatchObject({
+      status: "ok",
+      value: 11.3,
+    });
+  });
+
+  it("reports a denied Windows location as an error and never guesses", async () => {
+    const locate = vi.fn(async () => {
+      throw new Error("Windows location was denied");
+    });
+    const { fetcher, calls } = fetcherOf();
+    const provider = new WeatherProvider({
+      settings: settingsStore(UNPLACED),
+      fetcher,
+      locate,
+    });
+
+    await sampleAt(provider, ["weather.temp"], Date.now());
+    await settle();
+    const [entry] = await sampleAt(provider, ["weather.temp"], Date.now());
+
+    expect(entry?.sample.status).toBe("error");
+    expect(entry?.sample.message).toBe("Windows location was denied");
+    expect(entry?.sample).not.toHaveProperty("value");
+    expect(calls()).toBe(0);
+    expect(provider.health()).toEqual({
+      available: false,
+      message: "Windows location was denied",
+    });
+  });
+
+  it("reports a Windows location timeout and an absent PowerShell", async () => {
+    for (const reason of [
+      "Windows location did not answer in time",
+      "PowerShell was not found, so Windows location is unavailable.",
+    ]) {
+      const provider = new WeatherProvider({
+        settings: settingsStore(UNPLACED),
+        fetcher: fetcherOf().fetcher,
+        locate: async () => {
+          throw new Error(reason);
+        },
+      });
+
+      await sampleAt(provider, ["weather.temp"], Date.now());
+      await settle();
+      const [entry] = await sampleAt(provider, ["weather.temp"], Date.now());
+
+      expect(entry?.sample.status).toBe("error");
+      expect(entry?.sample.message).toBe(reason);
+    }
+  });
+
+  it("reuses the Windows position for a day, then asks again", async () => {
+    const locate = vi.fn(async () => ({ latitude: 48.86, longitude: 2.35 }));
+    const { fetcher } = fetcherOf();
+    const provider = new WeatherProvider({
+      settings: settingsStore(UNPLACED),
+      fetcher,
+      locate,
+    });
+
+    await sampleAt(provider, ["weather.temp"], Date.now());
+    await settle();
+    expect(locate).toHaveBeenCalledTimes(1);
+
+    // Demand keeps the clock alive while the cache's day is crossed, so the
+    // second request is the cache expiring rather than the poll stopping.
+    for (let elapsed = 0; elapsed < 24 * 60 * 60_000; elapsed += 600_000) {
+      await sampleAt(provider, ["weather.temp"], Date.now());
+      await vi.advanceTimersByTimeAsync(600_000);
+    }
+
+    // The poll landing exactly on the day boundary asks again.
+    expect(locate).toHaveBeenCalledTimes(2);
   });
 
   it("makes no request for a missing BYOK key and names the credential", async () => {

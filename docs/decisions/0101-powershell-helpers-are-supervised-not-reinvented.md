@@ -2,7 +2,8 @@
 
 - **Date:** 2026-10-24
 - **Status:** accepted
-- **Paths:** `src/web/packages/host/src/providers/helpers/`
+- **Paths:** `src/web/packages/host/src/providers/helpers/supervisor.ts`,
+  `src/web/packages/host/src/providers/helpers/location.ts`
 
 ## The problem
 
