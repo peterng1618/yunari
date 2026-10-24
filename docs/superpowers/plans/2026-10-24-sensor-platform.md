@@ -672,7 +672,10 @@ Weather runs before custom sources so the HTTP failure, cache and image paths ar
 - Modify: `packages/host/src/settings/credentials-registry.test.ts`
 - Modify: `packages/host/src/providers/weather/provider.ts`
 - Modify: `packages/host/src/main.ts` (credential entries)
-- No editor change: `CredentialRow` carries no `kind`, and the settings list renders whatever `KNOWN_CREDENTIALS` answers, so both rows appear without an editor edit.
+- Modify: `packages/host/src/server.ts` (weather settings GET carries the backend's attribution text and terms URL)
+- Modify: `packages/editor/src/host-settings-mode/client.ts`, `weather-section.tsx`, `ui-copy.ts` (show the credit the terms require)
+- Test: `packages/editor/src/host-settings-mode/region.dom.test.tsx`
+- No editor change for credentials: `CredentialRow` carries no `kind`, and the settings list renders whatever `KNOWN_CREDENTIALS` answers, so both rows appear without an editor edit.
 
 **Interfaces:**
 - Consumes: `CredentialStore`, `WeatherProvider`.
