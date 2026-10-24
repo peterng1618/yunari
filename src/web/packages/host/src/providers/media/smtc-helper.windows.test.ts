@@ -256,6 +256,28 @@ describe("artwork window classification", () => {
       ),
     ).toBe("artwork-expected");
   });
+
+  it("classifies a successful window that ends on an artwork line", () => {
+    // The shape a healthy helper actually produces: a session line followed by
+    // the track's artwork line. It is still a session window.
+    const records = recordsOf([
+      record({ kind: "session", hasArtwork: true }),
+      record({ kind: "artwork" }),
+    ]);
+    expect(windowVerdict(records)).toBe("session");
+    expect(artworkExpectation(records)).toBe("artwork-expected");
+  });
+
+  it("treats a window that ends on a session line as not closed", () => {
+    // A `none` in the middle is a lost poll, not a lost session.
+    const records = recordsOf([
+      record({ kind: "session", hasArtwork: true }),
+      record({ kind: "none" }),
+      record({ kind: "session", hasArtwork: true }),
+    ]);
+    expect(windowVerdict(records)).toBe("session");
+    expect(artworkExpectation(records)).toBe("artwork-expected");
+  });
 });
 
 describe.skipIf(!available)("SMTC helper on Windows", () => {
@@ -326,8 +348,10 @@ describe.skipIf(!available)("SMTC helper on Windows", () => {
     expect(
       artworkLines.length,
       `${app} / ${title} reported a thumbnail but emitted no artwork line in ` +
-        `${ARTWORK_WINDOW_MS} ms; a track without artwork emits nothing, so a ` +
-        "red here is a defect only for a track that has one",
+        `${ARTWORK_WINDOW_MS} ms. A red here is a defect only for a thumbnail ` +
+        "the helper could read whole and under the size cap: no thumbnail, an " +
+        "over-cap thumbnail, and one still truncated after the retry limit are " +
+        "all legitimate negatives that emit nothing by specification",
     ).toBeGreaterThan(0);
 
     for (const line of lines) {
@@ -381,6 +405,24 @@ describe.skipIf(!available)("SMTC helper on Windows", () => {
       "Try-EmitArtwork $null @{ sessionId = 'w'; title = 't'; artist = 'a'; album = 'b' }",
       "Try-EmitArtwork $null @{ sessionId = 'w'; title = 't'; artist = 'a'; album = 'b' }",
       '[Console]::Out.WriteLine("thrown=$script:reads")',
+      // An exhausted track is cached: after the retry limit, later polls of
+      // the same track do not read again.
+      "$script:reads = 0",
+      "function Get-ArtworkResult($session) { $script:reads += 1; return @{ status = 'retry' } }",
+      "for ($i = 0; $i -lt 8; $i++) { Try-EmitArtwork $null @{ sessionId = 'v'; title = 't'; artist = 'a'; album = 'b' } }",
+      '[Console]::Out.WriteLine("exhausted=$script:reads")',
+      // The real Get-SessionLine reports whether a thumbnail exists, with the
+      // WinRT wait stood in for: no live session needed.
+      "$global:smtcProps = [pscustomobject]@{ Title = 't'; Artist = 'a'; AlbumTitle = 'b'; Thumbnail = [pscustomobject]@{} }",
+      "function Wait-WinRt($operation, $resultType) { return $global:smtcProps }",
+      "$smtcSession = [pscustomobject]@{ SourceAppUserModelId = 'app.exe' }",
+      "$smtcSession | Add-Member -MemberType ScriptMethod -Name GetPlaybackInfo -Value { return [pscustomobject]@{ PlaybackStatus = 'Playing' } }",
+      "$smtcSession | Add-Member -MemberType ScriptMethod -Name GetTimelineProperties -Value { return [pscustomobject]@{ Position = [TimeSpan]::FromSeconds(1); LastUpdatedTime = [DateTimeOffset]::UtcNow; EndTime = [TimeSpan]::FromSeconds(10) } }",
+      "$smtcSession | Add-Member -MemberType ScriptMethod -Name TryGetMediaPropertiesAsync -Value { return $null }",
+      "$smtcWithArtwork = Get-SessionLine $smtcSession",
+      "$global:smtcProps.Thumbnail = $null",
+      "$smtcWithoutArtwork = Get-SessionLine $smtcSession",
+      '[Console]::Out.WriteLine("hasArtwork=$($smtcWithArtwork.hasArtwork),$($smtcWithoutArtwork.hasArtwork)")',
     ].join("\n");
 
     const { stdout, failure } = await runPowerShell(harness);
@@ -396,5 +438,9 @@ describe.skipIf(!available)("SMTC helper on Windows", () => {
     expect(stdout).toContain("retried=3");
     // A thrown load is not recorded: it is attempted again on the next poll.
     expect(stdout).toContain("thrown=2");
+    // Five retryable polls exhaust the limit; the next three do not read.
+    expect(stdout).toContain("exhausted=5");
+    // A thumbnail present reports true, and an absent one false.
+    expect(stdout).toContain("hasArtwork=True,False");
   }, 30_000);
 });
