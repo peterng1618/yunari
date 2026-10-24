@@ -19,9 +19,9 @@ Branch: `feat/game-identity`
 
 ## Last completed change
 
-- **Merged into `main` locally** (`493a510e`, not pushed): sensor platform plus text elements, conflicts resolved on the merged side.
-- **Register repaired**: colliding sensor rows renumbered to vg-718–vg-724; vg-725 (store metadata) closed verified; stale vg-405/vg-439 copies dropped.
-- **Gate on the merge:** `npm run gate` exit 0 — web 382 files / 5677 tests; store-worker 12 files / 72 tests; backlog 725 rows valid.
+- **Task 1.1 landed** (`8a46b5e1`): `InstalledGame`/`CatalogueSeams` and the fixture-tested Epic manifest reader, 5 tests, red run recorded.
+- **Review:** spec compliance PASS, no must-fix; three minors (seam docblock, unneeded export, empty-`MainGameAppName` fixture) are being fixed.
+- **Environment:** the worktree's stale `node_modules` broke host typecheck; `npm install` in `src/web` fixed it, host typecheck exit 0.
 - **No tray icon exists**: host lifetime remains terminal-owned (`host/src/main.ts`), and this plan does not add one.
 
 ## Next
