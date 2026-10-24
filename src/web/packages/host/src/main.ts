@@ -12,6 +12,7 @@ import {
   waitUntilReachable,
 } from "./cli/net.js";
 import { ClockSensorProvider } from "./providers/clock.js";
+import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { LhmSensorProvider } from "./providers/lhm.js";
 import { launchLhm, registerLhmTask } from "./providers/lhm-launcher.js";
 import { LibrarySensorProvider } from "./providers/library.js";
@@ -172,18 +173,15 @@ export async function run(argv: readonly string[]): Promise<number> {
   // browser may write one and never read it back. Created before the weather
   // provider because a BYOK backend reads its key from here.
   const credentials = createCredentialStore(settingsDir);
-  // Custom sources sit beside the credentials they reference, and the provider
-  // that reads them arrives with the custom-source task. Issues are counted
-  // here meanwhile, never quoted: a reason can echo a key name or a pasted
-  // value, and a log line may not carry one. The count includes a file-level
-  // issue, so it says "issues", not "entries".
+  // Custom sources sit beside the credentials they reference. A rejected entry
+  // is exposed through the provider's health, never quoted in a log line: a
+  // reason can echo a key name or a pasted value.
   const customSources = createSourceStore(settingsDir);
-  const sourceIssues = (await customSources.read()).issues.length;
-  if (sourceIssues > 0) {
-    console.warn(
-      `${sourceIssues} issue${sourceIssues === 1 ? "" : "s"} in sources.json; see that file in the settings folder.`,
-    );
-  }
+  const customProvider = new CustomSourceProvider({
+    sources: customSources,
+    credentials,
+  });
+  await customProvider.reload();
   // Weather's place, backend and cadence are this PC's own settings, and the
   // provider owns its timer: it is built here with the providers, not by the
   // registry's cycle (docs/decisions/0099).
@@ -204,6 +202,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     libraryProvider,
     weatherProvider,
     mediaProvider,
+    customProvider,
   ]);
   const here = path.dirname(fileURLToPath(import.meta.url));
   const packagesDir = path.resolve(here, "..", "..");
@@ -553,6 +552,8 @@ export async function run(argv: readonly string[]): Promise<number> {
       // The media helper is a child process this run started; leaving it
       // polling after the host exits is the orphan decision 0102 prevents.
       mediaProvider.stop();
+      // Every per-source timer goes with it, and an in-flight fetch is cut.
+      customProvider.stop();
       // The windows close with the host: one left behind is one the next run
       // cannot see, and it would put a second window on that monitor.
       launcher?.stop();
