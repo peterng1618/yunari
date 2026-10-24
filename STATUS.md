@@ -11,7 +11,7 @@ Branch: `feat/game-identity`
 
 ## Active work
 
-- **Phase 3 (shared descriptor mapping)**: Task 3.1 done; **Task 3.2 (editor uses the shared mapper) is next**, then the player catalogue and its e2e.
+- **Phase 3 (shared descriptor mapping)**: Tasks 3.1 and 3.2 done; **the phase gate and the player catalogue's e2e are next**.
 - **Phase 2 (classifier)** replaces `game.running`'s pid check with catalogue, runtime-marker and window evidence, debounced.
 - **Phase 4 (player catalogue)** moves the wire mapping to `renderer-core` and passes descriptors to `refreshBoundText`.
 - **Windows-first**: Linux catalogue readers and foreground detection stay out, recorded in the spec.
@@ -19,9 +19,9 @@ Branch: `feat/game-identity`
 
 ## Last completed change
 
-- **Task 3.1** (`1e1667ef`, tests `541184d7`, `acfd95d0`): `renderer-core/src/data/sensor-catalogue.ts` owns `descriptorFromWire` + `descriptorsFromWire`, exported from the package index; editor file untouched until 3.2.
-- **Review** passed spec and quality; two fix commits made each filtered-field test prove the entry survives, not just that the field is absent.
-- **Evidence:** focused 14/14 tests exit 0 (renderer-core + editor), reviewer re-ran renderer-core typecheck exit 0; full gate not re-run (pure move, Phase 3 gate follows 3.2).
+- **Task 3.2** (`5a870e86`): editor `sensor-catalogue.ts` calls `descriptorsFromWire`; its local wire mapper is deleted, fetch and failure behaviour unchanged.
+- **Equality test** runs one wire array (a custom key plus a built-in collision) through the catalogue and through `descriptorsFromWire`; built-ins-survive tests kept.
+- **Evidence:** editor catalogue 5/5 and chart picker 23/23 exit 0; `typecheck -w @yunari/editor` and Biome exit 0; full gate not run (Phase 3 gate follows).
 
 ## Next
 
