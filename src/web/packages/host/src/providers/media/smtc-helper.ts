@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { HELPER_LINE_CAP } from "../helpers/supervisor.js";
 
 /**
  * Windows Now Playing through the SMTC session manager, read by one embedded
@@ -47,9 +48,6 @@ export interface SmtcScriptOptions {
 const DATA_READER_CONSTRUCTOR =
   "[Windows.Storage.Streams.DataReader].GetConstructor(@([Windows.Storage.Streams.IInputStream]))";
 
-/** The supervisor frames lines at this length and drops anything longer. */
-const SUPERVISOR_LINE_CAP = 1_048_576;
-
 /**
  * Room for the JSON keys, session id, digest and extension around the base64
  * payload. A Windows app id is well under this.
@@ -63,7 +61,7 @@ export const SMTC_ARTWORK_ENVELOPE_RESERVE = 512;
  * refuse as a gap instead of emitting a line the supervisor would drop.
  */
 export const SMTC_ARTWORK_RAW_BYTES = Math.floor(
-  ((SUPERVISOR_LINE_CAP - SMTC_ARTWORK_ENVELOPE_RESERVE) * 3) / 4,
+  ((HELPER_LINE_CAP - SMTC_ARTWORK_ENVELOPE_RESERVE) * 3) / 4,
 );
 
 const HEADER = `
@@ -198,20 +196,23 @@ function Get-ArtworkLine($session) {
   }
 }
 
-# One failed read is a gap for this track, retried next poll; it must not
-# record the track as done or reach the next session in the same poll.
+# One failed read is a gap for this track; a definite miss (no thumbnail, over
+# the cap, bad trailer) is recorded so it is not re-read every second. Only a
+# thrown load error retries, and never reaches the next session in the poll.
 function Try-EmitArtwork($session, $line) {
   $sessionId = $line['sessionId']
   $key = "$sessionId|$($line['title'])|$($line['artist'])|$($line['album'])"
   if ($lastArtwork.ContainsKey($sessionId) -and $lastArtwork[$sessionId] -eq $key) { return }
   try {
     $artwork = Get-ArtworkLine $session
-    if ($null -eq $artwork) { return }
-    [Console]::Out.WriteLine(($artwork | ConvertTo-Json -Compress))
   } catch {
     return
   }
-  # Recorded only after the line left the helper, so a failure retries.
+  if ($null -ne $artwork) {
+    [Console]::Out.WriteLine(($artwork | ConvertTo-Json -Compress))
+  }
+  # Recorded after the emit attempt either way: silence from a definitive miss
+  # must not become a WinRT read on every poll.
   $lastArtwork[$sessionId] = $key
 }
 `;
@@ -252,17 +253,21 @@ while ($true) {
 `;
 
 /**
+ * The artwork half before its poll loop: the WinRT awaits, the chunked read,
+ * the completeness check and the dedupe. Exported so a Windows test can
+ * execute that logic without needing a live thumbnail.
+ */
+export const SMTC_ARTWORK_FUNCTIONS: string = HEADER + ARTWORK;
+
+/**
  * The poll script. Artwork is compiled out unless the caller asked for it;
  * the supervisor has no command channel, so the script chosen at spawn is the
  * request.
  */
 export function smtcScript(options: SmtcScriptOptions = {}): string {
-  const artwork = options.artwork === true;
-  return (
-    HEADER +
-    (artwork ? `${ARTWORK}\n$WantArtwork = $true\n$lastArtwork = @{}\n` : "") +
-    POLL
-  );
+  return options.artwork === true
+    ? `${SMTC_ARTWORK_FUNCTIONS}\n$WantArtwork = $true\n$lastArtwork = @{}\n${POLL}`
+    : `${HEADER}${POLL}`;
 }
 
 export const SMTC_SCRIPT: string = smtcScript();

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import {
+  HELPER_LINE_CAP,
   type HelperChild,
   type SpawnProcess,
   startJsonLineHelper,
@@ -15,9 +16,6 @@ import {
   smtcArtworkLine,
   smtcScript,
 } from "./smtc-helper.js";
-
-/** The supervisor's own framing bound (not exported by it). */
-const SUPERVISOR_LINE_CAP = 1_048_576;
 
 class FakeChild extends EventEmitter {
   readonly pid: number;
@@ -139,7 +137,7 @@ describe("SMTC_SCRIPT", () => {
     expect(artwork).toContain("Test-CompleteImage $buffer $ext");
   });
 
-  it("records a track only after its artwork line was emitted", () => {
+  it("records a track after the emit attempt, including a definitive miss", () => {
     const artwork = smtcScript({ artwork: true });
     const emit = artwork.indexOf(
       "[Console]::Out.WriteLine(($artwork | ConvertTo-Json -Compress))",
@@ -148,6 +146,9 @@ describe("SMTC_SCRIPT", () => {
 
     expect(emit).toBeGreaterThan(-1);
     expect(record).toBeGreaterThan(emit);
+    // A null read is a recorded miss, not an early return that would re-read
+    // the thumbnail on every poll.
+    expect(artwork).not.toContain("if ($null -eq $artwork) { return }");
   });
 
   it("reads each session inside its own try, so one failure cannot hide others", () => {
@@ -160,13 +161,13 @@ describe("SMTC_SCRIPT", () => {
     // The largest line the script can emit must survive the supervisor's cap.
     expect(
       base64Length(SMTC_ARTWORK_RAW_BYTES) + artworkEnvelope("x".repeat(200)),
-    ).toBeLessThanOrEqual(SUPERVISOR_LINE_CAP);
+    ).toBeLessThanOrEqual(HELPER_LINE_CAP);
 
     // One byte more breaks the reserved envelope, so the script refuses it
     // instead of emitting a line the supervisor would drop.
     expect(
       base64Length(SMTC_ARTWORK_RAW_BYTES + 1) + SMTC_ARTWORK_ENVELOPE_RESERVE,
-    ).toBeGreaterThan(SUPERVISOR_LINE_CAP);
+    ).toBeGreaterThan(HELPER_LINE_CAP);
     expect(artworkEnvelope("x".repeat(200))).toBeLessThanOrEqual(
       SMTC_ARTWORK_ENVELOPE_RESERVE,
     );
@@ -202,7 +203,7 @@ describe("SMTC_SCRIPT", () => {
       base64,
     });
 
-    expect(line.length).toBeLessThanOrEqual(SUPERVISOR_LINE_CAP);
+    expect(line.length).toBeLessThanOrEqual(HELPER_LINE_CAP);
     children[0]?.stdout.emit("data", `${line}\n`);
     expect(onLine).toHaveBeenCalledWith(line);
     expect(onProblem).not.toHaveBeenCalled();

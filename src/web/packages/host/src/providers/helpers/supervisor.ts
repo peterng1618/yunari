@@ -9,7 +9,8 @@ import path from "node:path";
  * tree kill so a stopped helper leaves no grandchild behind.
  */
 
-const LINE_CAP = 1_048_576;
+/** One framed line may not exceed this; a longer one is dropped and reported. */
+export const HELPER_LINE_CAP = 1_048_576;
 const STDERR_CAP = 500;
 const MAX_ATTEMPTS = 5;
 const STABLE_MS = 30_000;
@@ -302,7 +303,7 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
         const line = buffer.slice(0, match.index);
         buffer = buffer.slice(match.index + match[0].length);
 
-        if (line.length > LINE_CAP) {
+        if (line.length > HELPER_LINE_CAP) {
           reportOverCap();
           continue;
         }
@@ -313,7 +314,7 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
 
       // Over-cap without a newline is dropped immediately, never buffered
       // until one arrives; the rest of that line is discarded as it streams.
-      if (buffer.length > LINE_CAP) {
+      if (buffer.length > HELPER_LINE_CAP) {
         buffer = "";
         dropping = true;
         reportOverCap();
