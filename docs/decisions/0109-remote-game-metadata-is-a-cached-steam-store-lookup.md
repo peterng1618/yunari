@@ -31,7 +31,7 @@ entries.
 Found: Steam-only identity from local VDF/ACF, a local box-art route with
 `realpath` containment and display-session auth, and no name matching or remote
 client of any kind. `steam-library.ts` parses ACF manifests — nothing resolves a
-bare name. The backlog rows vg-715 and vg-716 record the non-Steam and remote
+bare name. The backlog rows vg-724 and vg-725 record the non-Steam and remote
 questions this note answers.
 
 ## Rung 2 — dependencies
@@ -83,7 +83,7 @@ and a new dependency.
 |---|---|---|
 | Add one of the wrappers | The two requests | Leaves the whole decision, plus a dependency and its licence, for no saved work |
 | Steam Web API `ISteamApps` | Official-ish list | Needs a user key, 100k/day, and does not carry covers |
-| IGDB | Rich metadata, store-agnostic ids | Needs a Twitch client secret per install (vg-716) — a credential wall for a box art |
+| IGDB | Rich metadata, store-agnostic ids | Needs a Twitch client secret per install (vg-725) — a credential wall for a box art |
 | SteamDB | — | No API, scraping forbidden by its own FAQ |
 | Build the client here | Two `fetch` calls, a matcher, a cache | Chosen: no dependency, the refusal rule lives with the provider that owns presence |
 

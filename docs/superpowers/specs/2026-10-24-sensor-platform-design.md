@@ -1012,7 +1012,7 @@ This spec is implemented when:
   a machine asking about a title it is running. The endpoints are keyless and
   undocumented as a contract: a change or a rate limit degrades to the local
   behaviour with a reason. This trade was ruled by the user, not inferred.
-- **Presence still treats every foreground window as a running game** (vg-714),
+- **Presence still treats every foreground window as a running game** (vg-723),
   so while that row is open the lookup can be asked about a browser or a file
   manager. Each distinct name costs one request, remembered on disk, so a
   restart does not ask again; the map and its timestamps are the inventory this

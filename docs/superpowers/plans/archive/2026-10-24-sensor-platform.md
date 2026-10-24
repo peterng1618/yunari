@@ -1448,7 +1448,7 @@ wording; the spec has been amended to say the same thing.
   Cache-miss is `unavailable`; a cached cover answers with no request. A name
   lookup itself runs only while a `game.*` key is demanded, and its result —
   match or "no match" — is cached on disk for the spelling searched, so an
-  unfixed vg-714 costs one request per distinct spelling, survives a restart,
+  unfixed vg-723 costs one request per distinct spelling, survives a restart,
   and costs one more only when the same normalised key is searched with a
   different spelling.
 - [ ] **Step 5: Commit**
