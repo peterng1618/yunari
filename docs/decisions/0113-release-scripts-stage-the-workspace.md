@@ -1,4 +1,4 @@
-# 0111 — The release stages a workspace-shaped package instead of publishing the host member
+# 0113 — The release stages a workspace-shaped package instead of publishing the host member
 
 - **Date:** 2026-10-25
 - **Status:** accepted

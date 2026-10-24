@@ -1,4 +1,4 @@
-# 0110 — A previous schema major is migrated in memory on open, through one dispatcher
+# 0112 — A previous schema major is migrated in memory on open, through one dispatcher
 
 - **Date:** 2026-10-25
 - **Status:** accepted
@@ -84,7 +84,7 @@ Searched: the three published shapes for evolving a persisted document format
 event-sourcing pattern), **version dispatch at the loader** (read the version,
 route to a matching reader), and a **dual reader with write-forward** (accept
 old and new, always write new). Also checked the registry for the release
-tooling in 0111's sibling note, and ran a web search for upcaster prior art.
+tooling in 0113's sibling note, and ran a web search for upcaster prior art.
 
 Found: **all three exist, and two of them are already refused in writing here.**
 0017 (`:83`, `:108`) and 0022 (`:126`) rejected migration *before* the release,

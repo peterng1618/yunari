@@ -5,7 +5,7 @@ what ships, and what a mistake costs. The rules behind it are spec decisions D1,
 D6 and D7 in
 [`../superpowers/specs/2026-10-25-release-readiness-design.md`](../superpowers/specs/2026-10-25-release-readiness-design.md);
 the packaging choice is
-[`../decisions/0111-release-scripts-stage-the-workspace.md`](../decisions/0111-release-scripts-stage-the-workspace.md).
+[`../decisions/0113-release-scripts-stage-the-workspace.md`](../decisions/0113-release-scripts-stage-the-workspace.md).
 
 ## One version, moved by release-please
 

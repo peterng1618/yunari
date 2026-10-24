@@ -33,6 +33,7 @@ const FIXTURE_PORT = 4291;
 
 let appDir = "";
 const THEMES_DIR = (): string => path.join(appDir, "themes");
+const SETTINGS_DIR = (): string => path.join(appDir, "settings");
 const HOST = `http://127.0.0.1:${PORT}`;
 const THEME_ID = "e2e-custom-source";
 const NODE_ID = "reading";
@@ -41,6 +42,22 @@ const SOURCE_KEY = `custom.${SOURCE_ID}.cpu-load`;
 const SOURCE_URL = `http://127.0.0.1:${FIXTURE_PORT}/data`;
 /** What the endpoint serves; the display's reading is this number. */
 const READING = 42.5;
+
+/**
+ * The conversion case, seeded as files rather than driven through the source
+ * form: `unit` and `unitKind` are `CustomField` keys the form does not expose,
+ * and the host reads `sources.json` at boot.
+ *
+ * 100 °C is 212 °F exactly, and the renderer's default precision prints it
+ * without a decimal, so the expected text is derived from the conversion rule
+ * rather than guessed.
+ */
+const TEMP_SOURCE_ID = "temp-fixture";
+const TEMP_SOURCE_KEY = `custom.${TEMP_SOURCE_ID}.temp`;
+const TEMP_SOURCE_URL = `http://127.0.0.1:${FIXTURE_PORT}/temp`;
+const TEMP_THEME_ID = "e2e-custom-source-unit";
+const TEMP_CELSIUS = 100;
+const TEMP_FAHRENHEIT_TEXT = "212°F";
 
 test.describe.configure({ timeout: 120_000 });
 
@@ -116,15 +133,57 @@ const envelope = {
   },
 };
 
-function seedLibrary(): void {
-  const result = writeThemePackage({ envelope, assets: {} });
-  if (!result.ok) {
-    throw new Error(`custom-source fixture is invalid: ${result.message}`);
-  }
+/** The same scene, bound to the temperature source and asking for °F. */
+const temperatureEnvelope = {
+  ...envelope,
+  id: TEMP_THEME_ID,
+  metadata: { name: "E2E custom source unit", themeLanguage: "en" },
+  bindings: {
+    [NODE_ID]: [{ id: "read", semanticKey: TEMP_SOURCE_KEY, unit: "°F" }],
+  },
+};
 
-  const folder = path.join(THEMES_DIR(), THEME_ID);
-  mkdirSync(folder, { recursive: true });
-  writeFileSync(path.join(folder, "theme.json"), JSON.stringify(envelope));
+function seedLibrary(): void {
+  for (const theme of [envelope, temperatureEnvelope]) {
+    const result = writeThemePackage({ envelope: theme, assets: {} });
+    if (!result.ok) {
+      throw new Error(`custom-source fixture is invalid: ${result.message}`);
+    }
+
+    const folder = path.join(THEMES_DIR(), theme.id);
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(path.join(folder, "theme.json"), JSON.stringify(theme));
+  }
+}
+
+/** A source the form cannot author: the field's unit and conversion kind are
+ *  read from this file at boot, not entered on the page. */
+function seedSources(): void {
+  mkdirSync(SETTINGS_DIR(), { recursive: true });
+  writeFileSync(
+    path.join(SETTINGS_DIR(), "sources.json"),
+    JSON.stringify({
+      sources: [
+        {
+          id: TEMP_SOURCE_ID,
+          name: "Temperature fixture",
+          url: TEMP_SOURCE_URL,
+          intervalMs: 10_000,
+          timeoutMs: 1_000,
+          fields: [
+            {
+              id: "temp",
+              label: "Temperature",
+              pointer: "/temp",
+              type: "number",
+              unit: "°C",
+              unitKind: "temperature",
+            },
+          ],
+        },
+      ],
+    }),
+  );
 }
 
 async function startHost(): Promise<ChildProcess> {
@@ -154,11 +213,15 @@ async function startHost(): Promise<ChildProcess> {
   throw new Error(`the custom-source host never answered on ${PORT}`);
 }
 
-/** The endpoint a source reads: the one shape this case asserts on. */
+/** The endpoint a source reads: the one shape each case asserts on. */
 async function startFixture(): Promise<Server> {
   const server = createServer((request, response) => {
+    const body =
+      request.url === "/temp"
+        ? { temp: TEMP_CELSIUS }
+        : { cpu: { load: READING } };
     response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify({ cpu: { load: READING } }));
+    response.end(JSON.stringify(body));
   });
 
   await new Promise<void>((resolve) => {
@@ -220,6 +283,7 @@ test.beforeAll(async () => {
   appDir = mkdtempSync(path.join(tmpdir(), "yunari-custom-source-"));
   mkdirSync(THEMES_DIR(), { recursive: true });
   seedLibrary();
+  seedSources();
   fixture = await startFixture();
   host = await startHost();
 });
@@ -318,4 +382,29 @@ test("a source authored on the page is read on a display, and its deletion expla
   // The theme itself still loaded: the node's authored box is on the canvas.
   await expect(player.locator("#artboard canvas.lower-canvas")).toBeVisible();
   await player.close();
+});
+
+/**
+ * The display's own conversion: the source reports 100 °C, the theme asks for
+ * °F, and the player turns the reading into 212 °F. The descriptor that says
+ * the custom key is a temperature comes from the host's `/api/sensors`, which
+ * is why removing that pass from the player leaves the raw `100°C` on the wall.
+ */
+test("a display shows a custom source's reading in the unit the theme asks for", async ({
+  page,
+}) => {
+  await page.goto(`${HOST}/?theme=${TEMP_THEME_ID}&data=live`);
+  await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible();
+  await playerReady(page);
+
+  await expect
+    .poll(() => canvasProp(page, NODE_ID, "text"), {
+      timeout: 25_000,
+      message: "the display never painted the converted temperature",
+    })
+    .toBe(TEMP_FAHRENHEIT_TEXT);
+
+  const painted = String(await canvasProp(page, NODE_ID, "text"));
+  expect(painted).toContain("°F");
+  expect(painted).not.toContain("°C");
 });

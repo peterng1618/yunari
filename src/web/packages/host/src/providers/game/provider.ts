@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 import {
   describeSemanticKey,
@@ -24,6 +25,12 @@ import type {
 import { descriptorFieldsOf, redactForBrowser } from "../provider.js";
 import { findBoxArt } from "./box-art.js";
 import {
+  type InstalledGame,
+  readInstalledGames,
+} from "./catalogue/catalogue.js";
+import { defaultCatalogueSeams } from "./catalogue/seams.js";
+import { classifyForeground, type GameEvidence } from "./game-classifier.js";
+import {
   matchProcess,
   readSteamApps,
   resolveSteamRoot,
@@ -32,16 +39,18 @@ import {
 import type { StoreLookupResult } from "./store-metadata.js";
 
 /**
- * The game the user is playing, with Steam's local library for its name.
+ * The game the user is playing, identified from local evidence.
  *
  * One PowerShell helper reports the foreground process once a second while a
- * display binds `game.*`; the Steam library is read once per demand window.
- * A matched app gives the name and, when Steam's cache holds it, the local box
- * art URL. A foreground process outside every Steam install reports its
- * executable and `running: true`; when a store is injected its local name —
- * ProductName, else the executable's file name — is looked up once, and a match
- * supplies the canonical name and cover (decision 0109). A store failure is a
- * gap for that key, never the provider's failure, so presence keeps answering.
+ * display binds `game.*`; the installed-game catalogue and the Steam library
+ * are each read once per demand window. `game.running` follows the classifier:
+ * a catalogue match, a runtime marker, or two fullscreen samples of a known
+ * engine window class. A Steam match still gives the name and, when Steam's
+ * cache holds it, the local box art URL. `game.app` names the executable for
+ * every process, game or not; a store lookup happens only when a name or
+ * artwork key is demanded and neither the catalogue nor Steam names the app
+ * (decision 0109). A store failure is a gap for that key, never the provider's
+ * failure, so presence keeps answering.
  */
 
 const GAME_PROVIDER_ID = "game";
@@ -106,6 +115,13 @@ export interface GameProviderOptions {
     executablePath: string,
   ) => Promise<string | undefined>;
   /**
+   * The installed games the classifier matches against. Read once per demand
+   * window; a rejection is an empty catalogue, not the provider's failure.
+   */
+  readonly catalogue?: () => Promise<readonly InstalledGame[]>;
+  /** The directory listing the runtime-marker check uses; a test injects one. */
+  readonly readdir?: (dir: string) => Promise<readonly string[]>;
+  /**
    * A fixed foreground executable instead of the Windows helper. A browser
    * proof uses it to name a game with no real window; the helper is not spawned.
    */
@@ -119,8 +135,10 @@ export interface GameStore {
   cover(appId: number, signal?: AbortSignal): Promise<string | undefined>;
 }
 
-/** What one demand window resolved: a local Steam app or a store match. */
+/** What one demand window resolved: a catalogue name, a Steam app or a store match. */
 interface GameIdentity {
+  /** The catalogue's name for the foreground game; it outranks every lookup. */
+  readonly catalogueName?: string;
   readonly steam?: SteamApp;
   readonly store?: { readonly id: number; readonly name: string };
   /** The lookup had no answer, so "no such game" would be a false reason. */
@@ -148,6 +166,8 @@ export class GameProvider implements SensorProvider {
   readonly #productName: (
     executablePath: string,
   ) => Promise<string | undefined>;
+  readonly #catalogue: () => Promise<readonly InstalledGame[]>;
+  readonly #readdir: (dir: string) => Promise<readonly string[]>;
   readonly #foregroundPath: string | undefined;
 
   #helper: RunningHelper | undefined;
@@ -158,6 +178,14 @@ export class GameProvider implements SensorProvider {
   #steamRootPath: string | undefined;
   #steamApps: readonly SteamApp[] | undefined;
   #steamLoading: Promise<void> | undefined;
+  #catalogueGames: readonly InstalledGame[] | undefined;
+  #catalogueLoading: Promise<void> | undefined;
+  /** Consecutive helper lines of the same foreground window while fullscreen. */
+  #fullscreenSamples = 0;
+  #fullscreenKey: { readonly pid: number; readonly class?: string } | undefined;
+  /** Bumped by every parsed helper line, so repeated asks read one line once. */
+  #readingSequence = 0;
+  #sampledSequence = -1;
   /** Bumped on teardown so a late Steam read cannot repopulate a new window. */
   #window = 0;
   /** Redacted; may reach a browser through `health()` and a sample message. */
@@ -174,6 +202,16 @@ export class GameProvider implements SensorProvider {
     this.#loadSteamApps = options.loadSteamApps ?? readSteamApps;
     this.#store = options.store;
     this.#productName = options.productName ?? readProductName;
+    this.#catalogue =
+      options.catalogue ??
+      (() =>
+        readInstalledGames(
+          defaultCatalogueSeams({
+            resolveSteamRoot: this.#steamRoot,
+            readSteamApps: this.#loadSteamApps,
+          }),
+        ));
+    this.#readdir = options.readdir ?? fs.readdir;
     this.#foregroundPath = options.foregroundPath;
   }
 
@@ -197,22 +235,33 @@ export class GameProvider implements SensorProvider {
     if (now - this.#lastDemandMs > this.#graceMs) this.#teardown();
     this.#lastDemandMs = now;
 
-    await this.#ensureSteam();
+    await Promise.all([this.#ensureSteam(), this.#ensureCatalogue()]);
     this.#reconcile(now);
 
     // A presence-only demand reads neither the store nor Steam's cache: identity
     // is resolved only for a key that needs it, and the cover only for artwork.
+    const wantsRunning = wanted.includes("game.running");
     const wantsName = wanted.includes("game.name");
     const wantsArtwork = wanted.includes("game.artwork");
+    const evidence =
+      wantsRunning || wantsName || wantsArtwork
+        ? await this.#classify()
+        : undefined;
     const identity =
-      wantsName || wantsArtwork ? await this.#identify() : undefined;
+      wantsName || wantsArtwork ? await this.#identify(evidence) : undefined;
     const artworkUrl = wantsArtwork
       ? await this.#artworkUrl(identity)
       : undefined;
 
     return wanted.map((semanticKey) => ({
       semanticKey,
-      sample: this.#sampleOf(semanticKey, nowMs, identity, artworkUrl),
+      sample: this.#sampleOf(
+        semanticKey,
+        nowMs,
+        evidence,
+        identity,
+        artworkUrl,
+      ),
     }));
   }
 
@@ -254,6 +303,30 @@ export class GameProvider implements SensorProvider {
     this.#steamRootPath = root;
     this.#steamApps = apps;
     this.#steamLoading = undefined;
+  }
+
+  #ensureCatalogue(): Promise<void> {
+    if (this.#catalogueGames !== undefined) return Promise.resolve();
+
+    this.#catalogueLoading ??= this.#readCatalogueOnce();
+    return this.#catalogueLoading;
+  }
+
+  async #readCatalogueOnce(): Promise<void> {
+    const window = this.#window;
+    let games: readonly InstalledGame[] = [];
+
+    try {
+      games = await this.#catalogue();
+    } catch {
+      // A catalogue that cannot be read is no games, never the provider down.
+      games = [];
+    }
+
+    if (window !== this.#window) return;
+
+    this.#catalogueGames = games;
+    this.#catalogueLoading = undefined;
   }
 
   #reconcile(now: number): void {
@@ -312,6 +385,7 @@ export class GameProvider implements SensorProvider {
 
     this.#failure = redactForBrowser(reason);
     this.#foreground = undefined;
+    this.#resetFullscreen();
     this.#retryAtMs = this.#now() + this.#retryMs;
     this.#stopTick();
   }
@@ -320,6 +394,7 @@ export class GameProvider implements SensorProvider {
     const reading = parseForegroundLine(line);
     if (reading === undefined) return;
 
+    this.#readingSequence += 1;
     this.#foreground = reading;
     this.#failure = undefined;
   }
@@ -340,8 +415,17 @@ export class GameProvider implements SensorProvider {
     this.#steamRootPath = undefined;
     this.#steamApps = undefined;
     this.#steamLoading = undefined;
+    this.#catalogueGames = undefined;
+    this.#catalogueLoading = undefined;
+    this.#resetFullscreen();
     this.#failure = undefined;
     this.#retryAtMs = 0;
+  }
+
+  #resetFullscreen(): void {
+    this.#fullscreenSamples = 0;
+    this.#fullscreenKey = undefined;
+    this.#sampledSequence = -1;
   }
 
   #stopTick(): void {
@@ -379,6 +463,54 @@ export class GameProvider implements SensorProvider {
     return matchProcess(foreground.path, this.#steamApps ?? []);
   }
 
+  /**
+   * The classifier's answer for the current foreground. The fullscreen streak
+   * advances on a new helper line only: several asks in one host tick all read
+   * the same line, and counting those would turn one fullscreen line into two.
+   * The streak is the same pid and class while a fullscreen flag holds, so the
+   * second line reaches the classifier's threshold and alt-tab does not flap
+   * presence.
+   */
+  async #classify(): Promise<GameEvidence | undefined> {
+    const sequence = this.#readingSequence;
+    const fresh = sequence !== this.#sampledSequence;
+    this.#sampledSequence = sequence;
+
+    const foreground = this.#currentForeground();
+
+    if (foreground === undefined) {
+      this.#resetFullscreen();
+      return undefined;
+    }
+
+    if (fresh) this.#advanceFullscreen(foreground);
+
+    return classifyForeground(foreground, this.#catalogueGames ?? [], {
+      fullscreenSamples: this.#fullscreenSamples,
+      readdir: this.#readdir,
+    });
+  }
+
+  #advanceFullscreen(foreground: ForegroundReading): void {
+    const fullscreen =
+      foreground.fullscreen === true || foreground.d3dFullscreen === true;
+    const previous = this.#fullscreenKey;
+    const sameWindow =
+      previous !== undefined &&
+      previous.pid === foreground.pid &&
+      previous.class === foreground.class;
+
+    this.#fullscreenSamples = fullscreen
+      ? sameWindow
+        ? this.#fullscreenSamples + 1
+        : 1
+      : 0;
+    this.#fullscreenKey = {
+      pid: foreground.pid,
+      ...(foreground.class === undefined ? {} : { class: foreground.class }),
+    };
+  }
+
   /** The executable's file name, else the process name the helper could read. */
   #processName(foreground: ForegroundReading): string | undefined {
     if (foreground.path !== undefined) {
@@ -390,17 +522,29 @@ export class GameProvider implements SensorProvider {
   }
 
   /**
-   * The identity a name or artwork reading needs. A Steam app answers from its
-   * manifest without a search; a non-Steam app is looked up once by its local
-   * name. A failed lookup is a reason for that key, never the provider's
-   * failure, and is kept distinct from the store answering "no match".
+   * The identity a name or artwork reading needs. The catalogue answers first,
+   * then a Steam app from its manifest without a search; otherwise the app is
+   * looked up once by its local name. A failed lookup is a reason for that key,
+   * never the provider's failure, and is kept distinct from the store answering
+   * "no match".
    */
-  async #identify(): Promise<GameIdentity> {
+  async #identify(evidence: GameEvidence | undefined): Promise<GameIdentity> {
     const foreground = this.#currentForeground();
 
     if (foreground === undefined || foreground.pid === 0) return {};
 
+    // Steam is still matched when the catalogue names the game, because its
+    // local cache is the first artwork source.
     const steam = this.#matched();
+    const catalogueGame = evidence?.game;
+
+    if (catalogueGame !== undefined) {
+      return {
+        catalogueName: catalogueGame.name,
+        ...(steam === undefined ? {} : { steam }),
+      };
+    }
+
     if (steam !== undefined) return { steam };
 
     const store = this.#store;
@@ -490,6 +634,7 @@ export class GameProvider implements SensorProvider {
   #sampleOf(
     semanticKey: string,
     nowMs: number,
+    evidence: GameEvidence | undefined,
     identity: GameIdentity | undefined,
     artworkUrl: string | undefined,
   ): Sample {
@@ -518,14 +663,17 @@ export class GameProvider implements SensorProvider {
         sensorId,
         timestamp,
         status: "ok",
-        booleanValue: foreground.pid !== 0,
+        booleanValue: evidence?.running === true,
       };
     }
 
     if (foreground.pid === 0) return absent(NO_GAME_MESSAGE);
 
     if (semanticKey === "game.name") {
-      const name = identity?.steam?.name ?? identity?.store?.name;
+      const name =
+        identity?.catalogueName ??
+        identity?.steam?.name ??
+        identity?.store?.name;
 
       if (name !== undefined) {
         return { sensorId, timestamp, status: "ok", textValue: name };
