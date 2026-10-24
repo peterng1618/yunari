@@ -19,9 +19,9 @@ Branch: `feat/game-identity`
 
 ## Last completed change
 
-- **Task 1.3 landed** (`4e6ce141`, fixes `23fa8009`): itch `.itch.toml` and uninstall-registry readers; 35 catalogue tests pass, host typecheck exit 0.
-- **Review:** spec PASS, no must-fix; quoted `DisplayIcon` now yields its exe, itch name and first-action rules are proven, TOML escapes and non-object entries tested.
-- **Task 1.4 is next**: Microsoft Store / Game Pass Appx reader, then the file split and aggregation.
+- **Task 1.4 landed** (`04a6dc80`, proof `235b10be`): Microsoft Store / Game Pass Appx reader, sharing Xbox's config extractor; 44 catalogue tests pass, host typecheck exit 0.
+- **Review:** spec PASS, no must-fix; `HasConfig` gate now has a mutation-proven test, ACL read and absolute appx exe covered.
+- **Task 1.5 is running**: split into `catalogue/` modules, then aggregate with exe/install-root dedupe, then the Phase 1 gate.
 - **No tray icon exists**: host lifetime remains terminal-owned (`host/src/main.ts`), and this plan does not add one.
 
 ## Next
