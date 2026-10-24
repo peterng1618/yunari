@@ -143,6 +143,13 @@ range, no advisory, unrelated to the overrides), and recorded the remaining
 | `canvas` 3.2.3 → `prebuild-install` 7.1.3 | deprecation | `canvas` is the latest release and fabric's node renderer needs it; a deprecation is not a vulnerability. |
 | `whatwg-encoding` 3.1.1 via `jsdom` 26.1.0 | deprecation | jsdom 30, which drops it, fails 8 editor DOM cases; jsdom 26 requires this version and a deprecation is not a vulnerability. |
 
+**Dependency updates.** `.github/dependabot.yml` has Dependabot propose version
+updates weekly: npm minor and patch updates arrive grouped, majors individually,
+and GitHub Actions updates separately. Security updates additionally require the
+repository's Dependabot security-updates setting to be enabled. The audit policy
+fails CI on an unallowlisted advisory and on a stale allowlist entry, so a bump
+that resolves an allowlisted advisory removes that row in the same PR.
+
 ## Vendored source
 
 | Source | Pin | Licence | Role |

@@ -1,0 +1,30 @@
+# Schema verified 2026-10-25 against GitHub's Dependabot options reference:
+# https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+# Confirmed there: `version: 2`; `updates`; `package-ecosystem` values `npm` and
+# `github-actions`; `directory`; `schedule.interval` includes `weekly`;
+# `groups.update-types` accepts `minor`, `patch`, `major`; `commit-message.prefix`
+# and `prefix-development`; `open-pull-requests-limit` bounds version-update PRs.
+# Security updates are a repository setting, not configurable in this file.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/src/web"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
