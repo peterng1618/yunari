@@ -20,10 +20,10 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Last completed change
 
-- **Linux tray:** `host/src/tray/linux.ts` drives the staged `systray2` x86-64 binary over JSON lines and maps a clicked `__id` through the current action map.
+- **Linux tray:** `host/src/tray/linux.ts` sends the binary's bare first `Menu`, then `update-item-and-menu` lines with `seq_id: -1` and stable `__id`s; separators are `" "`.
 - **Vendoring:** `scripts/vendor-tray.mjs` checks the pinned SHA-256 before extraction and stages only the Linux binary and LICENSE under ignored `vendor/tray`.
 - **View discipline:** one `onLost` per view and never after a rejected start; a lost view stops writing menus but `close()` still kills the process.
-- **Tests:** 12 Linux tests; the staged binary is a 3.5 MB x86-64 ELF and `PROVENANCE.txt` carries the pinned digest.
+- **Tests:** 15 Linux tests; the staged binary is a 3.5 MB x86-64 ELF and `PROVENANCE.txt` carries the pinned digest.
 - **Gates:** host typecheck, Biome, all tray tests and `status:check` exit 0.
 
 ## Next

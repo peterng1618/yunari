@@ -1,6 +1,13 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -23,6 +30,9 @@ const SHA256 = "24a176933952c4db79026dcec25c7acf48e5c1cee5d94bc6b87740060bc8ed00
 const BINARY_MEMBER = "package/traybin/tray_linux_release";
 const LICENSE_MEMBER = "package/LICENSE";
 
+/** A hung registry must not leave the build waiting forever. */
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+
 const run = promisify(execFile);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const target = path.join(here, "..", "vendor", "tray");
@@ -30,7 +40,9 @@ const target = path.join(here, "..", "vendor", "tray");
 async function main() {
   console.log(`Downloading systray2 ${VERSION}…`);
 
-  const response = await fetch(URL);
+  const response = await fetch(URL, {
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+  });
   if (!response.ok) {
     throw new Error(`${URL} answered ${response.status}`);
   }
@@ -67,22 +79,22 @@ async function main() {
       { cwd: temp },
     );
 
-    await rm(target, { recursive: true, force: true });
     await mkdir(target, { recursive: true });
-    await copyFile(
-      path.join(extractDir, BINARY_MEMBER),
-      path.join(target, "tray_linux_release"),
-    );
-    await copyFile(
-      path.join(extractDir, LICENSE_MEMBER),
-      path.join(target, "LICENSE"),
-    );
+    // Copy beside the live files and rename over only once every file is
+    // ready, so a failed download or extraction leaves the previous staging
+    // usable instead of an empty vendor/tray.
+    for (const [name, source] of [
+      ["tray_linux_release", path.join(extractDir, BINARY_MEMBER)],
+      ["LICENSE", path.join(extractDir, LICENSE_MEMBER)],
+    ]) {
+      await copyFile(source, path.join(target, `${name}.new`));
+    }
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
 
   await writeFile(
-    path.join(target, "PROVENANCE.txt"),
+    path.join(target, "PROVENANCE.txt.new"),
     [
       `systray2 ${VERSION}`,
       `source: ${URL}`,
@@ -95,6 +107,9 @@ async function main() {
       "",
     ].join("\n"),
   );
+  for (const name of ["tray_linux_release", "LICENSE", "PROVENANCE.txt"]) {
+    await rename(path.join(target, `${name}.new`), path.join(target, name));
+  }
 
   console.log(`Staged systray2 ${VERSION} into ${target}`);
   console.log(`sha256 ${digest}`);

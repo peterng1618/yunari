@@ -60,14 +60,13 @@ it("marks a checked row with the Linux check suffix and keeps ids stable", () =>
   expect((menu.items as readonly { title: string }[])[0]?.title).toBe(
     "Auto start (√)",
   );
-  expect((menu.items as readonly { title: string }[])[1]?.title).toBe(
-    "<SEPARATOR>",
-  );
+  expect((menu.items as readonly { title: string }[])[1]?.title).toBe(" ");
+  expect((menu.items as readonly { __id: number }[])[1]?.__id).toBe(2);
   expect(actions.get(3)).toBe("rtss");
   expect(actions.has(2)).toBe(false);
 });
 
-it("opens on ready, sends a menu, and maps a clicked __id", async () => {
+it("opens on ready with a bare Menu, then maps a clicked __id", async () => {
   const { child, stdin } = fakeChild();
   const onAction = vi.fn();
   const starting = startLinuxTray({
@@ -80,9 +79,92 @@ it("opens on ready, sends a menu, and maps a clicked __id", async () => {
   child.stdout.write('{"type":"ready"}\n');
   const view = await starting;
   view.setMenu([{ title: "Pair display", enabled: true, action: "pair" }]);
-  expect(JSON.parse(stdin[0] ?? "")).toMatchObject({ type: "update-menu" });
+  const first = JSON.parse(stdin[0] ?? "") as {
+    type?: string;
+    icon: string;
+    title: string;
+    tooltip: string;
+    items: { title: string; enabled: boolean; __id: number }[];
+  };
+  // The binary reads exactly one bare Menu line before it builds the tray.
+  expect(first.type).toBeUndefined();
+  expect(first.icon.length).toBeGreaterThan(0);
+  expect(first.title).toBe("");
+  expect(first.tooltip).toBe("Yunari");
+  expect(first.items).toEqual([
+    { title: "Pair display", enabled: true, __id: 1 },
+  ]);
   child.stdout.write('{"type":"clicked","__id":1}\n');
   expect(onAction).toHaveBeenCalledWith("pair");
+});
+
+it("updates a changed row with update-item-and-menu and seq_id -1", async () => {
+  const { child, stdin, spawnProcess } = fakeChild();
+  const starting = startLinuxTray({
+    binary: "tray",
+    onAction: vi.fn(),
+    onLost: vi.fn(),
+    spawnProcess,
+    ...fakeDeps,
+  });
+  child.stdout.write('{"type":"ready"}\n');
+  const view = await starting;
+  view.setMenu([
+    { title: "status", enabled: false },
+    { title: "Auto start", enabled: true, checked: false, action: "autostart" },
+    { title: "Pair display", enabled: true, action: "pair" },
+  ]);
+  view.setMenu([
+    { title: "status", enabled: false },
+    { title: "Auto start", enabled: true, checked: true, action: "autostart" },
+    { title: "Pair display", enabled: true, action: "pair" },
+  ]);
+
+  expect(stdin).toHaveLength(2);
+  const line = JSON.parse(stdin[1] ?? "") as {
+    type: string;
+    seq_id: number;
+    item: { title: string; __id: number };
+    menu: { tooltip: string; items: { title: string }[] };
+  };
+  expect(line.type).toBe("update-item-and-menu");
+  expect(line.seq_id).toBe(-1);
+  expect(line.item.__id).toBe(2);
+  expect(line.item.title).toBe("Auto start (√)");
+  expect(line.menu.tooltip).toBe("Yunari");
+  expect(line.menu.items).toHaveLength(3);
+});
+
+it("maps a clicked __id to its row after the array order differs", async () => {
+  const { child, spawnProcess } = fakeChild();
+  const onAction = vi.fn();
+  const starting = startLinuxTray({
+    binary: "tray",
+    onAction,
+    onLost: vi.fn(),
+    spawnProcess,
+    ...fakeDeps,
+  });
+  child.stdout.write('{"type":"ready"}\n');
+  const view = await starting;
+  view.setMenu([
+    { title: "status", enabled: false },
+    { title: "Pair display", enabled: true, action: "pair" },
+    { title: "Theme Editor", enabled: true, action: "editor" },
+  ]);
+  // A reordered array keeps each action row's original id, so the click still
+  // resolves to the row the binary knows.
+  view.setMenu([
+    { title: "status", enabled: false },
+    { title: "Theme Editor", enabled: true, action: "editor" },
+    { title: "Pair display", enabled: true, action: "pair" },
+  ]);
+  child.stdout.write('{"type":"clicked","__id":2}\n');
+  expect(onAction).toHaveBeenLastCalledWith("pair");
+  child.stdout.write('{"type":"clicked","__id":3}\n');
+  expect(onAction).toHaveBeenLastCalledWith("editor");
+  child.stdout.write('{"type":"clicked","__id":99}\n');
+  expect(onAction).toHaveBeenCalledTimes(2);
 });
 
 it("names the missing staged binary", async () => {
@@ -169,11 +251,41 @@ it("resends the menu when only the tooltip changes", async () => {
   view.setTooltip("paused");
   const message = JSON.parse(stdin[1] ?? "") as {
     type: string;
+    seq_id: number;
     menu: { tooltip: string; items: { title: string }[] };
   };
-  expect(message.type).toBe("update-menu");
+  expect(message.type).toBe("update-item-and-menu");
+  expect(message.seq_id).toBe(-1);
   expect(message.menu.tooltip).toBe("paused");
   expect(message.menu.items[0]?.title).toBe("status");
+});
+
+it("warns instead of sending rows the tray binary cannot add", async () => {
+  const warn = vi
+    .spyOn(process, "emitWarning")
+    .mockImplementation(() => undefined);
+  const { child, stdin, spawnProcess } = fakeChild();
+  const starting = startLinuxTray({
+    binary: "tray",
+    onAction: vi.fn(),
+    onLost: vi.fn(),
+    spawnProcess,
+    ...fakeDeps,
+  });
+  child.stdout.write('{"type":"ready"}\n');
+  const view = await starting;
+  view.setMenu([
+    { title: "status", enabled: false },
+    { title: "Pair display", enabled: true, action: "pair" },
+  ]);
+  view.setMenu([
+    { title: "status", enabled: false },
+    { title: "Pair display", enabled: true, action: "pair" },
+    { title: "Exit", enabled: true, action: "exit" },
+  ]);
+  expect(warn).toHaveBeenCalledTimes(1);
+  // The known rows did not change, so nothing is written for the extra row.
+  expect(stdin).toHaveLength(1);
 });
 
 it("rejects when ready never arrives and kills the child", async () => {
