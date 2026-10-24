@@ -95,10 +95,10 @@ Non-obvious failure modes worth checking before repeating expensive investigatio
 - **The helper line's `class`, `fullscreen` and `d3dFullscreen` are optional.**
   An older line without them still parses, and a missing class or fullscreen
   flag means window evidence cannot fire.
-- **The live classifier needs a real fullscreen game, so tests inject the
-  foreground.** `YUNARI_FOREGROUND_EXE` names a fixture executable whose stem is
-  the searched name; `tests/e2e/game-metadata.spec.ts` proves identity that way.
-  `game-artwork.spec.ts` instead fakes the Steam root and stubs the page's stream.
+- **Only window evidence needs a real fullscreen game.** The injected foreground
+  supplies no window, so it proves catalogue or store identity only;
+  `tests/e2e/game-metadata.spec.ts` uses that seam, while `game-artwork.spec.ts`
+  uses a Steam-root fixture and stubs the page's stream.
 
 ## Toolchain
 
