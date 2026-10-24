@@ -9,29 +9,27 @@ The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-relea
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-release-readiness.md` — Phases A and B complete; Phase C next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-release-readiness.md` — Phases A and B complete; Phase C in progress, C1 committed.
 - **A1 is complete:** decisions 0110 (migrate the previous schema major on open) and 0111 (stage the workspace as `yunari`) claim every watched path later tasks write.
 - **A2 is complete:** `schemaVersion` is `"2.0.0"`; the strict validator accepts a semver major and still refuses every integer.
 - **A3 is complete:** `readFabricThemeEnvelope` migrates the legacy integer and accepted older majors, then validates.
 - **A4 is complete:** every open path reads through the migration; save, snapshot, package write and `requestVersion` stay strict.
-- **Probe finding for C1:** the staged manifest needs five runtime deps — `culori`, `fflate`, `ffmpeg-static`, `node-forge`, `systeminformation` — not the three the plan lists.
 
 ## Last completed change
 
-- **Audit policy fails closed:** `scripts/audit-policy.mjs` exits 1 on an unallowlisted finding or a stale allowlist row, 2 on unreadable input.
-- **Allowlist measured after B2:** the four high findings are `node-forge` GHSA-86w9-cpqp-85rv, `zod` GHSA-mrhx-c7xc-m3w5, and zod reached via `@google/design.md` and `@cloudflare/vitest-pool-workers`.
-- **Wired without a network in the gate:** `audit:check`, the policy `--self-test` in `gates:self-test`, and a separate `audit` CI job.
-- **Tests:** 9 pass in `tests/scripts/audit-policy.test.ts`; empty and stale allowlists exit 1, unreadable input exits 2.
-- **Gate stops only at the known SMTC pair:** 384 of 385 files and 5727 of 5729 tests pass.
+- **The npm package stages with no production path change:** `scripts/stage-npm-package.mjs` copies the workspace layout outside the repo and refuses a non-empty or in-repo `--out`.
+- **The staged manifest declares five runtime deps** as ranges read from `src/web/package-lock.json`: `culori`, `fflate`, `ffmpeg-static`, `node-forge`, `systeminformation`.
+- **A real install boots:** 35-file tarball, 6,878,647 bytes packed and 26,757,424 unpacked; installed `yunari --version` prints `0.1.0`; `/api/health`, `/editor` and `/` answer 200 on port 4321.
+- **Tests:** 7 pass in `tests/scripts/stage-npm-package.test.ts`; a missing `host/dist/main.js` and a mismatched `--expect-version` both exit non-zero.
 
 ## Next
 
-1. C1 — stage the npm package as a workspace-shaped tarball (Phase B complete).
+1. C2 — wire release-please and the tag-driven publish workflow (Phase C continues).
 
 ## Blockers / unverified
 
 - **Migration is a forward obligation only:** at `2.0.0` there is no earlier supported major beyond the legacy integer, so no real N−1 migration is exercised by data.
 - **No release has happened:** npm names `yunari` and `yunari-dashboard` both return 404 today, and trusted publishing is unconfigured.
-- **The staged-package probe ran with `--ignore-scripts`:** `ffmpeg-static`'s download and a full host boot from the installed tarball are unverified.
+- **`ffmpeg-static` installs with its scripts and the host boots from the tarball;** no media playback was exercised, so a missing binary still degrades only at first media use.
 - **release-please settings and trusted publishing** were not verified against live docs; web search returned no results today.
 - **`npm ls` marks the overridden edges `invalid` on npm 11.6.2** because the lockfile keeps each requester's exact pins; `npm ci` exits 0 and the only installed copies are the patched ones, so this is a reported deviation awaiting a controller ruling.
