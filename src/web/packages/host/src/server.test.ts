@@ -8242,12 +8242,16 @@ describe("Weather settings routes", () => {
       url: "https://open-meteo.com/en/licence",
     });
 
-    await request(
+    const saved = await request(
       server,
       "PUT",
       "/api/weather/settings",
       JSON.stringify({ ...BERLIN, provider: "weatherapi" }),
     );
+    expect((saved.json() as { attribution: unknown }).attribution).toEqual({
+      text: "Powered by WeatherAPI.com",
+      url: "https://www.weatherapi.com/",
+    });
 
     const byok = await request(server, "GET", "/api/weather/settings");
     expect((byok.json() as { attribution: unknown }).attribution).toEqual({

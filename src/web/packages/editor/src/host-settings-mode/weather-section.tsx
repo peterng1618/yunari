@@ -149,12 +149,13 @@ export function WeatherSection(props: {
           />
           {weather.attribution === undefined ? null : (
             <p className="text-sm text-muted">
+              {/* The visible credit is the link's accessible name: an
+                  overriding label would drop the backend it names. */}
               <a
                 href={weather.attribution.url}
                 target="_blank"
                 rel="noreferrer"
                 className="underline"
-                aria-label={uiCopy.hostSettings.weather.attribution}
                 data-yunari-weather-attribution=""
               >
                 {weather.attribution.text}

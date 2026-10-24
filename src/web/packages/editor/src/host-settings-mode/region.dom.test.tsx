@@ -904,6 +904,11 @@ it.each([
     );
     expect(link.textContent).toBe(text);
     expect(link.getAttribute("href")).toBe(url);
+    // A screen reader must hear which backend the credit names: an overriding
+    // label would replace the visible text rather than add to it.
+    const accessibleName =
+      link.getAttribute("aria-label") ?? link.textContent ?? "";
+    expect(accessibleName).toContain(text);
   },
 );
 

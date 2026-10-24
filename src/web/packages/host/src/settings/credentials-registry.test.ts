@@ -8,10 +8,14 @@ const openweathermap = KNOWN_CREDENTIALS.find(
 );
 
 /** One response for one call, and a record of the URL it was asked. */
-function fetcherOf(status: number, calls: URL[] = []): typeof fetch {
+function fetcherOf(
+  status: number,
+  calls: URL[] = [],
+  body = "{}",
+): typeof fetch {
   return (async (input: string | URL | Request) => {
     calls.push(new URL(String(input)));
-    return new Response("{}", { status });
+    return new Response(body, { status });
   }) as unknown as typeof fetch;
 }
 
@@ -93,7 +97,12 @@ describe("the weather credentials", () => {
   });
 
   it("refuses a rejected WeatherAPI key without echoing it", async () => {
-    const result = await weatherapi?.verify?.("key-1234", fetcherOf(401));
+    const result = await weatherapi?.verify?.(
+      "key-1234",
+      // The body carries the key, so a reason that quoted the answer would
+      // show it here.
+      fetcherOf(401, [], "denied for key-1234"),
+    );
 
     expect(result?.ok).toBe(false);
     const message = result?.ok === false ? result.message : "";
@@ -117,7 +126,10 @@ describe("the weather credentials", () => {
   });
 
   it("refuses a rejected OpenWeatherMap key without echoing it", async () => {
-    const result = await openweathermap?.verify?.("key-1234", fetcherOf(401));
+    const result = await openweathermap?.verify?.(
+      "key-1234",
+      fetcherOf(401, [], "denied for key-1234"),
+    );
 
     expect(result?.ok).toBe(false);
     const message = result?.ok === false ? result.message : "";

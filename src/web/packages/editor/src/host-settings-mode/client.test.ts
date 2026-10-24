@@ -236,3 +236,30 @@ it("carries the attribution the host answered, and drops an unknown shape", asyn
     ).toBeUndefined();
   }
 });
+
+it("keeps the place and cadence when the host names an unknown provider", async () => {
+  const { fetch } = host(() =>
+    json({
+      settings: {
+        provider: "meteorologist",
+        label: "Paris, Ile-de-France, FR",
+        latitude: 48.86,
+        longitude: 2.35,
+        useWindowsLocation: true,
+        pollIntervalMs: 120000,
+      },
+    }),
+  );
+
+  expect(
+    await createHostSettingsClient({ fetch }).readWeather(),
+    "an unknown provider fell back by blanking the fields beside it",
+  ).toEqual({
+    provider: "open-meteo",
+    label: "Paris, Ile-de-France, FR",
+    latitude: 48.86,
+    longitude: 2.35,
+    useWindowsLocation: true,
+    pollIntervalMs: 120000,
+  });
+});
