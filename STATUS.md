@@ -22,7 +22,7 @@ Drain `docs/product/backlog.jsonl`: the queued [`spec`](docs/superpowers/specs/2
 - **Register merged by id:** main's `vg-727`, `vg-724`, `vg-728` and `vg-729` stand; the branch's `vg-726` was dropped because main had already verified it at `15978c51`.
 - **Decision notes renumbered:** the tray notes became 0114 (RTSS on request) and 0115 (host-owned shell), leaving main's 0110 and 0111 in place.
 - **SMTC fix superseded:** main's array materialisation in `POLL` replaced the branch's test change; `smtc-helper.windows.test.ts` passes with the merged code.
-- **Merged gate:** 408 files and 5963 tests pass with 1 skipped, Worker 73; `status:check`, `docs:check` and `backlog:check` exit 0.
+- **Merged gate** at `6d2f62a`: 408 files and 5963 tests pass with 1 skipped, Worker 73; `status:check`, `docs:check` and `backlog:check` exit 0.
 
 ## Next
 
