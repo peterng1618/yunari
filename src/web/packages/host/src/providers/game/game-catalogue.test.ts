@@ -35,6 +35,16 @@ const DLC_MANIFEST = JSON.stringify({
   bIsIncompleteInstall: false,
 });
 
+/** The real local shape: an empty MainGameAppName is no DLC, not a mismatch. */
+const EMPTY_MAIN_GAME_MANIFEST = JSON.stringify({
+  AppName: "HeardInstalling",
+  DisplayName: "Red Dead Redemption 2",
+  InstallLocation: "C:\\Program Files\\Epic Games\\RedDeadRedemption2",
+  LaunchExecutable: "RDR2.exe",
+  MainGameAppName: "",
+  bIsIncompleteInstall: false,
+});
+
 interface Fixture {
   readonly entries?: readonly string[];
   readonly files?: Record<string, string>;
@@ -100,6 +110,23 @@ describe("readEpicGames", () => {
     });
 
     await expect(readEpicGames(seams)).resolves.toEqual([]);
+  });
+
+  it("keeps a game whose MainGameAppName is empty", async () => {
+    const seams = seamsOf({
+      entries: ["HeardInstalling.item"],
+      files: {
+        [manifestFile("HeardInstalling.item")]: EMPTY_MAIN_GAME_MANIFEST,
+      },
+    });
+
+    const games = await readEpicGames(seams);
+
+    expect(games).toHaveLength(1);
+    expect(games[0]?.name).toBe("Red Dead Redemption 2");
+    expect(games[0]?.exes).toEqual([
+      "C:\\Program Files\\Epic Games\\RedDeadRedemption2\\RDR2.exe",
+    ]);
   });
 
   it("treats a missing manifest directory as an empty list", async () => {

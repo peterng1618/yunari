@@ -34,7 +34,10 @@ export interface CatalogueSeams {
 
 const POWERSHELL_TIMEOUT_MS = 10_000;
 
-/** Runs a script under the 0102 supervisor and parses its JSON stdout. */
+/**
+ * One-shot PowerShell: runs a script and parses its JSON stdout. Long-running
+ * helpers belong to the 0102 supervisor; a catalogue read is a single call.
+ */
 async function runPowerShellJson(script: string): Promise<unknown> {
   const executable = powershellPath();
 
@@ -109,7 +112,7 @@ function textField(
  * (decision 0110). A DLC names its parent in `MainGameAppName`; an incomplete
  * install has no executable to match yet.
  */
-export function parseEpicManifest(text: string): InstalledGame | undefined {
+function parseEpicManifest(text: string): InstalledGame | undefined {
   let parsed: unknown;
 
   try {
