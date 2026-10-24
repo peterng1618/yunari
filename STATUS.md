@@ -16,9 +16,8 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- `placeText` in `rebuild-driver` presses the Add tile then clicks the canvas at scene coordinates read from `viewportTransform`.
-- `insert(page, "Text", "text")` arms and places; other groups keep the immediate path.
-- The four direct Text sites now place through the helper and assert the `i-text` class.
+- `placeText`'s default point is the artboard centre from `viewport.artboardScreenRect()`; explicit scene points use `viewportTransform`.
+- `insertTextBox` drag-places a Textbox, and `addText` uses it, so the rebuild journey authors boxes again.
 
 ## Next
 
@@ -26,5 +25,5 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Blockers / unverified
 
-- No browser proof yet for the click-or-drag gesture; Phase 3 owns it.
+- No browser proof yet for drag, cancel, reload or player parity; Task 3.2 owns them.
 - Outside this plan: the store Worker is undeployed, and the live catalogue's smoke theme still carries the old media shape.

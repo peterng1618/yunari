@@ -183,56 +183,120 @@ export function addButton(page: Page, label: string, group: AddGroup): Locator {
   return scope.getByRole("button", { name: label, exact: true });
 }
 
+/** A page pixel or a scene point, in the units the camel case names. */
+type Point = { readonly x: number; readonly y: number };
+
+/** Arms the Text tile and returns the scene's object count before it. */
+async function armText(page: Page): Promise<number> {
+  await openPane(page, "Add");
+  const before = (await readScene(page)).length;
+  await addButton(page, "Text", "text").click();
+  return before;
+}
+
+/**
+ * The page point for a scene point — or for the artboard's centre when given
+ * `null`.
+ *
+ * The bridge is resolved inside the evaluation because `page.evaluate`
+ * serialises the callback and cannot close over a page-side helper. The camera's
+ * owner gives the artboard's box: its centre is the one point guaranteed to be
+ * inside it whatever the pan and zoom, where the element's centre is only the
+ * artboard's while a fit happens to centre it.
+ */
+async function pagePoint(page: Page, scene: Point | null): Promise<Point> {
+  return page.evaluate((scenePoint) => {
+    const bridge = (
+      window as unknown as {
+        yunariEditorBridge?: {
+          editor: {
+            canvas: {
+              viewportTransform: [
+                number,
+                number,
+                number,
+                number,
+                number,
+                number,
+              ];
+              upperCanvasEl: HTMLCanvasElement;
+            };
+            viewport: {
+              artboardScreenRect(): {
+                readonly left: number;
+                readonly top: number;
+                readonly width: number;
+                readonly height: number;
+              };
+            };
+          };
+        };
+      }
+    ).yunariEditorBridge;
+    if (bridge === undefined)
+      throw new Error("the editor bridge is not on the page");
+    const { canvas, viewport } = bridge.editor;
+    const rect = canvas.upperCanvasEl.getBoundingClientRect();
+    if (scenePoint === null) {
+      const board = viewport.artboardScreenRect();
+      return {
+        x: rect.left + board.left + board.width / 2,
+        y: rect.top + board.top + board.height / 2,
+      };
+    }
+    // `[0]` is the scale, `[4]`/`[5]` the translation; the tuple is not rotated
+    // in this editor, so `[3]` is the vertical scale.
+    const [scaleX, , , scaleY, translateX, translateY] =
+      canvas.viewportTransform;
+    return {
+      x: rect.left + translateX + scenePoint.x * scaleX,
+      y: rect.top + translateY + scenePoint.y * scaleY,
+    };
+  }, scene);
+}
+
 /**
  * Places a Text through the armed gesture: the Add pane's tile arms it, and the
  * next primary press on the canvas creates the object at that point.
  *
  * **The press is a pointer event at scene coordinates, not a locator click**:
- * the canvas is one element, so where the press lands is scene geometry. Fabric
- * puts scene units on the element through `viewportTransform`, and the
- * element's own box puts that on the page. The default is the element's centre,
- * which is where the camera fit puts the artboard's centre too.
+ * the canvas is one element, so where the press lands is scene geometry. The
+ * default point is the artboard's centre, because a press outside the artboard
+ * cancels silently.
  */
-export async function placeText(
-  page: Page,
-  point?: { readonly x: number; readonly y: number },
-): Promise<void> {
-  await openPane(page, "Add");
-  const before = (await readScene(page)).length;
-  await addButton(page, "Text", "text").click();
-  const target = await page.evaluate((scenePoint) => {
-    const handle = Object.values(window).find(
-      (value) =>
-        value !== null &&
-        typeof value === "object" &&
-        "canvas" in value &&
-        "historyManager" in value,
-    ) as
-      | {
-          canvas: {
-            viewportTransform: [number, number, number, number, number, number];
-            upperCanvasEl: HTMLCanvasElement;
-          };
-        }
-      | undefined;
-    if (handle === undefined)
-      throw new Error("the editor handle is not on the page");
-    const { canvas } = handle;
-    // `[0]` is the scale, `[4]`/`[5]` the translation; the tuple is not rotated
-    // in this editor, so `[3]` is the vertical scale.
-    const [scaleX, , , scaleY, translateX, translateY] =
-      canvas.viewportTransform;
-    const rect = canvas.upperCanvasEl.getBoundingClientRect();
-    const scene = scenePoint ?? {
-      x: (rect.width / 2 - translateX) / scaleX,
-      y: (rect.height / 2 - translateY) / scaleY,
-    };
-    return {
-      x: rect.left + translateX + scene.x * scaleX,
-      y: rect.top + translateY + scene.y * scaleY,
-    };
-  }, point ?? null);
+export async function placeText(page: Page, point?: Point): Promise<void> {
+  const before = await armText(page);
+  const target = await pagePoint(page, point ?? null);
   await page.mouse.click(target.x, target.y);
+  await expect
+    .poll(async () => (await readScene(page)).length)
+    .toBe(before + 1);
+}
+
+/**
+ * Inserts a Text box through the drag arm of the gesture. A caller that
+ * declares a width and height wants a Textbox; a click would place an
+ * auto-width `IText` whose width control is a measurement, not an input.
+ */
+export async function insertTextBox(
+  page: Page,
+  box: {
+    readonly x: number;
+    readonly y: number;
+    readonly w: number;
+    readonly h: number;
+  },
+): Promise<void> {
+  const before = await armText(page);
+  const start = await pagePoint(page, { x: box.x, y: box.y });
+  const end = await pagePoint(page, {
+    x: box.x + box.w,
+    y: box.y + box.h,
+  });
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 4 });
+  await page.mouse.up();
   await expect
     .poll(async () => (await readScene(page)).length)
     .toBe(before + 1);
@@ -492,7 +556,7 @@ export async function addText(
     readonly colour?: string;
   },
 ): Promise<void> {
-  await insert(page, "Text", "text");
+  await insertTextBox(page, object);
   await setName(page, object.name);
   await place(page, object);
   await fill(page, '[data-yunari-run-text="0"]', object.text);

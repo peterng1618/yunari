@@ -10,6 +10,7 @@ import {
   chooseToken,
   fill,
   insert,
+  insertTextBox,
   openBlank,
   place,
   readObject,
@@ -281,9 +282,8 @@ test.describe("the reference composition, built from blank", () => {
 
     // **32** and **%** — a reading and a unit on one object. This is the step
     // F2.1 was blocking: before the fix there was no way to add the second.
-    await insert(page, "Text", "text");
+    await insertTextBox(page, { x: 448, y: 262, w: 220, h: 60 });
     await setName(page, "cpu-card-value");
-    await place(page, { x: 448, y: 262, w: 220, h: 60 });
     await fill(page, '[data-yunari-run-text="0"]', "32");
     await chooseIn(page, '[data-yunari-run-preset="0"]', "typePresets.60-600");
     await chooseIn(page, '[data-yunari-run-colour="0"]', "palette.text");
