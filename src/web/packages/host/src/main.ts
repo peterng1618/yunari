@@ -641,22 +641,26 @@ export async function run(argv: readonly string[]): Promise<number> {
           `The tray could not close: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
-      // Stop only the LHM this run started; one the owner already ran is theirs.
-      externalApps.stopOwnedLhm();
-      // The media helper is a child process this run started; leaving it
-      // polling after the host exits is the orphan decision 0102 prevents.
-      mediaProvider.stop();
-      // Same for the RTSS helper: a PowerShell left polling outlives the host.
-      frameProvider.stop();
-      // The game helper is the same shape: a PowerShell left polling would
-      // outlive the host.
-      gameProvider.stop();
-      // Every per-source timer goes with it, and an in-flight fetch is cut.
-      customProvider.stop();
-      // The windows close with the host: one left behind is one the next run
-      // cannot see, and it would put a second window on that monitor.
-      launcher?.stop();
-      void hosted.close().then(resolve, resolve);
+      try {
+        // Stop only the LHM this run started; one the owner already ran is theirs.
+        externalApps.stopOwnedLhm();
+        // The media helper is a child process this run started; leaving it
+        // polling after the host exits is the orphan decision 0102 prevents.
+        mediaProvider.stop();
+        // Same for the RTSS helper: a PowerShell left polling outlives the host.
+        frameProvider.stop();
+        // The game helper is the same shape: a PowerShell left polling would
+        // outlive the host.
+        gameProvider.stop();
+        // Every per-source timer goes with it, and an in-flight fetch is cut.
+        customProvider.stop();
+        // The windows close with the host: one left behind is one the next run
+        // cannot see, and it would put a second window on that monitor.
+        launcher?.stop();
+      } finally {
+        // A throwing stop must not leave the server listening with no tray.
+        void hosted.close().then(resolve, resolve);
+      }
     };
 
     stopHost = stop;
