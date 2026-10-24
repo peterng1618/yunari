@@ -457,7 +457,7 @@ test.describe("the per-kind inspector column", () => {
     expect(rows).toHaveLength(11);
 
     await page.locator('[data-yunari-layer="group-cpu-card"]').click();
-    // **Two: the name moved to the lead block's rename, and a Group has no
+    // **Two: the name moved to the subject heading's rename, and a Group has no
     // render boundary for the treatment to reach.** With no content question
     // left, the section is omitted rather than rendered empty, and `vg-465`
     // (item 8) withholds the treatment section and says so in the lead.
@@ -1445,7 +1445,7 @@ test.describe("the per-kind inspector column", () => {
     // (item 13), and there is no read-only section left to photograph (item 17).
     // A projection that returned no sections would otherwise photograph an empty
     // column and pass.
-    // **Two questions, not four: the name is the lead block's rename, and the
+    // **Two questions, not four: the name is the subject heading's rename, and the
     // card is a Group** (`vg-465`, item 8), so there is no content field and no
     // treatment boundary for those sections to reach; each is omitted rather
     // than rendered empty.
