@@ -33,6 +33,8 @@ import {
   type ThemeAnswers,
 } from "./client.js";
 import { Group } from "./section-group.js";
+import { createSourcesClient, type SourcesClient } from "./sources-client.js";
+import { SourcesSection } from "./sources-section.js";
 import { WeatherSection } from "./weather-section.js";
 
 /**
@@ -181,12 +183,17 @@ export function HostSettingsRegion(props: {
   readonly mode: ShellMode;
   readonly client?: ThemeLibraryClient | undefined;
   readonly settings?: HostSettingsClient | undefined;
+  /** The custom sources seam. The shell mounts this with none and the section
+   *  builds its own; a test that does not exercise the page hands a fake in so
+   *  no case reaches a host it never started. */
+  readonly sources?: SourcesClient | undefined;
   readonly onStatus?: ((line: HostStatusLine | undefined) => void) | undefined;
 }): React.JSX.Element | null {
   return props.mode === "this-pc" ? (
     <HostSettings
       client={props.client}
       settings={props.settings}
+      sources={props.sources}
       onStatus={props.onStatus}
     />
   ) : null;
@@ -199,6 +206,7 @@ export function HostSettingsRegion(props: {
 function HostSettings(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly settings?: HostSettingsClient | undefined;
+  readonly sources?: SourcesClient | undefined;
   readonly onStatus?: ((line: HostStatusLine | undefined) => void) | undefined;
 }): React.JSX.Element {
   // One client of each for the life of the region: a client built per render
@@ -208,6 +216,7 @@ function HostSettings(props: {
   const [settings] = useState(
     () => props.settings ?? createHostSettingsClient(),
   );
+  const [sources] = useState(() => props.sources ?? createSourcesClient());
 
   /** The display map, or `undefined` until it arrives. **Nothing draws the
    *  first-run state before then**: a region that said "no displays" for a frame
@@ -681,6 +690,8 @@ function HostSettings(props: {
           </Group>
 
           <WeatherSection settings={settings} report={setStatus} />
+
+          <SourcesSection sources={sources} report={setStatus} />
 
           {/* **Only the questions the theme on this display raises are drawn**,
               and only the ones nothing has answered: the route derives `required`

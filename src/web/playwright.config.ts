@@ -54,7 +54,8 @@ const EDGE_PROBE_SPEC = /live-chart-edge\.spec\.ts/;
  * specs they cannot run under the preview projects, and they cannot share their
  * port — `publish-header` owns 4227, `publish-loop` owns 4229,
  * `editor-invalid-theme` owns 4231, `editor-overlarge-theme` owns 4237,
- * `host-secure-origin` owns 4233 and `media-artwork` owns 4222.
+ * `host-secure-origin` owns 4233, `media-artwork` owns 4222 and
+ * `custom-source` owns 4223.
  *
  * The installability proof joins them for the reason `host-secure-origin` is
  * here rather than in the host project: it starts its own host bound to the
@@ -62,7 +63,7 @@ const EDGE_PROBE_SPEC = /live-chart-edge\.spec\.ts/;
  * context and `localhost` is one whatever the host does. It owns 4235.
  */
 const OWN_HOST_SPEC =
-  /(publish-(header|loop)|editor-(invalid|overlarge)-theme|host-secure-origin|host-pwa|media-artwork)\.spec\.ts/;
+  /(publish-(header|loop)|editor-(invalid|overlarge)-theme|host-secure-origin|host-pwa|media-artwork|custom-source)\.spec\.ts/;
 
 /**
  * The rebuild drives its own preview on its own port, under

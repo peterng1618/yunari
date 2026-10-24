@@ -565,6 +565,106 @@ export const uiCopy = {
       noResults: "No place matched that search.",
       searchFailed: (reason: string): string => `Could not search: ${reason}`,
     },
+    /** The custom HTTP sources this PC reads. The page names the source and
+     *  never its secret: a source carries a credential id, and no credential
+     *  value ever reaches the browser (`credentials-client.ts`). */
+    sources: {
+      heading: "Custom sources",
+      hint: 'Readings from an HTTP endpoint on this network. Each field becomes a key a theme can read, named "custom.source-id.field-id".',
+      empty: "No custom sources yet.",
+      add: "Add source",
+      edit: "Edit",
+      remove: "Delete",
+      test: "Test",
+      testing: "Testing…",
+      id: "Id",
+      name: "Name",
+      url: "Address",
+      /** What the address is, and what it is not: a key referenced through
+       *  `auth` travels in a header or a query the host adds, never in the
+       *  address this page prints. */
+      urlHint:
+        "An http or https address, shown as you typed it. A key is never added to it here.",
+      interval: "Poll every",
+      timeout: "Timeout",
+      seconds: "s",
+      fields: "Fields",
+      fieldId: "Field id",
+      fieldLabel: "Label",
+      fieldPointer: "JSON pointer",
+      fieldType: "Type",
+      fieldUnit: "Unit",
+      addField: "Add field",
+      removeField: (id: string): string => `Remove field ${id}`,
+      types: {
+        number: "Number",
+        text: "Text",
+        boolean: "True/false",
+      } satisfies Record<"number" | "text" | "boolean", string>,
+      save: "Save",
+      cancel: "Cancel",
+      health: {
+        ok: "Reading",
+        error: "Error",
+        waiting: "Waiting",
+      } satisfies Record<"ok" | "error" | "waiting", string>,
+      lastSuccess: (at: string): string => `Last read ${at}`,
+      neverRead: "No successful read yet",
+      /** The local checks mirror the host's own limits
+       *  (`packages/host/src/settings/sources.ts`) so a typo is refused before
+       *  a round trip; the route's `400 {field, reason}` stays the authority. */
+      invalidId: "Use 1–32 lowercase letters, digits, - or _.",
+      invalidUrl:
+        "Enter an http or https address with no username or password.",
+      invalidInterval: (min: number, max: number): string =>
+        `Poll at least ${min} and at most ${max} seconds.`,
+      invalidTimeout: (min: number, max: number): string =>
+        `Set a timeout of ${min}–${max} seconds.`,
+      invalidFieldId: (id: string): string =>
+        `The field id ${id === "" ? "(blank)" : `"${id}"`} is not 1–32 lowercase letters, digits, - or _.`,
+      duplicateField: (id: string): string =>
+        `Two fields share the id "${id}".`,
+      tooManyFields: (max: number): string =>
+        `A source carries at most ${max} fields.`,
+      fieldCount: (count: number): string =>
+        `${count} ${count === 1 ? "field" : "fields"}`,
+      removeAsk: (name: string): string =>
+        `Delete ${name}? Its fields stop resolving on every display.`,
+      confirmRemove: "Delete",
+      keep: "Cancel",
+      /** The offer after a delete: the route answered that no source references
+       *  this credential any more. The id is an id, never the value. */
+      credentialAsk: (id: string): string =>
+        `No other source uses the key ${id}. Remove it from this PC?`,
+      removeCredential: "Remove the key",
+      keepCredential: "Keep the key",
+      credentialRemoved: "The key was removed.",
+      credentialFailed: (reason: string): string =>
+        `Could not remove the key: ${reason}`,
+      saved: "Saved. Displays update on the source's next poll.",
+      removed: (name: string): string => `Removed ${name}.`,
+      testLine: (
+        ok: boolean,
+        status: number | undefined,
+        elapsedMs: number,
+        // `undefined` only for the copy walker, which probes a function with
+        // one argument; a surface always passes a list.
+        values:
+          | readonly { readonly id: string; readonly value: string }[]
+          | undefined,
+        reason: string | undefined,
+      ): string => {
+        if (!ok) {
+          return `Test failed: ${reason ?? (status === undefined ? "the host refused it" : `HTTP ${status}`)}`;
+        }
+        const code = status === undefined ? "" : ` (HTTP ${status})`;
+        const mapped =
+          values === undefined || values.length === 0
+            ? "no value mapped"
+            : values.map((entry) => `${entry.id} ${entry.value}`).join(", ");
+        return `Test passed${code} in ${elapsedMs} ms · ${mapped}`;
+      },
+    },
     /** The questions the theme on the chosen display raises. Only the ones it
      *  has not answered are drawn, so answering one is what makes it leave. */
     questions: {

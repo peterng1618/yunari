@@ -158,6 +158,10 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     "editor-shell/settings.tsx",
     "the credential field commits through its own Save button and is cleared there, never on blur or Enter",
   ],
+  [
+    "host-settings-mode/sources-section.tsx",
+    "the source form's fields are committed by the form's own Save button, never on blur or Enter",
+  ],
 ];
 
 /**
