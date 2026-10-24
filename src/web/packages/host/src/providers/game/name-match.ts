@@ -8,12 +8,8 @@
  * rule: `Half-Life` must not resolve to `Half-Life 2`.
  */
 
-/**
- * The spec's edition qualifiers, each dropped as a trailing phrase with or
- * without a following `edition`. Longest first: `director's cut edition` must
- * be removed whole, or its `edition` would remain as a stray word.
- */
-const QUALIFIERS: readonly (readonly string[])[] = [
+/** Edition words safe to drop bare: they never distinguish one title alone. */
+const BARE_QUALIFIERS = [
   "definitive",
   "deluxe",
   "ultimate",
@@ -22,18 +18,28 @@ const QUALIFIERS: readonly (readonly string[])[] = [
   "game of the year",
   "enhanced",
   "remastered",
-  "special",
-  "gold",
-  "anniversary",
-  "legendary",
   "collectors",
   "directors cut",
-]
-  .flatMap((phrase) => {
+];
+
+/**
+ * Words that are also title words — `Pokémon Gold` is not `Pokémon` — so they
+ * drop only inside an `edition` phrase.
+ */
+const EDITION_ONLY_QUALIFIERS = ["gold", "special", "legendary", "anniversary"];
+
+/**
+ * Trailing phrases that name an edition, not the game. Longest first:
+ * `director's cut edition` must be removed whole, or its `edition` would
+ * remain as a stray word.
+ */
+const QUALIFIERS: readonly (readonly string[])[] = [
+  ...BARE_QUALIFIERS.flatMap((phrase) => {
     const words = phrase.split(" ");
     return [words, [...words, "edition"]];
-  })
-  .sort((left, right) => right.length - left.length);
+  }),
+  ...EDITION_ONLY_QUALIFIERS.map((phrase) => [...phrase.split(" "), "edition"]),
+].sort((left, right) => right.length - left.length);
 
 const ARTICLES = new Set(["a", "an", "the"]);
 

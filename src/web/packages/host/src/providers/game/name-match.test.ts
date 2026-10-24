@@ -37,6 +37,13 @@ describe("normalizeGameName", () => {
     expect(normalizeGameName("Doom Remastered Edition")).toBe("doom");
   });
 
+  it("keeps a bare word that can distinguish a title", () => {
+    expect(normalizeGameName("Pokémon Gold")).toBe("pokemon gold");
+    expect(normalizeGameName("Halo Anniversary")).toBe("halo anniversary");
+    expect(normalizeGameName("Skyrim Legendary Edition")).toBe("skyrim");
+    expect(normalizeGameName("Skyrim Gold Edition")).toBe("skyrim");
+  });
+
   it("keeps a word that is not a qualifier", () => {
     expect(normalizeGameName("Doom Eternal")).toBe("doom eternal");
   });
@@ -81,6 +88,18 @@ describe("matchStoreGame", () => {
     );
     expect(matchStoreGame("BioShock Ultimate", [game(7, "BioShock")])).toEqual(
       game(7, "BioShock"),
+    );
+  });
+
+  it("refuses a title distinguished by a bare qualifier word", () => {
+    expect(
+      matchStoreGame("Pokémon Gold", [game(1, "Pokémon")]),
+    ).toBeUndefined();
+    expect(
+      matchStoreGame("Halo Anniversary", [game(2, "Halo")]),
+    ).toBeUndefined();
+    expect(matchStoreGame("Pokémon Gold", [game(3, "Pokémon Gold")])).toEqual(
+      game(3, "Pokémon Gold"),
     );
   });
 
