@@ -77,13 +77,25 @@ export async function startTrayController(
       noticeTimer = undefined;
       if (stopped) return;
       notice = undefined;
-      void refresh();
+      void run(refresh);
     }, noticeMs);
   }
 
   function clearNotice(): void {
     notice = undefined;
     clearNoticeTimer();
+  }
+
+  /** Fire-and-forget entry: a throwing view write must not become an
+   *  unhandled rejection; report it where a surface still exists. */
+  async function run(task: () => Promise<void>): Promise<void> {
+    try {
+      await task();
+    } catch (error) {
+      if (stopped) return;
+      if (view === undefined) options.onLost(messageOf(error));
+      else setNotice(messageOf(error));
+    }
   }
 
   async function refresh(): Promise<void> {
@@ -133,11 +145,10 @@ export async function startTrayController(
       result = { ok: false, message: messageOf(error) };
     }
     if (stopped) return;
-    if (!result.ok) {
-      if (result.message !== "") setNotice(result.message);
-    } else {
-      clearNotice();
-    }
+    // A failure with nothing to say still clears a stale notice from an
+    // earlier action; only a message-bearing failure is worth showing.
+    if (!result.ok && result.message !== "") setNotice(result.message);
+    else clearNotice();
     await refresh();
   }
 
@@ -146,7 +157,7 @@ export async function startTrayController(
     pollTimer = setTimeout(() => {
       pollTimer = undefined;
       // A tick that fires during a slow refresh is a no-op, not a queued one.
-      void refresh().then(schedulePoll, schedulePoll);
+      void run(refresh).then(schedulePoll);
     }, pollMs);
   }
 
@@ -164,7 +175,7 @@ export async function startTrayController(
   }
 
   view = await options.openView((action) => {
-    void handleAction(action);
+    void run(() => handleAction(action));
   }, options.onLost);
 
   await refresh();

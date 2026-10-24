@@ -23,7 +23,7 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 - **Controller:** `host/src/tray/controller.ts` polls the snapshot every 5 s, resends only a changed menu or tooltip, dispatches clicks and keeps failures as 10 s notices.
 - **Selector:** `host/src/tray/index.ts` refuses macOS and headless Linux before opening a view, then passes `spawnProcess` and both callbacks to the chosen adapter.
 - **Stop:** `exit`, a repeated `stop()` and a stop during a refresh are all no-ops after the first close; `onLost` remains the adapter's call.
-- **Tests:** 12 new tests; all 67 tray tests pass.
+- **Tests:** 15 new tests; all 70 tray tests pass.
 - **Gates:** host typecheck, Biome and `status:check` exit 0.
 
 ## Next
