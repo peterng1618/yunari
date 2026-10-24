@@ -157,7 +157,7 @@ const envelopeFor = (
   binding: { semanticKey: string; format?: string; precision?: number },
   themeLanguage = "en",
 ) => ({
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id,
   metadata: { name, themeLanguage },
@@ -320,7 +320,7 @@ const envelopeFor = (
  * (`chartPaintReferences`).
  */
 const chartEnvelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_CHART_THEME_ID,
   metadata: { name: "E2E chart", themeLanguage: "en" },
@@ -434,7 +434,7 @@ export const BADGE_INK = { r: 232, g: 236, b: 243 } as const;
  *  An empty scene is deliberate: no authored node can contribute a light pixel,
  *  so what a test sees on the artboard is the host's bytes and nothing else. */
 const mediaEnvelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_MEDIA_THEME_ID,
   metadata: { name: "E2E media", themeLanguage: "en" },
@@ -479,7 +479,7 @@ const mediaEnvelope = {
  * panel inside it.
  */
 const backgroundLayerEnvelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_BACKGROUND_LAYER_THEME_ID,
   metadata: { name: "E2E background layer", themeLanguage: "en" },
@@ -562,7 +562,7 @@ const backgroundLayerEnvelope = {
  * be the paint.
  */
 const backgroundEdgeEnvelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_BACKGROUND_EDGE_THEME_ID,
   metadata: { name: "E2E background edge", themeLanguage: "en" },
@@ -614,7 +614,7 @@ const backgroundEdgeEnvelope = {
  * colour.
  */
 const backgroundFlipEnvelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_BACKGROUND_FLIP_THEME_ID,
   metadata: { name: "E2E background flip", themeLanguage: "en" },
@@ -692,7 +692,7 @@ const backgroundFlipEnvelope = {
  *  the library writer only checks that a declared asset is present. An empty
  *  scene, so the theme carries no glass and answers `video-background`. */
 const videoEnvelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_VIDEO_THEME_ID,
   metadata: { name: "E2E video", themeLanguage: "en" },
@@ -728,7 +728,7 @@ const videoEnvelope = {
 
 /** The overhang composition, unmarked: see {@link HOST_OVERHANG_THEME_ID}. */
 const overhangEnvelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_OVERHANG_THEME_ID,
   metadata: { name: "E2E overhang", themeLanguage: "en" },
@@ -858,7 +858,7 @@ export const GROUPED_GROUP_ANGLE = -20;
  * is: an opaque artboard would cover the bars before any panel sampled them.
  */
 const groupedGlassEnvelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_GROUPED_THEME_ID,
   metadata: { name: "E2E grouped glass", themeLanguage: "en" },

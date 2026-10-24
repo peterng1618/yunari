@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://yunari.local/schema/theme-document/2.json",
+  "$id": "https://yunari.local/schema/theme-document/2.0.0.json",
   "title": "Yunari Fabric theme envelope",
   "description": "The published Yunari theme format. Fabric owns scene geometry and object state; Yunari owns the versioned semantic envelope.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "fabricVersion", "id", "artboard", "scene"],
   "properties": {
-    "schemaVersion": { "const": 2 },
+    "schemaVersion": { "const": "2.0.0" },
     "fabricVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
     "id": { "$ref": "#/$defs/stableId" },
     "metadata": { "$ref": "#/$defs/metadata" },

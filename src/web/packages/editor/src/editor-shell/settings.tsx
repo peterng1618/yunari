@@ -68,10 +68,9 @@ const PALETTE_GROUP_ID = "yunari-settings-palette";
  *  a test reads the row by what it is rather than by its position. */
 interface VersionFact {
   readonly id: "product-version" | "schema-version" | "release-version";
-  /** The fact's own value: the schema version is a number
-   *  (`SUPPORTED_SCHEMA_VERSION`), the other two are strings. The tab
-   *  stringifies where it renders. */
-  readonly value: string | number;
+  /** The fact's own value. All three are strings; the tab renders them as
+   *  they are. */
+  readonly value: string;
 }
 
 /** Each fact's label, by the id it renders under. One owner of "what this row

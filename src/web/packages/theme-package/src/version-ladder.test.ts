@@ -13,13 +13,13 @@ import {
 } from "./version-ladder.js";
 
 type EnvelopeOverrides = Omit<Partial<FabricThemeEnvelope>, "schemaVersion"> & {
-  readonly schemaVersion?: number;
+  readonly schemaVersion?: string;
 };
 
 /** A minimal valid envelope. Tests mutate clones of this. */
 function base(overrides: EnvelopeOverrides = {}): FabricThemeEnvelope {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: "demo-theme",
     metadata: { themeLanguage: "en" },
@@ -98,7 +98,9 @@ describe("classifyThemeChange", () => {
     });
   });
   it("is major when the schema version changes", () => {
-    expect(classifyThemeChange(base(), base({ schemaVersion: 3 }))).toEqual({
+    expect(
+      classifyThemeChange(base(), base({ schemaVersion: "3.0.0" })),
+    ).toEqual({
       level: "major",
       reasons: ["schema"],
     });

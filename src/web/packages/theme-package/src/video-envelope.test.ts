@@ -345,7 +345,7 @@ describe("videoRefusals", () => {
 
   it("refuses an unreadable video rather than passing it", () => {
     const envelope = {
-      schemaVersion: 2,
+      schemaVersion: "2.0.0",
       fabricVersion: "7.4.0",
       id: "aurora",
       artboard: { width: 1920, height: 1080 },
@@ -363,7 +363,7 @@ describe("videoRefusals", () => {
     // An actually-H.264 file whose walk ran out of budget: it does not need a
     // different codec, so the codec sentence would send the author in circles.
     const envelope = {
-      schemaVersion: 2,
+      schemaVersion: "2.0.0",
       fabricVersion: "7.4.0",
       id: "aurora",
       artboard: { width: 1920, height: 1080 },
@@ -381,7 +381,7 @@ describe("videoRefusals", () => {
 
   it("checks declared videos only, in declaration order", () => {
     const envelope = {
-      schemaVersion: 2,
+      schemaVersion: "2.0.0",
       fabricVersion: "7.4.0",
       id: "aurora",
       artboard: { width: 1920, height: 1080 },

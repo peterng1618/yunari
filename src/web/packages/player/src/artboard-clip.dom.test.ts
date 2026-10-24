@@ -37,7 +37,7 @@ function host(): HTMLElement {
 
 function envelope(): FabricThemeEnvelope {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: "clip-probe",
     artboard: { ...ARTBOARD },

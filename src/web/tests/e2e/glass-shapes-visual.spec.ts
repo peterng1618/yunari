@@ -129,7 +129,7 @@ function objectFor(
 
 function envelope(fill: "panel" | "frost" | "none", withGlass: boolean) {
   return {
-    schemaVersion: 2 as const,
+    schemaVersion: "2.0.0" as const,
     fabricVersion: "7.4.0" as const,
     id: `e2e-glass-shapes-${fill}-${withGlass ? "frosted" : "bare"}`,
     metadata: { name: "E2E glass shapes", themeLanguage: "en" },

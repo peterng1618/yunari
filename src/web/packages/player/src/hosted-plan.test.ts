@@ -8,7 +8,7 @@ import { envelopePlan } from "./hosted-plan.js";
  *  form `scene-fabric` paints. */
 function envelope(paint: { readonly kind: "solid"; readonly color: string }) {
   return {
-    schemaVersion: 2 as const,
+    schemaVersion: "2.0.0" as const,
     fabricVersion: "7.4.0",
     id: "hosted",
     artboard: {

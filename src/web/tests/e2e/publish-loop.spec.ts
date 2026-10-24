@@ -68,7 +68,7 @@ const THEME_ID = "e2e-publish-loop";
  *  change a reader can see. A dark artboard on a dark page would make the
  *  picture a black rectangle that proves nothing either way. */
 const envelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: THEME_ID,
   metadata: { name: "E2E publish loop", themeLanguage: "en" },

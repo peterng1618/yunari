@@ -25,6 +25,8 @@ import {
 } from "./envelope-semantics.js";
 import {
   type FabricThemeEnvelope,
+  parseSchemaMajor,
+  SUPPORTED_SCHEMA_MAJOR,
   SUPPORTED_SCHEMA_VERSION,
 } from "./fabric-envelope.js";
 import {
@@ -62,26 +64,29 @@ export function validateFabricThemeEnvelope(
   }
 
   // An unknown version cannot be safely interpreted, so report it alone (§141).
+  // Strict on purpose: the legacy integer is accepted by the reader's migration
+  // path, never here, so a write path cannot smuggle an old document through.
   const version = input["schemaVersion"];
-  if (typeof version !== "number" || !Number.isInteger(version)) {
+  const major = parseSchemaMajor(version);
+  if (major === undefined) {
     return fail(
       "missing-field",
       "/schemaVersion",
-      "schemaVersion is required and must be an integer.",
+      "schemaVersion is required and must be major.minor.patch.",
     );
   }
-  if (version > SUPPORTED_SCHEMA_VERSION) {
+  if (major > SUPPORTED_SCHEMA_MAJOR) {
     return fail(
       "newer-schema-version",
       "/schemaVersion",
-      `This theme was made with a newer version of Yunari (schema ${version}). Update Yunari to open it.`,
+      `This theme was made with a newer version of Yunari (schema ${String(version)}). Update Yunari to open it.`,
     );
   }
-  if (version !== SUPPORTED_SCHEMA_VERSION) {
+  if (major !== SUPPORTED_SCHEMA_MAJOR) {
     return fail(
       "unsupported-schema-version",
       "/schemaVersion",
-      `Schema version ${version} is not supported by this build (expected ${SUPPORTED_SCHEMA_VERSION}).`,
+      `Schema version ${String(version)} is not supported by this build (expected ${SUPPORTED_SCHEMA_VERSION}).`,
     );
   }
 

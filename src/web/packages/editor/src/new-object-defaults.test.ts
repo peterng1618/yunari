@@ -325,7 +325,7 @@ function envelopeWith(
   document: unknown = globals,
 ): unknown {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: "theme",
     metadata: { themeLanguage: "en" },

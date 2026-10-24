@@ -19,7 +19,7 @@ import type { FabricThemeEnvelope } from "./fabric-envelope.js";
 /** A minimal valid envelope. Tests mutate clones of this. */
 function baseEnvelope(): Record<string, unknown> {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: "demo-theme",
     metadata: { themeLanguage: "en" },
@@ -366,7 +366,7 @@ describe("the background layer", () => {
 
   it("refuses the old artboard keys", () => {
     // Both removed keys are refused by name: `background` was the colour and
-    // `backgroundMedia` its media, and `schemaVersion` stays 2 precisely
+    // `backgroundMedia` its media, and `schemaVersion` stays 2.0.0 precisely
     // because an old document is rejected here rather than silently read with
     // its background dropped.
     for (const artboard of [

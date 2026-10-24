@@ -9,7 +9,7 @@ import {
 } from "./theme-library-client.js";
 
 const envelope: FabricThemeEnvelope = {
-  schemaVersion: 2,
+  schemaVersion: "2.0.0",
   fabricVersion: "7.4.0",
   id: "living-room",
   artboard: { width: 1920, height: 1080 },
@@ -320,7 +320,8 @@ describe("ThemeLibraryClient", () => {
               {
                 code: "missing-field",
                 path: "/schemaVersion",
-                message: "schemaVersion is required and must be an integer.",
+                message:
+                  "schemaVersion is required and must be major.minor.patch.",
               },
             ],
           }),

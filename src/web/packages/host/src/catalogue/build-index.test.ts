@@ -19,7 +19,7 @@ const GENERATED_AT = "2026-10-21T12:00:00Z";
 /** The smallest envelope `validateFabricThemeEnvelope` accepts. */
 function themeFor(id: string, name: string): FabricThemeEnvelope {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id,
     artboard: { width: 1920, height: 1080 },
@@ -107,7 +107,7 @@ describe("catalogueIndexOf", () => {
     const items: CatalogueItem[] = [
       item("beta"),
       item("aurora", valid),
-      item("broken", { schemaVersion: 2 }),
+      item("broken", { schemaVersion: "2.0.0" }),
     ];
 
     const index = catalogueIndexOf(items, GENERATED_AT);

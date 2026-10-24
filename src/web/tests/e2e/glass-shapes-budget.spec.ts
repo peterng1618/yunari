@@ -120,7 +120,7 @@ function shape(
 
 function envelope(kinds: readonly Kind[]) {
   return {
-    schemaVersion: 2 as const,
+    schemaVersion: "2.0.0" as const,
     fabricVersion: "7.4.0" as const,
     id: "e2e-glass-shapes",
     metadata: { name: "E2E glass shapes", themeLanguage: "en" },

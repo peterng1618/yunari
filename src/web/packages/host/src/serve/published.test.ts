@@ -9,7 +9,9 @@ describe("the published document", () => {
   it("answers with what was published, and a revision that moved", () => {
     const store = createPublishedStore();
     const before = store.revision();
-    const after = store.publish("living-room", { schemaVersion: 2 } as never);
+    const after = store.publish("living-room", {
+      schemaVersion: "2.0.0",
+    } as never);
 
     expect(after).not.toBe(before);
     expect(store.read()).toMatchObject({ id: "living-room" });

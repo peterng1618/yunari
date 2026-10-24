@@ -570,7 +570,7 @@ function envelopeWith(
   assets: readonly AssetReference[] = [],
 ): NonNullable<Parameters<typeof mountEditorShell>[0]["envelope"]> {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: "background-probe",
     artboard: ARTBOARD,
@@ -595,7 +595,7 @@ function legacyTextEnvelope(): NonNullable<
   Parameters<typeof mountEditorShell>[0]["envelope"]
 > {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: "legacy-text",
     artboard: ARTBOARD,

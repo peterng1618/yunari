@@ -158,7 +158,7 @@ describe("every other cause the loader can reach", () => {
 
   it("names the validation when a theme arrives but does not validate", async () => {
     const shown = await reasonShownFor(async () =>
-      Response.json({ schemaVersion: 3 }),
+      Response.json({ schemaVersion: "3.0.0" }),
     );
 
     // The validator's codes are already a vocabulary, so the sentence carries

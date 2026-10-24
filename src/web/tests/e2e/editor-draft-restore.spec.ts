@@ -42,7 +42,7 @@ const UNRENDERABLE_DRAFT = {
   name: DRAFT_NAME,
   savedAt: "2026-10-15T08:00:00.000Z",
   content: {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     // Not this runtime's renderer version: the mount refuses it, which is the
     // refusal under test.
     fabricVersion: "0.0.0",

@@ -47,7 +47,7 @@ const AUTHORED_URL = `/api/themes/${THEME_ID}/assets/authored.svg`;
 const LIVE_URL = `/api/game/artwork/${APP_ID}.jpg`;
 
 const envelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: THEME_ID,
   metadata: { name: "E2E game artwork", themeLanguage: "en" },

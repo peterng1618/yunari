@@ -3,7 +3,10 @@ import { createPublisher } from "./publish-client.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
-const document = { id: "living-room", envelope: { schemaVersion: 2 } as never };
+const document = {
+  id: "living-room",
+  envelope: { schemaVersion: "2.0.0" } as never,
+};
 
 it("sends the latest document once, not every edit", async () => {
   const fetch = vi.fn(

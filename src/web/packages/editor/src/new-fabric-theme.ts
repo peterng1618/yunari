@@ -1,4 +1,7 @@
-import type { FabricThemeEnvelope } from "@yunari/renderer-core";
+import {
+  type FabricThemeEnvelope,
+  SUPPORTED_SCHEMA_VERSION,
+} from "@yunari/renderer-core";
 import type { ArtboardSize } from "./artboard-presets.js";
 import {
   clockCard,
@@ -43,7 +46,7 @@ export const STARTER_ENVELOPE_ID = "yunari-demo-dashboard";
  */
 export function createNewFabricTheme(): FabricThemeEnvelope {
   return {
-    schemaVersion: 2,
+    schemaVersion: SUPPORTED_SCHEMA_VERSION,
     fabricVersion: "7.4.0",
     id: crypto.randomUUID(),
     metadata: {

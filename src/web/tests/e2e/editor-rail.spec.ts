@@ -1456,7 +1456,7 @@ const STORE_LIBRARY = Array.from({ length: 30 }, (_unused, at) => {
   // run, and a run of one row cannot show whether its rows are spaced at all.
   const author = index % 3 === 0 ? "mei" : "huyng";
   const envelope: FabricThemeEnvelope = {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: `store-${label}`,
     artboard: {
@@ -1858,7 +1858,7 @@ function boundaryEnvelope(input: {
   readonly height: number;
 }): FabricThemeEnvelope {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: input.id,
     artboard: {
@@ -3222,7 +3222,7 @@ test("the store opens a library theme as the document, from the cell and its foo
   const CELL_NAME = "Cell theme";
   const FOOTER_NAME = "Footer theme";
   const themeOf = (id: string, name: string): FabricThemeEnvelope => ({
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id,
     // No artboard paint: a theme's background is a palette token or nothing
@@ -3547,7 +3547,7 @@ test("opening a library theme fits it to the phone's own canvas", async ({
 
   const written = writeThemePackage({
     envelope: {
-      schemaVersion: 2,
+      schemaVersion: "2.0.0",
       fabricVersion: "7.4.0",
       id: "store-open-phone",
       artboard: { width: 640, height: 480 },

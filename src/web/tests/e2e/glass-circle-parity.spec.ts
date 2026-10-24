@@ -201,7 +201,7 @@ function packageFor(scene: Scene, backdrop: Backdrop): Uint8Array {
         };
   const written = writeThemePackage({
     envelope: {
-      schemaVersion: 2 as const,
+      schemaVersion: "2.0.0" as const,
       fabricVersion: "7.4.0" as const,
       id: `probe-${scene}-${backdrop}`,
       metadata: { name: "Glass shape parity", themeLanguage: "en" },

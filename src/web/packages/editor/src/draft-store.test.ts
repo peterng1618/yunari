@@ -24,7 +24,7 @@ import {
 /** The document the draft holds. The store never reads inside `content`, so
  *  this only has to be a snapshot-shaped envelope. */
 const ENVELOPE: FabricThemeEnvelope = {
-  schemaVersion: 2,
+  schemaVersion: "2.0.0",
   fabricVersion: "7.4.0",
   id: "ops-board",
   artboard: { width: 1920, height: 1080 },

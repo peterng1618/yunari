@@ -42,7 +42,7 @@ function versionRow(overrides: Partial<VersionRow> = {}): VersionRow {
   return {
     item_id: ITEM_ID,
     version: "1.0.0",
-    envelope_json: JSON.stringify({ schemaVersion: 2, metadata: {} }),
+    envelope_json: JSON.stringify({ schemaVersion: "2.0.0", metadata: {} }),
     facets_json: JSON.stringify(FACETS),
     package_key: `packages/${ITEM_ID}/1.0.0.zip`,
     thumbnail_key: `thumbnails/${ITEM_ID}.png`,
@@ -99,7 +99,7 @@ describe("entryOf", () => {
       itemRow({ remix_of_id: remixOf.catalogueId }),
       versionRow({
         envelope_json: JSON.stringify({
-          schemaVersion: 2,
+          schemaVersion: "2.0.0",
           metadata: { remixOf },
         }),
       }),

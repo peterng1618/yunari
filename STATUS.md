@@ -11,26 +11,22 @@ The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-relea
 
 - **Active plan:** `docs/superpowers/plans/2026-10-25-release-readiness.md` — Phase A, tasks A1–A4, followed by Phases B–D.
 - **A1 is complete:** decisions 0110 (migrate the previous schema major on open) and 0111 (stage the workspace as `yunari`) claim every watched path later tasks write.
-- **Next is A2:** `schemaVersion` becomes `"2.0.0"`, while the integer `2` stays refused on the write path.
-- **A3 and A4 follow:** one migration dispatcher, then every open path routed through `readFabricThemeEnvelope`.
+- **A2 is complete:** `schemaVersion` is `"2.0.0"`; the strict validator accepts a semver major and still refuses every integer.
+- **Next is A3:** one migration dispatcher, then A4 routes every open path through `readFabricThemeEnvelope`.
 - **Probe finding for C1:** the staged manifest needs five runtime deps — `culori`, `fflate`, `ffmpeg-static`, `node-forge`, `systeminformation` — not the three the plan lists.
-- **No production code changed yet:** the design, plan and decision notes are the only landed work.
 
 ## Last completed change
 
-- **Decision 0110** records the migration dispatcher: one conversion before validation, strict writers, legacy integer `2` normalised to `"2.0.0"`.
-- **Decision 0111** records staging the workspace as `yunari`; the probe packed 6.4 MB / 28 files and `yunari --version` printed `0.1.0`.
-- **The probe found the staged manifest needs `culori` and `fflate`** beside the host's three, because the host bundle externalises them.
-- **This plan is now the one active plan** in `STATUS.md`.
-- **No production code changed:** later tasks A2–A4 and B3/C1 write the claimed paths.
+- **The schema version is `"2.0.0"`:** `SUPPORTED_SCHEMA_VERSION` is a literal string, `SUPPORTED_SCHEMA_MAJOR` and `parseSchemaMajor` derive the major rather than restating it.
+- **The strict validator speaks semver and refuses every integer,** including the legacy `2`, which belongs to A3's read path.
+- **The published schema names `2.0.0`** in its `$id` and `const`; every writer emits the constant and every fixture carries the string.
 
 ## Next
 
-1. A2 — make the schema version a semver string (`"2.0.0"`) and update the schema file, fixtures and tests.
-2. A3 — add `migrations.ts` and `readFabricThemeEnvelope`, with the "every accepted older major has a migration" test.
-3. A4 — route every open path through the reader; keep save, snapshot and publish-strict writes on the validator.
-4. B1 — upgrade `vite` to `8.3.5` and `vitest` to `5.0.5`, then run the gate.
-5. B2 — add the `undici`, `sharp` and `jsdom` overrides, each kept only if its suite passes.
+1. A3 — add `migrations.ts` and `readFabricThemeEnvelope`, with the "every accepted older major has a migration" test.
+2. A4 — route every open path through the reader; keep save, snapshot and publish-strict writes on the validator.
+3. B1 — upgrade `vite` to `8.3.5` and `vitest` to `5.0.5`, then run the gate.
+4. B2 — add the `undici`, `sharp` and `jsdom` overrides, each kept only if its suite passes.
 
 ## Blockers / unverified
 

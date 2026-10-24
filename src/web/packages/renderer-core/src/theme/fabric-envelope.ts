@@ -1,20 +1,35 @@
-import type {
-  Artboard,
-  AssetReference,
-  Background,
-  Binding,
-  Globals,
-  PalettePaint,
-  ThemeMetadata,
+import {
+  type Artboard,
+  type AssetReference,
+  type Background,
+  type Binding,
+  type Globals,
+  isSemanticVersion,
+  type PalettePaint,
+  type ThemeMetadata,
 } from "./document.js";
 
 /**
  * The theme schema version this build reads and writes.
  *
- * One owner, and the envelope's own type pins itself to it, so the number the
- * About tab reports cannot drift from the number a save writes.
+ * One owner, and the envelope's own type pins itself to it, so the version the
+ * About tab reports cannot drift from the version a save writes. It is a
+ * semantic version, and the reader compares majors only.
  */
-export const SUPPORTED_SCHEMA_VERSION = 2;
+export const SUPPORTED_SCHEMA_VERSION = "2.0.0";
+
+/** The major half of {@link SUPPORTED_SCHEMA_VERSION}, derived so it has one home. */
+export const SUPPORTED_SCHEMA_MAJOR: number = Number.parseInt(
+  SUPPORTED_SCHEMA_VERSION,
+  10,
+);
+
+/** The major of a semantic version string, or `undefined` for anything else. */
+export function parseSchemaMajor(value: unknown): number | undefined {
+  if (typeof value !== "string" || !isSemanticVersion(value)) return undefined;
+  const major = Number.parseInt(value, 10);
+  return Number.isSafeInteger(major) ? major : undefined;
+}
 
 export interface FabricPaletteEntry {
   readonly name: string;

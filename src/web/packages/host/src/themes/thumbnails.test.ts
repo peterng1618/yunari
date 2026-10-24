@@ -13,7 +13,7 @@ const PNG = new Uint8Array([
 ]);
 
 const envelopeFor = (id: string): FabricThemeEnvelope => ({
-  schemaVersion: 2,
+  schemaVersion: "2.0.0",
   fabricVersion: "7.4.0",
   id,
   metadata: { name: "Living Room", themeLanguage: "en" },

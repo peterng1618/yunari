@@ -37,7 +37,7 @@ const PNG = (() => {
 })();
 
 const envelopeOf = (id: string) => ({
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id,
   artboard: { width: 400, height: 300 },

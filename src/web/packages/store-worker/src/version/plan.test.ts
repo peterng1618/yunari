@@ -10,7 +10,7 @@ function baseEnvelope(
   } = {},
 ): FabricThemeEnvelope {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: "demo-theme",
     metadata: { themeLanguage: "en", name: "Demo" },

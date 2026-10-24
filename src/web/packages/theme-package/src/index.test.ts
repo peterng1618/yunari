@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { readThemePackage, writeThemePackage } from "./index.js";
 
 const envelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: "demo",
   artboard: { width: 400, height: 300 },

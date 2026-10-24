@@ -668,7 +668,7 @@ describe("a card that declares one id twice", () => {
     ) as unknown as Readonly<Record<string, unknown>>;
 
     const result = validateFabricThemeEnvelope({
-      schemaVersion: 2,
+      schemaVersion: "2.0.0",
       fabricVersion: "7.4.0",
       id: "duplicate-card",
       // Carried from the starter rather than restated: the validator requires a
@@ -783,7 +783,7 @@ describe("a card whose repeat mints the suffix a genuine part already holds", ()
     ) as unknown as Readonly<Record<string, unknown>>;
 
     const result = validateFabricThemeEnvelope({
-      schemaVersion: 2,
+      schemaVersion: "2.0.0",
       fabricVersion: "7.4.0",
       id: "suffix-card",
       // Carried from the starter rather than restated: the validator requires a

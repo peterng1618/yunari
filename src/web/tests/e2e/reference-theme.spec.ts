@@ -776,7 +776,7 @@ test.describe("the reference composition, authored", () => {
               theme: "theme.json",
             }),
           ),
-          "theme.json": strToU8(JSON.stringify({ schemaVersion: 2 })),
+          "theme.json": strToU8(JSON.stringify({ schemaVersion: "2.0.0" })),
         }),
       ),
     );

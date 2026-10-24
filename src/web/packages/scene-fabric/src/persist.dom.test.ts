@@ -1184,7 +1184,7 @@ describe("the Fabric theme envelope", () => {
   it("revives every baseline class used by the v2 demo fixture", async () => {
     const target = canvasOf();
     const envelope = {
-      schemaVersion: 2,
+      schemaVersion: "2.0.0",
       fabricVersion: "7.4.0",
       id: "demo",
       artboard: { width: 1, height: 1 },
@@ -1227,7 +1227,7 @@ describe("the Fabric theme envelope", () => {
     });
 
     expect(envelope).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: "2.0.0",
       id: "theme",
       fabricVersion: "7.4.0",
     });

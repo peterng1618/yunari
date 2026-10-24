@@ -96,7 +96,7 @@ function createValidPackage(
   semanticKey?: string,
 ): ThemeContent {
   const envelope: FabricThemeEnvelope = {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id,
     artboard: { width: 1920, height: 1080 },
@@ -186,7 +186,7 @@ function createPackageWithAsset(
   bytes: readonly number[],
 ): ThemeContent {
   const envelope: FabricThemeEnvelope = {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: "living-room",
     artboard: { width: 1920, height: 1080 },
@@ -528,7 +528,7 @@ describe("Host theme routes", () => {
     expect(docRes.headers["content-type"]).toContain("application/json");
     const docData = docRes.json() as FabricThemeEnvelope;
     expect(docData.id).toBe("living-room");
-    expect(docData.schemaVersion).toBe(2);
+    expect(docData.schemaVersion).toBe("2.0.0");
 
     // What a save put in the folder, an open takes out again.
     const openRes = await request(
@@ -6844,7 +6844,7 @@ describe("The publish route", () => {
         envelope: Record<string, unknown>;
         assets: unknown;
       };
-      wire.envelope["schemaVersion"] = 99;
+      wire.envelope["schemaVersion"] = "99.0.0";
 
       const bad = await request(
         hosted.server,

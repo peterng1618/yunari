@@ -40,7 +40,7 @@ function json(body: unknown): Response {
  *  follower starts. Its own contents are not what this case is about. */
 function mountedEnvelope(): unknown {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: "living-room",
     artboard: { width: 1920, height: 1080 },

@@ -10,7 +10,7 @@ import {
 } from "./theme-loader.js";
 
 const envelope: FabricThemeEnvelope = {
-  schemaVersion: 2,
+  schemaVersion: "2.0.0",
   fabricVersion: "7.4.0",
   id: "living-room",
   artboard: { width: 1920, height: 1080 },
@@ -104,7 +104,7 @@ describe("loadHostedTheme", () => {
   it("rejects an invalid hosted envelope", async () => {
     await expect(
       loadHostedTheme("living-room", async () =>
-        Response.json({ ...envelope, schemaVersion: 3 }),
+        Response.json({ ...envelope, schemaVersion: "3.0.0" }),
       ),
     ).rejects.toThrow("newer version");
   });

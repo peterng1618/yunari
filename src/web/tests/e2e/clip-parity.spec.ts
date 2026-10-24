@@ -147,7 +147,7 @@ function textBox(
 }
 
 const ENVELOPE = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0" as const,
   id: THEME_ID,
   metadata: { name: "E2E clip parity", themeLanguage: "en" },

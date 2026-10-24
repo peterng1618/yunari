@@ -4,7 +4,7 @@ import { requiredDeviceGroups } from "./required-devices.js";
 
 function themeWith(keys: readonly string[]): FabricThemeEnvelope {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: "t",
     artboard: { width: 100, height: 100 },

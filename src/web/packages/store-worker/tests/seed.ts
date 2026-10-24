@@ -21,7 +21,7 @@ const FACETS: FacetRecord = {
   width: 1280,
   height: 720,
 };
-const ENVELOPE_JSON = JSON.stringify({ schemaVersion: 2, metadata: {} });
+const ENVELOPE_JSON = JSON.stringify({ schemaVersion: "2.0.0", metadata: {} });
 
 export interface SeedOptions {
   readonly versions?: readonly string[];

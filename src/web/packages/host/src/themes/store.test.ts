@@ -23,7 +23,7 @@ import {
 
 function envelopeFor(id: string, name: string): FabricThemeEnvelope {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id,
     artboard: { width: 1920, height: 1080 },

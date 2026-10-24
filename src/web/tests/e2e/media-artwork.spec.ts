@@ -106,7 +106,7 @@ const textNode = (index: number) => ({
 });
 
 const envelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: THEME_ID,
   metadata: { name: "E2E media artwork", themeLanguage: "en" },

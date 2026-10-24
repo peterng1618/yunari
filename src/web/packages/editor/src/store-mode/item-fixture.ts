@@ -2,6 +2,7 @@ import {
   DASHBOARD_THEME_KIND,
   type FabricThemeEnvelope,
   facetRecordOf,
+  SUPPORTED_SCHEMA_VERSION,
 } from "@yunari/renderer-core";
 import type { ThemeLibraryEntry } from "../theme-library-client.js";
 import type { CatalogueFacts, StoreItem } from "./local-source.js";
@@ -53,7 +54,7 @@ export interface FixtureTheme {
 /** The document behind a fixture theme. */
 export function fixtureEnvelope(theme: FixtureTheme): FabricThemeEnvelope {
   return {
-    schemaVersion: 2,
+    schemaVersion: SUPPORTED_SCHEMA_VERSION,
     fabricVersion: "7.4.0",
     id: theme.id,
     artboard: {

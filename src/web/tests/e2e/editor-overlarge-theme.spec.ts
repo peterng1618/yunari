@@ -54,7 +54,7 @@ function seedLibrary(): void {
   const folder = path.join(THEMES_DIR, THEME_ID);
   mkdirSync(folder, { recursive: true });
   const document = JSON.stringify({
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: THEME_ID,
     artboard: { width: 1920, height: 1080 },

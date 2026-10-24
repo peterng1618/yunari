@@ -40,7 +40,7 @@ const PANEL_ID = "media-panel";
  *  media layer, which sits below the canvas — the same reason the grouped
  *  fixture's artboard is transparent. */
 const envelope = (id: string) => ({
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id,
   metadata: { name: "E2E changing media", themeLanguage: "en" },

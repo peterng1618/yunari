@@ -43,7 +43,7 @@ const THEME_ID = "e2e-publish";
 /** One minimal, valid package, so the host starts with a real library rather
  *  than an empty folder. */
 const envelope = {
-  schemaVersion: 2 as const,
+  schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: THEME_ID,
   metadata: { name: "E2E publish", themeLanguage: "en" },

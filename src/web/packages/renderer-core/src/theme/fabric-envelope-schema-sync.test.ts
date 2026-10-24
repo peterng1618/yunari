@@ -35,7 +35,7 @@ describe("published Fabric theme schema", () => {
   it("publishes the v2 envelope rather than the obsolete node tree", () => {
     const document = schema();
 
-    expect(document.$id).toContain("/2.json");
+    expect(document.$id).toContain("/2.0.0.json");
     // The version is stated twice — here and in `SUPPORTED_SCHEMA_VERSION` —
     // and the About row reports the code's copy, so a theme published under
     // one and opened under the other would be refused for no reason.

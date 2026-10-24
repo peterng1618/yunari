@@ -169,7 +169,7 @@ describe("version requests", () => {
     expect(await own.json()).toEqual({
       version: "1.0.0",
       createdAt: "2026-10-01T00:00:00.000Z",
-      envelope: { schemaVersion: 2, metadata: {} },
+      envelope: { schemaVersion: "2.0.0", metadata: {} },
       status: "unpublished",
     });
 

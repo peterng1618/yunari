@@ -34,7 +34,7 @@ import {
  * the baked-in default and a saved copy of it have the same number of objects,
  * which is exactly how this hid. */
 const SAVED: FabricThemeEnvelope = {
-  schemaVersion: 2,
+  schemaVersion: "2.0.0",
   fabricVersion: "7.4.0",
   id: "edited-by-hand",
   artboard: { width: 1920, height: 1080 },
@@ -129,7 +129,7 @@ describe("the editor on a URL that names a theme", () => {
           {
             code: "missing-field",
             path: "/schemaVersion",
-            message: "schemaVersion is required and must be an integer.",
+            message: "schemaVersion is required and must be major.minor.patch.",
           },
         ]);
       }),

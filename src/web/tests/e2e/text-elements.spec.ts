@@ -339,7 +339,7 @@ function legacyEnvelope(): FabricThemeEnvelope {
     },
   ];
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     fabricVersion: "7.4.0",
     id: LEGACY_THEME_ID,
     metadata: { name: "E2E legacy text", themeLanguage: "en" },

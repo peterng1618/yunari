@@ -20,7 +20,7 @@ function backgroundTheme(
   objects: readonly unknown[] = [],
 ): unknown {
   return {
-    schemaVersion: 2,
+    schemaVersion: "2.0.0",
     background: {
       media: { assetId: asset.id, bounds: "theme" },
     },
@@ -33,10 +33,13 @@ const videoOnly = backgroundTheme(VIDEO_ASSET);
 const videoWithGlass = backgroundTheme(VIDEO_ASSET, [GLASS_PANEL]);
 const glassOverImage = backgroundTheme(IMAGE_ASSET, [GLASS_PANEL]);
 /** No background media and no glass at all. */
-const plain = { schemaVersion: 2, scene: { version: "7.4.0", objects: [] } };
+const plain = {
+  schemaVersion: "2.0.0",
+  scene: { version: "7.4.0", objects: [] },
+};
 /** Glass over nothing: the treatment costs what it composites over. */
 const glassOnly = {
-  schemaVersion: 2,
+  schemaVersion: "2.0.0",
   scene: { version: "7.4.0", objects: [GLASS_PANEL] },
 };
 
@@ -94,7 +97,7 @@ describe("what a theme costs the display it is given to", () => {
 
   it("answers no costs for a background whose asset is not declared", () => {
     const dangling = {
-      schemaVersion: 2,
+      schemaVersion: "2.0.0",
       artboard: { width: 640, height: 360 },
       background: { media: { assetId: "loop", bounds: "theme" } },
       assets: [],

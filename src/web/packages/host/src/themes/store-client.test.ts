@@ -11,7 +11,7 @@ const PNG = new Uint8Array([
 const PACKAGE_BYTES = new Uint8Array([7, 7, 7]);
 
 const envelope: FabricThemeEnvelope = {
-  schemaVersion: 2,
+  schemaVersion: "2.0.0",
   fabricVersion: "7.4.0",
   id: ITEM_ID,
   artboard: { width: 1920, height: 1080 },
