@@ -20,7 +20,6 @@ import {
   createDisplayLauncher,
   findBrowser,
   LIVE_WINDOW_MS,
-  registerHostAutostart,
 } from "./display-launcher.js";
 
 /**
@@ -366,31 +365,6 @@ describe("findBrowser", () => {
       found === undefined ||
         (existsSync(found) && BROWSER_NAME.test(path.basename(found))),
     ).toBe(true);
-  });
-});
-
-describe("registerHostAutostart", () => {
-  it("names the platform it cannot register a sign-in task on", async () => {
-    // macOS's launchd and Linux's autostart are not implemented, and saying so
-    // is the whole of the answer: silently registering nothing would report a
-    // reboot that never comes back.
-    const platform = process.platform;
-    Object.defineProperty(process, "platform", {
-      value: "darwin",
-      configurable: true,
-    });
-
-    try {
-      const outcome = await registerHostAutostart("yunari");
-
-      expect(outcome.ok).toBe(false);
-      expect(outcome.message).toContain("darwin");
-    } finally {
-      Object.defineProperty(process, "platform", {
-        value: platform,
-        configurable: true,
-      });
-    }
   });
 });
 

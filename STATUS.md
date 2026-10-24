@@ -11,7 +11,7 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Active work
 
-- **Tasks 1–2 are done** (menu model, external programs); Phase 1 continues with the autostart entry.
+- **Tasks 1–3 are done** (menu model, external programs, sign-in entry); Phase 1 continues with the Windows tray.
 - **Controller next:** the 5-second snapshot poll, action dispatch and 10-second notices are still to be built.
 - **Windows adapter** renders the model through a hidden PowerShell WinForms `NotifyIcon` fed by JSON lines on stdin.
 - **Linux adapter** stages the pinned `systray2@2.1.4` x86-64 binary; no new npm dependency and no runtime install.
@@ -20,15 +20,15 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Last completed change
 
-- **External programs:** `host/src/tray/external-apps.ts` detects LHM and RTSS on Windows and starts them on request.
-- **LHM** starts through `launchLhm`, keeps its stop on every result, releases the old handle before replacing it, and only an in-flight launch blocks a retry.
-- **RTSS probes before spawning** and has no stop; failed probes read as absent, and both programs are absent off Windows.
-- **Tests:** 14 pass in `packages/host/src/tray/external-apps.test.ts`.
+- **Sign-in entry:** `host/src/serve/host-autostart.ts` owns a hidden `Yunari.vbs` on Windows and an XDG autostart entry on Linux, and removes the legacy `YunariHost` task first.
+- **`hostEntry`** starts the same host with `--tray -n`; the server's `registerAutostart` now calls `autostart.enable(entry)`.
+- **Validation:** a command with a quote or line break is refused, not written broken; an undefined APPDATA/HOME reads as "no entry".
+- **Tests:** 8 new in `packages/host/src/serve/host-autostart.test.ts`; 23 pass across both serve suites, `@yunari/host` typecheck exit 0.
 
 ## Next
 
-1. Task 3: controller polling, action dispatch and notices.
-2. Task 4+: Windows and Linux adapters, autostart entry, editor deep links and `--tray` wiring.
+1. Task 4: Windows tray and icon.
+2. Task 5+: Linux adapter, editor deep links and `--tray` wiring.
 3. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
 4. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
 

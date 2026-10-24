@@ -29,8 +29,8 @@ import { WeatherProvider } from "./providers/weather/provider.js";
 import {
   createDisplayLauncher,
   type Launcher,
-  registerHostAutostart,
 } from "./serve/display-launcher.js";
+import { createHostAutostart, hostEntry } from "./serve/host-autostart.js";
 import { CA_CERTIFICATE_PATH, createHostServer } from "./server.js";
 import { createPairingCodeStore } from "./session/pairing-code.js";
 import { createActiveThemeStore } from "./settings/active-theme.js";
@@ -79,25 +79,6 @@ function productVersion(): string {
 /** The staged LibreHardwareMonitor, for setup commands that need a default. */
 function defaultLhmExecutable(): string {
   return path.join(here, "..", "vendor", "lhm", "LibreHardwareMonitor.exe");
-}
-
-/**
- * The command that starts this host again, for the sign-in task: this
- * interpreter, the shim it was started through, and the flags this run was
- * given, so the host that comes back is the same host with the same app folder.
- *
- * `-n` because a host that starts at sign-in is bringing back the displays; a
- * dashboard tab in the default browser at every login is not part of that.
- */
-function hostCommand(argv: readonly string[]): string {
-  return [
-    process.execPath,
-    path.join(here, "..", "bin", "yunari.js"),
-    ...argv,
-    "-n",
-  ]
-    .map((part) => `"${part}"`)
-    .join(" ");
 }
 
 export async function run(argv: readonly string[]): Promise<number> {
@@ -341,6 +322,11 @@ export async function run(argv: readonly string[]): Promise<number> {
   // `hosting` is one.
   let launcher: Launcher | undefined;
 
+  // One entry at sign-in covers every local monitor, including one added
+  // later. The tray's "Auto start" toggle drives the same owner (Task 9).
+  const autostart = createHostAutostart();
+  const entry = hostEntry(argv, here);
+
   const hosted = createHostServer({
     registry,
     // The leaf, signed by the root a display installs once. In memory only:
@@ -356,9 +342,9 @@ export async function run(argv: readonly string[]): Promise<number> {
       return launcher;
     },
     // One entry at sign-in covers every local monitor, including one added
-    // later. Registering needs an elevated shell, so this only ever asks; a
+    // later. Registering writes the hidden entry, so this only ever asks; a
     // refusal is answered with the registrar's own message.
-    registerAutostart: () => registerHostAutostart(hostCommand(argv)),
+    registerAutostart: () => autostart.enable(entry),
     // Where a phone should point, whether one can reach this host at all, and
     // how to move it there.
     get hosting() {

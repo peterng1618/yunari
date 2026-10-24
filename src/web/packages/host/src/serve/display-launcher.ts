@@ -1,4 +1,4 @@
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -148,69 +148,6 @@ export function browserCommand(
       "--disable-extensions",
     ],
   };
-}
-
-/** The task Windows starts this host with at sign-in. */
-const HOST_TASK_NAME = "YunariHost";
-
-/**
- * Registers the **host** at sign-in, so every local monitor survives a reboot —
- * the one added later included, and with one entry for the owner to find and
- * remove rather than one per screen.
- *
- * `schtasks` is the call `registerLhmTask` already makes. The host needs no
- * elevation, so this asks for none; registering does, so Windows shows one
- * consent dialog. macOS's launchd and Linux's autostart are not implemented and
- * say so, rather than registering nothing.
- */
-export function registerHostAutostart(
-  command: string,
-): Promise<{ readonly ok: boolean; readonly message: string }> {
-  if (process.platform !== "win32") {
-    return Promise.resolve({
-      ok: false,
-      message:
-        "Yunari registers a sign-in task on Windows only; this host is on " +
-        `${process.platform}.`,
-    });
-  }
-
-  return new Promise((resolve) => {
-    execFile(
-      "schtasks",
-      [
-        "/Create",
-        "/TN",
-        HOST_TASK_NAME,
-        "/TR",
-        command,
-        "/SC",
-        "ONLOGON",
-        "/F",
-      ],
-      { timeout: 60_000, windowsHide: true },
-      (error, _stdout, stderr) => {
-        if (error) {
-          // A refused consent dialog surfaces here, worded plainly.
-          resolve({
-            ok: false,
-            message: `could not register the sign-in task: ${
-              stderr?.trim() || error.message
-            }. Approve the permission prompt, or run this from an elevated terminal.`,
-          });
-          return;
-        }
-
-        resolve({
-          ok: true,
-          message:
-            "Registered. Windows starts Yunari at sign-in, so every local " +
-            `monitor comes back with it. Remove the "${HOST_TASK_NAME}" task in ` +
-            "Task Scheduler to stop it.",
-        });
-      },
-    );
-  });
 }
 
 export interface Launcher {
