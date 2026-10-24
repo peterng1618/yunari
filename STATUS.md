@@ -10,7 +10,7 @@ Branch: `feat/game-identity`
 ## Active work
 
 - **The plan is finished**: Phases 1–5.1 are committed; this close-out closes vg-723, vg-724 and vg-717 and files vg-727 for Linux presence.
-- **Final code gate**: `GATE_EXIT=1` with only the 2 pre-existing SMTC tests (vg-726) plus a ThemeStore asset-bounds flake that passes alone (69/69); 5789/5793 passed.
+- **Final code gate**: `GATE_EXIT=1` with only the 2 pre-existing SMTC tests (vg-726) plus two ThemeStore asset-bounds cases that pass alone (69/69); 5789/5793 passed.
 - **Windows-first boundary**: Linux catalogue readers and foreground detection are out of scope (spec D4) and now owned by vg-727.
 - **Known costs**: the provider reads Steam twice per demand window, and a non-catalogue foreground costs one readdir per sample.
 - **Store search is not a presence signal**: the Steam lookup stays demand-driven for name and artwork only.
