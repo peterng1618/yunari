@@ -185,6 +185,10 @@ export {
   semanticKeysByFamily,
   UNIT_KINDS,
 } from "./data/semantic-keys.js";
+export {
+  descriptorFromWire,
+  descriptorsFromWire,
+} from "./data/sensor-catalogue.js";
 export type { SampleSource } from "./data/source.js";
 export { emptySampleSource } from "./data/source.js";
 export type { SampleStoreOptions } from "./data/store.js";
