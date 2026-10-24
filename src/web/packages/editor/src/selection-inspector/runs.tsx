@@ -1,3 +1,4 @@
+import { Tabs } from "@base-ui/react/tabs";
 import type {
   Binding,
   FabricGlobals,
@@ -23,6 +24,7 @@ import {
   ControlWell,
   useControlIds,
 } from "../components/ui/control-well.js";
+import { Glyph, PLUS_GLYPH } from "../editor-shell/icons.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   authoredContentOf,
@@ -50,6 +52,12 @@ interface RunsProjection {
   readonly locale: string | undefined;
   readonly nodeBindings: ((nodeId: string) => readonly Binding[]) | undefined;
   readonly sampleSource: (() => SampleSource) | undefined;
+  /**
+   * Whether the selected object is a `Textbox`, the class that owns width,
+   * overflow, vertical alignment and ellipsis. Passed in because this module
+   * sees the authored content, not the live Fabric class.
+   */
+  readonly wraps: boolean;
   /**
    * What a palette reference resolves to, for a swatch. Passed in rather than
    * imported so this module does not reach back into `appearance.ts`, which
@@ -282,13 +290,13 @@ export function projectRuns(
   return {
     nodeId,
     runs: rows,
+    wraps: context.wraps,
     layout: {
       align: typeof content["align"] === "string" ? content["align"] : "left",
       verticalAlign:
         typeof content["verticalAlign"] === "string"
           ? content["verticalAlign"]
           : "top",
-      wrap: content["wrap"] === false ? "nowrap" : "wrap",
       overflow:
         typeof content["overflow"] === "string" ? content["overflow"] : "clip",
     },
@@ -326,11 +334,6 @@ const VERTICAL_OPTIONS = [
   { id: "top", name: uiCopy.inspectorFields.verticalTop },
   { id: "middle", name: uiCopy.inspectorFields.verticalMiddle },
   { id: "bottom", name: uiCopy.inspectorFields.verticalBottom },
-];
-
-const WRAP_OPTIONS = [
-  { id: "wrap", name: uiCopy.inspectorFields.on },
-  { id: "nowrap", name: uiCopy.inspectorFields.off },
 ];
 
 const OVERFLOW_OPTIONS = [
@@ -450,8 +453,14 @@ function RunRow(props: {
   readonly row: RunRowView;
   readonly view: RunsView;
   readonly edits: RunEdits;
+  /**
+   * Called before the write, so the editor can stop following the last run:
+   * removing the selected last one must leave the *first* remaining run
+   * selected, not whatever is last now.
+   */
+  readonly onRemove: (index: number) => void;
 }): React.JSX.Element {
-  const { row, view, edits } = props;
+  const { row, view, edits, onRemove } = props;
   const index = row.index;
 
   return (
@@ -554,7 +563,7 @@ function RunRow(props: {
           type="button"
           data-yunari-run-remove={String(index)}
           className="self-start text-xs text-muted"
-          onClick={() => edits.removeRun(index)}
+          onClick={() => onRemove(index)}
         >
           {uiCopy.inspectorFields.removeRun(index + 1)}
         </button>
@@ -569,18 +578,37 @@ function colourValueOf(view: RunsView, ref: string): string {
 }
 
 /**
- * The run editor: the layout controls, one row per run, and the add button.
+ * The run editor: the layout controls, a numbered tab per run, the selected
+ * run's fields, and the add button.
  *
  * The caret rule the imperative editor needed a focus-restoring pair for is
- * React's own here: the rows key on their index and the values are props, so a
- * re-publish updates the focused input rather than replacing it, and a checkbox
- * never regains focus it was not holding. See `index.ts`.
+ * React's own here: a row keys on its runtime identity and the values are
+ * props, so a re-publish updates the focused input rather than replacing it,
+ * and a checkbox never regains focus it was not holding. See `index.ts`.
  */
 export function RunEditor(props: {
   readonly runs: RunsView;
   readonly edits: RunEdits;
 }): React.JSX.Element {
   const { runs: view, edits } = props;
+  // Which tab is showing is React's own: not authored, never in the view, the
+  // envelope or history. Keyed by the row's runtime identity so removing a
+  // different run does not move the selection off the run being edited.
+  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  // `+` appends a run whose identity is only minted when the re-published view
+  // arrives, so the selection follows the last run rather than guessing its id.
+  const [followLast, setFollowLast] = useState(false);
+  const selected = followLast
+    ? view.runs.at(-1)
+    : (view.runs.find((row) => row.id === selectedId) ?? view.runs[0]);
+
+  const remove = (index: number): void => {
+    setFollowLast(false);
+    // The selected id names the run being removed, so it must not survive as a
+    // fallback: a stale one would restore a tab that was selected before `+`.
+    setSelectedId(undefined);
+    edits.removeRun(index);
+  };
 
   return (
     <div data-yunari-runs="" className="flex flex-col gap-[var(--space-6)]">
@@ -595,44 +623,89 @@ export function RunEditor(props: {
         options={ALIGN_OPTIONS}
         onChange={(align: string) => edits.writeLayout({ align })}
       />
-      <ControlSegmented
-        label={uiCopy.inspectorFields.verticalAlign}
-        data={{ "data-yunari-text-vertical-align": "" }}
-        value={view.layout.verticalAlign}
-        options={VERTICAL_OPTIONS}
-        onChange={(verticalAlign: string) =>
-          edits.writeLayout({ verticalAlign })
-        }
-      />
-      <ControlSegmented
-        label={uiCopy.inspectorFields.wrap}
-        data={{ "data-yunari-text-wrap": "" }}
-        value={view.layout.wrap}
-        options={WRAP_OPTIONS}
-        onChange={(wrap: string) =>
-          edits.writeLayout({ wrap: wrap === "wrap" })
-        }
-      />
-      <ControlSegmented
-        label={uiCopy.inspectorFields.overflow}
-        data={{ "data-yunari-text-overflow": "" }}
-        value={view.layout.overflow}
-        options={OVERFLOW_OPTIONS}
-        onChange={(overflow: string) => edits.writeLayout({ overflow })}
-      />
-
-      {view.runs.map((row) => (
-        <RunRow key={row.id} row={row} view={view} edits={edits} />
-      ))}
-
-      <button
-        type="button"
-        data-yunari-run-add=""
-        className="self-start text-xs text-muted"
-        onClick={() => edits.addRun()}
+      {/* Overflow and vertical placement are the box's contract: a point text
+          has no authored height to clip or place inside, so the two controls
+          that write them would accept an edit nothing paints. */}
+      {view.wraps ? (
+        <>
+          <ControlSegmented
+            label={uiCopy.inspectorFields.verticalAlign}
+            data={{ "data-yunari-text-vertical-align": "" }}
+            value={view.layout.verticalAlign}
+            options={VERTICAL_OPTIONS}
+            onChange={(verticalAlign: string) =>
+              edits.writeLayout({ verticalAlign })
+            }
+          />
+          <ControlSegmented
+            label={uiCopy.inspectorFields.overflow}
+            data={{ "data-yunari-text-overflow": "" }}
+            value={view.layout.overflow}
+            options={OVERFLOW_OPTIONS}
+            onChange={(overflow: string) => edits.writeLayout({ overflow })}
+          />
+        </>
+      ) : null}
+      <Tabs.Root
+        value={selected?.id ?? null}
+        onValueChange={(value) => {
+          if (typeof value !== "string") return;
+          setFollowLast(false);
+          setSelectedId(value);
+        }}
+        className="flex flex-col gap-[var(--space-6)]"
       >
-        {uiCopy.inspectorFields.addRun}
-      </button>
+        {/* The add action sits after the tablist rather than inside it: a
+            tablist owns tabs, and a reader should not meet a foreign button in
+            the middle of the strip. The row wraps, so the + follows the last
+            tab on the same line. */}
+        <div className="flex flex-wrap items-center gap-[var(--space-4)]">
+          <Tabs.List
+            activateOnFocus
+            className="flex flex-wrap items-center gap-[var(--space-4)]"
+          >
+            {view.runs.map((row, at) => (
+              <Tabs.Tab
+                key={row.id}
+                value={row.id}
+                data-yunari-run-tab={String(at + 1)}
+                aria-label={uiCopy.inspectorFields.runTab(at + 1)}
+                className="rounded-t-[var(--radius-sm)] px-[var(--space-12)] py-[var(--space-8)] text-sm text-muted data-[selected]:bg-[var(--panel-2)] data-[selected]:text-text"
+              >
+                {at + 1}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+          <button
+            type="button"
+            data-yunari-run-add=""
+            aria-label={uiCopy.inspectorFields.addRun}
+            className="text-xs text-muted"
+            onClick={() => {
+              if (edits.addRun()) setFollowLast(true);
+            }}
+          >
+            <Glyph icon={PLUS_GLYPH} size={12} />
+          </button>
+        </div>
+
+        {selected === undefined ? null : (
+          <Tabs.Panel
+            value={selected.id}
+            className="flex flex-col gap-[var(--space-6)]"
+          >
+            {/* Keyed by identity, so moving to another tab remounts the fields:
+                a draft belongs to the run it was typed into. */}
+            <RunRow
+              key={selected.id}
+              row={selected}
+              view={view}
+              edits={edits}
+              onRemove={remove}
+            />
+          </Tabs.Panel>
+        )}
+      </Tabs.Root>
 
       {view.notes.map((note) => (
         <p

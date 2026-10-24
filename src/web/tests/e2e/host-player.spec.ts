@@ -38,6 +38,7 @@ import {
   hostClient,
   TEMPERATURE_NODE_ID,
 } from "./host-theme.js";
+import { placeText, readScene } from "./rebuild-driver.js";
 import { isDesktopSurface } from "./surface.js";
 
 /** Exercises the real Node host: the browser suite's only proof that hosted
@@ -366,11 +367,9 @@ test.describe("hosted player over the real host", () => {
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
 
-    await openPane(page, "Add");
-    await page
-      .locator('[data-yunari-panel="add"]')
-      .getByRole("button", { name: "Text" })
-      .click();
+    await placeText(page);
+    // The saved theme has to carry the text class the player reads runs from.
+    expect((await readScene(page)).at(-1)?.type).toBe("i-text");
 
     // Save to library goes through PUT /api/themes/:id, not a download.
     await page.getByRole("button", { name: "File", exact: true }).click();

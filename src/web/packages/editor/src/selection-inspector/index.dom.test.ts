@@ -689,7 +689,6 @@ describe("the selection inspector", () => {
     // A shape has no text layout to edit, so it must not be offered one.
     for (const field of [
       "[data-yunari-text-align]",
-      "[data-yunari-text-wrap]",
       "[data-yunari-text-overflow]",
     ]) {
       expect(host.querySelector(field)).toBeNull();
@@ -895,6 +894,30 @@ describe("the selection inspector", () => {
  * subject and the first section, and that pressing one arranges the objects —
  * the rendered reading of it is the controller's browser pass.
  */
+describe("the run editor's tab selection", () => {
+  it("does not write, or record a history entry, when a tab is picked", async () => {
+    const text = new Textbox("", { id: "clock-label" });
+    text.set({
+      yunariText: {
+        runs: [
+          { kind: "literal", text: "A", typePreset: "typePresets.body" },
+          { kind: "literal", text: "B", typePreset: "typePresets.body" },
+        ],
+      },
+    });
+    const { host, history } = setup(text);
+    const before = JSON.stringify(text.get("yunariText"));
+
+    await click(host.querySelector<HTMLElement>('[data-yunari-run-tab="2"]')!);
+
+    expect(host.querySelector('[data-yunari-run-text="1"]')).not.toBeNull();
+    // Selection is React's own: it is not an edit, so nothing is written and
+    // no undo entry stands over a look at another run.
+    expect(JSON.stringify(text.get("yunariText"))).toBe(before);
+    expect(history.saveState).not.toHaveBeenCalled();
+  });
+});
+
 describe("the arrange actions the column leads with", () => {
   const buttons = (host: HTMLElement): readonly HTMLButtonElement[] => [
     ...host.querySelectorAll<HTMLButtonElement>("[data-yunari-arrange-action]"),
@@ -1695,6 +1718,101 @@ describe("the size of a text object", () => {
   });
 });
 
+describe("the class the inspector states", () => {
+  /** A point text: its size is measured from what it says, and it has no box. */
+  function autoText(id: string): IText {
+    const text = new IText("Hi", { left: 0, top: 0, id });
+    text.set({
+      yunariText: {
+        runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+      },
+    });
+    return text;
+  }
+
+  /** A text box: the one class whose W/H are an authored box. */
+  function textBox(id: string): Textbox {
+    const text = new Textbox("Hi", { left: 0, top: 0, width: 120, id });
+    text.set({
+      yunariText: {
+        runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+      },
+    });
+    return text;
+  }
+
+  it("shows a text's measured W/H read-only and commits nothing typed", async () => {
+    const text = autoText("label-1");
+    const measured = {
+      width: Math.round(text.width * text.scaleX),
+      height: Math.round(text.height * text.scaleY),
+    };
+    const { host, history } = setup(text);
+    const half = (key: "width" | "height"): HTMLInputElement =>
+      host.querySelector<HTMLInputElement>(`[data-yunari-geometry="${key}"]`)!;
+
+    // Read-only, not blank and not disabled: the number the canvas draws is
+    // still the number the author reads, and it stays focusable.
+    expect(half("width").value).toBe(String(measured.width));
+    expect(half("height").value).toBe(String(measured.height));
+    expect(half("width").readOnly).toBe(true);
+    expect(half("height").readOnly).toBe(true);
+    expect(half("width").disabled).toBe(false);
+
+    // The input's own readOnly is the browser's guard; the commit path has to
+    // refuse too, because a draft can reach it without a keystroke.
+    await edit(half("width"), "300");
+    await edit(half("height"), "80");
+
+    expect(half("width").value).toBe(String(measured.width));
+    expect(Math.round(text.width * text.scaleX)).toBe(measured.width);
+    expect(Math.round(text.height * text.scaleY)).toBe(measured.height);
+    expect(text.scaleX).toBe(1);
+    expect(text.scaleY).toBe(1);
+    expect(
+      (text.get("yunariText") as { readonly box?: unknown }).box,
+    ).toBeUndefined();
+    expect(history.saveState).not.toHaveBeenCalled();
+  });
+
+  it("leaves a text box's W/H editable", () => {
+    const { host } = setup(textBox("label-2"));
+    const half = (key: "width" | "height"): HTMLInputElement =>
+      host.querySelector<HTMLInputElement>(`[data-yunari-geometry="${key}"]`)!;
+
+    expect(half("width").readOnly).toBe(false);
+    expect(half("height").readOnly).toBe(false);
+  });
+
+  it("switches to the auto contract when the selection moves to a text", () => {
+    const box = textBox("label-3");
+    const text = autoText("label-4");
+    let active: FabricObject = box;
+    const { host, inspector } = setup(() => active);
+
+    expect(
+      host.querySelector("[data-yunari-text-vertical-align]"),
+    ).not.toBeNull();
+    expect(
+      host.querySelector<HTMLInputElement>('[data-yunari-geometry="width"]')
+        ?.readOnly,
+    ).toBe(false);
+
+    active = text;
+    inspector.render();
+
+    // No stale control survives the class change, and the measured halves are
+    // the new object's rather than the box's.
+    expect(host.querySelector("[data-yunari-text-vertical-align]")).toBeNull();
+    expect(host.querySelector("[data-yunari-text-overflow]")).toBeNull();
+    expect(host.querySelector("[data-yunari-text-align]")).not.toBeNull();
+    expect(
+      host.querySelector<HTMLInputElement>('[data-yunari-geometry="width"]')
+        ?.readOnly,
+    ).toBe(true);
+  });
+});
+
 describe("the column a kind gets", () => {
   /** A shape that carries a paint reference, so a container built from it has
       something for its own appearance question to read. */
@@ -1781,9 +1899,9 @@ describe("the column a kind gets", () => {
    *   is what proves the surface renders them, not only that jsdom's tree does.
    *
    * So the count here is deliberately the shared floor, not the ceiling — and
-   * the figures are exact so the parts sum to the whole. This table names **15**
+   * the figures are exact so the parts sum to the whole. This table names **14**
    * distinct hooks: two in `EVERY_OBJECT` (`geometry`'s five selectors are one
-   * name, plus `opacity`), six added by `shape`, six by `text`, one by `image`.
+   * name, plus `opacity`), six added by `shape`, five by `text`, one by `image`.
    * The name left this table when it moved out of the Content section and into
    * the heading, where it renders only while being renamed; `index.dom.test.ts`
    * drives that gesture directly. It named 19 while the read-only section stood,
@@ -1797,10 +1915,10 @@ describe("the column a kind gets", () => {
    * src/web/packages/editor/src/selection-inspector | sort -u | wc -l`) prints
    * 47 — one high: a docblock at `190dc1a4:selection-inspector/index.ts:230`
    * quotes the bare prefix `data-yunari-`, which the pattern counts as a name.
-   * So the remaining **31** are 27 carried by the per-domain tests and the e2e
-   * specs, plus the rename field the heading now owns and those **3** the
-   * product no longer renders at all. Reading the 15 as the inventory would
-   * understate the coverage by 31.
+   * So the remaining **32** are 27 carried by the per-domain tests and the e2e
+   * specs, plus the rename field the heading now owns and those **4** the
+   * product no longer renders at all. Reading the 14 as the inventory would
+   * understate the coverage by 32.
    */
   const EVERY_OBJECT: readonly string[] = [
     '[data-yunari-geometry="left"]',
@@ -1831,7 +1949,6 @@ describe("the column a kind gets", () => {
       "[data-yunari-runs]",
       "[data-yunari-text-align]",
       "[data-yunari-text-vertical-align]",
-      "[data-yunari-text-wrap]",
       "[data-yunari-text-overflow]",
       "[data-yunari-run-source]",
     ],

@@ -13,8 +13,10 @@ import {
   Ellipse,
   type FabricObject,
   Group,
+  IText,
   Rect,
   StaticCanvas,
+  Textbox,
 } from "fabric/es";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSceneAdapter, type SceneAdapter } from "./adapter.js";
@@ -104,6 +106,7 @@ function textNode(
   id: string,
   text: string,
   style: PlanNode["style"] = {},
+  wrap = false,
 ): PlanNode {
   const authored: TextContent = { runs: [{ kind: "literal", text }] };
 
@@ -116,8 +119,8 @@ function textNode(
       authored,
       segments: [{ text, style: {} }],
       layout: {
-        wrap: false,
-        overflow: "visible",
+        wrap,
+        overflow: wrap ? "clip" : "visible",
         align: "left",
         verticalAlign: "top",
       },
@@ -221,6 +224,21 @@ describe("creating a scene", () => {
     expect(canvas.getObjects()).toHaveLength(2);
     expect(adapter.objectFor("bg")).toBeInstanceOf(Rect);
     expect(adapter.objectFor("nope")).toBeUndefined();
+  });
+
+  it("builds an auto text as IText and a fixed text as Textbox", () => {
+    // The plan's derived `layout.wrap` is the class choice; a plan builder that
+    // sets it from the element's own class is the only thing that keeps the two
+    // paths agreeing.
+    const { adapter } = mount();
+
+    adapter.apply(
+      plan([textNode("auto", "CPU"), textNode("fixed", "CPU", {}, true)]),
+    );
+
+    expect(adapter.objectFor("auto")).toBeInstanceOf(IText);
+    expect(adapter.objectFor("auto")).not.toBeInstanceOf(Textbox);
+    expect(adapter.objectFor("fixed")).toBeInstanceOf(Textbox);
   });
 
   it("puts an object where the document put it, centre origin and all", () => {

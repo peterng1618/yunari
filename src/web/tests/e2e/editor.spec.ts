@@ -45,7 +45,12 @@ import {
   storedColour,
 } from "./editor-fixture.js";
 import { openPane } from "./editor-rail.js";
-import { openPosition, selectLayer } from "./rebuild-driver.js";
+import {
+  openPosition,
+  placeText,
+  readScene,
+  selectLayer,
+} from "./rebuild-driver.js";
 import { choosePalette } from "./shell-palette.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
@@ -1152,11 +1157,8 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    await openPane(page, "Add");
-    await page
-      .locator('[data-yunari-panel="add"]')
-      .getByRole("button", { name: "Text" })
-      .click();
+    await placeText(page);
+    expect((await readScene(page)).at(-1)?.type).toBe("i-text");
 
     const envelope = (await saveEnvelope(page)) as {
       scene: {

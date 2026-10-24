@@ -37,6 +37,7 @@ import { createErrorManager } from "./error-manager/index.js";
 import { createBlankFabricTheme } from "./new-fabric-theme.js";
 import { createNewObjectPanel } from "./new-object-panel.js";
 import { idleCrop } from "./selection-inspector/idle-crop.test-stage.js";
+import type { TextPlacementPort } from "./text-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
 
 // Base UI's popup needs two browser APIs jsdom has none of: floating-ui observes
@@ -92,6 +93,9 @@ interface Wired {
   readonly facade: ReturnType<EditorSession["actionFacade"]>;
   readonly errors: ReturnType<typeof createErrorManager>;
   readonly canvas: Canvas;
+  /** The placement port the text route armed, played by a test to end the
+   *  gesture the way a click would. */
+  readonly port: () => TextPlacementPort | undefined;
 }
 
 /** A real session on a real blank theme, over a real Fabric canvas. */
@@ -111,6 +115,8 @@ function wiredSession(envelope: typeof BLANK = BLANK): Wired {
     }) as never,
   );
   const save = vi.fn();
+  /** The one placement port the session's text route arms. */
+  let armed: TextPlacementPort | undefined;
 
   const session = new EditorSession({
     assetManager: new AssetManager(),
@@ -127,6 +133,9 @@ function wiredSession(envelope: typeof BLANK = BLANK): Wired {
         }),
         textManager: {
           addText: vi.fn(),
+          beginPlacement: (port: TextPlacementPort) => {
+            armed = port;
+          },
           setAuthoringView: vi.fn(),
           setRepaint: vi.fn(),
         },
@@ -156,7 +165,13 @@ function wiredSession(envelope: typeof BLANK = BLANK): Wired {
     onNewFromStarter: vi.fn(),
     onSaved: vi.fn(),
   });
-  return { session, facade: session.actionFacade(), errors, canvas };
+  return {
+    session,
+    facade: session.actionFacade(),
+    errors,
+    canvas,
+    port: () => armed,
+  };
 }
 
 beforeEach(() => {
@@ -191,6 +206,7 @@ describe("a card a theme with its own vocabulary cannot name", () => {
         typePresets: BLANK.globals?.typePresets ?? {},
       },
       {
+        addText: vi.fn(),
         addChart: vi.fn(),
         insertCard: (cardId) => session.actionFacade().insertCard(cardId),
       },
@@ -297,7 +313,7 @@ describe("an insert the Add pane cannot reach its owner for", () => {
  */
 describe("a construction the theme cannot express", () => {
   it("is refused in words, from the footer's own route", async () => {
-    const { session, facade, errors, canvas } = wiredSession(BARE);
+    const { session, facade, errors, canvas, port } = wiredSession(BARE);
     const bridge = createEditorShellBridge({
       editor: editorOf(canvas, errors),
       session: facade,
@@ -305,6 +321,10 @@ describe("a construction the theme cannot express", () => {
     } as never);
 
     bridge.run("new-text");
+    await flush();
+    // The footer arms; the pointer ends the gesture. A refusal is the gesture's
+    // outcome, so it is reported when the placement is attempted.
+    port()?.onPlace({ left: 10, top: 10 });
     await flush();
 
     expect(told.join(" ")).toContain("palette token");
@@ -317,9 +337,10 @@ describe("a construction the theme cannot express", () => {
     // The menu dispatches a construction through the façade's own `addText`
     // (`canvas-context-menu.tsx`'s `creationGroups`), so the two surfaces share
     // one method: this is the second caller, not a second implementation.
-    const { session, facade } = wiredSession(BARE);
+    const { session, facade, port } = wiredSession(BARE);
 
     facade.addText();
+    port()?.onPlace({ left: 10, top: 10 });
     await flush();
 
     expect(told.join(" ")).toContain("palette token");

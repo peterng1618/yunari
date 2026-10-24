@@ -34,6 +34,7 @@ import {
   type ChartFieldsPort,
   type ColumnContext,
   type GeometryKey,
+  isAutoText,
   MIN_DIMENSION,
   perKindColumn,
 } from "./per-kind-column.js";
@@ -328,12 +329,13 @@ export function createSelectionInspector(
   };
 
   /** Writes one field to the object without rendering or saving history, so a
-      caller can batch several writes into one entry. */
+      caller can batch several writes into one entry. Returns whether the write
+      was applied: a text without a box refuses its dimensions. */
   const write = (
     object: FabricObject,
     key: GeometryKey,
     value: number,
-  ): void => {
+  ): boolean => {
     // A dimension below one unit would make the object vanish from the canvas
     // and from its own selection box. The pre-plan Size pair carried this floor
     // as a field bound that landed the value on it rather than refusing; it is
@@ -347,6 +349,11 @@ export function createSelectionInspector(
         object.set({ top: value });
         break;
       case "width": {
+        // A point text's width is measured from what it says and grows with it;
+        // it has no authored box. Writing `scaleX` or a box would change
+        // neither what it draws nor what the readout next shows, so the write
+        // is refused rather than landing a history entry for nothing (Task 2.2).
+        if (isAutoText(object)) return false;
         // A text object's width is the box its text wraps inside, not a scale
         // on the type. Writing `scaleX` instead stretched every glyph: a 24px
         // caption asked for a 220-unit box came back at 3.4× the size, and the
@@ -381,6 +388,7 @@ export function createSelectionInspector(
         break;
       }
       case "height": {
+        if (isAutoText(object)) return false;
         if (isTextObject(object)) {
           // Same unit as the width above, and as `writeAuthoredBoxDimension`'s
           // own seeding of the other dimension from the object's edges — those
@@ -410,6 +418,7 @@ export function createSelectionInspector(
     }
 
     object.setCoords();
+    return true;
   };
 
   /** One entry per committed edit, matching the dock's own actions. */
@@ -508,8 +517,7 @@ export function createSelectionInspector(
     if (fieldId === "flipX" || fieldId === "flipY")
       return writeFlip(object, fieldId, value);
     if (GEOMETRY_KEYS.has(fieldId)) {
-      write(object, fieldId as GeometryKey, value as number);
-      return true;
+      return write(object, fieldId as GeometryKey, value as number);
     }
 
     let applied: boolean;

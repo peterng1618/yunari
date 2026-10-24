@@ -35,9 +35,9 @@ import { placementFor } from "./placement.js";
 import { textShapeFor } from "./text-runs.js";
 
 /**
- * Text uses `Textbox` for wrapping and `FabricText` otherwise. Fabric has no
- * vertical alignment/overflow box, so placement, clipping and ellipsis are handled
- * here. Ellipsis truncates segments by grapheme to preserve run styles.
+ * The Fabric class is the width mode: `Textbox` wraps inside a fixed width,
+ * `IText` measures its own. Fabric has no vertical alignment/overflow box, so
+ * placement, clipping and ellipsis are handled here.
  *
  * A `Textbox` also has no fixed box: `initDimensions` widens it to its longest
  * unbreakable run and never narrows (`fabric/dist/index.mjs:18453`), and
@@ -121,22 +121,29 @@ function applyVerticalAlign(
 }
 
 /**
- * The alignment scalars the author wrote, with Fabric's fallbacks.
+ * The alignment the class implies, with Fabric's fallbacks.
+ *
+ * The Fabric class owns the width mode: a `Textbox` wraps inside its authored
+ * box, an `IText` measures its own width and has nothing to clip. An old
+ * document's authored `wrap` (or a box-only key on an auto text) is therefore
+ * ignored, never migrated.
  *
  * Split from `runtimeLayout` because the cache below serves the *measured* half
  * of the layout and must not serve this half: an editor control rewrites these
  * into the authored content and then asks the pass to reapply, so reading them
  * from the cache is reading the value the author just replaced.
  */
-function authoredAlignment(
+export function authoredAlignment(
   object: PlanTextObject,
   authored: TextContent,
 ): PlanTextLayout {
+  const wraps = object instanceof Textbox;
+
   return {
-    wrap: authored.wrap ?? object instanceof Textbox,
-    overflow: authored.overflow ?? "clip",
+    wrap: wraps,
+    overflow: wraps ? (authored.overflow ?? "clip") : "visible",
     align: authored.align ?? "left",
-    verticalAlign: authored.verticalAlign ?? "top",
+    verticalAlign: wraps ? (authored.verticalAlign ?? "top") : "top",
   };
 }
 
@@ -183,15 +190,18 @@ function runtimeLayout(
   }
 
   if (clip instanceof Rect) {
+    const box = boxFrom(
+      object,
+      clip.width,
+      clip.height,
+      clip.left * scaleX,
+      clip.top * scaleY,
+    );
     return {
-      box: boxFrom(
-        object,
-        clip.width,
-        clip.height,
-        clip.left * scaleX,
-        clip.top * scaleY,
-      ),
-      layout,
+      box,
+      // A legacy document's clip is the same authored box, so a Textbox holding
+      // one has the same line capacity it would have from `yunariText.box`.
+      layout: withLineCapacity(object, box, layout),
       style: styleFor(object),
     };
   }
@@ -238,7 +248,7 @@ export function buildText(node: PlanNode, box: PlanBox): PlanTextObject {
   // `applyText` owns text, run styles and measurement-dependent placement.
   const object = node.content.layout.wrap
     ? new Textbox("", { ...common, width: box.width })
-    : new FabricText("", common);
+    : new IText("", common);
 
   applyText(object, node, box);
   object.set(YUNARI_TEXT_PROPERTY, node.content.authored);

@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
 
-import {
-  YUNARI_PAINT_PROPERTY,
-  YUNARI_TEXT_PROPERTY,
-} from "@yunari/scene-fabric";
+import { YUNARI_PAINT_PROPERTY } from "@yunari/scene-fabric";
 import { Ellipse, Line, Path, Polygon, Polyline, Rect } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
 import { CARD_LIBRARY } from "./card-library.js";
@@ -21,7 +18,9 @@ const GLOBALS = {
   },
 };
 
-/** The object `addText` hands back: a Textbox, which is what it really creates. */
+/** The object `addText` hands back. An insert asks for no box yet, so the
+ *  manager's no-box branch constructs an `IText`; the fake only needs the
+ *  caret calls both classes share. */
 function textWithEditing() {
   return {
     enterEditing: vi.fn(function (this: { isEditing: boolean }) {
@@ -50,7 +49,11 @@ function editorStub() {
     // The authored frame a placement has to land inside.
     artboard: () => ({ width: 1920, height: 1080 }),
     historyManager,
-    textManager: { addText: vi.fn((): unknown => textWithEditing()) },
+    textManager: {
+      addText: vi.fn((_options?: Record<string, unknown>): unknown =>
+        textWithEditing(),
+      ),
+    },
     errorManager: { warn: vi.fn(), error: vi.fn() },
   };
 }
@@ -205,17 +208,21 @@ describe("new object panel", () => {
     const addChart = vi.fn();
     const panel = createNewObjectPanel(
       document.body,
-      // `addText` returns a `Textbox`, never undefined — see `TextManager`. A
+      // `addText` returns a text object, never undefined — see `TextManager`. A
       // bare `vi.fn()` broke that contract, and the panel's deferred caret
       // callback then dereferenced the undefined: its guard compares the canvas's
       // active object against the returned one, and `undefined !== undefined` is
       // false, so it fell through. Every full run printed an Unhandled Errors
       // block that had nothing to do with what any of these tests were checking.
       {
-        textManager: { addText: vi.fn((): unknown => textWithEditing()) },
+        textManager: {
+          addText: vi.fn((_options?: Record<string, unknown>): unknown =>
+            textWithEditing(),
+          ),
+        },
       } as never,
       undefined,
-      { addChart, insertCard: vi.fn() },
+      { addText: vi.fn(), addChart, insertCard: vi.fn() },
     );
 
     chartButton(panel.root, label).click();
@@ -236,6 +243,7 @@ describe("new object panel", () => {
       editor as never,
       undefined,
       {
+        addText: vi.fn(),
         addChart,
         insertCard: vi.fn(),
       },
@@ -451,49 +459,92 @@ describe("new object panel", () => {
     expect(editor.canvas.add).not.toHaveBeenCalled();
   });
 
-  it("delegates text construction to the editor with derived v2 defaults", () => {
-    // Records the call AND honours `TextManager.addText`'s contract, which is a
-    // `Textbox` and never undefined — see the note on the ChartManager cases.
-    const addText = vi.fn((): unknown => textWithEditing());
-    const root = createNewObjectPanel(
+  it("arms the session's text route instead of constructing at the click", () => {
+    // The pointer, not the menu, decides what the text is and where it lands.
+    // A tile that constructed here would make the placement gesture a second,
+    // later step after an object had already appeared.
+    const addText = vi.fn();
+    const editor = editorStub();
+    const panel = createNewObjectPanel(
       document.body,
-      { ...editorStub(), textManager: { addText } } as never,
-      {
-        palette: {
-          none: {
-            name: "None",
-            value: { kind: "solid", color: "transparent" },
-          },
-          ink: { name: "Ink", value: { kind: "solid", color: "#102030" } },
-        },
-        typePresets: {
-          body: { name: "Body", value: { family: "Inter", size: 16 } },
-        },
-      },
+      editor as never,
+      GLOBALS as never,
+      { addText, addChart: vi.fn(), insertCard: vi.fn() },
     );
 
-    // By label, not position: the card group comes first, and "the first
-    // button" was a proxy for "the Text button" before there was a unit above it.
-    [...root.root.querySelectorAll("button")]
+    [...panel.root.querySelectorAll("button")]
       .find((button) => button.textContent === uiCopy.panels.text)!
       .click();
 
-    expect(addText).toHaveBeenCalledWith(
-      expect.objectContaining({
-        text: "New text",
-        fill: "#102030",
-        [YUNARI_PAINT_PROPERTY]: { fill: "palette.ink" },
-        [YUNARI_TEXT_PROPERTY]: expect.objectContaining({
-          runs: [
-            expect.objectContaining({
-              text: "New text",
-              typePreset: "typePresets.body",
-              style: { color: { ref: "palette.ink" } },
-            }),
-          ],
-        }),
-      }),
+    expect(addText).toHaveBeenCalledOnce();
+    expect(editor.textManager.addText).not.toHaveBeenCalled();
+    expect(editor.canvas.add).not.toHaveBeenCalled();
+  });
+
+  it("refuses the text tile rather than doing nothing when there is no session", () => {
+    const editor = editorStub();
+    const root = createNewObjectPanel(
+      document.body,
+      editor as never,
+      GLOBALS as never,
+    ).root;
+
+    [...root.querySelectorAll("button")]
+      .find((button) => button.textContent === uiCopy.panels.text)!
+      .click();
+
+    expect(editor.errorManager.warn).toHaveBeenCalledWith(
+      "controls",
+      expect.stringContaining("text manager"),
     );
+    expect(editor.textManager.addText).not.toHaveBeenCalled();
+  });
+
+  it("inserts a Text at the placement point and with no authored box", () => {
+    const editor = editorStub();
+
+    insertNewText(editor as never, GLOBALS as never, { left: 120, top: 80 });
+
+    const options = editor.textManager.addText.mock.calls[0]?.[0] as {
+      left: number;
+      top: number;
+      name: string;
+      text: string;
+      box?: unknown;
+    };
+    expect(options).toMatchObject({ text: "New text", left: 120, top: 80 });
+    expect(options.name).toBe(uiCopy.panels.text);
+    expect("box" in options).toBe(false);
+    expect(editor.textManager.addText).toHaveBeenCalledOnce();
+  });
+
+  it("inserts a Text box with the rectangle the drag drew", () => {
+    const editor = editorStub();
+    const box = { width: 240, height: 96 };
+
+    insertNewText(editor as never, GLOBALS as never, {
+      left: 120,
+      top: 80,
+      box,
+    });
+
+    const options = editor.textManager.addText.mock.calls[0]?.[0] as {
+      name: string;
+      box?: unknown;
+    };
+    expect(options.name).toBe(uiCopy.panels.textBox);
+    expect(options.box).toEqual(box);
+  });
+
+  it("leaves the one history entry to the text manager's own addText", () => {
+    // `insertNewText` constructs once and saves nothing itself: `addText` is
+    // the owner of the entry, and its own suite pins that it saves once.
+    const editor = editorStub();
+
+    insertNewText(editor as never, GLOBALS as never, { left: 10, top: 10 });
+
+    expect(editor.textManager.addText).toHaveBeenCalledOnce();
+    expect(editor.historyManager.saveState).not.toHaveBeenCalled();
   });
 });
 
@@ -504,7 +555,7 @@ describe("the chooser offers units and primitives", () => {
       document.body,
       editorStub() as never,
       palette as never,
-      { addChart: vi.fn(), insertCard: vi.fn() },
+      { addText: vi.fn(), addChart: vi.fn(), insertCard: vi.fn() },
     ).root;
   }
 
@@ -556,7 +607,7 @@ describe("the chooser offers units and primitives", () => {
       document.body,
       editorStub() as never,
       palette as never,
-      { addChart: vi.fn(), insertCard },
+      { addText: vi.fn(), addChart: vi.fn(), insertCard },
     ).root;
 
     buttonsIn(root, uiCopy.panels.cards)[0]?.click();
@@ -607,7 +658,7 @@ describe("a new text object takes the caret", () => {
     // checks before taking the caret.
     editor.canvas.getActiveObject = vi.fn((): unknown => created);
 
-    insertNewText(editor as never, GLOBALS);
+    insertNewText(editor as never, GLOBALS, { left: 40, top: 40 });
     await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
 
     expect(editor.textManager.addText).toHaveBeenCalledOnce();
@@ -627,7 +678,7 @@ describe("a new text object takes the caret", () => {
     );
     editor.canvas.getActiveObject = vi.fn((): unknown => other);
 
-    insertNewText(editor as never, GLOBALS);
+    insertNewText(editor as never, GLOBALS, { left: 40, top: 40 });
     await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
 
     expect(created.enterEditing).not.toHaveBeenCalled();

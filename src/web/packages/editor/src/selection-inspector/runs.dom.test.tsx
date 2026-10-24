@@ -2,8 +2,11 @@
 import type { TextRun } from "@yunari/renderer-core";
 import { act } from "react";
 import { describe, expect, it } from "vitest";
+import { accessibleName } from "../accessible-name.js";
+import { uiCopy } from "../ui-copy.js";
 import {
   blur,
+  click,
   clickHook,
   mountRunEditor,
   press,
@@ -15,12 +18,11 @@ import { RUN_GLOBALS } from "./runs-fixture.js";
  * The run-editor cases that need the editor's *own* state, rather than what a
  * control writes.
  *
- * All four are about the same mechanism, which is why they are one file:
- * React's row identity is what keeps a draft and the caret alive across a
- * commit, a re-publish and a removal, and what discards the draft when the
- * described object changes. The case for a selection that moves under a draft
- * lives with the column in `index.dom.test.ts`, because that is where a
- * selection can move.
+ * The caret cases are about one mechanism: React's row identity keeps a draft
+ * and the caret alive across a commit and a re-publish, and discards the draft
+ * when the described object changes. The second block is the run tab strip,
+ * whose selection is the editor's own state too — never authored, so it writes
+ * nothing and records no history.
  */
 
 const twoRuns: readonly TextRun[] = [
@@ -73,34 +75,36 @@ describe("the run editor's own state", () => {
     return box.dispose();
   });
 
-  it("adds and removes a run without the editor losing its own state", async () => {
+  it("adds and removes runs without disturbing the run that stays", async () => {
     const box = mountRunEditor({ runs: twoRuns, globals: RUN_GLOBALS });
     const field = box.pick<HTMLInputElement>('[data-yunari-run-text="0"]');
     await typeInto(field, "GPU ");
+    await blur(field);
 
-    // Adding a run re-publishes: the draft in a row that did not change has to
-    // survive it, or the author loses what they were typing to somebody else's
-    // click.
+    // Adding selects the new run, so its fields — not the first run's — are the
+    // ones on screen. The first run's committed text survives the re-publish.
     await clickHook(box.host, "data-yunari-run-add");
     expect(box.runs()).toHaveLength(3);
-    expect(field.value).toBe("GPU ");
+    expect(box.host.querySelector('[data-yunari-run-text="2"]')).not.toBeNull();
+    expect(box.host.querySelector('[data-yunari-run-text="0"]')).toBeNull();
 
-    // ...and removing one does too, which is the harder half: the row list
-    // shrinks under the draft.
+    // Removing the selected last run falls back to the first remaining one,
+    // still holding the text committed before the add.
     await clickHook(box.host, 'data-yunari-run-remove="2"');
     expect(box.runs()).toHaveLength(2);
-    expect(field.value).toBe("GPU ");
-
-    await blur(field);
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-text="0"]').value).toBe(
+      "GPU ",
+    );
     expect(box.runs()[0]).toMatchObject({ kind: "literal", text: "GPU " });
     expect(box.runs()[1]).toMatchObject({ kind: "literal", text: "%" });
     return box.dispose();
   });
 
-  it("keeps a draft on its own run when an earlier one is removed", async () => {
-    // The three runs carry distinct presets on purpose: this is the case a
-    // spelling of the run's fields can already tell apart. The pair that shares
-    // a preset is the harder half, and it is the next case.
+  it("removes the selected run and leaves the survivors on their own rows", async () => {
+    // Removing is only reachable from the selected panel now, so the old
+    // "remove a run before the draft" case is gone. What must still hold is
+    // that the survivors keep their own content and identity when the middle
+    // run of three leaves.
     const box = mountRunEditor({
       runs: [
         { kind: "literal", text: "A", typePreset: "typePresets.plain" },
@@ -109,34 +113,26 @@ describe("the run editor's own state", () => {
       ],
       globals: RUN_GLOBALS,
     });
-    const field = box.pick<HTMLInputElement>('[data-yunari-run-text="1"]');
-    await typeInto(field, "GPU ");
+    await click(box.pick<HTMLElement>('[data-yunari-run-tab="2"]'));
+    await clickHook(box.host, 'data-yunari-run-remove="1"');
 
-    // Removing a run that is not the last renumbers every row after it. Keyed
-    // by index, this draft would stay in its element and be re-pointed at C,
-    // while C's own row showed B's text: hence both halves of the assertion,
-    // the draft that followed its run and the row that moved up.
-    await clickHook(box.host, 'data-yunari-run-remove="0"');
     expect(box.runs()).toHaveLength(2);
+    // The first remaining run is selected, and the run that moved up into
+    // second place carries its own text rather than the removed run's.
     expect(box.pick<HTMLInputElement>('[data-yunari-run-text="0"]').value).toBe(
-      "GPU ",
+      "A",
     );
+    await click(box.pick<HTMLElement>('[data-yunari-run-tab="2"]'));
     expect(box.pick<HTMLInputElement>('[data-yunari-run-text="1"]').value).toBe(
       "C",
     );
-
-    await blur(field);
-    expect(box.runs()[0]).toMatchObject({ kind: "literal", text: "GPU " });
-    expect(box.runs()[1]).toMatchObject({ kind: "literal", text: "C" });
     return box.dispose();
   });
 
-  it("keeps a draft on its own run when a twin of it is removed", async () => {
+  it("removes the selected twin without taking the survivor's text", async () => {
     // Two literals sharing a preset are the same spelling, so a key derived from
-    // the run's fields cannot tell them apart and counting repeats is
-    // positional: removing the first renames the second, React reuses the
-    // removed row for the survivor, and the survivor's draft is destroyed while
-    // the removed row's is shown against it (vg-249).
+    // the run's fields cannot tell them apart. The survivor is the run it was,
+    // not the row that moved up under it (vg-249).
     const box = mountRunEditor({
       runs: [
         { kind: "literal", text: "A", typePreset: "typePresets.plain" },
@@ -144,20 +140,154 @@ describe("the run editor's own state", () => {
       ],
       globals: RUN_GLOBALS,
     });
-    const field = box.pick<HTMLInputElement>('[data-yunari-run-text="1"]');
+    const field = box.pick<HTMLInputElement>('[data-yunari-run-text="0"]');
     await typeInto(field, "GPU ");
+    await blur(field);
 
-    await clickHook(box.host, 'data-yunari-run-remove="0"');
+    await click(box.pick<HTMLElement>('[data-yunari-run-tab="2"]'));
+    await clickHook(box.host, 'data-yunari-run-remove="1"');
+
     expect(box.runs()).toHaveLength(1);
-    // The draft is the survivor's, and the survivor is the run it was typed
-    // into — not the row that moved up under it. The element itself is asserted
-    // too: a value that came back through a remount would have dropped focus.
-    const after = box.pick<HTMLInputElement>('[data-yunari-run-text="0"]');
-    expect(after.value).toBe("GPU ");
-    expect(after).toBe(field);
-
-    await blur(after);
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-text="0"]').value).toBe(
+      "GPU ",
+    );
     expect(box.runs()[0]).toMatchObject({ kind: "literal", text: "GPU " });
+    return box.dispose();
+  });
+});
+
+describe("showing one run at a time behind numbered tabs", () => {
+  const threeRuns: readonly TextRun[] = [
+    { kind: "literal", text: "A", typePreset: "typePresets.plain" },
+    { kind: "literal", text: "B", typePreset: "typePresets.caption" },
+    { kind: "literal", text: "C", typePreset: "typePresets.title" },
+  ];
+
+  const tab = (box: ReturnType<typeof mountRunEditor>, position: number) =>
+    box.pick<HTMLElement>(`[data-yunari-run-tab="${position}"]`);
+
+  it("numbers every run's tab and shows only the selected run's fields", () => {
+    const box = mountRunEditor({ runs: twoRuns, globals: RUN_GLOBALS });
+
+    const tabs = [
+      ...box.host.querySelectorAll<HTMLElement>("[data-yunari-run-tab]"),
+    ];
+    expect(
+      tabs.map((element) => element.getAttribute("data-yunari-run-tab")),
+    ).toEqual(["1", "2"]);
+    // The visible label is the bare number; the name a reader hears is the one
+    // `uiCopy` owns, because "1" alone names no question.
+    expect(tabs.map((element) => element.textContent)).toEqual(["1", "2"]);
+    expect(tabs.map((element) => accessibleName(element))).toEqual([
+      uiCopy.inspectorFields.runTab(1),
+      uiCopy.inspectorFields.runTab(2),
+    ]);
+
+    expect(box.host.querySelectorAll("[data-yunari-run]")).toHaveLength(1);
+    expect(box.host.querySelector('[data-yunari-run-text="0"]')).not.toBeNull();
+    expect(box.host.querySelector('[data-yunari-run-text="1"]')).toBeNull();
+    return box.dispose();
+  });
+
+  it("shows run 2's fields and hides run 1's when its tab is picked", async () => {
+    const box = mountRunEditor({ runs: twoRuns, globals: RUN_GLOBALS });
+
+    await click(tab(box, 2));
+
+    expect(tab(box, 2).getAttribute("aria-selected")).toBe("true");
+    expect(tab(box, 1).getAttribute("aria-selected")).toBe("false");
+    expect(box.host.querySelector('[data-yunari-run-text="0"]')).toBeNull();
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-text="1"]').value).toBe(
+      "%",
+    );
+    return box.dispose();
+  });
+
+  it("adds a run with the plus and selects the new last run", async () => {
+    const box = mountRunEditor({ runs: twoRuns, globals: RUN_GLOBALS });
+
+    await click(box.pick<HTMLElement>("[data-yunari-run-add]"));
+
+    expect(box.runs()).toHaveLength(3);
+    expect(
+      box
+        .pick<HTMLElement>('[data-yunari-run-tab="3"]')
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(box.host.querySelector('[data-yunari-run-text="0"]')).toBeNull();
+    expect(box.host.querySelector('[data-yunari-run-text="1"]')).toBeNull();
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-text="2"]').value).toBe(
+      "",
+    );
+    return box.dispose();
+  });
+
+  it("selects the first remaining run when the selected one is removed", async () => {
+    const box = mountRunEditor({ runs: threeRuns, globals: RUN_GLOBALS });
+    await click(tab(box, 2));
+
+    await clickHook(box.host, 'data-yunari-run-remove="1"');
+
+    expect(box.runs()).toHaveLength(2);
+    expect(box.host.querySelectorAll("[data-yunari-run-tab]")).toHaveLength(2);
+    expect(tab(box, 1).getAttribute("aria-selected")).toBe("true");
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-text="0"]').value).toBe(
+      "A",
+    );
+    return box.dispose();
+  });
+
+  it("selects the first run when the added last run is removed", async () => {
+    // `+` leaves the previously selected id behind while it follows the new
+    // last run. Removing that run must still land on the FIRST remaining run,
+    // not silently restore the tab that was selected before the add.
+    const box = mountRunEditor({ runs: threeRuns, globals: RUN_GLOBALS });
+    await click(tab(box, 2));
+    await click(box.pick<HTMLElement>("[data-yunari-run-add]"));
+
+    await clickHook(box.host, 'data-yunari-run-remove="3"');
+
+    expect(box.runs()).toHaveLength(3);
+    expect(tab(box, 1).getAttribute("aria-selected")).toBe("true");
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-text="0"]').value).toBe(
+      "A",
+    );
+    return box.dispose();
+  });
+
+  it("moves between tabs with the arrow keys", async () => {
+    const box = mountRunEditor({ runs: threeRuns, globals: RUN_GLOBALS });
+    const first = tab(box, 1);
+    await act(async () => {
+      first.focus();
+    });
+
+    await press(first, "ArrowRight");
+
+    expect(
+      box
+        .pick<HTMLElement>('[data-yunari-run-tab="2"]')
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-text="1"]').value).toBe(
+      "B",
+    );
+    return box.dispose();
+  });
+
+  it("names the plus button for what it adds, not for its glyph", () => {
+    const box = mountRunEditor({ runs: twoRuns, globals: RUN_GLOBALS });
+
+    expect(accessibleName(box.pick<HTMLElement>("[data-yunari-run-add]"))).toBe(
+      uiCopy.inspectorFields.addRun,
+    );
+    // A tablist owns tabs. The add button is an action after the strip, so a
+    // reader does not hear it announced as a tab nor arrow past it as one.
+    expect(
+      box
+        .pick<HTMLElement>("[data-yunari-run-add]")
+        .closest('[role="tablist"]'),
+    ).toBeNull();
     return box.dispose();
   });
 });

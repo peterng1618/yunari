@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   blur,
   choose,
+  click,
   mountRunEditor,
   optionsOf,
   pressedLabel,
@@ -263,18 +264,56 @@ describe("binding a text run to a sensor", () => {
     return box.dispose();
   });
 
-  it("writes alignment, wrap and overflow into the object's authored text", async () => {
+  it("writes alignment and overflow into the object's authored text", async () => {
     const box = mountRunEditor({ runs: literalClock });
 
     await segment(box.host, "data-yunari-text-align", "Centre");
-    await segment(box.host, "data-yunari-text-wrap", "Off");
     await segment(box.host, "data-yunari-text-overflow", "Ellipsis");
 
     // These are the object's layout, which the renderer already honours; they
     // persist in the same authored content the runs do.
     expect(box.content()["align"]).toBe("center");
-    expect(box.content()["wrap"]).toBe(false);
     expect(box.content()["overflow"]).toBe("ellipsis");
+    return box.dispose();
+  });
+
+  it("offers no Wrap control, because the Fabric class is the width mode", async () => {
+    // A `Textbox` wraps and an `IText` does not; a control that wrote a flag
+    // changed no pixel until a reload, so the control is gone rather than
+    // disabled.
+    const box = mountRunEditor({ runs: literalClock });
+
+    expect(box.host.querySelector("[data-yunari-text-wrap]")).toBeNull();
+    expect(box.host.querySelector("[data-yunari-text-align]")).not.toBeNull();
+    return box.dispose();
+  });
+
+  it("hides overflow and vertical alignment on a text, which has no box", async () => {
+    // A point text has no authored height to clip or place inside, so both
+    // controls would accept an edit the renderer never reads.
+    const box = mountRunEditor({ runs: literalClock, kind: "text" });
+
+    expect(box.host.querySelector("[data-yunari-text-align]")).not.toBeNull();
+    expect(box.host.querySelector("[data-yunari-runs]")).not.toBeNull();
+    expect(box.host.querySelector("[data-yunari-run-add]")).not.toBeNull();
+    expect(
+      box.host.querySelector("[data-yunari-text-vertical-align]"),
+    ).toBeNull();
+    expect(box.host.querySelector("[data-yunari-text-overflow]")).toBeNull();
+    return box.dispose();
+  });
+
+  it("keeps overflow and vertical alignment on a text box", async () => {
+    // The other class, so the case above cannot pass by hiding the controls
+    // from everything.
+    const box = mountRunEditor({ runs: literalClock, kind: "textbox" });
+
+    expect(
+      box.host.querySelector("[data-yunari-text-vertical-align]"),
+    ).not.toBeNull();
+    expect(
+      box.host.querySelector("[data-yunari-text-overflow]"),
+    ).not.toBeNull();
     return box.dispose();
   });
 
@@ -341,7 +380,7 @@ describe("binding a text run to a sensor", () => {
     return box.dispose();
   });
 
-  it("shows alignment, wrap and overflow again from what was stored", async () => {
+  it("shows alignment and overflow again from what was stored", async () => {
     const box = mountRunEditor({ runs: literalClock });
     await segment(box.host, "data-yunari-text-align", "Right");
 
@@ -512,6 +551,8 @@ describe("how many runs a text object has", () => {
     // A value run has no words of its own, so a field over one would accept an
     // edit and persist nothing.
     expect(box.host.querySelector('[data-yunari-run-text="0"]')).toBeNull();
+    // The second run is behind its tab now; pick it before reading a field.
+    await click(box.pick<HTMLElement>('[data-yunari-run-tab="2"]'));
     const field = box.pick<HTMLInputElement>('[data-yunari-run-text="1"]');
     expect(field.value).toBe("%");
     await typeInto(field, " %");
@@ -546,7 +587,7 @@ describe("how many runs a text object has", () => {
     return box.dispose();
   });
 
-  it("numbers the remove buttons, so three rows are not one name", async () => {
+  it("numbers the remove action for the run it removes", async () => {
     const box = mountRunEditor({
       runs: [
         ...readingAndUnit,
@@ -557,10 +598,17 @@ describe("how many runs a text object has", () => {
       declared: [{ id: "load", semanticKey: "cpu.load" }],
     });
 
-    const names = [
-      ...box.host.querySelectorAll("[data-yunari-run-remove]"),
-    ].map((button) => button.textContent);
-    expect(new Set(names).size).toBe(3);
+    const visible = (): readonly HTMLElement[] => [
+      ...box.host.querySelectorAll<HTMLElement>("[data-yunari-run-remove]"),
+    ];
+    // One panel at a time, so one remove action — and its number is the run's
+    // own position, not a constant "run 1".
+    expect(visible()).toHaveLength(1);
+    expect(visible()[0]?.textContent).toBe("Remove run 1");
+
+    await click(box.pick<HTMLElement>('[data-yunari-run-tab="3"]'));
+    expect(visible()).toHaveLength(1);
+    expect(visible()[0]?.textContent).toBe("Remove run 3");
     return box.dispose();
   });
 });
@@ -723,6 +771,7 @@ describe("which binding a value run carries", () => {
         { kind: "value", bindingId: "disk.free" },
       ],
     });
+    await click(box.pick<HTMLElement>('[data-yunari-run-tab="2"]'));
 
     const note = box.pick<HTMLElement>("[data-yunari-run-binding]");
     expect(note.getAttribute("data-yunari-run-binding")).toBe("disk.free");

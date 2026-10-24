@@ -101,6 +101,7 @@ async function runReadingNote(
     // Nothing has arrived for the `unmapped` case; the `undeclared` case never
     // asks, because the run names a binding the object does not hold.
     sampleSource: () => ({ latest: () => undefined, history: () => [] }),
+    wraps: true,
     swatchValue: () => undefined,
   });
   if (runs === undefined)

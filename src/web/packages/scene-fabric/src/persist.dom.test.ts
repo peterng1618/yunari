@@ -18,6 +18,7 @@ import {
   FabricImage,
   FabricText,
   Group,
+  IText,
   Path,
   Rect,
   Shadow,
@@ -239,6 +240,106 @@ describe("the persisted key set, per class", () => {
 
     expect(keys).not.toContain("option");
     expect(keys).not.toContain("renderScale");
+  });
+});
+
+describe("a legacy display text revives as editable only when asked", () => {
+  // Fabric serialises its display-only `FabricText` as `type: "Text"`. The
+  // player renders it as an auto-width label, but the editor cannot type into
+  // it, so the editor normalises it to `IText` on the one revival path undo
+  // also uses. Nothing else about the document may change.
+  const authoredRuns = {
+    runs: [
+      { kind: "literal" as const, text: "CPU " },
+      { kind: "value" as const, bindingId: "load" },
+    ],
+    align: "center" as const,
+  };
+
+  const legacyScene = (): SerialisedScene => ({
+    version: "7.4.0",
+    objects: [
+      {
+        type: "Text",
+        id: "readout",
+        text: "CPU 48%",
+        left: 12,
+        top: 34,
+        width: 120,
+        height: 30,
+        scaleX: 1,
+        scaleY: 1,
+        angle: 0,
+        fill: "#ff0000",
+        fontSize: 24,
+        fontFamily: "Inter",
+        [YUNARI_TEXT_PROPERTY]: authoredRuns,
+      },
+    ],
+  });
+
+  it("keeps the display class for a caller that does not ask for editing", async () => {
+    const revived = new StaticCanvas(undefined, { width: 400, height: 300 });
+    await reviveScene(revived, legacyScene());
+
+    expect(revived.getObjects()[0]).toBeInstanceOf(FabricText);
+    expect(revived.getObjects()[0]).not.toBeInstanceOf(IText);
+  });
+
+  it("revives it as IText with geometry, runs and style untouched", async () => {
+    const scene = legacyScene();
+    const revived = new StaticCanvas(undefined, { width: 400, height: 300 });
+
+    await reviveScene(revived, scene, undefined, {}, { editableText: true });
+
+    const object = revived.getObjects()[0]!;
+    expect(object).toBeInstanceOf(IText);
+    expect(object).not.toBeInstanceOf(Textbox);
+    expect(object).toMatchObject({
+      left: 12,
+      top: 34,
+      scaleX: 1,
+      scaleY: 1,
+      angle: 0,
+      fill: "#ff0000",
+      fontSize: 24,
+      fontFamily: "Inter",
+    });
+    expect(object.get(YUNARI_TEXT_PROPERTY)).toEqual(authoredRuns);
+    // The caller's document is the author's; the rewrite is a copy.
+    expect(scene.objects[0]!["type"]).toBe("Text");
+    expect(scene.objects[0]![YUNARI_TEXT_PROPERTY]).toEqual(authoredRuns);
+
+    // The revival is only persisted once the editor saves again, so the class
+    // that save writes is the observable half of "editable after opening".
+    expect(
+      serialiseScene(revived).objects[0]!["type"],
+      "the save writes the editable class",
+    ).toBe("IText");
+  });
+
+  it("rewrites a legacy text nested inside a group", async () => {
+    const scene: SerialisedScene = {
+      version: "7.4.0",
+      objects: [
+        {
+          type: "Group",
+          id: "card",
+          objects: [
+            { type: "Text", id: "child", text: "inner", left: 2, top: 3 },
+          ],
+        },
+      ],
+    };
+    const revived = new StaticCanvas(undefined, { width: 400, height: 300 });
+
+    await reviveScene(revived, scene, undefined, {}, { editableText: true });
+
+    const [group] = revived.getObjects() as Group[];
+    expect(group!.getObjects()[0]).toBeInstanceOf(IText);
+    expect((scene.objects[0]!["objects"] as { type: string }[])[0]!.type).toBe(
+      "Text",
+    );
   });
 });
 
@@ -864,8 +965,12 @@ describe("identity survives a round trip", () => {
     text.set("id", "readout");
     text.clipPath = new Rect({ width: 40, height: 30 });
     text.set(YUNARI_TEXT_PROPERTY, {
-      runs: [{ kind: "value", bindingId: "load" }],
-      wrap: false,
+      // A word break is what a `Textbox` wraps at; an unbreakable numeric run
+      // is the auto text's case, not this class's.
+      runs: [
+        { kind: "literal", text: "CPU " },
+        { kind: "value", bindingId: "load" },
+      ],
       overflow: "ellipsis",
       align: "right",
       verticalAlign: "bottom",
@@ -882,7 +987,7 @@ describe("identity survives a round trip", () => {
     );
 
     expect(text.text).toContain("…");
-    expect(text.text).not.toBe("123456789");
+    expect(text.text).not.toBe("CPU 123456789");
     expect((text.clipPath as Rect).width).toBe(40);
   });
 

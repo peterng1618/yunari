@@ -322,8 +322,9 @@ function memoryCard(options: {
       // no chart-internal value text to suppress and no choice to make.
       //
       // Both sit at the reference's own centre, and they hold it because
-      // `text()` authors `wrap: true` — the box is restored on every refresh, so
-      // the placement arithmetic has the authored width to work from.
+      // `text()` authors a `Textbox` with a fixed box — the box is restored on
+      // every refresh, so the placement arithmetic has the authored width to
+      // work from.
       text(
         `${prefix}-value`,
         options.ringCentreX - 90,

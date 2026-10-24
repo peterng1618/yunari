@@ -271,6 +271,9 @@ export const uiCopy = {
     /** What one run says, for a run that is prose. Distinct from the Add pane's
         "Text" button, which inserts an object rather than naming a field. */
     runText: "Run text",
+    /** A run tab's accessible name: its visible label is the bare number, which
+        on its own names no question. */
+    runTab: (position: number) => `Run ${position}`,
     addRun: "Add run",
     /** Shown when an in-place edit would have to drop the runs it cannot place. */
     multiRunRefused:
@@ -328,9 +331,6 @@ export const uiCopy = {
     verticalTop: "Top",
     verticalMiddle: "Middle",
     verticalBottom: "Bottom",
-    wrap: "Wrap",
-    on: "On",
-    off: "Off",
     overflow: "Overflow",
     clip: "Clip",
     ellipsis: "Ellipsis",
@@ -1398,6 +1398,10 @@ export const uiCopy = {
     enter: "Enter",
     leave: "Leave",
     text: "Text",
+    /** A fixed text, whose row must say which of the two elements it is: both
+     *  share the `text` layer kind, so the name is the only place the class
+     *  shows in the layer list. */
+    textBox: "Text box",
     panel: "Panel",
     /** A pasted image and a fresh group arrive without an authored name, so
         the layer row would print their uuid; these are what they are called

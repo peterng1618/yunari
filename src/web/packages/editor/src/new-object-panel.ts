@@ -18,6 +18,7 @@ import {
 } from "./new-object-defaults.js";
 import { AddPane } from "./panes/add/add-pane.js";
 import { FileSection } from "./panes/add/file-section.js";
+import type { TextPlacement } from "./text-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
 
 export interface NewObjectPanel {
@@ -38,6 +39,12 @@ export interface NewObjectPanel {
 }
 
 export interface NewObjectActions {
+  /**
+   * Arms the session's one placement gesture. The tile does not construct: the
+   * pointer, not the menu, decides whether this is a Text or a Text box and
+   * where it lands, and an object made here would appear before that decision.
+   */
+  readonly addText: () => void;
   readonly addChart: (family: ChartFamily) => void;
   /**
    * Inserts one card as a unit. The session owns this because the copy's
@@ -175,15 +182,17 @@ function groupOf(object: InsertableObject): string | undefined {
   }
 }
 
-/** A text object, placed and named as a new one always is. */
+/** A text object, placed where the gesture ended and named by the class the
+ *  gesture asked for. */
 export function insertNewText(
   editor: EditorInteraction,
   globals: FabricGlobals | undefined,
+  placement: TextPlacement,
 ): void {
   const content = "New text";
   const text = editor.textManager.addText({
     text: content,
-    ...createNewTextDefaults(globals, content, nextNewObjectPlacement(editor)),
+    ...createNewTextDefaults(globals, content, placement, placement.box),
   });
   // The caret, so typing goes somewhere. Asking for a text box and then having
   // to double-click it before the first character lands is a second, undiscoverable
@@ -279,9 +288,17 @@ export function insertObject(
 ): void {
   constructing(editor, () => {
     switch (object.kind) {
-      case "text":
-        insertNewText(editor, globals);
-        return;
+      case "text": {
+        const addText = actions?.addText;
+        // The same refusal the card path makes: the placement state belongs to
+        // the session, and a tile that armed nothing would be silent.
+        if (addText === undefined) {
+          throw new Error(
+            "Text placement needs the editor session that owns the text manager.",
+          );
+        }
+        return addText();
+      }
       case "shape":
         insertNewShape(editor, globals, object.shape);
         return;

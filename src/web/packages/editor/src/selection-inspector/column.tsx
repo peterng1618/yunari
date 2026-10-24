@@ -109,6 +109,7 @@ function fieldControl(
             // The number is already the percentage; the suffix is what says so.
             ...(half.percent === true ? { unit: "%" } : {}),
             ...(half.integer === undefined ? {} : { integer: half.integer }),
+            ...(half.readOnly === undefined ? {} : { readOnly: half.readOnly }),
             onCommit: (value: number) =>
               edits.commit(
                 revision,

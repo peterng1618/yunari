@@ -70,7 +70,7 @@ two apart is the judgement the map cannot make for itself.
 | The stage camera — zoom, pan, framing, and the lens it frames through | `editor/src/viewport-manager/` |
 | **The editor's own fit** — the author framed to the display's screen rather than to the host: its own containment and centring, a rule of its own rather than the renderer-core one, and the one place its refusals live (a board with no frameable area refused as `computeArtboardTransform` refuses it) | `editor/src/viewport-manager/` |
 | `EditorInteraction` contract consumed by product panels | `editor/src/editor-interaction.ts` |
-| Text creation | `editor/src/text-manager/` |
+| **Text creation and placement** — the click-or-drag gesture, and the Fabric class it constructs: a click places an `IText`, a drag places a `Textbox` whose normalised rectangle is the authored box. Nothing else constructs a text object | `editor/src/text-manager/` |
 | Image import | `editor/src/image-manager/` |
 | Generic canvas stack order | `editor/src/layer-manager/` |
 | Object lock/unlock | `editor/src/object-lock-manager/` |
@@ -151,6 +151,28 @@ silent. `ownership:sweep` cannot see this: none of the seven exports an id
 vocabulary, each inlines a string literal, and the sweep reports re-spelled
 vocabularies. Fold them in when a creation site is next edited.
 
+### Text elements
+
+A text is one layer kind (`text`) with two Fabric contracts, and the persisted
+class is the width mode. There is no authored `wrap` flag; a legacy one is read
+and ignored.
+
+| Element | Fabric class | Width | Height |
+|---|---|---|---|
+| Text | `IText` | measured ink width; editing grows and shrinks it | measured lines |
+| Text box | `Textbox` | the authored box width, which is the wrap measure | the authored box height, which clips or ellipsises |
+
+- `editor/src/text-manager/` owns construction, the placement gesture and the
+  class choice: a click below 4 CSS pixels places an `IText`, a drag places a
+  `Textbox` whose normalised rectangle is the authored box. Every creation
+  surface arms that one gesture, and nothing else constructs a text object.
+- `TextContent.box`, `overflow` and `verticalAlign` are meaningful only on a
+  `Textbox`. An `IText` ignores them, and the editor never writes a box for one.
+- `reviveScene` carries an editor-only `editableText` option that rewrites a
+  legacy display `type: "Text"` to `IText` through the same revival path undo
+  uses, changing only the class. The player revives the persisted class and
+  renders both without converting.
+
 ### Packaged fonts
 
 `renderer-core/src/theme/` owns font-face declarations and preset validation;
@@ -197,14 +219,14 @@ adapter does not own catalog, preview or adoption semantics.
 | **The background layer's DOM media** — the `<video>`/`<img>` beneath the canvas, its theme/display bounds, its cover placement with offsets bounded by the overhang, its paint-time flips, and the re-placement that does not restart playback | `scene-fabric/src/background-media.ts` |
 | Backdrop-glass composition, and its attach/dispose lifecycle | `scene-fabric/src/glass.ts` (editor Canvas and player StaticCanvas share it) |
 | **What a panel samples** — the artboard's paint composed *under* its media, and the board rect a gradient is mapped to (0080) | `scene-fabric/src/artboard-backdrop.ts`, with the paint's third output form in `scene-fabric/src/artboard-paint.ts` |
-| Scene serialization/revival | `scene-fabric/src/persist.ts` |
+| Scene serialization/revival, including the editor-only `reviveScene({ editableText })` rewrite of a legacy display `"Text"` to `IText`; the player revives the persisted class and never converts on render | `scene-fabric/src/persist.ts` |
 | `YunariChart` lifecycle | `scene-fabric/src/chart-object.ts` |
 | Chart repaint cadence | `scene-fabric/src/chart-refresh.ts` |
 | Chart backing limits | `scene-fabric/src/render-scale.ts` |
 | ECharts registration | `scene-fabric/src/chart-engine.ts` |
 | Fabric node updates | `scene-fabric/src/fabric-nodes.ts` |
 | Text runs | `scene-fabric/src/text-runs.ts` |
-| The authored text box (`yunariText.box`) — its two dimensions, and the one write every geometry surface shares | `scene-fabric/src/authored-box.ts` |
+| The authored text box (`yunariText.box`) — its two dimensions and the one write every geometry surface shares; meaningful only on a `Textbox`, since an `IText` is its own measurement and ignores it | `scene-fabric/src/authored-box.ts` |
 | Image/SVG | `scene-fabric/src/fabric-image.ts` |
 | Paint conversion | `scene-fabric/src/paint.ts` |
 | **Which objects point at a token** — the walk a token delete and a swap both read | `scene-fabric/src/palette-references.ts` |

@@ -127,6 +127,7 @@ export async function reviveScene(
   scene: SerialisedScene,
   resolveAsset?: (assetId: string) => string | undefined,
   paint: PaintApplicationOptions = {},
+  options: ReviveSceneOptions = {},
 ): Promise<void> {
   disposeScene(canvas);
   // `loadFromJSON` assigns every canvas-level property the document omits, so
@@ -143,10 +144,49 @@ export async function reviveScene(
   // pre-revival value is the empty one the mount left, so this clears it.
   const clipPath = canvas.clipPath;
   const backgroundColor = canvas.backgroundColor;
-  await canvas.loadFromJSON(resolveAssetSources(scene, resolveAsset));
+  await canvas.loadFromJSON(
+    resolveAssetSources(editableTextScene(scene, options), resolveAsset),
+  );
   if (clipPath !== undefined) canvas.clipPath = clipPath;
   if (backgroundColor !== undefined) canvas.backgroundColor = backgroundColor;
   refuseUndrawablePaint(canvas.getObjects(), paint);
+}
+
+export interface ReviveSceneOptions {
+  /**
+   * Revive Fabric's display-only `"Text"` as `IText`, the class the editor can
+   * type into. Opt-in because the player renders both classes and has no
+   * editing; the editor asks so mount and undo normalise identically.
+   */
+  readonly editableText?: boolean;
+}
+
+/**
+ * The document with every nested `"Text"` revived as an editable `IText`.
+ *
+ * A copy, not a rewrite: the caller's scene is the author's document, and only
+ * the class is normalised — geometry, runs and styles are carried through
+ * untouched. Groups nest serialised objects, so the walk goes through them.
+ */
+function editableTextScene(
+  scene: SerialisedScene,
+  options: ReviveSceneOptions,
+): SerialisedScene {
+  if (options.editableText !== true) return scene;
+  return { ...scene, objects: scene.objects.map(editableTextObject) };
+}
+
+function editableTextObject(
+  object: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  const children = object["objects"];
+  return {
+    ...object,
+    ...(object["type"] === "Text" ? { type: "IText" } : {}),
+    ...(Array.isArray(children)
+      ? { objects: children.filter(isRecord).map(editableTextObject) }
+      : {}),
+  };
 }
 
 /**
@@ -194,6 +234,7 @@ export async function reviveThemeEnvelope(
   envelope: FabricThemeEnvelope,
   resolveAsset?: (assetId: string) => string | undefined,
   paint: PaintApplicationOptions = {},
+  options: ReviveSceneOptions = {},
 ): Promise<void> {
   assertFabricThemeEnvelopeCompatible(envelope);
   await reviveScene(
@@ -201,6 +242,7 @@ export async function reviveThemeEnvelope(
     envelope.scene as SerialisedScene,
     resolveAsset,
     paint,
+    options,
   );
 }
 

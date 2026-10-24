@@ -222,6 +222,29 @@ describe("new object defaults", () => {
     );
   });
 
+  it("names a fixed text box for what it is, so its layer row is not a bare Text", () => {
+    const box = { width: 240, height: 96 };
+
+    expect(
+      createNewTextDefaults(globals, "New text", placement, box).name,
+    ).toBe(uiCopy.panels.textBox);
+    expect(uiCopy.panels.textBox).toBe("Text box");
+  });
+
+  it("carries the authored box only when the gesture drew one", () => {
+    // A Text measures its own ink; handing `addText` a box would construct a
+    // Textbox and give it a width it cannot honour.
+    expect(
+      createNewTextDefaults(globals, "New text", placement),
+    ).not.toHaveProperty("box");
+    expect(
+      createNewTextDefaults(globals, "New text", placement, {
+        width: 240,
+        height: 96,
+      }),
+    ).toMatchObject({ box: { width: 240, height: 96 }, ...placement });
+  });
+
   it("names a new chart after the family the author chose", () => {
     for (const family of ["gauge", "line", "bar", "pie"] as const) {
       expect(newObjectName(family)).toBe(uiCopy.chartFamilies[family]);

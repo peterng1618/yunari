@@ -3,8 +3,8 @@ import {
   Ellipse,
   FabricImage,
   type FabricObject,
-  FabricText,
   Group,
+  IText,
   Rect,
   type StaticCanvas,
   Textbox,
@@ -371,7 +371,8 @@ function classFor(node: PlanNode): FabricObjectClass | undefined {
       return node.content.shape === "ellipse" ? Ellipse : Rect;
 
     case "text":
-      return node.content.layout.wrap ? Textbox : FabricText;
+      // The class is the width mode; the plan's `wrap` is derived from it.
+      return node.content.layout.wrap ? Textbox : IText;
 
     case "chart":
       return YunariChart;

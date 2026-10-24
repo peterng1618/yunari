@@ -33,6 +33,8 @@ export function ControlPair(props: {
     /** A percentage half says so; the number it shows is already scaled. */
     readonly unit?: string;
     readonly integer?: boolean;
+    /** A measurement the owner refuses to write; the other half may still edit. */
+    readonly readOnly?: boolean;
     /** The pair's own bounds, on both halves: a width and a height the same
      *  document holds are the same size. */
     readonly min?: number;
@@ -61,6 +63,9 @@ export function ControlPair(props: {
             {...(half.data === undefined ? {} : { data: half.data })}
             {...(half.unit === undefined ? {} : { unit: half.unit })}
             {...(half.integer === undefined ? {} : { integer: half.integer })}
+            {...(half.readOnly === undefined
+              ? {}
+              : { readOnly: half.readOnly })}
             {...(half.min === undefined ? {} : { min: half.min })}
             {...(half.max === undefined ? {} : { max: half.max })}
             onCommit={half.onCommit}

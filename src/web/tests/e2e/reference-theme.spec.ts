@@ -14,7 +14,7 @@ import {
 } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
 import { GLASS_ENVELOPE, glassStripesPng } from "./glass-fixture.js";
-import { selectLayer } from "./rebuild-driver.js";
+import { placeText, readScene, selectLayer } from "./rebuild-driver.js";
 import {
   EDGE_OBJECT_FILL,
   REFERENCE_BADGE_SVG,
@@ -588,11 +588,10 @@ test.describe("the reference composition, authored", () => {
     await openEditor(page);
 
     // **Insert** — a text object and a chart, from the Add pane.
-    await openPane(page, "Add");
-    await page
-      .locator('[data-yunari-panel="add"]')
-      .getByRole("button", { name: "Text", exact: true })
-      .click();
+    await placeText(page);
+    // The journey's first object is a Text, and the class is what carries its
+    // runs.
+    expect((await readScene(page)).at(-1)?.type).toBe("i-text");
     const textId = (await activeId(page)) ?? "";
     await page
       .locator('[data-yunari-add-group="shape"]')

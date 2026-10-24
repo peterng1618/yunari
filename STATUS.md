@@ -5,19 +5,20 @@ Branch: `main`
 
 ## Current objective
 
-The **colour and gradient picker rebuild** ([`spec`](docs/superpowers/specs/2026-10-12-colour-and-gradient-rebuild-design.md), [`plan`](docs/superpowers/plans/archive/2026-10-23-colour-and-gradient-rebuild.md)) is complete and merged; no plan is active.
+The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10-24-text-elements-design.md), [`plan`](docs/superpowers/plans/2026-10-24-text-elements.md)) is complete and merged; no plan is active. The colour and gradient picker rebuild is also merged.
 
 ## Active work
 
-- **Nothing is dispatched.** The rebuild's plan is closed and the queue waits on a named plan.
+- **Nothing is dispatched.** The queue waits on a named plan.
+- **Text is two Fabric classes:** `IText` is placed by a click, `Textbox` by a drag, and the persisted Fabric `type` is the only width-mode discriminator.
 - **Sources:** the preset library is editor-local (`yunari.editor.presets`, version 1); the Colours tab adds palettes and gradients to it.
 
 ## Last completed change
 
-- **The picker is rebuilt on culori and the ReUI contract**: one popover trigger per colour, area/hue/alpha controls, an exact-value field and presets, with asset-finder palette and gradient adds landing in the same library.
-- **The gradient editor draws its own track**: stops are sliders with drag, typed and keyboard input and a live `linear-gradient` preview; the old angle and per-stop rows are gone.
-- **Undo owns globals**: palette and type commits are their own history entries, and a restored globals bag repaints every consumer.
-- **Proof:** `npm run gate` exited 0 (346 unit files / 4805 tests; worker 12 / 72) and the colour-picker browser spec passed 8/8.
+- **Text and text box are separate classes**: one click-or-drag placement gesture arms from every creation surface, and authored `wrap` is gone and ignored on load.
+- **Legacy `"Text"` revives as editable `IText`** in the editor only; the player renders whichever class the scene carries.
+- **The Runs inspector shows one run at a time** behind numbered tabs, with a lucide `+` that adds and selects the run.
+- **Proof:** `npm run gate` exited 0 (342 unit files / 4804 tests; worker 12 / 72) and the text browser spec passed 9 desktop cases with 0 unexpected; the six e2e suites the gesture touched were re-run green.
 
 ## Next
 
@@ -27,8 +28,8 @@ The **colour and gradient picker rebuild** ([`spec`](docs/superpowers/specs/2026
 
 ## Blockers / unverified
 
-- **The picker popup is 630px tall with twelve seeded presets** at a 720px viewport, so Base UI side-places it; no clipping is captured, but the unbounded height is unchanged.
 - **A gradient stop moved past its neighbour writes descending offsets** and the validator refuses the document (`vg-712`, issue #52).
-- **The gradient capture's fixed status footer overlaps the last preset row** in the scoped element screenshot; the track, the `25 %` position and the preset row are visible.
-- **The Colours sources are routed fixtures in the browser proof**, the store Worker is not deployed, and a theme's `credits.json` does not survive the host library (`vg-698`).
+- **Arming text placement survives inserting a shape** (`vg-714`), so the next canvas press places text instead of selecting.
+- **The picker popup is 630px tall** with twelve seeded presets at a 720px viewport, so Base UI side-places it.
 - **The compact editor header stays wider than a phone** (`vg-707`), and `server.test.ts` flakes pre-existing (`vg-695`).
+- **The text e2e cases skip on `phone-chromium` by design**, so the phone surface is unproven for the new gesture.

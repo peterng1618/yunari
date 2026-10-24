@@ -9,7 +9,11 @@ import type { PlanTextObject } from "./fabric-text.js";
 /**
  * The authored box, and the geometry derived from it.
  *
- * A `Textbox` cannot hold one: `initDimensions` widens it to its longest
+ * **The box is a Text box's, not a Text's.** An `IText` is its own measurement:
+ * it has no wrap measure and no clip, so `yunariText.box` on one is tolerated on
+ * load and ignored. Everything here is meaningful only for a `Textbox`.
+ *
+ * A `Textbox` cannot hold one either: `initDimensions` widens it to its longest
  * unbreakable run and never narrows (`fabric/dist/index.mjs:18453`), and
  * `width` is one of its `textLayoutProperties` (`:18760`), so every width write
  * re-enters that. `yunariText.box` is therefore the owner, and everything that
@@ -69,16 +73,21 @@ function objectCentre(object: PlanTextObject): { x: number; y: number } {
 }
 
 /**
- * The box the author wrote, in parent space.
+ * The box the author wrote, in parent space, or `undefined` for an auto text.
  *
  * `yunariText.box` is scene units; Fabric's `width` is the same box before
  * `scaleX`. The object's `left`/`top` are the box's own corner, so they say
  * where the box is without anything having to measure the text to find out.
+ *
+ * A `Textbox` alone: an `IText` measures its own edges, and a box left on one by
+ * an older document must not become a constraint it never had.
  */
 export function authoredBox(
   object: PlanTextObject,
   authored: TextContent,
 ): PlanBox | undefined {
+  if (!(object instanceof Textbox)) return undefined;
+
   const box = authored.box;
   return box === undefined ? undefined : boxFrom(object, box.width, box.height);
 }
@@ -277,7 +286,12 @@ export function withLineCapacity(
   box: PlanBox,
   layout: PlanTextLayout,
 ): PlanTextLayout {
-  if (layout.maxLines !== undefined || object.textLines.length === 0) {
+  // A Text is its own measurement, so it has no authored height to fill.
+  if (
+    !(object instanceof Textbox) ||
+    layout.maxLines !== undefined ||
+    object.textLines.length === 0
+  ) {
     return layout;
   }
 

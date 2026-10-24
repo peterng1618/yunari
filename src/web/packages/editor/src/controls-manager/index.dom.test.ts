@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Textbox } from "fabric/es";
+import { IText, Textbox } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import { applyEditorControls } from "./index.js";
 
@@ -122,5 +122,22 @@ describe("a textbox's vertical edge writes the authored box", () => {
     press(object, "mb");
 
     expect(boxOf(object)).toMatchObject({ width: 140, height: 27 });
+  });
+});
+
+describe("a text's own controls", () => {
+  it("carries corners and rotation only, with no box-writing edges", () => {
+    applyEditorControls();
+
+    // The text measures its own ink, so a width or height drag has no authored
+    // box to write. Asserted on an instance, because that is what the canvas
+    // reads: the constructor spreads `IText.ownDefaults` into its options.
+    expect(Object.keys(new IText("CPU").controls).sort()).toEqual([
+      "bl",
+      "br",
+      "mtr",
+      "tl",
+      "tr",
+    ]);
   });
 });

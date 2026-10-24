@@ -432,6 +432,7 @@ export class EditorSession {
       options.shell.editor,
       this.#document.envelope.globals,
       {
+        addText: () => this.#armText(),
         addChart: (family) => this.charts.addChart(family),
         insertCard: (cardId) => this.#document.insertCard(cardId),
       },
@@ -689,6 +690,31 @@ export class EditorSession {
     }
   }
 
+  /**
+   * The one route every surface arms: the Add pane's text tile, the canvas
+   * context menu and the layer footer all reach this method, so the editor has
+   * one placement state rather than one per surface.
+   *
+   * Arming cannot fail — the theme's palette and type preset are read when the
+   * gesture ends — so the construction is the only part wrapped. A refusal is
+   * reported there once, and the gesture has already disarmed by then.
+   */
+  #armText(): void {
+    const editor = this.#options.shell.editor;
+    editor.textManager.beginPlacement({
+      contained: ({ x, y }) => {
+        // Scene coordinates, origin (0,0): the artboard's frame is the limit,
+        // and a press outside it cancels without creating anything.
+        const artboard = editor.artboard();
+        return x >= 0 && x <= artboard.width && y >= 0 && y <= artboard.height;
+      },
+      onPlace: (placement) =>
+        constructing(editor, () =>
+          insertNewText(editor, this.#document.envelope.globals, placement),
+        ),
+    });
+  }
+
   /** Reachability only: the shell menus dispatch through the existing owners,
    * including the private document actions the panel section used to call. */
   actionFacade(): EditorActionFacade {
@@ -851,16 +877,15 @@ export class EditorSession {
       openLibraryTheme: (id, onAccepted) =>
         this.#document.openLibraryTheme(id, onAccepted),
       saveLibrary: () => this.#document.saveLibrary(),
-      // The three constructions the shell dispatches are wrapped in the one
-      // owner of a construction's refusal (`new-object-panel.ts`), because the
-      // surfaces that reach them — the layer footer through `bridge.run`, and
-      // the canvas context menu through `creationGroups` — both hold a `void`
-      // and cannot report a throw themselves (`vg-484`). `insertCard` is not
-      // wrapped: the document reports that one at its own owner.
-      addText: () =>
-        constructing(editor, () =>
-          insertNewText(editor, this.#document.envelope.globals),
-        ),
+      // The constructions the shell dispatches are wrapped in the one owner of
+      // a construction's refusal (`new-object-panel.ts`), because the surfaces
+      // that reach them — the layer footer through `bridge.run`, and the canvas
+      // context menu through `creationGroups` — both hold a `void` and cannot
+      // report a throw themselves (`vg-484`). `addText` arms rather than
+      // constructs now, so its refusal is reported at the gesture's end by
+      // `#armText`. `insertCard` is not wrapped: the document reports that one
+      // at its own owner.
+      addText: () => this.#armText(),
       addShape: (kind) =>
         constructing(editor, () =>
           insertNewShape(editor, this.#document.envelope.globals, kind),

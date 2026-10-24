@@ -5,11 +5,13 @@ import type {
   PlanNode,
   PlanTextLayout,
   PlanTextSegment,
+  TextContent,
 } from "@yunari/renderer-core";
-import { Canvas, Rect, Textbox } from "fabric/es";
+import { Canvas, IText, Rect, Textbox } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import {
   applyAuthoredText,
+  authoredAlignment,
   buildText,
   refreshBoundText,
   textGaps,
@@ -80,6 +82,84 @@ function segment(
 ): PlanTextSegment {
   return { text, style };
 }
+
+describe("the Fabric class is the width mode", () => {
+  it("keeps a Textbox wrapping when its authored content still carries wrap: false", async () => {
+    // The legacy shape, kept as a raw object on purpose: `TextContent` no longer
+    // has the key, and a document that still carries it must render as the
+    // class says, not as the dead flag says.
+    const object = new Textbox(LONG, { width: 120, fontSize: 32 });
+    object.set("id", "label");
+    object.set(YUNARI_TEXT_PROPERTY, {
+      wrap: false,
+      runs: [{ kind: "literal", text: LONG }],
+    } as unknown as TextContent);
+    const canvas = new Canvas(document.createElement("canvas"));
+    canvas.add(object);
+
+    applyAuthoredText(canvas, undefined, { bindings: {} });
+
+    expect(
+      authoredAlignment(object, {
+        wrap: false,
+        runs: [{ kind: "literal", text: LONG }],
+      } as unknown as TextContent).wrap,
+    ).toBe(true);
+    expect(object.textLines.length).toBeGreaterThan(1);
+    await canvas.dispose();
+  });
+
+  it("derives an IText as unwrapped and visible, ignoring the old authored values", () => {
+    // The same legacy keys on the other class: a box control written before the
+    // split must not survive on an auto text.
+    const object = new IText("short");
+
+    expect(
+      authoredAlignment(object, {
+        wrap: false,
+        overflow: "clip",
+        verticalAlign: "bottom",
+        align: "right",
+        runs: [{ kind: "literal", text: "short" }],
+      } as unknown as TextContent),
+    ).toEqual({
+      wrap: false,
+      overflow: "visible",
+      align: "right",
+      verticalAlign: "top",
+    });
+  });
+
+  it("derives a Textbox as wrapped, with the authored overflow and alignment", () => {
+    const object = new Textbox("short", { width: 120 });
+
+    expect(
+      authoredAlignment(object, {
+        wrap: false,
+        overflow: "ellipsis",
+        verticalAlign: "middle",
+        runs: [{ kind: "literal", text: "short" }],
+      } as unknown as TextContent),
+    ).toEqual({
+      wrap: true,
+      overflow: "ellipsis",
+      align: "left",
+      verticalAlign: "middle",
+    });
+  });
+
+  it("builds IText for an auto text and Textbox for a fixed one", () => {
+    const auto = buildText(textNode([segment("short")]), box());
+    const fixed = buildText(
+      textNode([segment("short")], { wrap: true, overflow: "clip" }),
+      box(),
+    );
+
+    expect(auto).toBeInstanceOf(IText);
+    expect(auto).not.toBeInstanceOf(Textbox);
+    expect(fixed).toBeInstanceOf(Textbox);
+  });
+});
 
 describe("clipping", () => {
   it("clips to the authored box for every mode but visible", () => {
@@ -281,7 +361,7 @@ describe("a layout change an author makes", () => {
     // only the axis `placeInBox` reads — vertical — was dead.
     const authored = box({ x: 0, y: 0, width: 200, height: 100 });
     const object = buildText(
-      textNode([segment("short")], { wrap: false, overflow: "visible" }),
+      textNode([segment("short")], { wrap: true, overflow: "clip" }),
       authored,
     );
     object.set("id", "label");

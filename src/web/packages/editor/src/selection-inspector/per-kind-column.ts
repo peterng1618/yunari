@@ -11,6 +11,7 @@ import {
   FabricImage,
   type FabricObject,
   Group,
+  Textbox,
 } from "fabric/es";
 import type {
   ChartContentFieldsView,
@@ -123,6 +124,16 @@ export type SelectionKind = (typeof SELECTION_KINDS)[number] | "background";
 function isTextKind(object: FabricObject): boolean {
   const type = (object as { readonly type?: string }).type;
   return type === "textbox" || type === "i-text" || type === "text";
+}
+
+/**
+ * A text whose size is measured rather than authored: every text class but
+ * `Textbox`, which is the one that owns a box. The projection reads it to mark
+ * the Size halves read-only and `index.ts`'s write funnel reads it to refuse
+ * the write, so the two halves of the contract cannot disagree.
+ */
+export function isAutoText(object: FabricObject): boolean {
+  return isTextKind(object) && !(object instanceof Textbox);
 }
 
 /**
@@ -289,6 +300,7 @@ function geometryPair(
   rowLabel: string,
   first: GeometryKey,
   second: GeometryKey,
+  readOnly = false,
 ): FieldView {
   const half = (key: GeometryKey): PairHalfView => ({
     id: key,
@@ -296,6 +308,7 @@ function geometryPair(
     value: Math.round(context.geometry.read(object, key)),
     integer: true,
     data: { "data-yunari-geometry": key },
+    ...(readOnly ? { readOnly: true } : {}),
   });
   return {
     id: `${first}-${second}`,
@@ -362,6 +375,8 @@ function contentBody(
       locale: context.locale,
       nodeBindings: context.nodeBindings,
       sampleSource: context.sampleSource,
+      // The live class, not authored content: it is the width-mode owner.
+      wraps: target instanceof Textbox,
       swatchValue: (ref) => resolveToken(context.globals, ref),
     },
   );
@@ -422,6 +437,9 @@ function positionBody(
       uiCopy.inspectorFields.size,
       "width",
       "height",
+      // A point text's W/H are measurements the text pass refreshes; the box
+      // class is the only one whose size the author sets.
+      isAutoText(target),
     ),
   ];
 

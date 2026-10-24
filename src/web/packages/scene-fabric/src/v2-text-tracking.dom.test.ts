@@ -5,13 +5,7 @@ import {
   type Globals,
   resolveTextSegments,
 } from "@yunari/renderer-core";
-import {
-  type FabricObject,
-  FabricText,
-  Rect,
-  StaticCanvas,
-  Textbox,
-} from "fabric/es";
+import { type FabricObject, StaticCanvas, Textbox } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import {
   applyAuthoredText,
@@ -93,30 +87,26 @@ function canvasOf(objects: readonly FabricObject[]): StaticCanvas {
 }
 
 /**
- * An unwrapped reading inside a fixed authored box. The clip carries the box,
- * so `runtimeLayout` reconstructs what the author drew rather than the text's
- * own measured edges.
+ * A fixed-box reading. The class is the width mode: a `Textbox` wraps inside its
+ * authored box, so a runtime reading reflows rather than moving its edges.
  */
 function reading(
   id: string,
   runs: readonly Readonly<Record<string, unknown>>[],
   layout: Readonly<Record<string, unknown>> = {},
   box: { left: number; top: number; width: number; height: number } = BOX,
-): FabricText {
-  const object = new FabricText("—", {
+): Textbox {
+  const object = new Textbox("—", {
     id,
     left: box.left + box.width / 2,
     top: box.top + box.height / 2,
+    width: box.width,
     fontSize: 32,
   });
-  object.set(YUNARI_TEXT_PROPERTY, { wrap: false, ...layout, runs });
-  object.clipPath = new Rect({
-    width: box.width,
-    height: box.height,
-    left: 0,
-    top: 0,
-    originX: "center",
-    originY: "center",
+  object.set(YUNARI_TEXT_PROPERTY, {
+    box: { width: box.width, height: box.height },
+    ...layout,
+    runs,
   });
   return object;
 }
@@ -220,10 +210,11 @@ describe("fixed boxes survive a changing reading", () => {
     const one = after(9);
     const two = after(10);
 
-    // Each assertion is load-bearing: without tracking in effect, and without
-    // the reading genuinely widening, every claim below would hold for free.
+    // Each assertion is load-bearing: without tracking in effect the type would
+    // not be re-measured, and a centre-aligned box would drift when it was.
     expect(object.charSpacing).toBeCloseTo(25, 6);
-    expect(two.width).toBeGreaterThan(one.width);
+    // The class decides the width, so a wider reading cannot widen the box.
+    expect(two.width).toBe(BOX.width);
     expect(two.centre).toBeCloseTo(one.centre, 6);
     expect(two.centre).toBeCloseTo(BOX.left + BOX.width / 2, 6);
     expect(clipWidthOf(object)).toBe(BOX.width);
@@ -254,10 +245,10 @@ describe("fixed boxes survive a changing reading", () => {
     const one = rightAfter(9);
     const two = rightAfter(10);
 
-    // The reading really did get wider; a right-aligned label then has to move
-    // its own left edge to keep the right one on the box.
+    // The reading really did get tracked and re-measured; a right-aligned box
+    // keeps its right edge even as the text inside it changes.
     expect(object.charSpacing).toBeCloseTo(25, 6);
-    expect(two.width).toBeGreaterThan(one.width);
+    expect(two.width).toBe(BOX.width);
     expect(two.right).toBeCloseTo(one.right, 6);
     expect(two.right).toBeCloseTo(BOX.left + BOX.width, 6);
   });
@@ -314,14 +305,12 @@ describe("fixed boxes survive a changing reading", () => {
     };
 
     const english = inLocale("en");
-    const englishWidth = object.width * object.scaleX;
     const french = inLocale("fr");
 
     expect(object.charSpacing).toBeCloseTo(25, 6);
     expect(french).not.toBe(english);
-    // A width that did not move would mean the second refresh never ran.
-    expect(object.width * object.scaleX).not.toBe(englishWidth);
-    expect(object.width * object.scaleX).toBeLessThanOrEqual(BOX.width);
+    // The class holds the width; the locale changes the content inside it.
+    expect(object.width * object.scaleX).toBe(BOX.width);
     expect(object.left).toBeCloseTo(BOX.left + BOX.width / 2, 6);
     expect(clipWidthOf(object)).toBe(BOX.width);
   });

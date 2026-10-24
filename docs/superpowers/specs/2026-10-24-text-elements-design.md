@@ -1,6 +1,6 @@
 # Text and text box as separate Fabric elements
 
-- **Status:** in progress. Plan: [`2026-10-24-text-elements.md`](../plans/2026-10-24-text-elements.md).
+- **Status:** implemented. Plan: [`2026-10-24-text-elements.md`](../plans/2026-10-24-text-elements.md).
 
 ## Why
 
@@ -72,9 +72,13 @@ class it revives and renders both.
   width.
 - `runs` are unchanged and work in both.
 
-`PlanTextLayout.wrap` stays as a **derived** field: the plan builder sets it from
-the element's class (`instanceof Textbox`), never from authored content. For a
-Text, the derived layout is `wrap: false`, `overflow: "visible"`,
+`PlanTextLayout.wrap` stays as a **derived** field: a plan built from a document
+must set it from the element's class (`instanceof Textbox`), never from authored
+content. No production document→plan builder exists today — the host's
+`packages/player/src/hosted-plan.ts` emits `nodes: []` — but the two consumers
+that read it name the contract: `adapter.classFor` returns `Textbox` when `wrap`
+is true and `IText` otherwise, and `buildText` constructs the matching class. For
+a Text, the derived layout is `wrap: false`, `overflow: "visible"`,
 `verticalAlign: "top"`, no `maxLines`. Runtime code that branches on
 `layout.wrap` keeps doing so; it is reading the class, not a flag.
 
@@ -177,6 +181,23 @@ element and where it lands.
 - Inspector shows everything it shows today except Wrap: Runs, Align, vertical
   align, Overflow, editable W/H, text fields, Position, Layer.
 
+### Runs in the inspector
+
+A text carries an ordered list of runs. The inspector shows them one at a time
+behind numbered tabs, **1, 2, 3, …** with a **`+`** after the last, because a
+stacked editor grows with every run and pushes the layout controls away. The
+tab's visible label is its 1-based number; its accessible name is `Run N`.
+
+- Tab order is run order. Selecting a tab shows only that run's fields,
+  including its `Remove run N` action.
+- `+` adds a run and selects it, so the author lands in the run they made.
+- Removing the selected run leaves the first remaining run selected; a tab
+  always names a row.
+- Run selection is editor-transient, like a selection: it is not authored, not
+  persisted, not written to the envelope and produces no history entry.
+- The strip wraps rather than scrolls. Alignment and the class-gated Overflow
+  and vertical alignment stay above it; notes stay below.
+
 ### Shared
 
 - Both are the same layer kind, `text`, with the same glyph. The kind word stays
@@ -233,7 +254,12 @@ element and where it lands.
   one history entry; undo removes it in one step.
 - The inspector renders no Wrap control on either class, hides Overflow,
   vertical align and editable W/H on a Text, and keeps them on a Text box.
+- The Runs section renders one numbered tab per run; selecting a tab shows that
+  run's fields only; `+` adds and selects a run; removing the selected run
+  selects a remaining one.
 - Geometry writes refuse a width or height write on a Text.
+- Words typed into a text created by the gesture are written to its authored run
+  and survive the next repaint and a reload.
 - `authoredAlignment` derives wrap, overflow and vertical alignment from the
   class; a legacy authored `wrap` has no effect.
 - Loading a `Textbox` with `wrap: false` keeps a `Textbox` and wraps.
@@ -243,8 +269,7 @@ element and where it lands.
 ### Browser
 
 - Add → Text → click on the artboard creates a Text that grows while typing and
-  has no width/height handles.
-- Add → Text → drag creates a Text box at the drawn rectangle, wraps inside it,
+  has no width/height handles.- Add → Text → drag creates a Text box at the drawn rectangle, wraps inside it,
   and keeps the box while typing.
 - Escape during placement leaves the document unchanged.
 - Save, reload and reopen preserves both classes and their geometry.
@@ -266,10 +291,77 @@ Each of these must fail before the change and pass after:
 - Click places auto-width Text; drag places a fixed Text box; the author never
   chooses a mode from a control.
 - No Wrap control exists in the inspector or the model.
+- Runs are edited one at a time behind numbered tabs, with `+` adding and
+  selecting a run.
 - An existing theme renders unchanged, with every `Textbox` still fixed and
   every legacy text still auto-width; only a legacy `FabricText` changes class,
   and only when the editor saves it again.
 - The player and the editor agree on each element's class and layout.
+
+## Acceptance evidence
+
+Unit and DOM cases run under `npm run test` (Vitest, jsdom for `*.dom.test.*`).
+Browser cases are `npx playwright test tests/e2e/text-elements.spec.ts
+--workers=1`: 9 desktop cases, 9 `phone-chromium` skips, last two runs expected
+9 / skipped 9 / unexpected 0 / flaky 0 with exit 0. The full gate is
+`npm run gate`, run from `src/web/`: it exited 0, covering biome, the gate
+self-tests, status, docs, scratch, design, typecheck, unit (342 files / 4804
+tests) and worker (12 files / 72 tests).
+
+- **Class is the only discriminator; no authored `wrap`.**
+  `a88bf857` constructs the class the gesture asks for; `d671ef78` derives
+  layout from it. `text-manager/index.dom.test.ts` — "creates a Text, with no
+  authored box, when no box is asked for" and "creates a Text box whose
+  authored box is the one it was given". `scene-fabric/fabric-text.dom.test.ts`
+  — "keeps a Textbox wrapping when its authored content still carries wrap:
+  false" and "derives an IText as unwrapped and visible, ignoring the old
+  authored values". Browser: "save, reload and reopen preserve both classes and
+  their geometry"; "a legacy wrap:false Textbox still wraps and a legacy Text
+  opens as IText".
+- **Click places auto-width Text; drag places a fixed Text box.** `f751b0a9`,
+  `318073dc`. `text-manager/index.dom.test.ts` — "makes a Text at the press
+  point from a click", "uses the normalised rectangle of a down-right drag as
+  the box", "normalises an up-left drag to a positive box at the upper-left",
+  "treats three pixels of jitter as a click", "treats a drag thinner than one
+  scene unit as a click". Every creation surface arms that one gesture —
+  `editor-session.dom.test.ts` "arms from the Add pane's text action and
+  constructs nothing yet" and "arms from the session façade's own addText"; a
+  non-primary press leaves no trace — `text-manager/index.dom.test.ts` "cancels
+  a non-primary press". Browser: "click places a Text that grows while typing
+  and scales rather than writing a width" and "drag draws a Text box at the
+  rectangle, wraps, and its ml/mr controls change the width". Escape creates
+  nothing and disarms — `text-manager/index.dom.test.ts` "cancels on Escape and
+  leaves no object, history entry or outline"; the browser case "Escape during
+  placement creates nothing and leaves the history alone" observes an unchanged
+  scene and a Ctrl+Z that still finds nothing, because the bridge exposes no
+  redo or history length.
+- **No Wrap control; no control the class cannot honour.** `e2f369c3`,
+  `386749ce`. `selection-inspector/runs.dom.test.ts` — "offers no Wrap control,
+  because the Fabric class is the width mode" and "hides overflow and vertical
+  alignment on a text, which has no box". `controls-manager/index.test.ts` —
+  "gives a text corners and rotation, and no box-writing handles";
+  `controls-manager/index.dom.test.ts` — "carries corners and rotation only,
+  with no box-writing edges". Browser: "a Text exposes corners and rotation only
+  while a Text box keeps all nine handles".
+- **Runs behind numbered tabs.** `41c59905`, `8d80defc`.
+  `selection-inspector/runs.dom.test.tsx` — "numbers every run's tab and shows
+  only the selected run's fields", "adds a run with the plus and selects the new
+  last run", "selects the first remaining run when the selected one is removed".
+  Browser: "three runs show three numbered tabs, one selected run's fields, and
+  + selects the new run".
+- **Existing themes render unchanged; only a legacy text changes class, on an
+  editor save.** `40e7b084`. `scene-fabric/persist.dom.test.ts` "a legacy
+  display text revives as editable only when asked" — "keeps the display class
+  for a caller that does not ask for editing", "revives it as IText with
+  geometry, runs and style untouched", "rewrites a legacy text nested inside a
+  group". The player calls `reviveThemeEnvelope` without the option, so it
+  keeps the persisted class.
+- **Player and editor agree.** The plan-built class choice is proven in
+  `scene-fabric/adapter.dom.test.ts` — "builds an auto text as IText and a fixed
+  text as Textbox" — because the player mounts no plans;
+  `fabric-text.dom.test.ts` "builds IText for an auto text and Textbox for a
+  fixed one". Browser: "the player renders both saved objects without changing
+  either class".
 
 ## Risks
 
