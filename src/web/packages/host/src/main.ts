@@ -13,6 +13,7 @@ import {
 } from "./cli/net.js";
 import { ClockSensorProvider } from "./providers/clock.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
+import { FrameProvider } from "./providers/frame/provider.js";
 import { LhmSensorProvider } from "./providers/lhm.js";
 import { launchLhm, registerLhmTask } from "./providers/lhm-launcher.js";
 import { LibrarySensorProvider } from "./providers/library.js";
@@ -196,12 +197,16 @@ export async function run(argv: readonly string[]): Promise<number> {
     path.join(path.dirname(settingsDir), "cache", "media-artwork"),
   );
   const mediaProvider = new MediaProvider({ cache: mediaArtwork });
+  // Frame statistics have no settings of their own; the provider starts the
+  // RTSS helper only while a display binds frame.* and stops it after demand.
+  const frameProvider = new FrameProvider();
   const registry = new ProviderRegistry([
     clockProvider,
     lhmProvider,
     libraryProvider,
     weatherProvider,
     mediaProvider,
+    frameProvider,
     customProvider,
   ]);
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -553,6 +558,8 @@ export async function run(argv: readonly string[]): Promise<number> {
       // The media helper is a child process this run started; leaving it
       // polling after the host exits is the orphan decision 0102 prevents.
       mediaProvider.stop();
+      // Same for the RTSS helper: a PowerShell left polling outlives the host.
+      frameProvider.stop();
       // Every per-source timer goes with it, and an in-flight fetch is cut.
       customProvider.stop();
       // The windows close with the host: one left behind is one the next run
