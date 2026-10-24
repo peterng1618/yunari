@@ -623,9 +623,9 @@ export function RunEditor(props: {
         options={ALIGN_OPTIONS}
         onChange={(align: string) => edits.writeLayout({ align })}
       />
-      {/* Width, overflow and vertical placement are the box's contract: a point
-          text has no authored height to clip or place inside, so the two
-          controls that write them would accept an edit nothing paints. */}
+      {/* Overflow and vertical placement are the box's contract: a point text
+          has no authored height to clip or place inside, so the two controls
+          that write them would accept an edit nothing paints. */}
       {view.wraps ? (
         <>
           <ControlSegmented

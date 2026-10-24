@@ -300,6 +300,11 @@ export async function insertTextBox(
   await expect
     .poll(async () => (await readScene(page)).length)
     .toBe(before + 1);
+  // A drag is the Textbox gesture; a placement that produced the point class
+  // would satisfy the count above and render the wrong width mode.
+  await expect
+    .poll(async () => (await readScene(page)).at(-1)?.type)
+    .toBe("textbox");
 }
 
 /** Inserts an object from the Add pane, by the word on the control and the group

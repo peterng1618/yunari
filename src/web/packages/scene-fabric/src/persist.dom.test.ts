@@ -309,6 +309,13 @@ describe("a legacy display text revives as editable only when asked", () => {
     // The caller's document is the author's; the rewrite is a copy.
     expect(scene.objects[0]!["type"]).toBe("Text");
     expect(scene.objects[0]![YUNARI_TEXT_PROPERTY]).toEqual(authoredRuns);
+
+    // The revival is only persisted once the editor saves again, so the class
+    // that save writes is the observable half of "editable after opening".
+    expect(
+      serialiseScene(revived).objects[0]!["type"],
+      "the save writes the editable class",
+    ).toBe("IText");
   });
 
   it("rewrites a legacy text nested inside a group", async () => {

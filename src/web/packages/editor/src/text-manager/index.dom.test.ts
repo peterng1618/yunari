@@ -431,6 +431,26 @@ describe("a width the author dragged", () => {
     text.destroy();
   });
 
+  it("writes no box for an IText, whose width it does not own", () => {
+    // A point text measures its own width; a `box` on it states a size nothing
+    // paints. Only Textbox controls emit this event today, so the class gate is
+    // the invariant rather than that reachability.
+    const object = authoredReading("point-text", IText);
+    const canvas = scene(object);
+    const text = createTextManager(canvas, vi.fn());
+
+    object.set("width", 310);
+    canvas.fire("object:resizing", {
+      transform: { target: object },
+    } as never);
+
+    const authored = object.get(YUNARI_TEXT_PROPERTY) as {
+      box?: { width: number };
+    };
+    expect(authored.box?.width).toBe(180);
+    text.destroy();
+  });
+
   it("saves once, when the gesture ends, and not once per step", () => {
     // `save` is `history.save()`, a full `serialiseScene` and an undo entry per
     // call. A drag is dozens of `object:resizing` events, so saving on each

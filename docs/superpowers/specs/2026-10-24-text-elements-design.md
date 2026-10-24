@@ -72,9 +72,13 @@ class it revives and renders both.
   width.
 - `runs` are unchanged and work in both.
 
-`PlanTextLayout.wrap` stays as a **derived** field: the plan builder sets it from
-the element's class (`instanceof Textbox`), never from authored content. For a
-Text, the derived layout is `wrap: false`, `overflow: "visible"`,
+`PlanTextLayout.wrap` stays as a **derived** field: a plan built from a document
+must set it from the element's class (`instanceof Textbox`), never from authored
+content. No production document→plan builder exists today — the host's
+`packages/player/src/hosted-plan.ts` emits `nodes: []` — but the two consumers
+that read it name the contract: `adapter.classFor` returns `Textbox` when `wrap`
+is true and `IText` otherwise, and `buildText` constructs the matching class. For
+a Text, the derived layout is `wrap: false`, `overflow: "visible"`,
 `verticalAlign: "top"`, no `maxLines`. Runtime code that branches on
 `layout.wrap` keeps doing so; it is reading the class, not a flag.
 

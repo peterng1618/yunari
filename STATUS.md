@@ -15,17 +15,17 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- A Text keeps `tl`/`tr`/`bl`/`br`/`mtr` only and a Text box keeps all nine handles (`controls-manager/index.test.ts`, `index.dom.test.ts`).
-- Typed words commit once at `text:editing:exited`, survive the repaint, and save when Fabric reports no `object:modified` (`text-manager/index.dom.test.ts`).
-- `tests/e2e/text-elements.spec.ts` proves both classes, handle sets, Run tabs, legacy `wrap: false`, save/reopen and the player; last two `--workers=1` runs: 9 expected, 9 skipped, 0 unexpected, 0 flaky.
-- `docs/architecture/ownership.md` names `text-manager` as the construction/gesture owner and records the two element contracts and the editor-only `"Text"` revival.
-- `npm run gate` exits 0; the spec's Acceptance evidence names each bullet's commit and test.
+- Review fix round: `adoptResizedBox` gates on `Textbox`, with a red-first test proving an `IText` resize writes no box.
+- `rebuild-driver.insertTextBox` pins the last object's class; the legacy-revival spec observes the save writing `IText`.
+- The card column has no Content section after the name moved to the lead block; `inspector-sections.spec.ts` now expects Position and Layer.
+- The design spec's derived `wrap` paragraph names `adapter.classFor`/`buildText` and states no document→plan builder exists.
+- Seven e2e runs re-ran `--workers=1` after `npm run build`: all exit 0, 0 unexpected, 0 flaky.
 
 ## Next
 
-1. Final whole-branch review of `peterng1618/Fixing-the-text-element`, then merge into `develop`.
+1. Merge `peterng1618/Fixing-the-text-element` into `develop`.
 
 ## Blockers / unverified
 
-- The text e2e cases skip on `phone-chromium` by design; phone rendering is unverified beyond the desktop player case.
+- No red or unverified browser case from this round; the text e2e cases still skip on `phone-chromium` by design.
 - Outside this plan: the store Worker is undeployed, and the live catalogue's smoke theme still carries the old media shape.

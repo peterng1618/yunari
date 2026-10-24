@@ -457,14 +457,15 @@ test.describe("the per-kind inspector column", () => {
     expect(rows).toHaveLength(11);
 
     await page.locator('[data-yunari-layer="group-cpu-card"]').click();
-    // **Three, not four: the card is a Group, and a Group has no render boundary
-    // for the treatment to reach.** `vg-465` (item 8) withholds the section there
-    // and says so in the lead block instead, so it is gone rather than empty.
-    expect(await sectionIds(page)).toEqual(["content", "position", "layer"]);
+    // **Two: the name moved to the lead block's rename, and a Group has no
+    // render boundary for the treatment to reach.** With no content question
+    // left, the section is omitted rather than rendered empty, and `vg-465`
+    // (item 8) withholds the treatment section and says so in the lead.
+    expect(await sectionIds(page)).toEqual(["position", "layer"]);
 
     // Every one of them open, Position included: no section starts closed
     // (item 13), and the author may still close what they are not using.
-    for (const id of ["content", "position", "layer"]) {
+    for (const id of ["position", "layer"]) {
       expect(await isOpen(page, id), id).toBe(true);
     }
 
@@ -1444,12 +1445,13 @@ test.describe("the per-kind inspector column", () => {
     // (item 13), and there is no read-only section left to photograph (item 17).
     // A projection that returned no sections would otherwise photograph an empty
     // column and pass.
-    // **Three questions, not four, and again because the card is a Group**
-    // (`vg-465`, item 8): the treatment section is withheld where there is no
-    // render boundary for it to reach, and the refusal is said in the lead block.
+    // **Two questions, not four: the name is the lead block's rename, and the
+    // card is a Group** (`vg-465`, item 8), so there is no content field and no
+    // treatment boundary for those sections to reach; each is omitted rather
+    // than rendered empty.
     expect(await subjectLeadsColumn(page)).toBe(true);
-    expect(await sectionIds(page)).toEqual(["content", "position", "layer"]);
-    for (const id of ["content", "position", "layer"]) {
+    expect(await sectionIds(page)).toEqual(["position", "layer"]);
+    for (const id of ["position", "layer"]) {
       expect(await isOpen(page, id), id).toBe(true);
     }
 

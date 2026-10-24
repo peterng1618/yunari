@@ -145,7 +145,10 @@ function keepTypedText(object: PlanTextObject): "written" | "refused" {
 function adoptResizedBox(object: object): void {
   const target = (object as { transform?: { target?: unknown } }).transform
     ?.target;
-  if (!isText(target)) return;
+  // Box-only: an `IText` measures its own width, so writing a `yunariText.box`
+  // for one would state a size nothing paints. The class gate is the invariant;
+  // that only Textbox controls emit this event today is not.
+  if (!(target instanceof Textbox)) return;
 
   const authored = authoredOf(target);
   if (authored === undefined) return;
@@ -164,13 +167,6 @@ function adoptResizedBox(object: object): void {
   // author dragged to (240 units dragged at `scaleX` 0.7432, 177.6 landed:
   // `vg-233`).
   writeAuthoredBoxDimension(target, "width", target.width);
-}
-
-function isText(value: unknown): value is PlanTextObject & {
-  readonly width: number;
-  readonly scaleX: number;
-} {
-  return value instanceof IText;
 }
 
 /** Fabric's floor is 1 and a `NaN` propagates into the clip, so refuse both. */
