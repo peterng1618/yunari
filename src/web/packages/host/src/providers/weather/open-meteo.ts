@@ -1,5 +1,6 @@
 /**
- * Open-Meteo's current-conditions endpoint, normalized to one reading.
+ * Open-Meteo's current-conditions endpoint, normalized to one reading, plus the
+ * fetch and field helpers every weather backend shares.
  *
  * The request asks for metric explicitly by taking the endpoint's defaults, and
  * names only the fields the weather keys need. The answer is bounded in size
@@ -38,26 +39,74 @@ export const OPEN_METEO_ATTRIBUTION = "Weather data by Open-Meteo.com";
 const TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 1024 * 1024;
 
-function finiteNumber(value: unknown, field: string): number {
+/** A number a backend reported. A missing one fails the acquisition rather
+ *  than becoming a zero nobody measured. */
+export function weatherNumber(
+  record: Record<string, unknown>,
+  field: string,
+  label: string,
+): number {
+  const value = record[field];
+
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new Error(`Open-Meteo's answer is missing ${field}.`);
+    throw new Error(`${label}'s answer is missing ${field}.`);
   }
 
   return value;
 }
 
-function numberOf(record: Record<string, unknown>, field: string): number {
-  return finiteNumber(record[field], field);
-}
+/** An object field, or a refusal naming it. */
+export function weatherObject(
+  record: Record<string, unknown>,
+  field: string,
+  label: string,
+): Record<string, unknown> {
+  const value = record[field];
 
-function firstOf(record: Record<string, unknown>, field: string): unknown {
-  const list = record[field];
-
-  if (!Array.isArray(list) || list.length === 0) {
-    throw new Error(`Open-Meteo's answer is missing ${field}.`);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${label}'s answer is missing ${field}.`);
   }
 
-  return list[0];
+  return value as Record<string, unknown>;
+}
+
+/** An array field. Empty is missing: every caller needs an entry. */
+export function weatherList(
+  record: Record<string, unknown>,
+  field: string,
+  label: string,
+): readonly unknown[] {
+  const value = record[field];
+
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${label}'s answer is missing ${field}.`);
+  }
+
+  return value;
+}
+
+/** The first entry of an array field. */
+export function weatherFirst(
+  record: Record<string, unknown>,
+  field: string,
+  label: string,
+): unknown {
+  return weatherList(record, field, label)[0];
+}
+
+/** The first number of an array field. */
+export function weatherFirstNumber(
+  record: Record<string, unknown>,
+  field: string,
+  label: string,
+): number {
+  const value = weatherFirst(record, field, label);
+
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${label}'s answer is missing ${field}.`);
+  }
+
+  return value;
 }
 
 /**
@@ -85,9 +134,9 @@ function toInstant(wall: unknown, offsetSeconds: number): string {
 
 /** The body, or a refusal once it passes the cap. Chunked so an upstream that
  *  ignores `content-length` cannot buffer a whole reply. */
-async function readBody(response: Response): Promise<string> {
+async function readBody(response: Response, label: string): Promise<string> {
   if (response.body === null) {
-    throw new Error("Open-Meteo answered nothing.");
+    throw new Error(`${label} answered nothing.`);
   }
 
   const reader = response.body.getReader();
@@ -102,7 +151,7 @@ async function readBody(response: Response): Promise<string> {
 
       if (total > MAX_BODY_BYTES) {
         await reader.cancel().catch(() => undefined);
-        throw new Error("Open-Meteo answered more than it should.");
+        throw new Error(`${label} answered more than it should.`);
       }
 
       chunks.push(value);
@@ -114,6 +163,64 @@ async function readBody(response: Response): Promise<string> {
   return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString(
     "utf8",
   );
+}
+
+/**
+ * One bounded, non-redirecting request whose answer must be a JSON object.
+ *
+ * Every weather backend goes through this so the timeout, the body cap and the
+ * refusal to follow a redirect exist once. `label` is the service, never the
+ * URL: its messages travel to displays through a provider's redacted reason.
+ */
+export async function fetchWeatherJson(
+  fetcher: typeof fetch,
+  url: URL,
+  label: string,
+): Promise<Record<string, unknown>> {
+  let response: Response;
+  // A controller rather than `AbortSignal.timeout`, so the deadline is a timer
+  // the suite can advance without a real wait.
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    try {
+      response = await fetcher(url, {
+        signal: controller.signal,
+        // A redirect is not the endpoint this host asked.
+        redirect: "error",
+      });
+    } catch {
+      throw new Error(`${label} could not be reached.`);
+    }
+
+    if (!response.ok) {
+      throw new Error(`${label} answered HTTP ${response.status}.`);
+    }
+
+    let parsed: unknown;
+
+    try {
+      parsed = JSON.parse(await readBody(response, label));
+    } catch (error: unknown) {
+      if (error instanceof SyntaxError) {
+        throw new Error(`${label} answered something unexpected.`);
+      }
+      throw error;
+    }
+
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error(`${label} answered something unexpected.`);
+    }
+
+    return parsed as Record<string, unknown>;
+  } finally {
+    clearTimeout(deadline);
+  }
 }
 
 export async function fetchOpenMeteo(
@@ -136,86 +243,59 @@ export async function fetchOpenMeteo(
   url.searchParams.set("timezone", "auto");
   url.searchParams.set("forecast_days", "1");
 
-  let response: Response;
-  // A controller rather than `AbortSignal.timeout`, so the deadline is a timer
-  // the suite can advance without a real wait.
-  const controller = new AbortController();
-  const deadline = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const record = await fetchWeatherJson(fetcher, url, "Open-Meteo");
+  const current = record["current"];
+  const daily = record["daily"];
 
-  try {
-    try {
-      response = await fetcher(url, {
-        signal: controller.signal,
-        // A redirect is not the endpoint this host asked.
-        redirect: "error",
-      });
-    } catch {
-      throw new Error("Open-Meteo could not be reached.");
-    }
-
-    if (!response.ok) {
-      throw new Error(`Open-Meteo answered HTTP ${response.status}.`);
-    }
-
-    let parsed: unknown;
-
-    try {
-      parsed = JSON.parse(await readBody(response));
-    } catch (error: unknown) {
-      if (error instanceof SyntaxError) {
-        throw new Error("Open-Meteo answered something unexpected.");
-      }
-      throw error;
-    }
-
-    if (typeof parsed !== "object" || parsed === null) {
-      throw new Error("Open-Meteo answered something unexpected.");
-    }
-
-    const record = parsed as Record<string, unknown>;
-    const current = record["current"];
-    const daily = record["daily"];
-
-    if (
-      typeof current !== "object" ||
-      current === null ||
-      typeof daily !== "object" ||
-      daily === null
-    ) {
-      throw new Error("Open-Meteo answered something unexpected.");
-    }
-
-    const currentRecord = current as Record<string, unknown>;
-    const dailyRecord = daily as Record<string, unknown>;
-    const offset = numberOf(record, "utc_offset_seconds");
-    const daylight = numberOf(currentRecord, "is_day");
-
-    if (daylight !== 0 && daylight !== 1) {
-      throw new Error("Open-Meteo's answer has an unreadable is_day.");
-    }
-
-    return {
-      tempC: numberOf(currentRecord, "temperature_2m"),
-      feelsLikeC: numberOf(currentRecord, "apparent_temperature"),
-      highC: finiteNumber(
-        firstOf(dailyRecord, "temperature_2m_max"),
-        "temperature_2m_max",
-      ),
-      lowC: finiteNumber(
-        firstOf(dailyRecord, "temperature_2m_min"),
-        "temperature_2m_min",
-      ),
-      humidity: numberOf(currentRecord, "relative_humidity_2m"),
-      pressureHpa: numberOf(currentRecord, "pressure_msl"),
-      precipitationMm: numberOf(currentRecord, "precipitation"),
-      windKph: numberOf(currentRecord, "wind_speed_10m"),
-      windDeg: numberOf(currentRecord, "wind_direction_10m"),
-      code: numberOf(currentRecord, "weather_code"),
-      isDay: daylight === 1,
-      sunriseIso: toInstant(firstOf(dailyRecord, "sunrise"), offset),
-      sunsetIso: toInstant(firstOf(dailyRecord, "sunset"), offset),
-    };
-  } finally {
-    clearTimeout(deadline);
+  if (
+    typeof current !== "object" ||
+    current === null ||
+    typeof daily !== "object" ||
+    daily === null
+  ) {
+    throw new Error("Open-Meteo answered something unexpected.");
   }
+
+  const currentRecord = current as Record<string, unknown>;
+  const dailyRecord = daily as Record<string, unknown>;
+  const offset = weatherNumber(record, "utc_offset_seconds", "Open-Meteo");
+  const daylight = weatherNumber(currentRecord, "is_day", "Open-Meteo");
+
+  if (daylight !== 0 && daylight !== 1) {
+    throw new Error("Open-Meteo's answer has an unreadable is_day.");
+  }
+
+  return {
+    tempC: weatherNumber(currentRecord, "temperature_2m", "Open-Meteo"),
+    feelsLikeC: weatherNumber(
+      currentRecord,
+      "apparent_temperature",
+      "Open-Meteo",
+    ),
+    highC: weatherFirstNumber(dailyRecord, "temperature_2m_max", "Open-Meteo"),
+    lowC: weatherFirstNumber(dailyRecord, "temperature_2m_min", "Open-Meteo"),
+    humidity: weatherNumber(
+      currentRecord,
+      "relative_humidity_2m",
+      "Open-Meteo",
+    ),
+    pressureHpa: weatherNumber(currentRecord, "pressure_msl", "Open-Meteo"),
+    precipitationMm: weatherNumber(
+      currentRecord,
+      "precipitation",
+      "Open-Meteo",
+    ),
+    windKph: weatherNumber(currentRecord, "wind_speed_10m", "Open-Meteo"),
+    windDeg: weatherNumber(currentRecord, "wind_direction_10m", "Open-Meteo"),
+    code: weatherNumber(currentRecord, "weather_code", "Open-Meteo"),
+    isDay: daylight === 1,
+    sunriseIso: toInstant(
+      weatherFirst(dailyRecord, "sunrise", "Open-Meteo"),
+      offset,
+    ),
+    sunsetIso: toInstant(
+      weatherFirst(dailyRecord, "sunset", "Open-Meteo"),
+      offset,
+    ),
+  };
 }

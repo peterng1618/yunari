@@ -42,7 +42,10 @@ import { newToken } from "./session/pairing.js";
 import { createPairingCodeStore } from "./session/pairing-code.js";
 import { createActiveThemeStore } from "./settings/active-theme.js";
 import { createCredentialStore } from "./settings/credentials.js";
-import type { KnownCredential } from "./settings/credentials-registry.js";
+import {
+  KNOWN_CREDENTIALS,
+  type KnownCredential,
+} from "./settings/credentials-registry.js";
 import {
   ASSIGNABLE_GROUPS,
   createDeviceSettingsStore,
@@ -5244,6 +5247,50 @@ describe("Credential routes", () => {
 
     expect(res.status).toBe(400);
     expect(res.text()).toContain("R10");
+  });
+
+  it("lists the shipped weather rows and accepts a query credential", async () => {
+    hosted = start(KNOWN_CREDENTIALS);
+
+    const listed = (await rows()) as unknown as {
+      id: string;
+      verify: boolean;
+      helpUrl: string | null;
+    }[];
+
+    expect(listed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "weatherapi",
+          label: "WeatherAPI",
+          set: false,
+          verify: true,
+          helpUrl: "https://www.weatherapi.com/my/",
+        }),
+        expect.objectContaining({
+          id: "openweathermap",
+          label: "OpenWeatherMap",
+          set: false,
+          verify: true,
+          helpUrl: "https://home.openweathermap.org/api_keys",
+        }),
+      ]),
+    );
+
+    // Query keys ride in the URL by these APIs' design, so a PUT stores one;
+    // only a cookie stays refused.
+    const put = await request(
+      hosted.server,
+      "PUT",
+      "/api/credentials/weatherapi",
+      json({ value: "sk-live-9f2c" }),
+    );
+    expect(put.status).toBe(200);
+
+    // The read still carries only the hint, never the value.
+    const after = await request(hosted.server, "GET", "/api/credentials");
+    expect(after.text()).not.toContain("sk-live-9f2c");
+    expect(after.text()).toContain("9f2c");
   });
 
   it("refuses an empty value", async () => {

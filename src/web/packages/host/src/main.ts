@@ -165,11 +165,18 @@ export async function run(argv: readonly string[]): Promise<number> {
   // Time is a reading from this PC, so displays agree and a wrong device clock
   // cannot mislead.
   const clockProvider = new ClockSensorProvider();
+  // Provider keys, in the same settings directory and with the same rules: the
+  // browser may write one and never read it back. Created before the weather
+  // provider because a BYOK backend reads its key from here.
+  const credentials = createCredentialStore(settingsDir);
   // Weather's place, backend and cadence are this PC's own settings, and the
   // provider owns its timer: it is built here with the providers, not by the
   // registry's cycle (docs/decisions/0099).
   const weatherSettings = createWeatherSettingsStore(settingsDir);
-  const weatherProvider = new WeatherProvider({ settings: weatherSettings });
+  const weatherProvider = new WeatherProvider({
+    settings: weatherSettings,
+    credentials,
+  });
   const registry = new ProviderRegistry([
     clockProvider,
     lhmProvider,
@@ -201,9 +208,6 @@ export async function run(argv: readonly string[]): Promise<number> {
   // Which curated font trios this author reaches for. Author preference about
   // this PC, so it sits with the other settings and never in a theme folder.
   const fontFavorites = createFontFavoritesStore(settingsDir);
-  // Provider keys, in the same directory and with the same rules: the browser
-  // may write one and never read it back.
-  const credentials = createCredentialStore(settingsDir);
   // The store session the author signed in to, beside the other records this
   // machine keeps. The browser never reads it; the host uses it to submit.
   // Which store it belongs to is a build-time address, passed at the server

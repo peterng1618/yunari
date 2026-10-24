@@ -110,6 +110,18 @@ string is `OPEN_METEO_ATTRIBUTION` in
 `packages/host/src/providers/weather/open-meteo.ts`, and `weather.attribution`
 serves it to a theme.
 
+The two BYOK weather backends carry the credit their own terms pages state,
+verified 2026-10-24:
+
+- WeatherAPI — "Powered by WeatherAPI.com", the text option on
+  <https://www.weatherapi.com/docs/attribution/>; the page links it to
+  <https://www.weatherapi.com/>. Constant `WEATHERAPI_ATTRIBUTION` in
+  `packages/host/src/providers/weather/weatherapi.ts`.
+- OpenWeatherMap — "Weather data provided by OpenWeather", the required wording
+  in the FAQ at <https://openweathermap.org/faq>, which also asks for a link to
+  <https://openweathermap.org/>. Constant `OPENWEATHERMAP_ATTRIBUTION` in
+  `packages/host/src/providers/weather/openweathermap.ts`.
+
 LibreHardwareMonitor/PawnIO are not current dependencies or redistributed.
 Earlier planning research found LHM MPL-2.0 and PawnIO modules under GPL/LGPL;
 re-open the analysis before bundling, downloading or installing them.

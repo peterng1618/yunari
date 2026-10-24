@@ -1,10 +1,16 @@
 import type { SampleEntry } from "@yunari/renderer-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { CredentialStore } from "../../settings/credentials.js";
 import {
   normalizeWeatherSettings,
   type WeatherSettings,
   type WeatherSettingsStore,
 } from "../../settings/weather.js";
+import {
+  OPENWEATHERMAP_CURRENT_BERLIN_CAPTURE,
+  OPENWEATHERMAP_FORECAST_BERLIN_CAPTURE,
+  WEATHERAPI_BERLIN_CAPTURE,
+} from "./backends.fixture.js";
 import { OPEN_METEO_BERLIN_CAPTURE } from "./open-meteo.fixture.js";
 import { WEATHER_KEYS, WeatherProvider } from "./provider.js";
 
@@ -34,6 +40,14 @@ function settingsStore(
     },
   };
 }
+
+/** A credential store that answers every id, so a BYOK backend can fetch. */
+const KEYS: CredentialStore = {
+  read: async () => ({}),
+  valueOf: async (id) => `key-${id}`,
+  write: async () => undefined,
+  clear: async () => undefined,
+};
 
 function fetcherOf(
   body: string | (() => Response) = JSON.stringify(OPEN_METEO_BERLIN_CAPTURE),
@@ -446,5 +460,103 @@ describe("WeatherProvider", () => {
 
     await vi.advanceTimersByTimeAsync(10 * 60_000);
     expect(calls()).toBe(31);
+  });
+
+  it("drops the cached reading when the backend changes and polls at once", async () => {
+    const now = Date.now();
+    const store = settingsStore();
+    const hosts: string[] = [];
+    const fetcher = (async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      hosts.push(url.hostname);
+      return new Response(
+        JSON.stringify(
+          url.hostname === "api.weatherapi.com"
+            ? WEATHERAPI_BERLIN_CAPTURE
+            : OPEN_METEO_BERLIN_CAPTURE,
+        ),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    const provider = new WeatherProvider({
+      settings: store,
+      fetcher,
+      credentials: KEYS,
+    });
+
+    await sampleAt(provider, ["weather.temp"], now);
+    await settle();
+    expect(hosts).toEqual(["api.open-meteo.com"]);
+
+    store.set({ ...BERLIN, provider: "weatherapi" });
+
+    // The sample notices the settings write; no timer advance is needed.
+    await sampleAt(provider, ["weather.temp"], now + 1);
+    await settle();
+    expect(hosts).toEqual(["api.open-meteo.com", "api.weatherapi.com"]);
+
+    const [attribution] = await provider.sample(
+      ["weather.attribution"],
+      now + 1,
+    );
+    expect(attribution?.sample).toMatchObject({
+      textValue: "Powered by WeatherAPI.com",
+    });
+    const [temp] = await provider.sample(["weather.temp"], now + 1);
+    expect(temp?.sample).toMatchObject({ value: 11.3 });
+  });
+
+  it("clears a failure backoff when the backend changes", async () => {
+    const now = Date.now();
+    const store = settingsStore({
+      ...BERLIN,
+      provider: "weatherapi",
+      pollIntervalMs: 60_000,
+    });
+    let calls = 0;
+    let failing = true;
+    const fetcher = (async (input: string | URL | Request) => {
+      calls += 1;
+      if (failing) return new Response("no", { status: 503 });
+
+      const path = new URL(String(input)).pathname;
+      return new Response(
+        JSON.stringify(
+          path.endsWith("/forecast")
+            ? OPENWEATHERMAP_FORECAST_BERLIN_CAPTURE
+            : OPENWEATHERMAP_CURRENT_BERLIN_CAPTURE,
+        ),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    const provider = new WeatherProvider({
+      settings: store,
+      fetcher,
+      credentials: KEYS,
+    });
+
+    await sampleAt(provider, ["weather.temp"], now);
+    await settle();
+    expect(calls).toBe(1);
+
+    // The first failure schedules two intervals. Changing the backend drops
+    // that reading and the failure count, and fetches now.
+    store.set({
+      ...BERLIN,
+      provider: "openweathermap",
+      pollIntervalMs: 60_000,
+    });
+    await sampleAt(provider, ["weather.temp"], now + 1);
+    await settle();
+    expect(calls).toBe(2);
+
+    // The second failure must schedule two intervals from a cleared count, not
+    // four from the first backend's failure.
+    failing = false;
+    await vi.advanceTimersByTimeAsync(119_000);
+    expect(calls).toBe(2);
+    await vi.advanceTimersByTimeAsync(1_000);
+    // Current and forecast are two requests, so a successful poll ends at 4.
+    expect(calls).toBe(4);
   });
 });

@@ -3,6 +3,7 @@ import {
   type Sample,
   type SampleEntry,
 } from "@yunari/renderer-core";
+import type { CredentialStore } from "../../settings/credentials.js";
 import type {
   WeatherSettings,
   WeatherSettingsStore,
@@ -14,13 +15,10 @@ import type {
   SensorProvider,
 } from "../provider.js";
 import { descriptorFieldsOf, redactForBrowser } from "../provider.js";
+import { WEATHER_BACKENDS } from "./backends.js";
 import { conditionText, windCompass } from "./conditions.js";
 import { weatherIconUrl } from "./icons.js";
-import {
-  fetchOpenMeteo,
-  OPEN_METEO_ATTRIBUTION,
-  type WeatherReading,
-} from "./open-meteo.js";
+import type { WeatherReading } from "./open-meteo.js";
 
 /**
  * Weather as readings, acquired by this provider rather than inside the host's
@@ -99,6 +97,8 @@ function idleWindowMs(intervalMs: number): number {
 
 export interface WeatherProviderOptions {
   readonly settings: WeatherSettingsStore;
+  /** Where a BYOK backend's key is read inside the host. */
+  readonly credentials?: CredentialStore;
   readonly fetcher?: typeof fetch;
   readonly now?: () => number;
 }
@@ -110,24 +110,30 @@ interface CachedReading {
 
 export class WeatherProvider implements SensorProvider {
   readonly id = WEATHER_PROVIDER_ID;
-  readonly label = "Weather (Open-Meteo)";
+  readonly label = "Weather";
 
   readonly #settingsStore: WeatherSettingsStore;
+  readonly #credentials: CredentialStore | undefined;
   readonly #fetcher: typeof fetch;
   readonly #now: () => number;
 
-  /** Last settings read, refreshed on every tick and on the first sample. */
+  /** Last settings read, refreshed on every sample and every tick. */
   #settings: WeatherSettings | undefined;
   #lastGood: CachedReading | undefined;
   /** Redacted; may reach a browser through `health()` and a sample message. */
   #failure: string | undefined;
   #failures = 0;
+  /** Backend plus place; a change drops the reading and the backoff. */
+  #lastIdentity: string | undefined;
+  #generation = 0;
+  #polling = false;
   #lastDemandMs = Number.NEGATIVE_INFINITY;
   #running = false;
   #timer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: WeatherProviderOptions) {
     this.#settingsStore = options.settings;
+    this.#credentials = options.credentials;
     this.#fetcher = options.fetcher ?? fetch;
     this.#now = options.now ?? (() => Date.now());
   }
@@ -150,12 +156,17 @@ export class WeatherProvider implements SensorProvider {
     // Demand is what starts and keeps the clock; a sample that asks for no
     // weather key must not spend this PC's request.
     this.#lastDemandMs = nowMs;
+    // Read every sample so a settings write is seen without waiting a whole
+    // interval (a backoff can be an hour); the file is one small JSON object.
+    const settings = await this.#refreshSettings();
+    const moved = this.#remember(settings);
+
     if (!this.#running) {
       this.#running = true;
       void this.#poll();
+    } else if (moved) {
+      this.#pollNow();
     }
-
-    const settings = this.#settings ?? (await this.#refreshSettings());
 
     // Only the cached reading's text is localized here: the clock above owns
     // acquisition, and the language must never reach it.
@@ -176,14 +187,56 @@ export class WeatherProvider implements SensorProvider {
     return this.#settings;
   }
 
-  async #poll(): Promise<void> {
-    if (!this.#running) return;
+  /**
+   * Records the backend and place, and drops everything derived from a
+   * different one. True when this call saw the change: the reading came from
+   * another backend or place, and its age and backoff do not describe this one.
+   */
+  #remember(settings: WeatherSettings): boolean {
+    const identity = [
+      settings.provider,
+      settings.label,
+      settings.latitude,
+      settings.longitude,
+    ].join("\u0000");
 
-    let delayMs: number;
+    if (identity === this.#lastIdentity) return false;
+
+    const first = this.#lastIdentity === undefined;
+    this.#lastIdentity = identity;
+
+    if (first) return false;
+
+    this.#generation += 1;
+    this.#lastGood = undefined;
+    this.#failure = undefined;
+    this.#failures = 0;
+    return true;
+  }
+
+  /** Drops a scheduled wait, including a backoff, and acquires now. */
+  #pollNow(): void {
+    if (this.#timer !== undefined) {
+      clearTimeout(this.#timer);
+      this.#timer = undefined;
+    }
+
+    // An in-flight poll checks the generation before storing its reading and
+    // schedules the next one at zero, so this cannot double-fetch.
+    if (!this.#polling) void this.#poll();
+  }
+
+  async #poll(): Promise<void> {
+    if (!this.#running || this.#polling) return;
+    this.#polling = true;
+
+    let delayMs = MAX_BACKOFF_MS;
 
     try {
       const settings = await this.#refreshSettings();
+      this.#remember(settings);
       const intervalMs = settings.pollIntervalMs;
+      const generation = this.#generation;
       const now = this.#now();
 
       if (now - this.#lastDemandMs > idleWindowMs(intervalMs)) {
@@ -197,14 +250,24 @@ export class WeatherProvider implements SensorProvider {
         delayMs = intervalMs;
       } else {
         try {
-          const reading = await fetchOpenMeteo(this.#fetcher, {
-            latitude: settings.latitude,
-            longitude: settings.longitude,
-          });
-          this.#lastGood = { reading, fetchedAtMs: this.#now() };
-          this.#failure = undefined;
-          this.#failures = 0;
-          delayMs = intervalMs;
+          const reading = await WEATHER_BACKENDS[settings.provider].fetch(
+            { latitude: settings.latitude, longitude: settings.longitude },
+            this.#fetcher,
+            settings.provider === "open-meteo"
+              ? undefined
+              : await this.#credentials?.valueOf(settings.provider),
+          );
+
+          if (generation !== this.#generation) {
+            // The backend or place moved while this request was in flight; the
+            // change already asked for a poll, and the old reading must not win.
+            delayMs = 0;
+          } else {
+            this.#lastGood = { reading, fetchedAtMs: this.#now() };
+            this.#failure = undefined;
+            this.#failures = 0;
+            delayMs = intervalMs;
+          }
         } catch (error: unknown) {
           this.#failures += 1;
           this.#failure = redactForBrowser(
@@ -220,6 +283,8 @@ export class WeatherProvider implements SensorProvider {
         error instanceof Error ? error.message : String(error),
       );
       delayMs = MAX_BACKOFF_MS;
+    } finally {
+      this.#polling = false;
     }
 
     this.#schedule(delayMs);
@@ -372,7 +437,7 @@ export class WeatherProvider implements SensorProvider {
       case "weather.sunset":
         return text(reading.sunsetIso);
       case "weather.attribution":
-        return text(OPEN_METEO_ATTRIBUTION);
+        return text(WEATHER_BACKENDS[settings.provider].attribution);
       default:
         return {
           sensorId,
