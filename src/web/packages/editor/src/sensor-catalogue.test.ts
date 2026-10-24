@@ -1,4 +1,4 @@
-import { SEMANTIC_KEYS } from "@yunari/renderer-core";
+import { descriptorsFromWire, SEMANTIC_KEYS } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { createSensorCatalogue } from "./sensor-catalogue.js";
 
@@ -48,6 +48,19 @@ describe("the sensor catalogue", () => {
         expectedTier: "baseline",
       },
     );
+  });
+
+  it("maps the wire exactly as the shared mapping does", async () => {
+    const payload = [
+      CUSTOM,
+      // Collides with a built-in: the vocabulary's spelling must win on both sides.
+      { ...CUSTOM, semanticKey: "cpu.load", label: "Provider load" },
+    ];
+    const catalogue = createSensorCatalogue(responding(payload));
+
+    await catalogue.refresh();
+
+    expect(catalogue.descriptors()).toEqual(descriptorsFromWire(payload));
   });
 
   it("keeps a known unit kind and drops one the renderer cannot honour", async () => {
