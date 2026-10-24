@@ -425,6 +425,39 @@ git commit -m "feat(release): fail CI on an unallowlisted dependency finding"
 
 ---
 
+### Task B4: Dependabot
+
+**Files:**
+- Create: `.github/dependabot.yml`
+- Modify: `docs/engineering/dependencies.md`
+
+**Interfaces:** none.
+
+- [ ] **Step 1: Verify the current config schema**
+
+Read GitHub's Dependabot options reference for `dependabot.yml` version 2 and confirm the keys used below still exist: `updates` entries, `package-ecosystem: npm` with `directory: "/src/web"`, `package-ecosystem: github-actions` with `directory: "/"`, `schedule.interval: weekly`, `groups` with `update-types`, and the `commit-message` prefixes. Record the source checked in a comment in the file.
+
+- [ ] **Step 2: Add the config**
+
+Two update entries: npm at `/src/web` and GitHub Actions at `/`. Weekly schedule, a bounded open-PR limit, Conventional Commit prefixes (`chore(deps)` and `chore(deps-dev)`), and a group for npm minor and patch updates so routine bumps arrive together. Majors stay ungrouped. Do not add a security-updates group: Dependabot security updates are a repository setting, not YAML.
+
+- [ ] **Step 3: Verify the YAML parses**
+
+Run: `npx --yes yaml@2 < .github/dependabot.yml` (or another parse-only check that adds no dependency). Expected: exit 0. GitHub validates the schema on the next push; a parse failure is the local failure mode worth catching.
+
+- [ ] **Step 4: Record the policy**
+
+In `docs/engineering/dependencies.md`, add a short paragraph: Dependabot proposes version updates weekly; minor and patch npm updates arrive grouped and majors individually; security updates require the repository setting to be enabled; the audit policy added in Task B3 fails CI on an unallowlisted advisory and on a stale allowlist entry, so a bump that resolves an allowlisted advisory removes that row in the same PR.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add .github/dependabot.yml docs/engineering/dependencies.md
+git commit -m "ci(deps): let Dependabot propose dependency updates"
+```
+
+---
+
 ## Phase C — Release pipeline
 
 ### Task C1: Stage the npm package
