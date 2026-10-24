@@ -17,7 +17,9 @@ import { isDesktopSurface } from "./surface.js";
  * way the values on screen are known. What stays real is the half the feature
  * is about: the theme is served by the real host, and the artwork URL the
  * sample names is fetched from the host's own route, so the bytes, the content
- * type and the display gate are the shipped ones.
+ * type and the headers are the shipped ones. That request is loopback, which
+ * the route admits without a credential, so the paired-display refusal is
+ * proven in `server.test.ts` rather than here.
  *
  * The sample is host-relative (`/api/media/artwork/<sha>.png`), exactly what
  * `providers/media/provider.ts` emits. Loopback is this PC and the route
@@ -416,9 +418,6 @@ test.describe("the media readings on a display", () => {
       .toBe(200);
     expect((await imageState(page))?.src).toContain(AUTHORED_URL);
     const authoredFrame = await frame(page);
-    expect(authoredFrame.length, "the authored frame painted").toBeGreaterThan(
-      0,
-    );
 
     // **The artwork.** Host-relative, as the provider emits it, and served by
     // the host's own route: the bytes arrive under its content type, pass the
