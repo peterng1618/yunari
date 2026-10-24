@@ -271,6 +271,9 @@ export const uiCopy = {
     /** What one run says, for a run that is prose. Distinct from the Add pane's
         "Text" button, which inserts an object rather than naming a field. */
     runText: "Run text",
+    /** A run tab's accessible name: its visible label is the bare number, which
+        on its own names no question. */
+    runTab: (position: number) => `Run ${position}`,
     addRun: "Add run",
     /** Shown when an in-place edit would have to drop the runs it cannot place. */
     multiRunRefused:

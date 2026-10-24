@@ -894,6 +894,30 @@ describe("the selection inspector", () => {
  * subject and the first section, and that pressing one arranges the objects —
  * the rendered reading of it is the controller's browser pass.
  */
+describe("the run editor's tab selection", () => {
+  it("does not write, or record a history entry, when a tab is picked", async () => {
+    const text = new Textbox("", { id: "clock-label" });
+    text.set({
+      yunariText: {
+        runs: [
+          { kind: "literal", text: "A", typePreset: "typePresets.body" },
+          { kind: "literal", text: "B", typePreset: "typePresets.body" },
+        ],
+      },
+    });
+    const { host, history } = setup(text);
+    const before = JSON.stringify(text.get("yunariText"));
+
+    await click(host.querySelector<HTMLElement>('[data-yunari-run-tab="2"]')!);
+
+    expect(host.querySelector('[data-yunari-run-text="1"]')).not.toBeNull();
+    // Selection is React's own: it is not an edit, so nothing is written and
+    // no undo entry stands over a look at another run.
+    expect(JSON.stringify(text.get("yunariText"))).toBe(before);
+    expect(history.saveState).not.toHaveBeenCalled();
+  });
+});
+
 describe("the arrange actions the column leads with", () => {
   const buttons = (host: HTMLElement): readonly HTMLButtonElement[] => [
     ...host.querySelectorAll<HTMLButtonElement>("[data-yunari-arrange-action]"),

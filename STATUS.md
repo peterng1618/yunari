@@ -16,14 +16,14 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- Auto text hides Overflow and vertical align in the run editor and shows measured W/H read-only; a `Textbox` keeps both.
-- `PairHalfView.readOnly` renders the half's value and commits nothing, through `ControlNumber`/`ControlPair`.
-- The geometry funnel refuses width/height for a non-`Textbox`, so an auto text's size follows its content.
-- Selecting a Text box then a Text republishes the auto contract with no stale control.
+- The run editor shows one run at a time behind Base UI tabs numbered 1..N, each named `Run N`.
+- `+` appends a run and selects it; removing the selected run falls back to the first remaining run.
+- Tab selection is React-local and writes nothing: no document edit and no history entry.
+- Run fields, `Remove run N` and the class-gated Overflow/vertical align are unchanged.
 
 ## Next
 
-1. Task 2.3: the runs strip as numbered tabs.
+1. Phase 3 / Task 3.1: update e2e insertion to the click-or-drag gesture.
 
 ## Blockers / unverified
 

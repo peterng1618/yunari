@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   blur,
   choose,
+  click,
   mountRunEditor,
   optionsOf,
   pressedLabel,
@@ -550,6 +551,8 @@ describe("how many runs a text object has", () => {
     // A value run has no words of its own, so a field over one would accept an
     // edit and persist nothing.
     expect(box.host.querySelector('[data-yunari-run-text="0"]')).toBeNull();
+    // The second run is behind its tab now; pick it before reading a field.
+    await click(box.pick<HTMLElement>('[data-yunari-run-tab="2"]'));
     const field = box.pick<HTMLInputElement>('[data-yunari-run-text="1"]');
     expect(field.value).toBe("%");
     await typeInto(field, " %");
@@ -584,7 +587,7 @@ describe("how many runs a text object has", () => {
     return box.dispose();
   });
 
-  it("numbers the remove buttons, so three rows are not one name", async () => {
+  it("numbers the remove action for the run it removes", async () => {
     const box = mountRunEditor({
       runs: [
         ...readingAndUnit,
@@ -595,10 +598,17 @@ describe("how many runs a text object has", () => {
       declared: [{ id: "load", semanticKey: "cpu.load" }],
     });
 
-    const names = [
-      ...box.host.querySelectorAll("[data-yunari-run-remove]"),
-    ].map((button) => button.textContent);
-    expect(new Set(names).size).toBe(3);
+    const visible = (): readonly HTMLElement[] => [
+      ...box.host.querySelectorAll<HTMLElement>("[data-yunari-run-remove]"),
+    ];
+    // One panel at a time, so one remove action — and its number is the run's
+    // own position, not a constant "run 1".
+    expect(visible()).toHaveLength(1);
+    expect(visible()[0]?.textContent).toBe("Remove run 1");
+
+    await click(box.pick<HTMLElement>('[data-yunari-run-tab="3"]'));
+    expect(visible()).toHaveLength(1);
+    expect(visible()[0]?.textContent).toBe("Remove run 3");
     return box.dispose();
   });
 });
@@ -761,6 +771,7 @@ describe("which binding a value run carries", () => {
         { kind: "value", bindingId: "disk.free" },
       ],
     });
+    await click(box.pick<HTMLElement>('[data-yunari-run-tab="2"]'));
 
     const note = box.pick<HTMLElement>("[data-yunari-run-binding]");
     expect(note.getAttribute("data-yunari-run-binding")).toBe("disk.free");

@@ -1,3 +1,4 @@
+import { Tabs } from "@base-ui/react/tabs";
 import type {
   Binding,
   FabricGlobals,
@@ -451,8 +452,14 @@ function RunRow(props: {
   readonly row: RunRowView;
   readonly view: RunsView;
   readonly edits: RunEdits;
+  /**
+   * Called before the write, so the editor can stop following the last run:
+   * removing the selected last one must leave the *first* remaining run
+   * selected, not whatever is last now.
+   */
+  readonly onRemove: (index: number) => void;
 }): React.JSX.Element {
-  const { row, view, edits } = props;
+  const { row, view, edits, onRemove } = props;
   const index = row.index;
 
   return (
@@ -555,7 +562,7 @@ function RunRow(props: {
           type="button"
           data-yunari-run-remove={String(index)}
           className="self-start text-xs text-muted"
-          onClick={() => edits.removeRun(index)}
+          onClick={() => onRemove(index)}
         >
           {uiCopy.inspectorFields.removeRun(index + 1)}
         </button>
@@ -570,18 +577,34 @@ function colourValueOf(view: RunsView, ref: string): string {
 }
 
 /**
- * The run editor: the layout controls, one row per run, and the add button.
+ * The run editor: the layout controls, a numbered tab per run, the selected
+ * run's fields, and the add button.
  *
  * The caret rule the imperative editor needed a focus-restoring pair for is
- * React's own here: the rows key on their index and the values are props, so a
- * re-publish updates the focused input rather than replacing it, and a checkbox
- * never regains focus it was not holding. See `index.ts`.
+ * React's own here: a row keys on its runtime identity and the values are
+ * props, so a re-publish updates the focused input rather than replacing it,
+ * and a checkbox never regains focus it was not holding. See `index.ts`.
  */
 export function RunEditor(props: {
   readonly runs: RunsView;
   readonly edits: RunEdits;
 }): React.JSX.Element {
   const { runs: view, edits } = props;
+  // Which tab is showing is React's own: not authored, never in the view, the
+  // envelope or history. Keyed by the row's runtime identity so removing a
+  // different run does not move the selection off the run being edited.
+  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  // `+` appends a run whose identity is only minted when the re-published view
+  // arrives, so the selection follows the last run rather than guessing its id.
+  const [followLast, setFollowLast] = useState(false);
+  const selected = followLast
+    ? view.runs.at(-1)
+    : (view.runs.find((row) => row.id === selectedId) ?? view.runs[0]);
+
+  const remove = (index: number): void => {
+    setFollowLast(false);
+    edits.removeRun(index);
+  };
 
   return (
     <div data-yunari-runs="" className="flex flex-col gap-[var(--space-6)]">
@@ -619,18 +642,60 @@ export function RunEditor(props: {
           />
         </>
       ) : null}
-      {view.runs.map((row) => (
-        <RunRow key={row.id} row={row} view={view} edits={edits} />
-      ))}
-
-      <button
-        type="button"
-        data-yunari-run-add=""
-        className="self-start text-xs text-muted"
-        onClick={() => edits.addRun()}
+      <Tabs.Root
+        value={selected?.id ?? null}
+        onValueChange={(value) => {
+          if (typeof value !== "string") return;
+          setFollowLast(false);
+          setSelectedId(value);
+        }}
+        className="flex flex-col gap-[var(--space-6)]"
       >
-        {uiCopy.inspectorFields.addRun}
-      </button>
+        <Tabs.List
+          activateOnFocus
+          className="flex flex-wrap items-center gap-[var(--space-4)]"
+        >
+          {view.runs.map((row, at) => (
+            <Tabs.Tab
+              key={row.id}
+              value={row.id}
+              data-yunari-run-tab={String(at + 1)}
+              aria-label={uiCopy.inspectorFields.runTab(at + 1)}
+              className="rounded-t-[var(--radius-sm)] px-[var(--space-12)] py-[var(--space-8)] text-sm text-muted data-[selected]:bg-[var(--panel-2)] data-[selected]:text-text"
+            >
+              {at + 1}
+            </Tabs.Tab>
+          ))}
+          <button
+            type="button"
+            data-yunari-run-add=""
+            aria-label={uiCopy.inspectorFields.addRun}
+            className="self-start text-xs text-muted"
+            onClick={() => {
+              if (edits.addRun()) setFollowLast(true);
+            }}
+          >
+            +
+          </button>
+        </Tabs.List>
+
+        {selected === undefined ? null : (
+          <Tabs.Panel
+            value={selected.id}
+            className="flex flex-col gap-[var(--space-6)]"
+          >
+            {/* Keyed by identity, so moving to another tab remounts the fields:
+                a draft belongs to the run it was typed into. */}
+            <RunRow
+              key={selected.id}
+              row={selected}
+              view={view}
+              edits={edits}
+              onRemove={remove}
+            />
+          </Tabs.Panel>
+        )}
+      </Tabs.Root>
 
       {view.notes.map((note) => (
         <p
