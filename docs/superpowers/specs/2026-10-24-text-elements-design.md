@@ -177,6 +177,23 @@ element and where it lands.
 - Inspector shows everything it shows today except Wrap: Runs, Align, vertical
   align, Overflow, editable W/H, text fields, Position, Layer.
 
+### Runs in the inspector
+
+A text carries an ordered list of runs. The inspector shows them one at a time
+behind numbered tabs, **1, 2, 3, …** with a **`+`** after the last, because a
+stacked editor grows with every run and pushes the layout controls away. The
+tab's visible label is its 1-based number; its accessible name is `Run N`.
+
+- Tab order is run order. Selecting a tab shows only that run's fields,
+  including its `Remove run N` action.
+- `+` adds a run and selects it, so the author lands in the run they made.
+- Removing the selected run leaves the first remaining run selected; a tab
+  always names a row.
+- Run selection is editor-transient, like a selection: it is not authored, not
+  persisted, not written to the envelope and produces no history entry.
+- The strip wraps rather than scrolls. Alignment and the class-gated Overflow
+  and vertical alignment stay above it; notes stay below.
+
 ### Shared
 
 - Both are the same layer kind, `text`, with the same glyph. The kind word stays
@@ -233,6 +250,9 @@ element and where it lands.
   one history entry; undo removes it in one step.
 - The inspector renders no Wrap control on either class, hides Overflow,
   vertical align and editable W/H on a Text, and keeps them on a Text box.
+- The Runs section renders one numbered tab per run; selecting a tab shows that
+  run's fields only; `+` adds and selects a run; removing the selected run
+  selects a remaining one.
 - Geometry writes refuse a width or height write on a Text.
 - `authoredAlignment` derives wrap, overflow and vertical alignment from the
   class; a legacy authored `wrap` has no effect.
@@ -266,6 +286,8 @@ Each of these must fail before the change and pass after:
 - Click places auto-width Text; drag places a fixed Text box; the author never
   chooses a mode from a control.
 - No Wrap control exists in the inspector or the model.
+- Runs are edited one at a time behind numbered tabs, with `+` adding and
+  selecting a run.
 - An existing theme renders unchanged, with every `Textbox` still fixed and
   every legacy text still auto-width; only a legacy `FabricText` changes class,
   and only when the editor saves it again.

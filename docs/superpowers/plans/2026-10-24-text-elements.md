@@ -22,6 +22,7 @@
 - **Textbox-only behaviour stays explicit.** Box guard, authored height, vertical alignment, clipping, line capacity, width/height drag handles and the text rule in `selection-eligibility` keep naming `Textbox`.
 - One owner per concept: text construction and placement are `text-manager`'s; the Add/context/footer surfaces arm through the session, never construct.
 - Copy lives in `uiCopy`; the removed Wrap control's copy is deleted rather than orphaned. Add `Text box` as the fixed element's default name.
+- The Runs editor's selected run is transient React state: never persisted, never an envelope key, never a history entry.
 - `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` are on. Refuse invalid numeric input rather than coercing it.
 - Stage explicit paths; no `git add -A`. Conventional Commit titles. No licence headers. 500 lines is a signal, 800 a stop.
 
@@ -32,6 +33,7 @@
 3. Cancelling with Escape, a right press or a press outside the artboard must restore the canvas's cursor and target-finding state and leave no object, history entry or armed state behind.
 4. A legacy `Textbox` carrying `wrap: false` must still wrap, and a save/reload must preserve each element's class and geometry.
 5. Swapping the selection from a Text box to a Text must show the auto contract immediately: no stale Overflow, vertical align or editable Size row.
+6. Selecting a run's number shows that run's fields and hides the others; `+` adds a run and selects it; removing the selected run leaves a remaining one selected.
 
 Each line's test is named in the owning task below.
 
@@ -215,7 +217,7 @@ git commit -m "feat(editor): place text by click or drag"
 
 ## Phase 2 — One arming route and an honest inspector
 
-**Outcome:** Every creation surface arms the same gesture; the new object lands at the gesture with the right class, defaults and name; the inspector shows only controls the selected class can honour.
+**Outcome:** Every creation surface arms the same gesture; the new object lands at the gesture with the right class, defaults and name; the inspector shows only controls the selected class can honour, and the Runs section shows one run at a time behind numeric tabs.
 
 ### Task 2.1: Arm from one route and insert at the gesture
 
@@ -295,6 +297,45 @@ Expected: PASS, including Review Focus 5.
 ```bash
 git add src/web/packages/editor/src/selection-inspector src/web/packages/editor/src/components/ui/control-number.tsx src/web/packages/editor/src/components/ui/control-pair.tsx
 git commit -m "feat(inspector): show only the selected text class's controls"
+```
+
+### Task 2.3: Show one run at a time behind numeric tabs
+
+**Files:**
+- Modify: `src/web/packages/editor/src/selection-inspector/runs.tsx` — `RunEditor` renders the layout controls, then a tab strip, then only the selected run
+- Modify: `src/web/packages/editor/src/ui-copy.ts` — `inspectorFields.runTab(index)`; `addRun` becomes the `+` button's accessible name
+- Tests: `selection-inspector/runs.dom.test.ts`, `runs.dom.test.tsx`, `inspector.dom.test.tsx`, `column.dom.test.tsx`, `accessible-names.dom.test.ts`
+
+**Interfaces:**
+- Consumes: `RunsView.runs` and `RunEdits.addRun`/`removeRun` (Task 1.1/2.2 already changed the projection and the class gating).
+- Produces: `uiCopy.inspectorFields.runTab(index: number): string` → `Run <1-based index>`; each `Tabs.Tab` carries `data-yunari-run-tab="<1-based index>"` and its accessible name from `runTab`; the existing `data-yunari-run-add` stays on the `+` button.
+- Behaviour: Base UI's existing `Tabs` primitive (`@base-ui/react/tabs`, already used by the asset finder and settings) owns the tab semantics. Tab order is run order; only the selected run's fields render below the strip. The selected run is React-local, keyed by `RunRowView.id`, never persisted, never a history entry. `+` calls `edits.addRun()` and selects the newly added run (last). A selection whose id disappears (its run was removed) falls back to the first remaining run, so a selected tab always names a row. `Remove run N` stays in the selected run's panel and keeps its existing copy. The strip wraps rather than scrolls; Align and the class-gated Overflow/vertical align stay above it, and notes stay below.
+
+- [ ] **Step 1: Write the failing tab tests**
+
+Cover: every run has a numbered tab and only the selected run's fields render; clicking tab 2 shows run 2's fields and hides run 1's; `+` adds a run and selects it; removing the selected run leaves a remaining one selected; the tab's accessible name is `Run N`; keyboard arrows move between tabs; the selection produces no history entry and no dirty state.
+
+- [ ] **Step 2: Run and confirm red**
+
+Run: `npx vitest run packages/editor/src/selection-inspector/runs.dom.test.ts packages/editor/src/selection-inspector/runs.dom.test.tsx`
+
+Expected: FAIL — every run still renders stacked.
+
+- [ ] **Step 3: Implement the tab strip**
+
+Wrap the run rows in `Tabs.Root`/`Tabs.List`/`Tabs.Tab`/`Tabs.Panel`; add the `+` button after the list; keep the run row component unchanged apart from living inside the panel. Update the accessible-name census and any fixture that counts rendered run fields.
+
+- [ ] **Step 4: Run the suites**
+
+Run: `npx vitest run packages/editor/src/selection-inspector packages/editor/src/accessible-names.dom.test.ts`
+
+Expected: PASS, including Review Focus 6.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/web/packages/editor/src/selection-inspector/runs.tsx src/web/packages/editor/src/ui-copy.ts src/web/packages/editor/src/selection-inspector/runs.dom.test.ts src/web/packages/editor/src/selection-inspector/runs.dom.test.tsx src/web/packages/editor/src/selection-inspector/inspector.dom.test.tsx src/web/packages/editor/src/selection-inspector/column.dom.test.tsx src/web/packages/editor/src/accessible-names.dom.test.ts
+git commit -m "feat(inspector): show one text run at a time behind numeric tabs"
 ```
 
 ---
@@ -410,5 +451,6 @@ git commit -m "docs(text): record the text class model and close the plan"
 - Auto text is `IText`, fixed text is `Textbox`, and the persisted Fabric `type` is the only width-mode discriminator.
 - Click places a Text, drag places a Text box, and every creation surface arms the same gesture; Escape and a non-primary press leave no trace.
 - The inspector offers no Wrap control and no control the selected class cannot honour.
+- The Runs section shows one numbered tab per run with `+` adding and selecting a run; only the selected run's fields and its Remove action are shown.
 - An editor-opened legacy `"Text"` is editable `IText`; the player still renders the class the scene carries.
 - The full gate exits 0 and the spec's Acceptance section records what was observed.
