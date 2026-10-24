@@ -25,9 +25,12 @@ import {
 } from "./envelope-semantics.js";
 import {
   type FabricThemeEnvelope,
+  newerSchemaVersionIssue,
+  notThemeObjectIssue,
   parseSchemaMajor,
   SUPPORTED_SCHEMA_MAJOR,
-  SUPPORTED_SCHEMA_VERSION,
+  schemaVersionRequiredIssue,
+  unsupportedSchemaVersionIssue,
 } from "./fabric-envelope.js";
 import {
   isGlassTreatment,
@@ -35,6 +38,7 @@ import {
   supportsGlass,
   YUNARI_GLASS_PROPERTY,
 } from "./glass.js";
+import { migrateFabricThemeEnvelope } from "./migrations.js";
 import { isObjectName, YUNARI_NAME_PROPERTY } from "./object-name.js";
 
 /** Bounds malformed Fabric JSON before it reaches Fabric's asynchronous revival. */
@@ -43,6 +47,27 @@ const MAX_SCENE_DEPTH = MAX_NODE_DEPTH + 8;
 export type FabricEnvelopeValidationResult =
   | { readonly ok: true; readonly envelope: FabricThemeEnvelope }
   | { readonly ok: false; readonly issues: readonly ValidationIssue[] };
+
+export interface FabricEnvelopeValidationOptions {
+  readonly requireTrioRoles?: boolean;
+}
+
+/**
+ * The one read path: normalises a legacy version and migrates N−1 in memory,
+ * then validates as current.
+ *
+ * Every persisted-theme reader calls this; write paths call
+ * {@link validateFabricThemeEnvelope} directly so a save cannot smuggle an old
+ * document through.
+ */
+export function readFabricThemeEnvelope(
+  input: unknown,
+  options: FabricEnvelopeValidationOptions = {},
+): FabricEnvelopeValidationResult {
+  const migrated = migrateFabricThemeEnvelope(input);
+  if (!migrated.ok) return { ok: false, issues: [migrated.issue] };
+  return validateFabricThemeEnvelope(migrated.document, options);
+}
 
 /**
  * Validates the versioned product envelope; Fabric compatibility remains
@@ -57,38 +82,20 @@ export type FabricEnvelopeValidationResult =
  */
 export function validateFabricThemeEnvelope(
   input: unknown,
-  options: { readonly requireTrioRoles?: boolean } = {},
+  options: FabricEnvelopeValidationOptions = {},
 ): FabricEnvelopeValidationResult {
-  if (!isRecord(input)) {
-    return fail("not-an-object", "", "The theme must be a JSON object.");
-  }
+  if (!isRecord(input)) return refuse(notThemeObjectIssue());
 
   // An unknown version cannot be safely interpreted, so report it alone (§141).
   // Strict on purpose: the legacy integer is accepted by the reader's migration
   // path, never here, so a write path cannot smuggle an old document through.
   const version = input["schemaVersion"];
   const major = parseSchemaMajor(version);
-  if (major === undefined) {
-    return fail(
-      "missing-field",
-      "/schemaVersion",
-      "schemaVersion is required and must be major.minor.patch.",
-    );
-  }
-  if (major > SUPPORTED_SCHEMA_MAJOR) {
-    return fail(
-      "newer-schema-version",
-      "/schemaVersion",
-      `This theme was made with a newer version of Yunari (schema ${String(version)}). Update Yunari to open it.`,
-    );
-  }
-  if (major !== SUPPORTED_SCHEMA_MAJOR) {
-    return fail(
-      "unsupported-schema-version",
-      "/schemaVersion",
-      `Schema version ${String(version)} is not supported by this build (expected ${SUPPORTED_SCHEMA_VERSION}).`,
-    );
-  }
+  if (major === undefined) return refuse(schemaVersionRequiredIssue());
+  if (major > SUPPORTED_SCHEMA_MAJOR)
+    return refuse(newerSchemaVersionIssue(version));
+  if (major !== SUPPORTED_SCHEMA_MAJOR)
+    return refuse(unsupportedSchemaVersionIssue(version));
 
   const issues: ValidationIssue[] = [];
   unknownKeys(input, "", envelopeKeysFor("envelope"), "A theme", issues);
@@ -1562,12 +1569,8 @@ function unknownKeys(
   }
 }
 
-function fail(
-  code: ValidationIssue["code"],
-  path: string,
-  message: string,
-): FabricEnvelopeValidationResult {
-  return { ok: false, issues: [issue(code, path, message)] };
+function refuse(issueValue: ValidationIssue): FabricEnvelopeValidationResult {
+  return { ok: false, issues: [issueValue] };
 }
 
 function issue(

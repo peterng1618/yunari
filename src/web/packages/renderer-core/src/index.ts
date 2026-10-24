@@ -342,8 +342,14 @@ export type {
   FabricThemeEnvelopeInput,
 } from "./theme/fabric-envelope.js";
 export { SUPPORTED_SCHEMA_VERSION } from "./theme/fabric-envelope.js";
-export type { FabricEnvelopeValidationResult } from "./theme/fabric-envelope-validate.js";
-export { validateFabricThemeEnvelope } from "./theme/fabric-envelope-validate.js";
+export type {
+  FabricEnvelopeValidationOptions,
+  FabricEnvelopeValidationResult,
+} from "./theme/fabric-envelope-validate.js";
+export {
+  readFabricThemeEnvelope,
+  validateFabricThemeEnvelope,
+} from "./theme/fabric-envelope-validate.js";
 export type {
   AspectBucket,
   ColourMode,
@@ -367,6 +373,13 @@ export {
   supportsGlass,
   YUNARI_GLASS_PROPERTY,
 } from "./theme/glass.js";
+export type { EnvelopeMigration, MigrationResult } from "./theme/migrations.js";
+export {
+  MIN_SUPPORTED_SCHEMA_MAJOR,
+  migrateFabricThemeEnvelope,
+  runSchemaMigrations,
+  SCHEMA_MIGRATIONS,
+} from "./theme/migrations.js";
 // The reader and the property name are the external contract; the guard and
 // the bound stay inside the package, where the validator and its tests live.
 // The guard and the bound are exported because an editor field must refuse an

@@ -8,6 +8,7 @@ import {
   type PalettePaint,
   type ThemeMetadata,
 } from "./document.js";
+import type { ValidationIssue } from "./envelope-semantics.js";
 
 /**
  * The theme schema version this build reads and writes.
@@ -29,6 +30,45 @@ export function parseSchemaMajor(value: unknown): number | undefined {
   if (typeof value !== "string" || !isSemanticVersion(value)) return undefined;
   const major = Number.parseInt(value, 10);
   return Number.isSafeInteger(major) ? major : undefined;
+}
+
+/**
+ * The version refusals, owned here so the strict validator and the reader's
+ * migration print one sentence each. A second copy would let a document be
+ * told it is malformed on open and new on save.
+ */
+export function notThemeObjectIssue(): ValidationIssue {
+  return {
+    code: "not-an-object",
+    path: "",
+    message: "The theme must be a JSON object.",
+  };
+}
+
+export function schemaVersionRequiredIssue(): ValidationIssue {
+  return {
+    code: "missing-field",
+    path: "/schemaVersion",
+    message: "schemaVersion is required and must be major.minor.patch.",
+  };
+}
+
+export function newerSchemaVersionIssue(version: unknown): ValidationIssue {
+  return {
+    code: "newer-schema-version",
+    path: "/schemaVersion",
+    message: `This theme was made with a newer version of Yunari (schema ${String(version)}). Update Yunari to open it.`,
+  };
+}
+
+export function unsupportedSchemaVersionIssue(
+  version: unknown,
+): ValidationIssue {
+  return {
+    code: "unsupported-schema-version",
+    path: "/schemaVersion",
+    message: `Schema version ${String(version)} is not supported by this build (expected ${SUPPORTED_SCHEMA_VERSION}).`,
+  };
 }
 
 export interface FabricPaletteEntry {
