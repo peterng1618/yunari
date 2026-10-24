@@ -146,8 +146,8 @@
 - Modify: `provider.ts`, `provider.test.ts`
 
 **Interfaces:**
-- Consumes: `readInstalledGames`, `classifyForeground`.
-- Produces: `GameProviderOptions.catalogue?: () => Promise<readonly InstalledGame[]>` (defaults to `readInstalledGames`); `game.running` follows `GameEvidence.running`.
+- Consumes: `readInstalledGames` (whose default seams include the Steam library through `catalogue/steam.ts`), `classifyForeground`.
+- Produces: `GameProviderOptions.catalogue?: () => Promise<readonly InstalledGame[]>` (defaults to `readInstalledGames`); `game.running` follows `GameEvidence.running`. Steam's existing app read stays for local box art; presence comes from the catalogue, so a Steam game is matched once, not twice.
 
 - [ ] Failing tests: a foreground `chrome.exe` reports `running:false` and still answers `game.app`; a catalogued exe reports `running:true` with no store lookup (assert the store fake was not called); the second consecutive fullscreen sample flips `running` true; a catalogue failure leaves the provider available.
 - [ ] Implement: read the catalogue once per demand window, keep a per-foreground sample counter, reset both on teardown, keep the store path untouched.
