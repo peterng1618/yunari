@@ -169,17 +169,22 @@ function buildRequest(
   source: CustomSource,
   destination: URL,
   credential: string | undefined,
-  withCredential: boolean,
+  sameOrigin: boolean,
 ): BuiltRequest | { readonly reason: string } {
   const url = new URL(destination.href);
   const headers = new Headers();
-  for (const [name, value] of Object.entries(source.headers ?? {})) {
-    if (!withCredential && name.toLowerCase() === "authorization") continue;
-    headers.set(name, value);
+
+  // A cross-origin hop gets none of the source's headers: they were configured
+  // for the endpoint the user typed, and a redirect is not that endpoint.
+  // Named headers are often secrets even when they are not `Authorization`.
+  if (sameOrigin) {
+    for (const [name, value] of Object.entries(source.headers ?? {})) {
+      headers.set(name, value);
+    }
   }
 
   const auth = source.auth;
-  if (auth === undefined || auth.kind === "none" || !withCredential) {
+  if (auth === undefined || auth.kind === "none" || !sameOrigin) {
     return { url, headers };
   }
   if (credential === undefined)
@@ -297,7 +302,7 @@ async function run(
 
   const origin = destination.origin;
   const signal = AbortSignal.timeout(source.timeoutMs);
-  let withCredential = true;
+  let sameOrigin = true;
   let redirects = 0;
 
   for (;;) {
@@ -305,7 +310,7 @@ async function run(
     if (refused !== undefined) return fail(refused);
     if (signal.aborted) return fail(TIMEOUT_REASON);
 
-    const built = buildRequest(source, destination, credential, withCredential);
+    const built = buildRequest(source, destination, credential, sameOrigin);
     if (!responseOf(built)) return fail(built.reason);
 
     let response: Response;
@@ -320,6 +325,8 @@ async function run(
     }
 
     if (REDIRECT_STATUSES.has(response.status)) {
+      // Not raced against the deadline: native fetch drops a cancelled socket
+      // promptly, and a seam that stalls here is a test bug, not a source.
       await discard(response);
 
       if (redirects >= MAX_REDIRECTS) {
@@ -338,6 +345,10 @@ async function run(
         return fail("the source redirected to an unusable address");
       }
 
+      if (next.username !== "" || next.password !== "") {
+        return fail("the source redirected to a URL carrying credentials");
+      }
+
       if (next.protocol !== built.url.protocol) {
         return fail(
           `the source redirected from ${built.url.protocol} to ${next.protocol}, which changes the scheme`,
@@ -345,7 +356,7 @@ async function run(
       }
 
       redirects += 1;
-      if (next.origin !== origin) withCredential = false;
+      if (next.origin !== origin) sameOrigin = false;
       destination = next;
       continue;
     }
