@@ -269,6 +269,27 @@ it("reports onLost once for an error followed by an exit and then stops writing"
   expect(stdin).toHaveLength(written);
 });
 
+it("still kills the child after a post-start error", async () => {
+  const { child, kill, spawnProcess } = fakeChild();
+  const starting = startWindowsTray({
+    onAction: vi.fn(),
+    onLost: vi.fn(),
+    spawnProcess,
+  });
+  child.stdout.write('{"type":"started"}\n');
+  const view = await starting;
+  child.stdout.write('{"type":"error","message":"the menu is gone"}\n');
+
+  vi.useFakeTimers();
+  try {
+    view.close();
+    vi.advanceTimersByTime(300);
+    expect(kill).toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("rejects when started never arrives and kills the child", async () => {
   const { kill, spawnProcess } = fakeChild();
   await expect(

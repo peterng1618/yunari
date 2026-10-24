@@ -341,9 +341,11 @@ export function startWindowsTray(
     }
 
     function close(): void {
-      if (closing || dead) return;
+      if (closing) return;
       closing = true;
-      send(JSON.stringify({ action: "kill" }));
+      // A post-start error latches `dead` but leaves the script running, so
+      // still kill it rather than orphaning the process at Exit.
+      if (!dead) send(JSON.stringify({ action: "kill" }));
       killTimer = setTimeout(() => child.kill(), KILL_GRACE_MS);
       killTimer.unref();
     }
