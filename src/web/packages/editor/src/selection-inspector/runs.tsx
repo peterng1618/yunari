@@ -603,6 +603,9 @@ export function RunEditor(props: {
 
   const remove = (index: number): void => {
     setFollowLast(false);
+    // The selected id names the run being removed, so it must not survive as a
+    // fallback: a stale one would restore a tab that was selected before `+`.
+    setSelectedId(undefined);
     edits.removeRun(index);
   };
 
@@ -651,33 +654,39 @@ export function RunEditor(props: {
         }}
         className="flex flex-col gap-[var(--space-6)]"
       >
-        <Tabs.List
-          activateOnFocus
-          className="flex flex-wrap items-center gap-[var(--space-4)]"
-        >
-          {view.runs.map((row, at) => (
-            <Tabs.Tab
-              key={row.id}
-              value={row.id}
-              data-yunari-run-tab={String(at + 1)}
-              aria-label={uiCopy.inspectorFields.runTab(at + 1)}
-              className="rounded-t-[var(--radius-sm)] px-[var(--space-12)] py-[var(--space-8)] text-sm text-muted data-[selected]:bg-[var(--panel-2)] data-[selected]:text-text"
-            >
-              {at + 1}
-            </Tabs.Tab>
-          ))}
+        {/* The add action sits after the tablist rather than inside it: a
+            tablist owns tabs, and a reader should not meet a foreign button in
+            the middle of the strip. The row wraps, so the + follows the last
+            tab on the same line. */}
+        <div className="flex flex-wrap items-center gap-[var(--space-4)]">
+          <Tabs.List
+            activateOnFocus
+            className="flex flex-wrap items-center gap-[var(--space-4)]"
+          >
+            {view.runs.map((row, at) => (
+              <Tabs.Tab
+                key={row.id}
+                value={row.id}
+                data-yunari-run-tab={String(at + 1)}
+                aria-label={uiCopy.inspectorFields.runTab(at + 1)}
+                className="rounded-t-[var(--radius-sm)] px-[var(--space-12)] py-[var(--space-8)] text-sm text-muted data-[selected]:bg-[var(--panel-2)] data-[selected]:text-text"
+              >
+                {at + 1}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
           <button
             type="button"
             data-yunari-run-add=""
             aria-label={uiCopy.inspectorFields.addRun}
-            className="self-start text-xs text-muted"
+            className="text-xs text-muted"
             onClick={() => {
               if (edits.addRun()) setFollowLast(true);
             }}
           >
             +
           </button>
-        </Tabs.List>
+        </div>
 
         {selected === undefined ? null : (
           <Tabs.Panel

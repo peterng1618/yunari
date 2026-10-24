@@ -237,6 +237,24 @@ describe("showing one run at a time behind numbered tabs", () => {
     return box.dispose();
   });
 
+  it("selects the first run when the added last run is removed", async () => {
+    // `+` leaves the previously selected id behind while it follows the new
+    // last run. Removing that run must still land on the FIRST remaining run,
+    // not silently restore the tab that was selected before the add.
+    const box = mountRunEditor({ runs: threeRuns, globals: RUN_GLOBALS });
+    await click(tab(box, 2));
+    await click(box.pick<HTMLElement>("[data-yunari-run-add]"));
+
+    await clickHook(box.host, 'data-yunari-run-remove="3"');
+
+    expect(box.runs()).toHaveLength(3);
+    expect(tab(box, 1).getAttribute("aria-selected")).toBe("true");
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-text="0"]').value).toBe(
+      "A",
+    );
+    return box.dispose();
+  });
+
   it("moves between tabs with the arrow keys", async () => {
     const box = mountRunEditor({ runs: threeRuns, globals: RUN_GLOBALS });
     const first = tab(box, 1);
@@ -263,6 +281,13 @@ describe("showing one run at a time behind numbered tabs", () => {
     expect(accessibleName(box.pick<HTMLElement>("[data-yunari-run-add]"))).toBe(
       uiCopy.inspectorFields.addRun,
     );
+    // A tablist owns tabs. The add button is an action after the strip, so a
+    // reader does not hear it announced as a tab nor arrow past it as one.
+    expect(
+      box
+        .pick<HTMLElement>("[data-yunari-run-add]")
+        .closest('[role="tablist"]'),
+    ).toBeNull();
     return box.dispose();
   });
 });
