@@ -11,28 +11,28 @@ The **sensor platform** ([`spec`](docs/superpowers/specs/2026-10-24-sensor-platf
 
 ## Active work
 
-- **Phases 1–5 are code complete** (Tasks 1.1–1.5, 2.1–2.4, 3.1–3.5, 4.1–4.3, 5.1–5.5); the Phase 5 gate is next.
+- **Phases 1–5 are complete** (Tasks 1.1–1.5, 2.1–2.4, 3.1–3.5, 4.1–4.3, 5.1–5.5); the Phase 5 gate ran green.
+- **Phase 6 is next**: frame statistics (6.1, 6.2) and game presence with local box art (6.3, 6.4).
 - **Custom sources are proven end to end**: authored in Host mode, discovered by the inspector, rendered on a display, and explained when deleted.
 - **Media is live end to end**: real Chrome session title/artist/state/position/duration, artwork bytes through the authed route, and `audio.volume`/`audio.muted` from the render endpoint.
 
 ## Last completed change
 
-- **Task 5.5**: the Host mode's Sources section — list with health, last read, field count and redacted error; add/edit with the host's limits mirrored; refused saves in the route's own words; test with status, elapsed time and mapped values; a confirmed delete that offers the credential the route reports unreferenced.
-- `SourcesClient` + `sources-section.tsx`; the page never renders a credential value or a key-bearing URL.
-- **E2E** `tests/e2e/custom-source.spec.ts` (own host 4223, fixture 4291): the key appears in the Reads select, the player paints `42.5`, then after the page deletes the source it paints `—` with the host's "no provider on this PC reports that sensor" reason, and the theme still loads.
-- **Evidence:** editor vitest 179 files / 2408 tests exit 0; `custom-source` e2e 1 passed; editor and host bundles rebuilt; editor typecheck and e2e tsconfig exit 0; biome clean.
-- **Unverified:** the inspector's catalogue is read at editor boot, so a source added while the editor is open is visible after a reopen (the proven flow).
+- **Task 5.5**: the Host mode's Sources section — list, add/edit with the id fixed and unshown field properties preserved, a write-free test, and a delete that offers the unreferenced credential.
+- **Phase 5 gate:** `npm run gate` exit 0 — web 362 files / 5305 tests, store-worker 12 files / 72 tests.
+- **E2E** `tests/e2e/custom-source.spec.ts` (own host 4225, fixture 4291): the key appears in the Reads select, the player paints `42.5`, then after deletion `—` with the host's "no provider on this PC reports that sensor", and the theme still loads.
+- **Filed:** vg-713 (a source added while the editor is open needs a reload before its key appears).
 
 ## Next
 
-1. Run the Phase 5 gate.
-2. Dispatch Phase 6 (frame and game presence) after the gate.
-3. Review each task's diff and evidence before dispatching the next.
+1. Dispatch Task 6.1 (frame window and the RTSS adapter).
+2. Review each task's diff and evidence before dispatching the next.
+3. Run the full gate at the end of each phase.
 
 ## Blockers / unverified
 
-- **No live WeatherAPI or OpenWeatherMap response** has run; both need user keys.
-- **RTSS shared memory and PresentMon streaming** are unverified on this machine, including the privilege failure path.
-- **Windows Geolocator permission behaviour** from a host-spawned PowerShell is unrun.
-- **jpg/webp artwork** is unverified; the live proof covered one PNG.
-- **Graceful host shutdown** stopping the media helper is unit-tested only; the live run ended with `taskkill /T`.
+- **No live WeatherAPI or OpenWeatherMap response** has run; both need user keys, and **Windows Geolocator** from a host-spawned PowerShell is unrun.
+- **Phase 6 is unverified live:** RTSS is installed but not running, PresentMon is not installed, and Steam's `librarycache` is absent (19 app manifests exist).
+- **Credential removal from the Sources page** is jsdom-tested only; the real `DELETE /api/credentials/:id` path never ran in a browser.
+- **jpg/webp artwork** is unverified; the live proof covered one PNG, and graceful helper shutdown on host exit is unit-tested only.
+- **A source added while the editor is open** is not in the Reads picker until a reload (vg-713).
