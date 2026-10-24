@@ -13,6 +13,17 @@ it("hides both external rows when neither program is installed", () => {
   expect(menu.some((item) => item.action === "rtss")).toBe(false);
 });
 
+it("shows a running program that is not installed", () => {
+  const menu = buildTrayMenu({
+    ...base,
+    lhm: { installed: false, running: true, detail: "web server off" },
+  });
+  expect(menu.find((item) => item.action === "lhm")).toMatchObject({
+    title: "LibreHardwareMonitor — running (web server off)",
+    enabled: false,
+  });
+});
+
 it("shows Start for an installed stopped program and disables a running one", () => {
   const menu = buildTrayMenu({
     ...base,

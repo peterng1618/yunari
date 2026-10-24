@@ -48,13 +48,15 @@ function statusTitle(snapshot: TraySnapshot): string {
   );
 }
 
-/** One label rule for both external programs; absent is hidden, not disabled. */
+/** One label rule for both external programs; installed or running is visible. */
 function externalRow(
   name: string,
   action: TrayAction,
   state: ExternalAppState | undefined,
 ): TrayMenuItem | undefined {
-  if (state?.installed !== true) return undefined;
+  if (state === undefined || (!state.installed && !state.running)) {
+    return undefined;
+  }
   if (state.running) {
     const detail = state.detail === undefined ? "" : ` (${state.detail})`;
     return { title: `${name} — running${detail}`, enabled: false, action };
