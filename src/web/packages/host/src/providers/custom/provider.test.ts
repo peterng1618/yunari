@@ -85,7 +85,9 @@ interface Call {
   readonly headers: Headers;
 }
 
-function fetcherOf(responder: (url: string) => Response | Promise<Response>): {
+function fetcherOf(
+  responder: (url: string, index: number) => Response | Promise<Response>,
+): {
   fetcher: typeof fetch;
   calls: readonly Call[];
 } {
@@ -98,11 +100,47 @@ function fetcherOf(responder: (url: string) => Response | Promise<Response>): {
         : input instanceof URL
           ? input.href
           : input.url;
+    const index = calls.length;
     calls.push({ url, headers: new Headers(init?.headers) });
-    return responder(url);
+    return responder(url, index);
   }) as unknown as typeof fetch;
 
   return { fetcher, calls };
+}
+
+/** A store whose first read is immediate and whose later reads wait until the
+ *  test releases them. */
+function gatedStore(
+  file: SourceFile,
+): SourceStore & { release(next: SourceFile): void } {
+  let current = file;
+  let reads = 0;
+  let held: ((next: SourceFile) => void) | undefined;
+
+  return {
+    read: () => {
+      reads += 1;
+      if (reads === 1) return Promise.resolve(current);
+      return new Promise<SourceFile>((resolve) => {
+        held = (next) => {
+          current = next;
+          resolve(next);
+        };
+      });
+    },
+    write: async () => current,
+    release: (next) => {
+      held?.(next);
+    },
+  };
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 function providerOf(
@@ -122,6 +160,24 @@ function byKey(
 /** Lets the fetch a `sample` kicked off settle without moving the clock. */
 async function settle(): Promise<void> {
   await vi.advanceTimersByTimeAsync(0);
+}
+
+/** One field with the given pointer against an empty body, fetched once. */
+async function samplePointer(
+  pointer: string,
+): Promise<SampleEntry["sample"] | undefined> {
+  const store = storeOf({
+    sources: [sourceOf({ id: "one", fields: [fieldOf({ id: "x", pointer })] })],
+    issues: [],
+  });
+  const { fetcher } = fetcherOf(() => json({}));
+  const provider = providerOf(store, credentialsOf(), fetcher);
+  await provider.reload();
+
+  const key = "custom.one.x";
+  await provider.sample([key], Date.now());
+  await settle();
+  return byKey(await provider.sample([key], Date.now())).get(key);
 }
 
 describe("CustomSourceProvider", () => {
@@ -264,7 +320,10 @@ describe("CustomSourceProvider", () => {
     const by = byKey(await provider.sample(keys, Date.now()));
 
     expect(by.get("custom.one.gone")).toMatchObject({ status: "missing" });
-    expect(by.get("custom.one.gone")?.message).toContain("/absent/nope");
+    // A slash-shaped pointer is what the redactor calls a path, so the field id
+    // names the miss rather than quoting it.
+    expect(by.get("custom.one.gone")?.message).toContain('field "gone"');
+    expect(by.get("custom.one.gone")?.message).not.toContain("/absent/nope");
 
     for (const [key, expected] of [
       ["custom.one.n", "expected a number"],
@@ -278,6 +337,32 @@ describe("CustomSourceProvider", () => {
       expect(sample?.textValue, key).toBeUndefined();
       expect(sample?.booleanValue, key).toBeUndefined();
     }
+  });
+
+  it("does not quote a pointer shaped like an address", async () => {
+    const sample = await samplePointer("/10.0.0.5:8080/secret");
+
+    expect(sample).toMatchObject({ status: "missing" });
+    expect(sample?.message).toContain('field "x"');
+    expect(sample?.message).not.toContain("10.0.0.5");
+  });
+
+  it("keeps replacement patterns in a pointer literal", async () => {
+    const sample = await samplePointer("price$&");
+
+    expect(sample).toMatchObject({ status: "missing" });
+    expect(sample?.message).toContain("price$&");
+    expect(sample?.message).not.toContain("\u0000");
+  });
+
+  it("bounds a long pointer in a reason", async () => {
+    const pointer = "a".repeat(100);
+    const sample = await samplePointer(pointer);
+
+    expect(sample).toMatchObject({ status: "missing" });
+    expect(sample?.message).toContain(`${"a".repeat(64)}…`);
+    expect(sample?.message).not.toContain(pointer);
+    expect(sample?.message?.length).toBeLessThan(200);
   });
 
   it("goes stale after three missed intervals and returns to ok on success", async () => {
@@ -426,6 +511,158 @@ describe("CustomSourceProvider", () => {
     // One immediate fetch per demand, then exactly one per interval: an old
     // timer left running would make this five or more.
     expect(calls.length).toBe(5);
+  });
+
+  it("refuses a reload that lands after stop", async () => {
+    const store = gatedStore({
+      sources: [sourceOf({ id: "one", fields: [fieldOf({ id: "x" })] })],
+      issues: [],
+    });
+    const { fetcher, calls } = fetcherOf(() => json({ x: 1 }));
+    const provider = providerOf(store, credentialsOf(), fetcher);
+    await provider.reload();
+
+    const pending = provider.reload();
+    provider.stop();
+    store.release({
+      sources: [sourceOf({ id: "two", fields: [fieldOf({ id: "y" })] })],
+      issues: [],
+    });
+    await pending;
+
+    expect(await provider.describe()).toEqual([]);
+    expect(provider.health().available).toBe(false);
+
+    await provider.sample(["custom.two.y"], Date.now());
+    await settle();
+    expect(calls.length).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS * 5);
+    expect(calls.length).toBe(0);
+  });
+
+  it("stops polling once demand is older than the grace, and starts again on demand", async () => {
+    const store = storeOf({
+      sources: [sourceOf({ id: "one", fields: [fieldOf({ id: "x" })] })],
+      issues: [],
+    });
+    const { fetcher, calls } = fetcherOf(() => json({ x: 1 }));
+    const provider = providerOf(store, credentialsOf(), fetcher);
+    await provider.reload();
+
+    const key = "custom.one.x";
+    await provider.sample([key], Date.now());
+    await settle();
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS * 3);
+    expect(calls.length).toBe(4);
+
+    // Past the grace window the timer is gone: no further fetch without demand.
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS * 10);
+    expect(calls.length).toBe(4);
+
+    await provider.sample([key], Date.now());
+    await settle();
+    expect(calls.length).toBe(5);
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS);
+    expect(calls.length).toBe(6);
+  });
+
+  it("drops an in-flight result when reload replaces the source", async () => {
+    const gate = deferred<Response>();
+    const { fetcher, calls } = fetcherOf((_url, index) =>
+      index === 0 ? gate.promise : json({ x: 1 }),
+    );
+    const store = storeOf({
+      sources: [
+        sourceOf({
+          id: "one",
+          fields: [fieldOf({ id: "x", label: "Before" })],
+        }),
+      ],
+      issues: [],
+    });
+    const provider = providerOf(store, credentialsOf(), fetcher);
+    await provider.reload();
+
+    const key = "custom.one.x";
+    await provider.sample([key], Date.now());
+    await settle();
+    expect(calls.length).toBe(1);
+
+    store.set({
+      sources: [
+        sourceOf({ id: "one", fields: [fieldOf({ id: "x", label: "After" })] }),
+      ],
+      issues: [],
+    });
+    await provider.reload();
+
+    gate.resolve(json({ x: 999 }));
+    await settle();
+
+    expect((await provider.describe())[0]?.label).toBe("After");
+    expect(
+      byKey(await provider.sample([key], Date.now())).get(key),
+    ).toMatchObject({ status: "missing" });
+
+    await settle();
+    expect(
+      byKey(await provider.sample([key], Date.now())).get(key),
+    ).toMatchObject({ status: "ok", value: 1 });
+  });
+
+  it("stops a removed source's timer and drops its cached values", async () => {
+    const sourceA = sourceOf({ id: "a", fields: [fieldOf({ id: "x" })] });
+    const sourceB = sourceOf({ id: "b", fields: [fieldOf({ id: "x" })] });
+    const store = storeOf({ sources: [sourceA, sourceB], issues: [] });
+    const { fetcher, calls } = fetcherOf(() => json({ x: 1 }));
+    const provider = providerOf(store, credentialsOf(), fetcher);
+    await provider.reload();
+
+    const keys = ["custom.a.x", "custom.b.x"];
+    await provider.sample(keys, Date.now());
+    await settle();
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS);
+    expect(calls.length).toBe(4);
+
+    store.set({ sources: [sourceB], issues: [] });
+    await provider.reload();
+
+    expect(
+      (await provider.describe()).map((entry) => entry.semanticKey),
+    ).toEqual(["custom.b.x"]);
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS * 3);
+    expect(calls.length).toBe(4);
+    expect(await provider.sample(["custom.a.x"], Date.now())).toEqual([]);
+
+    // Re-adding the id is a new runtime, so the old cached value is gone.
+    store.set({ sources: [sourceA, sourceB], issues: [] });
+    await provider.reload();
+    expect(
+      byKey(await provider.sample(["custom.a.x"], Date.now())).get(
+        "custom.a.x",
+      ),
+    ).toMatchObject({ status: "missing" });
+    await settle();
+    expect(calls.length).toBe(5);
+  });
+
+  it("starts nothing for an added source until a key is demanded", async () => {
+    const source = sourceOf({ id: "one", fields: [fieldOf({ id: "x" })] });
+    const store = storeOf();
+    const { fetcher, calls } = fetcherOf(() => json({ x: 1 }));
+    const provider = providerOf(store, credentialsOf(), fetcher);
+    await provider.reload();
+
+    store.set({ sources: [source], issues: [] });
+    await provider.reload();
+
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS * 5);
+    expect(calls.length).toBe(0);
+
+    await provider.sample(["custom.one.x"], Date.now());
+    await settle();
+    expect(calls.length).toBe(1);
   });
 
   it("never fetches when the credential it needs is missing", async () => {

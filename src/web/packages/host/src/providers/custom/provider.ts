@@ -79,26 +79,47 @@ export interface CustomSourceProviderOptions {
   readonly now?: () => number;
 }
 
+/** The longest pointer a reason quotes, so a hand-written one cannot turn one
+ *  line into a paragraph. */
+const MAX_POINTER_CHARS = 64;
+
 /**
- * A pointer names where in the user's own document a value lives, which is not
- * a transport address. `redactForBrowser` cannot tell `/data/temp` from a
- * filesystem path, so the pointer is restored after the sentence around it is
- * redacted — the message is still redacted, and the pointer stays named.
+ * A reason may name where a value should have been, but the pointer is
+ * authored in `sources.json` and is not trusted display text: it can be shaped
+ * like an address, longer than a line, or contain `$&`-style replacement text.
+ * A pointer redaction would change is not quoted; the field id (validated
+ * `[a-z0-9_-]{1,32}`) names it instead. The restore is a replacer function so
+ * a `$` sequence in the pointer stays literal.
  */
 function messageWithPointer(
-  sentence: (placeholder: string) => string,
-  pointer: string,
+  sentence: (subject: string) => string,
+  field: CustomField,
 ): string {
+  const { pointer } = field;
+  const bounded =
+    pointer.length > MAX_POINTER_CHARS
+      ? `${pointer.slice(0, MAX_POINTER_CHARS)}…`
+      : pointer;
+  const subject =
+    pointer === ""
+      ? "the whole response"
+      : redactForBrowser(pointer) === pointer
+        ? `the pointer ${bounded}`
+        : `field "${field.id}"`;
+
   const placeholder = "\u0000";
-  return redactForBrowser(sentence(placeholder)).replace(placeholder, pointer);
+  return redactForBrowser(sentence(placeholder)).replace(
+    placeholder,
+    () => subject,
+  );
 }
 
-function missingPointer(pointer: string): FieldReading {
+function missingPointer(field: CustomField): FieldReading {
   return {
     kind: "missing",
     message: messageWithPointer(
-      (at) => `The pointer ${at} is missing from the source's response.`,
-      pointer,
+      (at) => `The value at ${at} is missing from the source's response.`,
+      field,
     ),
   };
 }
@@ -107,9 +128,8 @@ function mismatched(field: CustomField, expected: string): FieldReading {
   return {
     kind: "error",
     message: messageWithPointer(
-      (at) =>
-        `The pointer ${at} did not yield ${expected}; expected ${expected}.`,
-      field.pointer,
+      (at) => `The value at ${at} did not match; expected ${expected}.`,
+      field,
     ),
   };
 }
@@ -117,7 +137,7 @@ function mismatched(field: CustomField, expected: string): FieldReading {
 /** One field's reading, scaled/offset here and only here. */
 function readField(field: CustomField, body: unknown): FieldReading {
   const resolved = resolvePointer(body, field.pointer);
-  if (!resolved.found) return missingPointer(field.pointer);
+  if (!resolved.found) return missingPointer(field);
 
   const value = resolved.value;
 
@@ -183,6 +203,9 @@ export class CustomSourceProvider implements SensorProvider {
   #issues: readonly SourceIssue[] = [];
   #sourceCount = 0;
   #reloadGeneration = 0;
+  /** `stop()` is a teardown: a reload that was already reading must not revive
+   *  the provider behind it. */
+  #stopped = false;
 
   constructor(options: CustomSourceProviderOptions) {
     this.#store = options.sources;
@@ -199,8 +222,9 @@ export class CustomSourceProvider implements SensorProvider {
   async reload(): Promise<void> {
     const generation = ++this.#reloadGeneration;
     const file = await this.#store.read();
-    // A second reload overtook this read; its file is the current one.
-    if (generation !== this.#reloadGeneration) return;
+    // A second reload overtook this read, or the provider was stopped while the
+    // read was pending; neither may apply this file.
+    if (this.#stopped || generation !== this.#reloadGeneration) return;
 
     for (const runtime of this.#runtimes.values()) this.#retire(runtime);
     this.#runtimes = new Map();
@@ -287,10 +311,18 @@ export class CustomSourceProvider implements SensorProvider {
     return { available: true };
   }
 
-  /** Every timer gone and every in-flight request aborted. */
+  /**
+   * Every timer gone, every in-flight request aborted, and any reload still
+   * waiting on the store refused when it lands: a stopped provider has no
+   * descriptors, no sources and nothing to fetch.
+   */
   stop(): void {
+    this.#stopped = true;
+    this.#reloadGeneration += 1;
     for (const runtime of this.#runtimes.values()) this.#retire(runtime);
     this.#runtimes.clear();
+    this.#sourceCount = 0;
+    this.#issues = [];
   }
 
   #retire(runtime: SourceRuntime): void {

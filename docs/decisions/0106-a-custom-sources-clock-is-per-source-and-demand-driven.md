@@ -22,8 +22,9 @@ Searched: `packages/host/src/providers/` for timer, demand, grace and staleness
 patterns, and for an existing per-entry scheduler.
 
 Found: three relevant owners. `weather/provider.ts` owns a single provider timer
-with a `now` seam, a demand timestamp, an idle window, staleness at three
-intervals and redaction at composition (`health()` and sample messages).
+with a `now` seam, a demand timestamp, an idle window, staleness at
+`max(3 × interval, 30 min)`, and redaction at composition (`health()` and
+sample messages).
 `media/provider.ts` owns a demand grace period and a `stop()` that a later
 `sample()` may restart. `registry.ts` owns the asked-key union but is a
 per-cycle scheduler, not a per-source timer. None handles more than one source,
@@ -95,10 +96,16 @@ Built: `custom/provider.ts` owns a `Map<sourceId, SourceRuntime>`. `reload()`
 re-reads the store, retires every old runtime (timer cleared, in-flight aborted)
 and rebuilds descriptors and runtimes, so a reload cannot double a timer.
 `sample()` is a cache read that registers demand and starts the first timer and
-fetch at once. Each field's pointer result is scaled/offset once at acquisition
-and stored; a miss is `missing` with the pointer named after redaction, a type
-mismatch is `error` with no coercion, and a source's failure reaches only its
-own samples and `health()`. Credentials resolve through `CredentialStore` at
-fetch time only, and a missing one is a reason rather than a request without it.
-`main.ts` constructs the provider, awaits `reload()` and stops it beside the
-other providers.
+fetch at once; a timer stops once no key has been asked for three intervals
+(the demand grace). Each field's pointer result is scaled/offset once at
+acquisition and stored; a miss is `missing`, a type mismatch is `error` with no
+coercion, and a source's failure reaches only its own samples and `health()`.
+A reason quotes a pointer only when redaction leaves it unchanged and it fits a
+bounded length; otherwise the field id names it. `health().available` follows
+whether the store has a valid source, so a partially failing provider is still
+available and its redacted failure rides in `message`. Credentials resolve
+through `CredentialStore` at fetch time only, and a missing one is a reason
+rather than a request without it. `stop()` retires every runtime, aborts
+in-flight requests and refuses a reload still pending on the store. `main.ts`
+constructs the provider, awaits `reload()` and stops it beside the other
+providers.

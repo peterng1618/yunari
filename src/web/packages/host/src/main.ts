@@ -173,10 +173,17 @@ export async function run(argv: readonly string[]): Promise<number> {
   // browser may write one and never read it back. Created before the weather
   // provider because a BYOK backend reads its key from here.
   const credentials = createCredentialStore(settingsDir);
-  // Custom sources sit beside the credentials they reference. A rejected entry
-  // is exposed through the provider's health, never quoted in a log line: a
-  // reason can echo a key name or a pasted value.
+  // Custom sources sit beside the credentials they reference. The provider
+  // carries the issues in health(), but nothing reads that yet, so the warning
+  // stays: a malformed sources.json must not start the host silently. Task 5.4
+  // deletes this once the sources route surfaces the same issues.
   const customSources = createSourceStore(settingsDir);
+  const sourceIssues = (await customSources.read()).issues.length;
+  if (sourceIssues > 0) {
+    console.warn(
+      `${sourceIssues} issue${sourceIssues === 1 ? "" : "s"} in sources.json; see that file in the settings folder.`,
+    );
+  }
   const customProvider = new CustomSourceProvider({
     sources: customSources,
     credentials,
