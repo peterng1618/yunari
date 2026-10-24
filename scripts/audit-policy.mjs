@@ -138,7 +138,9 @@ function auditJson() {
     windows ? "npm audit --json" : "npm",
     windows ? [] : ["audit", "--json"],
     {
-      cwd: process.cwd(),
+      // The lockfile lives at src/web, so the documented root invocation must
+      // still audit that workspace rather than whatever cwd it was called from.
+      cwd: resolve(ROOT, "src/web"),
       encoding: "utf8",
       maxBuffer: 1 << 28,
       shell: windows,
