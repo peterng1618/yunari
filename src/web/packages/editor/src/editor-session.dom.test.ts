@@ -2281,7 +2281,7 @@ describe("arming a text placement from every surface", () => {
         requestRenderAll: vi.fn(),
       },
       artboard: () => ({ width: 1920, height: 1080 }),
-      historyManager: { saveState },
+      historyManager: { saveState, attachGlobals: () => {} },
       errorManager: { warn, error: vi.fn() },
       clipboardManager: { setImageImporter: vi.fn(), setBindings: vi.fn() },
       textManager: {
