@@ -672,7 +672,7 @@ Weather runs before custom sources so the HTTP failure, cache and image paths ar
 - Modify: `packages/host/src/settings/credentials-registry.test.ts`
 - Modify: `packages/host/src/providers/weather/provider.ts`
 - Modify: `packages/host/src/main.ts` (credential entries)
-- Modify: `packages/editor/src/asset-finder/credentials-client.ts` (query-kind row)
+- No editor change: `CredentialRow` carries no `kind`, and the settings list renders whatever `KNOWN_CREDENTIALS` answers, so both rows appear without an editor edit.
 
 **Interfaces:**
 - Consumes: `CredentialStore`, `WeatherProvider`.
@@ -709,7 +709,7 @@ Weather runs before custom sources so the HTTP failure, cache and image paths ar
 - [ ] **Step 5: Commit**
 
   ```bash
-  git add packages/host/src/providers/weather packages/host/src/settings/credentials-registry.ts packages/host/src/settings/credentials-registry.test.ts packages/host/src/main.ts packages/editor/src/asset-finder/credentials-client.ts
+  git add packages/host/src/providers/weather packages/host/src/settings/credentials-registry.ts packages/host/src/settings/credentials-registry.test.ts packages/host/src/main.ts
   git commit -m "feat(host): add WeatherAPI and OpenWeatherMap BYOK backends"
   ```
 
