@@ -51,8 +51,10 @@ The host prints the addresses it took. Defaults:
 - `http://127.0.0.1:5227` — dashboard (player) at `/`, editor at `/editor`,
   settings at `/settings`.
 - The same port over `https`, from a certificate the host issues itself.
-- The editor and settings pages, and every pairing route except the code
-  exchange, are **localhost-only**, even when the LAN is open.
+- The editor and the settings page are **localhost-only**, even when the LAN is
+  open, as is the pairing admin API (`/api/pairing/*`). The code exchange is the
+  exception, and the `/pair` page itself answers on the LAN so a device with no
+  credential can reach it.
 
 State lives in one app folder, `%USERPROFILE%\.yunari` (`~/.yunari` on other
 platforms): `themes/` is the theme library and `settings/` is this machine's
@@ -92,8 +94,8 @@ never expose it to the internet.
 - **Editor** — a Fabric scene with shapes, text, images/SVG, groups, layers,
   undo, snapping and reusable widgets, over a versioned theme envelope.
 - **Theme library and store** — the host's local library, plus a theme
-  catalogue served by a Cloudflare Worker; sign in from the editor to browse and
-  install published themes.
+  catalogue served by a Cloudflare Worker, browsable and installable from the
+  editor; signing in is for submitting a theme and seeing your own.
 - **Sensors** — baseline readings (CPU load and clock, memory, GPUs, disks,
   network) through
   [`systeminformation`](https://www.npmjs.com/package/systeminformation). CPU
@@ -101,9 +103,9 @@ never expose it to the internet.
   [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor),
   read from its web server; Yunari never controls your hardware. A key nobody
   measured stays empty with a stated reason, never a fabricated zero.
-- **Displays and devices** — several monitors, each showing a chosen theme; the
-  devices (GPU, disk, network adapter, …) each theme reads are assigned per
-  display.
+- **Displays and devices** — several monitors, each showing a chosen theme;
+  which GPU and disk this PC answers with is chosen once for this PC, and a
+  theme may answer a slot for itself.
 - **Wallpaper Engine** — the host reads the Steam Workshop library and serves a
   wallpaper's preview and video assets to the editor.
 - **Steam presence and store metadata** — the foreground game, named from the
@@ -126,22 +128,15 @@ node packages/host/bin/yunari.js --lhm-exe packages/host/vendor/lhm/LibreHardwar
 
 ## CLI reference
 
-`node packages/host/bin/yunari.js --help` is authoritative; these are its
-options:
+Run `node packages/host/bin/yunari.js --help` (or `yunari --help` once
+installed) for the complete option list and its defaults; that output is the
+authoritative reference and this section deliberately does not repeat it.
 
-```text
--p, --port <port>        Port to listen on (default: 5227)
--H, --host <addr>        Address to bind (default: 127.0.0.1, loopback only)
--n, --no-browser         Do not open a browser
-    --app-dir <dir>      App folder; themes/ and settings/ live inside it
-                         (default %USERPROFILE%\.yunari)
-    --themes-dir <dir>   Directory for the theme library (default: the app folder's themes/)
-    --lhm-url <url>      LibreHardwareMonitor web server (default http://127.0.0.1:8085)
-    --lhm-exe <path>     Launch LibreHardwareMonitor.exe with the host
-    --register-lhm-task  Register LHM to start elevated at sign-in (one prompt)
--v, --version            Print the version
--h, --help               Print this help
-```
+The flags a normal run needs: `--host 0.0.0.0` opens the LAN (off by default),
+`-p/--port` moves off 5227, `--app-dir` relocates the app folder, and
+`-n/--no-browser` starts the host without opening a window. The
+LibreHardwareMonitor flags (`--lhm-url`, `--lhm-exe`, `--register-lhm-task`) are
+shown there too.
 
 The host serves `https` beside `http` on the same port and prints the root
 certificate path. A run without `--host` obeys the LAN preference saved in the
@@ -217,7 +212,8 @@ npm run test:e2e
 ```
 
 Long-running suites: `npm run test:display` (real host + phone rendering) and
-`npm run test:rebuild` (rebuilt player).
+`npm run test:rebuild` (the reference composition rebuilt by hand in the
+editor).
 
 Visual evidence capture writes PNGs, so it runs one capture at a time:
 
