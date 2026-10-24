@@ -35,6 +35,7 @@ import { createFontFavoritesStore } from "./settings/font-favorites.js";
 import { acquireHostLock } from "./settings/host-lock.js";
 import { readOrMintHostRecord } from "./settings/host-record.js";
 import { createHostingSettingsStore } from "./settings/hosting.js";
+import { createSourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
 import { createThemeSettingsStore } from "./settings/theme-settings.js";
@@ -171,6 +172,15 @@ export async function run(argv: readonly string[]): Promise<number> {
   // browser may write one and never read it back. Created before the weather
   // provider because a BYOK backend reads its key from here.
   const credentials = createCredentialStore(settingsDir);
+  // Custom sources sit beside the credentials they reference, and the provider
+  // that reads them arrives with the custom-source task. A rejected entry is
+  // surfaced here meanwhile: silently dropping one looks like never saving it.
+  const customSources = createSourceStore(settingsDir);
+  for (const issue of (await customSources.read()).issues) {
+    console.warn(
+      `Custom source ${issue.sourceId || "(file)"}: ${issue.reason}`,
+    );
+  }
   // Weather's place, backend and cadence are this PC's own settings, and the
   // provider owns its timer: it is built here with the providers, not by the
   // registry's cycle (docs/decisions/0099).
