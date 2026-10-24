@@ -8,6 +8,11 @@
  * `update-item-and-menu` lines, and a separator is the title `" "`. A row that
  * was not in the first menu cannot be added later, so the row set must stay
  * stable and only the rows the binary knows are ever addressed.
+ *
+ * Row ids are issued from one monotonic counter and never reused; update lines
+ * carry the array index as `seq_id` and the new id as `item.__id`. A bounded
+ * history of id→action keeps a click that raced an update pointing at the row
+ * the user actually clicked.
  */
 
 import { spawn } from "node:child_process";
@@ -77,6 +82,9 @@ const SEPARATOR_TITLE = " ";
 /** Linux has no native check mark; the documented encoding is a suffix. */
 const CHECK_SUFFIX = " (√)";
 
+/** How many issued row ids stay resolvable after later menus replace them. */
+const ID_HISTORY_MAX = 200;
+
 /** How long `exit` keeps the tray informative before the process is killed. */
 const KILL_GRACE_MS = 300;
 
@@ -84,24 +92,19 @@ const KILL_GRACE_MS = 300;
 const STDERR_TAIL_MAX = 500;
 
 /**
- * Rows are numbered 1-based over the initial array. An action row keeps the id
- * it had in the first menu, so a reordered array still resolves its clicks.
+ * Every row takes a fresh id from the view's one monotonic counter: ids are
+ * globally unique and never reused, so an update can never overwrite a row it
+ * did not mean and a click that raced an update still names the row it saw.
  */
 function buildLinuxMenu(
   items: readonly TrayMenuItem[],
   iconBase64: string,
-  pinnedActions: Map<TrayAction, number>,
+  nextId: () => number,
 ): LinuxMenu {
   const actions = new Map<number, TrayAction>();
-  const wire = items.map((item, index) => {
-    const position = index + 1;
-    let __id = position;
-    if (item.action !== undefined) {
-      const pinned = pinnedActions.get(item.action);
-      if (pinned === undefined) pinnedActions.set(item.action, position);
-      else __id = pinned;
-      actions.set(__id, item.action);
-    }
+  const wire = items.map((item) => {
+    const __id = nextId();
+    if (item.action !== undefined) actions.set(__id, item.action);
     if (item.separator === true) {
       return { title: SEPARATOR_TITLE, enabled: false, __id };
     }
@@ -119,12 +122,12 @@ function buildLinuxMenu(
   };
 }
 
-/** The first menu's ids: 1-based over the array, separators included. */
 export function linuxMenu(
   items: readonly TrayMenuItem[],
   iconBase64: string,
 ): LinuxMenu {
-  return buildLinuxMenu(items, iconBase64, new Map());
+  let id = 1;
+  return buildLinuxMenu(items, iconBase64, () => id++);
 }
 
 function messageOf(error: unknown): string {
@@ -188,13 +191,15 @@ export async function startLinuxTray(
     }
 
     let items: readonly TrayMenuItem[] | undefined;
-    let actions = new Map<number, TrayAction>();
-    const pinnedActions = new Map<TrayAction, number>();
+    /** One counter for the view: an id is issued once and never reused. */
+    let nextId = 1;
     let tooltip = "Yunari";
-    /** What the binary was initialised with; later lines may only update it. */
-    let sentMenu: LinuxMenuMessage | undefined;
-    let sentItems = new Map<number, LinuxMenuItem>();
-    let rowCount = 0;
+    /** The rows the binary currently holds, by array index. */
+    let sentRows: LinuxMenuItem[] = [];
+    /** Set only once the bare first menu was actually written. */
+    let sentTooltip: string | undefined;
+    /** Every id ever issued with an action, oldest pruned first. */
+    const idHistory = new Map<number, TrayAction>();
     let warnedRowCount: number | undefined;
     let started = false;
     let failed = false;
@@ -206,70 +211,113 @@ export async function startLinuxTray(
     let killTimer: NodeJS.Timeout | undefined;
     let readyTimer: NodeJS.Timeout | undefined;
 
-    function send(line: string): void {
+    function send(line: string): boolean {
       try {
         child.stdin.write(`${line}\n`);
+        return true;
       } catch {
         // The pipe is gone; exit handling is what reports that.
+        return false;
       }
+    }
+
+    function remember(actions: Map<number, TrayAction>): void {
+      for (const [id, action] of actions) {
+        idHistory.set(id, action);
+        while (idHistory.size > ID_HISTORY_MAX) {
+          const oldest = idHistory.keys().next();
+          if (oldest.done === true) break;
+          idHistory.delete(oldest.value);
+        }
+      }
+    }
+
+    function sameRow(a: LinuxMenuItem, b: LinuxMenuItem): boolean {
+      return (
+        a.title === b.title &&
+        a.enabled === b.enabled &&
+        a.checked === b.checked
+      );
     }
 
     function sendMenu(): void {
       if (items === undefined) return;
-      const built = buildLinuxMenu(items, TRAY_ICON_PNG_BASE64, pinnedActions);
-      actions = built.actions;
+      const built = buildLinuxMenu(items, TRAY_ICON_PNG_BASE64, () => nextId++);
       const menu: LinuxMenuMessage = { ...built.menu, tooltip };
 
-      if (sentMenu === undefined) {
-        // The binary decodes exactly one bare Menu line before it builds the
-        // tray; an action wrapper here would decode as an empty menu.
-        rowCount = menu.items.length;
-        send(JSON.stringify(menu));
-        sentMenu = menu;
-        sentItems = new Map(menu.items.map((item) => [item.__id, item]));
+      if (sentTooltip === undefined) {
+        // An empty menu cannot initialise the binary, so wait for the first
+        // real one. Latch only after the write landed: a dropped line leaves
+        // the binary uninitialised and the next call must retry this menu.
+        if (menu.items.length === 0) return;
+        if (!send(JSON.stringify(menu))) return;
+        sentRows = [...menu.items];
+        sentTooltip = tooltip;
+        remember(built.actions);
         return;
       }
 
       // The binary's row table was built from the first menu and an update
       // cannot append a row, so only those rows are addressable.
-      const rows = menu.items.slice(0, rowCount);
-      if (
-        menu.items.length !== rowCount &&
-        warnedRowCount !== menu.items.length
-      ) {
-        warnedRowCount = menu.items.length;
-        process.emitWarning(
-          `the Linux tray menu has ${menu.items.length} rows but the tray was ` +
-            `built with ${rowCount}; the systray2 binary cannot add or remove rows.`,
-        );
+      if (menu.items.length !== sentRows.length) {
+        if (warnedRowCount !== menu.items.length) {
+          warnedRowCount = menu.items.length;
+          process.emitWarning(
+            `the Linux tray menu has ${menu.items.length} rows but the tray was ` +
+              `built with ${sentRows.length}; the systray2 binary cannot add or remove rows.`,
+          );
+        }
+      } else {
+        warnedRowCount = undefined;
       }
-      const changed = rows.filter((row) => {
-        const previous = sentItems.get(row.__id);
-        return (
-          previous === undefined ||
-          JSON.stringify(previous) !== JSON.stringify(row)
-        );
-      });
-      // The menu carries the tooltip, so a tooltip-only change must still be
-      // written; any row works because updateItem runs before updateMenu.
-      const updates =
-        changed.length > 0
-          ? changed
-          : menu.tooltip !== sentMenu.tooltip
-            ? rows.slice(0, 1)
-            : [];
-      for (const item of updates) {
-        send(
-          JSON.stringify({
-            type: "update-item-and-menu",
-            item,
-            menu,
-            seq_id: -1,
-          }),
-        );
+
+      const rows = menu.items.slice(0, sentRows.length);
+      let wrote = false;
+      for (let index = 0; index < rows.length; index += 1) {
+        const item = rows[index];
+        if (item === undefined) continue;
+        const previous = sentRows[index];
+        if (previous !== undefined && sameRow(previous, item)) continue;
+        // `seq_id` is the array index the binary stores; `__id` is the id a
+        // click will echo back. They are different namespaces on purpose.
+        if (
+          !send(
+            JSON.stringify({
+              type: "update-item-and-menu",
+              item,
+              menu,
+              seq_id: index,
+            }),
+          )
+        ) {
+          continue;
+        }
+        sentRows[index] = item;
+        const action = built.actions.get(item.__id);
+        if (action !== undefined) remember(new Map([[item.__id, action]]));
+        wrote = true;
       }
-      sentMenu = menu;
-      sentItems = new Map(rows.map((item) => [item.__id, item]));
+      // The tooltip travels on the menu, which every update line carries; with
+      // no row change, one unchanged row still has to be written.
+      const first = rows[0];
+      if (!wrote && first !== undefined && tooltip !== sentTooltip) {
+        if (
+          send(
+            JSON.stringify({
+              type: "update-item-and-menu",
+              item: first,
+              menu,
+              seq_id: 0,
+            }),
+          )
+        ) {
+          sentRows[0] = first;
+          const action = built.actions.get(first.__id);
+          if (action !== undefined) remember(new Map([[first.__id, action]]));
+          wrote = true;
+        }
+      }
+      if (wrote) sentTooltip = tooltip;
     }
 
     function setMenu(next: readonly TrayMenuItem[]): void {
@@ -357,7 +405,7 @@ export async function startLinuxTray(
         const id = message.__id;
         // The binary echoes the id it was given; anything else is not ours.
         if (typeof id !== "number" || !Number.isInteger(id)) return;
-        const action = actions.get(id);
+        const action = idHistory.get(id);
         if (action === undefined) return;
         onAction(action);
       }
