@@ -8,7 +8,6 @@ import { openPane } from "./editor-rail.js";
 import { HOST_PORT, HOST_THEMES_DIR } from "./host-theme.js";
 import {
   addButton,
-  fill,
   insertTextBox,
   openBlank,
   placeText,
@@ -40,6 +39,8 @@ const GROWN_TEXT = "A much wider strapline";
 /** Longer than the drawn box is wide, so it must occupy more than one line. */
 const WRAPPED_TEXT =
   "A paragraph long enough that a box this wide has to wrap it";
+/** Words typed into a placed Text, and the words a reopen must still hold. */
+const TYPED_TEXT = "Typed into a placed text";
 
 type TextState = {
   readonly id: string;
@@ -157,8 +158,8 @@ async function caretIn(page: Page, id: string): Promise<boolean> {
  * The caret is Fabric's hidden textarea and the placement's `enterEditing` is
  * deferred a frame, so a keystroke sent before focus lands nowhere: it reads as
  * a text that did not grow, which is a timing artefact rather than the surface.
- * The state is read before Escape because leaving the edit lets the text pass
- * repaint from the authored runs.
+ * The exit handler writes the words into the authored run, so the caller reads
+ * the edited display here and the committed model after `exitEditing`.
  */
 async function typeInto(
   page: Page,
@@ -192,13 +193,14 @@ async function exitEditing(page: Page, id: string): Promise<void> {
     .toBe(false);
 }
 
-/** Drags a side handle by scene units. Both controls live on the same object,
- *  so a scene-unit delta is what tells the two width modes apart. */
+/** Drags a handle by scene units: a corner from a Text, a side edge from a Text
+ *  box. Both are scene-space deltas, which is what tells the width modes apart. */
 async function dragHandle(
   page: Page,
   id: string,
-  key: "ml" | "mr",
+  key: "ml" | "mr" | "br",
   deltaX: number,
+  deltaY = 0,
 ): Promise<void> {
   const handle = await objectHandleScenePoint(page, id, key);
   const from = await sceneToClient(page, ARTBOARD_WIDTH, handle.x, handle.y);
@@ -206,7 +208,7 @@ async function dragHandle(
     page,
     ARTBOARD_WIDTH,
     handle.x + deltaX,
-    handle.y,
+    handle.y + deltaY,
   );
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
@@ -223,6 +225,18 @@ function boxOf(
       | { readonly box?: { readonly width?: number; readonly height?: number } }
       | undefined
   )?.box;
+}
+
+/** The words each authored run carries, in order. */
+function runTextsOf(
+  authored: Record<string, unknown> | undefined,
+): readonly string[] {
+  const runs = (
+    authored?.["yunariText"] as
+      | { readonly runs?: readonly { readonly text?: string }[] }
+      | undefined
+  )?.runs;
+  return (runs ?? []).map((run) => run.text ?? "");
 }
 
 /** Saves through File ▸ Save to library and answers the host's own id. */
@@ -430,19 +444,16 @@ test.describe("text and text box elements", () => {
     expect(grown.editable).toBe(true);
 
     await exitEditing(page, placed.id);
+    // Leaving the edit writes the words into the authored run and repaints from
+    // it, so the measurement it grew to is the one the model now describes.
+    const committed = await textState(page, placed.id);
+    if (committed === undefined) throw new Error("the text vanished");
+    expect(committed.text).toBe(GROWN_TEXT);
+    expect(committed.width).toBeCloseTo(grown.width, 0);
+
     await selectLayer(page, placed.name ?? "Text");
     const authored = await readObject(page, placed.name ?? "Text");
     expect(boxOf(authored), "a point text authors no box").toBeUndefined();
-
-    // The canvas edit becomes the authored run through the run editor, so the
-    // repaint the next selection drives shows the typed words rather than
-    // reverting the measurement under the width assertions below.
-    await fill(page, '[data-yunari-run-text="0"]', GROWN_TEXT);
-    await expect
-      .poll(async () => (await textState(page, placed.id))?.width ?? 0)
-      .toBeGreaterThan(before.width + 20);
-    const committed = await textState(page, placed.id);
-    if (committed === undefined) throw new Error("the text vanished");
 
     // Both Size halves are the measurement, so neither is an input.
     for (const key of ["width", "height"] as const) {
@@ -472,10 +483,11 @@ test.describe("text and text box elements", () => {
       0,
     );
 
-    // `ml`/`mr` are the default scaling controls: the drag leaves `width` at the
-    // measured ink and puts the change on `scaleX`, so no authored width exists.
+    // A Text has corners, not edges: the corner drag leaves `width` at the
+    // measured ink and puts the change on `scaleX`/`scaleY`, so no authored box
+    // is written for it.
     const widthBeforeDrag = committed.width;
-    await dragHandle(page, placed.id, "mr", 60);
+    await dragHandle(page, placed.id, "br", 60, 40);
     await expect
       .poll(async () => (await textState(page, placed.id))?.scaleX ?? 0)
       .toBeGreaterThan(1.05);
@@ -483,7 +495,13 @@ test.describe("text and text box elements", () => {
     if (scaled === undefined)
       throw new Error("the text vanished after scaling");
     expect(scaled.width).toBe(widthBeforeDrag);
+    expect(scaled.scaleY).toBeGreaterThan(1.05);
     expect(scaled.width * scaled.scaleX).toBeGreaterThan(widthBeforeDrag + 20);
+    const afterScale = await readObject(page, placed.name ?? "Text");
+    expect(
+      boxOf(afterScale),
+      "scaling a Text writes no authored box",
+    ).toBeUndefined();
   });
 
   test("drag draws a Text box at the rectangle, wraps, and its ml/mr controls change the width", async ({
@@ -519,13 +537,17 @@ test.describe("text and text box elements", () => {
     ).toBeGreaterThan(1);
 
     await exitEditing(page, placed.id);
-    await selectLayer(page, placed.name ?? "Text box");
-    // The canvas edit becomes the authored run, so the next text pass measures
-    // the paragraph rather than the placeholder the object was made with.
-    await fill(page, '[data-yunari-run-text="0"]', WRAPPED_TEXT);
+    // The words survive the repaint that leaving the edit runs, and the box is
+    // still the drawn one rather than being widened by the paragraph.
+    const committed = await textState(page, placed.id);
+    if (committed === undefined) throw new Error("the box vanished");
+    expect(committed.text).toBe(WRAPPED_TEXT);
+    expect(committed.width).toBe(drawn.width);
     await expect
       .poll(async () => (await textState(page, placed.id))?.lines ?? 0)
       .toBeGreaterThan(1);
+
+    await selectLayer(page, placed.name ?? "Text box");
     const authored = await readObject(page, placed.name ?? "Text box");
     expect(boxOf(authored)?.width).toBeCloseTo(drawn.width, 0);
 
@@ -563,6 +585,58 @@ test.describe("text and text box elements", () => {
     expect(widened.width).toBeLessThan(widthBeforeDrag + 80);
     const widenedBox = boxOf(await readObject(page, placed.name ?? "Text box"));
     expect(widenedBox?.width).toBeCloseTo(widened.width, 0);
+  });
+
+  test("words typed into a placed Text survive the repaint and a save/reopen", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    test.setTimeout(120_000);
+
+    await page.goto(HOST_EDITOR);
+    await openBlank(page);
+    await placeText(page, { x: 300, y: 200 });
+    const placed = (await readScene(page)).at(-1);
+    if (placed === undefined) throw new Error("the click made nothing");
+
+    await typeInto(page, placed.id, TYPED_TEXT);
+    await exitEditing(page, placed.id);
+
+    // Leaving the edit repaints from the authored runs, so words the commit did
+    // not keep would read back as the placeholder here rather than as typed.
+    const edited = await textState(page, placed.id);
+    if (edited === undefined)
+      throw new Error("the text vanished after the edit");
+    expect(edited.type).toBe("i-text");
+    expect(edited.text).toBe(TYPED_TEXT);
+    const authored = await readObject(page, placed.name ?? "Text");
+    expect(runTextsOf(authored)).toEqual([TYPED_TEXT]);
+
+    // Selecting the object drives the authored pass the sample tick drives; the
+    // measured width the words grew to is unchanged by the second repaint.
+    const measured = edited.width;
+    await selectLayer(page, placed.name ?? "Text");
+    await expect
+      .poll(async () => (await textState(page, placed.id))?.text ?? "")
+      .toBe(TYPED_TEXT);
+    expect((await textState(page, placed.id))?.width).toBe(measured);
+
+    // A reload half: the words must be in the document, not only on the canvas.
+    const id = await saveToLibrary(page);
+    await page.goto(`${HOST_EDITOR}?theme=${id}`);
+    await expect(
+      page.locator("#yunari-fabric-editor canvas.upper-canvas"),
+    ).toBeVisible();
+    await expect.poll(async () => (await readScene(page)).length).toBe(1);
+    const reopened = await textState(page, placed.id);
+    if (reopened === undefined)
+      throw new Error("the saved text did not reopen");
+    expect(reopened.type).toBe("i-text");
+    expect(reopened.text).toBe(TYPED_TEXT);
+    expect(Math.abs(reopened.width - measured)).toBeLessThanOrEqual(2);
+    expect(runTextsOf(await readObject(page, placed.name ?? "Text"))).toEqual([
+      TYPED_TEXT,
+    ]);
   });
 
   test("Escape during placement creates nothing and leaves the history alone", async ({
@@ -746,19 +820,10 @@ test.describe("text and text box elements", () => {
     }
   });
 
-  test("a Text exposes no mt/mb edge handles while a Text box keeps them", async ({
+  test("a Text exposes corners and rotation only while a Text box keeps all nine handles", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    // **Pinned red, not written around.** `applyEditorControls` gives every
-    // object `createObjectDefaultControls`, so an `IText` still carries `mt`/`mb`
-    // while the Text contract says the height edges are Textbox-only. Removing
-    // them is a production change this evidence task must not make; the mark
-    // fails the suite once the fix lands.
-    test.fail(
-      true,
-      "controls-manager gives IText the mt/mb height edges; they must be Textbox-only",
-    );
     await page.goto(EDITOR);
     await openBlank(page);
 
@@ -782,15 +847,32 @@ test.describe("text and text box elements", () => {
       throw new Error("an object is missing from the scene");
     }
 
-    // The side edges exist on both: a Text scales horizontally, a Text box
-    // changes its width. The top and bottom edges write a height, and a Text
-    // has no authored height to write.
-    expect(pointState.controls).toEqual(
-      expect.arrayContaining(["ml", "mr", "tl", "tr", "bl", "br"]),
+    // A Text has no authored box, so it has no edge handle that would write one:
+    // corners scale and rotation turns it, and the four edges are absent.
+    expect([...pointState.controls].sort()).toEqual([
+      "bl",
+      "br",
+      "mtr",
+      "tl",
+      "tr",
+    ]);
+
+    // A Text box keeps the full set: its edges change the authored width and
+    // height, and its corners scale.
+    expect(boxState.controls).toHaveLength(9);
+    expect(boxState.controls).toEqual(
+      expect.arrayContaining([
+        "ml",
+        "mr",
+        "mt",
+        "mb",
+        "tl",
+        "tr",
+        "bl",
+        "br",
+        "mtr",
+      ]),
     );
-    expect(pointState.controls).not.toContain("mt");
-    expect(pointState.controls).not.toContain("mb");
-    expect(boxState.controls).toEqual(expect.arrayContaining(["mt", "mb"]));
   });
 
   test("three runs show three numbered tabs, one selected run's fields, and + selects the new run", async ({

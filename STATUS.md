@@ -16,16 +16,15 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- The edit records the display Fabric captured before the authoring view painted, separately from the painted token.
-- Typing that display back now saves its authored run even though Fabric fires no `object:modified`; every other change is still saved there, and the two conditions are complementary so one edit commits once.
-- The placement test's save pin now states it guards against a second commit, not the write itself.
+- All nine e2e cases now assert the live contract: Text exposes `tl`/`tr`/`bl`/`br`/`mtr` only, Textbox keeps all nine, and no case is pinned `test.fail`.
+- A Text's resize proof is a `br` corner drag: `scaleX`/`scaleY` rise, measured `width` holds, and no authored `yunariText.box` is written.
+- New case: words typed into a placed Text are the run's authored text, the repaint keeps the width they grew to, and Save to library + reopen keeps them.
+- Two clean `--workers=1` runs: expected 9, skipped 9, unexpected 0, flaky 0.
 
 ## Next
 
-1. Phase 3 / Task 3.2 (resumed): remove the stale `test.fail` pin and prove a placed text keeps typed words across a reload.
-2. Phase 3 / Task 3.3: ownership docs, status and the full gate.
+1. Phase 3 / Task 3.3: ownership docs, status and the full gate.
 
 ## Blockers / unverified
 
-- The e2e control test is still pinned `test.fail` and now fails on its stale `ml`/`mr` expectation, so the browser proof of the new contract has not run.
 - Outside this plan: the store Worker is undeployed, and the live catalogue's smoke theme still carries the old media shape.
