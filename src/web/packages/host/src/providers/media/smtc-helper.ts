@@ -47,6 +47,25 @@ export interface SmtcScriptOptions {
 const DATA_READER_CONSTRUCTOR =
   "[Windows.Storage.Streams.DataReader].GetConstructor(@([Windows.Storage.Streams.IInputStream]))";
 
+/** The supervisor frames lines at this length and drops anything longer. */
+const SUPERVISOR_LINE_CAP = 1_048_576;
+
+/**
+ * Room for the JSON keys, session id, digest and extension around the base64
+ * payload. A Windows app id is well under this.
+ */
+export const SMTC_ARTWORK_ENVELOPE_RESERVE = 512;
+
+/**
+ * The largest raw image whose base64 JSON line still fits the supervisor's
+ * framing: 4/3 expansion plus the envelope reserve. Derived rather than
+ * guessed, so `SMTC_ARTWORK_RAW_BYTES + 1` is the first size the script must
+ * refuse as a gap instead of emitting a line the supervisor would drop.
+ */
+export const SMTC_ARTWORK_RAW_BYTES = Math.floor(
+  ((SUPERVISOR_LINE_CAP - SMTC_ARTWORK_ENVELOPE_RESERVE) * 3) / 4,
+);
+
 const HEADER = `
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -107,9 +126,31 @@ $null = [Windows.Storage.Streams.IRandomAccessStreamWithContentType,Windows.Stor
 # format from the bytes instead; DataReaderLoadOperation exposes Status and
 # GetResults directly, which is all the wait needs.
 function Wait-Operation($operation) {
-  while ([string]$operation.Status -eq 'Started') { Start-Sleep -Milliseconds 5 }
+  $deadline = [DateTime]::UtcNow.AddSeconds(10)
+  while ([string]$operation.Status -eq 'Started') {
+    if ([DateTime]::UtcNow -gt $deadline) { throw 'async operation did not finish' }
+    Start-Sleep -Milliseconds 5
+  }
   if ([string]$operation.Status -ne 'Completed') { throw "async operation ended: $($operation.Status)" }
   return $operation.GetResults()
+}
+
+# A stream that ended early must not be published as a whole image.
+function Test-CompleteImage($buffer, $ext) {
+  if ($ext -eq 'png') {
+    if ($buffer.Length -lt 8) { return $false }
+    return ([Text.Encoding]::ASCII.GetString($buffer, $buffer.Length - 8, 4) -eq 'IEND') -and
+      ($buffer[$buffer.Length - 4] -eq 0xae -and $buffer[$buffer.Length - 3] -eq 0x42 -and
+       $buffer[$buffer.Length - 2] -eq 0x60 -and $buffer[$buffer.Length - 1] -eq 0x82)
+  }
+  if ($ext -eq 'jpg') {
+    return ($buffer.Length -ge 2) -and ($buffer[$buffer.Length - 2] -eq 0xff) -and ($buffer[$buffer.Length - 1] -eq 0xd9)
+  }
+  if ($ext -eq 'webp') {
+    if ($buffer.Length -lt 12) { return $false }
+    return ([int64][BitConverter]::ToUInt32($buffer, 4) + 8) -eq $buffer.Length
+  }
+  return $false
 }
 
 function Get-ArtworkLine($session) {
@@ -130,9 +171,8 @@ function Get-ArtworkLine($session) {
       $chunk = [byte[]]::new($loaded)
       $reader.ReadBytes($chunk)
       $chunks.AddRange($chunk)
-      # The supervisor drops any line over 1 MiB, and base64 costs 4/3: a
-      # bigger thumbnail is not deliverable anyway.
-      if ($chunks.Count -gt 786432) { return $null }
+      # Derived from the supervisor's line cap; see SMTC_ARTWORK_RAW_BYTES.
+      if ($chunks.Count -gt ${SMTC_ARTWORK_RAW_BYTES}) { return $null }
     }
   } finally {
     $reader.Dispose()
@@ -145,6 +185,7 @@ function Get-ArtworkLine($session) {
   elseif ($buffer[0] -eq 0xff -and $buffer[1] -eq 0xd8 -and $buffer[2] -eq 0xff) { $ext = 'jpg' }
   elseif ([Text.Encoding]::ASCII.GetString($buffer, 0, 4) -eq 'RIFF' -and [Text.Encoding]::ASCII.GetString($buffer, 8, 4) -eq 'WEBP') { $ext = 'webp' }
   if ($null -eq $ext) { return $null }
+  if (-not (Test-CompleteImage $buffer $ext)) { return $null }
 
   $hash = [System.Security.Cryptography.SHA256]::Create().ComputeHash($buffer)
   $hex = -join ($hash | ForEach-Object { $_.ToString('x2') })
@@ -155,6 +196,23 @@ function Get-ArtworkLine($session) {
     ext = $ext
     base64 = [Convert]::ToBase64String($buffer)
   }
+}
+
+# One failed read is a gap for this track, retried next poll; it must not
+# record the track as done or reach the next session in the same poll.
+function Try-EmitArtwork($session, $line) {
+  $sessionId = $line['sessionId']
+  $key = "$sessionId|$($line['title'])|$($line['artist'])|$($line['album'])"
+  if ($lastArtwork.ContainsKey($sessionId) -and $lastArtwork[$sessionId] -eq $key) { return }
+  try {
+    $artwork = Get-ArtworkLine $session
+    if ($null -eq $artwork) { return }
+    [Console]::Out.WriteLine(($artwork | ConvertTo-Json -Compress))
+  } catch {
+    return
+  }
+  # Recorded only after the line left the helper, so a failure retries.
+  $lastArtwork[$sessionId] = $key
 }
 `;
 
@@ -167,26 +225,27 @@ try {
 }
 
 while ($true) {
+  $sessions = $null
   try {
     $sessions = $manager.GetSessions()
-    if ($null -eq $sessions -or $sessions.Count -eq 0) {
+  } catch {
+    [Console]::Out.WriteLine('{"kind":"error"}')
+  }
+  if ($null -ne $sessions) {
+    if ($sessions.Count -eq 0) {
       [Console]::Out.WriteLine('{"kind":"none"}')
     } else {
+      # Per session, so one unreadable app does not hide the others.
       foreach ($session in $sessions) {
-        $line = Get-SessionLine $session
-        [Console]::Out.WriteLine(($line | ConvertTo-Json -Compress))
-        if ($WantArtwork) {
-          $key = "$($line['sessionId'])|$($line['title'])|$($line['artist'])|$($line['album'])"
-          if (-not $lastArtwork.ContainsKey($line['sessionId']) -or $lastArtwork[$line['sessionId']] -ne $key) {
-            $lastArtwork[$line['sessionId']] = $key
-            $artwork = Get-ArtworkLine $session
-            if ($null -ne $artwork) { [Console]::Out.WriteLine(($artwork | ConvertTo-Json -Compress)) }
-          }
+        try {
+          $line = Get-SessionLine $session
+          [Console]::Out.WriteLine(($line | ConvertTo-Json -Compress))
+          if ($WantArtwork) { Try-EmitArtwork $session $line }
+        } catch {
+          [Console]::Out.WriteLine('{"kind":"error"}')
         }
       }
     }
-  } catch {
-    [Console]::Out.WriteLine('{"kind":"error"}')
   }
   Start-Sleep -Milliseconds 1000
 }
@@ -277,6 +336,17 @@ export function parseSmtcLine(line: string): SmtcSession | undefined {
 }
 
 /**
+ * `Buffer.from(x, "base64")` skips whitespace and ignores garbage, so it can
+ * decode a line the helper never wrote. Only the exact encoding of the bytes
+ * it produces is accepted.
+ */
+function isCanonicalBase64(value: string): boolean {
+  if (value.length === 0 || value.length % 4 !== 0) return false;
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
+  return Buffer.from(value, "base64").toString("base64") === value;
+}
+
+/**
  * The artwork half of the helper's output. The digest is recomputed rather
  * than trusted: the cache is content-addressed, so a line whose name does not
  * match its bytes would poison the cache under the wrong key.
@@ -291,7 +361,8 @@ export function smtcArtworkLine(line: string): ArtworkBytes | undefined {
 
   if (typeof sha256 !== "string" || !SHA256_HEX.test(sha256)) return undefined;
   if (typeof ext !== "string" || !EXTENSIONS.has(ext)) return undefined;
-  if (typeof base64 !== "string" || base64 === "") return undefined;
+  if (typeof base64 !== "string" || !isCanonicalBase64(base64))
+    return undefined;
 
   const bytes = new Uint8Array(Buffer.from(base64, "base64"));
   if (bytes.length === 0) return undefined;

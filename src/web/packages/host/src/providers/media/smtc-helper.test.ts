@@ -1,12 +1,67 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { EventEmitter } from "node:events";
+import { describe, expect, it, vi } from "vitest";
+import {
+  type HelperChild,
+  type SpawnProcess,
+  startJsonLineHelper,
+} from "../helpers/supervisor.js";
 import {
   parseSmtcLine,
+  SMTC_ARTWORK_ENVELOPE_RESERVE,
+  SMTC_ARTWORK_RAW_BYTES,
   SMTC_SCRIPT,
   type SmtcSession,
   smtcArtworkLine,
   smtcScript,
 } from "./smtc-helper.js";
+
+/** The supervisor's own framing bound (not exported by it). */
+const SUPERVISOR_LINE_CAP = 1_048_576;
+
+class FakeChild extends EventEmitter {
+  readonly pid: number;
+  readonly stdout = new EventEmitter();
+  readonly stderr = new EventEmitter();
+
+  constructor(pid: number) {
+    super();
+    this.pid = pid;
+  }
+}
+
+function fakeSpawner(): {
+  spawnProcess: SpawnProcess;
+  children: FakeChild[];
+} {
+  const children: FakeChild[] = [];
+  let pid = 300;
+
+  return {
+    children,
+    spawnProcess: (() => {
+      const child = new FakeChild(pid);
+      pid += 1;
+      children.push(child);
+      return child as unknown as HelperChild;
+    }) as SpawnProcess,
+  };
+}
+
+function base64Length(rawBytes: number): number {
+  return Math.ceil(rawBytes / 3) * 4;
+}
+
+/** The JSON around the payload: keys, session id, digest, extension. */
+function artworkEnvelope(sessionId: string): number {
+  return JSON.stringify({
+    kind: "artwork",
+    sessionId,
+    sha256: "0".repeat(64),
+    ext: "png",
+    base64: "",
+  }).length;
+}
 
 function sessionLine(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
@@ -45,13 +100,13 @@ describe("SMTC_SCRIPT", () => {
     expect(firstWrite).toBeGreaterThan(encoding);
   });
 
-  it("selects the generic AsTask overload, never the IAsyncAction one", () => {
+  it("selects the generic AsTask overload and actually closes it", () => {
     // The non-generic overload has the same arity; binding it first makes
-    // MakeGenericMethod throw. Only the generic definition is usable here.
+    // MakeGenericMethod throw. Pin the executing call, not the word: the
+    // comment above it mentions MakeGenericMethod too.
     expect(SMTC_SCRIPT).toContain("$_.IsGenericMethodDefinition");
-    expect(SMTC_SCRIPT).toContain("MakeGenericMethod");
-    expect(SMTC_SCRIPT).not.toContain(
-      "[System.WindowsRuntimeSystemExtensions]::AsTask",
+    expect(SMTC_SCRIPT).toContain(
+      "$task = $AsTaskMethod.MakeGenericMethod($resultType).Invoke($null, @($operation))",
     );
   });
 
@@ -66,6 +121,91 @@ describe("SMTC_SCRIPT", () => {
     expect(SMTC_SCRIPT).not.toContain("DataReader");
     expect(SMTC_SCRIPT).not.toContain("base64");
     expect(smtcScript()).not.toContain("DataReader");
+  });
+
+  it("bounds the async wait so a stuck load cannot wedge the helper", () => {
+    const artwork = smtcScript({ artwork: true });
+
+    expect(artwork).toContain("[DateTime]::UtcNow.AddSeconds(10)");
+    expect(artwork).toContain("async operation did not finish");
+  });
+
+  it("accepts an image only when its trailer proves it was not truncated", () => {
+    const artwork = smtcScript({ artwork: true });
+
+    expect(artwork).toContain("'IEND'");
+    expect(artwork).toContain("0xd9");
+    expect(artwork).toContain("[BitConverter]::ToUInt32");
+    expect(artwork).toContain("Test-CompleteImage $buffer $ext");
+  });
+
+  it("records a track only after its artwork line was emitted", () => {
+    const artwork = smtcScript({ artwork: true });
+    const emit = artwork.indexOf(
+      "[Console]::Out.WriteLine(($artwork | ConvertTo-Json -Compress))",
+    );
+    const record = artwork.indexOf("$lastArtwork[$sessionId] = $key");
+
+    expect(emit).toBeGreaterThan(-1);
+    expect(record).toBeGreaterThan(emit);
+  });
+
+  it("reads each session inside its own try, so one failure cannot hide others", () => {
+    expect(SMTC_SCRIPT).toMatch(
+      /foreach \(\$session in \$sessions\) \{\s*try \{/,
+    );
+  });
+
+  it("derives the artwork byte cap from the supervisor's framing", () => {
+    // The largest line the script can emit must survive the supervisor's cap.
+    expect(
+      base64Length(SMTC_ARTWORK_RAW_BYTES) + artworkEnvelope("x".repeat(200)),
+    ).toBeLessThanOrEqual(SUPERVISOR_LINE_CAP);
+
+    // One byte more breaks the reserved envelope, so the script refuses it
+    // instead of emitting a line the supervisor would drop.
+    expect(
+      base64Length(SMTC_ARTWORK_RAW_BYTES + 1) + SMTC_ARTWORK_ENVELOPE_RESERVE,
+    ).toBeGreaterThan(SUPERVISOR_LINE_CAP);
+    expect(artworkEnvelope("x".repeat(200))).toBeLessThanOrEqual(
+      SMTC_ARTWORK_ENVELOPE_RESERVE,
+    );
+
+    expect(smtcScript({ artwork: true })).toContain(
+      `if ($chunks.Count -gt ${SMTC_ARTWORK_RAW_BYTES}) { return $null }`,
+    );
+  });
+
+  it("emits its largest artwork line through the real supervisor framing", () => {
+    const { spawnProcess, children } = fakeSpawner();
+    const onLine = vi.fn();
+    const onProblem = vi.fn();
+    const killTree = vi.fn();
+
+    startJsonLineHelper({
+      id: "media",
+      script: "x",
+      pathExists: () => true,
+      spawnProcess,
+      killTree,
+      onLine,
+      onProblem,
+      onExit: () => undefined,
+    });
+
+    const base64 = Buffer.alloc(SMTC_ARTWORK_RAW_BYTES).toString("base64");
+    const line = JSON.stringify({
+      kind: "artwork",
+      sessionId: "x".repeat(200),
+      sha256: "0".repeat(64),
+      ext: "png",
+      base64,
+    });
+
+    expect(line.length).toBeLessThanOrEqual(SUPERVISOR_LINE_CAP);
+    children[0]?.stdout.emit("data", `${line}\n`);
+    expect(onLine).toHaveBeenCalledWith(line);
+    expect(onProblem).not.toHaveBeenCalled();
   });
 
   it("polls once a second", () => {
@@ -137,13 +277,14 @@ describe("parseSmtcLine", () => {
 describe("smtcArtworkLine", () => {
   const bytes = new Uint8Array([0, 1, 2, 3, 4, 250]);
   const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const base64 = Buffer.from(bytes).toString("base64");
   const artworkLine = (overrides: Record<string, unknown> = {}): string =>
     JSON.stringify({
       kind: "artwork",
       sessionId: "Spotify.exe",
       sha256,
       ext: "png",
-      base64: Buffer.from(bytes).toString("base64"),
+      base64,
       ...overrides,
     });
 
@@ -177,6 +318,13 @@ describe("smtcArtworkLine", () => {
       artworkLine({ base64: undefined }),
       artworkLine({ base64: "" }),
       artworkLine({ base64: "!!!not base64!!!" }),
+      // Buffer.from tolerates all of these; none is the encoding it decodes to.
+      artworkLine({ base64: `${base64.slice(0, 4)} ${base64.slice(4)}` }),
+      artworkLine({ base64: `${base64.slice(0, 4)}\n${base64.slice(4)}` }),
+      artworkLine({ base64: "AB==" }),
+      artworkLine({ base64: "AQI" }),
+      artworkLine({ base64: "AAAA====" }),
+      artworkLine({ base64: "AA!C" }),
       sessionLine(),
     ];
 
