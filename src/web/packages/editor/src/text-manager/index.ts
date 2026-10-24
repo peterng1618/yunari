@@ -210,21 +210,30 @@ export function createTextManager(
    * tile constructs a text and enters it directly. A per-object handler
    * installed by the double-click was how a placed text's words were lost.
    */
-  let editing: { readonly target: IText; readonly painted: string } | undefined;
+  let editing:
+    | {
+        readonly target: IText;
+        readonly painted: string;
+        /** The display Fabric captured as `_textBeforeEdit`, which its own
+         *  `object:modified` comparison is made against. */
+        readonly entryText: string;
+      }
+    | undefined;
 
   const onEditingEntered = (event: { target?: unknown }): void => {
     const target = event.target;
     if (!(target instanceof IText)) return;
     // What the object carries as the edit opens: a constructed text is still
     // showing its placeholder, and a double-click replaces this with the run's
-    // authoring view it paints afterwards.
-    editing = { target, painted: target.text };
+    // authoring view it paints afterwards. `entryText` stays that display,
+    // because it is the one Fabric's own modification test used.
+    editing = { target, painted: target.text, entryText: target.text };
   };
 
   const onEditingExited = (event: { target?: unknown }): void => {
     const target = event.target;
     if (!(target instanceof IText)) return;
-    const painted = editing?.target === target ? editing.painted : undefined;
+    const record = editing?.target === target ? editing : undefined;
     editing = undefined;
 
     // Fabric's `exitEditing` (`index.mjs:17102-17105`) compares
@@ -232,7 +241,7 @@ export function createTextManager(
     // it, so after a double-click and nothing else `text` is still the token
     // this view painted. Writing that back would turn a sensor card into prose
     // from a gesture that changed nothing.
-    if (painted !== undefined && target.text !== painted) {
+    if (record !== undefined && target.text !== record.painted) {
       if (keepTypedText(target) === "refused") {
         warn?.(uiCopy.inspectorFields.multiRunRefused);
         // Fabric has already left editing, so the object's own text is the only
@@ -243,9 +252,13 @@ export function createTextManager(
         canvas.requestRenderAll();
         return;
       }
-      // The history entry is Fabric's `object:modified`, fired on the canvas
-      // straight after this event for a changed text; `onModified` saves there.
-      // A save here too would be a second commit of one edit.
+      // Fabric is silent only when what was typed is the display it captured
+      // before the authoring view painted (`_textBeforeEdit`): typing a card's
+      // own reading back reports no modification, and the run this branch just
+      // wrote still needs its history entry. Every other change is saved by
+      // `onModified`; the condition is the exact complement of Fabric's, so the
+      // two can never save one edit twice.
+      if (target.text === record.entryText) save();
     }
     // The token was this edit's view and it ends with the edit: repaint now
     // rather than at the next sample tick, so Escape puts the reading back on
@@ -271,11 +284,16 @@ export function createTextManager(
     // hidden textarea still holds the reading and typing edits that rather than
     // what is on screen.
     target.enterEditing();
+    // Fabric captured `_textBeforeEdit` as the display before this view paints,
+    // so that pre-paint text is what its own modification test compares
+    // against; a manager that entered mid-edit has no earlier record to keep.
+    const entryText =
+      editing?.target === target ? editing.entryText : target.text;
     showAuthoringView(target);
-    // The painted token is this edit's baseline: an edit that changed nothing
-    // is one that still holds it. Fabric's own entry recorded the run's reading
-    // before this paint, and the canvas exit handler commits against this one.
-    editing = { target, painted: target.text };
+    // The painted token is this edit's baseline for "did the author type
+    // anything"; `entryText` stays the display Fabric saw, which is what says
+    // whether Fabric will report the edit at all.
+    editing = { target, painted: target.text, entryText };
     // Fabric writes the hidden textarea exactly once, as it enters editing
     // (`enterEditingImpl`, `index.mjs:16908`), and `_updateTextarea` then only
     // ever syncs the *selection*. So a run painted after that point is what the

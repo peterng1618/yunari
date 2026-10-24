@@ -16,8 +16,9 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- Editing entry and exit are canvas-level: the words typed into a constructed text become its authored run on `text:editing:exited`, whichever route entered editing.
-- The double-click's per-object `once` handler is gone, so one edit saves once on either route; the unchanged-edit guard and the multi-run refusal stay.
+- The edit records the display Fabric captured before the authoring view painted, separately from the painted token.
+- Typing that display back now saves its authored run even though Fabric fires no `object:modified`; every other change is still saved there, and the two conditions are complementary so one edit commits once.
+- The placement test's save pin now states it guards against a second commit, not the write itself.
 
 ## Next
 

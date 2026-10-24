@@ -293,6 +293,31 @@ describe.each([
     expect(save).toHaveBeenCalledOnce();
     text.destroy();
   });
+
+  it("saves the run when the author types the display Fabric already saw", () => {
+    // A value run's edit can end on the words the card already showed: the
+    // authoring view painted the token, but Fabric captured `_textBeforeEdit`
+    // as "MEM 61" before that paint and compares it with the typed text. With
+    // the same string back it fires no `object:modified` at all, so the run
+    // write needs its own save — and only in this branch.
+    const object = reading();
+    const canvas = scene(object);
+    const save = vi.fn();
+    const text = withAuthoringView(canvas, save);
+    canvas.setActiveObject(object);
+    canvas.fire("mouse:dblclick", { target: object } as never);
+    save.mockClear();
+
+    object.set("text", "MEM 61");
+    object.exitEditing();
+
+    const authored = object.get(YUNARI_TEXT_PROPERTY) as {
+      runs: Readonly<Record<string, unknown>>[];
+    };
+    expect(authored.runs[0]).toMatchObject({ kind: "literal", text: "MEM 61" });
+    expect(save).toHaveBeenCalledOnce();
+    text.destroy();
+  });
 });
 
 describe.each([
@@ -332,8 +357,9 @@ describe.each([
     };
     expect(authored.runs).toHaveLength(1);
     expect(authored.runs[0]).toMatchObject({ kind: "literal", text: "Hello" });
-    // Committed once: the write to the authored run and the history entry are
-    // one edit, not one per handler that saw the exit.
+    // The run assertions above are this case's red; pre-fix code also saved
+    // once, through Fabric's `object:modified`. This pin guards the commit
+    // count instead: the exit write must not add a save on top of Fabric's.
     expect(save).toHaveBeenCalledOnce();
     manager.destroy();
   });
