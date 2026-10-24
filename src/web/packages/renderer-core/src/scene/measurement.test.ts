@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { SemanticKeyDescriptor } from "../data/semantic-keys.js";
 import {
   convertForDisplay,
   DEFAULT_UNIT_PREFERENCES,
@@ -252,6 +253,32 @@ describe("binding overrides", () => {
         unit: "GHz",
       }),
     ).toEqual({ value: 42, unit: "%", unsupportedUnit: true });
+  });
+
+  it("keeps a custom reading measured when its kind cannot reach the target", () => {
+    // The preference would convert this °C reading to °F, but the binding
+    // asked for kelvin; an unsupported override shows the measured form, not
+    // a preference the author never got.
+    const custom: SemanticKeyDescriptor = {
+      key: "custom.thermostat.room",
+      family: "custom",
+      label: "Room",
+      unit: "°C",
+      unitKind: "temperature",
+      valueKind: "number",
+      expectedTier: "extended",
+    };
+
+    expect(
+      convertForDisplay(
+        "custom.thermostat.room",
+        20,
+        "°C",
+        { measurement: "imperial" },
+        { unit: "K" },
+        custom,
+      ),
+    ).toEqual({ value: 20, unit: "°C", unsupportedUnit: true });
   });
 
   it("lets a supported override win over the display preference", () => {

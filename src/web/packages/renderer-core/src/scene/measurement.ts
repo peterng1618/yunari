@@ -182,7 +182,9 @@ export function convertForDisplay(
     overrides.unit !== undefined &&
     resolved.displayUnits === undefined &&
     converted.unit !== overrides.unit
-      ? { ...converted, unsupportedUnit: true as const }
+      ? // The preference converted on the way; the measured form is what a
+        // refused target leaves, the same as the early return above.
+        { value, unit, unsupportedUnit: true as const }
       : converted;
 
   switch (resolved.unitKind) {
