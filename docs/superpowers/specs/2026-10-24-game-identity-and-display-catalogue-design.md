@@ -167,10 +167,12 @@ Unit (Vitest):
 - Player: descriptors reach `refreshBoundText` (a spy/capture seam), a failed
   catalogue fetch leaves the built-in table.
 
-Browser (Playwright): a real host, a fixed foreground executable inside a
-temporary fake Epic install root, a theme binding `game.name`/`game.running`, and
-a second arm with a custom `°C` source bound to `°F` on the player reading `°F`.
-The browser test must fail when the descriptors are not passed.
+Browser (Playwright): one player arm — a real host, a custom `°C` source bound
+to `°F`, reading `°F`, failing when the descriptors are not passed. Game
+identity is proven by the classifier and provider unit tests plus
+`game-metadata.spec.ts`'s fixed-foreground arm: a fixture catalogue cannot
+stand in for a real machine's install roots, so no browser arm asserts
+`game.running`.
 
 ## Acceptance
 
@@ -186,8 +188,8 @@ The browser test must fail when the descriptors are not passed.
 ## Out of scope
 
 - Linux catalogue readers and Linux foreground detection (D4).
-- Store-specific box art for Epic/GOG/itch (the Steam store lookup stays the
-  cover source; local Steam cache stays first).
+- Box art for catalogue-matched non-Steam games: no local art is read, and the
+  Steam store lookup stays the cover source for Steam titles only.
 - A tray icon, autostart and any lifetime control for the host.
 - A user-managed allow/deny list beyond the fixed exclusion list.
 - Persisting classification or catalogue data.
