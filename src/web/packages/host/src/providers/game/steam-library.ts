@@ -49,7 +49,7 @@ class VdfReader {
         char === "\t" ||
         char === "\r" ||
         char === "\n" ||
-        char === "﻿"
+        char === "\uFEFF"
       ) {
         this.#at += 1;
         continue;
@@ -213,7 +213,11 @@ export function parseAppManifest(
     return undefined;
   }
 
-  return { appId, name, installDir };
+  return {
+    appId: appId.trim(),
+    name: name.trim(),
+    installDir: installDir.trim(),
+  };
 }
 
 function folded(target: string): string {
@@ -312,15 +316,67 @@ if ($null -ne $value -and "$value" -ne '') {
 }
 `;
 
+/** Runs PowerShell and answers its stdout, or `undefined` when it failed. */
+export type SteamRootExec = (
+  executable: string,
+  args: readonly string[],
+  timeoutMs: number,
+) => Promise<string | undefined>;
+
+function runPowerShell(
+  executable: string,
+  args: readonly string[],
+  timeoutMs: number,
+): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    execFile(
+      executable,
+      args,
+      { windowsHide: true, timeout: timeoutMs, encoding: "utf8" },
+      (error, stdout) => {
+        resolve(error ? undefined : stdout);
+      },
+    );
+  });
+}
+
+/** The root from the helper's first `{"kind":"steam"}` line. */
+function steamRootFrom(output: string | undefined): string | undefined {
+  if (output === undefined) return undefined;
+
+  for (const line of output.split(/\r?\n/)) {
+    let parsed: unknown;
+
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    if (typeof parsed !== "object" || parsed === null) continue;
+
+    const record = parsed as Record<string, unknown>;
+    const root = record["root"];
+
+    if (record["kind"] === "steam" && typeof root === "string" && root !== "") {
+      return root;
+    }
+  }
+
+  return undefined;
+}
+
 export interface SteamRootOptions {
   /** Injected so a test does not depend on this machine's registry. */
   readonly pathExists?: (file: string) => boolean;
   readonly timeoutMs?: number;
+  readonly exec?: SteamRootExec;
 }
 
 /**
  * Steam's root from HKCU, looked up once per demand window by the provider.
- * An absent key or an absent PowerShell is `undefined`, not a failure.
+ * An absent key, absent PowerShell or a failed run is `undefined`, not a
+ * failure.
  */
 export function resolveSteamRoot(
   options: SteamRootOptions = {},
@@ -338,47 +394,10 @@ export function resolveSteamRoot(
     Buffer.from(STEAM_ROOT_SCRIPT, "utf16le").toString("base64"),
   ];
 
-  return new Promise((resolve) => {
-    execFile(
-      executable,
-      args,
-      {
-        windowsHide: true,
-        timeout: options.timeoutMs ?? 10_000,
-        encoding: "utf8",
-      },
-      (error, stdout) => {
-        if (error) {
-          resolve(undefined);
-          return;
-        }
+  const run = options.exec ?? runPowerShell;
 
-        for (const line of stdout.split(/\r?\n/)) {
-          let parsed: unknown;
-
-          try {
-            parsed = JSON.parse(line);
-          } catch {
-            continue;
-          }
-
-          if (typeof parsed !== "object" || parsed === null) continue;
-
-          const record = parsed as Record<string, unknown>;
-          const root = record["root"];
-
-          if (
-            record["kind"] === "steam" &&
-            typeof root === "string" &&
-            root !== ""
-          ) {
-            resolve(root);
-            return;
-          }
-        }
-
-        resolve(undefined);
-      },
-    );
-  });
+  return run(executable, args, options.timeoutMs ?? 10_000).then(
+    steamRootFrom,
+    () => undefined,
+  );
 }

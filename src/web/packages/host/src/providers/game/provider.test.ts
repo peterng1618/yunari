@@ -26,6 +26,11 @@ interface HarnessOptions {
   readonly steamRoot?: string | undefined;
   readonly apps?: readonly SteamApp[];
   readonly graceMs?: number;
+  readonly retryMs?: number;
+  /** Make the Steam registry lookup reject, exercising the provider's catch. */
+  readonly steamError?: boolean;
+  /** Make the helper's spawn throw; cleared later to prove the retry boundary. */
+  readonly failSpawn?: boolean;
 }
 
 interface Harness {
@@ -34,6 +39,8 @@ interface Harness {
   readonly killed: FakeChild[];
   readonly scripts: string[];
   readonly now: () => number;
+  spawnCalls(): number;
+  setFailSpawn(fail: boolean): void;
   advance(ms: number): void;
   emit(child: FakeChild, line: string): void;
   sample(keys: readonly string[]): Promise<Map<string, Sample>>;
@@ -45,8 +52,18 @@ function harness(options: HarnessOptions = {}): Harness {
   const scripts: string[] = [];
   let pid = 700;
   let nowMs = 1_000_000;
+  let spawnCalls = 0;
+  let failSpawn = options.failSpawn ?? false;
 
   const spawnProcess: SpawnProcess = (_command, args) => {
+    spawnCalls += 1;
+
+    if (failSpawn) {
+      throw new Error(
+        "could not start at C:\\Users\\peter\\secret\\game.exe via https://example.com/token",
+      );
+    }
+
     const child = new FakeChild(pid);
     pid += 1;
     const index = args.indexOf("-EncodedCommand");
@@ -59,10 +76,17 @@ function harness(options: HarnessOptions = {}): Harness {
   const provider = new GameProvider({
     now: () => nowMs,
     graceMs: options.graceMs ?? 60_000,
+    retryMs: options.retryMs ?? 60_000,
     spawnProcess,
     killTree: (child) => killed.push(child as unknown as FakeChild),
     pathExists: () => true,
-    steamRoot: async () => options.steamRoot,
+    steamRoot: async () => {
+      if (options.steamError === true) {
+        throw new Error("registry read failed");
+      }
+
+      return options.steamRoot;
+    },
     loadSteamApps: async () => options.apps ?? [],
   });
 
@@ -72,6 +96,10 @@ function harness(options: HarnessOptions = {}): Harness {
     killed,
     scripts,
     now: () => nowMs,
+    spawnCalls: () => spawnCalls,
+    setFailSpawn(fail) {
+      failSpawn = fail;
+    },
     advance(ms) {
       nowMs += ms;
       vi.advanceTimersByTime(ms);
@@ -269,6 +297,26 @@ describe("GameProvider samples", () => {
     h.provider.stop();
   });
 
+  it("survives a Steam registry lookup that rejects", async () => {
+    vi.useFakeTimers();
+    const h = harness({ steamError: true });
+    await h.sample(["game.running"]);
+    h.emit(
+      h.children[0] as FakeChild,
+      foregroundLine(7, "C:\\Games\\Other\\other.exe", "other"),
+    );
+
+    const samples = await h.sample(GAME_KEYS);
+
+    expect(samples.get("game.app")).toMatchObject({
+      status: "ok",
+      textValue: "other.exe",
+    });
+    expect(samples.get("game.name")?.status).not.toBe("ok");
+    expect(h.provider.health()).toEqual({ available: true });
+    h.provider.stop();
+  });
+
   it("starts the helper only on demand and stops it after the grace period", async () => {
     vi.useFakeTimers();
     const h = harness({ graceMs: 5_000 });
@@ -283,6 +331,75 @@ describe("GameProvider samples", () => {
     await h.sample([]);
 
     expect(h.killed).toHaveLength(1);
+    h.provider.stop();
+  });
+});
+
+describe("GameProvider helper lifecycle", () => {
+  it("keeps one helper while the supervisor restarts it", async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    await h.sample(["game.running"]);
+    expect(h.children).toHaveLength(1);
+
+    (h.children[0] as FakeChild).emit("exit", 1);
+    h.advance(500);
+    await h.sample(["game.running"]);
+    expect(h.children).toHaveLength(1);
+
+    h.advance(600);
+    expect(h.children).toHaveLength(2);
+
+    await h.sample(["game.running"]);
+    expect(h.children).toHaveLength(2);
+    h.provider.stop();
+  });
+
+  it("reports a failed helper as unavailable with a redacted reason", async () => {
+    vi.useFakeTimers();
+    const h = harness({ retryMs: 10_000, failSpawn: true });
+    await h.sample(["game.running"]);
+
+    // Five consecutive failed starts: the supervisor's backoff is 1+2+4+8 s.
+    h.advance(1_000);
+    h.advance(2_000);
+    h.advance(4_000);
+    h.advance(8_000);
+    expect(h.spawnCalls()).toBe(5);
+
+    const health = h.provider.health();
+    expect(health.available).toBe(false);
+    expect(health.message).toContain("game helper");
+    expect(health.message).not.toContain("secret");
+    expect(health.message).not.toContain("example.com");
+
+    const samples = await h.sample(["game.running"]);
+    expect(samples.get("game.running")?.status).toBe("unavailable");
+    expect(samples.get("game.running")?.message).toBe(health.message);
+    h.provider.stop();
+  });
+
+  it("does not retry a failed helper before the retry boundary", async () => {
+    vi.useFakeTimers();
+    const h = harness({ retryMs: 10_000, failSpawn: true });
+    await h.sample(["game.running"]);
+
+    h.advance(1_000);
+    h.advance(2_000);
+    h.advance(4_000);
+    h.advance(8_000);
+    expect(h.spawnCalls()).toBe(5);
+    expect(h.provider.health().available).toBe(false);
+
+    h.setFailSpawn(false);
+    h.advance(5_000);
+    await h.sample(["game.running"]);
+    expect(h.spawnCalls()).toBe(5);
+
+    h.advance(5_001);
+    await h.sample(["game.running"]);
+    expect(h.spawnCalls()).toBe(6);
+    expect(h.children).toHaveLength(1);
     h.provider.stop();
   });
 });
