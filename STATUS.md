@@ -9,7 +9,7 @@ The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-relea
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-release-readiness.md` — Phase A complete, Phase B in progress.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-release-readiness.md` — Phases A and B complete; Phase C next.
 - **A1 is complete:** decisions 0110 (migrate the previous schema major on open) and 0111 (stage the workspace as `yunari`) claim every watched path later tasks write.
 - **A2 is complete:** `schemaVersion` is `"2.0.0"`; the strict validator accepts a semver major and still refuses every integer.
 - **A3 is complete:** `readFabricThemeEnvelope` migrates the legacy integer and accepted older majors, then validates.
@@ -18,15 +18,15 @@ The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-relea
 
 ## Last completed change
 
-- **`undici` 7.30.1 and `sharp` 0.35.5 overrides:** keep the Cloudflare toolchain's transitive copies patched; `npm audit` falls from eight high findings to four.
-- **The kept overrides are proven by the Worker suite:** `npm run test:worker` exits 0 with 12 files and 72 tests.
-- **The `jsdom` 30 override was removed:** eight editor DOM cases failed on its changed CSS serialisation and DOM-removal semantics; `whatwg-encoding` 3.1.1 stays, and the three-package DOM run exits 0 with 254 files and 3672 tests.
-- **Four high findings remain, recorded in `docs/engineering/dependencies.md`:** `node-forge` (ADR 0070), and `zod` below 4.6.6 via `@google/design.md`'s v3 and `@cloudflare/vitest-pool-workers`'s 4.4.3.
-- **Gate stops only at the known SMTC pair:** 383 of 384 files and 5718 of 5720 tests pass, and the Worker suite exits 0 outside the gate.
+- **Audit policy fails closed:** `scripts/audit-policy.mjs` exits 1 on an unallowlisted finding or a stale allowlist row, 2 on unreadable input.
+- **Allowlist measured after B2:** the four high findings are `node-forge` GHSA-86w9-cpqp-85rv, `zod` GHSA-mrhx-c7xc-m3w5, and zod reached via `@google/design.md` and `@cloudflare/vitest-pool-workers`.
+- **Wired without a network in the gate:** `audit:check`, the policy `--self-test` in `gates:self-test`, and a separate `audit` CI job.
+- **Tests:** 9 pass in `tests/scripts/audit-policy.test.ts`; empty and stale allowlists exit 1, unreadable input exits 2.
+- **Gate stops only at the known SMTC pair:** 384 of 385 files and 5727 of 5729 tests pass.
 
 ## Next
 
-1. B3 — make the audit policy fail closed over the findings that remain after B2.
+1. C1 — stage the npm package as a workspace-shaped tarball (Phase B complete).
 
 ## Blockers / unverified
 

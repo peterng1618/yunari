@@ -186,6 +186,32 @@ jobs:
           done
           exit $missing
 
+  audit:
+    name: Dependency audit policy
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+
+      - run: npm ci
+
+      - name: Audit policy fails closed
+        # Its own job, not a `npm run gate` step: the policy is a live registry
+        # read, and the gate must stay runnable offline. The gate still runs the
+        # policy's `--self-test`, so its rules are proved without the network.
+        # The script returns its own exit code because `npm audit --json` exits 1
+        # whenever findings exist.
+        run: node ../../scripts/audit-policy.mjs
+
   slow-suites:
     name: Rebuild and display suites (nightly, or on demand)
     # vg-282, ruled 2026-10-12: WIRE BOTH SUITES, BUT NOT ON EVERY PUSH.

@@ -1,0 +1,26 @@
+[
+  {
+    "package": "node-forge",
+    "advisory": "GHSA-86w9-cpqp-85rv",
+    "reason": "No patched release exists (affected <=1.4.0). The host generates and signs certificates with node-forge but never calls its verifier; every certificate it issues is verified with node:crypto's X509Certificate.verify() and by the browser that accepts the chain. ADR 0070 records the alternatives weighed.",
+    "reviewed": "2026-10-25"
+  },
+  {
+    "package": "zod",
+    "advisory": "GHSA-mrhx-c7xc-m3w5",
+    "reason": "Dev-only: both paths are build/test tooling, not shipped runtime. @google/design.md 0.4.0 is the latest published linter and needs zod v3; @cloudflare/vitest-pool-workers 0.23.0 pins zod exactly inside its Worker toolchain. The override set deliberately covers undici and sharp only.",
+    "reviewed": "2026-10-25"
+  },
+  {
+    "package": "@google/design.md",
+    "advisory": "zod",
+    "reason": "Dev-only linter at its latest published version (0.4.0); its zod v3 requirement has no patched release that also needs v4.",
+    "reviewed": "2026-10-25"
+  },
+  {
+    "package": "@cloudflare/vitest-pool-workers",
+    "advisory": "zod",
+    "reason": "Dev-only Worker test pool (0.23.0) pins zod exactly inside its toolchain; the latest pool still does, and the override set covers only undici and sharp.",
+    "reviewed": "2026-10-25"
+  }
+]
