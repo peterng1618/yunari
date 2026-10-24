@@ -9,8 +9,10 @@ import type { HelperChild, SpawnProcess } from "../helpers/supervisor.js";
 import {
   GAME_KEYS,
   GameProvider,
+  type GameStore,
   NO_ARTWORK_MESSAGE,
   NO_GAME_MESSAGE,
+  NO_STEAM_MATCH_MESSAGE,
 } from "./provider.js";
 import type { SteamApp } from "./steam-library.js";
 
@@ -34,6 +36,10 @@ interface HarnessOptions {
   readonly steamError?: boolean;
   /** Make the helper's spawn throw; cleared later to prove the retry boundary. */
   readonly failSpawn?: boolean;
+  readonly store?: GameStore;
+  readonly productName?: (
+    executablePath: string,
+  ) => Promise<string | undefined>;
 }
 
 interface Harness {
@@ -91,6 +97,9 @@ function harness(options: HarnessOptions = {}): Harness {
       return options.steamRoot;
     },
     loadSteamApps: async () => options.apps ?? [],
+    // A test never runs PowerShell: absent a fake, there is no product name.
+    productName: options.productName ?? (async () => undefined),
+    ...(options.store === undefined ? {} : { store: options.store }),
   });
 
   return {
@@ -402,6 +411,282 @@ describe("GameProvider samples", () => {
     await h.sample([]);
 
     expect(h.killed).toHaveLength(1);
+    h.provider.stop();
+  });
+});
+
+describe("GameProvider store metadata", () => {
+  const EXAMPLE_MATCH = { id: 1201270, name: "Example Game" };
+  const OTHER_EXE = "C:\\Games\\Other\\other.exe";
+
+  interface FakeStore {
+    readonly store: GameStore;
+    readonly lookups: string[];
+    readonly covers: number[];
+  }
+
+  function fakeStore(
+    answer: (name: string) => { id: number; name: string } | undefined,
+    coverUrl: (appId: number) => string | undefined = (appId) =>
+      `/api/game/artwork/${appId}.jpg`,
+  ): FakeStore {
+    const lookups: string[] = [];
+    const covers: number[] = [];
+
+    return {
+      lookups,
+      covers,
+      store: {
+        async lookup(name) {
+          lookups.push(name);
+          return answer(name);
+        },
+        async cover(appId) {
+          covers.push(appId);
+          return coverUrl(appId);
+        },
+      },
+    };
+  }
+
+  it("reads nothing from the store for a Steam install", async () => {
+    vi.useFakeTimers();
+    const root = await steamRootWithBoxArt("10");
+    const fake = fakeStore(() => EXAMPLE_MATCH);
+    const h = harness({
+      steamRoot: root,
+      apps: [STEAM_APP],
+      store: fake.store,
+      productName: async () => {
+        throw new Error("a Steam app needs no product name");
+      },
+    });
+    await h.sample(["game.running"]);
+    h.emit(
+      h.children[0] as FakeChild,
+      foregroundLine(
+        1234,
+        "d:\\games\\steam\\STEAMAPPS\\common\\half-life\\hl.exe",
+        "hl",
+      ),
+    );
+
+    const samples = await h.sample(GAME_KEYS);
+
+    expect(fake.lookups).toEqual([]);
+    expect(fake.covers).toEqual([]);
+    expect(samples.get("game.name")).toMatchObject({
+      status: "ok",
+      textValue: "Counter-Strike",
+    });
+    expect(samples.get("game.artwork")).toMatchObject({
+      status: "ok",
+      textValue: "/api/game/artwork/10.jpg",
+    });
+    h.provider.stop();
+  });
+
+  it("performs no store request for a presence-only demand", async () => {
+    vi.useFakeTimers();
+    const fake = fakeStore(() => EXAMPLE_MATCH);
+    let productReads = 0;
+    const h = harness({
+      store: fake.store,
+      productName: async () => {
+        productReads += 1;
+        return "Example Game";
+      },
+    });
+    await h.sample(["game.running"]);
+    h.emit(h.children[0] as FakeChild, foregroundLine(99, OTHER_EXE, "other"));
+
+    const samples = await h.sample(["game.app", "game.running"]);
+
+    expect(fake.lookups).toEqual([]);
+    expect(fake.covers).toEqual([]);
+    expect(productReads).toBe(0);
+    expect(samples.get("game.app")).toMatchObject({
+      status: "ok",
+      textValue: "other.exe",
+    });
+    expect(samples.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: true,
+    });
+    h.provider.stop();
+  });
+
+  it("names a non-Steam app from the store's canonical match", async () => {
+    vi.useFakeTimers();
+    const fake = fakeStore((name) =>
+      name === "Example Game" ? EXAMPLE_MATCH : undefined,
+    );
+    const h = harness({
+      store: fake.store,
+      productName: async () => "Example Game",
+    });
+    await h.sample(["game.running"]);
+    h.emit(h.children[0] as FakeChild, foregroundLine(99, OTHER_EXE, "other"));
+
+    const samples = await h.sample(["game.name", "game.app", "game.running"]);
+
+    expect(fake.lookups).toEqual(["Example Game"]);
+    expect(fake.covers).toEqual([]);
+    expect(samples.get("game.name")).toMatchObject({
+      status: "ok",
+      textValue: "Example Game",
+    });
+    expect(samples.get("game.app")).toMatchObject({
+      status: "ok",
+      textValue: "other.exe",
+    });
+    expect(samples.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: true,
+    });
+    h.provider.stop();
+  });
+
+  it("searches the executable's file stem when ProductName is absent", async () => {
+    vi.useFakeTimers();
+    const fake = fakeStore(() => undefined);
+    const h = harness({ store: fake.store });
+    await h.sample(["game.running"]);
+    h.emit(h.children[0] as FakeChild, foregroundLine(99, OTHER_EXE, "other"));
+
+    const samples = await h.sample(["game.name", "game.app"]);
+
+    expect(fake.lookups).toEqual(["other"]);
+    expect(samples.get("game.name")?.status).toBe("unavailable");
+    expect(samples.get("game.name")?.textValue).toBeUndefined();
+    expect(samples.get("game.name")?.message).toBe(NO_STEAM_MATCH_MESSAGE);
+    expect(samples.get("game.app")).toMatchObject({
+      status: "ok",
+      textValue: "other.exe",
+    });
+    h.provider.stop();
+  });
+
+  it("serves the store's cover for a matched non-Steam app only on demand", async () => {
+    vi.useFakeTimers();
+    const fake = fakeStore(
+      () => EXAMPLE_MATCH,
+      (appId) => `/api/game/artwork/${appId}.jpg`,
+    );
+    const h = harness({
+      store: fake.store,
+      productName: async () => "Example Game",
+    });
+    await h.sample(["game.running"]);
+    h.emit(h.children[0] as FakeChild, foregroundLine(99, OTHER_EXE, "other"));
+
+    const samples = await h.sample(["game.artwork"]);
+
+    expect(fake.lookups).toEqual(["Example Game"]);
+    expect(fake.covers).toEqual([1201270]);
+    expect(samples.get("game.artwork")).toMatchObject({
+      status: "ok",
+      textValue: "/api/game/artwork/1201270.jpg",
+    });
+    h.provider.stop();
+  });
+
+  it("reports a missing store cover as unavailable with a reason", async () => {
+    vi.useFakeTimers();
+    const fake = fakeStore(
+      () => EXAMPLE_MATCH,
+      () => undefined,
+    );
+    const h = harness({
+      store: fake.store,
+      productName: async () => "Example Game",
+    });
+    await h.sample(["game.running"]);
+    h.emit(h.children[0] as FakeChild, foregroundLine(99, OTHER_EXE, "other"));
+
+    const samples = await h.sample(["game.artwork"]);
+
+    expect(fake.covers).toEqual([1201270]);
+    expect(samples.get("game.artwork")).toMatchObject({
+      status: "unavailable",
+      message: NO_ARTWORK_MESSAGE,
+    });
+    expect(samples.get("game.artwork")?.textValue).toBeUndefined();
+    h.provider.stop();
+  });
+
+  it("falls back to the store's cover when a Steam app has no local art", async () => {
+    vi.useFakeTimers();
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-game-art-"));
+    tempRoots.push(root);
+    const fake = fakeStore(() => EXAMPLE_MATCH);
+    const h = harness({
+      steamRoot: root,
+      apps: [STEAM_APP],
+      store: fake.store,
+      productName: async () => {
+        throw new Error("a Steam app needs no product name");
+      },
+    });
+    await h.sample(["game.running"]);
+    h.emit(
+      h.children[0] as FakeChild,
+      foregroundLine(
+        1234,
+        "d:\\games\\steam\\steamapps\\common\\half-life\\hl.exe",
+        "hl",
+      ),
+    );
+
+    const samples = await h.sample(["game.artwork"]);
+
+    expect(fake.lookups).toEqual([]);
+    expect(fake.covers).toEqual([10]);
+    expect(samples.get("game.artwork")).toMatchObject({
+      status: "ok",
+      textValue: "/api/game/artwork/10.jpg",
+    });
+    h.provider.stop();
+  });
+
+  it("keeps presence available when the store fails", async () => {
+    vi.useFakeTimers();
+    const store: GameStore = {
+      async lookup() {
+        throw new Error("offline");
+      },
+      async cover() {
+        throw new Error("offline");
+      },
+    };
+    const h = harness({
+      store,
+      productName: async () => "Example Game",
+    });
+    await h.sample(["game.running"]);
+    h.emit(h.children[0] as FakeChild, foregroundLine(99, OTHER_EXE, "other"));
+
+    const samples = await h.sample([
+      "game.name",
+      "game.artwork",
+      "game.running",
+      "game.app",
+    ]);
+
+    expect(samples.get("game.name")?.status).toBe("unavailable");
+    expect(samples.get("game.artwork")).toMatchObject({
+      status: "unavailable",
+      message: NO_ARTWORK_MESSAGE,
+    });
+    expect(samples.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: true,
+    });
+    expect(samples.get("game.app")).toMatchObject({
+      status: "ok",
+      textValue: "other.exe",
+    });
+    expect(h.provider.health()).toEqual({ available: true });
     h.provider.stop();
   });
 });

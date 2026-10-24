@@ -8,6 +8,7 @@ import {
   FOREGROUND_SCRIPT,
   type ForegroundReading,
   parseForegroundLine,
+  readProductName,
 } from "../helpers/foreground.js";
 import type {
   HelperExitKind,
@@ -35,10 +36,11 @@ import {
  * One PowerShell helper reports the foreground process once a second while a
  * display binds `game.*`; the Steam library is read once per demand window.
  * A matched app gives the name and, when Steam's cache holds it, the local box
- * art URL; a foreground process outside every Steam install still reports its
- * executable and `running: true` with no name (decision 0108). There is no
- * artwork fallback: no local file means an unavailable reading, never a CDN
- * URL or a placeholder.
+ * art URL. A foreground process outside every Steam install reports its
+ * executable and `running: true`; when a store is injected its local name —
+ * ProductName, else the executable's file name — is looked up once, and a match
+ * supplies the canonical name and cover (decision 0109). A store failure is a
+ * gap for that key, never the provider's failure, so presence keeps answering.
  */
 
 const GAME_PROVIDER_ID = "game";
@@ -94,6 +96,25 @@ export interface GameProviderOptions {
   /** Steam's install root; absent is no Steam apps, not a failure. */
   readonly steamRoot?: () => Promise<string | undefined>;
   readonly loadSteamApps?: (root: string) => Promise<readonly SteamApp[]>;
+  /** Decision 0109's client; absent is local-only names and art. */
+  readonly store?: GameStore;
+  /** Injected so a test reads no executable's version info. */
+  readonly productName?: (
+    executablePath: string,
+  ) => Promise<string | undefined>;
+}
+
+/** The slice of Task 7.1's store client the provider needs. */
+export interface GameStore {
+  lookup(name: string): Promise<{ id: number; name: string } | undefined>;
+  /** The host-relative route that serves this app's cached cover. */
+  cover(appId: number): Promise<string | undefined>;
+}
+
+/** What one demand window resolved: a local Steam app or a store match. */
+interface GameIdentity {
+  readonly steam?: SteamApp;
+  readonly store?: { readonly id: number; readonly name: string };
 }
 
 interface RunningHelper {
@@ -113,6 +134,10 @@ export class GameProvider implements SensorProvider {
   readonly #pathExists: ((file: string) => boolean) | undefined;
   readonly #steamRoot: () => Promise<string | undefined>;
   readonly #loadSteamApps: (root: string) => Promise<readonly SteamApp[]>;
+  readonly #store: GameStore | undefined;
+  readonly #productName: (
+    executablePath: string,
+  ) => Promise<string | undefined>;
 
   #helper: RunningHelper | undefined;
   #tick: ReturnType<typeof setTimeout> | undefined;
@@ -136,6 +161,8 @@ export class GameProvider implements SensorProvider {
     this.#pathExists = options.pathExists;
     this.#steamRoot = options.steamRoot ?? (() => resolveSteamRoot());
     this.#loadSteamApps = options.loadSteamApps ?? readSteamApps;
+    this.#store = options.store;
+    this.#productName = options.productName ?? readProductName;
   }
 
   async describe(): Promise<readonly SensorDescriptor[]> {
@@ -161,15 +188,19 @@ export class GameProvider implements SensorProvider {
     await this.#ensureSteam();
     this.#reconcile(now);
 
-    // Only a demand for the picture reads it, so a name-only display never
-    // stats Steam's cache.
-    const artworkUrl = wanted.includes("game.artwork")
-      ? await this.#boxArtUrl()
+    // A presence-only demand reads neither the store nor Steam's cache: identity
+    // is resolved only for a key that needs it, and the cover only for artwork.
+    const wantsName = wanted.includes("game.name");
+    const wantsArtwork = wanted.includes("game.artwork");
+    const identity =
+      wantsName || wantsArtwork ? await this.#identify() : undefined;
+    const artworkUrl = wantsArtwork
+      ? await this.#artworkUrl(identity)
       : undefined;
 
     return wanted.map((semanticKey) => ({
       semanticKey,
-      sample: this.#sampleOf(semanticKey, nowMs, artworkUrl),
+      sample: this.#sampleOf(semanticKey, nowMs, identity, artworkUrl),
     }));
   }
 
@@ -336,19 +367,100 @@ export class GameProvider implements SensorProvider {
     return foreground.name;
   }
 
-  /** The matched app's cached box art, when this window read a Steam root. */
-  async #boxArtUrl(): Promise<string | undefined> {
-    const app = this.#matched();
-    const root = this.#steamRootPath;
+  /**
+   * The identity a name or artwork reading needs. A Steam app answers from its
+   * manifest without a search; a non-Steam app is looked up once by its local
+   * name. A failed lookup is a missing match, never the provider's failure.
+   */
+  async #identify(): Promise<GameIdentity> {
+    const foreground = this.#foreground;
 
-    if (app === undefined || root === undefined) return undefined;
+    if (foreground === undefined || foreground.pid === 0) return {};
 
-    return findBoxArt(app, [root]);
+    const steam = this.#matched();
+    if (steam !== undefined) return { steam };
+
+    const store = this.#store;
+    if (store === undefined) return {};
+
+    const localName = await this.#localName(foreground);
+    if (localName === undefined) return {};
+
+    let match: { id: number; name: string } | undefined;
+
+    try {
+      match = await store.lookup(localName);
+    } catch {
+      match = undefined;
+    }
+
+    return match === undefined ? {} : { store: match };
+  }
+
+  /** The local name a store search can use: ProductName, else the file stem. */
+  async #localName(foreground: ForegroundReading): Promise<string | undefined> {
+    if (foreground.path !== undefined) {
+      let product: string | undefined;
+
+      try {
+        product = await this.#productName(foreground.path);
+      } catch {
+        product = undefined;
+      }
+
+      const trimmed = product?.trim();
+      if (trimmed !== undefined && trimmed !== "") return trimmed;
+
+      const file = path.win32.parse(foreground.path).name;
+      if (file !== "") return file;
+    }
+
+    return foreground.name;
+  }
+
+  /**
+   * A local image stays first: only a matched app whose Steam cache is empty
+   * asks the store. The cover is fetched only for a demanded artwork key.
+   */
+  async #artworkUrl(
+    identity: GameIdentity | undefined,
+  ): Promise<string | undefined> {
+    const steam = identity?.steam;
+
+    if (steam !== undefined) {
+      const root = this.#steamRootPath;
+
+      if (root !== undefined) {
+        const local = await findBoxArt(steam, [root]);
+        if (local !== undefined) return local;
+      }
+
+      const appId = Number.parseInt(steam.appId, 10);
+      return this.#cover(appId);
+    }
+
+    const match = identity?.store;
+    return match === undefined ? undefined : this.#cover(match.id);
+  }
+
+  async #cover(appId: number): Promise<string | undefined> {
+    const store = this.#store;
+
+    if (store === undefined || !Number.isInteger(appId) || appId <= 0) {
+      return undefined;
+    }
+
+    try {
+      return await store.cover(appId);
+    } catch {
+      return undefined;
+    }
   }
 
   #sampleOf(
     semanticKey: string,
     nowMs: number,
+    identity: GameIdentity | undefined,
     artworkUrl: string | undefined,
   ): Sample {
     const sensorId = `${GAME_PROVIDER_ID}:${semanticKey}`;
@@ -383,11 +495,11 @@ export class GameProvider implements SensorProvider {
     if (foreground.pid === 0) return absent(NO_GAME_MESSAGE);
 
     if (semanticKey === "game.name") {
-      const app = this.#matched();
+      const name = identity?.steam?.name ?? identity?.store?.name;
 
-      return app === undefined
+      return name === undefined
         ? absent(NO_STEAM_MATCH_MESSAGE)
-        : { sensorId, timestamp, status: "ok", textValue: app.name };
+        : { sensorId, timestamp, status: "ok", textValue: name };
     }
 
     const name = this.#processName(foreground);

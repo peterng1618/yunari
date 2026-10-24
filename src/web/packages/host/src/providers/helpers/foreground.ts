@@ -1,6 +1,10 @@
+import { execFile } from "node:child_process";
+import { powershellPath } from "./supervisor.js";
+
 /**
  * The foreground window's owning process, read by one embedded PowerShell
- * script under the 0102 supervisor.
+ * script under the 0102 supervisor, plus a one-shot version-info read of the
+ * name a store lookup searches for.
  *
  * `GetForegroundWindow` and `GetWindowThreadProcessId` need no elevation and
  * raise no UAC prompt. `Process.MainModule.FileName` throws for a process this
@@ -14,6 +18,85 @@ export interface ForegroundReading {
   readonly path?: string;
   /** The process name without a path, when the executable path is unreadable. */
   readonly name?: string;
+}
+
+/** A version-info read blocks no sample longer than this. */
+const PRODUCT_NAME_TIMEOUT_MS = 5_000;
+
+/**
+ * Read once per executable path for the process life: a store match turns on
+ * this value only when a display binds a game name, and a game started again
+ * has not changed its ProductName. The promise is cached so concurrent samples
+ * share one PowerShell run.
+ */
+const productNames = new Map<string, Promise<string | undefined>>();
+
+/** A single-quoted PowerShell literal: the only escape is a doubled quote. */
+function powerShellLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function productNameScript(executablePath: string): string {
+  return `
+$ErrorActionPreference = 'SilentlyContinue'
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$value = (Get-Item -LiteralPath ${powerShellLiteral(executablePath)}).VersionInfo.ProductName
+if ($null -ne $value) { [Console]::Out.Write([string]$value) }
+`;
+}
+
+/**
+ * The executable's version-info ProductName, used as the local name a store
+ * lookup searches for (decision 0109). An absent PowerShell, a failed run or an
+ * empty value is `undefined`; nothing here is ever reported as a failure.
+ */
+export function readProductName(
+  executablePath: string,
+): Promise<string | undefined> {
+  const key = executablePath.toLowerCase();
+  const cached = productNames.get(key);
+  if (cached !== undefined) return cached;
+
+  const reading = readProductNameOnce(executablePath);
+  productNames.set(key, reading);
+  return reading;
+}
+
+async function readProductNameOnce(
+  executablePath: string,
+): Promise<string | undefined> {
+  const executable = powershellPath();
+
+  if (executable === undefined) return undefined;
+
+  const args = [
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-EncodedCommand",
+    Buffer.from(productNameScript(executablePath), "utf16le").toString(
+      "base64",
+    ),
+  ];
+
+  const output = await new Promise<string | undefined>((resolve) => {
+    execFile(
+      executable,
+      args,
+      {
+        windowsHide: true,
+        timeout: PRODUCT_NAME_TIMEOUT_MS,
+        encoding: "utf8",
+      },
+      (error, stdout) => {
+        resolve(error ? undefined : stdout);
+      },
+    );
+  });
+
+  const name = output?.trim();
+  return name === undefined || name === "" ? undefined : name;
 }
 
 export const FOREGROUND_SCRIPT = `

@@ -18,6 +18,7 @@ import { FrameProvider } from "./providers/frame/provider.js";
 import { RtssAdapter } from "./providers/frame/rtss.js";
 import { createGameArtwork } from "./providers/game/box-art.js";
 import { GameProvider } from "./providers/game/provider.js";
+import { createSteamStore } from "./providers/game/store-metadata.js";
 import { LhmSensorProvider } from "./providers/lhm.js";
 import { launchLhm, registerLhmTask } from "./providers/lhm-launcher.js";
 import { LibrarySensorProvider } from "./providers/library.js";
@@ -222,15 +223,21 @@ export async function run(argv: readonly string[]): Promise<number> {
   // The foreground process, with Steam's local files for a game name: one
   // helper only while a display binds game.*. A named root lets a portable
   // install — or a test fixture — point at its own library; absent, the
-  // registry's SteamPath is the answer.
+  // registry's SteamPath is the answer. A game outside Steam is named by the
+  // store's cached lookup, kept beside the other caches (decision 0109).
   const namedSteamRoot = process.env.YUNARI_STEAM_ROOT;
   const steamRoot =
     namedSteamRoot === undefined || namedSteamRoot === ""
       ? undefined
       : () => Promise.resolve(namedSteamRoot);
-  const gameProvider = new GameProvider(
-    steamRoot === undefined ? {} : { steamRoot },
-  );
+  const gameStore = createSteamStore({
+    fetchImpl: (input, init) => fetch(input, init),
+    cacheDir: path.join(path.dirname(settingsDir), "cache", "game-metadata"),
+  });
+  const gameProvider = new GameProvider({
+    ...(steamRoot === undefined ? {} : { steamRoot }),
+    store: gameStore,
+  });
   const registry = new ProviderRegistry([
     clockProvider,
     lhmProvider,
