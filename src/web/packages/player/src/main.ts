@@ -37,6 +37,7 @@ import {
 import { envelopePlan } from "./hosted-plan.js";
 import { showLoadFailure } from "./load-failure.js";
 import { followPublished, reResolveUrl } from "./publish-follower.js";
+import { loadDisplayCatalogue } from "./sensor-catalogue.js";
 import { registerServiceWorker } from "./service-worker.js";
 import { type DisplaySessionToken, displaySession } from "./session.js";
 import { createThemeChooser } from "./theme-chooser.js";
@@ -202,6 +203,7 @@ async function startHostedTheme(
   // Fetch before allocating live resources so a failed font request has nothing to release.
   const fontBytes = await loadHostedFontAssets(theme.id, theme, session.fetch);
   const units = await loadDisplayPreferences(session.fetch);
+  const descriptors = await loadDisplayCatalogue(session.fetch);
   const keys = boundSemanticKeys(theme);
   // The host localizes per display and does not read this theme to learn its
   // language, so the already-loaded value rides the request. The host validates.
@@ -287,6 +289,7 @@ async function startHostedTheme(
       theme.globals,
       units,
       theme.metadata?.themeLanguage,
+      descriptors,
     );
     handle.canvas.requestRenderAll();
     // Refreshed here because a provider's reason exists only once data has
