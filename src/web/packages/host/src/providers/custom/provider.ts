@@ -113,8 +113,16 @@ function messageWithPointer(
       : `the pointer ${bounded}`;
 
   const placeholder = "\u0000";
+  // RFC 6901 permits whitespace and control characters in a token, but a
+  // reason is one line: collapse the whitespace and drop the controls, then
+  // apply the line cap to the assembled message.
+  const oneLine = subject
+    .replace(/\s+/g, " ")
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, "")
+    .trim();
+
   return redactForBrowser(sentence(placeholder))
-    .replace(placeholder, () => subject)
+    .replace(placeholder, () => oneLine)
     .slice(0, MESSAGE_MAX_CHARS);
 }
 
@@ -287,6 +295,10 @@ export class CustomSourceProvider implements SensorProvider {
   }
 
   health(): ProviderHealth {
+    if (this.#stopped) {
+      return { available: false, message: "The provider is stopped." };
+    }
+
     if (this.#sourceCount === 0) {
       const issue = this.#issues[0];
       return {

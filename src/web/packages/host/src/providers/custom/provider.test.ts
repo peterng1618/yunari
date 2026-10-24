@@ -361,6 +361,22 @@ describe("CustomSourceProvider", () => {
     expect(sample?.message?.length).toBeLessThanOrEqual(120);
   });
 
+  it("keeps a pointer with a newline on one line", async () => {
+    const sample = await samplePointer("/a\nb");
+
+    expect(sample).toMatchObject({ status: "missing" });
+    expect(sample?.message).not.toContain("\n");
+    expect(sample?.message).toContain("/a b");
+  });
+
+  it("strips a control character from a pointer", async () => {
+    const sample = await samplePointer("/price\u0000x");
+
+    expect(sample).toMatchObject({ status: "missing" });
+    expect(sample?.message).not.toContain("\u0000");
+    expect(sample?.message).toContain("/pricex");
+  });
+
   it("names the field when a pointer is not JSON Pointer grammar", async () => {
     const sample = await samplePointer("not a pointer");
 
@@ -543,7 +559,10 @@ describe("CustomSourceProvider", () => {
     await pending;
 
     expect(await provider.describe()).toEqual([]);
-    expect(provider.health().available).toBe(false);
+    expect(provider.health()).toEqual({
+      available: false,
+      message: "The provider is stopped.",
+    });
 
     await provider.sample(["custom.two.y"], Date.now());
     await settle();
@@ -579,7 +598,7 @@ describe("CustomSourceProvider", () => {
     expect(calls.length).toBe(6);
   });
 
-  it("drops an in-flight result when reload replaces the source", async () => {
+  it("reload replaces the runtime, so a result for the old one is discarded", async () => {
     const gate = deferred<Response>();
     const { fetcher, calls } = fetcherOf((_url, index) =>
       index === 0 ? gate.promise : json({ x: 1 }),
@@ -618,9 +637,12 @@ describe("CustomSourceProvider", () => {
     ).toMatchObject({ status: "missing" });
 
     await settle();
+    // The value served after the reload is the new fetch's, not the in-flight
+    // 999 that arrived for the runtime the reload replaced.
     expect(
       byKey(await provider.sample([key], Date.now())).get(key),
     ).toMatchObject({ status: "ok", value: 1 });
+    expect(calls.length).toBe(2);
   });
 
   it("stops a removed source's timer and drops its cached values", async () => {

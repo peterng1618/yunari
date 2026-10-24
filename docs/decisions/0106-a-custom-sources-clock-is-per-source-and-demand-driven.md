@@ -107,6 +107,7 @@ whether the store has a valid source, so a partially failing provider is still
 available and its redacted failure rides in `message`. Credentials resolve
 through `CredentialStore` at fetch time only, and a missing one is a reason
 rather than a request without it. `stop()` retires every runtime, aborts
-in-flight requests and refuses a reload still pending on the store. `main.ts`
+in-flight requests, refuses a reload still pending on the store and reports
+the provider stopped rather than source-less. `main.ts`
 constructs the provider, awaits `reload()` and stops it beside the other
 providers.
