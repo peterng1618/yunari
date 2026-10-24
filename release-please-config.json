@@ -3,7 +3,8 @@
     "src/web": {
       "release-type": "node",
       "package-name": "yunari",
-      "include-component-in-tag": false
+      "include-component-in-tag": false,
+      "bump-minor-pre-major": true
     }
   }
 }

@@ -18,10 +18,10 @@ The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-relea
 ## Last completed change
 
 - **`docs/engineering/releases.md` is the release runbook:** release-please flow, the two release-token modes, dry-run dispatch, what the publish job does, and the asset list.
-- **It records npm authentication order:** the first publish is token-authenticated, the trusted publisher for `peterng1618/yunari` / `publish.yml` applies from the second, and no token is wired into the workflow.
+- **It records the first-publish bootstrap:** a one-time local, token-authenticated publish (stage, pack, `npm publish`, upload assets) because the workflow wires no token, then the trusted publisher for `peterng1618/yunari` / `publish.yml` and OIDC from the second release.
 - **It states the costs and the deferral:** tag/version mismatch fails the run, npm unpublish is 72 hours then `deprecate` only, a version is never reused, and winget waits on a real `.exe`.
 - **Ownership gained four rows** — schema version, envelope migration, release bump/notes, published package — and `docs/README.md` maps the runbook.
-- **Verified:** `npm run docs:check` and `npm run ownership:sweep` both exit 0.
+- **`release-please-config.json` sets `bump-minor-pre-major`** so a breaking change before 1.0 bumps minor; `docs:check` and `ownership:sweep` exit 0.
 
 ## Next
 
