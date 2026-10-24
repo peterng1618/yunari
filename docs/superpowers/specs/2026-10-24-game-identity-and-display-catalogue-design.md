@@ -168,11 +168,12 @@ Unit (Vitest):
   catalogue fetch leaves the built-in table.
 
 Browser (Playwright): one player arm — a real host, a custom `°C` source bound
-to `°F`, reading `°F`, failing when the descriptors are not passed. Game
-identity is proven by the classifier and provider unit tests plus
-`game-metadata.spec.ts`'s fixed-foreground arm: a fixture catalogue cannot
-stand in for a real machine's install roots, so no browser arm asserts
-`game.running`.
+to `°F`, reading `°F`, failing when the descriptors are not passed. The
+`running` decision is unit-proven by the classifier and provider tests; the
+only browser identity arm is `game-metadata.spec.ts`, which names a fixed
+foreground and asserts painted name and artwork, not `running`. A fixture
+catalogue cannot stand in for a real machine's install roots, so no browser
+arm asserts `game.running`.
 
 ## Acceptance
 
