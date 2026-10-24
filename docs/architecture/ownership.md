@@ -140,6 +140,7 @@ two apart is the judgement the map cannot make for itself.
 | **Minting ids for a *copy*** — object ids and binding ids together, minted past the destination | `renderer-core/src/theme/widget.ts` (`createWidgetIdAllocator`), used by `editor/src/card-library.ts` and `editor/src/clipboard-manager/` |
 | **The store surface** — the four things a cell can do and which of them a build runs, the five facets' filter rules, the query, the pager's page arithmetic, and the item's own surface | `editor/src/store-mode/` |
 | **The Host mode's surface, and the editor's seam to the host's settings** — the settings page rebuilt in React, and the routes it reads for this PC's devices, a display's preferences and one theme's answers | `editor/src/host-settings-mode/` |
+| Editor surface chosen by a URL — the mode it parses and the publish request it carries, read once at mount | `editor/src/editor-shell/shell-entry.ts` |
 
 **The copy path and the fresh-object path are one job, not two, and only the copy
 path has been folded in.** "A copy is a copy, not a twin" needs an id the
@@ -273,6 +274,9 @@ adapter does not own catalog, preview or adoption semantics.
 | LHM launch and elevation reporting | `host/src/providers/lhm-launcher.ts` |
 | systeminformation-backed baseline provider | `host/src/providers/library.ts` |
 | LAN display sessions and pairing | `host/src/session/pairing.ts` |
+| Tray menu, controller and platform adapters | `host/src/tray/` |
+| Sign-in entry and its legacy-task migration | `host/src/serve/host-autostart.ts` |
+| External-program presence, status and Start | `host/src/tray/external-apps.ts` |
 
 ## Known ownership gaps
 

@@ -11,7 +11,7 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Active work
 
-- **Tasks 1–10 are done** (menu model, external programs, sign-in entry, both tray adapters, controller, CLI flags, console-free opener, host wiring, editor deep links); Phases 1–2 complete, Phase 3 in flight.
+- **Tasks 1–11 are done**; all three phases complete, with the live acceptance run and plan close-out outstanding.
 - **Controller** polls every 5 s, sends only a changed menu or tooltip, dispatches clicks and shows action or snapshot failures as 10 s notices.
 - **Windows adapter** renders the model through a hidden PowerShell WinForms `NotifyIcon` fed by JSON lines on stdin.
 - **Linux adapter** stages the pinned `systray2@2.1.4` x86-64 binary; no new npm dependency and no runtime install.
@@ -20,17 +20,18 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Last completed change
 
-- **Deep links:** `shell-entry.ts` reads `mode=themes|this-pc` and `publish=1`, and any other mode value opens the editor.
-- **Shell wiring:** `ShellRoot` opens on the parsed mode; one mount effect opens the existing publish surface, and `publish=1` is ignored where another mode is named.
-- **Unit:** `shell-entry.test.ts` pins six query cases; the red proof (defaults unconditionally) failed 4 of 6.
-- **Browser:** `editor-deep-links.spec.ts` drives the 4174 preview with `index.json`, `/api/themes` and `/api/hosting` stubbed; red proof failed 3 of 5, restored run 5 pass.
-- **Gates:** editor and e2e typecheck 0, biome 0 on the four files, `shell-layout.dom` 38 pass; editor, player and host bundles rebuilt for the preview.
+- **Owners:** the ownership map gains the tray, sign-in entry, external-program status/start and editor URL-entry rows.
+- **Notices:** `THIRD-PARTY-NOTICES.md` and `dependencies.md` record `systray2` 2.1.4 MIT, the staged x86-64 binary and its pinned sha256.
+- **Spec:** Acceptance records the Windows start/teardown proof, the editor 6/6 and 5/5 red-proof, and the unverified Linux tray; status stays `active`.
+- **Gate:** `npm run gate` exits 1 at `npm run test`; its only failures are the two untouched `smtc-helper.windows.test.ts` timeouts, and `test:worker` passed when run alone.
+- **No product code changed**; this commit is documentation and notices only.
 
 ## Next
 
-1. Task 11: documentation, notices and the full gate.
-2. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
-3. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
+1. A live tray run by the owner: inspect the menu's rows, toggle Auto start, open each editor surface, start RTSS, and Exit.
+2. Run the staged Linux tray binary on a Linux desktop session; it was never executed here.
+3. Separate the `smtc-helper.windows.test.ts` timeout from this branch by running it at base `bdf113fe`.
+4. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
 
 ## Blockers / unverified
 

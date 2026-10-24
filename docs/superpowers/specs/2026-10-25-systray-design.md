@@ -407,6 +407,44 @@ the server needs it.
   unverified until run; the Linux binary cannot execute on this Windows box.
 - **Gate:** run the broad gate at the plan boundary, from `src/web/`.
 
+## Acceptance — 2026-10-25
+
+Split by what was run, not by what the design intends.
+
+**Observed on Windows.** A host started with `--tray` against an app folder whose
+`APPDATA` was a `%TEMP%` directory, so no real sign-in entry could be written.
+While it ran, the host process stayed up and the PowerShell tray helper child
+was present; after termination both were gone. That is process evidence for
+start, helper spawn and Exit-time teardown.
+
+**Not observed.** The menu's rendered rows were never seen, and no row or
+toggle was clicked: Auto start, Pair display, the three editor surfaces, RTSS
+Start and Exit are unverified as user-visible behaviour.
+
+**Editor deep links.** `shell-entry.test.ts` 6/6 and
+`editor-deep-links.spec.ts` 5/5 on `desktop-chromium`, both red-proven: making
+`parseShellEntry` return defaults failed 4 of 6 unit cases and 3 of 5 browser
+cases. Together they cover the four URL entry cases and the unknown-mode
+fallback.
+
+**Linux tray — unverified.** The staged ELF was never executed on this box. The
+adapter was written from the pinned `systray2@2.1.4` tarball's own source and
+strings, so the JSON protocol is inferred from the package, not observed in a
+Linux desktop session.
+
+**Gate.** `npm run gate` exits `1`, stopping at `npm run test`; its only failures
+are in `packages/host/src/providers/media/smtc-helper.windows.test.ts`, where two
+tests time out waiting for the helper (`1/2` "no line within 20000 ms", `2/2`
+"expected 0 to be greater than 0"). That path is untouched by this branch
+(`git diff bdf113fe..29b4eea8 -- src/web/packages/host/src/providers/media/` is
+empty), so it is recorded as pre-existing and environment-suspected — a machine
+with no active Windows media session — not as caused by this branch, and not as
+proven pre-existing because it was not run at the base commit.
+
+**The status stays `active`.** What closes it: a live run by the owner that
+visibly inspects the menu's rows and clicks each action, plus a Linux desktop
+run of the staged binary.
+
 ## Documentation
 
 - `docs/decisions/0110-the-tray-may-start-rtss-on-request.md` amends 0107's

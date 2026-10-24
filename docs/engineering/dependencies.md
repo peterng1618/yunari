@@ -94,6 +94,7 @@ licence text in `THIRD-PARTY-NOTICES.md`.
 |---|---|---|---|
 | `@anu3ev/fabric-image-editor` | 0.10.32, commit `9efdd78a34` | MIT | adapted movement-snapping and indicator source |
 | `@meteocons/svg-static` (`fill` style) | 0.1.0, `sha512-dnuXOkt1W5q+XZbyj54dzjuBcKmsC0eLv51IVaW9kzzvzwnhwv9KgNXHKgpvmdN6cX2stMo+k95iMFbcyM4x5Q==` | MIT | 23 weather SVGs staged by `packages/host/scripts/vendor-weather-icons.mjs`; served at `/api/weather/icon/<slug>.svg` |
+| `systray2` (`tray_linux_release`) | 2.1.4, sha256 `24a176933952c4db79026dcec25c7acf48e5c1cee5d94bc6b87740060bc8ed00` | MIT | Linux x86-64 tray binary staged by `packages/host/scripts/vendor-tray.mjs`; run over JSON lines, never imported |
 
 Copied, not installed: no entry appears in `package.json` and nothing enters the
 transitive graph. Licence verified from the `LICENSE` blob at that commit,
@@ -104,6 +105,27 @@ refers to the runtime dependency, which stays removed.
 Meteocons' `package/LICENSE` in the pinned tarball is the MIT text,
 `Copyright (c) 2020-present Bas Milius`; the vendor script copies it beside the
 icons. Source: <https://github.com/basmilius/meteocons>.
+
+### systray2 packaging review — 2026-10-25
+
+Assessed against the pinned `systray2@2.1.4` npm tarball
+(<https://registry.npmjs.org/systray2/-/systray2-2.1.4.tgz>, sha256
+`24a176933952c4db79026dcec25c7acf48e5c1cee5d94bc6b87740060bc8ed00`) and the
+extracted `package/LICENSE`, whose text is the MIT licence, "Copyright (c)
+2017 Zack Young"; the npm metadata also says MIT.
+
+`packages/host/scripts/vendor-tray.mjs` stages `package/traybin/tray_linux_release`
+and `package/LICENSE` into `packages/host/vendor/tray` and refuses a digest
+mismatch. It is not a declared dependency and never enters the transitive graph.
+**Only the Linux x86-64 binary is staged** — Linux arm64 is unsupported and
+would need its own binary and provenance; Windows uses the PowerShell adapter,
+so it needs no file from this package. The binary is staged, not shipped in the
+repository: `vendor/` is ignored, and only `vendor/tray/PROVENANCE.txt` is
+tracked. MIT requires the notice to travel with the binary, so release
+packaging must include `vendor/tray/LICENSE` beside `tray_linux_release`.
+
+Conclusion: redistribution is permissible with its licence file, and the host
+runs it without linking or modifying it.
 
 Open-Meteo's data is offered under CC BY 4.0. Its licence page,
 <https://open-meteo.com/en/licence> (verified 2026-10-24), states the credit as
