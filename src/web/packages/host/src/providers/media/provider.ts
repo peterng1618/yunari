@@ -100,6 +100,12 @@ const TICK_MS = 1_000;
 /** One line a second is the contract; a minute without one is a wedged helper
  *  (a track's artwork read can hold the loop for a few seconds). */
 const LIVENESS_TIMEOUT_MS = 60_000;
+/** Held artwork URLs. The disk cache keeps 64 files; this only remembers the
+ *  handful of tracks a display can switch between without a new emission. */
+const ARTWORK_TRACKS_CAP = 32;
+/** Track identities already re-requested after a selection found no held art,
+ *  so a track with no thumbnail cannot restart the helper every poll. */
+const ARTWORK_REQUESTS_CAP = 32;
 
 function trackKeyOf(session: SmtcSession): string {
   return [session.sessionId, session.title, session.artist, session.album].join(
@@ -176,6 +182,11 @@ export class MediaProvider implements SensorProvider {
 
   #trackKey: string | undefined;
   #artworkUrl: string | undefined;
+  /** Artwork already emitted, keyed by session and track identity, so a
+   *  selection change resolves to a picture read while another track played. */
+  readonly #artworkByTrack = new Map<string, string>();
+  /** Track identities whose missing art has already cost one helper restart. */
+  readonly #artRequested = new Set<string>();
   /** The last artwork write, so a sample that follows a line sees its URL. */
   #artworkWrite: Promise<void> = Promise.resolve();
 
@@ -213,11 +224,12 @@ export class MediaProvider implements SensorProvider {
       this.#lastArtworkDemandMs = now;
     }
 
-    this.#reconcile(now);
-
-    // A line may have arrived in this turn; let its write land before the
-    // sample asks for a URL.
+    // A line may have arrived in this turn; let its write land first, so a
+    // track whose artwork was just read is not mistaken for a miss and the
+    // helper is not restarted needlessly.
     await this.#artworkWrite;
+
+    this.#reconcile(now);
 
     return wanted.map((semanticKey) => ({
       semanticKey,
@@ -264,7 +276,47 @@ export class MediaProvider implements SensorProvider {
     }
 
     if (this.#helper.artwork !== this.#artworkWanted(now)) {
+      // A new artwork mode may read tracks the previous one never asked for.
+      this.#artRequested.clear();
       this.#restart(now);
+      return;
+    }
+
+    this.#requestMissingArtwork(now);
+  }
+
+  /**
+   * A newly selected track with no held picture costs one helper restart,
+   * which clears the script's per-track dedupe and re-reads every session's
+   * thumbnail. The identity is remembered so a track that genuinely has no
+   * artwork cannot restart the helper on every poll.
+   */
+  #requestMissingArtwork(now: number): void {
+    if (this.#helper?.artwork !== true) return;
+
+    const key = this.#trackKey;
+
+    if (key === undefined || this.#artworkUrl !== undefined) return;
+    if (this.#artRequested.has(key)) return;
+
+    this.#artRequested.add(key);
+
+    if (this.#artRequested.size > ARTWORK_REQUESTS_CAP) {
+      const oldest = this.#artRequested.values().next().value;
+      if (oldest !== undefined) this.#artRequested.delete(oldest);
+    }
+
+    this.#restart(now);
+  }
+
+  /** Stores a URL by track identity, keeping the newest handful. */
+  #rememberArtwork(key: string, url: string): void {
+    this.#artworkByTrack.delete(key);
+    this.#artworkByTrack.set(key, url);
+
+    if (this.#artworkByTrack.size > ARTWORK_TRACKS_CAP) {
+      const oldest = this.#artworkByTrack.keys().next().value;
+      if (oldest !== undefined) this.#artworkByTrack.delete(oldest);
     }
   }
 
@@ -352,6 +404,8 @@ export class MediaProvider implements SensorProvider {
     this.#audio = undefined;
     this.#trackKey = undefined;
     this.#artworkUrl = undefined;
+    this.#artworkByTrack.clear();
+    this.#artRequested.clear();
   }
 
   #scheduleTick(): void {
@@ -409,19 +463,20 @@ export class MediaProvider implements SensorProvider {
   }
 
   #ingestArtwork(artwork: ArtworkBytes): void {
-    const session = this.#selected(this.#now());
+    // Artwork is held for the session that emitted it, not only for the one
+    // selected now: another track's picture must already be known when a
+    // selection change makes it current.
+    const session = this.#sessions.get(artwork.sessionId)?.session;
 
     if (session === undefined) return;
-
-    // The helper emits one line per session in a poll; a paused app's picture
-    // must not be attached to the track the display is actually showing.
-    if (artwork.sessionId !== session.sessionId) return;
 
     const key = trackKeyOf(session);
 
     this.#artworkWrite = this.#artworkWrite
       .then(async () => {
         const url = await this.#cache.put(artwork.bytes, artwork.ext);
+
+        this.#rememberArtwork(key, url);
 
         // A track that changed while the write was in flight must not get the
         // previous picture under its new title.
@@ -460,7 +515,10 @@ export class MediaProvider implements SensorProvider {
 
     if (key !== this.#trackKey) {
       this.#trackKey = key;
-      this.#artworkUrl = undefined;
+      // A picture already emitted for this exact track is reused; only a track
+      // nothing was ever read for is a miss.
+      this.#artworkUrl =
+        key === undefined ? undefined : this.#artworkByTrack.get(key);
     }
 
     return selected;

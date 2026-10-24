@@ -431,6 +431,9 @@ describe.skipIf(!available)("SMTC helper on Windows", () => {
       "$global:smtcProps.Thumbnail = $null",
       "$smtcWithoutArtwork = Get-SessionLine $smtcSession",
       '[Console]::Out.WriteLine("hasArtwork=$($smtcWithArtwork.hasArtwork),$($smtcWithoutArtwork.hasArtwork)")',
+      // No registry entry exists for this AUMID, so the name falls back to
+      // the AUMID itself rather than an empty or guessed label.
+      '[Console]::Out.WriteLine("appFallback=" + (Get-AppName "yunari-no-such-aumid.exe"))',
     ].join("\n");
 
     const { stdout, failure } = await runPowerShell(harness);
@@ -450,5 +453,7 @@ describe.skipIf(!available)("SMTC helper on Windows", () => {
     expect(stdout).toContain("exhausted=5");
     // A thumbnail present reports true, and an absent one false.
     expect(stdout).toContain("hasArtwork=True,False");
+    // An AUMID with no registered DisplayName is its own display name.
+    expect(stdout).toContain("appFallback=yunari-no-such-aumid.exe");
   }, 30_000);
 });

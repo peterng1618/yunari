@@ -510,7 +510,7 @@ describe("MediaProvider selection and samples", () => {
     });
   });
 
-  it("reports the helper's display name, falling back to the AUMID", async () => {
+  it("forwards the helper's app name as media.app", async () => {
     const device = harness();
     await device.sample(["media.app"]);
 
@@ -588,7 +588,11 @@ describe("MediaProvider artwork", () => {
     expect(device.scripts).toHaveLength(2);
     expect(device.scripts[1]).toContain("DataReader");
 
-    // The same track re-polling does not restart anything.
+    // The re-polled track's picture arrives; the same track re-polling does not
+    // restart anything.
+    device.emit(device.children[1] as FakeChild, sessionLine());
+    device.emit(device.children[1] as FakeChild, artworkLine());
+    await device.sample(["media.title", "media.artwork"]);
     device.emit(device.children[1] as FakeChild, sessionLine());
     await device.sample(["media.title", "media.artwork"]);
     expect(device.children).toHaveLength(2);
@@ -617,7 +621,7 @@ describe("MediaProvider artwork", () => {
     expect(second?.textValue).toBeUndefined();
   });
 
-  it("refuses another session's artwork under the selected track", async () => {
+  it("does not attach another session's artwork to the selected track", async () => {
     const device = harness();
     await device.sample(["media.artwork"]);
 
@@ -633,6 +637,7 @@ describe("MediaProvider artwork", () => {
         current: false,
       }),
     );
+    device.emit(child, artworkLine());
     device.emit(
       child,
       sessionLine({
@@ -655,15 +660,112 @@ describe("MediaProvider artwork", () => {
       }),
     );
 
-    // Chrome's picture must not become Spotify's URL.
-    expect(
-      (await device.sample(["media.artwork"])).get("media.artwork")?.textValue,
-    ).toBeUndefined();
-
-    device.emit(child, artworkLine());
+    // Chrome's picture is held for Chrome, never shown as Spotify's URL.
     expect(
       (await device.sample(["media.artwork"])).get("media.artwork")?.textValue,
     ).toBe(`/api/media/artwork/${ARTWORK_SHA}.png`);
+    expect(device.children).toHaveLength(1);
+  });
+
+  it("keeps another session's artwork for a later selection change", async () => {
+    const device = harness();
+    await device.sample(["media.artwork"]);
+
+    const child = device.children[0] as FakeChild;
+    const otherBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 8, 8, 8, 8]);
+    const otherSha = createHash("sha256").update(otherBytes).digest("hex");
+
+    // Poll 1: Spotify plays with its picture; Chrome is paused and also emits
+    // one, which must be held rather than dropped.
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Spotify.exe",
+        app: "Spotify",
+        title: "Spotify track",
+        state: "playing",
+        current: false,
+      }),
+    );
+    device.emit(child, artworkLine());
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Chrome",
+        app: "Chrome",
+        title: "Chrome track",
+        state: "paused",
+        current: true,
+      }),
+    );
+    device.emit(
+      child,
+      artworkLine({
+        sessionId: "Chrome",
+        sha256: otherSha,
+        base64: Buffer.from(otherBytes).toString("base64"),
+      }),
+    );
+
+    expect(
+      (await device.sample(["media.artwork"])).get("media.artwork")?.textValue,
+    ).toBe(`/api/media/artwork/${ARTWORK_SHA}.png`);
+
+    // Poll 2: Spotify pauses, so Chrome becomes the selected session.
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Spotify.exe",
+        app: "Spotify",
+        title: "Spotify track",
+        state: "paused",
+        current: false,
+      }),
+    );
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Chrome",
+        app: "Chrome",
+        title: "Chrome track",
+        state: "paused",
+        current: true,
+      }),
+    );
+
+    expect(
+      (await device.sample(["media.artwork"])).get("media.artwork"),
+    ).toMatchObject({
+      status: "ok",
+      textValue: `/api/media/artwork/${otherSha}.png`,
+    });
+
+    // The picture was already held, so no restart and no second read.
+    expect(device.children).toHaveLength(1);
+    expect(device.killed).toHaveLength(0);
+  });
+
+  it("restarts once when a newly selected track has no held artwork", async () => {
+    const device = harness();
+    await device.sample(["media.artwork"]);
+
+    const child = device.children[0] as FakeChild;
+    device.emit(child, sessionLine({ title: "Track A", current: true }));
+    device.emit(child, artworkLine());
+    await device.sample(["media.artwork"]);
+
+    // A new track with no artwork line: the first sample sees the miss, the
+    // next reconcile asks the helper once.
+    device.emit(child, sessionLine({ title: "Track B", current: true }));
+    await device.sample(["media.artwork"]);
+    await device.sample(["media.artwork"]);
+    expect(device.killed).toHaveLength(1);
+
+    // A track that genuinely has no picture must not restart every poll.
+    await device.sample(["media.artwork"]);
+    device.advance(1_000);
+    await device.sample(["media.artwork"]);
+    expect(device.killed).toHaveLength(1);
   });
 
   it("restarts without the artwork half once its demand grace expires", async () => {
