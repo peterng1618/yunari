@@ -37,6 +37,13 @@ export interface TrayMenuItem {
   readonly action?: TrayAction;
 }
 
+/** What a platform adapter has to render; both adapters satisfy this type. */
+export interface TrayView {
+  setMenu(items: readonly TrayMenuItem[]): void;
+  setTooltip(text: string): void;
+  close(): void;
+}
+
 /** Windows caps a NotifyIcon tooltip at 63 characters. */
 const TOOLTIP_MAX = 63;
 
