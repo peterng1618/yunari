@@ -12,7 +12,7 @@ import {
   type GameStore,
   NO_ARTWORK_MESSAGE,
   NO_GAME_MESSAGE,
-  NO_STEAM_MATCH_MESSAGE,
+  NO_STORE_MATCH_MESSAGE,
 } from "./provider.js";
 import type { SteamApp } from "./steam-library.js";
 
@@ -423,6 +423,7 @@ describe("GameProvider store metadata", () => {
     readonly store: GameStore;
     readonly lookups: string[];
     readonly covers: number[];
+    readonly signals: (AbortSignal | undefined)[];
   }
 
   function fakeStore(
@@ -432,17 +433,21 @@ describe("GameProvider store metadata", () => {
   ): FakeStore {
     const lookups: string[] = [];
     const covers: number[] = [];
+    const signals: (AbortSignal | undefined)[] = [];
 
     return {
       lookups,
       covers,
+      signals,
       store: {
-        async lookup(name) {
+        async lookup(name, signal) {
           lookups.push(name);
+          signals.push(signal);
           return answer(name);
         },
-        async cover(appId) {
+        async cover(appId, signal) {
           covers.push(appId);
+          signals.push(signal);
           return coverUrl(appId);
         },
       },
@@ -453,12 +458,14 @@ describe("GameProvider store metadata", () => {
     vi.useFakeTimers();
     const root = await steamRootWithBoxArt("10");
     const fake = fakeStore(() => EXAMPLE_MATCH);
+    let productReads = 0;
     const h = harness({
       steamRoot: root,
       apps: [STEAM_APP],
       store: fake.store,
       productName: async () => {
-        throw new Error("a Steam app needs no product name");
+        productReads += 1;
+        return "Steam Game";
       },
     });
     await h.sample(["game.running"]);
@@ -475,6 +482,7 @@ describe("GameProvider store metadata", () => {
 
     expect(fake.lookups).toEqual([]);
     expect(fake.covers).toEqual([]);
+    expect(productReads).toBe(0);
     expect(samples.get("game.name")).toMatchObject({
       status: "ok",
       textValue: "Counter-Strike",
@@ -516,6 +524,31 @@ describe("GameProvider store metadata", () => {
     h.provider.stop();
   });
 
+  it("makes no store request in a later window that demands only presence", async () => {
+    vi.useFakeTimers();
+    const fake = fakeStore(() => EXAMPLE_MATCH);
+    const h = harness({
+      graceMs: 5_000,
+      store: fake.store,
+      productName: async () => "Example Game",
+    });
+    await h.sample(["game.running"]);
+    h.emit(h.children[0] as FakeChild, foregroundLine(99, OTHER_EXE, "other"));
+
+    const artwork = await h.sample(["game.artwork"]);
+    expect(artwork.get("game.artwork")?.status).toBe("ok");
+    expect(fake.lookups).toEqual(["Example Game"]);
+    expect(fake.covers).toEqual([1201270]);
+
+    // The grace gap starts a new window; no identity may survive it.
+    h.advance(6_000);
+    await h.sample(["game.app", "game.running"]);
+
+    expect(fake.lookups).toEqual(["Example Game"]);
+    expect(fake.covers).toEqual([1201270]);
+    h.provider.stop();
+  });
+
   it("names a non-Steam app from the store's canonical match", async () => {
     vi.useFakeTimers();
     const fake = fakeStore((name) =>
@@ -532,6 +565,7 @@ describe("GameProvider store metadata", () => {
 
     expect(fake.lookups).toEqual(["Example Game"]);
     expect(fake.covers).toEqual([]);
+    expect(fake.signals[0]).toBeInstanceOf(AbortSignal);
     expect(samples.get("game.name")).toMatchObject({
       status: "ok",
       textValue: "Example Game",
@@ -559,7 +593,7 @@ describe("GameProvider store metadata", () => {
     expect(fake.lookups).toEqual(["other"]);
     expect(samples.get("game.name")?.status).toBe("unavailable");
     expect(samples.get("game.name")?.textValue).toBeUndefined();
-    expect(samples.get("game.name")?.message).toBe(NO_STEAM_MATCH_MESSAGE);
+    expect(samples.get("game.name")?.message).toBe(NO_STORE_MATCH_MESSAGE);
     expect(samples.get("game.app")).toMatchObject({
       status: "ok",
       textValue: "other.exe",
@@ -620,12 +654,14 @@ describe("GameProvider store metadata", () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-game-art-"));
     tempRoots.push(root);
     const fake = fakeStore(() => EXAMPLE_MATCH);
+    let productReads = 0;
     const h = harness({
       steamRoot: root,
       apps: [STEAM_APP],
       store: fake.store,
       productName: async () => {
-        throw new Error("a Steam app needs no product name");
+        productReads += 1;
+        return "Steam Game";
       },
     });
     await h.sample(["game.running"]);
@@ -642,6 +678,7 @@ describe("GameProvider store metadata", () => {
 
     expect(fake.lookups).toEqual([]);
     expect(fake.covers).toEqual([10]);
+    expect(productReads).toBe(0);
     expect(samples.get("game.artwork")).toMatchObject({
       status: "ok",
       textValue: "/api/game/artwork/10.jpg",

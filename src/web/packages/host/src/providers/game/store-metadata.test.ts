@@ -443,6 +443,54 @@ describe("Steam store cover", () => {
     await expect(fs.readdir(directory)).resolves.toEqual([]);
   });
 
+  it("suppresses a failed cover for ten minutes, then retries", async () => {
+    let available = false;
+    const h = harness(await cacheDir(), (call) =>
+      available ? happyPath(call) : new Response("", { status: 404 }),
+    );
+
+    await expect(h.store.cover(APP_ID)).resolves.toBeUndefined();
+    // The portrait and the details fallback, both refused.
+    expect(h.calls).toHaveLength(2);
+
+    await expect(h.store.cover(APP_ID)).resolves.toBeUndefined();
+    expect(h.calls).toHaveLength(2);
+
+    h.advance(10 * 60_000 - 1);
+    await expect(h.store.cover(APP_ID)).resolves.toBeUndefined();
+    expect(h.calls).toHaveLength(2);
+
+    available = true;
+    h.advance(1);
+    await expect(h.store.cover(APP_ID)).resolves.toBe(
+      `/api/game/artwork/${APP_ID}.jpg`,
+    );
+    expect(h.calls).toHaveLength(3);
+  });
+
+  it("clears the cover suppression on success and serves the cached file", async () => {
+    let available = false;
+    const h = harness(await cacheDir(), (call) =>
+      available ? happyPath(call) : new Response("", { status: 404 }),
+    );
+
+    await expect(h.store.cover(APP_ID)).resolves.toBeUndefined();
+    expect(h.calls).toHaveLength(2);
+
+    available = true;
+    h.advance(10 * 60_000);
+    await expect(h.store.cover(APP_ID)).resolves.toBe(
+      `/api/game/artwork/${APP_ID}.jpg`,
+    );
+    expect(h.calls).toHaveLength(3);
+
+    h.advance(10 * 60_000);
+    await expect(h.store.cover(APP_ID)).resolves.toBe(
+      `/api/game/artwork/${APP_ID}.jpg`,
+    );
+    expect(h.calls).toHaveLength(3);
+  });
+
   it("refuses a non-positive app id without a request", async () => {
     const h = harness(await cacheDir(), happyPath);
     await expect(h.store.cover(0)).resolves.toBeUndefined();

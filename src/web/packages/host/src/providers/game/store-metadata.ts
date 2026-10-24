@@ -249,6 +249,9 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
   // A name whose request failed is not retried for ten minutes. Kept in
   // memory: a failure is this process's problem, not a durable fact.
   const backoffUntil = new Map<string, number>();
+  // A cover that failed is the same: the route asks once a second per display,
+  // so a permanent miss or an outage would otherwise re-download every sample.
+  const coverBackoffUntil = new Map<number, number>();
   const pending = new Map<
     string,
     Promise<{ id: number; name: string } | undefined>
@@ -403,15 +406,28 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
       if (!Number.isInteger(appId) || appId <= 0) return undefined;
 
       const cached = await cachedCover(cacheDir, appId);
-      if (cached !== undefined) return cached;
+      if (cached !== undefined) {
+        coverBackoffUntil.delete(appId);
+        return cached;
+      }
+
+      const until = coverBackoffUntil.get(appId);
+      if (until !== undefined && nowMs() < until) return undefined;
+
+      // Every failure below — no bytes, unrecognised bytes, an unwritable file,
+      // an aborted request — is suppressed until the window ends.
+      const failed = (): undefined => {
+        coverBackoffUntil.set(appId, nowMs() + BACKOFF_MS);
+        return undefined;
+      };
 
       const bytes = await fetchCover(appId, signal);
-      if (bytes === undefined) return undefined;
+      if (bytes === undefined) return failed();
 
       // The URL extension is not trusted; the bytes decide what this is and
       // anything that is not an image writes nothing.
       const extension = sniffImage(bytes);
-      if (extension === undefined) return undefined;
+      if (extension === undefined) return failed();
 
       const file = path.join(cacheDir, `${appId}.${extension}`);
       scratchCount += 1;
@@ -423,9 +439,10 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
       try {
         await writeAtomic(cacheDir, file, bytes, scratch);
       } catch {
-        return undefined;
+        return failed();
       }
 
+      coverBackoffUntil.delete(appId);
       return `${ARTWORK_ROUTE}${appId}.${extension}`;
     },
   };

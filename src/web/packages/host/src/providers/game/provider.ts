@@ -72,8 +72,7 @@ export const GAME_DESCRIPTORS: readonly SensorDescriptor[] = GAME_KEYS.map(
 
 export const WAITING_GAME_MESSAGE = "Waiting for the game helper.";
 export const NO_GAME_MESSAGE = "No game process is running.";
-export const NO_STEAM_MATCH_MESSAGE =
-  "The foreground process is not a Steam game.";
+export const NO_STORE_MATCH_MESSAGE = "No store match for this app.";
 export const NO_ARTWORK_MESSAGE = "Game artwork is not available yet.";
 const NO_PROCESS_NAME_MESSAGE = "The foreground process could not be named.";
 
@@ -85,6 +84,8 @@ const DEFAULT_RETRY_MS = 60_000;
 const TICK_MS = 1_000;
 /** A helper silent for this long is wedged; its readings are dropped. */
 const LIVENESS_TIMEOUT_MS = 60_000;
+/** A stalled store request must not hold the whole registry cycle. */
+const STORE_TIMEOUT_MS = 3_000;
 
 export interface GameProviderOptions {
   readonly now?: () => number;
@@ -106,9 +107,12 @@ export interface GameProviderOptions {
 
 /** The slice of Task 7.1's store client the provider needs. */
 export interface GameStore {
-  lookup(name: string): Promise<{ id: number; name: string } | undefined>;
+  lookup(
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<{ id: number; name: string } | undefined>;
   /** The host-relative route that serves this app's cached cover. */
-  cover(appId: number): Promise<string | undefined>;
+  cover(appId: number, signal?: AbortSignal): Promise<string | undefined>;
 }
 
 /** What one demand window resolved: a local Steam app or a store match. */
@@ -389,7 +393,10 @@ export class GameProvider implements SensorProvider {
     let match: { id: number; name: string } | undefined;
 
     try {
-      match = await store.lookup(localName);
+      match = await store.lookup(
+        localName,
+        AbortSignal.timeout(STORE_TIMEOUT_MS),
+      );
     } catch {
       match = undefined;
     }
@@ -451,7 +458,7 @@ export class GameProvider implements SensorProvider {
     }
 
     try {
-      return await store.cover(appId);
+      return await store.cover(appId, AbortSignal.timeout(STORE_TIMEOUT_MS));
     } catch {
       return undefined;
     }
@@ -498,7 +505,7 @@ export class GameProvider implements SensorProvider {
       const name = identity?.steam?.name ?? identity?.store?.name;
 
       return name === undefined
-        ? absent(NO_STEAM_MATCH_MESSAGE)
+        ? absent(NO_STORE_MATCH_MESSAGE)
         : { sensorId, timestamp, status: "ok", textValue: name };
     }
 
