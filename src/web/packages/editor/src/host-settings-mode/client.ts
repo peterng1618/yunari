@@ -2,6 +2,8 @@ import {
   isMeasurementSystem,
   isTimeZoneName,
   type MeasurementSystem,
+  normalizeUnitPreferences,
+  type UnitPreferences,
 } from "@yunari/renderer-core";
 
 /**
@@ -65,13 +67,59 @@ export interface DisplayPreferences {
    *  absence of a choice, which the route also writes from `""`. */
   readonly timeZone?: string;
   readonly measurement?: MeasurementSystem;
+  /** The per-family display units this build can display. */
+  readonly units?: UnitPreferences;
 }
 
-/** What the display form sends: both fields always, because the route replaces
- *  the whole object and saving one field would clear the other. */
+/** What the display form sends: every field always, because the route replaces
+ *  the whole object and saving one field would clear the others. */
 export interface DisplayPreferencesWrite {
   readonly timeZone: string;
   readonly measurement: MeasurementSystem;
+  readonly units?: UnitPreferences;
+}
+
+/** The weather backends the host knows. Spelled here rather than imported: the
+ *  editor has no dependency on the host package. */
+export type WeatherProviderId = "open-meteo" | "weatherapi" | "openweathermap";
+
+export const WEATHER_PROVIDERS: readonly WeatherProviderId[] = [
+  "open-meteo",
+  "weatherapi",
+  "openweathermap",
+];
+
+export function isWeatherProvider(value: unknown): value is WeatherProviderId {
+  return (WEATHER_PROVIDERS as readonly unknown[]).includes(value);
+}
+
+/** Where this PC's weather comes from, and the place it is for. `label` is
+ *  empty when no manual place has been chosen. */
+export interface WeatherSettings {
+  readonly provider: WeatherProviderId;
+  readonly label: string;
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly useWindowsLocation: boolean;
+  readonly pollIntervalMs: number;
+}
+
+/** The credit a weather backend asks for, with the page it links to. */
+export interface WeatherAttribution {
+  readonly text: string;
+  readonly url: string;
+}
+
+/** The settings plus the selected backend's credit, when the host sent one. */
+export interface WeatherRead extends WeatherSettings {
+  readonly attribution?: WeatherAttribution;
+}
+
+/** One place the geocoder found. */
+export interface WeatherPlace {
+  readonly label: string;
+  readonly latitude: number;
+  readonly longitude: number;
 }
 
 export interface HostSettingsClient {
@@ -91,6 +139,12 @@ export interface HostSettingsClient {
     readonly zones: readonly string[];
   }>;
   saveDisplay(next: DisplayPreferencesWrite): Promise<DisplayPreferences>;
+  readWeather(): Promise<WeatherRead>;
+  /** Writes the whole object: the route replaces it. A blank label is omitted,
+   *  because an absent one is no manual place while an empty one is refused. */
+  saveWeather(next: WeatherSettings): Promise<WeatherRead>;
+  /** The places a search finds, from the host's keyless geocoder. */
+  searchPlaces(query: string): Promise<readonly WeatherPlace[]>;
   /** Which slots the theme on that display reads, and the answers it already
    *  has. The `required` list is the host's own `requiredDeviceGroups` run
    *  against the theme's document — derived, never authored here. */
@@ -144,6 +198,125 @@ function readNames(input: unknown): Record<string, string> {
     if (typeof name === "string" && name.length > 0) names[id] = name;
   }
   return names;
+}
+
+/** The unit preferences this build can display. A stored value it cannot is
+ *  dropped rather than printed, the same refusal the zone gets: the control
+ *  would otherwise show a value it cannot offer. */
+function readUnits(input: unknown): UnitPreferences {
+  try {
+    return normalizeUnitPreferences(input ?? {});
+  } catch {
+    return {};
+  }
+}
+
+/** The credit the selected backend names, or nothing when the host's answer is
+ *  not the shape this build can link: an anchor here must never carry a value
+ *  no backend asked to be shown. */
+function readAttribution(input: unknown): WeatherAttribution | undefined {
+  if (typeof input !== "object" || input === null) return undefined;
+
+  const record = input as { readonly text?: unknown; readonly url?: unknown };
+  const { text, url } = record;
+
+  if (typeof text !== "string" || text === "") return undefined;
+  if (typeof url !== "string") return undefined;
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return { text, url };
+}
+
+/** The weather settings a host is expected to answer, keeping only the fields
+ *  this build can draw. The host normalizes its own file, so a value outside
+ *  these ranges is a shape this build did not expect rather than a person's
+ *  choice, and the defaults are safer than printing it. */
+const DEFAULT_WEATHER: WeatherSettings = {
+  provider: "open-meteo",
+  label: "",
+  latitude: 0,
+  longitude: 0,
+  useWindowsLocation: false,
+  pollIntervalMs: 600_000,
+};
+
+function numberInRange(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= min &&
+    value <= max
+    ? value
+    : fallback;
+}
+
+function readWeatherSettings(input: unknown): WeatherSettings {
+  const record = (
+    typeof input === "object" && input !== null ? input : {}
+  ) as Record<string, unknown>;
+
+  return {
+    provider: isWeatherProvider(record["provider"])
+      ? record["provider"]
+      : DEFAULT_WEATHER.provider,
+    label: typeof record["label"] === "string" ? record["label"] : "",
+    latitude: numberInRange(record["latitude"], 0, -90, 90),
+    longitude: numberInRange(record["longitude"], 0, -180, 180),
+    useWindowsLocation: record["useWindowsLocation"] === true,
+    pollIntervalMs: numberInRange(
+      record["pollIntervalMs"],
+      DEFAULT_WEATHER.pollIntervalMs,
+      60_000,
+      86_400_000,
+    ),
+  };
+}
+
+function readWeather(input: unknown, attribution: unknown): WeatherRead {
+  const credit = readAttribution(attribution);
+
+  return {
+    ...readWeatherSettings(input),
+    ...(credit === undefined ? {} : { attribution: credit }),
+  };
+}
+
+function readPlaces(input: unknown): readonly WeatherPlace[] {
+  if (!Array.isArray(input)) return [];
+
+  return input.flatMap((entry) => {
+    const record = (entry ?? {}) as {
+      readonly label?: unknown;
+      readonly latitude?: unknown;
+      readonly longitude?: unknown;
+    };
+
+    return typeof record.label === "string" &&
+      typeof record.latitude === "number" &&
+      Number.isFinite(record.latitude) &&
+      typeof record.longitude === "number" &&
+      Number.isFinite(record.longitude)
+      ? [
+          {
+            label: record.label,
+            latitude: record.latitude,
+            longitude: record.longitude,
+          },
+        ]
+      : [];
+  });
 }
 
 /** A refusal is the host's own words where it sent any, so the person reads the
@@ -214,11 +387,13 @@ export function createHostSettingsClient(options?: {
         readonly settings?: {
           readonly timeZone?: unknown;
           readonly measurement?: unknown;
+          readonly units?: unknown;
         };
         readonly zones?: unknown;
       };
       const zone = body?.settings?.timeZone;
       const measurement = body?.settings?.measurement;
+      const units = readUnits(body?.settings?.units);
       return {
         // A stored value this runtime can no longer resolve is refused rather
         // than printed: the control would otherwise show a zone it cannot
@@ -228,6 +403,7 @@ export function createHostSettingsClient(options?: {
             ? { timeZone: zone }
             : {}),
           ...(isMeasurementSystem(measurement) ? { measurement } : {}),
+          ...(Object.keys(units).length > 0 ? { units } : {}),
         },
         zones: Array.isArray(body?.zones)
           ? body.zones.filter(
@@ -241,11 +417,12 @@ export function createHostSettingsClient(options?: {
       const response = await fetcher(`${baseUrl}/api/display`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        // Both fields travel: the route replaces the whole object, so a save of
-        // one would clear the other.
+        // Every field travels: the route replaces the whole object, so a save
+        // of one would clear the others.
         body: JSON.stringify({
           timeZone: next.timeZone,
           measurement: next.measurement,
+          units: next.units ?? {},
         }),
       });
       if (!response.ok) {
@@ -255,16 +432,68 @@ export function createHostSettingsClient(options?: {
         readonly settings?: {
           readonly timeZone?: unknown;
           readonly measurement?: unknown;
+          readonly units?: unknown;
         };
       };
       const zone = body?.settings?.timeZone;
       const measurement = body?.settings?.measurement;
+      const units = readUnits(body?.settings?.units);
       return {
         ...(typeof zone === "string" && isTimeZoneName(zone)
           ? { timeZone: zone }
           : {}),
         ...(isMeasurementSystem(measurement) ? { measurement } : {}),
+        ...(Object.keys(units).length > 0 ? { units } : {}),
       };
+    },
+
+    async readWeather(): Promise<WeatherRead> {
+      const response = await fetcher(`${baseUrl}/api/weather/settings`);
+      if (!response.ok) {
+        throw await refusal(response, "Could not read the weather settings");
+      }
+      const body = (await response.json()) as {
+        readonly settings?: unknown;
+        readonly attribution?: unknown;
+      };
+      return readWeather(body?.settings, body?.attribution);
+    },
+
+    async saveWeather(next): Promise<WeatherRead> {
+      const response = await fetcher(`${baseUrl}/api/weather/settings`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        // The route replaces the whole object. A blank label is left out
+        // rather than sent: an absent one is no manual place, while an empty
+        // one is the refusal of a place that has no name.
+        body: JSON.stringify({
+          provider: next.provider,
+          ...(next.label === "" ? {} : { label: next.label }),
+          latitude: next.latitude,
+          longitude: next.longitude,
+          useWindowsLocation: next.useWindowsLocation,
+          pollIntervalMs: next.pollIntervalMs,
+        }),
+      });
+      if (!response.ok) {
+        throw await refusal(response, "Could not save the weather settings");
+      }
+      const body = (await response.json()) as {
+        readonly settings?: unknown;
+        readonly attribution?: unknown;
+      };
+      return readWeather(body?.settings, body?.attribution);
+    },
+
+    async searchPlaces(query): Promise<readonly WeatherPlace[]> {
+      const response = await fetcher(
+        `${baseUrl}/api/weather/places?q=${encodeURIComponent(query)}`,
+      );
+      if (!response.ok) {
+        throw await refusal(response, "Could not search for a place");
+      }
+      const body = (await response.json()) as { readonly places?: unknown };
+      return readPlaces(body?.places);
     },
 
     async readQuestions(display, theme) {

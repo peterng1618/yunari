@@ -165,19 +165,25 @@ export type {
   SemanticFamily,
   SemanticKeyDescriptor,
   SensorTier,
+  UnitKind,
+  ValueKind,
 } from "./data/semantic-keys.js";
 export {
+  BUILT_IN_FAMILIES,
   DISK_DEVICE_QUANTITIES,
   type DiskDeviceQuantity,
   type DiskKeyDescriptor,
   describeDiskKey,
+  describeDynamicKey,
   describeSemanticKey,
-  diskDeviceId,
   diskDeviceOf,
+  groupDescriptorsByFamily,
   isKnownSemanticKey,
   labelForSemanticKey,
   SEMANTIC_KEYS,
+  semanticId,
   semanticKeysByFamily,
+  UNIT_KINDS,
 } from "./data/semantic-keys.js";
 export type { SampleSource } from "./data/source.js";
 export { emptySampleSource } from "./data/source.js";
@@ -197,12 +203,19 @@ export {
   parseFontStack,
   unavailableFontFamilies,
 } from "./scene/fonts.js";
-export type { ConvertedValue, MeasurementSystem } from "./scene/measurement.js";
+export type {
+  ConvertedValue,
+  MeasurementSystem,
+  UnitOverrides,
+  UnitPreferences,
+} from "./scene/measurement.js";
 export {
   convertForDisplay,
   DEFAULT_MEASUREMENT_SYSTEM,
+  DEFAULT_UNIT_PREFERENCES,
   isMeasurementSystem,
   MEASUREMENT_SYSTEMS,
+  normalizeUnitPreferences,
 } from "./scene/measurement.js";
 export type {
   ChartPlanContext,

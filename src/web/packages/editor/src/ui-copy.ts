@@ -263,6 +263,9 @@ export const uiCopy = {
     /** A picture layer's two paint-time mirrors. */
     flipX: "Flip horizontally",
     flipY: "Flip vertically",
+    /** The reading a picture draws its image from: the catalogue's own name for
+        the key is the option, so the row names the question and not the answer. */
+    imageSensor: "Sensor",
     paint: "Paint",
     notSet: "not set",
     unresolved: "no longer resolves",
@@ -450,6 +453,173 @@ export const uiCopy = {
        *  prints is the renderer's. */
       metric: "Celsius",
       imperial: "Fahrenheit",
+      /** The per-family units a reading can be shown in. Each family's values
+       *  are its own, and the empty answer is not offered: an unchosen family
+       *  is shown on its default, and the control prints that default. */
+      units: {
+        clock: {
+          label: "Clock speed",
+          values: { auto: "Automatic", mhz: "MHz", ghz: "GHz" },
+        },
+        data: {
+          label: "Data size",
+          values: { binary: "Binary (GiB)", decimal: "Decimal (GB)" },
+        },
+        dataScale: {
+          label: "Data scale",
+          values: { auto: "Automatic", mb: "MB", gb: "GB", tb: "TB" },
+        },
+        rate: {
+          label: "Transfer rate",
+          values: { bits: "Bits", bytes: "Bytes" },
+        },
+        rateScale: {
+          label: "Rate scale",
+          values: { auto: "Automatic", k: "kb/s", m: "Mb/s", g: "Gb/s" },
+        },
+        windSpeed: {
+          label: "Wind speed",
+          values: { kmh: "km/h", mph: "mph", ms: "m/s" },
+        },
+        pressure: {
+          label: "Pressure",
+          values: { hpa: "hPa", inhg: "inHg" },
+        },
+      },
+    },
+    weather: {
+      heading: "Weather",
+      hint: "Where this PC's weather comes from. A manual place needs no permission; Windows location fills the gap when none is set.",
+      provider: "Backend",
+      /** What each backend costs: the three are names a person knows from the
+       *  key they bought, not descriptions of an API. */
+      providers: {
+        "open-meteo": "Open-Meteo (no key)",
+        weatherapi: "WeatherAPI (key required)",
+        openweathermap: "OpenWeatherMap (key required)",
+      },
+      label: "Place",
+      latitude: "Latitude",
+      longitude: "Longitude",
+      windowsLocation: "Use Windows location when no place is set",
+      pollInterval: "Poll every",
+      seconds: "s",
+      search: "Find a place",
+      searching: "Searching for places…",
+      noResults: "No place matched that search.",
+      searchFailed: (reason: string): string => `Could not search: ${reason}`,
+    },
+    /** The custom HTTP sources this PC reads. The page names the source and
+     *  never its secret: a source carries a credential id, and no credential
+     *  value ever reaches the browser (`credentials-client.ts`). */
+    sources: {
+      heading: "Custom sources",
+      hint: 'Readings from an HTTP endpoint on this network. Each field becomes a key a theme can read, named "custom.source-id.field-id".',
+      empty: "No custom sources yet.",
+      add: "Add source",
+      edit: "Edit",
+      remove: "Delete",
+      test: "Test",
+      testing: "Testing…",
+      /** One accessible name per row's command, because three rows of "Edit"
+       *  are three buttons a screen reader cannot tell apart. */
+      editSource: (name: string): string => `Edit ${name}`,
+      testSource: (name: string): string => `Test ${name}`,
+      deleteSource: (name: string): string => `Delete ${name}`,
+      deleting: "Deleting…",
+      deleteFailed: (reason: string): string => `Could not delete: ${reason}`,
+      id: "Id",
+      /** A source id is embedded in every theme key that reads it
+       *  (`custom.<id>.<field>`), so an edit keeps it: a rename would be a new
+       *  source plus rebinding, not an in-place change. */
+      idFixed:
+        "A source's id cannot change: themes read its fields as custom.id.field, so a new id needs a new source and rebinding.",
+      name: "Name",
+      url: "Address",
+      /** What the address is, and what it is not: a key referenced through
+       *  `auth` travels in a header or a query the host adds, never in the
+       *  address this page prints. */
+      urlHint:
+        "An http or https address, shown as you typed it. A key is never added to it here.",
+      interval: "Poll every",
+      timeout: "Timeout",
+      seconds: "s",
+      fields: "Fields",
+      fieldId: "Field id",
+      fieldLabel: "Label",
+      fieldPointer: "JSON pointer",
+      fieldType: "Type",
+      fieldUnit: "Unit",
+      addField: "Add field",
+      removeField: (id: string): string => `Remove field ${id}`,
+      types: {
+        number: "Number",
+        text: "Text",
+        boolean: "True/false",
+      } satisfies Record<"number" | "text" | "boolean", string>,
+      save: "Save",
+      cancel: "Cancel",
+      health: {
+        ok: "Reading",
+        error: "Error",
+        waiting: "Waiting",
+      } satisfies Record<"ok" | "error" | "waiting", string>,
+      lastSuccess: (at: string): string => `Last read ${at}`,
+      neverRead: "No successful read yet",
+      /** The local checks mirror the host's own limits
+       *  (`packages/host/src/settings/sources.ts`) so a typo is refused before
+       *  a round trip; the route's `400 {field, reason}` stays the authority. */
+      invalidId: "Use 1–32 lowercase letters, digits, - or _.",
+      invalidUrl:
+        "Enter an http or https address with no username or password.",
+      invalidInterval: (min: number, max: number): string =>
+        `Poll at least ${min} and at most ${max} seconds.`,
+      invalidTimeout: (min: number, max: number): string =>
+        `Set a timeout of ${min}–${max} seconds.`,
+      invalidFieldId: (id: string): string =>
+        `The field id ${id === "" ? "(blank)" : `"${id}"`} is not 1–32 lowercase letters, digits, - or _.`,
+      duplicateField: (id: string): string =>
+        `Two fields share the id "${id}".`,
+      tooManyFields: (max: number): string =>
+        `A source carries at most ${max} fields.`,
+      fieldCount: (count: number): string =>
+        `${count} ${count === 1 ? "field" : "fields"}`,
+      removeAsk: (name: string): string =>
+        `Delete ${name}? Its fields stop resolving on every display.`,
+      confirmRemove: "Delete",
+      keep: "Cancel",
+      /** The offer after a delete: the route answered that no source references
+       *  this credential any more. The id is an id, never the value. */
+      credentialAsk: (id: string): string =>
+        `No other source uses the key ${id}. Remove it from this PC?`,
+      removeCredential: "Remove the key",
+      keepCredential: "Keep the key",
+      credentialRemoved: "The key was removed.",
+      credentialFailed: (reason: string): string =>
+        `Could not remove the key: ${reason}`,
+      saved: "Saved. Displays update on the source's next poll.",
+      removed: (name: string): string => `Removed ${name}.`,
+      testLine: (
+        ok: boolean,
+        status: number | undefined,
+        elapsedMs: number,
+        // `undefined` only for the copy walker, which probes a function with
+        // one argument; a surface always passes a list.
+        values:
+          | readonly { readonly id: string; readonly value: string }[]
+          | undefined,
+        reason: string | undefined,
+      ): string => {
+        if (!ok) {
+          return `Test failed: ${reason ?? (status === undefined ? "the host refused it" : `HTTP ${status}`)}`;
+        }
+        const code = status === undefined ? "" : ` (HTTP ${status})`;
+        const mapped =
+          values === undefined || values.length === 0
+            ? "no value mapped"
+            : values.map((entry) => `${entry.id} ${entry.value}`).join(", ");
+        return `Test passed${code} in ${elapsedMs} ms · ${mapped}`;
+      },
     },
     /** The questions the theme on the chosen display raises. Only the ones it
      *  has not answered are drawn, so answering one is what makes it leave. */
@@ -475,6 +645,8 @@ export const uiCopy = {
       savedUnits:
         "Saved. Displays already open keep their old units until they reload.",
       savedAnswers: "Saved. Only this theme is affected.",
+      savedWeather:
+        "Saved. Weather readings update on the backend's next poll.",
       failed: (reason: string): string => `Could not save: ${reason}`,
     },
   },

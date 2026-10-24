@@ -1,6 +1,13 @@
-import type { FabricThemeEnvelope } from "@yunari/renderer-core";
+import {
+  DEFAULT_UNIT_PREFERENCES,
+  type FabricThemeEnvelope,
+} from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
-import { loadHostedFontAssets, loadHostedTheme } from "./theme-loader.js";
+import {
+  loadDisplayPreferences,
+  loadHostedFontAssets,
+  loadHostedTheme,
+} from "./theme-loader.js";
 
 const envelope: FabricThemeEnvelope = {
   schemaVersion: 2,
@@ -10,6 +17,57 @@ const envelope: FabricThemeEnvelope = {
   metadata: { themeLanguage: "en" },
   scene: { version: "7.4.0", objects: [] },
 };
+
+describe("loadDisplayPreferences", () => {
+  it("reads the host's unit preferences, resting on the defaults", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ settings: { units: { clock: "ghz", data: "decimal" } } }),
+    );
+
+    await expect(loadDisplayPreferences(fetcher)).resolves.toEqual({
+      ...DEFAULT_UNIT_PREFERENCES,
+      clock: "ghz",
+      data: "decimal",
+    });
+    expect(fetcher).toHaveBeenCalledWith("/api/display");
+  });
+
+  it("uses every default when the host stores no units", async () => {
+    await expect(
+      loadDisplayPreferences(async () => Response.json({ settings: {} })),
+    ).resolves.toEqual(DEFAULT_UNIT_PREFERENCES);
+  });
+
+  it("keeps the older measurement field as the temperature preference", async () => {
+    await expect(
+      loadDisplayPreferences(async () =>
+        Response.json({ settings: { measurement: "imperial" } }),
+      ),
+    ).resolves.toEqual({
+      ...DEFAULT_UNIT_PREFERENCES,
+      measurement: "imperial",
+    });
+  });
+
+  it("uses every default when a stored preference cannot be displayed", async () => {
+    await expect(
+      loadDisplayPreferences(async () =>
+        Response.json({ settings: { units: { clock: "thz" } } }),
+      ),
+    ).resolves.toEqual(DEFAULT_UNIT_PREFERENCES);
+  });
+
+  it("uses every default when the host cannot answer", async () => {
+    await expect(
+      loadDisplayPreferences(async () => new Response("", { status: 404 })),
+    ).resolves.toEqual(DEFAULT_UNIT_PREFERENCES);
+    await expect(
+      loadDisplayPreferences(async () => {
+        throw new Error("down");
+      }),
+    ).resolves.toEqual(DEFAULT_UNIT_PREFERENCES);
+  });
+});
 
 describe("loadHostedTheme", () => {
   it("rejects invalid IDs before fetching", async () => {

@@ -3,6 +3,7 @@ import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createBatch,
   knownTimeZones,
@@ -19,13 +20,31 @@ import { handleSubmitRoute } from "./catalogue/submit.js";
 import { DEFAULT_THEMES_DIR } from "./cli/args.js";
 import type { HostBinding } from "./cli/hosting.js";
 import type { ListenableServer } from "./cli/net.js";
+import type {
+  CustomSourceStatus,
+  SourceTestResult,
+} from "./providers/custom/provider.js";
+import {
+  GAME_APP_ID,
+  GAME_ARTWORK_PREFIX,
+  type GameArtworkSource,
+  readCachedCover,
+} from "./providers/game/box-art.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
 import {
+  ARTWORK_NAME,
+  type ArtworkCache,
+  artworkContentType,
+} from "./providers/media/artwork.js";
+import { redactForBrowser } from "./providers/provider.js";
+import {
   type DisplayAsk,
-  groupByAssignment,
+  groupByAsk,
   ProviderRegistry,
   unionOfKeys,
 } from "./providers/registry.js";
+import { WEATHER_BACKENDS } from "./providers/weather/backends.js";
+import { isVendoredWeatherIcon } from "./providers/weather/icons.js";
 import type { Launcher } from "./serve/display-launcher.js";
 import {
   createPublishedStore,
@@ -47,6 +66,7 @@ import {
   type CredentialRow,
   KNOWN_CREDENTIALS,
   type KnownCredential,
+  sourcesInUse,
 } from "./settings/credentials-registry.js";
 import {
   type AssignableGroup,
@@ -76,9 +96,22 @@ import type { FontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
 import { listMonitors, type Monitor } from "./settings/monitors.js";
 import { requiredDeviceGroups } from "./settings/required-devices.js";
+import {
+  normalizeSources,
+  type SourceIssue,
+  type SourceStore,
+  SourceUpdateRefused,
+  sourceEntryCredentialId,
+  withoutSourceEntry,
+  withSourceEntry,
+} from "./settings/sources.js";
 import type { StoreSessionStore } from "./settings/store-session.js";
 import type { ThemeOriginsStore } from "./settings/theme-origins.js";
 import type { ThemeSettingsStore } from "./settings/theme-settings.js";
+import {
+  searchWeatherPlaces,
+  type WeatherSettingsStore,
+} from "./settings/weather.js";
 import { importThemePackage } from "./themes/import.js";
 import {
   type InstallRequest,
@@ -145,11 +178,40 @@ interface ActiveDisplay {
  */
 const LOCAL_DISPLAY_LABEL = "This PC";
 
+/** A search term longer than this is a paste, not a place. */
+const MAX_PLACE_QUERY_LENGTH = 200;
+
+/** The store's source-id pattern, repeated for the path so a malformed id is a
+ *  400 rather than a lookup. `settings/sources.ts` owns what a write accepts. */
+const SOURCE_ID = /^[a-z0-9_-]{1,32}$/;
+
+/** An issue's identity when comparing the file before and after a merge: the
+ *  reason alone is not unique across sources. */
+function issueKey(issue: SourceIssue): string {
+  return `${issue.sourceId}\u0000${issue.reason}`;
+}
+
 export interface BundleRoots {
   readonly player: string;
   readonly editor: string;
   /** Admin pages served from source (no build step), e.g. the settings page. */
   readonly admin?: string;
+}
+
+/**
+ * Custom HTTP sources, as the settings routes see them.
+ *
+ * The store is the only writer of `sources.json`; the provider is the only
+ * reader that fetches, so a write reloads it and a Test goes through it rather
+ * than a second fetch path.
+ */
+export interface SourceRouteOptions {
+  readonly store: SourceStore;
+  readonly provider: {
+    reload(): Promise<void>;
+    status(): readonly CustomSourceStatus[];
+    test(sourceId: string): Promise<SourceTestResult | undefined>;
+  };
 }
 
 export interface HostServerOptions {
@@ -190,6 +252,9 @@ export interface HostServerOptions {
   readonly activeTheme?: ActiveThemeStore;
   /** The consumer's display preferences. Omit when the host stores none. */
   readonly display?: DisplaySettingsStore;
+  /** The weather backend, place and cadence. Omitted when the host stores
+   *  none — the routes then say so rather than serving an empty reading. */
+  readonly weather?: WeatherSettingsStore;
   /** Which curated font trios this author favours. Omit when the host stores
    *  none — the route then reports that rather than serving an empty list. */
   readonly fontFavorites?: FontFavoritesStore;
@@ -199,9 +264,22 @@ export interface HostServerOptions {
   /** The credential ids this host knows. Omitted uses the shipped table, which
    *  is empty in v1; supplied so a route test can hold a cookie fixture. */
   readonly knownCredentials?: readonly KnownCredential[];
+  /** Custom HTTP sources. Omitted when this host serves none — the routes then
+   *  say so rather than falling through to the static 404. */
+  readonly sources?: SourceRouteOptions;
   /** The asset finder's sources. Omitted when this host serves none; the
    *  routes then say so rather than falling through to the static 404. */
   readonly assets?: AssetRouteOptions;
+  /** The media provider's artwork files. Omitted when this host reads no
+   *  media; the route then answers 404 rather than inventing a picture. */
+  readonly artwork?: ArtworkCache;
+  /** The running Steam game's local box art. Omitted when this host reads no
+   *  Steam library; the route then answers 404 rather than inventing a picture. */
+  readonly gameArtwork?: GameArtworkSource;
+  /** Where the store provider caches covers it looked up for a non-Steam game
+   *  (decision 0109). The route only reads it; the provider owns every download,
+   *  so a request never starts a fetch. Omitted keeps the route local-art only. */
+  readonly gameCoverCacheDir?: string;
   /** The Wallpaper Engine library on this PC. Omitted when this host serves
    *  none, and the listing then says it is not installed. */
   readonly wallpaperEngine?: WallpaperEngineSource;
@@ -303,6 +381,16 @@ export interface HostServer {
 }
 
 export const DEFAULT_SAMPLE_INTERVAL_MS = 1000;
+
+/** The committed Meteocons bytes. A request names a file here only when that
+ *  exact slug is in the provider's allow-list; no request path reaches the
+ *  filesystem. */
+const WEATHER_ICON_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "vendor",
+  "weather-icons",
+);
 /** A save is JSON with base64 assets, so the wire is a third larger than the
  *  archive it replaced; the store enforces its own bounds on the decoded side. */
 export const MAX_THEME_UPLOAD_BYTES = 96 * 1024 * 1024;
@@ -468,6 +556,32 @@ export async function displayKeyFor(
   }
 
   return (await displayFor(request, url, displays))?.id ?? DEFAULT_DISPLAY;
+}
+
+/** A BCP-47-shaped tag, bounded: enough for `de`, `de-DE`, `zh-Hant-TW`. */
+const LANGUAGE_TAG = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
+/** The published schema's `metadata.themeLanguage` ceiling (`maxLength: 64`). */
+const MAX_LANGUAGE_LENGTH = 64;
+
+/**
+ * The language a display declares on its stream URL, or none.
+ *
+ * The player sends the theme it has already loaded; the host never reads a
+ * theme record to learn it. A malformed or over-long value is dropped rather
+ * than refused — a display that mistranslates its own text still opens.
+ */
+function streamLanguage(url: URL): string | undefined {
+  const language = url.searchParams.get("lang");
+
+  if (
+    language === null ||
+    language.length > MAX_LANGUAGE_LENGTH ||
+    !LANGUAGE_TAG.test(language)
+  ) {
+    return undefined;
+  }
+
+  return language;
 }
 
 /**
@@ -883,10 +997,18 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const saved = options.rememberLan;
   const devices = options.devices;
   const display = options.display;
+  const weather = options.weather;
   const fontFavorites = options.fontFavorites;
   const credentials = options.credentials;
-  const knownCredentials = options.knownCredentials ?? KNOWN_CREDENTIALS;
+  const sourceRoutes = options.sources;
+  /** The fixed half of the credential table; the dynamic half is the custom
+   *  sources' referenced ids, refreshed after every source write. */
+  const baseCredentials = options.knownCredentials ?? KNOWN_CREDENTIALS;
+  let knownCredentials = baseCredentials;
   const assets = options.assets;
+  const artwork = options.artwork;
+  const gameArtwork = options.gameArtwork;
+  const gameCoverCacheDir = options.gameCoverCacheDir;
   const wallpaperEngine = options.wallpaperEngine;
   const activeTheme = options.activeTheme;
   const thumbnails = options.thumbnails;
@@ -912,6 +1034,17 @@ export function createHostServer(options: HostServerOptions): HostServer {
     const outcome = await options.hosting?.setLan(on);
     // A refused binding moved nothing, so nothing is remembered.
     if (outcome?.ok === true) await saved?.(on);
+  }
+
+  /**
+   * Re-derives the credential ids a source may name. Called before a credential
+   * route answers and after a source write, so a newly referenced id is
+   * writable without a restart and a removed one stops being admitted.
+   */
+  async function refreshCredentialTable(): Promise<void> {
+    if (sourceRoutes === undefined) return;
+    const file = await sourceRoutes.store.read();
+    knownCredentials = sourcesInUse(file.sources, baseCredentials);
   }
 
   /**
@@ -1724,7 +1857,19 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
         try {
           const body = JSON.parse(await readBody(request)) as unknown;
-          const saved = await display.write(body);
+          // **An omitted bag is not a request to clear it.** The dependency-free
+          // `/settings` page predates unit preferences and sends only the fields
+          // it draws; the route replaces the whole object, so passing that body
+          // through erased units the editor had stored. A caller that means to
+          // clear them sends `units: {}`.
+          const merged =
+            typeof body === "object" &&
+            body !== null &&
+            !Array.isArray(body) &&
+            !("units" in body)
+              ? { ...body, units: (await display.read()).units }
+              : body;
+          const saved = await display.write(merged);
           options.onDisplayChange?.(saved);
           sendJson(response, 200, { ok: true, settings: saved });
         } catch (error: unknown) {
@@ -1738,6 +1883,146 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       sendText(response, 405, "Only GET and PUT are supported.");
+      return;
+    }
+
+    // Weather's place, backend and cadence are this PC's own facts, like the
+    // display preferences above: a display never reads them, and a place search
+    // spends this host's request on a person's own act.
+    if (
+      url.pathname === "/api/weather/settings" ||
+      url.pathname === "/api/weather/places"
+    ) {
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Weather settings are available on this PC only.",
+        );
+        return;
+      }
+
+      if (weather === undefined) {
+        sendText(
+          response,
+          404,
+          "Weather settings are not enabled on this host.",
+        );
+        return;
+      }
+
+      if (url.pathname === "/api/weather/settings") {
+        if (request.method === "GET") {
+          const settings = await weather.read();
+          const backend = WEATHER_BACKENDS[settings.provider];
+          // The credit belongs to the backend the settings name: the page's
+          // link is the backend's own terms, which OpenWeather requires beside
+          // its wording.
+          sendJson(response, 200, {
+            settings,
+            attribution: { text: backend.attribution, url: backend.termsUrl },
+          });
+          return;
+        }
+
+        if (request.method === "PUT") {
+          let raw: string;
+
+          try {
+            raw = await readBody(request);
+          } catch (error: unknown) {
+            // The body's size is its own refusal: a body this host will not
+            // read is not a malformed one it read and rejected.
+            sendText(
+              response,
+              413,
+              error instanceof Error ? error.message : String(error),
+            );
+            return;
+          }
+
+          let body: unknown;
+
+          try {
+            body = JSON.parse(raw) as unknown;
+          } catch {
+            sendText(response, 400, "That request body is not JSON.");
+            return;
+          }
+
+          try {
+            // The store normalizes before it touches the file, and its refusal
+            // names the field: a bad write leaves the stored one in place.
+            const saved = await weather.write(body);
+            const backend = WEATHER_BACKENDS[saved.provider];
+            sendJson(response, 200, {
+              ok: true,
+              settings: saved,
+              attribution: { text: backend.attribution, url: backend.termsUrl },
+            });
+          } catch (error: unknown) {
+            sendText(
+              response,
+              400,
+              error instanceof Error ? error.message : String(error),
+            );
+          }
+          return;
+        }
+
+        sendText(response, 405, "Only GET and PUT are supported.");
+        return;
+      }
+
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+
+      // A foreign page must not spend this PC's outbound request: the search
+      // is an admin action like the write above it, not a display's read.
+      if (isForeignOrigin(request)) {
+        sendText(
+          response,
+          403,
+          "Weather settings are not available to another page.",
+        );
+        return;
+      }
+
+      const query = url.searchParams.get("q")?.trim() ?? "";
+
+      if (query === "") {
+        sendText(response, 400, 'The "q" search term is required.');
+        return;
+      }
+
+      if (query.length > MAX_PLACE_QUERY_LENGTH) {
+        sendText(
+          response,
+          400,
+          `The "q" search term must be ${MAX_PLACE_QUERY_LENGTH} characters at most.`,
+        );
+        return;
+      }
+
+      try {
+        // The injected fetcher is the asset routes' own, so a route case never
+        // reaches the network and this host makes one kind of outbound call.
+        sendJson(response, 200, {
+          places: await searchWeatherPlaces(fetcher ?? fetch, query),
+        });
+      } catch (error: unknown) {
+        // Redacted and bounded: geocoding needs no key, but an upstream's
+        // transport words are still not a browser's to read.
+        sendText(
+          response,
+          502,
+          redactForBrowser(
+            error instanceof Error ? error.message : String(error),
+          ),
+        );
+      }
       return;
     }
 
@@ -1840,6 +2125,231 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
+    // Custom HTTP sources. Every route is admin on this PC, so the guard order
+    // is the credential routes': loopback, then a foreign page, then the store.
+    if (
+      url.pathname === "/api/sources" ||
+      url.pathname.startsWith("/api/sources/")
+    ) {
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Sources are available on this PC only.");
+        return;
+      }
+
+      if (isForeignOrigin(request)) {
+        sendText(response, 403, "Sources are not available to another page.");
+        return;
+      }
+
+      if (sourceRoutes === undefined) {
+        sendText(response, 503, "Custom sources are not enabled on this host.");
+        return;
+      }
+
+      if (url.pathname === "/api/sources") {
+        if (request.method !== "GET") {
+          sendText(response, 405, "Only GET is supported.");
+          return;
+        }
+
+        const file = await sourceRoutes.store.read();
+        const statuses = new Map(
+          sourceRoutes.provider
+            .status()
+            .map((entry) => [entry.sourceId, entry]),
+        );
+
+        sendJson(response, 200, {
+          sources: file.sources.map((source) => {
+            const status = statuses.get(source.id);
+            const lastError =
+              status?.lastError === undefined
+                ? null
+                : redactForBrowser(status.lastError);
+            const lastSuccessMs = status?.lastSuccessMs;
+
+            return {
+              ...source,
+              fieldCount: source.fields.length,
+              health:
+                lastError !== null
+                  ? "error"
+                  : lastSuccessMs === undefined
+                    ? "waiting"
+                    : "ok",
+              lastError,
+              lastSuccessAt:
+                lastSuccessMs === undefined
+                  ? null
+                  : new Date(lastSuccessMs).toISOString(),
+            };
+          }),
+          issues: file.issues.map((issue) => ({
+            sourceId: issue.sourceId,
+            reason: redactForBrowser(issue.reason),
+          })),
+        });
+        return;
+      }
+
+      const parts = url.pathname.slice("/api/sources/".length).split("/");
+      const id = parts[0] ?? "";
+
+      if (!SOURCE_ID.test(id)) {
+        sendText(response, 400, "That source id is not valid.");
+        return;
+      }
+
+      if (parts.length === 2 && parts[1] === "test") {
+        if (request.method !== "POST") {
+          sendText(response, 405, "Only POST is supported.");
+          return;
+        }
+
+        const result = await sourceRoutes.provider.test(id);
+        if (result === undefined) {
+          sendText(response, 404, "No such source.");
+          return;
+        }
+
+        sendJson(response, 200, {
+          ...result,
+          ...(result.reason === undefined
+            ? {}
+            : { reason: redactForBrowser(result.reason) }),
+        });
+        return;
+      }
+
+      if (parts.length !== 1) {
+        sendText(response, 404, "No such source route.");
+        return;
+      }
+
+      if (request.method === "PUT") {
+        let raw: string;
+
+        try {
+          raw = await readBody(request);
+        } catch (error: unknown) {
+          // The body's size is its own refusal: a body this host will not read
+          // is not a malformed one it read and rejected.
+          sendText(
+            response,
+            413,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+
+        let body: unknown;
+        try {
+          body = JSON.parse(raw) as unknown;
+        } catch {
+          sendText(response, 400, "That request body is not JSON.");
+          return;
+        }
+
+        if (typeof body !== "object" || body === null || Array.isArray(body)) {
+          sendText(response, 400, "A source must be an object.");
+          return;
+        }
+
+        const givenId = (body as { id?: unknown }).id;
+        if (givenId !== undefined && givenId !== id) {
+          sendText(response, 400, 'The source "id" must match the path.');
+          return;
+        }
+
+        const candidate = { ...body, id };
+        // The store persists the file as authored, so a neighbour it cannot
+        // parse survives this write; only the candidate has to be valid. The
+        // source-count limit is whole-file, so the merge checks what it adds.
+        const ownIssue = normalizeSources({ sources: [candidate] }).issues[0];
+
+        if (ownIssue !== undefined) {
+          sendJson(response, 400, {
+            ok: false,
+            field: ownIssue.sourceId,
+            reason: redactForBrowser(ownIssue.reason),
+          });
+          return;
+        }
+
+        try {
+          await sourceRoutes.store.update((current) => {
+            const next = withSourceEntry(current, candidate);
+            const before = new Set(
+              normalizeSources(current).issues.map(issueKey),
+            );
+            const introduced = normalizeSources(next).issues.find(
+              (issue) => !before.has(issueKey(issue)),
+            );
+
+            if (introduced !== undefined) {
+              throw new SourceUpdateRefused(introduced);
+            }
+
+            return next;
+          });
+        } catch (error: unknown) {
+          if (error instanceof SourceUpdateRefused) {
+            sendJson(response, 400, {
+              ok: false,
+              field: error.issue.sourceId,
+              reason: redactForBrowser(error.issue.reason),
+            });
+            return;
+          }
+          throw error;
+        }
+
+        await sourceRoutes.provider.reload();
+        await refreshCredentialTable();
+        sendJson(response, 200, { ok: true });
+        return;
+      }
+
+      if (request.method === "DELETE") {
+        // Raw, so an entry the store refused is still removable and every
+        // other entry survives. The credential is never touched here: an entry
+        // the source no longer references is the owner's to clear.
+        let removed: unknown = undefined;
+
+        const written = await sourceRoutes.store.update((raw) => {
+          const result = withoutSourceEntry(raw, id);
+          removed = result.removed;
+          return result.raw;
+        });
+
+        if (removed === undefined) {
+          sendText(response, 404, "No such source.");
+          return;
+        }
+
+        await sourceRoutes.provider.reload();
+        await refreshCredentialTable();
+
+        const credentialId = sourceEntryCredentialId(removed);
+        const unreferenced =
+          credentialId !== undefined &&
+          !written.sources.some(
+            (source) => source.auth?.credentialId === credentialId,
+          )
+            ? credentialId
+            : null;
+
+        sendJson(response, 200, {
+          ok: true,
+          unreferencedCredential: unreferenced,
+        });
+        return;
+      }
+
+      sendText(response, 405, "Only PUT and DELETE are supported.");
+      return;
+    }
+
     // Provider credentials. The value is write-only from the browser: the read
     // answers `set` and a four-character hint, never the value, and every method
     // stays on this PC because this file is the one secret the host holds.
@@ -1866,6 +2376,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
+      // A source written a moment ago makes its credential id writable here
+      // without a restart; the store stays the only record of sources.
+      await refreshCredentialTable();
+
       if (url.pathname === "/api/credentials") {
         if (request.method !== "GET") {
           sendText(response, 405, "Only GET is supported.");
@@ -1886,14 +2400,33 @@ export function createHostServer(options: HostServerOptions): HostServer {
           });
         }
 
+        // A credential whose source was deleted stays visible and clearable,
+        // rather than becoming a secret the owner can see no way to remove.
+        for (const [id, entry] of Object.entries(await credentials.read())) {
+          if (knownCredentials.some((known) => known.id === id)) continue;
+          rows.push({
+            id,
+            label: "Unreferenced credential",
+            set: true,
+            hint: hintOf(entry.value),
+            verify: false,
+            helpText: null,
+            helpUrl: null,
+          });
+        }
+
         sendJson(response, 200, rows);
         return;
       }
 
       const parts = url.pathname.slice("/api/credentials/".length).split("/");
-      const known = knownCredentials.find((entry) => entry.id === parts[0]);
+      const credentialId = parts[0] ?? "";
+      const known = knownCredentials.find((entry) => entry.id === credentialId);
+      const orphan =
+        known === undefined &&
+        Object.hasOwn(await credentials.read(), credentialId);
 
-      if (known === undefined) {
+      if (known === undefined && !orphan) {
         sendText(response, 400, "That credential is not one this host knows.");
         return;
       }
@@ -1901,6 +2434,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
       if (parts.length === 2 && parts[1] === "verify") {
         if (request.method !== "POST") {
           sendText(response, 405, "Only POST is supported.");
+          return;
+        }
+
+        if (known === undefined) {
+          sendText(
+            response,
+            400,
+            "That credential is not one this host knows.",
+          );
           return;
         }
 
@@ -1932,6 +2474,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       if (request.method === "PUT") {
+        if (known === undefined) {
+          sendText(
+            response,
+            400,
+            "That credential is not one this host knows.",
+          );
+          return;
+        }
+
         if (known.kind === "cookie") {
           sendText(
             response,
@@ -1961,7 +2512,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       if (request.method === "DELETE") {
-        await credentials.clear(known.id);
+        // An unreferenced id is still clearable: deleting a source must not
+        // strand a secret with no route that can remove it.
+        await credentials.clear(credentialId);
         sendJson(response, 200, { ok: true });
         return;
       }
@@ -1990,7 +2543,189 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
+    // Weather icons are committed bytes with a fixed allow-list. A display
+    // reads them, so a remote request needs the same credential as theme asset
+    // bytes; loopback is this PC and needs none. Any name not vendored is a
+    // 404 — never a neighbouring picture and never a filesystem path.
+    if (url.pathname.startsWith("/api/weather/icon/")) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+
+      const requested = url.pathname.slice("/api/weather/icon/".length);
+      const slug = requested.endsWith(".svg")
+        ? requested.slice(0, -".svg".length)
+        : "";
+
+      if (!isVendoredWeatherIcon(slug)) {
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      if (
+        !isLoopbackRemote(request.socket.remoteAddress) &&
+        (await displayFor(request, url, displays)) === undefined
+      ) {
+        sendText(response, 403, "This display is not paired with the host.");
+        return;
+      }
+
+      let bytes: Buffer;
+
+      try {
+        bytes = await fs.readFile(path.join(WEATHER_ICON_DIR, `${slug}.svg`));
+      } catch {
+        // A vendored name whose bytes are missing is an installation fault, but
+        // the answer is still an absence rather than a 500 on a display.
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      response.writeHead(200, {
+        "content-type": "image/svg+xml",
+        "content-length": bytes.byteLength,
+        "cache-control": "public, max-age=31536000, immutable",
+        "x-content-type-options": "nosniff",
+      });
+      response.end(bytes);
+      return;
+    }
+
+    // Media artwork is a content-addressed cache file, so the name is the
+    // whole allow-list: 64 lowercase hex digits and an image extension. A
+    // display reads it through the same credential as theme asset bytes;
+    // loopback is this PC and needs none. An unknown or malformed name is a
+    // 404, never a neighbouring file and never a 500.
+    if (url.pathname.startsWith("/api/media/artwork/")) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+
+      const name = url.pathname.slice("/api/media/artwork/".length);
+
+      if (!ARTWORK_NAME.test(name)) {
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      if (
+        !isLoopbackRemote(request.socket.remoteAddress) &&
+        (await displayFor(request, url, displays)) === undefined
+      ) {
+        sendText(response, 403, "This display is not paired with the host.");
+        return;
+      }
+
+      const stored =
+        artwork === undefined ? undefined : await artwork.read(name);
+
+      if (stored === undefined) {
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      response.writeHead(200, {
+        "content-type": artworkContentType(stored.ext),
+        "content-length": stored.bytes.byteLength,
+        "cache-control": "public, max-age=31536000, immutable",
+        "x-content-type-options": "nosniff",
+      });
+      response.end(stored.bytes);
+      return;
+    }
+
+    // The running Steam game's box art is local bytes, so the app id is the
+    // whole allow-list: only an installed app or a cover the store provider
+    // cached has a file, and anything else is a 404 rather than a filesystem
+    // probe. A display reads it through the same credential as media artwork;
+    // loopback is this PC. The name is not content-addressed, so the cache is
+    // bounded rather than immutable. The downloaded cover is read only, never
+    // fetched: the provider is the one owner of the store's CDN (decision 0109).
+    if (url.pathname.startsWith(GAME_ARTWORK_PREFIX)) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+
+      const name = url.pathname.slice(GAME_ARTWORK_PREFIX.length);
+      const extension = name.endsWith(".jpg")
+        ? "jpg"
+        : name.endsWith(".png")
+          ? "png"
+          : undefined;
+
+      if (extension === undefined) {
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      const appId = name.slice(0, -(extension.length + 1));
+
+      if (!GAME_APP_ID.test(appId)) {
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      if (
+        !isLoopbackRemote(request.socket.remoteAddress) &&
+        (await displayFor(request, url, displays)) === undefined
+      ) {
+        sendText(response, 403, "This display is not paired with the host.");
+        return;
+      }
+
+      // Local library art first: it costs no network, and Steam only writes the
+      // JPEG. A cached remote cover is the fallback for a non-Steam game.
+      let bytes =
+        extension === "jpg" && gameArtwork !== undefined
+          ? await gameArtwork.read(appId)
+          : undefined;
+      let contentType = "image/jpeg";
+
+      if (bytes === undefined) {
+        const cached = await readCachedCover(
+          gameCoverCacheDir,
+          appId,
+          extension,
+        );
+
+        if (cached !== undefined) {
+          bytes = cached.bytes;
+          contentType = cached.contentType;
+        }
+      }
+
+      if (bytes === undefined) {
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      response.writeHead(200, {
+        "content-type": contentType,
+        "content-length": bytes.byteLength,
+        "cache-control": "private, max-age=3600",
+        "x-content-type-options": "nosniff",
+      });
+      response.end(bytes);
+      return;
+    }
+
     if (url.pathname === "/api/health") {
+      let weatherProblem: string | undefined;
+
+      if (weather !== undefined) {
+        // The read is what refreshes the reason: health is a poll, not a file
+        // watch, and a rewritten valid file has to clear it.
+        await weather.read();
+        const problem = weather.problem();
+        // `/api/health` answers anyone on the network, and a read error's own
+        // message carries the path it failed on — the person's home directory.
+        weatherProblem =
+          problem === undefined ? undefined : redactForBrowser(problem);
+      }
+
       sendJson(response, 200, {
         displays: connections.size,
         polling: unionOfKeys(
@@ -1998,6 +2733,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         ),
         unmapped: lastUnmapped,
         pairing: displays !== undefined,
+        ...(weatherProblem === undefined ? {} : { weather: weatherProblem }),
       });
       return;
     }
@@ -3292,7 +4028,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
     request.on("error", noteGone);
 
     const display = await displayKeyFor(request, url, displays);
-    const connection = new SseConnection(response, keys, display);
+    const connection = new SseConnection(
+      response,
+      keys,
+      display,
+      streamLanguage(url),
+    );
 
     request.off("close", noteGone);
     request.off("error", noteGone);
@@ -3342,12 +4083,20 @@ export function createHostServer(options: HostServerOptions): HostServer {
     const asks: DisplayAsk[] = [];
 
     for (const [display, held] of byDisplay) {
+      // The newest connection that declares a language speaks for the display;
+      // a theme change follows a re-connect, so only disagreement is transient.
+      let language: string | undefined;
+      for (const connection of held) {
+        if (connection.language !== undefined) language = connection.language;
+      }
+
       asks.push({
         display,
         semanticKeys: unionOfKeys(
           held.map((connection) => connection.semanticKeys),
         ),
         assignment: await currentAssignment(display),
+        ...(language === undefined ? {} : { language }),
       });
     }
 
@@ -3356,12 +4105,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // comparable, which is what a batch's `sentAt` and its samples promise.
     const at = now();
 
-    for (const group of groupByAssignment(asks)) {
-      const cycle = await registry.sample(
-        group.semanticKeys,
-        at,
-        group.assignment,
-      );
+    for (const group of groupByAsk(asks)) {
+      const cycle = await registry.sample(group.semanticKeys, at, {
+        assignment: group.assignment,
+        ...(group.language === undefined ? {} : { language: group.language }),
+      });
 
       // A key no provider even considers would otherwise be absent from the frame
       // entirely, so a display cannot tell "nothing reports this" from "no data

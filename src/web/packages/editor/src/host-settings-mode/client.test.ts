@@ -149,3 +149,117 @@ it("answers a refusal that carried no words with its own sentence", async () => 
     createHostSettingsClient({ fetch }).readDisplay(),
   ).rejects.toThrow("Could not read the display settings (500).");
 });
+
+it("sends the whole weather object, omitting a blank label", async () => {
+  let body: Record<string, unknown> | undefined;
+  const { fetch, calls } = host((_url, init) => {
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return json({ ok: true, settings: body });
+  });
+
+  const settings = createHostSettingsClient({ fetch });
+
+  // **An absent label is no manual place; an empty one is refused.** The host
+  // normalizer refuses `label: ""`, so the blank has to leave the wire, while
+  // every other field still travels because the route replaces the object.
+  await settings.saveWeather({
+    provider: "weatherapi",
+    label: "",
+    latitude: 52.52,
+    longitude: 13.41,
+    useWindowsLocation: false,
+    pollIntervalMs: 120000,
+  });
+
+  expect(calls).toEqual(["PUT /api/weather/settings"]);
+  expect(body).toEqual({
+    provider: "weatherapi",
+    latitude: 52.52,
+    longitude: 13.41,
+    useWindowsLocation: false,
+    pollIntervalMs: 120000,
+  });
+  expect(body !== undefined && "label" in body).toBe(false);
+
+  // A chosen place is sent, and only the blank is ever omitted.
+  await settings.saveWeather({
+    provider: "weatherapi",
+    label: "Berlin, Berlin, DE",
+    latitude: 52.52,
+    longitude: 13.41,
+    useWindowsLocation: false,
+    pollIntervalMs: 120000,
+  });
+  expect(body?.label).toBe("Berlin, Berlin, DE");
+});
+
+it("carries the attribution the host answered, and drops an unknown shape", async () => {
+  const settings = {
+    provider: "weatherapi",
+    label: "Berlin, Berlin, DE",
+    latitude: 52.52,
+    longitude: 13.41,
+    useWindowsLocation: false,
+    pollIntervalMs: 600000,
+  };
+  const valid = host(() =>
+    json({
+      settings,
+      attribution: {
+        text: "Powered by WeatherAPI.com",
+        url: "https://www.weatherapi.com/",
+      },
+    }),
+  );
+  expect(
+    (await createHostSettingsClient({ fetch: valid.fetch }).readWeather())
+      .attribution,
+  ).toEqual({
+    text: "Powered by WeatherAPI.com",
+    url: "https://www.weatherapi.com/",
+  });
+
+  // A host of another shape is read as no attribution rather than rendered:
+  // the anchor would otherwise carry a value no backend named.
+  for (const attribution of [
+    { text: 42, url: "https://www.weatherapi.com/" },
+    { text: "Powered by WeatherAPI.com", url: "not a url" },
+    { text: "", url: "https://www.weatherapi.com/" },
+    "Powered by WeatherAPI.com",
+    null,
+  ]) {
+    const broken = host(() => json({ settings, attribution }));
+    expect(
+      (await createHostSettingsClient({ fetch: broken.fetch }).readWeather())
+        .attribution,
+      JSON.stringify(attribution),
+    ).toBeUndefined();
+  }
+});
+
+it("keeps the place and cadence when the host names an unknown provider", async () => {
+  const { fetch } = host(() =>
+    json({
+      settings: {
+        provider: "meteorologist",
+        label: "Paris, Ile-de-France, FR",
+        latitude: 48.86,
+        longitude: 2.35,
+        useWindowsLocation: true,
+        pollIntervalMs: 120000,
+      },
+    }),
+  );
+
+  expect(
+    await createHostSettingsClient({ fetch }).readWeather(),
+    "an unknown provider fell back by blanking the fields beside it",
+  ).toEqual({
+    provider: "open-meteo",
+    label: "Paris, Ile-de-France, FR",
+    latitude: 48.86,
+    longitude: 2.35,
+    useWindowsLocation: true,
+    pollIntervalMs: 120000,
+  });
+});

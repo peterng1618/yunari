@@ -139,6 +139,42 @@ describe("Fabric theme envelope validation", () => {
     expect(validateFabricThemeEnvelope(envelope())).toMatchObject({ ok: true });
   });
 
+  it("refuses an image object bound to a key that is not an image reading", () => {
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      bindings: { art: [{ id: "image", semanticKey: "cpu.load" }] },
+      scene: {
+        version: "7.4.0",
+        objects: [{ type: "Image", id: "art" }],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues).toEqual([
+        {
+          code: "invalid-enum",
+          path: "/bindings/art/0/semanticKey",
+          message:
+            'An image object shows an image reading, and "cpu.load" is not an image key.',
+        },
+      ]);
+    }
+  });
+
+  it("accepts an image object bound to an image-capable key", () => {
+    expect(
+      validateFabricThemeEnvelope({
+        ...envelope(),
+        bindings: { art: [{ id: "image", semanticKey: "media.artwork" }] },
+        scene: {
+          version: "7.4.0",
+          objects: [{ type: "Image", id: "art" }],
+        },
+      }),
+    ).toMatchObject({ ok: true });
+  });
+
   it("accepts one declared background image or video and a semantic release version", () => {
     expect(
       validateFabricThemeEnvelope({
@@ -249,6 +285,51 @@ describe("Fabric theme envelope validation", () => {
           expect.objectContaining({
             code: "invalid-id",
             path: "/scene/objects/2/id",
+          }),
+        ]),
+      );
+    }
+  });
+
+  it("accepts an authored unit override and auto-scale on a binding", () => {
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      bindings: {
+        chart: [
+          { id: "cpu", semanticKey: "cpu.clock", unit: "GHz", autoScale: true },
+        ],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses a non-boolean auto-scale and an unknown binding key", () => {
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      bindings: {
+        chart: [
+          {
+            id: "cpu",
+            semanticKey: "cpu.clock",
+            autoScale: "yes",
+            colour: "red",
+          },
+        ],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "wrong-type",
+            path: "/bindings/chart/0/autoScale",
+          }),
+          expect.objectContaining({
+            code: "unknown-field",
+            path: "/bindings/chart/0/colour",
           }),
         ]),
       );

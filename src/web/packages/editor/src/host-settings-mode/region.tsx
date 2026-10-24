@@ -1,5 +1,9 @@
 import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
+import {
+  DEFAULT_UNIT_PREFERENCES,
+  type UnitPreferences,
+} from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -28,6 +32,10 @@ import {
   type HostSettingsClient,
   type ThemeAnswers,
 } from "./client.js";
+import { Group } from "./section-group.js";
+import { createSourcesClient, type SourcesClient } from "./sources-client.js";
+import { SourcesSection } from "./sources-section.js";
+import { WeatherSection } from "./weather-section.js";
 
 /**
  * The Host mode's region — the third surface the shell's mode switch reaches,
@@ -87,6 +95,21 @@ function everyDevice(settings: DeviceSettings): readonly AvailableDevice[] {
   return [...settings.available.gpus, ...settings.available.disks];
 }
 
+/** The unit families the display form offers, in its order. `measurement` is
+ *  not among them: temperatures have their own row above, whose systems read
+ *  as names rather than unit marks. */
+const UNIT_FIELDS = [
+  "clock",
+  "data",
+  "dataScale",
+  "rate",
+  "rateScale",
+  "windSpeed",
+  "pressure",
+] as const;
+
+type UnitField = (typeof UNIT_FIELDS)[number];
+
 /** What a device is called: the name chosen for it, else the one it reports. */
 function nameOfDevice(
   settings: DeviceSettings,
@@ -116,29 +139,6 @@ function groupQuestion(
 /** A message a person can act on: the host's own words where it sent any. */
 function reason(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/** One section of the mode: §2's eyebrow, the sentence that says what it is,
- *  and the rows. Not `InspectorSection` — that one is a disclosure whose header
- *  is a button, and none of these four collapses. */
-function Group(props: {
-  readonly name: string;
-  readonly hint: string;
-  readonly testId: string;
-  readonly children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <section
-      data-yunari-host-section={props.testId}
-      className="flex flex-col gap-[var(--space-8)]"
-    >
-      <h2 className="m-0 text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
-        {props.name}
-      </h2>
-      <p className="text-xs text-muted">{props.hint}</p>
-      <div className="flex flex-col gap-[var(--space-6)]">{props.children}</div>
-    </section>
-  );
 }
 
 /**
@@ -182,12 +182,17 @@ export function HostSettingsRegion(props: {
   readonly mode: ShellMode;
   readonly client?: ThemeLibraryClient | undefined;
   readonly settings?: HostSettingsClient | undefined;
+  /** The custom sources seam. The shell mounts this with none and the section
+   *  builds its own; a test that does not exercise the page hands a fake in so
+   *  no case reaches a host it never started. */
+  readonly sources?: SourcesClient | undefined;
   readonly onStatus?: ((line: HostStatusLine | undefined) => void) | undefined;
 }): React.JSX.Element | null {
   return props.mode === "this-pc" ? (
     <HostSettings
       client={props.client}
       settings={props.settings}
+      sources={props.sources}
       onStatus={props.onStatus}
     />
   ) : null;
@@ -200,6 +205,7 @@ export function HostSettingsRegion(props: {
 function HostSettings(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly settings?: HostSettingsClient | undefined;
+  readonly sources?: SourcesClient | undefined;
   readonly onStatus?: ((line: HostStatusLine | undefined) => void) | undefined;
 }): React.JSX.Element {
   // One client of each for the life of the region: a client built per render
@@ -209,6 +215,7 @@ function HostSettings(props: {
   const [settings] = useState(
     () => props.settings ?? createHostSettingsClient(),
   );
+  const [sources] = useState(() => props.sources ?? createSourcesClient());
 
   /** The display map, or `undefined` until it arrives. **Nothing draws the
    *  first-run state before then**: a region that said "no displays" for a frame
@@ -399,7 +406,11 @@ function HostSettings(props: {
   };
 
   const saveDisplay = (
-    next: { readonly timeZone: string; readonly measurement: string },
+    next: {
+      readonly timeZone: string;
+      readonly measurement: string;
+      readonly units: UnitPreferences;
+    },
     saved: string,
   ): void => {
     const measurement = next.measurement;
@@ -410,6 +421,7 @@ function HostSettings(props: {
       const written = await settings.saveDisplay({
         timeZone: next.timeZone,
         measurement,
+        units: next.units,
       });
       if (mounted.current) {
         setPreferences((current) =>
@@ -418,6 +430,26 @@ function HostSettings(props: {
       }
       return saved;
     });
+  };
+
+  /** One unit family's change, merged into the bag that travels whole: the
+   *  route replaces the settings object, so sending only the changed family
+   *  would clear the rest. */
+  const saveUnit = (field: UnitField, value: string): void => {
+    if (preferences === undefined) return;
+    saveDisplay(
+      {
+        timeZone: preferences.settings.timeZone ?? "",
+        measurement: preferences.settings.measurement ?? "metric",
+        // The control offers only the values the family names, so the merge is
+        // a full preference set at the surface.
+        units: {
+          ...preferences.settings.units,
+          [field]: value,
+        } as UnitPreferences,
+      },
+      uiCopy.hostSettings.status.savedUnits,
+    );
   };
 
   const answer = (group: AssignableGroup, device: string): void => {
@@ -601,6 +633,7 @@ function HostSettings(props: {
                         timeZone: zone,
                         measurement:
                           preferences.settings.measurement ?? "metric",
+                        units: preferences.settings.units ?? {},
                       },
                       uiCopy.hostSettings.status.savedZone,
                     )
@@ -623,14 +656,41 @@ function HostSettings(props: {
                       {
                         timeZone: preferences.settings.timeZone ?? "",
                         measurement,
+                        units: preferences.settings.units ?? {},
                       },
                       uiCopy.hostSettings.status.savedUnits,
                     )
                   }
                 />
+                {UNIT_FIELDS.map((field) => {
+                  const copy = uiCopy.hostSettings.display.units[field];
+                  return (
+                    <ControlSelect
+                      key={field}
+                      id={`yunari-host-unit-${field}`}
+                      label={copy.label}
+                      data={{ "data-yunari-host-unit": field }}
+                      // An unchosen family shows the value it is already
+                      // reading in, so the control prints the effective answer
+                      // rather than an empty third state.
+                      value={
+                        preferences.settings.units?.[field] ??
+                        DEFAULT_UNIT_PREFERENCES[field]
+                      }
+                      options={Object.entries(copy.values).map(
+                        ([id, name]) => ({ id, name }),
+                      )}
+                      onChange={(value) => saveUnit(field, value)}
+                    />
+                  );
+                })}
               </>
             )}
           </Group>
+
+          <WeatherSection settings={settings} report={setStatus} />
+
+          <SourcesSection sources={sources} report={setStatus} />
 
           {/* **Only the questions the theme on this display raises are drawn**,
               and only the ones nothing has answered: the route derives `required`

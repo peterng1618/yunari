@@ -1,24 +1,23 @@
 import type { Sample, SampleEntry } from "@yunari/renderer-core";
-import {
-  describeSemanticKey,
-  diskDeviceId,
-  diskDeviceOf,
-} from "@yunari/renderer-core";
+import { describeSemanticKey, diskDeviceOf } from "@yunari/renderer-core";
 import { displayNameFor } from "../settings/devices.js";
 import {
-  type DeviceAssignment,
   diskDeviceReadings,
+  dynamicKeyReadings,
   gpuDeviceReadings,
-  lhmDeviceName,
+  isLhmDynamicKey,
+  lhmDeviceCaption,
+  lhmStorageDeviceExists,
   matchLhmSensorsAssigned,
 } from "./lhm-mapping.js";
 import { flattenLhmSensors } from "./lhm-tree.js";
 import type {
   ProviderHealth,
+  SampleContext,
   SensorDescriptor,
   SensorProvider,
 } from "./provider.js";
-import { redactForBrowser } from "./provider.js";
+import { descriptorFieldsOf, redactForBrowser } from "./provider.js";
 
 /**
  * LibreHardwareMonitor as an optional external program (§97): Yunari reads the
@@ -42,18 +41,36 @@ const LHM_KEYS = [
   "disk.data.used.percent",
   "disk.data.total",
   "cpu.temp",
+  "cpu.temp.package",
+  "cpu.temp.core.max",
+  "cpu.temp.core.avg",
   "cpu.power",
+  "cpu.voltage",
   "cpu.clock",
   "cpu.fan",
+  "motherboard.temp",
+  "cooling.temp",
+  "psu.power",
+  "psu.temp",
+  "psu.fan",
+  "battery.level",
+  "battery.voltage",
+  "battery.rate",
+  "battery.timeRemaining",
   "gpu.load",
   "gpu.temp",
+  "gpu.temp.core",
+  "gpu.temp.hotspot",
   "gpu.power",
+  "gpu.voltage",
   "gpu.clock",
+  "gpu.clock.memory",
   "gpu.fan",
   "gpu.name",
   "vram.used",
   "vram.used.percent",
   "vram.total",
+  "vram.temp",
   "disk.used",
   "disk.used.percent",
   "disk.total",
@@ -62,21 +79,31 @@ const LHM_KEYS = [
   "network.upload",
 ] as const;
 
+function descriptorFor(key: string): SensorDescriptor | undefined {
+  const declared = describeSemanticKey(key);
+
+  if (declared === undefined) {
+    return undefined;
+  }
+
+  return {
+    sensorId: `${LHM_PROVIDER_ID}:${key}`,
+    semanticKey: key,
+    label: declared.label,
+    ...descriptorFieldsOf(declared),
+    tier: "extended" as const,
+  };
+}
+
 export const LHM_DESCRIPTORS: readonly SensorDescriptor[] = LHM_KEYS.map(
   (key) => {
-    const declared = describeSemanticKey(key);
+    const descriptor = descriptorFor(key);
 
-    if (declared === undefined) {
+    if (descriptor === undefined) {
       throw new Error(`${key} is not in the semantic key vocabulary`);
     }
 
-    return {
-      sensorId: `${LHM_PROVIDER_ID}:${key}`,
-      semanticKey: key,
-      label: declared.label,
-      ...(declared.unit === undefined ? {} : { unit: declared.unit }),
-      tier: "extended" as const,
-    };
+    return descriptor;
   },
 );
 
@@ -127,8 +154,36 @@ export class LhmSensorProvider implements SensorProvider {
       options.fetcher ?? boundedFetcher(options.timeoutMs ?? LHM_TIMEOUT_MS);
   }
 
+  /**
+   * Static keys plus the dynamic ones this machine actually reports, so the
+   * editor catalogue can list per-core and per-fan readings like built-ins.
+   * Discovery is best-effort: an absent LHM leaves the static list intact.
+   */
   async describe(): Promise<readonly SensorDescriptor[]> {
-    return LHM_DESCRIPTORS;
+    return [...LHM_DESCRIPTORS, ...(await this.describeDynamic())];
+  }
+
+  private async describeDynamic(): Promise<readonly SensorDescriptor[]> {
+    try {
+      const response = await this.fetcher(`${this.baseUrl}/data.json`);
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const sensors = flattenLhmSensors(JSON.parse(await response.text()));
+
+      return dynamicKeyReadings(sensors).flatMap(({ key, label }) => {
+        const descriptor = descriptorFor(key);
+        if (descriptor === undefined) {
+          return [];
+        }
+        // A board or cooler names its own headers; that label is shown as-is.
+        return [label === undefined ? descriptor : { ...descriptor, label }];
+      });
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -165,13 +220,16 @@ export class LhmSensorProvider implements SensorProvider {
   async sample(
     semanticKeys: readonly string[],
     nowMs: number,
-    assignment: DeviceAssignment = {},
+    context: SampleContext = {},
   ): Promise<readonly SampleEntry[]> {
-    // Per-device keys (disk dot id dot used) are discovered at runtime, so they
-    // are accepted by shape rather than by membership in the fixed list.
+    const assignment = context.assignment ?? {};
+    // Per-device keys (disk dot id dot used, cpu.core.n.*, gpu.fan.n) are
+    // discovered at runtime, so they are accepted by shape rather than by
+    // membership in the fixed list.
     const owned = semanticKeys.filter(
       (key) =>
         (LHM_KEYS as readonly string[]).includes(key) ||
+        isLhmDynamicKey(key) ||
         diskDeviceOf(key) !== undefined,
     );
 
@@ -223,6 +281,7 @@ export class LhmSensorProvider implements SensorProvider {
     for (const device of diskDeviceReadings(sensors)) {
       matched.set(`disk.${device.deviceId}.used`, device.usedGb);
       matched.set(`disk.${device.deviceId}.total`, device.totalGb);
+      matched.set(`disk.${device.deviceId}.free`, device.freeGb);
       matched.set(`disk.${device.deviceId}.used.percent`, device.usedPercent);
     }
 
@@ -230,23 +289,19 @@ export class LhmSensorProvider implements SensorProvider {
     // so a name can never sit over another device's reading. A name the
     // consumer chose wins over the model, which is what the settings page
     // edits.
-    const gpuName = lhmDeviceName(sensors, "gpu", assignment);
-    const diskName = lhmDeviceName(sensors, "storage", assignment);
+    const gpu = lhmDeviceCaption(sensors, "gpu", assignment);
+    const disk = lhmDeviceCaption(sensors, "storage", assignment);
     const names = assignment.names ?? {};
     const named = new Map<string, string>();
 
-    if (gpuName !== undefined) {
-      named.set(
-        "gpu.name",
-        displayNameFor(names, diskDeviceId(gpuName), gpuName),
-      );
+    if (gpu !== undefined) {
+      // The settings page keys a saved name by the resolved device id, which
+      // disambiguates two identical models: `samsung-ssd-970-2`.
+      named.set("gpu.name", displayNameFor(names, gpu.deviceId, gpu.name));
     }
 
-    if (diskName !== undefined) {
-      named.set(
-        "disk.name",
-        displayNameFor(names, diskDeviceId(diskName), diskName),
-      );
+    if (disk !== undefined) {
+      named.set("disk.name", displayNameFor(names, disk.deviceId, disk.name));
     }
 
     return owned.map((semanticKey) => {
@@ -267,14 +322,22 @@ export class LhmSensorProvider implements SensorProvider {
       }
 
       if (value === undefined) {
+        const diskId = diskDeviceOf(semanticKey);
+        let reason =
+          "this machine reports no matching LibreHardwareMonitor sensor";
+
+        if (diskId !== undefined) {
+          reason = lhmStorageDeviceExists(sensors, diskId)
+            ? "this drive reports no matching LibreHardwareMonitor sensor"
+            : "this machine has no drive with that id";
+        }
+
         return {
           semanticKey,
           sample: missing(
             `${LHM_PROVIDER_ID}:${semanticKey}`,
             timestamp,
-            diskDeviceOf(semanticKey) === undefined
-              ? "this machine reports no matching LibreHardwareMonitor sensor"
-              : "this machine has no drive with that id",
+            reason,
           ),
         };
       }

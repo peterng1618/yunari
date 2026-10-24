@@ -5,31 +5,33 @@ Branch: `main`
 
 ## Current objective
 
-The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10-24-text-elements-design.md), [`plan`](docs/superpowers/plans/2026-10-24-text-elements.md)) is complete and merged; no plan is active. The colour and gradient picker rebuild is also merged.
+The **sensor platform** ([`spec`](docs/superpowers/specs/2026-10-24-sensor-platform-design.md), [`archived plan`](docs/superpowers/plans/archive/2026-10-24-sensor-platform.md)) is delivered: seven phases from vocabulary/units/image binding through hardware, weather, media, custom sources, frame/game presence, and Steam store metadata. The text-elements and Wallpaper Engine plans are merged; no plan is in flight.
 
 ## Active work
 
-- **Nothing is dispatched.** The queue waits on a named plan.
-- **Text is two Fabric classes:** `IText` is placed by a click, `Textbox` by a drag, and the persisted Fabric `type` is the only width-mode discriminator.
-- **Sources:** the preset library is editor-local (`yunari.editor.presets`, version 1); the Colours tab adds palettes and gradients to it.
+- **All seven sensor-platform phases are complete**; the final gate after the Phase 7 review fixes ran green.
+- **Phase 7 is proven end to end**: a real host and player, a fixture Steam store, the canonical name and cover painted, a cached reload with no request, and the cover fallback.
+- **Every sensor-platform review finding is closed**: two whole-phase reviews, their scoped re-reviews, and the per-task fix rounds all returned clear.
+- **Text elements are merged and unchanged by this merge**: `IText` and `Textbox` are separate classes, and the preset library holds palettes and gradients.
+- **Open register findings include** vg-714 (every foreground process reads as a game), vg-715 (non-Steam identity), vg-717 (player descriptor catalogue), vg-699, vg-701 and vg-708.
 
 ## Last completed change
 
-- **Text and text box are separate classes**: one click-or-drag placement gesture arms from every creation surface, and authored `wrap` is gone and ignored on load.
-- **Legacy `"Text"` revives as editable `IText`** in the editor only; the player renders whichever class the scene carries.
-- **The Runs inspector shows one run at a time** behind numbered tabs, with a lucide `+` that adds and selects the run.
-- **Proof:** `npm run gate` exited 0 (342 unit files / 4804 tests; worker 12 / 72) and the text browser spec passed 9 desktop cases with 0 unexpected; the six e2e suites the gesture touched were re-run green.
+- **Final gate:** `npm run gate` exit 0 — web 371 test files / 5473 tests; store-worker 12 files / 72 tests.
+- **Review fixes:** lookup reports match/none/unavailable with distinct copy; a cached miss answers only its own spelling; covers over 5 MiB are refused and cached files validated; concurrent cover demands share one download.
+- **Docs truth:** the spec states what the store cache keeps (normalised name, searched term, canonical name, first-lookup time, cover bytes) and the per-spelling request budget; the plan is archived.
+- **Merged into `main`** with the STATUS and backlog conflicts resolved by union, so the text-element and sensor-platform work coexist.
 
 ## Next
 
-1. Drain the backlog register: `2026-10-12-the-backlog-drain.md` is queued.
-2. Then `2026-10-21-theme-store-origin-and-style.md` and `2026-10-23-r2-store-backend.md`.
-3. The owner's R2 Task 5.2 deploy and the Wallpaper Engine live export wait outside any plan.
+1. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
+2. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
+3. Choose the next objective from `docs/product/backlog.jsonl` (vg-714, vg-715 and vg-717 are the largest).
 
 ## Blockers / unverified
 
-- **A gradient stop moved past its neighbour writes descending offsets** and the validator refuses the document (`vg-712`, issue #52).
-- **Arming text placement survives inserting a shape** (`vg-714`), so the next canvas press places text instead of selecting.
-- **The picker popup is 630px tall** with twelve seeded presets at a 720px viewport, so Base UI side-places it.
-- **The compact editor header stays wider than a phone** (`vg-707`), and `server.test.ts` flakes pre-existing (`vg-695`).
-- **The text e2e cases skip on `phone-chromium` by design**, so the phone surface is unproven for the new gesture.
+- **No live Steam store request:** the Phase 7 e2e uses a fixture; the endpoints were only probed by hand. No live frame or game reading either.
+- **Player conversion and catalogue refresh:** a custom temperature key converts in the editor preview only (vg-717); a source added while the editor is open needs a reload (vg-713).
+- **No live weather backend and no Windows Geolocator run**; fixtures and units are tested only.
+- **Credential removal from the Sources page** is jsdom-tested only; jpg/webp media artwork is unverified.
+- **Presence still reads every foreground process as a game** (vg-714), so a store lookup can be asked about a browser once per spelling.

@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import type { FabricGlobals, TextRun } from "@yunari/renderer-core";
-import { formatInstant, instantIn } from "@yunari/renderer-core";
+import {
+  formatInstant,
+  instantIn,
+  SEMANTIC_KEYS,
+  type SemanticKeyDescriptor,
+} from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import {
   blur,
@@ -799,6 +804,62 @@ describe("which format tokens a clock can be given", () => {
     const hint = box.pick('[data-yunari-run-format-hint="0"]').textContent;
     for (const token of ["YYYY", "MMM", "ddd", "DD", "HH", "mm", "A"])
       expect(hint).toContain(token);
+    return box.dispose();
+  });
+});
+
+describe("which readings a run may name", () => {
+  const fan: SemanticKeyDescriptor = {
+    key: "custom.fan",
+    family: "cpu",
+    label: "Fan speed",
+    expectedTier: "extended",
+  };
+
+  it("groups the built-ins by family and puts a discovered key in its family", () => {
+    // The catalogue is the host's answer rather than a second table, so a key a
+    // provider reports sits under the same heading as the built-ins it belongs
+    // with instead of at the end of one flat list.
+    const box = mountRunEditor({
+      runs: literalClock,
+      descriptors: () => [...SEMANTIC_KEYS, fan],
+    });
+    const sources = box.sources();
+
+    expect(sources.find((source) => source.id === "cpu.load")?.group).toBe(
+      "cpu",
+    );
+    expect(sources.find((source) => source.id === "custom.fan")).toEqual({
+      id: "custom.fan",
+      name: "Fan speed",
+      group: "cpu",
+    });
+    const cpu = sources
+      .map((source, index) => ({ ...source, index }))
+      .filter((source) => source.group === "cpu");
+    const at = cpu.findIndex((source) => source.id === "custom.fan");
+    expect(at).toBeGreaterThan(0);
+    expect(cpu[at]?.index).toBe((cpu[at - 1]?.index ?? -2) + 1);
+    return box.dispose();
+  });
+
+  it("keeps a saved key the catalogue no longer lists, still selected", () => {
+    // A theme may name a key this host stopped reporting. Dropping it from the
+    // options would show the run as reading nothing and leave no way back to
+    // the key the document holds.
+    const box = mountRunEditor({
+      runs: [{ kind: "value", bindingId: "saved" }],
+      declared: [{ id: "saved", semanticKey: "retired.key" }],
+      descriptors: () => [fan],
+    });
+
+    expect(box.sources()).toContainEqual({
+      id: "retired.key",
+      name: "retired.key",
+    });
+    expect(valueText(box.host, 'data-yunari-run-source="0"')).toBe(
+      "retired.key",
+    );
     return box.dispose();
   });
 });

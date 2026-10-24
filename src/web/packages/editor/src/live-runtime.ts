@@ -2,6 +2,7 @@ import type {
   Binding,
   FabricGlobals,
   SampleSource,
+  SemanticKeyDescriptor,
 } from "@yunari/renderer-core";
 import { applyAuthoredText, refreshBoundText } from "@yunari/scene-fabric";
 import type { StaticCanvas } from "fabric/es";
@@ -28,6 +29,8 @@ export class LiveRuntime {
   #source: SampleSource;
   #globals: FabricGlobals | undefined;
   #themeLanguage: string | undefined;
+  /** Read per repaint: the catalogue replaces its list when a refresh lands. */
+  #descriptors: (() => readonly SemanticKeyDescriptor[]) | undefined;
   /** Set by every input a repaint resolves against; cleared by the repaint. */
   #authoredDue = true;
   #lastSampleMs: number | undefined;
@@ -39,6 +42,8 @@ export class LiveRuntime {
     readonly source: SampleSource;
     readonly globals?: FabricGlobals;
     readonly themeLanguage?: string;
+    /** The editor catalogue, so a custom descriptor's unitKind converts. */
+    readonly descriptors?: () => readonly SemanticKeyDescriptor[];
     /** Injectable so a test can hold the loop still; wall clock otherwise. */
     readonly now?: () => number;
   }) {
@@ -47,6 +52,7 @@ export class LiveRuntime {
     this.#source = options.source;
     this.#globals = options.globals;
     this.#themeLanguage = options.themeLanguage;
+    this.#descriptors = options.descriptors;
     this.#now = options.now ?? (() => Date.now());
   }
 
@@ -181,6 +187,7 @@ export class LiveRuntime {
       this.#globals,
       undefined,
       this.#themeLanguage,
+      this.#descriptors?.(),
     );
   }
 }

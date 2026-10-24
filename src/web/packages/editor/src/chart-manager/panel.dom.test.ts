@@ -4,6 +4,8 @@ import {
   defaultPieSettings,
   type FabricPalette,
   type PieSettings,
+  SEMANTIC_KEYS,
+  type SemanticKeyDescriptor,
   settingsFieldsFor,
 } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
@@ -426,6 +428,43 @@ describe("a chart's series, as a value", () => {
     const series = chartContentView(charts[0] as ChartFieldTarget).series;
     expect(series.refused).toBe(true);
     expect(series.full).toContain("gauge");
+  });
+});
+
+describe("a chart's readings, as the catalogue offers them", () => {
+  const fan: SemanticKeyDescriptor = {
+    key: "custom.fan",
+    family: "custom",
+    label: "Fan speed",
+    expectedTier: "extended",
+  };
+  const line = (
+    bindings: readonly { id: string; semanticKey: string }[],
+    descriptors: readonly SemanticKeyDescriptor[] = [...SEMANTIC_KEYS, fan],
+  ) =>
+    chartContentView(
+      {
+        id: "trends",
+        content: charts[1]!.content,
+        bindings,
+      },
+      descriptors,
+    );
+
+  it("lists a discovered key and its label beside the built-in ones", () => {
+    const options = line([]).series.options;
+    expect(options).toContainEqual({ id: "custom.fan", name: "Fan speed" });
+    expect(options.map((option) => option.id)).toContain("cpu.load");
+  });
+
+  it("keeps a saved binding the catalogue does not know", () => {
+    // A theme may name a key this host no longer reports; a picker that dropped
+    // it would show the series as reading nothing at all.
+    const [row] = line([{ id: "a", semanticKey: "retired.key" }], [fan]).series
+      .rows;
+    const options = row?.keyOptions ?? [];
+    expect(options[0]).toEqual({ id: "retired.key", name: "retired.key" });
+    expect(options.map((option) => option.id)).not.toContain("cpu.load");
   });
 });
 

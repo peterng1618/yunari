@@ -93,12 +93,38 @@ licence text in `THIRD-PARTY-NOTICES.md`.
 | Source | Pin | Licence | Role |
 |---|---|---|---|
 | `@anu3ev/fabric-image-editor` | 0.10.32, commit `9efdd78a34` | MIT | adapted movement-snapping and indicator source |
+| `@meteocons/svg-static` (`fill` style) | 0.1.0, `sha512-dnuXOkt1W5q+XZbyj54dzjuBcKmsC0eLv51IVaW9kzzvzwnhwv9KgNXHKgpvmdN6cX2stMo+k95iMFbcyM4x5Q==` | MIT | 23 weather SVGs staged by `packages/host/scripts/vendor-weather-icons.mjs`; served at `/api/weather/icon/<slug>.svg` |
 
 Copied, not installed: no entry appears in `package.json` and nothing enters the
 transitive graph. Licence verified from the `LICENSE` blob at that commit,
 `MIT, Copyright (c) 2025 Alexander Anufriev`. Full text in
 `THIRD-PARTY-NOTICES.md`. The note above about the removed image-editor package
 refers to the runtime dependency, which stays removed.
+
+Meteocons' `package/LICENSE` in the pinned tarball is the MIT text,
+`Copyright (c) 2020-present Bas Milius`; the vendor script copies it beside the
+icons. Source: <https://github.com/basmilius/meteocons>.
+
+Open-Meteo's data is offered under CC BY 4.0. Its licence page,
+<https://open-meteo.com/en/licence> (verified 2026-10-24), states the credit as
+"Weather data by Open-Meteo.com" linking to <https://open-meteo.com/>. That exact
+string is `OPEN_METEO_ATTRIBUTION` in
+`packages/host/src/providers/weather/open-meteo.ts`, and `weather.attribution`
+serves it to a theme.
+
+The two BYOK weather backends carry the credit their own terms pages state,
+verified 2026-10-24:
+
+- WeatherAPI — "Powered by WeatherAPI.com", the text option on
+  <https://www.weatherapi.com/docs/attribution/>; the page links it to
+  <https://www.weatherapi.com/>. Constant `WEATHERAPI_ATTRIBUTION` in
+  `packages/host/src/providers/weather/weatherapi.ts`.
+- OpenWeatherMap — "Weather data provided by OpenWeather", the required wording
+  in the FAQ at <https://openweathermap.org/faq>, which also requires a link to
+  <https://openweathermap.org/> and the OpenWeather logo. The text is
+  `OPENWEATHERMAP_ATTRIBUTION` and the link is `termsUrl` in
+  `packages/host/src/providers/weather/backends.ts`; the host settings page
+  renders the text as that link. The logo is not drawn by that surface.
 
 LibreHardwareMonitor/PawnIO are not current dependencies or redistributed.
 Earlier planning research found LHM MPL-2.0 and PawnIO modules under GPL/LGPL;
@@ -139,6 +165,41 @@ in `THIRD-PARTY-NOTICES.md`, and the vendor script stages LHM's `LICENSE` and
 packaging must include those files. A PawnIO module download (LGPL-2.1,
 fetched by LHM at runtime) remains separately unreviewed and must not be
 enabled without its own assessment.
+
+### PresentMon packaging review — 2026-10-24
+
+Assessed against the `v2.6.0` console release asset
+(`PresentMon-2.6.0-x64.exe`, 980 320 bytes) and the repository's `LICENSE.txt`.
+
+Findings:
+
+- **PresentMon is MIT.** GitHub's licence API reports `spdx_id: "MIT"` for
+  `LICENSE.txt`, whose text is the MIT licence, "Copyright (C) 2017-2024 Intel
+  Corporation". Redistribution is permitted provided that notice travels with
+  the binary; the release asset is a bare executable, so the vendor script
+  stages the licence beside it.
+- The console asset is one self-contained executable; it bundles no
+  third-party binaries whose notices would also need reproducing.
+- It is an ETW consumer, not a linkable library. `--output_stdout` writes CSV
+  to stdout per row, `--no_csv` creates no file, and `--session_name` names the
+  trace session. The host parses by header name, never by column position,
+  because `--v1_metrics`/`--v2_metrics` change the set (and the frametime
+  column is spelled `msBetweenPresents` in the v1 header and
+  `MsBetweenPresents` in v2).
+- A trace session needs the account to be in the `Performance Log Users` group
+  or to be elevated. Yunari never passes `--restart_as_admin` (it would prompt
+  for UAC per launch; it defaults off) and never passes
+  `--stop_existing_session` (that would kill a session the user started). A
+  denied session is reported `unavailable` and retried only at the next demand
+  window.
+- Pinned sha256 of the staged `v2.6.0` asset:
+  `b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af`.
+  `packages/host/scripts/vendor-presentmon.mjs` refuses a mismatch.
+- Binaries are not committed (`vendor/` is ignored); the repository tracks
+  provenance.
+
+Conclusion: redistribution is permissible with its licence file, and the
+host runs it without linking or modifying it.
 
 `systeminformation` 5.33.13 (MIT, no dependencies of its own) is the host's
 hardware-metrics source: verified from the package's own `LICENSE` and `npm

@@ -1,4 +1,4 @@
-import { diskDeviceId } from "@yunari/renderer-core";
+import { semanticId } from "@yunari/renderer-core";
 import type { LhmSensor } from "./lhm-tree.js";
 
 /** Which LHM sensor answers which Yunari semantic key. Modelled on explicit
@@ -21,10 +21,20 @@ type LhmSensorType =
   | "Throughput"
   | "Level"
   | "Voltage"
-  | "Current";
+  | "Current"
+  | "Control"
+  | "TimeSpan";
 
-/** Which hardware node a binding applies to, matched against its name. */
-type HardwareGroup = "cpu" | "cooling" | "gpu" | "storage" | "network";
+/** Which hardware node a binding applies to, matched against its identity. */
+type HardwareGroup =
+  | "cpu"
+  | "cooling"
+  | "gpu"
+  | "storage"
+  | "network"
+  | "motherboard"
+  | "psu"
+  | "battery";
 
 interface LhmBinding {
   readonly semanticKey: string;
@@ -37,10 +47,12 @@ interface LhmBinding {
 }
 
 const CPU_PATTERN = /intel|amd|ryzen|core i\d|threadripper/i;
-/** A liquid cooler (NZXT Kraken, Corsair, …) drives the CPU, and so do the
- * motherboard super-I/O fan headers (ITE/Nuvoton/Fintek chips). */
-const COOLING_PATTERN =
-  /kraken|corsair|nzxt|coolit|aio|liquid|ite it|nuvoton|fintek|prime|aorus|tomahawk/i;
+/** Board and super-I/O nodes. LHM names a board by its model ("Gigabyte Z590
+ * GAMING X") and its super-I/O child by the chip ("ITE IT8689E"). */
+const MOTHERBOARD_PATTERN =
+  /motherboard|gigabyte|ite it|nuvoton|fintek|prime|aorus|tomahawk/i;
+/** A liquid cooler (NZXT Kraken, Corsair, …) drives the CPU. */
+const COOLING_PATTERN = /kraken|corsair|nzxt|coolit|aio|liquid|cooler/i;
 const GPU_PATTERN = /nvidia|geforce|radeon|gpu|arc a\d/i;
 /** Drive model designations vary widely: `Lexar 500GB SSD`, `ST4000DM004`,
  * `WDC WD30NMVW`, `Samsung SSD 970`, `CT1000MX500SSD1`. */
@@ -48,14 +60,31 @@ const STORAGE_PATTERN =
   /ssd|hdd|nvme|disk|wdc|wd\d|\bst\d|ct\d|micron|samsung|lexar|seagate|kingston|toshiba|crucial|sandisk|intel ssd/i;
 const NETWORK_PATTERN = /ethernet|wi-?fi|wireless|network|802\.11/i;
 
-function groupOf(hardwareName: string): HardwareGroup | undefined {
-  // Order matters: a "Bluetooth Network Connection" is a network node, and a GPU
-  // named "Intel Arc" must not be read as a CPU.
+/** LHM's hardware path root names the hardware type: `Identifier("psu", …)`
+ * becomes `/psu/…` and `Identifier("battery", …)` becomes `/battery/…`. Those
+ * roots are the documented type; the node's text is the product name. */
+const PSU_ID = /^\/psu(\/|$)/;
+const BATTERY_ID = /^\/battery(\/|$)/;
+
+function groupOf(
+  hardwareName: string,
+  hardwareId: string,
+): HardwareGroup | undefined {
+  // PSU and battery come first: their node text is a product name ("Corsair
+  // HX1000i", "DELL 97WH"), so only the path root identifies the type.
+  if (PSU_ID.test(hardwareId)) return "psu";
+  if (BATTERY_ID.test(hardwareId)) return "battery";
+  // Order matters. Network first (a "Bluetooth Network Connection" is a link),
+  // then the specific device kinds before the board: a board-vendor GPU or SSD
+  // ("Gigabyte GeForce", "AORUS NVMe") must keep its own group, a GPU named
+  // "Intel Arc" must not be read as a CPU, and a super-I/O chip sits under a
+  // board rather than a cooler.
   if (NETWORK_PATTERN.test(hardwareName)) return "network";
-  if (COOLING_PATTERN.test(hardwareName)) return "cooling";
   if (STORAGE_PATTERN.test(hardwareName)) return "storage";
   if (GPU_PATTERN.test(hardwareName)) return "gpu";
   if (CPU_PATTERN.test(hardwareName)) return "cpu";
+  if (MOTHERBOARD_PATTERN.test(hardwareName)) return "motherboard";
+  if (COOLING_PATTERN.test(hardwareName)) return "cooling";
   return undefined;
 }
 
@@ -74,6 +103,26 @@ const BINDINGS: readonly LhmBinding[] = [
     type: "Temperature",
     anyText: ["Liquid"],
   },
+  // The package figure and the core extremes, beside the aggregate rather than
+  // replacing it: a theme bound to `cpu.temp` keeps reading what it always did.
+  {
+    semanticKey: "cpu.temp.package",
+    group: "cpu",
+    type: "Temperature",
+    anyText: ["CPU Package"],
+  },
+  {
+    semanticKey: "cpu.temp.core.max",
+    group: "cpu",
+    type: "Temperature",
+    anyText: ["Core Max"],
+  },
+  {
+    semanticKey: "cpu.temp.core.avg",
+    group: "cpu",
+    type: "Temperature",
+    anyText: ["Core Average"],
+  },
   {
     semanticKey: "cpu.power",
     group: "cpu",
@@ -85,6 +134,12 @@ const BINDINGS: readonly LhmBinding[] = [
     group: "cpu",
     type: "Clock",
     anyText: ["Cores (Average)", "Core Average", "CPU Core #1", "Bus Speed"],
+  },
+  {
+    semanticKey: "cpu.voltage",
+    group: "cpu",
+    type: "Voltage",
+    anyText: ["CPU Core"],
   },
   // Only an explicit CPU fan name answers this; a case or AIO fan does not.
   {
@@ -107,6 +162,84 @@ const BINDINGS: readonly LhmBinding[] = [
       "Fan #6",
     ],
   },
+  // The super-I/O headers answered `cpu.fan` before the board got its own
+  // group, so they still do: an aggregate key keeps its precedence (0004).
+  {
+    semanticKey: "cpu.fan",
+    group: "motherboard",
+    type: "Fan",
+    anyText: ["Fan #1", "Fan #2", "Fan #3", "Fan #4", "Fan #5", "Fan #6"],
+  },
+
+  // Motherboard and cooler. A board LHM cannot label reports its super-I/O
+  // temperature sources as `Temperature #N`; the aggregate takes the highest,
+  // like every other temperature key.
+  {
+    semanticKey: "motherboard.temp",
+    group: "motherboard",
+    type: "Temperature",
+    anyText: [
+      "Temperature #1",
+      "Temperature #2",
+      "Temperature #3",
+      "Temperature #4",
+      "Temperature #5",
+      "Temperature #6",
+    ],
+  },
+  {
+    semanticKey: "cooling.temp",
+    group: "cooling",
+    type: "Temperature",
+    anyText: ["Liquid"],
+  },
+
+  // PSU and battery. The hardware type comes from the path root above; the
+  // sensor names are the ones LHM's `CorsairPsu` and `Battery` classes create
+  // (LibreHardwareMonitorLib/Hardware/Psu/Corsair/CorsairPsu.cs and
+  // Hardware/Battery/Battery.cs), not names invented for this fixture.
+  {
+    semanticKey: "psu.power",
+    group: "psu",
+    type: "Power",
+    anyText: ["Total watts", "Total Output"],
+  },
+  {
+    semanticKey: "psu.temp",
+    group: "psu",
+    type: "Temperature",
+    anyText: ["VRM", "Case"],
+  },
+  {
+    semanticKey: "psu.fan",
+    group: "psu",
+    type: "Fan",
+    anyText: ["Case"],
+  },
+  {
+    semanticKey: "battery.level",
+    group: "battery",
+    type: "Level",
+    anyText: ["Charge Level"],
+  },
+  {
+    semanticKey: "battery.voltage",
+    group: "battery",
+    type: "Voltage",
+    anyText: ["Voltage"],
+  },
+  {
+    semanticKey: "battery.rate",
+    group: "battery",
+    type: "Power",
+    anyText: ["Charge/Discharge Rate"],
+  },
+  {
+    semanticKey: "battery.timeRemaining",
+    group: "battery",
+    type: "TimeSpan",
+    anyText: ["Remaining Time (Estimated)"],
+  },
 
   // GPU
   {
@@ -122,16 +255,40 @@ const BINDINGS: readonly LhmBinding[] = [
     anyText: ["GPU Core"],
   },
   {
+    semanticKey: "gpu.temp.core",
+    group: "gpu",
+    type: "Temperature",
+    anyText: ["GPU Core"],
+  },
+  {
+    semanticKey: "gpu.temp.hotspot",
+    group: "gpu",
+    type: "Temperature",
+    anyText: ["GPU Hot Spot"],
+  },
+  {
     semanticKey: "gpu.power",
     group: "gpu",
     type: "Power",
     anyText: ["GPU Package", "GPU Power"],
   },
   {
+    semanticKey: "gpu.voltage",
+    group: "gpu",
+    type: "Voltage",
+    anyText: ["GPU Core Voltage"],
+  },
+  {
     semanticKey: "gpu.clock",
     group: "gpu",
     type: "Clock",
     anyText: ["GPU Core"],
+  },
+  {
+    semanticKey: "gpu.clock.memory",
+    group: "gpu",
+    type: "Clock",
+    anyText: ["GPU Memory"],
   },
   {
     semanticKey: "gpu.fan",
@@ -158,6 +315,12 @@ const BINDINGS: readonly LhmBinding[] = [
     group: "gpu",
     type: "Load",
     anyText: ["GPU Memory"],
+  },
+  {
+    semanticKey: "vram.temp",
+    group: "gpu",
+    type: "Temperature",
+    anyText: ["GPU Memory Junction"],
   },
 
   // Disk capacity. `Used Space` is typed Load but carries a percentage, so it
@@ -196,6 +359,276 @@ const BINDINGS: readonly LhmBinding[] = [
   },
 ];
 
+/**
+ * A binding whose key carries the sensor's own identity, so the key set depends
+ * on the machine rather than on the vocabulary. Numbers come from LHM's own
+ * name and are 1-based; a name absent from the capture produces no key.
+ */
+interface LhmDynamicBinding {
+  readonly group: HardwareGroup;
+  readonly type: LhmSensorType;
+  readonly pattern: RegExp;
+  /** Builds the semantic key from the sensor's own name. */
+  readonly key: (match: RegExpExecArray, sensor: LhmSensor) => string;
+  /** Descriptor label from the sensor's own name; default is the vocabulary label. */
+  readonly label?: (sensor: LhmSensor) => string;
+  /** How repeated matches for one key combine. Default: highest. */
+  readonly combine?: "mean";
+  /** Leave the key alone when an earlier binding already answered it. */
+  readonly whenAbsent?: boolean;
+}
+
+const DYNAMIC_BINDINGS: readonly LhmDynamicBinding[] = [
+  {
+    group: "cpu",
+    type: "Load",
+    // The vocabulary's per-core Load sensor, named directly by the spec's table.
+    pattern: /^CPU Core #(\d+)$/,
+    key: (match) => `cpu.core.${match[1]}.load`,
+  },
+  {
+    group: "cpu",
+    type: "Load",
+    // Other LHM builds name load per logical processor only. A core then reads
+    // the mean of its threads — the conventional per-core utilization — so a
+    // core's gauge cannot exceed the aggregate by taking its busiest thread.
+    pattern: /^CPU Core #(\d+) Thread #\d+$/,
+    key: (match) => `cpu.core.${match[1]}.load`,
+    combine: "mean",
+    whenAbsent: true,
+  },
+  {
+    group: "cpu",
+    type: "Temperature",
+    pattern: /^CPU Core #(\d+)$/,
+    key: (match) => `cpu.core.${match[1]}.temp`,
+  },
+  {
+    group: "cpu",
+    type: "Clock",
+    pattern: /^CPU Core #(\d+)$/,
+    key: (match) => `cpu.core.${match[1]}.clock`,
+  },
+  {
+    group: "gpu",
+    type: "Fan",
+    pattern: /^GPU Fan (\d+)$/,
+    key: (match) => `gpu.fan.${match[1]}`,
+  },
+  // Board headers: an RPM sensor and a Control sensor of the same name are two
+  // readings of one fan, so each keeps its own key rather than collapsing to a
+  // maximum. The label is the board's own ("Fan #2"), never a friendly rename.
+  {
+    group: "motherboard",
+    type: "Fan",
+    pattern: /^Fan #(\d+)$/,
+    key: (_match, sensor) => `motherboard.fan.${semanticId(sensor.text)}.rpm`,
+    label: (sensor) => sensor.text,
+  },
+  {
+    group: "motherboard",
+    type: "Control",
+    pattern: /^Fan #(\d+)$/,
+    key: (_match, sensor) =>
+      `motherboard.fan.${semanticId(sensor.text)}.percent`,
+    label: (sensor) => sensor.text,
+  },
+  {
+    group: "motherboard",
+    type: "Voltage",
+    pattern: /^.+$/,
+    key: (_match, sensor) => `motherboard.voltage.${semanticId(sensor.text)}`,
+    label: (sensor) => sensor.text,
+  },
+  // A cooler's fan headers, when it exposes them; the pump is its own key.
+  {
+    group: "cooling",
+    type: "Fan",
+    pattern: /^Pump\b/i,
+    key: (_match, sensor) => `cooling.pump.${semanticId(sensor.text)}.rpm`,
+    label: (sensor) => sensor.text,
+  },
+  {
+    group: "cooling",
+    type: "Fan",
+    pattern: /^Fan #(\d+)$/,
+    key: (_match, sensor) => `cooling.fan.${semanticId(sensor.text)}.rpm`,
+    label: (sensor) => sensor.text,
+  },
+  {
+    group: "cooling",
+    type: "Control",
+    pattern: /^Fan #(\d+)$/,
+    key: (_match, sensor) => `cooling.fan.${semanticId(sensor.text)}.percent`,
+    label: (sensor) => sensor.text,
+  },
+  // A PSU's rails each carry their own id: `Input`, `+12V`, `+5V`, `+3.3V`.
+  {
+    group: "psu",
+    type: "Voltage",
+    pattern: /^.+$/,
+    key: (_match, sensor) => `psu.voltage.${semanticId(sensor.text)}`,
+    label: (sensor) => sensor.text,
+  },
+];
+
+/**
+ * A sensor that answers one key per device, under the device's own id rather
+ * than an index. Stored separately from `DYNAMIC_BINDINGS` because the key
+ * depends on the hardware node, not on the sensor's own name.
+ */
+interface LhmDeviceBinding {
+  readonly group: "storage" | "network";
+  readonly type: LhmSensorType;
+  /** Quantity suffix after the device id. */
+  readonly quantity: string;
+  /** Accepted sensor names in priority order; the first present answers. */
+  readonly anyText: readonly string[];
+  /** A byte-per-second sensor lands in this vocabulary unit. */
+  readonly scale?: "megabyte" | "megabit";
+}
+
+const DEVICE_BINDINGS: readonly LhmDeviceBinding[] = [
+  // A drive's general temperature: NVMe calls it `Composite Temperature`, a
+  // SATA drive simply `Temperature`. Warning/critical limits are not readings.
+  {
+    group: "storage",
+    type: "Temperature",
+    quantity: "temp",
+    anyText: ["Composite Temperature", "Temperature"],
+  },
+  // LHM's storage life sensor is a `Level` named `Life`.
+  {
+    group: "storage",
+    type: "Level",
+    quantity: "health",
+    anyText: ["Life"],
+  },
+  // Byte-native: the vocabulary declares MB/s for storage rates.
+  {
+    group: "storage",
+    type: "Throughput",
+    quantity: "read",
+    anyText: ["Read Rate"],
+    scale: "megabyte",
+  },
+  {
+    group: "storage",
+    type: "Throughput",
+    quantity: "write",
+    anyText: ["Write Rate"],
+    scale: "megabyte",
+  },
+  {
+    group: "storage",
+    type: "Load",
+    quantity: "activity",
+    anyText: ["Total Activity"],
+  },
+  {
+    group: "network",
+    type: "Throughput",
+    quantity: "download",
+    anyText: ["Download Speed"],
+    scale: "megabit",
+  },
+  {
+    group: "network",
+    type: "Throughput",
+    quantity: "upload",
+    anyText: ["Upload Speed"],
+    scale: "megabit",
+  },
+];
+
+/** Per-drive capacity keys, beside the per-drive sensor readings. */
+const DISK_CAPACITY_KEYS = ["used", "used.percent", "total", "free"] as const;
+
+/** Dynamic keys this provider owns by shape, discovered per machine. */
+const SLUG = "[a-z0-9][a-z0-9-]{0,63}";
+const NETWORK_INTERFACE_KEY = new RegExp(
+  `^network\\.${SLUG}\\.(download|upload)$`,
+);
+const CPU_CORE_KEY = /^cpu\.core\.[1-9]\d*\.(load|temp|clock)$/;
+const GPU_FAN_KEY = /^gpu\.fan\.[1-9]\d*$/;
+const MOTHERBOARD_FAN_KEY = new RegExp(
+  `^motherboard\\.fan\\.${SLUG}\\.(rpm|percent)$`,
+);
+const MOTHERBOARD_VOLTAGE_KEY = new RegExp(`^motherboard\\.voltage\\.${SLUG}$`);
+const COOLING_FAN_KEY = new RegExp(`^cooling\\.fan\\.${SLUG}\\.(rpm|percent)$`);
+const COOLING_PUMP_KEY = new RegExp(`^cooling\\.pump\\.${SLUG}\\.rpm$`);
+const PSU_VOLTAGE_KEY = new RegExp(`^psu\\.voltage\\.${SLUG}$`);
+
+export function isLhmDynamicKey(key: string): boolean {
+  return (
+    CPU_CORE_KEY.test(key) ||
+    GPU_FAN_KEY.test(key) ||
+    MOTHERBOARD_FAN_KEY.test(key) ||
+    MOTHERBOARD_VOLTAGE_KEY.test(key) ||
+    COOLING_FAN_KEY.test(key) ||
+    COOLING_PUMP_KEY.test(key) ||
+    PSU_VOLTAGE_KEY.test(key) ||
+    NETWORK_INTERFACE_KEY.test(key)
+  );
+}
+
+/** A discovered key and, when the sensor names itself, the label to show. */
+export interface LhmDynamicReading {
+  readonly key: string;
+  readonly label?: string;
+}
+
+/**
+ * Every dynamic key these sensors can answer, requested or not. The provider
+ * advertises these so an editor can list per-core, per-fan and per-rail readings
+ * exactly like built-ins.
+ *
+ * A Control sensor stays discoverable when LHM reports no number for it: the
+ * captured board controls arrive as `" %"` (unit only), and the type documents
+ * a percentage. Its sample is still a gap — the key exists, the value does not.
+ */
+export function dynamicKeyReadings(
+  sensors: readonly LhmSensor[],
+): readonly LhmDynamicReading[] {
+  const readings = new Map<string, LhmDynamicReading>();
+
+  for (const binding of DYNAMIC_BINDINGS) {
+    for (const sensor of sensors) {
+      if (
+        (sensor.value === undefined && sensor.type !== "Control") ||
+        sensor.type !== binding.type ||
+        groupOf(sensor.hardwareType, sensor.hardwareId) !== binding.group
+      ) {
+        continue;
+      }
+
+      const match = binding.pattern.exec(sensor.text);
+      if (match !== null) {
+        const key = binding.key(match, sensor);
+        const label = binding.label?.(sensor);
+        readings.set(key, label === undefined ? { key } : { key, label });
+      }
+    }
+  }
+
+  // Per-device keys keep the vocabulary's default label, which carries the
+  // device id: two identical models would otherwise advertise the same text.
+  for (const reading of deviceReadings(sensors)) {
+    readings.set(reading.key, { key: reading.key });
+  }
+
+  // Capacity keys come from the same per-drive derivation the sample uses, so
+  // a discovered `disk.<id>.free` and its value cannot describe different sets.
+  for (const device of diskDeviceReadings(sensors)) {
+    for (const quantity of DISK_CAPACITY_KEYS) {
+      const key = `disk.${device.deviceId}.${quantity}`;
+      readings.set(key, { key });
+    }
+  }
+
+  return [...readings.values()];
+}
+
 /** LHM reports `Data` in GB and `SmallData` in MB. */
 const MIB_PER_GB = 1024;
 const MEGABIT_PER_BYTE_PER_SECOND = 8 / 1_000_000;
@@ -216,7 +649,7 @@ function scaleFor(binding: LhmBinding, value: number): number {
 function matches(binding: LhmBinding, sensor: LhmSensor): boolean {
   return (
     sensor.type === binding.type &&
-    groupOf(sensor.hardwareType) === binding.group &&
+    groupOf(sensor.hardwareType, sensor.hardwareId) === binding.group &&
     binding.anyText.includes(sensor.text)
   );
 }
@@ -239,7 +672,7 @@ function sumNamed(
   for (const sensor of sensors) {
     if (
       sensor.value === undefined ||
-      groupOf(sensor.hardwareType) !== group ||
+      groupOf(sensor.hardwareType, sensor.hardwareId) !== group ||
       !names.includes(sensor.text)
     ) {
       continue;
@@ -268,6 +701,116 @@ function deriveDiskUsed(sensors: readonly LhmSensor[]): number | undefined {
   return total === undefined || free === undefined ? undefined : total - free;
 }
 
+const BYTE_PER_SECOND_TO_MEGABYTE = 1 / 1_000_000;
+
+/**
+ * A stable id for every hardware node in a group, slugged from the provider's
+ * own model name. Two nodes reporting the same model get a numeric suffix, so
+ * their keys stay distinct; the suffix never comes from an array position.
+ */
+function deviceIdsOf(
+  sensors: readonly LhmSensor[],
+  group: HardwareGroup,
+): ReadonlyMap<string, string> {
+  const names = new Map<string, string>();
+
+  for (const sensor of sensors) {
+    if (
+      groupOf(sensor.hardwareType, sensor.hardwareId) === group &&
+      !names.has(sensor.hardwareId)
+    ) {
+      names.set(sensor.hardwareId, sensor.hardwareType);
+    }
+  }
+
+  const taken = new Set<string>();
+  const ids = new Map<string, string>();
+
+  for (const [hardwareId, name] of names) {
+    const base = semanticId(name) || semanticId(hardwareId) || "device";
+    let id = base;
+
+    for (let n = 2; taken.has(id); n += 1) {
+      const suffix = `-${n}`;
+      id = `${base.slice(0, 64 - suffix.length)}${suffix}`;
+    }
+
+    taken.add(id);
+    ids.set(hardwareId, id);
+  }
+
+  return ids;
+}
+
+function scaleDeviceValue(
+  scale: LhmDeviceBinding["scale"],
+  value: number,
+): number {
+  switch (scale) {
+    case "megabyte":
+      return value * BYTE_PER_SECOND_TO_MEGABYTE;
+    case "megabit":
+      return value * MEGABIT_PER_BYTE_PER_SECOND;
+    default:
+      return value;
+  }
+}
+
+interface LhmDeviceReading {
+  readonly key: string;
+  readonly sensor: LhmSensor;
+  readonly value: number;
+}
+
+/** The per-device readings this machine reports, optionally only `wanted`. */
+function deviceReadings(
+  sensors: readonly LhmSensor[],
+  wanted?: ReadonlySet<string>,
+): readonly LhmDeviceReading[] {
+  const readings: LhmDeviceReading[] = [];
+  // Ids depend on the whole group, not on one binding, so derive them once.
+  const idsByGroup = {
+    storage: deviceIdsOf(sensors, "storage"),
+    network: deviceIdsOf(sensors, "network"),
+  } as const;
+
+  for (const binding of DEVICE_BINDINGS) {
+    const ids = idsByGroup[binding.group];
+    const family = binding.group === "storage" ? "disk" : "network";
+
+    for (const [hardwareId, deviceId] of ids) {
+      const key = `${family}.${deviceId}.${binding.quantity}`;
+
+      if (wanted !== undefined && !wanted.has(key)) {
+        continue;
+      }
+
+      for (const name of binding.anyText) {
+        const sensor = sensors.find(
+          (candidate) =>
+            candidate.hardwareId === hardwareId &&
+            candidate.type === binding.type &&
+            candidate.text === name &&
+            candidate.value !== undefined,
+        );
+
+        if (sensor?.value === undefined) {
+          continue;
+        }
+
+        readings.push({
+          key,
+          sensor,
+          value: scaleDeviceValue(binding.scale, sensor.value),
+        });
+        break;
+      }
+    }
+  }
+
+  return readings;
+}
+
 /** A GPU this machine reports, so a consumer can choose between them. */
 interface GpuDeviceReading {
   readonly deviceId: string;
@@ -277,17 +820,17 @@ interface GpuDeviceReading {
 export function gpuDeviceReadings(
   sensors: readonly LhmSensor[],
 ): readonly GpuDeviceReading[] {
-  const seen = new Map<string, string>();
+  const names = new Map<string, string>();
 
   for (const sensor of sensors) {
-    if (groupOf(sensor.hardwareType) === "gpu") {
-      seen.set(sensor.hardwareId, sensor.hardwareType);
+    if (groupOf(sensor.hardwareType, sensor.hardwareId) === "gpu") {
+      names.set(sensor.hardwareId, sensor.hardwareType);
     }
   }
 
-  return [...seen].map(([hardwareId, name]) => ({
-    deviceId: diskDeviceId(name) || hardwareId,
-    name,
+  return [...deviceIdsOf(sensors, "gpu")].map(([hardwareId, deviceId]) => ({
+    deviceId,
+    name: names.get(hardwareId) ?? hardwareId,
   }));
 }
 
@@ -301,23 +844,17 @@ interface DiskDeviceReading {
   readonly name: string;
   readonly usedGb: number;
   readonly totalGb: number;
+  readonly freeGb: number;
   readonly usedPercent: number;
 }
 
 export function diskDeviceReadings(
   sensors: readonly LhmSensor[],
 ): readonly DiskDeviceReading[] {
-  const names = new Map<string, string>();
-
-  for (const sensor of sensors) {
-    if (groupOf(sensor.hardwareType) === "storage") {
-      names.set(sensor.hardwareId, sensor.hardwareType);
-    }
-  }
-
+  const ids = deviceIdsOf(sensors, "storage");
   const readings: DiskDeviceReading[] = [];
 
-  for (const [hardwareId, name] of names) {
+  for (const [hardwareId, deviceId] of ids) {
     const own = sensors.filter((sensor) => sensor.hardwareId === hardwareId);
     const total = sumNamed(own, "storage", ["Total Space"]);
     const free = sumNamed(own, "storage", ["Free Space"]);
@@ -328,15 +865,38 @@ export function diskDeviceReadings(
 
     const usedGb = total - free;
     readings.push({
-      deviceId: diskDeviceId(name),
-      name,
+      deviceId,
+      name: own[0]?.hardwareType ?? "",
       usedGb,
       totalGb: total,
+      // Published only beside a used figure: total and free answer both keys.
+      freeGb: free,
       usedPercent: (usedGb / total) * 100,
     });
   }
 
   return readings;
+}
+
+/** Records a reading, combining repeated hardware by the binding's rule. */
+function selectReading(
+  chosen: Map<string, LhmMatch>,
+  semanticKey: string,
+  sensor: LhmSensor,
+  value: number,
+  sums: boolean,
+): void {
+  const existing = chosen.get(semanticKey);
+
+  if (existing === undefined) {
+    chosen.set(semanticKey, { semanticKey, sensor, value });
+    return;
+  }
+
+  chosen.set(semanticKey, {
+    ...existing,
+    value: sums ? existing.value + value : Math.max(existing.value, value),
+  });
 }
 
 /**
@@ -370,29 +930,83 @@ export function matchLhmSensors(
         continue;
       }
 
-      const value = scaleFor(binding, sensor.value);
-      const existing = chosen.get(binding.semanticKey);
-
-      if (existing === undefined) {
-        chosen.set(binding.semanticKey, {
-          semanticKey: binding.semanticKey,
-          sensor,
-          value,
-        });
-        continue;
-      }
-
-      const combines =
+      const sums =
         binding.combine === "sum" ||
         binding.type === "Data" ||
         binding.type === "SmallData" ||
         binding.type === "Throughput";
-      const next = combines
-        ? existing.value + value
-        : Math.max(existing.value, value);
 
-      chosen.set(binding.semanticKey, { ...existing, value: next });
+      selectReading(
+        chosen,
+        binding.semanticKey,
+        sensor,
+        scaleFor(binding, sensor.value),
+        sums,
+      );
     }
+  }
+
+  // Dynamic keys depend on which sensors this machine reports, so only the
+  // requested ones are produced; a request for an absent device stays absent.
+  for (const binding of DYNAMIC_BINDINGS) {
+    const groups = new Map<
+      string,
+      { sensor: LhmSensor; sum: number; max: number; count: number }
+    >();
+
+    for (const sensor of sensors) {
+      const reading = sensor.value;
+      if (
+        reading === undefined ||
+        sensor.type !== binding.type ||
+        groupOf(sensor.hardwareType, sensor.hardwareId) !== binding.group
+      ) {
+        continue;
+      }
+
+      const match = binding.pattern.exec(sensor.text);
+      if (match === null) {
+        continue;
+      }
+
+      const semanticKey = binding.key(match, sensor);
+      if (!wanted.has(semanticKey)) {
+        continue;
+      }
+
+      const group = groups.get(semanticKey);
+      if (group === undefined) {
+        groups.set(semanticKey, {
+          sensor,
+          sum: reading,
+          max: reading,
+          count: 1,
+        });
+      } else {
+        group.sum += reading;
+        group.max = Math.max(group.max, reading);
+        group.count += 1;
+      }
+    }
+
+    for (const [semanticKey, group] of groups) {
+      if (binding.whenAbsent === true && chosen.has(semanticKey)) {
+        continue;
+      }
+
+      selectReading(
+        chosen,
+        semanticKey,
+        group.sensor,
+        binding.combine === "mean" ? group.sum / group.count : group.max,
+        false,
+      );
+    }
+  }
+
+  // Keys that name one device by id answer that device directly.
+  for (const reading of deviceReadings(sensors, wanted)) {
+    selectReading(chosen, reading.key, reading.sensor, reading.value, false);
   }
 
   // A summed percentage is meaningless; it must describe the same set of drives
@@ -481,15 +1095,7 @@ function nodeFor(
   group: HardwareGroup,
   assigned: string | undefined,
 ): string | undefined {
-  const seen = new Map<string, string>();
-
-  for (const sensor of sensors) {
-    if (groupOf(sensor.hardwareType) === group) {
-      seen.set(sensor.hardwareId, diskDeviceId(sensor.hardwareType));
-    }
-  }
-
-  const ids = [...seen.values()];
+  const ids = [...deviceIdsOf(sensors, group).values()];
   if (ids.length === 0) {
     return undefined;
   }
@@ -501,19 +1107,26 @@ function nodeFor(
   return assigned === undefined ? ids[0] : ids.find((id) => id === assigned);
 }
 
+/** The device a caption describes, with both the id a saved name uses and the
+ * model LHM reports. */
+export interface LhmDeviceCaption {
+  readonly deviceId: string;
+  readonly name: string;
+}
+
 /**
- * The name of the device a group's unsuffixed keys describe, or undefined when
- * no single device answers them.
+ * The device a group's unsuffixed keys describe, or undefined when no single
+ * device answers them.
  *
- * The GPU group is scoped to one node either way, so it always has a name. The
- * storage group is summed across every drive until one is assigned — a
+ * The GPU group is scoped to one node either way, so it always has a caption.
+ * The storage group is summed across every drive until one is assigned — a
  * legitimate host total, and a total no one drive's name describes.
  */
-export function lhmDeviceName(
+export function lhmDeviceCaption(
   sensors: readonly LhmSensor[],
   group: "gpu" | "storage",
   assignment: DeviceAssignment,
-): string | undefined {
+): LhmDeviceCaption | undefined {
   const deviceId =
     group === "gpu"
       ? nodeFor(sensors, "gpu", assignment.gpu)
@@ -523,16 +1136,26 @@ export function lhmDeviceName(
     return undefined;
   }
 
+  const ids = deviceIdsOf(sensors, group);
+
   for (const sensor of sensors) {
     if (
-      groupOf(sensor.hardwareType) === group &&
-      diskDeviceId(sensor.hardwareType) === deviceId
+      groupOf(sensor.hardwareType, sensor.hardwareId) === group &&
+      ids.get(sensor.hardwareId) === deviceId
     ) {
-      return sensor.hardwareType;
+      return { deviceId, name: sensor.hardwareType };
     }
   }
 
   return undefined;
+}
+
+/** Whether a drive with this id is attached, so a gap can say what is missing. */
+export function lhmStorageDeviceExists(
+  sensors: readonly LhmSensor[],
+  deviceId: string,
+): boolean {
+  return [...deviceIdsOf(sensors, "storage").values()].includes(deviceId);
 }
 
 export function matchLhmSensorsAssigned(
@@ -552,22 +1175,47 @@ export function matchLhmSensorsAssigned(
   const gpuWanted = gpuId !== undefined || assignment.gpu !== undefined;
   const diskWanted = assignment.systemDisk !== undefined;
   const diskId = assignment.systemDisk;
+  const gpuIds = deviceIdsOf(sensors, "gpu");
+  const storageIds = deviceIdsOf(sensors, "storage");
 
   const scoped =
     !gpuWanted && !diskWanted
       ? sensors
       : sensors.filter((sensor) => {
-          const group = groupOf(sensor.hardwareType);
-          const id = diskDeviceId(sensor.hardwareType);
+          const group = groupOf(sensor.hardwareType, sensor.hardwareId);
 
           // Keep everything that is not one of the selected groups.
-          if (group === "gpu" && gpuWanted)
-            return gpuId !== undefined && id === gpuId;
-          if (group === "storage" && diskWanted) return id === diskId;
+          if (group === "gpu" && gpuWanted) {
+            return (
+              gpuId !== undefined && gpuIds.get(sensor.hardwareId) === gpuId
+            );
+          }
+          if (group === "storage" && diskWanted)
+            return storageIds.get(sensor.hardwareId) === diskId;
           return true;
         });
 
-  const matched = matchLhmSensors(scoped, semanticKeys);
+  const scopedMatches = matchLhmSensors(scoped, semanticKeys);
+  // A key naming a device by id is explicit, so the display's aggregate
+  // assignment must not remove another device's reading from it.
+  const matched =
+    scoped === sensors
+      ? scopedMatches
+      : [
+          ...scopedMatches,
+          ...deviceReadings(sensors, new Set(semanticKeys))
+            .filter(
+              (reading) =>
+                !scopedMatches.some(
+                  (match) => match.semanticKey === reading.key,
+                ),
+            )
+            .map((reading) => ({
+              semanticKey: reading.key,
+              sensor: reading.sensor,
+              value: reading.value,
+            })),
+        ];
 
   // The data slot is a second disk: a theme binds one disk to the system keys
   // and one to the data keys, so neither names a drive on any machine.

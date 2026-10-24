@@ -23,7 +23,7 @@
  */
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, expect, it } from "vitest";
+import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { fixtureEntry } from "../store-mode/item-fixture.js";
 import {
   type ThemedDisplay,
@@ -37,8 +37,19 @@ import {
   type DisplayPreferencesWrite,
   type HostSettingsClient,
   type ThemeAnswers,
+  type WeatherPlace,
+  type WeatherRead,
+  type WeatherSettings,
 } from "./client.js";
 import { HostSettingsRegion, type HostStatusLine } from "./region.js";
+import {
+  type RemovalAnswer,
+  type Source,
+  SourceRefusedError,
+  type SourceRow,
+  type SourcesClient,
+  type TestResult,
+} from "./sources-client.js";
 
 // Base UI's popup needs two browser APIs jsdom has none of: floating-ui observes
 // its anchor, and the popup waits for its own open transition. Each test file
@@ -126,8 +137,21 @@ interface Fixture {
       }
     >
   >;
+  readonly weather?: WeatherRead;
+  /** What the geocoder finds for a search, whatever it was asked. */
+  readonly places?: readonly WeatherPlace[];
   /** The display map's own refusal: a host that keeps its settings to itself. */
   readonly refuseDisplays?: boolean;
+  /** The custom sources the list route answers. */
+  readonly sources?: readonly SourceRow[];
+  /** The refusal a save answers with, in the route's own `field`/`reason`. */
+  readonly sourceRefusal?: { readonly field: string; readonly reason: string };
+  /** What the test route answers. */
+  readonly sourceTest?: TestResult;
+  /** What a delete answers about a credential it no longer sees referenced. */
+  readonly sourceRemoval?: RemovalAnswer;
+  /** The sentence a delete fails with, or `undefined` for a landed delete. */
+  readonly sourceRemoveFailure?: string;
 }
 
 /** Every write the region made, in the order it made them. */
@@ -143,6 +167,8 @@ interface Written {
     readonly answers: ThemeAnswers;
   }[];
   readonly asked: { readonly display: string; readonly theme: string }[];
+  readonly weather: WeatherSettings[];
+  readonly searches: string[];
 }
 
 function library(fixture: Fixture): ThemeLibraryClient {
@@ -170,18 +196,33 @@ function library(fixture: Fixture): ThemeLibraryClient {
  *  recorded. `refuse` is the sentence a write fails with, or `undefined`. */
 function hostSettings(
   fixture: Fixture,
-  refuse?: { readonly devices?: string; readonly answers?: string },
+  refuse?: {
+    readonly devices?: string;
+    readonly display?: string;
+    readonly answers?: string;
+    readonly weather?: string;
+  },
 ): { readonly client: HostSettingsClient; readonly wrote: Written } {
   const wrote: Written = {
     devices: [],
     display: [],
     answers: [],
     asked: [],
+    weather: [],
+    searches: [],
   };
   const devices: DeviceSettings = fixture.devices ?? {
     available: { gpus: [], disks: [] },
     assigned: {},
     names: {},
+  };
+  const weather: WeatherRead = fixture.weather ?? {
+    provider: "open-meteo",
+    label: "",
+    latitude: 0,
+    longitude: 0,
+    useWindowsLocation: false,
+    pollIntervalMs: 600000,
   };
 
   return {
@@ -197,6 +238,7 @@ function hostSettings(
         fixture.preferences ?? { settings: {}, zones: [] },
       saveDisplay: async (next) => {
         wrote.display.push(next);
+        if (refuse?.display !== undefined) throw new Error(refuse.display);
         return next;
       },
       readQuestions: async (display, theme) => {
@@ -212,6 +254,71 @@ function hostSettings(
         wrote.answers.push({ display, theme, answers });
         if (refuse?.answers !== undefined) throw new Error(refuse.answers);
         return answers;
+      },
+      readWeather: async () => weather,
+      saveWeather: async (next) => {
+        wrote.weather.push(next);
+        if (refuse?.weather !== undefined) throw new Error(refuse.weather);
+        return next;
+      },
+      searchPlaces: async (query) => {
+        wrote.searches.push(query);
+        return fixture.places ?? [];
+      },
+    },
+  };
+}
+
+/** Every source write the section made, in the order it made them. */
+interface SourceWrites {
+  readonly saved: Source[];
+  readonly removed: string[];
+  readonly tested: string[];
+}
+
+/** The host's source routes, with the list a mutable copy so a save is visible
+ *  to the read the section makes after it. */
+function sourcesClient(fixture: Fixture): {
+  readonly client: SourcesClient;
+  readonly wrote: SourceWrites;
+} {
+  const wrote: SourceWrites = { saved: [], removed: [], tested: [] };
+  let rows = [...(fixture.sources ?? [])];
+
+  return {
+    wrote,
+    client: {
+      list: async () => rows,
+      save: async (source) => {
+        wrote.saved.push(source);
+        if (fixture.sourceRefusal !== undefined) {
+          throw new SourceRefusedError(
+            fixture.sourceRefusal.field,
+            fixture.sourceRefusal.reason,
+          );
+        }
+        const row: SourceRow = {
+          ...source,
+          fieldCount: source.fields.length,
+          health: "waiting",
+          lastError: null,
+          lastSuccessAt: null,
+        };
+        rows = rows.some((entry) => entry.id === source.id)
+          ? rows.map((entry) => (entry.id === source.id ? row : entry))
+          : [...rows, row];
+      },
+      remove: async (id) => {
+        wrote.removed.push(id);
+        if (fixture.sourceRemoveFailure !== undefined) {
+          throw new Error(fixture.sourceRemoveFailure);
+        }
+        rows = rows.filter((entry) => entry.id !== id);
+        return fixture.sourceRemoval ?? { unreferencedCredential: null };
+      },
+      test: async (id) => {
+        wrote.tested.push(id);
+        return fixture.sourceTest ?? { ok: true, elapsedMs: 5, values: [] };
       },
     },
   };
@@ -247,23 +354,36 @@ const DEVICES: DeviceSettings = {
  *  draws. A `undefined` entry is the region withdrawing the line as it leaves. */
 async function mountHost(
   fixture: Fixture,
-  refuse?: { readonly devices?: string; readonly answers?: string },
+  refuse?: {
+    readonly devices?: string;
+    readonly display?: string;
+    readonly answers?: string;
+    readonly weather?: string;
+  },
 ): Promise<{
   readonly container: HTMLDivElement;
   readonly wrote: Written;
+  readonly sources: SourceWrites;
   readonly published: (HostStatusLine | undefined)[];
 }> {
   const settings = hostSettings(fixture, refuse);
+  const sources = sourcesClient(fixture);
   const published: (HostStatusLine | undefined)[] = [];
   const container = await mount(
     <HostSettingsRegion
       mode="this-pc"
       client={library(fixture)}
       settings={settings.client}
+      sources={sources.client}
       onStatus={(line) => published.push(line)}
     />,
   );
-  return { container, wrote: settings.wrote, published };
+  return {
+    container,
+    wrote: settings.wrote,
+    sources: sources.wrote,
+    published,
+  };
 }
 
 /** The line the shell's strip is showing: the last one published, or a defect
@@ -311,6 +431,14 @@ function nameField(container: HTMLElement, id: string): HTMLInputElement {
     ),
     `the name row for ${id}`,
   );
+}
+
+/** The unit preference rows the display section draws, in the order it draws
+ *  them. */
+function unitRows(container: HTMLElement): readonly string[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>("[data-yunari-host-unit]"),
+  ).map((row) => row.getAttribute("data-yunari-host-unit") ?? "");
 }
 
 /** The answer rows the questions section draws, by the slot each asks about. */
@@ -383,6 +511,16 @@ async function leave(field: HTMLInputElement): Promise<void> {
   await act(async () => {
     field.focus();
     field.blur();
+  });
+}
+
+/** Presses Enter in a field, which is the other act that commits a draft. */
+async function enter(field: HTMLInputElement): Promise<void> {
+  await act(async () => {
+    field.focus();
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
   });
 }
 
@@ -626,7 +764,257 @@ it("writes both display fields together", async () => {
   expect(
     wrote.display,
     "a zone write did not carry the units beside it",
-  ).toEqual([{ timeZone: "Europe/Paris", measurement: "imperial" }]);
+  ).toEqual([{ timeZone: "Europe/Paris", measurement: "imperial", units: {} }]);
+});
+
+/**
+ * **One row per unit preference, and a save carries only the field that
+ * changed.** The route replaces the whole settings object, so the unchanged
+ * fields travel with the new one — and within `units` the untouched families
+ * are kept rather than cleared.
+ */
+it("renders a row per unit preference and writes only the changed field", async () => {
+  const { container, wrote } = await mountHost({
+    ...TWO_DISPLAYS,
+    preferences: {
+      settings: { measurement: "imperial", units: { data: "decimal" } },
+      zones: [],
+    },
+  });
+
+  expect(
+    unitRows(container),
+    "the display section does not offer every unit preference",
+  ).toEqual([
+    "clock",
+    "data",
+    "dataScale",
+    "rate",
+    "rateScale",
+    "windSpeed",
+    "pressure",
+  ]);
+  expect(
+    selectValue(container, "[data-yunari-host-unit='clock']"),
+    "a family with no stored choice does not open on its own default",
+  ).toBe("auto");
+  expect(
+    selectValue(container, "[data-yunari-host-unit='data']"),
+    "a stored unit preference is not shown",
+  ).toBe("decimal");
+
+  await offered(
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-host-unit='clock']"),
+      "the clock's unit row",
+    ),
+  );
+  await choose("ghz");
+
+  expect(
+    wrote.display,
+    "a unit write did not carry the other settings, or cleared the units beside it",
+  ).toEqual([
+    {
+      timeZone: "",
+      measurement: "imperial",
+      units: { data: "decimal", clock: "ghz" },
+    },
+  ]);
+});
+
+/**
+ * **An unknown value is the store's refusal, not a default.** The control
+ * offers only values this build displays; a host that still refuses one has
+ * said so, and that sentence is what the person reads.
+ */
+it("shows the store's refusal when a unit preference cannot be stored", async () => {
+  const refusal = '"thz" is not a value for the "clock" unit preference.';
+  const { container, published } = await mountHost(
+    { ...TWO_DISPLAYS, preferences: { settings: {}, zones: [] } },
+    { display: refusal },
+  );
+
+  await offered(
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-host-unit='clock']"),
+      "the clock's unit row",
+    ),
+  );
+  await choose("ghz");
+
+  expect(
+    statusLine(published).status,
+    "the store's refusal did not reach the person",
+  ).toBe(uiCopy.hostSettings.status.failed(refusal));
+});
+
+/** The weather form's own rows, by the hook each publishes. */
+function weatherField(container: HTMLElement, hook: string): HTMLInputElement {
+  return must(container.querySelector<HTMLInputElement>(hook), hook);
+}
+
+const WEATHER: WeatherSettings = {
+  provider: "open-meteo",
+  label: "Berlin, Berlin, DE",
+  latitude: 52.52,
+  longitude: 13.41,
+  useWindowsLocation: false,
+  pollIntervalMs: 600000,
+};
+
+/**
+ * **The form's own units, and the one write they all travel in.** The interval
+ * is set in seconds and stored in milliseconds — the provider polls on a clock,
+ * a person sets a cadence — and every control writes the whole settings object,
+ * because the route replaces it. A searched place fills the three location
+ * fields from geocoding rather than being typed in by hand.
+ */
+it("saves the weather form in seconds and fills a searched place", async () => {
+  const { container, wrote } = await mountHost({
+    ...TWO_DISPLAYS,
+    weather: WEATHER,
+    places: [
+      {
+        label: "Paris, Ile-de-France, FR",
+        latitude: 48.86,
+        longitude: 2.35,
+      },
+    ],
+  });
+
+  const interval = weatherField(container, "[data-yunari-weather-interval]");
+  expect(
+    interval.value,
+    "a stored millisecond interval is not drawn in seconds",
+  ).toBe("600");
+  await type(interval, "120");
+  await leave(interval);
+  // **Every commit carries the whole object**, because the route replaces it:
+  // a client that sent only the changed field would pass a per-field check and
+  // silently clear the rest.
+  const timed = { ...WEATHER, pollIntervalMs: 120000 };
+  expect(
+    wrote.weather.at(-1),
+    "seconds typed into the form were not stored as milliseconds, or the rest of the object was dropped",
+  ).toEqual(timed);
+
+  await offered(
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-weather-provider]"),
+      "the weather provider select",
+    ),
+  );
+  await choose("weatherapi");
+  const repointed = { ...timed, provider: "weatherapi" as const };
+  expect(wrote.weather.at(-1), "the provider save was not whole").toEqual(
+    repointed,
+  );
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLElement>(
+        "[data-yunari-weather-windows-location]",
+      ),
+      "the Windows location switch",
+    ).click(),
+  );
+  const located = { ...repointed, useWindowsLocation: true };
+  expect(
+    wrote.weather.at(-1),
+    "the Windows location save was not whole",
+  ).toEqual(located);
+
+  const search = weatherField(container, "[data-yunari-weather-search]");
+  await type(search, "Paris");
+  await enter(search);
+  expect(wrote.searches).toEqual(["Paris"]);
+
+  const place = must(
+    container.querySelector<HTMLElement>(
+      '[data-yunari-weather-place="Paris, Ile-de-France, FR"]',
+    ),
+    "the searched place",
+  );
+  await act(async () => place.click());
+
+  expect(
+    wrote.weather.at(-1),
+    "the searched place did not fill the form and save the whole object",
+  ).toEqual({
+    ...located,
+    label: "Paris, Ile-de-France, FR",
+    latitude: 48.86,
+    longitude: 2.35,
+  });
+});
+
+/** The credit belongs to the backend the settings name, and its own page is the
+ *  link: OpenWeather's terms ask for one, and a text-only credit could not
+ *  carry it. */
+it.each([
+  [
+    "open-meteo",
+    "Weather data by Open-Meteo.com",
+    "https://open-meteo.com/en/licence",
+  ],
+  ["weatherapi", "Powered by WeatherAPI.com", "https://www.weatherapi.com/"],
+  [
+    "openweathermap",
+    "Weather data provided by OpenWeather",
+    "https://openweathermap.org/",
+  ],
+] as const)(
+  "links the %s attribution inside the weather group",
+  async (provider, text, url) => {
+    const { container } = await mountHost({
+      ...TWO_DISPLAYS,
+      weather: {
+        ...WEATHER,
+        provider,
+        attribution: { text, url },
+      },
+    });
+
+    const link = must(
+      container.querySelector<HTMLAnchorElement>(
+        "[data-yunari-weather-attribution]",
+      ),
+      "the weather attribution",
+    );
+    expect(link.textContent).toBe(text);
+    expect(link.getAttribute("href")).toBe(url);
+    // A screen reader must hear which backend the credit names: an overriding
+    // label would replace the visible text rather than add to it.
+    const accessibleName =
+      link.getAttribute("aria-label") ?? link.textContent ?? "";
+    expect(accessibleName).toContain(text);
+  },
+);
+
+/**
+ * **An emptied interval is a refusal, not a zero.** Milliseconds of `0` are
+ * below the host's own floor and `NaN` is not JSON, so a cleared field must
+ * keep the draft and send nothing — the same rule every number control in the
+ * editor follows.
+ */
+it("does not save an emptied poll interval as zero or NaN", async () => {
+  const { container, wrote } = await mountHost({
+    ...TWO_DISPLAYS,
+    weather: WEATHER,
+  });
+
+  const interval = weatherField(container, "[data-yunari-weather-interval]");
+  await type(interval, "");
+  await leave(interval);
+
+  expect(wrote.weather, "a cleared interval was written as a number").toEqual(
+    [],
+  );
+  expect(
+    interval.getAttribute("aria-invalid"),
+    "the cleared field did not report itself as refused",
+  ).toBe("true");
 });
 
 /** A refused write is the host's own words, after the region's own lead: the
@@ -757,4 +1145,514 @@ it("withdraws its line when the region leaves, so the next visit paints none", a
     published.at(-1),
     "the region left its line standing for the next visit",
   ).toBeUndefined();
+});
+
+/** A working source, and one the provider could not read. The second has no
+ *  chosen name, so its row is named by its id. */
+const SOURCE_ROW: SourceRow = {
+  id: "fixture",
+  name: "Fixture",
+  url: "http://127.0.0.1:4291/data",
+  intervalMs: 60_000,
+  timeoutMs: 5_000,
+  auth: { kind: "query", queryName: "apikey", credentialId: "fixture-key" },
+  fields: [
+    { id: "cpu-load", label: "CPU load", pointer: "/cpu/load", type: "number" },
+  ],
+  fieldCount: 1,
+  health: "ok",
+  lastError: null,
+  lastSuccessAt: "2026-10-24T10:00:00.000Z",
+};
+
+/** A source whose field carries every property the form does not show. An edit
+ *  that rebuilt the field from the five shown would drop all five, and the
+ *  route replaces the whole entry, so nothing would warn. */
+const SCALED_ROW: SourceRow = {
+  ...SOURCE_ROW,
+  id: "scaled",
+  name: "Scaled",
+  fields: [
+    {
+      id: "temperature",
+      label: "Temperature",
+      pointer: "/temp",
+      type: "number",
+      family: "thermal",
+      unit: "C",
+      unitKind: "temperature",
+      scale: 0.01,
+      offset: 2,
+      expectedTier: "extended",
+    },
+  ],
+};
+
+const BROKEN_ROW: SourceRow = {
+  id: "broken",
+  name: "",
+  url: "https://example.test/feed",
+  intervalMs: 10_000,
+  timeoutMs: 1_000,
+  fields: [
+    { id: "one", label: "One", pointer: "/one", type: "number" },
+    { id: "two", label: "Two", pointer: "/two", type: "text" },
+  ],
+  fieldCount: 2,
+  health: "error",
+  lastError: "The source answered 503.",
+  lastSuccessAt: null,
+};
+
+const SOURCES_COPY = uiCopy.hostSettings.sources;
+
+function sourceRow(container: HTMLElement, id: string): HTMLElement {
+  return must(
+    container.querySelector<HTMLElement>(`[data-yunari-source-row="${id}"]`),
+    `the ${id} source row`,
+  );
+}
+
+function input(container: HTMLElement, attribute: string): HTMLInputElement {
+  return must(
+    container.querySelector<HTMLInputElement>(`[${attribute}]`),
+    `the ${attribute} field`,
+  );
+}
+
+/** Submits the source form the way its own button does. */
+async function submitSource(container: HTMLElement): Promise<void> {
+  const form = must(
+    container.querySelector<HTMLFormElement>("[data-yunari-source-form]"),
+    "the source form",
+  );
+  await act(async () =>
+    form.dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    ),
+  );
+}
+
+/**
+ * **Every source is listed with the four facts the route answers**: its health,
+ * when it last read, how many fields it publishes and the host's redacted
+ * failure. A row that printed only its name would leave the person unable to
+ * tell a working source from one that has never answered.
+ */
+it("lists each source with health, last success, field count and last error", async () => {
+  const { container } = await mountHost({
+    ...TWO_DISPLAYS,
+    sources: [SOURCE_ROW, BROKEN_ROW],
+  });
+
+  const healthy = sourceRow(container, "fixture");
+  expect(
+    healthy.querySelector(`[data-yunari-source-health="ok"]`)?.textContent,
+    "the healthy source did not say it is reading",
+  ).toBe(SOURCES_COPY.health.ok);
+  expect(healthy.textContent, "the last successful read is missing").toContain(
+    SOURCES_COPY.lastSuccess("2026-10-24T10:00:00.000Z"),
+  );
+  expect(healthy.textContent, "the field count is missing").toContain(
+    SOURCES_COPY.fieldCount(1),
+  );
+
+  const broken = sourceRow(container, "broken");
+  expect(
+    broken.querySelector(`[data-yunari-source-health="error"]`)?.textContent,
+    "the failing source did not say it is in error",
+  ).toBe(SOURCES_COPY.health.error);
+  expect(broken.textContent, "the host's reason is missing").toContain(
+    "The source answered 503.",
+  );
+  expect(broken.textContent, "a source that never read says nothing").toContain(
+    SOURCES_COPY.neverRead,
+  );
+  expect(broken.textContent, "the field count is missing").toContain(
+    SOURCES_COPY.fieldCount(2),
+  );
+
+  // Three rows of "Edit" are three buttons a screen reader cannot tell apart;
+  // each one's name carries the source it acts on.
+  expect(
+    healthy
+      .querySelector('[data-yunari-source-edit="fixture"]')
+      ?.getAttribute("aria-label"),
+    "the edit button does not name its source",
+  ).toBe(SOURCES_COPY.editSource("Fixture"));
+  expect(
+    healthy
+      .querySelector('[data-yunari-source-delete="fixture"]')
+      ?.getAttribute("aria-label"),
+    "the delete button does not name its source",
+  ).toBe(SOURCES_COPY.deleteSource("Fixture"));
+});
+
+/**
+ * **The form refuses the same shapes the route refuses, and passes on the
+ * route's own reason when it does not.**
+ *
+ * The local check is a round trip saved, not the authority: a URL the host
+ * would reject is refused in the form, and a host refusal that only the route
+ * can see is shown in the host's words rather than replaced by "failed".
+ */
+it("refuses a bad address locally and shows the route's reason beside the form", async () => {
+  const hostReason = 'source "fixture" url must be an http or https URL';
+  const { container, sources, published } = await mountHost({
+    ...TWO_DISPLAYS,
+    sourceRefusal: { field: "fixture", reason: hostReason },
+  });
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>("[data-yunari-source-add]"),
+      "the add button",
+    ).click(),
+  );
+  await type(input(container, "data-yunari-source-id"), "fixture");
+  await type(input(container, "data-yunari-source-url"), "ftp://nope");
+  await submitSource(container);
+
+  expect(sources.saved, "a bad address reached the host").toHaveLength(0);
+  expect(container.textContent).toContain(SOURCES_COPY.invalidUrl);
+
+  await type(
+    input(container, "data-yunari-source-url"),
+    "http://127.0.0.1:4291/data",
+  );
+  await submitSource(container);
+
+  expect(sources.saved, "a valid address did not reach the host").toHaveLength(
+    1,
+  );
+  expect(
+    must(
+      container.querySelector("[data-yunari-source-error]"),
+      "the host's refusal",
+    ).textContent,
+    "the refusal is not in the host's own words",
+  ).toBe(hostReason);
+  // The region's strip is what outlives the form; it must not be left on
+  // "Saving…" while the form holds the refusal.
+  expect(
+    statusLine(published).status,
+    "the status line still reads as a write in flight",
+  ).toBe(uiCopy.hostSettings.status.failed(hostReason));
+});
+
+/**
+ * **A test shows what the route answered and stores nothing.** The status, the
+ * time and the mapped values are the three readings that tell a person the
+ * endpoint is the one they meant; the route writes no file, so neither does the
+ * page.
+ */
+it("shows a test's status, elapsed time and mapped values, and stores nothing", async () => {
+  const { container, sources } = await mountHost({
+    ...TWO_DISPLAYS,
+    sources: [SOURCE_ROW],
+    sourceTest: {
+      ok: true,
+      status: 200,
+      elapsedMs: 12,
+      values: [{ id: "cpu-load", value: "42.5" }],
+    },
+  });
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        '[data-yunari-source-test="fixture"]',
+      ),
+      "the test button",
+    ).click(),
+  );
+
+  const result = must(
+    container.querySelector('[data-yunari-source-test-result="fixture"]'),
+    "the test's answer",
+  );
+  expect(result.textContent, "the status is missing").toContain("200");
+  expect(result.textContent, "the elapsed time is missing").toContain("12 ms");
+  expect(result.textContent, "the mapped value is missing").toContain(
+    "cpu-load 42.5",
+  );
+  expect(sources.tested).toEqual(["fixture"]);
+  expect(sources.saved, "a test wrote a source").toHaveLength(0);
+  expect(sources.removed, "a test deleted a source").toHaveLength(0);
+});
+
+/**
+ * **Delete asks first, and a credential answer is an offer rather than a
+ * deletion.** The route says which credential nothing references any more; the
+ * page may offer to clear it, and declining must leave it alone — the key is
+ * the owner's, not the page's.
+ */
+it("confirms a delete, offers the unreferenced credential and leaves it on decline", async () => {
+  const fetched = vi.fn();
+  vi.stubGlobal("fetch", fetched);
+  try {
+    const { container, sources } = await mountHost({
+      ...TWO_DISPLAYS,
+      sources: [SOURCE_ROW],
+      sourceRemoval: { unreferencedCredential: "fixture-key" },
+    });
+
+    await act(async () =>
+      must(
+        container.querySelector<HTMLButtonElement>(
+          '[data-yunari-source-delete="fixture"]',
+        ),
+        "the delete button",
+      ).click(),
+    );
+    expect(
+      must(
+        container.querySelector("[data-yunari-source-confirm]"),
+        "the delete confirmation",
+      ),
+      "delete ran without asking",
+    ).not.toBeNull();
+    expect(sources.removed, "delete ran before it was confirmed").toHaveLength(
+      0,
+    );
+
+    await act(async () =>
+      must(
+        container.querySelector<HTMLButtonElement>(
+          '[data-yunari-source-confirm-delete="fixture"]',
+        ),
+        "the confirm button",
+      ).click(),
+    );
+    expect(sources.removed).toEqual(["fixture"]);
+
+    const offer = must(
+      container.querySelector(
+        '[data-yunari-source-credential-offer="fixture-key"]',
+      ),
+      "the credential offer",
+    );
+    expect(offer.textContent, "the offer does not name the key").toContain(
+      "fixture-key",
+    );
+
+    await act(async () =>
+      must(
+        container.querySelector<HTMLButtonElement>(
+          "[data-yunari-source-keep-credential]",
+        ),
+        "the keep button",
+      ).click(),
+    );
+    expect(
+      container.querySelector("[data-yunari-source-credential-offer]"),
+      "declining did not take the offer away",
+    ).toBeNull();
+    expect(
+      fetched,
+      "declining still cleared the credential",
+    ).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+/**
+ * **The page prints the authored address and never one a key was spelled
+ * into.** A credential referenced through `auth` is added by the host at fetch
+ * time; if the page composed it, a secret would be on screen and in the DOM.
+ */
+it("renders the authored address and no credential", async () => {
+  const { container } = await mountHost({
+    ...TWO_DISPLAYS,
+    sources: [SOURCE_ROW],
+  });
+
+  const address = must(
+    container.querySelector('[data-yunari-source-row-url="fixture"]'),
+    "the source's address",
+  );
+  expect(address.textContent).toBe(SOURCE_ROW.url);
+  expect(
+    address.textContent,
+    "the credential id reached the address",
+  ).not.toContain("fixture-key");
+  expect(
+    address.textContent,
+    "the key's query name reached the address",
+  ).not.toContain("apikey");
+});
+
+/** Opens one row's edit form. */
+async function openEdit(container: HTMLElement, id: string): Promise<void> {
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        `[data-yunari-source-edit="${id}"]`,
+      ),
+      `the ${id} edit button`,
+    ).click(),
+  );
+}
+
+/**
+ * **An edit keeps every field property the form does not show.** The route
+ * replaces the whole source, so a field rebuilt from id/label/pointer/type/unit
+ * would drop the scale and offset the provider multiplies and adds, and the
+ * family and tier the catalogue names — silently, on a name change alone.
+ */
+it("keeps field properties the form does not show when an edit is saved", async () => {
+  const { container, sources } = await mountHost({
+    ...TWO_DISPLAYS,
+    sources: [SCALED_ROW],
+  });
+
+  await openEdit(container, "scaled");
+  await type(input(container, "data-yunari-source-name"), "Scaled renamed");
+  await submitSource(container);
+
+  expect(sources.saved, "the edit did not reach the host").toHaveLength(1);
+  expect(
+    sources.saved[0]?.fields[0],
+    "an unshown field property was stripped by the edit",
+  ).toEqual(SCALED_ROW.fields[0]);
+  expect(sources.saved[0]?.name).toBe("Scaled renamed");
+});
+
+/**
+ * **A source id is immutable once created.** The keys a theme reads embed it
+ * (`custom.<id>.<field>`), so the edit form shows it read-only and the write
+ * always uses the stored id; a draft that changed it anyway is refused rather
+ * than appended as a second source.
+ */
+it("keeps the stored id while editing and refuses a changed draft id", async () => {
+  const { container, sources } = await mountHost({
+    ...TWO_DISPLAYS,
+    sources: [SOURCE_ROW],
+  });
+
+  await openEdit(container, "fixture");
+  const idField = input(container, "data-yunari-source-id");
+  expect(idField.readOnly, "the id field is editable while editing").toBe(true);
+  expect(
+    container.textContent,
+    "the form does not say why the id is fixed",
+  ).toContain(SOURCES_COPY.idFixed);
+
+  await type(input(container, "data-yunari-source-name"), "Renamed");
+  await submitSource(container);
+
+  expect(sources.saved, "the edit did not reach the host").toHaveLength(1);
+  expect(sources.saved[0]?.id, "the save did not use the stored id").toBe(
+    "fixture",
+  );
+
+  // The field is read-only; this forces the draft directly to prove the guard
+  // behind it, because a rename would otherwise append a second source.
+  await openEdit(container, "fixture");
+  await type(input(container, "data-yunari-source-id"), "fixture2");
+  await submitSource(container);
+
+  expect(sources.saved, "a changed id reached the host").toHaveLength(1);
+  expect(
+    must(
+      container.querySelector("[data-yunari-source-field-reason]"),
+      "the id refusal",
+    ).textContent,
+    "the changed id was not refused in the form's own words",
+  ).toBe(SOURCES_COPY.idFixed);
+});
+
+/**
+ * **The credential offer's accept path clears the key the route named.** The
+ * decline case proves nothing is touched; this proves the accept reaches the
+ * credential route with the id and reports what happened.
+ */
+it("clears the credential the delete offer names, when accepted", async () => {
+  const calls: { readonly method: string; readonly url: string }[] = [];
+  const fetcher = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      calls.push({ method: init?.method ?? "GET", url: String(input) });
+      return new Response("{}", { status: 200 });
+    },
+  );
+  vi.stubGlobal("fetch", fetcher);
+  try {
+    const { container, published } = await mountHost({
+      ...TWO_DISPLAYS,
+      sources: [SOURCE_ROW],
+      sourceRemoval: { unreferencedCredential: "fixture-key" },
+    });
+
+    await act(async () =>
+      must(
+        container.querySelector<HTMLButtonElement>(
+          '[data-yunari-source-delete="fixture"]',
+        ),
+        "the delete button",
+      ).click(),
+    );
+    await act(async () =>
+      must(
+        container.querySelector<HTMLButtonElement>(
+          '[data-yunari-source-confirm-delete="fixture"]',
+        ),
+        "the confirm button",
+      ).click(),
+    );
+    await act(async () =>
+      must(
+        container.querySelector<HTMLButtonElement>(
+          "[data-yunari-source-remove-credential]",
+        ),
+        "the remove-credential button",
+      ).click(),
+    );
+    await act(async () => {});
+
+    expect(calls, "the accept did not reach the credential route").toEqual([
+      { method: "DELETE", url: "/api/credentials/fixture-key" },
+    ]);
+    expect(
+      container.querySelector("[data-yunari-source-credential-offer]"),
+      "the offer stayed after the key was removed",
+    ).toBeNull();
+    expect(statusLine(published).status).toBe(SOURCES_COPY.credentialRemoved);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+/**
+ * **A failed delete reports itself in the delete's own words.** The save
+ * sentence says "Could not save", which is wrong for a delete and was the only
+ * sentence the status line had.
+ */
+it("reports a failed delete with the delete's own sentence", async () => {
+  const failure = "The host refused the delete (500).";
+  const { container, published } = await mountHost({
+    ...TWO_DISPLAYS,
+    sources: [SOURCE_ROW],
+    sourceRemoveFailure: failure,
+  });
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        '[data-yunari-source-delete="fixture"]',
+      ),
+      "the delete button",
+    ).click(),
+  );
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        '[data-yunari-source-confirm-delete="fixture"]',
+      ),
+      "the confirm button",
+    ).click(),
+  );
+
+  expect(statusLine(published).status).toBe(SOURCES_COPY.deleteFailed(failure));
+  expect(statusLine(published).status).not.toContain("Could not save");
 });

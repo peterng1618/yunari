@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defaultBarSettings } from "../charts/bar.js";
 import { defaultLineSettings } from "../charts/line.js";
 import { LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS } from "../data/live-source.js";
+import type { SemanticKeyDescriptor } from "../data/semantic-keys.js";
 import type { SampleSource } from "../data/source.js";
 import { emptySampleSource } from "../data/source.js";
 import { SampleStore } from "../data/store.js";
@@ -212,7 +213,10 @@ describe("text (§89)", () => {
     bindings: readonly Binding[],
     runs: readonly TextRun[],
     overrides: Partial<
-      Pick<PlanInputs, "longUnits" | "measurement" | "themeLanguage">
+      Pick<
+        PlanInputs,
+        "longUnits" | "measurement" | "units" | "themeLanguage" | "descriptors"
+      >
     > = {},
   ) {
     const issues: PlanIssue[] = [];
@@ -285,6 +289,28 @@ describe("text (§89)", () => {
 
     // 14:07 +07:00 is 16:07 in Tokyo, which is the reading the author asked for.
     expect(result.segments[0]!.text).toBe("16:07");
+  });
+
+  it("reads a sunrise instant in the zone and format the binding pins", () => {
+    // The provider sends an ISO instant; without the descriptor's `instant`
+    // this rendered that raw string and ignored both binding fields.
+    const source = storeWith({
+      "weather.sunrise": instant("2026-10-24T06:12:00.000Z", "weather.sunrise"),
+    });
+    const result = segments(
+      source,
+      [
+        {
+          id: "b",
+          semanticKey: "weather.sunrise",
+          format: "HH:mm",
+          timeZone: "Asia/Tokyo",
+        },
+      ],
+      [{ kind: "value", bindingId: "b" }],
+    );
+
+    expect(result.segments[0]!.text).toBe("15:12");
   });
 
   it("reads a date in the language it is told", () => {
@@ -372,6 +398,148 @@ describe("text (§89)", () => {
         (segment) => segment.text,
       ),
     ).toEqual(["122.8°C"]);
+  });
+
+  it("applies the consumer's unit preferences to a bound run", () => {
+    const source = storeWith({ "cpu.clock": ok(3800, "MHz", "cpu.clock") });
+    const result = segments(
+      source,
+      [{ id: "b", semanticKey: "cpu.clock" }],
+      [{ kind: "value", bindingId: "b" }],
+      { units: { clock: "ghz" } },
+    );
+
+    expect(result.segments.map((segment) => segment.text)).toEqual([
+      "3.80 GHz",
+    ]);
+    expect(result.issues).toEqual([]);
+  });
+
+  it("reads a GHz conversion at the spec's precision", () => {
+    const source = storeWith({
+      "cpu.clock": ok(3845, "MHz", "cpu.clock"),
+      "gpu.clock": ok(12000, "MHz", "gpu.clock"),
+    });
+    const result = segments(
+      source,
+      [
+        { id: "cpu", semanticKey: "cpu.clock" },
+        { id: "gpu", semanticKey: "gpu.clock" },
+      ],
+      [
+        { kind: "value", bindingId: "cpu" },
+        { kind: "literal", text: " / " },
+        { kind: "value", bindingId: "gpu" },
+      ],
+      { units: { clock: "ghz" } },
+    );
+
+    // Two decimals below 10 GHz, one above.
+    expect(result.segments.map((segment) => segment.text)).toEqual([
+      "3.85 GHz",
+      " / ",
+      "12.0 GHz",
+    ]);
+  });
+
+  it("lets an authored precision beat the unit's own", () => {
+    const result = segments(
+      storeWith({ "cpu.clock": ok(3845, "MHz", "cpu.clock") }),
+      [{ id: "b", semanticKey: "cpu.clock" }],
+      [{ kind: "value", bindingId: "b", precision: 0 }],
+      { units: { clock: "ghz" } },
+    );
+
+    expect(result.segments[0]!.text).toBe("4 GHz");
+  });
+
+  it("keeps disk throughput in bytes under the default preferences", () => {
+    const result = segments(
+      storeWith({
+        "disk.nvme0.read": ok(500, "MB/s", "disk.nvme0.read"),
+      }),
+      [{ id: "b", semanticKey: "disk.nvme0.read" }],
+      [{ kind: "value", bindingId: "b" }],
+    );
+
+    expect(result.segments[0]!.text).toBe("500 MB/s");
+  });
+
+  it("reports a bound unit the key cannot display, and keeps the reading", () => {
+    // An unsupported override is a plan-time issue: the theme still paints.
+    const binding = {
+      id: "b",
+      semanticKey: "cpu.load",
+      unit: "GHz",
+    } as Binding;
+    const result = segments(
+      storeWith({ "cpu.load": ok(42) }),
+      [binding],
+      [{ kind: "value", bindingId: "b" }],
+    );
+
+    expect(result.segments.map((segment) => segment.text)).toEqual(["42%"]);
+    expect(result.issues).toEqual([
+      {
+        code: "unsupported-unit",
+        nodeId: "t",
+        detail: 'Unit "GHz" is not displayable for "cpu.load".',
+      },
+    ]);
+  });
+
+  it("converts a custom reading through the descriptor that supplied its key", () => {
+    // The vocabulary's `custom.*` shape has no unit or unitKind; only the
+    // provider's descriptor says this field is a temperature in °C.
+    const descriptor: SemanticKeyDescriptor = {
+      key: "custom.thermostat.room",
+      family: "custom",
+      label: "Room",
+      unit: "°C",
+      unitKind: "temperature",
+      valueKind: "number",
+      expectedTier: "extended",
+    };
+    const result = segments(
+      storeWith({
+        "custom.thermostat.room": ok(20, "°C", "custom:thermostat:room"),
+      }),
+      [{ id: "b", semanticKey: "custom.thermostat.room", unit: "°F" }],
+      [{ kind: "value", bindingId: "b" }],
+      { descriptors: [descriptor] },
+    );
+
+    expect(result.segments.map((segment) => segment.text)).toEqual(["68°F"]);
+    expect(result.issues).toEqual([]);
+  });
+
+  it("reports an override the supplying descriptor cannot convert", () => {
+    const descriptor: SemanticKeyDescriptor = {
+      key: "custom.thermostat.room",
+      family: "custom",
+      label: "Room",
+      unit: "°C",
+      unitKind: "temperature",
+      valueKind: "number",
+      expectedTier: "extended",
+    };
+    const result = segments(
+      storeWith({
+        "custom.thermostat.room": ok(20, "°C", "custom:thermostat:room"),
+      }),
+      [{ id: "b", semanticKey: "custom.thermostat.room", unit: "GHz" }],
+      [{ kind: "value", bindingId: "b" }],
+      { descriptors: [descriptor] },
+    );
+
+    expect(result.segments.map((segment) => segment.text)).toEqual(["20°C"]);
+    expect(result.issues).toEqual([
+      {
+        code: "unsupported-unit",
+        nodeId: "t",
+        detail: 'Unit "GHz" is not displayable for "custom.thermostat.room".',
+      },
+    ]);
   });
 
   it("leaves every other family, and a gap, exactly as measured", () => {

@@ -7,6 +7,7 @@
 // `swept.length > 0` guard is what turns the missing origin into red rather
 // than into a silent green.
 
+import type { SampleSource } from "@yunari/renderer-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PAIRING_STORAGE_KEY, readStoredPairing } from "./host-refind.js";
 
@@ -591,6 +592,402 @@ describe("the background the display mounts with", () => {
   });
 });
 
+/**
+ * The units a display paints with, driven through the real `main.ts`.
+ *
+ * The host answers the preference on `/api/display`, and the reading arrives on
+ * the sample stream. What the case pins is the pairing: the text converts once,
+ * at presentation, and the sample the source holds is still the measured
+ * `3800 MHz` rather than a derived gigahertz figure.
+ */
+describe("the units a display paints with", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    streams.length = 0;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  /** An `EventSource` the case can push a batch through. */
+  const streams: RecordingEventSource[] = [];
+
+  class RecordingEventSource {
+    readonly #listeners = new Map<
+      string,
+      ((event: { readonly data: string }) => void)[]
+    >();
+
+    constructor() {
+      streams.push(this);
+    }
+
+    addEventListener(
+      type: string,
+      listener: (event: { readonly data: string }) => void,
+    ): void {
+      const existing = this.#listeners.get(type) ?? [];
+      existing.push(listener);
+      this.#listeners.set(type, existing);
+    }
+
+    close(): void {}
+
+    emit(type: string, data: string): void {
+      for (const listener of this.#listeners.get(type) ?? []) {
+        listener({ data });
+      }
+    }
+  }
+
+  it("paints a bound clock in the host's unit and keeps the sample as measured", async () => {
+    skeleton();
+    history.replaceState({}, "", "/?theme=units");
+    vi.stubGlobal("EventSource", RecordingEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/document")) return json(unitsEnvelope());
+        if (url === "/api/display") {
+          return json({ settings: { units: { clock: "ghz" } }, zones: [] });
+        }
+        return json({});
+      }),
+    });
+    // **The repaint cadence is driven here, not left to jsdom.** A sibling case
+    // in this file installs a frame driver of its own, so the real loop's clock
+    // is not a fact this case can lean on across the file's order.
+    const frames: FrameRequestCallback[] = [];
+    let frameTime = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await import("./main.js");
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector("[data-yunari-controls]"),
+        "the display mounted",
+      ).not.toBeNull(),
+    );
+
+    streams[0]!.emit(
+      "samples",
+      JSON.stringify({
+        version: 1,
+        sentAt: new Date().toISOString(),
+        samples: [
+          {
+            semanticKey: "cpu.clock",
+            sample: {
+              sensorId: "cpu.clock",
+              timestamp: new Date().toISOString(),
+              status: "ok",
+              value: 3800,
+              unit: "MHz",
+            },
+          },
+        ],
+      }),
+    );
+
+    const diagnostics = window as unknown as {
+      readonly yunari: {
+        readonly live: { readonly source: SampleSource };
+      };
+    };
+    await vi.waitFor(
+      () =>
+        expect(
+          diagnostics.yunari.live.source.latest("cpu.clock")?.value,
+          "the batch never reached the source",
+        ).toBe(3800),
+      { timeout: 5_000 },
+    );
+
+    // One second of the loop's own clock: the cadence is 30 a second, so a
+    // handful of frames is more than one repaint.
+    for (let frame = 0; frame < 20; frame += 1) {
+      frameTime += 100;
+      const due = frames.splice(0);
+      for (const callback of due) callback(frameTime);
+    }
+    expect(readoutText(), "the text did not paint the chosen unit").toBe(
+      "3.8 GHz",
+    );
+
+    expect(
+      diagnostics.yunari.live.source.latest("cpu.clock")?.value,
+      "the stored sample was converted instead of the displayed one",
+    ).toBe(3800);
+  });
+
+  /** The mounted text object's rendered string. */
+  function readoutText(): string | undefined {
+    const diagnostics = window as unknown as {
+      readonly yunari?: {
+        readonly handle: {
+          readonly canvas: {
+            readonly getObjects: () => readonly {
+              readonly id?: unknown;
+              readonly text?: unknown;
+              readonly getObjects?: () => readonly unknown[];
+            }[];
+          };
+        };
+      };
+    };
+    const objects = diagnostics.yunari?.handle.canvas.getObjects() ?? [];
+    const readout = objects.find((object) => object.id === "readout");
+    return typeof readout?.text === "string" ? readout.text : undefined;
+  }
+
+  /** One text object bound to `cpu.clock`, saved as a theme would save it. */
+  function unitsEnvelope(): unknown {
+    return {
+      schemaVersion: 2,
+      fabricVersion: "7.4.0",
+      id: "units",
+      artboard: { width: 1920, height: 1080 },
+      metadata: { themeLanguage: "en" },
+      globals: {
+        typePresets: {
+          body: { name: "Body", value: { family: "Inter", size: 24 } },
+        },
+        palette: {
+          none: {
+            name: "None",
+            value: { kind: "solid", color: "transparent" },
+          },
+          ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
+        },
+      },
+      bindings: {
+        readout: [{ id: "clock", semanticKey: "cpu.clock", precision: 1 }],
+      },
+      scene: {
+        version: "7.4.0",
+        objects: [
+          {
+            type: "Textbox",
+            id: "readout",
+            left: 20,
+            top: 20,
+            width: 400,
+            height: 80,
+            text: "--",
+            yunariText: {
+              runs: [
+                {
+                  kind: "value",
+                  bindingId: "clock",
+                  typePreset: "typePresets.body",
+                  style: { color: { ref: "palette.ink" } },
+                },
+              ],
+              box: { width: 400, height: 80 },
+              overflow: "visible",
+            },
+          },
+        ],
+      },
+    };
+  }
+});
+
+/**
+ * The image side of the refresh loop, driven through the real `main.ts`.
+ *
+ * jsdom never decodes an image, so what is read here is the request the pass
+ * made: the reading arrives on the stream, the loop runs, and the URL the
+ * session resolved is the one an `<img>` was asked for. That the picture then
+ * paints, and that an absolute reading never reaches one, is
+ * `tests/e2e/image-binding.spec.ts`'s.
+ */
+describe("an image reading on the display", () => {
+  const streams: ImageStreamEventSource[] = [];
+
+  beforeEach(() => {
+    vi.resetModules();
+    streams.length = 0;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  class ImageStreamEventSource {
+    readonly #listeners = new Map<
+      string,
+      ((event: { readonly data: string }) => void)[]
+    >();
+
+    constructor() {
+      streams.push(this);
+    }
+
+    addEventListener(
+      type: string,
+      listener: (event: { readonly data: string }) => void,
+    ): void {
+      const existing = this.#listeners.get(type) ?? [];
+      existing.push(listener);
+      this.#listeners.set(type, existing);
+    }
+
+    close(): void {}
+
+    emit(type: string, data: string): void {
+      for (const listener of this.#listeners.get(type) ?? []) {
+        listener({ data });
+      }
+    }
+  }
+
+  function imageEnvelope(): unknown {
+    return {
+      schemaVersion: 2,
+      fabricVersion: "7.4.0",
+      id: "images",
+      artboard: { width: 1920, height: 1080 },
+      metadata: { themeLanguage: "en" },
+      globals: {
+        palette: {
+          none: {
+            name: "None",
+            value: { kind: "solid", color: "transparent" },
+          },
+          ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
+        },
+        typePresets: {},
+      },
+      bindings: {
+        artwork: [{ id: "image", semanticKey: "media.artwork" }],
+      },
+      scene: {
+        version: "7.4.0",
+        objects: [
+          {
+            type: "Image",
+            id: "artwork",
+            left: 20,
+            top: 20,
+            width: 200,
+            height: 200,
+            // jsdom's canvas cannot draw an image, and this case is about the
+            // request the pass makes rather than the paint. The browser proof
+            // draws it (`tests/e2e/image-binding.spec.ts`).
+            opacity: 0,
+          },
+        ],
+      },
+    };
+  }
+
+  it("asks the host for the image a reading names", async () => {
+    skeleton();
+    history.replaceState({}, "", "/?theme=images");
+    vi.stubGlobal("EventSource", ImageStreamEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/document")) return json(imageEnvelope());
+        if (url === "/api/display") return json({ settings: {}, zones: [] });
+        return json({});
+      }),
+    });
+    const frames: FrameRequestCallback[] = [];
+    let frameTime = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    // Every `<img>` the refresh loop asks for, once the scene has mounted.
+    const create = document.createElement.bind(document);
+    const requested: HTMLImageElement[] = [];
+    vi.spyOn(document, "createElement").mockImplementation(((
+      name: string,
+      options?: ElementCreationOptions,
+    ) => {
+      const element = create(name, options);
+      if (name === "img") requested.push(element as HTMLImageElement);
+      return element;
+    }) as typeof document.createElement);
+
+    await import("./main.js");
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector("[data-yunari-controls]"),
+        "the display mounted",
+      ).not.toBeNull(),
+    );
+
+    streams[0]!.emit(
+      "samples",
+      JSON.stringify({
+        version: 1,
+        sentAt: new Date().toISOString(),
+        samples: [
+          {
+            semanticKey: "media.artwork",
+            sample: {
+              sensorId: "media.artwork",
+              timestamp: new Date().toISOString(),
+              status: "ok",
+              textValue: "/api/themes/images/assets/live.png",
+            },
+          },
+        ],
+      }),
+    );
+
+    for (let frame = 0; frame < 20; frame += 1) {
+      frameTime += 100;
+      const due = frames.splice(0);
+      for (const callback of due) callback(frameTime);
+    }
+
+    expect(
+      requested.some((element) =>
+        element.src.endsWith("/api/themes/images/assets/live.png"),
+      ),
+      "the reading's image was never requested",
+    ).toBe(true);
+  });
+});
+
 /** Valid to the compatibility check, so the display mounts whole and reaches
  *  the point where its chrome is built. */
 function mountedEnvelope(): unknown {
@@ -769,5 +1166,83 @@ describe("the pairing a load remembers", () => {
     expect(writes.mock.calls.map(([key]) => key)).toEqual([
       PAIRING_STORAGE_KEY,
     ]);
+  });
+});
+
+/**
+ * The language half of the sample stream's wire shape, driven through the real
+ * `main.ts`: the host localizes per display and never reads a theme record to
+ * learn this display's language, so the loaded theme's own `themeLanguage` has
+ * to ride the URL beside `keys`.
+ */
+describe("the language a display sends with its samples", () => {
+  const urls: string[] = [];
+
+  class RecordingEventSource {
+    constructor(url: string | URL) {
+      urls.push(String(url));
+    }
+
+    addEventListener(): void {}
+    close(): void {}
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    urls.length = 0;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /** Mounts a display showing a theme whose declared language is `language`,
+   *  and returns the sample stream URL it opened. The document starts in
+   *  another language, so a read of `document.documentElement.lang` instead of
+   *  the theme's own metadata cannot pass as the sent value. */
+  async function mountWithLanguage(language: string): Promise<URL> {
+    skeleton();
+    document.documentElement.lang = "fr";
+    history.replaceState({}, "", "/?theme=living-room");
+    vi.stubGlobal("EventSource", RecordingEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+
+    const envelope = mountedEnvelope() as Record<string, unknown>;
+    envelope["metadata"] = { themeLanguage: language };
+
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/document")) return json(envelope);
+        return json({});
+      }),
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await import("./main.js");
+    await vi.waitFor(() => expect(urls.length).toBeGreaterThan(0));
+
+    return new URL(urls[0]!, window.location.href);
+  }
+
+  it("sends the loaded theme's language beside the keys", async () => {
+    const url = await mountWithLanguage("de-DE");
+
+    expect(url.pathname).toBe("/ws");
+    expect(url.searchParams.has("keys")).toBe(true);
+    expect(url.searchParams.get("lang")).toBe("de-DE");
+    // The theme's tag, not the document language `declareDocumentLanguage`
+    // would have reduced it to.
+    expect(document.documentElement.lang).not.toBe("de-DE");
   });
 });

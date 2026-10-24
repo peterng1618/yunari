@@ -24,9 +24,14 @@ import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
 import { type ListenableServer, listenWithFallback } from "./cli/net.js";
+import { CustomSourceProvider } from "./providers/custom/provider.js";
+import { MAX_BOX_ART_BYTES } from "./providers/game/box-art.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
-import type { SensorProvider } from "./providers/provider.js";
+import { createArtworkCache } from "./providers/media/artwork.js";
+import type { SampleContext, SensorProvider } from "./providers/provider.js";
 import { ProviderRegistry } from "./providers/registry.js";
+import { OPEN_METEO_BERLIN_CAPTURE } from "./providers/weather/open-meteo.fixture.js";
+import { WeatherProvider } from "./providers/weather/provider.js";
 import { createDisplayLauncher } from "./serve/display-launcher.js";
 import {
   CA_CERTIFICATE_PATH,
@@ -35,12 +40,16 @@ import {
   type HostingState,
   type HostServerOptions,
   MAX_THEME_UPLOAD_BYTES,
+  type SourceRouteOptions,
 } from "./server.js";
 import { newToken } from "./session/pairing.js";
 import { createPairingCodeStore } from "./session/pairing-code.js";
 import { createActiveThemeStore } from "./settings/active-theme.js";
 import { createCredentialStore } from "./settings/credentials.js";
-import type { KnownCredential } from "./settings/credentials-registry.js";
+import {
+  KNOWN_CREDENTIALS,
+  type KnownCredential,
+} from "./settings/credentials-registry.js";
 import {
   ASSIGNABLE_GROUPS,
   createDeviceSettingsStore,
@@ -49,15 +58,23 @@ import { createDisplaySettingsStore } from "./settings/display.js";
 import {
   createDisplayStore,
   DEFAULT_DISPLAY,
+  type DisplayRecord,
   hashToken,
   LOCAL_DISPLAY_ID,
 } from "./settings/displays.js";
 import { createFontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
 import type { Monitor } from "./settings/monitors.js";
+import { createSourceStore, type SourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
 import { createThemeSettingsStore } from "./settings/theme-settings.js";
+import {
+  createWeatherSettingsStore,
+  DEFAULT_WEATHER_SETTINGS,
+  normalizeWeatherSettings,
+  type WeatherSettingsStore,
+} from "./settings/weather.js";
 import { createThemeStore, type ThemeContent } from "./themes/store.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
 import { encodeThemeContent } from "./themes/wire.js";
@@ -330,13 +347,16 @@ function streamStatus(
  */
 function assignmentEcho(): SensorProvider & {
   readonly assignments: DeviceAssignment[];
+  readonly contexts: SampleContext[];
 } {
   const assignments: DeviceAssignment[] = [];
+  const contexts: SampleContext[] = [];
 
   return {
     id: "echo",
     label: "echo",
     assignments,
+    contexts,
     describe: () =>
       Promise.resolve([
         {
@@ -346,8 +366,10 @@ function assignmentEcho(): SensorProvider & {
           tier: "baseline" as const,
         },
       ]),
-    sample(semanticKeys, nowMs, assignment = {}) {
+    sample(semanticKeys, nowMs, context = {}) {
+      const assignment = context.assignment ?? {};
       assignments.push(assignment);
+      contexts.push(context);
 
       return Promise.resolve(
         semanticKeys
@@ -2611,6 +2633,41 @@ describe("Host theme routes", () => {
           )
         ).status,
       ).toBe(403);
+    });
+
+    it("keeps unit preferences when a page that does not draw them saves a zone", async () => {
+      // The served `/settings` page sends only the fields it draws. The route
+      // replaces the whole object, so an omitted bag must not erase what the
+      // editor's Host mode stored: a zone save is not a request to clear units.
+      expect(
+        (
+          await request(
+            paired.server,
+            "PUT",
+            "/api/display",
+            JSON.stringify({ units: { clock: "ghz" } }),
+          )
+        ).status,
+      ).toBe(200);
+
+      expect(
+        (
+          await request(
+            paired.server,
+            "PUT",
+            "/api/display",
+            JSON.stringify({ timeZone: "Asia/Tokyo", measurement: "metric" }),
+          )
+        ).status,
+      ).toBe(200);
+
+      const read = await request(paired.server, "GET", "/api/display");
+      expect(read.status).toBe(200);
+      expect((read.json() as { settings: unknown }).settings).toEqual({
+        timeZone: "Asia/Tokyo",
+        measurement: "metric",
+        units: { clock: "ghz" },
+      });
     });
 
     it("lets a paired display read this PC's favourites, not change them", async () => {
@@ -5197,6 +5254,50 @@ describe("Credential routes", () => {
     expect(res.text()).toContain("R10");
   });
 
+  it("lists the shipped weather rows and accepts a query credential", async () => {
+    hosted = start(KNOWN_CREDENTIALS);
+
+    const listed = (await rows()) as unknown as {
+      id: string;
+      verify: boolean;
+      helpUrl: string | null;
+    }[];
+
+    expect(listed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "weatherapi",
+          label: "WeatherAPI",
+          set: false,
+          verify: true,
+          helpUrl: "https://www.weatherapi.com/my/",
+        }),
+        expect.objectContaining({
+          id: "openweathermap",
+          label: "OpenWeatherMap",
+          set: false,
+          verify: true,
+          helpUrl: "https://home.openweathermap.org/api_keys",
+        }),
+      ]),
+    );
+
+    // Query keys ride in the URL by these APIs' design, so a PUT stores one;
+    // only a cookie stays refused.
+    const put = await request(
+      hosted.server,
+      "PUT",
+      "/api/credentials/weatherapi",
+      json({ value: "sk-live-9f2c" }),
+    );
+    expect(put.status).toBe(200);
+
+    // The read still carries only the hint, never the value.
+    const after = await request(hosted.server, "GET", "/api/credentials");
+    expect(after.text()).not.toContain("sk-live-9f2c");
+    expect(after.text()).toContain("9f2c");
+  });
+
   it("refuses an empty value", async () => {
     const res = await request(
       hosted.server,
@@ -5819,6 +5920,168 @@ describe("The assignment a display is served", () => {
     expect(await servedCard(one)).toBe("gpu-0");
     expect(await servedCard(two)).toBe("gpu-0");
     expect(await servedCard(three)).toBe("gpu-1");
+  });
+
+  it("passes a connection's declared language into that display's ask", async () => {
+    sampleStream(
+      hosted.server,
+      `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=de-DE`,
+    );
+
+    await vi.waitFor(() =>
+      expect(echo.contexts.at(-1)).toMatchObject({ language: "de-DE" }),
+    );
+  });
+
+  it("lets the newest connection's language speak for the display", async () => {
+    sampleStream(hosted.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=en`);
+    await vi.waitFor(() =>
+      expect(echo.contexts.at(-1)).toMatchObject({ language: "en" }),
+    );
+
+    sampleStream(
+      hosted.server,
+      `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=de-DE`,
+    );
+
+    await vi.waitFor(() =>
+      expect(echo.contexts.at(-1)).toMatchObject({ language: "de-DE" }),
+    );
+  });
+
+  it("accepts a tag as long as the published schema allows", async () => {
+    // The envelope validator caps `metadata.themeLanguage` at 64 characters, so
+    // the host must not drop a tag its own schema published.
+    const tag =
+      "de-Latn-DE-1996-x-yunari-display-abcdefg-abcdefg-abcdefg-abcdefg";
+
+    expect(tag).toHaveLength(64);
+
+    sampleStream(
+      hosted.server,
+      `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=${tag}`,
+    );
+
+    await vi.waitFor(() =>
+      expect(echo.contexts.at(-1)).toMatchObject({ language: tag }),
+    );
+  });
+
+  it("opens the stream when lang is unusable, and asks without a language", async () => {
+    // A malformed tag and a syntactically valid one past the length ceiling:
+    // both are dropped, and neither refusal closes the stream.
+    for (const lang of [
+      "de_DE",
+      "de-Latn-DE-1996-x-yunari-display-abcdefg-abcdefg-abcdefg-abcdefg-abcdefg",
+    ]) {
+      const answer = await streamStatus(
+        hosted.server,
+        `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=${lang}`,
+        "127.0.0.1",
+      );
+
+      expect(answer.status).toBe(200);
+    }
+
+    await vi.waitFor(() => expect(echo.contexts.length).toBeGreaterThan(0));
+    expect(echo.contexts.at(-1)).not.toHaveProperty("language");
+  });
+});
+
+/**
+ * The served payload, not the provider's own return value: two displays that
+ * resolved the same devices but declared different languages must get one
+ * reading in two words.
+ */
+describe("A display's language in the served payload", () => {
+  let tmpDir: string;
+  let hosted: ReturnType<typeof createHostServer>;
+  let desk: DisplayRecord;
+  let wall: DisplayRecord;
+
+  /** Berlin, so the fixture's OVC reading maps to both tables. */
+  function berlinStore(): WeatherSettingsStore {
+    const settings = normalizeWeatherSettings({
+      provider: "open-meteo",
+      label: "Berlin, Berlin, DE",
+      latitude: 52.52,
+      longitude: 13.41,
+      useWindowsLocation: false,
+      pollIntervalMs: 600_000,
+    });
+
+    return {
+      read: async () => settings,
+      write: async () => settings,
+      problem: () => undefined,
+    };
+  }
+
+  function servedSample(
+    stream: { readonly frames: () => string },
+    semanticKey: string,
+  ): { readonly textValue?: string; readonly value?: number } | undefined {
+    const decoded = decodeBatch(lastFrame(stream.frames()));
+
+    return decoded.ok
+      ? decoded.batch.samples.find((entry) => entry.semanticKey === semanticKey)
+          ?.sample
+      : undefined;
+  }
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-lang-payload-"));
+    const displays = createDisplayStore(tmpDir);
+    desk = await displays.createLocal("Desk monitor", {
+      deviceName: "DELL U2722D",
+    });
+    wall = await displays.createLocal("Wall monitor", {
+      deviceName: "LG C2",
+    });
+    hosted = createHostServer({
+      registry: new ProviderRegistry([
+        new WeatherProvider({
+          settings: berlinStore(),
+          fetcher: (async () =>
+            new Response(JSON.stringify(OPEN_METEO_BERLIN_CAPTURE), {
+              status: 200,
+            })) as unknown as typeof fetch,
+        }),
+      ]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      displays,
+      sampleIntervalMs: 10,
+    });
+  });
+
+  afterEach(async () => {
+    await hosted.close();
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("serves one reading in German and English for two displays on one assignment", async () => {
+    const keys = "weather.temp,weather.condition";
+    const german = sampleStream(
+      hosted.server,
+      `${SAMPLE_STREAM_PATH}?keys=${keys}&display=${desk.id}&lang=de`,
+    );
+    const english = sampleStream(
+      hosted.server,
+      `${SAMPLE_STREAM_PATH}?keys=${keys}&display=${wall.id}&lang=en`,
+    );
+
+    await vi.waitFor(() => {
+      expect(servedSample(german, "weather.condition")?.textValue).toBe(
+        "Bedeckt",
+      );
+      expect(servedSample(english, "weather.condition")?.textValue).toBe(
+        "Overcast",
+      );
+    });
+
+    // The words differ; the measurement does not.
+    expect(servedSample(german, "weather.temp")?.value).toBe(11.3);
+    expect(servedSample(english, "weather.temp")?.value).toBe(11.3);
   });
 });
 
@@ -7879,5 +8142,1671 @@ describe("Host Wallpaper Engine routes", () => {
     } finally {
       await hosted.close();
     }
+  });
+});
+
+describe("Weather settings routes", () => {
+  let settingsDir: string;
+  let hosted: ReturnType<typeof createHostServer> | undefined;
+
+  beforeEach(async () => {
+    settingsDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-weather-"));
+  });
+
+  afterEach(async () => {
+    await hosted?.close();
+    hosted = undefined;
+    await fs.rm(settingsDir, { recursive: true, force: true });
+  });
+
+  /** A host holding this directory's weather store, and the store itself so a
+   *  case can read what a route wrote. */
+  async function launch(
+    options: { readonly fetch?: typeof fetch } = {},
+  ): Promise<{
+    readonly server: ListenableServer;
+    readonly weather: ReturnType<typeof createWeatherSettingsStore>;
+  }> {
+    const weather = createWeatherSettingsStore(settingsDir);
+    const running = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: settingsDir, editor: settingsDir },
+      weather,
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    });
+    hosted = running;
+    return { server: running.server, weather };
+  }
+
+  const BERLIN = {
+    provider: "open-meteo",
+    label: "Berlin, Berlin, DE",
+    latitude: 52.52,
+    longitude: 13.41,
+    useWindowsLocation: false,
+    pollIntervalMs: 600000,
+  } as const;
+
+  it("answers this PC's stored weather settings, and refuses the network", async () => {
+    const { server } = await launch();
+
+    const local = await request(server, "GET", "/api/weather/settings");
+    expect(local.status).toBe(200);
+    expect((local.json() as { settings: unknown }).settings).toEqual(
+      DEFAULT_WEATHER_SETTINGS,
+    );
+
+    // A place and a polling cadence are this PC's own facts, like the display
+    // preferences beside them.
+    expect(
+      (
+        await request(server, "GET", "/api/weather/settings", undefined, {
+          remoteAddress: "192.168.1.50",
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it("stores what a PUT normalizes, and answers the stored reading", async () => {
+    const { server, weather } = await launch();
+
+    const saved = await request(
+      server,
+      "PUT",
+      "/api/weather/settings",
+      JSON.stringify({ ...BERLIN, label: "  Berlin, Berlin, DE  " }),
+    );
+    expect(saved.status).toBe(200);
+    expect((saved.json() as { settings: unknown }).settings).toEqual(BERLIN);
+    expect(await weather.read()).toEqual(BERLIN);
+
+    const read = await request(server, "GET", "/api/weather/settings");
+    expect((read.json() as { settings: unknown }).settings).toEqual(BERLIN);
+
+    // A write is an admin action too.
+    expect(
+      (
+        await request(
+          server,
+          "PUT",
+          "/api/weather/settings",
+          JSON.stringify(BERLIN),
+          { remoteAddress: "192.168.1.50" },
+        )
+      ).status,
+    ).toBe(403);
+  });
+
+  it("answers the selected backend's attribution with its settings", async () => {
+    const { server } = await launch();
+
+    const openMeteo = await request(server, "GET", "/api/weather/settings");
+    expect(openMeteo.status).toBe(200);
+    expect((openMeteo.json() as { attribution: unknown }).attribution).toEqual({
+      text: "Weather data by Open-Meteo.com",
+      url: "https://open-meteo.com/en/licence",
+    });
+
+    const saved = await request(
+      server,
+      "PUT",
+      "/api/weather/settings",
+      JSON.stringify({ ...BERLIN, provider: "weatherapi" }),
+    );
+    expect((saved.json() as { attribution: unknown }).attribution).toEqual({
+      text: "Powered by WeatherAPI.com",
+      url: "https://www.weatherapi.com/",
+    });
+
+    const byok = await request(server, "GET", "/api/weather/settings");
+    expect((byok.json() as { attribution: unknown }).attribution).toEqual({
+      text: "Powered by WeatherAPI.com",
+      url: "https://www.weatherapi.com/",
+    });
+  });
+
+  it("refuses invalid input with the normalizer's message and keeps the file", async () => {
+    const { server, weather } = await launch();
+    await weather.write(BERLIN);
+
+    const refused = await request(
+      server,
+      "PUT",
+      "/api/weather/settings",
+      JSON.stringify({ ...BERLIN, latitude: 91 }),
+    );
+    expect(refused.status).toBe(400);
+    expect(refused.text()).toMatch(/latitude/);
+
+    expect(await weather.read()).toEqual(BERLIN);
+  });
+
+  it("answers the places an injected geocoder finds, without the network", async () => {
+    const asked: string[] = [];
+    const { server } = await launch({
+      fetch: async (input) => {
+        asked.push(String(input));
+        return new Response(
+          JSON.stringify({
+            results: [
+              {
+                name: "Berlin",
+                admin1: "Berlin",
+                country_code: "DE",
+                latitude: 52.52,
+                longitude: 13.41,
+              },
+              {
+                name: "Berlin",
+                admin1: "",
+                country_code: "US",
+                latitude: 44.47,
+                longitude: -71.18,
+              },
+            ],
+          }),
+        );
+      },
+    });
+
+    const found = await request(server, "GET", "/api/weather/places?q=Berlin");
+    expect(found.status).toBe(200);
+    expect((found.json() as { places: unknown }).places).toEqual([
+      { label: "Berlin, Berlin, DE", latitude: 52.52, longitude: 13.41 },
+      // An empty part is skipped rather than printed as a gap in the label.
+      { label: "Berlin, US", latitude: 44.47, longitude: -71.18 },
+    ]);
+
+    const endpoint = new URL(asked[0] ?? "");
+    expect(endpoint.origin).toBe("https://geocoding-api.open-meteo.com");
+    expect(endpoint.pathname).toBe("/v1/search");
+    expect(endpoint.searchParams.get("name")).toBe("Berlin");
+    expect(endpoint.searchParams.get("count")).toBe("5");
+    expect(endpoint.searchParams.get("language")).toBe("en");
+    expect(endpoint.searchParams.get("format")).toBe("json");
+
+    // The search is a this-PC action, like the settings read above it.
+    expect(
+      (
+        await request(
+          server,
+          "GET",
+          "/api/weather/places?q=Berlin",
+          undefined,
+          {
+            remoteAddress: "192.168.1.50",
+          },
+        )
+      ).status,
+    ).toBe(403);
+  });
+
+  it("refuses an empty search without reaching the geocoder", async () => {
+    let called = false;
+    const { server } = await launch({
+      fetch: async () => {
+        called = true;
+        return new Response("{}");
+      },
+    });
+
+    for (const query of ["", "?q=", "?q=%20%20"]) {
+      const refused = await request(
+        server,
+        "GET",
+        `/api/weather/places${query}`,
+      );
+      expect(refused.status, query).toBe(400);
+    }
+    expect(called).toBe(false);
+  });
+
+  it("answers 502 when the geocoder fails or overruns the body cap", async () => {
+    for (const fetchImpl of [
+      (async (): Promise<Response> => {
+        throw new Error("connect ECONNREFUSED 127.0.0.1");
+      }) as typeof fetch,
+      (async (): Promise<Response> =>
+        new Response(new Uint8Array(64 * 1024 + 1))) as typeof fetch,
+      (async (): Promise<Response> =>
+        new Response("{}", { status: 500 })) as typeof fetch,
+    ]) {
+      const { server } = await launch({ fetch: fetchImpl });
+      const failed = await request(
+        server,
+        "GET",
+        "/api/weather/places?q=Berlin",
+      );
+      expect(failed.status).toBe(502);
+      // Its own sentence, so nothing undici or Open-Meteo wrote reaches a
+      // browser — geocoding needs no key, but it does not echo its transport.
+      expect(failed.text()).not.toContain("ECONNREFUSED");
+    }
+  });
+
+  it("redacts a read error's path from the network-visible health answer", async () => {
+    const weather = createWeatherSettingsStore(settingsDir);
+    const leaking = {
+      ...weather,
+      problem: () =>
+        "EACCES: permission denied, open 'C:\\Users\\peter\\secret\\weather.json'",
+    };
+    const running = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: settingsDir, editor: settingsDir },
+      weather: leaking,
+    });
+    hosted = running;
+
+    const answer = await request(running.server, "GET", "/api/health");
+    const reason = String(
+      (answer.json() as { readonly weather?: unknown }).weather,
+    );
+
+    // `/api/health` has no pairing guard, so an OS error's own path — the
+    // person's home directory — must not travel over the network.
+    expect(reason).not.toContain("peter");
+    expect(reason).not.toContain(String.raw`C:\Users`);
+    expect(reason).toContain("its configured address");
+  });
+
+  it("refuses a geocoder body over the cap, however it arrives", async () => {
+    const { server } = await launch({
+      // No `content-length`, three chunks: the cap has to be counted while
+      // reading, and a cap checked only from the declared length sees nothing.
+      fetch: async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              for (let chunk = 0; chunk < 3; chunk += 1) {
+                controller.enqueue(new Uint8Array(32 * 1024).fill(0x20));
+              }
+              controller.close();
+            },
+          }),
+        ),
+    });
+
+    const failed = await request(server, "GET", "/api/weather/places?q=Berlin");
+
+    expect(failed.status).toBe(502);
+    // The specific sentence: an implementation that read the whole body and
+    // rejected its JSON would answer "something unexpected" instead.
+    expect(failed.text()).toMatch(/more than it should/);
+  });
+
+  it("refuses a long search term and a foreign page before the geocoder", async () => {
+    let called = false;
+    const { server } = await launch({
+      fetch: async () => {
+        called = true;
+        return new Response("{}");
+      },
+    });
+
+    const long = await request(
+      server,
+      "GET",
+      `/api/weather/places?q=${"a".repeat(201)}`,
+    );
+    expect(long.status).toBe(400);
+    expect(long.text()).toMatch(/200 characters/);
+
+    // A foreign page must not spend this PC's outbound request.
+    const foreign = await request(
+      server,
+      "GET",
+      "/api/weather/places?q=Berlin",
+      undefined,
+      { headers: { origin: "https://evil.example" } },
+    );
+    expect(foreign.status).toBe(403);
+    expect(called).toBe(false);
+  });
+
+  it("answers 413, not 400, for a body over the limit", async () => {
+    const { server } = await launch();
+
+    const refused = await request(
+      server,
+      "PUT",
+      "/api/weather/settings",
+      JSON.stringify({ label: "a".repeat(64 * 1024) }),
+    );
+
+    expect(refused.status).toBe(413);
+    expect(refused.text()).toMatch(/too large/);
+  });
+
+  it("redacts a failing geocoder body's own words", async () => {
+    const { server } = await launch({
+      fetch: async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(
+                new Error(
+                  "EACCES: permission denied, open 'C:\\Users\\peter\\secret\\weather.json'",
+                ),
+              );
+            },
+          }),
+        ),
+    });
+
+    const failed = await request(server, "GET", "/api/weather/places?q=Berlin");
+
+    expect(failed.status).toBe(502);
+    expect(failed.text()).not.toContain("peter");
+    expect(failed.text()).not.toContain("C:\\\\");
+  });
+
+  it("reports an invalid weather.json through /api/health and clears it", async () => {
+    const { server } = await launch();
+    await fs.writeFile(
+      path.join(settingsDir, "weather.json"),
+      JSON.stringify({ ...BERLIN, latitude: 91 }),
+      "utf8",
+    );
+
+    const unhealthy = await request(server, "GET", "/api/health");
+    expect((unhealthy.json() as { weather?: unknown }).weather).toMatch(
+      /latitude/,
+    );
+
+    await request(
+      server,
+      "PUT",
+      "/api/weather/settings",
+      JSON.stringify(BERLIN),
+    );
+    const healthy = await request(server, "GET", "/api/health");
+    expect(
+      "weather" in (healthy.json() as Record<string, unknown>),
+      "a valid file still reports a problem",
+    ).toBe(false);
+  });
+
+  it("serves a vendored weather icon and 404s every other name", async () => {
+    const { server } = await launch();
+
+    const icon = await request(
+      server,
+      "GET",
+      "/api/weather/icon/clear-day.svg",
+    );
+    expect(icon.status).toBe(200);
+    expect(icon.headers["content-type"]).toBe("image/svg+xml");
+    expect(icon.headers["cache-control"]).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(icon.headers["x-content-type-options"]).toBe("nosniff");
+    expect(icon.body.toString()).toContain("<svg");
+
+    for (const name of [
+      "nope.svg",
+      "clear-day",
+      "CLEAR-DAY.svg",
+      "..%2Fpackage.json.svg",
+      "clear-day.svg.svg",
+      "clear-day.svg/extra",
+    ]) {
+      expect(
+        (await request(server, "GET", `/api/weather/icon/${name}`)).status,
+        name,
+      ).toBe(404);
+    }
+
+    expect(
+      (await request(server, "POST", "/api/weather/icon/clear-day.svg")).status,
+    ).toBe(405);
+  });
+
+  it("lets a paired display read an icon and refuses an unpaired remote", async () => {
+    const displays = createDisplayStore(settingsDir);
+    const token = newToken();
+    await displays.create("phone", token);
+
+    const running = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: settingsDir, editor: settingsDir },
+      weather: createWeatherSettingsStore(settingsDir),
+      displays,
+    });
+    hosted = running;
+
+    const lan = { remoteAddress: "192.168.1.50" };
+    expect(
+      (
+        await request(
+          running.server,
+          "GET",
+          "/api/weather/icon/clear-day.svg",
+          undefined,
+          lan,
+        )
+      ).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await request(
+          running.server,
+          "GET",
+          "/api/weather/icon/clear-day.svg",
+          undefined,
+          { ...lan, headers: { "x-yunari-session": "not-a-live-token" } },
+        )
+      ).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await request(
+          running.server,
+          "GET",
+          "/api/weather/icon/clear-day.svg",
+          undefined,
+          { ...lan, headers: { "x-yunari-session": token } },
+        )
+      ).status,
+    ).toBe(200);
+  });
+});
+
+describe("The media artwork route", () => {
+  const BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9, 9, 9]);
+  const SHA = createHash("sha256").update(BYTES).digest("hex");
+  const NAME = `${SHA}.png`;
+
+  let directory: string;
+  let hosted: ReturnType<typeof createHostServer> | undefined;
+
+  beforeEach(async () => {
+    directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "yunari-artwork-route-"),
+    );
+  });
+
+  afterEach(async () => {
+    await hosted?.close();
+    hosted = undefined;
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+
+  function launch(options: Partial<HostServerOptions> = {}) {
+    const running = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: directory, editor: directory },
+      ...options,
+    });
+    hosted = running;
+    return running;
+  }
+
+  async function storedCache() {
+    const cache = createArtworkCache(directory);
+    await cache.put(BYTES, "png");
+    return cache;
+  }
+
+  it("serves a cached image with an immutable header", async () => {
+    const running = launch({ artwork: await storedCache() });
+
+    const answer = await request(
+      running.server,
+      "GET",
+      `/api/media/artwork/${NAME}`,
+    );
+
+    expect(answer.status).toBe(200);
+    expect(answer.headers["content-type"]).toBe("image/png");
+    expect(answer.headers["cache-control"]).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(answer.headers["x-content-type-options"]).toBe("nosniff");
+    expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
+  });
+
+  it("404s a malformed name, an unknown digest and every non-GET", async () => {
+    const running = launch({ artwork: await storedCache() });
+
+    for (const name of [
+      "a.png",
+      NAME.toUpperCase(),
+      `${NAME}.png`,
+      `${SHA}.gif`,
+      `${SHA}.png/extra`,
+      "..%2Fpackage.json.png",
+      `${"b".repeat(64)}.png`,
+    ]) {
+      expect(
+        (await request(running.server, "GET", `/api/media/artwork/${name}`))
+          .status,
+        name,
+      ).toBe(404);
+    }
+
+    expect(
+      (await request(running.server, "POST", `/api/media/artwork/${NAME}`, "x"))
+        .status,
+    ).toBe(405);
+  });
+
+  it("refuses a malformed name before the cache is asked", async () => {
+    // The cache also refuses these, so this case uses one that answers any
+    // name: the refusal has to be the route's own, before any read.
+    let reads = 0;
+    const running = launch({
+      artwork: {
+        put: async () => "",
+        read: async () => {
+          reads += 1;
+          return { bytes: BYTES, ext: "png" };
+        },
+      },
+    });
+
+    for (const name of ["a.png", NAME.toUpperCase(), `${NAME}/extra`]) {
+      expect(
+        (await request(running.server, "GET", `/api/media/artwork/${name}`))
+          .status,
+        name,
+      ).toBe(404);
+    }
+
+    expect(reads).toBe(0);
+  });
+
+  it("lets a paired display read it and refuses an unpaired remote", async () => {
+    const displays = createDisplayStore(directory);
+    const token = newToken();
+    await displays.create("phone", token);
+    const running = launch({ displays, artwork: await storedCache() });
+
+    const lan = { remoteAddress: "192.168.1.50" };
+    const url = `/api/media/artwork/${NAME}`;
+
+    // Loopback is this PC and needs no credential.
+    expect((await request(running.server, "GET", url)).status).toBe(200);
+
+    expect(
+      (await request(running.server, "GET", url, undefined, lan)).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await request(running.server, "GET", url, undefined, {
+          ...lan,
+          headers: { "x-yunari-session": "not-a-live-token" },
+        })
+      ).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await request(running.server, "GET", url, undefined, {
+          ...lan,
+          headers: { "x-yunari-session": token },
+        })
+      ).status,
+    ).toBe(200);
+  });
+});
+
+describe("The game box art route", () => {
+  const BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+  const REMOTE_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xdb]);
+  const PNG_BYTES = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01,
+  ]);
+
+  let directory: string;
+  let cache: string;
+  let hosted: ReturnType<typeof createHostServer> | undefined;
+
+  beforeEach(async () => {
+    directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "yunari-game-art-route-"),
+    );
+    cache = path.join(directory, "game-metadata");
+    await fs.mkdir(cache, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await hosted?.close();
+    hosted = undefined;
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+
+  function launch(options: Partial<HostServerOptions> = {}) {
+    const running = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: directory, editor: directory },
+      ...options,
+    });
+    hosted = running;
+    return running;
+  }
+
+  function source(ids: readonly string[]) {
+    return {
+      read: async (appId: string) => (ids.includes(appId) ? BYTES : undefined),
+    };
+  }
+
+  it("serves box art with a bounded, non-immutable cache header", async () => {
+    const running = launch({ gameArtwork: source(["10"]) });
+
+    const answer = await request(
+      running.server,
+      "GET",
+      "/api/game/artwork/10.jpg",
+    );
+
+    expect(answer.status).toBe(200);
+    expect(answer.headers["content-type"]).toBe("image/jpeg");
+    expect(answer.headers["cache-control"]).toBe("private, max-age=3600");
+    expect(answer.headers["x-content-type-options"]).toBe("nosniff");
+    expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
+  });
+
+  it("404s a malformed name before the source is asked", async () => {
+    let reads = 0;
+    const running = launch({
+      gameArtwork: {
+        read: async () => {
+          reads += 1;
+          return BYTES;
+        },
+      },
+    });
+
+    for (const name of [
+      "10",
+      "10.gif",
+      "10.jpg.png",
+      "10.jpg/extra",
+      "abc.jpg",
+      "12345678901.jpg",
+      "10.JPG",
+      "..%2F10.jpg",
+    ]) {
+      expect(
+        (await request(running.server, "GET", `/api/game/artwork/${name}`))
+          .status,
+        name,
+      ).toBe(404);
+    }
+
+    expect(reads).toBe(0);
+  });
+
+  it("404s an app id the host does not know", async () => {
+    const running = launch({ gameArtwork: source(["10"]) });
+
+    expect(
+      (await request(running.server, "GET", "/api/game/artwork/999.jpg"))
+        .status,
+    ).toBe(404);
+  });
+
+  it("serves a non-installed app's cached remote JPEG cover", async () => {
+    await fs.writeFile(path.join(cache, "1201270.jpg"), BYTES);
+    const running = launch({ gameCoverCacheDir: cache });
+
+    const answer = await request(
+      running.server,
+      "GET",
+      "/api/game/artwork/1201270.jpg",
+    );
+
+    expect(answer.status).toBe(200);
+    expect(answer.headers["content-type"]).toBe("image/jpeg");
+    expect(Number(answer.headers["content-length"])).toBe(BYTES.byteLength);
+    expect(answer.headers["cache-control"]).toBe("private, max-age=3600");
+    expect(answer.headers["x-content-type-options"]).toBe("nosniff");
+    expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
+  });
+
+  it("serves a cached remote PNG cover as image/png", async () => {
+    await fs.writeFile(path.join(cache, "1201270.png"), PNG_BYTES);
+    const running = launch({ gameCoverCacheDir: cache });
+
+    const answer = await request(
+      running.server,
+      "GET",
+      "/api/game/artwork/1201270.png",
+    );
+
+    expect(answer.status).toBe(200);
+    expect(answer.headers["content-type"]).toBe("image/png");
+    expect(Number(answer.headers["content-length"])).toBe(PNG_BYTES.byteLength);
+    expect(answer.headers["cache-control"]).toBe("private, max-age=3600");
+    expect(answer.headers["x-content-type-options"]).toBe("nosniff");
+    expect(Buffer.compare(answer.body, Buffer.from(PNG_BYTES))).toBe(0);
+  });
+
+  it("serves installed local art ahead of a cached remote cover", async () => {
+    await fs.writeFile(path.join(cache, "10.jpg"), REMOTE_BYTES);
+    const running = launch({
+      gameArtwork: source(["10"]),
+      gameCoverCacheDir: cache,
+    });
+
+    const answer = await request(
+      running.server,
+      "GET",
+      "/api/game/artwork/10.jpg",
+    );
+
+    expect(answer.status).toBe(200);
+    expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
+  });
+
+  it("404s when neither installed art nor a cached cover exists", async () => {
+    const running = launch({ gameCoverCacheDir: cache });
+
+    expect(
+      (await request(running.server, "GET", "/api/game/artwork/999.jpg"))
+        .status,
+    ).toBe(404);
+    expect(
+      (await request(running.server, "GET", "/api/game/artwork/999.png"))
+        .status,
+    ).toBe(404);
+  });
+
+  it("404s a cached cover when the cache directory is missing", async () => {
+    const running = launch({
+      gameCoverCacheDir: path.join(directory, "absent"),
+    });
+
+    for (const extension of ["jpg", "png"]) {
+      expect(
+        (
+          await request(
+            running.server,
+            "GET",
+            `/api/game/artwork/1201270.${extension}`,
+          )
+        ).status,
+        extension,
+      ).toBe(404);
+    }
+  });
+
+  it("404s a cached cover whose bytes do not match its extension", async () => {
+    await fs.writeFile(path.join(cache, "1201270.jpg"), PNG_BYTES);
+    const running = launch({ gameCoverCacheDir: cache });
+
+    expect(
+      (await request(running.server, "GET", "/api/game/artwork/1201270.jpg"))
+        .status,
+    ).toBe(404);
+  });
+
+  it("404s a cached cover that links outside the cache directory", async () => {
+    const outside = path.join(directory, "outside.jpg");
+    await fs.writeFile(outside, BYTES);
+    await fs.symlink(outside, path.join(cache, "1201270.jpg"), "file");
+    const running = launch({ gameCoverCacheDir: cache });
+
+    expect(
+      (await request(running.server, "GET", "/api/game/artwork/1201270.jpg"))
+        .status,
+    ).toBe(404);
+  });
+
+  it("404s an oversized cached cover", async () => {
+    await fs.writeFile(
+      path.join(cache, "1201270.jpg"),
+      new Uint8Array(MAX_BOX_ART_BYTES + 1),
+    );
+    const running = launch({ gameCoverCacheDir: cache });
+
+    expect(
+      (await request(running.server, "GET", "/api/game/artwork/1201270.jpg"))
+        .status,
+    ).toBe(404);
+  });
+
+  it("lets a paired display read it and refuses an unpaired remote", async () => {
+    const displays = createDisplayStore(directory);
+    const token = newToken();
+    await displays.create("phone", token);
+    const running = launch({ displays, gameArtwork: source(["10"]) });
+
+    const lan = { remoteAddress: "192.168.1.50" };
+    const url = "/api/game/artwork/10.jpg";
+
+    expect((await request(running.server, "GET", url)).status).toBe(200);
+
+    expect(
+      (await request(running.server, "GET", url, undefined, lan)).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await request(running.server, "GET", url, undefined, {
+          ...lan,
+          headers: { "x-yunari-session": token },
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  it("guards a cached cover exactly like installed art", async () => {
+    await fs.writeFile(path.join(cache, "1201270.jpg"), BYTES);
+    const displays = createDisplayStore(directory);
+    const token = newToken();
+    await displays.create("phone", token);
+    const running = launch({ displays, gameCoverCacheDir: cache });
+
+    const lan = { remoteAddress: "192.168.1.50" };
+    const url = "/api/game/artwork/1201270.jpg";
+
+    expect(
+      (await request(running.server, "GET", url, undefined, lan)).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await request(running.server, "GET", url, undefined, {
+          ...lan,
+          headers: { "x-yunari-session": token },
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  it("405s every non-GET", async () => {
+    const running = launch({ gameArtwork: source(["10"]) });
+
+    for (const method of ["POST", "PUT", "DELETE"]) {
+      expect(
+        (await request(running.server, method, "/api/game/artwork/10.jpg", "x"))
+          .status,
+        method,
+      ).toBe(405);
+    }
+  });
+});
+
+describe("Custom source routes", () => {
+  let tmpDir: string;
+  let credentials: ReturnType<typeof createCredentialStore>;
+  let sources: SourceStore;
+  let hosted: ReturnType<typeof createHostServer>;
+
+  const LAN = { remoteAddress: "192.168.1.50" };
+  const FOREIGN = {
+    headers: { origin: "https://evil.example", host: "127.0.0.1:5173" },
+  };
+
+  const sourceFile = () => path.join(tmpDir, "sources.json");
+
+  function fixtureSource(
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    return {
+      id: "fixture",
+      name: "Fixture",
+      // A loopback IP literal: the fetch client refuses nothing, and the
+      // stubbed fetcher answers without a DNS lookup.
+      url: "http://127.0.0.1:8787/read",
+      intervalMs: 60_000,
+      timeoutMs: 5_000,
+      fields: [
+        {
+          id: "load",
+          label: "CPU load",
+          pointer: "/cpu/load",
+          type: "number",
+        },
+      ],
+      ...overrides,
+    };
+  }
+
+  function jsonFetch(
+    body: unknown,
+    status = 200,
+    calls: URL[] = [],
+  ): typeof fetch {
+    return (async (input: string | URL | Request) => {
+      calls.push(new URL(String(input)));
+      return new Response(JSON.stringify(body), {
+        status,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+  }
+
+  async function start(
+    options: {
+      readonly fetch?: typeof fetch;
+      readonly provider?: SourceRouteOptions["provider"];
+    } = {},
+  ): Promise<void> {
+    credentials = createCredentialStore(tmpDir);
+    sources = createSourceStore(tmpDir);
+
+    const provider = new CustomSourceProvider({
+      sources,
+      credentials,
+      ...(options.fetch === undefined ? {} : { fetcher: options.fetch }),
+    });
+    await provider.reload();
+
+    hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      credentials,
+      sources: { store: sources, provider: options.provider ?? provider },
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    });
+  }
+
+  const rows = async () =>
+    (await request(hosted.server, "GET", "/api/credentials")).json() as {
+      id: string;
+      label: string;
+      set: boolean;
+      hint: string;
+    }[];
+
+  const list = async () =>
+    (await request(hosted.server, "GET", "/api/sources")).json() as {
+      sources: Record<string, unknown>[];
+      issues: { sourceId: string; reason: string }[];
+    };
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-sources-"));
+  });
+
+  afterEach(async () => {
+    await hosted.close();
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("keeps every source route on this PC and refuses another page", async () => {
+    await start({ fetch: jsonFetch({ cpu: { load: 1 } }) });
+
+    for (const [method, url] of [
+      ["GET", "/api/sources"],
+      ["PUT", "/api/sources/fixture"],
+      ["DELETE", "/api/sources/fixture"],
+      ["POST", "/api/sources/fixture/test"],
+    ] as const) {
+      const body = method === "PUT" ? json(fixtureSource()) : undefined;
+      expect(
+        (await request(hosted.server, method, url, body, LAN)).status,
+      ).toBe(403);
+      expect(
+        (await request(hosted.server, method, url, body, FOREIGN)).status,
+      ).toBe(403);
+    }
+
+    // Refused, so nothing was written: no file, not even an empty envelope.
+    await expect(fs.readFile(sourceFile(), "utf8")).rejects.toThrow();
+  });
+
+  it("refuses an id the store's pattern does not admit, before any lookup", async () => {
+    await start({ fetch: jsonFetch({}) });
+
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PUT",
+          "/api/sources/Bad",
+          json(fixtureSource()),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (await request(hosted.server, "DELETE", "/api/sources/Bad")).status,
+    ).toBe(400);
+    expect(
+      (await request(hosted.server, "POST", "/api/sources/Bad/test")).status,
+    ).toBe(400);
+    expect(
+      (await request(hosted.server, "DELETE", `/api/sources/${"a".repeat(33)}`))
+        .status,
+    ).toBe(400);
+  });
+
+  it("upserts a source and lists it with field count and health, never a credential value", async () => {
+    await start({ fetch: jsonFetch({}) });
+
+    const put = await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource({ auth: { kind: "bearer", credentialId: "srckey" } })),
+    );
+    expect(put.status).toBe(200);
+
+    // The write refreshed the table: the referenced id is writable now.
+    const credential = await request(
+      hosted.server,
+      "PUT",
+      "/api/credentials/srckey",
+      json({ value: "sk-live-9f2c" }),
+    );
+    expect(credential.status).toBe(200);
+
+    const res = await request(hosted.server, "GET", "/api/sources");
+    expect(res.status).toBe(200);
+    expect(res.json()).toEqual({
+      sources: [
+        expect.objectContaining({
+          id: "fixture",
+          name: "Fixture",
+          fieldCount: 1,
+          health: "waiting",
+          lastError: null,
+          lastSuccessAt: null,
+          auth: { kind: "bearer", credentialId: "srckey" },
+        }),
+      ],
+      issues: [],
+    });
+    // The reference is all the route carries: no value and no hint.
+    expect(res.text()).not.toContain("sk-live-9f2c");
+    expect(res.text()).not.toContain("9f2c");
+  });
+
+  it("refuses an invalid upsert and leaves the file byte-identical", async () => {
+    await start({ fetch: jsonFetch({}) });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource()),
+    );
+
+    const before = await fs.readFile(sourceFile());
+    const refused = await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(
+        fixtureSource({
+          fields: [
+            {
+              id: "load",
+              label: "CPU load",
+              pointer: "/cpu/load",
+              type: "date",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(refused.status).toBe(400);
+    expect(refused.json()).toMatchObject({ ok: false, field: "fixture" });
+    expect((refused.json() as { reason: string }).reason).toContain(
+      "type must be number|text|boolean",
+    );
+    expect((await fs.readFile(sourceFile())).equals(before)).toBe(true);
+  });
+
+  it("reports the provider's last error redacted and its last success time", async () => {
+    const stub: SourceRouteOptions["provider"] = {
+      reload: async () => undefined,
+      status: () => [
+        {
+          sourceId: "fixture",
+          lastError: "could not reach https://192.168.1.9:8080/read",
+          lastSuccessMs: 1_700_000_000_000,
+        },
+      ],
+      test: async () => ({ ok: false, elapsedMs: 0, values: [] }),
+    };
+
+    await start({ provider: stub, fetch: jsonFetch({}) });
+    await sources.write({ sources: [fixtureSource()] });
+
+    const [row] = (await list()).sources;
+
+    expect(row).toMatchObject({
+      id: "fixture",
+      fieldCount: 1,
+      health: "error",
+      lastError: "could not reach its configured address",
+      lastSuccessAt: new Date(1_700_000_000_000).toISOString(),
+    });
+    expect(JSON.stringify(row)).not.toContain("192.168.1.9");
+  });
+
+  it("tests one fetch with the real credential, bounded, and writes nothing", async () => {
+    const calls: URL[] = [];
+    await start({
+      fetch: jsonFetch(
+        {
+          cpu: { load: 42.5 },
+          v0: 0,
+          v1: 1,
+          v2: 2,
+          v3: 3,
+          v4: 4,
+          v5: 5,
+          v6: 6,
+          v7: 7,
+          v8: 8,
+          v9: 9,
+        },
+        200,
+        calls,
+      ),
+    });
+
+    const fields = [
+      { id: "load", label: "CPU load", pointer: "/cpu/load", type: "number" },
+      ...Array.from({ length: 9 }, (_, index) => ({
+        id: `v${index}`,
+        label: `Value ${index}`,
+        pointer: `/v${index}`,
+        type: "number",
+      })),
+      { id: "extra", label: "Extra", pointer: "/v0", type: "number" },
+    ];
+
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(
+        fixtureSource({
+          auth: { kind: "bearer", credentialId: "srckey" },
+          fields,
+        }),
+      ),
+    );
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/credentials/srckey",
+      json({ value: "sk-live-9f2c" }),
+    );
+
+    const before = await fs.readFile(sourceFile());
+    const beforeStat = await fs.stat(sourceFile());
+    const beforeDir = (await fs.readdir(tmpDir)).sort();
+
+    const res = await request(
+      hosted.server,
+      "POST",
+      "/api/sources/fixture/test",
+    );
+
+    expect(res.status).toBe(200);
+    const tested = res.json() as {
+      ok: boolean;
+      elapsedMs: number;
+      values: { id: string; value: unknown }[];
+    };
+    expect(tested.ok).toBe(true);
+    expect(typeof tested.elapsedMs).toBe("number");
+    expect(tested.values[0]).toEqual({ id: "load", value: 42.5 });
+    // Bounded: eleven mapped fields, ten answered.
+    expect(tested.values).toHaveLength(10);
+    expect(calls).toHaveLength(1);
+    expect(String(calls[0])).toBe("http://127.0.0.1:8787/read");
+
+    // A test stores neither the fetched body nor a reading: file bytes, the
+    // file's mtime and the directory's contents are unchanged, and the list
+    // still says no fetch has succeeded.
+    expect((await fs.readFile(sourceFile())).equals(before)).toBe(true);
+    expect((await fs.stat(sourceFile())).mtimeMs).toBe(beforeStat.mtimeMs);
+    expect((await fs.readdir(tmpDir)).sort()).toEqual(beforeDir);
+    expect((await list()).sources[0]).toMatchObject({
+      lastSuccessAt: null,
+      health: "waiting",
+    });
+  });
+
+  it("redacts a test result's reason before it leaves the host", async () => {
+    const stub: SourceRouteOptions["provider"] = {
+      reload: async () => undefined,
+      status: () => [],
+      test: async () => ({
+        ok: false,
+        elapsedMs: 1,
+        values: [],
+        reason: "could not reach https://192.168.1.9:8080/read",
+      }),
+    };
+
+    await start({ provider: stub, fetch: jsonFetch({}) });
+    await sources.write({ sources: [fixtureSource()] });
+
+    const res = await request(
+      hosted.server,
+      "POST",
+      "/api/sources/fixture/test",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.text()).toContain("its configured address");
+    expect(res.text()).not.toContain("192.168.1.9");
+  });
+
+  it("answers a failed test with the status and a redacted reason", async () => {
+    await start({
+      fetch: jsonFetch({ error: "denied" }, 500),
+    });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource()),
+    );
+
+    const res = await request(
+      hosted.server,
+      "POST",
+      "/api/sources/fixture/test",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.json()).toEqual({
+      ok: false,
+      status: 500,
+      elapsedMs: expect.any(Number),
+      values: [],
+      reason: "the source answered HTTP 500",
+    });
+  });
+
+  it("names a missing credential and makes no request", async () => {
+    const calls: URL[] = [];
+    await start({ fetch: jsonFetch({}, 200, calls) });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(
+        fixtureSource({
+          auth: { kind: "bearer", credentialId: "absentkey" },
+        }),
+      ),
+    );
+
+    const res = await request(
+      hosted.server,
+      "POST",
+      "/api/sources/fixture/test",
+    );
+
+    expect(res.json()).toMatchObject({
+      ok: false,
+      values: [],
+      reason: "credential is missing",
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("accepts a source-referenced credential id and still refuses an unknown one", async () => {
+    await start({ fetch: jsonFetch({}) });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource({ auth: { kind: "bearer", credentialId: "srckey" } })),
+    );
+
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PUT",
+          "/api/credentials/srckey",
+          json({ value: "sk-live-9f2c" }),
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PUT",
+          "/api/credentials/arbitrary",
+          json({ value: "sk-live-9f2c" }),
+        )
+      ).status,
+    ).toBe(400);
+  });
+
+  it("does not admit the credential id of a source the store refused", async () => {
+    await start({ fetch: jsonFetch({}) });
+
+    // Written by hand, as a malformed file would be: one valid source and one
+    // the store rejects. Only the valid one's credential is admitted.
+    await fs.writeFile(
+      sourceFile(),
+      JSON.stringify({
+        sources: [
+          fixtureSource({
+            id: "valid",
+            auth: { kind: "bearer", credentialId: "goodkey" },
+          }),
+          fixtureSource({
+            id: "broken",
+            auth: { kind: "bearer", credentialId: "evilkey" },
+            fields: [
+              {
+                id: "load",
+                label: "CPU load",
+                pointer: "/cpu/load",
+                type: "date",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const listed = await rows();
+    expect(listed.map((row) => row.id)).toContain("goodkey");
+    expect(listed.map((row) => row.id)).not.toContain("evilkey");
+
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PUT",
+          "/api/credentials/evilkey",
+          json({ value: "sk-live-9f2c" }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PUT",
+          "/api/credentials/goodkey",
+          json({ value: "sk-live-9f2c" }),
+        )
+      ).status,
+    ).toBe(200);
+
+    const response = await list();
+    expect(response.issues).toHaveLength(1);
+    expect(response.issues[0]?.sourceId).toBe("broken");
+  });
+
+  it("deletes a source without deleting its credential, and says it is unreferenced", async () => {
+    await start({ fetch: jsonFetch({}) });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource({ auth: { kind: "bearer", credentialId: "srckey" } })),
+    );
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/credentials/srckey",
+      json({ value: "sk-live-9f2c" }),
+    );
+
+    const removed = await request(
+      hosted.server,
+      "DELETE",
+      "/api/sources/fixture",
+    );
+
+    expect(removed.status).toBe(200);
+    expect(removed.json()).toEqual({
+      ok: true,
+      unreferencedCredential: "srckey",
+    });
+
+    // The secret is still on disk and still listed as an orphan, so it can be
+    // cleared rather than stranded.
+    expect(
+      await fs.readFile(path.join(tmpDir, "credentials.json"), "utf8"),
+    ).toContain("sk-live-9f2c");
+    expect(await rows()).toContainEqual(
+      expect.objectContaining({
+        id: "srckey",
+        label: "Unreferenced credential",
+        set: true,
+        hint: "9f2c",
+      }),
+    );
+
+    expect(
+      (await request(hosted.server, "DELETE", "/api/credentials/srckey"))
+        .status,
+    ).toBe(200);
+    expect(
+      await fs.readFile(path.join(tmpDir, "credentials.json"), "utf8"),
+    ).not.toContain("srckey");
+  });
+
+  it("reports no unreferenced credential while a sibling still names it", async () => {
+    await start({ fetch: jsonFetch({}) });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/first",
+      json(
+        fixtureSource({
+          id: "first",
+          auth: { kind: "bearer", credentialId: "srckey" },
+        }),
+      ),
+    );
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/second",
+      json(
+        fixtureSource({
+          id: "second",
+          auth: { kind: "bearer", credentialId: "srckey" },
+        }),
+      ),
+    );
+
+    const removed = await request(
+      hosted.server,
+      "DELETE",
+      "/api/sources/first",
+    );
+
+    expect(removed.json()).toEqual({
+      ok: true,
+      unreferencedCredential: null,
+    });
+  });
+
+  it("keeps an entry the store refused when another entry is written", async () => {
+    await start({ fetch: jsonFetch({}) });
+    await fs.writeFile(
+      sourceFile(),
+      JSON.stringify({
+        sources: [
+          fixtureSource(),
+          fixtureSource({
+            id: "broken",
+            fields: [
+              {
+                id: "load",
+                label: "CPU load",
+                pointer: "/cpu/load",
+                type: "date",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const put = await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource({ name: "Renamed" })),
+    );
+
+    expect(put.status).toBe(200);
+    const raw = JSON.parse(await fs.readFile(sourceFile(), "utf8")) as {
+      sources: { id: string }[];
+    };
+    // The write targeted one entry; the neighbour it cannot parse survives.
+    expect(raw.sources.map((entry) => entry.id)).toEqual(["fixture", "broken"]);
+    expect((await list()).issues[0]?.sourceId).toBe("broken");
+  });
+
+  it("refuses a write the whole-file merge would make invalid, writing nothing", async () => {
+    await start({ fetch: jsonFetch({}) });
+    // The candidate is valid on its own; only the 32-source limit, which is a
+    // property of the merged file, refuses it.
+    const full = Array.from({ length: 32 }, (_, index) =>
+      fixtureSource({ id: `s${index}` }),
+    );
+    await fs.writeFile(sourceFile(), JSON.stringify({ sources: full }));
+    const before = await fs.readFile(sourceFile());
+
+    const put = await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/extra",
+      json(fixtureSource({ id: "extra" })),
+    );
+
+    expect(put.status).toBe(400);
+    expect(put.json()).toMatchObject({ ok: false, field: "extra" });
+    expect((put.json() as { reason: string }).reason).toContain("exceeds");
+    expect((await fs.readFile(sourceFile())).equals(before)).toBe(true);
+  });
+
+  it("lands two simultaneous writes to different ids", async () => {
+    await start({ fetch: jsonFetch({}) });
+
+    const [left, right] = await Promise.all([
+      request(
+        hosted.server,
+        "PUT",
+        "/api/sources/left",
+        json(fixtureSource({ id: "left" })),
+      ),
+      request(
+        hosted.server,
+        "PUT",
+        "/api/sources/right",
+        json(fixtureSource({ id: "right" })),
+      ),
+    ]);
+
+    expect([left.status, right.status]).toEqual([200, 200]);
+    expect((await list()).sources.map((source) => source.id).sort()).toEqual([
+      "left",
+      "right",
+    ]);
+  });
+
+  it("admits a valid source's credential when a duplicate id was refused", async () => {
+    await start({ fetch: jsonFetch({}) });
+    await fs.writeFile(
+      sourceFile(),
+      JSON.stringify({
+        sources: [
+          fixtureSource({
+            id: "duplicate",
+            auth: { kind: "bearer", credentialId: "dupkey" },
+          }),
+          fixtureSource({
+            id: "duplicate",
+            auth: { kind: "bearer", credentialId: "dupkey" },
+            fields: [
+              {
+                id: "load",
+                label: "CPU load",
+                pointer: "/cpu/load",
+                type: "date",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect((await rows()).map((row) => row.id)).toContain("dupkey");
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PUT",
+          "/api/credentials/dupkey",
+          json({ value: "sk-live-9f2c" }),
+        )
+      ).status,
+    ).toBe(200);
+  });
+
+  it("answers an oversized write with 413, as the weather route does", async () => {
+    await start({ fetch: jsonFetch({}) });
+    const oversized = json(fixtureSource({ name: "x".repeat(70_000) }));
+
+    const res = await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      oversized,
+    );
+
+    expect(res.status).toBe(413);
+    // Refused before parsing, so nothing was written.
+    await expect(fs.readFile(sourceFile(), "utf8")).rejects.toThrow();
+  });
+
+  it("does not answer a test whose source was reloaded away mid-fetch", async () => {
+    let release: (value: Response) => void = () => undefined;
+    const gate = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    let called = false;
+    const fetchStub = (async () => {
+      called = true;
+      return gate;
+    }) as unknown as typeof fetch;
+
+    await start({ fetch: fetchStub });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource()),
+    );
+
+    const testing = request(hosted.server, "POST", "/api/sources/fixture/test");
+    await vi.waitFor(() => expect(called).toBe(true));
+
+    // A write reloads the provider, which retires the runtime the test is
+    // still holding; its answer belongs to a source that has been replaced.
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource({ name: "Renamed" })),
+    );
+
+    release(
+      new Response(JSON.stringify({ cpu: { load: 1 } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    expect((await testing).status).toBe(404);
   });
 });

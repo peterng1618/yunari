@@ -2,6 +2,7 @@ import {
   CHART_PAINT_FIELDS,
   CHART_SETTINGS_FIELDS,
 } from "../charts/settings-fields.js";
+import { describeSemanticKey } from "../data/semantic-keys.js";
 import { isTimeZoneName } from "../scene/datetime/instant.js";
 import { isLocaleName } from "../scene/datetime/names.js";
 import { isCatalogueId } from "./catalogue-index.js";
@@ -114,11 +115,11 @@ export function validateFabricThemeEnvelope(
     options.requireTrioRoles === true,
     issues,
   );
-  const sceneIds = scene(input["scene"], issues);
+  const sceneIndex = scene(input["scene"], issues);
   scenePaintReferences(input["scene"], input["globals"], issues);
   sceneTypeReferences(input["scene"], input["globals"], issues);
   chartSettingsReferences(input["scene"], input["globals"], issues);
-  bindings(input["bindings"], sceneIds, issues);
+  bindings(input["bindings"], sceneIndex, issues);
 
   return issues.length === 0
     ? {
@@ -480,6 +481,11 @@ function isTextObject(object: Record<string, unknown>): boolean {
     object["type"] === "Text" ||
     object["type"] === "FabricText"
   );
+}
+
+/** Both the serialized type and Fabric's class name, as the text check does. */
+function isImageObjectType(type: string | undefined): boolean {
+  return type === "Image" || type === "FabricImage";
 }
 
 /**
@@ -1123,7 +1129,7 @@ function rejectGifAssets(value: unknown, issues: ValidationIssue[]): void {
 
 function bindings(
   value: unknown,
-  sceneIds: ReadonlySet<string>,
+  sceneObjects: ReadonlyMap<string, string>,
   issues: ValidationIssue[],
 ): void {
   if (value === undefined) return;
@@ -1140,7 +1146,7 @@ function bindings(
   const ids = new Set<string>();
   for (const [objectId, entries] of Object.entries(value)) {
     stableId(objectId, `/bindings/${objectId}`, "A bound object id", issues);
-    if (!sceneIds.has(objectId)) {
+    if (!sceneObjects.has(objectId)) {
       issues.push(
         issue(
           "unresolved-binding-ref",
@@ -1190,6 +1196,19 @@ function bindings(
             "A binding needs a semantic key of 1–120 characters.",
           ),
         );
+      } else if (
+        isImageObjectType(sceneObjects.get(objectId)) &&
+        describeSemanticKey(entry["semanticKey"])?.mediaKind !== "image"
+      ) {
+        // The runtime refuses to load such a sample, but a hand-edited theme
+        // would keep its authored picture with no authoring error at all.
+        issues.push(
+          issue(
+            "invalid-enum",
+            `${path}/semanticKey`,
+            `An image object shows an image reading, and "${entry["semanticKey"]}" is not an image key.`,
+          ),
+        );
       }
       if (
         entry["precision"] !== undefined &&
@@ -1231,6 +1250,31 @@ function bindings(
           );
         }
       }
+      const unit = entry["unit"];
+      if (
+        unit !== undefined &&
+        (typeof unit !== "string" || unit.length === 0 || unit.length > 32)
+      ) {
+        issues.push(
+          issue(
+            "wrong-type",
+            `${path}/unit`,
+            "unit must be a non-empty string of at most 32 characters.",
+          ),
+        );
+      }
+      if (
+        entry["autoScale"] !== undefined &&
+        typeof entry["autoScale"] !== "boolean"
+      ) {
+        issues.push(
+          issue(
+            "wrong-type",
+            `${path}/autoScale`,
+            "autoScale must be a boolean.",
+          ),
+        );
+      }
       for (const key of ["format", "timeZone"] as const) {
         const value = entry[key];
         if (value === undefined) continue;
@@ -1257,13 +1301,16 @@ function bindings(
   }
 }
 
-function scene(value: unknown, issues: ValidationIssue[]): ReadonlySet<string> {
-  const ids = new Set<string>();
+function scene(
+  value: unknown,
+  issues: ValidationIssue[],
+): ReadonlyMap<string, string> {
+  const objects = new Map<string, string>();
   if (!isRecord(value)) {
     issues.push(
       issue("invalid-fabric-scene", "/scene", "scene must be a JSON object."),
     );
-    return ids;
+    return objects;
   }
   if (
     typeof value["version"] !== "string" ||
@@ -1285,20 +1332,20 @@ function scene(value: unknown, issues: ValidationIssue[]): ReadonlySet<string> {
         "scene.objects must be an array.",
       ),
     );
-    return ids;
+    return objects;
   }
   const count = { value: 0 };
   for (const [index, object] of value["objects"].entries()) {
-    sceneObject(object, `/scene/objects/${index}`, 0, ids, count, issues);
+    sceneObject(object, `/scene/objects/${index}`, 0, objects, count, issues);
   }
-  return ids;
+  return objects;
 }
 
 function sceneObject(
   value: unknown,
   path: string,
   depth: number,
-  ids: Set<string>,
+  objects: Map<string, string>,
   count: { value: number },
   issues: ValidationIssue[],
 ): void {
@@ -1330,7 +1377,7 @@ function sceneObject(
     return;
   }
   if (stableId(value["id"], `${path}/id`, "An object id", issues)) {
-    if (ids.has(value["id"])) {
+    if (objects.has(value["id"])) {
       issues.push(
         issue(
           "duplicate-id",
@@ -1339,7 +1386,10 @@ function sceneObject(
         ),
       );
     }
-    ids.add(value["id"]);
+    objects.set(
+      value["id"],
+      typeof value["type"] === "string" ? value["type"] : "",
+    );
   }
   if (typeof value["type"] !== "string" || value["type"].length === 0) {
     issues.push(
@@ -1368,7 +1418,7 @@ function sceneObject(
           child,
           `${path}/objects/${index}`,
           depth + 1,
-          ids,
+          objects,
           count,
           issues,
         );

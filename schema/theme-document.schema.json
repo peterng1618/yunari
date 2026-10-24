@@ -163,6 +163,8 @@
         "precision": { "type": "integer", "minimum": 0, "maximum": 6 },
         "unitDisplay": { "enum": ["none", "short", "long"] },
         "scale": { "type": "number" }, "offset": { "type": "number" },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "autoScale": { "type": "boolean" },
         "format": { "type": "string", "maxLength": 64 },
         "timeZone": { "type": "string", "maxLength": 64 }
       }

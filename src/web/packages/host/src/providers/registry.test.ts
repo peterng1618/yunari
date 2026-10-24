@@ -1,16 +1,12 @@
 import type { Sample, SampleEntry } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
-import type { DeviceAssignment } from "./lhm-mapping.js";
 import type {
   ProviderHealth,
+  SampleContext,
   SensorDescriptor,
   SensorProvider,
 } from "./provider.js";
-import {
-  groupByAssignment,
-  ProviderRegistry,
-  unionOfKeys,
-} from "./registry.js";
+import { groupByAsk, ProviderRegistry, unionOfKeys } from "./registry.js";
 
 const NOW = Date.parse("2026-01-01T00:00:10Z");
 
@@ -36,17 +32,17 @@ function stubProvider(
   } = {},
 ): SensorProvider & {
   readonly calls: string[][];
-  readonly assignments: DeviceAssignment[];
+  readonly contexts: SampleContext[];
 } {
   const calls: string[][] = [];
-  const assignments: DeviceAssignment[] = [];
+  const contexts: SampleContext[] = [];
   const gaps = new Set(options.gaps ?? []);
 
   return {
     id,
     label: id,
     calls,
-    assignments,
+    contexts,
     describe(): Promise<readonly SensorDescriptor[]> {
       return Promise.resolve(
         Object.keys(answers).map((key) => ({
@@ -60,10 +56,10 @@ function stubProvider(
     sample(
       semanticKeys: readonly string[],
       _nowMs: number,
-      assignment: DeviceAssignment = {},
+      context: SampleContext = {},
     ): Promise<readonly SampleEntry[]> {
       calls.push([...semanticKeys]);
-      assignments.push(assignment);
+      contexts.push(context);
 
       if (options.failWith !== undefined) {
         return Promise.reject(new Error(options.failWith));
@@ -114,7 +110,7 @@ describe("unionOfKeys", () => {
   });
 });
 
-describe("groupByAssignment", () => {
+describe("groupByAsk", () => {
   it("samples once per distinct assignment, not once per display", async () => {
     // Three connections on three displays, two of which resolved the same
     // devices: the host groups them before it samples, so this PC is polled
@@ -122,7 +118,7 @@ describe("groupByAssignment", () => {
     const os = stubProvider("os", { "gpu.temp": 60 });
     const registry = new ProviderRegistry([os]);
 
-    const groups = groupByAssignment([
+    const groups = groupByAsk([
       {
         display: "this-pc",
         semanticKeys: ["gpu.temp"],
@@ -141,7 +137,10 @@ describe("groupByAssignment", () => {
     ]);
 
     for (const group of groups) {
-      await registry.sample(group.semanticKeys, NOW, group.assignment);
+      await registry.sample(group.semanticKeys, NOW, {
+        assignment: group.assignment,
+        ...(group.language === undefined ? {} : { language: group.language }),
+      });
     }
 
     expect(groups.map((group) => group.displays)).toEqual([
@@ -151,11 +150,14 @@ describe("groupByAssignment", () => {
     expect(os.calls).toHaveLength(2);
     // Each poll was made with the assignment its own displays resolved, which
     // is what makes the two answers differ.
-    expect(os.assignments).toEqual([{ gpu: "gpu-0" }, { gpu: "gpu-1" }]);
+    expect(os.contexts).toEqual([
+      { assignment: { gpu: "gpu-0" } },
+      { assignment: { gpu: "gpu-1" } },
+    ]);
   });
 
   it("asks for the union of what the displays it grouped need", () => {
-    const groups = groupByAssignment([
+    const groups = groupByAsk([
       {
         display: "this-pc",
         semanticKeys: ["cpu.load", "gpu.temp"],
@@ -166,6 +168,63 @@ describe("groupByAssignment", () => {
 
     expect(groups).toHaveLength(1);
     expect(groups[0]?.semanticKeys).toEqual(["cpu.load", "gpu.temp"]);
+  });
+
+  it("samples twice for one assignment shown in two languages", async () => {
+    // Localization is per display, so the language is part of what makes a
+    // poll: one assignment in German and English is two answers, not one.
+    const os = stubProvider("os", { "weather.temp": 10 });
+    const registry = new ProviderRegistry([os]);
+
+    const groups = groupByAsk([
+      {
+        display: "desk",
+        semanticKeys: ["weather.temp"],
+        assignment: {},
+        language: "de",
+      },
+      {
+        display: "phone",
+        semanticKeys: ["weather.temp"],
+        assignment: {},
+        language: "en",
+      },
+    ]);
+
+    expect(groups).toHaveLength(2);
+
+    for (const group of groups) {
+      await registry.sample(group.semanticKeys, NOW, {
+        assignment: group.assignment,
+        ...(group.language === undefined ? {} : { language: group.language }),
+      });
+    }
+
+    expect(os.calls).toHaveLength(2);
+    expect(os.contexts).toEqual([
+      { assignment: {}, language: "de" },
+      { assignment: {}, language: "en" },
+    ]);
+  });
+
+  it("keeps one group when the languages match too", () => {
+    const groups = groupByAsk([
+      {
+        display: "desk",
+        semanticKeys: ["weather.condition"],
+        assignment: {},
+        language: "de",
+      },
+      {
+        display: "phone",
+        semanticKeys: ["weather.condition"],
+        assignment: {},
+        language: "de",
+      },
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.displays).toEqual(["desk", "phone"]);
   });
 });
 
@@ -435,6 +494,54 @@ describe("ProviderRegistry", () => {
       ]);
     });
 
+    it("forwards the fields a picker needs, without interpreting them", async () => {
+      // The editor's catalogue is built from these: a family to group by, the
+      // unit's kind, the value's kind, and whether the binding is a picture.
+      // The registry only tags; it never derives a field of its own.
+      const rich: SensorProvider = {
+        id: "lhm",
+        label: "lhm",
+        describe: () =>
+          Promise.resolve([
+            {
+              sensorId: "lhm:gpu.temp",
+              semanticKey: "gpu.temp",
+              label: "GPU temperature",
+              tier: "extended",
+              family: "gpu",
+              unitKind: "temperature",
+              displayUnits: ["°C", "°F"],
+              valueKind: "number",
+            },
+            {
+              sensorId: "lhm:media.image",
+              semanticKey: "media.image",
+              label: "Picture",
+              tier: "extended",
+              family: "media",
+              mediaKind: "image",
+            },
+          ]),
+        sample: () => Promise.resolve([]),
+        health: () => ({ available: true }),
+      };
+
+      const described = await new ProviderRegistry([rich]).describe();
+
+      expect(described[0]).toMatchObject({
+        providerId: "lhm",
+        family: "gpu",
+        unitKind: "temperature",
+        displayUnits: ["°C", "°F"],
+        valueKind: "number",
+      });
+      expect(described[1]).toMatchObject({
+        providerId: "lhm",
+        family: "media",
+        mediaKind: "image",
+      });
+    });
+
     it("still lists healthy providers when one cannot describe itself", async () => {
       const broken: SensorProvider = {
         id: "broken",
@@ -472,5 +579,18 @@ describe("ProviderRegistry", () => {
 
     // One clock per cycle keeps every sample in a batch comparable.
     expect(spy).toHaveBeenCalledWith(["cpu.load"], NOW, undefined);
+  });
+
+  it("passes the whole context through to every provider", async () => {
+    const os = stubProvider("os", { "weather.condition": "Overcast" });
+
+    await new ProviderRegistry([os]).sample(["weather.condition"], NOW, {
+      assignment: { gpu: "gpu-0" },
+      language: "de",
+    });
+
+    expect(os.contexts).toEqual([
+      { assignment: { gpu: "gpu-0" }, language: "de" },
+    ]);
   });
 });

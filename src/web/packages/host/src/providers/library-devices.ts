@@ -1,4 +1,4 @@
-import { diskDeviceId } from "@yunari/renderer-core";
+import { semanticId } from "@yunari/renderer-core";
 import { displayNameFor } from "../settings/devices.js";
 
 /**
@@ -100,7 +100,7 @@ export function drivesFrom(
       continue;
     }
 
-    const deviceId = diskDeviceId(entry.name);
+    const deviceId = semanticId(entry.name);
     if (seen.has(deviceId)) {
       continue;
     }

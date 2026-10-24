@@ -1,9 +1,10 @@
 import {
   createAssetResolver,
-  DEFAULT_MEASUREMENT_SYSTEM,
+  DEFAULT_UNIT_PREFERENCES,
   type FabricThemeEnvelope,
   isMeasurementSystem,
-  type MeasurementSystem,
+  normalizeUnitPreferences,
+  type UnitPreferences,
   validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
 
@@ -47,22 +48,33 @@ export class ThemeLoadError extends Error {
  */
 export async function loadDisplayPreferences(
   fetcher: typeof fetch,
-): Promise<MeasurementSystem> {
+): Promise<UnitPreferences> {
   try {
     const response = await fetcher("/api/display");
     if (!response.ok) {
-      return DEFAULT_MEASUREMENT_SYSTEM;
+      return { ...DEFAULT_UNIT_PREFERENCES };
     }
 
     const body = (await response.json()) as {
-      settings?: { measurement?: unknown };
+      settings?: { measurement?: unknown; units?: unknown };
     };
+    // A stored value this build cannot display refuses the whole set rather
+    // than being silently dropped: the reading then shows what every other
+    // display shows, which is the one answer nobody chose but everyone shares.
+    const units = normalizeUnitPreferences(body.settings?.units ?? {});
     const measurement = body.settings?.measurement;
-    return isMeasurementSystem(measurement)
-      ? measurement
-      : DEFAULT_MEASUREMENT_SYSTEM;
+
+    return {
+      ...DEFAULT_UNIT_PREFERENCES,
+      ...units,
+      // The top-level field is the older spelling of the same choice; it only
+      // answers where the newer bag says nothing.
+      ...(units.measurement === undefined && isMeasurementSystem(measurement)
+        ? { measurement }
+        : {}),
+    };
   } catch {
-    return DEFAULT_MEASUREMENT_SYSTEM;
+    return { ...DEFAULT_UNIT_PREFERENCES };
   }
 }
 

@@ -66,6 +66,21 @@ being enabled. Provenance and the pinned digest:
 `docs/engineering/dependencies.md`; `vendor/lhm/PROVENANCE.txt` records the
 version, source URL and sha256 of the staged release.
 
+### PresentMon (bundled external program)
+
+A Yunari release ships PresentMon v2.6.0 (**MIT**, Copyright (C) 2017-2024
+Intel Corporation) as an external program, staged by
+`npm run vendor:presentmon -w @yunari/host`. Yunari links nothing and compiles
+nothing: it runs the console executable with `--output_stdout --no_csv` and
+reads the CSV it writes. It is not a dependency and its source is not vendored.
+
+MIT requires the copyright and permission notice to travel with the binary, so
+the vendor script stages PresentMon's own `LICENSE.txt` beside it. Release
+packaging must include `vendor/presentmon/LICENSE.txt` in the shipped
+distribution. Provenance and the pinned digest:
+`docs/engineering/dependencies.md`; `vendor/presentmon/PROVENANCE.txt` records
+the version, source URL and sha256 of the staged release.
+
 ## Build/test
 
 Declared development dependencies: @biomejs/biome 2.5.14 (MIT OR Apache-2.0),
@@ -89,6 +104,21 @@ sections: the three the editor declares in `dependencies` ship with it, and
 `@playwright/mcp` is a `devDependency`.
 
 ## Vendored source
+
+### Meteocons (weather icons)
+
+`packages/host/vendor/weather-icons/` holds 23 SVGs from
+`@meteocons/svg-static` 0.1.0, `fill` style, staged by
+`npm run vendor:weather-icons -w @yunari/host`. The script pins
+<https://registry.npmjs.org/@meteocons/svg-static/-/svg-static-0.1.0.tgz> by
+its sha512 integrity and extracts only the slugs the provider's allow-list
+names; the committed bytes are what the host serves at
+`/api/weather/icon/<slug>.svg`.
+
+Licence: MIT, Copyright (c) 2020-present Bas Milius. The complete MIT text
+travels with the bytes as `packages/host/vendor/weather-icons/LICENSE`.
+Source and artwork: <https://github.com/basmilius/meteocons>; attribution
+"Meteocons by Bas Milius".
 
 `packages/editor/src/snap-manager/` and `packages/editor/src/indicator-manager/`
 contain adapted copies of `@anu3ev/fabric-image-editor` 0.10.32, taken from

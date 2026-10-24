@@ -16,6 +16,7 @@ import {
   applyAuthoredText,
   loadFontAssets,
   mountFabricScene,
+  refreshBoundImages,
   refreshBoundText,
   reviveThemeEnvelope,
   startChartRefresh,
@@ -196,16 +197,20 @@ async function startHostedTheme(
   theme: FabricThemeEnvelope,
   session: DisplaySessionToken,
 ): Promise<void> {
-  declareDocumentLanguage(theme.metadata?.themeLanguage);
+  const language = theme.metadata?.themeLanguage;
+  declareDocumentLanguage(language);
   // Fetch before allocating live resources so a failed font request has nothing to release.
   const fontBytes = await loadHostedFontAssets(theme.id, theme, session.fetch);
-  const measurement = await loadDisplayPreferences(session.fetch);
+  const units = await loadDisplayPreferences(session.fetch);
   const keys = boundSemanticKeys(theme);
+  // The host localizes per display and does not read this theme to learn its
+  // language, so the already-loaded value rides the request. The host validates.
+  const streamParameters = new URLSearchParams({ keys: keys.join(",") });
+  if (language !== undefined && language.length > 0) {
+    streamParameters.set("lang", language);
+  }
   const liveHandle = createLiveSource({
-    url: session.streamUrl(
-      SAMPLE_STREAM_PATH,
-      new URLSearchParams({ keys: keys.join(",") }),
-    ),
+    url: session.streamUrl(SAMPLE_STREAM_PATH, streamParameters),
     onStatus: (status, detail) =>
       showConnectionState(status, keys.length, detail),
   });
@@ -256,6 +261,22 @@ async function startHostedTheme(
       liveHandle.source,
       theme.globals?.palette,
     );
+    // An image reading is a URL on this host, resolved through the session the
+    // way every other packaged asset is. The pass refuses anything else and puts
+    // the authored picture back, so a sample can never choose an origin.
+    refreshBoundImages(
+      handle.canvas.getObjects(),
+      theme.bindings ?? {},
+      liveHandle.source,
+      {
+        resolve: (url) => session.withToken(url),
+        onRefused: reportImageRefusal,
+        onLoadError: (nodeId) =>
+          reportRepaintError(
+            `Image "${nodeId}" failed to load and was left as it was.`,
+          ),
+      },
+    );
     // Revived text carries the authored runs, not the sampled readings: the
     // saved scene keeps placeholders, so every cadence re-resolves the runs
     // through the bindings, the way a rebuilt plan would.
@@ -264,7 +285,7 @@ async function startHostedTheme(
       theme.bindings ?? {},
       liveHandle.source,
       theme.globals,
-      measurement,
+      units,
       theme.metadata?.themeLanguage,
     );
     handle.canvas.requestRenderAll();
@@ -494,6 +515,16 @@ function hydrateCharts(
 }
 
 const reportedChartIssues = new Set<string>();
+/** One line per image and cause: the refresh cadence would otherwise repeat a
+ *  refusal thirty times a second for as long as the sample stands. */
+const reportedImageRefusals = new Set<string>();
+
+function reportImageRefusal(nodeId: string, reason: string): void {
+  const message = `Image "${nodeId}": ${reason}`;
+  if (reportedImageRefusals.has(message)) return;
+  reportedImageRefusals.add(message);
+  reportRepaintError(message);
+}
 
 /**
  * Declares the theme's language on the page that shows it.

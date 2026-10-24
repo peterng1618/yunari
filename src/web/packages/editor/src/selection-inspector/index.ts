@@ -4,6 +4,7 @@ import {
   type Binding,
   type FabricGlobals,
   type SampleSource,
+  type SemanticKeyDescriptor,
 } from "@yunari/renderer-core";
 import {
   applyAuthoredText,
@@ -59,6 +60,7 @@ import {
   type CropEdits,
   editRefusal,
   type FontFaceEdits,
+  IMAGE_BINDING_FIELD_ID,
   isTextObject,
   type ProjectionPorts,
   projectSelection,
@@ -120,6 +122,10 @@ interface SelectionInspectorOptions {
    * mounted for the session rather than rebuilt.
    */
   readonly sampleSource?: () => SampleSource;
+  /** The readings a run may name, pulled at render time like the sample source
+   *  so a catalogue refreshed after mount reaches the next projection. Absent
+   *  keeps the built-in vocabulary. */
+  readonly descriptors?: () => readonly SemanticKeyDescriptor[];
   /**
    * Re-resolves the glass lifecycle. The handle belongs to the shell that
    * created it and re-resolves on its own only when the canvas gains or loses
@@ -516,6 +522,20 @@ export function createSelectionInspector(
     if (fieldId === "opacity") return writeOpacity(object, value);
     if (fieldId === "flipX" || fieldId === "flipY")
       return writeFlip(object, fieldId, value);
+    if (fieldId === IMAGE_BINDING_FIELD_ID) {
+      // The binding belongs to the envelope, not the Fabric object: the session
+      // owns the map, so the funnel hands it the whole replacement. One image,
+      // one reading; the blank entry is the picker's clear.
+      const nodeId = object.get("id");
+      if (typeof nodeId !== "string" || nodeId.length === 0) return false;
+      if (typeof value !== "string") return false;
+      if (options.onNodeBindingsChange === undefined) return false;
+      options.onNodeBindingsChange(
+        nodeId,
+        value === "" ? [] : [{ id: "image", semanticKey: value }],
+      );
+      return true;
+    }
     if (GEOMETRY_KEYS.has(fieldId)) {
       return write(object, fieldId as GeometryKey, value as number);
     }
@@ -778,6 +798,9 @@ export function createSelectionInspector(
       onNodeBindingsChange: options.onNodeBindingsChange,
       sampleSource: options.sampleSource,
       canWriteFontFace: options.fontActions !== undefined,
+      ...(options.descriptors === undefined
+        ? {}
+        : { descriptors: options.descriptors }),
       ...(chartFields === undefined ? {} : { chartFields }),
     };
   };

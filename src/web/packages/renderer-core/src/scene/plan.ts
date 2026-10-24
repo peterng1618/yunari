@@ -9,7 +9,10 @@ import {
 } from "../charts/line.js";
 import { buildPieOption, type PieSliceInput } from "../charts/pie.js";
 import { chartPaintFieldsFor } from "../charts/settings-fields.js";
-import { describeSemanticKey } from "../data/semantic-keys.js";
+import {
+  describeSemanticKey,
+  type SemanticKeyDescriptor,
+} from "../data/semantic-keys.js";
 import type { SampleSource } from "../data/source.js";
 import type {
   Artboard,
@@ -29,8 +32,9 @@ import type { Sample, SensorStatus } from "../types.js";
 import { formatInstant } from "./datetime/format.js";
 import {
   convertForDisplay,
-  DEFAULT_MEASUREMENT_SYSTEM,
   type MeasurementSystem,
+  type UnitOverrides,
+  type UnitPreferences,
 } from "./measurement.js";
 
 /**
@@ -126,7 +130,7 @@ export interface PlanNode {
 
 /** Runtime frame diagnostics, not document-validation errors. */
 export interface PlanIssue {
-  readonly code: "unmapped-key" | "unresolved-global";
+  readonly code: "unmapped-key" | "unresolved-global" | "unsupported-unit";
   readonly nodeId: string;
   readonly detail: string;
 }
@@ -152,6 +156,14 @@ export interface PlanInputs {
   readonly longUnits?: Readonly<Record<string, string>>;
   /** The consumer's measurement preference; metric shows what was measured. */
   readonly measurement?: MeasurementSystem;
+  /** The consumer's full display choices; `measurement` above still wins. */
+  readonly units?: UnitPreferences;
+  /**
+   * The descriptors that supplied the bound keys, when the caller has them.
+   * A custom source's `unitKind` lives only on its provider's descriptor, so
+   * conversion reads it here rather than from the generic `custom.*` shape.
+   */
+  readonly descriptors?: readonly SemanticKeyDescriptor[];
   /**
    * The language the theme's text is written in. A runtime input like
    * `longUnits`, never persisted scene state: the theme's own `metadata` owns it.
@@ -202,7 +214,12 @@ export function resolveTextSegments(
   bindings: readonly Binding[],
   context: Pick<
     PlanInputs,
-    "source" | "longUnits" | "measurement" | "themeLanguage"
+    | "source"
+    | "longUnits"
+    | "measurement"
+    | "units"
+    | "themeLanguage"
+    | "descriptors"
   >,
   globals: Globals,
   issues: PlanIssue[],
@@ -241,7 +258,15 @@ export function resolveTextSegments(
       return { text: MISSING_VALUE_TEXT, style };
     }
 
-    return formatValueSegment(sample, binding, run, style, context);
+    return formatValueSegment(
+      sample,
+      binding,
+      run,
+      style,
+      nodeId,
+      context,
+      issues,
+    );
   });
 }
 
@@ -250,7 +275,12 @@ function formatValueSegment(
   binding: Binding,
   run: Extract<TextRun, { kind: "value" }>,
   style: ResolvedStyle,
-  context: Pick<PlanInputs, "longUnits" | "measurement" | "themeLanguage">,
+  nodeId: string,
+  context: Pick<
+    PlanInputs,
+    "longUnits" | "measurement" | "units" | "themeLanguage" | "descriptors"
+  >,
+  issues: PlanIssue[],
 ): PlanTextSegment {
   if (sample.status !== "ok") {
     return {
@@ -261,7 +291,7 @@ function formatValueSegment(
     };
   }
 
-  const precision = run.precision ?? binding.precision;
+  const authoredPrecision = run.precision ?? binding.precision;
   const unitDisplay = run.unitDisplay ?? binding.unitDisplay ?? "short";
 
   let text: string;
@@ -269,15 +299,27 @@ function formatValueSegment(
 
   if (typeof sample.value === "number" && Number.isFinite(sample.value)) {
     const scaled = sample.value * (binding.scale ?? 1) + (binding.offset ?? 0);
-    // The consumer's measurement preference converts what is displayed, after
-    // the binding's own scale and offset and before formatting, so a converted
+    // The consumer's unit preferences convert what is displayed, after the
+    // binding's own scale and offset and before formatting, so a converted
     // value is never fed back through a scale.
+    const overrides = bindingUnitOverrides(binding);
     const converted = convertForDisplay(
       binding.semanticKey,
       scaled,
       sample.unit,
-      context.measurement ?? DEFAULT_MEASUREMENT_SYSTEM,
+      unitPreferencesFor(context),
+      overrides,
+      descriptorFor(context, binding.semanticKey),
     );
+    if (converted.unsupportedUnit === true && overrides?.unit !== undefined) {
+      issues.push({
+        code: "unsupported-unit",
+        nodeId,
+        detail: `Unit "${overrides.unit}" is not displayable for "${binding.semanticKey}".`,
+      });
+    }
+    // An authored precision wins; otherwise the chosen unit supplies its own.
+    const precision = authoredPrecision ?? converted.precision;
     text = formatNumber(converted.value, precision, context.themeLanguage);
     shown = converted.unit;
   } else if (sample.textValue !== undefined) {
@@ -291,6 +333,47 @@ function formatValueSegment(
   const unit = formatUnit(shown, unitDisplay, context.longUnits);
 
   return { text: unit === "" ? text : `${text}${unit}`, style };
+}
+
+/**
+ * `units` carries the whole preference set; the older `measurement` field, kept
+ * for callers that only choose temperature, wins when both are present.
+ */
+function unitPreferencesFor(
+  context: Pick<PlanInputs, "measurement" | "units">,
+): UnitPreferences {
+  return context.measurement === undefined
+    ? (context.units ?? {})
+    : { ...context.units, measurement: context.measurement };
+}
+
+/**
+ * The descriptor that owns a key: the one the caller supplied, else the
+ * vocabulary's. A supplied list carries built-ins too, and the catalogue
+ * merges built-ins first, so an exact match is the canonical descriptor.
+ */
+function descriptorFor(
+  context: Pick<PlanInputs, "descriptors">,
+  key: string,
+): SemanticKeyDescriptor | undefined {
+  return (
+    context.descriptors?.find((descriptor) => descriptor.key === key) ??
+    describeSemanticKey(key)
+  );
+}
+
+/** The author's per-binding unit request, or `undefined` when none was made. */
+function bindingUnitOverrides(binding: Binding): UnitOverrides | undefined {
+  if (binding.unit === undefined && binding.autoScale === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(binding.unit === undefined ? {} : { unit: binding.unit }),
+    ...(binding.autoScale === undefined
+      ? {}
+      : { autoScale: binding.autoScale }),
+  };
 }
 
 /**

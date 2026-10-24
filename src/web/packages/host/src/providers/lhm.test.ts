@@ -1,7 +1,29 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { LHM_DESCRIPTORS, LhmSensorProvider } from "./lhm.js";
-import { matchLhmSensors } from "./lhm-mapping.js";
-import { flattenLhmSensors } from "./lhm-tree.js";
+import { diskDeviceReadings, matchLhmSensors } from "./lhm-mapping.js";
+import { flattenLhmSensors, type LhmSensor } from "./lhm-tree.js";
+
+/** The real v0.9.6 capture: i9-10850K + RTX 3080 Ti + Gigabyte Z590. */
+function realPayload(): unknown {
+  const path = fileURLToPath(
+    new URL("./__fixtures__/real-lhm.json", import.meta.url),
+  );
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function valuesOf(
+  sensors: readonly LhmSensor[],
+  keys: readonly string[],
+): ReadonlyMap<string, number> {
+  return new Map(
+    matchLhmSensors(sensors, keys).map((match) => [
+      match.semanticKey,
+      match.value,
+    ]),
+  );
+}
 
 /** Minimal `data.json` shaped like a real LHM reply. */
 const DATA_JSON = {
@@ -27,6 +49,87 @@ const DATA_JSON = {
                   SensorId: "/intelcpu/0/temperature/1",
                   Type: "Temperature",
                   RawValue: "55.0 °C",
+                },
+                {
+                  Text: "Core Max",
+                  SensorId: "/intelcpu/0/temperature/2",
+                  Type: "Temperature",
+                  RawValue: "61.0 °C",
+                },
+                {
+                  Text: "Core Average",
+                  SensorId: "/intelcpu/0/temperature/3",
+                  Type: "Temperature",
+                  RawValue: "57.0 °C",
+                },
+                {
+                  Text: "CPU Core #1",
+                  SensorId: "/intelcpu/0/temperature/4",
+                  Type: "Temperature",
+                  RawValue: "55.0 °C",
+                },
+                {
+                  Text: "CPU Core #2",
+                  SensorId: "/intelcpu/0/temperature/5",
+                  Type: "Temperature",
+                  RawValue: "58.0 °C",
+                },
+              ],
+            },
+            {
+              Text: "Load",
+              Children: [
+                {
+                  Text: "CPU Core #1 Thread #1",
+                  SensorId: "/intelcpu/0/load/0",
+                  Type: "Load",
+                  RawValue: "100.0 %",
+                },
+                {
+                  Text: "CPU Core #1 Thread #2",
+                  SensorId: "/intelcpu/0/load/1",
+                  Type: "Load",
+                  RawValue: "0.0 %",
+                },
+                {
+                  Text: "CPU Core #2 Thread #1",
+                  SensorId: "/intelcpu/0/load/2",
+                  Type: "Load",
+                  RawValue: "5.0 %",
+                },
+                {
+                  Text: "CPU Core #2 Thread #2",
+                  SensorId: "/intelcpu/0/load/3",
+                  Type: "Load",
+                  RawValue: "7.0 %",
+                },
+              ],
+            },
+            {
+              Text: "Clock",
+              Children: [
+                {
+                  Text: "CPU Core #1",
+                  SensorId: "/intelcpu/0/clock/0",
+                  Type: "Clock",
+                  RawValue: "4800.0 MHz",
+                },
+                {
+                  Text: "CPU Core #2",
+                  SensorId: "/intelcpu/0/clock/1",
+                  Type: "Clock",
+                  RawValue: "4700.0 MHz",
+                },
+              ],
+            },
+            {
+              Text: "Voltage",
+              Children: [
+                {
+                  Text: "CPU Core",
+                  SensorId: "/intelcpu/0/voltage/0",
+                  Type: "Voltage",
+                  RawValue: "1.362 V",
                 },
               ],
             },
@@ -89,6 +192,23 @@ const DATA_JSON = {
                   SensorId: "/gpu-nvidia/0/data/1",
                   Type: "SmallData",
                   RawValue: "12288.0 MB",
+                },
+              ],
+            },
+            {
+              Text: "Fan",
+              Children: [
+                {
+                  Text: "GPU Fan 1",
+                  SensorId: "/gpu-nvidia/0/fan/0",
+                  Type: "Fan",
+                  RawValue: "1100 RPM",
+                },
+                {
+                  Text: "GPU Fan 2",
+                  SensorId: "/gpu-nvidia/0/fan/1",
+                  Type: "Fan",
+                  RawValue: "1300 RPM",
                 },
               ],
             },
@@ -272,6 +392,18 @@ describe("LHM sensor mapping", () => {
     expect(matchLhmSensors(twoGpus, ["gpu.load"])[0]?.value).toBe(70);
   });
 
+  it("numbers each GPU fan while the aggregate keeps the first", () => {
+    const matched = new Map(
+      matchLhmSensors(sensors, ["gpu.fan", "gpu.fan.1", "gpu.fan.2"]).map(
+        (match) => [match.semanticKey, match.value],
+      ),
+    );
+
+    expect(matched.get("gpu.fan.1")).toBe(1100);
+    expect(matched.get("gpu.fan.2")).toBe(1300);
+    expect(matched.get("gpu.fan")).toBe(1100);
+  });
+
   it("sums throughput across links rather than reporting one", () => {
     const twoNics = flattenLhmSensors({
       Children: [
@@ -324,25 +456,76 @@ describe("LHM sensor mapping", () => {
   });
 });
 
-describe("LHM provider", () => {
-  function providerReturning(
-    response: { ok: boolean; status: number; body: unknown } | Error,
-  ): LhmSensorProvider {
-    return new LhmSensorProvider({
-      fetcher: vi.fn(async () => {
-        if (response instanceof Error) throw response;
-        return {
-          ok: response.ok,
-          status: response.status,
-          text: async () => JSON.stringify(response.body),
-        };
-      }),
-    });
-  }
+function providerReturning(
+  response: { ok: boolean; status: number; body: unknown } | Error,
+): LhmSensorProvider {
+  return new LhmSensorProvider({
+    fetcher: vi.fn(async () => {
+      if (response instanceof Error) throw response;
+      return {
+        ok: response.ok,
+        status: response.status,
+        text: async () => JSON.stringify(response.body),
+      };
+    }),
+  });
+}
 
+describe("LHM provider", () => {
   it("describes the extended vocabulary it can answer", () => {
-    expect(LHM_DESCRIPTORS.map((d) => d.semanticKey)).toContain("cpu.temp");
+    const keys = LHM_DESCRIPTORS.map((d) => d.semanticKey);
+
+    expect(keys).toContain("cpu.temp");
+    expect(keys).toContain("cpu.temp.package");
+    expect(keys).toContain("cpu.voltage");
+    expect(keys).toContain("gpu.temp.hotspot");
+    expect(keys).toContain("gpu.clock.memory");
+    expect(keys).toContain("vram.temp");
     expect(LHM_DESCRIPTORS.every((d) => d.tier === "extended")).toBe(true);
+  });
+
+  it("describes the dynamic keys this machine reports", async () => {
+    const provider = providerReturning({
+      ok: true,
+      status: 200,
+      body: DATA_JSON,
+    });
+
+    const descriptors = await provider.describe();
+    const keys = descriptors.map((descriptor) => descriptor.semanticKey);
+    // Derived from the payload rather than hard-coded, so the test still holds
+    // when the fixture gains or loses a core.
+    const cores = new Set(
+      flattenLhmSensors(DATA_JSON).flatMap((sensor) => {
+        const match = /^CPU Core #(\d+)(?: Thread #\d+)?$/.exec(sensor.text);
+        return match === null ? [] : [Number(match[1])];
+      }),
+    );
+
+    expect(cores.size).toBeGreaterThan(1);
+    for (const core of cores) {
+      for (const quantity of ["load", "temp", "clock"]) {
+        expect(keys).toContain(`cpu.core.${core}.${quantity}`);
+      }
+    }
+    expect(keys.filter((key) => key.startsWith("cpu.core."))).toHaveLength(
+      cores.size * 3,
+    );
+    expect(
+      descriptors.find(
+        (descriptor) => descriptor.semanticKey === "cpu.core.1.load",
+      ),
+    ).toMatchObject({ unit: "%", tier: "extended" });
+    expect(keys).toContain("gpu.fan.1");
+    expect(keys).toContain("gpu.fan.2");
+  });
+
+  it("falls back to the static list when discovery fails", async () => {
+    const unreachable = providerReturning(new Error("connect ECONNREFUSED"));
+    const refused = providerReturning({ ok: false, status: 500, body: {} });
+
+    expect(await unreachable.describe()).toEqual(LHM_DESCRIPTORS);
+    expect(await refused.describe()).toEqual(LHM_DESCRIPTORS);
   });
 
   it("maps a live answer onto vocabulary units", async () => {
@@ -362,6 +545,48 @@ describe("LHM provider", () => {
       { status: "ok", value: 10, unit: "Mb/s" },
     ]);
     expect(provider.health().available).toBe(true);
+  });
+
+  it("answers per-core and per-fan keys requested by name", async () => {
+    const provider = providerReturning({
+      ok: true,
+      status: 200,
+      body: DATA_JSON,
+    });
+
+    const entries = await provider.sample(
+      [
+        "cpu.core.1.temp",
+        "cpu.core.1.load",
+        "cpu.core.2.load",
+        "gpu.fan.2",
+        "cpu.voltage",
+      ],
+      Date.UTC(2026, 8, 24),
+    );
+
+    expect(entries.map((entry) => entry.sample)).toMatchObject([
+      { status: "ok", value: 55, unit: "°C" },
+      // 100 % and 0 % threads: the core is half utilized, not fully.
+      { status: "ok", value: 50, unit: "%" },
+      // 5 % and 7 % threads.
+      { status: "ok", value: 6, unit: "%" },
+      { status: "ok", value: 1300, unit: "RPM" },
+      { status: "ok", value: 1.362, unit: "V" },
+    ]);
+  });
+
+  it("reports a dynamic key the machine cannot answer as a gap", async () => {
+    const provider = providerReturning({
+      ok: true,
+      status: 200,
+      body: DATA_JSON,
+    });
+
+    const entries = await provider.sample(["cpu.core.9.temp"], 0);
+
+    expect(entries[0]?.sample).toMatchObject({ status: "missing" });
+    expect(entries[0]?.sample).not.toHaveProperty("value");
   });
 
   it("reports LHM being absent as a gap with a reason, never a reading", async () => {
@@ -417,5 +642,844 @@ describe("LHM provider", () => {
 
     expect(await provider.sample(["ram.used"], 0)).toEqual([]);
     expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe("LHM motherboard and cooler mapping", () => {
+  const sensors = flattenLhmSensors(realPayload());
+
+  it("gives every board fan header its own rpm key", () => {
+    const values = valuesOf(sensors, [
+      "motherboard.fan.fan-1.rpm",
+      "motherboard.fan.fan-2.rpm",
+      "motherboard.fan.fan-3.rpm",
+      "motherboard.fan.fan-4.rpm",
+      "motherboard.fan.fan-5.rpm",
+    ]);
+
+    // A stopped header reports 0, not a gap, and each header keeps its own
+    // reading instead of collapsing to the fastest.
+    expect(values.get("motherboard.fan.fan-1.rpm")).toBe(0);
+    expect(values.get("motherboard.fan.fan-2.rpm")).toBe(1048);
+    expect(values.get("motherboard.fan.fan-5.rpm")).toBe(1286);
+  });
+
+  it("answers each board voltage under the sensor's own id", () => {
+    const values = valuesOf(sensors, [
+      "motherboard.voltage.voltage-1",
+      "motherboard.voltage.3v-standby",
+      "motherboard.voltage.cmos-battery",
+    ]);
+
+    expect(values.get("motherboard.voltage.voltage-1")).toBe(1.212);
+    expect(values.get("motherboard.voltage.3v-standby")).toBe(3.384);
+    expect(values.get("motherboard.voltage.cmos-battery")).toBe(3.168);
+  });
+
+  it("maps the unlabelled board temperatures to motherboard.temp", () => {
+    // The ITE super-I/O reports Temperature #1..#6 because this board has no
+    // vendor label mapping; the aggregate takes the highest, like every other
+    // temperature key.
+    expect(
+      valuesOf(sensors, ["motherboard.temp"]).get("motherboard.temp"),
+    ).toBe(47);
+  });
+
+  it("maps the cooler's coolant and pump from the Kraken", () => {
+    const values = valuesOf(sensors, ["cooling.temp", "cooling.pump.pump.rpm"]);
+
+    expect(values.get("cooling.temp")).toBe(33.9);
+    expect(values.get("cooling.pump.pump.rpm")).toBe(1067);
+    // The aggregate is unchanged: cpu.temp still prefers the CPU package.
+    expect(valuesOf(sensors, ["cpu.temp"]).get("cpu.temp")).toBe(41);
+  });
+
+  it("derives a percent key only from a Control sensor", () => {
+    // Captured shapes: a Fan sensor and a Control sensor share a header label,
+    // and a Control can report a percentage while its Fan reports RPM. The
+    // Control percentages in the capture are unreadable (" %"), so this payload
+    // keeps the same shape with a readable value.
+    const withControl = flattenLhmSensors({
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [
+            {
+              Text: "ITE IT8689E",
+              HardwareId: "/lpc/it8689e/0",
+              Children: [
+                {
+                  Text: "Fans",
+                  Children: [
+                    {
+                      Text: "Fan #1",
+                      SensorId: "a",
+                      Type: "Fan",
+                      RawValue: "900 RPM",
+                    },
+                    {
+                      Text: "Fan #2",
+                      SensorId: "b",
+                      Type: "Fan",
+                      RawValue: "700 RPM",
+                    },
+                  ],
+                },
+                {
+                  Text: "Controls",
+                  Children: [
+                    {
+                      Text: "Fan #1",
+                      SensorId: "c",
+                      Type: "Control",
+                      RawValue: "45.0 %",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      valuesOf(withControl, [
+        "motherboard.fan.fan-1.rpm",
+        "motherboard.fan.fan-1.percent",
+        "motherboard.fan.fan-2.rpm",
+        "motherboard.fan.fan-2.percent",
+      ]),
+    ).toEqual(
+      new Map([
+        ["motherboard.fan.fan-1.rpm", 900],
+        ["motherboard.fan.fan-1.percent", 45],
+        ["motherboard.fan.fan-2.rpm", 700],
+      ]),
+    );
+
+    // Fan #2 has no Control sensor, so it has no percent key at all.
+    expect(
+      matchLhmSensors(withControl, ["motherboard.fan.fan-2.percent"]),
+    ).toEqual([]);
+  });
+
+  it("describes board fans, voltages and the pump with the sensor's own label", async () => {
+    const provider = providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    });
+
+    const descriptors = await provider.describe();
+    const keys = descriptors.map((descriptor) => descriptor.semanticKey);
+
+    expect(keys).toContain("motherboard.fan.fan-2.rpm");
+    expect(keys).toContain("motherboard.voltage.voltage-1");
+    expect(keys).toContain("cooling.pump.pump.rpm");
+    expect(
+      descriptors.find(
+        (descriptor) => descriptor.semanticKey === "motherboard.fan.fan-2.rpm",
+      ),
+    ).toMatchObject({
+      label: "Fan #2",
+      unit: "RPM",
+      tier: "extended",
+    });
+    expect(
+      descriptors.find(
+        (descriptor) =>
+          descriptor.semanticKey === "motherboard.voltage.cmos-battery",
+      ),
+    ).toMatchObject({ label: "CMOS Battery", unit: "V" });
+  });
+
+  it("advertises a Control's percent key even when its reading is unreadable", async () => {
+    // The captured board controls arrive as " %" (unit only, no number). The
+    // Control type documents a percentage, so the key is listed; the sample is
+    // a gap, never an invented zero.
+    const provider = providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    });
+
+    const keys = (await provider.describe()).map(
+      (descriptor) => descriptor.semanticKey,
+    );
+    expect(keys).toContain("motherboard.fan.fan-1.percent");
+
+    const entries = await provider.sample(["motherboard.fan.fan-1.percent"], 0);
+    expect(entries[0]?.sample).toMatchObject({ status: "missing" });
+    expect(entries[0]?.sample).not.toHaveProperty("value");
+  });
+
+  it("reads a value reported with a leading space before its unit", () => {
+    const sensors = flattenLhmSensors({
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [
+            {
+              Text: "ITE IT8689E",
+              HardwareId: "/lpc/it8689e/0",
+              Children: [
+                {
+                  Text: "Controls",
+                  Children: [
+                    {
+                      Text: "Fan #1",
+                      SensorId: "a",
+                      Type: "Control",
+                      RawValue: " 45.0 %",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      valuesOf(sensors, ["motherboard.fan.fan-1.percent"]).get(
+        "motherboard.fan.fan-1.percent",
+      ),
+    ).toBe(45);
+  });
+
+  it("does not read a board-vendor GPU or SSD as the motherboard", () => {
+    const vendor = flattenLhmSensors({
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [
+            {
+              Text: "Gigabyte GeForce RTX 4070",
+              HardwareId: "/gpu-nvidia/0",
+              Children: [
+                {
+                  Text: "Temperatures",
+                  Children: [
+                    {
+                      Text: "GPU Core",
+                      SensorId: "a",
+                      Type: "Temperature",
+                      RawValue: "50.0 °C",
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              Text: "AORUS NVMe SSD",
+              HardwareId: "/nvme/9",
+              Children: [
+                {
+                  Text: "Data",
+                  Children: [
+                    {
+                      Text: "Total Space",
+                      SensorId: "b",
+                      Type: "Data",
+                      RawValue: "100.0 GB",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const values = valuesOf(vendor, ["gpu.temp", "disk.total"]);
+    expect(values.get("gpu.temp")).toBe(50);
+    expect(values.get("disk.total")).toBe(100);
+    expect(matchLhmSensors(vendor, ["motherboard.temp"])).toEqual([]);
+  });
+});
+
+// The two payloads below are LHM-shape fixtures, not hardware captures: they
+// use the hardware paths and sensor names LHM's CorsairPsu/Battery classes
+// create (see Hardware/Psu/Corsair/CorsairPsu.cs, Hardware/Battery/Battery.cs),
+// because no capture with a PSU or battery was available.
+const PSU_SHAPE = {
+  Children: [
+    {
+      Text: "Sensor",
+      Children: [
+        {
+          Text: "Corsair HX1000i",
+          HardwareId: "/psu/corsair/0",
+          Children: [
+            {
+              Text: "Powers",
+              Children: [
+                {
+                  Text: "+12V",
+                  SensorId: "/psu/corsair/0/power/0",
+                  Type: "Power",
+                  RawValue: "300.0 W",
+                },
+                {
+                  Text: "Total watts",
+                  SensorId: "/psu/corsair/0/power/1",
+                  Type: "Power",
+                  RawValue: "420.0 W",
+                },
+              ],
+            },
+            {
+              Text: "Temperatures",
+              Children: [
+                {
+                  Text: "VRM",
+                  SensorId: "/psu/corsair/0/temperature/0",
+                  Type: "Temperature",
+                  RawValue: "45.0 °C",
+                },
+                {
+                  Text: "Case",
+                  SensorId: "/psu/corsair/0/temperature/1",
+                  Type: "Temperature",
+                  RawValue: "38.0 °C",
+                },
+              ],
+            },
+            {
+              Text: "Fans",
+              Children: [
+                {
+                  Text: "Case",
+                  SensorId: "/psu/corsair/0/fan/0",
+                  Type: "Fan",
+                  RawValue: "900 RPM",
+                },
+              ],
+            },
+            {
+              Text: "Voltages",
+              Children: [
+                {
+                  Text: "Input",
+                  SensorId: "/psu/corsair/0/voltage/0",
+                  Type: "Voltage",
+                  RawValue: "230.0 V",
+                },
+                {
+                  Text: "+12V",
+                  SensorId: "/psu/corsair/0/voltage/1",
+                  Type: "Voltage",
+                  RawValue: "12.1 V",
+                },
+                {
+                  Text: "+3.3V",
+                  SensorId: "/psu/corsair/0/voltage/2",
+                  Type: "Voltage",
+                  RawValue: "3.3 V",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const BATTERY_SHAPE = {
+  Children: [
+    {
+      Text: "Sensor",
+      Children: [
+        {
+          Text: "DELL 97WH",
+          HardwareId: "/battery/DELL-97WH_123",
+          Children: [
+            {
+              Text: "Level",
+              Children: [
+                {
+                  Text: "Charge Level",
+                  SensorId: "/battery/DELL-97WH_123/level/0",
+                  Type: "Level",
+                  RawValue: "76.0 %",
+                },
+                {
+                  Text: "Degradation Level",
+                  SensorId: "/battery/DELL-97WH_123/level/1",
+                  Type: "Level",
+                  RawValue: "4.0 %",
+                },
+              ],
+            },
+            {
+              Text: "Voltages",
+              Children: [
+                {
+                  Text: "Voltage",
+                  SensorId: "/battery/DELL-97WH_123/voltage/0",
+                  Type: "Voltage",
+                  RawValue: "12.4 V",
+                },
+              ],
+            },
+            {
+              Text: "Powers",
+              Children: [
+                {
+                  Text: "Charge/Discharge Rate",
+                  SensorId: "/battery/DELL-97WH_123/power/0",
+                  Type: "Power",
+                  RawValue: "30.0 W",
+                },
+              ],
+            },
+            {
+              Text: "Time",
+              Children: [
+                {
+                  Text: "Remaining Time (Estimated)",
+                  SensorId: "/battery/DELL-97WH_123/timespan/0",
+                  Type: "TimeSpan",
+                  RawValue: "5400 s",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+/** One storage node with the capacity sensors LHM reports for a volume. */
+function driveNode(
+  name: string,
+  hardwareId: string,
+  totalGb: number,
+  freeGb?: number,
+  temperatureC?: number,
+) {
+  const data = [
+    {
+      Text: "Total Space",
+      SensorId: `${hardwareId}/data/2`,
+      Type: "Data",
+      RawValue: `${totalGb} GB`,
+    },
+    ...(freeGb === undefined
+      ? []
+      : [
+          {
+            Text: "Free Space",
+            SensorId: `${hardwareId}/data/1`,
+            Type: "Data",
+            RawValue: `${freeGb} GB`,
+          },
+        ]),
+  ];
+  const temperatures =
+    temperatureC === undefined
+      ? []
+      : [
+          {
+            Text: "Temperature",
+            Children: [
+              {
+                Text: "Temperature",
+                SensorId: `${hardwareId}/temperature/0`,
+                Type: "Temperature",
+                RawValue: `${temperatureC} °C`,
+              },
+            ],
+          },
+        ];
+
+  return {
+    Text: name,
+    HardwareId: hardwareId,
+    Children: [...temperatures, { Text: "Data", Children: data }],
+  };
+}
+
+/** Two drives reporting the same model, so only their ids distinguish them. */
+function identicalDrives() {
+  return {
+    Children: [
+      {
+        Text: "Sensor",
+        Children: [
+          driveNode("Samsung SSD 970", "/nvme/0", 400, 200, 35),
+          driveNode("Samsung SSD 970", "/nvme/1", 400, 100, 40),
+        ],
+      },
+    ],
+  };
+}
+
+describe("LHM per-drive readings", () => {
+  it("gives the same model twice distinct ids and its own readings", () => {
+    const sensors = flattenLhmSensors({
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [
+            driveNode("Samsung SSD 970", "/nvme/0", 400, 200),
+            driveNode("Samsung SSD 970", "/nvme/1", 400, 100),
+          ],
+        },
+      ],
+    });
+
+    expect(
+      diskDeviceReadings(sensors).map((device) => [
+        device.deviceId,
+        device.usedGb,
+      ]),
+    ).toEqual([
+      ["samsung-ssd-970", 200],
+      ["samsung-ssd-970-2", 300],
+    ]);
+  });
+
+  it("labels two identical drives by their own ids", async () => {
+    const descriptors = await providerReturning({
+      ok: true,
+      status: 200,
+      body: identicalDrives(),
+    }).describe();
+    const labels = new Map(
+      descriptors.map((descriptor) => [
+        descriptor.semanticKey,
+        descriptor.label,
+      ]),
+    );
+
+    expect(labels.get("disk.samsung-ssd-970.temp")).toBe(
+      "samsung-ssd-970 temperature",
+    );
+    expect(labels.get("disk.samsung-ssd-970-2.temp")).toBe(
+      "samsung-ssd-970-2 temperature",
+    );
+    expect(labels.get("disk.samsung-ssd-970.used")).toBe(
+      "samsung-ssd-970 used",
+    );
+    expect(labels.get("disk.samsung-ssd-970-2.used")).toBe(
+      "samsung-ssd-970-2 used",
+    );
+  });
+
+  it("reports a saved name keyed by the second drive's deduped id", async () => {
+    const entries = await providerReturning({
+      ok: true,
+      status: 200,
+      body: identicalDrives(),
+    }).sample(["disk.name"], 0, {
+      assignment: {
+        systemDisk: "samsung-ssd-970-2",
+        names: { "samsung-ssd-970-2": "Games" },
+      },
+    });
+
+    expect(entries[0]?.sample).toMatchObject({
+      status: "ok",
+      textValue: "Games",
+    });
+  });
+
+  it("says an existing drive reports no matching health sensor", async () => {
+    const entries = await providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    }).sample(["disk.st4000dm004-2cv104.health"], 0);
+
+    const message = entries[0]?.sample.message ?? "";
+    expect(message).toContain("this drive reports no matching");
+    expect(message).not.toContain("no drive with that id");
+  });
+
+  it("reads each drive's temperature, health, activity and byte rates", () => {
+    const values = valuesOf(flattenLhmSensors(realPayload()), [
+      "disk.lexar-500gb-ssd.temp",
+      "disk.lexar-500gb-ssd.health",
+      "disk.lexar-500gb-ssd.activity",
+      "disk.lexar-500gb-ssd.read",
+      "disk.lexar-500gb-ssd.write",
+      "disk.st4000dm004-2cv104.temp",
+    ]);
+
+    // The drive's composite figure, not its warning or critical thresholds.
+    expect(values.get("disk.lexar-500gb-ssd.temp")).toBe(43);
+    // LHM's Level sensor named `Life`.
+    expect(values.get("disk.lexar-500gb-ssd.health")).toBe(60);
+    // The drive's total activity, not its read or write share alone.
+    expect(values.get("disk.lexar-500gb-ssd.activity")).toBe(0.8);
+    // Byte-native: 635529.6 B/s is 0.64 MB/s, not 5.08 Mb/s.
+    expect(values.get("disk.lexar-500gb-ssd.read")).toBe(0);
+    expect(values.get("disk.lexar-500gb-ssd.write")).toBeCloseTo(0.6355296, 9);
+    // A drive with no Level sensor has no health key, not a zero.
+    expect(values.get("disk.st4000dm004-2cv104.temp")).toBe(41);
+  });
+
+  it("reports no health key for a drive LHM gives no Level sensor", () => {
+    expect(
+      matchLhmSensors(flattenLhmSensors(realPayload()), [
+        "disk.st4000dm004-2cv104.health",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("derives free from total minus used, and only when both are reported", async () => {
+    const provider = providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    });
+
+    const entries = await provider.sample(["disk.lexar-500gb-ssd.free"], 0);
+
+    expect(entries[0]?.sample).toMatchObject({ status: "ok", unit: "GB" });
+    expect(entries[0]?.sample.value).toBeCloseTo(194.6, 9);
+
+    // A volume LHM reports without Free Space has no used or free reading.
+    const totalOnly = {
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [driveNode("Samsung SSD 970", "/nvme/0", 400)],
+        },
+      ],
+    };
+    const missing = await providerReturning({
+      ok: true,
+      status: 200,
+      body: totalOnly,
+    }).sample(["disk.samsung-ssd-970.free"], 0);
+
+    expect(missing[0]?.sample).toMatchObject({ status: "missing" });
+    expect(missing[0]?.sample).not.toHaveProperty("value");
+  });
+
+  it("keeps a named drive's reading when another drive is assigned", async () => {
+    const entries = await providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    }).sample(["disk.st4000dm004-2cv104.temp"], 0, {
+      assignment: { systemDisk: "lexar-500gb-ssd" },
+    });
+
+    expect(entries[0]?.sample).toMatchObject({ status: "ok", value: 41 });
+  });
+
+  it("advertises each drive's readings with their units", async () => {
+    const descriptors = await providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    }).describe();
+    const byKey = new Map(
+      descriptors.map((descriptor) => [descriptor.semanticKey, descriptor]),
+    );
+
+    // The label carries the device id, so two identical models stay distinct.
+    expect(byKey.get("disk.lexar-500gb-ssd.temp")).toMatchObject({
+      unit: "°C",
+      label: "lexar-500gb-ssd temperature",
+    });
+    expect(byKey.get("disk.lexar-500gb-ssd.health")).toMatchObject({
+      unit: "%",
+      label: "lexar-500gb-ssd health",
+    });
+    expect(byKey.get("disk.lexar-500gb-ssd.read")).toMatchObject({
+      unit: "MB/s",
+    });
+    expect(byKey.get("disk.lexar-500gb-ssd.write")).toMatchObject({
+      unit: "MB/s",
+    });
+    expect(byKey.get("disk.lexar-500gb-ssd.activity")).toMatchObject({
+      unit: "%",
+    });
+    expect(byKey.get("disk.lexar-500gb-ssd.free")).toMatchObject({
+      unit: "GB",
+    });
+  });
+});
+
+describe("LHM per-interface network readings", () => {
+  it("answers each NIC under its own id and keeps the aggregate", () => {
+    const values = valuesOf(flattenLhmSensors(realPayload()), [
+      "network.ethernet.download",
+      "network.ethernet.upload",
+      "network.ethernet-2.download",
+      "network.download",
+    ]);
+
+    // 110172.6 B/s is 0.88 Mb/s; the link's own key carries it.
+    expect(values.get("network.ethernet.download")).toBeCloseTo(0.8813808, 9);
+    expect(values.get("network.ethernet.upload")).toBeCloseTo(0.0481816, 9);
+    expect(values.get("network.ethernet-2.download")).toBe(0);
+    // The aggregate still describes every link at once.
+    expect(values.get("network.download")).toBeCloseTo(0.8813808, 9);
+  });
+
+  it("numbers two interfaces that report the same name", () => {
+    const sensors = flattenLhmSensors({
+      Children: [
+        {
+          Text: "Sensor",
+          Children: [nicNode("/nic/0", 125_000), nicNode("/nic/1", 250_000)],
+        },
+      ],
+    });
+    const values = valuesOf(sensors, [
+      "network.ethernet.download",
+      "network.ethernet-2.download",
+      "network.download",
+    ]);
+
+    expect(values.get("network.ethernet.download")).toBeCloseTo(1, 9);
+    expect(values.get("network.ethernet-2.download")).toBeCloseTo(2, 9);
+    // The aggregate sums both links.
+    expect(values.get("network.download")).toBeCloseTo(3, 9);
+  });
+
+  it("labels two same-named interfaces by their own ids", async () => {
+    const descriptors = await providerReturning({
+      ok: true,
+      status: 200,
+      body: {
+        Children: [
+          {
+            Text: "Sensor",
+            Children: [nicNode("/nic/0", 125_000), nicNode("/nic/1", 250_000)],
+          },
+        ],
+      },
+    }).describe();
+    const labels = new Map(
+      descriptors.map((descriptor) => [
+        descriptor.semanticKey,
+        descriptor.label,
+      ]),
+    );
+
+    expect(labels.get("network.ethernet.download")).toBe(
+      "Network ethernet download",
+    );
+    expect(labels.get("network.ethernet-2.download")).toBe(
+      "Network ethernet-2 download",
+    );
+  });
+
+  it("advertises each interface's readings", async () => {
+    const descriptors = await providerReturning({
+      ok: true,
+      status: 200,
+      body: realPayload(),
+    }).describe();
+    const byKey = new Map(
+      descriptors.map((descriptor) => [descriptor.semanticKey, descriptor]),
+    );
+
+    expect(byKey.get("network.ethernet.download")).toMatchObject({
+      unit: "Mb/s",
+    });
+    expect(byKey.get("network.ethernet.upload")).toMatchObject({
+      unit: "Mb/s",
+    });
+  });
+});
+
+function nicNode(hardwareId: string, downloadBytesPerSecond: number) {
+  return {
+    Text: "Ethernet",
+    HardwareId: hardwareId,
+    Children: [
+      {
+        Text: "Throughput",
+        Children: [
+          {
+            Text: "Download Speed",
+            SensorId: `${hardwareId}/throughput/0`,
+            Type: "Throughput",
+            RawValue: `${downloadBytesPerSecond} B/s`,
+          },
+          {
+            Text: "Upload Speed",
+            SensorId: `${hardwareId}/throughput/1`,
+            Type: "Throughput",
+            RawValue: "0.0 B/s",
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe("LHM PSU and battery (structural fixtures)", () => {
+  it("maps a PSU from its documented hardware path and sensor types", () => {
+    const values = valuesOf(flattenLhmSensors(PSU_SHAPE), [
+      "psu.power",
+      "psu.temp",
+      "psu.fan",
+      "psu.voltage.input",
+      "psu.voltage.12v",
+      "psu.voltage.3-3v",
+    ]);
+
+    // The total, not the +12V rail alone.
+    expect(values.get("psu.power")).toBe(420);
+    // The hottest of the two documented temperature sensors.
+    expect(values.get("psu.temp")).toBe(45);
+    expect(values.get("psu.fan")).toBe(900);
+    expect(values.get("psu.voltage.input")).toBe(230);
+    expect(values.get("psu.voltage.12v")).toBe(12.1);
+    expect(values.get("psu.voltage.3-3v")).toBe(3.3);
+  });
+
+  it("maps a battery from its documented hardware path and sensor types", () => {
+    const sensors = flattenLhmSensors(BATTERY_SHAPE);
+    const values = valuesOf(sensors, [
+      "battery.level",
+      "battery.voltage",
+      "battery.rate",
+      "battery.timeRemaining",
+    ]);
+
+    // Charge Level, not the Degradation Level sensor that shares its type.
+    expect(values.get("battery.level")).toBe(76);
+    expect(values.get("battery.voltage")).toBe(12.4);
+    expect(values.get("battery.rate")).toBe(30);
+    expect(values.get("battery.timeRemaining")).toBe(5400);
+    // LHM reports no AC state, so nothing is derived for these keys.
+    expect(
+      matchLhmSensors(sensors, ["battery.ac", "battery.charging"]),
+    ).toEqual([]);
+  });
+
+  it("advertises PSU and battery keys from the structural shapes", async () => {
+    const descriptors = await providerReturning({
+      ok: true,
+      status: 200,
+      body: {
+        Children: [...PSU_SHAPE.Children, ...BATTERY_SHAPE.Children],
+      },
+    }).describe();
+    const keys = descriptors.map((descriptor) => descriptor.semanticKey);
+
+    expect(keys).toContain("psu.power");
+    expect(keys).toContain("psu.voltage.12v");
+    expect(keys).toContain("battery.level");
+    expect(keys).toContain("battery.timeRemaining");
+    expect(
+      descriptors.find(
+        (descriptor) => descriptor.semanticKey === "psu.voltage.12v",
+      ),
+    ).toMatchObject({ label: "+12V", unit: "V" });
   });
 });

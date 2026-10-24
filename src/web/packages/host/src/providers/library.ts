@@ -1,6 +1,5 @@
 import type { Sample, SampleEntry } from "@yunari/renderer-core";
-import { describeSemanticKey, diskDeviceId } from "@yunari/renderer-core";
-import type { DeviceAssignment } from "./lhm-mapping.js";
+import { describeSemanticKey, semanticId } from "@yunari/renderer-core";
 import {
   type BlockDeviceLike,
   type DriveLayoutLike as DiskLayoutLike,
@@ -12,10 +11,11 @@ import {
 } from "./library-devices.js";
 import type {
   ProviderHealth,
+  SampleContext,
   SensorDescriptor,
   SensorProvider,
 } from "./provider.js";
-import { redactForBrowser } from "./provider.js";
+import { descriptorFieldsOf, redactForBrowser } from "./provider.js";
 
 /**
  * Hardware metrics come from `systeminformation` rather than a collector Yunari
@@ -31,6 +31,12 @@ import { redactForBrowser } from "./provider.js";
 
 /** Identity text, not measurements: read on demand, never per sample. */
 const CPU_NAME_KEYS = ["cpu.manufacturer", "cpu.brand", "cpu.model"];
+/** Static counts from the same `cpu()` read as the identity strings. */
+const CPU_COUNT_KEYS = ["cpu.cores.physical", "cpu.cores.logical"];
+const SYSTEM_TEXT_KEYS = ["system.hostname", "system.os", "system.osBuild"];
+
+/** `processes()` enumerates every process, so its count is reused this long. */
+const PROCESS_COUNT_TTL_MS = 5000;
 
 export const LIBRARY_PROVIDER_ID = "library";
 
@@ -44,6 +50,8 @@ const LIBRARY_KEYS = [
   "cpu.manufacturer",
   "cpu.brand",
   "cpu.model",
+  "cpu.cores.physical",
+  "cpu.cores.logical",
   "ram.used",
   "ram.used.percent",
   "ram.total",
@@ -63,6 +71,21 @@ const LIBRARY_KEYS = [
   "disk.data.total",
   "network.download",
   "network.upload",
+  "wifi.ssid",
+  "wifi.signal",
+  "wifi.linkSpeed",
+  "system.uptime",
+  "system.processes",
+  "system.hostname",
+  "system.os",
+  "system.osBuild",
+  "battery.level",
+  "battery.state",
+  "battery.charging",
+  "battery.timeRemaining",
+  "battery.ac",
+  "battery.health",
+  "battery.voltage",
 ] as const;
 
 export const LIBRARY_DESCRIPTORS: readonly SensorDescriptor[] =
@@ -77,7 +100,7 @@ export const LIBRARY_DESCRIPTORS: readonly SensorDescriptor[] =
       sensorId: `${LIBRARY_PROVIDER_ID}:${key}`,
       semanticKey: key,
       label: declared.label,
-      ...(declared.unit === undefined ? {} : { unit: declared.unit }),
+      ...descriptorFieldsOf(declared),
       tier: declared.expectedTier,
     };
   });
@@ -100,10 +123,31 @@ export interface LibraryReadings {
   readonly dataDiskTotalGb?: number;
   readonly download?: number;
   readonly upload?: number;
+  readonly wifiSignal?: number;
+  readonly wifiLinkSpeed?: number;
+  readonly wifiSsid?: string;
+  readonly systemUptime?: number;
+  readonly systemProcesses?: number;
+  readonly systemHostname?: string;
+  readonly systemOs?: string;
+  readonly systemOsBuild?: string;
+  readonly batteryLevel?: number;
+  readonly batteryVoltage?: number;
+  /** The machine reports battery hardware, so its gaps are field gaps. */
+  readonly batteryReported?: boolean;
+  /** Minutes are the library's unit; seconds is the vocabulary's. */
+  readonly batteryTimeRemaining?: number;
+  readonly batteryHealth?: number;
+  readonly batteryState?: string;
+  readonly batteryCharging?: boolean;
+  readonly batteryAc?: boolean;
   /** What the machine calls its own hardware, as display text. */
   readonly cpuManufacturer?: string;
   readonly cpuBrand?: string;
   readonly cpuModel?: string;
+  /** Static core counts from the same CPU read; absent when not reported. */
+  readonly cpuPhysicalCores?: number;
+  readonly cpuLogicalCores?: number;
   /** The selected card's name; absent when no single card was selected. */
   readonly gpuName?: string;
   /** The selected volume's name; absent when the keys describe them all. */
@@ -120,11 +164,54 @@ interface NetStatsLike {
   readonly tx_sec?: number | null;
 }
 
+/** One connected Wi-Fi link; the library reports connected adapters only. */
+export interface WifiConnectionLike {
+  readonly ssid?: string;
+  /** Signal quality, already a percentage. */
+  readonly quality?: number;
+  /** Link rate in Mb/s as the adapter reports it. */
+  readonly txRate?: number;
+}
+
+export interface SystemTimeLike {
+  readonly uptime?: number;
+}
+
+export interface ProcessesLike {
+  readonly all?: number;
+}
+
+export interface OsInfoLike {
+  readonly hostname?: string;
+  readonly distro?: string;
+  readonly platform?: string;
+  readonly build?: string;
+}
+
+export interface BatteryLike {
+  readonly hasBattery?: boolean;
+  readonly isCharging?: boolean;
+  readonly acConnected?: boolean;
+  /**
+   * Minutes left while discharging. `null` when the platform does not report
+   * one (a desktop, or Windows), and macOS floors `parseInt('0' + value)`, so
+   * `0` can mean "unread" rather than "empty".
+   */
+  readonly timeRemaining?: number | null;
+  readonly designedCapacity?: number;
+  readonly maxCapacity?: number;
+  readonly percent?: number;
+  readonly voltage?: number;
+}
+
 /** The CPU identity fields the library reports, all three of which differ. */
 export interface CpuLike {
   readonly manufacturer?: string;
   readonly brand?: string;
   readonly model?: string;
+  /** Physical cores, and logical processors including SMT threads. */
+  readonly physicalCores?: number;
+  readonly cores?: number;
 }
 
 export interface FsSizeLike {
@@ -151,6 +238,12 @@ function finite(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+/** A reported name, trimmed; a blank field is a gap, not an empty reading. */
+function reportedText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
 }
 
 function bytesToGb(value: unknown): number | undefined {
@@ -218,7 +311,7 @@ function selectGpu(
 ): GpuSelection | undefined {
   const byModel = (controller: ControllerLike): string | undefined =>
     typeof controller.model === "string" && controller.model.length > 0
-      ? diskDeviceId(controller.model)
+      ? semanticId(controller.model)
       : undefined;
 
   // An assigned card must be matchable, so only named cards can satisfy one.
@@ -281,6 +374,13 @@ export function readingsFromLibrary(input: {
   readonly mem?: MemLike | undefined;
   readonly filesystems?: readonly FsSizeLike[] | undefined;
   readonly network?: readonly NetStatsLike[] | undefined;
+  readonly wifi?: readonly WifiConnectionLike[] | undefined;
+  readonly time?: SystemTimeLike | undefined;
+  readonly processes?: ProcessesLike | undefined;
+  readonly os?: OsInfoLike | undefined;
+  readonly battery?: BatteryLike | undefined;
+  /** The same CPU read as its identity strings; its counts are static. */
+  readonly cpu?: CpuLike | undefined;
   /** The one card answering the GPU keys; absent when none is reported. */
   readonly gpu?: GpuSelection | undefined;
 }): LibraryReadings {
@@ -296,6 +396,40 @@ export function readingsFromLibrary(input: {
   // The library reports VRAM in MB; the vocabulary declares GB.
   const vramTotalMb = finite(card?.vram ?? card?.memoryTotal ?? undefined);
   const vramUsedMb = finite(card?.memoryUsed);
+  // Connected adapter only; the library lists no disconnected Wi-Fi link.
+  const wifi = input.wifi?.[0];
+  const os = input.os;
+  // The distro is the product name ("Windows 11 Pro"); a machine that reports
+  // none still names its platform ("win32").
+  const osName = reportedText(os?.distro) ?? reportedText(os?.platform);
+  // `hasBattery === false` is a desktop: nothing it reports is a battery value,
+  // and zero percent or zero watts would be a fabricated reading.
+  const battery =
+    input.battery?.hasBattery === true ? input.battery : undefined;
+  const maxCapacity = finite(battery?.maxCapacity);
+  const designedCapacity = finite(battery?.designedCapacity);
+  const remainingMinutes = finite(battery?.timeRemaining);
+  // Zero is the library's "not reported" for a present battery; no battery
+  // reads 0 V, so it is a gap rather than a reading.
+  const voltage = finite(battery?.voltage);
+  const acConnected =
+    typeof battery?.acConnected === "boolean" ? battery.acConnected : undefined;
+  const isCharging =
+    typeof battery?.isCharging === "boolean" ? battery.isCharging : undefined;
+  // A non-positive countdown is unreported, not a reading: the darwin path
+  // builds it as parseInt('0' + value) and the Windows path never sets it.
+  const batteryTimeRemaining =
+    remainingMinutes === undefined || remainingMinutes <= 0
+      ? undefined
+      : remainingMinutes * 60;
+  // A core count is a positive integer or a gap; the library leaves 0 when the
+  // platform would not say.
+  const coreCount = (value: unknown): number | undefined => {
+    const count = finite(value);
+    return count === undefined || count < 1 ? undefined : Math.trunc(count);
+  };
+  const physicalCores = coreCount(input.cpu?.physicalCores);
+  const logicalCores = coreCount(input.cpu?.cores);
 
   return {
     ...(finite(input.load?.currentLoad) === undefined
@@ -323,6 +457,56 @@ export function readingsFromLibrary(input: {
     ...(net === undefined
       ? {}
       : { download: net.download, upload: net.upload }),
+    ...(finite(wifi?.quality) === undefined
+      ? {}
+      : { wifiSignal: finite(wifi?.quality)! }),
+    ...(finite(wifi?.txRate) === undefined
+      ? {}
+      : { wifiLinkSpeed: finite(wifi?.txRate)! }),
+    ...(reportedText(wifi?.ssid) === undefined
+      ? {}
+      : { wifiSsid: reportedText(wifi?.ssid)! }),
+    ...(finite(input.time?.uptime) === undefined
+      ? {}
+      : { systemUptime: Math.round(finite(input.time?.uptime)!) }),
+    ...(finite(input.processes?.all) === undefined
+      ? {}
+      : { systemProcesses: Math.trunc(finite(input.processes?.all)!) }),
+    ...(reportedText(os?.hostname) === undefined
+      ? {}
+      : { systemHostname: reportedText(os?.hostname)! }),
+    ...(osName === undefined ? {} : { systemOs: osName }),
+    ...(reportedText(os?.build) === undefined
+      ? {}
+      : { systemOsBuild: reportedText(os?.build)! }),
+    ...(physicalCores === undefined ? {} : { cpuPhysicalCores: physicalCores }),
+    ...(logicalCores === undefined ? {} : { cpuLogicalCores: logicalCores }),
+    ...(battery === undefined ? {} : { batteryReported: true }),
+    // `ponytail:` Windows defaults `percent` to 0 when EstimatedChargeRemaining
+    // is absent, so a laptop can read 0 % and look empty; add a platform-side
+    // charge-state check when that shows up as a real defect.
+    ...(finite(battery?.percent) === undefined
+      ? {}
+      : { batteryLevel: finite(battery?.percent)! }),
+    ...(voltage === undefined || voltage <= 0
+      ? {}
+      : { batteryVoltage: voltage }),
+    ...(batteryTimeRemaining === undefined ? {} : { batteryTimeRemaining }),
+    ...(maxCapacity === undefined ||
+    designedCapacity === undefined ||
+    maxCapacity <= 0 ||
+    designedCapacity <= 0
+      ? {}
+      : { batteryHealth: (maxCapacity / designedCapacity) * 100 }),
+    // Only two states are reported. Plugged in and not charging is neither:
+    // the library does not say whether the battery is full or idle.
+    ...(isCharging === true
+      ? { batteryState: "charging" }
+      : isCharging === false && acConnected === false
+        ? { batteryState: "discharging" }
+        : {}),
+    ...(isCharging === undefined ? {} : { batteryCharging: isCharging }),
+    ...(acConnected === undefined ? {} : { batteryAc: acConnected }),
   };
 }
 
@@ -335,7 +519,11 @@ export function samplesFromLibrary(
   const timestamp = new Date(nowMs).toISOString();
   const entries: SampleEntry[] = [];
 
-  const push = (semanticKey: string, value: number | undefined): void => {
+  const push = (
+    semanticKey: string,
+    value: number | undefined,
+    gap = "this machine reports no reading for that sensor",
+  ): void => {
     if (!semanticKeys.includes(semanticKey)) {
       return;
     }
@@ -346,12 +534,7 @@ export function samplesFromLibrary(
     if (value === undefined) {
       entries.push({
         semanticKey,
-        sample: {
-          sensorId,
-          timestamp,
-          status: "missing",
-          message: "this machine reports no reading for that sensor",
-        },
+        sample: { sensorId, timestamp, status: "missing", message: gap },
       });
       return;
     }
@@ -399,6 +582,32 @@ export function samplesFromLibrary(
     entries.push({
       semanticKey,
       sample: { sensorId, timestamp, status: "ok", textValue: trimmed },
+    });
+  };
+
+  /** A boolean is a reading too: `false` is an answer, `undefined` is a gap. */
+  const pushBoolean = (
+    semanticKey: string,
+    value: boolean | undefined,
+    gap: string,
+  ): void => {
+    if (!semanticKeys.includes(semanticKey)) {
+      return;
+    }
+
+    const sensorId = `${LIBRARY_PROVIDER_ID}:${semanticKey}`;
+
+    if (value === undefined) {
+      entries.push({
+        semanticKey,
+        sample: { sensorId, timestamp, status: "missing", message: gap },
+      });
+      return;
+    }
+
+    entries.push({
+      semanticKey,
+      sample: { sensorId, timestamp, status: "ok", booleanValue: value },
     });
   };
 
@@ -452,6 +661,9 @@ export function samplesFromLibrary(
   pushText("cpu.manufacturer", readings.cpuManufacturer, cpuGap);
   pushText("cpu.brand", readings.cpuBrand, cpuGap);
   pushText("cpu.model", readings.cpuModel, cpuGap);
+  const coreGap = "this machine reports no CPU core count";
+  push("cpu.cores.physical", readings.cpuPhysicalCores, coreGap);
+  push("cpu.cores.logical", readings.cpuLogicalCores, coreGap);
   pushText(
     "gpu.name",
     readings.gpuName,
@@ -466,6 +678,34 @@ export function samplesFromLibrary(
     "no drive is assigned, so these keys describe every volume at once; " +
       "choose one on the settings page",
   );
+  push("wifi.signal", readings.wifiSignal);
+  push("wifi.linkSpeed", readings.wifiLinkSpeed);
+  pushText("wifi.ssid", readings.wifiSsid, "no Wi-Fi network is connected");
+  push("system.uptime", readings.systemUptime);
+  push("system.processes", readings.systemProcesses);
+  const systemTextGap = "this machine reports no such system identity";
+  pushText("system.hostname", readings.systemHostname, systemTextGap);
+  pushText("system.os", readings.systemOs, systemTextGap);
+  pushText("system.osBuild", readings.systemOsBuild, systemTextGap);
+  // A desktop and a reported-but-silent battery are different gaps: the first
+  // has no battery hardware, the second has nothing to say about this field.
+  const batteryGap =
+    readings.batteryReported === true
+      ? "this machine reports no such battery reading"
+      : "this machine reports no battery";
+  push("battery.level", readings.batteryLevel, batteryGap);
+  push("battery.voltage", readings.batteryVoltage, batteryGap);
+  push("battery.timeRemaining", readings.batteryTimeRemaining, batteryGap);
+  push("battery.health", readings.batteryHealth, batteryGap);
+  pushText(
+    "battery.state",
+    readings.batteryState,
+    readings.batteryReported === true
+      ? "the battery reports neither charging nor discharging"
+      : batteryGap,
+  );
+  pushBoolean("battery.charging", readings.batteryCharging, batteryGap);
+  pushBoolean("battery.ac", readings.batteryAc, batteryGap);
 
   return entries;
 }
@@ -525,7 +765,21 @@ export type LibraryModule = {
   graphics(): Promise<{ controllers?: readonly ControllerLike[] }>;
   diskLayout(): Promise<readonly DiskLayoutLike[]>;
   blockDevices(): Promise<readonly BlockDeviceLike[]>;
+  wifiConnections(): Promise<readonly WifiConnectionLike[]>;
+  time(): SystemTimeLike;
+  processes(): Promise<ProcessesLike>;
+  osInfo(): Promise<OsInfoLike>;
+  battery(): Promise<BatteryLike>;
 };
+
+/** `time()` is synchronous in the library, so it cannot join `Promise.all`. */
+function readSystemTime(library: LibraryModule): SystemTimeLike | undefined {
+  try {
+    return library.time();
+  } catch {
+    return undefined;
+  }
+}
 
 export class LibrarySensorProvider implements SensorProvider {
   readonly id = LIBRARY_PROVIDER_ID;
@@ -544,6 +798,15 @@ export class LibrarySensorProvider implements SensorProvider {
   /** Read once like the drive index, but *not* refreshed by `describeDevices`:
    * a CPU's identity cannot change while the host runs. */
   private cpu: Promise<CpuLike> | undefined;
+  /**
+   * `processes()` walks every process and costs more than the poll interval,
+   * while the count moves slowly. A rejected read is never cached.
+   * `ponytail:` at most 5 s stale; make the window a setting if a theme needs
+   * fresher counts.
+   */
+  private processReads:
+    | { readonly count: number; readonly atMs: number }
+    | undefined;
 
   constructor(private readonly library?: LibraryModule) {}
 
@@ -571,7 +834,7 @@ export class LibrarySensorProvider implements SensorProvider {
           (model): model is string =>
             typeof model === "string" && model.length > 0,
         )
-        .map((model) => ({ id: diskDeviceId(model), name: model }));
+        .map((model) => ({ id: semanticId(model), name: model }));
 
       return {
         gpus,
@@ -623,6 +886,27 @@ export class LibrarySensorProvider implements SensorProvider {
     return this.cpu;
   }
 
+  private async processCount(
+    library: LibraryModule,
+    nowMs: number,
+  ): Promise<ProcessesLike> {
+    const cached = this.processReads;
+
+    if (cached !== undefined && nowMs - cached.atMs < PROCESS_COUNT_TTL_MS) {
+      return { all: cached.count };
+    }
+
+    const count = finite((await library.processes()).all);
+
+    if (count === undefined) {
+      return {};
+    }
+
+    // The count is coerced once, where readings are mapped.
+    this.processReads = { count, atMs: nowMs };
+    return { all: count };
+  }
+
   /** Loaded lazily so a host that never needs metrics does not pay for it. */
   private async module(): Promise<LibraryModule> {
     if (this.library !== undefined) {
@@ -640,8 +924,9 @@ export class LibrarySensorProvider implements SensorProvider {
   async sample(
     semanticKeys: readonly string[],
     nowMs: number,
-    assignment: DeviceAssignment = {},
+    context: SampleContext = {},
   ): Promise<readonly SampleEntry[]> {
+    const assignment = context.assignment ?? {};
     const owned = semanticKeys.filter((key) =>
       (LIBRARY_KEYS as readonly string[]).includes(key),
     );
@@ -672,18 +957,38 @@ export class LibrarySensorProvider implements SensorProvider {
       // Neither is read for a theme that binds nothing needing it. Both disk
       // slots need the model→volume join, not just the unsuffixed keys:
       // `disk.data.*` answers a drive too.
-      const wantsCpuNames = owned.some((key) => CPU_NAME_KEYS.includes(key));
+      const wantsCpu = owned.some(
+        (key) => CPU_NAME_KEYS.includes(key) || CPU_COUNT_KEYS.includes(key),
+      );
       const wantsVolumes = owned.some((key) => key.startsWith("disk."));
+      // Each extra read is paid for only by the group that binds it: a theme
+      // showing Wi-Fi must not wait for the process walk or the battery.
+      const wantsWifi = owned.some((key) => key.startsWith("wifi."));
+      const wantsBattery = owned.some((key) => key.startsWith("battery."));
+      const wantsUptime = owned.includes("system.uptime");
+      const wantsProcesses = owned.includes("system.processes");
+      const wantsSystemText = owned.some((key) =>
+        SYSTEM_TEXT_KEYS.includes(key),
+      );
       // Each is contained: a machine whose CPU cannot be read still answers
       // every other key it owns, and a volume is a gap rather than a name that
       // could belong to another drive.
       const [cpu, drives] = await Promise.all([
-        wantsCpuNames
-          ? this.cpuIdentity(library).catch(() => undefined)
-          : undefined,
+        wantsCpu ? this.cpuIdentity(library).catch(() => undefined) : undefined,
         wantsVolumes
           ? this.driveIndex(library).catch(() => undefined)
           : undefined,
+      ]);
+      const [wifi, systemTime, processes, os, battery] = await Promise.all([
+        wantsWifi
+          ? library.wifiConnections().catch(() => undefined)
+          : undefined,
+        wantsUptime ? readSystemTime(library) : undefined,
+        wantsProcesses
+          ? this.processCount(library, nowMs).catch(() => undefined)
+          : undefined,
+        wantsSystemText ? library.osInfo().catch(() => undefined) : undefined,
+        wantsBattery ? library.battery().catch(() => undefined) : undefined,
       ]);
 
       const card = selectGpu(graphics.controllers ?? [], gpu);
@@ -714,6 +1019,12 @@ export class LibrarySensorProvider implements SensorProvider {
         // volume at once otherwise — which is why the caption is then a gap.
         filesystems: systemVolumes,
         network,
+        wifi,
+        time: systemTime,
+        processes,
+        os,
+        battery,
+        cpu,
         gpu: card,
       });
 

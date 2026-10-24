@@ -12,10 +12,20 @@ import {
   waitUntilReachable,
 } from "./cli/net.js";
 import { ClockSensorProvider } from "./providers/clock.js";
+import { CustomSourceProvider } from "./providers/custom/provider.js";
+import { presentMonAdapter } from "./providers/frame/presentmon.js";
+import { FrameProvider } from "./providers/frame/provider.js";
+import { RtssAdapter } from "./providers/frame/rtss.js";
+import { createGameArtwork } from "./providers/game/box-art.js";
+import { GameProvider } from "./providers/game/provider.js";
+import { createSteamStore } from "./providers/game/store-metadata.js";
 import { LhmSensorProvider } from "./providers/lhm.js";
 import { launchLhm, registerLhmTask } from "./providers/lhm-launcher.js";
 import { LibrarySensorProvider } from "./providers/library.js";
+import { createArtworkCache } from "./providers/media/artwork.js";
+import { MediaProvider } from "./providers/media/provider.js";
 import { ProviderRegistry } from "./providers/registry.js";
+import { WeatherProvider } from "./providers/weather/provider.js";
 import {
   createDisplayLauncher,
   type Launcher,
@@ -32,9 +42,11 @@ import { createFontFavoritesStore } from "./settings/font-favorites.js";
 import { acquireHostLock } from "./settings/host-lock.js";
 import { readOrMintHostRecord } from "./settings/host-record.js";
 import { createHostingSettingsStore } from "./settings/hosting.js";
+import { createSourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
 import { createThemeSettingsStore } from "./settings/theme-settings.js";
+import { createWeatherSettingsStore } from "./settings/weather.js";
 import { normalizeVideoCommand } from "./themes/normalize-video.js";
 import { createThemeStore } from "./themes/store.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
@@ -163,12 +175,100 @@ export async function run(argv: readonly string[]): Promise<number> {
   // Time is a reading from this PC, so displays agree and a wrong device clock
   // cannot mislead.
   const clockProvider = new ClockSensorProvider();
+  // Provider keys, in the same settings directory and with the same rules: the
+  // browser may write one and never read it back. Created before the weather
+  // provider because a BYOK backend reads its key from here.
+  const credentials = createCredentialStore(settingsDir);
+  // Custom sources sit beside the credentials they reference. The settings page
+  // reads and writes them through the host's loopback routes, which report a
+  // malformed entry rather than starting the host silently.
+  const customSources = createSourceStore(settingsDir);
+  const customProvider = new CustomSourceProvider({
+    sources: customSources,
+    credentials,
+  });
+  await customProvider.reload();
+  // Weather's place, backend and cadence are this PC's own settings, and the
+  // provider owns its timer: it is built here with the providers, not by the
+  // registry's cycle (docs/decisions/0099).
+  const weatherSettings = createWeatherSettingsStore(settingsDir);
+  const weatherProvider = new WeatherProvider({
+    settings: weatherSettings,
+    credentials,
+  });
+  // Artwork is a cache, not a setting: the bytes live under the app folder's
+  // cache directory, and the server serves them through the display gate.
+  const mediaArtwork = createArtworkCache(
+    path.join(path.dirname(settingsDir), "cache", "media-artwork"),
+  );
+  const mediaProvider = new MediaProvider({ cache: mediaArtwork });
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  // Frame statistics have no settings of their own; the provider starts one
+  // helper at a time only while a display binds frame.*. RTSS is the source;
+  // the vendored PresentMon is the fallback when RTSS is not running.
+  const frameProvider = new FrameProvider({
+    adapters: [
+      new RtssAdapter(),
+      presentMonAdapter({
+        executable: path.join(
+          here,
+          "..",
+          "vendor",
+          "presentmon",
+          "PresentMon.exe",
+        ),
+      }),
+    ],
+  });
+  // The foreground process, with Steam's local files for a game name: one
+  // helper only while a display binds game.*. A named root lets a portable
+  // install — or a test fixture — point at its own library; absent, the
+  // registry's SteamPath is the answer. A game outside Steam is named by the
+  // store's cached lookup, kept beside the other caches (decision 0109).
+  const namedSteamRoot = process.env.YUNARI_STEAM_ROOT;
+  const steamRoot =
+    namedSteamRoot === undefined || namedSteamRoot === ""
+      ? undefined
+      : () => Promise.resolve(namedSteamRoot);
+  const gameMetadataCacheDir = path.join(
+    path.dirname(settingsDir),
+    "cache",
+    "game-metadata",
+  );
+  // Two test seams, each honoured only when non-empty: a store fixture for the
+  // searched metadata, and a fixed foreground so a browser proof needs no
+  // running game. Unset changes nothing (docs/engineering/gotchas.md).
+  const storeBaseUrl = process.env.YUNARI_STEAM_STORE;
+  const fixedForeground = process.env.YUNARI_FOREGROUND_EXE;
+  const gameStore = createSteamStore({
+    fetchImpl: (input, init) => fetch(input, init),
+    cacheDir: gameMetadataCacheDir,
+    ...(storeBaseUrl === undefined || storeBaseUrl === ""
+      ? {}
+      : { baseUrl: storeBaseUrl }),
+  });
+  const gameProvider = new GameProvider({
+    ...(steamRoot === undefined ? {} : { steamRoot }),
+    store: gameStore,
+    ...(fixedForeground === undefined || fixedForeground === ""
+      ? {}
+      : {
+          foregroundPath: fixedForeground,
+          // The seam's file stem is its name; a version-info read would be a
+          // spawn the proof cannot control.
+          productName: () => Promise.resolve(undefined),
+        }),
+  });
   const registry = new ProviderRegistry([
     clockProvider,
     lhmProvider,
     libraryProvider,
+    weatherProvider,
+    mediaProvider,
+    frameProvider,
+    gameProvider,
+    customProvider,
   ]);
-  const here = path.dirname(fileURLToPath(import.meta.url));
   const packagesDir = path.resolve(here, "..", "..");
 
   // Displays and their credentials exist whether or not the LAN is on, because
@@ -193,9 +293,6 @@ export async function run(argv: readonly string[]): Promise<number> {
   // Which curated font trios this author reaches for. Author preference about
   // this PC, so it sits with the other settings and never in a theme folder.
   const fontFavorites = createFontFavoritesStore(settingsDir);
-  // Provider keys, in the same directory and with the same rules: the browser
-  // may write one and never read it back.
-  const credentials = createCredentialStore(settingsDir);
   // The store session the author signed in to, beside the other records this
   // machine keeps. The browser never reads it; the host uses it to submit.
   // Which store it belongs to is a build-time address, passed at the server
@@ -295,9 +392,16 @@ export async function run(argv: readonly string[]): Promise<number> {
     pairingCodes,
     devices: deviceSettings,
     display: displaySettings,
+    weather: weatherSettings,
     fontFavorites,
     credentials,
+    sources: { store: customSources, provider: customProvider },
     assets: { credentials },
+    artwork: mediaArtwork,
+    gameArtwork: createGameArtwork(
+      steamRoot === undefined ? {} : { steamRoot },
+    ),
+    gameCoverCacheDir: gameMetadataCacheDir,
     onDisplayChange: (settings) => clockProvider.setTimeZone(settings.timeZone),
     activeTheme,
     // Both providers know the machine's devices; LHM's list is richer, so its
@@ -514,6 +618,16 @@ export async function run(argv: readonly string[]): Promise<number> {
       console.log("\nStopping.");
       // Stop only the LHM this run started; one the owner already ran is theirs.
       lhm.stop();
+      // The media helper is a child process this run started; leaving it
+      // polling after the host exits is the orphan decision 0102 prevents.
+      mediaProvider.stop();
+      // Same for the RTSS helper: a PowerShell left polling outlives the host.
+      frameProvider.stop();
+      // The game helper is the same shape: a PowerShell left polling would
+      // outlive the host.
+      gameProvider.stop();
+      // Every per-source timer goes with it, and an in-flight fetch is cut.
+      customProvider.stop();
       // The windows close with the host: one left behind is one the next run
       // cannot see, and it would put a second window on that monitor.
       launcher?.stop();

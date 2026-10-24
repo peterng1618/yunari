@@ -113,6 +113,24 @@ silently — nothing red, a wrong banner:
   under a `## … Task status` heading. A prose heading gives a resumed controller
   an empty status list.
 
+## Environment overrides
+
+- **`YUNARI_STEAM_ROOT`** names the Steam install the host reads instead of the
+  registry's `HKCU\Software\Valve\Steam\SteamPath`. It overrides only the root
+  used by the game provider and `/api/game/artwork/`; unset changes nothing.
+  `tests/e2e/game-artwork.spec.ts` sets it to a temp root so the real host reads
+  a fixture library and cache without touching this machine's Steam.
+- **`YUNARI_STEAM_STORE`** points the store-metadata client at one origin for
+  its search, details and portrait requests; unset keeps Valve's store and CDN.
+  `tests/e2e/game-metadata.spec.ts` uses it to play all three from a fixture, so
+  the proof needs no network.
+- **`YUNARI_FOREGROUND_EXE`** reports that executable as the running game
+  instead of spawning the Windows foreground helper, and its file stem is the
+  local name searched for. The version-info ProductName read is skipped for the
+  seam. Unset changes nothing. Same spec.
+- **`YUNARI_CAPTURE=1`** and **`YUNARI_CAPTURE_DIR`** are the capture switches;
+  their rules live in [`docs/evidence/screenshots/README.md`](../evidence/screenshots/README.md).
+
 ## Documentation
 
 - A claim about the environment belongs in a doc only after a control

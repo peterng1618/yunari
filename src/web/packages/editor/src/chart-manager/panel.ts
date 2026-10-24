@@ -12,6 +12,7 @@ import {
   paletteTokenOptions,
   readSetting,
   SEMANTIC_KEYS,
+  type SemanticKeyDescriptor,
   type SettingsFieldDescriptor,
   settingsFieldsFor,
 } from "@yunari/renderer-core";
@@ -137,8 +138,10 @@ const UNIT_OPTIONS: readonly ChartOptionView[] = Object.entries(
   uiCopy.unitDisplayOptions,
 ).map(([id, name]) => ({ id, name }));
 
-function semanticKeyOptions(): readonly ChartOptionView[] {
-  return SEMANTIC_KEYS.map((descriptor) => ({
+function semanticKeyOptions(
+  descriptors: readonly SemanticKeyDescriptor[],
+): readonly ChartOptionView[] {
+  return descriptors.map((descriptor) => ({
     id: descriptor.key,
     name: descriptor.label,
   }));
@@ -163,27 +166,33 @@ function aspectView(target: ChartFieldTarget): ChartAspectView {
   };
 }
 
-function seriesRow(binding: Binding, moreThanOne: boolean): ChartSeriesRowView {
+function seriesRow(
+  binding: Binding,
+  moreThanOne: boolean,
+  descriptors: readonly SemanticKeyDescriptor[],
+): ChartSeriesRowView {
   // The series' own key is offered even when no descriptor declares it: a
-  // document can name one the table no longer has, and a picker that dropped it
-  // would show the series as reading nothing.
+  // document can name one the catalogue no longer has, and a picker that
+  // dropped it would show the series as reading nothing.
   const keys = new Set([
     binding.semanticKey,
-    ...SEMANTIC_KEYS.map((descriptor) => descriptor.key),
+    ...descriptors.map((descriptor) => descriptor.key),
   ]);
   return {
     binding,
     keyOptions: [...keys].map((key) => ({
       id: key,
       name:
-        SEMANTIC_KEYS.find((descriptor) => descriptor.key === key)?.label ??
-        key,
+        descriptors.find((descriptor) => descriptor.key === key)?.label ?? key,
     })),
     removable: moreThanOne,
   };
 }
 
-function seriesFields(target: ChartFieldTarget): ChartSeriesFieldsView {
+function seriesFields(
+  target: ChartFieldTarget,
+  descriptors: readonly SemanticKeyDescriptor[],
+): ChartSeriesFieldsView {
   const { bindings, content } = target;
   const full = bindings.length >= MAX_BINDINGS[content.family];
   return {
@@ -194,14 +203,16 @@ function seriesFields(target: ChartFieldTarget): ChartSeriesFieldsView {
     // control always shows what it is for rather than the series it just added.
     options: [
       { id: "", name: uiCopy.inspectorFields.runSeries },
-      ...semanticKeyOptions(),
+      ...semanticKeyOptions(descriptors),
     ],
     refused: full,
     ...(full
       ? { full: uiCopy.inspectorFields.runSeriesFull(content.family) }
       : {}),
     unitOptions: UNIT_OPTIONS,
-    rows: bindings.map((binding) => seriesRow(binding, bindings.length > 1)),
+    rows: bindings.map((binding) =>
+      seriesRow(binding, bindings.length > 1, descriptors),
+    ),
   };
 }
 
@@ -315,12 +326,13 @@ function optionView(option: {
 /** What the chart shows: its family's settings, and the series it reads. */
 export function chartContentView(
   target: ChartFieldTarget,
+  descriptors: readonly SemanticKeyDescriptor[] = SEMANTIC_KEYS,
 ): ChartContentFieldsView {
   return {
     chartId: target.id,
     content: target.content,
     ...(target.content.family === "line" ? { aspect: aspectView(target) } : {}),
-    series: seriesFields(target),
+    series: seriesFields(target, descriptors),
     rows: settingRows(target.content, target.drawnEdge),
   };
 }

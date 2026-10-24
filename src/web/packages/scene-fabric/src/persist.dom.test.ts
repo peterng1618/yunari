@@ -1056,7 +1056,7 @@ describe("identity survives a round trip", () => {
       { readout: [{ id: "temp", semanticKey: "gpu.temp" }] },
       source,
       undefined,
-      "imperial",
+      { measurement: "imperial" },
     );
 
     expect(text.text).toBe("102°F");

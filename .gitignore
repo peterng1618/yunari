@@ -29,7 +29,11 @@ blob-report/
 .e2e-font-cache/
 # Staged third-party release binaries (LibreHardwareMonitor). Provenance is
 # tracked in the script that stages them, never the binaries themselves.
-src/web/packages/host/vendor/
+src/web/packages/host/vendor/*
+# ...except the weather icons: small, MIT-licensed SVG bytes the host route
+# serves from the repository, pinned by scripts/vendor-weather-icons.mjs.
+!src/web/packages/host/vendor/weather-icons/
+!src/web/packages/host/vendor/weather-icons/**
 # Vitest JSON reporter output (diagnostics only, never asserted against).
 .vitest/
 

@@ -86,6 +86,13 @@ function fakeMachine(overrides: Fake = {}): LibraryModule {
         { mount: "C:", device: "\\\\.\\PHYSICALDRIVE1", label: "" },
         { mount: "D:", device: "\\\\.\\PHYSICALDRIVE0", label: "Data" },
       ],
+    // No Wi-Fi, no battery and no system identity: these fixtures test device
+    // selection, so the baseline extras are absent rather than invented.
+    wifiConnections: async () => [],
+    time: () => ({}),
+    processes: async () => ({}),
+    osInfo: async () => ({}),
+    battery: async () => ({}),
   };
 }
 
@@ -143,7 +150,7 @@ describe("one device answers the GPU group", () => {
       fakeMachine({ controllers: [nvidia, amd] }),
     );
     const entries = await provider.sample(GPU_KEYS, 0, {
-      gpu: "amd-radeon-rx-6800",
+      assignment: { gpu: "amd-radeon-rx-6800" },
     });
 
     expect(sampleOf(entries, "gpu.load")?.value).toBe(90);
@@ -159,7 +166,7 @@ describe("one device answers the GPU group", () => {
       fakeMachine({ controllers: [nvidia, amd] }),
     );
     const entries = await provider.sample(GPU_KEYS, 0, {
-      gpu: "nvidia-geforce-rtx-3080-ti",
+      assignment: { gpu: "nvidia-geforce-rtx-3080-ti" },
     });
 
     expect(sampleOf(entries, "gpu.load")?.value).toBe(10);
@@ -173,7 +180,7 @@ describe("one device answers the GPU group", () => {
       fakeMachine({ controllers: [nvidia, amd] }),
     );
     const entries = await provider.sample(GPU_KEYS, 0, {
-      gpu: "a-card-this-pc-does-not-have",
+      assignment: { gpu: "a-card-this-pc-does-not-have" },
     });
 
     for (const key of ["gpu.load", "gpu.temp", "gpu.power"]) {
@@ -192,7 +199,7 @@ describe("one device answers the GPU group", () => {
     );
 
     const entries = await provider.sample(["gpu.name"], 0, {
-      gpu: "amd-radeon-rx-6800",
+      assignment: { gpu: "amd-radeon-rx-6800" },
     });
 
     expect(textOf(entries, "gpu.name")).toBe("AMD Radeon RX 6800");
@@ -203,8 +210,10 @@ describe("one device answers the GPU group", () => {
       fakeMachine({ controllers: [nvidia, amd] }),
     );
     const entries = await provider.sample(["gpu.name", "gpu.temp"], 0, {
-      gpu: "nvidia-geforce-rtx-3080-ti",
-      names: { "nvidia-geforce-rtx-3080-ti": "Desk card" },
+      assignment: {
+        gpu: "nvidia-geforce-rtx-3080-ti",
+        names: { "nvidia-geforce-rtx-3080-ti": "Desk card" },
+      },
     });
 
     expect(textOf(entries, "gpu.name")).toBe("Desk card");
@@ -273,7 +282,7 @@ describe("the second disk slot", () => {
     // only skipped when nothing about disks is bound at all.
     const provider = new LibrarySensorProvider(fakeMachine());
     const entries = await provider.sample(["disk.data.total"], 0, {
-      dataDisk: "st4000dm004-2cv104",
+      assignment: { dataDisk: "st4000dm004-2cv104" },
     });
 
     expect(sampleOf(entries, "disk.data.total")?.value).toBeCloseTo(4000, 0);
@@ -326,7 +335,7 @@ describe("the volume caption", () => {
   it("resolves the drive model back to the volume that answers for it", async () => {
     const provider = new LibrarySensorProvider(fakeMachine());
     const entries = await provider.sample(DISK_KEYS, 0, {
-      systemDisk: "lexar-500gb-ssd",
+      assignment: { systemDisk: "lexar-500gb-ssd" },
     });
 
     // The assigned id is the drive's model, the same id LibreHardwareMonitor
@@ -339,8 +348,10 @@ describe("the volume caption", () => {
   it("shows the consumer's chosen name for the drive", async () => {
     const provider = new LibrarySensorProvider(fakeMachine());
     const entries = await provider.sample(DISK_KEYS, 0, {
-      systemDisk: "st4000dm004-2cv104",
-      names: { "st4000dm004-2cv104": "Games" },
+      assignment: {
+        systemDisk: "st4000dm004-2cv104",
+        names: { "st4000dm004-2cv104": "Games" },
+      },
     });
 
     expect(textOf(entries, "disk.name")).toBe("Games");
@@ -363,7 +374,7 @@ describe("the volume caption", () => {
   it("is a gap when the assigned drive is gone, never another drive's figures", async () => {
     const provider = new LibrarySensorProvider(fakeMachine());
     const entries = await provider.sample(DISK_KEYS, 0, {
-      systemDisk: "a-drive-this-pc-does-not-have",
+      assignment: { systemDisk: "a-drive-this-pc-does-not-have" },
     });
 
     expect(sampleOf(entries, "disk.total")).toMatchObject({
@@ -377,7 +388,7 @@ describe("the volume caption", () => {
     // identity, so the caption names the drive and not the label.
     const provider = new LibrarySensorProvider(fakeMachine());
     const entries = await provider.sample(["disk.name"], 0, {
-      systemDisk: "st4000dm004-2cv104",
+      assignment: { systemDisk: "st4000dm004-2cv104" },
     });
 
     expect(textOf(entries, "disk.name")).toBe("ST4000DM004-2CV104");
@@ -442,7 +453,7 @@ describe("a volume on POSIX", () => {
       }),
     );
     const entries = await provider.sample(DISK_KEYS, 0, {
-      systemDisk: "samsung-ssd-990-pro",
+      assignment: { systemDisk: "samsung-ssd-990-pro" },
     });
 
     expect(sampleOf(entries, "disk.total")?.value).toBeCloseTo(500, 0);
@@ -497,11 +508,11 @@ describe("an assignment given to one sample", () => {
     );
 
     const first = provider.sample(["gpu.temp", "gpu.name"], 0, {
-      gpu: "amd-radeon-rx-6800",
+      assignment: { gpu: "amd-radeon-rx-6800" },
     });
     await atFirstGraphics;
     const second = provider.sample(["gpu.temp", "gpu.name"], 0, {
-      gpu: "nvidia-geforce-rtx-3080-ti",
+      assignment: { gpu: "nvidia-geforce-rtx-3080-ti" },
     });
     release();
 
@@ -628,7 +639,7 @@ describe("a caption is display metadata only", () => {
 
     const provider = new LibrarySensorProvider(fakeMachine({ layout }));
     const entries = await provider.sample(DISK_KEYS, 0, {
-      systemDisk: "lexar-500gb-ssd",
+      assignment: { systemDisk: "lexar-500gb-ssd" },
     });
 
     expect(JSON.stringify(entries)).not.toContain("S4EWNX0R123456");
@@ -688,7 +699,7 @@ describe("the expensive discovery reads", () => {
     // Assigned, because an unassigned `disk.total` answers from `fsSize`
     // alone and never needs the index — the failure only shows where the
     // index is what the key depends on.
-    const assigned = { systemDisk: "lexar-500gb-ssd" };
+    const assigned = { assignment: { systemDisk: "lexar-500gb-ssd" } };
 
     // First sample: the volume is a gap, and nothing else is taken down with it.
     const first = await provider.sample(

@@ -40,6 +40,8 @@ const KNOWN_KEYS = {
     "unitDisplay",
     "scale",
     "offset",
+    "unit",
+    "autoScale",
     "format",
     "timeZone",
   ],

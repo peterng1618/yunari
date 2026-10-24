@@ -36,6 +36,11 @@ export {
   type BackgroundMediaSource,
   mountBackgroundMedia,
 } from "./background-media.js";
+export {
+  type ImageBindingHooks,
+  isHostRelativeImageUrl,
+  refreshBoundImages,
+} from "./bound-image.js";
 export type {
   ChartSerialisedKey,
   YunariChartOptions,
