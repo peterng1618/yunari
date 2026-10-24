@@ -624,8 +624,9 @@ appid. Nothing
 else — no account, no library list, no machine identifier. **What is kept** is a
 small on-disk map from normalised name to appid (including "no match"), the
 searched term, the canonical name and the first-lookup time, plus the downloaded
-cover bytes. A lookup happens once per game — across restarts, not only per
-process life — and the display works offline afterwards.
+cover bytes. A lookup is remembered across restarts, not only per process life,
+so the same spelling is never searched twice; a different spelling that shares a
+normalised key costs one more lookup, and the display works offline afterwards.
 
 **Matching is tiered, and ambiguity is refused.** Normalisation folds case,
 strips `™ ® ©`, punctuation and leading articles, removes Latin diacritics but

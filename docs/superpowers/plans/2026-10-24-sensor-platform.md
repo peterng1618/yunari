@@ -1446,9 +1446,11 @@ wording; the spec has been amended to say the same thing.
   Fetch cover bytes only when `game.artwork` is in the demanded key set; the
   route never starts a download, and a presence-only poll never downloads.
   Cache-miss is `unavailable`; a cached cover answers with no request. A name
-  lookup itself runs only while a `game.*` key is demanded, and its "no match"
-  result is cached, so an unfixed vg-714 costs at most one request per distinct
-  foreground name per process life.
+  lookup itself runs only while a `game.*` key is demanded, and its result —
+  match or "no match" — is cached on disk for the spelling searched, so an
+  unfixed vg-714 costs one request per distinct spelling, survives a restart,
+  and costs one more only when the same normalised key is searched with a
+  different spelling.
 - [ ] **Step 5: Commit**
 
 ### Task 7.3: Cached remote covers through the gated route
