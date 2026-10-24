@@ -23,6 +23,15 @@ const HEADER =
 const ROW =
   "game.exe,1234,0x0000000000000000,DXGI,1,0,Displayed,12.345,0.5,8.333";
 
+/** A header the parser cannot read is a test failure, never an empty list. */
+function columnsOf(header: string): readonly string[] {
+  const columns = parsePresentMonHeader(header);
+  if (columns === undefined) {
+    throw new Error(`not a PresentMon header: ${header}`);
+  }
+  return columns;
+}
+
 describe("parsePresentMonHeader", () => {
   it("reads the names from a real v1 header and rejects a data row", () => {
     expect(parsePresentMonHeader(HEADER)).toEqual([
@@ -44,7 +53,7 @@ describe("parsePresentMonHeader", () => {
 
 describe("parsePresentMonCsv", () => {
   it("parses a data row against the header's column names", () => {
-    const columns = parsePresentMonHeader(HEADER) ?? [];
+    const columns = columnsOf(HEADER);
 
     expect(parsePresentMonCsv(ROW, columns)).toEqual({
       frametimeMs: 8.333,
@@ -53,10 +62,9 @@ describe("parsePresentMonCsv", () => {
   });
 
   it("finds the names in the v2 header spelling too", () => {
-    const columns =
-      parsePresentMonHeader(
-        "Application,ProcessID,MsBetweenPresents,msInPresentAPI",
-      ) ?? [];
+    const columns = columnsOf(
+      "Application,ProcessID,MsBetweenPresents,msInPresentAPI",
+    );
 
     expect(parsePresentMonCsv("other.exe,7,16.667,0.2", columns)).toEqual({
       frametimeMs: 16.667,
@@ -65,10 +73,9 @@ describe("parsePresentMonCsv", () => {
   });
 
   it("does not read a v1 row against a v2 header", () => {
-    const v2 =
-      parsePresentMonHeader(
-        "Application,ProcessID,MsBetweenPresents,msInPresentAPI",
-      ) ?? [];
+    const v2 = columnsOf(
+      "Application,ProcessID,MsBetweenPresents,msInPresentAPI",
+    );
 
     // The v2 header's frametime index is where this v1 row carries the
     // swap-chain address (`0x…1F00` = 7936), which is finite and positive.
@@ -82,7 +89,7 @@ describe("parsePresentMonCsv", () => {
   });
 
   it("rejects NA, non-numeric and short rows", () => {
-    const columns = parsePresentMonHeader(HEADER) ?? [];
+    const columns = columnsOf(HEADER);
 
     expect(parsePresentMonCsv(HEADER, columns)).toBeUndefined();
     expect(
@@ -102,7 +109,7 @@ describe("parsePresentMonCsv", () => {
   });
 
   it("treats an unknown application as no name", () => {
-    const columns = parsePresentMonHeader(HEADER) ?? [];
+    const columns = columnsOf(HEADER);
 
     expect(
       parsePresentMonCsv(
@@ -113,8 +120,7 @@ describe("parsePresentMonCsv", () => {
   });
 
   it("does not shift columns on a quoted field", () => {
-    const columns =
-      parsePresentMonHeader("Application,ProcessID,msBetweenPresents") ?? [];
+    const columns = columnsOf("Application,ProcessID,msBetweenPresents");
 
     expect(parsePresentMonCsv('"stats, game.exe",7,8.0', columns)).toEqual({
       frametimeMs: 8,
@@ -176,7 +182,6 @@ interface AdapterHarness {
   readonly reasons: string[];
   stop(): void;
   restart(): void;
-  advanceNow(ms: number): void;
 }
 
 function adapterHarness(
@@ -187,7 +192,6 @@ function adapterHarness(
   const killed: FakeChild[] = [];
   const readings: FrameReading[] = [];
   const reasons: string[] = [];
-  let now = 0;
 
   const spawnProcess: SpawnProcess = (_command, args) => {
     argv.push(args);
@@ -201,7 +205,6 @@ function adapterHarness(
 
   const adapter = presentMonAdapter({
     executable: "C:/yunari/vendor/presentmon/PresentMon.exe",
-    nowMs: () => now,
     spawnProcess,
     killTree,
     pathExists: options.pathExists ?? (() => true),
@@ -225,9 +228,6 @@ function adapterHarness(
     stop: () => handle(),
     restart: () => {
       start();
-    },
-    advanceNow: (ms) => {
-      now += ms;
     },
   };
 }
@@ -263,8 +263,8 @@ describe("PresentMon adapter", () => {
       const child = harness.children[0];
 
       // PresentMon writes its header only with the first frame, so a demand
-      // window opened before the game starts produces no lines at all.
-      harness.advanceNow(60_000);
+      // window opened before the game starts produces no lines at all. The
+      // old one-shot timeout was 15 s; no timer may fire here.
       vi.advanceTimersByTime(60_000);
 
       expect(harness.reasons).toEqual([]);

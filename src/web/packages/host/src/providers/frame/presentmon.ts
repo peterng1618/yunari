@@ -157,8 +157,6 @@ function toFrameReading(frame: PresentMonReading): FrameReading {
 
 export interface PresentMonAdapterOptions {
   readonly executable: string;
-  /** Injected so a test owns the clock; a silent capture is never timed out. */
-  readonly nowMs: () => number;
   readonly spawnProcess?: SpawnProcess;
   readonly killTree?: KillTree;
   readonly pathExists?: (file: string) => boolean;

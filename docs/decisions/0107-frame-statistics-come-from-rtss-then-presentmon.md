@@ -222,6 +222,12 @@ a file mapping — so the rungs were worked again for that shape.
   provider evaluates adapters in order, starts PresentMon only after RTSS
   reports unavailable, and does not retry an exhausted pair until the demand
   window closes.
+- **Silent capture.** PresentMon writes its CSV header only with the first
+  frame, so no output while a display waits for a game is healthy and the
+  adapter sets no liveness timeout. Process exit is the only failure signal; a
+  capture that wedges without exiting is not killed until the demand window
+  closes. The controller accepted that residual risk because the alternative —
+  a 15 s timeout — killed the common open-theme-then-launch-game flow.
 
 The vendor script follows `vendor-lhm.mjs`'s existing shape rather than
 inventing a downloader: pinned release URL, pinned SHA-256 that refuses a

@@ -214,7 +214,6 @@ export async function run(argv: readonly string[]): Promise<number> {
           "presentmon",
           "PresentMon.exe",
         ),
-        nowMs: () => Date.now(),
       }),
     ],
   });

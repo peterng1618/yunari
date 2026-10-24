@@ -57,7 +57,7 @@ const UNIT_BY_KEY: ReadonlyMap<string, string | undefined> = new Map(
 );
 
 export const NO_FRAMES_MESSAGE =
-  "No frame timing has been reported by RTSS or PresentMon.";
+  "No frame timing has been reported by an available frame source.";
 export const WAITING_LOW1_MESSAGE = "Not enough frames yet for a 1% low.";
 export const NO_APP_MESSAGE = "No game process is reporting frame statistics.";
 
