@@ -1422,7 +1422,7 @@ wording; the spec has been amended to say the same thing.
   path.
 - Produces: `game.name` and `game.app` for a non-Steam foreground app; the
   priority is Steam app name, then store match, then the executable's version-info
-  `ProductName`, then the install folder name.
+  `ProductName`, then its file name without extension.
 
 - [ ] **Step 1: Write the failing provider tests**
   Fixture store returns `{ id: 1201270, name: "Example Game" }` for a
@@ -1452,7 +1452,8 @@ wording; the spec has been amended to say the same thing.
 ### Task 7.3: Cached remote covers through the gated route
 
 **Files:**
-- Modify: `packages/host/src/server.ts` (`/api/game/artwork/<appId>.jpg`)
+- Modify: `packages/host/src/server.ts` (`/api/game/artwork/<appId>.jpg`, `ServerOptions`)
+- Modify: `packages/host/src/main.ts` (pass the game-metadata cache directory)
 - Modify: `packages/host/src/providers/game/box-art.ts`
 - Test: `packages/host/src/server.test.ts`, `packages/host/src/providers/game/box-art.test.ts`
 
@@ -1466,9 +1467,11 @@ wording; the spec has been amended to say the same thing.
 
   Run: `npx vitest run packages/host/src/server.test.ts packages/host/src/providers/game/box-art.test.ts`
 - [ ] **Step 3: Decide the local-vs-remote order in `box-art.ts`**
-  Local library cache first (no network); otherwise a cached remote cover; a
-  missing remote cover triggers at most one download per appid per process life
-  when the route is asked, never on a presence poll.
+  Local library cache first (no network); otherwise the cached cover file in the
+  game-metadata cache directory. The route serves bytes only: the provider owns
+  every download, so a route request never starts a fetch and two owners cannot
+  race for the same file. The provider publishes the route URL only after the
+  bytes are cached.
 - [ ] **Step 4: Commit**
 
 ### Task 7.4: Browser proof and honest fallback
@@ -1477,13 +1480,20 @@ wording; the spec has been amended to say the same thing.
 - Create: `tests/e2e/game-metadata.spec.ts`
 - Modify: `playwright.config.ts` (own-host port 4245; 4241/4243 are the
   `host-player` themed hosts)
+- Modify: `packages/host/src/providers/game/store-metadata.ts` (a `baseUrl`
+  option, default the real Steam store)
+- Modify: `packages/host/src/main.ts` (two env seams: `YUNARI_STEAM_STORE` for
+  the store base URL and `YUNARI_FOREGROUND_EXE` for a fixed foreground
+  executable), plus `docs/engineering/gotchas.md`
 
 - [ ] **Step 1: Write the failing spec**
   A fixture server plays storesearch, appdetails and the cover image, selected
-  through `YUNARI_STEAM_STORE`; a fixture Steam root holds the game as a
-  non-Steam executable. The player paints the store's name and cover. Assert
-  every request the page makes is same-origin — none to `steampowered.com` or
-  `steamstatic.com`.
+  through `YUNARI_STEAM_STORE`; `YUNARI_FOREGROUND_EXE` points at a fixture
+  executable with no Steam manifest, and the cache directory starts empty. Run
+  the real host and player (no stubbed stream): the player paints the store's
+  name and cover. Assert every request the page makes is same-origin — none to
+  `steampowered.com` or `steamstatic.com` — and that the host asked the fixture
+  for the name exactly once.
 - [ ] **Step 2: Run it and confirm it fails for the missing capability.**
 
   Run: `npx playwright test tests/e2e/game-metadata.spec.ts --workers=1`

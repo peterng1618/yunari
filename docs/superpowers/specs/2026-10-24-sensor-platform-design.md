@@ -618,8 +618,9 @@ Both are keyless and need no credential. **The lookup is on by default** because
 the alternative is a library of unnamed executables; it is not a per-store
 adapter. SteamDB is not used: it has no API and forbids scraping.
 
-**What is sent** is the game's local name (from the executable's version
-information or its install folder) or, for a Steam install, its appid. Nothing
+**What is sent** is the game's local name (the executable's version
+information, else its file name without extension) or, for a Steam install, its
+appid. Nothing
 else — no account, no library list, no machine identifier. **What is kept** is a
 small on-disk map from normalised name to appid (including "no match") and the
 downloaded cover bytes, so a lookup happens once per game and the display works
