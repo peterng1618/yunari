@@ -92,7 +92,7 @@
 #### Task 1.5: One catalogue, deduplicated
 
 **Files:**
-- Create: `src/web/packages/host/src/providers/game/catalogue/` — one module per source (`epic.ts`, `gog.ts`, `xbox.ts`, `itch.ts`, `uninstall.ts`, `appx.ts`) plus `catalogue.ts` for the types and aggregation
+- Create: `src/web/packages/host/src/providers/game/catalogue/` — one module per source (`epic.ts`, `gog.ts`, `xbox.ts`, `itch.ts`, `uninstall.ts`, `appx.ts`), plus `catalogue.ts` (types + aggregation), `seams.ts` (`CatalogueSeams`, `defaultCatalogueSeams`, `textField`, `isTrueFlag`) and `game-config.ts` (`GAME_CONFIG_FILE`, `executableFromGameConfig`, shared by Xbox and Appx)
 - Create: `src/web/packages/host/src/providers/game/catalogue/catalogue.test.ts` (aggregation) and one test file per source alongside it
 - Delete: `game-catalogue.ts` and `game-catalogue.test.ts` after the move
 
