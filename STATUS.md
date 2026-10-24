@@ -19,9 +19,9 @@ Branch: `feat/game-identity`
 
 ## Last completed change
 
-- **Task 1.1 landed** (`8a46b5e1`): `InstalledGame`/`CatalogueSeams` and the fixture-tested Epic manifest reader, 5 tests, red run recorded.
-- **Review:** spec compliance PASS, no must-fix; three minors (seam docblock, unneeded export, empty-`MainGameAppName` fixture) are being fixed.
-- **Environment:** the worktree's stale `node_modules` broke host typecheck; `npm install` in `src/web` fixed it, host typecheck exit 0.
+- **Task 1.2 landed** (`098ecaa0`, fixes `2d8dd6c7`): GOG registry and Xbox readers; 20 catalogue tests pass, host typecheck exit 0.
+- **Review:** spec PASS, no must-fix; six gaps fixed — Xbox config vs sole-exe discrimination, GOG empty-field skips, XML comments stripped, absolute `exe` no longer re-joined, non-object GOG entries skipped.
+- **Task 1.1 closed** (`8a46b5e1`): Epic manifest reader; its three review minors were fixed in `9beee455`.
 - **No tray icon exists**: host lifetime remains terminal-owned (`host/src/main.ts`), and this plan does not add one.
 
 ## Next
