@@ -731,7 +731,7 @@ describe("readAppxGames", () => {
     expect(scripts[0]).toContain("ConvertTo-Json -InputObject @(");
   });
 
-  it("reads a non-framework package's install location", async () => {
+  it("ignores a present config when HasConfig is false", async () => {
     const seams = seamsOf({
       powerShell: [
         {
@@ -742,6 +742,8 @@ describe("readAppxGames", () => {
           HasConfig: false,
         },
       ],
+      // The file is readable, so only the HasConfig gate can keep exes empty.
+      files: { [`${APPX_INSTALL}\\MicrosoftGame.config`]: APPX_CONFIG },
     });
 
     await expect(readAppxGames(seams)).resolves.toEqual([
@@ -828,7 +830,38 @@ describe("readAppxGames", () => {
     ]);
   });
 
-  it("keeps a package whose config exists but cannot be read", async () => {
+  it("keeps a package whose config exists but is denied", async () => {
+    const seams = {
+      ...seamsOf({
+        powerShell: [
+          {
+            Name: "Microsoft.ForzaHorizon5",
+            InstallLocation: APPX_INSTALL,
+            IsFramework: false,
+            HasConfig: true,
+          },
+        ],
+        files: { [`${APPX_INSTALL}\\MicrosoftGame.config`]: APPX_CONFIG },
+      }),
+      readFile: async () => {
+        throw Object.assign(new Error("EACCES: permission denied"), {
+          code: "EACCES",
+        });
+      },
+    };
+
+    await expect(readAppxGames(seams)).resolves.toEqual([
+      {
+        source: "appx",
+        name: "Microsoft.ForzaHorizon5",
+        installDir: APPX_INSTALL,
+        exes: [],
+      },
+    ]);
+  });
+
+  it("keeps an absolute executable from the config as-is", async () => {
+    const config = `<Game><ExecutableList><Executable Name="D:\\Games\\Launcher\\game.exe" /></ExecutableList></Game>`;
     const seams = seamsOf({
       powerShell: [
         {
@@ -838,6 +871,7 @@ describe("readAppxGames", () => {
           HasConfig: true,
         },
       ],
+      files: { [`${APPX_INSTALL}\\MicrosoftGame.config`]: config },
     });
 
     await expect(readAppxGames(seams)).resolves.toEqual([
@@ -845,7 +879,7 @@ describe("readAppxGames", () => {
         source: "appx",
         name: "Microsoft.ForzaHorizon5",
         installDir: APPX_INSTALL,
-        exes: [],
+        exes: ["D:\\Games\\Launcher\\game.exe"],
       },
     ]);
   });
