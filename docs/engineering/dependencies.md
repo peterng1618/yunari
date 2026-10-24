@@ -23,9 +23,9 @@ declares. The closure half is this file's own **Release rule** below.
 | `fflate` | 0.8.3 | MIT | theme ZIP codec |
 | `ffmpeg-static` | 5.3.0 | GPL-3.0-or-later | host: re-encodes theme video; source offered at <https://github.com/eugeneware/ffmpeg-static> |
 | `@biomejs/biome` | 2.5.14 | MIT OR Apache-2.0 | format/lint |
-| `vite` | 8.3.0 | MIT | build/dev |
+| `vite` | 8.3.5 | MIT | build/dev |
 | `typescript` | 7.0.2 | Apache-2.0 | build |
-| `vitest` | 5.0.0 | MIT | tests |
+| `vitest` | 5.0.5 | MIT | tests |
 | `@playwright/test` | 1.63.0 | Apache-2.0 | browser tests |
 | `jsdom` | 26.1.0 | MIT | DOM tests |
 | `canvas` | 3.2.3 | MIT | native raster test dependency |
@@ -50,7 +50,7 @@ declares. The closure half is this file's own **Release rule** below.
 | `@cloudflare/vitest-pool-workers` | 0.23.0 | MIT | devDependency: runs the Worker suite inside workerd |
 | `@cloudflare/workers-types` | 5.20261022.1 | MIT OR Apache-2.0 | devDependency: Worker runtime types |
 | `wrangler` | 4.152.0 | MIT OR Apache-2.0 | devDependency: Worker dev and deploy CLI |
-| `vitest` (nested, `packages/store-worker`) | 4.1.12 | MIT | devDependency: the pool peers on `^4.1.0`; the workspace runs 5.0.0 |
+| `vitest` (nested, `packages/store-worker`) | 4.1.12 | MIT | devDependency: the pool peers on `^4.1.0`; the workspace runs 5.0.5 |
 | `tsx` | 4.23.15 | MIT | devDependency: runs `src/web/scripts/*.mjs` that import workspace TypeScript packages |
 
 `node-forge` 1.4.0 was added on 2026-10-18 with `docs/decisions/0070`. Its

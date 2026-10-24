@@ -6,6 +6,7 @@ import type {
 import {
   DASHBOARD_THEME_KIND,
   facetRecordOf,
+  migrateFabricThemeEnvelope,
   validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
 import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
@@ -576,11 +577,19 @@ async function previousEnvelope(
     : { version: row.version, envelope: parseEnvelope(row) };
 }
 
-/** Written by this Worker from a validated envelope, so the parse is trusted. */
+/**
+ * A row this Worker wrote was validated before it was stored, so the only read
+ * work left is the schema migration: a row from before the semver switch still
+ * carries the legacy integer `2`, and feeding that to the version ladder reports
+ * a schema change where none happened. A row that will not migrate is
+ * corruption, not an old format, so it fails loudly rather than being served.
+ */
 function parseEnvelope(row: {
   readonly envelope_json: string;
 }): FabricThemeEnvelope {
-  return JSON.parse(row.envelope_json) as FabricThemeEnvelope;
+  const migrated = migrateFabricThemeEnvelope(JSON.parse(row.envelope_json));
+  if (!migrated.ok) throw new Error(migrated.issue.message);
+  return migrated.document as unknown as FabricThemeEnvelope;
 }
 
 /**

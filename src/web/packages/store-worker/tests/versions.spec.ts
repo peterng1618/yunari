@@ -182,4 +182,46 @@ describe("version requests", () => {
       ).status,
     ).toBe(404);
   });
+
+  it("migrates a legacy stored envelope before planning the next version", async () => {
+    const headers = await sessionHeaders();
+    await seedPublished({ owner: USER_ID });
+    // The shape a version row written before the semver switch carries.
+    await env.DB.prepare(
+      "UPDATE item_version SET envelope_json = ? WHERE item_id = ?",
+    )
+      .bind(
+        JSON.stringify({
+          ...candidate(ITEM_ID),
+          schemaVersion: 2,
+          metadata: { themeLanguage: "en" },
+        }),
+        ITEM_ID,
+      )
+      .run();
+
+    // The baseline an author reads is the migrated document, not the integer.
+    const baseline = await SELF.fetch(
+      `${BASE}/api/me/items/${ITEM_ID}/baseline`,
+      { headers },
+    );
+    expect(baseline.status).toBe(200);
+    expect(
+      ((await baseline.json()) as { envelope: { schemaVersion: string } })
+        .envelope.schemaVersion,
+    ).toBe("2.0.0");
+
+    // Renaming the theme is a patch. A raw integer `2` against `"2.0.0"` would
+    // read as a schema change and publish a false major.
+    const response = await createVersion(headers, ITEM_ID, {
+      envelope: {
+        ...candidate(ITEM_ID, "1.0.1"),
+        metadata: { themeLanguage: "en", version: "1.0.1", name: "Renamed" },
+      },
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()) as { version: string }).toMatchObject({
+      version: "1.0.1",
+    });
+  });
 });

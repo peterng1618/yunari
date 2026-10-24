@@ -17,10 +17,11 @@ The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-relea
 
 ## Last completed change
 
-- **`README.md` rewritten to current state:** three processes, pre-release `0.x` status, the N−1 migration promise, Windows/Node requirements, build-from-source, first-phone steps, the feature set, CLI flags from `--help`, and the package table.
-- **Stale claims deleted:** the "`yunari` on npm is unrelated" line and the 12-hour token/`curl -X DELETE` revocation; pairing is a six-character code for a durable display credential.
-- **Releases are documented as pending:** package `yunari`, GitHub Releases, `npm i -g yunari@latest` as the post-publish path, the runbook link, and winget not supported.
-- **`docs:check` exits 0;** the gate's only failures are the two known live-SMTC cases.
+- **Gate stays offline:** `scripts/audit-policy.mjs` runs only as its entry point, with a spawned-import test proving the import is side-effect free.
+- **Weather icons ship:** `packages/host/vendor` is staged, and the stage test, tarball list and installed-host smoke check assert it.
+- **Store worker migrates the stored envelope:** a legacy integer baseline no longer plans a false major bump.
+- **Docs corrected:** ownership names `migrateFabricThemeEnvelope`, dependency versions match the manifest, and spec D2 states the implemented refusals.
+- **`docs:check` and `status:check` exit 0;** the gate's only failures are the two known live-SMTC cases.
 
 ## Next
 
@@ -32,4 +33,4 @@ The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-relea
 - **The first publish is a one-time local publish:** trusted publishing is configured on an existing package, so the owner builds and packs locally and runs `npm publish <tarball>` with their own token; the trusted publisher for `peterng1618/yunari`, workflow `publish.yml` applies from the second release, when the workflow takes over OIDC.
 - **The release-token choice is open:** a `RELEASE_PLEASE_TOKEN` PAT or App token makes publication automatic, while a `GITHUB_TOKEN` release cannot trigger this workflow, leaving a manual dispatch on the tag.
 - **Migration is a forward obligation only:** at `2.0.0` there is no earlier supported major beyond the legacy integer, so no real N−1 migration is exercised by data.
-- **Two dependency deviations remain:** `ffmpeg-static` installs with scripts but no media playback was exercised, and `npm ls` marks the overridden edges `invalid` awaiting a controller ruling.
+- **Two dependency deviations remain:** `ffmpeg-static` installs with scripts but no media playback was exercised, and `npm ls` marks the overridden edges `invalid`, accepted in `docs/engineering/dependencies.md` with the audit policy as the backstop.

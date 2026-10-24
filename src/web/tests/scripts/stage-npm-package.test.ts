@@ -76,6 +76,10 @@ function fakeTree({ main = true } = {}): Fake {
   );
   if (main) write("src/web/packages/host/dist/main.js", "export {};\n");
   write("src/web/packages/host/public/index.html", "<!doctype html>");
+  write(
+    "src/web/packages/host/vendor/weather-icons/clear-day.svg",
+    "<svg>clear day</svg>",
+  );
   write("src/web/packages/player/dist/index.html", "<!doctype html>");
   write("src/web/packages/editor/dist/index.html", "<!doctype html>");
 
@@ -102,6 +106,7 @@ it("copies every required path into the workspace layout", () => {
     "packages/host/bin/yunari.js",
     "packages/host/dist/main.js",
     "packages/host/public/index.html",
+    "packages/host/vendor/weather-icons/clear-day.svg",
     "packages/player/dist/index.html",
     "packages/editor/dist/index.html",
     "schema/theme-document.schema.json",

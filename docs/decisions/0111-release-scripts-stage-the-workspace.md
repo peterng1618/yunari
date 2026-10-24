@@ -37,6 +37,7 @@ the `vg-279` ruling). The host build is an SSR bundle
 (`:73–77`). The bin shim refuses a missing build and names the build command.
 
 So the layout the launcher needs — `packages/host/{bin,dist,public}`,
+`packages/host/vendor/weather-icons` (read from `<dist>/../vendor` at run time),
 `packages/player/dist`, `packages/editor/dist`, a root `package.json` — is
 **already the tarball layout** if staging mirrors it. Nothing in production code
 has to move.

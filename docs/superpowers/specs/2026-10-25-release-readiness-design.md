@@ -130,9 +130,14 @@ Reading rules:
 - A document whose major equals the current major is accepted.
 - A document whose major is exactly one less is **migrated in memory**, then
   validated as current.
-- A document two or more majors older, any other integer, or any newer major,
-  is refused with the sentence it already prints for a newer schema.
-- Saving, exporting and publishing always write the current version.
+- Any other integer, and any value that is not `major.minor.patch`, is refused
+  through the validator's missing-field sentence.
+- A newer major is refused with the sentence it already prints for a newer
+  schema; a major older than the previous one with the unsupported-version
+  sentence.
+- Writers validate against the current major and refuse any other, but they do
+  not rewrite a same-major version: today's saving, exporting and publishing
+  paths all emit `SUPPORTED_SCHEMA_VERSION`.
 
 At `2.0.0` there is no earlier supported major beyond the legacy integer: v1
 was deleted and no v1 document exists. N−1 is therefore a forward obligation.
@@ -248,6 +253,7 @@ Flow on `main`:
    packages/host/bin/yunari.js
    packages/host/dist/
    packages/host/public/
+   packages/host/vendor/weather-icons/
    packages/player/dist/
    packages/editor/dist/
    schema/

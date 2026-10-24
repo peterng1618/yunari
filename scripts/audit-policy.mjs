@@ -22,6 +22,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const DEFAULT_ALLOWLIST = resolve(ROOT, "docs/engineering/audit-allowlist.json");
@@ -256,41 +257,52 @@ function flagValue(argv, flag) {
   return value;
 }
 
-if (process.argv.includes("--self-test")) selfTest();
+function main() {
+  if (process.argv.includes("--self-test")) selfTest();
 
-try {
-  const argv = process.argv.slice(2);
-  const reportArg = flagValue(argv, "--report");
-  const allowlistArg = flagValue(argv, "--allowlist");
-  const allowlist = parseAllowlist(
-    readJson(
-      allowlistArg === undefined ? DEFAULT_ALLOWLIST : resolve(allowlistArg),
-      "allowlist",
-    ),
-  );
-  const report = parseReport(
-    reportArg === undefined ? auditJson() : readJson(resolve(reportArg), "audit report"),
-  );
-  const { ok, unmatched, stale } = evaluateAuditReport(report, allowlist);
+  try {
+    const argv = process.argv.slice(2);
+    const reportArg = flagValue(argv, "--report");
+    const allowlistArg = flagValue(argv, "--allowlist");
+    const allowlist = parseAllowlist(
+      readJson(
+        allowlistArg === undefined ? DEFAULT_ALLOWLIST : resolve(allowlistArg),
+        "allowlist",
+      ),
+    );
+    const report = parseReport(
+      reportArg === undefined ? auditJson() : readJson(resolve(reportArg), "audit report"),
+    );
+    const { ok, unmatched, stale } = evaluateAuditReport(report, allowlist);
 
-  for (const finding of unmatched) {
-    process.stderr.write(
-      `audit-policy: ${finding.package} ${finding.advisory} is not allowlisted\n`,
-    );
+    for (const finding of unmatched) {
+      process.stderr.write(
+        `audit-policy: ${finding.package} ${finding.advisory} is not allowlisted\n`,
+      );
+    }
+    for (const entry of stale) {
+      process.stderr.write(
+        `audit-policy: allowlist entry ${entry.package} ${entry.advisory} (reviewed ${entry.reviewed}) matches no finding\n`,
+      );
+    }
+    if (!ok) {
+      process.stderr.write(
+        `audit-policy: ${unmatched.length} unallowlisted finding(s), ${stale.length} stale row(s)\n`,
+      );
+      process.exit(1);
+    }
+    process.stdout.write("audit-policy: every finding is allowlisted, no stale rows\n");
+  } catch (error) {
+    process.stderr.write(`audit-policy: ${error.message}\n`);
+    process.exit(2);
   }
-  for (const entry of stale) {
-    process.stderr.write(
-      `audit-policy: allowlist entry ${entry.package} ${entry.advisory} (reviewed ${entry.reviewed}) matches no finding\n`,
-    );
-  }
-  if (!ok) {
-    process.stderr.write(
-      `audit-policy: ${unmatched.length} unallowlisted finding(s), ${stale.length} stale row(s)\n`,
-    );
-    process.exit(1);
-  }
-  process.stdout.write("audit-policy: every finding is allowlisted, no stale rows\n");
-} catch (error) {
-  process.stderr.write(`audit-policy: ${error.message}\n`);
-  process.exit(2);
+}
+
+// Importing this module must not run the audit: `evaluateAuditReport`'s own test
+// imports it inside `npm run gate`, which must stay runnable offline (D5).
+if (
+  process.argv[1] !== undefined &&
+  pathToFileURL(resolve(process.argv[1])).href === import.meta.url
+) {
+  main();
 }

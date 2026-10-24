@@ -139,6 +139,7 @@ jobs:
             package/packages/host/public/settings.html \
             package/packages/player/dist/index.html \
             package/packages/editor/dist/index.html \
+            package/packages/host/vendor/weather-icons/clear-day.svg \
             package/schema/theme-document.schema.json; do
             if ! grep -qx "$path" <<< "$entries"; then
               echo "missing $path in the tarball" >&2
@@ -199,6 +200,9 @@ jobs:
           check /api/health
           check /editor
           check /
+          # The icons are read from `<dist>/../vendor`, so an installed package
+          # that omits them answers 404 here rather than in a user's theme.
+          check /api/weather/icon/clear-day.svg
 
       - name: Publish the packed tarball to npm
         run: |

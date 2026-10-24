@@ -46,6 +46,10 @@ const COPY = [
   ["src/web/packages/host/bin", "packages/host/bin"],
   ["src/web/packages/host/dist", "packages/host/dist"],
   ["src/web/packages/host/public", "packages/host/public"],
+  // The host resolves `<dist>/../vendor/weather-icons` at run time (server.ts),
+  // so the icons are runtime bytes, not optional binaries. `vendor/` is ignored
+  // except this tracked directory, so a clean checkout stages only these.
+  ["src/web/packages/host/vendor", "packages/host/vendor"],
   ["src/web/packages/player/dist", "packages/player/dist"],
   ["src/web/packages/editor/dist", "packages/editor/dist"],
   ["schema", "schema"],

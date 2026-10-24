@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 // The script lives at the repository root, four levels above this file:
 // src/web/tests/scripts → ../../../.. = repo root.
@@ -178,6 +179,21 @@ it("exits 1 when a finding is unallowlisted, and 0 when it is covered", () => {
       entry("node-forge", "GHSA-86w9-cpqp-85rv"),
     ]),
   ).toBe(0);
+});
+
+it("runs nothing when imported, so the gate stays offline", () => {
+  const run = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `await import(${JSON.stringify(pathToFileURL(SCRIPT).href)})`,
+    ],
+    { encoding: "utf8" },
+  );
+  expect(run.stdout).toBe("");
+  expect(run.stderr).toBe("");
+  expect(run.status).toBe(0);
 });
 
 it("prints a summary and exits 0 for --self-test", () => {
