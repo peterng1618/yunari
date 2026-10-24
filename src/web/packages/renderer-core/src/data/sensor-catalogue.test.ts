@@ -25,9 +25,9 @@ describe("descriptorFromWire", () => {
   });
 
   it("drops a unit kind the renderer cannot honour", () => {
-    expect(
-      descriptorFromWire({ ...CUSTOM, unitKind: "furlongs" })?.unitKind,
-    ).toBeUndefined();
+    const descriptor = descriptorFromWire({ ...CUSTOM, unitKind: "furlongs" });
+    expect(descriptor?.key).toBe("custom.fan");
+    expect(descriptor?.unitKind).toBeUndefined();
   });
 
   it("drops a value kind the renderer cannot honour", () => {
@@ -40,9 +40,9 @@ describe("descriptorFromWire", () => {
     expect(
       descriptorFromWire({ ...CUSTOM, mediaKind: "image" })?.mediaKind,
     ).toBe("image");
-    expect(
-      descriptorFromWire({ ...CUSTOM, mediaKind: "video" })?.mediaKind,
-    ).toBeUndefined();
+    const video = descriptorFromWire({ ...CUSTOM, mediaKind: "video" });
+    expect(video?.key).toBe("custom.fan");
+    expect(video?.mediaKind).toBeUndefined();
   });
 
   it("filters display units to strings and omits an empty list", () => {
