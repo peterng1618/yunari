@@ -16,6 +16,7 @@ import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { presentMonAdapter } from "./providers/frame/presentmon.js";
 import { FrameProvider } from "./providers/frame/provider.js";
 import { RtssAdapter } from "./providers/frame/rtss.js";
+import { GameProvider } from "./providers/game/provider.js";
 import { LhmSensorProvider } from "./providers/lhm.js";
 import { launchLhm, registerLhmTask } from "./providers/lhm-launcher.js";
 import { LibrarySensorProvider } from "./providers/library.js";
@@ -217,6 +218,9 @@ export async function run(argv: readonly string[]): Promise<number> {
       }),
     ],
   });
+  // The foreground process, with Steam's local files for a game name: one
+  // helper only while a display binds game.*.
+  const gameProvider = new GameProvider();
   const registry = new ProviderRegistry([
     clockProvider,
     lhmProvider,
@@ -224,6 +228,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     weatherProvider,
     mediaProvider,
     frameProvider,
+    gameProvider,
     customProvider,
   ]);
   const packagesDir = path.resolve(here, "..", "..");
@@ -576,6 +581,9 @@ export async function run(argv: readonly string[]): Promise<number> {
       mediaProvider.stop();
       // Same for the RTSS helper: a PowerShell left polling outlives the host.
       frameProvider.stop();
+      // The game helper is the same shape: a PowerShell left polling would
+      // outlive the host.
+      gameProvider.stop();
       // Every per-source timer goes with it, and an in-flight fetch is cut.
       customProvider.stop();
       // The windows close with the host: one left behind is one the next run
