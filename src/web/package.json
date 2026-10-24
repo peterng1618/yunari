@@ -60,6 +60,11 @@
     "vitest": "5.0.5"
   },
   "//devDependencies": "jsdom and canvas are the `*.dom.test.ts` environment, declared here beside vitest because vitest.config.ts owns `environment` for the whole workspace. They were reachable without being declared — both are OPTIONAL dependencies of fabric@7.4.0 — which is the problem: `canvas` is native, npm continues silently when its prebuild is unavailable, and the tests that need a real 2D context would then lose it without failing. Declaring them also puts them through CI's licence job.",
+  "//overrides": "Targeted transitive advisories (plan 2026-10-25 release readiness, D4). Each override is kept only while the suite that exercises it is green; `docs/engineering/dependencies.md` records the measurement. A jsdom override to 30 was tried and removed: it changed CSSStyleDeclaration serialisation and DOM removal semantics, failing 8 editor DOM cases.",
+  "overrides": {
+    "undici": "^7.30.1",
+    "sharp": "^0.35.5"
+  },
   "engines": {
     "node": ">=22"
   }

@@ -88,6 +88,40 @@ compiled-in icons exist and therefore on the package's licence scope. Four of
 its current icons are Feather-derived and MIT rather than ISC alone. Full
 licence text in `THIRD-PARTY-NOTICES.md`.
 
+## Audit overrides
+
+Measured 2026-10-25 on the tree carrying the `undici`/`sharp` overrides (plan
+2026-10-25 release readiness, D4). `npm audit --json` reports 4 high findings,
+down from 8; `npm ci` exits 0.
+
+| Override | Resolved | Proving suite |
+|---|---|---|
+| `undici` `^7.30.1` | 7.30.1 | `npm run test:worker` — 12 files, 72 tests, exit 0 |
+| `sharp` `^0.35.5` | 0.35.5 | `npm run test:worker` — 12 files, 72 tests, exit 0 |
+
+A `jsdom` `^30.1.3` override was tried and removed: it changed
+`CSSStyleDeclaration` serialisation and DOM-removal semantics, failing 8 editor
+DOM cases. With jsdom 26.1.0 restored the suite is 254 files / 3672 tests green,
+and `whatwg-encoding@3.1.1` stays.
+
+`npm ls` on npm 11.6.2 marks the overridden edges `invalid` because the lockfile
+keeps each requester's original exact range (`miniflare` pins `undici` 7.29.0
+and `sharp` 0.35.2); `npm ci` exits 0 and `npm explain` reports the edges as
+`overridden`. The resolved versions above are what the lockfile installs.
+Applying the overrides needed a fresh lock resolution, which also re-hoisted
+`magic-string`, `tslib`, `obug` and `why-is-node-running` (same version sets,
+different placement) and recorded the remaining `@tailwindcss/oxide` platform
+binaries.
+
+### Accepted findings that remain
+
+| Finding | Severity | Why it is accepted |
+|---|---|---|
+| `node-forge` 1.4.0, GHSA-86w9-cpqp-85rv | high | No patched version exists. The host generates and signs with it, never calls the vulnerable verifier; ADR 0070 records the reasoning. |
+| `zod` < 4.6.6, GHSA-mrhx-c7xc-m3w5, via `@google/design.md` 0.4.0 | high | The linter is the latest published version and needs zod v3; D4 forbids a major override. |
+| `zod` 4.4.3 via `@cloudflare/vitest-pool-workers` 0.23.0 | high | The pool pins zod exactly inside the Worker toolchain; the override set covers only `undici` and `sharp`. |
+| `canvas` 3.2.3 → `prebuild-install` 7.1.3 | deprecation | `canvas` is the latest release and fabric's node renderer needs it; a deprecation is not a vulnerability. |
+
 ## Vendored source
 
 | Source | Pin | Licence | Role |
