@@ -9,21 +9,18 @@ import { type Canvas, IText, Textbox } from "fabric/es";
 import { uiCopy } from "../ui-copy.js";
 
 /**
- * How much room a new text gets beyond its own measured words.
- *
- * Wide enough that the first word does not sit against the edge of its own box,
- * so the box reads as a box rather than as a glyph outline, and narrow enough
- * that the handle is still on screen. The exact number is a product default,
- * not a measurement.
+ * What a new text is asked for: its words, and the authored box that makes it
+ * a `Textbox`. No box asks for an `IText`, which measures its own ink.
  */
-const NEW_TEXT_SLACK = 24;
-
-/** A width no scene uses, so the measurement reports one line rather than a wrap. */
-const UNCONSTRAINED_WIDTH = 100_000;
+export interface TextCreationOptions {
+  readonly text?: string;
+  readonly box?: { readonly width: number; readonly height: number };
+  readonly [key: string]: unknown;
+}
 
 interface TextManager {
-  /** A `Textbox`, so the run editor's Wrap and Overflow mean what they say. */
-  addText(options?: Readonly<Record<string, unknown>>): Textbox;
+  /** The class the request chose: an `IText` with no box, a `Textbox` with one. */
+  addText(options?: TextCreationOptions): IText;
   /**
    * Who paints an object's authoring view when the author starts editing it.
    * The session owns the run display that painting comes from, and the shell
@@ -113,29 +110,6 @@ function adoptResizedBox(object: object): void {
   // author dragged to (240 units dragged at `scaleX` 0.7432, 177.6 landed:
   // `vg-233`).
   writeAuthoredBoxDimension(target, "width", target.width);
-}
-
-/**
- * Give a text that has runs but no box one that holds its first line.
- *
- * A `Textbox` with no width is measured from its longest unbreakable run, so a
- * new "New text" arrives 64 units wide and wraps onto two lines before the
- * author has touched it. Measuring it at an unconstrained width and storing
- * that is the same number a single-line `FabricText` would have, and it makes
- * both alignment controls and the width handle mean something from birth:
- * without a box, an alignment has no slack to act in and a resize has nothing
- * to write to.
- */
-function seedAuthoredBox(object: Textbox): void {
-  const authored = authoredOf(object);
-  if (authored === undefined || authored.box !== undefined) return;
-
-  object.set("width", UNCONSTRAINED_WIDTH);
-  const width = Math.ceil(object.calcTextWidth()) + NEW_TEXT_SLACK;
-  object.set("width", width);
-  // Seeds the other dimension from the object's own measured edge, which is the
-  // single-line height the width above just established.
-  writeAuthoredBoxDimension(object, "width", width);
 }
 
 function isText(value: unknown): value is PlanTextObject & {
@@ -258,23 +232,35 @@ export function createTextManager(
 
   return {
     addText(options = {}) {
-      // A `Textbox`, not an `IText`. Two of the three controls the run editor
-      // offers a text object — Wrap and Overflow — are `Textbox` behaviour, and
-      // an `IText` accepts both, records both, and does neither: the text runs
-      // past the box the author set instead of wrapping inside it. It is also
-      // the class every text object in a shipped theme is authored as, so this
-      // is the editor making the same object the scene does.
-      const text = new Textbox(
-        typeof options["text"] === "string" ? options["text"] : "",
-        { id: `text-${crypto.randomUUID()}`, ...options },
-      );
-      // Installed at construction, not on the first authored pass: the author
-      // types into a new text immediately, and both passes skip an object that
-      // is being edited — so a handle dragged while those passes are skipping
-      // would otherwise be widened back to its longest word by Fabric's own
-      // `initDimensions` before it ever met the guard.
-      guardBoxWidth(text);
-      seedAuthoredBox(text);
+      const { box, text: content = "", ...rest } = options;
+      const id = `text-${crypto.randomUUID()}`;
+      let text: IText;
+      if (box === undefined) {
+        // No box is the whole of the width mode: an `IText` measures its own
+        // ink, so an authored box or a width guard would be a constraint the
+        // class cannot honour.
+        text = new IText(content, { id, ...rest });
+      } else {
+        // A `Textbox` is an `IText` at runtime; only Fabric's generic
+        // signatures make the subclass unassignable under
+        // `exactOptionalPropertyTypes`, so the annotation needs the cast.
+        text = new Textbox(content, {
+          id,
+          ...rest,
+          width: box.width,
+          height: box.height,
+        }) as IText;
+        // Installed at construction, not on the first authored pass: the author
+        // types into a new text immediately, and both passes skip an object
+        // that is being edited — so a handle dragged while those passes are
+        // skipping would otherwise be widened back to its longest word by
+        // Fabric's own `initDimensions` before it ever met the guard.
+        guardBoxWidth(text);
+        // The drawn rectangle is the authored box, both dimensions of it. A
+        // measurement here would make the box the author drew a suggestion.
+        writeAuthoredBoxDimension(text, "width", box.width);
+        writeAuthoredBoxDimension(text, "height", box.height);
+      }
       canvas.add(text);
       canvas.setActiveObject(text);
       save();

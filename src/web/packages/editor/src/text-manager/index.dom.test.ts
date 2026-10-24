@@ -25,8 +25,11 @@ const AUTHORED = {
 };
 
 /** The starter's `ram-value`: an authored 180-wide box on a bound run. */
-function reading(id = "ram-value"): Textbox {
-  const object = new Textbox("MEM 61", {
+function authoredReading(
+  id = "ram-value",
+  Class: typeof IText | typeof Textbox = Textbox,
+): IText {
+  const object = new (Class as typeof Textbox)("MEM 61", {
     id,
     left: 40,
     top: 30,
@@ -34,7 +37,7 @@ function reading(id = "ram-value"): Textbox {
     fontSize: 32,
     originX: "left",
     originY: "top",
-  });
+  }) as IText;
   object.set(YUNARI_TEXT_PROPERTY, {
     overflow: "ellipsis",
     align: "center",
@@ -44,7 +47,7 @@ function reading(id = "ram-value"): Textbox {
   return object;
 }
 
-function scene(object: Textbox): Canvas {
+function scene(object: IText | Textbox): Canvas {
   const canvas = new Canvas(document.createElement("canvas"));
   canvas.add(object);
   return canvas;
@@ -89,10 +92,10 @@ describe("TextManager", () => {
     expect(text.get("id")).toBe("explicit-id");
   });
 
-  it("gives a new text an authored box that holds its first line", () => {
-    // A Textbox with no width measures itself from its longest unbreakable run,
-    // so "New text" used to arrive 64 units wide and wrap onto two lines — and,
-    // with no authored box, the first handle drag had nothing to write to.
+  it("creates a Text, with no authored box, when no box is asked for", () => {
+    // An auto text measures its own ink; an authored box would be a width the
+    // class cannot honour. A seeded one also made a new text a Textbox wearing
+    // an IText's name — the class is the width mode, so it is the whole answer.
     const canvas = new Canvas(document.createElement("canvas"));
     const manager = createTextManager(canvas, vi.fn());
 
@@ -107,14 +110,53 @@ describe("TextManager", () => {
     const authored = text.get(YUNARI_TEXT_PROPERTY) as {
       box?: { width: number; height: number };
     };
-    expect(authored.box).toBeDefined();
+    expect(text).toBeInstanceOf(IText);
+    expect(text).not.toBeInstanceOf(Textbox);
+    expect(authored.box).toBeUndefined();
     expect(text.textLines).toHaveLength(1);
-    expect(text.width).toBe(authored.box?.width);
-    expect(text.height).toBeCloseTo(authored.box?.height ?? -1, 6);
+    expect(text.width).toBeGreaterThan(0);
+  });
+
+  it("creates a Text box whose authored box is the one it was given", () => {
+    // The box is the author's rectangle, not a measurement. It is also the
+    // width the guard has to hold: Fabric widens a Textbox to its longest word
+    // on every `initDimensions`, so the written box is what the next drag and
+    // the clip read.
+    const canvas = new Canvas(document.createElement("canvas"));
+    const manager = createTextManager(canvas, vi.fn());
+    const box = { width: 200, height: 80 };
+
+    const text = manager.addText({
+      text: "New text",
+      fontSize: 32,
+      box,
+      yunariText: {
+        runs: [{ kind: "literal", text: "New text" }],
+      },
+    });
+
+    const authored = text.get(YUNARI_TEXT_PROPERTY) as {
+      box?: { width: number; height: number };
+    };
+    expect(text).toBeInstanceOf(Textbox);
+    expect(authored.box).toEqual(box);
+    expect(text.textLines).toHaveLength(1);
+    expect(text.width).toBe(box.width);
+    // The guard is installed, so a width write stays where it was put.
+    text.set("width", 150);
+    expect(text.width).toBe(150);
+    expect(
+      (text.get(YUNARI_TEXT_PROPERTY) as { box?: { width: number } }).box
+        ?.width,
+    ).toBe(200);
   });
 });
 
-describe("double-clicking a bound run", () => {
+describe.each([
+  ["Text", IText],
+  ["Text box", Textbox],
+] as const)("double-clicking a bound run on a %s", (_name, Class) => {
+  const reading = (): IText => authoredReading("ram-value", Class);
   it("paints the token and syncs Fabric's textarea with it", () => {
     // Fabric enters inline editing on the first click's mouse-up, so the
     // object is already editing when the double-click arrives, and its hidden
@@ -222,7 +264,7 @@ describe("double-clicking a bound run", () => {
 
 describe("a width the author dragged", () => {
   it("records it as the new authored box, on every step of the drag", () => {
-    const object = reading();
+    const object = authoredReading();
     const canvas = scene(object);
     const save = vi.fn();
     const text = withAuthoringView(canvas, save);
@@ -279,7 +321,7 @@ describe("a width the author dragged", () => {
     // would be dozens of serialisations and dozens of undos. Fabric reports the
     // gesture as finished on `object:modified`, and that is where the codebase
     // already answers this — see `editor-shell.ts:213-215`.
-    const object = reading();
+    const object = authoredReading();
     const canvas = scene(object);
     const save = vi.fn();
     const text = withAuthoringView(canvas, save);
@@ -345,29 +387,15 @@ describe("typing over an object that carries more than one run", () => {
 });
 
 describe("what a text object an author inserts can do", () => {
-  /**
-   * Both of these were measured on the surface, not read off the source: a text
-   * inserted from the Add pane came out as an `IText` with a centre origin, so
-   * its X and Y were the middle of the object, and Wrap and Overflow recorded
-   * an ask and did nothing — a 57-character caption asked to wrap at 200 units
-   * rendered 1193 wide.
-   */
-  it("is the class that wraps, so Wrap and Overflow are not a promise", () => {
-    const canvas = new Canvas(document.createElement("canvas"));
-    const manager = createTextManager(canvas, vi.fn());
-
-    const text = manager.addText({ text: "New text" });
-
-    expect(text).toBeInstanceOf(Textbox);
-    manager.destroy();
-  });
-
   it("wraps inside the box the author set", () => {
     const canvas = new Canvas(document.createElement("canvas"));
     const manager = createTextManager(canvas, vi.fn());
-    const text = manager.addText({ text: "New text" });
+    const text = manager.addText({
+      text: "New text",
+      box: { width: 200, height: 400 },
+      yunariText: { runs: [{ kind: "literal", text: "New text" }] },
+    });
     canvas.setActiveObject(text);
-    text.set("width", 200);
     text.set(
       "text",
       "AMD Ryzen 7 7800X3D sixteen core thirty two thread processor",
@@ -392,7 +420,7 @@ describe("what a text object an author inserts can do", () => {
     // cannot jitter. The defect is that nothing ever told the box it no longer
     // fits — an author who picks a larger face is left with text they cannot
     // read and a Height field that is right about a box that is wrong.
-    const object = reading("cpu-card-title");
+    const object = authoredReading("cpu-card-title");
     object.set(YUNARI_TEXT_PROPERTY, {
       overflow: "clip",
       align: "left",

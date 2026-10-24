@@ -16,8 +16,9 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- `reviveScene` takes an editor-only `editableText` option that revives nested serialised `type: "Text"` as `IText` on a copy, leaving geometry, runs and styles untouched.
-- The editor's mount and its history revive both pass it, so a legacy display text opens editable and stays editable after undo; the player's revive is unchanged.
+- `addText` builds an `IText` when asked for no box and a `Textbox` when given one, writing the drawn box's width and height as authored.
+- Auto text no longer gets a measured authored box or a width guard; `seedAuthoredBox` had no caller and is deleted.
+- Tests cover both classes, keep the double-click editing cases on each, and pass an explicit box wherever a fixed text is resized.
 
 ## Next
 

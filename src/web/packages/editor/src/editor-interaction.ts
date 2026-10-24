@@ -1,9 +1,10 @@
-import type { Canvas, FabricObject, IText, Textbox } from "fabric/es";
+import type { Canvas, FabricObject, IText } from "fabric/es";
 import type { ClipboardManager } from "./clipboard-manager/index.js";
 import type { CropManager } from "./crop-manager/index.js";
 import type { DeletionManager } from "./deletion-manager/index.js";
 import type { ErrorManager } from "./error-manager/index.js";
 import type { GroupingManager } from "./grouping-manager/index.js";
+import type { TextCreationOptions } from "./text-manager/index.js";
 import type { ViewportManager } from "./viewport-manager/index.js";
 
 /** Product panels depend only on the editor mechanics they exercise. */
@@ -28,11 +29,9 @@ export interface EditorInteraction {
     destroy(): void;
   };
   readonly textManager: {
-    /** A `Textbox`, which is what it creates and what the manager's own
-     *  interface already said — narrowing it here lets a caller put the caret
-     *  in a new text object, which is the difference between typing working and
-     *  typing going nowhere after Insert. */
-    addText(options?: Readonly<Record<string, unknown>>): Textbox;
+    /** The class the request chose — an `IText` with no box, a `Textbox` with
+     *  one — as a text object so the caller can put the caret in it. */
+    addText(options?: TextCreationOptions): IText;
     /**
      * Installs who paints an object's authoring view when the author starts
      * editing it. The session owns the run display that comes from, and the

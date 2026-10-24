@@ -21,7 +21,9 @@ const GLOBALS = {
   },
 };
 
-/** The object `addText` hands back: a Textbox, which is what it really creates. */
+/** The object `addText` hands back. An insert asks for no box yet, so the
+ *  manager's no-box branch constructs an `IText`; the fake only needs the
+ *  caret calls both classes share. */
 function textWithEditing() {
   return {
     enterEditing: vi.fn(function (this: { isEditing: boolean }) {
@@ -205,7 +207,7 @@ describe("new object panel", () => {
     const addChart = vi.fn();
     const panel = createNewObjectPanel(
       document.body,
-      // `addText` returns a `Textbox`, never undefined — see `TextManager`. A
+      // `addText` returns a text object, never undefined — see `TextManager`. A
       // bare `vi.fn()` broke that contract, and the panel's deferred caret
       // callback then dereferenced the undefined: its guard compares the canvas's
       // active object against the returned one, and `undefined !== undefined` is
@@ -453,7 +455,7 @@ describe("new object panel", () => {
 
   it("delegates text construction to the editor with derived v2 defaults", () => {
     // Records the call AND honours `TextManager.addText`'s contract, which is a
-    // `Textbox` and never undefined — see the note on the ChartManager cases.
+    // text object and never undefined — see the note on the ChartManager cases.
     const addText = vi.fn((): unknown => textWithEditing());
     const root = createNewObjectPanel(
       document.body,
