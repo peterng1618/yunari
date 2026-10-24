@@ -11,17 +11,21 @@ name: Publish
 # one, an owner dispatches this workflow manually on the tag. Manual dispatch
 # assumes a `vX.Y.Z` tag ref: `${GITHUB_REF_NAME#v}` strips that prefix and
 # `--expect-version` then cross-checks the tag against src/web/package.json.
-# `dry_run` defaults to true, so a manual run neither publishes nor uploads
-# unless the box is unticked, and a real manual run needs the GitHub Release
-# for that tag to exist already (`gh release upload` targets it).
+# `dry_run` defaults to true and any dispatch that does not explicitly pass
+# `false` stays a dry run, so neither a publish nor an asset upload can happen
+# by omission; a real manual run needs the GitHub Release for that tag to exist
+# already (`gh release upload` targets it).
 #
-# npm trusted publishing. The package owner must configure a trusted publisher
-# on npmjs.com for repository `peterng1618/yunari`, workflow `publish.yml`.
-# Provenance and OIDC need `id-token: write` and a public repository, and the
-# bundled npm must be >= 11.5.1 (Node 24 ships a newer one). If OIDC cannot be
-# configured, the fallback is an `NPM_TOKEN` secret exported as
-# `NODE_AUTH_TOKEN`; it is deliberately not wired here until it is needed. The
-# full setup runbook is release-readiness Task D1.
+# npm authentication. Trusted publishing is configured on an EXISTING package's
+# npmjs.com settings, so it cannot be set up before `yunari` exists: the FIRST
+# publish must be token-authenticated (an `NPM_TOKEN` secret exported as
+# `NODE_AUTH_TOKEN`, or a manual token-seeded publish by the owner). The trusted
+# publisher for repository `peterng1618/yunari`, workflow `publish.yml` takes
+# effect from the SECOND publish on, and `publish.yml` must exist on the default
+# branch for that binding to be offered. Provenance needs a public repository,
+# `id-token: write`, and npm >= 11.5.1 (Node 24 ships a newer one). No token is
+# wired here; the owner supplies one for the first release only. The full setup
+# runbook is release-readiness Task D1.
 #
 # `/editor` is a 302 to `/editor/` (relative asset base), so the smoke request
 # follows redirects and still requires a final 200.
@@ -41,20 +45,25 @@ permissions:
   id-token: write
 
 concurrency:
-  group: publish-${{ github.ref }}
-  # A publish already talking to npm is not cancelled by the next dispatch.
-  cancel-in-progress: false
+  # One publish at a time, whatever the ref: the version is only known inside
+  # the job, so a ref-scoped group can still let a dispatch on `main` and a
+  # dispatch on the tag reach `npm publish` together. Serialising the whole
+  # workflow is the shortest guarantee that only one real publish runs.
+  group: publish
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       STAGE: ${{ runner.temp }}/yunari-package
       ASSETS: ${{ runner.temp }}/yunari-assets
       SMOKE: ${{ runner.temp }}/yunari-smoke
-      # The release event carries no inputs, so only a manual dispatch can ask
-      # for a dry run; every other run really publishes.
-      DRY_RUN: ${{ inputs.dry_run || 'false' }}
+      # Fail closed: only an explicit `false` from a dispatch publishes. Loose
+      # equality cannot tell `false` from a missing input (both coerce to 0), so
+      # compare the serialised value: release -> false, dispatch true -> true,
+      # dispatch false -> false, dispatch absent -> null -> dry run.
+      DRY_RUN: "${{ github.event_name == 'workflow_dispatch' && toJSON(inputs.dry_run) != 'false' ? 'true' : 'false' }}"
     steps:
       # The gate dates licence rules by commit history, so a shallow clone
       # would make every rule read as written by its own citing commit.
@@ -81,12 +90,14 @@ jobs:
       - name: Build player, editor and host
         working-directory: src/web
         run: |
+          set -euo pipefail
           npm run build -w @yunari/player
           npm run build -w @yunari/editor
           npm run build -w @yunari/host
 
       - name: Resolve version and dist-tag
         run: |
+          set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           if [[ "$version" == *-* ]]; then
             dist_tag=next
@@ -98,11 +109,13 @@ jobs:
 
       - name: Stage the package outside the repository
         run: |
+          set -euo pipefail
           rm -rf "$STAGE"
           node scripts/stage-npm-package.mjs --out "$STAGE" --expect-version "$VERSION"
 
       - name: Pack the tarball
         run: |
+          set -euo pipefail
           rm -rf "$ASSETS"
           mkdir -p "$ASSETS"
           (cd "$STAGE" && npm pack --pack-destination "$ASSETS")
@@ -112,6 +125,7 @@ jobs:
       # release that the install smoke test alone would not explain.
       - name: Verify the tarball contents
         run: |
+          set -euo pipefail
           entries="$(tar -tzf "$ASSETS/yunari-${VERSION}.tgz")"
           for path in \
             package/package.json \
@@ -135,6 +149,7 @@ jobs:
       # workspace above it, then boot the host and require every page to answer.
       - name: Install and smoke-test the tarball
         run: |
+          set -euo pipefail
           rm -rf "$SMOKE"
           mkdir -p "$SMOKE"
           cd "$SMOKE"
@@ -150,7 +165,7 @@ jobs:
           port=4319
           ./node_modules/.bin/yunari --no-browser --port "$port" > "$SMOKE/host.log" 2>&1 &
           host_pid=$!
-          trap 'kill "$host_pid" 2>/dev/null || true' EXIT
+          trap 'kill "$host_pid" 2>/dev/null || true; wait "$host_pid" 2>/dev/null || true' EXIT
 
           for attempt in {1..60}; do
             if curl --silent --fail --output /dev/null --max-time 1 "http://127.0.0.1:${port}/api/health"; then
@@ -184,20 +199,21 @@ jobs:
           check /editor
           check /
 
-      - name: Publish to npm
+      - name: Publish the packed tarball to npm
         run: |
+          set -euo pipefail
           args=(--provenance --access public --tag "$DIST_TAG")
           if [[ "$DRY_RUN" == "true" ]]; then
             args+=(--dry-run)
           fi
-          cd "$STAGE"
-          npm publish "${args[@]}"
+          npm publish "$ASSETS/yunari-${VERSION}.tgz" "${args[@]}"
 
       - name: Attach the release assets
         if: env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           (cd "$STAGE" && zip -q -r "$ASSETS/yunari-${VERSION}.zip" .)
           gh release upload "$GITHUB_REF_NAME" \
             "$ASSETS/yunari-${VERSION}.tgz" \

@@ -32,7 +32,7 @@ The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-relea
 ## Blockers / unverified
 
 - **The publish workflow is unverified end to end:** no dispatch was authorised, so only its parse and its stage/pack/smoke/publish-dry-run commands were exercised, locally.
-- **The trusted publisher is unconfigured:** the npm package owner must add repository `peterng1618/yunari`, workflow `publish.yml`; `NPM_TOKEN` is the OIDC fallback and is deliberately not wired.
+- **The first publish needs token auth:** trusted publishing is configured on an existing package, so the first `yunari` publish needs `NPM_TOKEN` or a manual token-seeded publish; the trusted publisher for `peterng1618/yunari`, workflow `publish.yml` applies from the second publish and needs that file on the default branch.
 - **The release-token choice is open:** a `RELEASE_PLEASE_TOKEN` PAT or App token makes publication automatic, while a `GITHUB_TOKEN` release cannot trigger this workflow, leaving a manual dispatch on the tag.
 - **Migration is a forward obligation only:** at `2.0.0` there is no earlier supported major beyond the legacy integer, so no real N−1 migration is exercised by data.
 - **Two dependency deviations remain:** `ffmpeg-static` installs with scripts but no media playback was exercised, and `npm ls` marks the overridden edges `invalid` awaiting a controller ruling.
