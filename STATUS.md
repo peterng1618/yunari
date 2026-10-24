@@ -11,8 +11,8 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Active work
 
-- **Tasks 1–5 are done** (menu model, external programs, sign-in entry, both tray adapters); Phase 1 continues with the controller.
-- **Controller next:** the 5-second snapshot poll, action dispatch and 10-second notices are still to be built.
+- **Tasks 1–6 are done** (menu model, external programs, sign-in entry, both tray adapters, controller); Phase 1 is complete.
+- **Controller** polls every 5 s, sends only a changed menu or tooltip, dispatches clicks and shows action or snapshot failures as 10 s notices.
 - **Windows adapter** renders the model through a hidden PowerShell WinForms `NotifyIcon` fed by JSON lines on stdin.
 - **Linux adapter** stages the pinned `systray2@2.1.4` x86-64 binary; no new npm dependency and no runtime install.
 - **External programs:** LHM and RTSS rows exist only when installed or running; RTSS starts only on an explicit click.
@@ -20,15 +20,15 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Last completed change
 
-- **Linux tray:** `host/src/tray/linux.ts` sends the binary's bare first `Menu`, then `update-item-and-menu` lines addressed by slot (`seq_id` = index, `__id` = init slot); separators are `" "`.
-- **Vendoring:** `scripts/vendor-tray.mjs` checks the pinned SHA-256 before extraction and stages only the Linux binary and LICENSE under ignored `vendor/tray`.
-- **View discipline:** one `onLost` per view and never after a rejected start; a lost view stops writing menus but `close()` still kills the process.
-- **Tests:** 17 Linux tests; the staged binary is a 3.5 MB x86-64 ELF and `PROVENANCE.txt` carries the pinned digest.
-- **Gates:** host typecheck, Biome, all tray tests and `status:check` exit 0.
+- **Controller:** `host/src/tray/controller.ts` polls the snapshot every 5 s, resends only a changed menu or tooltip, dispatches clicks and keeps failures as 10 s notices.
+- **Selector:** `host/src/tray/index.ts` refuses macOS and headless Linux before opening a view, then passes `spawnProcess` and both callbacks to the chosen adapter.
+- **Stop:** `exit`, a repeated `stop()` and a stop during a refresh are all no-ops after the first close; `onLost` remains the adapter's call.
+- **Tests:** 12 new tests; all 67 tray tests pass.
+- **Gates:** host typecheck, Biome and `status:check` exit 0.
 
 ## Next
 
-1. Task 6+: the controller, editor deep links and `--tray` wiring.
+1. Task 7+: CLI `--tray` flags, editor deep links and host wiring.
 2. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
 3. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
 
