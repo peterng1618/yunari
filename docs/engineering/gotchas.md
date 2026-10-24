@@ -120,6 +120,14 @@ silently — nothing red, a wrong banner:
   used by the game provider and `/api/game/artwork/`; unset changes nothing.
   `tests/e2e/game-artwork.spec.ts` sets it to a temp root so the real host reads
   a fixture library and cache without touching this machine's Steam.
+- **`YUNARI_STEAM_STORE`** points the store-metadata client at one origin for
+  its search, details and portrait requests; unset keeps Valve's store and CDN.
+  `tests/e2e/game-metadata.spec.ts` uses it to play all three from a fixture, so
+  the proof needs no network.
+- **`YUNARI_FOREGROUND_EXE`** reports that executable as the running game
+  instead of spawning the Windows foreground helper, and its file stem is the
+  local name searched for. The version-info ProductName read is skipped for the
+  seam. Unset changes nothing. Same spec.
 - **`YUNARI_CAPTURE=1`** and **`YUNARI_CAPTURE_DIR`** are the capture switches;
   their rules live in [`docs/evidence/screenshots/README.md`](../evidence/screenshots/README.md).
 

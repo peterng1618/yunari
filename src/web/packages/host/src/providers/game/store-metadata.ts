@@ -12,9 +12,8 @@ import { matchStoreGame, normalizeGameName } from "./name-match.js";
  * ever talks to Valve's CDN itself.
  */
 
-const SEARCH_URL = "https://store.steampowered.com/api/storesearch/";
-const DETAILS_URL = "https://store.steampowered.com/api/appdetails";
-const PORTRAIT_BASE = "https://cdn.akamai.steamstatic.com/steam/apps/";
+const STORE_ORIGIN = "https://store.steampowered.com";
+const PORTRAIT_ORIGIN = "https://cdn.akamai.steamstatic.com";
 const ARTWORK_ROUTE = "/api/game/artwork/";
 const CACHE_FILE = "game-metadata.json";
 const BACKOFF_MS = 10 * 60_000;
@@ -47,6 +46,11 @@ export interface SteamStoreOptions {
   readonly fetchImpl: typeof fetch;
   readonly cacheDir: string;
   readonly nowMs?: () => number;
+  /**
+   * One origin for the search, details and portrait requests; absent is Valve's
+   * store and CDN. A browser proof points it at a fixture that plays all three.
+   */
+  readonly baseUrl?: string;
 }
 
 export interface SteamStore {
@@ -66,16 +70,16 @@ function requestInit(signal: AbortSignal | undefined): RequestInit {
   return signal === undefined ? {} : { signal };
 }
 
-function searchUrl(name: string): string {
-  return `${SEARCH_URL}?term=${encodeURIComponent(name)}&cc=us&l=en`;
+function searchUrl(base: string | undefined, name: string): string {
+  return `${base ?? STORE_ORIGIN}/api/storesearch/?term=${encodeURIComponent(name)}&cc=us&l=en`;
 }
 
-function detailsUrl(appId: number): string {
-  return `${DETAILS_URL}?appids=${appId}&filters=basic`;
+function detailsUrl(base: string | undefined, appId: number): string {
+  return `${base ?? STORE_ORIGIN}/api/appdetails?appids=${appId}&filters=basic`;
 }
 
-function portraitUrl(appId: number): string {
-  return `${PORTRAIT_BASE}${appId}/library_600x900.jpg`;
+function portraitUrl(base: string | undefined, appId: number): string {
+  return `${base ?? PORTRAIT_ORIGIN}/steam/apps/${appId}/library_600x900.jpg`;
 }
 
 /** The `items` of a storesearch answer, ignoring anything not shaped like one. */
@@ -239,6 +243,8 @@ async function cachedCover(
 export function createSteamStore(options: SteamStoreOptions): SteamStore {
   const { fetchImpl, cacheDir } = options;
   const nowMs = options.nowMs ?? Date.now;
+  // A trailing slash would double the one the paths below carry.
+  const base = options.baseUrl?.replace(/\/+$/, "");
   const cacheFile = path.join(cacheDir, CACHE_FILE);
 
   let cache: StoreCache = emptyCache();
@@ -300,7 +306,10 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
     appId: number,
     signal: AbortSignal | undefined,
   ): Promise<AppDetails | undefined> {
-    const response = await fetchImpl(detailsUrl(appId), requestInit(signal));
+    const response = await fetchImpl(
+      detailsUrl(base, appId),
+      requestInit(signal),
+    );
     if (!response.ok) return undefined;
 
     return detailsOf(await response.json(), appId);
@@ -312,7 +321,10 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
     signal: AbortSignal | undefined,
   ): Promise<{ id: number; name: string } | undefined> {
     try {
-      const response = await fetchImpl(searchUrl(name), requestInit(signal));
+      const response = await fetchImpl(
+        searchUrl(base, name),
+        requestInit(signal),
+      );
       if (!response.ok) {
         backoffUntil.set(key, nowMs() + BACKOFF_MS);
         return undefined;
@@ -359,7 +371,7 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
     appId: number,
     signal: AbortSignal | undefined,
   ): Promise<Uint8Array | undefined> {
-    const portrait = await fetchBytes(portraitUrl(appId), signal).catch(
+    const portrait = await fetchBytes(portraitUrl(base, appId), signal).catch(
       () => undefined,
     );
     if (portrait !== undefined) return portrait;

@@ -235,13 +235,29 @@ export async function run(argv: readonly string[]): Promise<number> {
     "cache",
     "game-metadata",
   );
+  // Two test seams, each honoured only when non-empty: a store fixture for the
+  // searched metadata, and a fixed foreground so a browser proof needs no
+  // running game. Unset changes nothing (docs/engineering/gotchas.md).
+  const storeBaseUrl = process.env.YUNARI_STEAM_STORE;
+  const fixedForeground = process.env.YUNARI_FOREGROUND_EXE;
   const gameStore = createSteamStore({
     fetchImpl: (input, init) => fetch(input, init),
     cacheDir: gameMetadataCacheDir,
+    ...(storeBaseUrl === undefined || storeBaseUrl === ""
+      ? {}
+      : { baseUrl: storeBaseUrl }),
   });
   const gameProvider = new GameProvider({
     ...(steamRoot === undefined ? {} : { steamRoot }),
     store: gameStore,
+    ...(fixedForeground === undefined || fixedForeground === ""
+      ? {}
+      : {
+          foregroundPath: fixedForeground,
+          // The seam's file stem is its name; a version-info read would be a
+          // spawn the proof cannot control.
+          productName: () => Promise.resolve(undefined),
+        }),
   });
   const registry = new ProviderRegistry([
     clockProvider,

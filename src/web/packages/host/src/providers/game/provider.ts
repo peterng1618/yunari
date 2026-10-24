@@ -103,6 +103,11 @@ export interface GameProviderOptions {
   readonly productName?: (
     executablePath: string,
   ) => Promise<string | undefined>;
+  /**
+   * A fixed foreground executable instead of the Windows helper. A browser
+   * proof uses it to name a game with no real window; the helper is not spawned.
+   */
+  readonly foregroundPath?: string;
 }
 
 /** The slice of Task 7.1's store client the provider needs. */
@@ -142,6 +147,7 @@ export class GameProvider implements SensorProvider {
   readonly #productName: (
     executablePath: string,
   ) => Promise<string | undefined>;
+  readonly #foregroundPath: string | undefined;
 
   #helper: RunningHelper | undefined;
   #tick: ReturnType<typeof setTimeout> | undefined;
@@ -167,6 +173,7 @@ export class GameProvider implements SensorProvider {
     this.#loadSteamApps = options.loadSteamApps ?? readSteamApps;
     this.#store = options.store;
     this.#productName = options.productName ?? readProductName;
+    this.#foregroundPath = options.foregroundPath;
   }
 
   async describe(): Promise<readonly SensorDescriptor[]> {
@@ -249,6 +256,9 @@ export class GameProvider implements SensorProvider {
   }
 
   #reconcile(now: number): void {
+    // A fixed foreground is the whole reading; the helper has nothing to add.
+    if (this.#foregroundPath !== undefined) return;
+
     if (now - this.#lastDemandMs > this.#graceMs) {
       this.#teardown();
       return;
@@ -352,8 +362,15 @@ export class GameProvider implements SensorProvider {
     (this.#tick as { unref?: () => void }).unref?.();
   }
 
+  /** The injected foreground, else whatever the helper last reported. */
+  #currentForeground(): ForegroundReading | undefined {
+    const fixed = this.#foregroundPath;
+
+    return fixed === undefined ? this.#foreground : { pid: 1, path: fixed };
+  }
+
   #matched(): SteamApp | undefined {
-    const foreground = this.#foreground;
+    const foreground = this.#currentForeground();
 
     if (foreground === undefined || foreground.pid === 0) return undefined;
     if (foreground.path === undefined) return undefined;
@@ -377,7 +394,7 @@ export class GameProvider implements SensorProvider {
    * name. A failed lookup is a missing match, never the provider's failure.
    */
   async #identify(): Promise<GameIdentity> {
-    const foreground = this.#foreground;
+    const foreground = this.#currentForeground();
 
     if (foreground === undefined || foreground.pid === 0) return {};
 
@@ -472,7 +489,7 @@ export class GameProvider implements SensorProvider {
   ): Sample {
     const sensorId = `${GAME_PROVIDER_ID}:${semanticKey}`;
     const timestamp = new Date(nowMs).toISOString();
-    const foreground = this.#foreground;
+    const foreground = this.#currentForeground();
     const absent = (message: string): Sample => ({
       sensorId,
       timestamp,
