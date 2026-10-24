@@ -6,7 +6,53 @@ import {
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
 import { type Canvas, IText, Textbox } from "fabric/es";
+import { GUIDE_COLOR, GUIDE_WIDTH } from "../snap-manager/constants.js";
 import { uiCopy } from "../ui-copy.js";
+
+/**
+ * Pointer travel, in CSS pixels, that turns a placement press into a drag.
+ * Below it the author meant a click, however unsteady their hand was.
+ */
+export const PLACEMENT_DRAG_THRESHOLD = 4;
+
+/** What a placement gesture asks for: a corner, and a box when it was a drag. */
+export interface TextPlacement {
+  readonly left: number;
+  readonly top: number;
+  readonly box?: { readonly width: number; readonly height: number };
+}
+
+/** Who decides where a text may land, and who constructs it once it does. */
+export interface TextPlacementPort {
+  readonly contained: (point: {
+    readonly x: number;
+    readonly y: number;
+  }) => boolean;
+  readonly onPlace: (placement: TextPlacement) => void;
+}
+
+/** The native pointer Fabric wraps in its own canvas event payload. */
+interface PlacementPointerEvent {
+  readonly e: {
+    readonly clientX: number;
+    readonly clientY: number;
+    readonly button?: number;
+  };
+}
+
+/** The positive-size rectangle between two scene points, anchored at the
+ *  upper-left so a drag up or left is normalised rather than inverted. */
+function rectangleBetween(
+  from: { readonly x: number; readonly y: number },
+  to: { readonly x: number; readonly y: number },
+): { left: number; top: number; width: number; height: number } {
+  return {
+    left: Math.min(from.x, to.x),
+    top: Math.min(from.y, to.y),
+    width: Math.abs(to.x - from.x),
+    height: Math.abs(to.y - from.y),
+  };
+}
 
 /**
  * What a new text is asked for: its words, and the authored box that makes it
@@ -21,6 +67,12 @@ export interface TextCreationOptions {
 interface TextManager {
   /** The class the request chose: an `IText` with no box, a `Textbox` with one. */
   addText(options?: TextCreationOptions): IText;
+  /**
+   * Arm the one-shot placement gesture: the next primary press on the canvas
+   * places a text, and any other outcome disarms. While armed, hover and
+   * selection belong to the gesture rather than to authored objects.
+   */
+  beginPlacement(port: TextPlacementPort): void;
   /**
    * Who paints an object's authoring view when the author starts editing it.
    * The session owns the run display that painting comes from, and the shell
@@ -236,9 +288,162 @@ export function createTextManager(
     }
   };
 
+  /** The armed placement gesture, if any. One-shot: every outcome disarms it. */
+  let placement: TextPlacementPort | undefined;
+  let press:
+    | {
+        readonly clientX: number;
+        readonly clientY: number;
+        readonly scene: { readonly x: number; readonly y: number };
+      }
+    | undefined;
+  /** The rectangle the drag would place, painted as chrome on `after:render`. */
+  let outline:
+    | {
+        readonly left: number;
+        readonly top: number;
+        readonly width: number;
+        readonly height: number;
+      }
+    | undefined;
+  /** What arming replaced, so every exit can put it back exactly. */
+  let resumeCanvasState:
+    | {
+        readonly skipTargetFind: boolean;
+        readonly selection: boolean;
+        readonly defaultCursor: string;
+      }
+    | undefined;
+
+  const disarmPlacement = (): void => {
+    placement = undefined;
+    press = undefined;
+    const hadOutline = outline !== undefined;
+    outline = undefined;
+    if (resumeCanvasState !== undefined) {
+      canvas.skipTargetFind = resumeCanvasState.skipTargetFind;
+      canvas.selection = resumeCanvasState.selection;
+      canvas.defaultCursor = resumeCanvasState.defaultCursor;
+      resumeCanvasState = undefined;
+    }
+    // The outline lives only in the last framebuffer; a render is what removes
+    // it when the gesture ends before the next move would have repainted it.
+    if (hadOutline) canvas.requestRenderAll();
+  };
+
+  const place = (value: TextPlacement): void => {
+    const armed = placement;
+    // Disarm before the callback: a construction that refuses, or one that
+    // arms again, must never leave this press able to place a second object.
+    disarmPlacement();
+    armed?.onPlace(value);
+  };
+
+  const onPlacementDown = (event: PlacementPointerEvent): void => {
+    if (placement === undefined) return;
+    // A right or middle press is a cancel, never a placement: the primary
+    // button is the whole gesture.
+    if (event.e.button !== 0) {
+      disarmPlacement();
+      return;
+    }
+    const scene = canvas.getScenePoint(event.e as never);
+    if (!placement.contained({ x: scene.x, y: scene.y })) {
+      disarmPlacement();
+      return;
+    }
+    press = {
+      clientX: event.e.clientX,
+      clientY: event.e.clientY,
+      scene: { x: scene.x, y: scene.y },
+    };
+    outline = undefined;
+  };
+
+  const onPlacementMove = (event: PlacementPointerEvent): void => {
+    const start = press;
+    if (placement === undefined || start === undefined) return;
+    // Travel is a screen-space decision, so it is taken from client pixels;
+    // the rectangle that gets placed is in scene units.
+    const travelled = Math.hypot(
+      event.e.clientX - start.clientX,
+      event.e.clientY - start.clientY,
+    );
+    if (travelled < PLACEMENT_DRAG_THRESHOLD) {
+      if (outline !== undefined) {
+        outline = undefined;
+        canvas.requestRenderAll();
+      }
+      return;
+    }
+    // Only the outline changes while the pointer moves; nothing is constructed
+    // until the release, so a move can never add an object or a history entry.
+    outline = rectangleBetween(
+      start.scene,
+      canvas.getScenePoint(event.e as never),
+    );
+    canvas.requestRenderAll();
+  };
+
+  const onPlacementUp = (event: PlacementPointerEvent): void => {
+    const start = press;
+    if (placement === undefined || start === undefined) return;
+    const release = canvas.getScenePoint(event.e as never);
+    const travelled =
+      Math.hypot(
+        event.e.clientX - start.clientX,
+        event.e.clientY - start.clientY,
+      ) >= PLACEMENT_DRAG_THRESHOLD;
+    const box = rectangleBetween(start.scene, release);
+    // A rectangle with no drawable dimension is a click: the author meant a
+    // point, not an invisible one-unit Text box.
+    if (!travelled || box.width < 1 || box.height < 1) {
+      place({ left: start.scene.x, top: start.scene.y });
+      return;
+    }
+    place({
+      left: box.left,
+      top: box.top,
+      box: { width: box.width, height: box.height },
+    });
+  };
+
+  const onPlacementKeyDown = (event: KeyboardEvent): void => {
+    if (placement === undefined || event.key !== "Escape") return;
+    disarmPlacement();
+  };
+
+  /** The drag outline is editor chrome: drawn after the render, on the lower
+   *  context through the viewport, and never a canvas object or a history entry. */
+  const onPlacementAfterRender = (): void => {
+    if (outline === undefined) return;
+    const context = canvas.contextContainer;
+    if (!context) return;
+    context.save();
+    try {
+      context.transform(...canvas.viewportTransform);
+      context.lineWidth = GUIDE_WIDTH / (canvas.getZoom() || 1);
+      context.strokeStyle = GUIDE_COLOR;
+      context.setLineDash([4, 4]);
+      context.strokeRect(
+        outline.left,
+        outline.top,
+        outline.width,
+        outline.height,
+      );
+    } finally {
+      context.restore();
+    }
+  };
+
   canvas.on("mouse:dblclick" as never, onDoubleClick as never);
   canvas.on("object:resizing" as never, onResizing as never);
   canvas.on("object:modified" as never, onModified as never);
+  canvas.on("mouse:down" as never, onPlacementDown as never);
+  canvas.on("mouse:move" as never, onPlacementMove as never);
+  canvas.on("mouse:up" as never, onPlacementUp as never);
+  canvas.on("after:render" as never, onPlacementAfterRender as never);
+  window.addEventListener("keydown", onPlacementKeyDown);
 
   return {
     addText(options = {}) {
@@ -282,6 +487,27 @@ export function createTextManager(
       save();
       return text;
     },
+    beginPlacement(port) {
+      // Already armed: swapping the port must not capture the crosshair as
+      // the state to restore.
+      if (placement !== undefined) {
+        placement = port;
+        return;
+      }
+      resumeCanvasState = {
+        skipTargetFind: canvas.skipTargetFind,
+        selection: canvas.selection,
+        defaultCursor: canvas.defaultCursor,
+      };
+      placement = port;
+      press = undefined;
+      outline = undefined;
+      // Fabric re-applies `defaultCursor` on every hover, so that is the
+      // property the crosshair has to live in.
+      canvas.skipTargetFind = true;
+      canvas.selection = false;
+      canvas.defaultCursor = "crosshair";
+    },
     setAuthoringView(paint) {
       showAuthoringView = paint;
     },
@@ -292,6 +518,12 @@ export function createTextManager(
       canvas.off("mouse:dblclick" as never, onDoubleClick as never);
       canvas.off("object:resizing" as never, onResizing as never);
       canvas.off("object:modified" as never, onModified as never);
+      canvas.off("mouse:down" as never, onPlacementDown as never);
+      canvas.off("mouse:move" as never, onPlacementMove as never);
+      canvas.off("mouse:up" as never, onPlacementUp as never);
+      canvas.off("after:render" as never, onPlacementAfterRender as never);
+      window.removeEventListener("keydown", onPlacementKeyDown);
+      disarmPlacement();
     },
   };
 }

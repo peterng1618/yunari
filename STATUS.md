@@ -16,13 +16,13 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- `addText` builds an `IText` when asked for no box and a `Textbox` when given one, writing the drawn box's width and height as authored.
-- Auto text no longer gets a measured authored box or a width guard; `seedAuthoredBox` had no caller and is deleted.
-- Tests cover both classes, keep the double-click editing cases on each, and pass an explicit box wherever a fixed text is resized.
+- The canvas's next primary press places text: a click makes an `IText` at the press point, a drag of 4 CSS pixels or more makes a `Textbox` from the normalised rectangle.
+- Escape, a non-primary press and a press outside the artboard cancel; arming saves and restores `skipTargetFind`, `selection` and `defaultCursor`.
+- The dashed drag outline is painted on `after:render` and is never canvas content; the gesture itself never saves, so construction owns the one history entry.
 
 ## Next
 
-1. Task 1.4: place text by click or drag through the one text route.
+1. Task 2.1: arm the one placement route from the Add tile, context menu and footer, constructing at the gesture.
 
 ## Blockers / unverified
 

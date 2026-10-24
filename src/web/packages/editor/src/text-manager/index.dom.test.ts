@@ -2,7 +2,11 @@
 import { applyAuthoredText, YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
 import { Canvas, IText, Textbox } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
-import { createTextManager } from "./index.js";
+import {
+  createTextManager,
+  PLACEMENT_DRAG_THRESHOLD,
+  type TextPlacementPort,
+} from "./index.js";
 
 /**
  * A double-click on a bound run, and a width the author dragged.
@@ -411,6 +415,305 @@ describe("typing over an object that carries more than one run", () => {
     // The canvas must not be left standing on text the document does not hold.
     expect(repainted).toBe(1);
     text.destroy();
+  });
+});
+
+/**
+ * The placement gesture: a click makes a Text, a drag makes a Text box.
+ *
+ * The canvas is real and its scene conversion is stubbed to client units, so
+ * the assertions read as the gesture's own arithmetic rather than as jsdom's
+ * zero-size element. `contained` stands in for the artboard, and `onPlace` for
+ * the construction the session owns.
+ */
+function placementScene(
+  options: {
+    readonly contained?: TextPlacementPort["contained"];
+    /** Off when a test sets the canvas state the arming has to restore. */
+    readonly arm?: boolean;
+  } = {},
+) {
+  const canvas = new Canvas(document.createElement("canvas"));
+  const getScenePoint = vi.spyOn(canvas, "getScenePoint").mockImplementation(((
+    event: PointerEvent,
+  ) => ({
+    x: event.clientX,
+    y: event.clientY,
+  })) as never);
+  const save = vi.fn();
+  const manager = createTextManager(canvas, save);
+  const port: TextPlacementPort = {
+    contained: vi.fn(options.contained ?? (() => true)),
+    onPlace: vi.fn(),
+  };
+  if (options.arm !== false) manager.beginPlacement(port);
+  return { canvas, getScenePoint, manager, port, save };
+}
+
+function pointer(
+  canvas: Canvas,
+  type: "mouse:down" | "mouse:move" | "mouse:up",
+  x: number,
+  y: number,
+  button = 0,
+): void {
+  canvas.fire(
+    type as never,
+    {
+      e: { clientX: x, clientY: y, button },
+    } as never,
+  );
+}
+
+function escape(): void {
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+}
+
+describe("placing a text by click or drag", () => {
+  it("makes a Text at the press point from a click", () => {
+    const { canvas, manager, port, save } = placementScene();
+
+    pointer(canvas, "mouse:down", 100, 120);
+    pointer(canvas, "mouse:up", 100, 120);
+
+    expect(port.onPlace).toHaveBeenCalledOnce();
+    const placement = (port.onPlace as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as Record<string, unknown>;
+    expect(placement).toEqual({ left: 100, top: 120 });
+    expect("box" in placement).toBe(false);
+    // Construction owns the history entry; a gesture-side save would be a
+    // second one for the object `onPlace` is about to add.
+    expect(save).not.toHaveBeenCalled();
+    manager.destroy();
+  });
+
+  it("converts the press through getScenePoint", () => {
+    // Zoom and pan are Fabric's conversion's business, not this gesture's: a
+    // client point that halves in scene units must land at 50, 60.
+    const { canvas, getScenePoint, manager, port } = placementScene();
+    getScenePoint.mockImplementation(((event: PointerEvent) => ({
+      x: event.clientX / 2,
+      y: event.clientY / 2,
+    })) as never);
+
+    pointer(canvas, "mouse:down", 100, 120);
+    pointer(canvas, "mouse:up", 100, 120);
+
+    expect(port.onPlace).toHaveBeenCalledWith({ left: 50, top: 60 });
+    manager.destroy();
+  });
+
+  it("uses the normalised rectangle of a down-right drag as the box", () => {
+    const { canvas, manager, port, save } = placementScene();
+
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:move", 160, 150);
+    pointer(canvas, "mouse:up", 160, 150);
+
+    expect(port.onPlace).toHaveBeenCalledOnce();
+    expect(port.onPlace).toHaveBeenCalledWith({
+      left: 100,
+      top: 100,
+      box: { width: 60, height: 50 },
+    });
+    expect(save).not.toHaveBeenCalled();
+    manager.destroy();
+  });
+
+  it("normalises an up-left drag to a positive box at the upper-left", () => {
+    // Review Focus 1: the author drags from the bottom-right towards the
+    // top-left. The object may not be created inverted or with a negative size.
+    const { canvas, manager, port } = placementScene();
+
+    pointer(canvas, "mouse:down", 160, 150);
+    pointer(canvas, "mouse:move", 130, 120);
+    pointer(canvas, "mouse:up", 100, 100);
+
+    expect(port.onPlace).toHaveBeenCalledWith({
+      left: 100,
+      top: 100,
+      box: { width: 60, height: 50 },
+    });
+    manager.destroy();
+  });
+
+  it("treats three pixels of jitter as a click", () => {
+    // Review Focus 2: the hand shakes on a click; a one-pixel Text box would be
+    // an object the author cannot see.
+    const { canvas, manager, port } = placementScene();
+
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:move", 103, 100);
+    pointer(canvas, "mouse:up", 103, 100);
+
+    expect(port.onPlace).toHaveBeenCalledWith({ left: 100, top: 100 });
+    expect(port.onPlace).toHaveBeenCalledOnce();
+    manager.destroy();
+  });
+
+  it("treats a drag thinner than one scene unit as a click", () => {
+    // At or above the pixel threshold but with no drawable box: the author
+    // meant a click, not a zero-height Text box.
+    const { canvas, manager, port } = placementScene();
+
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:up", 104, 100);
+
+    expect(PLACEMENT_DRAG_THRESHOLD).toBe(4);
+    expect(port.onPlace).toHaveBeenCalledWith({ left: 100, top: 100 });
+    manager.destroy();
+  });
+
+  it("draws a dashed outline that follows the drag and is never content", () => {
+    const { canvas, manager, port, save } = placementScene();
+    const strokeRect = vi.spyOn(canvas.contextContainer, "strokeRect");
+    const setLineDash = vi.spyOn(canvas.contextContainer, "setLineDash");
+
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:move", 160, 150);
+    canvas.fire("after:render", {} as never);
+
+    expect(setLineDash).toHaveBeenCalledWith([4, 4]);
+    expect(strokeRect).toHaveBeenCalledWith(100, 100, 60, 50);
+    // No object and no history entry came from the move: the outline is editor
+    // chrome painted after the render, not canvas content.
+    expect(canvas.getObjects()).toHaveLength(0);
+    expect(port.onPlace).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    manager.destroy();
+  });
+
+  it("draws no outline for a click", () => {
+    const { canvas, manager } = placementScene();
+    const strokeRect = vi.spyOn(canvas.contextContainer, "strokeRect");
+
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:up", 100, 100);
+    canvas.fire("after:render", {} as never);
+
+    expect(strokeRect).not.toHaveBeenCalled();
+    manager.destroy();
+  });
+
+  it("arms a crosshair without target finding and restores the canvas exactly", () => {
+    const { canvas, manager, port } = placementScene({ arm: false });
+    canvas.defaultCursor = "grab";
+    canvas.skipTargetFind = false;
+    canvas.selection = true;
+
+    manager.beginPlacement(port);
+    expect(canvas.defaultCursor).toBe("crosshair");
+    expect(canvas.skipTargetFind).toBe(true);
+    expect(canvas.selection).toBe(false);
+
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:up", 100, 100);
+
+    expect(canvas.defaultCursor).toBe("grab");
+    expect(canvas.skipTargetFind).toBe(false);
+    expect(canvas.selection).toBe(true);
+    manager.destroy();
+  });
+
+  it("cancels on Escape and leaves no object, history entry or outline", () => {
+    // Review Focus 3: the pressed state and the drag outline must both go.
+    const { canvas, manager, port, save } = placementScene({ arm: false });
+    const strokeRect = vi.spyOn(canvas.contextContainer, "strokeRect");
+    canvas.defaultCursor = "grab";
+    manager.beginPlacement(port);
+
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:move", 160, 150);
+    escape();
+
+    expect(port.onPlace).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(canvas.getObjects()).toHaveLength(0);
+    expect(canvas.defaultCursor).toBe("grab");
+    expect(canvas.skipTargetFind).toBe(false);
+    expect(canvas.selection).toBe(true);
+    canvas.fire("after:render", {} as never);
+    expect(strokeRect).not.toHaveBeenCalled();
+    // The cancelled gesture also disarmed: the release that follows places
+    // nothing.
+    pointer(canvas, "mouse:up", 160, 150);
+    expect(port.onPlace).not.toHaveBeenCalled();
+    manager.destroy();
+  });
+
+  it("cancels a non-primary press", () => {
+    const { canvas, manager, port } = placementScene({ arm: false });
+    canvas.defaultCursor = "grab";
+    manager.beginPlacement(port);
+
+    pointer(canvas, "mouse:down", 100, 100, 2);
+    pointer(canvas, "mouse:up", 100, 100, 2);
+
+    expect(port.onPlace).not.toHaveBeenCalled();
+    expect(canvas.defaultCursor).toBe("grab");
+    expect(canvas.skipTargetFind).toBe(false);
+    expect(canvas.selection).toBe(true);
+    manager.destroy();
+  });
+
+  it("cancels a press outside the artboard", () => {
+    const contained = vi.fn(() => false);
+    const { canvas, manager, port } = placementScene({ contained });
+
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:up", 100, 100);
+
+    expect(contained).toHaveBeenCalledWith({ x: 100, y: 100 });
+    expect(port.onPlace).not.toHaveBeenCalled();
+    expect(canvas.skipTargetFind).toBe(false);
+    expect(canvas.selection).toBe(true);
+    manager.destroy();
+  });
+
+  it("is one-shot: a completed gesture does not place a second object", () => {
+    const { canvas, manager, port } = placementScene();
+
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:up", 100, 100);
+    pointer(canvas, "mouse:down", 200, 200);
+    pointer(canvas, "mouse:up", 200, 200);
+
+    expect(port.onPlace).toHaveBeenCalledOnce();
+    manager.destroy();
+  });
+
+  it("leaves the one history entry to the construction it asks for", () => {
+    const { canvas, manager, save } = placementScene({ arm: false });
+    manager.beginPlacement({
+      contained: () => true,
+      onPlace: (placement) => {
+        manager.addText({
+          text: "New text",
+          ...(placement.box === undefined ? {} : { box: placement.box }),
+        });
+      },
+    });
+
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:up", 160, 150);
+
+    expect(save).toHaveBeenCalledOnce();
+    manager.destroy();
+  });
+
+  it("disarms and restores on destroy", () => {
+    const { canvas, manager, port } = placementScene({ arm: false });
+    canvas.defaultCursor = "grab";
+    manager.beginPlacement(port);
+
+    manager.destroy();
+
+    expect(canvas.defaultCursor).toBe("grab");
+    expect(canvas.skipTargetFind).toBe(false);
+    expect(canvas.selection).toBe(true);
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:up", 100, 100);
+    expect(port.onPlace).not.toHaveBeenCalled();
   });
 });
 
