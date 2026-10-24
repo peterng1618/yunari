@@ -375,6 +375,7 @@ export class CustomSourceProvider implements SensorProvider {
 
     const startedAt = this.#now();
     const credential = await this.#credentialOf(runtime.source);
+    if (!runtime.active) return undefined;
 
     if (!credential.ok) {
       return {
@@ -391,6 +392,10 @@ export class CustomSourceProvider implements SensorProvider {
       this.#fetcher,
       this.#now,
     );
+    // A reload or stop retired this runtime while the fetch was in flight; its
+    // answer belongs to a source the store no longer holds.
+    if (!runtime.active) return undefined;
+
     const elapsedMs = this.#now() - startedAt;
 
     if (!outcome.ok) {

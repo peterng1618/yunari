@@ -9347,4 +9347,163 @@ describe("Custom source routes", () => {
       unreferencedCredential: null,
     });
   });
+
+  it("keeps an entry the store refused when another entry is written", async () => {
+    await start({ fetch: jsonFetch({}) });
+    await fs.writeFile(
+      sourceFile(),
+      JSON.stringify({
+        sources: [
+          fixtureSource(),
+          fixtureSource({
+            id: "broken",
+            fields: [
+              {
+                id: "load",
+                label: "CPU load",
+                pointer: "/cpu/load",
+                type: "date",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const put = await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource({ name: "Renamed" })),
+    );
+
+    expect(put.status).toBe(200);
+    const raw = JSON.parse(await fs.readFile(sourceFile(), "utf8")) as {
+      sources: { id: string }[];
+    };
+    // The write targeted one entry; the neighbour it cannot parse survives.
+    expect(raw.sources.map((entry) => entry.id)).toEqual(["fixture", "broken"]);
+    expect((await list()).issues[0]?.sourceId).toBe("broken");
+  });
+
+  it("lands two simultaneous writes to different ids", async () => {
+    await start({ fetch: jsonFetch({}) });
+
+    const [left, right] = await Promise.all([
+      request(
+        hosted.server,
+        "PUT",
+        "/api/sources/left",
+        json(fixtureSource({ id: "left" })),
+      ),
+      request(
+        hosted.server,
+        "PUT",
+        "/api/sources/right",
+        json(fixtureSource({ id: "right" })),
+      ),
+    ]);
+
+    expect([left.status, right.status]).toEqual([200, 200]);
+    expect((await list()).sources.map((source) => source.id).sort()).toEqual([
+      "left",
+      "right",
+    ]);
+  });
+
+  it("admits a valid source's credential when a duplicate id was refused", async () => {
+    await start({ fetch: jsonFetch({}) });
+    await fs.writeFile(
+      sourceFile(),
+      JSON.stringify({
+        sources: [
+          fixtureSource({
+            id: "duplicate",
+            auth: { kind: "bearer", credentialId: "dupkey" },
+          }),
+          fixtureSource({
+            id: "duplicate",
+            auth: { kind: "bearer", credentialId: "dupkey" },
+            fields: [
+              {
+                id: "load",
+                label: "CPU load",
+                pointer: "/cpu/load",
+                type: "date",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect((await rows()).map((row) => row.id)).toContain("dupkey");
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PUT",
+          "/api/credentials/dupkey",
+          json({ value: "sk-live-9f2c" }),
+        )
+      ).status,
+    ).toBe(200);
+  });
+
+  it("answers an oversized write with 413, as the weather route does", async () => {
+    await start({ fetch: jsonFetch({}) });
+    const oversized = json(fixtureSource({ name: "x".repeat(70_000) }));
+
+    const res = await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      oversized,
+    );
+
+    expect(res.status).toBe(413);
+    // Refused before parsing, so nothing was written.
+    await expect(fs.readFile(sourceFile(), "utf8")).rejects.toThrow();
+  });
+
+  it("does not answer a test whose source was reloaded away mid-fetch", async () => {
+    let release: (value: Response) => void = () => undefined;
+    const gate = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    let called = false;
+    const fetchStub = (async () => {
+      called = true;
+      return gate;
+    }) as unknown as typeof fetch;
+
+    await start({ fetch: fetchStub });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource()),
+    );
+
+    const testing = request(hosted.server, "POST", "/api/sources/fixture/test");
+    await vi.waitFor(() => expect(called).toBe(true));
+
+    // A write reloads the provider, which retires the runtime the test is
+    // still holding; its answer belongs to a source that has been replaced.
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource({ name: "Renamed" })),
+    );
+
+    release(
+      new Response(JSON.stringify({ cpu: { load: 1 } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    expect((await testing).status).toBe(404);
+  });
 });

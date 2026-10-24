@@ -1,9 +1,22 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describeDynamicKey, UNIT_KINDS } from "@yunari/renderer-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createSourceStore, normalizeSources } from "./sources.js";
+import {
+  createSourceStore,
+  normalizeSources,
+  sourceEntryId,
+  withoutSourceEntry,
+  withSourceEntry,
+} from "./sources.js";
 
 /** A minimal valid source; each test overrides the one value it refuses. */
 function source(overrides: Record<string, unknown> = {}) {
@@ -356,17 +369,21 @@ describe("source store", () => {
     expect(read.issues[0]?.sourceId).toBe("BROKEN");
   });
 
-  it("refuses a rejected input without writing anything", async () => {
+  it("persists the file as authored and reports what a read will skip", async () => {
     const store = createSourceStore(dir);
-    await store.write({ sources: [source()] });
-    const before = await readFile(sourcesFile(dir));
+    const authored = {
+      sources: [source(), source({ id: "broken", timeoutMs: 999 })],
+    };
 
-    const refused = await store.write({
-      sources: [source({ timeoutMs: 999 })],
-    });
+    const written = await store.write(authored);
 
-    expect(refused.issues).toHaveLength(1);
-    expect(await readFile(sourcesFile(dir))).toEqual(before);
+    // The bad entry is reported, not dropped: the file is the caller's object.
+    expect(written.issues).toHaveLength(1);
+    expect(written.sources.map((one) => one.id)).toEqual(["local"]);
+    expect(JSON.parse(await readFile(sourcesFile(dir), "utf8"))).toEqual(
+      authored,
+    );
+    expect((await store.read()).issues[0]?.sourceId).toBe("broken");
   });
 
   it("stores the parsed URL so typed case and whitespace do not persist", async () => {
@@ -465,5 +482,103 @@ describe("source store", () => {
     );
 
     expect(await readdir(dir)).toEqual([]);
+  });
+
+  it("keeps an entry it cannot parse when another entry is updated", async () => {
+    await seed(
+      JSON.stringify({
+        sources: [source(), source({ id: "broken", timeoutMs: 999 })],
+      }),
+    );
+    const store = createSourceStore(dir);
+
+    await store.update((raw) =>
+      withSourceEntry(raw, source({ id: "local", name: "Renamed" })),
+    );
+
+    const raw = JSON.parse(await readFile(sourcesFile(dir), "utf8")) as {
+      sources: { id: string; name?: string; timeoutMs?: number }[];
+    };
+
+    expect(raw.sources.map((entry) => entry.id)).toEqual(["local", "broken"]);
+    expect(raw.sources[1]?.timeoutMs).toBe(999);
+
+    const read = await store.read();
+    expect(read.sources[0]?.name).toBe("Renamed");
+    expect(read.issues[0]?.sourceId).toBe("broken");
+  });
+
+  it("removes a malformed entry by its object id and keeps the rest", async () => {
+    await seed(
+      JSON.stringify({
+        sources: [source(), { id: "broken", url: "ftp://nope" }],
+      }),
+    );
+    const store = createSourceStore(dir);
+    let removed: unknown = undefined;
+
+    const file = await store.update((raw) => {
+      const result = withoutSourceEntry(raw, "broken");
+      removed = result.removed;
+      return result.raw;
+    });
+
+    expect(sourceEntryId(removed)).toBe("broken");
+    expect(file.issues).toEqual([]);
+    expect(file.sources.map((one) => one.id)).toEqual(["local"]);
+    expect(
+      (
+        JSON.parse(await readFile(sourcesFile(dir), "utf8")) as {
+          sources: { id: string }[];
+        }
+      ).sources.map((entry) => entry.id),
+    ).toEqual(["local"]);
+  });
+
+  it("serializes concurrent updates so both land", async () => {
+    let release = (): void => undefined;
+    const firstSave = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let saves = 0;
+    const store = createSourceStore(dir, {
+      rename: async (from, to) => {
+        saves += 1;
+        if (saves === 1) await firstSave;
+        await rename(from, to);
+      },
+    });
+
+    const left = store.update((raw) =>
+      withSourceEntry(raw, source({ id: "left" })),
+    );
+    const right = store.update((raw) =>
+      withSourceEntry(raw, source({ id: "right" })),
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    release();
+    await Promise.all([left, right]);
+
+    const read = await store.read();
+    expect(read.issues).toEqual([]);
+    expect(read.sources.map((one) => one.id)).toEqual(["left", "right"]);
+  });
+
+  it("skips the save when the mutator returns the file it was given", async () => {
+    let renames = 0;
+    const store = createSourceStore(dir, {
+      rename: async (from, to) => {
+        renames += 1;
+        await rename(from, to);
+      },
+    });
+    await store.write({ sources: [source()] });
+    const before = await readFile(sourcesFile(dir));
+    renames = 0;
+
+    await store.update((raw) => withoutSourceEntry(raw, "absent").raw);
+
+    expect(renames).toBe(0);
+    expect(await readFile(sourcesFile(dir))).toEqual(before);
   });
 });

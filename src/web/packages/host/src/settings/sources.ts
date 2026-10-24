@@ -54,9 +54,29 @@ export interface SourceFile {
 }
 
 export interface SourceStore {
+  /** The validated projection of the file, with every entry it skipped. */
   read(): Promise<SourceFile>;
-  /** Validated first: a rejected input writes nothing and returns the issues. */
+  /** Persists the object as given — never the projection — and reports what a
+   *  read would skip, so an entry the store cannot parse is not dropped. */
   write(input: unknown): Promise<SourceFile>;
+  /**
+   * Read-raw, mutate, save, all inside the store's one queue, so a read and a
+   * write from two requests cannot interleave. Returns the saved file's
+   * validated projection. Returning the object the mutator was given skips the
+   * save, which is how a route refuses to rewrite a file it did not change.
+   */
+  update(mutate: (raw: unknown) => unknown): Promise<SourceFile>;
+}
+
+/** A refusal raised by an `update` mutator: nothing is written. */
+export class SourceUpdateRefused extends Error {
+  readonly issue: SourceIssue;
+
+  constructor(issue: SourceIssue) {
+    super(issue.reason);
+    this.name = "SourceUpdateRefused";
+    this.issue = issue;
+  }
 }
 
 /** A test seam for the atomic-write proof; production always renames. */
@@ -494,28 +514,94 @@ export function normalizeSources(input: unknown): SourceFile {
 }
 
 async function readSources(file: string): Promise<SourceFile> {
+  const raw = await readRaw(file);
+  if (!raw.ok) {
+    return { sources: [], issues: [{ sourceId: "", reason: raw.reason }] };
+  }
+  return normalizeSources(raw.value);
+}
+
+type RawRead =
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false; readonly reason: string };
+
+/** The file as authored, without the validated projection. No file is an empty
+ *  document; a file that cannot be read or parsed is a refusal rather than an
+ *  empty one, because writing it would drop what is there. */
+async function readRaw(file: string): Promise<RawRead> {
   let text: string;
 
   try {
     text = await readFile(file, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { sources: [], issues: [] };
+      return { ok: true, value: { sources: [] } };
     }
-    return {
-      sources: [],
-      issues: [{ sourceId: "", reason: "sources.json could not be read" }],
-    };
+    return { ok: false, reason: "sources.json could not be read" };
   }
 
   try {
-    return normalizeSources(JSON.parse(text));
+    return { ok: true, value: JSON.parse(text) };
   } catch {
-    return {
-      sources: [],
-      issues: [{ sourceId: "", reason: "sources.json is not valid JSON" }],
-    };
+    return { ok: false, reason: "sources.json is not valid JSON" };
   }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/** The raw `sources` array of a file value, as authored. */
+export function sourceEntries(raw: unknown): readonly unknown[] {
+  const record = asRecord(raw);
+  return record !== undefined && Array.isArray(record.sources)
+    ? record.sources
+    : [];
+}
+
+/** A raw entry's own object id, even when the rest of the entry is refused. */
+export function sourceEntryId(entry: unknown): string | undefined {
+  const id = asRecord(entry)?.id;
+  return typeof id === "string" ? id : undefined;
+}
+
+/** A raw entry's credential reference, even when the entry is refused. */
+export function sourceEntryCredentialId(entry: unknown): string | undefined {
+  const credentialId = asRecord(asRecord(entry)?.auth)?.credentialId;
+  return typeof credentialId === "string" ? credentialId : undefined;
+}
+
+/** Replaces the raw entry with this id in place, or appends it. Every other
+ *  entry — valid or refused — is kept exactly as it was. */
+export function withSourceEntry(raw: unknown, candidate: unknown): unknown {
+  const entries = [...sourceEntries(raw)];
+  const id = sourceEntryId(candidate);
+  const index =
+    id === undefined
+      ? -1
+      : entries.findIndex((entry) => sourceEntryId(entry) === id);
+
+  if (index === -1) entries.push(candidate);
+  else entries[index] = candidate;
+
+  return { sources: entries };
+}
+
+/** Removes the raw entry whose object id matches, so a malformed entry is still
+ *  removable. Returns the input unchanged when nothing matches. */
+export function withoutSourceEntry(
+  raw: unknown,
+  id: string,
+): { readonly raw: unknown; readonly removed: unknown | undefined } {
+  const entries = [...sourceEntries(raw)];
+  const index = entries.findIndex((entry) => sourceEntryId(entry) === id);
+  if (index === -1) return { raw, removed: undefined };
+
+  const removed = entries[index];
+  entries.splice(index, 1);
+  return { raw: { sources: entries }, removed };
 }
 
 export function createSourceStore(
@@ -530,14 +616,10 @@ export function createSourceStore(
   const temporary = `${file}.tmp`;
   const replace = options.rename ?? rename;
 
-  const save = async (sources: readonly CustomSource[]): Promise<void> => {
+  const save = async (input: unknown): Promise<void> => {
     await mkdir(directory, { recursive: true });
     try {
-      await writeFile(
-        temporary,
-        `${JSON.stringify({ sources }, null, 2)}\n`,
-        "utf8",
-      );
+      await writeFile(temporary, `${JSON.stringify(input, null, 2)}\n`, "utf8");
       await replace(temporary, file);
     } catch (error) {
       // A failed save must not leave the next attempt reading a stale temp
@@ -557,19 +639,31 @@ export function createSourceStore(
     return next;
   };
 
+  const applyUpdate = async (
+    mutate: (raw: unknown) => unknown,
+  ): Promise<SourceFile> => {
+    const raw = await readRaw(file);
+    if (!raw.ok) throw new Error(raw.reason);
+
+    const next = mutate(raw.value);
+    if (next !== raw.value) await save(next);
+    return normalizeSources(next);
+  };
+
   return {
     read() {
       return writeExclusively(() => readSources(file));
     },
 
-    async write(input) {
-      const normalized = normalizeSources(input);
-      if (normalized.issues.length > 0) return normalized;
-
+    write(input) {
       return writeExclusively(async () => {
-        await save(normalized.sources);
-        return normalized;
+        await save(input);
+        return normalizeSources(input);
       });
+    },
+
+    update(mutate) {
+      return writeExclusively(() => applyUpdate(mutate));
     },
   };
 }

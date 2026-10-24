@@ -90,7 +90,15 @@ import type { FontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
 import { listMonitors, type Monitor } from "./settings/monitors.js";
 import { requiredDeviceGroups } from "./settings/required-devices.js";
-import type { SourceStore } from "./settings/sources.js";
+import {
+  normalizeSources,
+  type SourceIssue,
+  type SourceStore,
+  SourceUpdateRefused,
+  sourceEntryCredentialId,
+  withoutSourceEntry,
+  withSourceEntry,
+} from "./settings/sources.js";
 import type { StoreSessionStore } from "./settings/store-session.js";
 import type { ThemeOriginsStore } from "./settings/theme-origins.js";
 import type { ThemeSettingsStore } from "./settings/theme-settings.js";
@@ -170,6 +178,12 @@ const MAX_PLACE_QUERY_LENGTH = 200;
 /** The store's source-id pattern, repeated for the path so a malformed id is a
  *  400 rather than a lookup. `settings/sources.ts` owns what a write accepts. */
 const SOURCE_ID = /^[a-z0-9_-]{1,32}$/;
+
+/** An issue's identity when comparing the file before and after a merge: the
+ *  reason alone is not unique across sources. */
+function issueKey(issue: SourceIssue): string {
+  return `${issue.sourceId}\u0000${issue.reason}`;
+}
 
 export interface BundleRoots {
   readonly player: string;
@@ -2198,9 +2212,24 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       if (request.method === "PUT") {
+        let raw: string;
+
+        try {
+          raw = await readBody(request);
+        } catch (error: unknown) {
+          // The body's size is its own refusal: a body this host will not read
+          // is not a malformed one it read and rejected.
+          sendText(
+            response,
+            413,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+
         let body: unknown;
         try {
-          body = JSON.parse(await readBody(request)) as unknown;
+          body = JSON.parse(raw) as unknown;
         } catch {
           sendText(response, 400, "That request body is not JSON.");
           return;
@@ -2217,24 +2246,47 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
-        const current = await sourceRoutes.store.read();
-        // Normalized over the whole resulting file, so an upsert is refused
-        // exactly when the store would refuse what it is about to hold.
-        const written = await sourceRoutes.store.write({
-          sources: [
-            ...current.sources.filter((source) => source.id !== id),
-            { ...body, id },
-          ],
-        });
+        const candidate = { ...body, id };
+        // The store persists the file as authored, so a neighbour it cannot
+        // parse survives this write; only the candidate has to be valid. The
+        // source-count limit is whole-file, so the merge checks what it adds.
+        const ownIssue = normalizeSources({ sources: [candidate] }).issues[0];
 
-        const issue = written.issues[0];
-        if (issue !== undefined) {
+        if (ownIssue !== undefined) {
           sendJson(response, 400, {
             ok: false,
-            field: issue.sourceId,
-            reason: redactForBrowser(issue.reason),
+            field: ownIssue.sourceId,
+            reason: redactForBrowser(ownIssue.reason),
           });
           return;
+        }
+
+        try {
+          await sourceRoutes.store.update((current) => {
+            const next = withSourceEntry(current, candidate);
+            const before = new Set(
+              normalizeSources(current).issues.map(issueKey),
+            );
+            const introduced = normalizeSources(next).issues.find(
+              (issue) => !before.has(issueKey(issue)),
+            );
+
+            if (introduced !== undefined) {
+              throw new SourceUpdateRefused(introduced);
+            }
+
+            return next;
+          });
+        } catch (error: unknown) {
+          if (error instanceof SourceUpdateRefused) {
+            sendJson(response, 400, {
+              ok: false,
+              field: error.issue.sourceId,
+              reason: redactForBrowser(error.issue.reason),
+            });
+            return;
+          }
+          throw error;
         }
 
         await sourceRoutes.provider.reload();
@@ -2244,23 +2296,26 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       if (request.method === "DELETE") {
-        const current = await sourceRoutes.store.read();
-        const removed = current.sources.find((source) => source.id === id);
+        // Raw, so an entry the store refused is still removable and every
+        // other entry survives. The credential is never touched here: an entry
+        // the source no longer references is the owner's to clear.
+        let removed: unknown = undefined;
+
+        const written = await sourceRoutes.store.update((raw) => {
+          const result = withoutSourceEntry(raw, id);
+          removed = result.removed;
+          return result.raw;
+        });
 
         if (removed === undefined) {
           sendText(response, 404, "No such source.");
           return;
         }
 
-        // The credential is never touched here: an entry the source no longer
-        // references is the owner's to clear, and the answer says so.
-        const written = await sourceRoutes.store.write({
-          sources: current.sources.filter((source) => source.id !== id),
-        });
         await sourceRoutes.provider.reload();
         await refreshCredentialTable();
 
-        const credentialId = removed.auth?.credentialId;
+        const credentialId = sourceEntryCredentialId(removed);
         const unreferenced =
           credentialId !== undefined &&
           !written.sources.some(

@@ -46,6 +46,7 @@ function storeOf(
   return {
     read: async () => current,
     write: async () => current,
+    update: async () => current,
     set: (next) => {
       current = next;
     },
@@ -129,6 +130,7 @@ function gatedStore(
       });
     },
     write: async () => current,
+    update: async () => current,
     release: (next) => {
       held?.(next);
     },

@@ -181,13 +181,15 @@ describe("sourcesInUse", () => {
     );
   });
 
-  it("does not admit an id from a source the store refused", () => {
+  it("admits the valid source's id when a duplicate id was refused", () => {
+    // The store keeps the first valid entry and reports the duplicate. Keying
+    // the skip by id would drop the valid entry's credential with it.
     const table = sourcesInUse(
-      [{ sourceId: "first", reason: "source has a bad field" }],
+      [{ sourceId: "first", reason: 'source "first" repeats an id' }],
       [sourceOf("first", "srckey")],
     );
 
-    expect(table.map((entry) => entry.id)).not.toContain("srckey");
+    expect(table.map((entry) => entry.id)).toContain("srckey");
   });
 
   it("ignores a source that names no credential", () => {

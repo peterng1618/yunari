@@ -67,23 +67,21 @@ export const KNOWN_CREDENTIALS: readonly KnownCredential[] = [
  * The table a credential write is checked against: the built-ins plus one entry
  * per credential id a valid custom source references.
  *
- * A source refused by `normalizeSources` is named in `sourceIssues` and is not
- * in `sources`; it is skipped again here so a caller that passes both cannot
- * widen the surface with an entry the store rejected. Built-ins win a shared
- * id, and an id referenced twice is listed once.
+ * `sourceIssues` is accepted for the caller's convenience but is not used to
+ * skip an id: an entry the store refused never reaches `sources` — that is the
+ * validated projection — and keying a skip by id also refused the *valid* entry
+ * when a duplicate id was the refused one. Built-ins win a shared id, and an
+ * id referenced twice is listed once.
  */
 export function sourcesInUse(
-  sourceIssues: readonly SourceIssue[],
+  _sourceIssues: readonly SourceIssue[],
   sources: readonly CustomSource[],
   known: readonly KnownCredential[] = KNOWN_CREDENTIALS,
 ): readonly KnownCredential[] {
-  const refused = new Set(sourceIssues.map((issue) => issue.sourceId));
   const admitted = new Set(known.map((entry) => entry.id));
   const table: KnownCredential[] = [...known];
 
   for (const source of sources) {
-    if (refused.has(source.id)) continue;
-
     const credentialId = source.auth?.credentialId;
     if (credentialId === undefined || admitted.has(credentialId)) continue;
 
