@@ -11,9 +11,11 @@ import {
   fetchWeatherJson,
   type WeatherLocation,
   type WeatherReading,
+  weatherKey,
   weatherList,
   weatherNumber,
   weatherObject,
+  weatherRecord,
 } from "./open-meteo.js";
 
 export const OPENWEATHERMAP_CURRENT_ENDPOINT =
@@ -85,22 +87,6 @@ const CONDITION_BY_ID: Readonly<Record<number, number>> = {
   762: 45,
 };
 
-function keyOf(key: string | undefined): string {
-  if (key === undefined || key === "") {
-    throw new Error("Set openweathermap in Settings.");
-  }
-
-  return key;
-}
-
-function objectOf(value: unknown, what: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`${LABEL}'s answer is missing ${what}.`);
-  }
-
-  return value as Record<string, unknown>;
-}
-
 function canonicalCode(id: number): number {
   const mapped = CONDITION_BY_ID[id];
 
@@ -131,7 +117,7 @@ function precipitationOf(current: Record<string, unknown>): number {
   // 0 mm is that statement rather than a reading invented in its place.
   if (rain === undefined) return 0;
 
-  const record = objectOf(rain, "rain");
+  const record = weatherRecord(rain, "rain", LABEL);
 
   return record["1h"] === undefined ? 0 : weatherNumber(record, "1h", LABEL);
 }
@@ -145,12 +131,13 @@ interface DayRange {
 function todayRange(
   forecast: Record<string, unknown>,
   nowMs: number,
+  current: Record<string, unknown>,
 ): DayRange {
   const city = weatherObject(forecast, "city", LABEL);
   const offset = weatherNumber(city, "timezone", LABEL);
   const today = localDate(nowMs / 1000, offset);
   const rows = weatherList(forecast, "list", LABEL).flatMap((entry) => {
-    const row = objectOf(entry, "list");
+    const row = weatherRecord(entry, "list", LABEL);
     const dt = weatherNumber(row, "dt", LABEL);
 
     if (localDate(dt, offset) !== today) return [];
@@ -166,7 +153,14 @@ function todayRange(
   });
 
   if (rows.length === 0) {
-    throw new Error(`${LABEL}'s forecast has no reading for today.`);
+    // `ponytail:` just before local midnight the three-hourly list can hold no
+    // row for today, and failing the whole acquisition daily is worse than the
+    // current answer's own range. The upgrade is a forecast list that names
+    // today explicitly.
+    return {
+      high: weatherNumber(current, "temp_max", LABEL),
+      low: weatherNumber(current, "temp_min", LABEL),
+    };
   }
 
   return {
@@ -180,7 +174,7 @@ export async function fetchOpenWeatherMap(
   fetcher: typeof fetch,
   key: string | undefined,
 ): Promise<WeatherReading> {
-  const credential = keyOf(key);
+  const credential = weatherKey(key, "openweathermap");
 
   const currentUrl = new URL(OPENWEATHERMAP_CURRENT_ENDPOINT);
   const forecastUrl = new URL(OPENWEATHERMAP_FORECAST_ENDPOINT);
@@ -195,9 +189,10 @@ export async function fetchOpenWeatherMap(
   const current = await fetchWeatherJson(fetcher, currentUrl, LABEL);
   const forecast = await fetchWeatherJson(fetcher, forecastUrl, LABEL);
 
-  const condition = objectOf(
+  const condition = weatherRecord(
     weatherList(current, "weather", LABEL)[0],
     "weather",
+    LABEL,
   );
   const main = weatherObject(current, "main", LABEL);
   const wind = weatherObject(current, "wind", LABEL);
@@ -205,7 +200,7 @@ export async function fetchOpenWeatherMap(
   const sunrise = weatherNumber(sys, "sunrise", LABEL);
   const sunset = weatherNumber(sys, "sunset", LABEL);
   const nowMs = Date.now();
-  const range = todayRange(forecast, nowMs);
+  const range = todayRange(forecast, nowMs, main);
 
   return {
     tempC: weatherNumber(main, "temp", LABEL),
@@ -237,14 +232,17 @@ export async function verifyOpenWeatherMap(
   url.searchParams.set("appid", value);
 
   try {
-    const response = await fetchImpl(url, { redirect: "error" });
-
-    return response.ok
-      ? { ok: true }
-      : { ok: false, message: `OpenWeatherMap answered ${response.status}.` };
-  } catch {
-    // A transport error can quote the request URL, and that URL carries the
-    // key: the check reports reachability without repeating either.
-    return { ok: false, message: "OpenWeatherMap could not be reached." };
+    await fetchWeatherJson(fetchImpl, url, LABEL);
+    return { ok: true };
+  } catch (error: unknown) {
+    // The shared request's reasons name the service, never the URL or the key
+    // in it, so a transport failure can be repeated here.
+    return {
+      ok: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "OpenWeatherMap could not be checked.",
+    };
   }
 }

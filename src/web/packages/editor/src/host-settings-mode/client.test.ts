@@ -192,3 +192,47 @@ it("sends the whole weather object, omitting a blank label", async () => {
   });
   expect(body?.label).toBe("Berlin, Berlin, DE");
 });
+
+it("carries the attribution the host answered, and drops an unknown shape", async () => {
+  const settings = {
+    provider: "weatherapi",
+    label: "Berlin, Berlin, DE",
+    latitude: 52.52,
+    longitude: 13.41,
+    useWindowsLocation: false,
+    pollIntervalMs: 600000,
+  };
+  const valid = host(() =>
+    json({
+      settings,
+      attribution: {
+        text: "Powered by WeatherAPI.com",
+        url: "https://www.weatherapi.com/",
+      },
+    }),
+  );
+  expect(
+    (await createHostSettingsClient({ fetch: valid.fetch }).readWeather())
+      .attribution,
+  ).toEqual({
+    text: "Powered by WeatherAPI.com",
+    url: "https://www.weatherapi.com/",
+  });
+
+  // A host of another shape is read as no attribution rather than rendered:
+  // the anchor would otherwise carry a value no backend named.
+  for (const attribution of [
+    { text: 42, url: "https://www.weatherapi.com/" },
+    { text: "Powered by WeatherAPI.com", url: "not a url" },
+    { text: "", url: "https://www.weatherapi.com/" },
+    "Powered by WeatherAPI.com",
+    null,
+  ]) {
+    const broken = host(() => json({ settings, attribution }));
+    expect(
+      (await createHostSettingsClient({ fetch: broken.fetch }).readWeather())
+        .attribution,
+      JSON.stringify(attribution),
+    ).toBeUndefined();
+  }
+});

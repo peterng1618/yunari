@@ -490,8 +490,14 @@ describe("WeatherProvider", () => {
 
     store.set({ ...BERLIN, provider: "weatherapi" });
 
-    // The sample notices the settings write; no timer advance is needed.
-    await sampleAt(provider, ["weather.temp"], now + 1);
+    // The sample notices the settings write; no timer advance is needed. The
+    // old reading is already gone from this answer, not only after the new
+    // poll lands: a reading from another backend must never be served under
+    // this one's credit.
+    const changed = await sampleAt(provider, ["weather.temp"], now + 1);
+    expect(changed[0]?.sample.status).not.toBe("ok");
+    expect(changed[0]?.sample).not.toHaveProperty("value");
+
     await settle();
     expect(hosts).toEqual(["api.open-meteo.com", "api.weatherapi.com"]);
 
@@ -558,5 +564,98 @@ describe("WeatherProvider", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     // Current and forecast are two requests, so a successful poll ends at 4.
     expect(calls).toBe(4);
+  });
+
+  it("drops the cached reading when the place changes on the same backend", async () => {
+    const now = Date.now();
+    const store = settingsStore();
+    const asks: string[] = [];
+    const fetcher = (async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      asks.push(
+        `${url.searchParams.get("latitude")},${url.searchParams.get("longitude")}`,
+      );
+      return new Response(JSON.stringify(OPEN_METEO_BERLIN_CAPTURE), {
+        status: 200,
+      });
+    }) as unknown as typeof fetch;
+    const provider = new WeatherProvider({ settings: store, fetcher });
+
+    await sampleAt(provider, ["weather.temp"], now);
+    await settle();
+    expect(asks).toEqual(["52.52,13.41"]);
+
+    store.set({
+      ...BERLIN,
+      label: "Paris, Ile-de-France, FR",
+      latitude: 48.86,
+      longitude: 2.35,
+    });
+
+    const changed = await sampleAt(provider, ["weather.temp"], now + 1);
+    expect(changed[0]?.sample.status).not.toBe("ok");
+
+    await settle();
+    expect(asks).toEqual(["52.52,13.41", "48.86,2.35"]);
+  });
+
+  it("does not record an in-flight failure under a backend that replaced it", async () => {
+    const now = Date.now();
+    const store = settingsStore({
+      ...BERLIN,
+      provider: "weatherapi",
+      pollIntervalMs: 60_000,
+    });
+    const hosts: string[] = [];
+    let settleFailure: ((response: Response) => void) | undefined;
+    const fetcher = (async (input: string | URL | Request) => {
+      const host = new URL(String(input)).hostname;
+      hosts.push(host);
+
+      if (host === "api.weatherapi.com") {
+        return new Promise<Response>((resolve) => {
+          settleFailure = resolve;
+        });
+      }
+
+      return new Response(JSON.stringify(OPEN_METEO_BERLIN_CAPTURE), {
+        status: 200,
+      });
+    }) as unknown as typeof fetch;
+    const provider = new WeatherProvider({
+      settings: store,
+      fetcher,
+      credentials: KEYS,
+    });
+
+    await sampleAt(provider, ["weather.temp"], now);
+    // The ask is in flight; changing the backend must own the next poll.
+    store.set({ ...BERLIN, provider: "open-meteo", pollIntervalMs: 60_000 });
+    await sampleAt(provider, ["weather.temp"], now + 1);
+
+    settleFailure?.(new Response("no", { status: 503 }));
+    await settle();
+
+    // Recorded as a failure, this would back off for two intervals and the
+    // Open-Meteo request would not have happened at all.
+    expect(hosts).toEqual(["api.weatherapi.com", "api.open-meteo.com"]);
+    expect(provider.health().available).toBe(true);
+  });
+
+  it("makes no request for a missing BYOK key and names the credential", async () => {
+    const now = Date.now();
+    const { fetcher, calls } = fetcherOf();
+    const provider = new WeatherProvider({
+      settings: settingsStore({ ...BERLIN, provider: "weatherapi" }),
+      fetcher,
+    });
+
+    await sampleAt(provider, ["weather.temp"], now);
+    await settle();
+    expect(calls()).toBe(0);
+
+    const [entry] = await sampleAt(provider, ["weather.temp"], now + 1);
+    expect(entry?.sample.status).toBe("error");
+    expect(String(entry?.sample.message)).toMatch(/weatherapi/);
   });
 });

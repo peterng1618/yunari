@@ -38,6 +38,7 @@ import {
   type HostSettingsClient,
   type ThemeAnswers,
   type WeatherPlace,
+  type WeatherRead,
   type WeatherSettings,
 } from "./client.js";
 import { HostSettingsRegion, type HostStatusLine } from "./region.js";
@@ -128,7 +129,7 @@ interface Fixture {
       }
     >
   >;
-  readonly weather?: WeatherSettings;
+  readonly weather?: WeatherRead;
   /** What the geocoder finds for a search, whatever it was asked. */
   readonly places?: readonly WeatherPlace[];
   /** The display map's own refusal: a host that keeps its settings to itself. */
@@ -197,7 +198,7 @@ function hostSettings(
     assigned: {},
     names: {},
   };
-  const weather: WeatherSettings = fixture.weather ?? {
+  const weather: WeatherRead = fixture.weather ?? {
     provider: "open-meteo",
     label: "",
     latitude: 0,
@@ -867,6 +868,44 @@ it("saves the weather form in seconds and fills a searched place", async () => {
     longitude: 2.35,
   });
 });
+
+/** The credit belongs to the backend the settings name, and its own page is the
+ *  link: OpenWeather's terms ask for one, and a text-only credit could not
+ *  carry it. */
+it.each([
+  [
+    "open-meteo",
+    "Weather data by Open-Meteo.com",
+    "https://open-meteo.com/en/licence",
+  ],
+  ["weatherapi", "Powered by WeatherAPI.com", "https://www.weatherapi.com/"],
+  [
+    "openweathermap",
+    "Weather data provided by OpenWeather",
+    "https://openweathermap.org/",
+  ],
+] as const)(
+  "links the %s attribution inside the weather group",
+  async (provider, text, url) => {
+    const { container } = await mountHost({
+      ...TWO_DISPLAYS,
+      weather: {
+        ...WEATHER,
+        provider,
+        attribution: { text, url },
+      },
+    });
+
+    const link = must(
+      container.querySelector<HTMLAnchorElement>(
+        "[data-yunari-weather-attribution]",
+      ),
+      "the weather attribution",
+    );
+    expect(link.textContent).toBe(text);
+    expect(link.getAttribute("href")).toBe(url);
+  },
+);
 
 /**
  * **An emptied interval is a refusal, not a zero.** Milliseconds of `0` are

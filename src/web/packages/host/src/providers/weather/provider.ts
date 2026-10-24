@@ -117,8 +117,7 @@ export class WeatherProvider implements SensorProvider {
   readonly #fetcher: typeof fetch;
   readonly #now: () => number;
 
-  /** Last settings read, refreshed on every sample and every tick. */
-  #settings: WeatherSettings | undefined;
+  /** Last good reading, dropped when the backend or place changes. */
   #lastGood: CachedReading | undefined;
   /** Redacted; may reach a browser through `health()` and a sample message. */
   #failure: string | undefined;
@@ -183,8 +182,7 @@ export class WeatherProvider implements SensorProvider {
   }
 
   async #refreshSettings(): Promise<WeatherSettings> {
-    this.#settings = await this.#settingsStore.read();
-    return this.#settings;
+    return this.#settingsStore.read();
   }
 
   /**
@@ -269,11 +267,21 @@ export class WeatherProvider implements SensorProvider {
             delayMs = intervalMs;
           }
         } catch (error: unknown) {
-          this.#failures += 1;
-          this.#failure = redactForBrowser(
-            error instanceof Error ? error.message : String(error),
-          );
-          delayMs = Math.min(intervalMs * 2 ** this.#failures, MAX_BACKOFF_MS);
+          if (generation !== this.#generation) {
+            // The failure belongs to a backend or place that has already been
+            // replaced; the change owns the next poll and this one is not its
+            // reason, so it must not back it off.
+            delayMs = 0;
+          } else {
+            this.#failures += 1;
+            this.#failure = redactForBrowser(
+              error instanceof Error ? error.message : String(error),
+            );
+            delayMs = Math.min(
+              intervalMs * 2 ** this.#failures,
+              MAX_BACKOFF_MS,
+            );
+          }
         }
       }
     } catch (error: unknown) {

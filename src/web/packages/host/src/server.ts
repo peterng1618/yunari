@@ -28,6 +28,7 @@ import {
   ProviderRegistry,
   unionOfKeys,
 } from "./providers/registry.js";
+import { WEATHER_BACKENDS } from "./providers/weather/backends.js";
 import { isVendoredWeatherIcon } from "./providers/weather/icons.js";
 import type { Launcher } from "./serve/display-launcher.js";
 import {
@@ -1830,7 +1831,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       if (url.pathname === "/api/weather/settings") {
         if (request.method === "GET") {
-          sendJson(response, 200, { settings: await weather.read() });
+          const settings = await weather.read();
+          const backend = WEATHER_BACKENDS[settings.provider];
+          // The credit belongs to the backend the settings name: the page's
+          // link is the backend's own terms, which OpenWeather requires beside
+          // its wording.
+          sendJson(response, 200, {
+            settings,
+            attribution: { text: backend.attribution, url: backend.termsUrl },
+          });
           return;
         }
 
@@ -1863,7 +1872,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
             // The store normalizes before it touches the file, and its refusal
             // names the field: a bad write leaves the stored one in place.
             const saved = await weather.write(body);
-            sendJson(response, 200, { ok: true, settings: saved });
+            const backend = WEATHER_BACKENDS[saved.provider];
+            sendJson(response, 200, {
+              ok: true,
+              settings: saved,
+              attribution: { text: backend.attribution, url: backend.termsUrl },
+            });
           } catch (error: unknown) {
             sendText(
               response,

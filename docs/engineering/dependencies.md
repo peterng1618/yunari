@@ -118,9 +118,11 @@ verified 2026-10-24:
   <https://www.weatherapi.com/>. Constant `WEATHERAPI_ATTRIBUTION` in
   `packages/host/src/providers/weather/weatherapi.ts`.
 - OpenWeatherMap — "Weather data provided by OpenWeather", the required wording
-  in the FAQ at <https://openweathermap.org/faq>, which also asks for a link to
-  <https://openweathermap.org/>. Constant `OPENWEATHERMAP_ATTRIBUTION` in
-  `packages/host/src/providers/weather/openweathermap.ts`.
+  in the FAQ at <https://openweathermap.org/faq>, which also requires a link to
+  <https://openweathermap.org/> and the OpenWeather logo. The text is
+  `OPENWEATHERMAP_ATTRIBUTION` and the link is `termsUrl` in
+  `packages/host/src/providers/weather/backends.ts`; the host settings page
+  renders the text as that link. The logo is not drawn by that surface.
 
 LibreHardwareMonitor/PawnIO are not current dependencies or redistributed.
 Earlier planning research found LHM MPL-2.0 and PawnIO modules under GPL/LGPL;

@@ -104,6 +104,17 @@ export interface WeatherSettings {
   readonly pollIntervalMs: number;
 }
 
+/** The credit a weather backend asks for, with the page it links to. */
+export interface WeatherAttribution {
+  readonly text: string;
+  readonly url: string;
+}
+
+/** The settings plus the selected backend's credit, when the host sent one. */
+export interface WeatherRead extends WeatherSettings {
+  readonly attribution?: WeatherAttribution;
+}
+
 /** One place the geocoder found. */
 export interface WeatherPlace {
   readonly label: string;
@@ -128,10 +139,10 @@ export interface HostSettingsClient {
     readonly zones: readonly string[];
   }>;
   saveDisplay(next: DisplayPreferencesWrite): Promise<DisplayPreferences>;
-  readWeather(): Promise<WeatherSettings>;
+  readWeather(): Promise<WeatherRead>;
   /** Writes the whole object: the route replaces it. A blank label is omitted,
    *  because an absent one is no manual place while an empty one is refused. */
-  saveWeather(next: WeatherSettings): Promise<WeatherSettings>;
+  saveWeather(next: WeatherSettings): Promise<WeatherRead>;
   /** The places a search finds, from the host's keyless geocoder. */
   searchPlaces(query: string): Promise<readonly WeatherPlace[]>;
   /** Which slots the theme on that display reads, and the answers it already
@@ -200,6 +211,30 @@ function readUnits(input: unknown): UnitPreferences {
   }
 }
 
+/** The credit the selected backend names, or nothing when the host's answer is
+ *  not the shape this build can link: an anchor here must never carry a value
+ *  no backend asked to be shown. */
+function readAttribution(input: unknown): WeatherAttribution | undefined {
+  if (typeof input !== "object" || input === null) return undefined;
+
+  const record = input as { readonly text?: unknown; readonly url?: unknown };
+  const { text, url } = record;
+
+  if (typeof text !== "string" || text === "") return undefined;
+  if (typeof url !== "string") return undefined;
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return { text, url };
+}
+
 /** The weather settings a host is expected to answer, keeping only the fields
  *  this build can draw. The host normalizes its own file, so a value outside
  *  these ranges is a shape this build did not expect rather than a person's
@@ -246,6 +281,15 @@ function readWeatherSettings(input: unknown): WeatherSettings {
       60_000,
       86_400_000,
     ),
+  };
+}
+
+function readWeather(input: unknown, attribution: unknown): WeatherRead {
+  const credit = readAttribution(attribution);
+
+  return {
+    ...readWeatherSettings(input),
+    ...(credit === undefined ? {} : { attribution: credit }),
   };
 }
 
@@ -403,16 +447,19 @@ export function createHostSettingsClient(options?: {
       };
     },
 
-    async readWeather(): Promise<WeatherSettings> {
+    async readWeather(): Promise<WeatherRead> {
       const response = await fetcher(`${baseUrl}/api/weather/settings`);
       if (!response.ok) {
         throw await refusal(response, "Could not read the weather settings");
       }
-      const body = (await response.json()) as { readonly settings?: unknown };
-      return readWeatherSettings(body?.settings);
+      const body = (await response.json()) as {
+        readonly settings?: unknown;
+        readonly attribution?: unknown;
+      };
+      return readWeather(body?.settings, body?.attribution);
     },
 
-    async saveWeather(next): Promise<WeatherSettings> {
+    async saveWeather(next): Promise<WeatherRead> {
       const response = await fetcher(`${baseUrl}/api/weather/settings`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -431,8 +478,11 @@ export function createHostSettingsClient(options?: {
       if (!response.ok) {
         throw await refusal(response, "Could not save the weather settings");
       }
-      const body = (await response.json()) as { readonly settings?: unknown };
-      return readWeatherSettings(body?.settings);
+      const body = (await response.json()) as {
+        readonly settings?: unknown;
+        readonly attribution?: unknown;
+      };
+      return readWeather(body?.settings, body?.attribution);
     },
 
     async searchPlaces(query): Promise<readonly WeatherPlace[]> {

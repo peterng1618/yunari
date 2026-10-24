@@ -11,9 +11,11 @@ import {
   fetchWeatherJson,
   type WeatherLocation,
   type WeatherReading,
+  weatherKey,
   weatherList,
   weatherNumber,
   weatherObject,
+  weatherRecord,
 } from "./open-meteo.js";
 
 export const WEATHERAPI_ENDPOINT =
@@ -73,14 +75,6 @@ const CONDITION_BY_CODE: Readonly<Record<number, number>> = {
   1282: 99,
 };
 
-function keyOf(key: string | undefined): string {
-  if (key === undefined || key === "") {
-    throw new Error("Set weatherapi in Settings.");
-  }
-
-  return key;
-}
-
 function textOf(record: Record<string, unknown>, field: string): string {
   const value = record[field];
 
@@ -89,14 +83,6 @@ function textOf(record: Record<string, unknown>, field: string): string {
   }
 
   return value;
-}
-
-function objectOf(value: unknown, what: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`${LABEL}'s answer is missing ${what}.`);
-  }
-
-  return value as Record<string, unknown>;
 }
 
 function canonicalCode(code: number): number {
@@ -152,7 +138,7 @@ export async function fetchWeatherApi(
   key: string | undefined,
 ): Promise<WeatherReading> {
   const url = new URL(WEATHERAPI_ENDPOINT);
-  url.searchParams.set("key", keyOf(key));
+  url.searchParams.set("key", weatherKey(key, "weatherapi"));
   url.searchParams.set("q", `${location.latitude},${location.longitude}`);
   url.searchParams.set("days", "1");
   url.searchParams.set("aqi", "no");
@@ -164,7 +150,7 @@ export async function fetchWeatherApi(
   const current = weatherObject(record, "current", LABEL);
   const forecast = weatherObject(record, "forecast", LABEL);
   const days = weatherList(forecast, "forecastday", LABEL);
-  const today = objectOf(days[0], "forecastday");
+  const today = weatherRecord(days[0], "forecastday", LABEL);
   const day = weatherObject(today, "day", LABEL);
   const astro = weatherObject(today, "astro", LABEL);
   const condition = weatherObject(current, "condition", LABEL);
@@ -212,14 +198,17 @@ export async function verifyWeatherApi(
   url.searchParams.set("days", "1");
 
   try {
-    const response = await fetchImpl(url, { redirect: "error" });
-
-    return response.ok
-      ? { ok: true }
-      : { ok: false, message: `WeatherAPI answered ${response.status}.` };
-  } catch {
-    // A transport error can quote the request URL, and that URL carries the
-    // key: the check reports reachability without repeating either.
-    return { ok: false, message: "WeatherAPI could not be reached." };
+    await fetchWeatherJson(fetchImpl, url, LABEL);
+    return { ok: true };
+  } catch (error: unknown) {
+    // The shared request's reasons name the service, never the URL or the key
+    // in it, so a transport failure can be repeated here.
+    return {
+      ok: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "WeatherAPI could not be checked.",
+    };
   }
 }

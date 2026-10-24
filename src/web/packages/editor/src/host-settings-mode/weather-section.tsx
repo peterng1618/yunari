@@ -11,9 +11,22 @@ import {
   isWeatherProvider,
   WEATHER_PROVIDERS,
   type WeatherPlace,
+  type WeatherRead,
   type WeatherSettings,
 } from "./client.js";
 import { Group } from "./section-group.js";
+
+/** The stored object without the read-only credit a save does not write. */
+function settingsOnly(read: WeatherRead): WeatherSettings {
+  return {
+    provider: read.provider,
+    label: read.label,
+    latitude: read.latitude,
+    longitude: read.longitude,
+    useWindowsLocation: read.useWindowsLocation,
+    pollIntervalMs: read.pollIntervalMs,
+  };
+}
 
 /** A message a person can act on: the host's own words where it sent any. */
 function reason(error: unknown): string {
@@ -39,9 +52,7 @@ export function WeatherSection(props: {
   readonly report: (status: string) => void;
 }): React.JSX.Element {
   const { settings, report } = props;
-  const [weather, setWeather] = useState<WeatherSettings | undefined>(
-    undefined,
-  );
+  const [weather, setWeather] = useState<WeatherRead | undefined>(undefined);
   const [search, setSearch] = useState("");
   const [places, setPlaces] = useState<readonly WeatherPlace[]>([]);
 
@@ -133,15 +144,29 @@ export function WeatherSection(props: {
               // The control offers only the three ids, so a fourth cannot reach
               // the host; the guard is what makes that true in the type.
               if (!isWeatherProvider(provider)) return;
-              save({ ...weather, provider });
+              save({ ...settingsOnly(weather), provider });
             }}
           />
+          {weather.attribution === undefined ? null : (
+            <p className="text-sm text-muted">
+              <a
+                href={weather.attribution.url}
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+                aria-label={uiCopy.hostSettings.weather.attribution}
+                data-yunari-weather-attribution=""
+              >
+                {weather.attribution.text}
+              </a>
+            </p>
+          )}
           <ControlText
             id="yunari-weather-place"
             label={uiCopy.hostSettings.weather.label}
             data={{ "data-yunari-weather-place-field": "" }}
             value={weather.label}
-            onCommit={(label) => save({ ...weather, label })}
+            onCommit={(label) => save({ ...settingsOnly(weather), label })}
           />
           <ControlNumber
             id="yunari-weather-latitude"
@@ -150,7 +175,9 @@ export function WeatherSection(props: {
             value={weather.latitude}
             min={-90}
             max={90}
-            onCommit={(latitude) => save({ ...weather, latitude })}
+            onCommit={(latitude) =>
+              save({ ...settingsOnly(weather), latitude })
+            }
           />
           <ControlNumber
             id="yunari-weather-longitude"
@@ -159,7 +186,9 @@ export function WeatherSection(props: {
             value={weather.longitude}
             min={-180}
             max={180}
-            onCommit={(longitude) => save({ ...weather, longitude })}
+            onCommit={(longitude) =>
+              save({ ...settingsOnly(weather), longitude })
+            }
           />
           <ControlToggle
             id="yunari-weather-windows-location"
@@ -167,7 +196,7 @@ export function WeatherSection(props: {
             data={{ "data-yunari-weather-windows-location": "" }}
             checked={weather.useWindowsLocation}
             onChange={(useWindowsLocation) =>
-              save({ ...weather, useWindowsLocation })
+              save({ ...settingsOnly(weather), useWindowsLocation })
             }
           />
           <ControlNumber
@@ -180,7 +209,7 @@ export function WeatherSection(props: {
             max={86400}
             integer
             onCommit={(seconds) =>
-              save({ ...weather, pollIntervalMs: seconds * 1000 })
+              save({ ...settingsOnly(weather), pollIntervalMs: seconds * 1000 })
             }
           />
           <ControlText
@@ -201,7 +230,7 @@ export function WeatherSection(props: {
                   onClick={() => {
                     setPlaces([]);
                     save({
-                      ...weather,
+                      ...settingsOnly(weather),
                       label: place.label,
                       latitude: place.latitude,
                       longitude: place.longitude,

@@ -557,6 +557,9 @@ export const uiCopy = {
       label: "Place",
       latitude: "Latitude",
       longitude: "Longitude",
+      /** What the link to the selected backend's page is for a reader who
+       *  cannot see the text it wraps. */
+      attribution: "Weather data attribution",
       windowsLocation: "Use Windows location when no place is set",
       pollInterval: "Poll every",
       seconds: "s",

@@ -8232,6 +8232,30 @@ describe("Weather settings routes", () => {
     ).toBe(403);
   });
 
+  it("answers the selected backend's attribution with its settings", async () => {
+    const { server } = await launch();
+
+    const openMeteo = await request(server, "GET", "/api/weather/settings");
+    expect(openMeteo.status).toBe(200);
+    expect((openMeteo.json() as { attribution: unknown }).attribution).toEqual({
+      text: "Weather data by Open-Meteo.com",
+      url: "https://open-meteo.com/en/licence",
+    });
+
+    await request(
+      server,
+      "PUT",
+      "/api/weather/settings",
+      JSON.stringify({ ...BERLIN, provider: "weatherapi" }),
+    );
+
+    const byok = await request(server, "GET", "/api/weather/settings");
+    expect((byok.json() as { attribution: unknown }).attribution).toEqual({
+      text: "Powered by WeatherAPI.com",
+      url: "https://www.weatherapi.com/",
+    });
+  });
+
   it("refuses invalid input with the normalizer's message and keeps the file", async () => {
     const { server, weather } = await launch();
     await weather.write(BERLIN);

@@ -55,6 +55,31 @@ export function weatherNumber(
   return value;
 }
 
+/** A required credential, named by its store id so the reason says what to set. */
+export function weatherKey(
+  key: string | undefined,
+  credentialId: string,
+): string {
+  if (key === undefined || key === "") {
+    throw new Error(`Set ${credentialId} in Settings.`);
+  }
+
+  return key;
+}
+
+/** An object held in an unknown value, or a refusal naming what was expected. */
+export function weatherRecord(
+  value: unknown,
+  what: string,
+  label: string,
+): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${label}'s answer is missing ${what}.`);
+  }
+
+  return value as Record<string, unknown>;
+}
+
 /** An object field, or a refusal naming it. */
 export function weatherObject(
   record: Record<string, unknown>,
