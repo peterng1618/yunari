@@ -395,7 +395,13 @@ test.describe("a non-Steam game's name and cover from the store", () => {
     expect(searches, "the host searched the store more than once").toHaveLength(
       1,
     );
-    expect(searches[0]?.searchParams.get("term")).toBe(GAME_NAME);
+    // Exactly the name and the two fixed constants: a new parameter would be a
+    // privacy change and must fail here.
+    expect(Object.fromEntries(searches[0]?.searchParams ?? [])).toEqual({
+      term: GAME_NAME,
+      cc: "us",
+      l: "en",
+    });
 
     await expect
       .poll(() => existsSync(coverFile()), { timeout: 20_000 })
