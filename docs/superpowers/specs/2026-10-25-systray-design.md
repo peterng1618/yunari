@@ -377,7 +377,7 @@ printed URL or path usable.
 | `--tray`, `--rtss-exe` and help text | `host/src/cli/args.ts` |
 | Open a URL or folder without a console | `host/src/cli/net.ts` |
 | Tray wiring and process stop | `host/src/main.ts` |
-| Editor entry parameters | `editor/src/editor-shell/shell-layout.tsx` |
+| Editor entry parameters | `editor/src/editor-shell/shell-entry.ts`, read by `shell-layout.tsx` at mount |
 | Staged Linux tray binary | `src/web/packages/host/scripts/vendor-tray.mjs` |
 
 `serve/display-launcher.ts` loses the autostart function and keeps the display

@@ -5,8 +5,15 @@
 - **Paths:** `src/web/packages/host/src/tray/external-apps.ts`,
   `src/web/packages/host/src/tray/menu.ts`,
   `src/web/packages/host/src/tray/controller.ts`,
+  `src/web/packages/host/src/tray/index.ts`,
+  `src/web/packages/host/src/tray/tray-icon.ts`,
   `src/web/packages/host/src/tray/windows.ts`,
   `src/web/packages/host/src/tray/linux.ts`,
+  `src/web/packages/host/src/serve/host-autostart.ts`,
+  `src/web/packages/host/src/cli/args.ts`,
+  `src/web/packages/host/src/cli/net.ts`,
+  `src/web/packages/host/src/main.ts`,
+  `src/web/packages/editor/src/editor-shell/shell-entry.ts`,
   `src/web/packages/editor/src/editor-shell/shell-layout.tsx`,
   `src/web/packages/host/scripts/vendor-tray.mjs`
 
