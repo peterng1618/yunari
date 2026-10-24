@@ -11,7 +11,7 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Active work
 
-- **Task 1 (menu model) is done**; Phase 1 continues with external-program detection and the autostart entry.
+- **Tasks 1–2 are done** (menu model, external programs); Phase 1 continues with the autostart entry.
 - **Controller next:** the 5-second snapshot poll, action dispatch and 10-second notices are still to be built.
 - **Windows adapter** renders the model through a hidden PowerShell WinForms `NotifyIcon` fed by JSON lines on stdin.
 - **Linux adapter** stages the pinned `systray2@2.1.4` x86-64 binary; no new npm dependency and no runtime install.
@@ -20,10 +20,10 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Last completed change
 
-- **Menu model added:** `host/src/tray/menu.ts` builds the status, Auto start, editor, external-program and Exit rows from a `TraySnapshot`.
-- **External rows hide when absent** and share one `externalRow` label rule; separators appear only between non-empty groups.
-- **Tooltip** repeats the status title, capped at Windows' 63 characters.
-- **Tests:** 8 pass in `packages/host/src/tray/menu.test.ts`; hiding the rows makes the labelled cases fail.
+- **External programs:** `host/src/tray/external-apps.ts` detects LHM and RTSS on Windows and starts them on request.
+- **LHM** starts through `launchLhm`; only the process this run started is stopped, and RTSS has no stop.
+- **Failed probes read as absent**, and both programs are absent off Windows.
+- **Tests:** 8 pass in `packages/host/src/tray/external-apps.test.ts`.
 
 ## Next
 
