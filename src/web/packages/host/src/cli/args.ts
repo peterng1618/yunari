@@ -266,8 +266,8 @@ export function parseArgs(
       port,
       host,
       hostGiven,
-      // Tray wins over a browser-opening flag, whatever their order.
-      openBrowser: tray ? false : openBrowser,
+      // --tray clears this when it is parsed; nothing sets it back.
+      openBrowser,
       tray,
       themesDir:
         themesDir ?? path.join(appDirOverride ?? DEFAULT_APP_DIR, "themes"),

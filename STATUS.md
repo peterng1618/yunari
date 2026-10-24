@@ -11,7 +11,7 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Active work
 
-- **Tasks 1–7 are done** (menu model, external programs, sign-in entry, both tray adapters, controller, CLI flags); Phases 1–2 complete.
+- **Tasks 1–7 are done** (menu model, external programs, sign-in entry, both tray adapters, controller, CLI flags); Phases 1–2 complete, Phase 3 in flight.
 - **Controller** polls every 5 s, sends only a changed menu or tooltip, dispatches clicks and shows action or snapshot failures as 10 s notices.
 - **Windows adapter** renders the model through a hidden PowerShell WinForms `NotifyIcon` fed by JSON lines on stdin.
 - **Linux adapter** stages the pinned `systray2@2.1.4` x86-64 binary; no new npm dependency and no runtime install.
