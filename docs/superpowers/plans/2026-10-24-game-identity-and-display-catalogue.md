@@ -92,14 +92,17 @@
 #### Task 1.5: One catalogue, deduplicated
 
 **Files:**
-- Modify: `game-catalogue.ts`, `game-catalogue.test.ts`, `src/web/packages/host/src/providers/game/steam-library.ts` (only if an adapter is needed)
+- Create: `src/web/packages/host/src/providers/game/catalogue/` — one module per source (`epic.ts`, `gog.ts`, `xbox.ts`, `itch.ts`, `uninstall.ts`, `appx.ts`) plus `catalogue.ts` for the types and aggregation
+- Create: `src/web/packages/host/src/providers/game/catalogue/catalogue.test.ts` (aggregation) and one test file per source alongside it
+- Delete: `game-catalogue.ts` and `game-catalogue.test.ts` after the move
 
 **Interfaces:**
-- Produces: `readInstalledGames(seams): Promise<readonly InstalledGame[]>`, Steam entries first, later duplicate executables dropped (case-insensitive, `path.win32.normalize`).
+- Produces: `readInstalledGames(seams): Promise<readonly InstalledGame[]>`, Steam entries first, a later entry dropped when it names an executable an earlier one already names, or when either side has `exes: []` and their normalised install roots are equal (case-insensitive, `path.win32.normalize`).
 
-- [ ] Failing test: Steam plus Epic naming the same exe keeps Steam; two sources with different exes both survive; a source that throws does not lose the others.
+- [ ] Move the readers with no behaviour change; keep every existing test, retargeted to its source module. This is the split the 500-line signal requires (`game-catalogue.ts` is 569 lines).
+- [ ] Failing tests: Steam plus Epic naming the same exe keeps Steam; two sources with different exes both survive; two empty-exe entries with the same install root collapse; two empty-exe entries with different roots both survive; a source that throws does not lose the others.
 - [ ] Implement the aggregation with per-source `try/catch`.
-- [ ] Run the whole `game-catalogue` suite plus `steam-library` tests; PASS.
+- [ ] Run the whole `providers/game` suite plus `steam-library` tests; PASS. No file over 500 lines.
 - [ ] Phase gate: `npm run gate` to a log file; exit code 0.
 - [ ] Commit: `feat(host): aggregate installed games across launchers`.
 
