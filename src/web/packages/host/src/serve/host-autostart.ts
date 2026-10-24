@@ -283,7 +283,7 @@ export function createHostAutostart(
         // WSH reads a BOM-less script as ANSI, so a non-ASCII path would be
         // mojibake and the entry would silently start nothing. UTF-16LE with a
         // BOM is the encoding it reads back correctly.
-        await writeFile(windowsFile, `﻿${body}`, "utf16le");
+        await writeFile(windowsFile, `\uFEFF${body}`, "utf16le");
 
         return { ok: true, message: STARTED, enabled: true };
       } catch (error) {
