@@ -18,6 +18,15 @@ export interface ForegroundReading {
   readonly path?: string;
   /** The process name without a path, when the executable path is unreadable. */
   readonly name?: string;
+  /**
+   * The window class. A packaged app reports its `Windows.UI.Core.CoreWindow`
+   * child, not the `ApplicationFrameWindow` its frame host owns.
+   */
+  readonly class?: string;
+  /** The window's rect equals the rect of the monitor nearest to it. */
+  readonly fullscreen?: boolean;
+  /** `SHQueryUserNotificationState` reported a running D3D fullscreen app. */
+  readonly d3dFullscreen?: boolean;
 }
 
 /** A version-info read blocks no sample longer than this. */
@@ -106,22 +115,97 @@ Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 public static class YunariForegroundWindow {
+  [StructLayout(LayoutKind.Sequential)]
+  public struct Rect {
+    public int Left;
+    public int Top;
+    public int Right;
+    public int Bottom;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  public struct MonitorInfo {
+    public int cbSize;
+    public Rect rcMonitor;
+    public Rect rcWork;
+    public uint dwFlags;
+  }
+
+  private const uint MonitorDefaultToNearest = 2;
+  private const int D3DFullScreen = 3;
+
   [DllImport("user32.dll")]
   public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")]
   public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  public static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpszClass, string lpszWindow);
+  [DllImport("user32.dll")]
+  public static extern bool GetWindowRect(IntPtr hWnd, out Rect lpRect);
+  [DllImport("user32.dll")]
+  public static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint dwFlags);
+  [DllImport("user32.dll")]
+  public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MonitorInfo lpmi);
+  [DllImport("shell32.dll")]
+  public static extern int SHQueryUserNotificationState(out int state);
+
+  public static string ClassNameOf(IntPtr hWnd) {
+    var name = new System.Text.StringBuilder(256);
+    return GetClassName(hWnd, name, name.Capacity) > 0 ? name.ToString() : "";
+  }
+
+  public static bool IsFullscreen(IntPtr hWnd) {
+    Rect window;
+    if (!GetWindowRect(hWnd, out window)) return false;
+    IntPtr monitor = MonitorFromWindow(hWnd, MonitorDefaultToNearest);
+    if (monitor == IntPtr.Zero) return false;
+    var info = new MonitorInfo();
+    info.cbSize = Marshal.SizeOf(typeof(MonitorInfo));
+    if (!GetMonitorInfo(monitor, ref info)) return false;
+    return window.Left == info.rcMonitor.Left &&
+      window.Top == info.rcMonitor.Top &&
+      window.Right == info.rcMonitor.Right &&
+      window.Bottom == info.rcMonitor.Bottom;
+  }
+
+  public static bool IsD3DFullscreen() {
+    int state;
+    return SHQueryUserNotificationState(out state) == 0 && state == D3DFullScreen;
+  }
 }
 '@
 while ($true) {
   $handle = [YunariForegroundWindow]::GetForegroundWindow()
   [uint32]$processId = 0
-  if ($handle -ne [IntPtr]::Zero) {
-    [void][YunariForegroundWindow]::GetWindowThreadProcessId($handle, [ref]$processId)
-  }
+  $class = ''
+  $fullscreen = $false
+  $d3dFullscreen = $false
 
-  if ($processId -eq 0) {
-    [Console]::Out.WriteLine('{"kind":"foreground","pid":0}')
-  } else {
+  if ($handle -ne [IntPtr]::Zero) {
+    $class = [YunariForegroundWindow]::ClassNameOf($handle)
+    if ($class -eq 'ApplicationFrameWindow') {
+      $child = [YunariForegroundWindow]::FindWindowEx($handle, [IntPtr]::Zero, 'Windows.UI.Core.CoreWindow', [NullString]::Value)
+      if ($child -ne [IntPtr]::Zero) {
+        $handle = $child
+        $class = [YunariForegroundWindow]::ClassNameOf($handle)
+      }
+    }
+    [void][YunariForegroundWindow]::GetWindowThreadProcessId($handle, [ref]$processId)
+    $fullscreen = [YunariForegroundWindow]::IsFullscreen($handle)
+  }
+  $d3dFullscreen = [YunariForegroundWindow]::IsD3DFullscreen()
+
+  $line = [ordered]@{
+    kind = 'foreground'
+    pid = [int]$processId
+    fullscreen = $fullscreen
+    d3dFullscreen = $d3dFullscreen
+  }
+  if ($class -ne '') { $line['class'] = $class }
+
+  if ($processId -ne 0) {
     $path = $null
     $name = $null
     try {
@@ -131,14 +215,10 @@ while ($true) {
     } catch {
       $path = $null
     }
-    $line = [ordered]@{
-      kind = 'foreground'
-      pid = [int]$processId
-      path = $path
-      name = $name
-    }
-    [Console]::Out.WriteLine(($line | ConvertTo-Json -Compress))
+    $line['path'] = $path
+    $line['name'] = $name
   }
+  [Console]::Out.WriteLine(($line | ConvertTo-Json -Compress))
 
   Start-Sleep -Milliseconds 1000
 }
@@ -146,6 +226,10 @@ while ($true) {
 
 function optionalText(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 /** One helper line, or nothing when the line is not a foreground reading. */
@@ -174,10 +258,16 @@ export function parseForegroundLine(
 
   const path = optionalText(record["path"]);
   const name = optionalText(record["name"]);
+  const windowClass = optionalText(record["class"]);
+  const fullscreen = optionalBoolean(record["fullscreen"]);
+  const d3dFullscreen = optionalBoolean(record["d3dFullscreen"]);
 
   return {
     pid,
     ...(path === undefined ? {} : { path }),
     ...(name === undefined ? {} : { name }),
+    ...(windowClass === undefined ? {} : { class: windowClass }),
+    ...(fullscreen === undefined ? {} : { fullscreen }),
+    ...(d3dFullscreen === undefined ? {} : { d3dFullscreen }),
   };
 }
