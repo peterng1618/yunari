@@ -29,6 +29,9 @@ export interface TrayControllerOptions {
     onLost: (reason: string) => void,
   ) => Promise<TrayView>;
   readonly onLost: (reason: string) => void;
+  /** Called after Exit closes the view. The controller owns only the view; the
+   *  host owns the process, so stopping it is the caller's job. */
+  readonly onExit?: () => void;
   readonly pollMs?: number;
   readonly noticeMs?: number;
   /** Accepted for the plan's interface; notice expiry is timer-driven. */
@@ -136,6 +139,7 @@ export async function startTrayController(
     if (stopped) return;
     if (action === "exit") {
       stop();
+      options.onExit?.();
       return;
     }
     let result: ActionResult;

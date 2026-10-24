@@ -21,6 +21,8 @@ export interface StartTrayOptions {
   readonly readSnapshot: () => Promise<TraySnapshot>;
   readonly act: (action: TrayAction) => Promise<ActionResult>;
   readonly onLost: (reason: string) => void;
+  /** Called when Exit closes the tray; the host stops itself. */
+  readonly onExit?: () => void;
   readonly platform?: NodeJS.Platform;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly spawnProcess?: TraySpawnProcess;
@@ -65,5 +67,6 @@ export async function startTray(
     act: options.act,
     openView,
     onLost: options.onLost,
+    ...(options.onExit === undefined ? {} : { onExit: options.onExit }),
   });
 }

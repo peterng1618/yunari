@@ -101,6 +101,7 @@ it("stops on exit without acting or polling again", async () => {
   const view = fakeView();
   let onAction: ((action: TrayAction) => void) | undefined;
   const act = vi.fn(async () => ({ ok: true, message: "" }));
+  const onExit = vi.fn();
   const readSnapshot = vi.fn(async () => BASE);
   await startTrayController({
     readSnapshot,
@@ -110,12 +111,14 @@ it("stops on exit without acting or polling again", async () => {
       return view;
     },
     onLost: vi.fn(),
+    onExit,
     pollMs: 1000,
   });
   expect(readSnapshot).toHaveBeenCalledTimes(1);
   onAction?.("exit");
   await vi.advanceTimersByTimeAsync(0);
   expect(act).not.toHaveBeenCalled();
+  expect(onExit).toHaveBeenCalledTimes(1);
   expect(view.close).toHaveBeenCalledTimes(1);
   await vi.advanceTimersByTimeAsync(10_000);
   expect(readSnapshot).toHaveBeenCalledTimes(1);
