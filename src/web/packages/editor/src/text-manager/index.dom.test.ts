@@ -431,6 +431,9 @@ function placementScene(
     readonly contained?: TextPlacementPort["contained"];
     /** Off when a test sets the canvas state the arming has to restore. */
     readonly arm?: boolean;
+    /** Runs before the manager exists, for a stand-in that must register its
+     *  listeners first — production binds viewport navigation before it. */
+    readonly beforeCreate?: (canvas: Canvas) => void;
   } = {},
 ) {
   const canvas = new Canvas(document.createElement("canvas"));
@@ -440,6 +443,7 @@ function placementScene(
     x: event.clientX,
     y: event.clientY,
   })) as never);
+  options.beforeCreate?.(canvas);
   const save = vi.fn();
   const manager = createTextManager(canvas, save);
   const port: TextPlacementPort = {
@@ -623,36 +627,81 @@ describe("placing a text by click or drag", () => {
     // Space is the viewport's pan key and claims the same three properties.
     // The gesture has to stand down first, or the pan captures the crosshair
     // as its state to restore and leaves `skipTargetFind` on afterwards.
-    const { canvas, manager, port, save } = placementScene({ arm: false });
-    canvas.defaultCursor = "grab";
-    canvas.skipTargetFind = false;
-    canvas.selection = true;
-    canvas.setCursor("default");
+    //
+    // The stand-in is registered before the manager, as production binds
+    // viewport navigation before the text manager, and it captures and writes
+    // the same state. Only the capture-phase listener can get in front of it,
+    // so a bubble-phase registration makes this test fail.
+    let seen: readonly unknown[] | undefined;
+    let resumePan:
+      | {
+          readonly skipTargetFind: boolean;
+          readonly selection: boolean;
+          readonly defaultCursor: string;
+          readonly cursor: string;
+        }
+      | undefined;
+    let removePan = (): void => {};
+    const { canvas, manager, port, save } = placementScene({
+      arm: false,
+      beforeCreate: (canvas) => {
+        canvas.defaultCursor = "grab";
+        canvas.skipTargetFind = false;
+        canvas.selection = true;
+        canvas.setCursor("default");
+        const onKeyDown = (event: KeyboardEvent): void => {
+          if (event.key !== " ") return;
+          seen = [
+            canvas.skipTargetFind,
+            canvas.selection,
+            canvas.defaultCursor,
+          ];
+          resumePan = {
+            skipTargetFind: canvas.skipTargetFind,
+            selection: canvas.selection,
+            defaultCursor: canvas.defaultCursor,
+            cursor: canvas.upperCanvasEl.style.cursor,
+          };
+          canvas.skipTargetFind = true;
+          canvas.selection = false;
+          canvas.defaultCursor = "grab";
+          canvas.setCursor("grab");
+        };
+        const onKeyUp = (event: KeyboardEvent): void => {
+          if (event.key !== " " || resumePan === undefined) return;
+          canvas.skipTargetFind = resumePan.skipTargetFind;
+          canvas.selection = resumePan.selection;
+          canvas.defaultCursor = resumePan.defaultCursor;
+          canvas.setCursor(resumePan.cursor);
+          resumePan = undefined;
+        };
+        window.addEventListener("keydown", onKeyDown);
+        window.addEventListener("keyup", onKeyUp);
+        removePan = () => {
+          window.removeEventListener("keydown", onKeyDown);
+          window.removeEventListener("keyup", onKeyUp);
+        };
+      },
+    });
     manager.beginPlacement(port);
 
-    const panClaim = vi.fn();
-    window.addEventListener("keydown", panClaim);
-
     window.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+    // What the pan captured is the pre-arm canvas, never the armed one.
+    expect(seen).toEqual([false, true, "grab"]);
+    // The pan owns the canvas for the hold; the press is its gesture.
     pointer(canvas, "mouse:down", 100, 100);
     pointer(canvas, "mouse:up", 100, 100);
+    expect(port.onPlace).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
 
-    // Whatever runs after this listener sees the pre-arm canvas, not the
-    // armed one.
-    expect(panClaim).toHaveBeenCalledOnce();
-    expect(panClaim).toHaveBeenCalledWith(
-      expect.objectContaining({ key: " " }),
-    );
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: " " }));
     expect([
       canvas.skipTargetFind,
       canvas.selection,
       canvas.defaultCursor,
     ]).toEqual([false, true, "grab"]);
-
-    window.dispatchEvent(new KeyboardEvent("keyup", { key: " " }));
-    expect(port.onPlace).not.toHaveBeenCalled();
-    expect(save).not.toHaveBeenCalled();
-    window.removeEventListener("keydown", panClaim);
+    expect(canvas.upperCanvasEl.style.cursor).toBe("default");
+    removePan();
     manager.destroy();
   });
 
@@ -713,6 +762,35 @@ describe("placing a text by click or drag", () => {
     expect(canvas.skipTargetFind).toBe(false);
     expect(canvas.selection).toBe(true);
 
+    canvas.upperCanvasEl.removeEventListener("contextmenu", menu);
+    manager.destroy();
+  });
+
+  it("does not carry context-menu suppression into a later press", () => {
+    // A middle press while armed disarms and asks for suppression, but a
+    // middle click never fires `contextmenu`. If the flag outlived that
+    // press it would swallow the next, unrelated right-click's menu.
+    const { canvas, manager, port } = placementScene();
+    const menu = vi.fn();
+    canvas.upperCanvasEl.addEventListener("contextmenu", menu);
+
+    pointer(canvas, "mouse:down", 100, 100, 1);
+    expect(port.onPlace).not.toHaveBeenCalled();
+    // The next press is a new gesture, unarmed now, and must clear the flag.
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:up", 100, 100);
+
+    // Fabric's own contextmenu listener also prevents the default, so this
+    // case takes its suppression out of the picture to isolate the manager's.
+    canvas.stopContextMenu = false;
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+    });
+    canvas.upperCanvasEl.dispatchEvent(event);
+
+    expect(menu).toHaveBeenCalledOnce();
+    expect(event.defaultPrevented).toBe(false);
     canvas.upperCanvasEl.removeEventListener("contextmenu", menu);
     manager.destroy();
   });

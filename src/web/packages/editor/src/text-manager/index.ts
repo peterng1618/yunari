@@ -354,6 +354,9 @@ export function createTextManager(
   };
 
   const onPlacementDown = (event: PlacementPointerEvent): void => {
+    // Any press starts a new gesture, armed or not: a suppression flag left by
+    // a press whose context menu never came must not swallow a later menu.
+    suppressContextMenu = false;
     if (placement === undefined) return;
     // A right or middle press is a cancel, never a placement: the primary
     // button is the whole gesture. Its context menu arrives later, so the
@@ -363,7 +366,7 @@ export function createTextManager(
       disarmPlacement();
       return;
     }
-    suppressContextMenu = false;
+
     // Someone else owns the canvas (the viewport's space-held pan). This press
     // is theirs, so the tool cancels rather than placing over their claim.
     if (claimedElsewhere) {
