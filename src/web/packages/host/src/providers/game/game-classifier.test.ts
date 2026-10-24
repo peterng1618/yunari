@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { InstalledGame } from "./catalogue/catalogue.js";
 import {
-  classifyForeground,
-  NON_GAME_PROCESSES,
   type ClassifierReading,
   type ClassifierState,
+  classifyForeground,
+  NON_GAME_PROCESSES,
 } from "./game-classifier.js";
 
 function game(
@@ -214,21 +214,19 @@ describe("classifyForeground", () => {
       const readdir = vi.fn(async () => ["pak0.pak"]);
 
       await expect(
-        classifyForeground(
-          reading({ path: "C:\\Games\\UE\\game.exe" }),
-          [],
-          { fullscreenSamples: 0, readdir },
-        ),
+        classifyForeground(reading({ path: "C:\\Games\\UE\\game.exe" }), [], {
+          fullscreenSamples: 0,
+          readdir,
+        }),
       ).resolves.toEqual({ running: false, evidence: "none" });
 
       readdir.mockResolvedValue(["pak0.pak", "Engine"]);
 
       await expect(
-        classifyForeground(
-          reading({ path: "C:\\Games\\UE\\game.exe" }),
-          [],
-          { fullscreenSamples: 0, readdir },
-        ),
+        classifyForeground(reading({ path: "C:\\Games\\UE\\game.exe" }), [], {
+          fullscreenSamples: 0,
+          readdir,
+        }),
       ).resolves.toEqual({ running: true, evidence: "runtime" });
     });
 

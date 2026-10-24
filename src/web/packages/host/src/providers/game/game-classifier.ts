@@ -86,7 +86,8 @@ function stem(value: string): string {
 
 function isNonGame(reading: ClassifierReading): boolean {
   const excluded = new Set<string>(NON_GAME_PROCESSES);
-  if (reading.name !== undefined && excluded.has(stem(reading.name))) return true;
+  if (reading.name !== undefined && excluded.has(stem(reading.name)))
+    return true;
   return reading.path !== undefined && excluded.has(stem(reading.path));
 }
 
@@ -138,8 +139,7 @@ async function hasRuntimeMarker(
   if (named) return true;
 
   return (
-    names.has("engine") &&
-    [...names].some((entry) => entry.endsWith(".pak"))
+    names.has("engine") && [...names].some((entry) => entry.endsWith(".pak"))
   );
 }
 
@@ -151,7 +151,8 @@ function isGameWindow(
 
   if (windowClass === undefined) return false;
   if (state.fullscreenSamples < 2) return false;
-  if (reading.fullscreen !== true && reading.d3dFullscreen !== true) return false;
+  if (reading.fullscreen !== true && reading.d3dFullscreen !== true)
+    return false;
 
   if ((GAME_WINDOW_CLASSES as readonly string[]).includes(windowClass)) {
     return true;
@@ -181,7 +182,8 @@ export async function classifyForeground(
     return { running: true, evidence: "runtime" };
   }
 
-  if (isGameWindow(reading, state)) return { running: true, evidence: "window" };
+  if (isGameWindow(reading, state))
+    return { running: true, evidence: "window" };
 
   return NONE;
 }
