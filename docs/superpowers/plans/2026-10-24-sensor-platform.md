@@ -617,9 +617,11 @@ Weather runs before custom sources so the HTTP failure, cache and image paths ar
 - Modify: `packages/host/src/server.ts` (tick)
 - Modify: every `SensorProvider.sample` implementation (clock, library, lhm, weather)
 - Modify: `packages/host/src/providers/weather/conditions.ts`
+- Modify: `packages/player/src/main.ts`, `packages/player/src/session.ts` (the language the player sends)
 - Test: `packages/host/src/providers/registry.test.ts`
 - Test: `packages/host/src/providers/weather/conditions.test.ts`
 - Test: `packages/host/src/server.test.ts`
+- Test: `packages/player/src/session.test.ts`, `packages/player/src/main.dom.test.ts`
 
 **Interfaces:**
 - Consumes: `WeatherProvider`.
@@ -640,14 +642,14 @@ Weather runs before custom sources so the HTTP failure, cache and image paths ar
   - Two asks with the same assignment and same language produce one group.
   - `weather.condition` for language `de` returns the German table entry; an unlisted language returns English.
   - Two displays, same assignment, languages `de` and `en`, receive different `weather.condition` text while `weather.temp` is the same number in both payloads — localization changes text only.
-  - The server passes each display's active theme language (`metadata.themeLanguage`) into its ask; a display with no theme passes none.
+  - The player sends its loaded theme's `metadata.themeLanguage` on the sample stream URL; the host records it on that connection and passes it into the display's ask. A player that sends none, or an unusable value, produces an ask with no language.
 - [ ] **Step 2: Run the tests and confirm they fail**
 
   Run: `npx vitest run packages/host/src/providers/registry.test.ts`
   Expected: FAIL on the old signature/grouping.
 
 - [ ] **Step 3: Implement the context**
-  Replace the third positional assignment with `SampleContext` in every provider and caller; keep assignment behaviour identical. Add `language` to `DisplayAsk` and the group key. Resolve the language from the display's active theme record (the same read `currentAssignment` already performs) without a second theme read per connection.
+  Replace the third positional assignment with `SampleContext` in every provider and caller; keep assignment behaviour identical. Add `language` to `DisplayAsk` and the group key. The language arrives from the player, which has already loaded the theme it is showing: `startHostedTheme` sends `lang` beside `keys`, and the host stores it on the `SseConnection`. The host does not read the theme record per tick — that would be a disk read of up to 32 MiB per display per second, and no change notification exists to cache it against.
 - [ ] **Step 4: Run the tests**
 
   Run: `npx vitest run packages/host/src/providers/registry.test.ts packages/host/src/providers/weather/conditions.test.ts packages/host/src/server.test.ts`

@@ -94,7 +94,9 @@ policy to replace a `Record<number, string>` lookup.
 `\u0000` plus the language, so equal devices in two languages are two polls.
 A display takes the language of its most recently added connection that has
 one, and the host accepts a value only when it matches
-`^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$` and is at most 35 characters — anything
+`^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$` and is at most 64 characters, the
+ceiling the published theme schema gives `metadata.themeLanguage`, so a theme
+the envelope accepts is never silently localized in the wrong language — anything
 else is dropped rather than refused, because a bad tag is not a reason to stop
 a display. `conditionText` resolves a region tag by its primary subtag and
 falls back to the English table; weather's timer, backoff and staleness rules
