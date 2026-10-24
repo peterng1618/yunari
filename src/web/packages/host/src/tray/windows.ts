@@ -1,7 +1,8 @@
 /**
  * Windows tray adapter: a hidden PowerShell process hosting a WinForms
  * NotifyIcon. The model is rendered by this process, never mirrored in it —
- * Node owns the items so a click maps back to the action by current index.
+ * Node owns the items so a click maps back to the action by generation and
+ * index, then to the array the user actually saw.
  */
 
 import { spawn } from "node:child_process";
@@ -48,6 +49,12 @@ const TOOLTIP_MAX = 63;
 
 /** How long `kill` keeps the tray informative before the process is killed. */
 const KILL_GRACE_MS = 300;
+
+/** Stderr kept for a startup failure message. */
+const STDERR_TAIL_MAX = 500;
+
+/** Old menu generations kept so a click on a just-replaced menu still maps. */
+const GENERATION_HISTORY = 5;
 
 /** Kept on a background C# thread: `Console.In` blocks, so reading it on the
  *  UI thread would freeze the menu. `menu`/`tooltip`/`kill` arrive on stdin. */
@@ -131,6 +138,8 @@ const CSHARP_TRAY = [
   "        }",
   '        if (message == null || !message.ContainsKey("action")) return;',
   '        string action = Convert.ToString(message["action"]);',
+  "        int generation = 0;",
+  '        if (message.ContainsKey("generation")) generation = Convert.ToInt32(message["generation"]);',
   '        if (action == "kill")',
   "        {",
   "            Quit();",
@@ -145,11 +154,11 @@ const CSHARP_TRAY = [
   "        }",
   '        if (action == "menu" && message.ContainsKey("items"))',
   "        {",
-  '            SetMenu(message["items"] as IEnumerable);',
+  '            SetMenu(message["items"] as IEnumerable, generation);',
   "        }",
   "    }",
   "",
-  "    private static void SetMenu(IEnumerable entries)",
+  "    private static void SetMenu(IEnumerable entries, int generation)",
   "    {",
   "        if (menu == null || entries == null) return;",
   "        menu.Items.Clear();",
@@ -157,7 +166,7 @@ const CSHARP_TRAY = [
   "        foreach (Dictionary<string, object> item in entries)",
   "        {",
   "            // Every wire item takes an index, separators included; Node maps",
-  "            // the click index back onto the same array.",
+  "            // the click index back onto the array of the same generation.",
   "            int captured = index;",
   "            index += 1;",
   '            if (item.ContainsKey("separator") && item["separator"] is bool && (bool)item["separator"])',
@@ -172,9 +181,10 @@ const CSHARP_TRAY = [
   "            entry.Enabled = enabled;",
   "            entry.Checked = isChecked;",
   "            int clickIndex = captured;",
+  "            int clickGeneration = generation;",
   "            entry.Click += delegate",
   "            {",
-  '                Emit(new Dictionary<string, object> { { "type", "click" }, { "index", clickIndex } });',
+  '                Emit(new Dictionary<string, object> { { "type", "click" }, { "generation", clickGeneration }, { "index", clickIndex } });',
   "            };",
   "            menu.Items.Add(entry);",
   "        }",
@@ -229,7 +239,10 @@ export function powershellEncodedCommand(script: string): string {
 }
 
 /** Serialises only what the tray renders; actions stay in this process. */
-export function windowsMenuMessage(items: readonly TrayMenuItem[]): string {
+export function windowsMenuMessage(
+  items: readonly TrayMenuItem[],
+  generation: number,
+): string {
   const wire = items.map((item) => {
     const entry: Record<string, unknown> = {
       title: item.title,
@@ -239,7 +252,7 @@ export function windowsMenuMessage(items: readonly TrayMenuItem[]): string {
     if (item.separator !== undefined) entry["separator"] = item.separator;
     return entry;
   });
-  return JSON.stringify({ action: "menu", items: wire });
+  return JSON.stringify({ action: "menu", generation, items: wire });
 }
 
 function messageOf(error: unknown): string {
@@ -251,6 +264,7 @@ const defaultSpawn: SpawnTrayProcess = (executable, args, options) =>
 
 interface TrayLine {
   readonly type?: unknown;
+  readonly generation?: unknown;
   readonly index?: unknown;
   readonly message?: unknown;
 }
@@ -285,9 +299,16 @@ export function startWindowsTray(
     }
 
     let items: readonly TrayMenuItem[] = [];
+    /** The script rebuilds on its own timer, so a click echoes the generation
+     *  it was displayed from and resolves against those items, not the newest. */
+    let generation = 0;
+    const generations = new Map<number, readonly TrayMenuItem[]>();
     let started = false;
     let failed = false;
     let closing = false;
+    let lost = false;
+    let dead = false;
+    let stderrTail = "";
     let buffer = "";
     let killTimer: NodeJS.Timeout | undefined;
 
@@ -300,18 +321,27 @@ export function startWindowsTray(
     }
 
     function setMenu(next: readonly TrayMenuItem[]): void {
+      if (dead) return;
       items = next;
-      send(windowsMenuMessage(next));
+      generation += 1;
+      generations.set(generation, next);
+      for (const previous of generations.keys()) {
+        if (previous <= generation - GENERATION_HISTORY) {
+          generations.delete(previous);
+        }
+      }
+      send(windowsMenuMessage(next, generation));
     }
 
     function setTooltip(text: string): void {
+      if (dead) return;
       send(
         JSON.stringify({ action: "tooltip", text: text.slice(0, TOOLTIP_MAX) }),
       );
     }
 
     function close(): void {
-      if (closing) return;
+      if (closing || dead) return;
       closing = true;
       send(JSON.stringify({ action: "kill" }));
       killTimer = setTimeout(() => child.kill(), KILL_GRACE_MS);
@@ -328,11 +358,26 @@ export function startWindowsTray(
       }
     };
 
+    const stderrNote = (): string => {
+      const tail = stderrTail.replace(/\s+/g, " ").trim();
+      return tail === "" ? "" : ` (${tail})`;
+    };
+
     const failStartup = (reason: string): void => {
+      if (failed) return;
       failed = true;
+      dead = true;
       quitTimers();
       child.kill();
-      reject(new Error(reason));
+      reject(new Error(`${reason}${stderrNote()}`));
+    };
+
+    const reportLost = (reason: string): void => {
+      if (lost || closing) return;
+      lost = true;
+      dead = true;
+      quitTimers();
+      onLost(reason);
     };
 
     const readyTimer = setTimeout(() => {
@@ -359,8 +404,15 @@ export function startWindowsTray(
       }
 
       if (message.type === "click") {
-        if (typeof message.index !== "number") return;
-        const item = items[message.index];
+        if (dead || typeof message.index !== "number") return;
+        const source =
+          typeof message.generation === "number"
+            ? generations.get(message.generation)
+            : items;
+        // A generation older than the history is too stale to act on safely;
+        // guessing against today's items is how a click lands on the wrong row.
+        if (source === undefined) return;
+        const item = source[message.index];
         if (item === undefined || !item.enabled || item.action === undefined) {
           return;
         }
@@ -375,8 +427,8 @@ export function startWindowsTray(
             : "the tray failed";
         if (!started && !failed) {
           failStartup(reason);
-        } else if (!closing) {
-          onLost(reason);
+        } else {
+          reportLost(reason);
         }
       }
     }
@@ -391,30 +443,28 @@ export function startWindowsTray(
         end = buffer.indexOf("\n");
       }
     });
-    child.stderr.on("data", () => undefined);
+    child.stderr.on("data", (chunk) => {
+      stderrTail = `${stderrTail}${chunk.toString()}`.slice(-STDERR_TAIL_MAX);
+    });
     child.stdin.on("error", () => undefined);
 
     child.once("exit", (code) => {
       quitTimers();
       const detail = code === null ? "unknown" : String(code);
-      if (!started && !failed) {
-        failed = true;
-        reject(
-          new Error(`the tray exited with code ${detail} before it started`),
-        );
+      if (!started) {
+        failStartup(`the tray exited with code ${detail} before it started`);
         return;
       }
-      if (!closing) onLost(`the tray exited with code ${detail}`);
+      reportLost(`the tray exited with code ${detail}`);
     });
 
     child.once("error", (error) => {
       quitTimers();
-      if (!started && !failed) {
-        failed = true;
-        reject(new Error(`the tray failed to start: ${messageOf(error)}`));
+      if (!started) {
+        failStartup(`the tray failed to start: ${messageOf(error)}`);
         return;
       }
-      if (!closing) onLost(`the tray failed: ${messageOf(error)}`);
+      reportLost(`the tray failed: ${messageOf(error)}`);
     });
   });
 }
