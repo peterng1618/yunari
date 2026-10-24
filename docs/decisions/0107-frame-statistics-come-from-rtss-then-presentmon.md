@@ -1,7 +1,9 @@
 # 0107 — Frame statistics come from RTSS memory, then a PresentMon shell in 6.2
 
 - **Date:** 2026-10-24
-- **Status:** accepted
+- **Status:** accepted; amended by
+  [0110](0110-the-tray-may-start-rtss-on-request.md) for the tray's explicit
+  Start action. All other findings stand.
 - **Paths:** `src/web/packages/host/src/providers/frame/rolling.ts`,
   `src/web/packages/host/src/providers/frame/rtss.ts`,
   `src/web/packages/host/src/providers/frame/presentmon.ts`,
@@ -172,6 +174,13 @@ test pins the marshaler's offsets, and a synthetic entry array proves selection
 and ring traversal without RTSS. The mapping name and signature are checked and
 an absent RTSS is a reported `unavailable`, never a zero reading. PresentMon is
 deferred to Task 6.2, where its binary and licence are the subject.
+
+## Amendment (0110)
+
+The tray may start RTSS when the owner clicks its Start row. It still never
+auto-starts, injects into a process or hooks a game, and it never stops RTSS.
+The reading and reporting decisions above are unchanged; starting RTSS only
+removes the absence the adapter already reports.
 
 ## PresentMon extension (Task 6.2)
 
