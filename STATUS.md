@@ -11,7 +11,7 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Active work
 
-- **Tasks 1–6 are done** (menu model, external programs, sign-in entry, both tray adapters, controller); Phase 1 is complete.
+- **Tasks 1–7 are done** (menu model, external programs, sign-in entry, both tray adapters, controller, CLI flags); Phases 1–2 complete.
 - **Controller** polls every 5 s, sends only a changed menu or tooltip, dispatches clicks and shows action or snapshot failures as 10 s notices.
 - **Windows adapter** renders the model through a hidden PowerShell WinForms `NotifyIcon` fed by JSON lines on stdin.
 - **Linux adapter** stages the pinned `systray2@2.1.4` x86-64 binary; no new npm dependency and no runtime install.
@@ -20,15 +20,14 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Last completed change
 
-- **Controller:** `host/src/tray/controller.ts` polls the snapshot every 5 s, resends only a changed menu or tooltip, dispatches clicks and keeps failures as 10 s notices.
-- **Selector:** `host/src/tray/index.ts` refuses macOS and headless Linux before opening a view, then passes `spawnProcess` and both callbacks to the chosen adapter.
-- **Stop:** `exit`, a repeated `stop()` and a stop during a refresh are all no-ops after the first close; `onLost` remains the adapter's call.
-- **Tests:** 15 new tests; all 70 tray tests pass.
+- **CLI:** `host/src/cli/args.ts` learns `--tray` and `--rtss-exe`; RTSS resolves like `--lhm-exe` and rejects a missing path.
+- **Ordering:** `--tray` forces `openBrowser` false at return, so a later flag cannot reopen a browser the tray host must not show.
+- **Tests:** 4 new CLI tests; all 44 in `args.test.ts` pass.
 - **Gates:** host typecheck, Biome and `status:check` exit 0.
 
 ## Next
 
-1. Task 7+: CLI `--tray` flags, editor deep links and host wiring.
+1. Task 8+: open URLs and folders, wire the tray into the host, editor deep links.
 2. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
 3. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
 

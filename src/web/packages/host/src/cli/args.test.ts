@@ -26,6 +26,7 @@ describe("parseArgs", () => {
         host: DEFAULT_HOST,
         hostGiven: false,
         openBrowser: true,
+        tray: false,
         themesDir: DEFAULT_THEMES_DIR,
         settingsDir: DEFAULT_SETTINGS_DIR,
         lhmUrl: DEFAULT_LHM_URL,
@@ -88,6 +89,31 @@ describe("parseArgs", () => {
     expect(run("--lhm-exe")).toMatchObject({ kind: "error" });
   });
 
+  it("runs a tray host without opening a browser", () => {
+    expect(run("--tray")).toMatchObject({
+      options: { tray: true, openBrowser: false },
+    });
+  });
+
+  it("reads a custom RTSS executable", () => {
+    expect(run("--rtss-exe", "C:\\Games\\RTSS.exe")).toMatchObject({
+      options: { rtssExecutable: path.resolve("C:\\Games\\RTSS.exe") },
+    });
+  });
+
+  it("refuses --rtss-exe with no path", () => {
+    expect(run("--rtss-exe")).toEqual({
+      kind: "error",
+      message: "--rtss-exe needs a path to RTSS.exe.",
+    });
+  });
+
+  it("documents the tray flags", () => {
+    const help = run("--help");
+    expect(help.kind === "message" ? help.text : "").toContain("--tray");
+    expect(help.kind === "message" ? help.text : "").toContain("--rtss-exe");
+  });
+
   it.each(["--no-browser", "-n"])("%s suppresses the browser", (flag) => {
     expect(run(flag)).toMatchObject({ options: { openBrowser: false } });
   });
@@ -110,6 +136,7 @@ describe("parseArgs", () => {
         host: "0.0.0.0",
         hostGiven: true,
         openBrowser: false,
+        tray: false,
         themesDir: path.resolve("my-themes"),
         settingsDir: DEFAULT_SETTINGS_DIR,
         lhmUrl: DEFAULT_LHM_URL,
