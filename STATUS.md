@@ -19,10 +19,9 @@ Branch: `feat/game-identity`
 
 ## Last completed change
 
-- **Task 2.1 landed** (`424812dd`, proof `f3ad3b37`): helper reports `class`, `fullscreen`, `d3dFullscreen` and resolves the UWP `CoreWindow` child; 31 helper tests pass.
-- **Live proof:** the helper emitted a real line (`Chrome_WidgetWin_1`, both booleans false), and the reviewer exercised the frame-host branch with Calculator (`Windows.UI.Core.CoreWindow`, `CalculatorApp.exe`).
-- **Unproven live:** `fullscreen:true` and `d3dFullscreen:true`; their constants and comparisons are reviewed but never observed.
-- **Task 2.2 (classifier) is running**, then presence switches to it.
+- **Task 2.2 landed** (`dc829c6c`, fix `65f119e2`): pure classifier over catalogue, runtime markers and window evidence; 24 tests pass, host typecheck exit 0.
+- **Review:** spec PASS, no must-fix; exact-executable match now beats an install-root match, longest root wins, marker matching is case-proven, catalogue never lists the exe directory.
+- **Task 2.3 is running**: `game.running` follows the classifier; a catalogued game supplies its name without a store request; Phase 2 gate after it.
 - **No tray icon exists**: host lifetime remains terminal-owned (`host/src/main.ts`), and this plan does not add one.
 
 ## Next
