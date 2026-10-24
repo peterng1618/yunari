@@ -26,7 +26,7 @@ preview does. Two outcomes define success:
 game when one of these holds, in order:
 
 1. **Catalogue match** — its executable sits inside an install root read from a
-   store or launcher on this PC (`steam`, `epic`, `gog`, `itch`, `xbox`,
+   store or launcher on this PC (`steam`, `epic`, `gog`, `itch`, `xbox`, `appx`,
    `uninstall`).
 2. **Runtime marker** — its own directory holds a game-runtime artefact
    (`steam_api64.dll`, `steam_api.dll`, `EOSSDK-Win64-Shipping.dll`,
@@ -41,6 +41,14 @@ No catalogue, marker or window signal means `game.running` is `false`.
 `game.app` still reports the executable's file name, and `game.name` still asks
 the store only when demanded, exactly as decision 0109 left it. The store is
 never consulted to decide whether something is a game.
+
+**Packaged (Microsoft Store / Game Pass) apps are resolved past their host.**
+A UWP title's foreground window is an `ApplicationFrameWindow` owned by
+`ApplicationFrameHost.exe`, not the game process. The helper therefore reports
+the child `Windows.UI.Core.CoreWindow`'s process and class when the foreground
+class is `ApplicationFrameWindow`; the frame host never reaches the classifier.
+If the child cannot be found, the reading names the frame host and the
+classifier answers `false` rather than claiming a game.
 
 **Ruling on the user's question:** "silently search Steam first" is rejected.
 It costs one request per foreground change, sends the names of non-game
@@ -59,6 +67,7 @@ Sources and the fields read:
 | GOG | `HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\*` via PowerShell | `gameName`, `path`, `exe`, `dependsOn` |
 | itch | `%APPDATA%\itch\apps\<game>\.itch.toml` | install root and its launch executable(s) |
 | Xbox | `C:\XboxGames\<Title>\Content\MicrosoftGame.config` | `Executable` (or the sole `.exe` under `Content`) |
+| Microsoft Store | `Get-AppxPackage` through PowerShell | `Name`, `PackageFullName`, `InstallLocation`, `IsFramework`; a GDK title also has `MicrosoftGame.config` |
 | Generic | uninstall keys with `InstallLocation` | `DisplayName`, `InstallLocation` |
 
 A DLC or incomplete install is skipped (Epic `MainGameAppName` mismatch,

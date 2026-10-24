@@ -76,7 +76,20 @@
 - [ ] Run tests; PASS.
 - [ ] Commit: `feat(host): read itch and uninstall-registry installs`.
 
-#### Task 1.4: One catalogue, deduplicated
+#### Task 1.4: Microsoft Store (Appx) reader
+
+**Files:**
+- Modify: `game-catalogue.ts`, `game-catalogue.test.ts`
+
+**Interfaces:**
+- Produces: `readAppxGames(seams)`, source `"appx"` in `InstalledGame`.
+
+- [ ] Failing tests: a non-framework package with an `InstallLocation`; a framework package skipped; a package with no install location skipped; a GDK package whose `MicrosoftGame.config` names an executable; a non-array/failed answer yields `[]`.
+- [ ] Implement one `runPowerShell` call running `Get-AppxPackage` and projecting `Name`, `PackageFullName`, `InstallLocation`, `IsFramework`, plus a `Test-Path` for `MicrosoftGame.config` inside the same call. Skip frameworks and empty install locations; `exes` = the config's executable under `InstallLocation` when the config is readable, else `[]` (the install root still matches).
+- [ ] Run tests; PASS.
+- [ ] Commit: `feat(host): read Microsoft Store packages into the catalogue`.
+
+#### Task 1.5: One catalogue, deduplicated
 
 **Files:**
 - Modify: `game-catalogue.ts`, `game-catalogue.test.ts`, `src/web/packages/host/src/providers/game/steam-library.ts` (only if an adapter is needed)
@@ -105,6 +118,8 @@
 
 - [ ] Failing tests: parse a full line; parse an old line; a non-boolean field is dropped rather than coerced.
 - [ ] Extend the P/Invoke block with `GetClassName`, `GetWindowRect`, `MonitorFromWindow`, `GetMonitorInfo`, `SHQueryUserNotificationState`; emit the three fields.
+- [ ] Resolve packaged apps: when the foreground class is `ApplicationFrameWindow`, find the child `Windows.UI.Core.CoreWindow` (`FindWindowEx`) and report that window's pid, path, name and class instead of the frame host. A missing child keeps the frame host (classifier then answers false).
+- [ ] Failing tests for the parse side: a frame-host line is not special-cased in the parser (the helper resolves it); a line whose class is `ApplicationFrameWindow` still parses.
 - [ ] Run helper tests; PASS. (The PowerShell script body is not executed by unit tests; state that in the report.)
 - [ ] Commit: `feat(host): report window class and fullscreen state from the foreground helper`.
 
@@ -117,7 +132,7 @@
 **Interfaces:**
 - Produces: `classifyForeground(reading, catalogue, state)` returning `GameEvidence`; `GAME_WINDOW_CLASSES`, `GAME_MARKER_FILES`, `NON_GAME_PROCESSES` exported for tests.
 
-- [ ] Failing tests: catalogue match by install root and by exact executable; marker file present; class+fullscreen on the second sample only; fullscreen browser (`chrome`, class `Chrome_WidgetWin_1`) false; class alone false; excluded process false even with markers.
+- [ ] Failing tests: catalogue match by install root and by exact executable; an `appx` install-root match (Microsoft Store / Game Pass); an unresolved `ApplicationFrameWindow` reading is false; marker file present; class+fullscreen on the second sample only; fullscreen browser (`chrome`, class `Chrome_WidgetWin_1`) false; class alone false; excluded process false even with markers.
 - [ ] Implement with a bounded directory listing for markers (injected `readdir`), normalized Windows path comparisons, and the sample counter supplied by the caller.
 - [ ] Run tests; PASS.
 - [ ] Commit: `feat(host): classify a foreground process as a game locally`.
@@ -222,6 +237,6 @@
 
 ## Self-review
 
-- Spec coverage: D1 (2.2/2.3), D2 (1.1–1.4), D3 (2.2), D4 (out of scope, 5.2), D5 (3.1/3.2), D6 (4.1/4.2). Acceptance 1–5 map to 2.3, 1.4/2.3, 2.2/2.3, 4.2, phase gates.
+- Spec coverage: D1 (2.2/2.3), D2 (1.1–1.5), D3 (2.2), D4 (out of scope, 5.2), D5 (3.1/3.2), D6 (4.1/4.2). Acceptance 1–5 map to 2.3, 1.5/2.3, 2.2/2.3, 4.2, phase gates.
 - Every task ends with a runnable check; no predicted test counts.
 - Types named once: `InstalledGame`, `CatalogueSeams`, `GameEvidence`, `descriptorsFromWire`, `loadDisplayCatalogue`.

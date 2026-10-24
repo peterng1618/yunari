@@ -61,6 +61,11 @@ Found, all readable without admin:
   `exe`, `dependsOn` (DLC marker).
 - itch: `%APPDATA%\itch\apps\<game>\` with `.itch.toml`.
 - Xbox: `C:\XboxGames\<Title>\Content\MicrosoftGame.config`.
+- Microsoft Store / Game Pass: `Get-AppxPackage` through PowerShell gives
+  `Name`, `PackageFullName`, `InstallLocation`, `IsFramework`; GDK titles carry
+  `MicrosoftGame.config` in that location. UWP windows are hosted by
+  `ApplicationFrameHost.exe`, so the helper resolves the child
+  `Windows.UI.Core.CoreWindow` to reach the game's own process.
 - Generic installers: uninstall registry keys carrying `InstallLocation` and
   `DisplayIcon`.
 - `SHQueryUserNotificationState` returns `QUNS_RUNNING_D3D_FULL_SCREEN` for a
