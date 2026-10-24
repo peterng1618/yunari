@@ -21,6 +21,11 @@ import { DEFAULT_THEMES_DIR } from "./cli/args.js";
 import type { HostBinding } from "./cli/hosting.js";
 import type { ListenableServer } from "./cli/net.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
+import {
+  ARTWORK_NAME,
+  type ArtworkCache,
+  artworkContentType,
+} from "./providers/media/artwork.js";
 import { redactForBrowser } from "./providers/provider.js";
 import {
   type DisplayAsk,
@@ -216,6 +221,9 @@ export interface HostServerOptions {
   /** The asset finder's sources. Omitted when this host serves none; the
    *  routes then say so rather than falling through to the static 404. */
   readonly assets?: AssetRouteOptions;
+  /** The media provider's artwork files. Omitted when this host reads no
+   *  media; the route then answers 404 rather than inventing a picture. */
+  readonly artwork?: ArtworkCache;
   /** The Wallpaper Engine library on this PC. Omitted when this host serves
    *  none, and the listing then says it is not installed. */
   readonly wallpaperEngine?: WallpaperEngineSource;
@@ -938,6 +946,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const credentials = options.credentials;
   const knownCredentials = options.knownCredentials ?? KNOWN_CREDENTIALS;
   const assets = options.assets;
+  const artwork = options.artwork;
   const wallpaperEngine = options.wallpaperEngine;
   const activeTheme = options.activeTheme;
   const thumbnails = options.thumbnails;
@@ -2239,6 +2248,50 @@ export function createHostServer(options: HostServerOptions): HostServer {
         "x-content-type-options": "nosniff",
       });
       response.end(bytes);
+      return;
+    }
+
+    // Media artwork is a content-addressed cache file, so the name is the
+    // whole allow-list: 64 lowercase hex digits and an image extension. A
+    // display reads it through the same credential as theme asset bytes;
+    // loopback is this PC and needs none. An unknown or malformed name is a
+    // 404, never a neighbouring file and never a 500.
+    if (url.pathname.startsWith("/api/media/artwork/")) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+
+      const name = url.pathname.slice("/api/media/artwork/".length);
+
+      if (!ARTWORK_NAME.test(name)) {
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      if (
+        !isLoopbackRemote(request.socket.remoteAddress) &&
+        (await displayFor(request, url, displays)) === undefined
+      ) {
+        sendText(response, 403, "This display is not paired with the host.");
+        return;
+      }
+
+      const stored =
+        artwork === undefined ? undefined : await artwork.read(name);
+
+      if (stored === undefined) {
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      response.writeHead(200, {
+        "content-type": artworkContentType(stored.ext),
+        "content-length": stored.bytes.byteLength,
+        "cache-control": "public, max-age=31536000, immutable",
+        "x-content-type-options": "nosniff",
+      });
+      response.end(stored.bytes);
       return;
     }
 

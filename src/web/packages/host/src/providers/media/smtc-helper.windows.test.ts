@@ -60,7 +60,13 @@ function firstLine(): Promise<FirstLine> {
       id: "smtc",
       script: SMTC_SCRIPT,
       timeoutMs: FIRST_LINE_MS + 5_000,
-      onLine: (line) => finish({ line }),
+      // The helper also emits the endpoint audio line every poll; this case is
+      // about the session line, so audio is not its first answer.
+      onLine: (line) => {
+        if ((JSON.parse(line) as { kind?: unknown }).kind !== "audio") {
+          finish({ line });
+        }
+      },
       onExit: (reason, kind) => {
         if (kind !== "stopped") finish({ failure: reason });
       },
@@ -93,8 +99,10 @@ function collectArtworkLines(): Promise<Collection> {
       script: smtcScript({ artwork: true }),
       timeoutMs: ARTWORK_WINDOW_MS + 5_000,
       onLine: (line) => {
-        lines.push(line);
         const kind = (JSON.parse(line) as { kind?: unknown }).kind;
+        // Audio is a separate reading; this window classifies the media half.
+        if (kind === "audio") return;
+        lines.push(line);
         if (kind === "artwork" || kind === "none") finish();
       },
       onExit: (reason, kind) => {

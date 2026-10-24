@@ -71,8 +71,28 @@ Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
 $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties,Windows.Media.Control,ContentType=WindowsRuntime]
 
-# AsTask has a non-generic IAsyncAction overload of the same arity; only the
-# generic definition can be closed with MakeGenericMethod.
+# The endpoint volume and mute through CoreAudio, compiled by Add-Type. No
+# endpoint means neither key, never zero and unmuted. Compact because the whole
+# script travels as one -EncodedCommand, which Windows caps near 32k chars.
+$AudioInterop = @'
+using System;using System.Runtime.InteropServices;
+public static class YunariAudio{
+[ComImport,Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]class E{}
+[ComImport,Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface N{[PreserveSig]int X0();[PreserveSig]int GetDefaultAudioEndpoint(int f,int r,out D d);}
+[ComImport,Guid("D666063F-1587-4E43-81F1-B948E807363F"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface D{[PreserveSig]int Activate(ref Guid i,int c,IntPtr p,out V v);}
+[ComImport,Guid("5CDF2C82-841E-4546-9722-0CF74078229A"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface V{[PreserveSig]int X0();[PreserveSig]int X1();[PreserveSig]int X2();[PreserveSig]int X3();[PreserveSig]int X4();[PreserveSig]int X5();[PreserveSig]int GetMasterVolumeLevelScalar(out float l);[PreserveSig]int X7();[PreserveSig]int X8();[PreserveSig]int X9();[PreserveSig]int X10();[PreserveSig]int SetMute([MarshalAs(UnmanagedType.Bool)]bool m,IntPtr c);[PreserveSig]int GetMute([MarshalAs(UnmanagedType.Bool)]out bool m);}
+static readonly Guid I=new Guid("5CDF2C82-841E-4546-9722-0CF74078229A");const int C=23;
+public static bool TryRead(out int v,out bool m){v=0;m=false;try{var n=(N)new E();D d;if(n.GetDefaultAudioEndpoint(1,1,out d)!=0||d==null)return false;Guid i=I;V a;if(d.Activate(ref i,C,IntPtr.Zero,out a)!=0||a==null)return false;float l;if(a.GetMasterVolumeLevelScalar(out l)!=0)return false;bool b;if(a.GetMute(out b)!=0)return false;v=(int)Math.Round(l*100.0);m=b;return true;}catch{return false;}}}
+'@
+$AudioAvailable = $false
+try {
+  Add-Type -TypeDefinition $AudioInterop -Language CSharp
+  $AudioAvailable = $true
+} catch {
+  $AudioAvailable = $false
+}
+
+# Only the generic AsTask overload can be closed with MakeGenericMethod.
 $AsTaskMethod = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
   $_.Name -eq 'AsTask' -and $_.IsGenericMethodDefinition -and $_.GetParameters().Count -eq 1 -and $_.GetGenericArguments().Count -eq 1
 } | Select-Object -First 1
@@ -90,7 +110,7 @@ function Convert-PlaybackState($playbackStatus) {
   return 'stopped'
 }
 
-function Get-SessionLine($session) {
+function Get-SessionLine($session, $isCurrent = $false) {
   $properties = Wait-WinRt ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
   $playback = $session.GetPlaybackInfo()
   $state = Convert-PlaybackState $playback.PlaybackStatus
@@ -108,29 +128,48 @@ function Get-SessionLine($session) {
     artist = $properties.Artist
     album = $properties.AlbumTitle
     state = $state
+    # Which session the system considers current, for the provider's choice
+    # when nothing is playing.
+    current = $isCurrent
     positionS = [math]::Round($position, 3)
     durationS = [math]::Round($timeline.EndTime.TotalSeconds, 3)
     # The artwork half reads this to tell "no thumbnail" from "broken emit".
     hasArtwork = ($null -ne $properties.Thumbnail)
   }
 }
+
+function Get-AudioLine {
+  if (-not $AudioAvailable) { return [ordered]@{ kind = 'audio' } }
+  $volume = 0
+  $muted = $false
+  if (-not [YunariAudio]::TryRead([ref]$volume, [ref]$muted)) {
+    return [ordered]@{ kind = 'audio' }
+  }
+  [ordered]@{
+    kind = 'audio'
+    volume = [int]$volume
+    muted = [bool]$muted
+  }
+}
 `;
 
+/**
+ * The artwork half. A retryable miss (no thumbnail yet, truncated image) is
+ * re-read for up to 5 polls before its negative is cached; over-cap is
+ * definitive at once and a thrown load is never cached. The stream arrives as
+ * a bare `__ComObject`, so the read is chunked and the format sniffed from the
+ * bytes. No public `DataReader` constructor exists to bind, hence the
+ * reflected `IInputStream` overload. Comments inside the script are minimal
+ * because the whole string travels as one `-EncodedCommand`.
+ */
 const ARTWORK = `
 $null = [Windows.Storage.Streams.DataReader,Windows.Storage.Streams,ContentType=WindowsRuntime]
 $null = [Windows.Storage.Streams.IInputStream,Windows.Storage.Streams,ContentType=WindowsRuntime]
 $null = [Windows.Storage.Streams.IRandomAccessStreamWithContentType,Windows.Storage.Streams,ContentType=WindowsRuntime]
 
-# A retryable miss (no thumbnail yet, truncated image) is re-read for up to 5
-# attempts, about 5 s at one poll a second, before its negative is cached.
-# Over-cap is definitive at once; a thrown load error is never cached.
 $ArtworkRetryLimit = 5
 $artworkAttempts = @{}
 
-# The stream arrives as a bare __ComObject, so PowerShell cannot read its Size,
-# ContentType or call AsTask on its load operation. Load in chunks and read the
-# format from the bytes instead; DataReaderLoadOperation exposes Status and
-# GetResults directly, which is all the wait needs.
 function Wait-Operation($operation) {
   $deadline = [DateTime]::UtcNow.AddSeconds(10)
   while ([string]$operation.Status -eq 'Started') {
@@ -141,7 +180,6 @@ function Wait-Operation($operation) {
   return $operation.GetResults()
 }
 
-# A stream that ended early must not be published as a whole image.
 function Test-CompleteImage($buffer, $ext) {
   if ($ext -eq 'png') {
     if ($buffer.Length -lt 8) { return $false }
@@ -159,15 +197,12 @@ function Test-CompleteImage($buffer, $ext) {
   return $false
 }
 
-# The outcome of one artwork read: an emitted line, a definitive over-cap
-# answer, or a retryable miss. A thrown load error is the caller's to retry.
 function Get-ArtworkResult($session) {
   $properties = Wait-WinRt ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
   $thumbnail = $properties.Thumbnail
   if ($null -eq $thumbnail) { return @{ status = 'retry' } }
   $stream = Wait-WinRt ($thumbnail.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
 
-  # No public constructor to bind: select the IInputStream overload.
   $constructor = ${DATA_READER_CONSTRUCTOR}
   if ($null -eq $constructor) { return @{ status = 'retry' } }
   $reader = $constructor.Invoke(@($stream))
@@ -179,7 +214,6 @@ function Get-ArtworkResult($session) {
       $chunk = [byte[]]::new($loaded)
       $reader.ReadBytes($chunk)
       $chunks.AddRange($chunk)
-      # Derived from the supervisor's line cap; see SMTC_ARTWORK_RAW_BYTES.
       if ($chunks.Count -gt ${SMTC_ARTWORK_RAW_BYTES}) { return @{ status = 'over' } }
     }
   } finally {
@@ -206,9 +240,6 @@ function Get-ArtworkResult($session) {
   } }
 }
 
-# Only over-cap and the exhausted retry count cache a negative for the track;
-# a track that gains artwork later still gets it. One failure never reaches
-# the next session in the poll.
 function Try-EmitArtwork($session, $line) {
   $sessionId = $line['sessionId']
   $key = "$sessionId|$($line['title'])|$($line['artist'])|$($line['album'])"
@@ -242,14 +273,30 @@ function Try-EmitArtwork($session, $line) {
 `;
 
 const POLL = `
-try {
-  $manager = Wait-WinRt ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
-} catch {
-  [Console]::Out.WriteLine('{"kind":"error"}')
-  exit 0
-}
-
+$manager = $null
 while ($true) {
+  # Audio is read every poll and independently of any session: a machine with
+  # no media session still reports its volume, and a manager failure below
+  # does not stop this line.
+  try {
+    [Console]::Out.WriteLine((Get-AudioLine | ConvertTo-Json -Compress))
+  } catch {
+    [Console]::Out.WriteLine('{"kind":"audio"}')
+  }
+
+  if ($null -eq $manager) {
+    try {
+      $manager = Wait-WinRt ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+    } catch {
+      $manager = $null
+    }
+  }
+  if ($null -eq $manager) {
+    [Console]::Out.WriteLine('{"kind":"error"}')
+    Start-Sleep -Milliseconds 1000
+    continue
+  }
+
   $sessions = $null
   try {
     $sessions = $manager.GetSessions()
@@ -260,10 +307,18 @@ while ($true) {
     if ($sessions.Count -eq 0) {
       [Console]::Out.WriteLine('{"kind":"none"}')
     } else {
+      $currentId = $null
+      try {
+        $current = $manager.GetCurrentSession()
+        if ($null -ne $current) { $currentId = $current.SourceAppUserModelId }
+      } catch {
+        $currentId = $null
+      }
       # Per session, so one unreadable app does not hide the others.
       foreach ($session in $sessions) {
         try {
-          $line = Get-SessionLine $session
+          $isCurrent = ($null -ne $currentId) -and ($session.SourceAppUserModelId -eq $currentId)
+          $line = Get-SessionLine $session $isCurrent
           [Console]::Out.WriteLine(($line | ConvertTo-Json -Compress))
           if ($WantArtwork) { Try-EmitArtwork $session $line }
         } catch {
@@ -365,11 +420,57 @@ export function parseSmtcLine(line: string): SmtcSession | undefined {
 }
 
 /**
+ * Whether the system calls this session the current one. Kept beside
+ * `parseSmtcLine` rather than folded into `SmtcSession` so the session shape a
+ * theme's keys see is unchanged.
+ */
+export function smtcSessionIsCurrent(line: string): boolean {
+  const record = parseObject(line);
+  return (
+    record !== undefined &&
+    record["kind"] === "session" &&
+    record["current"] === true
+  );
+}
+
+/**
+ * The endpoint volume line. Both keys present is a reading; both absent is a
+ * machine with no default render endpoint, which is an absence rather than
+ * zero and unmuted. One key without the other is not a reading the script
+ * writes, so a line carrying it is malformed.
+ */
+export interface SmtcAudio {
+  readonly volume?: number;
+  readonly muted?: boolean;
+}
+
+export function parseSmtcAudio(line: string): SmtcAudio | undefined {
+  const record = parseObject(line);
+  if (record === undefined || record["kind"] !== "audio") return undefined;
+
+  const volume = record["volume"];
+  const muted = record["muted"];
+
+  if (volume === undefined && muted === undefined) return {};
+  if (volume === undefined || muted === undefined) return undefined;
+  if (
+    typeof volume !== "number" ||
+    !Number.isFinite(volume) ||
+    volume < 0 ||
+    volume > 100
+  ) {
+    return undefined;
+  }
+  if (typeof muted !== "boolean") return undefined;
+
+  return { volume, muted };
+}
+
+/**
  * `Buffer.from(x, "base64")` skips whitespace and ignores garbage, so it can
  * decode a line the helper never wrote. Only the exact encoding of the bytes
  * it produces is accepted.
- */
-function isCanonicalBase64(value: string): boolean {
+ */ function isCanonicalBase64(value: string): boolean {
   if (value.length === 0 || value.length % 4 !== 0) return false;
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
   return Buffer.from(value, "base64").toString("base64") === value;

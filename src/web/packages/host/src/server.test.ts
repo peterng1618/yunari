@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
 import { type ListenableServer, listenWithFallback } from "./cli/net.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
+import { createArtworkCache } from "./providers/media/artwork.js";
 import type { SampleContext, SensorProvider } from "./providers/provider.js";
 import { ProviderRegistry } from "./providers/registry.js";
 import { OPEN_METEO_BERLIN_CAPTURE } from "./providers/weather/open-meteo.fixture.js";
@@ -8604,6 +8605,155 @@ describe("Weather settings routes", () => {
           undefined,
           { ...lan, headers: { "x-yunari-session": token } },
         )
+      ).status,
+    ).toBe(200);
+  });
+});
+
+describe("The media artwork route", () => {
+  const BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9, 9, 9]);
+  const SHA = createHash("sha256").update(BYTES).digest("hex");
+  const NAME = `${SHA}.png`;
+
+  let directory: string;
+  let hosted: ReturnType<typeof createHostServer> | undefined;
+
+  beforeEach(async () => {
+    directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "yunari-artwork-route-"),
+    );
+  });
+
+  afterEach(async () => {
+    await hosted?.close();
+    hosted = undefined;
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+
+  function launch(options: Partial<HostServerOptions> = {}) {
+    const running = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: directory, editor: directory },
+      ...options,
+    });
+    hosted = running;
+    return running;
+  }
+
+  async function storedCache() {
+    const cache = createArtworkCache(directory);
+    await cache.put(BYTES, "png");
+    return cache;
+  }
+
+  it("serves a cached image with an immutable header", async () => {
+    const running = launch({ artwork: await storedCache() });
+
+    const answer = await request(
+      running.server,
+      "GET",
+      `/api/media/artwork/${NAME}`,
+    );
+
+    expect(answer.status).toBe(200);
+    expect(answer.headers["content-type"]).toBe("image/png");
+    expect(answer.headers["cache-control"]).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(answer.headers["x-content-type-options"]).toBe("nosniff");
+    expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
+  });
+
+  it("404s a malformed name, an unknown digest and every non-GET", async () => {
+    const running = launch({ artwork: await storedCache() });
+
+    for (const name of [
+      "a.png",
+      NAME.toUpperCase(),
+      `${NAME}.png`,
+      `${SHA}.gif`,
+      `${SHA}.png/extra`,
+      "..%2Fpackage.json.png",
+      `${"b".repeat(64)}.png`,
+    ]) {
+      expect(
+        (await request(running.server, "GET", `/api/media/artwork/${name}`))
+          .status,
+        name,
+      ).toBe(404);
+    }
+
+    expect(
+      (await request(running.server, "POST", `/api/media/artwork/${NAME}`, "x"))
+        .status,
+    ).toBe(405);
+  });
+
+  it("refuses a malformed name before the cache is asked", async () => {
+    // The cache also refuses these, so this case uses one that answers any
+    // name: the refusal has to be the route's own, before any read.
+    let reads = 0;
+    const running = launch({
+      artwork: {
+        put: async () => "",
+        read: async () => {
+          reads += 1;
+          return { bytes: BYTES, ext: "png" };
+        },
+      },
+    });
+
+    for (const name of ["a.png", NAME.toUpperCase(), `${NAME}/extra`]) {
+      expect(
+        (await request(running.server, "GET", `/api/media/artwork/${name}`))
+          .status,
+        name,
+      ).toBe(404);
+    }
+
+    expect(reads).toBe(0);
+  });
+
+  it("404s rather than inventing a picture when the host keeps no cache", async () => {
+    const running = launch();
+
+    expect(
+      (await request(running.server, "GET", `/api/media/artwork/${NAME}`))
+        .status,
+    ).toBe(404);
+  });
+
+  it("lets a paired display read it and refuses an unpaired remote", async () => {
+    const displays = createDisplayStore(directory);
+    const token = newToken();
+    await displays.create("phone", token);
+    const running = launch({ displays, artwork: await storedCache() });
+
+    const lan = { remoteAddress: "192.168.1.50" };
+    const url = `/api/media/artwork/${NAME}`;
+
+    // Loopback is this PC and needs no credential.
+    expect((await request(running.server, "GET", url)).status).toBe(200);
+
+    expect(
+      (await request(running.server, "GET", url, undefined, lan)).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await request(running.server, "GET", url, undefined, {
+          ...lan,
+          headers: { "x-yunari-session": "not-a-live-token" },
+        })
+      ).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await request(running.server, "GET", url, undefined, {
+          ...lan,
+          headers: { "x-yunari-session": token },
+        })
       ).status,
     ).toBe(200);
   });

@@ -15,6 +15,8 @@ import { ClockSensorProvider } from "./providers/clock.js";
 import { LhmSensorProvider } from "./providers/lhm.js";
 import { launchLhm, registerLhmTask } from "./providers/lhm-launcher.js";
 import { LibrarySensorProvider } from "./providers/library.js";
+import { createArtworkCache } from "./providers/media/artwork.js";
+import { MediaProvider } from "./providers/media/provider.js";
 import { ProviderRegistry } from "./providers/registry.js";
 import { WeatherProvider } from "./providers/weather/provider.js";
 import {
@@ -177,11 +179,18 @@ export async function run(argv: readonly string[]): Promise<number> {
     settings: weatherSettings,
     credentials,
   });
+  // Artwork is a cache, not a setting: the bytes live in the app folder under
+  // their own digest, and the server serves them through the display gate.
+  const mediaArtwork = createArtworkCache(
+    path.join(settingsDir, "media-artwork"),
+  );
+  const mediaProvider = new MediaProvider({ cache: mediaArtwork });
   const registry = new ProviderRegistry([
     clockProvider,
     lhmProvider,
     libraryProvider,
     weatherProvider,
+    mediaProvider,
   ]);
   const here = path.dirname(fileURLToPath(import.meta.url));
   const packagesDir = path.resolve(here, "..", "..");
@@ -311,6 +320,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     fontFavorites,
     credentials,
     assets: { credentials },
+    artwork: mediaArtwork,
     onDisplayChange: (settings) => clockProvider.setTimeZone(settings.timeZone),
     activeTheme,
     // Both providers know the machine's devices; LHM's list is richer, so its
