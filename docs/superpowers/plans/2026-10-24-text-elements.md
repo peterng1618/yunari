@@ -388,6 +388,7 @@ git commit -m "test(e2e): place text through the click-or-drag gesture"
 - [ ] **Step 1: Write the failing browser cases**
 
 - Add → Text → click creates an instance of type `i-text`, grows while typing, and its `ml`/`mr` controls scale rather than writing a width.
+- The click-created Text exposes no `mt`/`mb` edge handles (edge controls are Textbox-only), while the drag-created Text box keeps them.
 - Add → Text → drag creates a `textbox` at the drawn rectangle, wraps inside it, keeps the box while typing, and its `ml`/`mr` controls use `changeWidth`.
 - Escape during placement leaves the scene and the history unchanged.
 - Save, reload and reopen preserves both classes and their geometry.

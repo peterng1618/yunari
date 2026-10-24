@@ -263,8 +263,7 @@ tab's visible label is its 1-based number; its accessible name is `Run N`.
 ### Browser
 
 - Add → Text → click on the artboard creates a Text that grows while typing and
-  has no width/height handles.
-- Add → Text → drag creates a Text box at the drawn rectangle, wraps inside it,
+  has no width/height handles.- Add → Text → drag creates a Text box at the drawn rectangle, wraps inside it,
   and keeps the box while typing.
 - Escape during placement leaves the document unchanged.
 - Save, reload and reopen preserves both classes and their geometry.
