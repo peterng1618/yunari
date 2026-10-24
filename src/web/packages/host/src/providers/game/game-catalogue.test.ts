@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { type CatalogueSeams, readEpicGames } from "./game-catalogue.js";
+import {
+  type CatalogueSeams,
+  readEpicGames,
+  readGogGames,
+  readXboxGames,
+} from "./game-catalogue.js";
 
 /**
  * Epic writes one JSON `.item` per install under its launcher's manifest
@@ -49,6 +54,10 @@ interface Fixture {
   readonly entries?: readonly string[];
   readonly files?: Record<string, string>;
   readonly missingDirectory?: true;
+  /** One seam answer per directory; a directory absent here throws ENOENT. */
+  readonly directories?: Record<string, readonly string[]>;
+  /** The parsed answer the PowerShell seam hands back. */
+  readonly gog?: unknown;
 }
 
 function seamsOf(fixture: Fixture): CatalogueSeams {
@@ -60,14 +69,18 @@ function seamsOf(fixture: Fixture): CatalogueSeams {
       return text;
     },
     readdir: async (dir) => {
+      const entries = fixture.directories?.[dir];
+
+      if (entries !== undefined) return entries;
       if (dir !== MANIFEST_DIR) throw new Error(`unexpected directory: ${dir}`);
       if (fixture.missingDirectory === true) throw new Error(`ENOENT: ${dir}`);
       return fixture.entries ?? [];
     },
     programData: "C:\\ProgramData",
     appData: "C:\\Users\\player\\AppData\\Roaming",
-    runPowerShell: async () => undefined,
+    runPowerShell: async () => fixture.gog,
     steamApps: async () => [],
+    xboxRoot: "C:\\XboxGames",
   };
 }
 
@@ -148,5 +161,163 @@ describe("readEpicGames", () => {
 
     expect(games).toHaveLength(1);
     expect(games[0]?.name).toBe("Fortnite");
+  });
+});
+
+/**
+ * GOG keeps its installs in one registry key, read through a single PowerShell
+ * call. The fixtures hand the reader the parsed answer directly, so no test
+ * reads this machine's registry.
+ */
+describe("readGogGames", () => {
+  it("enumerates the GOG key in one PowerShell call", async () => {
+    const scripts: string[] = [];
+    const seams = {
+      ...seamsOf({ gog: [] }),
+      runPowerShell: async (script: string) => {
+        scripts.push(script);
+        return [];
+      },
+    };
+
+    await readGogGames(seams);
+
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0]).toContain("GOG.com\\Games");
+  });
+
+  it("resolves a GOG entry's exe under its install path", async () => {
+    const seams = seamsOf({
+      gog: [
+        {
+          gameName: "Disco Elysium",
+          path: "C:\\Games\\Disco Elysium",
+          exe: "disco.exe",
+          dependsOn: "",
+        },
+      ],
+    });
+
+    await expect(readGogGames(seams)).resolves.toEqual([
+      {
+        source: "gog",
+        name: "Disco Elysium",
+        installDir: "C:\\Games\\Disco Elysium",
+        exes: ["C:\\Games\\Disco Elysium\\disco.exe"],
+      },
+    ]);
+  });
+
+  it("skips a DLC whose dependsOn names a parent", async () => {
+    const seams = seamsOf({
+      gog: [
+        {
+          gameName: "Disco Elysium Soundtrack",
+          path: "C:\\Games\\Disco Elysium",
+          exe: "disco.exe",
+          dependsOn: "Disco Elysium",
+        },
+      ],
+    });
+
+    await expect(readGogGames(seams)).resolves.toEqual([]);
+  });
+
+  it("reports no executables for an entry without exe", async () => {
+    const seams = seamsOf({
+      gog: [{ gameName: "Launcher Only", path: "C:\\Games\\Launcher" }],
+    });
+
+    await expect(readGogGames(seams)).resolves.toEqual([
+      {
+        source: "gog",
+        name: "Launcher Only",
+        installDir: "C:\\Games\\Launcher",
+        exes: [],
+      },
+    ]);
+  });
+
+  it("treats a registry answer that is not JSON as an empty list", async () => {
+    const seams = seamsOf({ gog: undefined });
+
+    await expect(readGogGames(seams)).resolves.toEqual([]);
+  });
+
+  it("treats a PowerShell rejection as an empty list", async () => {
+    const seams = {
+      ...seamsOf({}),
+      runPowerShell: async () => {
+        throw new Error("registry unavailable");
+      },
+    };
+
+    await expect(readGogGames(seams)).resolves.toEqual([]);
+  });
+});
+
+const XBOX_ROOT = "C:\\XboxGames";
+const XBOX_CONTENT = `${XBOX_ROOT}\\Forza\\Content`;
+
+const XBOX_CONFIG = `<?xml version="1.0" encoding="utf-8"?>
+<Game configVersion="1">
+  <ExecutableList>
+    <Executable Name="Forza.exe" />
+  </ExecutableList>
+</Game>`;
+
+describe("readXboxGames", () => {
+  it("reads a title whose MicrosoftGame.config names its executable", async () => {
+    const seams = seamsOf({
+      directories: {
+        [XBOX_ROOT]: ["Forza"],
+        [XBOX_CONTENT]: ["Forza.exe", "readme.txt"],
+      },
+      files: { [`${XBOX_CONTENT}\\MicrosoftGame.config`]: XBOX_CONFIG },
+    });
+
+    await expect(readXboxGames(seams)).resolves.toEqual([
+      {
+        source: "xbox",
+        name: "Forza",
+        installDir: XBOX_CONTENT,
+        exes: [`${XBOX_CONTENT}\\Forza.exe`],
+      },
+    ]);
+  });
+
+  it("falls back to the sole exe under Content when there is no config", async () => {
+    const seams = seamsOf({
+      directories: {
+        [XBOX_ROOT]: ["Grounded"],
+        [`${XBOX_ROOT}\\Grounded\\Content`]: ["Grounded.exe", "data.pak"],
+      },
+    });
+
+    await expect(readXboxGames(seams)).resolves.toEqual([
+      {
+        source: "xbox",
+        name: "Grounded",
+        installDir: `${XBOX_ROOT}\\Grounded\\Content`,
+        exes: [`${XBOX_ROOT}\\Grounded\\Content\\Grounded.exe`],
+      },
+    ]);
+  });
+
+  it("skips a title with several executables and no config", async () => {
+    const seams = seamsOf({
+      directories: {
+        [XBOX_ROOT]: ["Bundle"],
+        [`${XBOX_ROOT}\\Bundle\\Content`]: ["a.exe", "b.exe"],
+      },
+    });
+
+    await expect(readXboxGames(seams)).resolves.toEqual([]);
+  });
+
+  it("treats a missing Xbox root as an empty list", async () => {
+    const seams = seamsOf({ directories: {} });
+
+    await expect(readXboxGames(seams)).resolves.toEqual([]);
   });
 });

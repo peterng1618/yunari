@@ -30,6 +30,8 @@ export interface CatalogueSeams {
   readonly runPowerShell: (script: string) => Promise<unknown>;
   /** Steam's installed apps; defaults to an empty list until Task 1.4 wires it. */
   readonly steamApps: () => Promise<readonly InstalledGame[]>;
+  /** Where Xbox titles install; injected so tests never touch the real drive. */
+  readonly xboxRoot: string;
 }
 
 const POWERSHELL_TIMEOUT_MS = 10_000;
@@ -86,6 +88,7 @@ export function defaultCatalogueSeams(): CatalogueSeams {
       path.win32.join(os.homedir(), "AppData", "Roaming"),
     runPowerShell: runPowerShellJson,
     steamApps: async () => [],
+    xboxRoot: "C:\\XboxGames",
   };
 }
 
@@ -191,6 +194,171 @@ export async function readEpicGames(
     }
 
     const game = parseEpicManifest(text);
+    if (game !== undefined) games.push(game);
+  }
+
+  return games;
+}
+
+/**
+ * GOG's launcher keeps one registry key per install. A single PowerShell call
+ * enumerates them; the seam returns parsed JSON, so an unreadable registry is
+ * `undefined` rather than a throw.
+ */
+const GOG_REGISTRY_SCRIPT = [
+  "$games = Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\WOW6432Node\\GOG.com\\Games\\*' -ErrorAction SilentlyContinue",
+  "ConvertTo-Json -InputObject @($games) -Compress",
+].join("; ");
+
+/**
+ * Every GOG install this machine's launcher registers. A DLC names its parent
+ * in `dependsOn`, and an entry without a name or install path is not a game.
+ */
+export async function readGogGames(
+  seams: CatalogueSeams,
+): Promise<readonly InstalledGame[]> {
+  let answer: unknown;
+
+  try {
+    answer = await seams.runPowerShell(GOG_REGISTRY_SCRIPT);
+  } catch {
+    return [];
+  }
+
+  if (!Array.isArray(answer)) return [];
+
+  const games: InstalledGame[] = [];
+
+  for (const entry of answer) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      continue;
+    }
+
+    const record = entry as Record<string, unknown>;
+
+    if (textField(record, "dependsOn") !== undefined) continue;
+
+    const name = textField(record, "gameName");
+    const installDir = textField(record, "path");
+
+    if (name === undefined || installDir === undefined) continue;
+
+    const executable = textField(record, "exe");
+
+    games.push({
+      source: "gog",
+      name,
+      installDir,
+      exes:
+        executable === undefined
+          ? []
+          : [path.win32.join(installDir, executable)],
+    });
+  }
+
+  return games;
+}
+
+const XBOX_CONTENT_DIR = "Content";
+const XBOX_CONFIG_FILE = "MicrosoftGame.config";
+
+/** `MicrosoftGame.config` is XML; these take its executable without a parser. */
+const XBOX_EXECUTABLE_PATTERNS = [
+  /<Executable\b[^>]*\bName\s*=\s*"([^"]+)"/i,
+  /<Executable\b[^>]*>([^<]+)<\/Executable>/i,
+  /\bExecutable\s*=\s*"([^"]+)"/i,
+] as const;
+
+function executableFromXboxConfig(text: string): string | undefined {
+  for (const pattern of XBOX_EXECUTABLE_PATTERNS) {
+    const value = pattern.exec(text)?.[1]?.trim();
+
+    if (value !== undefined && value !== "") return value;
+  }
+
+  return undefined;
+}
+
+/** One title under the Xbox root, or `undefined` when it names no launcher. */
+async function readXboxTitle(
+  seams: CatalogueSeams,
+  titleDir: string,
+): Promise<InstalledGame | undefined> {
+  const contentDir = path.win32.join(titleDir, XBOX_CONTENT_DIR);
+  let configured: string | undefined;
+  let hasConfig = false;
+
+  try {
+    const text = await seams.readFile(
+      path.win32.join(contentDir, XBOX_CONFIG_FILE),
+    );
+    hasConfig = true;
+    configured = executableFromXboxConfig(text);
+  } catch {
+    hasConfig = false;
+  }
+
+  // A config that names no executable is not the fallback case; the title is
+  // unreadable rather than config-less.
+  if (hasConfig && configured === undefined) return undefined;
+
+  let executable = configured;
+
+  if (executable === undefined) {
+    let entries: readonly string[];
+
+    try {
+      entries = await seams.readdir(contentDir);
+    } catch {
+      return undefined;
+    }
+
+    const candidates = entries.filter((entry) =>
+      entry.toLowerCase().endsWith(".exe"),
+    );
+
+    if (candidates.length !== 1) return undefined;
+    executable = candidates[0];
+  }
+
+  if (executable === undefined) return undefined;
+
+  return {
+    source: "xbox",
+    name: path.win32.basename(titleDir),
+    installDir: contentDir,
+    exes: [
+      path.win32.isAbsolute(executable)
+        ? executable
+        : path.win32.join(contentDir, executable),
+    ],
+  };
+}
+
+/**
+ * Every Xbox title under the root, one directory level deep. A title with no
+ * config is accepted only when `Content` holds exactly one executable; zero or
+ * several is ambiguous and skipped.
+ */
+export async function readXboxGames(
+  seams: CatalogueSeams,
+): Promise<readonly InstalledGame[]> {
+  let titles: readonly string[];
+
+  try {
+    titles = await seams.readdir(seams.xboxRoot);
+  } catch {
+    return [];
+  }
+
+  const games: InstalledGame[] = [];
+
+  for (const title of titles) {
+    const game = await readXboxTitle(
+      seams,
+      path.win32.join(seams.xboxRoot, title),
+    );
+
     if (game !== undefined) games.push(game);
   }
 
