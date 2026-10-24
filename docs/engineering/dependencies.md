@@ -91,27 +91,47 @@ licence text in `THIRD-PARTY-NOTICES.md`.
 ## Audit overrides
 
 Measured 2026-10-25 on the tree carrying the `undici`/`sharp` overrides (plan
-2026-10-25 release readiness, D4). `npm audit --json` reports 4 high findings,
-down from 8; `npm ci` exits 0.
+2026-10-25 release readiness, D4). `npm ci` exits 0; `npm run test:worker`
+exits 0 with 12 files / 72 tests; `npx vitest run packages/renderer-core
+packages/scene-fabric packages/editor` exits 0 with 254 files / 3672 tests.
+Outcome: `npm audit --json` falls from 8 high findings to 4.
 
 | Override | Resolved | Proving suite |
 |---|---|---|
 | `undici` `^7.30.1` | 7.30.1 | `npm run test:worker` — 12 files, 72 tests, exit 0 |
 | `sharp` `^0.35.5` | 0.35.5 | `npm run test:worker` — 12 files, 72 tests, exit 0 |
 
+The lockfile holds exactly two `undici`/`sharp` entries — `node_modules/undici`
+7.30.1 and `node_modules/sharp` 0.35.5 — and no nested copies. The two
+`miniflare` requesters keep their upstream pins in the lock's dependency
+records: `node_modules/miniflare` asks `undici` 7.29.1 and `sharp` 0.35.5, and
+`packages/store-worker/node_modules/miniflare` asks `undici` 7.29.0 and `sharp`
+0.35.2. `npm ls undici sharp` therefore exits with `ELSPROBLEMS` and marks both
+resolved packages `invalid`. The marker comes from npm 11.6.2 comparing the
+resolved version against the requester's recorded pin, not from the installed
+tree: the two patched copies are the only ones installed, and the Worker suite
+is the proof that they run. `npm install`, `npm dedupe`, `npm install
+--package-lock-only` and `npm install --force` were each tried; the first,
+third and fourth leave the marker, and `npm dedupe` removes it only by reverting
+to the pinned vulnerable versions, so it was rejected.
+
+Forward risk: a later dependency change can restore a nested pinned copy —
+`npm dedupe` did exactly that — so the clean `npm ls` is not an invariant to
+rely on. B3's audit policy is the backstop that fails on the return of these
+advisories.
+
 A `jsdom` `^30.1.3` override was tried and removed: it changed
 `CSSStyleDeclaration` serialisation and DOM-removal semantics, failing 8 editor
 DOM cases. With jsdom 26.1.0 restored the suite is 254 files / 3672 tests green,
 and `whatwg-encoding@3.1.1` stays.
 
-`npm ls` on npm 11.6.2 marks the overridden edges `invalid` because the lockfile
-keeps each requester's original exact range (`miniflare` pins `undici` 7.29.0
-and `sharp` 0.35.2); `npm ci` exits 0 and `npm explain` reports the edges as
-`overridden`. The resolved versions above are what the lockfile installs.
-Applying the overrides needed a fresh lock resolution, which also re-hoisted
-`magic-string`, `tslib`, `obug` and `why-is-node-running` (same version sets,
-different placement) and recorded the remaining `@tailwindcss/oxide` platform
-binaries.
+npm 11.6.2 applies overrides only during a fresh resolution. Reproduce the lock
+with `rm -rf node_modules packages/*/node_modules package-lock.json && npm
+install`, then reconcile with `npm install`. That resolution re-hoisted
+`magic-string`, `tslib`, `obug` and `why-is-node-running` to a different depth
+with the same version sets, took `ws` 8.21.3 → 8.22.0 (latest within jsdom 26's
+range, no advisory, unrelated to the overrides), and recorded the remaining
+`@tailwindcss/oxide` platform binaries.
 
 ### Accepted findings that remain
 
@@ -121,6 +141,7 @@ binaries.
 | `zod` < 4.6.6, GHSA-mrhx-c7xc-m3w5, via `@google/design.md` 0.4.0 | high | The linter is the latest published version and needs zod v3; D4 forbids a major override. |
 | `zod` 4.4.3 via `@cloudflare/vitest-pool-workers` 0.23.0 | high | The pool pins zod exactly inside the Worker toolchain; the override set covers only `undici` and `sharp`. |
 | `canvas` 3.2.3 → `prebuild-install` 7.1.3 | deprecation | `canvas` is the latest release and fabric's node renderer needs it; a deprecation is not a vulnerability. |
+| `whatwg-encoding` 3.1.1 via `jsdom` 26.1.0 | deprecation | jsdom 30, which drops it, fails 8 editor DOM cases; jsdom 26 requires this version and a deprecation is not a vulnerability. |
 
 ## Vendored source
 
