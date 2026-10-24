@@ -1,38 +1,40 @@
 # Yunari status
 
-Updated: 2026-10-24
-Branch: `main`
+Updated: 2026-10-25
+Branch: `feat/game-identity`
 
 ## Current objective
 
-The **sensor platform** ([`spec`](docs/superpowers/specs/2026-10-24-sensor-platform-design.md), [`archived plan`](docs/superpowers/plans/archive/2026-10-24-sensor-platform.md)) is delivered: seven phases from vocabulary/units/image binding through hardware, weather, media, custom sources, frame/game presence, and Steam store metadata. The text-elements and Wallpaper Engine plans are merged; no plan is in flight.
+**Game identity and the display catalogue is complete** ([`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), [`plan`](docs/superpowers/plans/archive/2026-10-24-game-identity-and-display-catalogue.md), [decision 0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md)): `game.running` means an identified game, and the player converts custom source units.
+
+- **Plan state:** this plan completed and its file is archived; the next plan comes from `docs/superpowers/plans/`.
 
 ## Active work
 
-- **All seven sensor-platform phases are complete**; the final gate after the Phase 7 review fixes ran green.
-- **Phase 7 is proven end to end**: a real host and player, a fixture Steam store, the canonical name and cover painted, a cached reload with no request, and the cover fallback.
-- **Every sensor-platform review finding is closed**: two whole-phase reviews, their scoped re-reviews, and the per-task fix rounds all returned clear.
-- **Text elements are merged and unchanged by this merge**: `IText` and `Textbox` are separate classes, and the preset library holds palettes and gradients.
-- **Open register findings include** vg-723 (every foreground process reads as a game), vg-724 (non-Steam identity), vg-717 (player descriptor catalogue), vg-699, vg-701 and vg-708.
+- **Final review narrowed presence:** the uninstall source is gone and a Store package needs `MicrosoftGame.config`, so Edge, the terminal and the shell no longer read as games.
+- **Final gate exit 0:** 406 files and 5861 tests passed, 1 skipped, no failure; `vg-726`'s SMTC helper was the last blocker and is fixed.
+- **Windows-first boundary:** Linux catalogue readers and foreground detection are out of scope (spec D4) and owned by `vg-727`.
+- **`vg-724` is open for art only:** naming for Steam, Epic, GOG, itch, Xbox and GDK Store packages landed; catalogue-matched non-Steam titles still report no artwork.
+- **Known costs:** Steam is read twice per demand window, and a non-catalogue foreground costs one `readdir` per sample.
+- **Store search is not a presence signal:** the Steam lookup stays demand-driven for name and artwork only.
 
 ## Last completed change
 
-- **Register ids repaired after the merge:** the branch's vg-709–vg-716 findings collided with ids main already used, so they are now vg-718–vg-724.
-- **vg-725 closes as verified:** the Steam store lookup answers the row that said store metadata was unused; the branch's stale vg-405 and vg-439 copies left the live file.
-- **Citations follow the ids:** STATUS, ADR 0109, the spec and the archived plan now name vg-722/723/724/725.
-- **Merged into `main`** with the run-display mode left to main's superseding commit and the sensor catalogue, descriptor seam and image sensor field kept.
-- **Gate:** `npm run gate` exit 0 — web 382 test files / 5677 tests; store-worker 12 files / 72 tests; backlog-check 725 items valid.
+- **Final-review fix round** (`d0738c96`, `ff30c14d`): presence restricted to game-only sources, Epic honours an absolute launcher, a teardown/streak regression test and the ownership row; each fix red-proofed.
+- **`vg-726` fixed** (`15978c51`): `GetSessions()` is projected into a PowerShell array, so an empty session list emits `none`; proved live with a playing Chromium session and after stopping it.
+- **Register:** `vg-723` and `vg-717` verified, `vg-724` reopened for art, `vg-727` filed for Linux presence, `vg-726` verified.
+- **Evidence:** `npm run gate` exit 0 (406 files / 5861 passed / 1 skipped); `docs:check`, `status:check`, `backlog:check` exit 0.
 
 ## Next
 
-1. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
-2. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
-3. Choose the next objective from `docs/product/backlog.jsonl` (vg-723, vg-724 and vg-717 are the largest).
+1. Work `vg-724`'s art half: local art for catalogue-matched non-Steam titles.
+2. Work `vg-727`: a Linux foreground source plus the Linux catalogue readers and their fixtures.
+3. Resume the backlog drain plan.
 
 ## Blockers / unverified
 
-- **No live Steam store request:** the Phase 7 e2e uses a fixture; the endpoints were only probed by hand. No live frame or game reading either.
-- **Player conversion and catalogue refresh:** a custom temperature key converts in the editor preview only (vg-717); a source added while the editor is open needs a reload (vg-722).
-- **No live weather backend and no Windows Geolocator run**; fixtures and units are tested only.
-- **Credential removal from the Sources page** is jsdom-tested only; jpg/webp media artwork is unverified.
-- **Presence still reads every foreground process as a game** (vg-723), so a store lookup can be asked about a browser once per spelling.
+- **No live fullscreen game check**: window evidence is unit-tested with injected readings; the e2e uses a fixed foreground seam.
+- **Epic, itch, Xbox and Store readers are fixture-tested only**: itch is absent on this PC, and the Store config probe ran only through injected seams.
+- **GOG registry read costs one PowerShell process per demand window**; caching is designed but unmeasured.
+- **No live Steam store request or frame reading**; both remain fixture-tested.
+- **The player conversion red proof ran on pre-reflow spec bytes**; the same assertion failed, whitespace-only delta.

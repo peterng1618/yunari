@@ -324,8 +324,14 @@ while ($true) {
 
   $sessions = $null
   try {
-    $sessions = $manager.GetSessions()
+    $raw = $manager.GetSessions()
+    if ($null -eq $raw) { throw 'GetSessions returned null' }
+    # The WinRT IVectorView arrives as a bare __ComObject: member enumeration
+    # reads Count over its items (empty) and the foreach below sees nothing.
+    # Materialise it into a PowerShell array first.
+    $sessions = @($raw | ForEach-Object { $_ })
   } catch {
+    $sessions = $null
     [Console]::Out.WriteLine('{"kind":"error"}')
   }
   if ($null -ne $sessions) {
