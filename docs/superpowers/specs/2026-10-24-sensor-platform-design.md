@@ -591,16 +591,56 @@ Game presence is a separate, lower-privilege read:
   (`steamapps/libraryfolders.vdf`, `appmanifest_*.acf`), producing
   `game.name`, `game.app` and `game.running`.
 - `game.artwork` is an image key pointing at a host-served copy of the local
-  Steam library-cache image for that app id. No Steam CDN request: it would
-  require network access and leak library membership. If the local cache has
-  no image, the key is unavailable.
-- Non-Steam games fall back to the executable name; box art is unavailable.
-  This is honest, not a generic placeholder.
+  Steam library-cache image for that app id. A local image is preferred and
+  costs no network access. If the local cache has no image, the host falls back
+  to the cached store cover described below; with neither, the key is
+  unavailable.
+- A non-Steam game is named by the store lookup below when one matches; with no
+  match it falls back to the executable name and no art. This is honest, not a
+  generic placeholder.
 - `frame.app` and `game.*` may disagree if the presenting process is not the
   foreground window; each says what it actually read.
 
 Presence is not a Discord integration. There is no public Discord game-detection
 API to consume; this reproduces the useful part locally.
+
+#### Remote game metadata (Steam store, on by default)
+
+Local store adapters cover Steam and, later, GOG and Epic, but most stores
+cannot be enumerated. The host therefore queries Valve's public Steam store
+endpoints for a game it could not name locally:
+
+- `store.steampowered.com/api/storesearch` to find a candidate by name.
+- `store.steampowered.com/api/appdetails` to confirm the app and its header
+  image.
+
+Both are keyless and need no credential. **The lookup is on by default** because
+the alternative is a library of unnamed executables; it is not a per-store
+adapter. SteamDB is not used: it has no API and forbids scraping.
+
+**What is sent** is the game's local name (from the executable's version
+information or its install folder) or, for a Steam install, its appid. Nothing
+else — no account, no library list, no machine identifier. **What is kept** is a
+small on-disk map from normalised name to appid (including "no match") and the
+downloaded cover bytes, so a lookup happens once per game and the display works
+offline afterwards.
+
+**Matching is tiered, and ambiguity is refused.** Normalisation folds case and
+Unicode, strips `™ ® ©`, punctuation and leading articles, and drops edition
+qualifiers (`definitive`, `deluxe`, `ultimate`, `complete`, `goty`, `enhanced`,
+`remastered`, `special`, `gold`, `anniversary`, `legendary`, `collector's`,
+`director's cut`). A match is accepted only when the base titles are equal or
+their token sets are equal after the qualifiers are dropped, and only if exactly
+one candidate remains. `Doom` must not match `Doom Eternal`, and no prefix or
+substring rule is used at all: a sequel's extra word is not a qualifier, so it
+makes the title different. Two remaining candidates leave the game unnamed.
+
+The **local name is shown when no match is found** (in `game.app`); the store's
+canonical name is shown when one is. Covers are downloaded once, cached by appid
+under the host's own directory, and served through the gated
+`/api/game/artwork/<appid>.jpg` route. A display never receives a Steam URL.
+Offline, a failed lookup or a rate-limited response degrades to the local
+behaviour with a reason; the cache keeps working.
 
 ## Image binding
 
@@ -834,7 +874,8 @@ Each phase is independently usable and independently verifiable.
    Sources page, editor discovery of custom descriptors.
 6. **Frame and game presence.**
    RTSS adapter, PresentMon adapter, rolling 1% low, foreground-process helper,
-   Steam library matching, local box-art route, unavailability reasons.
+   Steam library matching, local box-art route, Steam store lookup with its
+   tiered matcher and cache, unavailability reasons.
 
 Weather before custom sources is deliberate: it exercises a built-in HTTP
 provider and the image path before the generic, user-configured source makes the
@@ -862,6 +903,10 @@ same mistakes available to arbitrary URLs.
 - Frame: CSV parser, RTSS struct parser, 1% low window, insufficient-window
   unavailability.
 - Steam library: VDF/manifest parsing and path matching.
+- Steam store: name normalisation and matcher tiers, a candidate with an edition
+  suffix, `Doom` refusing `Doom Eternal`, two equal candidates refusing, request
+  carries only the local name, no request on a cache hit, "no match" cached,
+  429/offline degradation, cover bytes cached by appid.
 - Polling: weather interval validation and demand-driven suspension; custom
   source intervals; no remote fetch while unbound.
 
@@ -876,6 +921,9 @@ same mistakes available to arbitrary URLs.
   end-to-end; a failing source shows a redacted reason and no value.
 - No absolute URL in a sample ever reaches an `<img>`.
 - A provider failure leaves other providers' readings on screen.
+- A game fixture server answers the store endpoints and the player paints the
+  matched name and cover; the display requests no third-party URL; with the
+  fixture stopped and the cache cleared the authored image returns with a reason.
 
 ### Manual probes, reported unverified until run
 
@@ -891,6 +939,8 @@ same mistakes available to arbitrary URLs.
 - RTSS shared-memory read and PresentMon console stream on this PC, including
   the privilege failure path.
 - Steam library-cache box-art path on this install.
+- A live Steam store lookup for a game named only by its executable, and the
+  portrait cover asset for an app that is not installed.
 
 ### Regression proof
 
@@ -920,8 +970,9 @@ This spec is implemented when:
 6. Now Playing shows title/artist/album/artwork from SMTC, including a real
    browser session, and returns unavailable when no session exists.
 7. FPS/frametime and game presence work through at least one adapter on a real
-   machine, with the other adapter’s failure path reported, and box art is local
-   only.
+   machine, with the other adapter’s failure path reported; a game named only
+   by its executable gains the store's name and cover, and every cover reaches
+   the display from the host, never from a third-party URL.
 8. A user can add a credentialed HTTP JSON source in the host UI, see its
    descriptors in the editor, and bind its fields; deleting it leaves honest
    gaps.
@@ -946,8 +997,16 @@ This spec is implemented when:
 - **LHM sensor names** vary by board and driver. The mapping is only as good as
   the captures behind it; a missing name is not guessed.
 - **Steam library-cache box art** path and file naming are not verified. If it
-  differs, `game.artwork` stays unavailable; no CDN fallback is added without a
-  privacy ruling.
+  differs, the store cover fallback still answers when the game is found.
+- **The Steam store lookup is a network request on by default.** What is sent is
+  the local game name and nothing else, and the answer is cached, but Valve sees
+  a machine asking about a title it is running. The endpoints are keyless and
+  undocumented as a contract: a change or a rate limit degrades to the local
+  behaviour with a reason. This trade was ruled by the user, not inferred.
+- **Presence still treats every foreground window as a running game** (vg-714),
+  so while that row is open the lookup can be asked about a browser or a file
+  manager. Each distinct normalised name costs at most one request per process
+  life because a "no match" is cached, and only while a `game.*` key is demanded.
 - **Weather icon licence** must be verified before the set is bundled. An
   unverified set is not shipped.
 - **Open-Meteo terms** (free tier, attribution, non-commercial) must be checked
@@ -963,7 +1022,9 @@ This spec is implemented when:
   editor widget styling — future work, not part of this spec.
 - A tray application UI.
 - Custom non-HTTP sources, arbitrary host code and user plugins.
-- Steam CDN or other external box-art fetches.
+- Store backends other than Steam (GOG, Epic, IGDB) and SteamDB; Steam is the
+  only remote source in this phase, and its images are cached host-side rather
+  than linked.
 - Weather forecasts beyond today's high/low and sun times.
 - Per-fan friendly-name renaming.
 - Chart axis, gauge-range and chart-label unit conversion; charts keep canonical

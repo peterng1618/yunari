@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Widen Yunari's sensor product to full hardware coverage, consumer units, weather, Now Playing, FPS and game presence, configurable polling, and user-defined HTTP sources — without changing canonical sample values or the v2 theme schema.
+**Goal:** Widen Yunari's sensor product to full hardware coverage, consumer units, weather, Now Playing, FPS, game presence with store metadata, configurable polling, and user-defined HTTP sources — without changing canonical sample values or the v2 theme schema.
 
 **Architecture:** The existing owner layers stay: `renderer-core` owns the vocabulary, descriptors, unit conversion and plan formatting; `packages/host/src/providers/` owns acquisition and the provider registry; `packages/host/src/settings/` owns consumer settings; the player hydrates text, charts and images from one sample source. New providers are adapters beneath the existing `SensorProvider` contract; helper processes are host children supervised by one policy.
 
@@ -31,6 +31,8 @@
 3. **Two displays on one host with different unit preferences or theme languages:** the same sample value produces different text; neither display mutates the sample.
 4. **A missing or rejected BYOK weather key:** the provider names the missing credential and never falls back to Open-Meteo or shows a fabricated reading.
 5. **A helper that is missing or wedged** (PowerShell absent, SMTC broken, RTSS not running, PresentMon denied): that provider reports `unavailable` with a redacted reason, its timers stop, and every other provider keeps rendering.
+6. **A store that is slow, down or rate-limited:** the local name still shows, a cached cover still renders, the reason is reported, and no poll retries in a loop.
+7. **A game whose name matches several store entries, or a sequel** (`Doom` vs `Doom Eternal`): it stays unnamed rather than borrowing another game's name and cover.
 
 ---
 
@@ -110,7 +112,6 @@ Each task is independently shippable; no new provider is added.
     readonly dataScale?: "auto" | "mb" | "gb" | "tb";
     readonly rate?: "bits" | "bytes";
     readonly rateScale?: "auto" | "k" | "m" | "g";
-    readonly fan?: "rpm" | "percent";
     readonly windSpeed?: "kmh" | "mph" | "ms";
     readonly pressure?: "hpa" | "inhg";
   }
@@ -133,7 +134,6 @@ Each task is independently shippable; no new provider is added.
   - `dataScale: "mb"` shows MB and multiplies by 1024; `"tb"` divides.
   - `network.download` `500` Mb/s with `rate: "bytes"` → `62.5` `MB/s`; `rateScale: "auto"` gives `kB/s` below 1 MB/s and `GB/s` above 1000.
   - `cpu.temp` `100` °C with `measurement: "imperial"` → `212 °F`.
-  - `fan: "percent"` on `cooling.fan.1.rpm` keeps `RPM`; on a control key shows `%`.
   - `pressure: "inhg"` converts `1013.25 hPa` → `29.92 inHg`; `windSpeed: "mph"` converts `100 km/h` → `62.14 mph`.
   - An override `{ unit: "GHz" }` on `cpu.load` returns `unsupportedUnit: true` and the measured value.
   - Existing temperature conversion and metric passthrough still pass unchanged.
@@ -1334,10 +1334,179 @@ Weather runs before custom sources so the HTTP failure, cache and image paths ar
 
 ---
 
+## Phase 7 — Steam store metadata
+
+Ruled by the user on 2026-10-24: a Steam store lookup is on by default because
+building an adapter per store does not cover most stores, and network access is
+accepted. This supersedes the spec's earlier "no CDN fallback" and exact-name
+wording; the spec has been amended to say the same thing.
+
+### Task 7.1: Steam store client and tiered matcher
+
+**Files:**
+- Create: `packages/host/src/providers/game/store-metadata.ts`
+- Create: `packages/host/src/providers/game/store-metadata.test.ts`
+- Create: `packages/host/src/providers/game/name-match.ts`
+- Create: `packages/host/src/providers/game/name-match.test.ts`
+
+**Interfaces:**
+- Consumes: an injected `fetchImpl`; no test performs a real request.
+- Produces:
+  ```ts
+  export function normalizeGameName(name: string): string;
+  export function matchStoreGame(localName: string, candidates: readonly { id: number; name: string }[]): { id: number; name: string } | undefined;
+  export function createSteamStore(options: {
+    fetchImpl: typeof fetch; cacheDir: string; nowMs?: () => number;
+  }): {
+    lookup(name: string, signal?: AbortSignal): Promise<{ id: number; name: string } | undefined>;
+    cover(appId: number, signal?: AbortSignal): Promise<string | undefined>; // host-relative URL
+  };
+  ```
+  Requests: `https://store.steampowered.com/api/storesearch/?term=<name>&cc=us&l=en`
+  then `/api/appdetails?appids=<id>&filters=basic`. `cc=us&l=en` are fixed
+  constants (the endpoint answers `total: 0` without `cc`). Cover: try
+  `https://cdn.akamai.steamstatic.com/steam/apps/<id>/library_600x900.jpg`,
+  fall back to `data.header_image` when that answers non-200. Sniff the bytes'
+  magic number for the type; the URL extension is not trusted.
+
+- [ ] **Step 1: Write the failing matcher tests**
+  `™`/`®`/`©`, case and punctuation, a leading article, `- Deluxe Edition`,
+  `GOTY`, `Definitive Edition`; `Doom` refuses `Doom Eternal` (the extra word is
+  not a qualifier), two candidates that both survive normalisation refuse, and
+  one surviving candidate is accepted. No prefix or substring rule: a local
+  `Half-Life` must not match `Half-Life 2`.
+- [ ] **Step 2: Run them and confirm they fail**
+
+  Run: `npx vitest run packages/host/src/providers/game/name-match.test.ts`
+  Expected: FAIL, module not found.
+
+- [ ] **Step 3: Implement the normaliser and tiers**
+  Fold case and Unicode (`normalize("NFKD")`, strip combining marks), strip the
+  symbols, punctuation and articles, drop the qualifier list, collapse
+  whitespace. Accept a candidate only when the normalised base titles are equal
+  or their token sets are equal; return a winner only when exactly one candidate
+  survives. No prefix, substring or edit-distance rule — it is the rule that
+  turns a sequel into the wrong cover.
+- [ ] **Step 4: Write and run the client tests**
+  Fixture JSON for a storesearch hit, a miss, a 429, and a rejected fetch;
+  appdetails success; a portrait 404 falling back to `header_image`; assert the
+  request URL carries the local name and no other parameter beyond `cc`/`l`, and
+  that a second lookup for the same normalised name makes zero requests, a
+  "no match" is cached, and a failed request keeps an existing cache entry.
+
+  Run: `npx vitest run packages/host/src/providers/game/store-metadata.test.ts`
+  Expected: PASS.
+- [ ] **Step 5: Implement the client and disk cache**
+  Cache file `game-metadata.json` under the injected `cacheDir`, written
+  temp-then-rename. Entries: `{ [normalisedName]: { id, name, at } | { none: true, at } }`
+  plus cover files by appid. A 429 or a rejected fetch marks the name
+  unavailable for 10 minutes rather than retrying every poll. Cover bytes are
+  written only after the response passes the type sniff.
+- [ ] **Step 6: Commit**
+
+### Task 7.2: Provider answers a store name and cover
+
+**Files:**
+- Modify: `packages/host/src/providers/game/provider.ts`
+- Modify: `packages/host/src/providers/helpers/foreground.ts`
+- Test: `packages/host/src/providers/game/provider.test.ts`
+
+**Interfaces:**
+- Consumes: Task 7.1's `createSteamStore`; the foreground helper's executable
+  path.
+- Produces: `game.name` and `game.app` for a non-Steam foreground app; the
+  priority is Steam app name, then store match, then the executable's version-info
+  `ProductName`, then the install folder name.
+
+- [ ] **Step 1: Write the failing provider tests**
+  Fixture store returns `{ id: 1201270, name: "Example Game" }` for a
+  non-Steam executable; the sample carries `game.name: "Example Game"`,
+  `game.app` as the local name, `game.running: true`, and `game.artwork` only
+  once demanded. A Steam install uses its appid without a name search (assert
+  zero storesearch calls). An unmatched app keeps `game.app` and has no
+  `game.name`. Offline with a cached match still answers; offline with no cache
+  is `unavailable` with a reason. Red-proof: disable the matcher and observe the
+  unnamed case fail.
+- [ ] **Step 2: Run, confirm FAIL; implement the resolution order; run to PASS.**
+
+  Run: `npx vitest run packages/host/src/providers/game`
+- [ ] **Step 3: Read the executable's product name once per path**
+  In `helpers/foreground.ts`, read `(Get-Item '<exe>').VersionInfo.ProductName`
+  through the existing PowerShell path, cache by executable path for the process
+  life, and treat an empty or missing value as absent. Do not spawn per poll.
+- [ ] **Step 4: Demand-driven cover fetch**
+  Fetch cover bytes only when `game.artwork` is in the demanded key set or a
+  display asks the route for that appid; a presence-only poll never downloads.
+  Cache-miss is `unavailable`; a cached cover answers with no request. A name
+  lookup itself runs only while a `game.*` key is demanded, and its "no match"
+  result is cached, so an unfixed vg-714 costs at most one request per distinct
+  foreground name per process life.
+- [ ] **Step 5: Commit**
+
+### Task 7.3: Cached remote covers through the gated route
+
+**Files:**
+- Modify: `packages/host/src/server.ts` (`/api/game/artwork/<appId>.jpg`)
+- Modify: `packages/host/src/providers/game/box-art.ts`
+- Test: `packages/host/src/server.test.ts`, `packages/host/src/providers/game/box-art.test.ts`
+
+- [ ] **Step 1: Write the failing route tests**
+  A route request for an appid that is not installed but whose cover the host
+  cached in its own directory returns the bytes; an id with no cached file is a
+  404, not a proxy pass-through; a path outside the cache dir is refused
+  (`realpath` containment); authorisation, `image/jpeg`, `nosniff` and
+  `private, max-age=3600` match the local route. No network in any test.
+- [ ] **Step 2: Run, confirm FAIL; extend the lookup; run to PASS.**
+
+  Run: `npx vitest run packages/host/src/server.test.ts packages/host/src/providers/game/box-art.test.ts`
+- [ ] **Step 3: Decide the local-vs-remote order in `box-art.ts`**
+  Local library cache first (no network); otherwise a cached remote cover; a
+  missing remote cover triggers at most one download per appid per process life
+  when the route is asked, never on a presence poll.
+- [ ] **Step 4: Commit**
+
+### Task 7.4: Browser proof and honest fallback
+
+**Files:**
+- Create: `tests/e2e/game-metadata.spec.ts`
+- Modify: `playwright.config.ts` (own-host port 4245; 4241/4243 are the
+  `host-player` themed hosts)
+
+- [ ] **Step 1: Write the failing spec**
+  A fixture server plays storesearch, appdetails and the cover image, selected
+  through `YUNARI_STEAM_STORE`; a fixture Steam root holds the game as a
+  non-Steam executable. The player paints the store's name and cover. Assert
+  every request the page makes is same-origin — none to `steampowered.com` or
+  `steamstatic.com`.
+- [ ] **Step 2: Run it and confirm it fails for the missing capability.**
+
+  Run: `npx playwright test tests/e2e/game-metadata.spec.ts --workers=1`
+- [ ] **Step 3: Add the offline arm**
+  Stop the fixture server and clear the cache: an authored image returns and the
+  run shows a reason. Restart with only the cover cache present: the cover
+  renders with the fixture still stopped.
+- [ ] **Step 4: Rebuild the affected bundles, re-run to PASS, commit.**
+
+### Task 7.5: Spec/plan/STATUS truth and the phase gate
+
+- [ ] **Step 1: Update `STATUS.md`** (objective mentions seven phases; last
+  completed change is the Phase 7 commit; next steps and blockers reflect what
+  remains unverified). Run `npm run status:check` from `src/web/`.
+- [ ] **Step 2: Record the matcher ruling in the ledger**, superseding the
+  spec's earlier "exact match" and "no CDN" sentences, and note what is still
+  unverified (live store lookup on hardware, rate-limit behaviour).
+- [ ] **Step 3: Run the boundary gate**
+
+  Run: `npm run gate > "$TEMP/gate-phase7.log" 2>&1; echo $?` from `src/web/`
+  Expected: exit 0; record file/test counts from the log.
+- [ ] **Step 4: Commit.**
+
+---
+
 ## Final verification
 
 - [ ] Run the full gate from `src/web/`: `npm run gate > /tmp/gate.log 2>&1; echo $?`; expect exit 0 and record the file/test counts from the log. Do not report green from a piped `tail`.
 - [ ] Re-run each new browser spec individually with its own port window; two worktrees must not share a Playwright project.
 - [ ] Red-proof each new regression test by disabling its fix, observing the failure, and restoring with `cmp` (a Windows text-mode write leaves CRLF; `git checkout` will not show it).
 - [ ] Record acceptance evidence item by item (spec Acceptance 1–10) in the closing commit body: what was observed, on which machine/provider.
-- [ ] Report anything not actually verified: Windows Geolocator permission behaviour, live WeatherAPI/OpenWeatherMap responses, real RTSS/PresentMon readings, real fan labels, and Steam box-art naming.
+- [ ] Report anything not actually verified: Windows Geolocator permission behaviour, live WeatherAPI/OpenWeatherMap responses, real RTSS/PresentMon readings, real fan labels, Steam box-art naming, and a live Steam store lookup on hardware.
