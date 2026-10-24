@@ -42,14 +42,27 @@ describe("loadDisplayCatalogue", () => {
       { ...CUSTOM, semanticKey: "cpu.load", label: "Provider load" },
     ];
 
-    await expect(
-      loadDisplayCatalogue(async () => Response.json({ sensors: payload })),
-    ).resolves.toEqual(descriptorsFromWire(payload));
+    const catalogue = await loadDisplayCatalogue(async () =>
+      Response.json({ sensors: payload }),
+    );
+
+    expect(catalogue).toEqual(descriptorsFromWire(payload));
+    // The direct proof, not only delegation: the built-in label survives intact.
+    const builtIn = SEMANTIC_KEYS.find(
+      (descriptor) => descriptor.key === "cpu.load",
+    );
+    expect(
+      catalogue.find((descriptor) => descriptor.key === "cpu.load")?.label,
+    ).toBe(builtIn?.label);
   });
 
   it("keeps the built-in table when the host answers a failure", async () => {
+    // A valid payload on a failing response: only the `!response.ok` gate can
+    // produce the built-in table, not the JSON parse falling into `catch`.
     await expect(
-      loadDisplayCatalogue(async () => new Response("", { status: 500 })),
+      loadDisplayCatalogue(async () =>
+        Response.json({ sensors: [CUSTOM] }, { status: 500 }),
+      ),
     ).resolves.toBe(SEMANTIC_KEYS);
   });
 
