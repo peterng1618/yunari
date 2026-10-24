@@ -24,13 +24,13 @@ import { isDesktopSurface } from "./surface.js";
  * — every request it makes is same-origin — and the host asks the fixture for
  * the name exactly once.
  *
- * Two offline arms, each proving only what it can observe. Arm 1 stops the
- * fixture and clears the cover cache, then reloads: the host still holds the
- * match in memory, so the canonical name stays and only the cover is gone —
- * this proves the missing-cover fallback, not a cold failed lookup. Arm 2
- * restarts the fixture answering 500 while only the cached cover is restored:
- * the cover renders and the listening fixture records zero requests, so the
- * "no store request" claim is observable rather than vacuous.
+ * Two offline arms, each proving only what it can observe, ordered so neither
+ * inherits the other's state. Arm 2 comes first, before any cache is cleared:
+ * the fixture is switched to answering 500 while still recording, and both the
+ * name and the cover must render from cache with zero new requests. Arm 1 is
+ * last: the fixture stops and the cover cache is cleared, so the host still
+ * holds the match in memory and the canonical name stays while only the cover
+ * is gone — this proves the missing-cover fallback, not a cold failed lookup.
  *
  * Its own host on its own port, over an app folder minted under the OS temp
  * directory, so no other spec's store, cache or port is shared.
@@ -420,9 +420,34 @@ test.describe("a non-Steam game's name and cover from the store", () => {
       .poll(() => existsSync(coverFile()), { timeout: 20_000 })
       .toBe(true);
 
-    // Arm 1 — the missing-cover fallback. The host still holds the match in
-    // memory, so the canonical name stays; with the cover cache cleared, only
-    // the cover is gone. This is not a cold failed lookup.
+    // Arm 2 — cache-first under an outage, before any cache is cleared. The
+    // fixture listens again but answers 500, so any request the host makes is
+    // recorded. The name and the cover must both come from cache with the
+    // request count unchanged.
+    await stopFixture();
+    fixture = await startFixture(true);
+    const requestsBefore = fixtureRequests.length;
+
+    await page.reload();
+    await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible();
+    await expect
+      .poll(() => canvasProp(page, TEXT_NODE_ID, "text"), {
+        timeout: 25_000,
+        message: "the cached match did not survive the reload",
+      })
+      .toBe(CANONICAL_NAME);
+    await expect
+      .poll(async () => (await imageState(page))?.width, {
+        timeout: 25_000,
+        message: "the cached cover did not render offline",
+      })
+      .toBe(1);
+    expect((await imageState(page))?.src).toContain(LIVE_URL);
+    expect(fixtureRequests.length).toBe(requestsBefore);
+
+    // Arm 1 — the missing-cover fallback, last. The host still holds the match
+    // in memory, so the canonical name stays; with the cover cache cleared,
+    // only the cover is gone. This is not a cold failed lookup.
     await stopFixture();
     rmSync(cacheDir, { recursive: true, force: true });
     await page.reload();
@@ -446,24 +471,5 @@ test.describe("a non-Steam game's name and cover from the store", () => {
       "Game artwork is not available yet.",
       { timeout: 20_000 },
     );
-
-    // Arm 2 — the cached cover survives an outage. The fixture listens again
-    // but answers 500, so any request the host makes is recorded; only the
-    // cover file is restored, and the cover must render with zero requests.
-    fixture = await startFixture(true);
-    mkdirSync(cacheDir, { recursive: true });
-    writeFileSync(coverFile(), COVER);
-    const requestsBefore = fixtureRequests.length;
-
-    await page.reload();
-    await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible();
-    await expect
-      .poll(async () => (await imageState(page))?.width, {
-        timeout: 25_000,
-        message: "the cached cover did not render offline",
-      })
-      .toBe(1);
-    expect((await imageState(page))?.src).toContain(LIVE_URL);
-    expect(fixtureRequests.length).toBe(requestsBefore);
   });
 });
