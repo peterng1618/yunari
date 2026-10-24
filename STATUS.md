@@ -19,9 +19,10 @@ Branch: `feat/game-identity`
 
 ## Last completed change
 
-- **Phase 1 complete** (`eaf16238`, Steam gap fixed in `fc0077b4`): catalogue split into `catalogue/` per-source modules plus aggregation; 159 `providers/game` tests pass, host typecheck exit 0.
-- **Sources reachable in production:** Steam adapter is the default seam; Epic, GOG, itch, Xbox, Microsoft Store Appx and uninstall entries are read by type; no network.
-- **Phase gate caveat:** `npm run gate` exit 1 only on two live SMTC tests (`smtc-helper.windows.test.ts`), reproduced identically on `main`; filed as vg-726.
+- **Task 2.1 landed** (`424812dd`, proof `f3ad3b37`): helper reports `class`, `fullscreen`, `d3dFullscreen` and resolves the UWP `CoreWindow` child; 31 helper tests pass.
+- **Live proof:** the helper emitted a real line (`Chrome_WidgetWin_1`, both booleans false), and the reviewer exercised the frame-host branch with Calculator (`Windows.UI.Core.CoreWindow`, `CalculatorApp.exe`).
+- **Unproven live:** `fullscreen:true` and `d3dFullscreen:true`; their constants and comparisons are reviewed but never observed.
+- **Task 2.2 (classifier) is running**, then presence switches to it.
 - **No tray icon exists**: host lifetime remains terminal-owned (`host/src/main.ts`), and this plan does not add one.
 
 ## Next
