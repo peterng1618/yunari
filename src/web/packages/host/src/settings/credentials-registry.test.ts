@@ -155,10 +155,10 @@ describe("sourcesInUse", () => {
   }
 
   it("keeps the built-ins and appends a source-referenced id once", () => {
-    const table = sourcesInUse(
-      [],
-      [sourceOf("first", "srckey"), sourceOf("second", "srckey")],
-    );
+    const table = sourcesInUse([
+      sourceOf("first", "srckey"),
+      sourceOf("second", "srckey"),
+    ]);
 
     expect(table.map((entry) => entry.id)).toEqual([
       "unsplash",
@@ -173,7 +173,7 @@ describe("sourcesInUse", () => {
   });
 
   it("keeps a built-in's own entry when a source reuses its id", () => {
-    const table = sourcesInUse([], [sourceOf("first", "unsplash")]);
+    const table = sourcesInUse([sourceOf("first", "unsplash")]);
 
     expect(table.filter((entry) => entry.id === "unsplash")).toHaveLength(1);
     expect(table.find((entry) => entry.id === "unsplash")?.label).toBe(
@@ -182,17 +182,14 @@ describe("sourcesInUse", () => {
   });
 
   it("admits the valid source's id when a duplicate id was refused", () => {
-    // The store keeps the first valid entry and reports the duplicate. Keying
-    // the skip by id would drop the valid entry's credential with it.
-    const table = sourcesInUse(
-      [{ sourceId: "first", reason: 'source "first" repeats an id' }],
-      [sourceOf("first", "srckey")],
-    );
+    // The store keeps the first valid entry and reports the duplicate, so only
+    // the valid projection reaches this function and its credential survives.
+    const table = sourcesInUse([sourceOf("first", "srckey")]);
 
     expect(table.map((entry) => entry.id)).toContain("srckey");
   });
 
   it("ignores a source that names no credential", () => {
-    expect(sourcesInUse([], [sourceOf("first")])).toEqual(KNOWN_CREDENTIALS);
+    expect(sourcesInUse([sourceOf("first")])).toEqual(KNOWN_CREDENTIALS);
   });
 });

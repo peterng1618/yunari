@@ -656,6 +656,13 @@ export function createSourceStore(
     },
 
     write(input) {
+      // An envelope the store cannot read as a file is refused rather than
+      // persisted: `null` or an object with no `sources` array would replace a
+      // populated file with something the next read can only report and skip.
+      if (!isObject(input) || !Array.isArray(input.sources)) {
+        return Promise.resolve(normalizeSources(input));
+      }
+
       return writeExclusively(async () => {
         await save(input);
         return normalizeSources(input);

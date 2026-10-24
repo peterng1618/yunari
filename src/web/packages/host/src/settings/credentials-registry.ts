@@ -2,7 +2,7 @@ import type { CredentialRow } from "@yunari/renderer-core";
 import { verifyUnsplash } from "../assets/images/unsplash.js";
 import { verifyOpenWeatherMap } from "../providers/weather/openweathermap.js";
 import { verifyWeatherApi } from "../providers/weather/weatherapi.js";
-import type { CustomSource, SourceIssue } from "./sources.js";
+import type { CustomSource } from "./sources.js";
 
 /**
  * The credentials this host knows how to store.
@@ -67,14 +67,12 @@ export const KNOWN_CREDENTIALS: readonly KnownCredential[] = [
  * The table a credential write is checked against: the built-ins plus one entry
  * per credential id a valid custom source references.
  *
- * `sourceIssues` is accepted for the caller's convenience but is not used to
- * skip an id: an entry the store refused never reaches `sources` — that is the
- * validated projection — and keying a skip by id also refused the *valid* entry
- * when a duplicate id was the refused one. Built-ins win a shared id, and an
- * id referenced twice is listed once.
+ * An entry the store refused never reaches `sources` — that is the validated
+ * projection — so no issue list is needed here (and keying a skip by id refused
+ * the *valid* entry when a duplicate id was the refused one). Built-ins win a
+ * shared id, and an id referenced twice is listed once.
  */
 export function sourcesInUse(
-  _sourceIssues: readonly SourceIssue[],
   sources: readonly CustomSource[],
   known: readonly KnownCredential[] = KNOWN_CREDENTIALS,
 ): readonly KnownCredential[] {

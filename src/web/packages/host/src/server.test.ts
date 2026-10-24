@@ -9386,6 +9386,29 @@ describe("Custom source routes", () => {
     expect((await list()).issues[0]?.sourceId).toBe("broken");
   });
 
+  it("refuses a write the whole-file merge would make invalid, writing nothing", async () => {
+    await start({ fetch: jsonFetch({}) });
+    // The candidate is valid on its own; only the 32-source limit, which is a
+    // property of the merged file, refuses it.
+    const full = Array.from({ length: 32 }, (_, index) =>
+      fixtureSource({ id: `s${index}` }),
+    );
+    await fs.writeFile(sourceFile(), JSON.stringify({ sources: full }));
+    const before = await fs.readFile(sourceFile());
+
+    const put = await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/extra",
+      json(fixtureSource({ id: "extra" })),
+    );
+
+    expect(put.status).toBe(400);
+    expect(put.json()).toMatchObject({ ok: false, field: "extra" });
+    expect((put.json() as { reason: string }).reason).toContain("exceeds");
+    expect((await fs.readFile(sourceFile())).equals(before)).toBe(true);
+  });
+
   it("lands two simultaneous writes to different ids", async () => {
     await start({ fetch: jsonFetch({}) });
 

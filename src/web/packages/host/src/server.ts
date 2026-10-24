@@ -1029,7 +1029,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   async function refreshCredentialTable(): Promise<void> {
     if (sourceRoutes === undefined) return;
     const file = await sourceRoutes.store.read();
-    knownCredentials = sourcesInUse(file.issues, file.sources, baseCredentials);
+    knownCredentials = sourcesInUse(file.sources, baseCredentials);
   }
 
   /**

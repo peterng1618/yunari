@@ -386,6 +386,25 @@ describe("source store", () => {
     expect((await store.read()).issues[0]?.sourceId).toBe("broken");
   });
 
+  it("refuses an input that is not a file envelope, leaving the file as it was", async () => {
+    const store = createSourceStore(dir);
+    await store.write({ sources: [source()] });
+    const before = await readFile(sourcesFile(dir));
+
+    for (const input of [null, undefined, "sources", {}]) {
+      const refused = await store.write(input);
+
+      expect(refused.issues).toHaveLength(1);
+      expect(await readFile(sourcesFile(dir))).toEqual(before);
+    }
+
+    // The populated file is still readable: the refusal did not replace it
+    // with something the next read can only report and skip.
+    expect((await store.read()).sources.map((one) => one.id)).toEqual([
+      "local",
+    ]);
+  });
+
   it("stores the parsed URL so typed case and whitespace do not persist", async () => {
     const store = createSourceStore(dir);
 
