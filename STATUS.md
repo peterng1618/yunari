@@ -16,10 +16,11 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- All nine e2e cases now assert the live contract: Text exposes `tl`/`tr`/`bl`/`br`/`mtr` only, Textbox keeps all nine, and no case is pinned `test.fail`.
+- All nine e2e cases assert the live contract: Text exposes `tl`/`tr`/`bl`/`br`/`mtr` only, Textbox keeps all nine, and no case is pinned `test.fail`.
 - A Text's resize proof is a `br` corner drag: `scaleX`/`scaleY` rise, measured `width` holds, and no authored `yunariText.box` is written.
-- New case: words typed into a placed Text are the run's authored text, the repaint keeps the width they grew to, and Save to library + reopen keeps them.
-- Two clean `--workers=1` runs: expected 9, skipped 9, unexpected 0, flaky 0.
+- Textbox cases assert the authored box height beside width, left and top, and that it survives Save to library and reopen.
+- Words typed into a placed Text are the authored run, survive the repaint, and survive Save to library and reopen.
+- Two clean `--workers=1` runs: expected 9, skipped 9, unexpected 0, flaky 0; the plan's auto/fixed class choice is proven in `adapter.dom.test.ts`, since no browser path applies a plan.
 
 ## Next
 

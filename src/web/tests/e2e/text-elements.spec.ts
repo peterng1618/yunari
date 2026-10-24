@@ -550,6 +550,13 @@ test.describe("text and text box elements", () => {
     await selectLayer(page, placed.name ?? "Text box");
     const authored = await readObject(page, placed.name ?? "Text box");
     expect(boxOf(authored)?.width).toBeCloseTo(drawn.width, 0);
+    // The height is authored with the width. Without it a box that kept its
+    // width and lost its height still wraps, so width alone cannot prove that
+    // the drawn rectangle survived.
+    expect(
+      Math.abs((boxOf(authored)?.height ?? 0) - 120),
+      "the authored box keeps the drawn height",
+    ).toBeLessThanOrEqual(2);
 
     // A Text box keeps its editable Size and the controls that mean something
     // only when there is a box to clip and align inside.
@@ -685,6 +692,17 @@ test.describe("text and text box elements", () => {
     expect(before.get(authored.point.id)?.type).toBe("i-text");
     expect(before.get(authored.box.id)?.type).toBe("textbox");
 
+    const drawnHeight = boxOf(
+      await readObject(page, authored.box.name ?? "Text box"),
+    )?.height;
+    if (drawnHeight === undefined) {
+      throw new Error("the dragged box has no authored height");
+    }
+    expect(
+      Math.abs(drawnHeight - 120),
+      "the authored box keeps the drawn height",
+    ).toBeLessThanOrEqual(2);
+
     const id = await saveToLibrary(page);
 
     await page.goto(`${HOST_EDITOR}?theme=${id}`);
@@ -710,7 +728,19 @@ test.describe("text and text box elements", () => {
         saved.width,
         0,
       );
+      expect(reopened.height, `${label} kept its height`).toBeCloseTo(
+        saved.height,
+        0,
+      );
     }
+
+    const reopenedHeight = boxOf(
+      await readObject(page, authored.box.name ?? "Text box"),
+    )?.height;
+    expect(
+      reopenedHeight,
+      "the saved box kept its authored height",
+    ).toBeCloseTo(drawnHeight, 0);
   });
 
   test("a legacy wrap:false Textbox still wraps and a legacy Text opens as IText", async ({
