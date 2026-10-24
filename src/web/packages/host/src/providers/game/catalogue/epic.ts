@@ -59,7 +59,11 @@ function parseEpicManifest(text: string): InstalledGame | undefined {
     source: "epic",
     name,
     installDir,
-    exes: [path.win32.join(installDir, executable)],
+    exes: [
+      path.win32.isAbsolute(executable)
+        ? executable
+        : path.win32.join(installDir, executable),
+    ],
   };
 }
 

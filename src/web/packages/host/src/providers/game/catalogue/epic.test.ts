@@ -69,6 +69,30 @@ describe("readEpicGames", () => {
     ]);
   });
 
+  it("keeps an absolute LaunchExecutable as-is", async () => {
+    const manifest = JSON.stringify({
+      AppName: "Elsewhere",
+      DisplayName: "Elsewhere",
+      InstallLocation: "C:\\Games\\Elsewhere",
+      LaunchExecutable: "D:\\Games\\X\\game.exe",
+      MainGameAppName: "Elsewhere",
+      bIsIncompleteInstall: false,
+    });
+    const seams = seamsOf({
+      directories: { [MANIFEST_DIR]: ["Elsewhere.item"] },
+      files: { [manifestFile("Elsewhere.item")]: manifest },
+    });
+
+    await expect(readEpicGames(seams)).resolves.toEqual([
+      {
+        source: "epic",
+        name: "Elsewhere",
+        installDir: "C:\\Games\\Elsewhere",
+        exes: ["D:\\Games\\X\\game.exe"],
+      },
+    ]);
+  });
+
   it("skips an incomplete install", async () => {
     const seams = seamsOf({
       directories: { [MANIFEST_DIR]: ["RocketLeague.item"] },

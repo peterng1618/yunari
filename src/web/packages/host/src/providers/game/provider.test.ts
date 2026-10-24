@@ -678,6 +678,35 @@ describe("GameProvider classification", () => {
     h.provider.stop();
   });
 
+  it("starts a fresh streak when a new demand window begins", async () => {
+    vi.useFakeTimers();
+    const h = harness({ graceMs: 5_000 });
+    await h.sample(["game.running"]);
+    const line = foregroundLine(99, "C:\\Games\\Unknown\\game.exe", "game", {
+      class: "UnityWndClass",
+      fullscreen: true,
+    });
+    h.emit(h.children[0] as FakeChild, line);
+    const first = await h.sample(["game.running"]);
+    expect(first.get("game.running")).toMatchObject({ booleanValue: false });
+
+    // The grace gap tears the helper down. The new window's first demand reads
+    // no process, so only teardown can have cleared the old first sample.
+    h.advance(6_000);
+    await h.sample(["game.app"]);
+    const restarted = h.children[1];
+    expect(restarted).toBeDefined();
+
+    h.emit(restarted as FakeChild, line);
+    const one = await h.sample(["game.running"]);
+    expect(one.get("game.running")).toMatchObject({ booleanValue: false });
+
+    h.emit(restarted as FakeChild, line);
+    const two = await h.sample(["game.running"]);
+    expect(two.get("game.running")).toMatchObject({ booleanValue: true });
+    h.provider.stop();
+  });
+
   it("classifies a runtime marker through the injected readdir", async () => {
     vi.useFakeTimers();
     const listed: string[] = [];

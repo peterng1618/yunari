@@ -260,6 +260,7 @@ adapter does not own catalog, preview or adoption semantics.
 | Whether a host already holds an app folder | `host/src/settings/host-lock.ts` |
 | Device-assignment resolution handed to providers | `host/src/server.ts` (`currentAssignment`, resolved per display in `tick`) |
 | Clock/date provider | `host/src/providers/clock.ts` |
+| **What counts as a game, and which installed programs are games** — `InstalledGame` and the `source` union, `GAME_WINDOW_CLASSES`, `GAME_MARKER_FILES`, `NON_GAME_PROCESSES`, and `classifyForeground` | `host/src/providers/game/game-classifier.ts`, `host/src/providers/game/catalogue/catalogue.ts` |
 | Instant reading, offsets and the zone list | `renderer-core/src/scene/datetime/instant.ts` |
 | The author's date/time format tokens | `renderer-core/src/scene/datetime/format.ts` |
 | Locale-spelled month, weekday and day-period names | `renderer-core/src/scene/datetime/names.ts` |
