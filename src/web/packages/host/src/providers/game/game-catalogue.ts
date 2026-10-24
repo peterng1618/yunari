@@ -252,7 +252,11 @@ export async function readGogGames(
       exes:
         executable === undefined
           ? []
-          : [path.win32.join(installDir, executable)],
+          : [
+              path.win32.isAbsolute(executable)
+                ? executable
+                : path.win32.join(installDir, executable),
+            ],
     });
   }
 
@@ -262,21 +266,17 @@ export async function readGogGames(
 const XBOX_CONTENT_DIR = "Content";
 const XBOX_CONFIG_FILE = "MicrosoftGame.config";
 
-/** `MicrosoftGame.config` is XML; these take its executable without a parser. */
-const XBOX_EXECUTABLE_PATTERNS = [
-  /<Executable\b[^>]*\bName\s*=\s*"([^"]+)"/i,
-  /<Executable\b[^>]*>([^<]+)<\/Executable>/i,
-  /\bExecutable\s*=\s*"([^"]+)"/i,
-] as const;
+/**
+ * `MicrosoftGame.config` is XML; this takes its executable without a parser.
+ * The GDK shape is `<ExecutableList><Executable Name="X.exe" …/></ExecutableList>`.
+ */
+const XBOX_EXECUTABLE_PATTERN = /<Executable\b[^>]*\bName\s*=\s*"([^"]+)"/i;
 
 function executableFromXboxConfig(text: string): string | undefined {
-  for (const pattern of XBOX_EXECUTABLE_PATTERNS) {
-    const value = pattern.exec(text)?.[1]?.trim();
+  const withoutComments = text.replace(/<!--[\s\S]*?-->/g, "");
+  const value = XBOX_EXECUTABLE_PATTERN.exec(withoutComments)?.[1]?.trim();
 
-    if (value !== undefined && value !== "") return value;
-  }
-
-  return undefined;
+  return value === undefined || value === "" ? undefined : value;
 }
 
 /** One title under the Xbox root, or `undefined` when it names no launcher. */

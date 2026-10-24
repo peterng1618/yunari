@@ -223,6 +223,52 @@ describe("readGogGames", () => {
     await expect(readGogGames(seams)).resolves.toEqual([]);
   });
 
+  it("skips an entry with an empty gameName or no path", async () => {
+    const seams = seamsOf({
+      gog: [
+        { gameName: "", path: "C:\\Games\\Nameless", exe: "a.exe" },
+        { gameName: "Pathless", exe: "b.exe" },
+      ],
+    });
+
+    await expect(readGogGames(seams)).resolves.toEqual([]);
+  });
+
+  it("keeps an absolute exe as-is", async () => {
+    const seams = seamsOf({
+      gog: [
+        {
+          gameName: "Portable",
+          path: "C:\\Games\\Portable",
+          exe: "D:\\Elsewhere\\portable.exe",
+        },
+      ],
+    });
+
+    const games = await readGogGames(seams);
+
+    expect(games[0]?.exes).toEqual(["D:\\Elsewhere\\portable.exe"]);
+  });
+
+  it("skips an answer's non-object entries", async () => {
+    const seams = seamsOf({
+      gog: [
+        null,
+        7,
+        {
+          gameName: "Disco Elysium",
+          path: "C:\\Games\\Disco Elysium",
+          exe: "disco.exe",
+        },
+      ],
+    });
+
+    const games = await readGogGames(seams);
+
+    expect(games).toHaveLength(1);
+    expect(games[0]?.name).toBe("Disco Elysium");
+  });
+
   it("reports no executables for an entry without exe", async () => {
     const seams = seamsOf({
       gog: [{ gameName: "Launcher Only", path: "C:\\Games\\Launcher" }],
@@ -262,7 +308,16 @@ const XBOX_CONTENT = `${XBOX_ROOT}\\Forza\\Content`;
 const XBOX_CONFIG = `<?xml version="1.0" encoding="utf-8"?>
 <Game configVersion="1">
   <ExecutableList>
-    <Executable Name="Forza.exe" />
+    <Executable Name="Forza.exe" TargetDeviceType="PC" />
+  </ExecutableList>
+</Game>`;
+
+/** A commented-out executable must not win over the live one. */
+const COMMENTED_XBOX_CONFIG = `<?xml version="1.0" encoding="utf-8"?>
+<Game configVersion="1">
+  <!-- <Executable Name="old.exe" /> -->
+  <ExecutableList>
+    <Executable Name="Forza.exe" TargetDeviceType="PC" />
   </ExecutableList>
 </Game>`;
 
@@ -271,7 +326,7 @@ describe("readXboxGames", () => {
     const seams = seamsOf({
       directories: {
         [XBOX_ROOT]: ["Forza"],
-        [XBOX_CONTENT]: ["Forza.exe", "readme.txt"],
+        [XBOX_CONTENT]: ["Forza.exe", "ForzaHelper.exe", "readme.txt"],
       },
       files: { [`${XBOX_CONTENT}\\MicrosoftGame.config`]: XBOX_CONFIG },
     });
@@ -284,6 +339,22 @@ describe("readXboxGames", () => {
         exes: [`${XBOX_CONTENT}\\Forza.exe`],
       },
     ]);
+  });
+
+  it("ignores a commented-out executable", async () => {
+    const seams = seamsOf({
+      directories: {
+        [XBOX_ROOT]: ["Forza"],
+        [XBOX_CONTENT]: ["Forza.exe", "old.exe"],
+      },
+      files: {
+        [`${XBOX_CONTENT}\\MicrosoftGame.config`]: COMMENTED_XBOX_CONFIG,
+      },
+    });
+
+    const games = await readXboxGames(seams);
+
+    expect(games[0]?.exes).toEqual([`${XBOX_CONTENT}\\Forza.exe`]);
   });
 
   it("falls back to the sole exe under Content when there is no config", async () => {
