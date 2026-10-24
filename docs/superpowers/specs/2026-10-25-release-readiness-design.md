@@ -1,7 +1,8 @@
 # Release readiness — versioning, dependency hygiene and publishing — design
 
 - **Date:** 2026-10-25
-- **Status:** approved 2026-10-25; spec awaiting plan.
+- **Status:** approved 2026-10-25; plan
+  [`2026-10-25-release-readiness.md`](../plans/2026-10-25-release-readiness.md).
 - **Register:** no row. Nothing here is a defect against shipped behaviour.
 - **Related:** [`STATUS.md`](../../../STATUS.md);
   [`docs/architecture/ownership.md`](../../architecture/ownership.md);
@@ -118,16 +119,21 @@ the major derived from it rather than written a second time.
 
 Reading rules:
 
+- A document whose `schemaVersion` is the legacy integer equal to the current
+  major (`2`) is normalised to the current semver (`"2.0.0"`) before
+  validation. This is the one migration that exists at landing time, and it
+  exists because every theme already saved by this build carries it.
 - A document whose major equals the current major is accepted.
 - A document whose major is exactly one less is **migrated in memory**, then
   validated as current.
-- A document two or more majors older, or any newer major, is refused with the
-  sentence it already prints for a newer schema.
+- A document two or more majors older, any other integer, or any newer major,
+  is refused with the sentence it already prints for a newer schema.
 - Saving, exporting and publishing always write the current version.
 
-At `2.0.0` there is no earlier supported major: v1 was deleted and no v1
-document exists. N−1 is therefore a forward obligation. The dispatch seam and
-its invariant land now; real migrations begin when `3.0.0` exists.
+At `2.0.0` there is no earlier supported major beyond the legacy integer: v1
+was deleted and no v1 document exists. N−1 is therefore a forward obligation.
+The dispatch seam and its invariant land now; real migrations begin when
+`3.0.0` exists.
 
 **Every envelope format change is a major bump** while the reader rejects
 unknown members. A new member, a removed member, a renamed member or a changed
@@ -276,6 +282,15 @@ release has run. Winget submission then uses the GitHub Release asset URL and
 SHA256, and `wingetcreate update` for later versions. No winget work is in this
 plan beyond documenting the path.
 
+### D8 — README describes the product as it is
+
+The whole README is rewritten, not just its install section. It must state the
+current architecture, the current feature set, the current CLI flags (read from
+`--help`, not a copy), the pre-release status, and the release path. It must
+not claim winget support, and it must not claim the npm package is installable
+before the first publish has happened. The stale line saying npm `yunari` is
+unrelated is removed. `AGENTS.md` is not edited: it is user-owned.
+
 ## Release files and ownership
 
 | Fact | Owner |
@@ -298,7 +313,8 @@ rewritten in the same change that publishes the first package.
 ## Testing and evidence
 
 - **Unit:** semver parse and bump rules for the product; schema major
-  extraction; migration dispatch with an injected table; refusal of an
+  extraction; the legacy integer `2` normalises to `"2.0.0"` while any other
+  integer is refused; migration dispatch with an injected table; refusal of an
   unsupported or malformed major; "every accepted older major has a migration".
 - **Unit:** versions are read from one owner — a test that changes the
   manifest value sees both the host answer and the editor define follow it.
@@ -313,7 +329,7 @@ rewritten in the same change that publishes the first package.
   in CI on the release tag.
 - **Browser:** existing dev-mode suites stay the behavioural evidence; the
   package smoke proves the packaged layout.
-- **Red-proofs:** remove the migration dispatch so an older-major fixture is
+- **Red-proofs:** remove the migration dispatch so a legacy-integer fixture is
   refused; remove a read routed through the migration so the direct-validator
   call is caught; add a fake finding to prove the audit policy fails closed.
 - **Gate:** `npm run gate` exit 0 on the release commit, CI green on the
