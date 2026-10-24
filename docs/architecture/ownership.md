@@ -208,6 +208,10 @@ adapter does not own catalog, preview or adoption semantics.
 | **The shape an asset path must have** — the pattern it must match, hand-spelled a second time outside this module | `renderer-core/src/theme/document.ts` (`ASSET_PATH_PATTERN`) |
 | Provider contract | `host/src/providers/provider.ts` |
 | **The product's version** — one number for the host CLI and the editor bundle alike, in the manifest a release already edits; the host reads it at run time and the editor's bundle is given it by Vite's `define` (`vg-279`) | `src/web/package.json` (`version`) |
+| **The schema version a document declares** — the one accepted version string, the major derived from it rather than spelled a second time, and the refusal every reader shares | `renderer-core/src/theme/fabric-envelope.ts` (`SUPPORTED_SCHEMA_VERSION`, `SCHEMA_MAJOR`) |
+| **Carrying an older supported schema forward** — the one dispatcher, each migration keyed by the major it comes *from*, and the rule that every accepted older major has one; it never validates and never writes | `renderer-core/src/theme/migrations.ts` (`migrateEnvelope`) |
+| **The release bump and its notes** — the level a commit earns, the version written to the manifest, and the tag the release PR creates | `.github/workflows/release.yml`, `release-please-config.json`, `.release-please-manifest.json` |
+| **The published package** — what the tarball contains, the dependencies its manifest declares, the tag/version agreement it refuses on, and the one publish run | `.github/workflows/publish.yml`, `scripts/stage-npm-package.mjs` |
 
 ### Fabric renderer
 

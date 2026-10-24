@@ -19,6 +19,7 @@ artifacts and from Git history.
 | Superpowers implementation plans | [`superpowers/plans/`](superpowers/plans/) |
 | Non-obvious engineering traps | [`engineering/gotchas.md`](engineering/gotchas.md) |
 | Dependency/licence provenance | [`engineering/dependencies.md`](engineering/dependencies.md) |
+| Releasing the product — version bump, publish, npm and the winget deferral | [`engineering/releases.md`](engineering/releases.md) |
 | Rendered verification evidence | [`evidence/screenshots/`](evidence/screenshots/) |
 
 Implementation truth is always the code and tests. `STATUS.md` is a compact handoff, not history. Git stores chronology.

@@ -9,7 +9,7 @@ The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-relea
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-release-readiness.md` — Phases A, B and C complete; C1, C2 and C3 committed.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-release-readiness.md` — Phases A, B and C complete; D1 committed, D2–D3 remain.
 - **A1 is complete:** decisions 0110 (migrate the previous schema major on open) and 0111 (stage the workspace as `yunari`) claim every watched path later tasks write.
 - **A2 is complete:** `schemaVersion` is `"2.0.0"`; the strict validator accepts a semver major and still refuses every integer.
 - **A3 is complete:** `readFabricThemeEnvelope` migrates the legacy integer and accepted older majors, then validates.
@@ -17,17 +17,16 @@ The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-relea
 
 ## Last completed change
 
-- **`.github/workflows/publish.yml` runs on `release: published` and manual `workflow_dispatch`** with a `dry_run` input defaulting to true, `contents: write` and `id-token: write`.
-- **It gates and builds player, editor and host on Node 24,** stages with `--expect-version "${GITHUB_REF_NAME#v}"`, then packs the tarball and asserts the load-bearing entries.
-- **The smoke step installs the tarball in a temp directory,** checks `yunari --version`, boots the host on port 4319 with `--no-browser` and requires 200 from `/api/health`, `/editor` and `/`.
-- **Publish uses `--provenance --access public` and `--tag next` for a prerelease;** manual dispatch adds `--dry-run`, and assets upload only on a real release run.
-- **Verified locally:** workflow YAML parses (exit 0), the staged pack is 35 files / 6.9 MB with every required entry, install-and-smoke passed, and `npm publish --dry-run` exited 0.
+- **`docs/engineering/releases.md` is the release runbook:** release-please flow, the two release-token modes, dry-run dispatch, what the publish job does, and the asset list.
+- **It records npm authentication order:** the first publish is token-authenticated, the trusted publisher for `peterng1618/yunari` / `publish.yml` applies from the second, and no token is wired into the workflow.
+- **It states the costs and the deferral:** tag/version mismatch fails the run, npm unpublish is 72 hours then `deprecate` only, a version is never reused, and winget waits on a real `.exe`.
+- **Ownership gained four rows** — schema version, envelope migration, release bump/notes, published package — and `docs/README.md` maps the runbook.
+- **Verified:** `npm run docs:check` and `npm run ownership:sweep` both exit 0.
 
 ## Next
 
-1. D1 — release documentation and ownership, including the trusted-publisher runbook.
-2. D2 — rewrite the README to current state.
-3. D3 — close the plan.
+1. D2 — rewrite the README to current state.
+2. D3 — close the plan.
 
 ## Blockers / unverified
 
