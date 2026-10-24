@@ -31,9 +31,9 @@ describe("descriptorFromWire", () => {
   });
 
   it("drops a value kind the renderer cannot honour", () => {
-    expect(
-      descriptorFromWire({ ...CUSTOM, valueKind: "decimal" })?.valueKind,
-    ).toBeUndefined();
+    const descriptor = descriptorFromWire({ ...CUSTOM, valueKind: "decimal" });
+    expect(descriptor?.key).toBe("custom.fan");
+    expect(descriptor?.valueKind).toBeUndefined();
   });
 
   it("keeps only an image media kind", () => {
@@ -50,10 +50,9 @@ describe("descriptorFromWire", () => {
       descriptorFromWire({ ...CUSTOM, displayUnits: ["RPM", 7, null] })
         ?.displayUnits,
     ).toEqual(["RPM"]);
-    expect(
-      "displayUnits" in
-        (descriptorFromWire({ ...CUSTOM, displayUnits: [7] }) ?? {}),
-    ).toBe(false);
+    const empty = descriptorFromWire({ ...CUSTOM, displayUnits: [7] });
+    expect(empty?.key).toBe("custom.fan");
+    expect("displayUnits" in (empty ?? {})).toBe(false);
   });
 
   it("drops an entry without a key or a label", () => {
