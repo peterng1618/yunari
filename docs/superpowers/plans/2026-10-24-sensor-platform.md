@@ -1384,8 +1384,11 @@ wording; the spec has been amended to say the same thing.
   Strip `™`/`®`/`©` before `normalize("NFKD")` (NFKD turns `™` into `TM`), fold
   case, and strip combining marks only when the base character is Latin — kana
   voicing and Cyrillic phonemic marks are meaningful, so `が` must not become
-  `か`. Then strip punctuation and articles, drop the trailing qualifier words
-  (with or without `edition`), collapse whitespace. Two results with one appid
+  `か`. Then strip punctuation and articles, drop the trailing qualifier words,
+  collapse whitespace. Bare-safe words: `definitive`, `deluxe`, `ultimate`,
+  `complete`, `enhanced`, `remastered`, `collector's`, `director's cut`, `goty`,
+  `game of the year`; `gold`, `special`, `legendary`, `anniversary` only inside
+  an `edition` phrase, because `Pokémon Gold` is not `Pokémon`. Two results with one appid
   are one candidate. Accept a candidate only when the normalised base titles are equal
   or their token sets are equal; return a winner only when exactly one candidate
   survives. No prefix, substring or edit-distance rule — it is the rule that

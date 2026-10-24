@@ -628,11 +628,13 @@ offline afterwards.
 **Matching is tiered, and ambiguity is refused.** Normalisation folds case,
 strips `™ ® ©`, punctuation and leading articles, removes Latin diacritics but
 never the marks that distinguish non-Latin letters (kana voicing, Cyrillic
-phonemic marks), and drops edition qualifiers (`definitive`, `deluxe`,
-`ultimate`, `complete`, `goty`, `enhanced`, `remastered`, `special`, `gold`,
-`anniversary`, `legendary`, `collector's`, `director's cut`) as trailing words,
-with or without a following `edition`. Two search entries carrying one appid are
-one candidate. A match is accepted only when the base titles are equal or
+phonemic marks), and drops edition qualifiers as trailing words. One-word
+qualifiers safe to drop bare are `definitive`, `deluxe`, `ultimate`, `complete`,
+`enhanced`, `remastered`, `collector's`, `director's cut`, `goty` and
+`game of the year`; `gold`, `special`, `legendary` and `anniversary` are dropped
+only as part of a phrase that carries `edition`, because they are also
+distinguishing title words (`Pokémon Gold`, `Halo: Anniversary`). Two search
+entries carrying one appid are one candidate. A match is accepted only when the base titles are equal or
 their token sets are equal after the qualifiers are dropped, and only if exactly
 one candidate remains. `Doom` must not match `Doom Eternal`, and no prefix or
 substring rule is used at all: a sequel's extra word is not a qualifier, so it
