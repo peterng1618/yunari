@@ -81,6 +81,82 @@ describe("classifyForeground", () => {
       ).resolves.toEqual({ running: false, evidence: "none" });
     });
 
+    it("prefers an exact executable over an earlier install-root match", async () => {
+      const launcher = game("Game Launcher", "C:\\Games\\Game", [
+        "C:\\Games\\Game\\launcher.exe",
+      ]);
+      const target = game("Game", "C:\\Games\\Game", [
+        "C:\\Games\\Game\\game.exe",
+      ]);
+
+      await expect(
+        classifyForeground(
+          reading({ path: "C:\\Games\\Game\\game.exe" }),
+          [launcher, target],
+          state(),
+        ),
+      ).resolves.toEqual({
+        running: true,
+        evidence: "catalogue",
+        game: target,
+      });
+    });
+
+    it("keeps an exact executable first even when containment comes later", async () => {
+      const target = game("Game", "C:\\Games\\Game", [
+        "C:\\Games\\Game\\game.exe",
+      ]);
+      const launcher = game("Game Launcher", "C:\\Games\\Game", [
+        "C:\\Games\\Game\\launcher.exe",
+      ]);
+
+      await expect(
+        classifyForeground(
+          reading({ path: "C:\\Games\\Game\\game.exe" }),
+          [target, launcher],
+          state(),
+        ),
+      ).resolves.toEqual({
+        running: true,
+        evidence: "catalogue",
+        game: target,
+      });
+    });
+
+    it("prefers the nested install root over its parent", async () => {
+      const parent = game("Parent", "C:\\Games\\Game");
+      const nested = game("Nested", "C:\\Games\\Game\\Nested");
+
+      await expect(
+        classifyForeground(
+          reading({ path: "C:\\Games\\Game\\Nested\\game.exe" }),
+          [parent, nested],
+          state(),
+        ),
+      ).resolves.toEqual({
+        running: true,
+        evidence: "catalogue",
+        game: nested,
+      });
+    });
+
+    it("does not list markers once the catalogue matches", async () => {
+      const readdir = vi.fn(async () => ["steam_api64.dll"]);
+
+      await expect(
+        classifyForeground(
+          reading({ path: "C:\\Games\\Doom\\doom.exe" }),
+          [game("Doom", "C:\\Games\\Doom")],
+          { fullscreenSamples: 0, readdir },
+        ),
+      ).resolves.toEqual({
+        running: true,
+        evidence: "catalogue",
+        game: game("Doom", "C:\\Games\\Doom"),
+      });
+      expect(readdir).not.toHaveBeenCalled();
+    });
+
     it("matches an appx install root", async () => {
       const catalogue = [
         game(
@@ -112,6 +188,24 @@ describe("classifyForeground", () => {
           reading({ path: "C:\\Games\\Indie\\game.exe" }),
           [],
           state({ "C:\\Games\\Indie": ["steam_api64.dll", "game.exe"] }),
+        ),
+      ).resolves.toEqual({ running: true, evidence: "runtime" });
+    });
+
+    it("matches markers regardless of the listing's case", async () => {
+      await expect(
+        classifyForeground(
+          reading({ path: "C:\\Games\\Unity\\game.exe" }),
+          [],
+          state({ "C:\\Games\\Unity": ["UNITYPLAYER.DLL", "Game.exe"] }),
+        ),
+      ).resolves.toEqual({ running: true, evidence: "runtime" });
+
+      await expect(
+        classifyForeground(
+          reading({ path: "C:\\Games\\UE\\game.exe" }),
+          [],
+          state({ "C:\\Games\\UE": ["GAME.PAK", "ENGINE"] }),
         ),
       ).resolves.toEqual({ running: true, evidence: "runtime" });
     });

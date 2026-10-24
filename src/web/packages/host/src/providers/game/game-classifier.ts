@@ -98,10 +98,20 @@ function catalogueMatch(
 
   const target = normalised(reading.path);
 
-  return catalogue.find((entry) => {
-    const exact = entry.exes.some((exe) => normalised(exe) === target);
-    return exact || isWithin(target, normalised(entry.installDir));
-  });
+  // An exact executable names its game; a shared install root may hold several.
+  const exact = catalogue.find((entry) =>
+    entry.exes.some((exe) => normalised(exe) === target),
+  );
+  if (exact !== undefined) return exact;
+
+  // Longest root first, so a nested install beats the parent that contains it.
+  const byRootLength = [...catalogue].sort(
+    (a, b) => b.installDir.length - a.installDir.length,
+  );
+
+  return byRootLength.find((entry) =>
+    isWithin(target, normalised(entry.installDir)),
+  );
 }
 
 /**
