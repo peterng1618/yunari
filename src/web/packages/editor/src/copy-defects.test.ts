@@ -297,17 +297,11 @@ it("states a missing reading as a gap rather than a zero or a dash", async () =>
  * `publish-indicator.dom.test.tsx`). The diagnostics pair leads its message,
  * asserted by `diagnostic-message.dom.test.tsx`.
  *
- * **One reading proven, two with no test at all.** The View menu's three readings
- * are not uniform. Its `chartRefresh` radio is proven — `shell-layout.dom.test.tsx`
- * opens that submenu, picks `uiCopy.view.fps1` and asserts
- * `view.setChartRefreshRate(1)` — which is why this case does not open the menu
- * again (50–90s per jsdom open, `vg-135`). Its `dataSource` and `valueRuns` radios
- * are exercised by **nothing**: searched `setSourceMode`, `setRunDisplay` and
- * `setChartDataSource`/`setValueRuns` across the test tree — `setSourceMode`
- * appears only as a `vi.fn()` stub never asserted, and the menu's `setRunDisplay`
- * is never asserted (the runtime method is tested directly in
- * `live-runtime.dom.test.ts`/`run-display.dom.test.ts`, not the radio). Filed as a
- * row (`vg-339`); the words are right, only their proof is missing.
+ * **Two readings, both proven.** The View menu carries `chartRefresh` and
+ * `dataSource`. `shell-layout.dom.test.tsx` opens each submenu, picks a value
+ * and asserts the owner was called, so this case does not open the menu again
+ * (50–90s per jsdom open, `vg-135`). The value-runs setting is gone: a value
+ * run's token is the editing view and has no standing mode.
  */
 it("maps the publish surface's capability strings to controls that can run them", async () => {
   const host = document.createElement("div");

@@ -76,9 +76,8 @@ function runtimeOf(canvas: Canvas): LiveRuntime {
 describe("what a value run shows", () => {
   it("shows the reading by default, not the token", () => {
     const { canvas, objects } = scene();
-    const runtime = runtimeOf(canvas);
+    runtimeOf(canvas);
 
-    expect(runtime.runDisplay).toBe("values");
     expect(objects["mem-label"]?.text).toBe("MEM 61 %");
   });
 
@@ -125,17 +124,7 @@ describe("what a value run shows", () => {
     expect(edited.text).toBe("MEM 61 %");
   });
 
-  it("shows the token for every object when the author asks for tokens", () => {
-    const { canvas, objects } = scene();
-    const runtime = runtimeOf(canvas);
-
-    runtime.setRunDisplay("tokens");
-
-    expect(objects["mem-label"]?.text).toBe("MEM @ram.used.percent %");
-    expect(objects["other"]?.text).toBe("MEM @ram.used.percent %");
-  });
-
-  it("leaves the authored runs alone whichever way it is showing them", () => {
+  it("leaves the authored runs alone while it shows a token", () => {
     const { canvas, objects } = scene();
     const runtime = runtimeOf(canvas);
 

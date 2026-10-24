@@ -14,17 +14,6 @@ import type { Binding, PlanTextSegment, TextRun } from "@yunari/renderer-core";
 /** Marks a placeholder as structure rather than data. */
 const PLACEHOLDER_PREFIX = "@";
 
-/** How a value run is presented while authoring. */
-export type RunDisplayMode = "tokens" | "values";
-
-/**
- * A dashboard that shows `@ram.used.percent` where the reader expects `61%` is
- * not a preview of the thing. The token is what an author needs while editing
- * that run, and the object's own `isEditing` says when that is; the mode here
- * is the deliberate override, not the default.
- */
-export const DEFAULT_RUN_DISPLAY_MODE: RunDisplayMode = "values";
-
 /** Why a run cannot name a token, if it cannot. */
 type PlaceholderProblem = "undeclared" | "unmapped";
 

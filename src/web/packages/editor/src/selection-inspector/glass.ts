@@ -53,7 +53,7 @@ function kindOf(object: FabricObject): string {
  * directly, so a group never fires `before:render` and there is no boundary to
  * sample its backdrop through; `scene-fabric/src/glass.ts` refuses the
  * treatment there. Enabling it would take an edit that paints nothing, so no
- * control is offered for it and `glassRefusal` is the reason instead.
+ * control is offered for it.
  *
  * Kept apart from `panel.ts`'s `supportsPanelFields` on purpose. That answers
  * "may these fields write this object's material?" — a group has no own fill,
@@ -65,33 +65,6 @@ function kindOf(object: FabricObject): string {
 export function supportsGlassControl(object: FabricObject): boolean {
   return supportsGlass(kindOf(object)) && !(object instanceof Group);
 }
-
-/**
- * Why this subject is offered no frosted-glass section, in its own terms, or
- * `undefined` when it is offered one.
- *
- * One function, so "is the section offered" and "why is it not" cannot drift
- * into answering two different questions: `glassFields` withholds exactly when
- * this answers, and it is what the column carries so the author is told.
- */
-export function glassRefusal(object: FabricObject): string | undefined {
-  return supportsGlassControl(object)
-    ? undefined
-    : uiCopy.inspectorFields.glassRefused(kindOf(object));
-}
-
-/**
- * The reason, and where it is carried.
- *
- * It is **not** a tooltip, and it is not a refused row either — there is no row
- * to carry it once the section is withheld. `index.ts` hands it to
- * `selection-lead.tsx`, so the column prints it as words under the name of the
- * thing it is about: the
- * same visible sentence the refused row used to print (plan 1's `refused` prop,
- * and §5.3 before it), reached without a hover and without a control that looks
- * operable and is not. `tooltip.ts` stays the one owner of what a tooltip is —
- * this module builds neither.
- */
 
 /** The panel's authored treatment, or none. */
 function treatmentOf(object: FabricObject): GlassTreatment | undefined {
@@ -161,12 +134,9 @@ function frostTheSurface(
  * nothing anywhere saying so". The author has since ruled the other way — the
  * subject's inability is a fact about its kind, and a section that exists only
  * to refuse one row is not a question (§7.4, "a property a kind does not have is
- * not shown as a field"). What the earlier ruling was protecting is kept rather
- * than dropped: {@link glassRefusal} is the same reason in the same words, and
- * `index.ts` hands it to `selection-inspector/selection-lead.tsx` so the column
- * leads the subject with it — an author
- * selecting a group is told why the control they expected is not there, instead
- * of meeting a silence they have to infer a rule from.
+ * not shown as a field"). The reason is not carried elsewhere either: an author
+ * selecting a group is simply offered no glass, without a sentence explaining
+ * what was never theirs to set.
  *
  * Values, not controls: React renders them through the control set and
  * `index.ts` writes them through {@link writeGlassField}.

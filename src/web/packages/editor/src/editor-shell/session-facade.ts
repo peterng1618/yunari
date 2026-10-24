@@ -8,7 +8,6 @@ import type * as React from "react";
 import type { ArrangeAction } from "../arrange.js";
 import type { ImportOutcome } from "../asset-finder/actions.js";
 import type { ShapeKind } from "../new-object-defaults.js";
-import type { RunDisplayMode } from "../run-placeholder.js";
 
 /** Document-level editor actions the shell dispatches. Every method delegates to
  * an existing owner; the façade adds reachability, never logic. */
@@ -72,7 +71,4 @@ export interface EditorViewControls {
   setSourceMode(mode: "preview" | "live"): void;
   readonly chartRefreshRate: () => 1 | 30;
   setChartRefreshRate(rate: 1 | 30): void;
-  /** How value runs read while authoring (§89): the token, or its value. */
-  readonly runDisplay: () => RunDisplayMode;
-  setRunDisplay(mode: RunDisplayMode): void;
 }

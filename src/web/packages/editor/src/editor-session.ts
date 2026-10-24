@@ -55,7 +55,6 @@ import {
   paletteTokenUsage,
 } from "./palette-manager/index.js";
 import type { PresetSelection } from "./panes/tokens/preset-list.js";
-import type { RunDisplayMode } from "./run-placeholder.js";
 import { typePresetOf } from "./selection-inspector/appearance.js";
 import {
   createSelectionInspector,
@@ -909,15 +908,6 @@ export class EditorSession {
   tick(): void {
     this.#runtime.tick();
     this.charts.refresh();
-  }
-
-  /** How value runs read while authoring (§89). */
-  runDisplay(): RunDisplayMode {
-    return this.#runtime.runDisplay;
-  }
-
-  setRunDisplay(mode: RunDisplayMode): void {
-    this.#runtime.setRunDisplay(mode);
   }
 
   async hydrateAssets(shell: EditorShell): Promise<void> {

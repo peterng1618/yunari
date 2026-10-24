@@ -2846,10 +2846,6 @@ body,
 .editor-shell-inspector {
   padding: 12px;
 }
-.editor-shell-hint {
-  color: var(--shell-muted);
-  margin: 0;
-}
 .editor-shell-tooltip {
   z-index: 50;
   /* A tooltip is a reading, not a control: it must never take a pointer event

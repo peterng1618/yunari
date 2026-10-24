@@ -9,20 +9,12 @@ import { type ObjectActionId, objectAction } from "../object-actions.js";
  * The block that leads the column, under the subject: what the selection itself
  * has to say before its properties say anything.
  *
- * Two things live here, and each is here for the same reason — there is nowhere
- * else left to put it:
- *
- * - **The arrange actions** (`vg-463`). The dock carried the eight; a
- *   multi-selection gets them at the top of the column now. The registry is
- *   still their one owner: the ids and labels cross as values from `index.ts`,
- *   the glyph is asked of it by id, and the run is its own — so a surface cannot
- *   advertise an action `applyArrange` would refuse.
- * - **The glass refusal** (`vg-465`). A subject the frosted-glass treatment
- *   cannot reach is offered no Paint section at all, and a reason the author
- *   never meets is the silence the earlier ruling was against. The sentence the
- *   refused row used to print is carried here instead, where the subject is
- *   named — visible words, no hover and no control that looks operable and is
- *   not (DESIGN.md §5.3).
+ * One thing lives here, and it is here for the same reason — there is nowhere
+ * else left to put it: **the arrange actions** (`vg-463`). The dock carried the
+ * eight; a multi-selection gets them at the top of the column now. The registry
+ * is still their one owner: the ids and labels cross as values from `index.ts`,
+ * the glyph is asked of it by id, and the run is its own — so a surface cannot
+ * advertise an action `applyArrange` would refuse.
  *
  * Values in, a callback out: `index.ts` projects the buttons from the live
  * selection and hands the run back, so React holds no Fabric object (ADR-0039)
@@ -46,8 +38,6 @@ export interface ArrangeButtonView {
 }
 
 export interface SelectionLeadView {
-  /** The reason no frosted-glass section is offered, or nothing when one is. */
-  readonly glassRefusal: string | undefined;
   readonly arrange: readonly ArrangeButtonView[];
 }
 
@@ -94,9 +84,9 @@ function ArrangeRow({
 }
 
 /**
- * The block, or nothing at all: a single object with a glass section to offer
- * gets neither a reason nor an action, and an empty block would still be a
- * boundary in the panel with nothing between the rules.
+ * The block, or nothing at all: a single object has no arrange action to
+ * offer, and an empty block would still be a boundary in the panel with nothing
+ * between the rules.
  *
  * **It closes with its own edge**, because it stands between the subject's
  * hairline and the sections. The first section draws no rule of its own
@@ -108,22 +98,16 @@ function ArrangeRow({
  * have put this block's boundary in someone else's component.
  */
 export function SelectionLead({
-  glassRefusal,
   arrange,
   run,
 }: SelectionLeadProps): React.JSX.Element | null {
-  if (glassRefusal === undefined && arrange.length === 0) return null;
+  if (arrange.length === 0) return null;
 
   return (
     <div
       className="flex flex-col gap-[var(--space-8)] border-b border-edge pt-[var(--space-12)] pb-[var(--space-8)]"
       data-yunari-selection-lead=""
     >
-      {glassRefusal === undefined ? null : (
-        <p className="m-0 text-sm text-muted" data-yunari-glass-refusal="">
-          {glassRefusal}
-        </p>
-      )}
       <ArrangeRow actions={arrange} run={run} />
     </div>
   );
@@ -146,13 +130,7 @@ export function createSelectionLeadRoot(host: HTMLElement): {
   return {
     publish(view, run) {
       flushSync(() => {
-        root.render(
-          <SelectionLead
-            glassRefusal={view.glassRefusal}
-            arrange={view.arrange}
-            run={run}
-          />,
-        );
+        root.render(<SelectionLead arrange={view.arrange} run={run} />);
       });
     },
     destroy() {

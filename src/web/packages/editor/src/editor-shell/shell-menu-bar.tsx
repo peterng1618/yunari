@@ -6,10 +6,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import {
-  DEFAULT_RUN_DISPLAY_MODE,
-  type RunDisplayMode,
-} from "../run-placeholder.js";
-import {
   activeShortcuts,
   subscribeShortcuts,
 } from "../shortcut-manager/bindings.js";
@@ -180,14 +176,10 @@ export function ShellMenuBar({
   const session = store.bridge?.session;
   const [source, setSource] = useState<"preview" | "live">("preview");
   const [rate, setRate] = useState<1 | 30>(30);
-  const [runDisplay, setRunDisplay] = useState<RunDisplayMode>(
-    DEFAULT_RUN_DISPLAY_MODE,
-  );
 
   useEffect(() => {
     setSource(getView()?.sourceMode() ?? "preview");
     setRate(getView()?.chartRefreshRate() ?? 30);
-    setRunDisplay(getView()?.runDisplay() ?? DEFAULT_RUN_DISPLAY_MODE);
   }, [getView, selection.selectedCount]);
 
   const item = (
@@ -283,18 +275,6 @@ export function ShellMenuBar({
           onChange={(next) => {
             getView()?.setChartRefreshRate(next);
             setRate(next);
-          }}
-        />
-        <ViewSetting
-          label={uiCopy.view.valueRuns}
-          value={runDisplay}
-          options={[
-            ["values", uiCopy.view.values],
-            ["tokens", uiCopy.view.tokens],
-          ]}
-          onChange={(next) => {
-            getView()?.setRunDisplay(next);
-            setRunDisplay(next);
           }}
         />
       </MenuGroup>

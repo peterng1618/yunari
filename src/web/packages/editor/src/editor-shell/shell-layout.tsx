@@ -319,12 +319,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
      *  shell's one reading of `ThemeMetadata` — the bridge snapshot — so the
      *  About tab's version is the same fact the Document pane's
      *  `releaseVersion` row reads, never a second source. */
-    const {
-      activeKind: kind,
-      releaseVersion,
-      objectCount,
-      tokenCount,
-    } = useSelection(store);
+    const { releaseVersion, objectCount, tokenCount } = useSelection(store);
     const sheetOpen = useSheet(sheet);
     const finderState = useFinder(finder);
     const finderOpen = finderState.open;
@@ -660,9 +655,6 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
                 A chart's own fields are still in this column — its owner is
                 asked for them — so a chart keeps every question it has. */}
             <Host node={hosts.selection} />
-            {kind !== "none" && (
-              <p className="editor-shell-hint">{uiCopy.selectionHint}</p>
-            )}
           </aside>
         </div>
         {/* The mode's own region — the seam a non-editor surface fills. A task

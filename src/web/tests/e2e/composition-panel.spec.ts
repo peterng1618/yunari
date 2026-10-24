@@ -811,12 +811,12 @@ test("the right column names where to choose from, and empties when nothing is s
 
   const column = page.locator('[data-yunari-panel="selection"]');
   const emptyLine = page.locator("[data-yunari-nothing-selected]");
-  const nameField = page.locator("[data-yunari-name]");
+  const subjectName = page.locator("[data-yunari-subject-name]");
 
   // Nothing selected on open: the line that says where to choose from, and no
   // field at all. Both halves matter — a line over a live form says two things.
   await expect(emptyLine).toBeVisible();
-  await expect(nameField).toHaveCount(0);
+  await expect(subjectName).toHaveCount(0);
 
   // A shape fills the column. The card's own rectangle is a `Rect`, reached by
   // entering the card first, which is what makes it selectable on its own.
@@ -824,7 +824,7 @@ test("the right column names where to choose from, and empties when nothing is s
   await selectLayer(page, "cpu-card");
   await expect.poll(() => activeId(page)).toBe("cpu-card");
   await expect(column).toBeVisible();
-  await expect(nameField).toBeVisible();
+  await expect(subjectName).toBeVisible();
   await expect(page.locator("[data-yunari-panel-fill]")).toBeVisible();
   await expect(emptyLine).toHaveCount(0);
 
@@ -846,7 +846,7 @@ test("the right column names where to choose from, and empties when nothing is s
     "a deselect must leave the column naming where to choose from",
   ).toBeVisible();
   await expect(
-    nameField,
+    subjectName,
     "and the column must not go on describing the dropped object",
   ).toHaveCount(0);
 
@@ -862,7 +862,7 @@ test("the right column names where to choose from, and empties when nothing is s
     .click();
   await expect.poll(() => activeId(page)).toBeUndefined();
   await expect(emptyLine).toBeVisible();
-  await expect(nameField).toHaveCount(0);
+  await expect(subjectName).toHaveCount(0);
 });
 
 /**
@@ -920,14 +920,14 @@ test("deleting a part inside a group empties the right column too", async ({
   await openStarterEditor(page);
 
   const emptyLine = page.locator("[data-yunari-nothing-selected]");
-  const nameField = page.locator("[data-yunari-name]");
+  const subjectName = page.locator("[data-yunari-subject-name]");
 
   // Reached the way the case above reaches a part: entering the group is what
   // puts its parts on their own rows.
   await enterLayer(page, "group-cpu-card");
   await selectLayer(page, "cpu-card");
   await expect.poll(() => activeId(page)).toBe("cpu-card");
-  await expect(nameField).toBeVisible();
+  await expect(subjectName).toBeVisible();
   expect(
     await documentHolds(page, "cpu-card"),
     "the part is in the document",
@@ -951,7 +951,7 @@ test("deleting a part inside a group empties the right column too", async ({
     emptyLine,
     "and the column names where to choose from rather than the deleted part",
   ).toBeVisible();
-  await expect(nameField).toHaveCount(0);
+  await expect(subjectName).toHaveCount(0);
 });
 
 test("two hundred loose shapes, re-measured", async ({ page }, testInfo) => {

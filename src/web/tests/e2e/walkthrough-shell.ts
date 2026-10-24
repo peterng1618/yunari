@@ -173,9 +173,13 @@ export const WALKTHROUGH_LAYER_NAME = "wordmark";
  *  while proving nothing. */
 export const FIELD_DRAFT = "walkthrough draft";
 
-/** The hook the selection's own name field carries (`nameField`,
- *  `selection-inspector/appearance.ts`), on the focus target rather than a
- *  wrapper. */
+/** The heading that carries the selection's name (`selection-inspector/
+ *  inspector.tsx`). Double-clicking it — or Enter while it has focus — opens
+ *  the rename field. */
+export const HEADING_HOOK = "[data-yunari-subject-name]";
+
+/** The rename field the heading opens, on the focus target rather than a
+ *  wrapper. It exists only while the name is being edited. */
 const FIELD_HOOK = "[data-yunari-name]";
 
 /** That field **inside the inspector**, which is what the three places that
@@ -410,8 +414,11 @@ export async function chooseRailPane(page: Page, name: string): Promise<void> {
 export async function editFieldThenCancel(page: Page): Promise<string> {
   const field = page.locator(FIELD_SELECTOR);
   await tabUntil(page, (focus) => focus.region === "inspector");
+  // The name is the heading's now: tab to the heading, then Enter opens its
+  // field. Reaching it by keyboard is what keeps this a control and not a
+  // pointer-only affordance.
   for (let press = 0; press < TAB_BOUND; press++) {
-    const onField = await page.evaluate(
+    const onHeading = await page.evaluate(
       (sel: { readonly hook: string; readonly scope: string }) => {
         const active = document.activeElement;
         return (
@@ -420,16 +427,18 @@ export async function editFieldThenCancel(page: Page): Promise<string> {
           active.closest(sel.scope) !== null
         );
       },
-      { hook: FIELD_HOOK, scope: REGION_SELECTOR.inspector },
+      { hook: HEADING_HOOK, scope: REGION_SELECTOR.inspector },
     );
-    if (onField) break;
+    if (onHeading) break;
     await page.keyboard.press("Tab");
     if (press === TAB_BOUND - 1) {
       throw new Error(
-        `no ${FIELD_HOOK} field took focus in ${TAB_BOUND} presses`,
+        `no ${HEADING_HOOK} heading took focus in ${TAB_BOUND} presses`,
       );
     }
   }
+  await page.keyboard.press("Enter");
+  await expect(field).toBeVisible();
 
   const original = await field.inputValue();
   await page.keyboard.press("End");
