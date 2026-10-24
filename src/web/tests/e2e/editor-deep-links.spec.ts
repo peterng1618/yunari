@@ -25,6 +25,10 @@ const EDITOR = "http://127.0.0.1:4174/";
  * nothing, which makes the header's publish control render no control at all —
  * the popup would then be absent for a reason this task is not about. The stub
  * is the host's shape with the LAN off, so the control exists and opens.
+ *
+ * `/api/themes` is stubbed empty for the same reason at the store's local half;
+ * the store case reads only the mode region, so the empty catalogue changes
+ * nothing it asserts.
  */
 test.beforeEach(async ({ page }) => {
   await page.route("**/index.json", (route) =>
@@ -67,7 +71,9 @@ test("opens the publish surface from the URL", async ({ page }, testInfo) => {
   await expect(page.locator(".editor-shell-publish-popup")).toBeVisible();
 });
 
-test("ignores publish=1 when a non-editor mode is named", async ({
+// Themes mode draws no publish control at all, so this proves the surface is
+// absent, not that `publish` was refused; shell-entry.test.ts pins the rule.
+test("draws no publish surface in a non-editor mode", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
