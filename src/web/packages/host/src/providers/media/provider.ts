@@ -19,6 +19,7 @@ import type {
 import { descriptorFieldsOf, redactForBrowser } from "../provider.js";
 import type { ArtworkCache } from "./artwork.js";
 import {
+  type ArtworkBytes,
   parseSmtcAudio,
   parseSmtcLine,
   type SmtcAudio,
@@ -230,6 +231,18 @@ export class MediaProvider implements SensorProvider {
       : { available: false, message: this.#failure };
   }
 
+  /**
+   * Ends the helper and its grace timer for host shutdown, so no
+   * `powershell.exe` is left polling. A later `sample()` starts it again: stop
+   * is a teardown, not a permanent disable.
+   */
+  stop(): void {
+    this.#stop();
+    this.#retryAtMs = 0;
+    this.#lastDemandMs = Number.NEGATIVE_INFINITY;
+    this.#lastArtworkDemandMs = Number.NEGATIVE_INFINITY;
+  }
+
   #artworkWanted(now: number): boolean {
     return now - this.#lastArtworkDemandMs <= this.#graceMs;
   }
@@ -395,13 +408,14 @@ export class MediaProvider implements SensorProvider {
     }
   }
 
-  #ingestArtwork(artwork: {
-    readonly bytes: Uint8Array;
-    readonly ext: string;
-  }): void {
+  #ingestArtwork(artwork: ArtworkBytes): void {
     const session = this.#selected(this.#now());
 
     if (session === undefined) return;
+
+    // The helper emits one line per session in a poll; a paused app's picture
+    // must not be attached to the track the display is actually showing.
+    if (artwork.sessionId !== session.sessionId) return;
 
     const key = trackKeyOf(session);
 

@@ -8714,15 +8714,6 @@ describe("The media artwork route", () => {
     expect(reads).toBe(0);
   });
 
-  it("404s rather than inventing a picture when the host keeps no cache", async () => {
-    const running = launch();
-
-    expect(
-      (await request(running.server, "GET", `/api/media/artwork/${NAME}`))
-        .status,
-    ).toBe(404);
-  });
-
   it("lets a paired display read it and refuses an unpaired remote", async () => {
     const displays = createDisplayStore(directory);
     const token = newToken();

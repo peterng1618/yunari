@@ -214,6 +214,43 @@ describe("createArtworkCache", () => {
     await expect(cache.put(new Uint8Array([1, 2, 3]), "png")).rejects.toThrow();
   });
 
+  it("sweeps an interrupted write's stale scratch file", async () => {
+    const directory = tempDirectory();
+    const cache = createArtworkCache(directory);
+    await cache.put(pngOf(1), "png");
+
+    const stale = path.join(
+      directory,
+      `.${nameOf(pngOf(2))}.123.${Date.now() - 120_000}.tmp`,
+    );
+    fsSync.writeFileSync(stale, pngOf(2));
+    const old = new Date(Date.now() - 120_000);
+    fsSync.utimesSync(stale, old, old);
+
+    const recent = path.join(
+      directory,
+      `.${nameOf(pngOf(3))}.123.${Date.now()}.tmp`,
+    );
+    fsSync.writeFileSync(recent, pngOf(3));
+
+    await cache.put(pngOf(4), "png");
+
+    expect(fsSync.existsSync(stale)).toBe(false);
+    // A write still inside the stale window may be another process's.
+    expect(fsSync.existsSync(recent)).toBe(true);
+  });
+
+  it("refuses a name whose extension does not describe the bytes", async () => {
+    const directory = tempDirectory();
+    const cache = createArtworkCache(directory);
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0, 0, 0]);
+    const name = `${createHash("sha256").update(jpeg).digest("hex")}.png`;
+
+    fsSync.writeFileSync(path.join(directory, name), jpeg);
+
+    expect(await cache.read(name)).toBeUndefined();
+  });
+
   it("evicts the oldest beyond the cap", async () => {
     const directory = tempDirectory();
     const cache = createArtworkCache(directory, 2);
@@ -290,6 +327,16 @@ describe("MediaProvider descriptors and script", () => {
     expect(script).toContain("5CDF2C82-841E-4546-9722-0CF74078229A");
     expect(script).toContain("GetMasterVolumeLevelScalar");
     expect(script).toContain("GetMute");
+    // eRender (0), not eCapture (1): this is the speaker level, not a
+    // microphone gain. Swapping the dataflow back must red this case.
+    expect(script).toContain("GetDefaultAudioEndpoint(0,1,");
+    expect(script).not.toContain("GetDefaultAudioEndpoint(1,1,");
+    // The display name is looked up without a prompt; the AUMID is the
+    // fallback when the app registered none.
+    expect(script).toContain("app = Get-AppName $session.SourceAppUserModelId");
+    expect(script).toContain(
+      "HKCU:\\Software\\Classes\\AppUserModelId\\$aumid",
+    );
     // Emitted every poll, before the session list is touched.
     expect(script.indexOf("Get-AudioLine | ConvertTo-Json")).toBeGreaterThan(
       -1,
@@ -463,6 +510,21 @@ describe("MediaProvider selection and samples", () => {
     });
   });
 
+  it("reports the helper's display name, falling back to the AUMID", async () => {
+    const device = harness();
+    await device.sample(["media.app"]);
+
+    const child = device.children[0] as FakeChild;
+    device.emit(
+      child,
+      sessionLine({ sessionId: "Spotify.exe", app: "Spotify" }),
+    );
+
+    expect((await device.sample(["media.app"])).get("media.app")).toMatchObject(
+      { status: "ok", textValue: "Spotify" },
+    );
+  });
+
   it("reports audio with no media session, and media stays unavailable", async () => {
     const device = harness();
     await device.sample(["audio.volume"]);
@@ -555,6 +617,55 @@ describe("MediaProvider artwork", () => {
     expect(second?.textValue).toBeUndefined();
   });
 
+  it("refuses another session's artwork under the selected track", async () => {
+    const device = harness();
+    await device.sample(["media.artwork"]);
+
+    const child = device.children[0] as FakeChild;
+    // Spotify is playing and selected; Chrome is paused.
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Spotify.exe",
+        app: "Spotify",
+        title: "Selected track",
+        state: "playing",
+        current: false,
+      }),
+    );
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Chrome",
+        app: "Chrome",
+        title: "Other tab",
+        state: "paused",
+        current: true,
+      }),
+    );
+
+    const otherBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 7, 7, 7, 7]);
+    const otherSha = createHash("sha256").update(otherBytes).digest("hex");
+    device.emit(
+      child,
+      artworkLine({
+        sessionId: "Chrome",
+        sha256: otherSha,
+        base64: Buffer.from(otherBytes).toString("base64"),
+      }),
+    );
+
+    // Chrome's picture must not become Spotify's URL.
+    expect(
+      (await device.sample(["media.artwork"])).get("media.artwork")?.textValue,
+    ).toBeUndefined();
+
+    device.emit(child, artworkLine());
+    expect(
+      (await device.sample(["media.artwork"])).get("media.artwork")?.textValue,
+    ).toBe(`/api/media/artwork/${ARTWORK_SHA}.png`);
+  });
+
   it("restarts without the artwork half once its demand grace expires", async () => {
     const device = harness({ graceMs: 5_000 });
     await device.sample(["media.title", "media.artwork"]);
@@ -591,6 +702,22 @@ describe("MediaProvider lifetime", () => {
     device.advance(2_000);
     expect(device.killed).toHaveLength(1);
 
+    await device.sample(["media.title"]);
+    expect(device.children).toHaveLength(2);
+  });
+
+  it("stops the helper for host shutdown and starts again on later demand", async () => {
+    const device = harness();
+    await device.sample(["media.title"]);
+    expect(device.children).toHaveLength(1);
+
+    device.provider.stop();
+
+    // Stop reaches the supervisor, which is the only thing that tree-kills the
+    // PowerShell child.
+    expect(device.killed).toHaveLength(1);
+
+    // Shutdown is a teardown, not a disable: a later demand starts a new one.
     await device.sample(["media.title"]);
     expect(device.children).toHaveLength(2);
   });

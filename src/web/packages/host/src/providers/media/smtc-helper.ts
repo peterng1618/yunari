@@ -26,6 +26,9 @@ export interface SmtcSession {
 }
 
 export interface ArtworkBytes {
+  /** The AUMID of the session the picture belongs to, so a caller can refuse
+   *  another session's art under the selected track's title. */
+  readonly sessionId: string;
   readonly sha256: string;
   readonly bytes: Uint8Array;
   readonly ext: string;
@@ -71,27 +74,6 @@ Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
 $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties,Windows.Media.Control,ContentType=WindowsRuntime]
 
-# The endpoint volume and mute through CoreAudio, compiled by Add-Type. No
-# endpoint means neither key, never zero and unmuted. Compact because the whole
-# script travels as one -EncodedCommand, which Windows caps near 32k chars.
-$AudioInterop = @'
-using System;using System.Runtime.InteropServices;
-public static class YunariAudio{
-[ComImport,Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]class E{}
-[ComImport,Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface N{[PreserveSig]int X0();[PreserveSig]int GetDefaultAudioEndpoint(int f,int r,out D d);}
-[ComImport,Guid("D666063F-1587-4E43-81F1-B948E807363F"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface D{[PreserveSig]int Activate(ref Guid i,int c,IntPtr p,out V v);}
-[ComImport,Guid("5CDF2C82-841E-4546-9722-0CF74078229A"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface V{[PreserveSig]int X0();[PreserveSig]int X1();[PreserveSig]int X2();[PreserveSig]int X3();[PreserveSig]int X4();[PreserveSig]int X5();[PreserveSig]int GetMasterVolumeLevelScalar(out float l);[PreserveSig]int X7();[PreserveSig]int X8();[PreserveSig]int X9();[PreserveSig]int X10();[PreserveSig]int SetMute([MarshalAs(UnmanagedType.Bool)]bool m,IntPtr c);[PreserveSig]int GetMute([MarshalAs(UnmanagedType.Bool)]out bool m);}
-static readonly Guid I=new Guid("5CDF2C82-841E-4546-9722-0CF74078229A");const int C=23;
-public static bool TryRead(out int v,out bool m){v=0;m=false;try{var n=(N)new E();D d;if(n.GetDefaultAudioEndpoint(1,1,out d)!=0||d==null)return false;Guid i=I;V a;if(d.Activate(ref i,C,IntPtr.Zero,out a)!=0||a==null)return false;float l;if(a.GetMasterVolumeLevelScalar(out l)!=0)return false;bool b;if(a.GetMute(out b)!=0)return false;v=(int)Math.Round(l*100.0);m=b;return true;}catch{return false;}}}
-'@
-$AudioAvailable = $false
-try {
-  Add-Type -TypeDefinition $AudioInterop -Language CSharp
-  $AudioAvailable = $true
-} catch {
-  $AudioAvailable = $false
-}
-
 # Only the generic AsTask overload can be closed with MakeGenericMethod.
 $AsTaskMethod = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
   $_.Name -eq 'AsTask' -and $_.IsGenericMethodDefinition -and $_.GetParameters().Count -eq 1 -and $_.GetGenericArguments().Count -eq 1
@@ -110,6 +92,21 @@ function Convert-PlaybackState($playbackStatus) {
   return 'stopped'
 }
 
+$AppNames = @{}
+function Get-AppName($aumid) {
+  if ($AppNames.ContainsKey($aumid)) { return $AppNames[$aumid] }
+  $name = $aumid
+  try {
+    $key = "HKCU:\\Software\\Classes\\AppUserModelId\\$aumid"
+    if (Test-Path $key) {
+      $display = (Get-ItemProperty $key -ErrorAction Stop).DisplayName
+      if (-not [string]::IsNullOrWhiteSpace($display)) { $name = $display }
+    }
+  } catch { }
+  $AppNames[$aumid] = $name
+  return $name
+}
+
 function Get-SessionLine($session, $isCurrent = $false) {
   $properties = Wait-WinRt ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
   $playback = $session.GetPlaybackInfo()
@@ -122,7 +119,7 @@ function Get-SessionLine($session, $isCurrent = $false) {
   if ($position -lt 0) { $position = 0 }
   [ordered]@{
     kind = 'session'
-    app = $session.SourceAppUserModelId
+    app = Get-AppName $session.SourceAppUserModelId
     sessionId = $session.SourceAppUserModelId
     title = $properties.Title
     artist = $properties.Artist
@@ -136,6 +133,34 @@ function Get-SessionLine($session, $isCurrent = $false) {
     # The artwork half reads this to tell "no thumbnail" from "broken emit".
     hasArtwork = ($null -ne $properties.Thumbnail)
   }
+}
+`;
+
+/**
+ * The audio half: the default render endpoint's volume and mute through
+ * CoreAudio. No endpoint means neither key, never zero and unmuted. Compact
+ * because the whole script travels as one `-EncodedCommand`, which Windows caps
+ * near 32k characters; it is separate from `HEADER` so the artwork-only test
+ * harness does not pay for the interop.
+ */
+const AUDIO = `
+# Endpoint volume and mute through CoreAudio. No endpoint means neither key.
+$AudioInterop = @'
+using System;using System.Runtime.InteropServices;
+public static class YunariAudio{
+[ComImport,Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]class E{}
+[ComImport,Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface N{[PreserveSig]int X0();[PreserveSig]int GetDefaultAudioEndpoint(int f,int r,out D d);}
+[ComImport,Guid("D666063F-1587-4E43-81F1-B948E807363F"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface D{[PreserveSig]int Activate(ref Guid i,int c,IntPtr p,out V v);}
+[ComImport,Guid("5CDF2C82-841E-4546-9722-0CF74078229A"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface V{[PreserveSig]int X0();[PreserveSig]int X1();[PreserveSig]int X2();[PreserveSig]int X3();[PreserveSig]int X4();[PreserveSig]int X5();[PreserveSig]int GetMasterVolumeLevelScalar(out float l);[PreserveSig]int X7();[PreserveSig]int X8();[PreserveSig]int X9();[PreserveSig]int X10();[PreserveSig]int SetMute([MarshalAs(UnmanagedType.Bool)]bool m,IntPtr c);[PreserveSig]int GetMute([MarshalAs(UnmanagedType.Bool)]out bool m);}
+static readonly Guid I=new Guid("5CDF2C82-841E-4546-9722-0CF74078229A");const int C=23;
+public static bool TryRead(out int v,out bool m){v=0;m=false;try{var n=(N)new E();D d;if(n.GetDefaultAudioEndpoint(0,1,out d)!=0||d==null)return false;Guid i=I;V a;if(d.Activate(ref i,C,IntPtr.Zero,out a)!=0||a==null)return false;float l;if(a.GetMasterVolumeLevelScalar(out l)!=0)return false;bool b;if(a.GetMute(out b)!=0)return false;v=(int)Math.Round(l*100.0);m=b;return true;}catch{return false;}}}
+'@
+$AudioAvailable = $false
+try {
+  Add-Type -TypeDefinition $AudioInterop -Language CSharp
+  $AudioAvailable = $true
+} catch {
+  $AudioAvailable = $false
 }
 
 function Get-AudioLine {
@@ -344,9 +369,11 @@ export const SMTC_ARTWORK_FUNCTIONS: string = HEADER + ARTWORK;
  * request.
  */
 export function smtcScript(options: SmtcScriptOptions = {}): string {
+  const base = `${HEADER}${AUDIO}`;
+
   return options.artwork === true
-    ? `${SMTC_ARTWORK_FUNCTIONS}\n$WantArtwork = $true\n$lastArtwork = @{}\n${POLL}`
-    : `${HEADER}${POLL}`;
+    ? `${base}${ARTWORK}\n$WantArtwork = $true\n$lastArtwork = @{}\n${POLL}`
+    : `${base}${POLL}`;
 }
 
 export const SMTC_SCRIPT: string = smtcScript();
@@ -470,7 +497,8 @@ export function parseSmtcAudio(line: string): SmtcAudio | undefined {
  * `Buffer.from(x, "base64")` skips whitespace and ignores garbage, so it can
  * decode a line the helper never wrote. Only the exact encoding of the bytes
  * it produces is accepted.
- */ function isCanonicalBase64(value: string): boolean {
+ */
+function isCanonicalBase64(value: string): boolean {
   if (value.length === 0 || value.length % 4 !== 0) return false;
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
   return Buffer.from(value, "base64").toString("base64") === value;
@@ -485,10 +513,12 @@ export function smtcArtworkLine(line: string): ArtworkBytes | undefined {
   const record = parseObject(line);
   if (record === undefined || record["kind"] !== "artwork") return undefined;
 
+  const sessionId = record["sessionId"];
   const sha256 = record["sha256"];
   const ext = record["ext"];
   const base64 = record["base64"];
 
+  if (typeof sessionId !== "string" || sessionId === "") return undefined;
   if (typeof sha256 !== "string" || !SHA256_HEX.test(sha256)) return undefined;
   if (typeof ext !== "string" || !EXTENSIONS.has(ext)) return undefined;
   if (typeof base64 !== "string" || !isCanonicalBase64(base64))
@@ -500,5 +530,5 @@ export function smtcArtworkLine(line: string): ArtworkBytes | undefined {
     return undefined;
   }
 
-  return { sha256, bytes, ext };
+  return { sessionId, sha256, bytes, ext };
 }

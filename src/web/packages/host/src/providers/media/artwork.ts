@@ -63,18 +63,43 @@ export function sniffArtworkExtension(
   return undefined;
 }
 
+/** The scratch name a write uses; a host that dies mid-write leaves one. */
+const TEMP_NAME = /^\.[0-9a-f]{64}\.(png|jpg|jpeg|webp)\.\d+\.\d+\.tmp$/;
+/** An interrupted write is only stale once nothing can still be renaming it. */
+const TEMP_STALE_MS = 60_000;
+
 /**
- * Keeps the newest `cap` files. Ties on mtime fall back to the name so two
- * files written in the same millisecond still evict deterministically.
+ * Keeps the newest `cap` files and sweeps scratch files left by an interrupted
+ * write. Ties on mtime fall back to the name so two files written in the same
+ * millisecond still evict deterministically.
  */
 function prune(directory: string, cap: number): void {
-  let names: string[];
+  let entries: string[];
 
   try {
-    names = fs.readdirSync(directory).filter((name) => ARTWORK_NAME.test(name));
+    entries = fs.readdirSync(directory);
   } catch {
     return;
   }
+
+  const now = Date.now();
+
+  for (const name of entries) {
+    if (!TEMP_NAME.test(name)) continue;
+
+    try {
+      if (
+        now - fs.statSync(path.join(directory, name)).mtimeMs >=
+        TEMP_STALE_MS
+      ) {
+        fs.unlinkSync(path.join(directory, name));
+      }
+    } catch {
+      // A scratch file that vanished is already swept.
+    }
+  }
+
+  const names = entries.filter((name) => ARTWORK_NAME.test(name));
 
   if (names.length <= cap) return;
 
@@ -151,7 +176,13 @@ export function createArtworkCache(directory: string, cap = 64): ArtworkCache {
       const sha256 = createHash("sha256").update(bytes).digest("hex");
       if (!name.startsWith(`${sha256}.`)) return undefined;
 
-      return { bytes, ext: name.slice(name.lastIndexOf(".") + 1) };
+      const ext = name.slice(name.lastIndexOf(".") + 1);
+      const sniffed = sniffArtworkExtension(bytes);
+      const matches = sniffed === ext || (sniffed === "jpg" && ext === "jpeg");
+
+      // A name whose extension does not describe its bytes would be served
+      // under the wrong MIME type, so it is not this entry either.
+      return matches ? { bytes, ext } : undefined;
     },
   };
 }

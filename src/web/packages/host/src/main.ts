@@ -179,10 +179,10 @@ export async function run(argv: readonly string[]): Promise<number> {
     settings: weatherSettings,
     credentials,
   });
-  // Artwork is a cache, not a setting: the bytes live in the app folder under
-  // their own digest, and the server serves them through the display gate.
+  // Artwork is a cache, not a setting: the bytes live under the app folder's
+  // cache directory, and the server serves them through the display gate.
   const mediaArtwork = createArtworkCache(
-    path.join(settingsDir, "media-artwork"),
+    path.join(path.dirname(settingsDir), "cache", "media-artwork"),
   );
   const mediaProvider = new MediaProvider({ cache: mediaArtwork });
   const registry = new ProviderRegistry([
@@ -537,6 +537,9 @@ export async function run(argv: readonly string[]): Promise<number> {
       console.log("\nStopping.");
       // Stop only the LHM this run started; one the owner already ran is theirs.
       lhm.stop();
+      // The media helper is a child process this run started; leaving it
+      // polling after the host exits is the orphan decision 0102 prevents.
+      mediaProvider.stop();
       // The windows close with the host: one left behind is one the next run
       // cannot see, and it would put a second window on that monitor.
       launcher?.stop();

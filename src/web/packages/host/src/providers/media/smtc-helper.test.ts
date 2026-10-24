@@ -301,8 +301,9 @@ describe("smtcArtworkLine", () => {
       ...overrides,
     });
 
-  it("carries the digest, extension and bytes", () => {
+  it("carries the digest, extension and bytes for its session", () => {
     expect(smtcArtworkLine(artworkLine())).toEqual({
+      sessionId: "Spotify.exe",
       sha256,
       bytes,
       ext: "png",
@@ -322,6 +323,9 @@ describe("smtcArtworkLine", () => {
       "null",
       "[]",
       '{"kind":"artwork"}',
+      artworkLine({ sessionId: undefined }),
+      artworkLine({ sessionId: "" }),
+      artworkLine({ sessionId: 7 }),
       artworkLine({ sha256: undefined }),
       artworkLine({ sha256: "0".repeat(64) }),
       artworkLine({ sha256: sha256.toUpperCase() }),
