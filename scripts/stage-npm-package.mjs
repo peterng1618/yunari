@@ -47,9 +47,10 @@ const COPY = [
   ["src/web/packages/host/dist", "packages/host/dist"],
   ["src/web/packages/host/public", "packages/host/public"],
   // The host resolves `<dist>/../vendor/weather-icons` at run time (server.ts),
-  // so the icons are runtime bytes, not optional binaries. `vendor/` is ignored
-  // except this tracked directory, so a clean checkout stages only these.
-  ["src/web/packages/host/vendor", "packages/host/vendor"],
+  // so the icons are runtime bytes, not optional binaries. Copy that directory
+  // by name, not `vendor/`: the rest of it is ignored, and a local
+  // `vendor:lhm` run would otherwise publish those binaries from a dev box.
+  ["src/web/packages/host/vendor/weather-icons", "packages/host/vendor/weather-icons"],
   ["src/web/packages/player/dist", "packages/player/dist"],
   ["src/web/packages/editor/dist", "packages/editor/dist"],
   ["schema", "schema"],

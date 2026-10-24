@@ -80,6 +80,8 @@ function fakeTree({ main = true } = {}): Fake {
     "src/web/packages/host/vendor/weather-icons/clear-day.svg",
     "<svg>clear day</svg>",
   );
+  // Ignored vendor binaries: present on a dev box after `vendor:lhm`.
+  write("src/web/packages/host/vendor/lhm/LibreHardwareMonitorLib.dll", "MZ");
   write("src/web/packages/player/dist/index.html", "<!doctype html>");
   write("src/web/packages/editor/dist/index.html", "<!doctype html>");
 
@@ -113,6 +115,16 @@ it("copies every required path into the workspace layout", () => {
   ]) {
     expect(existsSync(path.join(tree.out, rel)), rel).toBe(true);
   }
+});
+
+it("stages the weather icons but no ignored vendor binaries", () => {
+  const tree = fakeTree();
+  expect(stage(tree).ok).toBe(true);
+
+  expect(
+    existsSync(path.join(tree.out, "packages/host/vendor/weather-icons/clear-day.svg")),
+  ).toBe(true);
+  expect(existsSync(path.join(tree.out, "packages/host/vendor/lhm"))).toBe(false);
 });
 
 it("writes the source manifest's version and the release manifest fields", () => {
