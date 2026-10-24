@@ -303,6 +303,29 @@ it("uses 5 s polling and 10 s notices by default", async () => {
   controller.stop();
 });
 
+it("turns a throwing first menu write into a notice instead of rejecting start", async () => {
+  vi.useFakeTimers();
+  const view = fakeView();
+  let writes = 0;
+  view.setMenu.mockImplementation(() => {
+    writes += 1;
+    if (writes === 1) throw new Error("menu write failed");
+  });
+  const controller = await startTrayController({
+    readSnapshot: async () => BASE,
+    act: async () => ({ ok: true, message: "" }),
+    openView: async () => view,
+    onLost: vi.fn(),
+    pollMs: 1000,
+  });
+  expect(writes).toBe(1);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(view.setMenu.mock.calls.at(-1)?.[0][0].title).toBe(
+    "menu write failed",
+  );
+  controller.stop();
+});
+
 it("turns a throwing menu write into a notice instead of a rejection", async () => {
   vi.useFakeTimers();
   const view = fakeView();

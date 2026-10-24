@@ -9,7 +9,6 @@ import {
   listenWithFallback,
   localNames,
   openBrowser,
-  openTarget,
   waitUntilReachable,
 } from "./cli/net.js";
 import { ClockSensorProvider } from "./providers/clock.js";
@@ -52,6 +51,7 @@ import { normalizeVideoCommand } from "./themes/normalize-video.js";
 import { createThemeStore } from "./themes/store.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
 import { createSecureOrigin, type SecureOrigin } from "./tls/authority.js";
+import { openTrayAction } from "./tray/actions.js";
 import { type TrayController } from "./tray/controller.js";
 import { createExternalApps } from "./tray/external-apps.js";
 import { startTray } from "./tray/index.js";
@@ -632,8 +632,15 @@ export async function run(argv: readonly string[]): Promise<number> {
 
       stopping = true;
       console.log("\nStopping.");
-      // The tray first: an icon left behind is one the owner cannot dismiss.
-      tray?.stop();
+      // The tray first: an icon left behind is one the owner cannot dismiss. A
+      // throwing view must not skip the server close below.
+      try {
+        tray?.stop();
+      } catch (error) {
+        console.error(
+          `The tray could not close: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       // Stop only the LHM this run started; one the owner already ran is theirs.
       externalApps.stopOwnedLhm();
       // The media helper is a child process this run started; leaving it
@@ -695,24 +702,15 @@ export async function run(argv: readonly string[]): Promise<number> {
             case "autostart":
               return autostart.toggle(entry);
             case "pair":
-              openBrowser(`${localPlain}/editor?publish=1`);
-              return { ok: true, message: "Opening Pair display." };
             case "editor":
-              openBrowser(`${localPlain}/editor?mode=editor`);
-              return { ok: true, message: "Opening Theme Editor." };
             case "themes":
-              openBrowser(`${localPlain}/editor?mode=themes`);
-              return { ok: true, message: "Opening Theme Store." };
             case "settings":
-              openBrowser(`${localPlain}/editor?mode=this-pc`);
-              return { ok: true, message: "Opening Host Settings." };
+            case "folder":
+              return openTrayAction(action, { localPlain, settingsDir });
             case "lhm":
               return externalApps.startLhm();
             case "rtss":
               return externalApps.startRtss();
-            case "folder":
-              openTarget(path.dirname(settingsDir));
-              return { ok: true, message: "Opening the Yunari folder." };
             case "exit":
               stopHost?.();
               return { ok: true, message: "Stopping." };

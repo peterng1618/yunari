@@ -338,11 +338,15 @@ export function openCommand(
   return { file: platform === "darwin" ? "open" : "xdg-open", args: [target] };
 }
 
-/** Opens a URL or folder without turning failure into a host startup failure. */
+/**
+ * Opens a URL or folder without turning failure into a host startup failure.
+ * Returns whether the opener was started, so a tray action can report a failed
+ * open instead of claiming success in a hidden host.
+ */
 export function openTarget(
   target: string,
   options: OpenTargetOptions = {},
-): void {
+): boolean {
   const command = openCommand(target, options);
 
   try {
@@ -356,12 +360,13 @@ export function openTarget(
       /* The printed URL remains usable. */
     });
     child.unref();
+    return true;
   } catch {
-    /* Same. */
+    return false;
   }
 }
 
 /** Opens the platform browser without turning failure into a host startup failure. */
-export function openBrowser(url: string): void {
-  openTarget(url);
+export function openBrowser(url: string): boolean {
+  return openTarget(url);
 }

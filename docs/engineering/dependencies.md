@@ -120,9 +120,10 @@ mismatch. It is not a declared dependency and never enters the transitive graph.
 **Only the Linux x86-64 binary is staged** — Linux arm64 is unsupported and
 would need its own binary and provenance; Windows uses the PowerShell adapter,
 so it needs no file from this package. The binary is staged, not shipped in the
-repository: `vendor/` is ignored, and only `vendor/tray/PROVENANCE.txt` is
-tracked. MIT requires the notice to travel with the binary, so release
-packaging must include `vendor/tray/LICENSE` beside `tray_linux_release`.
+repository: `vendor/` is ignored, and the staging script writes
+`vendor/tray/PROVENANCE.txt` beside the binary for release packaging to ship.
+MIT requires the notice to travel with the binary, so release packaging must
+include `vendor/tray/LICENSE` beside `tray_linux_release`.
 
 Conclusion: redistribution is permissible with its licence file, and the host
 runs it without linking or modifying it.

@@ -16,6 +16,18 @@ it("starts the same host with --tray -n", () => {
   expect(entry.args[0]).toContain("yunari.js");
 });
 
+it("resolves a relative --app-dir against this run's cwd, not the launcher's", () => {
+  const entry = hostEntry(["--app-dir", "my-app"], "C:\\app\\dist");
+  expect(entry.args).toContain(path.resolve("my-app"));
+  expect(entry.args).not.toContain("my-app");
+});
+
+it("does not append a --tray or -n the argv already carries", () => {
+  const entry = hostEntry(["--tray", "-n"], "C:\\app\\dist");
+  expect(entry.args.filter((arg) => arg === "--tray")).toHaveLength(1);
+  expect(entry.args.filter((arg) => arg === "-n")).toHaveLength(1);
+});
+
 it("writes a hidden VBS and quotes a path with spaces", () => {
   const vbs = windowsVbs({
     file: "C:\\Program Files\\node.exe",
@@ -39,6 +51,17 @@ it("writes a Linux desktop entry with Terminal=false", () => {
   });
   expect(entry).toContain("Terminal=false");
   expect(entry).toContain('"/home/a b/yunari.js"');
+});
+
+it("escapes $ and a backtick in the desktop Exec value", () => {
+  // The Desktop Entry spec requires both quoted inside double quotes; an
+  // unescaped `$` would expand when the entry is run through a shell-like
+  // launcher.
+  const entry = linuxDesktopEntry({
+    file: "/usr/bin/node",
+    args: ["/home/$USER/a`b"],
+  });
+  expect(entry).toContain('"/home/\\$USER/a\\`b"');
 });
 
 it("refuses a path containing a quote instead of writing a broken VBS", () => {

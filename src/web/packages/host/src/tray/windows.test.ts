@@ -52,6 +52,16 @@ it("encodes a PowerShell script as base64 UTF-16LE", () => {
   );
 });
 
+it("assigns the menu to the icon so the shell can open it from the keyboard", () => {
+  // Without this, right-click and the keyboard menu key reach nothing, and in
+  // tray mode the menu is the only way to Exit.
+  expect(WINDOWS_TRAY_SCRIPT).toContain("notify.ContextMenuStrip = menu;");
+  // The shell then owns right-click; showing it again on MouseDown would open
+  // two menus.
+  expect(WINDOWS_TRAY_SCRIPT).toContain("e.Button == MouseButtons.Left");
+  expect(WINDOWS_TRAY_SCRIPT).not.toContain("MouseButtons.Right");
+});
+
 it("serialises only the fields the tray renders", () => {
   const message = JSON.parse(windowsMenuMessage(menu, 7)) as {
     action: string;

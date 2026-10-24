@@ -419,7 +419,8 @@ start, helper spawn and Exit-time teardown.
 
 **Not observed.** The menu's rendered rows were never seen, and no row or
 toggle was clicked: Auto start, Pair display, the three editor surfaces, RTSS
-Start and Exit are unverified as user-visible behaviour.
+Start and Exit are unverified as user-visible behaviour. The sign-in entry
+itself was never executed, so "starts hidden at sign-in" is unverified.
 
 **Editor deep links.** `shell-entry.test.ts` 6/6 and
 `editor-deep-links.spec.ts` 5/5 on `desktop-chromium`, both red-proven: making

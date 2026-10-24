@@ -20,11 +20,11 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Last completed change
 
-- **Owners:** the ownership map gains the tray, sign-in entry, external-program status/start and editor URL-entry rows.
-- **Notices:** `THIRD-PARTY-NOTICES.md` and `dependencies.md` record `systray2` 2.1.4 MIT, the staged x86-64 binary and its pinned sha256.
-- **Spec:** Acceptance records the Windows start/teardown proof, the editor 6/6 and 5/5 red-proof, and the unverified Linux tray; status stays `active`.
-- **Gate:** `npm run gate` exits 1 at `npm run test`; its only failures are the two untouched `smtc-helper.windows.test.ts` timeouts, and `test:worker` passed when run alone.
-- **No product code changed**; this commit is documentation and notices only.
+- **Open rows:** `tray/actions.ts` owns them; the folder takes the directory branch so Windows uses `explorer.exe`, and a failed open reports `ok: false`.
+- **Sign-in entry:** path flags resolve against this run's cwd, `--tray`/`-n` are not appended twice, and XDG `Exec` escapes `$` and a backtick.
+- **Tray fixes:** a Linux row-count change writes nothing, Windows assigns `ContextMenuStrip` for keyboard opening, process presence is cached 30 s, and first-refresh/stop failures are guarded.
+- **Docs:** RTSS help and the untracked-PROVENANCE wording corrected; the spec records the unexecuted sign-in entry as unverified.
+- **Verification:** 161 focused tray/cli/autostart tests pass; the behavioural new cases were red-proven by reverting each fix.
 
 ## Next
 

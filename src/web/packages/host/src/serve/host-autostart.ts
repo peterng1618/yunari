@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { resolvePathFlags } from "../cli/args.js";
 
 /**
  * The host's own start-at-sign-in entry, and the one "Auto start" toggle behind
@@ -94,16 +95,25 @@ function configuredFolder(value: string | undefined): string | undefined {
  * `--tray` is what makes it a tray host rather than a console one, and `-n`
  * because a host that starts at sign-in is bringing back the displays; a
  * dashboard tab in the default browser at every login is not part of that.
+ *
+ * Path flags are resolved here: the launcher's cwd is not this run's, so an
+ * unresolved relative `--app-dir` would start a different folder at sign-in.
+ * A flag the caller already gave is not appended a second time.
  */
 export function hostEntry(
   argv: readonly string[],
   here: string,
   execPath: string = process.execPath,
 ): AutostartCommand {
-  return {
-    file: execPath,
-    args: [path.join(here, "..", "bin", "yunari.js"), ...argv, "--tray", "-n"],
-  };
+  const resolved = resolvePathFlags(argv);
+  const args = [path.join(here, "..", "bin", "yunari.js"), ...resolved];
+
+  if (!resolved.includes("--tray")) args.push("--tray");
+  if (!resolved.includes("-n") && !resolved.includes("--no-browser")) {
+    args.push("-n");
+  }
+
+  return { file: execPath, args };
 }
 
 /** A token as Windows' own parser would read it back. */
@@ -151,6 +161,8 @@ function linuxToken(part: string): string {
   return `"${part
     .replace(/\\/g, "\\\\")
     .replace(/"/g, '\\"')
+    .replace(/\$/g, "\\$")
+    .replace(/`/g, "\\`")
     .replace(/%/g, "%%")}"`;
 }
 

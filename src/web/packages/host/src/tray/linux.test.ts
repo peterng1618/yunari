@@ -275,6 +275,77 @@ it("warns instead of sending rows the tray binary cannot add", async () => {
   expect(stdin).toHaveLength(1);
 });
 
+it("writes nothing on a changed row count, so a click still routes the row seen", async () => {
+  const warn = vi
+    .spyOn(process, "emitWarning")
+    .mockImplementation(() => undefined);
+  const { child, stdin, spawnProcess } = fakeChild();
+  const onAction = vi.fn();
+  const starting = startLinuxTray({
+    binary: "tray",
+    onAction,
+    onLost: vi.fn(),
+    spawnProcess,
+    ...fakeDeps,
+  });
+  child.stdout.write('{"type":"ready"}\n');
+  const view = await starting;
+  view.setMenu([
+    { title: "status", enabled: false },
+    { title: "Auto start", enabled: true, checked: false, action: "autostart" },
+    { title: "Pair display", enabled: true, action: "pair" },
+  ]);
+  // A row disappears, so every later row shifts by one. Writing the new titles
+  // would put "Pair display" under the slot that routes `autostart`.
+  view.setMenu([
+    { title: "status", enabled: false },
+    { title: "Pair display", enabled: true, action: "pair" },
+  ]);
+  expect(warn).toHaveBeenCalledTimes(1);
+  expect(stdin).toHaveLength(1);
+
+  // The screen still shows the pre-mismatch rows, and routing agrees with it.
+  child.stdout.write(
+    '{"type":"clicked","seq_id":2,"__id":3,"item":{"title":"Pair display"}}\n',
+  );
+  expect(onAction).toHaveBeenLastCalledWith("pair");
+  child.stdout.write(
+    '{"type":"clicked","seq_id":1,"__id":2,"item":{"title":"Auto start"}}\n',
+  );
+  expect(onAction).toHaveBeenLastCalledWith("autostart");
+});
+
+it("treats a write that reports backpressure as delivered", async () => {
+  const { child, stdin, spawnProcess } = fakeChild();
+  // `write()` returning false means "buffered, do not write more yet", not
+  // "failed"; only a thrown EPIPE is a failed write.
+  vi.spyOn(child.stdin, "write").mockImplementationOnce((() => false) as never);
+  const starting = startLinuxTray({
+    binary: "tray",
+    onAction: vi.fn(),
+    onLost: vi.fn(),
+    spawnProcess,
+    ...fakeDeps,
+  });
+  child.stdout.write('{"type":"ready"}\n');
+  const view = await starting;
+  view.setMenu([
+    { title: "status", enabled: false },
+    { title: "Auto start", enabled: true, checked: false, action: "autostart" },
+  ]);
+  view.setMenu([
+    { title: "status", enabled: false },
+    { title: "Auto start", enabled: true, checked: true, action: "autostart" },
+  ]);
+  // The backpressured first write never reached the pipe, but it still latched
+  // the rows: the next write is an update, not a second bare init menu.
+  expect(stdin).toHaveLength(1);
+  expect(JSON.parse(stdin[0] ?? "")).toMatchObject({
+    type: "update-item-and-menu",
+    seq_id: 1,
+  });
+});
+
 it("latches the row set on the first non-empty menu", async () => {
   const { child, stdin, spawnProcess } = fakeChild();
   const onAction = vi.fn();

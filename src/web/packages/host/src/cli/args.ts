@@ -60,7 +60,7 @@ Options:
       --themes-dir <dir>  Directory for the theme library (default: the app folder's themes/)
       --lhm-url <url>     LibreHardwareMonitor web server (default ${DEFAULT_LHM_URL})
       --lhm-exe <path>    Launch LibreHardwareMonitor.exe with the host
-      --rtss-exe <path>   Launch RivaTuner Statistics Server with the host
+      --rtss-exe <path>   RivaTuner Statistics Server install; the tray can start it
       --register-lhm-task Register LHM to start elevated at sign-in (one prompt)
   -v, --version           Print the version
   -h, --help              Print this help
@@ -77,6 +77,39 @@ that root is installed on it — this PC included.
 LAN access is off by default. Passing --host 0.0.0.0 serves your hardware
 telemetry to every device on the network; plain http there has no
 confidentiality, so use it on trusted networks only, never the internet.`;
+
+/** Flags whose value is a path the parser resolves against its cwd. */
+const PATH_VALUE_FLAGS: ReadonlySet<string> = new Set([
+  "--app-dir",
+  "--themes-dir",
+  "--lhm-exe",
+  "--rtss-exe",
+]);
+
+/**
+ * Resolves those flags' values against this process's cwd, for argv that will
+ * be replayed later. A sign-in launcher starts in Explorer's or the home
+ * directory, so an unresolved relative path would name a different folder.
+ */
+export function resolvePathFlags(argv: readonly string[]): string[] {
+  const resolved = [...argv];
+
+  for (let index = 0; index < resolved.length; index += 1) {
+    const flag = resolved[index];
+
+    if (flag === undefined || !PATH_VALUE_FLAGS.has(flag)) continue;
+
+    const value = resolved[index + 1];
+
+    // A missing or flag-shaped value is the parser's error to report.
+    if (value === undefined || value.startsWith("-")) continue;
+
+    resolved[index + 1] = path.resolve(value);
+    index += 1;
+  }
+
+  return resolved;
+}
 
 /** True only for addresses restricted to this machine. */
 export function isLoopbackHost(host: string): boolean {

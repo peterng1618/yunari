@@ -91,8 +91,9 @@ JSON-line protocol. It is not a dependency.
 
 Only the Linux **x86-64** binary is staged; Linux arm64 is unsupported and needs
 its own binary and provenance. The binary is staged into
-`packages/host/vendor/tray` and is not committed — `vendor/` is ignored, so the
-repository tracks `PROVENANCE.txt` alone. MIT requires the copyright and
+`packages/host/vendor/tray` and is not committed — `vendor/` is ignored; the
+staging script writes `PROVENANCE.txt` beside the binary, and release packaging
+ships it. MIT requires the copyright and
 permission notice to travel with the binary, so the vendor script stages
 `systray2`'s own `LICENSE` beside it; release packaging must include
 `vendor/tray/LICENSE` and `vendor/tray/tray_linux_release` in the shipped

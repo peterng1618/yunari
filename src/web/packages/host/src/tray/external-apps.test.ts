@@ -43,6 +43,31 @@ it("hides both programs on a non-Windows host", async () => {
   expect(await apps.rtssState()).toEqual({ installed: false, running: false });
 });
 
+it("probes process presence once per 30 s while the HTTP probe runs every poll", async () => {
+  let clock = 0;
+  const listProcesses = vi.fn(async () => false);
+  const fetchImpl = vi.fn(async () => ({ ok: false }));
+  const apps = createExternalApps({
+    platform: "win32",
+    lhmUrl: "http://127.0.0.1:8085",
+    exists: () => false,
+    listProcesses,
+    fetchImpl,
+    now: () => clock,
+  });
+
+  await apps.lhmState();
+  await apps.lhmState();
+  // The second poll inside the TTL spawns no `tasklist`; the cheap HTTP probe
+  // still runs, so a started web server is seen within one poll.
+  expect(listProcesses).toHaveBeenCalledTimes(1);
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+  clock = 30_000;
+  await apps.lhmState();
+  expect(listProcesses).toHaveBeenCalledTimes(2);
+});
+
 it("reports both programs absent when no path or process answers", async () => {
   const apps = createExternalApps({
     platform: "win32",

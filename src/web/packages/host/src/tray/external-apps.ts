@@ -68,6 +68,8 @@ export interface ExternalAppsOptions {
   readonly fetchImpl?: FetchLike;
   readonly spawnProcess?: SpawnProcess;
   readonly launchLhm?: LaunchLhm;
+  /** Clock seam for the process-presence cache; defaults to `Date.now`. */
+  readonly now?: () => number;
 }
 
 export interface ExternalApps {
@@ -96,6 +98,10 @@ const RTSS_STANDARD_PATHS = [
 ] as const;
 
 const ABSENT: ExternalAppState = { installed: false, running: false };
+
+/** A `tasklist` spawn is the expensive half of a poll, and presence changes on
+ *  an install or start/stop, not on a 5 s cadence. */
+const PROCESS_CACHE_MS = 30_000;
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -148,6 +154,8 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
   const fetchImpl = options.fetchImpl ?? defaultFetch;
   const spawnProcess = options.spawnProcess ?? defaultSpawn;
   const launchLhm = options.launchLhm ?? launchLhmDefault;
+  const now = options.now ?? Date.now;
+  const processCache = new Map<string, { running: boolean; at: number }>();
 
   let ownedStop: (() => void) | undefined;
   let startingLhm = false;
@@ -185,12 +193,31 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
     return firstExisting([options.rtssExecutable, ...RTSS_STANDARD_PATHS]);
   };
 
-  const processIsRunning = async (image: string): Promise<boolean> => {
+  const rememberProcess = (image: string, running: boolean): void => {
+    processCache.set(image, { running, at: now() });
+  };
+
+  /** An uncached probe, for a Start click: a cache entry is a menu fact, not
+   *  permission to refuse the explicit action that follows it. */
+  const probeProcess = async (image: string): Promise<boolean> => {
     try {
-      return await listProcesses(image);
+      const running = await listProcesses(image);
+      rememberProcess(image, running);
+      return running;
     } catch {
+      // A failed probe is not an answer; the next poll retries it.
       return false;
     }
+  };
+
+  const processIsRunning = async (image: string): Promise<boolean> => {
+    const cached = processCache.get(image);
+
+    if (cached !== undefined && now() - cached.at < PROCESS_CACHE_MS) {
+      return cached.running;
+    }
+
+    return probeProcess(image);
   };
 
   const webServerAnswers = async (): Promise<boolean> => {
@@ -244,7 +271,7 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
         return { ok: true, message: `${LHM_NAME} is already running.` };
       }
 
-      if (await processIsRunning(LHM_IMAGE)) {
+      if (await probeProcess(LHM_IMAGE)) {
         return {
           ok: false,
           message: `${LHM_NAME} is running but its web server is off.`,
@@ -282,6 +309,9 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
       }
 
       if (result.started) {
+        // The menu is refreshed right after this action; a stale cached
+        // "not running" would offer Start again for up to the TTL.
+        rememberProcess(LHM_IMAGE, true);
         return {
           ok: true,
           message: `Started ${LHM_NAME}.`,
@@ -319,7 +349,7 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
 
     startingRtss = true;
     try {
-      if (await processIsRunning(RTSS_IMAGE)) {
+      if (await probeProcess(RTSS_IMAGE)) {
         return { ok: true, message: `${RTSS_NAME} is already running.` };
       }
 
@@ -349,6 +379,7 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
 
         child.once("spawn", () => {
           child.unref();
+          rememberProcess(RTSS_IMAGE, true);
           resolve({ ok: true, message: `Started ${RTSS_NAME}.` });
         });
         child.once("error", (error) => {
@@ -367,6 +398,7 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
     const stop = ownedStop;
     ownedStop = undefined;
     stop?.();
+    processCache.delete(LHM_IMAGE);
     if (startingLhm) stopWhenSettled = true;
   };
 

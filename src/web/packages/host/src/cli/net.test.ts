@@ -93,7 +93,7 @@ describe("openTarget", () => {
     const target = "C:\\Users\\a\\.yunari";
     const options = { platform: "win32", directory: true } as const;
 
-    openTarget(target, options);
+    expect(openTarget(target, options)).toBe(true);
 
     const expected = openCommand(target, options);
     expect(spawnMock).toHaveBeenCalledWith(expected.file, expected.args, {
@@ -105,14 +105,14 @@ describe("openTarget", () => {
     expect(child.unref).toHaveBeenCalledOnce();
   });
 
-  it("swallows a spawn failure, because the printed URL stays usable", () => {
+  it("returns false on a spawn failure rather than throwing", () => {
     spawnMock.mockImplementation(() => {
       throw new Error("no opener here");
     });
 
-    expect(() =>
+    expect(
       openTarget("https://localhost:5227/editor", { platform: "linux" }),
-    ).not.toThrow();
+    ).toBe(false);
   });
 });
 

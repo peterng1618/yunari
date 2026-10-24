@@ -224,8 +224,8 @@ export async function startLinuxTray(
     /**
      * `next` is the menu asked for; `undefined` re-sends the applied rows for
      * a tooltip-only change. A row set that does not match the binary's slots
-     * is a mismatch: warn, apply only the rows it can address, and leave the
-     * routing rows alone so the visible rows still click correctly.
+     * is a mismatch: warn once and write nothing, so the rows on screen and
+     * the array a click routes through stay the same array.
      */
     function sendMenu(next?: readonly TrayMenuItem[]): void {
       if (sentTooltip === undefined) {
@@ -251,10 +251,10 @@ export async function startLinuxTray(
                 `built with ${sentRows.length}; the systray2 binary cannot add or remove rows.`,
             );
           }
-        } else {
-          warnedRowCount = undefined;
-          items = next;
+          return;
         }
+        warnedRowCount = undefined;
+        items = next;
       }
 
       const source = next ?? items ?? [];

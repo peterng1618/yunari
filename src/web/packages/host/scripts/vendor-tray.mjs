@@ -16,7 +16,8 @@ import { fileURLToPath } from "node:url";
 /**
  * Stages the `systray2` Linux tray binary into `packages/host/vendor/tray` so a
  * release can ship it. The executable is never committed: it is third-party
- * binary output, and the repository tracks its provenance instead.
+ * binary output. Its provenance is written beside it for release packaging,
+ * because `vendor/` is ignored.
  *
  * Run: `node packages/host/scripts/vendor-tray.mjs`
  */

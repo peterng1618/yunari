@@ -182,7 +182,9 @@ export async function startTrayController(
     void run(() => handleAction(action));
   }, options.onLost);
 
-  await refresh();
+  // Guarded like every later refresh: a throwing first write must not reject
+  // this promise after the view (and the host behind it) is already live.
+  await run(refresh);
   schedulePoll();
 
   return { refresh, stop };
