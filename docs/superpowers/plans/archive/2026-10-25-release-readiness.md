@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, npm workspaces, Vitest, Vite 8, Node 22+, release-please, npm trusted publishing, GitHub Actions.
 
-**Spec:** [`docs/superpowers/specs/2026-10-25-release-readiness-design.md`](../specs/2026-10-25-release-readiness-design.md)
+**Spec:** [`docs/superpowers/specs/2026-10-25-release-readiness-design.md`](../../specs/2026-10-25-release-readiness-design.md)
 
 ## Global Constraints
 

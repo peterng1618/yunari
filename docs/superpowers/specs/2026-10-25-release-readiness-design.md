@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-25
 - **Status:** landed 2026-10-25; commits `d8b223a6` (design) through
-  `c24a166b` (close), 30 commits; plan archived at
+  `c24a166b` (last code change), closed by `b82ab7f9`; plan archived at
   [`archive/2026-10-25-release-readiness.md`](../plans/archive/2026-10-25-release-readiness.md).
 - **Register:** no row. Nothing here is a defect against shipped behaviour.
 - **Related:** [`STATUS.md`](../../../STATUS.md);
