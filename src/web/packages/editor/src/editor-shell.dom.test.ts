@@ -7,7 +7,14 @@ import {
   objectName,
 } from "@yunari/renderer-core";
 import { isLocked, serialiseScene } from "@yunari/scene-fabric";
-import { FabricImage, type FabricObject, Group, Rect } from "fabric/es";
+import {
+  FabricImage,
+  type FabricObject,
+  FabricText,
+  Group,
+  IText,
+  Rect,
+} from "fabric/es";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorDocument } from "./editor-document.js";
 import { createEditorShellBridge } from "./editor-shell/bridge.js";
@@ -399,6 +406,68 @@ describe("native editor shell", () => {
     expect(revived?.left).toBe(5);
   });
 
+  it("opens a legacy Text as IText, and undo revives it editable again", async () => {
+    // Fabric serialises its display-only `FabricText` as `type: "Text"`; the
+    // player renders it, the editor cannot type into it. Mount and undo go
+    // through the same revival path, so normalising only one of them would make
+    // an edit silently downgrade the class back on the first undo.
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+
+    const shell = await mount({
+      host,
+      artboard: ARTBOARD,
+      envelope: legacyTextEnvelope(),
+    });
+
+    const opened = objectDeepById(shell.editor.canvas, "legacy-readout");
+    expect(opened).toBeInstanceOf(IText);
+    if (opened === undefined)
+      throw new Error("the legacy text was not revived");
+    expect(opened.left).toBe(10);
+
+    opened.set("left", 40);
+    shell.editor.canvas.fire("object:modified", { target: opened });
+    await shell.editor.historyManager.undo();
+
+    const undone = objectDeepById(shell.editor.canvas, "legacy-readout");
+    expect(undone).toBeInstanceOf(IText);
+    expect(undone?.left).toBe(10);
+  });
+
+  it("revives a display class recorded in history as editable on redo", async () => {
+    // The history callback is a revival path of its own: a scene can still
+    // carry `type: "Text"` — an older recorded state, an import — and restoring
+    // it without the editor's option would hand back the class nothing can type
+    // into. Seeded directly because the editor itself never constructs it.
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const shell = await mount({ host, artboard: ARTBOARD });
+    const legacy = new FabricText("CPU 48%", {
+      left: 10,
+      top: 20,
+    });
+    legacy.set("id", "legacy-readout");
+    shell.editor.canvas.add(legacy);
+    shell.editor.canvas.fire("object:modified", { target: legacy });
+    await shell.editor.historyManager.undo();
+    expect(
+      objectDeepById(shell.editor.canvas, "legacy-readout"),
+    ).toBeUndefined();
+
+    await shell.editor.historyManager.redo();
+
+    expect(
+      objectDeepById(shell.editor.canvas, "legacy-readout"),
+    ).toBeInstanceOf(IText);
+  });
+
   it("keeps an open crop frame out of the serialised scene", async () => {
     const host = document.createElement("div");
     Object.defineProperties(host, {
@@ -515,6 +584,56 @@ function envelopeWith(
     assets,
     metadata: { themeLanguage: "en" },
     scene: { version: "7.4.0", objects: [] },
+  } as unknown as NonNullable<
+    Parameters<typeof mountEditorShell>[0]["envelope"]
+  >;
+}
+
+/** A v2 document carrying the class Fabric wrote before Text and Text box split:
+ *  the display-only `FabricText`, serialised as `type: "Text"`. */
+function legacyTextEnvelope(): NonNullable<
+  Parameters<typeof mountEditorShell>[0]["envelope"]
+> {
+  return {
+    schemaVersion: 2,
+    fabricVersion: "7.4.0",
+    id: "legacy-text",
+    artboard: ARTBOARD,
+    globals: {
+      palette: {
+        none: { name: "None", value: { kind: "solid", color: "transparent" } },
+        ink: { name: "Ink", value: { kind: "solid", color: "#112233" } },
+      },
+      typePresets: {
+        body: {
+          name: "Body",
+          value: { family: "Inter", size: 24, weight: 400, lineHeight: 1.2 },
+        },
+      },
+    },
+    metadata: { themeLanguage: "en" },
+    scene: {
+      version: "7.4.0",
+      objects: [
+        {
+          type: "Text",
+          id: "legacy-readout",
+          text: "CPU 48%",
+          left: 10,
+          top: 20,
+          yunariText: {
+            runs: [
+              {
+                kind: "literal",
+                text: "CPU 48%",
+                typePreset: "typePresets.body",
+                style: { color: { ref: "palette.ink" } },
+              },
+            ],
+          },
+        },
+      ],
+    },
   } as unknown as NonNullable<
     Parameters<typeof mountEditorShell>[0]["envelope"]
   >;

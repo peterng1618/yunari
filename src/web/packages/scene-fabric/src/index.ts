@@ -86,7 +86,7 @@ export {
   type PaletteReference,
   reassignObjectPaletteReferences,
 } from "./palette-references.js";
-export type { SerialisedScene } from "./persist.js";
+export type { ReviveSceneOptions, SerialisedScene } from "./persist.js";
 export {
   assertFabricThemeEnvelopeCompatible,
   disposeScene,

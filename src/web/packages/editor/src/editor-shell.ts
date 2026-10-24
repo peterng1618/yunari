@@ -332,9 +332,15 @@ function createNativeEditor(input: {
     canvas,
     serialize: serialiseScene,
     revive: (target, scene) =>
-      reviveScene(target, scene, input.resolveSceneAsset, {
-        onRefusedPaint: (message) => errors.warn("paint", message),
-      }),
+      reviveScene(
+        target,
+        scene,
+        input.resolveSceneAsset,
+        { onRefusedPaint: (message) => errors.warn("paint", message) },
+        // Undo normalises a legacy display text exactly as the mount did, or an
+        // edit would come back as a class the author cannot type into.
+        { editableText: true },
+      ),
   });
   history.reset();
   const save = (): void => history.save();
@@ -513,9 +519,18 @@ export async function mountEditorShell({
       // that loses a figure at revival says so through the shell's own line —
       // and says it once, because `refuseUndrawablePaint` leaves the
       // reference-carrying arc to the paint pass below.
-      await reviveThemeEnvelope(editor.canvas, envelope, resolveSceneAsset, {
-        onRefusedPaint: (message) => editor.errorManager.warn("paint", message),
-      });
+      await reviveThemeEnvelope(
+        editor.canvas,
+        envelope,
+        resolveSceneAsset,
+        {
+          onRefusedPaint: (message) =>
+            editor.errorManager.warn("paint", message),
+        },
+        // The editor is the only surface that types into text; the player keeps
+        // the display class it persisted.
+        { editableText: true },
+      );
       editor.historyManager.resetHistory();
     }
 

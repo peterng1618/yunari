@@ -16,14 +16,13 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- Text layout derives from the Fabric class: `IText` measures itself, `Textbox` wraps; the authored `wrap` key is deleted and an old one is ignored.
-- The inspector's Wrap control and its copy are gone; the runs projection carries `wraps` for later class-specific controls.
-- Decision 0098 records why the persisted class, not a flag, owns the width mode.
+- `reviveScene` takes an editor-only `editableText` option that revives nested serialised `type: "Text"` as `IText` on a copy, leaving geometry, runs and styles untouched.
+- The editor's mount and its history revive both pass it, so a legacy display text opens editable and stays editable after undo; the player's revive is unchanged.
 
 ## Next
 
-1. Task 1.2: revive a legacy `"Text"` as `IText` in the editor only.
-2. Tasks 1.3–1.4: construct the chosen class, then place text by click or drag.
+1. Task 1.3: `addText` constructs the chosen class (`IText` for a click, `Textbox` for a drag).
+2. Task 1.4: place text by click or drag through the one text route.
 
 ## Blockers / unverified
 
