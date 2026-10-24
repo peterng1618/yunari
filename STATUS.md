@@ -16,14 +16,16 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- `placeText`'s default point is the artboard centre from `viewport.artboardScreenRect()`; explicit scene points use `viewportTransform`.
-- `insertTextBox` drag-places a Textbox, and `addText` uses it, so the rebuild journey authors boxes again.
+- New `tests/e2e/text-elements.spec.ts` proves click/drag classes, growth, wrap, cancel, save/reload, legacy load, player parity and run tabs.
+- Text `ml`/`mr` scale and W/H are read-only; Text box `ml`/`mr` change the width and W/H stay editable.
+- The no-`mt`/`mb` case is pinned `test.fail`: `controls-manager` still gives `IText` the six default edges.
 
 ## Next
 
-1. Phase 3 / Task 3.2: prove click, drag, cancel, reload and player parity.
+1. Phase 3 / Task 3.3: ownership docs, status and the full gate.
+2. Drop the `text-elements.spec.ts` `test.fail` pin once the `mt`/`mb` edges are Textbox-only.
 
 ## Blockers / unverified
 
-- No browser proof yet for drag, cancel, reload or player parity; Task 3.2 owns them.
+- `IText` still carries Fabric's `mt`/`mb` scaleY edges; the Text contract says height edges are Textbox-only, and the fix is outside Task 3.2's evidence-only scope.
 - Outside this plan: the store Worker is undeployed, and the live catalogue's smoke theme still carries the old media shape.
