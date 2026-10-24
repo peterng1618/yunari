@@ -12,7 +12,7 @@ The **sensor platform** ([`spec`](docs/superpowers/specs/2026-10-24-sensor-platf
 ## Active work
 
 - **All seven phases are complete** (Tasks 1.1–7.5); the Plan 7 boundary gate ran green.
-- **Phase 7 is proven end to end**: a real host and player, a fixture Steam store, the store's canonical name and cover painted, and both offline arms.
+- **Phase 7 is proven end to end**: a real host and player, a fixture Steam store, the canonical name and cover painted; offline arm 1 proves the cover fallback, not a cold lookup.
 - **The earlier whole-branch review's five findings are fixed**, and its scoped re-review returned ALL CLEAR.
 - **Media and custom sources remain proven** with the same live evidence recorded at Phase 6.
 

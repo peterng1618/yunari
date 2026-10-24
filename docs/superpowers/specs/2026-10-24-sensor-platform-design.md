@@ -622,9 +622,10 @@ adapter. SteamDB is not used: it has no API and forbids scraping.
 information, else its file name without extension) or, for a Steam install, its
 appid. Nothing
 else — no account, no library list, no machine identifier. **What is kept** is a
-small on-disk map from normalised name to appid (including "no match") and the
-downloaded cover bytes, so a lookup happens once per game and the display works
-offline afterwards.
+small on-disk map from normalised name to appid (including "no match"), the
+searched term, the canonical name and the first-lookup time, plus the downloaded
+cover bytes. A lookup happens once per game — across restarts, not only per
+process life — and the display works offline afterwards.
 
 **Matching is tiered, and ambiguity is refused.** Normalisation folds case,
 strips `™ ® ©`, punctuation and leading articles, removes Latin diacritics but
@@ -641,10 +642,11 @@ one candidate remains. `Doom` must not match `Doom Eternal`, and no prefix or
 substring rule is used at all: a sequel's extra word is not a qualifier, so it
 makes the title different. Two remaining candidates leave the game unnamed.
 
-The **local name is shown when no match is found** (in `game.app`); the store's
-canonical name is shown when one is. Covers are downloaded once, cached by appid
-under the host's own directory, and served through the gated
-`/api/game/artwork/<appid>.jpg` route. A display never receives a Steam URL.
+`game.app` is always the process's file name. When no match is found, `game.name`
+stays absent and the gap says so; when one is, `game.name` is the store's
+canonical name. Covers are downloaded once, cached by appid under the host's own
+directory, and served through the gated `/api/game/artwork/<appid>.jpg` or
+`.png` route. A display never receives a Steam URL.
 Offline, a failed lookup or a rate-limited response degrades to the local
 behaviour with a reason; the cache keeps working.
 
@@ -1011,8 +1013,9 @@ This spec is implemented when:
   behaviour with a reason. This trade was ruled by the user, not inferred.
 - **Presence still treats every foreground window as a running game** (vg-714),
   so while that row is open the lookup can be asked about a browser or a file
-  manager. Each distinct normalised name costs at most one request per process
-  life because a "no match" is cached, and only while a `game.*` key is demanded.
+  manager. Each distinct name costs one request, remembered on disk, so a
+  restart does not ask again; the map and its timestamps are the inventory this
+  paragraph discloses. Lookups run only while a `game.*` key is demanded.
 - **Weather icon licence** must be verified before the set is bundled. An
   unverified set is not shipped.
 - **Open-Meteo terms** (free tier, attribution, non-commercial) must be checked

@@ -1404,7 +1404,9 @@ wording; the spec has been amended to say the same thing.
   Expected: PASS.
 - [ ] **Step 5: Implement the client and disk cache**
   Cache file `game-metadata.json` under the injected `cacheDir`, written
-  temp-then-rename. Entries: `{ [normalisedName]: { id, name, at } | { none: true, at } }`
+  temp-then-rename. Entries: `{ [normalisedName]: { term, id, name, at } | { term, none: true, at } }`
+  — `term` is the searched spelling, so a cached "no match" for one spelling does
+  not suppress another spelling that normalises the same but searches differently.
   plus cover files by appid. A 429 or a rejected fetch marks the name
   unavailable for 10 minutes rather than retrying every poll. Cover bytes are
   written only after the response passes the type sniff.
@@ -1441,8 +1443,8 @@ wording; the spec has been amended to say the same thing.
   through the existing PowerShell path, cache by executable path for the process
   life, and treat an empty or missing value as absent. Do not spawn per poll.
 - [ ] **Step 4: Demand-driven cover fetch**
-  Fetch cover bytes only when `game.artwork` is in the demanded key set or a
-  display asks the route for that appid; a presence-only poll never downloads.
+  Fetch cover bytes only when `game.artwork` is in the demanded key set; the
+  route never starts a download, and a presence-only poll never downloads.
   Cache-miss is `unavailable`; a cached cover answers with no request. A name
   lookup itself runs only while a `game.*` key is demanded, and its "no match"
   result is cached, so an unfixed vg-714 costs at most one request per distinct
@@ -1499,8 +1501,9 @@ wording; the spec has been amended to say the same thing.
   Run: `npx playwright test tests/e2e/game-metadata.spec.ts --workers=1`
 - [ ] **Step 3: Add the offline arm**
   Stop the fixture server and clear the cache: an authored image returns and the
-  run shows a reason. Restart with only the cover cache present: the cover
-  renders with the fixture still stopped.
+  run shows a reason. With the fixture still stopped but only the cover cache
+  present, reload the display: the cover renders, and the fixture's recorded
+  request count is unchanged once it can answer again.
 - [ ] **Step 4: Rebuild the affected bundles, re-run to PASS, commit.**
 
 ### Task 7.5: Spec/plan/STATUS truth and the phase gate
