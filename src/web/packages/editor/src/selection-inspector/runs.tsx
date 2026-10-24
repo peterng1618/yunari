@@ -24,6 +24,7 @@ import {
   ControlWell,
   useControlIds,
 } from "../components/ui/control-well.js";
+import { Glyph, PLUS_GLYPH } from "../editor-shell/icons.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   authoredContentOf,
@@ -684,7 +685,7 @@ export function RunEditor(props: {
               if (edits.addRun()) setFollowLast(true);
             }}
           >
-            +
+            <Glyph icon={PLUS_GLYPH} size={12} />
           </button>
         </div>
 

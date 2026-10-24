@@ -1,6 +1,6 @@
 # Text and text box as separate Fabric elements
 
-- **Status:** in progress. Plan: [`2026-10-24-text-elements.md`](../plans/2026-10-24-text-elements.md).
+- **Status:** implemented. Plan: [`2026-10-24-text-elements.md`](../plans/2026-10-24-text-elements.md).
 
 ## Why
 
@@ -293,6 +293,65 @@ Each of these must fail before the change and pass after:
   every legacy text still auto-width; only a legacy `FabricText` changes class,
   and only when the editor saves it again.
 - The player and the editor agree on each element's class and layout.
+
+## Acceptance evidence
+
+Unit and DOM cases run under `npm run test` (Vitest, jsdom for `*.dom.test.*`).
+Browser cases are `npx playwright test tests/e2e/text-elements.spec.ts
+--workers=1`: 9 desktop cases, 9 `phone-chromium` skips, last two runs expected
+9 / skipped 9 / unexpected 0 / flaky 0 with exit 0. The full gate is
+`npm run gate` from `src/web/`.
+
+- **Class is the only discriminator; no authored `wrap`.**
+  `a88bf857` constructs the class the gesture asks for; `d671ef78` derives
+  layout from it. `text-manager/index.dom.test.ts` — "creates a Text, with no
+  authored box, when no box is asked for" and "creates a Text box whose
+  authored box is the one it was given". `scene-fabric/fabric-text.dom.test.ts`
+  — "keeps a Textbox wrapping when its authored content still carries wrap:
+  false" and "derives an IText as unwrapped and visible, ignoring the old
+  authored values". Browser: "save, reload and reopen preserve both classes and
+  their geometry"; "a legacy wrap:false Textbox still wraps and a legacy Text
+  opens as IText".
+- **Click places auto-width Text; drag places a fixed Text box.** `f751b0a9`,
+  `318073dc`. `text-manager/index.dom.test.ts` — "makes a Text at the press
+  point from a click", "uses the normalised rectangle of a down-right drag as
+  the box", "normalises an up-left drag to a positive box at the upper-left",
+  "treats three pixels of jitter as a click", "treats a drag thinner than one
+  scene unit as a click". Browser: "click places a Text that grows while typing
+  and scales rather than writing a width" and "drag draws a Text box at the
+  rectangle, wraps, and its ml/mr controls change the width". Escape creates
+  nothing and disarms — `text-manager/index.dom.test.ts` "cancels on Escape and
+  leaves no object, history entry or outline"; the browser case "Escape during
+  placement creates nothing and leaves the history alone" observes an unchanged
+  scene and a Ctrl+Z that still finds nothing, because the bridge exposes no
+  redo or history length.
+- **No Wrap control; no control the class cannot honour.** `e2f369c3`,
+  `386749ce`. `selection-inspector/runs.dom.test.ts` — "offers no Wrap control,
+  because the Fabric class is the width mode" and "hides overflow and vertical
+  alignment on a text, which has no box". `controls-manager/index.test.ts` —
+  "gives a text corners and rotation, and no box-writing handles";
+  `controls-manager/index.dom.test.ts` — "carries corners and rotation only,
+  with no box-writing edges". Browser: "a Text exposes corners and rotation only
+  while a Text box keeps all nine handles".
+- **Runs behind numbered tabs.** `41c59905`, `8d80defc`.
+  `selection-inspector/runs.dom.test.tsx` — "numbers every run's tab and shows
+  only the selected run's fields", "adds a run with the plus and selects the new
+  last run", "selects the first remaining run when the selected one is removed".
+  Browser: "three runs show three numbered tabs, one selected run's fields, and
+  + selects the new run".
+- **Existing themes render unchanged; only a legacy text changes class, on an
+  editor save.** `40e7b084`. `scene-fabric/persist.dom.test.ts` "a legacy
+  display text revives as editable only when asked" — "keeps the display class
+  for a caller that does not ask for editing", "revives it as IText with
+  geometry, runs and style untouched", "rewrites a legacy text nested inside a
+  group". The player calls `reviveThemeEnvelope` without the option, so it
+  keeps the persisted class.
+- **Player and editor agree.** The plan-built class choice is proven in
+  `scene-fabric/adapter.dom.test.ts` — "builds an auto text as IText and a fixed
+  text as Textbox" — because the player mounts no plans;
+  `fabric-text.dom.test.ts` "builds IText for an auto text and Textbox for a
+  fixed one". Browser: "the player renders both saved objects without changing
+  either class".
 
 ## Risks
 

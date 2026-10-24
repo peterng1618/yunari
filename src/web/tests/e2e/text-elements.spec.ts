@@ -351,8 +351,14 @@ function legacyEnvelope(): FabricThemeEnvelope {
           name: "None",
           value: { kind: "solid", color: "transparent" },
         },
-        bar: { name: "Bar", value: { kind: "solid", color: "#101318" } },
-        ink: { name: "Ink", value: { kind: "solid", color: "#e8ecf3" } },
+        bar: {
+          name: "Bar",
+          value: { kind: "solid", color: "rgb(16, 19, 24)" },
+        },
+        ink: {
+          name: "Ink",
+          value: { kind: "solid", color: "rgb(232, 236, 243)" },
+        },
       },
       typePresets: {
         "11-400": {

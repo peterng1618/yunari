@@ -5,27 +5,27 @@ Branch: `peterng1618/Fixing-the-text-element`
 
 ## Current objective
 
-The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10-24-text-elements-design.md), [`plan`](docs/superpowers/plans/2026-10-24-text-elements.md)) is active: split one text element into `IText` and `Textbox`, chosen by a click-or-drag gesture, with the authored `wrap` flag removed.
+The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10-24-text-elements-design.md), [`plan`](docs/superpowers/plans/2026-10-24-text-elements.md)) is implemented: one text element is split into `IText` and `Textbox`, chosen by a click-or-drag gesture, with the authored `wrap` flag removed.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-24-text-elements.md`
-- Phase 1 — the class is the width model: layout derived from the class, legacy `"Text"` revives as `IText`, `addText` constructs the chosen class, the placement gesture lands.
-- Phase 2 — one arming route across Add, context and footer, and an inspector that shows only the selected class's controls.
-- Phase 3 — e2e text placement through the gesture, browser proof, ownership docs, full gate.
+- **Active plan:** `docs/superpowers/plans/2026-10-24-text-elements.md` — phases 1–3 complete; the plan is closing.
+- Phase 3 — e2e proof, ownership docs, spec evidence and the full gate are done.
+- No task is in flight in this worktree.
 
 ## Last completed change
 
-- All nine e2e cases assert the live contract: Text exposes `tl`/`tr`/`bl`/`br`/`mtr` only, Textbox keeps all nine, and no case is pinned `test.fail`.
-- A Text's resize proof is a `br` corner drag: `scaleX`/`scaleY` rise, measured `width` holds, and no authored `yunariText.box` is written.
-- Textbox cases assert the authored box height beside width, left and top, and that it survives Save to library and reopen.
-- Words typed into a placed Text are the authored run, survive the repaint, and survive Save to library and reopen.
-- Two clean `--workers=1` runs: expected 9, skipped 9, unexpected 0, flaky 0; the plan's auto/fixed class choice is proven in `adapter.dom.test.ts`, since no browser path applies a plan.
+- A Text keeps `tl`/`tr`/`bl`/`br`/`mtr` only and a Text box keeps all nine handles (`controls-manager/index.test.ts`, `index.dom.test.ts`).
+- Typed words commit once at `text:editing:exited`, survive the repaint, and save when Fabric reports no `object:modified` (`text-manager/index.dom.test.ts`).
+- `tests/e2e/text-elements.spec.ts` proves both classes, handle sets, Run tabs, legacy `wrap: false`, save/reopen and the player; last two `--workers=1` runs: 9 expected, 9 skipped, 0 unexpected, 0 flaky.
+- `docs/architecture/ownership.md` names `text-manager` as the construction/gesture owner and records the two element contracts and the editor-only `"Text"` revival.
+- `npm run gate` exits 0; the spec's Acceptance evidence names each bullet's commit and test.
 
 ## Next
 
-1. Phase 3 / Task 3.3: ownership docs, status and the full gate.
+1. Final whole-branch review of `peterng1618/Fixing-the-text-element`, then merge into `develop`.
 
 ## Blockers / unverified
 
+- The text e2e cases skip on `phone-chromium` by design; phone rendering is unverified beyond the desktop player case.
 - Outside this plan: the store Worker is undeployed, and the live catalogue's smoke theme still carries the old media shape.
