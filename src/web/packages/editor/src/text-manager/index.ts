@@ -201,6 +201,59 @@ export function createTextManager(
   /** Repaints the authored runs, so a refused edit does not leave un-authored
       text standing on the canvas as though it had been kept. */
   let repaint: (object: IText) => void = () => {};
+  /**
+   * The text this edit's view painted, so an edit that changed nothing is told
+   * apart from one that did.
+   *
+   * Recorded on the canvas's own entry event because that is the one place both
+   * routes meet: Fabric enters editing itself on a double-click, and the Add
+   * tile constructs a text and enters it directly. A per-object handler
+   * installed by the double-click was how a placed text's words were lost.
+   */
+  let editing: { readonly target: IText; readonly painted: string } | undefined;
+
+  const onEditingEntered = (event: { target?: unknown }): void => {
+    const target = event.target;
+    if (!(target instanceof IText)) return;
+    // What the object carries as the edit opens: a constructed text is still
+    // showing its placeholder, and a double-click replaces this with the run's
+    // authoring view it paints afterwards.
+    editing = { target, painted: target.text };
+  };
+
+  const onEditingExited = (event: { target?: unknown }): void => {
+    const target = event.target;
+    if (!(target instanceof IText)) return;
+    const painted = editing?.target === target ? editing.painted : undefined;
+    editing = undefined;
+
+    // Fabric's `exitEditing` (`index.mjs:17102-17105`) compares
+    // `_textBeforeEdit` to decide whether to fire `modified` and never restores
+    // it, so after a double-click and nothing else `text` is still the token
+    // this view painted. Writing that back would turn a sensor card into prose
+    // from a gesture that changed nothing.
+    if (painted !== undefined && target.text !== painted) {
+      if (keepTypedText(target) === "refused") {
+        warn?.(uiCopy.inspectorFields.multiRunRefused);
+        // Fabric has already left editing, so the object's own text is the only
+        // thing standing where the authored runs should be. Putting them back
+        // is what makes the refusal honest rather than a warning the author
+        // watches scroll away from text that was never kept.
+        repaint(target);
+        canvas.requestRenderAll();
+        return;
+      }
+      // The history entry is Fabric's `object:modified`, fired on the canvas
+      // straight after this event for a changed text; `onModified` saves there.
+      // A save here too would be a second commit of one edit.
+    }
+    // The token was this edit's view and it ends with the edit: repaint now
+    // rather than at the next sample tick, so Escape puts the reading back on
+    // the frame the author pressed it. The refresh loop's own copy is at most
+    // a quarter second behind and is what restores every *other* object.
+    repaint(target);
+    canvas.requestRenderAll();
+  };
 
   const onDoubleClick = (event: { target?: unknown }): void => {
     const target = event.target;
@@ -219,9 +272,10 @@ export function createTextManager(
     // what is on screen.
     target.enterEditing();
     showAuthoringView(target);
-    // What the authoring view painted, so an edit that changed nothing can be
-    // told apart from one that did — see the `editing:exited` handler.
-    const painted = target.text;
+    // The painted token is this edit's baseline: an edit that changed nothing
+    // is one that still holds it. Fabric's own entry recorded the run's reading
+    // before this paint, and the canvas exit handler commits against this one.
+    editing = { target, painted: target.text };
     // Fabric writes the hidden textarea exactly once, as it enters editing
     // (`enterEditingImpl`, `index.mjs:16908`), and `_updateTextarea` then only
     // ever syncs the *selection*. So a run painted after that point is what the
@@ -247,32 +301,6 @@ export function createTextManager(
       }
     });
     canvas.requestRenderAll();
-    target.once("editing:exited", () => {
-      // Fabric's `exitEditing` (`index.mjs:17102-17105`) compares
-      // `_textBeforeEdit` to decide whether to fire `modified` and never
-      // restores it, so after a double-click and nothing else `text` is still
-      // the token this view painted. Writing that back would turn a sensor card
-      // into prose from a gesture that changed nothing.
-      if (target.text !== painted) {
-        if (keepTypedText(target) === "refused") {
-          warn?.(uiCopy.inspectorFields.multiRunRefused);
-          // Fabric has already left editing, so the object's own text is the only
-          // thing standing where the authored runs should be. Putting them back
-          // is what makes the refusal honest rather than a warning the author
-          // watches scroll away from text that was never kept.
-          repaint(target);
-          canvas.requestRenderAll();
-          return;
-        }
-        save();
-      }
-      // The token was this edit's view and it ends with the edit: repaint now
-      // rather than at the next sample tick, so Escape puts the reading back on
-      // the frame the author pressed it. The refresh loop's own copy is at most
-      // a quarter second behind and is what restores every *other* object.
-      repaint(target);
-      canvas.requestRenderAll();
-    });
   };
 
   const onResizing = (event: object): void => {
@@ -481,6 +509,8 @@ export function createTextManager(
   };
 
   canvas.on("mouse:dblclick" as never, onDoubleClick as never);
+  canvas.on("text:editing:entered" as never, onEditingEntered as never);
+  canvas.on("text:editing:exited" as never, onEditingExited as never);
   canvas.on("object:resizing" as never, onResizing as never);
   canvas.on("object:modified" as never, onModified as never);
   canvas.on("mouse:down" as never, onPlacementDown as never);
@@ -573,6 +603,8 @@ export function createTextManager(
     },
     destroy() {
       canvas.off("mouse:dblclick" as never, onDoubleClick as never);
+      canvas.off("text:editing:entered" as never, onEditingEntered as never);
+      canvas.off("text:editing:exited" as never, onEditingExited as never);
       canvas.off("object:resizing" as never, onResizing as never);
       canvas.off("object:modified" as never, onModified as never);
       canvas.off("mouse:down" as never, onPlacementDown as never);

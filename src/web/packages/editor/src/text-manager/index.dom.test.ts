@@ -289,8 +289,66 @@ describe.each([
       text: "MEM 16.0 GB",
       typePreset: "typePresets.60-600",
     });
-    expect(save).toHaveBeenCalled();
+    // One commit for one edit, whichever route entered editing.
+    expect(save).toHaveBeenCalledOnce();
     text.destroy();
+  });
+});
+
+describe.each([
+  ["Text", IText],
+  ["Text box", Textbox],
+] as const)("typing into a newly placed %s", (_name, Class) => {
+  /**
+   * The Add tile constructs the text and enters editing itself, so no
+   * double-click ever installs a per-object `editing:exited` handler. This is
+   * the route that lost what was typed: the next authored pass restored the
+   * placeholder and the object came back as "New text".
+   */
+  function placed(save: () => void) {
+    const canvas = new Canvas(document.createElement("canvas"));
+    const manager = createTextManager(canvas, save);
+    const text = manager.addText({
+      text: "New text",
+      ...(Class === Textbox ? { box: { width: 200, height: 80 } } : {}),
+      yunariText: { runs: [{ kind: "literal", text: "New text" }] },
+    });
+    return { canvas, manager, text };
+  }
+
+  it("writes what was typed into the authored run and saves it once", () => {
+    const save = vi.fn();
+    const { canvas, manager, text } = placed(save);
+    // The construction's own entry is not this edit's.
+    save.mockClear();
+    canvas.setActiveObject(text);
+
+    text.enterEditing();
+    text.set("text", "Hello");
+    text.exitEditing();
+
+    const authored = text.get(YUNARI_TEXT_PROPERTY) as {
+      runs: readonly { kind: string; text?: string }[];
+    };
+    expect(authored.runs).toHaveLength(1);
+    expect(authored.runs[0]).toMatchObject({ kind: "literal", text: "Hello" });
+    // Committed once: the write to the authored run and the history entry are
+    // one edit, not one per handler that saw the exit.
+    expect(save).toHaveBeenCalledOnce();
+    manager.destroy();
+  });
+
+  it("keeps the words through the next authored repaint", () => {
+    const { canvas, manager, text } = placed(vi.fn());
+    canvas.setActiveObject(text);
+
+    text.enterEditing();
+    text.set("text", "Hello");
+    text.exitEditing();
+    applyAuthoredText(canvas, undefined);
+
+    expect(text.text).toBe("Hello");
+    manager.destroy();
   });
 });
 

@@ -16,14 +16,13 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- `IText` gets corners and rotation only: its own control set omits `ml`/`mr`/`mt`/`mb`, built from the shared object set so the overrides still apply.
-- `Textbox` keeps all nine handles and every other object keeps Fabric's full set; unit and dom tests pin all three.
+- Editing entry and exit are canvas-level: the words typed into a constructed text become its authored run on `text:editing:exited`, whichever route entered editing.
+- The double-click's per-object `once` handler is gone, so one edit saves once on either route; the unchanged-edit guard and the multi-run refusal stay.
 
 ## Next
 
-1. Phase 2 / Task 2.5: typing into a just-placed text is kept.
-2. Rewrite then unpin the `text-elements.spec.ts` control test: a Text now has no `ml`/`mr` either, so its expectation is stale.
-3. Phase 3 / Task 3.3: ownership docs, status and the full gate.
+1. Phase 3 / Task 3.2 (resumed): remove the stale `test.fail` pin and prove a placed text keeps typed words across a reload.
+2. Phase 3 / Task 3.3: ownership docs, status and the full gate.
 
 ## Blockers / unverified
 
