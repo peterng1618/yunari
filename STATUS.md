@@ -21,17 +21,16 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 ## Last completed change
 
 - **External programs:** `host/src/tray/external-apps.ts` detects LHM and RTSS on Windows and starts them on request.
-- **LHM** starts through `launchLhm`; only the process this run started is stopped, and RTSS has no stop.
-- **Failed probes read as absent**, and both programs are absent off Windows.
-- **Tests:** 8 pass in `packages/host/src/tray/external-apps.test.ts`.
+- **LHM** starts through `launchLhm`, keeps its stop on every result, and only an in-flight launch blocks a retry.
+- **RTSS probes before spawning** and has no stop; failed probes read as absent, and both programs are absent off Windows.
+- **Tests:** 12 pass in `packages/host/src/tray/external-apps.test.ts`.
 
 ## Next
 
-1. Task 2: external-program presence and start, behind injected probes.
-2. Task 3: controller polling, action dispatch and notices.
-3. Task 4+: Windows and Linux adapters, autostart entry, editor deep links and `--tray` wiring.
-4. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
-5. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
+1. Task 3: controller polling, action dispatch and notices.
+2. Task 4+: Windows and Linux adapters, autostart entry, editor deep links and `--tray` wiring.
+3. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
+4. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
 
 ## Blockers / unverified
 

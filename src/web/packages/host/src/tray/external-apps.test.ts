@@ -73,24 +73,27 @@ it("reports an installed program as stopped when the process probe fails", async
 it("calls the process probe for RTSS and starts only the installed executable", async () => {
   const unref = vi.fn();
   const child = Object.assign(new EventEmitter(), { unref });
-  const spawnProcess = vi.fn(() => child);
+  const spawnProcess = vi.fn(() => {
+    queueMicrotask(() => child.emit("spawn"));
+    return child;
+  });
+  const listProcesses = vi.fn(async () => false);
   const apps = createExternalApps({
     platform: "win32",
     lhmUrl: "http://127.0.0.1:8085",
     lhmDefaultExecutable: "C:\\app\\lhm.exe",
     rtssExecutable: "C:\\RTSS\\RTSS.exe",
     exists: () => true,
-    listProcesses: async (image) => image === "RTSS.exe",
+    listProcesses,
     fetchImpl: async () => ({ ok: false }),
     spawnProcess,
   });
-  expect(await apps.rtssState()).toEqual({ installed: true, running: true });
-  const started = apps.startRtss();
-  child.emit("spawn");
-  expect(await started).toEqual({
+  expect(await apps.rtssState()).toEqual({ installed: true, running: false });
+  expect(await apps.startRtss()).toEqual({
     ok: true,
     message: "Started RivaTuner Statistics Server.",
   });
+  expect(listProcesses).toHaveBeenCalledWith("RTSS.exe");
   expect(spawnProcess).toHaveBeenCalledWith(
     "C:\\RTSS\\RTSS.exe",
     [],
@@ -101,6 +104,25 @@ it("calls the process probe for RTSS and starts only the installed executable", 
     }),
   );
   expect(unref).toHaveBeenCalled();
+});
+
+it("does not start an RTSS that is already running", async () => {
+  const spawnProcess = vi.fn();
+  const apps = createExternalApps({
+    platform: "win32",
+    lhmUrl: "http://127.0.0.1:8085",
+    lhmDefaultExecutable: "C:\\app\\lhm.exe",
+    rtssExecutable: "C:\\RTSS\\RTSS.exe",
+    exists: () => true,
+    listProcesses: async (image) => image === "RTSS.exe",
+    fetchImpl: async () => ({ ok: false }),
+    spawnProcess,
+  });
+  expect(await apps.startRtss()).toMatchObject({
+    ok: true,
+    message: "RivaTuner Statistics Server is already running.",
+  });
+  expect(spawnProcess).not.toHaveBeenCalled();
 });
 
 it("does not launch an LHM that is already running with its web server off", async () => {
@@ -141,4 +163,68 @@ it("stops the LHM this run started and has no RTSS stop", async () => {
   apps.stopOwnedLhm();
   expect(stop).toHaveBeenCalledTimes(1);
   expect("stopRtss" in apps).toBe(false);
+});
+
+it("stops an LHM launch that failed after starting a process", async () => {
+  const stop = vi.fn();
+  const apps = createExternalApps({
+    platform: "win32",
+    lhmUrl: "http://127.0.0.1:8085",
+    lhmDefaultExecutable: "C:\\app\\lhm.exe",
+    exists: () => true,
+    listProcesses: async () => false,
+    fetchImpl: async () => ({ ok: false }),
+    launchLhm: async () => ({ started: false, reason: "web server off", stop }),
+  });
+  expect(await apps.startLhm()).toMatchObject({
+    ok: false,
+    reason: "web server off",
+  });
+  apps.stopOwnedLhm();
+  expect(stop).toHaveBeenCalledTimes(1);
+});
+
+it("starts LHM again after the owned process was stopped", async () => {
+  const launchLhm = vi.fn(async () => ({
+    started: true,
+    stop: () => undefined,
+  }));
+  const apps = createExternalApps({
+    platform: "win32",
+    lhmUrl: "http://127.0.0.1:8085",
+    lhmDefaultExecutable: "C:\\app\\lhm.exe",
+    exists: () => true,
+    listProcesses: async () => false,
+    fetchImpl: async () => ({ ok: false }),
+    launchLhm,
+  });
+  await apps.startLhm();
+  apps.stopOwnedLhm();
+  await apps.startLhm();
+  expect(launchLhm).toHaveBeenCalledTimes(2);
+});
+
+it("stops a launch that resolves after Exit", async () => {
+  const stop = vi.fn();
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const apps = createExternalApps({
+    platform: "win32",
+    lhmUrl: "http://127.0.0.1:8085",
+    lhmDefaultExecutable: "C:\\app\\lhm.exe",
+    exists: () => true,
+    listProcesses: async () => false,
+    fetchImpl: async () => ({ ok: false }),
+    launchLhm: async () => {
+      await gate;
+      return { started: true, stop };
+    },
+  });
+  const starting = apps.startLhm();
+  apps.stopOwnedLhm();
+  release?.();
+  await starting;
+  expect(stop).toHaveBeenCalledTimes(1);
 });

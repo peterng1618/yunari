@@ -151,7 +151,7 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
 
   let ownedStop: (() => void) | undefined;
   let startingLhm = false;
-  let stopping = false;
+  let stopWhenSettled = false;
   let startingRtss = false;
 
   const existsSafely = (file: string): boolean => {
@@ -231,48 +231,55 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
       };
     }
 
-    if (ownedStop !== undefined || startingLhm) {
+    if (startingLhm) {
       return { ok: true, message: `${LHM_NAME} is already starting.` };
     }
 
-    if (await webServerAnswers()) {
-      return { ok: true, message: `${LHM_NAME} is already running.` };
-    }
-
-    if (await processIsRunning(LHM_IMAGE)) {
-      return {
-        ok: false,
-        message: `${LHM_NAME} is running but its web server is off.`,
-        started: false,
-        reason: "web server off",
-      };
-    }
-
-    const executable = findLhmExecutable();
-    if (executable === undefined) {
-      return {
-        ok: false,
-        message: `${LHM_NAME} was not found. Install it or pass --lhm-exe.`,
-      };
-    }
-
+    // Covers the probes as well as the launch: Exit can arrive while either is
+    // in flight, and the launch's stop has to be called once it resolves.
     startingLhm = true;
+    let launched = false;
     try {
+      if (await webServerAnswers()) {
+        return { ok: true, message: `${LHM_NAME} is already running.` };
+      }
+
+      if (await processIsRunning(LHM_IMAGE)) {
+        return {
+          ok: false,
+          message: `${LHM_NAME} is running but its web server is off.`,
+          started: false,
+          reason: "web server off",
+        };
+      }
+
+      const executable = findLhmExecutable();
+      if (executable === undefined) {
+        return {
+          ok: false,
+          message: `${LHM_NAME} was not found. Install it or pass --lhm-exe.`,
+        };
+      }
+
       const result = await launchLhm({
         executable,
         baseUrl: lhmUrl,
         timeoutMs: 20_000,
-        fetcher: (url) => fetchImpl(url),
+        fetcher: (url) => fetchImpl(url, { signal: AbortSignal.timeout(1000) }),
       });
-      startingLhm = false;
+      launched = true;
+
+      // The launcher returns a live stop even with `started: false`: it spawned
+      // a process that never answered. Keep it either way; a later launch
+      // replaces it, so a failed launch does not block a retry.
+      if (stopWhenSettled) {
+        stopWhenSettled = false;
+        result.stop();
+      } else {
+        ownedStop = result.stop;
+      }
 
       if (result.started) {
-        if (stopping) {
-          // Exit ran while the launch was still resolving.
-          result.stop();
-        } else {
-          ownedStop = result.stop;
-        }
         return {
           ok: true,
           message: `Started ${LHM_NAME}.`,
@@ -280,84 +287,85 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
         };
       }
 
-      return {
-        ok: false,
-        message: result.reason ?? `${LHM_NAME} did not start.`,
-        started: false,
-      };
+      const reason = result.reason;
+      return reason === undefined
+        ? { ok: false, message: `${LHM_NAME} did not start.`, started: false }
+        : { ok: false, message: reason, started: false, reason };
     } catch (error) {
-      startingLhm = false;
       return {
         ok: false,
         message: `could not start ${LHM_NAME}: ${messageOf(error)}`,
         started: false,
       };
+    } finally {
+      startingLhm = false;
+      if (!launched) stopWhenSettled = false;
     }
   };
 
-  const startRtss = (): Promise<ActionResult> => {
+  const startRtss = async (): Promise<ActionResult> => {
     if (platform !== "win32") {
-      return Promise.resolve({
+      return {
         ok: false,
         message: `${RTSS_NAME} is available on Windows only.`,
-      });
+      };
     }
 
-    // The menu disables the row while RTSS runs, so a second click is the only
-    // duplicate to guard; a fresh process probe would race the spawn itself.
     if (startingRtss) {
-      return Promise.resolve({
-        ok: true,
-        message: `${RTSS_NAME} is already starting.`,
-      });
-    }
-
-    const executable = findRtssExecutable();
-    if (executable === undefined) {
-      return Promise.resolve({
-        ok: false,
-        message: `${RTSS_NAME} was not found. Install it or pass --rtss-exe.`,
-      });
+      return { ok: true, message: `${RTSS_NAME} is already starting.` };
     }
 
     startingRtss = true;
-    return new Promise((resolve) => {
-      let child: SpawnedProcess;
-      try {
-        child = spawnProcess(executable, [], {
-          detached: true,
-          stdio: "ignore",
-          windowsHide: true,
-        });
-      } catch (error) {
-        startingRtss = false;
-        resolve({
-          ok: false,
-          message: `could not start ${RTSS_NAME}: ${messageOf(error)}`,
-        });
-        return;
+    try {
+      if (await processIsRunning(RTSS_IMAGE)) {
+        return { ok: true, message: `${RTSS_NAME} is already running.` };
       }
 
-      child.once("spawn", () => {
-        startingRtss = false;
-        child.unref();
-        resolve({ ok: true, message: `Started ${RTSS_NAME}.` });
-      });
-      child.once("error", (error) => {
-        startingRtss = false;
-        resolve({
+      const executable = findRtssExecutable();
+      if (executable === undefined) {
+        return {
           ok: false,
-          message: `could not start ${RTSS_NAME}: ${messageOf(error)}`,
+          message: `${RTSS_NAME} was not found. Install it or pass --rtss-exe.`,
+        };
+      }
+
+      return await new Promise<ActionResult>((resolve) => {
+        let child: SpawnedProcess;
+        try {
+          child = spawnProcess(executable, [], {
+            detached: true,
+            stdio: "ignore",
+            windowsHide: true,
+          });
+        } catch (error) {
+          resolve({
+            ok: false,
+            message: `could not start ${RTSS_NAME}: ${messageOf(error)}`,
+          });
+          return;
+        }
+
+        child.once("spawn", () => {
+          child.unref();
+          resolve({ ok: true, message: `Started ${RTSS_NAME}.` });
+        });
+        child.once("error", (error) => {
+          resolve({
+            ok: false,
+            message: `could not start ${RTSS_NAME}: ${messageOf(error)}`,
+          });
         });
       });
-    });
+    } finally {
+      startingRtss = false;
+    }
   };
 
   const stopOwnedLhm = (): void => {
-    stopping = true;
     const stop = ownedStop;
     ownedStop = undefined;
     stop?.();
+    if (startingLhm) stopWhenSettled = true;
   };
 
   return {
