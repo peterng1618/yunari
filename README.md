@@ -1,14 +1,39 @@
 # Yunari
 
-Windows-first hardware-monitoring dashboards: the PC collects sensor data and
-serves a local site; desktop authors dashboards and phones display them over
-local Wi-Fi.
+Windows-first hardware-monitoring dashboards. One PC collects its own sensor
+readings and serves a local site; a desktop editor authors dashboard themes, and
+phones (or this PC's own monitors) display them over local Wi-Fi.
 
-> **Early and unstable.** Authoring, rendering, packaging and LAN display work
-> end to end; the persisted theme format may still change before the first
-> release. Nothing is published yet.
+Three processes:
 
-## Run
+- **Host** (`@yunari/host`) — a Node process: CLI launcher, sensor providers,
+  theme storage, static serving and the SSE stream displays read.
+- **Editor** (`@yunari/editor`) — the authoring surface, served on this PC only
+  at `/editor`. React 19 + Base UI chrome over an imperative Fabric canvas.
+- **Player** (`@yunari/player`) — the display-only bundle at `/`, installable as
+  an app. It never imports editor code.
+
+## Status
+
+**Pre-release `0.x`.** The current version is `0.1.0`, and the theme format may
+still change before `1.0.0`. A theme document carries
+`schemaVersion: "2.0.0"`.
+
+Before the first release a format change may break cleanly. **From the first tag
+on, the previous schema major is migrated on open**; a document two or more
+majors old, or any newer major, is refused instead of being guessed at.
+
+The npm package is **not published yet** — see [Releases](#releases).
+
+## Requirements
+
+- **Windows first.** Sensor acquisition and the helper processes are built and
+  tested there.
+- **Node 22.12+, 24, or 26+** (the Vitest version's range).
+- **A Chromium browser** for the Playwright suites; `npx playwright install
+  chromium` installs it.
+
+## Run from source
 
 From `src/web/`:
 
@@ -18,54 +43,209 @@ npm run build
 node packages/host/bin/yunari.js
 ```
 
-The host defaults to `http://127.0.0.1:5227`. The editor is at `/editor`.
+`npm run build` builds the player, editor and host bundles. The host refuses to
+start without its own build and names the command that produces it.
 
-CLI package name: `yunari-dashboard` (`yunari` on npm is unrelated).
+The host prints the addresses it took. Defaults:
 
-## Sensors
+- `http://127.0.0.1:5227` — dashboard (player) at `/`, editor at `/editor`,
+  settings at `/settings`.
+- The same port over `https`, from a certificate the host issues itself.
+- The editor and settings pages, and every pairing route except the code
+  exchange, are **localhost-only**, even when the LAN is open.
 
-Metrics come from sources that already exist; Yunari does not implement its own
-hardware collector.
+State lives in one app folder, `%USERPROFILE%\.yunari` (`~/.yunari` on other
+platforms): `themes/` is the theme library and `settings/` is this machine's
+own state. `--app-dir <dir>` moves both; `--themes-dir <dir>` moves only the
+library.
 
-- **Baseline** (CPU load and clock, memory, GPUs, disks, network) comes from the
-  [`systeminformation`](https://www.npmjs.com/package/systeminformation) package
-  and works with no setup.
-- **Extended** sensors (CPU temperature, fans, power, per-GPU detail) come from
-  [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
-  when it is running. LHM is an optional external program: Yunari reads the
-  JSON its web server publishes and never controls your hardware.
+## First phone
 
-  Run LHM yourself and enable **Options → Run web server** (port 8085), or let
-  Yunari start a copy for you:
-
-  ```bash
-  npm run vendor:lhm -w @yunari/host   # stages the pinned release
-  node packages/host/bin/yunari.js --lhm-exe packages/host/vendor/lhm/LibreHardwareMonitor.exe
-  ```
-
-  Keys with no reading stay empty with a stated reason; Yunari never invents a
-  number. `node packages/host/bin/yunari.js --help` lists the LHM flags.
-
-## Show a dashboard on your phone
-
-LAN serving is **off by default**. To turn it on:
+LAN serving is **off by default**. Turn it on explicitly:
 
 ```bash
 node packages/host/bin/yunari.js --host 0.0.0.0
 ```
 
-The host prints a pairing link containing a short-lived token (12 hours). Open
-that link on the phone. Only paired devices can read a dashboard from the LAN;
-pairing itself is localhost-only, and `Ctrl+C` or the printed `curl -X DELETE`
-revokes a token sooner. Plain LAN HTTP has no confidentiality, so use it on
-trusted networks only — never the internet.
+Then, in this order:
 
-## Docs
+1. **Install the root certificate on the phone.** Fetch
+   `http://<lan-ip>:<port>/yunari-ca.crt` over plain http — that route answers
+   before every gate, so no certificate warning is in the way — and trust it on
+   the device.
+2. **Open the secure address**, `https://<lan-ip>:<port>/`. Only at that origin
+   can the display hold the screen awake and register the service worker that
+   makes it installable. Without the root it shows a certificate warning; over
+   plain http it loads, but is not a secure context.
+3. **Install it as an app** from the browser menu (PWA, `display: standalone`).
+4. **Pair it.** The host prints a `/pair?code=…` link. A phone with a camera
+   can scan the QR in the editor's publish popover; without one, open `/pair`
+   and type the code. The code is six characters and valid for ten minutes. What
+   it buys is a durable display credential, which lasts until you remove that
+   display on this PC.
 
-For ongoing work, start with [`STATUS.md`](STATUS.md). Agent rules are in [`AGENTS.md`](AGENTS.md), and the full documentation map is in [docs/README.md](docs/README.md).
-Current product truth lives in [product requirements](docs/product/requirements.md),
-[current architecture](docs/architecture/README.md), and the
-[ownership map](docs/architecture/ownership.md). Major architecture choices are
-recorded as [ADRs](docs/adr/). Superpowers owns feature
-[specs](docs/superpowers/specs/) and [implementation plans](docs/superpowers/plans/).
-Licences: [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+Plain LAN HTTP has no confidentiality. Use this on trusted networks only —
+never expose it to the internet.
+
+## What it does
+
+- **Editor** — a Fabric scene with shapes, text, images/SVG, groups, layers,
+  undo, snapping and reusable widgets, over a versioned theme envelope.
+- **Theme library and store** — the host's local library, plus a theme
+  catalogue served by a Cloudflare Worker; sign in from the editor to browse and
+  install published themes.
+- **Sensors** — baseline readings (CPU load and clock, memory, GPUs, disks,
+  network) through
+  [`systeminformation`](https://www.npmjs.com/package/systeminformation). CPU
+  temperature, fans, power and per-GPU detail through
+  [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor),
+  read from its web server; Yunari never controls your hardware. A key nobody
+  measured stays empty with a stated reason, never a fabricated zero.
+- **Displays and devices** — several monitors, each showing a chosen theme; the
+  devices (GPU, disk, network adapter, …) each theme reads are assigned per
+  display.
+- **Wallpaper Engine** — the host reads the Steam Workshop library and serves a
+  wallpaper's preview and video assets to the editor.
+- **Steam presence and store metadata** — the foreground game, named from the
+  local Steam library or the Steam store, with box art.
+- **Weather, media and custom sources** — weather backends and places, the
+  now-playing media session, and custom HTTP JSON sources; credentials stay in
+  the host's settings folder and are never handed to the browser.
+- **Charts, text and glass** — four chart families (pie/donut, radial gauge,
+  bars/progress, line/sparkline/area) with typed styling, rich text and
+  typography presets, and a frosted-glass treatment for shapes.
+
+LibreHardwareMonitor is optional. Run it yourself with **Options → Run web
+server** enabled (port 8085), or stage the pinned release and let the host start
+it:
+
+```bash
+npm run vendor:lhm -w @yunari/host
+node packages/host/bin/yunari.js --lhm-exe packages/host/vendor/lhm/LibreHardwareMonitor.exe
+```
+
+## CLI reference
+
+`node packages/host/bin/yunari.js --help` is authoritative; these are its
+options:
+
+```text
+-p, --port <port>        Port to listen on (default: 5227)
+-H, --host <addr>        Address to bind (default: 127.0.0.1, loopback only)
+-n, --no-browser         Do not open a browser
+    --app-dir <dir>      App folder; themes/ and settings/ live inside it
+                         (default %USERPROFILE%\.yunari)
+    --themes-dir <dir>   Directory for the theme library (default: the app folder's themes/)
+    --lhm-url <url>      LibreHardwareMonitor web server (default http://127.0.0.1:8085)
+    --lhm-exe <path>     Launch LibreHardwareMonitor.exe with the host
+    --register-lhm-task  Register LHM to start elevated at sign-in (one prompt)
+-v, --version            Print the version
+-h, --help               Print this help
+```
+
+The host serves `https` beside `http` on the same port and prints the root
+certificate path. A run without `--host` obeys the LAN preference saved in the
+app folder; a run that passes `--host` obeys that address for that run.
+
+## Releases
+
+The npm package is **`yunari`**, and it provides the `yunari` command. Release
+notes and the `.tgz`/`.zip` assets belong on
+[GitHub Releases](https://github.com/peterng1618/yunari/releases).
+
+**Public publication is pending: the first publish has not run yet.** Once it
+has, the install path is:
+
+```bash
+npm i -g yunari@latest
+yunari
+```
+
+Both commands are the release path, not something that works today.
+Prereleases are published under the `next` dist-tag and are not reached by
+`@latest`. winget is **not supported**; it is deferred until a packaged Windows
+executable exists.
+
+The operational runbook — release-please flow, the first-publish bootstrap,
+trusted publishing, the dry run, and what a bad release costs — is
+[`docs/engineering/releases.md`](docs/engineering/releases.md).
+
+## Architecture
+
+`renderer-core` is the semantic boundary: types, theme semantics and scene
+planning, with no Fabric or DOM import. `scene-fabric` is the only layer that
+turns a plan into Fabric objects, so browser/Fabric code never reaches the Node
+host. The editor mounts `fabric/es` directly behind its own imperative boundary;
+the player uses `scene-fabric` and may never import editor code. Fabric JSON is
+the persisted scene inside Yunari's versioned envelope — there is no second
+scene model.
+
+| Package | Role |
+|---|---|
+| `@yunari/renderer-core` | Shared semantics, theme envelope, planning; Fabric/DOM-free |
+| `@yunari/scene-fabric` | Renders a scene plan onto Fabric; also persistence/Fabric revival |
+| `@yunari/player` | Display-only bundle served to phones; never includes editor controls |
+| `@yunari/editor` | Desktop authoring experience with inspectors and interaction overlays |
+| `@yunari/host` | PC host: CLI launcher, static serving, sample transport and hardware providers |
+| `@yunari/theme-package` | Theme ZIP packages: read, validate, export |
+| `@yunari/store-worker` | Cloudflare Worker: theme catalogue, auth, presigned uploads and R2 delivery |
+| `@yunari/fake-source` | Deterministic synthetic samples for developing and testing the display path |
+
+Current system shape: [`docs/architecture/README.md`](docs/architecture/README.md).
+Concept ownership: [`docs/architecture/ownership.md`](docs/architecture/ownership.md).
+
+## Development
+
+Run all npm commands from `src/web/`.
+
+```bash
+npm install
+npm run build
+npm test            # Vitest unit suites
+npm run gate        # format/lint, self-tests, status and docs checks, typecheck, unit and Worker suites
+```
+
+`npm run gate` is the one command that means green. It is offline and must exit
+0. `npm run typecheck`, `npm run docs:check` and `npm run status:check` are also
+runnable alone.
+
+Browser tests preview the built bundles, so build first and install Chromium:
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
+Long-running suites: `npm run test:display` (real host + phone rendering) and
+`npm run test:rebuild` (rebuilt player).
+
+Visual evidence capture writes PNGs, so it runs one capture at a time:
+
+```bash
+YUNARI_CAPTURE=1 npx playwright test --project=desktop-chromium \
+  --grep "<capture title>" --workers=1
+```
+
+`YUNARI_CAPTURE_DIR` changes the output directory (default
+`docs/evidence/screenshots`). Which captures are registered, and their freshness
+rule, is [`docs/evidence/screenshots/README.md`](docs/evidence/screenshots/README.md).
+
+## Docs and licence
+
+- [`STATUS.md`](STATUS.md) — current objective and the fresh-session handoff.
+- [`docs/README.md`](docs/README.md) — the documentation map.
+- [`docs/product/requirements.md`](docs/product/requirements.md) — product truth.
+- [`docs/architecture/README.md`](docs/architecture/README.md) — current
+  architecture and boundaries.
+- [`docs/decisions/`](docs/decisions/) — durable architecture decisions;
+  [`docs/adr/`](docs/adr/) — the earlier set.
+- [`docs/superpowers/specs/`](docs/superpowers/specs/) and
+  [`docs/superpowers/plans/`](docs/superpowers/plans/) — feature designs and
+  implementation plans.
+- [`docs/engineering/gotchas.md`](docs/engineering/gotchas.md) — non-obvious
+  traps. [`docs/engineering/dependencies.md`](docs/engineering/dependencies.md) —
+  dependency and licence provenance.
+- [`AGENTS.md`](AGENTS.md) — rules for coding agents in this repository.
+
+Yunari is [MIT licensed](LICENSE). Third-party provenance and licences:
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
