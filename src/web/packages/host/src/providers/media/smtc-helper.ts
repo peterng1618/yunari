@@ -329,7 +329,9 @@ while ($true) {
     [Console]::Out.WriteLine('{"kind":"error"}')
   }
   if ($null -ne $sessions) {
-    if ($sessions.Count -eq 0) {
+    # An empty WinRT IVectorView exposes no Count (PS 5.1 reads $null), so an
+    # -eq 0 test never fires and no 'none' line is emitted.
+    if (-not ($sessions.Count -gt 0)) {
       [Console]::Out.WriteLine('{"kind":"none"}')
     } else {
       $currentId = $null

@@ -20,18 +20,14 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Last completed change
 
-- **Open rows:** `tray/actions.ts` owns them; the folder takes the directory branch so Windows uses `explorer.exe`, and a failed open reports `ok: false`.
-- **Sign-in entry:** path flags resolve against this run's cwd, `--tray`/`-n` are not appended twice, and XDG `Exec` escapes `$` and a backtick.
-- **Tray fixes:** a Linux row-count change writes nothing, Windows assigns `ContextMenuStrip` for keyboard opening, process presence is cached 30 s, first-refresh/stop failures are guarded, and the server close runs in a `finally`.
-- **Docs:** RTSS help and the untracked-PROVENANCE wording corrected; the spec records the unexecuted sign-in entry as unverified.
-- **Verification:** 161 focused tray/cli/autostart tests pass; the behavioural new cases were red-proven by reverting each fix.
+- **SMTC no-session line:** an empty WinRT session vector exposes no `Count`, so `$sessions.Count -eq 0` never fired and the poll emitted neither `none` nor sessions; it now tests `-not ($sessions.Count -gt 0)`.
+- **Verification:** `smtc-helper.windows.test.ts` passes 9 with 1 self-skip (artwork needs a live session); full `npm run gate` exits 0.
 
 ## Next
 
 1. A live tray run by the owner: inspect the menu's rows, toggle Auto start, open each editor surface, start RTSS, and Exit.
 2. Run the staged Linux tray binary on a Linux desktop session; it was never executed here.
-3. Separate the `smtc-helper.windows.test.ts` timeout from this branch by running it at base `bdf113fe`.
-4. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
+3. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
 
 ## Blockers / unverified
 
