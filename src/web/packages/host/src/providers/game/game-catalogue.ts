@@ -15,7 +15,14 @@ import { powershellPath } from "../helpers/supervisor.js";
  */
 
 export interface InstalledGame {
-  readonly source: "steam" | "epic" | "gog" | "itch" | "xbox" | "uninstall";
+  readonly source:
+    | "steam"
+    | "epic"
+    | "gog"
+    | "itch"
+    | "xbox"
+    | "appx"
+    | "uninstall";
   readonly name: string;
   readonly installDir: string;
   readonly exes: readonly string[];
@@ -264,17 +271,18 @@ export async function readGogGames(
 }
 
 const XBOX_CONTENT_DIR = "Content";
-const XBOX_CONFIG_FILE = "MicrosoftGame.config";
+const GAME_CONFIG_FILE = "MicrosoftGame.config";
 
 /**
  * `MicrosoftGame.config` is XML; this takes its executable without a parser.
  * The GDK shape is `<ExecutableList><Executable Name="X.exe" …/></ExecutableList>`.
+ * Xbox titles and GDK Appx packages share it, so one function owns the rules.
  */
-const XBOX_EXECUTABLE_PATTERN = /<Executable\b[^>]*\bName\s*=\s*"([^"]+)"/i;
+const GAME_EXECUTABLE_PATTERN = /<Executable\b[^>]*\bName\s*=\s*"([^"]+)"/i;
 
-function executableFromXboxConfig(text: string): string | undefined {
+function executableFromGameConfig(text: string): string | undefined {
   const withoutComments = text.replace(/<!--[\s\S]*?-->/g, "");
-  const value = XBOX_EXECUTABLE_PATTERN.exec(withoutComments)?.[1]?.trim();
+  const value = GAME_EXECUTABLE_PATTERN.exec(withoutComments)?.[1]?.trim();
 
   return value === undefined || value === "" ? undefined : value;
 }
@@ -290,10 +298,10 @@ async function readXboxTitle(
 
   try {
     const text = await seams.readFile(
-      path.win32.join(contentDir, XBOX_CONFIG_FILE),
+      path.win32.join(contentDir, GAME_CONFIG_FILE),
     );
     hasConfig = true;
-    configured = executableFromXboxConfig(text);
+    configured = executableFromGameConfig(text);
   } catch {
     hasConfig = false;
   }
@@ -566,6 +574,104 @@ export async function readUninstallGames(
       name,
       installDir,
       exes: executable === undefined ? [] : [executable],
+    });
+  }
+
+  return games;
+}
+
+/** PowerShell booleans arrive as JSON booleans or as the string `"True"`. */
+function isTrueFlag(value: unknown): boolean {
+  return (
+    value === true ||
+    (typeof value === "string" && value.trim().toLowerCase() === "true")
+  );
+}
+
+/**
+ * One projection over every package. `PackageFullName` is carried so a caller
+ * can identify a package whose install path is ambiguous. The config probe runs
+ * in the same call, so a catalogue read is still one PowerShell invocation.
+ */
+const APPX_SCRIPT =
+  "$packages = Get-AppxPackage -ErrorAction SilentlyContinue | " +
+  "ForEach-Object { [pscustomobject]@{ " +
+  "Name = $_.Name; " +
+  "PackageFullName = $_.PackageFullName; " +
+  "InstallLocation = $_.InstallLocation; " +
+  "IsFramework = $_.IsFramework; " +
+  "HasConfig = [bool]($_.InstallLocation -and " +
+  "(Test-Path -LiteralPath " +
+  "(Join-Path $_.InstallLocation 'MicrosoftGame.config'))) } }; " +
+  "ConvertTo-Json -InputObject @($packages) -Compress";
+
+/** A GDK package names its launcher in the config; an unreadable one has none. */
+async function appxExecutables(
+  seams: CatalogueSeams,
+  record: Record<string, unknown>,
+  installDir: string,
+): Promise<readonly string[]> {
+  if (!isTrueFlag(record["HasConfig"])) return [];
+
+  let text: string;
+
+  try {
+    text = await seams.readFile(path.win32.join(installDir, GAME_CONFIG_FILE));
+  } catch {
+    return [];
+  }
+
+  const executable = executableFromGameConfig(text);
+
+  if (executable === undefined) return [];
+
+  return [
+    path.win32.isAbsolute(executable)
+      ? executable
+      : path.win32.join(installDir, executable),
+  ];
+}
+
+/**
+ * Every Microsoft Store and Game Pass package. `name` is the package `Name`
+ * (`Microsoft.ForzaHorizon5`); the AppxManifest `DisplayName` is not read
+ * because it is usually an unresolvable `ms-resource:` token. A framework
+ * package or one with no install location is not a game and is skipped.
+ */
+export async function readAppxGames(
+  seams: CatalogueSeams,
+): Promise<readonly InstalledGame[]> {
+  let answer: unknown;
+
+  try {
+    answer = await seams.runPowerShell(APPX_SCRIPT);
+  } catch {
+    return [];
+  }
+
+  if (!Array.isArray(answer)) return [];
+
+  const games: InstalledGame[] = [];
+
+  for (const entry of answer) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      continue;
+    }
+
+    const record = entry as Record<string, unknown>;
+
+    if (isTrueFlag(record["IsFramework"])) continue;
+
+    const name = textField(record, "Name");
+    const installDir = textField(record, "InstallLocation");
+
+    if (name === undefined || installDir === undefined) continue;
+
+    games.push({
+      source: "appx",
+      name,
+      installDir,
+      exes: await appxExecutables(seams, record, installDir),
     });
   }
 
