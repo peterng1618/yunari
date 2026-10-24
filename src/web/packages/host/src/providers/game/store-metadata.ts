@@ -18,6 +18,7 @@ const PORTRAIT_BASE = "https://cdn.akamai.steamstatic.com/steam/apps/";
 const ARTWORK_ROUTE = "/api/game/artwork/";
 const CACHE_FILE = "game-metadata.json";
 const BACKOFF_MS = 10 * 60_000;
+const MAX_CACHE_ENTRIES = 500;
 const COVER_EXTENSIONS = ["jpg", "png"] as const;
 
 type ImageExtension = (typeof COVER_EXTENSIONS)[number];
@@ -87,6 +88,9 @@ function candidatesOf(body: unknown): readonly { id: number; name: string }[] {
 
   for (const item of items) {
     if (!isRecord(item)) continue;
+    // Only an app carries the id this cache stores; a bundle or sub result
+    // would become a game's appid and route a wrong cover.
+    if (item["type"] !== "app") continue;
     const id = item["id"];
     const name = item["name"];
 
@@ -141,18 +145,38 @@ function sniffImage(bytes: Uint8Array): ImageExtension | undefined {
   return undefined;
 }
 
+/**
+ * A null-prototype map: a normalised name such as `constructor` must read as
+ * absent, not as something inherited from `Object.prototype`.
+ */
+function emptyCache(): StoreCache {
+  return Object.create(null) as StoreCache;
+}
+
+/** Keep the newest entries; `at` is the only age the cache records. */
+function pruneCache(cache: StoreCache): void {
+  const entries = Object.entries(cache);
+  if (entries.length <= MAX_CACHE_ENTRIES) return;
+
+  entries.sort((left, right) => left[1].at - right[1].at);
+
+  for (const [key] of entries.slice(0, entries.length - MAX_CACHE_ENTRIES)) {
+    delete cache[key];
+  }
+}
+
 function parseCache(text: string): StoreCache {
   let parsed: unknown;
 
   try {
     parsed = JSON.parse(text);
   } catch {
-    return {};
+    return emptyCache();
   }
 
-  if (!isRecord(parsed)) return {};
+  if (!isRecord(parsed)) return emptyCache();
 
-  const cache: StoreCache = {};
+  const cache = emptyCache();
 
   for (const [key, value] of Object.entries(parsed)) {
     if (key === "" || !isRecord(value)) continue;
@@ -178,6 +202,7 @@ function parseCache(text: string): StoreCache {
     }
   }
 
+  pruneCache(cache);
   return cache;
 }
 
@@ -216,7 +241,7 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
   const nowMs = options.nowMs ?? Date.now;
   const cacheFile = path.join(cacheDir, CACHE_FILE);
 
-  let cache: StoreCache = {};
+  let cache: StoreCache = emptyCache();
   let loading: Promise<void> | undefined;
   let writing: Promise<void> = Promise.resolve();
   let scratchCount = 0;
@@ -234,7 +259,7 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
       try {
         cache = parseCache(await fs.readFile(cacheFile, "utf8"));
       } catch {
-        cache = {};
+        cache = emptyCache();
       }
     })();
 
@@ -264,6 +289,7 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
 
   async function store(key: string, entry: CacheEntry): Promise<void> {
     cache[key] = entry;
+    pruneCache(cache);
     await persist();
   }
 
@@ -349,7 +375,9 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
 
       await load();
 
-      const cached = cache[key];
+      // `Object.hasOwn`, not a plain read: the map is the only owner of these
+      // keys, and an inherited property is not a cached answer.
+      const cached = Object.hasOwn(cache, key) ? cache[key] : undefined;
       if (cached !== undefined) {
         return "none" in cached
           ? undefined

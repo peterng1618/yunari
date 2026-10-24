@@ -1,6 +1,6 @@
 /**
  * The rule that decides a local game name is the same game as a store
- * candidate (decision 0109).
+ * candidate (decision 0109, spec "Remote game metadata").
  *
  * Only two tiers accept: equal normalised base titles, or equal token sets
  * after case, symbols, punctuation, a leading article and edition qualifiers
@@ -8,32 +8,36 @@
  * rule: `Half-Life` must not resolve to `Half-Life 2`.
  */
 
-/** Trailing token sequences that name an edition, not the game. */
+/**
+ * The spec's edition qualifiers, each dropped as a trailing phrase with or
+ * without a following `edition`. Longest first: `director's cut edition` must
+ * be removed whole, or its `edition` would remain as a stray word.
+ */
 const QUALIFIERS: readonly (readonly string[])[] = [
-  ["game", "of", "the", "year", "edition"],
-  ["game", "of", "the", "year"],
-  ["digital", "deluxe", "edition"],
-  ["collectors", "edition"],
-  ["anniversary", "edition"],
-  ["definitive", "edition"],
-  ["legendary", "edition"],
-  ["standard", "edition"],
-  ["enhanced", "edition"],
-  ["complete", "edition"],
-  ["special", "edition"],
-  ["premium", "edition"],
-  ["ultimate", "edition"],
-  ["deluxe", "edition"],
-  ["goty", "edition"],
-  ["gold", "edition"],
-  ["digital", "deluxe"],
-  ["deluxe"],
-  ["goty"],
-];
+  "definitive",
+  "deluxe",
+  "ultimate",
+  "complete",
+  "goty",
+  "game of the year",
+  "enhanced",
+  "remastered",
+  "special",
+  "gold",
+  "anniversary",
+  "legendary",
+  "collectors",
+  "directors cut",
+]
+  .flatMap((phrase) => {
+    const words = phrase.split(" ");
+    return [words, [...words, "edition"]];
+  })
+  .sort((left, right) => right.length - left.length);
 
 const ARTICLES = new Set(["a", "an", "the"]);
 
-function dropQualifiers(tokens: readonly string[]): readonly string[] {
+function stripQualifiers(tokens: readonly string[]): readonly string[] {
   let remaining = tokens;
 
   while (remaining.length > 0) {
@@ -53,26 +57,59 @@ function dropQualifiers(tokens: readonly string[]): readonly string[] {
 }
 
 /**
- * A title's comparable base: NFKD-folded, combining marks and symbols
- * removed, lowercased, punctuation treated as a separator, a leading article
- * dropped, then edition qualifiers dropped from the end.
+ * Drop a combining mark only when it decorates a Latin letter. Kana voicing
+ * (`が` vs `か`) and Cyrillic phonemic marks (`й` vs `и`) distinguish different
+ * titles, and stripping them would turn a sequel-like pair into a wrong match.
  */
-export function normalizeGameName(name: string): string {
-  const words = name
+function keepNonLatinMarks(value: string): string {
+  let out = "";
+  let base = "";
+
+  for (const char of value) {
+    const isMark = /\p{M}/u.test(char);
+
+    if (isMark) {
+      if (!/[a-z]/.test(base)) out += char;
+      continue;
+    }
+
+    out += char;
+    base = char;
+  }
+
+  return out;
+}
+
+/** Comparable words: folded, symbols and punctuation dropped, article gone. */
+function tokenise(name: string): readonly string[] {
+  const folded = name
     // NFKD decomposes `™` to the letters `TM`, so the symbols go first.
     .replace(/[™®©]/gu, "")
     .normalize("NFKD")
-    .replace(/\p{M}+/gu, "")
-    .toLowerCase()
     .replace(/['’]/gu, "")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .toLowerCase();
+
+  const words = keepNonLatinMarks(folded)
+    // `\p{M}` stays: a non-Latin mark is part of the letter it follows.
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ")
     .split(/\s+/u)
     .filter((word) => word !== "");
 
-  const withoutArticle =
-    words[0] !== undefined && ARTICLES.has(words[0]) ? words.slice(1) : words;
+  return words[0] !== undefined && ARTICLES.has(words[0])
+    ? words.slice(1)
+    : words;
+}
 
-  return dropQualifiers(withoutArticle).join(" ");
+/**
+ * A title's comparable base. A title made only of qualifier words keeps its
+ * words instead of collapsing to the empty string; `matchStoreGame` refuses it
+ * rather than letting it match everything.
+ */
+export function normalizeGameName(name: string): string {
+  const words = tokenise(name);
+  const base = stripQualifiers(words);
+
+  return (base.length > 0 ? base : words).join(" ");
 }
 
 function tokenSet(normalised: string): ReadonlySet<string> {
@@ -92,25 +129,32 @@ function sameSet(
   return true;
 }
 
+function baseOf(name: string): readonly string[] {
+  return stripQualifiers(tokenise(name));
+}
+
 /**
  * The one candidate that could be this game, or `undefined` when none — or
  * more than one — survives. Two candidates for the same app id are one
- * survivor: the store can list an app twice.
+ * survivor: the store can list an app twice. A title that is nothing but
+ * qualifier words never matches.
  */
 export function matchStoreGame(
   localName: string,
   candidates: readonly { id: number; name: string }[],
 ): { id: number; name: string } | undefined {
-  const base = normalizeGameName(localName);
-  if (base === "") return undefined;
+  const localBase = baseOf(localName);
+  if (localBase.length === 0) return undefined;
 
+  const base = localBase.join(" ");
   const baseTokens = tokenSet(base);
   let winner: { id: number; name: string } | undefined;
 
   for (const candidate of candidates) {
-    const normalised = normalizeGameName(candidate.name);
-    if (normalised === "") continue;
+    const candidateBase = baseOf(candidate.name);
+    if (candidateBase.length === 0) continue;
 
+    const normalised = candidateBase.join(" ");
     const accepted =
       normalised === base || sameSet(tokenSet(normalised), baseTokens);
     if (!accepted) continue;

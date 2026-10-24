@@ -161,6 +161,119 @@ describe("Steam store lookup", () => {
     expect(second.calls).toHaveLength(0);
   });
 
+  it("treats a prototype key as a miss and caches the no-match", async () => {
+    const directory = await cacheDir();
+    const h = harness(directory, (call) =>
+      call.url.pathname === "/api/storesearch/"
+        ? json(MISS)
+        : new Response("", { status: 500 }),
+    );
+
+    await expect(h.store.lookup("Constructor")).resolves.toBeUndefined();
+    expect(h.calls).toHaveLength(1);
+
+    const stored = JSON.parse(
+      await fs.readFile(path.join(directory, "game-metadata.json"), "utf8"),
+    ) as Record<string, unknown>;
+    expect(stored["constructor"]).toEqual({ none: true, at: 1_000_000 });
+  });
+
+  it("ignores bundle results and accepts only an app result", async () => {
+    const mixed = harness(await cacheDir(), (call) => {
+      if (call.url.pathname === "/api/storesearch/") {
+        return json({
+          total: 2,
+          items: [
+            { type: "bundle", id: 999, name: APP_NAME },
+            { type: "app", id: APP_ID, name: APP_NAME },
+          ],
+        });
+      }
+      return json(details());
+    });
+
+    await expect(mixed.store.lookup(APP_NAME)).resolves.toEqual({
+      id: APP_ID,
+      name: APP_NAME,
+    });
+    expect(mixed.calls[1]?.url.searchParams.get("appids")).toBe(String(APP_ID));
+
+    const bundleOnly = harness(await cacheDir(), () =>
+      json({ total: 1, items: [{ type: "bundle", id: 999, name: APP_NAME }] }),
+    );
+    await expect(bundleOnly.store.lookup(APP_NAME)).resolves.toBeUndefined();
+    expect(bundleOnly.calls).toHaveLength(1);
+  });
+
+  it("caps the persisted cache at 500 entries, evicting the oldest", async () => {
+    const directory = await cacheDir();
+    const seeded: Record<string, unknown> = {};
+
+    for (let index = 1; index <= 500; index += 1) {
+      seeded[`game ${index}`] = { none: true, at: index };
+    }
+
+    await fs.writeFile(
+      path.join(directory, "game-metadata.json"),
+      JSON.stringify(seeded),
+    );
+
+    const miss = (call: Call): Response =>
+      call.url.pathname === "/api/storesearch/"
+        ? json(MISS)
+        : new Response("", { status: 500 });
+
+    const h = harness(directory, miss);
+    await expect(h.store.lookup("New Game")).resolves.toBeUndefined();
+
+    const file = path.join(directory, "game-metadata.json");
+    const stored = JSON.parse(await fs.readFile(file, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(stored)).toHaveLength(500);
+    expect(stored["game 1"]).toBeUndefined();
+    expect(stored["game 2"]).toBeDefined();
+    expect(stored["new game"]).toEqual({ none: true, at: 1_000_000 });
+
+    // A restart reads the capped file: the survivor answers without a request,
+    // the evicted name needs one.
+    const restarted = harness(directory, miss);
+    await restarted.store.lookup("game 2");
+    expect(restarted.calls).toHaveLength(0);
+    await restarted.store.lookup("game 1");
+    expect(restarted.calls).toHaveLength(1);
+  });
+
+  it("tolerates an absent or corrupt cache file", async () => {
+    const absent = harness(await cacheDir(), happyPath);
+    await expect(absent.store.lookup(APP_NAME)).resolves.toEqual({
+      id: APP_ID,
+      name: APP_NAME,
+    });
+    expect(absent.calls).toHaveLength(2);
+
+    const corrupt = await cacheDir();
+    const file = path.join(corrupt, "game-metadata.json");
+    await fs.writeFile(file, "{ not json");
+
+    const h = harness(corrupt, happyPath);
+    await expect(h.store.lookup(APP_NAME)).resolves.toEqual({
+      id: APP_ID,
+      name: APP_NAME,
+    });
+
+    const stored = JSON.parse(await fs.readFile(file, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    expect(stored["example game"]).toEqual({
+      id: APP_ID,
+      name: APP_NAME,
+      at: 1_000_000,
+    });
+  });
+
   it("makes no second request for the same normalised name", async () => {
     const h = harness(await cacheDir(), happyPath);
     await h.store.lookup("Example Game");
@@ -194,7 +307,7 @@ describe("Steam store lookup", () => {
       if (call.url.pathname === "/api/storesearch/") {
         return json({
           total: 1,
-          items: [{ id: 70, name: "Half-Life 2" }],
+          items: [{ type: "app", id: 70, name: "Half-Life 2" }],
         });
       }
       return json(details("Half-Life 2"));
@@ -253,7 +366,7 @@ describe("Steam store lookup", () => {
     });
   });
 
-  it("keeps an existing cache entry when a later request fails", async () => {
+  it("leaves other entries untouched when a lookup fails", async () => {
     const directory = await cacheDir();
     const h = harness(directory, (call) => {
       const name = call.url.searchParams.get("term");

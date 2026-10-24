@@ -29,8 +29,31 @@ describe("normalizeGameName", () => {
     expect(normalizeGameName("Doom Game of the Year Edition")).toBe("doom");
   });
 
+  it("drops a bare qualifier word, with or without edition", () => {
+    expect(normalizeGameName("Doom Remastered")).toBe("doom");
+    expect(normalizeGameName("Doom - Director's Cut")).toBe("doom");
+    expect(normalizeGameName("BioShock Ultimate")).toBe("bioshock");
+    expect(normalizeGameName("BioShock: Complete Edition")).toBe("bioshock");
+    expect(normalizeGameName("Doom Remastered Edition")).toBe("doom");
+  });
+
   it("keeps a word that is not a qualifier", () => {
     expect(normalizeGameName("Doom Eternal")).toBe("doom eternal");
+  });
+
+  it("folds a Latin diacritic", () => {
+    expect(normalizeGameName("Pokémon")).toBe("pokemon");
+  });
+
+  it("keeps kana voicing and Cyrillic phonemic marks", () => {
+    expect(normalizeGameName("が")).not.toBe(normalizeGameName("か"));
+    expect(normalizeGameName("Мой")).not.toBe(normalizeGameName("Мои"));
+    expect(normalizeGameName("逆転裁判")).toBe("逆転裁判");
+  });
+
+  it("does not collapse a qualifier-only title to empty", () => {
+    expect(normalizeGameName("Ultimate Edition")).toBe("ultimate edition");
+    expect(normalizeGameName("Remastered")).toBe("remastered");
   });
 });
 
@@ -50,6 +73,15 @@ describe("matchStoreGame", () => {
         game(5, "San Andreas — Grand Theft Auto"),
       ]),
     ).toEqual(game(5, "San Andreas — Grand Theft Auto"));
+  });
+
+  it("accepts a bare or suffixed qualifier on either side", () => {
+    expect(matchStoreGame("Doom - Director's Cut", [game(8, "DOOM")])).toEqual(
+      game(8, "DOOM"),
+    );
+    expect(matchStoreGame("BioShock Ultimate", [game(7, "BioShock")])).toEqual(
+      game(7, "BioShock"),
+    );
   });
 
   it("refuses Doom against Doom Eternal", () => {
@@ -76,5 +108,23 @@ describe("matchStoreGame", () => {
 
   it("refuses an empty local name", () => {
     expect(matchStoreGame("   ", [game(1, "DOOM")])).toBeUndefined();
+  });
+
+  it("never matches a qualifier-only title", () => {
+    expect(
+      matchStoreGame("Ultimate Edition", [game(1, "Ultimate Edition")]),
+    ).toBeUndefined();
+    expect(matchStoreGame("Doom", [game(2, "Remastered")])).toBeUndefined();
+  });
+
+  it("refuses non-Latin titles differing only by a phonemic mark", () => {
+    expect(matchStoreGame("が", [game(1, "か")])).toBeUndefined();
+    expect(matchStoreGame("Мой", [game(2, "Мои")])).toBeUndefined();
+  });
+
+  it("accepts a Latin title differing only by a diacritic", () => {
+    expect(matchStoreGame("Pokémon", [game(3, "Pokemon")])).toEqual(
+      game(3, "Pokemon"),
+    );
   });
 });
