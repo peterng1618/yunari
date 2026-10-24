@@ -16,6 +16,9 @@ import { type ListenableServer, lanAddress } from "./net.js";
  */
 
 export interface HostBinding {
+  /** Whether the host is serving the LAN, without asking the OS for an address.
+   *  A poll that only needs this must not pay `state()`'s route query. */
+  readonly isLan: () => boolean;
   /** The state the host reports to the editor: what it is bound to now.
    *
    *  Async because the address is: ranking the adapters asks the OS which one
@@ -107,6 +110,8 @@ export function createHostBinding(
   }
 
   return {
+    isLan: () => !isLoopbackHost(host),
+
     state,
 
     idle: () => moving,

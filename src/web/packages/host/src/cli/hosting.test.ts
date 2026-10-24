@@ -58,14 +58,17 @@ describe("createHostBinding", () => {
     const binding = createHostBinding(server, { port, host: "127.0.0.1" });
 
     expect((await binding.state()).lan).toBe(false);
+    expect(binding.isLan()).toBe(false);
 
     const turned = await binding.setLan(true);
     expect(turned.ok).toBe(true);
     expect((await binding.state()).lan).toBe(true);
+    expect(binding.isLan()).toBe(true);
     expect((await binding.state()).port).toBe(port);
 
     await binding.setLan(false);
     expect((await binding.state()).lan).toBe(false);
+    expect(binding.isLan()).toBe(false);
     expect((await binding.state()).port).toBe(port);
   });
 

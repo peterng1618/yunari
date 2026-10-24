@@ -2924,6 +2924,7 @@ describe("Host theme routes", () => {
             port: 1,
             refusal: null,
           }),
+          isLan: () => false,
           setLan: async () => ({ ok: true }),
           idle: async () => {},
         },
@@ -6337,7 +6338,12 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     state: HostingState,
     setLan: HostBinding["setLan"] = async () => ({ ok: true }),
   ): HostBinding {
-    return { state: async () => state, setLan, idle: async () => {} };
+    return {
+      state: async () => state,
+      isLan: () => state.lan,
+      setLan,
+      idle: async () => {},
+    };
   }
 
   afterEach(async () => {
@@ -6427,6 +6433,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
           port: 5227,
           refusal: null,
         }),
+        isLan: () => lan,
         setLan: async (on) => {
           lan = on;
           return { ok: true };
@@ -6492,6 +6499,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     build({
       hosting: {
         state: async () => ({ lan: false, address: null, port: 5227, refusal }),
+        isLan: () => false,
         setLan: async () => {
           refusal = "Port 5227 is not free on 0.0.0.0: EADDRINUSE";
           return { ok: false, reason: refusal };
@@ -6541,6 +6549,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
           port: 5227,
           refusal: null,
         }),
+        isLan: () => true,
         setLan: async () => ({ ok: true }),
         idle: async () => inFlight,
       },

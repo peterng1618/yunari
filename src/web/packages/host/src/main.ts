@@ -623,8 +623,8 @@ export async function run(argv: readonly string[]): Promise<number> {
   // In tray mode the tray owns the process lifetime; in foreground mode the
   // terminal does, and the same function serves both.
   let stopHost: (() => void) | undefined;
+  let stopping = false;
   const stopped = new Promise<void>((resolve) => {
-    let stopping = false;
     const stop = (): void => {
       if (stopping) {
         return;
@@ -676,17 +676,15 @@ export async function run(argv: readonly string[]): Promise<number> {
           "tray_linux_release",
         ),
         readSnapshot: async () => {
-          const state =
-            lanBinding === undefined
-              ? { lan: false }
-              : await lanBinding.state();
           const [lhm, rtss] = await Promise.all([
             externalApps.lhmState(),
             externalApps.rtssState(),
           ]);
           return {
             port: bound,
-            lan: state.lan,
+            // `isLan` alone: the menu never shows the address, and `state()`
+            // would query the OS route table on every 5 s poll.
+            lan: lanBinding?.isLan() ?? false,
             autostart: autostart.state(),
             lhm,
             rtss,
@@ -728,6 +726,10 @@ export async function run(argv: readonly string[]): Promise<number> {
         // action to `act`, so this is what stops the host behind it.
         onExit: () => stopHost?.(),
       });
+
+      // The view can be live while `tray` is still undefined, so a stop that
+      // arrived during the await missed it; close the tray that just appeared.
+      if (stopping) tray.stop();
     } catch (error) {
       // A host that cannot show a tray would run invisibly: report it, unwind
       // what this run already started, and exit the way the other early
