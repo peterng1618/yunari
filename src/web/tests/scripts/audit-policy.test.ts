@@ -47,12 +47,20 @@ const SCRIPT = path.resolve(
 );
 
 /** Run the CLI over fixtures written outside the repo. */
-function cli(report: unknown, allowlist: unknown | "missing"): number {
+function cli(
+  report: unknown | "missing" | "malformed",
+  allowlist: unknown | "missing",
+): number {
   const dir = mkdtempSync(path.join(os.tmpdir(), "yunari-audit-policy-"));
   try {
     const reportFile = path.join(dir, "report.json");
     const allowlistFile = path.join(dir, "allowlist.json");
-    writeFileSync(reportFile, JSON.stringify(report));
+    if (report !== "missing") {
+      writeFileSync(
+        reportFile,
+        report === "malformed" ? "{not json" : JSON.stringify(report),
+      );
+    }
     if (allowlist !== "missing") {
       writeFileSync(allowlistFile, JSON.stringify(allowlist));
     }
@@ -61,7 +69,7 @@ function cli(report: unknown, allowlist: unknown | "missing"): number {
       [
         SCRIPT,
         "--report",
-        reportFile,
+        report === "missing" ? path.join(dir, "absent.json") : reportFile,
         "--allowlist",
         allowlist === "missing" ? path.join(dir, "absent.json") : allowlistFile,
       ],
@@ -133,7 +141,33 @@ it("spends an allowlist entry once, so a second finding cannot hide behind it", 
   expect(twice.unmatched).toHaveLength(1);
 });
 
-it("exits 2 when the report cannot be read", () => {
+it("prefers an exact row before spending a wildcard", () => {
+  const other = {
+    name: "node-forge",
+    url: "https://github.com/advisories/GHSA-dddd-eeee-ffff",
+  };
+  const result = evaluateAuditReport(
+    {
+      vulnerabilities: {
+        "node-forge": { name: "node-forge", via: [GHSA, other] },
+      },
+    },
+    // The wildcard is written first; a first-fit would spend it on GHSA and
+    // leave both the exact row and the second advisory uncovered.
+    [entry("node-forge", "*"), entry("node-forge", "GHSA-86w9-cpqp-85rv")],
+  );
+  expect(result).toEqual({ ok: true, unmatched: [], stale: [] });
+});
+
+it("exits 2 when the report file is absent", () => {
+  expect(cli("missing", [])).toBe(2);
+});
+
+it("exits 2 when the report is malformed JSON", () => {
+  expect(cli("malformed", [])).toBe(2);
+});
+
+it("exits 2 when the allowlist cannot be read", () => {
   expect(cli({}, "missing")).toBe(2);
 });
 

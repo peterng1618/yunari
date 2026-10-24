@@ -188,7 +188,6 @@ jobs:
 
   audit:
     name: Dependency audit policy
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     defaults:
       run:

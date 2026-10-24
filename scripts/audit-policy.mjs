@@ -61,12 +61,21 @@ export function evaluateAuditReport(report, allowlist) {
   const used = new Set();
   const unmatched = [];
   for (const finding of findings) {
-    const at = allowlist.findIndex(
-      (entry, index) =>
-        !used.has(index) &&
-        entry.package === finding.package &&
-        (entry.advisory === "*" || entry.advisory === finding.advisory),
-    );
+    // Exact rows first, so a wildcard cannot consume an advisory that has its
+    // own row and leave that row stale while the wildcard's advisory fails.
+    const matches = (entry, index) =>
+      !used.has(index) &&
+      entry.package === finding.package &&
+      entry.advisory === finding.advisory;
+    let at = allowlist.findIndex(matches);
+    if (at < 0) {
+      at = allowlist.findIndex(
+        (entry, index) =>
+          !used.has(index) &&
+          entry.package === finding.package &&
+          entry.advisory === "*",
+      );
+    }
     if (at < 0) unmatched.push(finding);
     else used.add(at);
   }
@@ -150,7 +159,9 @@ function auditJson() {
     throw new Error(`npm audit could not run: ${run.error.message}`);
   }
   if (!run.stdout) {
-    throw new Error(`npm audit returned no JSON: ${run.stderr ?? ""}`.trim());
+    throw new Error(
+      `npm audit produced no JSON (exit ${run.status}): ${run.stderr ?? ""}`.trim(),
+    );
   }
   try {
     return JSON.parse(run.stdout);
@@ -209,6 +220,14 @@ function selfTest() {
           report({ pkg: { via: ["dep", "dep"] } }),
           [row("pkg", "*")],
         ).unmatched.length === 1,
+    ],
+    [
+      "prefers an exact row before a wildcard",
+      () =>
+        evaluateAuditReport(report({ pkg: { via: ["dep", "other"] } }), [
+          row("pkg", "*"),
+          row("pkg", "dep"),
+        ]).ok === true,
     ],
   ];
   let failed = 0;
