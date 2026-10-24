@@ -75,6 +75,31 @@ Non-obvious failure modes worth checking before repeating expensive investigatio
   catalogue read fails against that address rather than falling back to a
   local directory.
 
+## Game identity
+
+- **`game.running` means an identified game, not `pid !== 0`.** The classifier
+  tries the installed catalogue, then runtime markers beside the executable,
+  then a known engine window class while fullscreen. Window evidence needs two
+  consecutive fullscreen readings of the same pid and class.
+- **The catalogue is local and read-only.** Steam's app manifests, Epic's
+  `.item`, GOG's registry keys, itch's `.itch.toml`, Xbox's
+  `MicrosoftGame.config`, Microsoft Store's `Get-AppxPackage` and the uninstall
+  keys. A missing source, or one that throws, contributes an empty list; it
+  never takes the provider down.
+- **Game identity is Windows-only.** The foreground helper is PowerShell over
+  `GetForegroundWindow`, and there is no Linux foreground source, so no Linux
+  catalogue reader exists.
+- **`NON_GAME_PROCESSES` carries the exclusion rule.** A fullscreen Explorer, the
+  shell, the host itself and an unresolved `ApplicationFrameHost` are not games;
+  a UWP title is resolved to its `Windows.UI.Core.CoreWindow` child first.
+- **The helper line's `class`, `fullscreen` and `d3dFullscreen` are optional.**
+  An older line without them still parses, and a missing class or fullscreen
+  flag means window evidence cannot fire.
+- **The live classifier needs a real fullscreen game, so tests inject the
+  foreground.** `YUNARI_FOREGROUND_EXE` names a fixture executable whose stem is
+  the searched name; `tests/e2e/game-metadata.spec.ts` proves identity that way.
+  `game-artwork.spec.ts` instead fakes the Steam root and stubs the page's stream.
+
 ## Toolchain
 
 - Bare gitignore rules match at any depth.
