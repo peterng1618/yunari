@@ -11,7 +11,7 @@ Branch: `feat/game-identity`
 
 ## Active work
 
-- **Phase 2 (classifier) is next**: helper reports window class and fullscreen, resolves the UWP frame-host child, then presence stops reading any foreground window as a game.
+- **Phase 3 (shared descriptor mapping) is next**, then the player catalogue and its e2e.
 - **Phase 2 (classifier)** replaces `game.running`'s pid check with catalogue, runtime-marker and window evidence, debounced.
 - **Phase 4 (player catalogue)** moves the wire mapping to `renderer-core` and passes descriptors to `refreshBoundText`.
 - **Windows-first**: Linux catalogue readers and foreground detection stay out, recorded in the spec.
@@ -19,9 +19,10 @@ Branch: `feat/game-identity`
 
 ## Last completed change
 
-- **Task 2.2 landed** (`dc829c6c`, fix `65f119e2`): pure classifier over catalogue, runtime markers and window evidence; 24 tests pass, host typecheck exit 0.
-- **Review:** spec PASS, no must-fix; exact-executable match now beats an install-root match, longest root wins, marker matching is case-proven, catalogue never lists the exe directory.
-- **Task 2.3 is running**: `game.running` follows the classifier; a catalogued game supplies its name without a store request; Phase 2 gate after it.
+- **Phase 2 complete** (`801fe2b5`, fixes `3bd6e6b4`, tests `eb0d1be9`): `game.running` follows the classifier; catalogued games name themselves with no store request.
+- **Review caught three real defects before close:** the fullscreen streak counted `sample()` calls not helper lines, the default catalogue bypassed `YUNARI_STEAM_ROOT`, and artwork identity differed with `game.name` present.
+- **Gate:** `npm run gate` exit 1 only on the two pre-existing live SMTC tests (vg-726); 392 files / 5774 tests pass otherwise.
+- **Known costs kept:** Steam is read twice per demand window, and one `readdir` runs per sample for a non-catalogue foreground.
 - **No tray icon exists**: host lifetime remains terminal-owned (`host/src/main.ts`), and this plan does not add one.
 
 ## Next
