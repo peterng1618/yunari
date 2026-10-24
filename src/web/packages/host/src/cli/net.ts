@@ -300,26 +300,73 @@ export function localNames(): readonly string[] {
   return [...names];
 }
 
-/** Opens the platform browser without turning failure into a host startup failure. */
-export function openBrowser(url: string): void {
-  const command =
-    process.platform === "win32"
-      ? { file: "cmd", args: ["/c", "start", "", url] }
-      : process.platform === "darwin"
-        ? { file: "open", args: [url] }
-        : { file: "xdg-open", args: [url] };
+/** The program that opens a target, and its arguments. */
+export interface OpenCommand {
+  readonly file: string;
+  readonly args: readonly string[];
+}
+
+export interface OpenTargetOptions {
+  /** Overrides `process.platform`, so a case carries the platform it asserts. */
+  readonly platform?: NodeJS.Platform;
+  /** Opens the target as a folder rather than as a URL. */
+  readonly directory?: boolean;
+}
+
+/**
+ * The command that opens `target`, without running it.
+ *
+ * Windows URLs go through `rundll32`'s protocol handler rather than
+ * `cmd /c start`: no console window is allocated, and the URL never reaches a
+ * shell. A folder needs no protocol handler, so `explorer` opens it directly.
+ */
+export function openCommand(
+  target: string,
+  options: OpenTargetOptions = {},
+): OpenCommand {
+  const platform = options.platform ?? process.platform;
+
+  if (platform === "win32") {
+    return options.directory === true
+      ? { file: "explorer.exe", args: [target] }
+      : {
+          file: "rundll32.exe",
+          args: ["url.dll,FileProtocolHandler", target],
+        };
+  }
+
+  return { file: platform === "darwin" ? "open" : "xdg-open", args: [target] };
+}
+
+/**
+ * Opens a URL or folder without turning failure into a host startup failure.
+ * Returns whether the opener was started, so a tray action can report a failed
+ * open instead of claiming success in a hidden host.
+ */
+export function openTarget(
+  target: string,
+  options: OpenTargetOptions = {},
+): boolean {
+  const command = openCommand(target, options);
 
   try {
     const child = spawn(command.file, command.args, {
       detached: true,
       stdio: "ignore",
+      windowsHide: true,
     });
 
     child.on("error", () => {
       /* The printed URL remains usable. */
     });
     child.unref();
+    return true;
   } catch {
-    /* Same. */
+    return false;
   }
+}
+
+/** Opens the platform browser without turning failure into a host startup failure. */
+export function openBrowser(url: string): boolean {
+  return openTarget(url);
 }

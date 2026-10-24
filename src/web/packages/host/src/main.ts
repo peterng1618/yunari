@@ -20,7 +20,7 @@ import { createGameArtwork } from "./providers/game/box-art.js";
 import { GameProvider } from "./providers/game/provider.js";
 import { createSteamStore } from "./providers/game/store-metadata.js";
 import { LhmSensorProvider } from "./providers/lhm.js";
-import { launchLhm, registerLhmTask } from "./providers/lhm-launcher.js";
+import { registerLhmTask } from "./providers/lhm-launcher.js";
 import { LibrarySensorProvider } from "./providers/library.js";
 import { createArtworkCache } from "./providers/media/artwork.js";
 import { MediaProvider } from "./providers/media/provider.js";
@@ -29,8 +29,8 @@ import { WeatherProvider } from "./providers/weather/provider.js";
 import {
   createDisplayLauncher,
   type Launcher,
-  registerHostAutostart,
 } from "./serve/display-launcher.js";
+import { createHostAutostart, hostEntry } from "./serve/host-autostart.js";
 import { CA_CERTIFICATE_PATH, createHostServer } from "./server.js";
 import { createPairingCodeStore } from "./session/pairing-code.js";
 import { createActiveThemeStore } from "./settings/active-theme.js";
@@ -51,6 +51,10 @@ import { normalizeVideoCommand } from "./themes/normalize-video.js";
 import { createThemeStore } from "./themes/store.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
 import { createSecureOrigin, type SecureOrigin } from "./tls/authority.js";
+import { openTrayAction } from "./tray/actions.js";
+import { type TrayController } from "./tray/controller.js";
+import { createExternalApps } from "./tray/external-apps.js";
+import { startTray } from "./tray/index.js";
 import { createWallpaperEngineSource } from "./wallpaper-engine/source.js";
 
 /** Launcher: bind, verify reachability, then print/open URLs. */
@@ -81,25 +85,6 @@ function defaultLhmExecutable(): string {
   return path.join(here, "..", "vendor", "lhm", "LibreHardwareMonitor.exe");
 }
 
-/**
- * The command that starts this host again, for the sign-in task: this
- * interpreter, the shim it was started through, and the flags this run was
- * given, so the host that comes back is the same host with the same app folder.
- *
- * `-n` because a host that starts at sign-in is bringing back the displays; a
- * dashboard tab in the default browser at every login is not part of that.
- */
-function hostCommand(argv: readonly string[]): string {
-  return [
-    process.execPath,
-    path.join(here, "..", "bin", "yunari.js"),
-    ...argv,
-    "-n",
-  ]
-    .map((part) => `"${part}"`)
-    .join(" ");
-}
-
 export async function run(argv: readonly string[]): Promise<number> {
   const normalized = await normalizeVideoCommand(argv);
   if (normalized !== undefined) return normalized;
@@ -124,10 +109,12 @@ export async function run(argv: readonly string[]): Promise<number> {
     host,
     hostGiven,
     openBrowser: shouldOpen,
+    tray: trayMode,
     themesDir,
     settingsDir,
     lhmUrl,
     lhmExecutable,
+    rtssExecutable,
     registerLhmTask: shouldRegisterTask,
   } = parsed.options;
 
@@ -152,18 +139,24 @@ export async function run(argv: readonly string[]): Promise<number> {
     return 1;
   }
 
-  // Launching LHM is opt-in via `--lhm-exe`, never automatic: its manifest
-  // requires administrator rights, so starting it unattended would raise a UAC
-  // prompt on every host start. The provider reads whichever server answers,
-  // whether Yunari launched it or the owner already runs it.
-  const lhm =
-    lhmExecutable === undefined
-      ? { started: false, stop: (): void => undefined }
-      : await launchLhm({
-          executable: lhmExecutable,
-          baseUrl: lhmUrl,
-          timeoutMs: 20_000,
-        });
+  // Launching LHM is opt-in, never automatic: its manifest requires
+  // administrator rights, so starting it unattended would raise a UAC prompt on
+  // every host start. The provider reads whichever server answers, whether
+  // Yunari launched it or the owner already runs it. The same owner serves the
+  // tray's LHM and RTSS rows; in tray mode it starts LHM in the background once
+  // the server is reachable, and stopOwnedLhm releases only what this run started.
+  const externalApps = createExternalApps({
+    platform: process.platform,
+    lhmUrl,
+    ...(lhmExecutable === undefined ? {} : { lhmExecutable }),
+    lhmDefaultExecutable: defaultLhmExecutable(),
+    ...(rtssExecutable === undefined ? {} : { rtssExecutable }),
+  });
+
+  let lhmStart: Awaited<ReturnType<typeof externalApps.startLhm>> | undefined;
+  if (!trayMode && lhmExecutable !== undefined) {
+    lhmStart = await externalApps.startLhm();
+  }
 
   // Provider order defines ownership priority. LibreHardwareMonitor answers the
   // extended sensors (CPU temperature, fans, GPU detail) when the machine owner
@@ -341,6 +334,15 @@ export async function run(argv: readonly string[]): Promise<number> {
   // `hosting` is one.
   let launcher: Launcher | undefined;
 
+  // The tray, once it exists. The stop path closes it first, so a click on Exit
+  // does not leave an icon behind; undefined until the server is reachable.
+  let tray: TrayController | undefined;
+
+  // One entry at sign-in covers every local monitor, including one added
+  // later. The tray's "Auto start" toggle drives the same owner (Task 9).
+  const autostart = createHostAutostart();
+  const entry = hostEntry(argv, here);
+
   const hosted = createHostServer({
     registry,
     // The leaf, signed by the root a display installs once. In memory only:
@@ -356,9 +358,9 @@ export async function run(argv: readonly string[]): Promise<number> {
       return launcher;
     },
     // One entry at sign-in covers every local monitor, including one added
-    // later. Registering needs an elevated shell, so this only ever asks; a
+    // later. Registering writes the hidden entry, so this only ever asks; a
     // refusal is answered with the registrar's own message.
-    registerAutostart: () => registerHostAutostart(hostCommand(argv)),
+    registerAutostart: () => autostart.enable(entry),
     // Where a phone should point, whether one can reach this host at all, and
     // how to move it there.
     get hosting() {
@@ -535,14 +537,24 @@ export async function run(argv: readonly string[]): Promise<number> {
 
   // Say what the extended sensors will do, rather than leaving the display to
   // show gaps without explanation.
-  if (lhm.started) {
+  if (lhmStart?.started === true) {
     console.log(style("2", `  LibreHardwareMonitor started for ${lhmUrl}`));
-  } else if (lhm.reason !== undefined) {
+  } else if (lhmStart?.reason !== undefined) {
     console.log(
       style(
         "33",
-        `  Extended sensors unavailable: ${lhm.reason}` +
+        `  Extended sensors unavailable: ${lhmStart.reason}` +
           "\n  Baseline sensors still work; temperature and fan keys will be gaps.",
+      ),
+    );
+  } else if (trayMode) {
+    // The tray starts LHM once the server answers; its LHM row reports a
+    // missing or unreadable install, so the banner does not advise a flag the
+    // owner did not pass.
+    console.log(
+      style(
+        "2",
+        "  LibreHardwareMonitor starts in the background when it is installed.",
       ),
     );
   } else {
@@ -606,9 +618,13 @@ export async function run(argv: readonly string[]): Promise<number> {
     openBrowser(`${localPlain}/editor`);
   }
 
-  // Process lifetime belongs to the terminal until a tray host exists.
-  await new Promise<void>((resolve) => {
-    let stopping = false;
+  // One stop path, for Exit, a lost tray and both signals. Created before the
+  // tray starts because its callbacks and the failure path below both use it.
+  // In tray mode the tray owns the process lifetime; in foreground mode the
+  // terminal does, and the same function serves both.
+  let stopHost: (() => void) | undefined;
+  let stopping = false;
+  const stopped = new Promise<void>((resolve) => {
     const stop = (): void => {
       if (stopping) {
         return;
@@ -616,28 +632,119 @@ export async function run(argv: readonly string[]): Promise<number> {
 
       stopping = true;
       console.log("\nStopping.");
-      // Stop only the LHM this run started; one the owner already ran is theirs.
-      lhm.stop();
-      // The media helper is a child process this run started; leaving it
-      // polling after the host exits is the orphan decision 0102 prevents.
-      mediaProvider.stop();
-      // Same for the RTSS helper: a PowerShell left polling outlives the host.
-      frameProvider.stop();
-      // The game helper is the same shape: a PowerShell left polling would
-      // outlive the host.
-      gameProvider.stop();
-      // Every per-source timer goes with it, and an in-flight fetch is cut.
-      customProvider.stop();
-      // The windows close with the host: one left behind is one the next run
-      // cannot see, and it would put a second window on that monitor.
-      launcher?.stop();
-      void hosted.close().then(resolve, resolve);
+      // The tray first: an icon left behind is one the owner cannot dismiss. A
+      // throwing view must not skip the server close below.
+      try {
+        tray?.stop();
+      } catch (error) {
+        console.error(
+          `The tray could not close: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      try {
+        // Stop only the LHM this run started; one the owner already ran is theirs.
+        externalApps.stopOwnedLhm();
+        // The media helper is a child process this run started; leaving it
+        // polling after the host exits is the orphan decision 0102 prevents.
+        mediaProvider.stop();
+        // Same for the RTSS helper: a PowerShell left polling outlives the host.
+        frameProvider.stop();
+        // The game helper is the same shape: a PowerShell left polling would
+        // outlive the host.
+        gameProvider.stop();
+        // Every per-source timer goes with it, and an in-flight fetch is cut.
+        customProvider.stop();
+        // The windows close with the host: one left behind is one the next run
+        // cannot see, and it would put a second window on that monitor.
+        launcher?.stop();
+      } finally {
+        // A throwing stop must not leave the server listening with no tray.
+        void hosted.close().then(resolve, resolve);
+      }
     };
 
+    stopHost = stop;
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
   });
 
+  if (trayMode) {
+    // After the server answers: LHM's launch is a probe plus a spawn, and a
+    // tray host that failed to start must not leave it running.
+    void externalApps.startLhm().then((result) => {
+      if (!result.ok && result.reason !== undefined) {
+        console.error(`LibreHardwareMonitor: ${result.reason}`);
+      }
+    });
+
+    try {
+      tray = await startTray({
+        linuxBinary: path.join(
+          here,
+          "..",
+          "vendor",
+          "tray",
+          "tray_linux_release",
+        ),
+        readSnapshot: async () => {
+          const [lhm, rtss] = await Promise.all([
+            externalApps.lhmState(),
+            externalApps.rtssState(),
+          ]);
+          return {
+            port: bound,
+            // `isLan` alone: the menu never shows the address, and `state()`
+            // would query the OS route table on every 5 s poll.
+            lan: lanBinding?.isLan() ?? false,
+            autostart: autostart.state(),
+            lhm,
+            rtss,
+          };
+        },
+        act: async (action) => {
+          switch (action) {
+            case "autostart":
+              return autostart.toggle(entry);
+            case "pair":
+            case "editor":
+            case "themes":
+            case "settings":
+            case "folder":
+              return openTrayAction(action, { localPlain, settingsDir });
+            case "lhm":
+              return externalApps.startLhm();
+            case "rtss":
+              return externalApps.startRtss();
+            case "exit":
+              stopHost?.();
+              return { ok: true, message: "Stopping." };
+          }
+        },
+        onLost: (reason) => {
+          console.error(`The tray stopped: ${reason}`);
+          stopHost?.();
+        },
+        // The controller closes its own view on Exit and never dispatches the
+        // action to `act`, so this is what stops the host behind it.
+        onExit: () => stopHost?.(),
+      });
+
+      // The view can be live while `tray` is still undefined, so a stop that
+      // arrived during the await missed it; close the tray that just appeared.
+      if (stopping) tray.stop();
+    } catch (error) {
+      // A host that cannot show a tray would run invisibly: report it, unwind
+      // what this run already started, and exit the way the other early
+      // failures do.
+      console.error(error instanceof Error ? error.message : String(error));
+      stopHost?.();
+      await stopped;
+      await held.lock.release();
+      return 1;
+    }
+  }
+
+  await stopped;
   await held.lock.release();
   return 0;
 }

@@ -1,0 +1,4 @@
+/** The tray glyph: a 32×32 PNG of "V" on the product's paper colour, generated
+ *  once with System.Drawing and inlined so the host ships no image asset. */
+export const TRAY_ICON_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAEKSURBVFhH7ZSxDYNADEWzQCgQK1EgVqFC7EGH2ILuJHagRWIE2hSpnVzCCQMO2E6kRMoVr4lP4d23z6frZYRv4gW8gBf4fYE2P0MUBhDlDVlfM1Sx6PxxAn0JaWglMmip+oIO6sSejaHuqfoWRgvcnwZQGKqOMNnz9kkJA1UnYM0AN1bXrrTqyDoFbwhZbWigeJzhx2/hCXDa4OJnDp+DKXDcBhf/4ZysYAvMEVNt2KvtIxDYuaUyfotI4NWHtPFbZAJk1NNvgrePEQpsb+uGU/L2MWKB5baTr941cgH8UTMtKGX8FoUAij15L36LSmBezfdWKN4+RieAVrPm7WOUAp/DC3iBfxcY4QaPGY88xLOBTAAAAABJRU5ErkJggg==";

@@ -11,6 +11,8 @@ export interface HostOptions {
    *  that run; one that does not obeys the stored hosting preference. */
   readonly hostGiven: boolean;
   readonly openBrowser: boolean;
+  /** Run hidden with a tray icon instead of a browser window. */
+  readonly tray: boolean;
   readonly themesDir: string;
   /** Where the host's own state lives; beside the themes, never among them. */
   readonly settingsDir: string;
@@ -18,6 +20,8 @@ export interface HostOptions {
   readonly lhmUrl: string;
   /** Path to `LibreHardwareMonitor.exe`; set to launch it with the host. */
   readonly lhmExecutable?: string;
+  /** Path to `RTSS.exe`; set to report and start that install. */
+  readonly rtssExecutable?: string;
   /** Register the elevated startup task for LHM, then exit. */
   readonly registerLhmTask?: boolean;
 }
@@ -50,11 +54,13 @@ Options:
   -p, --port <port>       Port to listen on (default: ${DEFAULT_PORT})
   -H, --host <addr>       Address to bind (default: ${DEFAULT_HOST}, loopback only)
   -n, --no-browser        Do not open a browser
+      --tray              Run from the system tray, with no browser window
       --app-dir <dir>     App folder; themes/ and settings/ live inside it
                           (default ${DEFAULT_APP_DIR})
       --themes-dir <dir>  Directory for the theme library (default: the app folder's themes/)
       --lhm-url <url>     LibreHardwareMonitor web server (default ${DEFAULT_LHM_URL})
       --lhm-exe <path>    Launch LibreHardwareMonitor.exe with the host
+      --rtss-exe <path>   RivaTuner Statistics Server install; the tray can start it
       --register-lhm-task Register LHM to start elevated at sign-in (one prompt)
   -v, --version           Print the version
   -h, --help              Print this help
@@ -71,6 +77,39 @@ that root is installed on it — this PC included.
 LAN access is off by default. Passing --host 0.0.0.0 serves your hardware
 telemetry to every device on the network; plain http there has no
 confidentiality, so use it on trusted networks only, never the internet.`;
+
+/** Flags whose value is a path the parser resolves against its cwd. */
+const PATH_VALUE_FLAGS: ReadonlySet<string> = new Set([
+  "--app-dir",
+  "--themes-dir",
+  "--lhm-exe",
+  "--rtss-exe",
+]);
+
+/**
+ * Resolves those flags' values against this process's cwd, for argv that will
+ * be replayed later. A sign-in launcher starts in Explorer's or the home
+ * directory, so an unresolved relative path would name a different folder.
+ */
+export function resolvePathFlags(argv: readonly string[]): string[] {
+  const resolved = [...argv];
+
+  for (let index = 0; index < resolved.length; index += 1) {
+    const flag = resolved[index];
+
+    if (flag === undefined || !PATH_VALUE_FLAGS.has(flag)) continue;
+
+    const value = resolved[index + 1];
+
+    // A missing or flag-shaped value is the parser's error to report.
+    if (value === undefined || value.startsWith("-")) continue;
+
+    resolved[index + 1] = path.resolve(value);
+    index += 1;
+  }
+
+  return resolved;
+}
 
 /** True only for addresses restricted to this machine. */
 export function isLoopbackHost(host: string): boolean {
@@ -106,6 +145,7 @@ export function parseArgs(
   let host = DEFAULT_HOST;
   let hostGiven = false;
   let openBrowser = true;
+  let tray = false;
   let themesDir: string | undefined;
   // A relocated app folder takes the library and the settings with it, so one
   // flag gives a private install rather than a library that writes into the
@@ -113,6 +153,7 @@ export function parseArgs(
   let settingsDir: string | undefined;
   let lhmUrl = DEFAULT_LHM_URL;
   let lhmExecutable: string | undefined;
+  let rtssExecutable: string | undefined;
   let registerLhmTask = false;
   let appDirOverride: string | undefined;
 
@@ -130,6 +171,11 @@ export function parseArgs(
 
       case "--no-browser":
       case "-n":
+        openBrowser = false;
+        break;
+
+      case "--tray":
+        tray = true;
         openBrowser = false;
         break;
 
@@ -197,6 +243,21 @@ export function parseArgs(
         break;
       }
 
+      case "--rtss-exe": {
+        const value = argv[index + 1];
+
+        if (value === undefined || value.startsWith("-")) {
+          return {
+            kind: "error",
+            message: `${arg} needs a path to RTSS.exe.`,
+          };
+        }
+
+        rtssExecutable = path.resolve(value);
+        index += 1;
+        break;
+      }
+
       case "--themes-dir": {
         const value = argv[index + 1];
 
@@ -238,12 +299,15 @@ export function parseArgs(
       port,
       host,
       hostGiven,
+      // --tray clears this when it is parsed; nothing sets it back.
       openBrowser,
+      tray,
       themesDir:
         themesDir ?? path.join(appDirOverride ?? DEFAULT_APP_DIR, "themes"),
       settingsDir: settingsDir ?? DEFAULT_SETTINGS_DIR,
       lhmUrl,
       ...(lhmExecutable === undefined ? {} : { lhmExecutable }),
+      ...(rtssExecutable === undefined ? {} : { rtssExecutable }),
       ...(registerLhmTask ? { registerLhmTask } : {}),
     },
   };

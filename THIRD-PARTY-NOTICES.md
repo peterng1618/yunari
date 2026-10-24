@@ -81,6 +81,27 @@ distribution. Provenance and the pinned digest:
 `docs/engineering/dependencies.md`; `vendor/presentmon/PROVENANCE.txt` records
 the version, source URL and sha256 of the staged release.
 
+### systray2 / systray-portable (bundled Linux external program)
+
+A Yunari release ships the Linux tray binary from `systray2` **2.1.4** (**MIT**,
+Copyright (c) 2017 Zack Young) as an external program, staged by
+`npm run vendor:tray -w @yunari/host`. Yunari does not import the `systray2`
+package, links nothing and compiles nothing: it runs `tray_linux_release` over a
+JSON-line protocol. It is not a dependency.
+
+Only the Linux **x86-64** binary is staged; Linux arm64 is unsupported and needs
+its own binary and provenance. The binary is staged into
+`packages/host/vendor/tray` and is not committed — `vendor/` is ignored; the
+staging script writes `PROVENANCE.txt` beside the binary, and release packaging
+ships it. MIT requires the copyright and
+permission notice to travel with the binary, so the vendor script stages
+`systray2`'s own `LICENSE` beside it; release packaging must include
+`vendor/tray/LICENSE` and `vendor/tray/tray_linux_release` in the shipped
+distribution. Source:
+<https://registry.npmjs.org/systray2/-/systray2-2.1.4.tgz>, pinned sha256
+`24a176933952c4db79026dcec25c7acf48e5c1cee5d94bc6b87740060bc8ed00`.
+Provenance: `docs/engineering/dependencies.md`.
+
 ## Build/test
 
 Declared development dependencies: @biomejs/biome 2.5.14 (MIT OR Apache-2.0),

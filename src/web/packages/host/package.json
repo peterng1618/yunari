@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "vendor:lhm": "node ./scripts/vendor-lhm.mjs",
     "vendor:presentmon": "node ./scripts/vendor-presentmon.mjs",
+    "vendor:tray": "node ./scripts/vendor-tray.mjs",
     "vendor:weather-icons": "node ./scripts/vendor-weather-icons.mjs"
   },
   "dependencies": {
