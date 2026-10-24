@@ -33,6 +33,8 @@ export interface TextPlacementPort {
 
 /** The native pointer Fabric wraps in its own canvas event payload. */
 interface PlacementPointerEvent {
+  /** A touch pointer has no `button`, so it reads as non-primary and cancels;
+   *  touch placement is out of scope for this plan. */
   readonly e: {
     readonly clientX: number;
     readonly clientY: number;
@@ -312,18 +314,30 @@ export function createTextManager(
         readonly skipTargetFind: boolean;
         readonly selection: boolean;
         readonly defaultCursor: string;
+        readonly cursor: string;
       }
     | undefined;
+  /** The canvas was already claimed when the tool armed — the viewport's
+   *  space-held pan, for instance — so this gesture owns none of its state. */
+  let claimedElsewhere = false;
+  /** A non-primary press is a cancel, but the element's `contextmenu`
+   *  listeners share the target and arrive afterwards; this keeps the menu
+   *  closed for that press even though the gesture has already disarmed. */
+  let suppressContextMenu = false;
 
   const disarmPlacement = (): void => {
     placement = undefined;
     press = undefined;
+    claimedElsewhere = false;
     const hadOutline = outline !== undefined;
     outline = undefined;
     if (resumeCanvasState !== undefined) {
       canvas.skipTargetFind = resumeCanvasState.skipTargetFind;
       canvas.selection = resumeCanvasState.selection;
       canvas.defaultCursor = resumeCanvasState.defaultCursor;
+      // Fabric re-applies `defaultCursor` on the next move; this is what puts
+      // the pointer back on the frame the gesture ends, without waiting for it.
+      canvas.setCursor(resumeCanvasState.cursor);
       resumeCanvasState = undefined;
     }
     // The outline lives only in the last framebuffer; a render is what removes
@@ -342,8 +356,17 @@ export function createTextManager(
   const onPlacementDown = (event: PlacementPointerEvent): void => {
     if (placement === undefined) return;
     // A right or middle press is a cancel, never a placement: the primary
-    // button is the whole gesture.
+    // button is the whole gesture. Its context menu arrives later, so the
+    // suppression flag has to outlive the disarm.
     if (event.e.button !== 0) {
+      suppressContextMenu = true;
+      disarmPlacement();
+      return;
+    }
+    suppressContextMenu = false;
+    // Someone else owns the canvas (the viewport's space-held pan). This press
+    // is theirs, so the tool cancels rather than placing over their claim.
+    if (claimedElsewhere) {
       disarmPlacement();
       return;
     }
@@ -409,8 +432,26 @@ export function createTextManager(
   };
 
   const onPlacementKeyDown = (event: KeyboardEvent): void => {
-    if (placement === undefined || event.key !== "Escape") return;
+    if (placement === undefined) return;
+    // Space belongs to the viewport's pan, which claims the same canvas state.
+    // Cancelling here — in the capture phase, before that claim runs — is what
+    // stops the two owners from capturing each other's cursor and target find.
+    if (event.key !== "Escape" && event.key !== " ") return;
     disarmPlacement();
+  };
+
+  /**
+   * The element's contextmenu listeners are a shared target: the app's menu is
+   * registered after this manager, so stopping immediate propagation from here
+   * is what keeps a right press on the armed tool from opening it.
+   */
+  const onPlacementContextMenu = (event: MouseEvent): void => {
+    const armed = placement !== undefined;
+    if (!armed && !suppressContextMenu) return;
+    suppressContextMenu = false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (armed) disarmPlacement();
   };
 
   /** The drag outline is editor chrome: drawn after the render, on the lower
@@ -443,7 +484,8 @@ export function createTextManager(
   canvas.on("mouse:move" as never, onPlacementMove as never);
   canvas.on("mouse:up" as never, onPlacementUp as never);
   canvas.on("after:render" as never, onPlacementAfterRender as never);
-  window.addEventListener("keydown", onPlacementKeyDown);
+  window.addEventListener("keydown", onPlacementKeyDown, true);
+  canvas.upperCanvasEl.addEventListener("contextmenu", onPlacementContextMenu);
 
   return {
     addText(options = {}) {
@@ -494,19 +536,31 @@ export function createTextManager(
         placement = port;
         return;
       }
+      placement = port;
+      press = undefined;
+      outline = undefined;
+      suppressContextMenu = false;
+      // A canvas that is already claimed belongs to another owner. Arming must
+      // not overwrite that claim, and the next primary press is theirs: it
+      // cancels this gesture without placing.
+      if (canvas.skipTargetFind) {
+        claimedElsewhere = true;
+        return;
+      }
+      claimedElsewhere = false;
       resumeCanvasState = {
         skipTargetFind: canvas.skipTargetFind,
         selection: canvas.selection,
         defaultCursor: canvas.defaultCursor,
+        cursor: canvas.upperCanvasEl.style.cursor,
       };
-      placement = port;
-      press = undefined;
-      outline = undefined;
       // Fabric re-applies `defaultCursor` on every hover, so that is the
-      // property the crosshair has to live in.
+      // property the crosshair has to live in; `setCursor` paints it now
+      // instead of waiting for the pointer to move.
       canvas.skipTargetFind = true;
       canvas.selection = false;
       canvas.defaultCursor = "crosshair";
+      canvas.setCursor("crosshair");
     },
     setAuthoringView(paint) {
       showAuthoringView = paint;
@@ -522,7 +576,11 @@ export function createTextManager(
       canvas.off("mouse:move" as never, onPlacementMove as never);
       canvas.off("mouse:up" as never, onPlacementUp as never);
       canvas.off("after:render" as never, onPlacementAfterRender as never);
-      window.removeEventListener("keydown", onPlacementKeyDown);
+      window.removeEventListener("keydown", onPlacementKeyDown, true);
+      canvas.upperCanvasEl.removeEventListener(
+        "contextmenu",
+        onPlacementContextMenu,
+      );
       disarmPlacement();
     },
   };

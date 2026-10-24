@@ -600,9 +600,12 @@ describe("placing a text by click or drag", () => {
     canvas.defaultCursor = "grab";
     canvas.skipTargetFind = false;
     canvas.selection = true;
+    canvas.setCursor("default");
 
     manager.beginPlacement(port);
     expect(canvas.defaultCursor).toBe("crosshair");
+    // The pointer is painted now, not at the next hover.
+    expect(canvas.upperCanvasEl.style.cursor).toBe("crosshair");
     expect(canvas.skipTargetFind).toBe(true);
     expect(canvas.selection).toBe(false);
 
@@ -612,6 +615,119 @@ describe("placing a text by click or drag", () => {
     expect(canvas.defaultCursor).toBe("grab");
     expect(canvas.skipTargetFind).toBe(false);
     expect(canvas.selection).toBe(true);
+    expect(canvas.upperCanvasEl.style.cursor).toBe("default");
+    manager.destroy();
+  });
+
+  it("cancels on Space before the viewport's pan can claim the canvas", () => {
+    // Space is the viewport's pan key and claims the same three properties.
+    // The gesture has to stand down first, or the pan captures the crosshair
+    // as its state to restore and leaves `skipTargetFind` on afterwards.
+    const { canvas, manager, port, save } = placementScene({ arm: false });
+    canvas.defaultCursor = "grab";
+    canvas.skipTargetFind = false;
+    canvas.selection = true;
+    canvas.setCursor("default");
+    manager.beginPlacement(port);
+
+    const panClaim = vi.fn();
+    window.addEventListener("keydown", panClaim);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:up", 100, 100);
+
+    // Whatever runs after this listener sees the pre-arm canvas, not the
+    // armed one.
+    expect(panClaim).toHaveBeenCalledOnce();
+    expect(panClaim).toHaveBeenCalledWith(
+      expect.objectContaining({ key: " " }),
+    );
+    expect([
+      canvas.skipTargetFind,
+      canvas.selection,
+      canvas.defaultCursor,
+    ]).toEqual([false, true, "grab"]);
+
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: " " }));
+    expect(port.onPlace).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    window.removeEventListener("keydown", panClaim);
+    manager.destroy();
+  });
+
+  it("does not overwrite a claim another owner already holds", () => {
+    // Arm while the viewport's space-pan owns the canvas. The tool must not
+    // write the crosshair over it, the press places nothing, and the claim
+    // survives both the cancel and destroy.
+    const { canvas, manager, port } = placementScene({ arm: false });
+    canvas.skipTargetFind = true;
+    canvas.selection = false;
+    canvas.defaultCursor = "grab";
+    canvas.setCursor("grab");
+
+    manager.beginPlacement(port);
+    expect(canvas.defaultCursor).toBe("grab");
+    expect(canvas.upperCanvasEl.style.cursor).toBe("grab");
+
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:up", 100, 100);
+    expect(port.onPlace).not.toHaveBeenCalled();
+
+    expect(canvas.skipTargetFind).toBe(true);
+    expect(canvas.selection).toBe(false);
+    expect(canvas.defaultCursor).toBe("grab");
+    expect(canvas.upperCanvasEl.style.cursor).toBe("grab");
+    manager.destroy();
+    expect(canvas.skipTargetFind).toBe(true);
+  });
+
+  it("suppresses the canvas context menu for a non-primary press", () => {
+    // The spec's "a non-primary press does not also open the canvas context
+    // menu". The app's menu listener shares `upperCanvasEl` and is registered
+    // after this manager, so stopping immediate propagation here is the only
+    // thing that keeps it closed.
+    const { canvas, manager, port, save } = placementScene({ arm: false });
+    canvas.defaultCursor = "grab";
+    manager.beginPlacement(port);
+    const menu = vi.fn();
+    canvas.upperCanvasEl.addEventListener("contextmenu", menu);
+
+    pointer(canvas, "mouse:down", 100, 100, 2);
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 100,
+      clientY: 100,
+      button: 2,
+    });
+    const stop = vi.spyOn(event, "stopImmediatePropagation");
+    canvas.upperCanvasEl.dispatchEvent(event);
+
+    expect(menu).not.toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(event.defaultPrevented).toBe(true);
+    expect(port.onPlace).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(canvas.defaultCursor).toBe("grab");
+    expect(canvas.skipTargetFind).toBe(false);
+    expect(canvas.selection).toBe(true);
+
+    canvas.upperCanvasEl.removeEventListener("contextmenu", menu);
+    manager.destroy();
+  });
+
+  it("leaves the context menu alone when no tool is armed", () => {
+    const { canvas, manager } = placementScene({ arm: false });
+    const menu = vi.fn();
+    canvas.upperCanvasEl.addEventListener("contextmenu", menu);
+
+    canvas.upperCanvasEl.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
+
+    expect(menu).toHaveBeenCalledOnce();
+    canvas.upperCanvasEl.removeEventListener("contextmenu", menu);
     manager.destroy();
   });
 
