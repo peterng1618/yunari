@@ -19,9 +19,9 @@ Branch: `feat/game-identity`
 
 ## Last completed change
 
-- **Task 1.2 landed** (`098ecaa0`, fixes `2d8dd6c7`): GOG registry and Xbox readers; 20 catalogue tests pass, host typecheck exit 0.
-- **Review:** spec PASS, no must-fix; six gaps fixed — Xbox config vs sole-exe discrimination, GOG empty-field skips, XML comments stripped, absolute `exe` no longer re-joined, non-object GOG entries skipped.
-- **Task 1.1 closed** (`8a46b5e1`): Epic manifest reader; its three review minors were fixed in `9beee455`.
+- **Task 1.3 landed** (`4e6ce141`, fixes `23fa8009`): itch `.itch.toml` and uninstall-registry readers; 35 catalogue tests pass, host typecheck exit 0.
+- **Review:** spec PASS, no must-fix; quoted `DisplayIcon` now yields its exe, itch name and first-action rules are proven, TOML escapes and non-object entries tested.
+- **Task 1.4 is next**: Microsoft Store / Game Pass Appx reader, then the file split and aggregation.
 - **No tray icon exists**: host lifetime remains terminal-owned (`host/src/main.ts`), and this plan does not add one.
 
 ## Next
