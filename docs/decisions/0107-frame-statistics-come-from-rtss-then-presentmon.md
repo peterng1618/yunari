@@ -115,22 +115,47 @@ binding. That work is Task 6.2's adapter, not this one.
 
 ## Rung 6 — probe
 
-Probe performed on this machine before implementation (not re-run during it):
+Probe performed on this machine before and during implementation:
 
 - `C:\Program Files (x86)\RivaTuner Statistics Server` is installed and RTSS
   is **not running** (no process, so no live mapping and no live reading).
-- `SDK\Include\RTSSSharedMemory.h` is present and was read: the app-entry
-  fields and their offsets are derived from the declared layout, not guessed.
-  The ring-buffer index formula is the shipped
-  `OverlayDataProviderInternal.cpp`'
+- `SDK\Include\RTSSSharedMemory.h` is present and was read. The ring-buffer
+  index formula is the shipped `OverlayDataProviderInternal.cpp`'
   `(dwPos + dwStatFrameTimeBufPos) & 1023`.
+- **Compiler offset probe** (`Add-Type` + `Marshal.OffsetOf` on
+  `LayoutKind.Sequential` structs mirroring the declared fields):
+
+  | Field | Offset |
+  |---|---|
+  | `Header.dwVersion` | 4 |
+  | `Header.dwAppEntrySize` | 8 |
+  | `Header.dwAppArrOffset` | 12 |
+  | `Header.dwAppArrSize` | 16 |
+  | `Header.dwLastForegroundAppProcessID` | 68 |
+  | `AppEntry.dwProcessID` | 0 |
+  | `AppEntry.szName` | 4 |
+  | `AppEntry.dwTime1` | 272 |
+  | `AppEntry.dwStatFrameTimeBuf` | 924 |
+  | `AppEntry.dwStatFrameTimeBufPos` | **5020** |
+  | `AppEntry.dwStatFrameTimeBufFramerate` | **5024** |
+  | `Header` size / `AppEntry` size | 72 / 5028 |
+
+  A hand-summed table read 5024 as `dwStatFrameTimeBufPos`, which is actually
+  `dwStatFrameTimeBufFramerate`; every live reading would have been wrong. The
+  implementation now declares the structs and reads fields by name through
+  `Marshal.PtrToStructure`, so no summed offset remains to be wrong.
+- **Synthetic-mapping A/B** (no RTSS running, a named mapping built from the
+  header above and one `game.exe` entry whose ring advances at 100 fps): the
+  hand-summed `5024` script emitted **0** frame lines; the identical script
+  with only `5024 → 5020` emitted **137** `frame` lines, all
+  `{"frametimeMs":6.944,"app":"game.exe"}`. The same harness now feeds the
+  Windows layout/traversal test in `rtss.windows.test.ts`.
 - PresentMon is not installed standalone. RTSS bundles a copy under its own
   tree; that copy is not a dependency the product may ship.
 
-The probe establishes the layout and the absence of a live source. It does not
-establish a live reading; the adapter is therefore verified against the header
-and against a parser/window test double, and a live reading is reported as
-unverified.
+The probe establishes the layout through a compiler rather than a reading of
+the header prose, and establishes the absence of a live source. It does not
+establish a live reading; a live RTSS run is reported as unverified.
 
 ## Decision
 
@@ -139,7 +164,9 @@ supervisor. The script emits one JSON line per newly observed frame
 (`{"kind":"frame","frametimeMs":…,"app":…}`), plus an `idle` heartbeat and a
 one-shot `unavailable` naming RTSS; it never launches or hooks anything. The
 TypeScript `FrameWindow` owns the rolling windows, so both halves are testable
-without RTSS present. Header offsets come from the SDK header and are embedded
-beside the script; the mapping name and signature are checked and an absent RTSS
-is a reported `unavailable`, never a zero reading. PresentMon is deferred to
-Task 6.2, where its binary and licence are the subject.
+without RTSS present. The app and header structs are declared with
+`LayoutKind.Sequential` and read through the runtime marshaler; a golden-table
+test pins the marshaler's offsets, and a synthetic entry array proves selection
+and ring traversal without RTSS. The mapping name and signature are checked and
+an absent RTSS is a reported `unavailable`, never a zero reading. PresentMon is
+deferred to Task 6.2, where its binary and licence are the subject.

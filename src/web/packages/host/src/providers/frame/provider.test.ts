@@ -298,17 +298,19 @@ describe("parseFrameUnavailable", () => {
 });
 
 describe("rtssScript", () => {
-  it("pins the SDK offsets, the mapping name, UTF-8 output and no launch", () => {
+  it("declares the SDK structs, the mapping name, UTF-8 output and no launch", () => {
     const script = rtssScript();
 
     expect(script).toContain(
       "[Console]::OutputEncoding = [Text.Encoding]::UTF8",
     );
     expect(script).toContain("RTSSSharedMemoryV2");
-    expect(script).toContain("$AppProcessId = 0");
-    expect(script).toContain("$AppName = 4");
-    expect(script).toContain("$AppStatFrameTimeBuf = 924");
-    expect(script).toContain("$AppStatFrameTimeBufPos = 5024");
+    expect(script).toContain("LayoutKind.Sequential");
+    expect(script).toContain("dwStatFrameTimeBufPos");
+    expect(script).toContain("dwStatFrameTimeBufFramerate");
+    expect(script).toContain("Marshal.PtrToStructure");
+    // No hand-summed offsets: the marshaler owns the layout.
+    expect(script).not.toMatch(/\$AppStatFrameTimeBuf(Pos)?\s*=\s*\d+/);
     expect(script).not.toContain("Start-Process");
     expect(script).not.toContain("PresentMon");
   });
