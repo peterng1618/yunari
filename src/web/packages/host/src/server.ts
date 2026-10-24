@@ -28,6 +28,7 @@ import {
   GAME_APP_ID,
   GAME_ARTWORK_PREFIX,
   type GameArtworkSource,
+  readCachedCover,
 } from "./providers/game/box-art.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
 import {
@@ -275,6 +276,10 @@ export interface HostServerOptions {
   /** The running Steam game's local box art. Omitted when this host reads no
    *  Steam library; the route then answers 404 rather than inventing a picture. */
   readonly gameArtwork?: GameArtworkSource;
+  /** Where the store provider caches covers it looked up for a non-Steam game
+   *  (decision 0109). The route only reads it; the provider owns every download,
+   *  so a request never starts a fetch. Omitted keeps the route local-art only. */
+  readonly gameCoverCacheDir?: string;
   /** The Wallpaper Engine library on this PC. Omitted when this host serves
    *  none, and the listing then says it is not installed. */
   readonly wallpaperEngine?: WallpaperEngineSource;
@@ -1003,6 +1008,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const assets = options.assets;
   const artwork = options.artwork;
   const gameArtwork = options.gameArtwork;
+  const gameCoverCacheDir = options.gameCoverCacheDir;
   const wallpaperEngine = options.wallpaperEngine;
   const activeTheme = options.activeTheme;
   const thumbnails = options.thumbnails;
@@ -2631,10 +2637,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     // The running Steam game's box art is local bytes, so the app id is the
-    // whole allow-list: only an installed app has a cache file, and anything
-    // else is a 404 rather than a filesystem probe. A display reads it through
-    // the same credential as media artwork; loopback is this PC. The name is
-    // not content-addressed, so the cache is bounded rather than immutable.
+    // whole allow-list: only an installed app or a cover the store provider
+    // cached has a file, and anything else is a 404 rather than a filesystem
+    // probe. A display reads it through the same credential as media artwork;
+    // loopback is this PC. The name is not content-addressed, so the cache is
+    // bounded rather than immutable. The downloaded cover is read only, never
+    // fetched: the provider is the one owner of the store's CDN (decision 0109).
     if (url.pathname.startsWith(GAME_ARTWORK_PREFIX)) {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
@@ -2642,7 +2650,18 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       const name = url.pathname.slice(GAME_ARTWORK_PREFIX.length);
-      const appId = name.endsWith(".jpg") ? name.slice(0, -".jpg".length) : "";
+      const extension = name.endsWith(".jpg")
+        ? "jpg"
+        : name.endsWith(".png")
+          ? "png"
+          : undefined;
+
+      if (extension === undefined) {
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      const appId = name.slice(0, -(extension.length + 1));
 
       if (!GAME_APP_ID.test(appId)) {
         sendText(response, 404, "Not found.");
@@ -2657,8 +2676,26 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
-      const bytes =
-        gameArtwork === undefined ? undefined : await gameArtwork.read(appId);
+      // Local library art first: it costs no network, and Steam only writes the
+      // JPEG. A cached remote cover is the fallback for a non-Steam game.
+      let bytes =
+        extension === "jpg" && gameArtwork !== undefined
+          ? await gameArtwork.read(appId)
+          : undefined;
+      let contentType = "image/jpeg";
+
+      if (bytes === undefined) {
+        const cached = await readCachedCover(
+          gameCoverCacheDir,
+          appId,
+          extension,
+        );
+
+        if (cached !== undefined) {
+          bytes = cached.bytes;
+          contentType = cached.contentType;
+        }
+      }
 
       if (bytes === undefined) {
         sendText(response, 404, "Not found.");
@@ -2666,7 +2703,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       response.writeHead(200, {
-        "content-type": "image/jpeg",
+        "content-type": contentType,
         "content-length": bytes.byteLength,
         "cache-control": "private, max-age=3600",
         "x-content-type-options": "nosniff",

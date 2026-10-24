@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
 import { type ListenableServer, listenWithFallback } from "./cli/net.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
+import { MAX_BOX_ART_BYTES } from "./providers/game/box-art.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
 import { createArtworkCache } from "./providers/media/artwork.js";
 import type { SampleContext, SensorProvider } from "./providers/provider.js";
@@ -8755,14 +8756,20 @@ describe("The media artwork route", () => {
 
 describe("The game box art route", () => {
   const BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+  const PNG_BYTES = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01,
+  ]);
 
   let directory: string;
+  let cache: string;
   let hosted: ReturnType<typeof createHostServer> | undefined;
 
   beforeEach(async () => {
     directory = await fs.mkdtemp(
       path.join(os.tmpdir(), "yunari-game-art-route-"),
     );
+    cache = path.join(directory, "game-metadata");
+    await fs.mkdir(cache, { recursive: true });
   });
 
   afterEach(async () => {
@@ -8816,7 +8823,8 @@ describe("The game box art route", () => {
 
     for (const name of [
       "10",
-      "10.png",
+      "10.gif",
+      "10.jpg.png",
       "10.jpg/extra",
       "abc.jpg",
       "12345678901.jpg",
@@ -8842,6 +8850,86 @@ describe("The game box art route", () => {
     ).toBe(404);
   });
 
+  it("serves a non-installed app's cached remote JPEG cover", async () => {
+    await fs.writeFile(path.join(cache, "1201270.jpg"), BYTES);
+    const running = launch({ gameCoverCacheDir: cache });
+
+    const answer = await request(
+      running.server,
+      "GET",
+      "/api/game/artwork/1201270.jpg",
+    );
+
+    expect(answer.status).toBe(200);
+    expect(answer.headers["content-type"]).toBe("image/jpeg");
+    expect(answer.headers["cache-control"]).toBe("private, max-age=3600");
+    expect(answer.headers["x-content-type-options"]).toBe("nosniff");
+    expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
+  });
+
+  it("serves a cached remote PNG cover as image/png", async () => {
+    await fs.writeFile(path.join(cache, "1201270.png"), PNG_BYTES);
+    const running = launch({ gameCoverCacheDir: cache });
+
+    const answer = await request(
+      running.server,
+      "GET",
+      "/api/game/artwork/1201270.png",
+    );
+
+    expect(answer.status).toBe(200);
+    expect(answer.headers["content-type"]).toBe("image/png");
+    expect(Buffer.compare(answer.body, Buffer.from(PNG_BYTES))).toBe(0);
+  });
+
+  it("404s when neither installed art nor a cached cover exists", async () => {
+    const running = launch({ gameCoverCacheDir: cache });
+
+    expect(
+      (await request(running.server, "GET", "/api/game/artwork/999.jpg"))
+        .status,
+    ).toBe(404);
+    expect(
+      (await request(running.server, "GET", "/api/game/artwork/999.png"))
+        .status,
+    ).toBe(404);
+  });
+
+  it("404s a cached cover whose bytes do not match its extension", async () => {
+    await fs.writeFile(path.join(cache, "1201270.jpg"), PNG_BYTES);
+    const running = launch({ gameCoverCacheDir: cache });
+
+    expect(
+      (await request(running.server, "GET", "/api/game/artwork/1201270.jpg"))
+        .status,
+    ).toBe(404);
+  });
+
+  it("404s a cached cover that links outside the cache directory", async () => {
+    const outside = path.join(directory, "outside.jpg");
+    await fs.writeFile(outside, BYTES);
+    await fs.symlink(outside, path.join(cache, "1201270.jpg"), "file");
+    const running = launch({ gameCoverCacheDir: cache });
+
+    expect(
+      (await request(running.server, "GET", "/api/game/artwork/1201270.jpg"))
+        .status,
+    ).toBe(404);
+  });
+
+  it("404s an oversized cached cover", async () => {
+    await fs.writeFile(
+      path.join(cache, "1201270.jpg"),
+      new Uint8Array(MAX_BOX_ART_BYTES + 1),
+    );
+    const running = launch({ gameCoverCacheDir: cache });
+
+    expect(
+      (await request(running.server, "GET", "/api/game/artwork/1201270.jpg"))
+        .status,
+    ).toBe(404);
+  });
+
   it("lets a paired display read it and refuses an unpaired remote", async () => {
     const displays = createDisplayStore(directory);
     const token = newToken();
@@ -8852,6 +8940,30 @@ describe("The game box art route", () => {
     const url = "/api/game/artwork/10.jpg";
 
     expect((await request(running.server, "GET", url)).status).toBe(200);
+
+    expect(
+      (await request(running.server, "GET", url, undefined, lan)).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await request(running.server, "GET", url, undefined, {
+          ...lan,
+          headers: { "x-yunari-session": token },
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  it("guards a cached cover exactly like installed art", async () => {
+    await fs.writeFile(path.join(cache, "1201270.jpg"), BYTES);
+    const displays = createDisplayStore(directory);
+    const token = newToken();
+    await displays.create("phone", token);
+    const running = launch({ displays, gameCoverCacheDir: cache });
+
+    const lan = { remoteAddress: "192.168.1.50" };
+    const url = "/api/game/artwork/1201270.jpg";
 
     expect(
       (await request(running.server, "GET", url, undefined, lan)).status,

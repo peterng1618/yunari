@@ -114,6 +114,88 @@ export interface GameArtworkSource {
   read(appId: string): Promise<Uint8Array | undefined>;
 }
 
+export type CoverExtension = "jpg" | "png";
+
+export interface CachedCover {
+  readonly bytes: Uint8Array;
+  readonly contentType: "image/jpeg" | "image/png";
+}
+
+/** The extension the bytes themselves declare, never the file name's. */
+function sniffImage(bytes: Uint8Array): CoverExtension | undefined {
+  const at = (index: number): number => bytes[index] ?? -1;
+
+  if (at(0) === 0xff && at(1) === 0xd8 && at(2) === 0xff) return "jpg";
+  if (
+    at(0) === 0x89 &&
+    at(1) === 0x50 &&
+    at(2) === 0x4e &&
+    at(3) === 0x47 &&
+    at(4) === 0x0d &&
+    at(5) === 0x0a &&
+    at(6) === 0x1a &&
+    at(7) === 0x0a
+  ) {
+    return "png";
+  }
+
+  return undefined;
+}
+
+/**
+ * True when the file resolves inside the cache directory. A junction or symlink
+ * named `<appId>.<ext>` must not turn the route into a read of an arbitrary
+ * user file.
+ */
+async function insideCoverCache(
+  directory: string,
+  file: string,
+): Promise<boolean> {
+  try {
+    const cache = await fs.realpath(directory);
+    const real = await fs.realpath(file);
+    const relative = path.relative(cache, real);
+
+    return (
+      relative !== "" &&
+      !relative.startsWith("..") &&
+      !path.isAbsolute(relative)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A cover the store provider already downloaded, or undefined. The route serves
+ * bytes only: a miss never starts a fetch, so the provider stays the one owner
+ * of Valve's CDN (decision 0109). The id is validated before any path work, and
+ * the bytes must match the extension they are served under.
+ */
+export async function readCachedCover(
+  cacheDir: string | undefined,
+  appId: string,
+  extension: CoverExtension,
+  readFile: (file: string) => Promise<Uint8Array> = (target) =>
+    fs.readFile(target),
+): Promise<CachedCover | undefined> {
+  if (cacheDir === undefined || !GAME_APP_ID.test(appId)) return undefined;
+
+  const id = Number(appId);
+  if (!Number.isInteger(id) || id <= 0) return undefined;
+
+  const file = path.join(cacheDir, `${id}.${extension}`);
+  if (!(await insideCoverCache(cacheDir, file))) return undefined;
+
+  const bytes = await readBoxArt(file, readFile);
+  if (bytes === undefined || sniffImage(bytes) !== extension) return undefined;
+
+  return {
+    bytes,
+    contentType: extension === "png" ? "image/png" : "image/jpeg",
+  };
+}
+
 export interface GameArtworkOptions {
   readonly steamRoot?: () => Promise<string | undefined>;
   readonly loadSteamApps?: (root: string) => Promise<readonly SteamApp[]>;

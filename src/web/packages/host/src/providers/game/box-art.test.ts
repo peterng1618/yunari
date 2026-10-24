@@ -7,6 +7,7 @@ import {
   findBoxArt,
   MAX_BOX_ART_BYTES,
   readBoxArt,
+  readCachedCover,
 } from "./box-art.js";
 import type { SteamApp } from "./steam-library.js";
 
@@ -100,6 +101,95 @@ describe("readBoxArt", () => {
 
     expect(bytes).toBeUndefined();
     expect(reads).toBe(0);
+  });
+});
+
+describe("readCachedCover", () => {
+  const PNG = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01,
+  ]);
+
+  function coverFile(extension: "jpg" | "png"): string {
+    return path.join(root, "game-metadata", `1201270.${extension}`);
+  }
+
+  async function writeCover(extension: "jpg" | "png", bytes: Uint8Array) {
+    await fs.mkdir(path.dirname(coverFile(extension)), { recursive: true });
+    await fs.writeFile(coverFile(extension), bytes);
+  }
+
+  it("reads a cached JPEG and names its content type", async () => {
+    await writeCover("jpg", BYTES);
+    const cached = await readCachedCover(
+      path.dirname(coverFile("jpg")),
+      "1201270",
+      "jpg",
+    );
+
+    expect(cached?.contentType).toBe("image/jpeg");
+    expect(Array.from(cached?.bytes ?? [])).toEqual(Array.from(BYTES));
+  });
+
+  it("reads a cached PNG and names its content type", async () => {
+    await writeCover("png", PNG);
+    const cached = await readCachedCover(
+      path.dirname(coverFile("png")),
+      "1201270",
+      "png",
+    );
+
+    expect(cached?.contentType).toBe("image/png");
+    expect(Array.from(cached?.bytes ?? [])).toEqual(Array.from(PNG));
+  });
+
+  it("refuses bytes whose magic number does not match the extension", async () => {
+    await writeCover("jpg", PNG);
+    await writeCover("png", BYTES);
+    const cacheDir = path.dirname(coverFile("jpg"));
+
+    expect(await readCachedCover(cacheDir, "1201270", "jpg")).toBeUndefined();
+    expect(await readCachedCover(cacheDir, "1201270", "png")).toBeUndefined();
+  });
+
+  it("refuses a file that links outside the cache directory", async () => {
+    const outside = path.join(tmp, "outside.jpg");
+    await fs.writeFile(outside, BYTES);
+    const cacheDir = path.join(root, "game-metadata");
+    await fs.mkdir(cacheDir, { recursive: true });
+    await fs.symlink(outside, path.join(cacheDir, "1201270.jpg"), "file");
+
+    expect(await readCachedCover(cacheDir, "1201270", "jpg")).toBeUndefined();
+  });
+
+  it("refuses an oversized file before reading it", async () => {
+    await writeCover("jpg", new Uint8Array(MAX_BOX_ART_BYTES + 1));
+    let reads = 0;
+
+    const cached = await readCachedCover(
+      path.dirname(coverFile("jpg")),
+      "1201270",
+      "jpg",
+      async () => {
+        reads += 1;
+        return new Uint8Array();
+      },
+    );
+
+    expect(cached).toBeUndefined();
+    expect(reads).toBe(0);
+  });
+
+  it("refuses a non-positive id, a malformed id and no cache directory", async () => {
+    await writeCover("jpg", BYTES);
+    const cacheDir = path.dirname(coverFile("jpg"));
+
+    for (const id of ["0", "00", "abc", "12e7", "-1", "1.5"]) {
+      expect(await readCachedCover(cacheDir, id, "jpg"), id).toBeUndefined();
+    }
+    expect(await readCachedCover(undefined, "1201270", "jpg")).toBeUndefined();
+    expect(
+      await readCachedCover(path.join(tmp, "absent"), "1201270", "jpg"),
+    ).toBeUndefined();
   });
 });
 

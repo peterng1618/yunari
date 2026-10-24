@@ -230,9 +230,14 @@ export async function run(argv: readonly string[]): Promise<number> {
     namedSteamRoot === undefined || namedSteamRoot === ""
       ? undefined
       : () => Promise.resolve(namedSteamRoot);
+  const gameMetadataCacheDir = path.join(
+    path.dirname(settingsDir),
+    "cache",
+    "game-metadata",
+  );
   const gameStore = createSteamStore({
     fetchImpl: (input, init) => fetch(input, init),
-    cacheDir: path.join(path.dirname(settingsDir), "cache", "game-metadata"),
+    cacheDir: gameMetadataCacheDir,
   });
   const gameProvider = new GameProvider({
     ...(steamRoot === undefined ? {} : { steamRoot }),
@@ -380,6 +385,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     gameArtwork: createGameArtwork(
       steamRoot === undefined ? {} : { steamRoot },
     ),
+    gameCoverCacheDir: gameMetadataCacheDir,
     onDisplayChange: (settings) => clockProvider.setTimeZone(settings.timeZone),
     activeTheme,
     // Both providers know the machine's devices; LHM's list is richer, so its
