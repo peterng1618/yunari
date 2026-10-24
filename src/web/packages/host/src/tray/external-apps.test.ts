@@ -204,6 +204,50 @@ it("starts LHM again after the owned process was stopped", async () => {
   expect(launchLhm).toHaveBeenCalledTimes(2);
 });
 
+it("starts LHM again after the previous process exited on its own", async () => {
+  const launchLhm = vi.fn(async () => ({
+    started: true,
+    stop: () => undefined,
+  }));
+  const apps = createExternalApps({
+    platform: "win32",
+    lhmUrl: "http://127.0.0.1:8085",
+    lhmDefaultExecutable: "C:\\app\\lhm.exe",
+    exists: () => true,
+    listProcesses: async () => false,
+    fetchImpl: async () => ({ ok: false }),
+    launchLhm,
+  });
+  expect((await apps.startLhm()).ok).toBe(true);
+  expect((await apps.startLhm()).ok).toBe(true);
+  expect(launchLhm).toHaveBeenCalledTimes(2);
+});
+
+it("releases the previous owned LHM before replacing its stop", async () => {
+  const firstStop = vi.fn();
+  const secondStop = vi.fn();
+  const launchLhm = vi
+    .fn()
+    .mockResolvedValueOnce({ started: true, stop: firstStop })
+    .mockResolvedValueOnce({ started: true, stop: secondStop });
+  const apps = createExternalApps({
+    platform: "win32",
+    lhmUrl: "http://127.0.0.1:8085",
+    lhmDefaultExecutable: "C:\\app\\lhm.exe",
+    exists: () => true,
+    listProcesses: async () => false,
+    fetchImpl: async () => ({ ok: false }),
+    launchLhm,
+  });
+  expect(await apps.startLhm()).toMatchObject({ ok: true });
+  expect(await apps.startLhm()).toMatchObject({ ok: true });
+  expect(launchLhm).toHaveBeenCalledTimes(2);
+  expect(firstStop).toHaveBeenCalledTimes(1);
+  apps.stopOwnedLhm();
+  expect(secondStop).toHaveBeenCalledTimes(1);
+  expect(firstStop).toHaveBeenCalledTimes(1);
+});
+
 it("stops a launch that resolves after Exit", async () => {
   const stop = vi.fn();
   let release: (() => void) | undefined;

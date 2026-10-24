@@ -271,11 +271,13 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
 
       // The launcher returns a live stop even with `started: false`: it spawned
       // a process that never answered. Keep it either way; a later launch
-      // replaces it, so a failed launch does not block a retry.
+      // replaces it, so a failed launch does not block a retry. The probes can
+      // miss a process we own, so release the old handle rather than orphan it.
       if (stopWhenSettled) {
         stopWhenSettled = false;
         result.stop();
       } else {
+        ownedStop?.();
         ownedStop = result.stop;
       }
 

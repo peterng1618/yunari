@@ -21,9 +21,9 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 ## Last completed change
 
 - **External programs:** `host/src/tray/external-apps.ts` detects LHM and RTSS on Windows and starts them on request.
-- **LHM** starts through `launchLhm`, keeps its stop on every result, and only an in-flight launch blocks a retry.
+- **LHM** starts through `launchLhm`, keeps its stop on every result, releases the old handle before replacing it, and only an in-flight launch blocks a retry.
 - **RTSS probes before spawning** and has no stop; failed probes read as absent, and both programs are absent off Windows.
-- **Tests:** 12 pass in `packages/host/src/tray/external-apps.test.ts`.
+- **Tests:** 14 pass in `packages/host/src/tray/external-apps.test.ts`.
 
 ## Next
 
