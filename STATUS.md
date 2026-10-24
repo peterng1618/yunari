@@ -22,8 +22,7 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Next
 
-1. Task 1.3: `addText` constructs the chosen class (`IText` for a click, `Textbox` for a drag).
-2. Task 1.4: place text by click or drag through the one text route.
+1. Task 1.4: place text by click or drag through the one text route.
 
 ## Blockers / unverified
 

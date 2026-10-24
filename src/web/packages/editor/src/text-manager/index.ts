@@ -119,6 +119,16 @@ function isText(value: unknown): value is PlanTextObject & {
   return value instanceof IText;
 }
 
+/** Fabric's floor is 1 and a `NaN` propagates into the clip, so refuse both. */
+function isBoxDimension(box: {
+  readonly width: number;
+  readonly height: number;
+}): boolean {
+  return [box.width, box.height].every(
+    (value) => Number.isFinite(value) && value >= 1,
+  );
+}
+
 /**
  * A double-click on a text object: it shows the run's binding, selects the
  * whole run so typing replaces it, and keeps what was typed.
@@ -233,6 +243,11 @@ export function createTextManager(
   return {
     addText(options = {}) {
       const { box, text: content = "", ...rest } = options;
+      if (box !== undefined && !isBoxDimension(box)) {
+        throw new Error(
+          "A text box needs a finite width and height of at least 1.",
+        );
+      }
       const id = `text-${crypto.randomUUID()}`;
       let text: IText;
       if (box === undefined) {
@@ -258,6 +273,7 @@ export function createTextManager(
         guardBoxWidth(text);
         // The drawn rectangle is the authored box, both dimensions of it. A
         // measurement here would make the box the author drew a suggestion.
+        // Runs are a precondition: the write refuses without authored content.
         writeAuthoredBoxDimension(text, "width", box.width);
         writeAuthoredBoxDimension(text, "height", box.height);
       }

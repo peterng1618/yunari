@@ -142,13 +142,41 @@ describe("TextManager", () => {
     expect(authored.box).toEqual(box);
     expect(text.textLines).toHaveLength(1);
     expect(text.width).toBe(box.width);
-    // The guard is installed, so a width write stays where it was put.
-    text.set("width", 150);
-    expect(text.width).toBe(150);
+    // Below the longest unbreakable word: unguarded, Fabric's `initDimensions`
+    // widens to that word, so this is the width the guard has to hold.
+    expect((text as Textbox).dynamicMinWidth).toBeGreaterThan(40);
+    text.set("width", 40);
+    expect(text.width).toBe(40);
     expect(
       (text.get(YUNARI_TEXT_PROPERTY) as { box?: { width: number } }).box
         ?.width,
     ).toBe(200);
+  });
+
+  it("refuses a box it could not draw, before constructing anything", () => {
+    // A zero or NaN dimension becomes a clip that hides the text, and the
+    // construction owner reports the throw. Nothing may be added or saved.
+    const canvas = new Canvas(document.createElement("canvas"));
+    const save = vi.fn();
+    const manager = createTextManager(canvas, save);
+    const authored = { runs: [{ kind: "literal" as const, text: "New text" }] };
+
+    expect(() =>
+      manager.addText({
+        text: "New text",
+        box: { width: 0, height: 80 },
+        yunariText: authored,
+      }),
+    ).toThrow(/at least 1/);
+    expect(() =>
+      manager.addText({
+        text: "New text",
+        box: { width: 200, height: Number.NaN },
+        yunariText: authored,
+      }),
+    ).toThrow(/at least 1/);
+    expect(canvas.getObjects()).toHaveLength(0);
+    expect(save).not.toHaveBeenCalled();
   });
 });
 
