@@ -24,10 +24,13 @@ import { isDesktopSurface } from "./surface.js";
  * — every request it makes is same-origin — and the host asks the fixture for
  * the name exactly once.
  *
- * The second arm is the honest offline case: with the fixture stopped and the
- * cache cleared, the authored picture returns and the display says why; with
- * only the cached cover restored, that cover renders with no store request at
- * all.
+ * Two offline arms, each proving only what it can observe. Arm 1 stops the
+ * fixture and clears the cover cache, then reloads: the host still holds the
+ * match in memory, so the canonical name stays and only the cover is gone —
+ * this proves the missing-cover fallback, not a cold failed lookup. Arm 2
+ * restarts the fixture answering 500 while only the cached cover is restored:
+ * the cover renders and the listening fixture records zero requests, so the
+ * "no store request" claim is observable rather than vacuous.
  *
  * Its own host on its own port, over an app folder minted under the OS temp
  * directory, so no other spec's store, cache or port is shared.
@@ -173,11 +176,21 @@ function seedLibrary(): void {
   }
 }
 
-/** A store that plays the two endpoints and the portrait the host asks for. */
-async function startFixture(): Promise<Server> {
+/**
+ * A store that plays the two endpoints and the portrait the host asks for.
+ * `fail` makes every endpoint answer 500 while still recording the request,
+ * so arm 2 can observe that the host made none.
+ */
+async function startFixture(fail = false): Promise<Server> {
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? "/", FIXTURE);
     fixtureRequests.push(url);
+
+    if (fail) {
+      response.writeHead(500);
+      response.end();
+      return;
+    }
 
     if (url.pathname === "/api/storesearch/") {
       const body = {
@@ -407,12 +420,20 @@ test.describe("a non-Steam game's name and cover from the store", () => {
       .poll(() => existsSync(coverFile()), { timeout: 20_000 })
       .toBe(true);
 
-    // Offline, with nothing cached: the authored picture returns and the
-    // display carries a reason rather than a stale or invented image.
+    // Arm 1 — the missing-cover fallback. The host still holds the match in
+    // memory, so the canonical name stays; with the cover cache cleared, only
+    // the cover is gone. This is not a cold failed lookup.
     await stopFixture();
     rmSync(cacheDir, { recursive: true, force: true });
     await page.reload();
     await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible();
+
+    await expect
+      .poll(() => canvasProp(page, TEXT_NODE_ID, "text"), {
+        timeout: 25_000,
+        message: "the in-memory match did not survive the reload",
+      })
+      .toBe(CANONICAL_NAME);
 
     await expect
       .poll(async () => (await imageState(page))?.width, {
@@ -426,8 +447,10 @@ test.describe("a non-Steam game's name and cover from the store", () => {
       { timeout: 20_000 },
     );
 
-    // Only the cover is restored, and the fixture stays stopped: a cache is
-    // what makes the cover survive an outage, so no store request is needed.
+    // Arm 2 — the cached cover survives an outage. The fixture listens again
+    // but answers 500, so any request the host makes is recorded; only the
+    // cover file is restored, and the cover must render with zero requests.
+    fixture = await startFixture(true);
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(coverFile(), COVER);
     const requestsBefore = fixtureRequests.length;

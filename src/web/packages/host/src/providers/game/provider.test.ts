@@ -13,8 +13,10 @@ import {
   NO_ARTWORK_MESSAGE,
   NO_GAME_MESSAGE,
   NO_STORE_MATCH_MESSAGE,
+  STORE_UNAVAILABLE_MESSAGE,
 } from "./provider.js";
 import type { SteamApp } from "./steam-library.js";
+import type { StoreLookupResult } from "./store-metadata.js";
 
 class FakeChild extends EventEmitter {
   readonly pid: number;
@@ -416,7 +418,13 @@ describe("GameProvider samples", () => {
 });
 
 describe("GameProvider store metadata", () => {
-  const EXAMPLE_MATCH = { id: 1201270, name: "Example Game" };
+  const EXAMPLE_MATCH: StoreLookupResult = {
+    kind: "match",
+    id: 1201270,
+    name: "Example Game",
+  };
+  const NO_MATCH: StoreLookupResult = { kind: "none" };
+  const UNAVAILABLE: StoreLookupResult = { kind: "unavailable" };
   const OTHER_EXE = "C:\\Games\\Other\\other.exe";
 
   interface FakeStore {
@@ -427,7 +435,7 @@ describe("GameProvider store metadata", () => {
   }
 
   function fakeStore(
-    answer: (name: string) => { id: number; name: string } | undefined,
+    answer: (name: string) => StoreLookupResult,
     coverUrl: (appId: number) => string | undefined = (appId) =>
       `/api/game/artwork/${appId}.jpg`,
   ): FakeStore {
@@ -552,7 +560,7 @@ describe("GameProvider store metadata", () => {
   it("names a non-Steam app from the store's canonical match", async () => {
     vi.useFakeTimers();
     const fake = fakeStore((name) =>
-      name === "Example Game" ? EXAMPLE_MATCH : undefined,
+      name === "Example Game" ? EXAMPLE_MATCH : NO_MATCH,
     );
     const h = harness({
       store: fake.store,
@@ -583,7 +591,7 @@ describe("GameProvider store metadata", () => {
 
   it("searches the executable's file stem when ProductName is absent", async () => {
     vi.useFakeTimers();
-    const fake = fakeStore(() => undefined);
+    const fake = fakeStore(() => NO_MATCH);
     const h = harness({ store: fake.store });
     await h.sample(["game.running"]);
     h.emit(h.children[0] as FakeChild, foregroundLine(99, OTHER_EXE, "other"));
@@ -594,6 +602,34 @@ describe("GameProvider store metadata", () => {
     expect(samples.get("game.name")?.status).toBe("unavailable");
     expect(samples.get("game.name")?.textValue).toBeUndefined();
     expect(samples.get("game.name")?.message).toBe(NO_STORE_MATCH_MESSAGE);
+    expect(samples.get("game.app")).toMatchObject({
+      status: "ok",
+      textValue: "other.exe",
+    });
+    h.provider.stop();
+  });
+
+  it("reports an unreachable store as a different reason than no match", async () => {
+    vi.useFakeTimers();
+    const fake = fakeStore(() => UNAVAILABLE);
+    const h = harness({
+      store: fake.store,
+      productName: async () => "Example Game",
+    });
+    await h.sample(["game.running"]);
+    h.emit(h.children[0] as FakeChild, foregroundLine(99, OTHER_EXE, "other"));
+
+    const samples = await h.sample(["game.name", "game.running", "game.app"]);
+
+    expect(samples.get("game.name")).toMatchObject({
+      status: "unavailable",
+      message: STORE_UNAVAILABLE_MESSAGE,
+    });
+    expect(samples.get("game.name")?.message).not.toBe(NO_STORE_MATCH_MESSAGE);
+    expect(samples.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: true,
+    });
     expect(samples.get("game.app")).toMatchObject({
       status: "ok",
       textValue: "other.exe",
@@ -710,7 +746,10 @@ describe("GameProvider store metadata", () => {
       "game.app",
     ]);
 
-    expect(samples.get("game.name")?.status).toBe("unavailable");
+    expect(samples.get("game.name")).toMatchObject({
+      status: "unavailable",
+      message: STORE_UNAVAILABLE_MESSAGE,
+    });
     expect(samples.get("game.artwork")).toMatchObject({
       status: "unavailable",
       message: NO_ARTWORK_MESSAGE,

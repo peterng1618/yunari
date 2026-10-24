@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { MAX_BOX_ART_BYTES } from "./box-art.js";
 import { matchStoreGame, normalizeGameName } from "./name-match.js";
 
 /**
@@ -25,16 +26,29 @@ type ImageExtension = (typeof COVER_EXTENSIONS)[number];
 interface MatchEntry {
   readonly id: number;
   readonly name: string;
+  /** The spelling actually searched; another spelling may match anew. */
+  readonly term: string;
   readonly at: number;
 }
 
 interface NoneEntry {
   readonly none: true;
+  readonly term: string;
   readonly at: number;
 }
 
 type CacheEntry = MatchEntry | NoneEntry;
 type StoreCache = Record<string, CacheEntry>;
+
+/**
+ * `none` is the store's answer: it replied and no candidate survived the
+ * matcher. `unavailable` is no answer — a failed or timed-out request, or a
+ * suppression window — and must not be reported as "no such game".
+ */
+export type StoreLookupResult =
+  | { readonly kind: "match"; readonly id: number; readonly name: string }
+  | { readonly kind: "none" }
+  | { readonly kind: "unavailable" };
 
 interface AppDetails {
   readonly name: string | undefined;
@@ -54,10 +68,7 @@ export interface SteamStoreOptions {
 }
 
 export interface SteamStore {
-  lookup(
-    name: string,
-    signal?: AbortSignal,
-  ): Promise<{ id: number; name: string } | undefined>;
+  lookup(name: string, signal?: AbortSignal): Promise<StoreLookupResult>;
   /** The host-relative route that serves this app's cached cover. */
   cover(appId: number, signal?: AbortSignal): Promise<string | undefined>;
 }
@@ -188,8 +199,11 @@ function parseCache(text: string): StoreCache {
     const at = value["at"];
     if (typeof at !== "number" || !Number.isFinite(at)) continue;
 
+    const term = value["term"];
+    if (typeof term !== "string" || term.trim() === "") continue;
+
     if (value["none"] === true) {
-      cache[key] = { none: true, at };
+      cache[key] = { none: true, term, at };
       continue;
     }
 
@@ -202,7 +216,7 @@ function parseCache(text: string): StoreCache {
       typeof name === "string" &&
       name !== ""
     ) {
-      cache[key] = { id, name, at };
+      cache[key] = { id, name, term, at };
     }
   }
 
@@ -222,22 +236,55 @@ async function writeAtomic(
   await fs.rename(scratch, file);
 }
 
+/** Enough bytes for either magic number. */
+const MAGIC_BYTES = 8;
+
+/** The same size and magic rules the artwork route applies before serving. */
+async function matchesExtension(
+  file: string,
+  extension: ImageExtension,
+): Promise<boolean> {
+  try {
+    const stat = await fs.stat(file);
+    if (!stat.isFile() || stat.size > MAX_BOX_ART_BYTES) return false;
+
+    const handle = await fs.open(file, "r");
+
+    try {
+      const head = new Uint8Array(MAGIC_BYTES);
+      const { bytesRead } = await handle.read(head, 0, MAGIC_BYTES, 0);
+      return sniffImage(head.subarray(0, bytesRead)) === extension;
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A cached cover is advertised only if the route can serve it: within the size
+ * cap and with bytes matching the extension in its URL. Advertising a file the
+ * route refuses would be a permanent broken image.
+ */
 async function cachedCover(
   directory: string,
   appId: number,
 ): Promise<string | undefined> {
   for (const extension of COVER_EXTENSIONS) {
-    try {
-      const file = path.join(directory, `${appId}.${extension}`);
-      if ((await fs.stat(file)).isFile()) {
-        return `${ARTWORK_ROUTE}${appId}.${extension}`;
-      }
-    } catch {
-      // Not cached under this extension; try the other.
+    const file = path.join(directory, `${appId}.${extension}`);
+
+    if (await matchesExtension(file, extension)) {
+      return `${ARTWORK_ROUTE}${appId}.${extension}`;
     }
   }
 
   return undefined;
+}
+
+/** Whether a cached miss answered this exact spelling. */
+function sameTerm(left: string, right: string): boolean {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
 export function createSteamStore(options: SteamStoreOptions): SteamStore {
@@ -258,10 +305,10 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
   // A cover that failed is the same: the route asks once a second per display,
   // so a permanent miss or an outage would otherwise re-download every sample.
   const coverBackoffUntil = new Map<number, number>();
-  const pending = new Map<
-    string,
-    Promise<{ id: number; name: string } | undefined>
-  >();
+  const pending = new Map<string, Promise<StoreLookupResult>>();
+  // A cover is downloaded once per appid, even when two samples demand it
+  // before the first write lands.
+  const coverPending = new Map<number, Promise<string | undefined>>();
 
   function load(): Promise<void> {
     loading ??= (async () => {
@@ -319,7 +366,7 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
     name: string,
     key: string,
     signal: AbortSignal | undefined,
-  ): Promise<{ id: number; name: string } | undefined> {
+  ): Promise<StoreLookupResult> {
     try {
       const response = await fetchImpl(
         searchUrl(base, name),
@@ -327,33 +374,34 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
       );
       if (!response.ok) {
         backoffUntil.set(key, nowMs() + BACKOFF_MS);
-        return undefined;
+        return { kind: "unavailable" };
       }
 
       const winner = matchStoreGame(name, candidatesOf(await response.json()));
 
       if (winner === undefined) {
-        await store(key, { none: true, at: nowMs() });
-        return undefined;
+        await store(key, { none: true, term: name, at: nowMs() });
+        return { kind: "none" };
       }
 
       const details = await fetchDetails(winner.id, signal);
       if (details === undefined) {
         backoffUntil.set(key, nowMs() + BACKOFF_MS);
-        return undefined;
+        return { kind: "unavailable" };
       }
 
       const entry: MatchEntry = {
         id: winner.id,
         name: details.name ?? winner.name,
+        term: name,
         at: nowMs(),
       };
       await store(key, entry);
 
-      return { id: entry.id, name: entry.name };
+      return { kind: "match", id: entry.id, name: entry.name };
     } catch {
       backoffUntil.set(key, nowMs() + BACKOFF_MS);
-      return undefined;
+      return { kind: "unavailable" };
     }
   }
 
@@ -364,7 +412,15 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
     const response = await fetchImpl(url, requestInit(signal));
     if (!response.ok) return undefined;
 
-    return new Uint8Array(await response.arrayBuffer());
+    // The route refuses to serve a larger body, so buffering one would cache a
+    // cover no display can ever receive.
+    const declared = response.headers.get("content-length");
+    if (declared !== null && Number(declared) > MAX_BOX_ART_BYTES) {
+      return undefined;
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return bytes.byteLength > MAX_BOX_ART_BYTES ? undefined : bytes;
   }
 
   async function fetchCover(
@@ -383,10 +439,47 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
     return fetchBytes(headerImage, signal).catch(() => undefined);
   }
 
+  async function downloadCover(
+    appId: number,
+    signal: AbortSignal | undefined,
+  ): Promise<string | undefined> {
+    // Every failure below — no bytes, unrecognised bytes, an unwritable file,
+    // an aborted request — is suppressed until the window ends.
+    const failed = (): undefined => {
+      coverBackoffUntil.set(appId, nowMs() + BACKOFF_MS);
+      return undefined;
+    };
+
+    const bytes = await fetchCover(appId, signal);
+    if (bytes === undefined) return failed();
+
+    // The URL extension is not trusted; the bytes decide what this is and
+    // anything that is not an image writes nothing.
+    const extension = sniffImage(bytes);
+    if (extension === undefined) return failed();
+
+    const file = path.join(cacheDir, `${appId}.${extension}`);
+    scratchCount += 1;
+    const scratch = path.join(
+      cacheDir,
+      `.${appId}.${extension}.${process.pid}.${scratchCount}.tmp`,
+    );
+
+    try {
+      await writeAtomic(cacheDir, file, bytes, scratch);
+    } catch {
+      return failed();
+    }
+
+    coverBackoffUntil.delete(appId);
+    return `${ARTWORK_ROUTE}${appId}.${extension}`;
+  }
+
   return {
     async lookup(name, signal) {
       const key = normalizeGameName(name);
-      if (key === "") return undefined;
+      // Nothing to search, so nothing can match; the store is not at fault.
+      if (key === "") return { kind: "none" };
 
       await load();
 
@@ -394,13 +487,19 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
       // keys, and an inherited property is not a cached answer.
       const cached = Object.hasOwn(cache, key) ? cache[key] : undefined;
       if (cached !== undefined) {
-        return "none" in cached
-          ? undefined
-          : { id: cached.id, name: cached.name };
+        if (!("none" in cached)) {
+          return { kind: "match", id: cached.id, name: cached.name };
+        }
+
+        // A miss for "BioShock Ultimate" must not keep "BioShock" unnamed:
+        // only the spelling the store actually answered may stay cached.
+        if (sameTerm(cached.term, name)) return { kind: "none" };
       }
 
       const until = backoffUntil.get(key);
-      if (until !== undefined && nowMs() < until) return undefined;
+      if (until !== undefined && nowMs() < until) {
+        return { kind: "unavailable" };
+      }
 
       let request = pending.get(key);
 
@@ -426,36 +525,15 @@ export function createSteamStore(options: SteamStoreOptions): SteamStore {
       const until = coverBackoffUntil.get(appId);
       if (until !== undefined && nowMs() < until) return undefined;
 
-      // Every failure below — no bytes, unrecognised bytes, an unwritable file,
-      // an aborted request — is suppressed until the window ends.
-      const failed = (): undefined => {
-        coverBackoffUntil.set(appId, nowMs() + BACKOFF_MS);
-        return undefined;
-      };
+      const inFlight = coverPending.get(appId);
+      if (inFlight !== undefined) return inFlight;
 
-      const bytes = await fetchCover(appId, signal);
-      if (bytes === undefined) return failed();
+      const request = downloadCover(appId, signal).finally(() => {
+        coverPending.delete(appId);
+      });
+      coverPending.set(appId, request);
 
-      // The URL extension is not trusted; the bytes decide what this is and
-      // anything that is not an image writes nothing.
-      const extension = sniffImage(bytes);
-      if (extension === undefined) return failed();
-
-      const file = path.join(cacheDir, `${appId}.${extension}`);
-      scratchCount += 1;
-      const scratch = path.join(
-        cacheDir,
-        `.${appId}.${extension}.${process.pid}.${scratchCount}.tmp`,
-      );
-
-      try {
-        await writeAtomic(cacheDir, file, bytes, scratch);
-      } catch {
-        return failed();
-      }
-
-      coverBackoffUntil.delete(appId);
-      return `${ARTWORK_ROUTE}${appId}.${extension}`;
+      return request;
     },
   };
 }

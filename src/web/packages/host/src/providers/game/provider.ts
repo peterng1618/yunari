@@ -29,6 +29,7 @@ import {
   resolveSteamRoot,
   type SteamApp,
 } from "./steam-library.js";
+import type { StoreLookupResult } from "./store-metadata.js";
 
 /**
  * The game the user is playing, with Steam's local library for its name.
@@ -73,6 +74,7 @@ export const GAME_DESCRIPTORS: readonly SensorDescriptor[] = GAME_KEYS.map(
 export const WAITING_GAME_MESSAGE = "Waiting for the game helper.";
 export const NO_GAME_MESSAGE = "No game process is running.";
 export const NO_STORE_MATCH_MESSAGE = "No store match for this app.";
+export const STORE_UNAVAILABLE_MESSAGE = "The game store could not be reached.";
 export const NO_ARTWORK_MESSAGE = "Game artwork is not available yet.";
 const NO_PROCESS_NAME_MESSAGE = "The foreground process could not be named.";
 
@@ -112,10 +114,7 @@ export interface GameProviderOptions {
 
 /** The slice of Task 7.1's store client the provider needs. */
 export interface GameStore {
-  lookup(
-    name: string,
-    signal?: AbortSignal,
-  ): Promise<{ id: number; name: string } | undefined>;
+  lookup(name: string, signal?: AbortSignal): Promise<StoreLookupResult>;
   /** The host-relative route that serves this app's cached cover. */
   cover(appId: number, signal?: AbortSignal): Promise<string | undefined>;
 }
@@ -124,6 +123,8 @@ export interface GameStore {
 interface GameIdentity {
   readonly steam?: SteamApp;
   readonly store?: { readonly id: number; readonly name: string };
+  /** The lookup had no answer, so "no such game" would be a false reason. */
+  readonly storeUnavailable?: true;
 }
 
 interface RunningHelper {
@@ -391,7 +392,8 @@ export class GameProvider implements SensorProvider {
   /**
    * The identity a name or artwork reading needs. A Steam app answers from its
    * manifest without a search; a non-Steam app is looked up once by its local
-   * name. A failed lookup is a missing match, never the provider's failure.
+   * name. A failed lookup is a reason for that key, never the provider's
+   * failure, and is kept distinct from the store answering "no match".
    */
   async #identify(): Promise<GameIdentity> {
     const foreground = this.#currentForeground();
@@ -407,18 +409,22 @@ export class GameProvider implements SensorProvider {
     const localName = await this.#localName(foreground);
     if (localName === undefined) return {};
 
-    let match: { id: number; name: string } | undefined;
+    let result: StoreLookupResult;
 
     try {
-      match = await store.lookup(
+      result = await store.lookup(
         localName,
         AbortSignal.timeout(STORE_TIMEOUT_MS),
       );
     } catch {
-      match = undefined;
+      return { storeUnavailable: true };
     }
 
-    return match === undefined ? {} : { store: match };
+    if (result.kind === "match") {
+      return { store: { id: result.id, name: result.name } };
+    }
+
+    return result.kind === "unavailable" ? { storeUnavailable: true } : {};
   }
 
   /** The local name a store search can use: ProductName, else the file stem. */
@@ -521,9 +527,16 @@ export class GameProvider implements SensorProvider {
     if (semanticKey === "game.name") {
       const name = identity?.steam?.name ?? identity?.store?.name;
 
-      return name === undefined
-        ? absent(NO_STORE_MATCH_MESSAGE)
-        : { sensorId, timestamp, status: "ok", textValue: name };
+      if (name !== undefined) {
+        return { sensorId, timestamp, status: "ok", textValue: name };
+      }
+
+      // "No store match" is only true when the store answered.
+      return absent(
+        identity?.storeUnavailable === true
+          ? STORE_UNAVAILABLE_MESSAGE
+          : NO_STORE_MATCH_MESSAGE,
+      );
     }
 
     const name = this.#processName(foreground);

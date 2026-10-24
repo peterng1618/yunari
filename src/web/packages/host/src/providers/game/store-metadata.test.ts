@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { MAX_BOX_ART_BYTES } from "./box-art.js";
 import { createSteamStore } from "./store-metadata.js";
 
 const APP_ID = 1201270;
@@ -115,6 +116,7 @@ describe("Steam store lookup", () => {
     const h = harness(await cacheDir(), happyPath);
 
     await expect(h.store.lookup("Example Game™")).resolves.toEqual({
+      kind: "match",
       id: APP_ID,
       name: APP_NAME,
     });
@@ -150,11 +152,17 @@ describe("Steam store lookup", () => {
     const file = path.join(directory, "game-metadata.json");
     const stored = JSON.parse(await fs.readFile(file, "utf8")) as unknown;
     expect(stored).toEqual({
-      "example game": { id: APP_ID, name: APP_NAME, at: 1_000_000 },
+      "example game": {
+        id: APP_ID,
+        name: APP_NAME,
+        term: APP_NAME,
+        at: 1_000_000,
+      },
     });
 
     const second = harness(directory, happyPath);
     await expect(second.store.lookup("example game")).resolves.toEqual({
+      kind: "match",
       id: APP_ID,
       name: APP_NAME,
     });
@@ -169,13 +177,19 @@ describe("Steam store lookup", () => {
         : new Response("", { status: 500 }),
     );
 
-    await expect(h.store.lookup("Constructor")).resolves.toBeUndefined();
+    await expect(h.store.lookup("Constructor")).resolves.toEqual({
+      kind: "none",
+    });
     expect(h.calls).toHaveLength(1);
 
     const stored = JSON.parse(
       await fs.readFile(path.join(directory, "game-metadata.json"), "utf8"),
     ) as Record<string, unknown>;
-    expect(stored["constructor"]).toEqual({ none: true, at: 1_000_000 });
+    expect(stored["constructor"]).toEqual({
+      none: true,
+      term: "Constructor",
+      at: 1_000_000,
+    });
   });
 
   it("ignores bundle results and accepts only an app result", async () => {
@@ -193,6 +207,7 @@ describe("Steam store lookup", () => {
     });
 
     await expect(mixed.store.lookup(APP_NAME)).resolves.toEqual({
+      kind: "match",
       id: APP_ID,
       name: APP_NAME,
     });
@@ -201,7 +216,9 @@ describe("Steam store lookup", () => {
     const bundleOnly = harness(await cacheDir(), () =>
       json({ total: 1, items: [{ type: "bundle", id: 999, name: APP_NAME }] }),
     );
-    await expect(bundleOnly.store.lookup(APP_NAME)).resolves.toBeUndefined();
+    await expect(bundleOnly.store.lookup(APP_NAME)).resolves.toEqual({
+      kind: "none",
+    });
     expect(bundleOnly.calls).toHaveLength(1);
   });
 
@@ -210,7 +227,11 @@ describe("Steam store lookup", () => {
     const seeded: Record<string, unknown> = {};
 
     for (let index = 1; index <= 500; index += 1) {
-      seeded[`game ${index}`] = { none: true, at: index };
+      seeded[`game ${index}`] = {
+        none: true,
+        term: `Game ${index}`,
+        at: index,
+      };
     }
 
     await fs.writeFile(
@@ -224,7 +245,7 @@ describe("Steam store lookup", () => {
         : new Response("", { status: 500 });
 
     const h = harness(directory, miss);
-    await expect(h.store.lookup("New Game")).resolves.toBeUndefined();
+    await expect(h.store.lookup("New Game")).resolves.toEqual({ kind: "none" });
 
     const file = path.join(directory, "game-metadata.json");
     const stored = JSON.parse(await fs.readFile(file, "utf8")) as Record<
@@ -234,7 +255,11 @@ describe("Steam store lookup", () => {
     expect(Object.keys(stored)).toHaveLength(500);
     expect(stored["game 1"]).toBeUndefined();
     expect(stored["game 2"]).toBeDefined();
-    expect(stored["new game"]).toEqual({ none: true, at: 1_000_000 });
+    expect(stored["new game"]).toEqual({
+      none: true,
+      term: "New Game",
+      at: 1_000_000,
+    });
 
     // A restart reads the capped file: the survivor answers without a request,
     // the evicted name needs one.
@@ -248,6 +273,7 @@ describe("Steam store lookup", () => {
   it("tolerates an absent or corrupt cache file", async () => {
     const absent = harness(await cacheDir(), happyPath);
     await expect(absent.store.lookup(APP_NAME)).resolves.toEqual({
+      kind: "match",
       id: APP_ID,
       name: APP_NAME,
     });
@@ -259,6 +285,7 @@ describe("Steam store lookup", () => {
 
     const h = harness(corrupt, happyPath);
     await expect(h.store.lookup(APP_NAME)).resolves.toEqual({
+      kind: "match",
       id: APP_ID,
       name: APP_NAME,
     });
@@ -270,6 +297,7 @@ describe("Steam store lookup", () => {
     expect(stored["example game"]).toEqual({
       id: APP_ID,
       name: APP_NAME,
+      term: APP_NAME,
       at: 1_000_000,
     });
   });
@@ -281,25 +309,89 @@ describe("Steam store lookup", () => {
     expect(h.calls).toHaveLength(2);
   });
 
-  it("caches a no-match for the process life", async () => {
+  it("caches a no-match for the same spelling, on disk too", async () => {
     const directory = await cacheDir();
     const h = harness(directory, (call) => {
       if (call.url.pathname === "/api/storesearch/") return json(MISS);
       return new Response("", { status: 500 });
     });
 
-    await expect(h.store.lookup(APP_NAME)).resolves.toBeUndefined();
-    await expect(h.store.lookup(APP_NAME)).resolves.toBeUndefined();
+    await expect(h.store.lookup(APP_NAME)).resolves.toEqual({ kind: "none" });
+    await expect(h.store.lookup(APP_NAME)).resolves.toEqual({ kind: "none" });
     expect(h.calls).toHaveLength(1);
 
     const stored = JSON.parse(
       await fs.readFile(path.join(directory, "game-metadata.json"), "utf8"),
     ) as Record<string, unknown>;
-    expect(stored["example game"]).toEqual({ none: true, at: 1_000_000 });
+    expect(stored["example game"]).toEqual({
+      none: true,
+      term: APP_NAME,
+      at: 1_000_000,
+    });
 
     const restarted = harness(directory, happyPath);
-    await expect(restarted.store.lookup(APP_NAME)).resolves.toBeUndefined();
+    await expect(restarted.store.lookup(APP_NAME)).resolves.toEqual({
+      kind: "none",
+    });
     expect(restarted.calls).toHaveLength(0);
+  });
+
+  it("retries a cached miss that answered a different spelling", async () => {
+    const directory = await cacheDir();
+    const h = harness(directory, (call) => {
+      if (call.url.pathname === "/api/storesearch/") {
+        if (call.url.searchParams.get("term") === "BioShock Ultimate") {
+          return json(MISS);
+        }
+
+        return json({
+          total: 1,
+          items: [{ type: "app", id: 4242, name: "BioShock" }],
+        });
+      }
+
+      if (call.url.pathname === "/api/appdetails") {
+        return json({
+          "4242": {
+            success: true,
+            data: { name: "BioShock", header_image: HEADER },
+          },
+        });
+      }
+
+      return new Response("", { status: 404 });
+    });
+
+    await expect(h.store.lookup("BioShock Ultimate")).resolves.toEqual({
+      kind: "none",
+    });
+    expect(h.calls).toHaveLength(1);
+
+    // Same normalised key, new spelling: the cached miss must not answer it.
+    await expect(h.store.lookup("BioShock")).resolves.toEqual({
+      kind: "match",
+      id: 4242,
+      name: "BioShock",
+    });
+    expect(h.calls).toHaveLength(3);
+
+    const stored = JSON.parse(
+      await fs.readFile(path.join(directory, "game-metadata.json"), "utf8"),
+    ) as Record<string, unknown>;
+    expect(stored["bioshock"]).toEqual({
+      id: 4242,
+      name: "BioShock",
+      term: "BioShock",
+      at: 1_000_000,
+    });
+
+    // A repeated spelling reads the replacement; no third request.
+    await expect(h.store.lookup("bioshock")).resolves.toEqual({
+      kind: "match",
+      id: 4242,
+      name: "BioShock",
+    });
+    expect(h.calls).toHaveLength(3);
   });
 
   it("refuses a sequel and caches that refusal", async () => {
@@ -313,8 +405,12 @@ describe("Steam store lookup", () => {
       return json(details("Half-Life 2"));
     });
 
-    await expect(h.store.lookup("Half-Life")).resolves.toBeUndefined();
-    await expect(h.store.lookup("Half-Life")).resolves.toBeUndefined();
+    await expect(h.store.lookup("Half-Life")).resolves.toEqual({
+      kind: "none",
+    });
+    await expect(h.store.lookup("Half-Life")).resolves.toEqual({
+      kind: "none",
+    });
     expect(h.calls).toHaveLength(1);
   });
 
@@ -328,19 +424,26 @@ describe("Steam store lookup", () => {
         : json(details()),
     );
 
-    await expect(h.store.lookup(APP_NAME)).resolves.toBeUndefined();
+    await expect(h.store.lookup(APP_NAME)).resolves.toEqual({
+      kind: "unavailable",
+    });
     expect(h.calls).toHaveLength(1);
 
-    await expect(h.store.lookup(APP_NAME)).resolves.toBeUndefined();
+    await expect(h.store.lookup(APP_NAME)).resolves.toEqual({
+      kind: "unavailable",
+    });
     expect(h.calls).toHaveLength(1);
 
     h.advance(10 * 60_000 - 1);
-    await expect(h.store.lookup(APP_NAME)).resolves.toBeUndefined();
+    await expect(h.store.lookup(APP_NAME)).resolves.toEqual({
+      kind: "unavailable",
+    });
     expect(h.calls).toHaveLength(1);
 
     status = 200;
     h.advance(1);
     await expect(h.store.lookup(APP_NAME)).resolves.toEqual({
+      kind: "match",
       id: APP_ID,
       name: APP_NAME,
     });
@@ -354,13 +457,18 @@ describe("Steam store lookup", () => {
       return happyPath(call);
     });
 
-    await expect(h.store.lookup(APP_NAME)).resolves.toBeUndefined();
-    await expect(h.store.lookup(APP_NAME)).resolves.toBeUndefined();
+    await expect(h.store.lookup(APP_NAME)).resolves.toEqual({
+      kind: "unavailable",
+    });
+    await expect(h.store.lookup(APP_NAME)).resolves.toEqual({
+      kind: "unavailable",
+    });
     expect(h.calls).toHaveLength(1);
 
     reject = false;
     h.advance(10 * 60_000);
     await expect(h.store.lookup(APP_NAME)).resolves.toEqual({
+      kind: "match",
       id: APP_ID,
       name: APP_NAME,
     });
@@ -375,7 +483,9 @@ describe("Steam store lookup", () => {
     });
 
     await h.store.lookup(APP_NAME);
-    await expect(h.store.lookup("Broken Game")).resolves.toBeUndefined();
+    await expect(h.store.lookup("Broken Game")).resolves.toEqual({
+      kind: "unavailable",
+    });
 
     const stored = JSON.parse(
       await fs.readFile(path.join(directory, "game-metadata.json"), "utf8"),
@@ -383,6 +493,7 @@ describe("Steam store lookup", () => {
     expect(stored["example game"]).toEqual({
       id: APP_ID,
       name: APP_NAME,
+      term: APP_NAME,
       at: 1_000_000,
     });
     expect(stored["broken game"]).toBeUndefined();
@@ -441,6 +552,81 @@ describe("Steam store cover", () => {
 
     await expect(h.store.cover(APP_ID)).resolves.toBeUndefined();
     await expect(fs.readdir(directory)).resolves.toEqual([]);
+  });
+
+  it("refuses a cover body larger than the route's cap", async () => {
+    const directory = await cacheDir();
+    const oversized = new Uint8Array(MAX_BOX_ART_BYTES + 1);
+    oversized.set(JPEG);
+    const h = harness(
+      directory,
+      () =>
+        new Response(oversized, {
+          status: 200,
+          headers: { "content-length": String(oversized.byteLength) },
+        }),
+    );
+
+    await expect(h.store.cover(APP_ID)).resolves.toBeUndefined();
+    await expect(fs.readdir(directory)).resolves.toEqual([]);
+    // The portrait is refused, then the appdetails fallback is refused too.
+    expect(h.calls).toHaveLength(2);
+
+    // The failure starts the usual ten-minute suppression.
+    await expect(h.store.cover(APP_ID)).resolves.toBeUndefined();
+    expect(h.calls).toHaveLength(2);
+  });
+
+  it("checks the buffered length when the store declares no size", async () => {
+    const directory = await cacheDir();
+    const oversized = new Uint8Array(MAX_BOX_ART_BYTES + 1);
+    oversized.set(JPEG);
+    const h = harness(
+      directory,
+      () => new Response(oversized, { status: 200 }),
+    );
+
+    await expect(h.store.cover(APP_ID)).resolves.toBeUndefined();
+    await expect(fs.readdir(directory)).resolves.toEqual([]);
+  });
+
+  it("does not advertise an oversized cached cover", async () => {
+    const directory = await cacheDir();
+    await fs.writeFile(
+      path.join(directory, `${APP_ID}.jpg`),
+      new Uint8Array(MAX_BOX_ART_BYTES + 1),
+    );
+    const h = harness(directory, () => new Response("", { status: 404 }));
+
+    await expect(h.store.cover(APP_ID)).resolves.toBeUndefined();
+  });
+
+  it("does not advertise a cached cover whose bytes contradict its name", async () => {
+    const directory = await cacheDir();
+    await fs.writeFile(
+      path.join(directory, `${APP_ID}.jpg`),
+      new Uint8Array(PNG),
+    );
+    const h = harness(directory, () => new Response("", { status: 404 }));
+
+    await expect(h.store.cover(APP_ID)).resolves.toBeUndefined();
+  });
+
+  it("downloads one cover for two concurrent demands", async () => {
+    const directory = await cacheDir();
+    const h = harness(directory, async (call) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return happyPath(call);
+    });
+
+    const [first, second] = await Promise.all([
+      h.store.cover(APP_ID),
+      h.store.cover(APP_ID),
+    ]);
+
+    expect(first).toBe(`/api/game/artwork/${APP_ID}.jpg`);
+    expect(second).toBe(first);
+    expect(h.calls).toHaveLength(1);
   });
 
   it("suppresses a failed cover for ten minutes, then retries", async () => {
