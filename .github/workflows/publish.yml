@@ -1,0 +1,205 @@
+name: Publish
+
+# Tag-driven release: gate, build, stage, smoke-test the installed tarball,
+# publish to npm, then attach the tarball and a staged-tree zip to the GitHub
+# Release (decision D6).
+#
+# Triggers. `release: published` fires when release-please creates the release;
+# `workflow_dispatch` exists because a release created with the default
+# GITHUB_TOKEN does not trigger workflows. With a RELEASE_PLEASE_TOKEN PAT or
+# GitHub App token configured in release.yml, publication is automatic; without
+# one, an owner dispatches this workflow manually on the tag. Manual dispatch
+# assumes a `vX.Y.Z` tag ref: `${GITHUB_REF_NAME#v}` strips that prefix and
+# `--expect-version` then cross-checks the tag against src/web/package.json.
+# `dry_run` defaults to true, so a manual run neither publishes nor uploads
+# unless the box is unticked, and a real manual run needs the GitHub Release
+# for that tag to exist already (`gh release upload` targets it).
+#
+# npm trusted publishing. The package owner must configure a trusted publisher
+# on npmjs.com for repository `peterng1618/yunari`, workflow `publish.yml`.
+# Provenance and OIDC need `id-token: write` and a public repository, and the
+# bundled npm must be >= 11.5.1 (Node 24 ships a newer one). If OIDC cannot be
+# configured, the fallback is an `NPM_TOKEN` secret exported as
+# `NODE_AUTH_TOKEN`; it is deliberately not wired here until it is needed. The
+# full setup runbook is release-readiness Task D1.
+#
+# `/editor` is a 302 to `/editor/` (relative asset base), so the smoke request
+# follows redirects and still requires a final 200.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Gate, build, stage, smoke and run npm publish --dry-run without uploading assets
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  # A publish already talking to npm is not cancelled by the next dispatch.
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      STAGE: ${{ runner.temp }}/yunari-package
+      ASSETS: ${{ runner.temp }}/yunari-assets
+      SMOKE: ${{ runner.temp }}/yunari-smoke
+      # The release event carries no inputs, so only a manual dispatch can ask
+      # for a dry run; every other run really publishes.
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
+    steps:
+      # The gate dates licence rules by commit history, so a shallow clone
+      # would make every rule read as written by its own citing commit.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          # vitest 5 requires ^22.12 || ^24 || >=26; Node 24 is the LTS the
+          # existing CI job pins.
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: src/web/package-lock.json
+
+      - name: Install the workspace
+        working-directory: src/web
+        run: npm ci
+
+      - name: Gate
+        working-directory: src/web
+        run: npm run gate
+
+      - name: Build player, editor and host
+        working-directory: src/web
+        run: |
+          npm run build -w @yunari/player
+          npm run build -w @yunari/editor
+          npm run build -w @yunari/host
+
+      - name: Resolve version and dist-tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "$version" == *-* ]]; then
+            dist_tag=next
+          else
+            dist_tag=latest
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "DIST_TAG=$dist_tag" >> "$GITHUB_ENV"
+
+      - name: Stage the package outside the repository
+        run: |
+          rm -rf "$STAGE"
+          node scripts/stage-npm-package.mjs --out "$STAGE" --expect-version "$VERSION"
+
+      - name: Pack the tarball
+        run: |
+          rm -rf "$ASSETS"
+          mkdir -p "$ASSETS"
+          (cd "$STAGE" && npm pack --pack-destination "$ASSETS")
+          test -f "$ASSETS/yunari-${VERSION}.tgz"
+
+      # The tarball is what users install; a missing entry here is a broken
+      # release that the install smoke test alone would not explain.
+      - name: Verify the tarball contents
+        run: |
+          entries="$(tar -tzf "$ASSETS/yunari-${VERSION}.tgz")"
+          for path in \
+            package/package.json \
+            package/LICENSE \
+            package/THIRD-PARTY-NOTICES.md \
+            package/packages/host/bin/yunari.js \
+            package/packages/host/dist/main.js \
+            package/packages/host/public/library.html \
+            package/packages/host/public/pair.html \
+            package/packages/host/public/settings.html \
+            package/packages/player/dist/index.html \
+            package/packages/editor/dist/index.html \
+            package/schema/theme-document.schema.json; do
+            if ! grep -qx "$path" <<< "$entries"; then
+              echo "missing $path in the tarball" >&2
+              exit 1
+            fi
+          done
+
+      # Install the packed tarball the way a user would, in a directory with no
+      # workspace above it, then boot the host and require every page to answer.
+      - name: Install and smoke-test the tarball
+        run: |
+          rm -rf "$SMOKE"
+          mkdir -p "$SMOKE"
+          cd "$SMOKE"
+          npm init --yes > /dev/null
+          npm install --no-audit --no-fund "$ASSETS/yunari-${VERSION}.tgz"
+
+          installed="$(./node_modules/.bin/yunari --version)"
+          if [[ "$installed" != "$VERSION" ]]; then
+            echo "installed yunari reports $installed, expected $VERSION" >&2
+            exit 1
+          fi
+
+          port=4319
+          ./node_modules/.bin/yunari --no-browser --port "$port" > "$SMOKE/host.log" 2>&1 &
+          host_pid=$!
+          trap 'kill "$host_pid" 2>/dev/null || true' EXIT
+
+          for attempt in {1..60}; do
+            if curl --silent --fail --output /dev/null --max-time 1 "http://127.0.0.1:${port}/api/health"; then
+              break
+            fi
+            if ! kill -0 "$host_pid" 2>/dev/null; then
+              echo "host exited before it answered; log follows" >&2
+              cat "$SMOKE/host.log" >&2
+              exit 1
+            fi
+            if [[ "$attempt" == 60 ]]; then
+              echo "host did not answer within 60s; log follows" >&2
+              cat "$SMOKE/host.log" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+
+          check() {
+            local code
+            code="$(curl --silent --show-error --location --max-time 10 \
+              --output /dev/null --write-out '%{http_code}' \
+              "http://127.0.0.1:${port}$1")"
+            if [[ "$code" != "200" ]]; then
+              echo "GET $1 returned $code, expected 200; log follows" >&2
+              cat "$SMOKE/host.log" >&2
+              exit 1
+            fi
+          }
+          check /api/health
+          check /editor
+          check /
+
+      - name: Publish to npm
+        run: |
+          args=(--provenance --access public --tag "$DIST_TAG")
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          cd "$STAGE"
+          npm publish "${args[@]}"
+
+      - name: Attach the release assets
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd "$STAGE" && zip -q -r "$ASSETS/yunari-${VERSION}.zip" .)
+          gh release upload "$GITHUB_REF_NAME" \
+            "$ASSETS/yunari-${VERSION}.tgz" \
+            "$ASSETS/yunari-${VERSION}.zip" \
+            --clobber
