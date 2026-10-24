@@ -56,8 +56,8 @@
     "lineicons": "1.3.2",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
-    "vite": "8.3.0",
-    "vitest": "5.0.0"
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
   },
   "//devDependencies": "jsdom and canvas are the `*.dom.test.ts` environment, declared here beside vitest because vitest.config.ts owns `environment` for the whole workspace. They were reachable without being declared — both are OPTIONAL dependencies of fabric@7.4.0 — which is the problem: `canvas` is native, npm continues silently when its prebuild is unavailable, and the tests that need a real 2D context would then lose it without failing. Declaring them also puts them through CI's licence job.",
   "engines": {
