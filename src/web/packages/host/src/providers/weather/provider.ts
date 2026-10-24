@@ -22,7 +22,7 @@ import { descriptorFieldsOf, redactForBrowser } from "../provider.js";
 import { WEATHER_BACKENDS } from "./backends.js";
 import { conditionText, windCompass } from "./conditions.js";
 import { weatherIconUrl } from "./icons.js";
-import type { WeatherReading } from "./open-meteo.js";
+import { type WeatherReading, weatherKey } from "./open-meteo.js";
 
 /**
  * Weather as readings, acquired by this provider rather than inside the host's
@@ -273,6 +273,15 @@ export class WeatherProvider implements SensorProvider {
         delayMs = intervalMs;
       } else {
         try {
+          // The key is resolved before the place: a missing BYOK credential
+          // must not start a location helper for a poll that cannot fetch.
+          const key =
+            settings.provider === "open-meteo"
+              ? undefined
+              : weatherKey(
+                  await this.#credentials?.valueOf(settings.provider),
+                  settings.provider,
+                );
           const place = await this.#placeOf(settings);
 
           if (generation !== this.#generation) {
@@ -283,9 +292,7 @@ export class WeatherProvider implements SensorProvider {
             const reading = await WEATHER_BACKENDS[settings.provider].fetch(
               place,
               this.#fetcher,
-              settings.provider === "open-meteo"
-                ? undefined
-                : await this.#credentials?.valueOf(settings.provider),
+              key,
             );
 
             if (generation !== this.#generation) {

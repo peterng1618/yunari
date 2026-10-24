@@ -1,4 +1,7 @@
-# 0101 — PowerShell helpers run under one supervisor, with the script embedded
+# 0102 — PowerShell helpers run under one supervisor, with the script embedded
+
+> Written as 0101 and renumbered once the BYOK note took that number in the
+> same sequence, so `89cfe9ab`'s message calling it ADR-0101 is historical.
 
 - **Date:** 2026-10-24
 - **Status:** accepted
@@ -88,8 +91,9 @@ On this machine (Windows 11 22631, PowerShell 10.0.22621.1):
 One supervisor in `providers/helpers/` owns every PowerShell child:
 `spawn` with the explicit absolute path and `-EncodedCommand`, stdout split into
 lines with a 1 MiB cap (over-cap is dropped and reported, never buffered),
-stderr treated the same way, restart with capped exponential backoff on an
-unexpected exit, and `taskkill /T /F` on stop so no grandchild survives. The
+stderr unparsed with only its last line kept, truncated to 500 characters, for
+the exit reason, restart with capped exponential backoff on an unexpected
+exit, and `taskkill /T /F` on stop so no grandchild survives. The
 script is a string constant in the module, never a loose `.ps1` — an embedded
 script cannot be edited out from under a running host, and there is then no
 path to resolve.

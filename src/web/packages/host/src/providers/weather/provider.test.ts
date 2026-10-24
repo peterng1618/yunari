@@ -636,7 +636,10 @@ describe("WeatherProvider", () => {
     });
 
     await sampleAt(provider, ["weather.temp"], now);
-    // The ask is in flight; changing the backend must own the next poll.
+    // The credential and place are resolved before the fetch, so let the poll
+    // reach it; the ask must actually be in flight for this test.
+    await settle();
+    // Changing the backend now must own the next poll.
     store.set({ ...BERLIN, provider: "open-meteo", pollIntervalMs: 60_000 });
     await sampleAt(provider, ["weather.temp"], now + 1);
 
@@ -663,6 +666,33 @@ describe("WeatherProvider", () => {
 
     expect(locate).not.toHaveBeenCalled();
     expect(calls()).toBe(1);
+  });
+
+  it("resolves a BYOK key before asking Windows for a place", async () => {
+    const locate = vi.fn(async () => ({ latitude: 1, longitude: 2 }));
+    const { fetcher, calls } = fetcherOf();
+    const provider = new WeatherProvider({
+      settings: settingsStore(
+        normalizeWeatherSettings({
+          provider: "weatherapi",
+          useWindowsLocation: true,
+          pollIntervalMs: 600_000,
+        }),
+      ),
+      fetcher,
+      locate,
+    });
+
+    await sampleAt(provider, ["weather.temp"], Date.now());
+    await settle();
+    const [entry] = await sampleAt(provider, ["weather.temp"], Date.now());
+
+    // A poll that cannot fetch because the key is missing must not start a
+    // location helper for nothing.
+    expect(locate).not.toHaveBeenCalled();
+    expect(calls()).toBe(0);
+    expect(entry?.sample.status).toBe("error");
+    expect(String(entry?.sample.message)).toMatch(/weatherapi/);
   });
 
   it("asks Windows for one place and polls with it when none is set", async () => {

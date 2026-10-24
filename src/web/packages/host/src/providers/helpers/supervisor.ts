@@ -32,6 +32,8 @@ export interface HelperChild {
   readonly stderr: HelperStream | null;
   once(event: "exit", listener: (code: number | null) => void): unknown;
   once(event: "error", listener: (error: Error) => void): unknown;
+  /** The fallback when there is no taskkill to end the tree. */
+  kill?(): unknown;
 }
 
 export type SpawnProcess = (
@@ -43,18 +45,22 @@ export type SpawnProcess = (
   },
 ) => HelperChild;
 
-/** Kills the process and everything it started; `.kill()` leaves children. */
-export type KillTree = (pid: number) => void;
+/** Ends the process and everything it started; `.kill()` leaves children. */
+export type KillTree = (child: HelperChild) => void;
+
+/** Why a helper ended: a deliberate stop is not a failure to reconnect. */
+export type HelperExitKind = "failed" | "timed out" | "stopped";
 
 export interface HelperOptions {
   readonly id: string;
   /** The embedded PowerShell source. Nothing user-supplied enters it. */
   readonly script: string;
   readonly onLine: (line: string) => void;
-  readonly onExit: (reason: string) => void;
-  readonly nowMs: () => number;
+  readonly onExit: (reason: string, kind: HelperExitKind) => void;
   /** A one-shot helper fails when no line arrives within this window. */
   readonly timeoutMs?: number;
+  /** Consecutive failed starts before giving up. */
+  readonly maxAttempts?: number;
   /** A line that could not be delivered, without stopping the helper. */
   readonly onProblem?: (reason: string) => void;
   readonly spawnProcess?: SpawnProcess;
@@ -97,11 +103,24 @@ function defaultSpawn(
   }) as unknown as ChildProcess as HelperChild;
 }
 
-function defaultKillTree(pid: number): void {
-  spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
-    windowsHide: true,
-    stdio: "ignore",
-  });
+function defaultKillTree(child: HelperChild): void {
+  const root = process.env["SystemRoot"] ?? "C:\\Windows";
+  const taskkill = path.join(root, "System32", "taskkill.exe");
+
+  if (child.pid !== undefined && existsSync(taskkill)) {
+    // The explicit path, not a PATH lookup, for the same reason the helper
+    // itself is launched by one. The listener keeps a failed spawn from
+    // becoming an unhandled `error` event.
+    const killer = spawn(taskkill, ["/PID", String(child.pid), "/T", "/F"], {
+      windowsHide: true,
+      stdio: "ignore",
+    });
+    killer.on("error", () => undefined);
+    return;
+  }
+
+  // No taskkill (or no pid): end only the process this supervisor started.
+  child.kill?.();
 }
 
 function unref(timer: ReturnType<typeof setTimeout>): void {
@@ -126,12 +145,13 @@ function powershellArgs(script: string): readonly string[] {
  * Starts an embedded PowerShell script and reads it as JSON lines.
  *
  * A helper that exits unexpectedly is restarted after a capped exponential
- * delay; five consecutive failures give up so a broken helper cannot spin.
+ * delay; consecutive failures give up so a broken helper cannot spin.
  * `stop()` is the deliberate end: it clears every timer and kills the tree.
  */
 export function startJsonLineHelper(options: HelperOptions): HelperHandle {
   const spawnProcess = options.spawnProcess ?? defaultSpawn;
   const killTree = options.killTree ?? defaultKillTree;
+  const maxAttempts = Math.max(1, options.maxAttempts ?? MAX_ATTEMPTS);
   const executable = powershellPath(options.pathExists);
 
   let stopped = false;
@@ -154,19 +174,27 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
     timeoutTimer = clearTimer(timeoutTimer);
   };
 
-  const stop = (): void => {
-    if (stopped) return;
+  /** Ends the helper without reporting it; callers report their own reason. */
+  const stopInternal = (): boolean => {
+    if (stopped) return false;
     stopped = true;
     clearTimers();
-    const pid = child?.pid;
+    const current = child;
     child = undefined;
-    if (pid !== undefined) killTree(pid);
+    if (current !== undefined) killTree(current);
+    return true;
+  };
+
+  const stop = (): void => {
+    if (!stopInternal()) return;
+    options.onExit(`${options.id} helper stopped.`, "stopped");
   };
 
   if (executable === undefined) {
     stopped = true;
     options.onExit(
       `PowerShell was not found, so the ${options.id} helper cannot run.`,
+      "failed",
     );
     return { pid: undefined, stop: () => undefined };
   }
@@ -176,9 +204,10 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
     timeoutTimer = clearTimer(timeoutTimer);
     timeoutTimer = setTimeout(() => {
       timeoutTimer = undefined;
-      stop();
+      stopInternal();
       options.onExit(
         `${options.id} helper timed out after ${options.timeoutMs} ms without a line.`,
+        "timed out",
       );
     }, options.timeoutMs);
     unref(timeoutTimer);
@@ -190,12 +219,13 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
     clearTimers();
     attempts += 1;
 
-    if (attempts >= MAX_ATTEMPTS) {
+    if (attempts >= maxAttempts) {
       stopped = true;
       clearTimers();
       options.onExit(
-        `${options.id} helper stopped after ${MAX_ATTEMPTS} failed starts; ` +
+        `${options.id} helper stopped after ${maxAttempts} failed starts; ` +
           `last failure: ${reason}`,
+        "failed",
       );
       return;
     }
@@ -233,7 +263,8 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
     let buffer = "";
     let dropping = false;
     let reportedOverCap = false;
-    let stderrTail = "";
+    let stderrLine = "";
+    let stderrPartial = "";
 
     const finish = (reason: string): void => {
       // `error` and `exit` can both fire for one failed start.
@@ -243,7 +274,8 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
     };
 
     const reportOverCap = (): void => {
-      if (reportedOverCap) return;
+      // A stop ends the contract: nothing may be delivered afterwards.
+      if (stopped || settled || reportedOverCap) return;
       reportedOverCap = true;
       options.onProblem?.(
         `${options.id} helper printed a line longer than 1 MiB; it was dropped.`,
@@ -251,6 +283,8 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
     };
 
     const consume = (text: string): void => {
+      if (stopped || settled) return;
+
       if (dropping) {
         const newline = text.search(/\r?\n/);
         if (newline === -1) return;
@@ -261,6 +295,7 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
       buffer += text;
 
       while (true) {
+        if (stopped) return;
         const match = /\r?\n/.exec(buffer);
         if (match === null) break;
         const line = buffer.slice(0, match.index);
@@ -273,7 +308,6 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
 
         armTimeout();
         options.onLine(line);
-        if (stopped) return;
       }
 
       // Over-cap without a newline is dropped immediately, never buffered
@@ -289,7 +323,10 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
       finish(`could not start PowerShell: ${error.message}`);
     });
     spawned.once("exit", (code: number | null) => {
-      const tail = stderrTail.trim();
+      // Only the last stderr line is diagnostic; the rest is noise and must
+      // not grow an unbounded reason.
+      const line = stderrPartial.trim() !== "" ? stderrPartial : stderrLine;
+      const tail = line.trim().slice(0, STDERR_CAP);
       finish(
         `${options.id} helper exited with code ${String(code)}` +
           (tail === "" ? "" : `: ${tail}`),
@@ -300,7 +337,11 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
     });
     spawned.stderr?.on("data", (chunk: Buffer | string) => {
       const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
-      stderrTail = `${stderrTail}${text}`.slice(-STDERR_CAP);
+      const parts = `${stderrPartial}${text}`.split(/\r?\n/);
+      stderrPartial = parts.pop() ?? "";
+
+      const complete = parts.filter((line) => line.trim() !== "").at(-1);
+      if (complete !== undefined) stderrLine = complete;
     });
 
     stableTimer = setTimeout(() => {

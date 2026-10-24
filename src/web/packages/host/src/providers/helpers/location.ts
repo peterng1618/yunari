@@ -24,6 +24,9 @@ export const LOCATION_TIMEOUT_REASON =
   "Windows location did not answer in time";
 export const LOCATION_UNAVAILABLE_REASON =
   "PowerShell was not found, so Windows location is unavailable.";
+/** The script ran but Windows refused or could not produce a fix. */
+export const LOCATION_SCRIPT_FAILED_REASON =
+  "Windows location is unavailable on this PC.";
 const LOCATION_FAILED_REASON = "Windows location could not be read.";
 
 /** Windows may show a permission prompt, so this has to outlast a person. */
@@ -31,15 +34,18 @@ const LOCATION_TIMEOUT_MS = 30_000;
 
 export const LOCATION_SCRIPT = `
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
 try {
   [void][Windows.Devices.Geolocation.Geolocator,Windows.Devices.Geolocation,ContentType=WindowsRuntime]
-  $locator = [Windows.Devices.Geolocation.Geolocator]::new()
-  $access = $locator.RequestAccessAsync().GetAwaiter().GetResult()
+  $accessOperation = [Windows.Devices.Geolocation.Geolocator]::RequestAccessAsync()
+  $access = [System.WindowsRuntimeSystemExtensions]::AsTask($accessOperation).GetAwaiter().GetResult()
   if ($access.ToString() -ne 'Allowed') {
     [Console]::Out.WriteLine('{"error":"denied"}')
     exit 0
   }
-  $fix = $locator.GetGeopositionAsync().GetAwaiter().GetResult()
+  $locator = [Windows.Devices.Geolocation.Geolocator]::new()
+  $positionOperation = $locator.GetGeopositionAsync()
+  $fix = [System.WindowsRuntimeSystemExtensions]::AsTask($positionOperation).GetAwaiter().GetResult()
   $point = $fix.Coordinate.Point.Position
   $json = ConvertTo-Json -Compress -InputObject ([ordered]@{
     latitude = $point.Latitude
@@ -107,7 +113,6 @@ export function parseLocationLine(line: string): LocationLine | undefined {
 export interface LocationOptions {
   readonly onPosition: (position: GeoPosition) => void;
   readonly onError: (reason: string) => void;
-  readonly nowMs?: () => number;
   readonly spawnProcess?: SpawnProcess;
   readonly killTree?: KillTree;
   readonly pathExists?: (file: string) => boolean;
@@ -142,7 +147,6 @@ export function readLocation(options: LocationOptions): HelperHandle {
   handle = startJsonLineHelper({
     id: "location",
     script: LOCATION_SCRIPT,
-    nowMs: options.nowMs ?? (() => Date.now()),
     timeoutMs: options.timeoutMs ?? LOCATION_TIMEOUT_MS,
     ...(options.spawnProcess === undefined
       ? {}
@@ -167,12 +171,12 @@ export function readLocation(options: LocationOptions): HelperHandle {
         options.onError(
           parsed.code === "denied"
             ? LOCATION_DENIED_REASON
-            : LOCATION_UNAVAILABLE_REASON,
+            : LOCATION_SCRIPT_FAILED_REASON,
         );
       }
     },
-    onExit: (reason) => {
-      if (reason.includes("timed out")) {
+    onExit: (reason, kind) => {
+      if (kind === "timed out") {
         fail(LOCATION_TIMEOUT_REASON);
       } else if (reason.startsWith("PowerShell was not found")) {
         fail(LOCATION_UNAVAILABLE_REASON);
