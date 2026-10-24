@@ -3,6 +3,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { powershellPath } from "../../helpers/supervisor.js";
+import {
+  readSteamApps as readSteamAppsFromDisk,
+  resolveSteamRoot as resolveSteamRootFromRegistry,
+  type SteamApp,
+} from "../steam-library.js";
 
 /**
  * Every game launcher's installed apps, read through injected seams so the
@@ -22,7 +27,8 @@ export interface CatalogueSeams {
   readonly appData: string;
   /** One PowerShell invocation returning parsed JSON, already redacted by the caller. */
   readonly runPowerShell: (script: string) => Promise<unknown>;
-  /** Steam's installed apps; defaults to an empty list until Task 1.4 wires it. */
+  /** Steam's installed apps, already in catalogue shape; the default adapter
+   *  resolves Steam's root and maps its library. */
   readonly steamApps: () => Promise<readonly InstalledGame[]>;
   /** Where Xbox titles install; injected so tests never touch the real drive. */
   readonly xboxRoot: string;
@@ -68,11 +74,23 @@ async function runPowerShellJson(script: string): Promise<unknown> {
   }
 }
 
+/** Steam's registry and disk reads, injected so tests use neither. */
+export interface CatalogueSeamOptions {
+  readonly resolveSteamRoot?: () => Promise<string | undefined>;
+  readonly readSteamApps?: (root: string) => Promise<readonly SteamApp[]>;
+}
+
 /**
- * The real seams for the provider. Steam's list is empty until Task 1.4 wires
- * `steam-library.ts` in, so no reader depends on the order of that task.
+ * The real seams for the provider. Steam's apps come from `steam-library.ts`
+ * through the injectable adapter below; a missing root or unreadable library is
+ * no Steam apps, not a failure.
  */
-export function defaultCatalogueSeams(): CatalogueSeams {
+export function defaultCatalogueSeams(
+  options: CatalogueSeamOptions = {},
+): CatalogueSeams {
+  const resolveRoot = options.resolveSteamRoot ?? resolveSteamRootFromRegistry;
+  const readApps = options.readSteamApps ?? readSteamAppsFromDisk;
+
   return {
     readFile: (file) => fs.readFile(file, "utf8"),
     readdir: (dir) => fs.readdir(dir),
@@ -81,7 +99,24 @@ export function defaultCatalogueSeams(): CatalogueSeams {
       process.env["APPDATA"] ??
       path.win32.join(os.homedir(), "AppData", "Roaming"),
     runPowerShell: runPowerShellJson,
-    steamApps: async () => [],
+    steamApps: async () => {
+      try {
+        const root = await resolveRoot();
+
+        if (root === undefined) return [];
+
+        const apps = await readApps(root);
+
+        return apps.map((app) => ({
+          source: "steam" as const,
+          name: app.name,
+          installDir: app.installDir,
+          exes: [],
+        }));
+      } catch {
+        return [];
+      }
+    },
     xboxRoot: "C:\\XboxGames",
   };
 }

@@ -11,6 +11,7 @@
   `src/web/packages/host/src/providers/game/catalogue/itch.ts`,
   `src/web/packages/host/src/providers/game/catalogue/uninstall.ts`,
   `src/web/packages/host/src/providers/game/catalogue/appx.ts`,
+  `src/web/packages/host/src/providers/game/catalogue/steam.ts`,
   `src/web/packages/host/src/providers/game/catalogue/test-seams.ts`
 
 ## The problem
@@ -74,10 +75,13 @@ against the split before aggregation is added.
 
 ## Decision
 
-One module per launcher (`epic`, `gog`, `xbox`, `itch`, `uninstall`, `appx`),
-sharing `seams.ts` (seam type, defaults, text/flag helpers) and
+One module per launcher (`epic`, `gog`, `xbox`, `itch`, `uninstall`, `appx`,
+`steam`), sharing `seams.ts` (seam type, defaults, text/flag helpers) and
 `game-config.ts` (the GDK config extractor), with `catalogue.ts` owning the
-`InstalledGame` type and `readInstalledGames` aggregation. Chosen because the
-launcher is the change unit and the only thing aggregation needs to know is
-each module's reader; it also matches `steam-library.ts`. The split is
-mechanical, so it inherits 0110's mechanism decision rather than replacing it.
+`InstalledGame` type and `readInstalledGames` aggregation. `seams.ts` owns the
+single Steam adapter that maps `SteamApp` to `InstalledGame` with `exes: []`,
+its root resolver and library reader injectable so tests touch neither the
+registry nor a drive. Chosen because the launcher is the change unit and the
+only thing aggregation needs to know is each module's reader; it also matches
+`steam-library.ts`. The split is mechanical, so it inherits 0110's mechanism
+decision rather than replacing it.

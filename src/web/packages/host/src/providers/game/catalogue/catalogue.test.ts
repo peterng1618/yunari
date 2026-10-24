@@ -127,6 +127,92 @@ describe("readInstalledGames", () => {
     expect(games.map((game) => game.source)).toEqual(["steam", "gog"]);
   });
 
+  it("drops a later entry that shares one of several executables", async () => {
+    const seams = {
+      ...seamsOf(epicFixture("Overlap", "C:\\Epic\\Overlap", "overlap.exe")),
+      steamApps: async () => [
+        {
+          source: "steam" as const,
+          name: "Steam Bundle",
+          installDir: "C:\\Steam\\Bundle",
+          exes: ["C:\\Steam\\Bundle\\a.exe", "C:\\Epic\\Overlap\\overlap.exe"],
+        },
+      ],
+    };
+
+    const games = await readInstalledGames(seams);
+
+    expect(games.map((game) => game.source)).toEqual(["steam"]);
+  });
+
+  it("drops a duplicate from the same source", async () => {
+    const seams = {
+      ...seamsOf({}),
+      steamApps: async () => [
+        {
+          source: "steam" as const,
+          name: "First Copy",
+          installDir: "C:\\Steam\\First",
+          exes: ["C:\\Steam\\Shared\\game.exe"],
+        },
+        {
+          source: "steam" as const,
+          name: "Second Copy",
+          installDir: "C:\\Steam\\Second",
+          exes: ["C:\\Steam\\Shared\\game.exe"],
+        },
+      ],
+    };
+
+    await expect(readInstalledGames(seams)).resolves.toEqual([
+      {
+        source: "steam",
+        name: "First Copy",
+        installDir: "C:\\Steam\\First",
+        exes: ["C:\\Steam\\Shared\\game.exe"],
+      },
+    ]);
+  });
+
+  it("collapses a Steam root against Epic, and keeps different roots", async () => {
+    const same = {
+      ...seamsOf(epicFixture("Same", "c:\\games\\same", "same.exe")),
+      steamApps: async () => [
+        {
+          source: "steam" as const,
+          name: "Steam Same",
+          installDir: "C:\\Games\\Same",
+          exes: [],
+        },
+      ],
+    };
+
+    await expect(readInstalledGames(same)).resolves.toEqual([
+      {
+        source: "steam",
+        name: "Steam Same",
+        installDir: "C:\\Games\\Same",
+        exes: [],
+      },
+    ]);
+
+    const different = {
+      ...seamsOf(epicFixture("Epic Other", "C:\\Games\\Two", "other.exe")),
+      steamApps: async () => [
+        {
+          source: "steam" as const,
+          name: "Steam One",
+          installDir: "C:\\Games\\One",
+          exes: [],
+        },
+      ],
+    };
+
+    const games = await readInstalledGames(different);
+
+    expect(games.map((game) => game.source)).toEqual(["steam", "epic"]);
+  });
+
   it("lets a throwing source lose only itself", async () => {
     const seams = {
       ...seamsOf(epicFixture("Epic Game", "C:\\Epic\\Game", "epic.exe")),

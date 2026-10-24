@@ -4,6 +4,7 @@ import { readEpicGames } from "./epic.js";
 import { readGogGames } from "./gog.js";
 import { readItchGames } from "./itch.js";
 import type { CatalogueSeams } from "./seams.js";
+import { readSteamGames } from "./steam.js";
 import { readUninstallGames } from "./uninstall.js";
 import { readXboxGames } from "./xbox.js";
 
@@ -51,7 +52,7 @@ export async function readInstalledGames(
   seams: CatalogueSeams,
 ): Promise<readonly InstalledGame[]> {
   const readers: readonly (() => Promise<readonly InstalledGame[]>)[] = [
-    () => seams.steamApps(),
+    () => readSteamGames(seams),
     () => readEpicGames(seams),
     () => readGogGames(seams),
     () => readItchGames(seams),
