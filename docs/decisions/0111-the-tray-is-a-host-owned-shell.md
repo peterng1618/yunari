@@ -8,7 +8,7 @@
   `src/web/packages/host/src/tray/windows.ts`,
   `src/web/packages/host/src/tray/linux.ts`,
   `src/web/packages/editor/src/editor-shell/shell-layout.tsx`,
-  `src/web/scripts/vendor-tray.mjs`
+  `src/web/packages/host/scripts/vendor-tray.mjs`
 
 ## The problem
 
@@ -132,7 +132,8 @@ Probe on this Windows 11 machine, 2026-10-25:
 - Vite bundles only TypeScript into `dist/main.js`; it emits no assets. The
   Windows PowerShell script and the tray icon PNG are therefore embedded
   strings in TypeScript, not files that a build step could forget to copy.
-- The Linux binary is staged by `src/web/scripts/vendor-tray.mjs` into
+- The Linux binary is staged by
+  `src/web/packages/host/scripts/vendor-tray.mjs` into
   `packages/host/vendor/tray/`, following `vendor-presentmon.mjs`: pinned URL,
   pinned SHA-256, a `LICENSE`, and a `PROVENANCE.txt`. The binary stays out of
   git. `npm run vendor:tray` is the build step.

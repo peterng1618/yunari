@@ -222,7 +222,7 @@ named pipe or temp command file is involved.
 
 ### 4. Linux adapter
 
-`scripts/vendor-tray.mjs` downloads the pinned `systray2@2.1.4` tarball,
+`packages/host/scripts/vendor-tray.mjs` downloads the pinned `systray2@2.1.4` tarball,
 verifies its SHA-256, and extracts **only** `package/traybin/tray_linux_release`
 and `package/LICENSE` into `packages/host/vendor/tray`. The binary is not
 committed; `vendor/` stays ignored and `PROVENANCE.txt` records the source and
@@ -378,7 +378,7 @@ printed URL or path usable.
 | Open a URL or folder without a console | `host/src/cli/net.ts` |
 | Tray wiring and process stop | `host/src/main.ts` |
 | Editor entry parameters | `editor/src/editor-shell/shell-layout.tsx` |
-| Staged Linux tray binary | `src/web/scripts/vendor-tray.mjs` |
+| Staged Linux tray binary | `src/web/packages/host/scripts/vendor-tray.mjs` |
 
 `serve/display-launcher.ts` loses the autostart function and keeps the display
 window launcher. `registerHostAutostart` is imported from the new owner where
