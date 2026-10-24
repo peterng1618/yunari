@@ -26,6 +26,28 @@ export function gameArtworkUrl(appId: string): string {
   return `${GAME_ARTWORK_PREFIX}${appId}.jpg`;
 }
 
+/**
+ * True when the file resolves inside Steam's cache. A junction or symlink under
+ * `<appId>` must not turn the fetch into a read of an arbitrary user file.
+ */
+async function insideCache(root: string, file: string): Promise<boolean> {
+  try {
+    const cache = await fs.realpath(
+      path.win32.join(root, "appcache", "librarycache"),
+    );
+    const real = await fs.realpath(file);
+    const relative = path.win32.relative(cache, real);
+
+    return (
+      relative !== "" &&
+      !relative.startsWith("..") &&
+      !path.win32.isAbsolute(relative)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** The cached file for this id under any of these Steam roots, or undefined. */
 export async function locateBoxArt(
   appId: string,
@@ -43,7 +65,9 @@ export async function locateBoxArt(
     );
 
     try {
-      if ((await fs.stat(file)).isFile()) return file;
+      if ((await fs.stat(file)).isFile() && (await insideCache(root, file))) {
+        return file;
+      }
     } catch {
       // No cache entry under this root; try the next one.
     }
@@ -67,15 +91,18 @@ export async function findBoxArt(
 /**
  * Bytes under the bound, or undefined. `stat` refuses a large file before it is
  * read; the length check covers a file that grew between the two calls.
+ * `readFile` is a test seam so a case can prove the stat refusal happens first.
  */
 export async function readBoxArt(
   file: string,
+  readFile: (file: string) => Promise<Uint8Array> = (target) =>
+    fs.readFile(target),
 ): Promise<Uint8Array | undefined> {
   try {
     const stat = await fs.stat(file);
     if (!stat.isFile() || stat.size > MAX_BOX_ART_BYTES) return undefined;
 
-    const bytes = await fs.readFile(file);
+    const bytes = await readFile(file);
     return bytes.byteLength > MAX_BOX_ART_BYTES ? undefined : bytes;
   } catch {
     return undefined;
@@ -114,7 +141,16 @@ export function createGameArtwork(
       root ??= await resolveRoot().catch(() => undefined);
       if (root === undefined) return undefined;
 
-      apps ??= await loadSteamApps(root).catch(() => []);
+      if (apps === undefined) {
+        try {
+          apps = await loadSteamApps(root);
+        } catch {
+          // A failed read is not cached: the next request retries rather than
+          // disabling box art for the rest of the process's life.
+          return undefined;
+        }
+      }
+
       if (!apps.some((app) => app.appId === appId)) return undefined;
 
       const file = await locateBoxArt(appId, [root]);

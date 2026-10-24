@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { writeThemePackage } from "@yunari/theme-package";
+import { canvasProp } from "./canvas-probe.js";
 import { isDesktopSurface } from "./surface.js";
 
 /**
@@ -28,7 +29,9 @@ const THEMES_DIR = (): string => path.join(appDir, "themes");
 const HOST = `http://127.0.0.1:${PORT}`;
 const THEME_ID = "e2e-game-artwork";
 const NODE_ID = "game-artwork";
+const TEXT_NODE_ID = "game-name";
 const APP_ID = "480";
+const GAME_NAME = "Spacewar";
 
 /** The authored bytes: the picture a display shows until a reading arrives. */
 const AUTHORED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
@@ -61,8 +64,18 @@ const envelope = {
         value: { kind: "solid" as const, color: "transparent" },
       },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
+      ink: { name: "Ink", value: { kind: "solid" as const, color: "#e8ecf3" } },
     },
-    typePresets: {},
+    typePresets: {
+      "20-400": {
+        name: "Value",
+        value: {
+          family: "system-ui, sans-serif",
+          size: 20,
+          weight: "400",
+        },
+      },
+    },
   },
   assets: [
     {
@@ -87,10 +100,39 @@ const envelope = {
         id: NODE_ID,
         yunariAsset: { assetId: "authored", kind: "svg" as const },
       },
+      {
+        type: "Textbox" as const,
+        version: "7.4.0" as const,
+        originX: "left" as const,
+        originY: "top" as const,
+        left: 300,
+        top: 80,
+        width: 300,
+        height: 48,
+        text: "--",
+        fontSize: 20,
+        fontFamily: "system-ui, sans-serif",
+        fill: "palette.ink",
+        id: TEXT_NODE_ID,
+        selectable: false,
+        evented: false,
+        yunariPaint: { fill: "palette.ink" as const },
+        yunariText: {
+          runs: [
+            {
+              kind: "value" as const,
+              bindingId: `bound-${TEXT_NODE_ID}`,
+              typePreset: "typePresets.20-400",
+              style: { color: { ref: "palette.ink" as const } },
+            },
+          ],
+        },
+      },
     ],
   },
   bindings: {
     [NODE_ID]: [{ id: "image", semanticKey: "game.artwork" }],
+    [TEXT_NODE_ID]: [{ id: `bound-${TEXT_NODE_ID}`, semanticKey: "game.name" }],
   },
 };
 
@@ -116,7 +158,7 @@ function seedSteam(): void {
   mkdirSync(apps, { recursive: true });
   writeFileSync(
     path.join(apps, `appmanifest_${APP_ID}.acf`),
-    `"AppState"\n{\n\t"appid"\t\t"${APP_ID}"\n\t"name"\t\t"Spacewar"\n\t"installdir"\t\t"Spacewar"\n}\n`,
+    `"AppState"\n{\n\t"appid"\t\t"${APP_ID}"\n\t"name"\t\t"${GAME_NAME}"\n\t"installdir"\t\t"Spacewar"\n}\n`,
   );
 
   const cache = path.join(steamRoot, "appcache", "librarycache", APP_ID);
@@ -155,18 +197,28 @@ async function startHost(): Promise<ChildProcess> {
   throw new Error(`the game-artwork host never answered on ${PORT}`);
 }
 
-/** A stream the case pushes through; installed before the player starts. */
-async function stubStream(page: Page): Promise<void> {
+/**
+ * The stream the case pushes through, plus the URL the player asked to open.
+ * The URL is the demand: the host samples what `keys` names, so a bound key
+ * missing there is a reading the display never asks for. Installed before any
+ * page script, because the player opens its `EventSource` while it starts.
+ */
+async function stubStream(
+  page: Page,
+): Promise<{ readonly streamUrl: () => Promise<string> }> {
   await page.addInitScript(() => {
     const listeners = new Map<string, ((event: { data: string }) => void)[]>();
+    const opened: string[] = [];
     class StubEventSource {
-      constructor() {
+      constructor(url: string) {
+        opened.push(String(url));
         Reflect.set(window, "__yunariGameSamples", {
           emit: (data: string) => {
             for (const listener of listeners.get("samples") ?? []) {
               listener({ data });
             }
           },
+          opened,
         });
       }
       addEventListener(
@@ -181,6 +233,20 @@ async function stubStream(page: Page): Promise<void> {
     }
     Reflect.set(window, "EventSource", StubEventSource);
   });
+
+  return {
+    streamUrl: async () => {
+      const urls = await page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __yunariGameSamples: { opened: string[] };
+            }
+          ).__yunariGameSamples.opened,
+      );
+      return urls[0] ?? "";
+    },
+  };
 }
 
 /** The mounted image object's own reading of its element. */
@@ -221,32 +287,44 @@ async function imageState(
   }, NODE_ID);
 }
 
-async function emitSample(
+/** Emit one batch of readings, exactly as the provider answers them. */
+async function emitSamples(
   page: Page,
-  sample: { status: string; textValue?: string; message?: string },
+  samples: readonly {
+    readonly semanticKey: string;
+    readonly status?: "ok" | "unavailable";
+    readonly textValue?: string;
+    readonly message?: string;
+  }[],
 ): Promise<void> {
   await page.evaluate(
-    (batch) => {
+    (entries) => {
       (
         window as unknown as {
           __yunariGameSamples: { emit(data: string): void };
         }
-      ).__yunariGameSamples.emit(JSON.stringify(batch));
+      ).__yunariGameSamples.emit(
+        JSON.stringify({
+          version: 1,
+          sentAt: new Date().toISOString(),
+          samples: entries.map((entry) => ({
+            semanticKey: entry.semanticKey,
+            sample: {
+              sensorId: `game:${entry.semanticKey}`,
+              timestamp: new Date().toISOString(),
+              status: entry.status ?? "ok",
+              ...(entry.textValue === undefined
+                ? {}
+                : { textValue: entry.textValue }),
+              ...(entry.message === undefined
+                ? {}
+                : { message: entry.message }),
+            },
+          })),
+        }),
+      );
     },
-    {
-      version: 1,
-      sentAt: new Date().toISOString(),
-      samples: [
-        {
-          semanticKey: "game.artwork",
-          sample: {
-            sensorId: "game.artwork",
-            timestamp: new Date().toISOString(),
-            ...sample,
-          },
-        },
-      ],
-    },
+    samples.map((entry) => ({ ...entry })),
   );
 }
 
@@ -274,14 +352,22 @@ test.describe("the running game's box art on a display", () => {
     if (appDir !== "") rmSync(appDir, { recursive: true, force: true });
   });
 
-  test("paints the local box art, then restores the authored picture when it is unavailable", async ({
+  test("paints the local box art and the game name, then restores the authored picture", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the display is read on a desktop");
 
-    await stubStream(page);
+    const stream = await stubStream(page);
     await page.goto(`${HOST}/?theme=${THEME_ID}`);
     await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible();
+
+    // **The demand.** The host samples what this URL names; a key absent here
+    // is a reading the display never asks for, whatever the stream can carry.
+    const requested = new URL(await stream.streamUrl(), HOST);
+    expect(
+      requested.searchParams.get("keys")?.split(","),
+      "the display asks for every game key its theme binds",
+    ).toEqual(expect.arrayContaining(["game.name", "game.artwork"]));
 
     // The authored asset decoded: nothing a sample did, this is the fallback.
     await expect
@@ -289,7 +375,15 @@ test.describe("the running game's box art on a display", () => {
       .toBe(200);
     expect((await imageState(page))?.src).toContain(AUTHORED_URL);
 
-    await emitSample(page, { status: "ok", textValue: LIVE_URL });
+    await emitSamples(page, [
+      { semanticKey: "game.name", textValue: GAME_NAME },
+      { semanticKey: "game.artwork", textValue: LIVE_URL },
+    ]);
+    await expect
+      .poll(async () => canvasProp(page, TEXT_NODE_ID, "text"), {
+        timeout: 20_000,
+      })
+      .toBe(GAME_NAME);
     await expect
       .poll(async () => (await imageState(page))?.src, { timeout: 20_000 })
       .toContain(LIVE_URL);
@@ -297,13 +391,18 @@ test.describe("the running game's box art on a display", () => {
     // art fixture is 1x1 and the authored SVG is 200x200.
     await expect.poll(async () => (await imageState(page))?.width).toBe(1);
 
-    await emitSample(page, {
-      status: "unavailable",
-      message: "Game artwork is not available.",
-    });
+    await emitSamples(page, [
+      {
+        semanticKey: "game.artwork",
+        status: "unavailable",
+        message: "Game artwork is not available.",
+      },
+    ]);
     await expect
       .poll(async () => (await imageState(page))?.src, { timeout: 20_000 })
       .toContain(AUTHORED_URL);
     await expect.poll(async () => (await imageState(page))?.width).toBe(200);
+    // The picture's absence does not disturb the name's own reading.
+    expect(await canvasProp(page, TEXT_NODE_ID, "text")).toBe(GAME_NAME);
   });
 });

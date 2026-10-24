@@ -166,9 +166,11 @@ the route cannot become a listing of whatever Steam happens to cache.
 The host serves those bytes at `/api/game/artwork/<appId>.jpg` instead of
 letting a display request Steam's CDN. A CDN URL carries the app id off this
 machine, which tells Valve's servers what the user owns and is playing; the
-route keeps that membership local. The app id is also the whole allow-list: a
-decimal id of 1–10 digits that is among the installed apps, and anything else
-is a 404, so the route is not a file oracle. Bytes are read only after a
+route keeps that membership local. The app id is also the allow-list: **once a
+request is loopback or an authorised display**, only a decimal id of 1–10
+digits that is among the installed apps is served, and every other id is a
+404, so the route is not a file oracle. An unpaired remote request is refused
+by the session check first, whatever id it names. Bytes are read only after a
 `stat` bound of 5 MiB, and a missing file is a 404 the image binding treats as
 a load error, leaving the authored asset.
 
