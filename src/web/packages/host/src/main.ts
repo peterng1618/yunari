@@ -16,6 +16,7 @@ import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { presentMonAdapter } from "./providers/frame/presentmon.js";
 import { FrameProvider } from "./providers/frame/provider.js";
 import { RtssAdapter } from "./providers/frame/rtss.js";
+import { createGameArtwork } from "./providers/game/box-art.js";
 import { GameProvider } from "./providers/game/provider.js";
 import { LhmSensorProvider } from "./providers/lhm.js";
 import { launchLhm, registerLhmTask } from "./providers/lhm-launcher.js";
@@ -219,8 +220,17 @@ export async function run(argv: readonly string[]): Promise<number> {
     ],
   });
   // The foreground process, with Steam's local files for a game name: one
-  // helper only while a display binds game.*.
-  const gameProvider = new GameProvider();
+  // helper only while a display binds game.*. A named root lets a portable
+  // install — or a test fixture — point at its own library; absent, the
+  // registry's SteamPath is the answer.
+  const namedSteamRoot = process.env.YUNARI_STEAM_ROOT;
+  const steamRoot =
+    namedSteamRoot === undefined || namedSteamRoot === ""
+      ? undefined
+      : () => Promise.resolve(namedSteamRoot);
+  const gameProvider = new GameProvider(
+    steamRoot === undefined ? {} : { steamRoot },
+  );
   const registry = new ProviderRegistry([
     clockProvider,
     lhmProvider,
@@ -360,6 +370,9 @@ export async function run(argv: readonly string[]): Promise<number> {
     sources: { store: customSources, provider: customProvider },
     assets: { credentials },
     artwork: mediaArtwork,
+    gameArtwork: createGameArtwork(
+      steamRoot === undefined ? {} : { steamRoot },
+    ),
     onDisplayChange: (settings) => clockProvider.setTimeZone(settings.timeZone),
     activeTheme,
     // Both providers know the machine's devices; LHM's list is richer, so its

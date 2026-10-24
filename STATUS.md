@@ -12,22 +12,22 @@ The **sensor platform** ([`spec`](docs/superpowers/specs/2026-10-24-sensor-platf
 ## Active work
 
 - **Phases 1–5 are complete** (Tasks 1.1–1.5, 2.1–2.4, 3.1–3.5, 4.1–4.3, 5.1–5.5); the Phase 5 gate ran green.
-- **Phase 6**: frame statistics (6.1, 6.2) and game presence (6.3) are complete; local box art (6.4) is next.
+- **Phase 6 is complete** (6.1–6.4): frame statistics, game presence and local box art all answer; the agent-implemented tasks are done.
 - **Custom sources are proven end to end**: authored in Host mode, discovered by the inspector, rendered on a display, and explained when deleted.
 - **Media is live end to end**: real Chrome session title/artist/state/position/duration, artwork bytes through the authed route, and `audio.volume`/`audio.muted` from the render endpoint.
 
 ## Last completed change
 
-- **Task 6.3**: foreground-process PowerShell helper plus a dependency-free KeyValues reader for `libraryfolders.vdf` and `appmanifest_*.acf`; the four `game.*` keys now answer.
-- **Evidence:** 17 focused tests, host typecheck, biome and build all exit 0; the real library read 19 apps and the foreground probe emitted one JSON line per second.
-- **Decision 0108** landed before the first provider write; the six rungs record the VDF/foreground package searches and the native-toolchain rejections.
-- **Filed by the controller:** vg-714, every foreground process reads as a running game (the plan's presence rule, followed unchanged).
+- **Task 6.4**: `/api/game/artwork/<appId>.jpg` serves Steam's local `librarycache/<appId>/library_600x900.jpg`; `game.artwork` gives that URL when the running app has one and is unavailable otherwise.
+- **Route refuses** malformed or uninstalled app ids, bounds reads at 5 MiB, and mirrors media artwork's loopback-or-paired-display gate with a `private, max-age=3600` cache.
+- **Evidence:** 323 focused host tests, host and e2e typechecks, biome, host and editor builds exit 0; the e2e decoded the cached JPEG then restored the authored SVG.
+- **Decision 0108 extended** (no second ADR): `server.ts` claimed, local-only serving recorded as a privacy decision against a Steam CDN request.
+- **Real-library probe:** 16 of 19 installed apps have the 600x900 file; `228980`, `292030` and `990080` do not.
 
 ## Next
 
-1. Dispatch Task 6.4 (local box art).
-2. Review each task's diff and evidence before dispatching the next.
-3. Run the full gate at the end of each phase.
+1. Run the full gate and the Phase 6 gate.
+2. Close the sensor-platform plan and spec.
 
 ## Blockers / unverified
 

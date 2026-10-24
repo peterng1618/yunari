@@ -24,6 +24,11 @@ import type {
   CustomSourceStatus,
   SourceTestResult,
 } from "./providers/custom/provider.js";
+import {
+  GAME_APP_ID,
+  GAME_ARTWORK_PREFIX,
+  type GameArtworkSource,
+} from "./providers/game/box-art.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
 import {
   ARTWORK_NAME,
@@ -267,6 +272,9 @@ export interface HostServerOptions {
   /** The media provider's artwork files. Omitted when this host reads no
    *  media; the route then answers 404 rather than inventing a picture. */
   readonly artwork?: ArtworkCache;
+  /** The running Steam game's local box art. Omitted when this host reads no
+   *  Steam library; the route then answers 404 rather than inventing a picture. */
+  readonly gameArtwork?: GameArtworkSource;
   /** The Wallpaper Engine library on this PC. Omitted when this host serves
    *  none, and the listing then says it is not installed. */
   readonly wallpaperEngine?: WallpaperEngineSource;
@@ -994,6 +1002,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   let knownCredentials = baseCredentials;
   const assets = options.assets;
   const artwork = options.artwork;
+  const gameArtwork = options.gameArtwork;
   const wallpaperEngine = options.wallpaperEngine;
   const activeTheme = options.activeTheme;
   const thumbnails = options.thumbnails;
@@ -2618,6 +2627,51 @@ export function createHostServer(options: HostServerOptions): HostServer {
         "x-content-type-options": "nosniff",
       });
       response.end(stored.bytes);
+      return;
+    }
+
+    // The running Steam game's box art is local bytes, so the app id is the
+    // whole allow-list: only an installed app has a cache file, and anything
+    // else is a 404 rather than a filesystem probe. A display reads it through
+    // the same credential as media artwork; loopback is this PC. The name is
+    // not content-addressed, so the cache is bounded rather than immutable.
+    if (url.pathname.startsWith(GAME_ARTWORK_PREFIX)) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+
+      const name = url.pathname.slice(GAME_ARTWORK_PREFIX.length);
+      const appId = name.endsWith(".jpg") ? name.slice(0, -".jpg".length) : "";
+
+      if (!GAME_APP_ID.test(appId)) {
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      if (
+        !isLoopbackRemote(request.socket.remoteAddress) &&
+        (await displayFor(request, url, displays)) === undefined
+      ) {
+        sendText(response, 403, "This display is not paired with the host.");
+        return;
+      }
+
+      const bytes =
+        gameArtwork === undefined ? undefined : await gameArtwork.read(appId);
+
+      if (bytes === undefined) {
+        sendText(response, 404, "Not found.");
+        return;
+      }
+
+      response.writeHead(200, {
+        "content-type": "image/jpeg",
+        "content-length": bytes.byteLength,
+        "cache-control": "private, max-age=3600",
+        "x-content-type-options": "nosniff",
+      });
+      response.end(bytes);
       return;
     }
 

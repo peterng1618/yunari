@@ -4,7 +4,9 @@
 - **Status:** accepted
 - **Paths:** `src/web/packages/host/src/providers/game/steam-library.ts`,
   `src/web/packages/host/src/providers/game/provider.ts`,
-  `src/web/packages/host/src/providers/helpers/foreground.ts`
+  `src/web/packages/host/src/providers/game/box-art.ts`,
+  `src/web/packages/host/src/providers/helpers/foreground.ts`,
+  `src/web/packages/host/src/server.ts`
 
 ## The problem
 
@@ -150,6 +152,31 @@ On this machine (2026-10-24, before implementation):
   — one per second, UTF-8, with the executable path. No game was running, so a
   Steam-matched live reading is unverified; the synthetic provider cases cover
   the matching path.
+
+## Box art stays on this machine
+
+`game.artwork` is the running Steam app's box art, read from the cache Steam
+itself writes: `<steam>/appcache/librarycache/<appId>/library_600x900.jpg`.
+Probed on this machine (2026-10-24): 16 of the 19 installed apps have that file
+and three do not (`228980`, `292030`, `990080`), so "no local image" is a real
+state, not an error. The folder also holds `header.jpg`, `library_hero.jpg`,
+`logo.png` and `library_capsule.jpg`; only the 600x900 box art is served, so
+the route cannot become a listing of whatever Steam happens to cache.
+
+The host serves those bytes at `/api/game/artwork/<appId>.jpg` instead of
+letting a display request Steam's CDN. A CDN URL carries the app id off this
+machine, which tells Valve's servers what the user owns and is playing; the
+route keeps that membership local. The app id is also the whole allow-list: a
+decimal id of 1–10 digits that is among the installed apps, and anything else
+is a 404, so the route is not a file oracle. Bytes are read only after a
+`stat` bound of 5 MiB, and a missing file is a 404 the image binding treats as
+a load error, leaving the authored asset.
+
+Authorisation mirrors `/api/media/artwork/`: loopback is this PC and needs no
+credential, and any other request must resolve through `displayFor` with a
+live display session. The response is `image/jpeg`, `nosniff`, and
+`private, max-age=3600` — not `immutable`, because the name is an app id and
+Steam can replace the file in place.
 
 ## Decision
 

@@ -1,4 +1,7 @@
 import { EventEmitter } from "node:events";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { Sample } from "@yunari/renderer-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseForegroundLine } from "../helpers/foreground.js";
@@ -128,9 +131,28 @@ const STEAM_APP: SteamApp = {
   installDir: "D:\\Games\\Steam\\steamapps\\common\\Half-Life",
 };
 
-afterEach(() => {
+const tempRoots: string[] = [];
+
+afterEach(async () => {
   vi.useRealTimers();
+
+  for (const root of tempRoots.splice(0)) {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
+
+/** A fake Steam root holding the art Steam caches for `appId`. */
+async function steamRootWithBoxArt(appId: string): Promise<string> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-game-art-"));
+  tempRoots.push(root);
+  const folder = path.join(root, "appcache", "librarycache", appId);
+  await fs.mkdir(folder, { recursive: true });
+  await fs.writeFile(
+    path.join(folder, "library_600x900.jpg"),
+    new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+  );
+  return root;
+}
 
 describe("GameProvider descriptors", () => {
   it("forwards the vocabulary's labels, families and media kind", async () => {
@@ -257,18 +279,67 @@ describe("GameProvider samples", () => {
     h.provider.stop();
   });
 
-  it("keeps artwork declared but absent until task 6.4", async () => {
+  it("reports the running Steam game's locally cached box art", async () => {
     vi.useFakeTimers();
-    const h = harness();
+    const root = await steamRootWithBoxArt("10");
+    const h = harness({ steamRoot: root, apps: [STEAM_APP] });
     await h.sample(["game.running"]);
-    h.emit(h.children[0] as FakeChild, '{"kind":"foreground","pid":0}');
+    h.emit(
+      h.children[0] as FakeChild,
+      foregroundLine(
+        1234,
+        "d:\\games\\steam\\STEAMAPPS\\common\\half-life\\hl.exe",
+        "hl",
+      ),
+    );
 
     const samples = await h.sample(["game.artwork"]);
 
     expect(samples.get("game.artwork")).toMatchObject({
-      status: "missing",
+      status: "ok",
+      textValue: "/api/game/artwork/10.jpg",
+    });
+    h.provider.stop();
+  });
+
+  it("leaves artwork unavailable when the running game has no local image", async () => {
+    vi.useFakeTimers();
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-game-art-"));
+    tempRoots.push(root);
+    const h = harness({ steamRoot: root, apps: [STEAM_APP] });
+    await h.sample(["game.running"]);
+    h.emit(
+      h.children[0] as FakeChild,
+      foregroundLine(
+        1234,
+        "d:\\games\\steam\\steamapps\\common\\half-life\\hl.exe",
+        "hl",
+      ),
+    );
+
+    const samples = await h.sample(["game.artwork"]);
+
+    expect(samples.get("game.artwork")).toMatchObject({
+      status: "unavailable",
       message: NO_ARTWORK_MESSAGE,
     });
+    expect(samples.get("game.artwork")?.textValue).toBeUndefined();
+    h.provider.stop();
+  });
+
+  it("keeps artwork unavailable for a process outside Steam", async () => {
+    vi.useFakeTimers();
+    const root = await steamRootWithBoxArt("10");
+    const h = harness({ steamRoot: root, apps: [STEAM_APP] });
+    await h.sample(["game.running"]);
+    h.emit(
+      h.children[0] as FakeChild,
+      foregroundLine(99, "C:\\Games\\Other\\other.exe", "other"),
+    );
+
+    const samples = await h.sample(["game.artwork"]);
+
+    expect(samples.get("game.artwork")?.status).toBe("unavailable");
     expect(samples.get("game.artwork")?.textValue).toBeUndefined();
     h.provider.stop();
   });

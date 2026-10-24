@@ -56,7 +56,7 @@ const EDGE_PROBE_SPEC = /live-chart-edge\.spec\.ts/;
  * `editor-invalid-theme` owns 4231, `editor-overlarge-theme` owns 4237,
  * `host-secure-origin` owns 4233 and `media-artwork` owns 4222. The display
  * runner's preview owns 4223 (`playwright.display.config.ts`), so
- * `custom-source` owns 4225.
+ * `custom-source` owns 4225 and `game-artwork` owns 4239.
  *
  * The installability proof joins them for the reason `host-secure-origin` is
  * here rather than in the host project: it starts its own host bound to the
@@ -64,7 +64,7 @@ const EDGE_PROBE_SPEC = /live-chart-edge\.spec\.ts/;
  * context and `localhost` is one whatever the host does. It owns 4235.
  */
 const OWN_HOST_SPEC =
-  /(publish-(header|loop)|editor-(invalid|overlarge)-theme|host-secure-origin|host-pwa|media-artwork|custom-source)\.spec\.ts/;
+  /(publish-(header|loop)|editor-(invalid|overlarge)-theme|host-secure-origin|host-pwa|media-artwork|game-artwork|custom-source)\.spec\.ts/;
 
 /**
  * The rebuild drives its own preview on its own port, under

@@ -21,6 +21,7 @@ import type {
   SensorProvider,
 } from "../provider.js";
 import { descriptorFieldsOf, redactForBrowser } from "../provider.js";
+import { findBoxArt } from "./box-art.js";
 import {
   matchProcess,
   readSteamApps,
@@ -33,10 +34,11 @@ import {
  *
  * One PowerShell helper reports the foreground process once a second while a
  * display binds `game.*`; the Steam library is read once per demand window.
- * A matched app gives the name; a foreground process outside every Steam
- * install still reports its executable and `running: true` with no name
- * (decision 0108). Artwork arrives in task 6.4, so the key is declared but
- * carries no value yet.
+ * A matched app gives the name and, when Steam's cache holds it, the local box
+ * art URL; a foreground process outside every Steam install still reports its
+ * executable and `running: true` with no name (decision 0108). There is no
+ * artwork fallback: no local file means an unavailable reading, never a CDN
+ * URL or a placeholder.
  */
 
 const GAME_PROVIDER_ID = "game";
@@ -117,6 +119,7 @@ export class GameProvider implements SensorProvider {
   #lastDemandMs = Number.NEGATIVE_INFINITY;
   #retryAtMs = 0;
   #foreground: ForegroundReading | undefined;
+  #steamRootPath: string | undefined;
   #steamApps: readonly SteamApp[] | undefined;
   #steamLoading: Promise<void> | undefined;
   /** Bumped on teardown so a late Steam read cannot repopulate a new window. */
@@ -158,9 +161,15 @@ export class GameProvider implements SensorProvider {
     await this.#ensureSteam();
     this.#reconcile(now);
 
+    // Only a demand for the picture reads it, so a name-only display never
+    // stats Steam's cache.
+    const artworkUrl = wanted.includes("game.artwork")
+      ? await this.#boxArtUrl()
+      : undefined;
+
     return wanted.map((semanticKey) => ({
       semanticKey,
-      sample: this.#sampleOf(semanticKey, nowMs),
+      sample: this.#sampleOf(semanticKey, nowMs, artworkUrl),
     }));
   }
 
@@ -186,10 +195,11 @@ export class GameProvider implements SensorProvider {
 
   async #readSteamOnce(): Promise<void> {
     const window = this.#window;
+    let root: string | undefined;
     let apps: readonly SteamApp[] = [];
 
     try {
-      const root = await this.#steamRoot();
+      root = await this.#steamRoot();
       if (root !== undefined) apps = await this.#loadSteamApps(root);
     } catch {
       // An absent or unreadable Steam install is no apps, never an error.
@@ -198,6 +208,7 @@ export class GameProvider implements SensorProvider {
 
     if (window !== this.#window) return;
 
+    this.#steamRootPath = root;
     this.#steamApps = apps;
     this.#steamLoading = undefined;
   }
@@ -280,6 +291,7 @@ export class GameProvider implements SensorProvider {
 
     this.#window += 1;
     this.#foreground = undefined;
+    this.#steamRootPath = undefined;
     this.#steamApps = undefined;
     this.#steamLoading = undefined;
     this.#failure = undefined;
@@ -324,7 +336,21 @@ export class GameProvider implements SensorProvider {
     return foreground.name;
   }
 
-  #sampleOf(semanticKey: string, nowMs: number): Sample {
+  /** The matched app's cached box art, when this window read a Steam root. */
+  async #boxArtUrl(): Promise<string | undefined> {
+    const app = this.#matched();
+    const root = this.#steamRootPath;
+
+    if (app === undefined || root === undefined) return undefined;
+
+    return findBoxArt(app, [root]);
+  }
+
+  #sampleOf(
+    semanticKey: string,
+    nowMs: number,
+    artworkUrl: string | undefined,
+  ): Sample {
     const sensorId = `${GAME_PROVIDER_ID}:${semanticKey}`;
     const timestamp = new Date(nowMs).toISOString();
     const foreground = this.#foreground;
@@ -336,12 +362,9 @@ export class GameProvider implements SensorProvider {
     });
 
     if (semanticKey === "game.artwork") {
-      return {
-        sensorId,
-        timestamp,
-        status: "missing",
-        message: NO_ARTWORK_MESSAGE,
-      };
+      return artworkUrl === undefined
+        ? absent(NO_ARTWORK_MESSAGE)
+        : { sensorId, timestamp, status: "ok", textValue: artworkUrl };
     }
 
     if (foreground === undefined) {

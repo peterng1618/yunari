@@ -8753,6 +8753,133 @@ describe("The media artwork route", () => {
   });
 });
 
+describe("The game box art route", () => {
+  const BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+
+  let directory: string;
+  let hosted: ReturnType<typeof createHostServer> | undefined;
+
+  beforeEach(async () => {
+    directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "yunari-game-art-route-"),
+    );
+  });
+
+  afterEach(async () => {
+    await hosted?.close();
+    hosted = undefined;
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+
+  function launch(options: Partial<HostServerOptions> = {}) {
+    const running = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: directory, editor: directory },
+      ...options,
+    });
+    hosted = running;
+    return running;
+  }
+
+  function source(ids: readonly string[]) {
+    return {
+      read: async (appId: string) => (ids.includes(appId) ? BYTES : undefined),
+    };
+  }
+
+  it("serves box art with a bounded, non-immutable cache header", async () => {
+    const running = launch({ gameArtwork: source(["10"]) });
+
+    const answer = await request(
+      running.server,
+      "GET",
+      "/api/game/artwork/10.jpg",
+    );
+
+    expect(answer.status).toBe(200);
+    expect(answer.headers["content-type"]).toBe("image/jpeg");
+    expect(answer.headers["cache-control"]).toBe("private, max-age=3600");
+    expect(answer.headers["x-content-type-options"]).toBe("nosniff");
+    expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
+  });
+
+  it("404s a malformed name before the source is asked", async () => {
+    let reads = 0;
+    const running = launch({
+      gameArtwork: {
+        read: async () => {
+          reads += 1;
+          return BYTES;
+        },
+      },
+    });
+
+    for (const name of [
+      "10",
+      "10.png",
+      "10.jpg/extra",
+      "abc.jpg",
+      "12345678901.jpg",
+      "10.JPG",
+      "..%2F10.jpg",
+    ]) {
+      expect(
+        (await request(running.server, "GET", `/api/game/artwork/${name}`))
+          .status,
+        name,
+      ).toBe(404);
+    }
+
+    expect(reads).toBe(0);
+  });
+
+  it("404s an app id the host does not know", async () => {
+    const running = launch({ gameArtwork: source(["10"]) });
+
+    expect(
+      (await request(running.server, "GET", "/api/game/artwork/999.jpg"))
+        .status,
+    ).toBe(404);
+  });
+
+  it("lets a paired display read it and refuses an unpaired remote", async () => {
+    const displays = createDisplayStore(directory);
+    const token = newToken();
+    await displays.create("phone", token);
+    const running = launch({ displays, gameArtwork: source(["10"]) });
+
+    const lan = { remoteAddress: "192.168.1.50" };
+    const url = "/api/game/artwork/10.jpg";
+
+    expect((await request(running.server, "GET", url)).status).toBe(200);
+
+    expect(
+      (await request(running.server, "GET", url, undefined, lan)).status,
+    ).toBe(403);
+
+    expect(
+      (
+        await request(running.server, "GET", url, undefined, {
+          ...lan,
+          headers: { "x-yunari-session": token },
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  it("405s every non-GET", async () => {
+    const running = launch({ gameArtwork: source(["10"]) });
+
+    for (const method of ["POST", "PUT", "DELETE"]) {
+      expect(
+        (await request(running.server, method, "/api/game/artwork/10.jpg", "x"))
+          .status,
+        method,
+      ).toBe(405);
+    }
+  });
+});
+
 describe("Custom source routes", () => {
   let tmpDir: string;
   let credentials: ReturnType<typeof createCredentialStore>;
