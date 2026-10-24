@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseForegroundLine } from "../helpers/foreground.js";
 import type { HelperChild, SpawnProcess } from "../helpers/supervisor.js";
 import type { InstalledGame } from "./catalogue/catalogue.js";
+import type { CatalogueSeams } from "./catalogue/seams.js";
 import {
   GAME_KEYS,
   GameProvider,
@@ -18,6 +19,26 @@ import {
 } from "./provider.js";
 import type { SteamApp } from "./steam-library.js";
 import type { StoreLookupResult } from "./store-metadata.js";
+
+/** Lets one test drive the provider's own default catalogue deterministically. */
+const defaultCatalogueReader = vi.hoisted(() => ({
+  read: undefined as
+    | ((seams: CatalogueSeams) => Promise<readonly InstalledGame[]>)
+    | undefined,
+}));
+
+vi.mock("./catalogue/catalogue.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./catalogue/catalogue.js")>();
+
+  return {
+    ...actual,
+    readInstalledGames: (seams: CatalogueSeams) =>
+      defaultCatalogueReader.read === undefined
+        ? actual.readInstalledGames(seams)
+        : defaultCatalogueReader.read(seams),
+  };
+});
 
 class FakeChild extends EventEmitter {
   readonly pid: number;
@@ -45,6 +66,10 @@ interface HarnessOptions {
   ) => Promise<string | undefined>;
   /** Installed games the classifier matches against. */
   readonly catalogue?: () => Promise<readonly InstalledGame[]>;
+  /** Use the provider's own default catalogue rather than the harness fake. */
+  readonly useDefaultCatalogue?: boolean;
+  /** The runtime-marker listing; the default throws, so no test reads a disk. */
+  readonly readdir?: (dir: string) => Promise<readonly string[]>;
 }
 
 interface Harness {
@@ -104,16 +129,25 @@ function harness(options: HarnessOptions = {}): Harness {
     loadSteamApps: async () => options.apps ?? [],
     // A test never runs PowerShell: absent a fake, there is no product name.
     productName: options.productName ?? (async () => undefined),
-    // The default catalogue is Steam's library, as the real default seams map it.
-    catalogue:
-      options.catalogue ??
-      (async () =>
-        (options.apps ?? []).map((app) => ({
-          source: "steam" as const,
-          name: app.name,
-          installDir: app.installDir,
-          exes: [],
-        }))),
+    ...(options.useDefaultCatalogue === true
+      ? {}
+      : {
+          // The default catalogue is Steam's library, as the real seams map it.
+          catalogue:
+            options.catalogue ??
+            (async () =>
+              (options.apps ?? []).map((app) => ({
+                source: "steam" as const,
+                name: app.name,
+                installDir: app.installDir,
+                exes: [],
+              }))),
+        }),
+    readdir:
+      options.readdir ??
+      (async () => {
+        throw new Error("ENOENT: no such directory in a test");
+      }),
     ...(options.store === undefined ? {} : { store: options.store }),
   });
 
@@ -170,6 +204,7 @@ const tempRoots: string[] = [];
 
 afterEach(async () => {
   vi.useRealTimers();
+  defaultCatalogueReader.read = undefined;
 
   for (const root of tempRoots.splice(0)) {
     await fs.rm(root, { recursive: true, force: true });
@@ -449,17 +484,24 @@ describe("GameProvider classification", () => {
     exes: ["C:\\Games\\Catalogue\\game.exe"],
   };
 
-  function countingStore(): { store: GameStore; lookups: () => number } {
+  function countingStore(): {
+    store: GameStore;
+    lookups: () => number;
+    covers: () => number;
+  } {
     let lookups = 0;
+    let covers = 0;
 
     return {
       lookups: () => lookups,
+      covers: () => covers,
       store: {
         async lookup() {
           lookups += 1;
           return { kind: "none" };
         },
         async cover() {
+          covers += 1;
           return undefined;
         },
       },
@@ -493,13 +535,17 @@ describe("GameProvider classification", () => {
     h.provider.stop();
   });
 
-  it("reports a catalogued executable as running with no store lookup", async () => {
+  it("reports a catalogued executable as running without touching the store", async () => {
     vi.useFakeTimers();
     const fake = countingStore();
+    let productReads = 0;
     const h = harness({
       catalogue: async () => [CATALOGUE_GAME],
       store: fake.store,
-      productName: async () => "Catalogue Game",
+      productName: async () => {
+        productReads += 1;
+        return "Catalogue Game";
+      },
     });
     await h.sample(["game.running"]);
     h.emit(
@@ -518,10 +564,50 @@ describe("GameProvider classification", () => {
       textValue: "Catalogue Game",
     });
     expect(fake.lookups()).toBe(0);
+    expect(fake.covers()).toBe(0);
+    expect(productReads).toBe(0);
     h.provider.stop();
   });
 
-  it("turns running true only on the second consecutive fullscreen sample", async () => {
+  it("gives a catalogued game the same identity for artwork-only and name+artwork", async () => {
+    vi.useFakeTimers();
+    const fake = countingStore();
+    let productReads = 0;
+    const h = harness({
+      catalogue: async () => [CATALOGUE_GAME],
+      store: fake.store,
+      productName: async () => {
+        productReads += 1;
+        return "Catalogue Game";
+      },
+    });
+    await h.sample(["game.running"]);
+    h.emit(
+      h.children[0] as FakeChild,
+      foregroundLine(99, "C:\\Games\\Catalogue\\game.exe", "game"),
+    );
+
+    const artworkOnly = await h.sample(["game.artwork"]);
+    const nameAndArtwork = await h.sample(["game.name", "game.artwork"]);
+
+    expect(artworkOnly.get("game.artwork")).toEqual(
+      nameAndArtwork.get("game.artwork"),
+    );
+    expect(artworkOnly.get("game.artwork")).toMatchObject({
+      status: "unavailable",
+      message: NO_ARTWORK_MESSAGE,
+    });
+    expect(nameAndArtwork.get("game.name")).toMatchObject({
+      status: "ok",
+      textValue: "Catalogue Game",
+    });
+    expect(fake.lookups()).toBe(0);
+    expect(fake.covers()).toBe(0);
+    expect(productReads).toBe(0);
+    h.provider.stop();
+  });
+
+  it("turns running true only on the second fullscreen helper line", async () => {
     vi.useFakeTimers();
     const h = harness();
     await h.sample(["game.running"]);
@@ -531,8 +617,15 @@ describe("GameProvider classification", () => {
     });
     h.emit(h.children[0] as FakeChild, line);
 
+    // Two ask groups in one host tick read the same helper line. Neither may
+    // count it as a second sample.
     const first = await h.sample(["game.running"]);
+    const repeated = await h.sample(["game.running"]);
     expect(first.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: false,
+    });
+    expect(repeated.get("game.running")).toMatchObject({
       status: "ok",
       booleanValue: false,
     });
@@ -542,6 +635,44 @@ describe("GameProvider classification", () => {
     expect(second.get("game.running")).toMatchObject({
       status: "ok",
       booleanValue: true,
+    });
+    h.provider.stop();
+  });
+
+  it("builds the default catalogue from the provider's Steam seams", async () => {
+    vi.useFakeTimers();
+    // A synthetic root no real Steam install can match: only the provider's
+    // injected seams resolve it.
+    const fixtureApp: SteamApp = {
+      appId: "10",
+      name: "Fixture Game",
+      installDir: "D:\\YunariFixtures\\Steam\\steamapps\\common\\Fixture",
+    };
+    defaultCatalogueReader.read = async (seams) => seams.steamApps();
+    const h = harness({
+      steamRoot: "D:\\YunariFixtures\\Steam",
+      apps: [fixtureApp],
+      useDefaultCatalogue: true,
+    });
+    await h.sample(["game.running"]);
+    h.emit(
+      h.children[0] as FakeChild,
+      foregroundLine(
+        1234,
+        "D:\\YunariFixtures\\Steam\\steamapps\\common\\Fixture\\game.exe",
+        "game",
+      ),
+    );
+
+    const samples = await h.sample(GAME_KEYS);
+
+    expect(samples.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: true,
+    });
+    expect(samples.get("game.name")).toMatchObject({
+      status: "ok",
+      textValue: "Fixture Game",
     });
     h.provider.stop();
   });
@@ -566,6 +697,80 @@ describe("GameProvider classification", () => {
       booleanValue: false,
     });
     expect(h.provider.health()).toEqual({ available: true });
+    h.provider.stop();
+  });
+
+  it("reads the catalogue once per demand window", async () => {
+    vi.useFakeTimers();
+    let reads = 0;
+    const h = harness({
+      catalogue: async () => {
+        reads += 1;
+        return [CATALOGUE_GAME];
+      },
+    });
+
+    await h.sample(["game.running"]);
+    await h.sample(["game.running"]);
+
+    expect(reads).toBe(1);
+    h.provider.stop();
+  });
+
+  it("reads the catalogue again after the grace gap starts a new window", async () => {
+    vi.useFakeTimers();
+    let reads = 0;
+    const h = harness({
+      graceMs: 5_000,
+      catalogue: async () => {
+        reads += 1;
+        return [CATALOGUE_GAME];
+      },
+    });
+
+    await h.sample(["game.running"]);
+    h.advance(6_000);
+    await h.sample(["game.running"]);
+
+    expect(reads).toBe(2);
+    h.provider.stop();
+  });
+
+  it("drops a catalogue read that resolves after teardown", async () => {
+    vi.useFakeTimers();
+    let reads = 0;
+    let release: (games: readonly InstalledGame[]) => void = () => undefined;
+    const h = harness({
+      catalogue: () => {
+        reads += 1;
+
+        return reads === 1
+          ? new Promise((resolve) => {
+              release = resolve;
+            })
+          : Promise.resolve([]);
+      },
+    });
+
+    const pending = h.provider.sample(["game.running"], h.now());
+    h.provider.stop();
+    release([CATALOGUE_GAME]);
+    await pending;
+
+    // The next window reads an empty catalogue; the late first read must not
+    // have populated it.
+    await h.sample(["game.running"]);
+    h.emit(
+      h.children[0] as FakeChild,
+      foregroundLine(99, "C:\\Games\\Catalogue\\game.exe", "game"),
+    );
+    const samples = await h.sample(["game.running"]);
+
+    expect(reads).toBe(2);
+    expect(samples.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: false,
+    });
     h.provider.stop();
   });
 });

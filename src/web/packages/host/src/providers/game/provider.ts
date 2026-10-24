@@ -119,6 +119,8 @@ export interface GameProviderOptions {
    * window; a rejection is an empty catalogue, not the provider's failure.
    */
   readonly catalogue?: () => Promise<readonly InstalledGame[]>;
+  /** The directory listing the runtime-marker check uses; a test injects one. */
+  readonly readdir?: (dir: string) => Promise<readonly string[]>;
   /**
    * A fixed foreground executable instead of the Windows helper. A browser
    * proof uses it to name a game with no real window; the helper is not spawned.
@@ -165,6 +167,7 @@ export class GameProvider implements SensorProvider {
     executablePath: string,
   ) => Promise<string | undefined>;
   readonly #catalogue: () => Promise<readonly InstalledGame[]>;
+  readonly #readdir: (dir: string) => Promise<readonly string[]>;
   readonly #foregroundPath: string | undefined;
 
   #helper: RunningHelper | undefined;
@@ -177,9 +180,12 @@ export class GameProvider implements SensorProvider {
   #steamLoading: Promise<void> | undefined;
   #catalogueGames: readonly InstalledGame[] | undefined;
   #catalogueLoading: Promise<void> | undefined;
-  /** Consecutive samples of the same foreground window while fullscreen. */
+  /** Consecutive helper lines of the same foreground window while fullscreen. */
   #fullscreenSamples = 0;
   #fullscreenKey: { readonly pid: number; readonly class?: string } | undefined;
+  /** Bumped by every parsed helper line, so repeated asks read one line once. */
+  #readingSequence = 0;
+  #sampledSequence = -1;
   /** Bumped on teardown so a late Steam read cannot repopulate a new window. */
   #window = 0;
   /** Redacted; may reach a browser through `health()` and a sample message. */
@@ -197,7 +203,15 @@ export class GameProvider implements SensorProvider {
     this.#store = options.store;
     this.#productName = options.productName ?? readProductName;
     this.#catalogue =
-      options.catalogue ?? (() => readInstalledGames(defaultCatalogueSeams()));
+      options.catalogue ??
+      (() =>
+        readInstalledGames(
+          defaultCatalogueSeams({
+            resolveSteamRoot: this.#steamRoot,
+            readSteamApps: this.#loadSteamApps,
+          }),
+        ));
+    this.#readdir = options.readdir ?? fs.readdir;
     this.#foregroundPath = options.foregroundPath;
   }
 
@@ -230,7 +244,9 @@ export class GameProvider implements SensorProvider {
     const wantsName = wanted.includes("game.name");
     const wantsArtwork = wanted.includes("game.artwork");
     const evidence =
-      wantsRunning || wantsName ? await this.#classify() : undefined;
+      wantsRunning || wantsName || wantsArtwork
+        ? await this.#classify()
+        : undefined;
     const identity =
       wantsName || wantsArtwork ? await this.#identify(evidence) : undefined;
     const artworkUrl = wantsArtwork
@@ -378,6 +394,7 @@ export class GameProvider implements SensorProvider {
     const reading = parseForegroundLine(line);
     if (reading === undefined) return;
 
+    this.#readingSequence += 1;
     this.#foreground = reading;
     this.#failure = undefined;
   }
@@ -408,6 +425,7 @@ export class GameProvider implements SensorProvider {
   #resetFullscreen(): void {
     this.#fullscreenSamples = 0;
     this.#fullscreenKey = undefined;
+    this.#sampledSequence = -1;
   }
 
   #stopTick(): void {
@@ -446,12 +464,18 @@ export class GameProvider implements SensorProvider {
   }
 
   /**
-   * The classifier's answer for the current foreground. The fullscreen count
-   * tracks a streak: the same pid and class while a fullscreen flag holds. The
-   * second sample of the streak reaches the classifier's threshold, so alt-tab
-   * does not flap presence.
+   * The classifier's answer for the current foreground. The fullscreen streak
+   * advances on a new helper line only: several asks in one host tick all read
+   * the same line, and counting those would turn one fullscreen line into two.
+   * The streak is the same pid and class while a fullscreen flag holds, so the
+   * second line reaches the classifier's threshold and alt-tab does not flap
+   * presence.
    */
   async #classify(): Promise<GameEvidence | undefined> {
+    const sequence = this.#readingSequence;
+    const fresh = sequence !== this.#sampledSequence;
+    this.#sampledSequence = sequence;
+
     const foreground = this.#currentForeground();
 
     if (foreground === undefined) {
@@ -459,6 +483,15 @@ export class GameProvider implements SensorProvider {
       return undefined;
     }
 
+    if (fresh) this.#advanceFullscreen(foreground);
+
+    return classifyForeground(foreground, this.#catalogueGames ?? [], {
+      fullscreenSamples: this.#fullscreenSamples,
+      readdir: this.#readdir,
+    });
+  }
+
+  #advanceFullscreen(foreground: ForegroundReading): void {
     const fullscreen =
       foreground.fullscreen === true || foreground.d3dFullscreen === true;
     const previous = this.#fullscreenKey;
@@ -476,11 +509,6 @@ export class GameProvider implements SensorProvider {
       pid: foreground.pid,
       ...(foreground.class === undefined ? {} : { class: foreground.class }),
     };
-
-    return classifyForeground(foreground, this.#catalogueGames ?? [], {
-      fullscreenSamples: this.#fullscreenSamples,
-      readdir: fs.readdir,
-    });
   }
 
   /** The executable's file name, else the process name the helper could read. */
