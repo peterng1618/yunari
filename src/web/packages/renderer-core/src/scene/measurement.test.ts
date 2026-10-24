@@ -200,16 +200,25 @@ describe("rate units", () => {
 });
 
 describe("fan units", () => {
-  it("never converts an RPM reading to a guessed percentage", () => {
-    expect(
-      convertForDisplay("cooling.fan.1.rpm", 1200, "RPM", { fan: "percent" }),
-    ).toEqual({ value: 1200, unit: "RPM" });
+  it("has no unit preference, so RPM and control percent show as measured", () => {
+    // RPM is never converted by guessing a range, and a control reading is
+    // already a percent — so the preference that could change neither is gone
+    // rather than left as a branch that never converts.
+    expect("fan" in DEFAULT_UNIT_PREFERENCES).toBe(false);
+    expect(convertForDisplay("cooling.fan.1.rpm", 1200, "RPM", {})).toEqual({
+      value: 1200,
+      unit: "RPM",
+    });
+    expect(convertForDisplay("cooling.fan.1.percent", 60, "%", {})).toEqual({
+      value: 60,
+      unit: "%",
+    });
   });
 
-  it("leaves a control reading in percent", () => {
-    expect(
-      convertForDisplay("cooling.fan.1.percent", 60, "%", { fan: "percent" }),
-    ).toEqual({ value: 60, unit: "%" });
+  it("ignores a stored fan preference so the other units survive", () => {
+    expect(normalizeUnitPreferences({ fan: "percent", clock: "ghz" })).toEqual({
+      clock: "ghz",
+    });
   });
 });
 
@@ -292,6 +301,8 @@ describe("normalizeUnitPreferences", () => {
 
   it("refuses a value it cannot display rather than storing a no-op", () => {
     expect(() => normalizeUnitPreferences({ clock: "thz" })).toThrow(/clock/);
-    expect(() => normalizeUnitPreferences({ fan: 50 })).toThrow(/fan/);
+    expect(() => normalizeUnitPreferences({ nonsense: 50 })).toThrow(
+      /nonsense/,
+    );
   });
 });

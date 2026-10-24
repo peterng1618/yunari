@@ -1,4 +1,7 @@
-import { describeSemanticKey } from "../data/semantic-keys.js";
+import {
+  describeSemanticKey,
+  type SemanticKeyDescriptor,
+} from "../data/semantic-keys.js";
 
 /**
  * A consumer's unit preferences, applied when a value is displayed.
@@ -35,7 +38,6 @@ export interface UnitPreferences {
   readonly dataScale?: "auto" | "mb" | "gb" | "tb";
   readonly rate?: "bits" | "bytes";
   readonly rateScale?: "auto" | "k" | "m" | "g";
-  readonly fan?: "rpm" | "percent";
   readonly windSpeed?: "kmh" | "mph" | "ms";
   readonly pressure?: "hpa" | "inhg";
 }
@@ -47,7 +49,6 @@ export const DEFAULT_UNIT_PREFERENCES: Required<UnitPreferences> = {
   dataScale: "auto",
   rate: "bits",
   rateScale: "auto",
-  fan: "rpm",
   windSpeed: "kmh",
   pressure: "hpa",
 };
@@ -59,7 +60,6 @@ const PREFERENCE_VALUES = {
   dataScale: ["auto", "mb", "gb", "tb"],
   rate: ["bits", "bytes"],
   rateScale: ["auto", "k", "m", "g"],
-  fan: ["rpm", "percent"],
   windSpeed: ["kmh", "mph", "ms"],
   pressure: ["hpa", "inhg"],
 } as const satisfies Record<keyof UnitPreferences, readonly string[]>;
@@ -77,6 +77,12 @@ export function normalizeUnitPreferences(input: unknown): UnitPreferences {
   const normalized: Record<string, unknown> = {};
 
   for (const [field, value] of Object.entries(input)) {
+    // A `fan` preference existed before RPM was ruled unconvertible. It is
+    // ignored rather than refused, so an old display.json keeps its other units.
+    if (field === "fan") {
+      continue;
+    }
+
     const allowed = PREFERENCE_VALUES[field as keyof typeof PREFERENCE_VALUES];
 
     if (allowed === undefined) {
@@ -136,6 +142,10 @@ function isDisplayableUnit(
  * Conversion runs once, at presentation, after the binding's authored
  * scale/offset. A unit that does not match the key's canonical unit is left as
  * measured rather than guessed at.
+ *
+ * `descriptor` is the descriptor that supplied the key, when a caller has one:
+ * a custom source's unit and `unitKind` live on the provider's descriptor, not
+ * on the vocabulary's generic `custom.*` shape. One conversion still runs.
  */
 export function convertForDisplay(
   semanticKey: string,
@@ -143,41 +153,54 @@ export function convertForDisplay(
   unit: string | undefined,
   preferences: UnitPreferences,
   overrides: UnitOverrides = {},
+  descriptor?: SemanticKeyDescriptor,
 ): ConvertedValue & { readonly unsupportedUnit?: true } {
-  const descriptor = describeSemanticKey(semanticKey);
+  const resolved = descriptor ?? describeSemanticKey(semanticKey);
 
-  if (
-    overrides.unit !== undefined &&
-    !isDisplayableUnit(
-      descriptor?.displayUnits,
-      descriptor?.unit,
-      overrides.unit,
-    )
-  ) {
-    // A plan-time issue, never a crash: the reading is still shown.
-    return { value, unit, unsupportedUnit: true };
+  if (overrides.unit !== undefined) {
+    if (resolved === undefined) {
+      return { value, unit, unsupportedUnit: true };
+    }
+
+    // A descriptor that declares no alternative units (a custom source's) is
+    // proved by the conversion itself, below.
+    if (
+      resolved.displayUnits !== undefined &&
+      !isDisplayableUnit(resolved.displayUnits, resolved.unit, overrides.unit)
+    ) {
+      // A plan-time issue, never a crash: the reading is still shown.
+      return { value, unit, unsupportedUnit: true };
+    }
   }
 
-  if (descriptor === undefined) {
+  if (resolved === undefined) {
     return { value, unit };
   }
 
-  switch (descriptor.unitKind) {
+  /** An undeclared target the kind could not reach is still unsupported. */
+  const finish = (converted: ConvertedValue) =>
+    overrides.unit !== undefined &&
+    resolved.displayUnits === undefined &&
+    converted.unit !== overrides.unit
+      ? { ...converted, unsupportedUnit: true as const }
+      : converted;
+
+  switch (resolved.unitKind) {
     case "temperature":
-      return convertTemperature(value, unit, preferences, overrides);
+      return finish(convertTemperature(value, unit, preferences, overrides));
     case "clock":
-      return convertClock(value, unit, preferences, overrides);
+      return finish(convertClock(value, unit, preferences, overrides));
     case "data":
-      return convertData(value, unit, preferences, overrides);
+      return finish(convertData(value, unit, preferences, overrides));
     case "dataRate":
-      return convertRate(value, unit, preferences, overrides);
+      return finish(convertRate(value, unit, preferences, overrides));
     case "speed":
-      return convertWindSpeed(value, unit, preferences, overrides);
+      return finish(convertWindSpeed(value, unit, preferences, overrides));
     case "pressure":
-      return convertPressure(value, unit, preferences, overrides);
+      return finish(convertPressure(value, unit, preferences, overrides));
     default:
       // Rotation and percent included: RPM is never guessed into a percentage.
-      return { value, unit };
+      return finish({ value, unit });
   }
 }
 

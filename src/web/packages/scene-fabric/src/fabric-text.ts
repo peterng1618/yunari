@@ -6,6 +6,7 @@ import type {
   PlanTextLayout,
   PlanTextSegment,
   SampleSource,
+  SemanticKeyDescriptor,
   TextContent,
   TextRun,
   UnitPreferences,
@@ -346,6 +347,7 @@ export function refreshBoundText(
   globals: FabricGlobals | undefined,
   units?: UnitPreferences,
   themeLanguage?: string,
+  descriptors?: readonly SemanticKeyDescriptor[],
 ): void {
   const refresh = (objects: readonly object[]): void => {
     for (const object of objects) {
@@ -368,6 +370,7 @@ export function refreshBoundText(
               source,
               ...(units === undefined ? {} : { units }),
               ...(themeLanguage === undefined ? {} : { themeLanguage }),
+              ...(descriptors === undefined ? {} : { descriptors }),
             },
             globals ?? {},
             [],

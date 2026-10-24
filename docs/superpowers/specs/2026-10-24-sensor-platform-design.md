@@ -272,7 +272,6 @@ interface UnitPreferences {
   readonly dataScale?: "auto" | "mb" | "gb" | "tb";
   readonly rate?: "bits" | "bytes";
   readonly rateScale?: "auto" | "k" | "m" | "g";
-  readonly fan?: "rpm" | "percent";
   readonly windSpeed?: "kmh" | "mph" | "ms";
   readonly pressure?: "hpa" | "inhg";
 }
@@ -294,7 +293,6 @@ would create two owners for one choice.
     "dataScale": "auto",
     "rate": "bits",
     "rateScale": "auto",
-    "fan": "rpm",
     "windSpeed": "kmh",
     "pressure": "hpa"
   }
@@ -331,9 +329,6 @@ readonly autoScale?: boolean; // author asks for magnitude-based prefixing
 - Rate: choose kb/s below 1 Mb/s, Mb/s below 1000 Mb/s, Gb/s above. Byte mode
   divides by 8 and labels `kB/s`, `MB/s`, `GB/s`.
 - Weather wind and pressure use the chosen unit; no auto prefix.
-- Fan percent is shown only where the provider reports a control reading. RPM
-  is never converted to a percentage by guessing a range. A `fan: "percent"`
-  preference therefore applies to control keys; an RPM-only key keeps RPM.
 
 Precision runs after conversion. The binding's `precision`, when present, wins;
 otherwise the formatter's default for the chosen unit applies. The existing
@@ -911,7 +906,7 @@ This spec is implemented when:
    `/api/sensors` returns them from the providers that can answer.
 2. The editor can bind text, chart and image surfaces to built-in, dynamic and
    custom keys; a disconnected editor still lists the built-ins.
-3. Unit preferences visibly change clock, data, rate, fan, wind and pressure
+3. Unit preferences visibly change clock, data, rate, wind and pressure
    **text** formatting without changing sample values or authored thresholds.
    Charts stay canonical in this phase, because their authored ranges and
    thresholds are written against sampled magnitudes.

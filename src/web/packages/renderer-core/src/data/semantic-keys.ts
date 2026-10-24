@@ -828,6 +828,9 @@ export const SEMANTIC_KEYS: readonly SemanticKeyDescriptor[] = [
     label: "Sunrise",
     valueKind: "text",
     expectedTier: "baseline",
+    // The provider sends an ISO instant, so the binding's format and zone
+    // decide how it reads rather than the provider's raw spelling.
+    instant: { defaultFormat: "HH:mm" },
   },
   {
     key: "weather.sunset",
@@ -835,6 +838,7 @@ export const SEMANTIC_KEYS: readonly SemanticKeyDescriptor[] = [
     label: "Sunset",
     valueKind: "text",
     expectedTier: "baseline",
+    instant: { defaultFormat: "HH:mm" },
   },
   {
     key: "weather.attribution",

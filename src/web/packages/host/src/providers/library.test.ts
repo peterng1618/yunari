@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   type BatteryLike,
+  type CpuLike,
   type LibraryModule,
   LibrarySensorProvider,
   type OsInfoLike,
@@ -60,6 +61,7 @@ interface Fake {
   readonly wifi?: readonly WifiConnectionLike[];
   readonly battery?: BatteryLike;
   readonly os?: OsInfoLike;
+  readonly cpu?: CpuLike;
   readonly uptime?: number;
   readonly processes?: number;
 }
@@ -73,7 +75,7 @@ function fakeMachine(overrides: Fake = {}): LibraryModule {
     fsSize: async () => [],
     networkStats: async () => [],
     graphics: async () => ({ controllers: [] }),
-    cpu: async () => ({}),
+    cpu: async () => overrides.cpu ?? {},
     diskLayout: async () => [],
     blockDevices: async () => [],
     // Fractional on purpose: the provider promises integer seconds and a count.
@@ -379,6 +381,38 @@ describe("battery readings", () => {
       expect(sampleOf(entries, key), key).not.toHaveProperty("booleanValue");
     }
     expect(sampleOf(entries, "battery.state")?.message).toContain("no battery");
+  });
+});
+
+describe("CPU core counts", () => {
+  const CORE_KEYS = ["cpu.cores.physical", "cpu.cores.logical"];
+
+  it("reports the physical and logical counts the CPU read carries", async () => {
+    const provider = new LibrarySensorProvider(
+      fakeMachine({ cpu: { physicalCores: 8, cores: 16 } }),
+    );
+    const entries = await provider.sample(CORE_KEYS, 0);
+
+    expect(sampleOf(entries, "cpu.cores.physical")).toMatchObject({
+      status: "ok",
+      value: 8,
+    });
+    expect(sampleOf(entries, "cpu.cores.logical")).toMatchObject({
+      status: "ok",
+      value: 16,
+    });
+  });
+
+  it("reports a count the library does not state as a gap, never zero", async () => {
+    const provider = new LibrarySensorProvider(
+      fakeMachine({ cpu: { physicalCores: 0 } }),
+    );
+    const entries = await provider.sample(CORE_KEYS, 0);
+
+    for (const key of CORE_KEYS) {
+      expect(sampleOf(entries, key), key).toMatchObject({ status: "missing" });
+      expect(sampleOf(entries, key), key).not.toHaveProperty("value");
+    }
   });
 });
 

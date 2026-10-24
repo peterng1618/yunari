@@ -529,10 +529,6 @@ export const uiCopy = {
           label: "Rate scale",
           values: { auto: "Automatic", k: "kb/s", m: "Mb/s", g: "Gb/s" },
         },
-        fan: {
-          label: "Fan speed",
-          values: { rpm: "RPM", percent: "Percent" },
-        },
         windSpeed: {
           label: "Wind speed",
           values: { kmh: "km/h", mph: "mph", ms: "m/s" },

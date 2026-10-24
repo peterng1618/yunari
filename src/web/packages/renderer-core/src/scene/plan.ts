@@ -9,7 +9,10 @@ import {
 } from "../charts/line.js";
 import { buildPieOption, type PieSliceInput } from "../charts/pie.js";
 import { chartPaintFieldsFor } from "../charts/settings-fields.js";
-import { describeSemanticKey } from "../data/semantic-keys.js";
+import {
+  describeSemanticKey,
+  type SemanticKeyDescriptor,
+} from "../data/semantic-keys.js";
 import type { SampleSource } from "../data/source.js";
 import type {
   Artboard,
@@ -151,6 +154,12 @@ export interface PlanInputs {
   /** The consumer's full display choices; `measurement` above still wins. */
   readonly units?: UnitPreferences;
   /**
+   * The descriptors that supplied the bound keys, when the caller has them.
+   * A custom source's `unitKind` lives only on its provider's descriptor, so
+   * conversion reads it here rather than from the generic `custom.*` shape.
+   */
+  readonly descriptors?: readonly SemanticKeyDescriptor[];
+  /**
    * The language the theme's text is written in. A runtime input like
    * `longUnits`, never persisted scene state: the theme's own `metadata` owns it.
    */
@@ -200,7 +209,12 @@ export function resolveTextSegments(
   bindings: readonly Binding[],
   context: Pick<
     PlanInputs,
-    "source" | "longUnits" | "measurement" | "units" | "themeLanguage"
+    | "source"
+    | "longUnits"
+    | "measurement"
+    | "units"
+    | "themeLanguage"
+    | "descriptors"
   >,
   globals: Globals,
   issues: PlanIssue[],
@@ -259,7 +273,7 @@ function formatValueSegment(
   nodeId: string,
   context: Pick<
     PlanInputs,
-    "longUnits" | "measurement" | "units" | "themeLanguage"
+    "longUnits" | "measurement" | "units" | "themeLanguage" | "descriptors"
   >,
   issues: PlanIssue[],
 ): PlanTextSegment {
@@ -290,6 +304,7 @@ function formatValueSegment(
       sample.unit,
       unitPreferencesFor(context),
       overrides,
+      descriptorFor(context, binding.semanticKey),
     );
     if (converted.unsupportedUnit === true && overrides?.unit !== undefined) {
       issues.push({
@@ -325,6 +340,21 @@ function unitPreferencesFor(
   return context.measurement === undefined
     ? (context.units ?? {})
     : { ...context.units, measurement: context.measurement };
+}
+
+/**
+ * The descriptor that owns a key: the one the caller supplied, else the
+ * vocabulary's. A supplied list carries built-ins too, and the catalogue
+ * merges built-ins first, so an exact match is the canonical descriptor.
+ */
+function descriptorFor(
+  context: Pick<PlanInputs, "descriptors">,
+  key: string,
+): SemanticKeyDescriptor | undefined {
+  return (
+    context.descriptors?.find((descriptor) => descriptor.key === key) ??
+    describeSemanticKey(key)
+  );
 }
 
 /** The author's per-binding unit request, or `undefined` when none was made. */

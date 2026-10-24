@@ -31,6 +31,8 @@ import { descriptorFieldsOf, redactForBrowser } from "./provider.js";
 
 /** Identity text, not measurements: read on demand, never per sample. */
 const CPU_NAME_KEYS = ["cpu.manufacturer", "cpu.brand", "cpu.model"];
+/** Static counts from the same `cpu()` read as the identity strings. */
+const CPU_COUNT_KEYS = ["cpu.cores.physical", "cpu.cores.logical"];
 const SYSTEM_TEXT_KEYS = ["system.hostname", "system.os", "system.osBuild"];
 
 /** `processes()` enumerates every process, so its count is reused this long. */
@@ -48,6 +50,8 @@ const LIBRARY_KEYS = [
   "cpu.manufacturer",
   "cpu.brand",
   "cpu.model",
+  "cpu.cores.physical",
+  "cpu.cores.logical",
   "ram.used",
   "ram.used.percent",
   "ram.total",
@@ -141,6 +145,9 @@ export interface LibraryReadings {
   readonly cpuManufacturer?: string;
   readonly cpuBrand?: string;
   readonly cpuModel?: string;
+  /** Static core counts from the same CPU read; absent when not reported. */
+  readonly cpuPhysicalCores?: number;
+  readonly cpuLogicalCores?: number;
   /** The selected card's name; absent when no single card was selected. */
   readonly gpuName?: string;
   /** The selected volume's name; absent when the keys describe them all. */
@@ -202,6 +209,9 @@ export interface CpuLike {
   readonly manufacturer?: string;
   readonly brand?: string;
   readonly model?: string;
+  /** Physical cores, and logical processors including SMT threads. */
+  readonly physicalCores?: number;
+  readonly cores?: number;
 }
 
 export interface FsSizeLike {
@@ -369,6 +379,8 @@ export function readingsFromLibrary(input: {
   readonly processes?: ProcessesLike | undefined;
   readonly os?: OsInfoLike | undefined;
   readonly battery?: BatteryLike | undefined;
+  /** The same CPU read as its identity strings; its counts are static. */
+  readonly cpu?: CpuLike | undefined;
   /** The one card answering the GPU keys; absent when none is reported. */
   readonly gpu?: GpuSelection | undefined;
 }): LibraryReadings {
@@ -410,6 +422,14 @@ export function readingsFromLibrary(input: {
     remainingMinutes === undefined || remainingMinutes <= 0
       ? undefined
       : remainingMinutes * 60;
+  // A core count is a positive integer or a gap; the library leaves 0 when the
+  // platform would not say.
+  const coreCount = (value: unknown): number | undefined => {
+    const count = finite(value);
+    return count === undefined || count < 1 ? undefined : Math.trunc(count);
+  };
+  const physicalCores = coreCount(input.cpu?.physicalCores);
+  const logicalCores = coreCount(input.cpu?.cores);
 
   return {
     ...(finite(input.load?.currentLoad) === undefined
@@ -459,6 +479,8 @@ export function readingsFromLibrary(input: {
     ...(reportedText(os?.build) === undefined
       ? {}
       : { systemOsBuild: reportedText(os?.build)! }),
+    ...(physicalCores === undefined ? {} : { cpuPhysicalCores: physicalCores }),
+    ...(logicalCores === undefined ? {} : { cpuLogicalCores: logicalCores }),
     ...(battery === undefined ? {} : { batteryReported: true }),
     // `ponytail:` Windows defaults `percent` to 0 when EstimatedChargeRemaining
     // is absent, so a laptop can read 0 % and look empty; add a platform-side
@@ -639,6 +661,9 @@ export function samplesFromLibrary(
   pushText("cpu.manufacturer", readings.cpuManufacturer, cpuGap);
   pushText("cpu.brand", readings.cpuBrand, cpuGap);
   pushText("cpu.model", readings.cpuModel, cpuGap);
+  const coreGap = "this machine reports no CPU core count";
+  push("cpu.cores.physical", readings.cpuPhysicalCores, coreGap);
+  push("cpu.cores.logical", readings.cpuLogicalCores, coreGap);
   pushText(
     "gpu.name",
     readings.gpuName,
@@ -932,7 +957,9 @@ export class LibrarySensorProvider implements SensorProvider {
       // Neither is read for a theme that binds nothing needing it. Both disk
       // slots need the model→volume join, not just the unsuffixed keys:
       // `disk.data.*` answers a drive too.
-      const wantsCpuNames = owned.some((key) => CPU_NAME_KEYS.includes(key));
+      const wantsCpu = owned.some(
+        (key) => CPU_NAME_KEYS.includes(key) || CPU_COUNT_KEYS.includes(key),
+      );
       const wantsVolumes = owned.some((key) => key.startsWith("disk."));
       // Each extra read is paid for only by the group that binds it: a theme
       // showing Wi-Fi must not wait for the process walk or the battery.
@@ -947,9 +974,7 @@ export class LibrarySensorProvider implements SensorProvider {
       // every other key it owns, and a volume is a gap rather than a name that
       // could belong to another drive.
       const [cpu, drives] = await Promise.all([
-        wantsCpuNames
-          ? this.cpuIdentity(library).catch(() => undefined)
-          : undefined,
+        wantsCpu ? this.cpuIdentity(library).catch(() => undefined) : undefined,
         wantsVolumes
           ? this.driveIndex(library).catch(() => undefined)
           : undefined,
@@ -999,6 +1024,7 @@ export class LibrarySensorProvider implements SensorProvider {
         processes,
         os,
         battery,
+        cpu,
         gpu: card,
       });
 

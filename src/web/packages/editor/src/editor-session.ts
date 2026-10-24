@@ -474,6 +474,7 @@ export class EditorSession {
       ...(this.#document.envelope.metadata?.themeLanguage === undefined
         ? {}
         : { themeLanguage: this.#document.envelope.metadata.themeLanguage }),
+      descriptors,
     });
     // A pasted image must be a declared asset, not a blob URL: the half-only
     // path saves a document whose image is a handle into this session's memory

@@ -104,7 +104,6 @@ const UNIT_FIELDS = [
   "dataScale",
   "rate",
   "rateScale",
-  "fan",
   "windSpeed",
   "pressure",
 ] as const;

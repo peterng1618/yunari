@@ -791,7 +791,6 @@ it("renders a row per unit preference and writes only the changed field", async 
     "dataScale",
     "rate",
     "rateScale",
-    "fan",
     "windSpeed",
     "pressure",
   ]);

@@ -139,6 +139,42 @@ describe("Fabric theme envelope validation", () => {
     expect(validateFabricThemeEnvelope(envelope())).toMatchObject({ ok: true });
   });
 
+  it("refuses an image object bound to a key that is not an image reading", () => {
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      bindings: { art: [{ id: "image", semanticKey: "cpu.load" }] },
+      scene: {
+        version: "7.4.0",
+        objects: [{ type: "Image", id: "art" }],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues).toEqual([
+        {
+          code: "invalid-enum",
+          path: "/bindings/art/0/semanticKey",
+          message:
+            'An image object shows an image reading, and "cpu.load" is not an image key.',
+        },
+      ]);
+    }
+  });
+
+  it("accepts an image object bound to an image-capable key", () => {
+    expect(
+      validateFabricThemeEnvelope({
+        ...envelope(),
+        bindings: { art: [{ id: "image", semanticKey: "media.artwork" }] },
+        scene: {
+          version: "7.4.0",
+          objects: [{ type: "Image", id: "art" }],
+        },
+      }),
+    ).toMatchObject({ ok: true });
+  });
+
   it("accepts one declared background image or video and a semantic release version", () => {
     expect(
       validateFabricThemeEnvelope({

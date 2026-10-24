@@ -91,6 +91,21 @@ describe("display settings", () => {
     });
   });
 
+  it("ignores a retired fan preference without losing the other units", async () => {
+    await writeFile(
+      path.join(dir, "display.json"),
+      JSON.stringify({
+        timeZone: "Europe/Lisbon",
+        units: { clock: "ghz", fan: "percent" },
+      }),
+      "utf8",
+    );
+    expect(await createDisplaySettingsStore(dir).read()).toEqual({
+      timeZone: "Europe/Lisbon",
+      units: { clock: "ghz" },
+    });
+  });
+
   it("round-trips unit preferences through the store", async () => {
     const store = createDisplaySettingsStore(dir);
 
