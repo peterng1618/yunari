@@ -1,18 +1,26 @@
 import type * as React from "react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { clearCredential } from "../asset-finder/credentials-client.js";
 import { plainButtonClasses } from "../components/ui/control-well.js";
 import { uiCopy } from "../ui-copy.js";
 import { Group } from "./section-group.js";
+import { SourceForm } from "./source-form.js";
 import {
   type RemovalAnswer,
-  type Source,
-  type SourceField,
   SourceRefusedError,
   type SourceRow,
   type SourcesClient,
   type TestResult,
 } from "./sources-client.js";
+import {
+  type Draft,
+  draftOf,
+  emptyDraft,
+  type FieldDraft,
+  problem,
+  type Refusal,
+  sourceOf,
+} from "./sources-draft.js";
 
 /**
  * The custom sources this PC reads: the list, one source's form, and the two
@@ -29,206 +37,6 @@ import {
  * or a query the host adds at fetch time — this page never composes one into the
  * address it shows (`docs/decisions`, the sources routes' own rule).
  */
-
-/** The host's limits, restated because the editor has no dependency on the host
- *  package. **The owner is `packages/host/src/settings/sources.ts`**; the route's
- *  `400 {field, reason}` is the authority and these checks only save a round
- *  trip. Keep them in step with that file rather than widening them here. */
-const SOURCE_ID = /^[a-z0-9_-]{1,32}$/;
-const MAX_FIELDS = 64;
-const MIN_INTERVAL_S = 10;
-const MAX_INTERVAL_S = 86_400;
-const DEFAULT_INTERVAL_S = 60;
-const MIN_TIMEOUT_S = 1;
-const MAX_TIMEOUT_S = 10;
-const DEFAULT_TIMEOUT_S = 5;
-
-/** A refusal the form is showing, beside the field that caused it where the
- *  field is one the form names. */
-interface Refusal {
-  readonly field: string;
-  readonly reason: string;
-}
-
-interface FieldDraft {
-  readonly id: string;
-  readonly label: string;
-  readonly pointer: string;
-  readonly type: SourceField["type"];
-  readonly unit: string;
-  /** The stored field this row was opened from. The form shows five of its
-   *  properties; the rest travel through an edit untouched because the route
-   *  replaces the whole source. Absent on a field the author just added. */
-  readonly original?: SourceField;
-}
-
-interface Draft {
-  readonly id: string;
-  readonly name: string;
-  readonly url: string;
-  readonly interval: string;
-  readonly timeout: string;
-  readonly fields: readonly FieldDraft[];
-}
-
-function emptyField(): FieldDraft {
-  return { id: "", label: "", pointer: "", type: "number", unit: "" };
-}
-
-function draftOf(row: SourceRow): Draft {
-  return {
-    id: row.id,
-    name: row.name,
-    url: row.url,
-    interval: String(row.intervalMs / 1000),
-    timeout: String(row.timeoutMs / 1000),
-    fields: row.fields.map((field) => ({
-      id: field.id,
-      label: field.label,
-      pointer: field.pointer,
-      type: field.type,
-      unit: field.unit ?? "",
-      original: field,
-    })),
-  };
-}
-
-function emptyDraft(): Draft {
-  return {
-    id: "",
-    name: "",
-    url: "",
-    interval: String(DEFAULT_INTERVAL_S),
-    timeout: String(DEFAULT_TIMEOUT_S),
-    // No field until the author adds one: a row with a blank id would be a
-    // refusal the form invented rather than one they typed.
-    fields: [],
-  };
-}
-
-function wholeSeconds(
-  value: string,
-  min: number,
-  max: number,
-): number | undefined {
-  if (!/^\d+$/.test(value.trim())) return undefined;
-  const seconds = Number(value.trim());
-  return Number.isInteger(seconds) && seconds >= min && seconds <= max
-    ? seconds
-    : undefined;
-}
-
-/** The first thing wrong with the form, in the host's own terms. Each answer
- *  names the form field it belongs beside, so the reason can be shown there. */
-function problem(
-  draft: Draft,
-  stored: SourceRow | undefined,
-): Refusal | undefined {
-  const copy = uiCopy.hostSettings.sources;
-  // A rename is a new source, not an edit: the id is embedded in every theme
-  // key that reads `custom.<id>.<field>`. The field is read-only while editing,
-  // and this is the guard for a draft that reached here some other way.
-  if (stored !== undefined && draft.id !== stored.id) {
-    return { field: "id", reason: copy.idFixed };
-  }
-  if (!SOURCE_ID.test(draft.id)) {
-    return { field: "id", reason: copy.invalidId };
-  }
-
-  let url: URL;
-  try {
-    url = new URL(draft.url);
-  } catch {
-    return { field: "url", reason: copy.invalidUrl };
-  }
-  if (
-    (url.protocol !== "http:" && url.protocol !== "https:") ||
-    url.username !== "" ||
-    url.password !== ""
-  ) {
-    return { field: "url", reason: copy.invalidUrl };
-  }
-
-  if (
-    wholeSeconds(draft.interval, MIN_INTERVAL_S, MAX_INTERVAL_S) === undefined
-  ) {
-    return {
-      field: "interval",
-      reason: copy.invalidInterval(MIN_INTERVAL_S, MAX_INTERVAL_S),
-    };
-  }
-  if (wholeSeconds(draft.timeout, MIN_TIMEOUT_S, MAX_TIMEOUT_S) === undefined) {
-    return {
-      field: "timeout",
-      reason: copy.invalidTimeout(MIN_TIMEOUT_S, MAX_TIMEOUT_S),
-    };
-  }
-
-  if (draft.fields.length > MAX_FIELDS) {
-    return { field: "fields", reason: copy.tooManyFields(MAX_FIELDS) };
-  }
-
-  const seen = new Set<string>();
-  for (const field of draft.fields) {
-    if (!SOURCE_ID.test(field.id)) {
-      return { field: "fields", reason: copy.invalidFieldId(field.id) };
-    }
-    if (seen.has(field.id)) {
-      return { field: "fields", reason: copy.duplicateField(field.id) };
-    }
-    seen.add(field.id);
-  }
-
-  return undefined;
-}
-
-/**
- * One field as the wire carries it: the stored object underneath, so every
- * property the form does not show survives the replace, and the draft's own
- * five over it.
- *
- * `unit` is the one shown property that may be removed, so it is taken off the
- * stored object rather than left to be overridden only when the draft has one.
- */
-function mergedField(field: FieldDraft): SourceField {
-  const stored: Partial<SourceField> =
-    field.original === undefined
-      ? {}
-      : (Object.fromEntries(
-          Object.entries(field.original).filter(([key]) => key !== "unit"),
-        ) as Partial<SourceField>);
-  const unit = field.unit.trim();
-  return {
-    ...stored,
-    id: field.id,
-    label: field.label,
-    pointer: field.pointer,
-    type: field.type,
-    ...(unit === "" ? {} : { unit }),
-  };
-}
-
-/** The wire object, keeping the parts the form does not edit when it is editing
- *  an existing row: the route replaces the whole source, so a save that dropped
- *  `auth` would unbind the credential the row already had, and a save that
- *  rebuilt fields from the five shown would drop `family`, `unitKind`, `scale`,
- *  `offset` and `expectedTier`.
- *
- * **The stored id is the id written**, because a rename would append a second
- * source rather than change the first. */
-function sourceOf(draft: Draft, base: SourceRow | undefined): Source {
-  return {
-    id: base?.id ?? draft.id,
-    name: draft.name,
-    url: draft.url,
-    ...(base?.query === undefined ? {} : { query: base.query }),
-    ...(base?.headers === undefined ? {} : { headers: base.headers }),
-    intervalMs: Number(draft.interval) * 1000,
-    timeoutMs: Number(draft.timeout) * 1000,
-    ...(base?.auth === undefined ? {} : { auth: base.auth }),
-    fields: draft.fields.map(mergedField),
-  };
-}
 
 /** A message a person can act on: the host's own words where it sent any. */
 function reason(error: unknown): string {
@@ -437,19 +245,6 @@ export function SourcesSection(props: {
   };
 
   const copy = uiCopy.hostSettings.sources;
-  const inline = (field: string): string | undefined =>
-    refusal?.field === field ? refusal.reason : undefined;
-  /** A reason whose field this form does not own — the host names the source,
-   *  not the input — is shown at the form's edge rather than under a field the
-   *  author did not fill. */
-  const formReason =
-    refusal === undefined ||
-    refusal.field === "id" ||
-    refusal.field === "url" ||
-    refusal.field === "interval" ||
-    refusal.field === "timeout"
-      ? undefined
-      : refusal.reason;
 
   return (
     <Group testId="sources" name={copy.heading} hint={copy.hint}>
@@ -619,214 +414,17 @@ export function SourcesSection(props: {
           {copy.add}
         </button>
       ) : (
-        <form
-          data-yunari-source-form={editing?.id ?? "new"}
-          className="flex flex-col gap-[var(--space-6)] rounded-lg border border-edge bg-panel-2 p-[var(--space-10)]"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit();
-          }}
-        >
-          <FormField
-            label={copy.id}
-            value={draft.id}
-            hint={editing === undefined ? undefined : copy.idFixed}
-            reason={inline("id")}
-            readOnly={editing !== undefined}
-            attribute="data-yunari-source-id"
-            onChange={(id) => change({ id })}
-          />
-          <FormField
-            label={copy.name}
-            value={draft.name}
-            attribute="data-yunari-source-name"
-            onChange={(name) => change({ name })}
-          />
-          <FormField
-            label={copy.url}
-            value={draft.url}
-            hint={copy.urlHint}
-            reason={inline("url")}
-            attribute="data-yunari-source-url"
-            onChange={(url) => change({ url })}
-          />
-          <FormField
-            label={copy.interval}
-            value={draft.interval}
-            hint={copy.seconds}
-            reason={inline("interval")}
-            attribute="data-yunari-source-interval"
-            onChange={(interval) => change({ interval })}
-          />
-          <FormField
-            label={copy.timeout}
-            value={draft.timeout}
-            hint={copy.seconds}
-            reason={inline("timeout")}
-            attribute="data-yunari-source-timeout"
-            onChange={(timeout) => change({ timeout })}
-          />
-
-          <h3 className="m-0 pt-[var(--space-4)] text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
-            {copy.fields}
-          </h3>
-          {draft.fields.map((field, index) => (
-            <div
-              // The index is the row's identity here: the author is editing an
-              // id the row may not have yet, so the id cannot key it.
-              key={index}
-              data-yunari-source-field={String(index)}
-              className="flex flex-col gap-[var(--space-4)] rounded-md border border-edge p-[var(--space-8)]"
-            >
-              <FormField
-                label={copy.fieldId}
-                value={field.id}
-                attribute="data-yunari-source-field-id"
-                onChange={(id) => changeField(index, { id })}
-              />
-              <FormField
-                label={copy.fieldLabel}
-                value={field.label}
-                attribute="data-yunari-source-field-label"
-                onChange={(label) => changeField(index, { label })}
-              />
-              <FormField
-                label={copy.fieldPointer}
-                value={field.pointer}
-                attribute="data-yunari-source-field-pointer"
-                onChange={(pointer) => changeField(index, { pointer })}
-              />
-              <div className="flex flex-col gap-[var(--space-4)]">
-                <label
-                  className="text-xs text-muted"
-                  htmlFor={`yunari-source-type-${index}`}
-                >
-                  {copy.fieldType}
-                </label>
-                <select
-                  id={`yunari-source-type-${index}`}
-                  data-yunari-source-field-type={String(index)}
-                  value={field.type}
-                  onChange={(event) =>
-                    changeField(index, {
-                      type: event.target.value as FieldDraft["type"],
-                    })
-                  }
-                  className="h-[26px] rounded-md border border-edge bg-panel-1 px-[var(--space-6)] text-sm text-text"
-                >
-                  <option value="number">{copy.types.number}</option>
-                  <option value="text">{copy.types.text}</option>
-                  <option value="boolean">{copy.types.boolean}</option>
-                </select>
-              </div>
-              <FormField
-                label={copy.fieldUnit}
-                value={field.unit}
-                attribute="data-yunari-source-field-unit"
-                onChange={(unit) => changeField(index, { unit })}
-              />
-              <button
-                type="button"
-                data-yunari-source-remove-field={String(index)}
-                aria-label={copy.removeField(field.id)}
-                className={plainButtonClasses}
-                onClick={() =>
-                  change({
-                    fields: draft.fields.filter(
-                      (_, position) => position !== index,
-                    ),
-                  })
-                }
-              >
-                {copy.remove}
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            data-yunari-source-add-field=""
-            className={plainButtonClasses}
-            onClick={() => change({ fields: [...draft.fields, emptyField()] })}
-          >
-            {copy.addField}
-          </button>
-
-          {formReason === undefined ? null : (
-            <p
-              role="alert"
-              data-yunari-source-error=""
-              className="m-0 text-xs text-muted"
-            >
-              {formReason}
-            </p>
-          )}
-
-          <div className="flex gap-[var(--space-6)]">
-            <button
-              type="submit"
-              data-yunari-source-save=""
-              className={plainButtonClasses}
-              disabled={busy}
-            >
-              {busy ? uiCopy.hostSettings.status.saving : copy.save}
-            </button>
-            <button
-              type="button"
-              data-yunari-source-cancel=""
-              className={plainButtonClasses}
-              onClick={closeForm}
-            >
-              {copy.cancel}
-            </button>
-          </div>
-        </form>
+        <SourceForm
+          draft={draft}
+          editing={editing}
+          busy={busy}
+          refusal={refusal}
+          onChange={change}
+          onChangeField={changeField}
+          onSubmit={submit}
+          onCancel={closeForm}
+        />
       )}
     </Group>
-  );
-}
-
-/**
- * One labelled text input in a source's form.
- *
- * Not `ControlText`: that control commits on blur and holds the authored value,
- * and a source form is submitted whole — the draft is the form's until Save.
- */
-function FormField(props: {
-  readonly label: string;
-  readonly value: string;
-  readonly attribute: string;
-  readonly hint?: string | undefined;
-  readonly reason?: string | undefined;
-  /** A value the form shows but does not change — the source id while editing. */
-  readonly readOnly?: boolean;
-  readonly onChange: (value: string) => void;
-}): React.JSX.Element {
-  const id = useId();
-  return (
-    <div className="flex flex-col gap-[var(--space-4)]">
-      <label className="text-xs text-muted" htmlFor={id}>
-        {props.label}
-      </label>
-      <input
-        id={id}
-        {...{ [props.attribute]: "" }}
-        value={props.value}
-        readOnly={props.readOnly}
-        onChange={(event) => props.onChange(event.target.value)}
-        className="h-[26px] rounded-md border border-edge bg-panel-1 px-[var(--space-6)] text-sm text-text"
-      />
-      {props.hint === undefined ? null : (
-        <p className="m-0 text-2xs text-faint">{props.hint}</p>
-      )}
-      {props.reason === undefined ? null : (
-        <p
-          role="alert"
-          data-yunari-source-field-reason=""
-          className="m-0 text-2xs text-muted"
-        >
-          {props.reason}
-        </p>
-      )}
-    </div>
   );
 }
