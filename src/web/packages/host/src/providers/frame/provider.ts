@@ -15,10 +15,11 @@ import { type FrameAdapter, type FrameReading, RtssAdapter } from "./rtss.js";
 /**
  * Frame statistics for the active 3D application.
  *
- * The adapter acquires frames; this provider owns the rolling window, so the
- * numbers a theme sees are computed here rather than trusted from RTSS. A key
- * with no frames behind it is `unavailable` — never zero — and the helper only
- * runs while a display is binding `frame.*`.
+ * Adapters acquire frames in order: RTSS first, PresentMon only when RTSS is
+ * unavailable. This provider owns the rolling window, so the numbers a theme
+ * sees are computed here rather than trusted from either source. A key with no
+ * frames behind it is `unavailable` — never zero — and the helpers only run
+ * while a display is binding `frame.*`.
  */
 
 const FRAME_PROVIDER_ID = "frame";
@@ -70,7 +71,10 @@ export interface FrameProviderOptions {
   readonly now?: () => number;
   readonly graceMs?: number;
   readonly retryMs?: number;
+  /** One source, the shape the provider started with. */
   readonly adapter?: FrameAdapter;
+  /** Sources in fallback order; concrete options win over `adapter`. */
+  readonly adapters?: readonly FrameAdapter[];
 }
 
 interface RunningHelper {
@@ -85,14 +89,17 @@ export class FrameProvider implements SensorProvider {
   readonly #now: () => number;
   readonly #graceMs: number;
   readonly #retryMs: number;
-  readonly #adapter: FrameAdapter;
+  readonly #adapters: readonly FrameAdapter[];
 
+  #adapterIndex = 0;
   #helper: RunningHelper | undefined;
   #tick: ReturnType<typeof setTimeout> | undefined;
   #lastDemandMs = Number.NEGATIVE_INFINITY;
   #retryAtMs = 0;
   #window = new FrameWindow();
   #app: string | undefined;
+  /** Every source failed; the pair is retried only in a new demand window. */
+  #windowFailed = false;
   /** Redacted; may reach a browser through `health()` and a sample message. */
   #failure: string | undefined;
 
@@ -100,7 +107,7 @@ export class FrameProvider implements SensorProvider {
     this.#now = options.now ?? (() => Date.now());
     this.#graceMs = Math.max(1, options.graceMs ?? DEFAULT_GRACE_MS);
     this.#retryMs = Math.max(0, options.retryMs ?? DEFAULT_RETRY_MS);
-    this.#adapter = options.adapter ?? new RtssAdapter();
+    this.#adapters = options.adapters ?? [options.adapter ?? new RtssAdapter()];
   }
 
   async describe(): Promise<readonly SensorDescriptor[]> {
@@ -118,6 +125,9 @@ export class FrameProvider implements SensorProvider {
     }
 
     const now = this.#now();
+    // A gap this long is a new demand window, even if the timer that would
+    // have noticed it was delayed or coalesced while the host slept.
+    if (now - this.#lastDemandMs > this.#graceMs) this.#teardown();
     this.#lastDemandMs = now;
     this.#reconcile(now);
 
@@ -146,15 +156,24 @@ export class FrameProvider implements SensorProvider {
       return;
     }
 
+    if (this.#windowFailed) return;
     if (this.#helper !== undefined || now < this.#retryAtMs) return;
 
     this.#start();
   }
 
   #start(): void {
+    const adapter = this.#adapters[this.#adapterIndex];
+
+    if (adapter === undefined) {
+      this.#windowFailed = true;
+      this.#scheduleTick();
+      return;
+    }
+
     const state: RunningHelper = { alive: true, stop: () => undefined };
 
-    const handle = this.#adapter.start(
+    const handle = adapter.start(
       (reading) => {
         if (state.alive) this.#reading(reading);
       },
@@ -179,14 +198,31 @@ export class FrameProvider implements SensorProvider {
     this.#scheduleTick();
   }
 
-  /** Reports the reason once and backs off; a reading later replaces it. */
+  /** Reports the reason once; the next source or demand window retries. */
   #unavailable(reason: string): void {
     this.#helper = undefined;
     this.#failure = redactForBrowser(reason);
-    this.#retryAtMs = this.#now() + this.#retryMs;
     this.#window = new FrameWindow();
     this.#app = undefined;
     this.#stopTick();
+
+    if (this.#adapterIndex + 1 < this.#adapters.length) {
+      // Fall back inside the same demand window; the next source may work.
+      this.#adapterIndex += 1;
+      this.#failure = undefined;
+      this.#start();
+      return;
+    }
+
+    if (this.#adapters.length > 1) {
+      // A denied trace session must not spawn a process per poll. The tick
+      // stays alive only to notice the demand window closing.
+      this.#windowFailed = true;
+      this.#scheduleTick();
+      return;
+    }
+
+    this.#retryAtMs = this.#now() + this.#retryMs;
   }
 
   #reading(reading: FrameReading): void {
@@ -209,6 +245,10 @@ export class FrameProvider implements SensorProvider {
     this.#window = new FrameWindow();
     this.#app = undefined;
     this.#failure = undefined;
+    // The next demand is a new window: order and backoff start clean.
+    this.#adapterIndex = 0;
+    this.#windowFailed = false;
+    this.#retryAtMs = 0;
   }
 
   #stopTick(): void {
@@ -219,13 +259,20 @@ export class FrameProvider implements SensorProvider {
   }
 
   #scheduleTick(): void {
-    if (this.#tick !== undefined || this.#helper === undefined) return;
+    if (
+      this.#tick !== undefined ||
+      (this.#helper === undefined && !this.#windowFailed)
+    ) {
+      return;
+    }
 
     this.#tick = setTimeout(() => {
       this.#tick = undefined;
       this.#reconcile(this.#now());
 
-      if (this.#helper !== undefined) this.#scheduleTick();
+      if (this.#helper !== undefined || this.#windowFailed) {
+        this.#scheduleTick();
+      }
     }, TICK_MS);
     (this.#tick as { unref?: () => void }).unref?.();
   }

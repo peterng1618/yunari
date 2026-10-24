@@ -13,7 +13,9 @@ import {
 } from "./cli/net.js";
 import { ClockSensorProvider } from "./providers/clock.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
+import { presentMonAdapter } from "./providers/frame/presentmon.js";
 import { FrameProvider } from "./providers/frame/provider.js";
+import { RtssAdapter } from "./providers/frame/rtss.js";
 import { LhmSensorProvider } from "./providers/lhm.js";
 import { launchLhm, registerLhmTask } from "./providers/lhm-launcher.js";
 import { LibrarySensorProvider } from "./providers/library.js";
@@ -197,9 +199,25 @@ export async function run(argv: readonly string[]): Promise<number> {
     path.join(path.dirname(settingsDir), "cache", "media-artwork"),
   );
   const mediaProvider = new MediaProvider({ cache: mediaArtwork });
-  // Frame statistics have no settings of their own; the provider starts the
-  // RTSS helper only while a display binds frame.* and stops it after demand.
-  const frameProvider = new FrameProvider();
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  // Frame statistics have no settings of their own; the provider starts one
+  // helper at a time only while a display binds frame.*. RTSS is the source;
+  // the vendored PresentMon is the fallback when RTSS is not running.
+  const frameProvider = new FrameProvider({
+    adapters: [
+      new RtssAdapter(),
+      presentMonAdapter({
+        executable: path.join(
+          here,
+          "..",
+          "vendor",
+          "presentmon",
+          "PresentMon.exe",
+        ),
+        nowMs: () => Date.now(),
+      }),
+    ],
+  });
   const registry = new ProviderRegistry([
     clockProvider,
     lhmProvider,
@@ -209,7 +227,6 @@ export async function run(argv: readonly string[]): Promise<number> {
     frameProvider,
     customProvider,
   ]);
-  const here = path.dirname(fileURLToPath(import.meta.url));
   const packagesDir = path.resolve(here, "..", "..");
 
   // Displays and their credentials exist whether or not the LAN is on, because

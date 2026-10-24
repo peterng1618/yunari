@@ -65,6 +65,21 @@ being enabled. Provenance and the pinned digest:
 `docs/engineering/dependencies.md`; `vendor/lhm/PROVENANCE.txt` records the
 version, source URL and sha256 of the staged release.
 
+### PresentMon (bundled external program)
+
+A Yunari release ships PresentMon v2.6.0 (**MIT**, Copyright (C) 2017-2024
+Intel Corporation) as an external program, staged by
+`npm run vendor:presentmon -w @yunari/host`. Yunari links nothing and compiles
+nothing: it runs the console executable with `--output_stdout --no_csv` and
+reads the CSV it writes. It is not a dependency and its source is not vendored.
+
+MIT requires the copyright and permission notice to travel with the binary, so
+the vendor script stages PresentMon's own `LICENSE.txt` beside it. Release
+packaging must include `vendor/presentmon/LICENSE.txt` in the shipped
+distribution. Provenance and the pinned digest:
+`docs/engineering/dependencies.md`; `vendor/presentmon/PROVENANCE.txt` records
+the version, source URL and sha256 of the staged release.
+
 ## Build/test
 
 Declared development dependencies: @biomejs/biome 2.5.14 (MIT OR Apache-2.0),

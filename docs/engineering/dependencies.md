@@ -164,6 +164,41 @@ packaging must include those files. A PawnIO module download (LGPL-2.1,
 fetched by LHM at runtime) remains separately unreviewed and must not be
 enabled without its own assessment.
 
+### PresentMon packaging review — 2026-10-24
+
+Assessed against the `v2.6.0` console release asset
+(`PresentMon-2.6.0-x64.exe`, 980 320 bytes) and the repository's `LICENSE.txt`.
+
+Findings:
+
+- **PresentMon is MIT.** GitHub's licence API reports `spdx_id: "MIT"` for
+  `LICENSE.txt`, whose text is the MIT licence, "Copyright (C) 2017-2024 Intel
+  Corporation". Redistribution is permitted provided that notice travels with
+  the binary; the release asset is a bare executable, so the vendor script
+  stages the licence beside it.
+- The console asset is one self-contained executable; it bundles no
+  third-party binaries whose notices would also need reproducing.
+- It is an ETW consumer, not a linkable library. `--output_stdout` writes CSV
+  to stdout per row, `--no_csv` creates no file, and `--session_name` names the
+  trace session. The host parses by header name, never by column position,
+  because `--v1_metrics`/`--v2_metrics` change the set (and the frametime
+  column is spelled `msBetweenPresents` in the v1 header and
+  `MsBetweenPresents` in v2).
+- A trace session needs the account to be in the `Performance Log Users` group
+  or to be elevated. Yunari never passes `--restart_as_admin` (it would prompt
+  for UAC per launch; it defaults off) and never passes
+  `--stop_existing_session` (that would kill a session the user started). A
+  denied session is reported `unavailable` and retried only at the next demand
+  window.
+- Pinned sha256 of the staged `v2.6.0` asset:
+  `b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af`.
+  `packages/host/scripts/vendor-presentmon.mjs` refuses a mismatch.
+- Binaries are not committed (`vendor/` is ignored); the repository tracks
+  provenance.
+
+Conclusion: redistribution is permissible with its licence file, and the
+host runs it without linking or modifying it.
+
 `systeminformation` 5.33.13 (MIT, no dependencies of its own) is the host's
 hardware-metrics source: verified from the package's own `LICENSE` and `npm
 view` metadata on 2026-09-24. It reads platform counters; it is not a vendored

@@ -91,7 +91,8 @@ export function powershellPath(
   return pathExists(executable) ? executable : undefined;
 }
 
-function defaultSpawn(
+/** The default spawn for a helper child, exported for non-script exes too. */
+export function spawnChildProcess(
   command: string,
   args: readonly string[],
   options: {
@@ -105,7 +106,12 @@ function defaultSpawn(
   }) as unknown as ChildProcess as HelperChild;
 }
 
-function defaultKillTree(child: HelperChild): void {
+/**
+ * Ends a child and everything it started. Exported so a helper that is not a
+ * PowerShell script — PresentMon spawns its own console process — gets the
+ * same tree kill rather than a bare `kill()` that leaves a grandchild.
+ */
+export function killProcessTree(child: HelperChild): void {
   const root = process.env["SystemRoot"] ?? "C:\\Windows";
   const taskkill = path.join(root, "System32", "taskkill.exe");
 
@@ -151,8 +157,8 @@ function powershellArgs(script: string): readonly string[] {
  * `stop()` is the deliberate end: it clears every timer and kills the tree.
  */
 export function startJsonLineHelper(options: HelperOptions): HelperHandle {
-  const spawnProcess = options.spawnProcess ?? defaultSpawn;
-  const killTree = options.killTree ?? defaultKillTree;
+  const spawnProcess = options.spawnProcess ?? spawnChildProcess;
+  const killTree = options.killTree ?? killProcessTree;
   const maxAttempts = Math.max(1, options.maxAttempts ?? MAX_ATTEMPTS);
   const executable = powershellPath(options.pathExists);
 

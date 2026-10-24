@@ -4,7 +4,9 @@
 - **Status:** accepted
 - **Paths:** `src/web/packages/host/src/providers/frame/rolling.ts`,
   `src/web/packages/host/src/providers/frame/rtss.ts`,
-  `src/web/packages/host/src/providers/frame/provider.ts`
+  `src/web/packages/host/src/providers/frame/presentmon.ts`,
+  `src/web/packages/host/src/providers/frame/provider.ts`,
+  `src/web/packages/host/scripts/vendor-presentmon.mjs`
 
 ## The problem
 
@@ -170,3 +172,59 @@ test pins the marshaler's offsets, and a synthetic entry array proves selection
 and ring traversal without RTSS. The mapping name and signature are checked and
 an absent RTSS is a reported `unavailable`, never a zero reading. PresentMon is
 deferred to Task 6.2, where its binary and licence are the subject.
+
+## PresentMon extension (Task 6.2)
+
+The RTSS half above left PresentMon deferred. Its mechanism genuinely differs
+— a separate console executable emitting CSV, not a PowerShell script reading
+a file mapping — so the rungs were worked again for that shape.
+
+- **Rung 1 — Yunari.** `rg -n "presentmon|restart_as_admin|killTree"` across
+  `src/web/packages/host`: only the deferral notes and the supervisor's
+  `killProcessTree` exist. The `FrameAdapter` contract (`start` returns a stop
+  handle) and `FrameProvider`'s demand window are reusable; no frame reader
+  for a child process exists.
+- **Rung 2 — dependencies.** `packages/host/package.json` still has no FFI, ETW
+  or CSV dependency. `npm search presentmon` (recorded under rung 4 above)
+  found only file parsers and harnesses; none acquires frames.
+- **Rung 3 — platform.** PresentMon's console app takes `--output_stdout`
+  (`WriteCsvHeader`/`WriteCsvRow` flush per row) and `--no_csv` (no file), and
+  `--session_name` names the ETW session. It does **not** need a wrapper: it
+  already writes line-delimited CSV. The OS provides `spawn` and `taskkill`;
+  Node has no ETW binding.
+- **Rung 4 — ecosystem.** The closest package, `pmonp`, parses a CSV a capture
+  already produced; it neither spawns nor filters a live session. `@qaping/rig`
+  is a test harness around the binary, not a live adapter. No npm package owns
+  sampling, ordering, disposal or the demand window.
+- **Rung 5 — comparison.** (a) Spawn the console exe directly and frame its
+  stdout: no dependency, one process, the supervisor's tree kill, and the
+  adapter owns only line framing and header lookup. (b) A PowerShell wrapper
+  around the exe: an extra interpreter and no gain. (c) An FFI ETW binding:
+  new native dependency, licence and ABI surface for the same events.
+  (d) `pmonp`: cannot acquire. Chosen: (a).
+- **Rung 6 — probe.** Read `PresentMon/CsvOutput.cpp` at `v2.6.0`: the v1
+  header spells `msBetweenPresents` lowercase while the v2 header spells
+  `MsBetweenPresents`, so column lookup is case-insensitive and by name, never
+  by position. `MainThread.cpp` proves a denied session prints
+  `failed to start trace session: access denied.` plus the `Performance Log
+  Users` requirement, and that `--restart_as_admin` defaults off (so omitting
+  it never prompts) while `--stop_existing_session` must stay off (it would
+  kill the user's session). The release asset
+  `PresentMon-2.6.0-x64.exe` (980 320 bytes) hashes to
+  `b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af`; licence
+  from GitHub's licence API is MIT (`LICENSE.txt`). No live trace session was
+  run: PresentMon is not installed standalone on this machine, so a successful
+  capture is unverified.
+- **Rung 7 — build.** Spawn the vendored executable with `--output_stdout
+  --no_csv --session_name Yunari`, parse stdout by header name, and end the
+  process with `killProcessTree` (not `.kill()`, which leaves a grandchild).
+  The binary is staged by `vendor-presentmon.mjs`, never committed. The
+  provider evaluates adapters in order, starts PresentMon only after RTSS
+  reports unavailable, and does not retry an exhausted pair until the demand
+  window closes.
+
+The vendor script follows `vendor-lhm.mjs`'s existing shape rather than
+inventing a downloader: pinned release URL, pinned SHA-256 that refuses a
+mismatch, a `PROVENANCE.txt`, and the licence file staged beside the binary.
+Binaries stay out of git (`vendor/` is ignored); the repository tracks
+provenance.
