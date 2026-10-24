@@ -34,6 +34,8 @@
 4. A legacy `Textbox` carrying `wrap: false` must still wrap, and a save/reload must preserve each element's class and geometry.
 5. Swapping the selection from a Text box to a Text must show the auto contract immediately: no stale Overflow, vertical align or editable Size row.
 6. Selecting a run's number shows that run's fields and hides the others; `+` adds a run and selects it; removing the selected run leaves a remaining one selected.
+7. A Text carries no width-drag or height-drag handle; a Text box keeps them.
+8. Words typed into a just-placed text, then committed by leaving the edit, survive the repaint and a save/reload.
 
 Each line's test is named in the owning task below.
 
@@ -217,7 +219,7 @@ git commit -m "feat(editor): place text by click or drag"
 
 ## Phase 2 — One arming route and an honest inspector
 
-**Outcome:** Every creation surface arms the same gesture; the new object lands at the gesture with the right class, defaults and name; the inspector shows only controls the selected class can honour, and the Runs section shows one run at a time behind numeric tabs.
+**Outcome:** Every creation surface arms the same gesture; the new object lands at the gesture with the right class, defaults and name; the inspector shows only controls the selected class can honour, the Runs section shows one run at a time behind numeric tabs, a Text carries no box-writing handles, and typing into a just-placed text is kept.
 
 ### Task 2.1: Arm from one route and insert at the gesture
 
@@ -338,6 +340,86 @@ git add src/web/packages/editor/src/selection-inspector/runs.tsx src/web/package
 git commit -m "feat(inspector): show one text run at a time behind numeric tabs"
 ```
 
+### Task 2.4: A Text carries no box-writing handles
+
+Found by Task 3.2's browser proof: Fabric's default object controls include `ml`, `mr`, `mt` and `mb`, and `controls-manager` gives them to every object, so a Text offers drag handles that write a box it does not have.
+
+**Files:**
+- Modify: `src/web/packages/editor/src/controls-manager/index.ts` — `IText` gets its own control set: corners and rotation only
+- Tests: `src/web/packages/editor/src/controls-manager/index.test.ts`, `index.dom.test.ts`
+
+**Interfaces:**
+- Consumes: `controlsUtils.createObjectDefaultControls()`, `applyOverrides`.
+- Produces: `IText.ownDefaults.controls` without `ml`/`mr`/`mt`/`mb`; `Textbox.ownDefaults.controls` unchanged (all nine).
+
+- [ ] **Step 1: Write the failing test**
+
+An `IText` exposes `tl`/`tr`/`bl`/`br`/`mtr` and none of `ml`/`mr`/`mt`/`mb`; a `Textbox` keeps all nine; a `Rect` keeps Fabric's defaults.
+
+- [ ] **Step 2: Run and confirm red**
+
+Run: `npx vitest run packages/editor/src/controls-manager`
+
+Expected: FAIL — an `IText` carries the four edge handles.
+
+- [ ] **Step 3: Assign the Text's own set**
+
+Take the object-control set this file already builds, delete the four edge handles, and assign it to `IText.ownDefaults` as a NEW defaults object — the same way `Line` is handled, because writing `controls` onto the inherited object would take the handles off every Fabric object.
+
+- [ ] **Step 4: Run the suite and typecheck**
+
+Run: `npx vitest run packages/editor/src/controls-manager packages/editor/src/selection-inspector`
+Run: `npm run typecheck`
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/web/packages/editor/src/controls-manager
+git commit -m "fix(editor): give a text corners and rotation only"
+```
+
+### Task 2.5: Typing into a just-placed text is kept
+
+Found by Task 3.2's browser proof: the words typed over an object's authoring view are written to `yunariText.runs` only by the handler `onDoubleClick` installs per object, so a text created by the placement gesture enters editing with no such handler and the next repaint restores the placeholder.
+
+**Files:**
+- Modify: `src/web/packages/editor/src/text-manager/index.ts` — one canvas-level `text:editing:exited` handler owns the commit, instead of a per-double-click `once`
+- Tests: `src/web/packages/editor/src/text-manager/index.dom.test.ts`; `new-object-panel.dom.test.ts` if its editing case asserts the old path
+
+**Interfaces:**
+- Consumes: Fabric's canvas `text:editing:exited`, `keepTypedText`, `save`, `repaint`.
+- Produces: no new public API. Behaviour: the words typed over an authoring view are written to the authored run and saved once, whether editing began by double-click or by construction; the token comparison that ignores an unchanged edit and the multi-run refusal keep working.
+
+- [ ] **Step 1: Write the failing test**
+
+Create a text without any double-click, `enterEditing()`, set a new `text`, `exitEditing()`: `yunariText.runs[0].text` holds the typed words and `save` was called once. Keep the double-click cases (an unchanged edit writes nothing; a multi-run refusal warns once and repaints).
+
+- [ ] **Step 2: Run and confirm red**
+
+Run: `npx vitest run packages/editor/src/text-manager/index.dom.test.ts`
+
+Expected: FAIL — the authored run still holds the placeholder.
+
+- [ ] **Step 3: Move the exit handling to the manager's canvas listeners**
+
+Record the painted view when editing starts, and commit on `text:editing:exited` for any text, not only a double-clicked one. Remove the listener in `destroy`; do not leave two handlers that both save.
+
+- [ ] **Step 4: Run the suites and typecheck**
+
+Run: `npx vitest run packages/editor/src/text-manager packages/editor/src/new-object-panel.dom.test.ts packages/editor/src/editor-shell.dom.test.ts`
+Run: `npm run typecheck`
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/web/packages/editor/src/text-manager src/web/packages/editor/src/new-object-panel.dom.test.ts
+git commit -m "fix(editor): keep the words typed into a new text"
+```
+
 ---
 
 ## Phase 3 — Browser proof, documentation and gate
@@ -387,7 +469,8 @@ git commit -m "test(e2e): place text through the click-or-drag gesture"
 
 - [ ] **Step 1: Write the failing browser cases**
 
-- Add → Text → click creates an instance of type `i-text`, grows while typing, and its `ml`/`mr` controls scale rather than writing a width.
+- Add → Text → click creates an instance of type `i-text`, grows while typing, its `ml`/`mr` controls scale rather than writing a width, and it exposes no `mt`/`mb` edge handles while the drag-created Text box keeps them.
+- Typing on the canvas into a just-placed Text, then leaving the edit, keeps the words through the repaint and a reload (Task 2.5); no case may be pinned as an expected failure.
 - The click-created Text exposes no `mt`/`mb` edge handles (edge controls are Textbox-only), while the drag-created Text box keeps them.
 - Add → Text → drag creates a `textbox` at the drawn rectangle, wraps inside it, keeps the box while typing, and its `ml`/`mr` controls use `changeWidth`.
 - Escape during placement leaves the scene and the history unchanged.

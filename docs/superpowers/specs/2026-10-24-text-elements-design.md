@@ -254,6 +254,8 @@ tab's visible label is its 1-based number; its accessible name is `Run N`.
   run's fields only; `+` adds and selects a run; removing the selected run
   selects a remaining one.
 - Geometry writes refuse a width or height write on a Text.
+- Words typed into a text created by the gesture are written to its authored run
+  and survive the next repaint and a reload.
 - `authoredAlignment` derives wrap, overflow and vertical alignment from the
   class; a legacy authored `wrap` has no effect.
 - Loading a `Textbox` with `wrap: false` keeps a `Textbox` and wraps.
