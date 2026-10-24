@@ -3,6 +3,8 @@ import {
   type CatalogueSeams,
   readEpicGames,
   readGogGames,
+  readItchGames,
+  readUninstallGames,
   readXboxGames,
 } from "./game-catalogue.js";
 
@@ -57,7 +59,7 @@ interface Fixture {
   /** One seam answer per directory; a directory absent here throws ENOENT. */
   readonly directories?: Record<string, readonly string[]>;
   /** The parsed answer the PowerShell seam hands back. */
-  readonly gog?: unknown;
+  readonly powerShell?: unknown;
 }
 
 function seamsOf(fixture: Fixture): CatalogueSeams {
@@ -78,7 +80,7 @@ function seamsOf(fixture: Fixture): CatalogueSeams {
     },
     programData: "C:\\ProgramData",
     appData: "C:\\Users\\player\\AppData\\Roaming",
-    runPowerShell: async () => fixture.gog,
+    runPowerShell: async () => fixture.powerShell,
     steamApps: async () => [],
     xboxRoot: "C:\\XboxGames",
   };
@@ -173,7 +175,7 @@ describe("readGogGames", () => {
   it("enumerates the GOG key in one PowerShell call", async () => {
     const scripts: string[] = [];
     const seams = {
-      ...seamsOf({ gog: [] }),
+      ...seamsOf({ powerShell: [] }),
       runPowerShell: async (script: string) => {
         scripts.push(script);
         return [];
@@ -188,7 +190,7 @@ describe("readGogGames", () => {
 
   it("resolves a GOG entry's exe under its install path", async () => {
     const seams = seamsOf({
-      gog: [
+      powerShell: [
         {
           gameName: "Disco Elysium",
           path: "C:\\Games\\Disco Elysium",
@@ -210,7 +212,7 @@ describe("readGogGames", () => {
 
   it("skips a DLC whose dependsOn names a parent", async () => {
     const seams = seamsOf({
-      gog: [
+      powerShell: [
         {
           gameName: "Disco Elysium Soundtrack",
           path: "C:\\Games\\Disco Elysium",
@@ -225,7 +227,7 @@ describe("readGogGames", () => {
 
   it("skips an entry with an empty gameName or no path", async () => {
     const seams = seamsOf({
-      gog: [
+      powerShell: [
         { gameName: "", path: "C:\\Games\\Nameless", exe: "a.exe" },
         { gameName: "Pathless", exe: "b.exe" },
       ],
@@ -236,7 +238,7 @@ describe("readGogGames", () => {
 
   it("keeps an absolute exe as-is", async () => {
     const seams = seamsOf({
-      gog: [
+      powerShell: [
         {
           gameName: "Portable",
           path: "C:\\Games\\Portable",
@@ -252,7 +254,7 @@ describe("readGogGames", () => {
 
   it("skips an answer's non-object entries", async () => {
     const seams = seamsOf({
-      gog: [
+      powerShell: [
         null,
         7,
         {
@@ -271,7 +273,7 @@ describe("readGogGames", () => {
 
   it("reports no executables for an entry without exe", async () => {
     const seams = seamsOf({
-      gog: [{ gameName: "Launcher Only", path: "C:\\Games\\Launcher" }],
+      powerShell: [{ gameName: "Launcher Only", path: "C:\\Games\\Launcher" }],
     });
 
     await expect(readGogGames(seams)).resolves.toEqual([
@@ -285,7 +287,7 @@ describe("readGogGames", () => {
   });
 
   it("treats a registry answer that is not JSON as an empty list", async () => {
-    const seams = seamsOf({ gog: undefined });
+    const seams = seamsOf({ powerShell: undefined });
 
     await expect(readGogGames(seams)).resolves.toEqual([]);
   });
@@ -390,5 +392,236 @@ describe("readXboxGames", () => {
     const seams = seamsOf({ directories: {} });
 
     await expect(readXboxGames(seams)).resolves.toEqual([]);
+  });
+});
+
+/**
+ * itch keeps one directory per installed app under its own `apps` directory.
+ * A `.itch.toml` names it and points at the launcher; without one, the folder's
+ * own executables are all the reader has.
+ */
+const ITCH_ROOT = "C:\\Users\\player\\AppData\\Roaming\\itch\\apps";
+const ITCH_APP = `${ITCH_ROOT}\\Baba Is You`;
+
+const ITCH_MANIFEST_TOML = `[app]
+name = "Baba Is You"
+[[actions]]
+name = "Play"
+path = "Baba Is You.exe"
+`;
+
+describe("readItchGames", () => {
+  it("reads an app's .itch.toml name and first action path", async () => {
+    const seams = seamsOf({
+      directories: { [ITCH_ROOT]: ["Baba Is You"] },
+      files: { [`${ITCH_APP}\\.itch.toml`]: ITCH_MANIFEST_TOML },
+    });
+
+    await expect(readItchGames(seams)).resolves.toEqual([
+      {
+        source: "itch",
+        name: "Baba Is You",
+        installDir: ITCH_APP,
+        exes: [`${ITCH_APP}\\Baba Is You.exe`],
+      },
+    ]);
+  });
+
+  it("reads a root exe key", async () => {
+    const seams = seamsOf({
+      directories: { [ITCH_ROOT]: ["Launchpad"] },
+      files: {
+        [`${ITCH_ROOT}\\Launchpad\\.itch.toml`]: [
+          'name = "Launchpad"',
+          'exe = "start.exe"',
+        ].join("\n"),
+      },
+    });
+
+    await expect(readItchGames(seams)).resolves.toEqual([
+      {
+        source: "itch",
+        name: "Launchpad",
+        installDir: `${ITCH_ROOT}\\Launchpad`,
+        exes: [`${ITCH_ROOT}\\Launchpad\\start.exe`],
+      },
+    ]);
+  });
+
+  it("keeps an app whose manifest names no executable", async () => {
+    const seams = seamsOf({
+      directories: { [ITCH_ROOT]: ["No Launcher"] },
+      files: {
+        [`${ITCH_ROOT}\\No Launcher\\.itch.toml`]:
+          '[app]\nname = "No Launcher"',
+      },
+    });
+
+    await expect(readItchGames(seams)).resolves.toEqual([
+      {
+        source: "itch",
+        name: "No Launcher",
+        installDir: `${ITCH_ROOT}\\No Launcher`,
+        exes: [],
+      },
+    ]);
+  });
+
+  it("falls back to the app folder's own executables without a manifest", async () => {
+    const seams = seamsOf({
+      directories: {
+        [ITCH_ROOT]: ["Scanned"],
+        [`${ITCH_ROOT}\\Scanned`]: ["Game.exe", "readme.txt", "tool.EXE"],
+      },
+    });
+
+    await expect(readItchGames(seams)).resolves.toEqual([
+      {
+        source: "itch",
+        name: "Scanned",
+        installDir: `${ITCH_ROOT}\\Scanned`,
+        exes: [
+          `${ITCH_ROOT}\\Scanned\\Game.exe`,
+          `${ITCH_ROOT}\\Scanned\\tool.EXE`,
+        ],
+      },
+    ]);
+  });
+
+  it("skips a manifest-less folder with no executable", async () => {
+    const seams = seamsOf({
+      directories: {
+        [ITCH_ROOT]: ["Empty"],
+        [`${ITCH_ROOT}\\Empty`]: ["readme.txt"],
+      },
+    });
+
+    await expect(readItchGames(seams)).resolves.toEqual([]);
+  });
+
+  it("treats a missing itch root as an empty list", async () => {
+    const seams = seamsOf({ directories: {} });
+
+    await expect(readItchGames(seams)).resolves.toEqual([]);
+  });
+});
+
+/**
+ * The uninstall keys are one PowerShell read for the whole machine. DisplayIcon
+ * carries an optional `,<resource index>` suffix, not a path.
+ */
+describe("readUninstallGames", () => {
+  it("enumerates all four uninstall keys in one PowerShell call", async () => {
+    const scripts: string[] = [];
+    const seams = {
+      ...seamsOf({ powerShell: [] }),
+      runPowerShell: async (script: string) => {
+        scripts.push(script);
+        return [];
+      },
+    };
+
+    await readUninstallGames(seams);
+
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0]).toContain(
+      "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+    );
+    expect(scripts[0]).toContain(
+      "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+    );
+    expect(scripts[0]).toContain(
+      "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+    );
+    expect(scripts[0]).toContain(
+      "HKCU:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+    );
+  });
+
+  it("strips DisplayIcon's resource index to name the executable", async () => {
+    const seams = seamsOf({
+      powerShell: [
+        {
+          DisplayName: "A Game",
+          InstallLocation: "C:\\Games\\G",
+          DisplayIcon: "C:\\Games\\G\\g.exe,0",
+        },
+      ],
+    });
+
+    await expect(readUninstallGames(seams)).resolves.toEqual([
+      {
+        source: "uninstall",
+        name: "A Game",
+        installDir: "C:\\Games\\G",
+        exes: ["C:\\Games\\G\\g.exe"],
+      },
+    ]);
+  });
+
+  it("skips an entry with an empty DisplayName or InstallLocation", async () => {
+    const seams = seamsOf({
+      powerShell: [
+        { DisplayName: "", InstallLocation: "C:\\Games\\Nameless" },
+        { DisplayName: "Pathless", DisplayIcon: "C:\\Games\\B\\b.exe" },
+      ],
+    });
+
+    await expect(readUninstallGames(seams)).resolves.toEqual([]);
+  });
+
+  it("keeps a non-game DisplayName; filtering is the classifier's job", async () => {
+    const seams = seamsOf({
+      powerShell: [
+        {
+          DisplayName: "Google Update",
+          InstallLocation: "C:\\Program Files\\Google\\Update",
+          DisplayIcon: "C:\\Program Files\\Google\\Update\\GoogleUpdate.exe",
+        },
+      ],
+    });
+
+    const games = await readUninstallGames(seams);
+
+    expect(games).toHaveLength(1);
+    expect(games[0]?.name).toBe("Google Update");
+  });
+
+  it("reports no executables when DisplayIcon is not an exe", async () => {
+    const seams = seamsOf({
+      powerShell: [
+        {
+          DisplayName: "Icon Only",
+          InstallLocation: "C:\\Games\\Icon",
+          DisplayIcon: "C:\\Games\\Icon\\icon.ico",
+        },
+      ],
+    });
+
+    await expect(readUninstallGames(seams)).resolves.toEqual([
+      {
+        source: "uninstall",
+        name: "Icon Only",
+        installDir: "C:\\Games\\Icon",
+        exes: [],
+      },
+    ]);
+  });
+
+  it("treats an answer that is not an array as an empty list", async () => {
+    const seams = seamsOf({ powerShell: { DisplayName: "One Object" } });
+
+    await expect(readUninstallGames(seams)).resolves.toEqual([]);
+  });
+
+  it("treats a PowerShell rejection as an empty list", async () => {
+    const seams = {
+      ...seamsOf({}),
+      runPowerShell: async () => {
+        throw new Error("registry unavailable");
+      },
+    };
+
+    await expect(readUninstallGames(seams)).resolves.toEqual([]);
   });
 });
