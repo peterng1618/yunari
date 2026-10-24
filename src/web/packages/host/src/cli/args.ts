@@ -44,7 +44,7 @@ export type ArgsResult =
   | { readonly kind: "message"; readonly text: string }
   | { readonly kind: "error"; readonly message: string };
 
-export const HELP_TEXT = `Usage: yunari-dashboard [options]
+export const HELP_TEXT = `Usage: yunari [options]
 
 Options:
   -p, --port <port>       Port to listen on (default: ${DEFAULT_PORT})
