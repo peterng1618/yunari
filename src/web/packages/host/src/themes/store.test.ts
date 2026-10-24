@@ -146,6 +146,53 @@ describe("ThemeStore", () => {
     expect(read?.assets).toEqual({});
   });
 
+  it("opens a document written by the previous schema major", async () => {
+    const store = createThemeStore(tmpDir);
+    // A folder saved by the previous major, written by hand: the strict write
+    // path will not produce one, and the read path is what is under test.
+    await fs.mkdir(path.join(tmpDir, "legacy"), { recursive: true });
+    await fs.writeFile(
+      path.join(tmpDir, "legacy", "theme.json"),
+      JSON.stringify({ ...envelopeFor("legacy", "Legacy"), schemaVersion: 2 }),
+    );
+
+    const read = await store.read("legacy");
+    expect(read?.envelope.schemaVersion).toBe("2.0.0");
+    expect(read?.envelope.metadata?.name).toBe("Legacy");
+  });
+
+  it("refuses a document from a schema major it cannot migrate", async () => {
+    const store = createThemeStore(tmpDir);
+    await fs.mkdir(path.join(tmpDir, "ancient"), { recursive: true });
+    await fs.writeFile(
+      path.join(tmpDir, "ancient", "theme.json"),
+      JSON.stringify({
+        ...envelopeFor("ancient", "Ancient"),
+        schemaVersion: "1.0.0",
+      }),
+    );
+
+    await expect(store.read("ancient")).rejects.toThrow(
+      "Schema version 1.0.0 is not supported by this build (expected 2.0.0).",
+    );
+  });
+
+  it("refuses a document from a newer schema major", async () => {
+    const store = createThemeStore(tmpDir);
+    await fs.mkdir(path.join(tmpDir, "future"), { recursive: true });
+    await fs.writeFile(
+      path.join(tmpDir, "future", "theme.json"),
+      JSON.stringify({
+        ...envelopeFor("future", "Future"),
+        schemaVersion: "3.0.0",
+      }),
+    );
+
+    await expect(store.read("future")).rejects.toThrow(
+      "This theme was made with a newer version of Yunari (schema 3.0.0).",
+    );
+  });
+
   it("round-trips a theme's assets through the folder", async () => {
     const store = createThemeStore(tmpDir);
     const content = withAsset(

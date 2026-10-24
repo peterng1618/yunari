@@ -1,5 +1,6 @@
 import {
   type FabricThemeEnvelope,
+  readFabricThemeEnvelope,
   validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
@@ -177,7 +178,7 @@ export function readThemePackage(bytes: Uint8Array): ThemePackageResult {
     )
       return fail("Unsupported package manifest.");
     const parsedTheme = JSON.parse(strFromU8(theme));
-    const validation = validateFabricThemeEnvelope(parsedTheme);
+    const validation = readFabricThemeEnvelope(parsedTheme);
     if (!validation.ok)
       return fail(validation.issues[0]?.message ?? "Invalid theme.");
     const paths = new Set(

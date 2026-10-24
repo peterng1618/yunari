@@ -6860,6 +6860,91 @@ describe("The publish route", () => {
     }
   });
 
+  it("publishes a document from the previous schema major as the current one", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-publish-"));
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: createThemeStore(dir),
+    });
+
+    try {
+      await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room",
+        themeBody(createValidPackage()),
+      );
+
+      const wire = JSON.parse(themeBody(createValidPackage())) as {
+        envelope: Record<string, unknown>;
+        assets: unknown;
+      };
+      wire.envelope["schemaVersion"] = 2;
+
+      const published = await request(
+        hosted.server,
+        "PUT",
+        "/api/publish?id=living-room",
+        JSON.stringify(wire),
+      );
+      expect(published.status).toBe(200);
+
+      // What a display is served is the migrated envelope, not the bytes that
+      // were posted: the raw integer is a shape no other reader accepts.
+      const served = await request(
+        hosted.server,
+        "GET",
+        "/api/themes/living-room/document",
+      );
+      expect(served.json()).toMatchObject({
+        id: "living-room",
+        schemaVersion: "2.0.0",
+      });
+    } finally {
+      await hosted.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a document from a schema major it cannot migrate", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-publish-"));
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: createThemeStore(dir),
+    });
+
+    try {
+      await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room",
+        themeBody(createValidPackage()),
+      );
+
+      const wire = JSON.parse(themeBody(createValidPackage())) as {
+        envelope: Record<string, unknown>;
+        assets: unknown;
+      };
+      wire.envelope["schemaVersion"] = "1.0.0";
+
+      const bad = await request(
+        hosted.server,
+        "PUT",
+        "/api/publish?id=living-room",
+        JSON.stringify(wire),
+      );
+      expect(bad.status).toBe(400);
+      expect(bad.text()).toContain(
+        "Schema version 1.0.0 is not supported by this build (expected 2.0.0).",
+      );
+    } finally {
+      await hosted.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("refuses a paired display, so a phone cannot cause a publish", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-publish-"));
     const displays = createDisplayStore(dir);

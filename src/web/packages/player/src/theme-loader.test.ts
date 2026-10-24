@@ -109,6 +109,24 @@ describe("loadHostedTheme", () => {
     ).rejects.toThrow("newer version");
   });
 
+  it("opens a document written by the previous schema major", async () => {
+    const legacy = { ...envelope, schemaVersion: 2 };
+
+    await expect(
+      loadHostedTheme("living-room", async () => Response.json(legacy)),
+    ).resolves.toMatchObject({ schemaVersion: "2.0.0" });
+  });
+
+  it("rejects a document from a schema major it cannot migrate", async () => {
+    await expect(
+      loadHostedTheme("living-room", async () =>
+        Response.json({ ...envelope, schemaVersion: "1.0.0" }),
+      ),
+    ).rejects.toThrow(
+      "Schema version 1.0.0 is not supported by this build (expected 2.0.0).",
+    );
+  });
+
   it("fetches exact bytes for declared font assets only", async () => {
     const theme: FabricThemeEnvelope = {
       ...envelope,

@@ -7,7 +7,7 @@ import {
   facetRecordOf,
   parseCatalogueIndex,
   parseCatalogueItemFile,
-  validateFabricThemeEnvelope,
+  readFabricThemeEnvelope,
 } from "@yunari/renderer-core";
 import { readThemePackage } from "@yunari/theme-package";
 
@@ -62,7 +62,7 @@ function entryOf({
 }: CatalogueItem): CatalogueEntry | undefined {
   const file = parseCatalogueItemFile(item);
   if (!file.ok) return undefined;
-  const validated = validateFabricThemeEnvelope(theme);
+  const validated = readFabricThemeEnvelope(theme);
   if (!validated.ok) return undefined;
 
   return { id, ...file.file, facets: facetRecordOf(validated.envelope) };
@@ -229,7 +229,7 @@ function refusalOf(theme: unknown, item: unknown): string {
   const file = parseCatalogueItemFile(item);
   if (!file.ok) return file.reason;
 
-  const validated = validateFabricThemeEnvelope(theme);
+  const validated = readFabricThemeEnvelope(theme);
   if (validated.ok) {
     return "item.json and the package's theme could not make an entry.";
   }

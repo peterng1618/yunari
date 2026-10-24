@@ -1,3 +1,4 @@
+import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { readThemePackage, writeThemePackage } from "./index.js";
@@ -41,6 +42,21 @@ const archive = (
 /** A manifest that declares the slot, which a package carrying a picture must. */
 const WITH_THUMBNAIL = { thumbnail: "thumbnail.png" } as const;
 
+/** A package carrying `theme`, for a document the writer itself would refuse.
+ *  The theme declares no assets so the archive needs no members beside it. */
+function packageWith(theme: unknown): Uint8Array {
+  return zipSync({
+    "manifest.json": strToU8(
+      JSON.stringify({
+        format: "yunari-theme-package",
+        version: 1,
+        theme: "theme.json",
+      }),
+    ),
+    "theme.json": strToU8(JSON.stringify({ ...(theme as object), assets: [] })),
+  });
+}
+
 describe("theme package", () => {
   it("round-trips a validated envelope and each declared asset", () => {
     const written = writeThemePackage({
@@ -53,6 +69,53 @@ describe("theme package", () => {
     expect(read).toMatchObject({ ok: true, envelope });
     if (read.ok)
       expect(read.assets["assets/logo.png"]).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it("opens a package written by the previous schema major", () => {
+    const read = readThemePackage(
+      packageWith({ ...envelope, schemaVersion: 2 }),
+    );
+
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.envelope.schemaVersion).toBe("2.0.0");
+  });
+
+  it("refuses a package from a schema major it cannot migrate", () => {
+    expect(
+      readThemePackage(packageWith({ ...envelope, schemaVersion: "1.0.0" })),
+    ).toMatchObject({
+      ok: false,
+      message:
+        "Schema version 1.0.0 is not supported by this build (expected 2.0.0).",
+    });
+  });
+
+  it("refuses a package from a newer schema major", () => {
+    expect(
+      readThemePackage(packageWith({ ...envelope, schemaVersion: "3.0.0" })),
+    ).toMatchObject({
+      ok: false,
+      message:
+        "This theme was made with a newer version of Yunari (schema 3.0.0). Update Yunari to open it.",
+    });
+  });
+
+  it("will not write an envelope from a previous schema major", () => {
+    // The writer is the strict half of the split: a save may not smuggle an old
+    // document through the migration the reader performs.
+    expect(
+      writeThemePackage({
+        envelope: {
+          ...envelope,
+          schemaVersion: 2,
+        } as unknown as FabricThemeEnvelope,
+        assets: { "assets/logo.png": new Uint8Array([1, 2, 3]) },
+      }),
+    ).toMatchObject({
+      ok: false,
+      message: "schemaVersion is required and must be major.minor.patch.",
+    });
   });
 
   it("refuses a valid ZIP whose declared entry exceeds the package bound", () => {

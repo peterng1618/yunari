@@ -5,6 +5,7 @@ import {
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
   type Globals,
+  readFabricThemeEnvelope,
   resolveStyleValue,
   type ScenePlan,
   validateFabricThemeEnvelope,
@@ -458,7 +459,7 @@ export async function mountEditorShell({
     );
   }
   if (envelope !== undefined) {
-    const validation = validateFabricThemeEnvelope(envelope);
+    const validation = readFabricThemeEnvelope(envelope);
     if (!validation.ok) {
       throw new Error(
         `Invalid theme: ${validation.issues[0]?.message ?? "unknown validation error"}`,

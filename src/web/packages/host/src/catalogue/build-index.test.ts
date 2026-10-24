@@ -136,6 +136,45 @@ describe("catalogueIndexOf", () => {
     expect(Object.hasOwn(alpha ?? {}, "remixOf")).toBe(false);
   });
 
+  it("publishes an item whose document carries the legacy integer version", () => {
+    const legacy = { ...themeFor("aurora", "Aurora"), schemaVersion: 2 };
+
+    const index = catalogueIndexOf([item("aurora", legacy)], GENERATED_AT);
+
+    expect(index.entries.map((entry) => entry.id)).toEqual(["aurora"]);
+    expect(index.entries[0]?.facets).toEqual(
+      facetRecordOf(themeFor("aurora", "Aurora")),
+    );
+  });
+
+  it("refuses an item from a schema major it cannot migrate", () => {
+    const index = catalogueIndexOf(
+      [
+        item("ancient", {
+          ...themeFor("ancient", "Ancient"),
+          schemaVersion: "1.0.0",
+        }),
+      ],
+      GENERATED_AT,
+    );
+
+    expect(index.entries).toEqual([]);
+  });
+
+  it("refuses an item from a newer schema major", () => {
+    const index = catalogueIndexOf(
+      [
+        item("future", {
+          ...themeFor("future", "Future"),
+          schemaVersion: "3.0.0",
+        }),
+      ],
+      GENERATED_AT,
+    );
+
+    expect(index.entries).toEqual([]);
+  });
+
   it("refuses an item whose header an entry cannot be built from", () => {
     const index = catalogueIndexOf(
       [

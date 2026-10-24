@@ -9,23 +9,24 @@ The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-relea
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-release-readiness.md` — Phase A, tasks A1–A4, followed by Phases B–D.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-release-readiness.md` — Phase A complete, Phase B next.
 - **A1 is complete:** decisions 0110 (migrate the previous schema major on open) and 0111 (stage the workspace as `yunari`) claim every watched path later tasks write.
 - **A2 is complete:** `schemaVersion` is `"2.0.0"`; the strict validator accepts a semver major and still refuses every integer.
-- **A3 is complete:** `readFabricThemeEnvelope` migrates the legacy integer and accepted older majors, then validates; A4 routes every open path through it.
+- **A3 is complete:** `readFabricThemeEnvelope` migrates the legacy integer and accepted older majors, then validates.
+- **A4 is complete:** every open path reads through the migration; save, snapshot, package write and `requestVersion` stay strict.
 - **Probe finding for C1:** the staged manifest needs five runtime deps — `culori`, `fflate`, `ffmpeg-static`, `node-forge`, `systeminformation` — not the three the plan lists.
 
 ## Last completed change
 
-- **One read path migrates before validating:** `migrateFabricThemeEnvelope` normalises the legacy integer `2` to `"2.0.0"`, chains `SCHEMA_MIGRATIONS` upward, and verifies the chain reached the target.
-- **The strict validator is untouched in strictness:** write paths still refuse every integer, and both paths share one sentence per version refusal.
-- **The migration table is empty at `2.0.0`,** and an invariant test requires an entry for every major the reader accepts below the current one.
+- **Opens migrate, writes stay strict:** the editor mount, store read, player loader, both catalogue readers, the package reader and the publish route call `readFabricThemeEnvelope`.
+- **Publish serves the migrated envelope:** a legacy-integer document is published as `"2.0.0"`, and `"1.0.0"` is refused with the unsupported sentence.
+- **Strict write paths unchanged:** `checked()`, the editor `snapshot`, `writeThemePackage` and `requestVersion` still call the validator and refuse the integer.
+- **Ten reader cases added** across the six existing suites; affected suites pass (3 failures: two SMTC, one load-timeout rerun green) and typecheck is clean.
 
 ## Next
 
-1. A4 — route every open path through the reader; keep save, snapshot and publish-strict writes on the validator.
-2. B1 — upgrade `vite` to `8.3.5` and `vitest` to `5.0.5`, then run the gate.
-3. B2 — add the `undici`, `sharp` and `jsdom` overrides, each kept only if its suite passes.
+1. B1 — upgrade `vite` to `8.3.5` and `vitest` to `5.0.5`, then run the gate.
+2. B2 — add the `undici`, `sharp` and `jsdom` overrides, each kept only if its suite passes.
 
 ## Blockers / unverified
 

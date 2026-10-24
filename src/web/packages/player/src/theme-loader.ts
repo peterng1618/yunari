@@ -4,8 +4,8 @@ import {
   type FabricThemeEnvelope,
   isMeasurementSystem,
   normalizeUnitPreferences,
+  readFabricThemeEnvelope,
   type UnitPreferences,
-  validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
 
 /**
@@ -115,7 +115,7 @@ export async function loadHostedTheme(
     );
   }
 
-  const result = validateFabricThemeEnvelope(body);
+  const result = readFabricThemeEnvelope(body);
   if (!result.ok) {
     const issue = result.issues[0];
     throw new ThemeLoadError(

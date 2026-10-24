@@ -998,3 +998,61 @@ describe("one resize path on the host", () => {
     ).toBe(800);
   });
 });
+
+describe("editor shell schema versions", () => {
+  function sizedHost(): HTMLDivElement {
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    return host;
+  }
+
+  function documentWithVersion(
+    version: unknown,
+  ): NonNullable<Parameters<typeof mountEditorShell>[0]["envelope"]> {
+    return {
+      ...envelopeWith({ color: { ref: "palette.ink" } }),
+      schemaVersion: version,
+    } as unknown as NonNullable<
+      Parameters<typeof mountEditorShell>[0]["envelope"]
+    >;
+  }
+
+  it("opens a document written by the previous schema major", async () => {
+    const host = sizedHost();
+    const shell = await mount({
+      host,
+      artboard: ARTBOARD,
+      envelope: documentWithVersion(2),
+    });
+
+    expect(host.querySelector("canvas")).not.toBeNull();
+    shell.destroy();
+  });
+
+  it("refuses a document from a schema major it cannot migrate", async () => {
+    await expect(
+      mount({
+        host: sizedHost(),
+        artboard: ARTBOARD,
+        envelope: documentWithVersion("1.0.0"),
+      }),
+    ).rejects.toThrow(
+      "Schema version 1.0.0 is not supported by this build (expected 2.0.0).",
+    );
+  });
+
+  it("refuses a document from a newer schema major", async () => {
+    await expect(
+      mount({
+        host: sizedHost(),
+        artboard: ARTBOARD,
+        envelope: documentWithVersion("3.0.0"),
+      }),
+    ).rejects.toThrow(
+      "This theme was made with a newer version of Yunari (schema 3.0.0).",
+    );
+  });
+});

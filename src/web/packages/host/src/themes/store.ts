@@ -8,6 +8,7 @@ import {
   facetRecordOf,
   type PerformanceCost,
   performanceCostsOf,
+  readFabricThemeEnvelope,
   resolveStyleValue,
   type ThemeRemix,
   type ValidationIssue,
@@ -596,7 +597,7 @@ async function readStored(
   if (bytes.byteLength > MAX_THEME_FILE_BYTES) {
     throw new ThemeTooLargeError(id);
   }
-  const validation = validateFabricThemeEnvelope(parseThemeDocument(id, bytes));
+  const validation = readFabricThemeEnvelope(parseThemeDocument(id, bytes));
   if (!validation.ok) {
     throw new ThemeValidationError(id, validation.issues);
   }

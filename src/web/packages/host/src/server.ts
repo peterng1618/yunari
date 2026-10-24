@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 import {
   createBatch,
   knownTimeZones,
+  readFabricThemeEnvelope,
   SAMPLE_STREAM_PATH,
-  validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
 import type { ChartRefreshRate } from "@yunari/scene-fabric";
 import { type AssetRouteOptions, handleAssetRoutes } from "./assets/routes.js";
@@ -3810,7 +3810,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
         // A publish bypasses `themeStore.write`, so nothing else checks the
         // document, and a display serves whatever it is given.
-        const checked = validateFabricThemeEnvelope(decoded.content.envelope);
+        const checked = readFabricThemeEnvelope(decoded.content.envelope);
         if (!checked.ok) {
           sendText(
             response,
