@@ -76,8 +76,8 @@ list, never an error. Nothing is written, and nothing leaves the machine.
 
 ### D3 — Classification evidence is reported, not guessed
 
-The classifier returns `{ running, evidence, installRoot? }` so a test and a
-future status line can tell a catalogue match from a fullscreen heuristic. The
+The classifier returns `{ running, evidence, game? }` so a test and a future
+status line can tell a catalogue match from a fullscreen heuristic. The
 `evidence` value is not exposed as a sensor this plan.
 
 ### D4 — Linux is deferred, not half-built
