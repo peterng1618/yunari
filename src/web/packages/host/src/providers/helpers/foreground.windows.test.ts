@@ -36,6 +36,10 @@ describe.skipIf(!canRun)("foreground helper on Windows", () => {
     const reading = parseForegroundLine(line);
     expect(reading, line).toBeDefined();
     expect(typeof reading?.pid, line).toBe("number");
+    expect(
+      reading?.pid,
+      `no foreground window was reported, so the window fields cannot be checked: ${line}`,
+    ).not.toBe(0);
 
     const raw = JSON.parse(line) as Record<string, unknown>;
     expect(typeof raw["fullscreen"], line).toBe("boolean");
@@ -43,6 +47,12 @@ describe.skipIf(!canRun)("foreground helper on Windows", () => {
     if (raw["class"] !== undefined) {
       expect(typeof raw["class"], line).toBe("string");
       expect(raw["class"], line).not.toBe("");
+    }
+
+    expect(typeof reading?.fullscreen, line).toBe("boolean");
+    expect(typeof reading?.d3dFullscreen, line).toBe("boolean");
+    if (reading?.class !== undefined) {
+      expect(reading.class, line).not.toBe("");
     }
   }, 40_000);
 });

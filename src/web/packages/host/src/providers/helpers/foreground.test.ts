@@ -22,8 +22,8 @@ describe("parseForegroundLine", () => {
       parseForegroundLine(
         '{"kind":"foreground","pid":7,"path":"C:\\\\a.exe","name":"a"}',
       ),
-    ).toEqual({ pid: 7, path: "C:\\a.exe", name: "a" });
-    expect(parseForegroundLine('{"kind":"foreground","pid":0}')).toEqual({
+    ).toStrictEqual({ pid: 7, path: "C:\\a.exe", name: "a" });
+    expect(parseForegroundLine('{"kind":"foreground","pid":0}')).toStrictEqual({
       pid: 0,
     });
   });
