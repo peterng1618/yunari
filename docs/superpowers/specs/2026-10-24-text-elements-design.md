@@ -300,7 +300,9 @@ Unit and DOM cases run under `npm run test` (Vitest, jsdom for `*.dom.test.*`).
 Browser cases are `npx playwright test tests/e2e/text-elements.spec.ts
 --workers=1`: 9 desktop cases, 9 `phone-chromium` skips, last two runs expected
 9 / skipped 9 / unexpected 0 / flaky 0 with exit 0. The full gate is
-`npm run gate` from `src/web/`.
+`npm run gate`, run from `src/web/`: it exited 0, covering biome, the gate
+self-tests, status, docs, scratch, design, typecheck, unit (342 files / 4804
+tests) and worker (12 files / 72 tests).
 
 - **Class is the only discriminator; no authored `wrap`.**
   `a88bf857` constructs the class the gesture asks for; `d671ef78` derives
@@ -317,7 +319,11 @@ Browser cases are `npx playwright test tests/e2e/text-elements.spec.ts
   point from a click", "uses the normalised rectangle of a down-right drag as
   the box", "normalises an up-left drag to a positive box at the upper-left",
   "treats three pixels of jitter as a click", "treats a drag thinner than one
-  scene unit as a click". Browser: "click places a Text that grows while typing
+  scene unit as a click". Every creation surface arms that one gesture —
+  `editor-session.dom.test.ts` "arms from the Add pane's text action and
+  constructs nothing yet" and "arms from the session façade's own addText"; a
+  non-primary press leaves no trace — `text-manager/index.dom.test.ts` "cancels
+  a non-primary press". Browser: "click places a Text that grows while typing
   and scales rather than writing a width" and "drag draws a Text box at the
   rectangle, wraps, and its ml/mr controls change the width". Escape creates
   nothing and disarms — `text-manager/index.dom.test.ts` "cancels on Escape and
