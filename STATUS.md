@@ -11,7 +11,7 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Active work
 
-- **Tasks 1–4 are done** (menu model, external programs, sign-in entry, Windows tray); Phase 1 continues with the Linux tray.
+- **Tasks 1–5 are done** (menu model, external programs, sign-in entry, both tray adapters); Phase 1 continues with the controller.
 - **Controller next:** the 5-second snapshot poll, action dispatch and 10-second notices are still to be built.
 - **Windows adapter** renders the model through a hidden PowerShell WinForms `NotifyIcon` fed by JSON lines on stdin.
 - **Linux adapter** stages the pinned `systray2@2.1.4` x86-64 binary; no new npm dependency and no runtime install.
@@ -20,18 +20,17 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Last completed change
 
-- **Windows tray:** `host/src/tray/windows.ts` spawns hidden `powershell.exe` to host a WinForms `NotifyIcon`, and maps a click index back to its current `TrayAction`.
-- **Shared view:** `TrayView` lives in `host/src/tray/menu.ts` for both adapters; `startWindowsTray` rejects without `started` in 10 s and tells a deliberate close from an unexpected exit.
-- **Icon:** `tray-icon.ts` carries the generated 32×32 PNG inline (500 base64 chars); tooltips cap at 63 characters.
-- **Tests:** 9 new (1 icon, 8 Windows); a live probe started the real tray, set a menu and closed with no `onLost`, and the embedded C# compiles under Windows PowerShell.
-- **Gates:** `@yunari/host` typecheck, Biome, `status:check` and 32 tray tests exit 0.
+- **Linux tray:** `host/src/tray/linux.ts` drives the staged `systray2` x86-64 binary over JSON lines and maps a clicked `__id` through the current action map.
+- **Vendoring:** `scripts/vendor-tray.mjs` checks the pinned SHA-256 before extraction and stages only the Linux binary and LICENSE under ignored `vendor/tray`.
+- **View discipline:** one `onLost` per view and never after a rejected start; a lost view stops writing menus but `close()` still kills the process.
+- **Tests:** 12 Linux tests; the staged binary is a 3.5 MB x86-64 ELF and `PROVENANCE.txt` carries the pinned digest.
+- **Gates:** host typecheck, Biome, all tray tests and `status:check` exit 0.
 
 ## Next
 
-1. Task 5: Linux tray adapter and its staged binary.
-2. Task 6+: the controller, editor deep links and `--tray` wiring.
-3. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
-4. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
+1. Task 6+: the controller, editor deep links and `--tray` wiring.
+2. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
+3. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
 
 ## Blockers / unverified
 
