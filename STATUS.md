@@ -22,9 +22,8 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Next
 
-1. Task 1.1: decision note 0098, then derive layout from the Fabric class and delete the authored `wrap`.
-2. Task 1.2: revive a legacy `"Text"` as `IText` in the editor only.
-3. Tasks 1.3–1.4: construct the chosen class, then place text by click or drag.
+1. Task 1.2: revive a legacy `"Text"` as `IText` in the editor only.
+2. Tasks 1.3–1.4: construct the chosen class, then place text by click or drag.
 
 ## Blockers / unverified
 
