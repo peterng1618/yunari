@@ -108,7 +108,10 @@ a one-time, token-authenticated publish run by the owner locally, and the
 workflow takes over after the trusted publisher exists. **This bootstrap has not
 been run yet.**
 
-1. **Build and pack the release locally**, on the release commit, from `src/web`:
+1. **Build and pack the release locally**, on the release commit, from `src/web`.
+   The block is POSIX shell: run it in Git Bash or WSL. On Windows use
+   `%TEMP%\yunari-assets` (and a `%TEMP%\yunari-package` staging path) instead of
+   `/tmp/...` — the staging directory must be outside the repository and empty.
 
    ```bash
    cd src/web
@@ -118,12 +121,14 @@ been run yet.**
    npm run build -w @yunari/editor
    npm run build -w @yunari/host
    cd ../..
+   mkdir -p /tmp/yunari-assets
    node scripts/stage-npm-package.mjs --out /tmp/yunari-package --expect-version 0.1.0
    (cd /tmp/yunari-package && npm pack --pack-destination /tmp/yunari-assets)
    ```
 
-   The staging directory must be outside the repository and empty (`%TEMP%`
-   paths on Windows). The `.tgz` produced here is the artifact that ships.
+   `mkdir` comes first because `npm pack --pack-destination` fails with `ENOENT`
+   when the destination directory does not exist — the publish workflow creates
+   it the same way. The `.tgz` produced here is the artifact that ships.
 
 2. **Publish that tarball with the owner's npm token** — `npm login` on the
    owner's account, or the token in the environment for this one command. Run it

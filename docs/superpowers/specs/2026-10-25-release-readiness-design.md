@@ -97,9 +97,13 @@ Levels follow semver:
 | `minor` | A new user-visible capability that keeps existing data working. |
 | `patch` | A fix, dependency/security update, documentation or internal change. |
 
-Conventional Commits already map to this: `feat` → minor, `fix`/`perf`/
-`refactor` → patch, `!` or `BREAKING CHANGE` → major. Before 1.0, semver allows a
-breaking change in a minor bump; release-please applies that rule.
+Conventional Commits already map to this: `feat` → minor, `fix` (and `deps`) →
+patch, `!` or `BREAKING CHANGE` → major. A non-breaking `refactor`, `perf`,
+`chore`, `docs` or `build` is not a releasable unit and opens no release.
+Before 1.0, semver allows a breaking change in a minor bump, and implementation
+measured that release-please needs `"bump-minor-pre-major": true` in
+`release-please-config.json` for that: its default is `false`, which would jump a
+breaking change to `1.0.0`.
 
 **release-please**, not semantic-release. It opens a release PR, so the full
 gate runs on the exact commit that will be tagged, and the release notes are

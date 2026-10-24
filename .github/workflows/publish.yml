@@ -17,15 +17,16 @@ name: Publish
 # already (`gh release upload` targets it).
 #
 # npm authentication. Trusted publishing is configured on an EXISTING package's
-# npmjs.com settings, so it cannot be set up before `yunari` exists: the FIRST
-# publish must be token-authenticated (an `NPM_TOKEN` secret exported as
-# `NODE_AUTH_TOKEN`, or a manual token-seeded publish by the owner). The trusted
-# publisher for repository `peterng1618/yunari`, workflow `publish.yml` takes
-# effect from the SECOND publish on, and `publish.yml` must exist on the default
-# branch for that binding to be offered. Provenance needs a public repository,
-# `id-token: write`, and npm >= 11.5.1 (Node 24 ships a newer one). No token is
-# wired here; the owner supplies one for the first release only. The full setup
-# runbook is release-readiness Task D1.
+# npmjs.com settings, so it cannot be set up before `yunari` exists — and this
+# workflow wires no token: no `registry-url` on setup-node, no `NODE_AUTH_TOKEN`
+# on the publish step. The FIRST publish is therefore a one-time local,
+# token-authenticated publish by the owner (stage, `npm pack`, `npm publish
+# <tarball>`, upload the assets by hand), never a run of this workflow. The
+# trusted publisher for repository `peterng1618/yunari`, workflow `publish.yml`
+# takes effect from the SECOND publish on, and `publish.yml` must exist on the
+# default branch for that binding to be offered. Provenance needs a public
+# repository, `id-token: write`, and npm >= 11.5.1 (the Node 24 pinned here
+# resolves an npm newer than that). The full runbook is docs/engineering/releases.md.
 #
 # `/editor` is a 302 to `/editor/` (relative asset base), so the smoke request
 # follows redirects and still requires a final 200.
