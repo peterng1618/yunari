@@ -569,6 +569,8 @@ describe("fetchSource", () => {
         "http://169.254.169.254/latest/meta-data",
         "http://169.254.1.1/",
         "http://[fe80::1]/",
+        // `::ffff:169.254.169.254` canonicalises to `::ffff:a9fe:a9fe`.
+        "http://[::ffff:169.254.169.254]/",
       ]) {
         const { fetchImpl, calls } = serve(() => json({}));
 
@@ -604,6 +606,22 @@ describe("fetchSource", () => {
         expect(outcome.ok).toBe(true);
         expect(calls).toHaveLength(1);
       }
+    });
+
+    it("resolves a hostname and allows it when every address is private", async () => {
+      // `localhost` goes through the real resolver (::1 and 127.0.0.1), so this
+      // is the one case that exercises `lookup` rather than a literal address.
+      const { fetchImpl, calls } = serve(() => json({}));
+
+      const outcome = await fetchSource(
+        sourceOf({ url: "http://localhost:8080/" }),
+        undefined,
+        fetchImpl,
+        () => 0,
+      );
+
+      expect(outcome.ok).toBe(true);
+      expect(calls).toHaveLength(1);
     });
 
     it("re-validates the destination on a redirect hop", async () => {
