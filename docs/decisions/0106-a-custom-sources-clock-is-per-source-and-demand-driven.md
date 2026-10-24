@@ -100,8 +100,9 @@ fetch at once; a timer stops once no key has been asked for three intervals
 (the demand grace). Each field's pointer result is scaled/offset once at
 acquisition and stored; a miss is `missing`, a type mismatch is `error` with no
 coercion, and a source's failure reaches only its own samples and `health()`.
-A reason quotes a pointer only when redaction leaves it unchanged and it fits a
-bounded length; otherwise the field id names it. `health().available` follows
+A reason names a field's pointer verbatim as user-authored configuration,
+bounded to 64 characters with the whole message capped at 120; only a value
+that fails the JSON-Pointer grammar falls back to the field id. `health().available` follows
 whether the store has a valid source, so a partially failing provider is still
 available and its redacted failure rides in `message`. Credentials resolve
 through `CredentialStore` at fetch time only, and a missing one is a reason

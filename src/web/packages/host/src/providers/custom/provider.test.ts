@@ -320,10 +320,7 @@ describe("CustomSourceProvider", () => {
     const by = byKey(await provider.sample(keys, Date.now()));
 
     expect(by.get("custom.one.gone")).toMatchObject({ status: "missing" });
-    // A slash-shaped pointer is what the redactor calls a path, so the field id
-    // names the miss rather than quoting it.
-    expect(by.get("custom.one.gone")?.message).toContain('field "gone"');
-    expect(by.get("custom.one.gone")?.message).not.toContain("/absent/nope");
+    expect(by.get("custom.one.gone")?.message).toContain("/absent/nope");
 
     for (const [key, expected] of [
       ["custom.one.n", "expected a number"],
@@ -339,30 +336,45 @@ describe("CustomSourceProvider", () => {
     }
   });
 
-  it("does not quote a pointer shaped like an address", async () => {
+  it("quotes a pointer verbatim, including one shaped like an address", async () => {
     const sample = await samplePointer("/10.0.0.5:8080/secret");
 
     expect(sample).toMatchObject({ status: "missing" });
-    expect(sample?.message).toContain('field "x"');
-    expect(sample?.message).not.toContain("10.0.0.5");
+    expect(sample?.message).toContain("/10.0.0.5:8080/secret");
   });
 
   it("keeps replacement patterns in a pointer literal", async () => {
-    const sample = await samplePointer("price$&");
+    const sample = await samplePointer("/price$&");
 
     expect(sample).toMatchObject({ status: "missing" });
-    expect(sample?.message).toContain("price$&");
+    expect(sample?.message).toContain("/price$&");
     expect(sample?.message).not.toContain("\u0000");
   });
 
-  it("bounds a long pointer in a reason", async () => {
-    const pointer = "a".repeat(100);
+  it("bounds a long pointer inside the 120-character message", async () => {
+    const pointer = `/${"a".repeat(5_000)}`;
     const sample = await samplePointer(pointer);
 
     expect(sample).toMatchObject({ status: "missing" });
-    expect(sample?.message).toContain(`${"a".repeat(64)}…`);
+    expect(sample?.message).toContain(`${pointer.slice(0, 64)}…`);
     expect(sample?.message).not.toContain(pointer);
-    expect(sample?.message?.length).toBeLessThan(200);
+    expect(sample?.message?.length).toBeLessThanOrEqual(120);
+  });
+
+  it("names the field when a pointer is not JSON Pointer grammar", async () => {
+    const sample = await samplePointer("not a pointer");
+
+    expect(sample).toMatchObject({ status: "missing" });
+    expect(sample?.message).toContain('field "x"');
+    expect(sample?.message).not.toContain("not a pointer");
+  });
+
+  it("names the whole document for an empty pointer", async () => {
+    const sample = await samplePointer("");
+
+    // The empty pointer found `{}`, which is not a number.
+    expect(sample).toMatchObject({ status: "error" });
+    expect(sample?.message).toContain("the whole document");
   });
 
   it("goes stale after three missed intervals and returns to ok on success", async () => {

@@ -82,14 +82,20 @@ export interface CustomSourceProviderOptions {
 /** The longest pointer a reason quotes, so a hand-written one cannot turn one
  *  line into a paragraph. */
 const MAX_POINTER_CHARS = 64;
+/** A reason is one line on a fixed strip; the pointer counts against it. */
+const MESSAGE_MAX_CHARS = 120;
+
+/** RFC 6901: empty, or segments of `/` plus text with only `~0`/`~1` escapes. */
+const POINTER_GRAMMAR = /^(?:\/(?:[^/~]|~[01])*)*$/;
 
 /**
- * A reason may name where a value should have been, but the pointer is
- * authored in `sources.json` and is not trusted display text: it can be shaped
- * like an address, longer than a line, or contain `$&`-style replacement text.
- * A pointer redaction would change is not quoted; the field id (validated
- * `[a-z0-9_-]{1,32}`) names it instead. The restore is a replacer function so
- * a `$` sequence in the pointer stays literal.
+ * A pointer is user-authored configuration, the same trust class as a source's
+ * name and a field's label, so it is quoted verbatim — bounded to a line, with
+ * a replacer function so `$&`-style text stays literal. Only a value that
+ * fails the JSON-Pointer grammar is malformed config rather than a location,
+ * and then the field id names it. The sentence around the pointer is still
+ * redacted; the pointer is the user's own text rather than a third-party
+ * error.
  */
 function messageWithPointer(
   sentence: (subject: string) => string,
@@ -100,18 +106,16 @@ function messageWithPointer(
     pointer.length > MAX_POINTER_CHARS
       ? `${pointer.slice(0, MAX_POINTER_CHARS)}…`
       : pointer;
-  const subject =
-    pointer === ""
-      ? "the whole response"
-      : redactForBrowser(pointer) === pointer
-        ? `the pointer ${bounded}`
-        : `field "${field.id}"`;
+  const subject = !POINTER_GRAMMAR.test(pointer)
+    ? `field "${field.id}"`
+    : pointer === ""
+      ? "the whole document"
+      : `the pointer ${bounded}`;
 
   const placeholder = "\u0000";
-  return redactForBrowser(sentence(placeholder)).replace(
-    placeholder,
-    () => subject,
-  );
+  return redactForBrowser(sentence(placeholder))
+    .replace(placeholder, () => subject)
+    .slice(0, MESSAGE_MAX_CHARS);
 }
 
 function missingPointer(field: CustomField): FieldReading {
