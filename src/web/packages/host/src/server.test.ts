@@ -8756,6 +8756,7 @@ describe("The media artwork route", () => {
 
 describe("The game box art route", () => {
   const BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+  const REMOTE_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xdb]);
   const PNG_BYTES = new Uint8Array([
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01,
   ]);
@@ -8862,6 +8863,7 @@ describe("The game box art route", () => {
 
     expect(answer.status).toBe(200);
     expect(answer.headers["content-type"]).toBe("image/jpeg");
+    expect(Number(answer.headers["content-length"])).toBe(BYTES.byteLength);
     expect(answer.headers["cache-control"]).toBe("private, max-age=3600");
     expect(answer.headers["x-content-type-options"]).toBe("nosniff");
     expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
@@ -8879,7 +8881,27 @@ describe("The game box art route", () => {
 
     expect(answer.status).toBe(200);
     expect(answer.headers["content-type"]).toBe("image/png");
+    expect(Number(answer.headers["content-length"])).toBe(PNG_BYTES.byteLength);
+    expect(answer.headers["cache-control"]).toBe("private, max-age=3600");
+    expect(answer.headers["x-content-type-options"]).toBe("nosniff");
     expect(Buffer.compare(answer.body, Buffer.from(PNG_BYTES))).toBe(0);
+  });
+
+  it("serves installed local art ahead of a cached remote cover", async () => {
+    await fs.writeFile(path.join(cache, "10.jpg"), REMOTE_BYTES);
+    const running = launch({
+      gameArtwork: source(["10"]),
+      gameCoverCacheDir: cache,
+    });
+
+    const answer = await request(
+      running.server,
+      "GET",
+      "/api/game/artwork/10.jpg",
+    );
+
+    expect(answer.status).toBe(200);
+    expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
   });
 
   it("404s when neither installed art nor a cached cover exists", async () => {
@@ -8893,6 +8915,25 @@ describe("The game box art route", () => {
       (await request(running.server, "GET", "/api/game/artwork/999.png"))
         .status,
     ).toBe(404);
+  });
+
+  it("404s a cached cover when the cache directory is missing", async () => {
+    const running = launch({
+      gameCoverCacheDir: path.join(directory, "absent"),
+    });
+
+    for (const extension of ["jpg", "png"]) {
+      expect(
+        (
+          await request(
+            running.server,
+            "GET",
+            `/api/game/artwork/1201270.${extension}`,
+          )
+        ).status,
+        extension,
+      ).toBe(404);
+    }
   });
 
   it("404s a cached cover whose bytes do not match its extension", async () => {

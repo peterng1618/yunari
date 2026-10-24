@@ -143,26 +143,31 @@ function sniffImage(bytes: Uint8Array): CoverExtension | undefined {
 }
 
 /**
- * True when the file resolves inside the cache directory. A junction or symlink
- * named `<appId>.<ext>` must not turn the route into a read of an arbitrary
- * user file.
+ * The canonical path when the file resolves inside the cache directory, so the
+ * caller stats and reads exactly what containment approved. A junction or
+ * symlink named `<appId>.<ext>` must not turn the route into a read of an
+ * arbitrary user file.
  */
-async function insideCoverCache(
+async function resolveInCoverCache(
   directory: string,
   file: string,
-): Promise<boolean> {
+): Promise<string | undefined> {
   try {
     const cache = await fs.realpath(directory);
     const real = await fs.realpath(file);
     const relative = path.relative(cache, real);
 
-    return (
-      relative !== "" &&
-      !relative.startsWith("..") &&
-      !path.isAbsolute(relative)
-    );
+    if (
+      relative === "" ||
+      relative.startsWith("..") ||
+      path.isAbsolute(relative)
+    ) {
+      return undefined;
+    }
+
+    return real;
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -184,10 +189,13 @@ export async function readCachedCover(
   const id = Number(appId);
   if (!Number.isInteger(id) || id <= 0) return undefined;
 
-  const file = path.join(cacheDir, `${id}.${extension}`);
-  if (!(await insideCoverCache(cacheDir, file))) return undefined;
+  const real = await resolveInCoverCache(
+    cacheDir,
+    path.join(cacheDir, `${id}.${extension}`),
+  );
+  if (real === undefined) return undefined;
 
-  const bytes = await readBoxArt(file, readFile);
+  const bytes = await readBoxArt(real, readFile);
   if (bytes === undefined || sniffImage(bytes) !== extension) return undefined;
 
   return {
