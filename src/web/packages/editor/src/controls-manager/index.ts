@@ -7,6 +7,7 @@ import {
   Control,
   controlsUtils,
   InteractiveFabricObject,
+  IText,
   Line,
   Point,
   Textbox,
@@ -283,6 +284,19 @@ export function applyEditorControls(): void {
   applyOverrides(textboxControls);
   withTextboxHeightControls(textboxControls);
   Textbox.ownDefaults.controls = textboxControls;
+
+  // A text has no authored box, so a width or height drag has nowhere to write.
+  // Corners and rotation remain; the four edge handles are omitted. Built from
+  // the object set so the shared overrides still apply, and copied because
+  // deleting from `objectControls` itself would take them off every object.
+  const {
+    ml: _ml,
+    mr: _mr,
+    mt: _mt,
+    mb: _mb,
+    ...textControls
+  } = objectControls;
+  IText.ownDefaults = { ...IText.ownDefaults, controls: textControls };
 
   // A line gets its own set rather than a narrowed one: the six handles it does
   // not need are the ones that make the box wrong, so hiding them would leave

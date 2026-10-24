@@ -16,16 +16,16 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- New `tests/e2e/text-elements.spec.ts` proves click/drag classes, growth, wrap, cancel, save/reload, legacy load, player parity and run tabs.
-- Text `ml`/`mr` scale and W/H are read-only; Text box `ml`/`mr` change the width and W/H stay editable.
-- The no-`mt`/`mb` case is pinned `test.fail`: `controls-manager` still gives `IText` the six default edges.
+- `IText` gets corners and rotation only: its own control set omits `ml`/`mr`/`mt`/`mb`, built from the shared object set so the overrides still apply.
+- `Textbox` keeps all nine handles and every other object keeps Fabric's full set; unit and dom tests pin all three.
 
 ## Next
 
-1. Phase 3 / Task 3.3: ownership docs, status and the full gate.
-2. Drop the `text-elements.spec.ts` `test.fail` pin once the `mt`/`mb` edges are Textbox-only.
+1. Phase 2 / Task 2.5: typing into a just-placed text is kept.
+2. Rewrite then unpin the `text-elements.spec.ts` control test: a Text now has no `ml`/`mr` either, so its expectation is stale.
+3. Phase 3 / Task 3.3: ownership docs, status and the full gate.
 
 ## Blockers / unverified
 
-- `IText` still carries Fabric's `mt`/`mb` scaleY edges; the Text contract says height edges are Textbox-only, and the fix is outside Task 3.2's evidence-only scope.
+- The e2e control test is still pinned `test.fail` and now fails on its stale `ml`/`mr` expectation, so the browser proof of the new contract has not run.
 - Outside this plan: the store Worker is undeployed, and the live catalogue's smoke theme still carries the old media shape.
