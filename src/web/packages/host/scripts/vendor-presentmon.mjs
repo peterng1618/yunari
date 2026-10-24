@@ -44,14 +44,15 @@ async function main() {
     );
   }
 
+  // MIT requires the copyright and permission notice to travel with the
+  // binary; the release asset carries no licence file of its own. Fetch it
+  // before writing anything, so a failed fetch stages no incomplete pair.
+  const licence = await download(licenceUrl, "LICENSE.txt");
+
   await rm(target, { recursive: true, force: true });
   await mkdir(target, { recursive: true });
 
   await writeFile(path.join(target, "PresentMon.exe"), executable);
-
-  // MIT requires the copyright and permission notice to travel with the
-  // binary; the release asset carries no licence file of its own.
-  const licence = await download(licenceUrl, "LICENSE.txt");
   await writeFile(path.join(target, "LICENSE.txt"), licence);
 
   await writeFile(

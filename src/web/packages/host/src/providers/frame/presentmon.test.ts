@@ -10,6 +10,7 @@ import {
   PRESENTMON_MISSING,
   PRESENTMON_SESSION_BUSY,
   parsePresentMonCsv,
+  parsePresentMonHeader,
   presentMonAdapter,
 } from "./presentmon.js";
 import { FRAME_KEYS, FrameProvider } from "./provider.js";
@@ -22,48 +23,103 @@ const HEADER =
 const ROW =
   "game.exe,1234,0x0000000000000000,DXGI,1,0,Displayed,12.345,0.5,8.333";
 
+describe("parsePresentMonHeader", () => {
+  it("reads the names from a real v1 header and rejects a data row", () => {
+    expect(parsePresentMonHeader(HEADER)).toEqual([
+      "application",
+      "processid",
+      "swapchainaddress",
+      "runtime",
+      "syncinterval",
+      "presentflags",
+      "dropped",
+      "timeinseconds",
+      "msinpresentapi",
+      "msbetweenpresents",
+    ]);
+    expect(parsePresentMonHeader(ROW)).toBeUndefined();
+    expect(parsePresentMonHeader("")).toBeUndefined();
+  });
+});
+
 describe("parsePresentMonCsv", () => {
-  it("parses a data row by column name after a real header", () => {
-    expect(parsePresentMonCsv(HEADER)).toBeUndefined();
-    expect(parsePresentMonCsv(ROW)).toEqual({
+  it("parses a data row against the header's column names", () => {
+    const columns = parsePresentMonHeader(HEADER) ?? [];
+
+    expect(parsePresentMonCsv(ROW, columns)).toEqual({
       frametimeMs: 8.333,
       app: "game.exe",
     });
   });
 
   it("finds the names in the v2 header spelling too", () => {
-    expect(
-      parsePresentMonCsv(
+    const columns =
+      parsePresentMonHeader(
         "Application,ProcessID,MsBetweenPresents,msInPresentAPI",
-      ),
-    ).toBeUndefined();
-    expect(parsePresentMonCsv("other.exe,7,16.667,0.2")).toEqual({
+      ) ?? [];
+
+    expect(parsePresentMonCsv("other.exe,7,16.667,0.2", columns)).toEqual({
       frametimeMs: 16.667,
       app: "other.exe",
     });
   });
 
-  it("rejects NA, non-numeric and short rows", () => {
-    expect(parsePresentMonCsv(HEADER)).toBeUndefined();
+  it("does not read a v1 row against a v2 header", () => {
+    const v2 =
+      parsePresentMonHeader(
+        "Application,ProcessID,MsBetweenPresents,msInPresentAPI",
+      ) ?? [];
+
+    // The v2 header's frametime index is where this v1 row carries the
+    // swap-chain address (`0x…1F00` = 7936), which is finite and positive.
+    // A wrong pairing must be undefined, never 7936 ms.
     expect(
-      parsePresentMonCsv("game.exe,1234,0x0,DXGI,1,0,NA,12.345,0.5,NA"),
+      parsePresentMonCsv(
+        "game.exe,1234,0x0000000000001F00,DXGI,1,0,Displayed,12.345,0.5,8.333",
+        v2,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("rejects NA, non-numeric and short rows", () => {
+    const columns = parsePresentMonHeader(HEADER) ?? [];
+
+    expect(parsePresentMonCsv(HEADER, columns)).toBeUndefined();
+    expect(
+      parsePresentMonCsv(
+        "game.exe,1234,0x0,DXGI,1,0,NA,12.345,0.5,NA",
+        columns,
+      ),
     ).toBeUndefined();
     expect(
       parsePresentMonCsv(
         "game.exe,1234,0x0,DXGI,1,0,Displayed,12.345,0.5,not-a-number",
+        columns,
       ),
     ).toBeUndefined();
-    expect(parsePresentMonCsv("game.exe,1234,0x0")).toBeUndefined();
-    expect(parsePresentMonCsv("")).toBeUndefined();
+    expect(parsePresentMonCsv("game.exe,1234,0x0", columns)).toBeUndefined();
+    expect(parsePresentMonCsv("", columns)).toBeUndefined();
   });
 
   it("treats an unknown application as no name", () => {
-    expect(parsePresentMonCsv(HEADER)).toBeUndefined();
+    const columns = parsePresentMonHeader(HEADER) ?? [];
+
     expect(
       parsePresentMonCsv(
         "<unknown>,1234,0x0,DXGI,1,0,Displayed,12.345,0.5,16.0",
+        columns,
       ),
     ).toEqual({ frametimeMs: 16, app: "" });
+  });
+
+  it("does not shift columns on a quoted field", () => {
+    const columns =
+      parsePresentMonHeader("Application,ProcessID,msBetweenPresents") ?? [];
+
+    expect(parsePresentMonCsv('"stats, game.exe",7,8.0', columns)).toEqual({
+      frametimeMs: 8,
+      app: "stats, game.exe",
+    });
   });
 });
 
@@ -119,6 +175,8 @@ interface AdapterHarness {
   readonly readings: FrameReading[];
   readonly reasons: string[];
   stop(): void;
+  restart(): void;
+  advanceNow(ms: number): void;
 }
 
 function adapterHarness(
@@ -129,6 +187,7 @@ function adapterHarness(
   const killed: FakeChild[] = [];
   const readings: FrameReading[] = [];
   const reasons: string[] = [];
+  let now = 0;
 
   const spawnProcess: SpawnProcess = (_command, args) => {
     argv.push(args);
@@ -142,16 +201,19 @@ function adapterHarness(
 
   const adapter = presentMonAdapter({
     executable: "C:/yunari/vendor/presentmon/PresentMon.exe",
-    nowMs: () => 0,
+    nowMs: () => now,
     spawnProcess,
     killTree,
     pathExists: options.pathExists ?? (() => true),
   });
 
-  const handle = adapter.start(
-    (reading) => readings.push(reading),
-    (reason) => reasons.push(reason),
-  );
+  const start = (): (() => void) =>
+    adapter.start(
+      (reading) => readings.push(reading),
+      (reason) => reasons.push(reason),
+    );
+
+  const handle = start();
 
   return {
     adapter,
@@ -161,6 +223,12 @@ function adapterHarness(
     readings,
     reasons,
     stop: () => handle(),
+    restart: () => {
+      start();
+    },
+    advanceNow: (ms) => {
+      now += ms;
+    },
   };
 }
 
@@ -185,6 +253,44 @@ describe("PresentMon adapter", () => {
     expect(readings).toEqual([
       { fps: 1000 / 8.333, frametimeMs: 8.333, app: "game.exe" },
     ]);
+  });
+
+  it("keeps a healthy silent capture running past the old timeout", () => {
+    vi.useFakeTimers();
+
+    try {
+      const harness = adapterHarness();
+      const child = harness.children[0];
+
+      // PresentMon writes its header only with the first frame, so a demand
+      // window opened before the game starts produces no lines at all.
+      harness.advanceNow(60_000);
+      vi.advanceTimersByTime(60_000);
+
+      expect(harness.reasons).toEqual([]);
+
+      child?.stdout.push(`${HEADER}\r\n${ROW}\r\n`);
+
+      expect(harness.readings).toEqual([
+        { fps: 1000 / 8.333, frametimeMs: 8.333, app: "game.exe" },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports a nonzero exit once and a new demand can start it again", () => {
+    const harness = adapterHarness();
+
+    harness.children[0]?.exit(2);
+
+    expect(harness.reasons).toEqual(["PresentMon exited with code 2."]);
+    expect(harness.reasons[0]).toContain("exited with code 2");
+
+    harness.restart();
+
+    expect(harness.children).toHaveLength(2);
+    expect(harness.argv).toHaveLength(2);
   });
 
   it("kills the process tree, not just the child, on stop", () => {
@@ -221,6 +327,7 @@ describe("PresentMon adapter", () => {
     children[0]?.exit(6);
 
     expect(reasons).toEqual([PRESENTMON_SESSION_BUSY]);
+    expect(reasons[0]).toContain('trace session named "Yunari"');
   });
 
   it("names the missing vendor step when the executable is absent", () => {
@@ -303,6 +410,23 @@ describe("PresentMon fallback order", () => {
 
     expect(rtss.starts).toBe(1);
     expect(presentmon.starts).toBe(1);
+  });
+
+  it("allows a new start at the next demand boundary after PresentMon exits", async () => {
+    const { provider, rtss, presentmon, advance } = providerHarness();
+
+    await provider.sample(["fps.current"], 0);
+    rtss.unavailable("RivaTuner Statistics Server is not running.");
+    presentmon.unavailable("PresentMon exited with code 2.");
+
+    advance(5_000);
+    await provider.sample(["fps.current"], 5_000);
+    expect(rtss.starts).toBe(1);
+    expect(presentmon.starts).toBe(1);
+
+    advance(31_000);
+    await provider.sample(["fps.current"], 36_000);
+    expect(rtss.starts).toBe(2);
   });
 
   it("keeps a denied PresentMon session until the next demand window", async () => {

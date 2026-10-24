@@ -38,7 +38,6 @@ export const PRESENTMON_SESSION_BUSY =
 /** PresentMon 2.x writes one of these two spellings depending on the metrics. */
 const FRAMETIME_COLUMN = "msbetweenpresents";
 const APP_COLUMN = "application";
-const LIVENESS_TIMEOUT_MS = 15_000;
 const STDERR_CAP = 2_000;
 const MISSING_APP = "<unknown>";
 
@@ -88,91 +87,81 @@ function splitCsvLine(line: string): string[] | undefined {
   return fields;
 }
 
-/** Column positions for the header this process last printed. */
-interface CsvColumns {
-  readonly frametime: number;
-  readonly app: number | undefined;
+function fieldsOf(line: string): string[] | undefined {
+  return splitCsvLine(line.replace(/^﻿/, ""));
 }
 
 /**
- * One line parser owns its header, because a data row carries values rather
- * than names. The adapter gives each process its own parser so two captures
- * cannot share column positions.
+ * The column names from a PresentMon header line, lowercased and trimmed, or
+ * undefined for a line that is not a header. Pure: it keeps no header state,
+ * because a data row read against the wrong header silently returns a number.
  */
-function createCsvLineParser(): (
+export function parsePresentMonHeader(
   line: string,
-) => PresentMonReading | undefined {
-  let columns: CsvColumns | undefined;
+): readonly string[] | undefined {
+  const fields = fieldsOf(line);
+  if (fields === undefined) return undefined;
 
-  return (line) => {
-    const fields = splitCsvLine(line.replace(/^﻿/, ""));
-    if (fields === undefined) return undefined;
-
-    const names = fields.map((field) => field.trim().toLowerCase());
-    const frametime = names.indexOf(FRAMETIME_COLUMN);
-
-    if (frametime !== -1) {
-      columns = {
-        frametime,
-        app: names.indexOf(APP_COLUMN),
-      };
-      return undefined;
-    }
-
-    const known = columns;
-    if (known === undefined) return undefined;
-
-    const rawFrametime = fields[known.frametime]?.trim();
-    const rawApp = known.app === undefined ? "" : fields[known.app]?.trim();
-
-    if (
-      rawFrametime === undefined ||
-      rawFrametime === "" ||
-      rawFrametime.toUpperCase() === "NA"
-    ) {
-      return undefined;
-    }
-
-    const frametimeMs = Number(rawFrametime);
-    if (!Number.isFinite(frametimeMs) || frametimeMs <= 0) return undefined;
-
-    const app =
-      rawApp === undefined ||
-      rawApp === "" ||
-      rawApp.toUpperCase() === "NA" ||
-      rawApp.toLowerCase() === MISSING_APP
-        ? ""
-        : rawApp;
-
-    return { frametimeMs, app };
-  };
+  const names = fields.map((field) => field.trim().toLowerCase());
+  return names.includes(FRAMETIME_COLUMN) ? names : undefined;
 }
 
-/** The module's default parser, so a one-line call still knows the header. */
-const defaultParser = createCsvLineParser();
-
 /**
- * One PresentMon CSV line. A header line establishes the column names and
- * returns undefined; without one a data row cannot be positioned, and
- * malformed rows are not readings.
+ * One PresentMon data row read against an explicit column list. A row whose
+ * field count differs from the header is not that header's row — the check is
+ * what makes a stale (or wrong) header return undefined rather than a value
+ * from the wrong column. Header lines, `NA`, non-numeric and non-positive
+ * frametimes are all not readings.
  */
 export function parsePresentMonCsv(
   line: string,
+  columns: readonly string[],
 ): PresentMonReading | undefined {
-  return defaultParser(line);
+  const fields = fieldsOf(line);
+  if (fields === undefined || fields.length !== columns.length) {
+    return undefined;
+  }
+
+  const frametime = columns.indexOf(FRAMETIME_COLUMN);
+  if (frametime === -1) return undefined;
+
+  const appIndex = columns.indexOf(APP_COLUMN);
+  const rawFrametime = fields[frametime]?.trim();
+  const rawApp = appIndex === -1 ? "" : fields[appIndex]?.trim();
+
+  if (
+    rawFrametime === undefined ||
+    rawFrametime === "" ||
+    rawFrametime.toUpperCase() === "NA"
+  ) {
+    return undefined;
+  }
+
+  const frametimeMs = Number(rawFrametime);
+  if (!Number.isFinite(frametimeMs) || frametimeMs <= 0) return undefined;
+
+  const app =
+    rawApp === undefined ||
+    rawApp === "" ||
+    rawApp.toUpperCase() === "NA" ||
+    rawApp.toLowerCase() === MISSING_APP
+      ? ""
+      : rawApp;
+
+  return { frametimeMs, app };
 }
 
-function parse(frame: PresentMonReading): FrameReading {
+function toFrameReading(frame: PresentMonReading): FrameReading {
   return { ...frame, fps: 1000 / frame.frametimeMs };
 }
 
 export interface PresentMonAdapterOptions {
   readonly executable: string;
+  /** Injected so a test owns the clock; a silent capture is never timed out. */
   readonly nowMs: () => number;
   readonly spawnProcess?: SpawnProcess;
   readonly killTree?: KillTree;
   readonly pathExists?: (file: string) => boolean;
-  readonly livenessTimeoutMs?: number;
 }
 
 function stderrReason(stderr: string, code: number | null): string {
@@ -201,10 +190,6 @@ export function presentMonAdapter(
   const spawnProcess = options.spawnProcess ?? spawnChildProcess;
   const killTree = options.killTree ?? killProcessTree;
   const pathExists = options.pathExists ?? existsSync;
-  const livenessTimeoutMs = Math.max(
-    1,
-    options.livenessTimeoutMs ?? LIVENESS_TIMEOUT_MS,
-  );
 
   return {
     id: "presentmon",
@@ -218,21 +203,11 @@ export function presentMonAdapter(
       let child: HelperChild | undefined;
       let buffer = "";
       let stderr = "";
-      let liveness: ReturnType<typeof setTimeout> | undefined;
-      const parser = createCsvLineParser();
-      const startedAt = options.nowMs();
-
-      const clearLiveness = (): void => {
-        if (liveness !== undefined) {
-          clearTimeout(liveness);
-          liveness = undefined;
-        }
-      };
+      let columns: readonly string[] | undefined;
 
       const stop = (): void => {
         if (stopped) return;
         stopped = true;
-        clearLiveness();
         const current = child;
         child = undefined;
         if (current !== undefined) killTree(current);
@@ -263,11 +238,16 @@ export function presentMonAdapter(
           const line = buffer.slice(0, match.index);
           buffer = buffer.slice(match.index + match[0].length);
 
-          const reading = parser(line);
-          if (reading !== undefined) {
-            clearLiveness();
-            onReading(parse(reading));
+          const header = parsePresentMonHeader(line);
+          if (header !== undefined) {
+            columns = header;
+            continue;
           }
+
+          if (columns === undefined) continue;
+
+          const reading = parsePresentMonCsv(line, columns);
+          if (reading !== undefined) onReading(toFrameReading(reading));
         }
 
         if (buffer.length > HELPER_LINE_CAP) buffer = "";
@@ -276,7 +256,6 @@ export function presentMonAdapter(
       spawned.once("error", (error) => {
         if (stopped) return;
         stopped = true;
-        clearLiveness();
         child = undefined;
         onUnavailable(`PresentMon could not be started: ${error.message}`);
       });
@@ -284,7 +263,6 @@ export function presentMonAdapter(
       spawned.once("exit", (code) => {
         if (stopped) return;
         stopped = true;
-        clearLiveness();
         child = undefined;
         onUnavailable(stderrReason(stderr, code));
       });
@@ -297,17 +275,9 @@ export function presentMonAdapter(
         stderr = `${stderr}${text}`.slice(-STDERR_CAP);
       });
 
-      // A process that never writes its CSV header is wedged; a live trace
-      // session with no game still prints the header, so only that is required.
-      liveness = setTimeout(() => {
-        if (stopped || options.nowMs() - startedAt < livenessTimeoutMs) return;
-        stop();
-        onUnavailable(
-          `PresentMon did not write its CSV header within ${livenessTimeoutMs} ms.`,
-        );
-      }, livenessTimeoutMs);
-      (liveness as { unref?: () => void }).unref?.();
-
+      // No liveness timeout: PresentMon writes its CSV header only with the
+      // first frame, so a silent capture is a healthy one waiting for a game.
+      // The process exiting is the only failure signal.
       return stop;
     },
   };
