@@ -6,8 +6,10 @@ import type { Sample } from "@yunari/renderer-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseForegroundLine } from "../helpers/foreground.js";
 import type { HelperChild, SpawnProcess } from "../helpers/supervisor.js";
+import { readAppxGames } from "./catalogue/appx.js";
 import type { InstalledGame } from "./catalogue/catalogue.js";
 import type { CatalogueSeams } from "./catalogue/seams.js";
+import { seamsOf } from "./catalogue/test-seams.js";
 import {
   GAME_KEYS,
   GameProvider,
@@ -566,6 +568,43 @@ describe("GameProvider classification", () => {
     expect(fake.lookups()).toBe(0);
     expect(fake.covers()).toBe(0);
     expect(productReads).toBe(0);
+    h.provider.stop();
+  });
+
+  it("reports a config-less Store package as not a game", async () => {
+    vi.useFakeTimers();
+    const h = harness({
+      catalogue: () =>
+        readAppxGames(
+          seamsOf({
+            powerShell: [
+              {
+                Name: "Microsoft.Edge",
+                InstallLocation:
+                  "C:\\Program Files\\WindowsApps\\Microsoft.Edge",
+                IsFramework: false,
+                HasConfig: false,
+              },
+            ],
+          }),
+        ),
+    });
+    await h.sample(["game.running"]);
+    h.emit(
+      h.children[0] as FakeChild,
+      foregroundLine(
+        99,
+        "C:\\Program Files\\WindowsApps\\Microsoft.Edge\\msedge.exe",
+        "msedge",
+      ),
+    );
+
+    const samples = await h.sample(["game.running"]);
+
+    expect(samples.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: false,
+    });
     h.provider.stop();
   });
 

@@ -36,18 +36,22 @@ describe("readAppxGames", () => {
     expect(scripts[0]).toContain("ConvertTo-Json -InputObject @(");
   });
 
-  it("ignores a present config when HasConfig is false", async () => {
+  it("skips a package without MicrosoftGame.config", async () => {
     const seams = seamsOf({
       powerShell: [
         {
-          Name: "Microsoft.ForzaHorizon5",
-          PackageFullName: "Microsoft.ForzaHorizon5_1.0.0.0_x64__8wekyb3d8bbwe",
-          InstallLocation: APPX_INSTALL,
+          Name: "Microsoft.Edge",
+          InstallLocation: "C:\\Program Files\\WindowsApps\\Microsoft.Edge",
           IsFramework: false,
           HasConfig: false,
         },
+        {
+          Name: "Microsoft.ForzaHorizon5",
+          InstallLocation: APPX_INSTALL,
+          IsFramework: false,
+          HasConfig: true,
+        },
       ],
-      // The file is readable, so only the HasConfig gate can keep exes empty.
       files: { [`${APPX_INSTALL}\\MicrosoftGame.config`]: APPX_CONFIG },
     });
 
@@ -56,9 +60,23 @@ describe("readAppxGames", () => {
         source: "appx",
         name: "Microsoft.ForzaHorizon5",
         installDir: APPX_INSTALL,
-        exes: [],
+        exes: [`${APPX_INSTALL}\\ForzaHorizon5.exe`],
       },
     ]);
+  });
+
+  it("skips a package whose config flag is absent", async () => {
+    const seams = seamsOf({
+      powerShell: [
+        {
+          Name: "Microsoft.NoProbe",
+          InstallLocation: "C:\\Program Files\\WindowsApps\\Microsoft.NoProbe",
+          IsFramework: false,
+        },
+      ],
+    });
+
+    await expect(readAppxGames(seams)).resolves.toEqual([]);
   });
 
   it("skips framework packages, whether boolean or string", async () => {
@@ -79,6 +97,7 @@ describe("readAppxGames", () => {
           Name: "Microsoft.ForzaHorizon5",
           InstallLocation: APPX_INSTALL,
           IsFramework: "False",
+          HasConfig: true,
         },
       ],
     });
@@ -92,16 +111,22 @@ describe("readAppxGames", () => {
   it("skips a package with no install location", async () => {
     const seams = seamsOf({
       powerShell: [
-        { Name: "Microsoft.MissingLocation", IsFramework: false },
+        {
+          Name: "Microsoft.MissingLocation",
+          IsFramework: false,
+          HasConfig: true,
+        },
         {
           Name: "Microsoft.BlankLocation",
           InstallLocation: "  ",
           IsFramework: false,
+          HasConfig: true,
         },
         {
           Name: "Microsoft.ForzaHorizon5",
           InstallLocation: APPX_INSTALL,
           IsFramework: false,
+          HasConfig: true,
         },
       ],
     });

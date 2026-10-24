@@ -23,11 +23,8 @@ const APPX_SCRIPT =
 /** A GDK package names its launcher in the config; an unreadable one has none. */
 async function appxExecutables(
   seams: CatalogueSeams,
-  record: Record<string, unknown>,
   installDir: string,
 ): Promise<readonly string[]> {
-  if (!isTrueFlag(record["HasConfig"])) return [];
-
   let text: string;
 
   try {
@@ -48,10 +45,12 @@ async function appxExecutables(
 }
 
 /**
- * Every Microsoft Store and Game Pass package. `name` is the package `Name`
- * (`Microsoft.ForzaHorizon5`); the AppxManifest `DisplayName` is not read
- * because it is usually an unresolvable `ms-resource:` token. A framework
- * package or one with no install location is not a game and is skipped.
+ * Microsoft Store and Game Pass packages, GDK titles only: a package without
+ * `MicrosoftGame.config` is an ordinary Store app, not a game. `name` is the
+ * package `Name` (`Microsoft.ForzaHorizon5`); the AppxManifest `DisplayName` is
+ * not read because it is usually an unresolvable `ms-resource:` token. A
+ * framework package or one with no install location is not a game and is
+ * skipped too.
  */
 export async function readAppxGames(
   seams: CatalogueSeams,
@@ -76,6 +75,7 @@ export async function readAppxGames(
     const record = entry as Record<string, unknown>;
 
     if (isTrueFlag(record["IsFramework"])) continue;
+    if (!isTrueFlag(record["HasConfig"])) continue;
 
     const name = textField(record, "Name");
     const installDir = textField(record, "InstallLocation");
@@ -86,7 +86,7 @@ export async function readAppxGames(
       source: "appx",
       name,
       installDir,
-      exes: await appxExecutables(seams, record, installDir),
+      exes: await appxExecutables(seams, installDir),
     });
   }
 

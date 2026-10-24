@@ -26,8 +26,8 @@ preview does. Two outcomes define success:
 game when one of these holds, in order:
 
 1. **Catalogue match** — its executable sits inside an install root read from a
-   store or launcher on this PC (`steam`, `epic`, `gog`, `itch`, `xbox`, `appx`,
-   `uninstall`).
+   game store or launcher on this PC (`steam`, `epic`, `gog`, `itch`, `xbox`,
+   `appx`).
 2. **Runtime marker** — its own directory holds a game-runtime artefact
    (`steam_api64.dll`, `steam_api.dll`, `EOSSDK-Win64-Shipping.dll`,
    `Galaxy64.dll`, `Galaxy.dll`, `UnityPlayer.dll`, `EasyAntiCheat`,
@@ -67,8 +67,7 @@ Sources and the fields read:
 | GOG | `HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\*` via PowerShell | `gameName`, `path`, `exe`, `dependsOn` |
 | itch | `%APPDATA%\itch\apps\<game>\.itch.toml` | install root and its launch executable(s) |
 | Xbox | `C:\XboxGames\<Title>\Content\MicrosoftGame.config` | `Executable` (or the sole `.exe` under `Content`) |
-| Microsoft Store | `Get-AppxPackage` through PowerShell | `Name`, `PackageFullName`, `InstallLocation`, `IsFramework`; a GDK title also has `MicrosoftGame.config` |
-| Generic | uninstall keys with `InstallLocation` | `DisplayName`, `InstallLocation` |
+| Microsoft Store (GDK only) | `Get-AppxPackage` through PowerShell | `Name`, `PackageFullName`, `InstallLocation`, `IsFramework`, and the `MicrosoftGame.config` a package must carry to be a game |
 
 A DLC or incomplete install is skipped (Epic `MainGameAppName` mismatch,
 `bIsIncompleteInstall`, GOG `dependsOn`). A source that is missing is an empty
@@ -108,7 +107,7 @@ state, per §97's "providers acquire; the host owns scheduling".
 ```ts
 // providers/game/game-catalogue.ts
 export interface InstalledGame {
-  readonly source: "steam" | "epic" | "gog" | "itch" | "xbox" | "uninstall";
+  readonly source: "steam" | "epic" | "gog" | "itch" | "xbox" | "appx";
   readonly name: string;
   readonly installDir: string;
   readonly exes: readonly string[];

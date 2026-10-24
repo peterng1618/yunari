@@ -5,18 +5,10 @@ import { readGogGames } from "./gog.js";
 import { readItchGames } from "./itch.js";
 import type { CatalogueSeams } from "./seams.js";
 import { readSteamGames } from "./steam.js";
-import { readUninstallGames } from "./uninstall.js";
 import { readXboxGames } from "./xbox.js";
 
 export interface InstalledGame {
-  readonly source:
-    | "steam"
-    | "epic"
-    | "gog"
-    | "itch"
-    | "xbox"
-    | "appx"
-    | "uninstall";
+  readonly source: "steam" | "epic" | "gog" | "itch" | "xbox" | "appx";
   readonly name: string;
   readonly installDir: string;
   readonly exes: readonly string[];
@@ -58,7 +50,6 @@ export async function readInstalledGames(
     () => readItchGames(seams),
     () => readXboxGames(seams),
     () => readAppxGames(seams),
-    () => readUninstallGames(seams),
   ];
 
   const games: InstalledGame[] = [];

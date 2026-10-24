@@ -83,9 +83,10 @@ Non-obvious failure modes worth checking before repeating expensive investigatio
   consecutive fullscreen readings of the same pid and class.
 - **The catalogue is local and read-only.** Steam's app manifests, Epic's
   `.item`, GOG's registry keys, itch's `.itch.toml`, Xbox's
-  `MicrosoftGame.config`, Microsoft Store's `Get-AppxPackage` and the uninstall
-  keys. A missing source, or one that throws, contributes an empty list; it
-  never takes the provider down.
+  `MicrosoftGame.config`, and Microsoft Store's `Get-AppxPackage` for GDK
+  packages only: a Store package counts only when it carries a
+  `MicrosoftGame.config`. A missing source, or one that throws, contributes an
+  empty list; it never takes the provider down.
 - **Game identity is Windows-only.** The foreground helper is PowerShell over
   `GetForegroundWindow`, and there is no Linux foreground source, so no Linux
   catalogue reader exists.

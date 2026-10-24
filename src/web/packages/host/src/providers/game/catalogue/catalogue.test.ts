@@ -82,6 +82,64 @@ describe("readInstalledGames", () => {
     expect(games.map((game) => game.source)).toEqual(["steam", "epic"]);
   });
 
+  it("reads the sources in the documented order and no others", async () => {
+    const itchRoot = "C:\\Users\\player\\AppData\\Roaming\\itch\\apps";
+    const xboxRoot = "C:\\XboxGames";
+    const epic = epicFixture("Epic Game", "C:\\Epic\\Game", "epic.exe");
+
+    const seams = {
+      ...seamsOf({
+        directories: {
+          ...epic.directories,
+          [itchRoot]: ["Itch Game"],
+          [xboxRoot]: ["Xbox Game"],
+        },
+        files: {
+          ...epic.files,
+          [`${itchRoot}\\Itch Game\\.itch.toml`]:
+            'name = "Itch Game"\nexe = "itch.exe"',
+          [`${xboxRoot}\\Xbox Game\\Content\\MicrosoftGame.config`]:
+            '<Game><ExecutableList><Executable Name="xbox.exe" /></ExecutableList></Game>',
+        },
+      }),
+      runPowerShell: async (script: string) => {
+        if (script.includes("GOG.com")) {
+          return [
+            { gameName: "GOG Game", path: "C:\\GOG\\Game", exe: "gog.exe" },
+          ];
+        }
+
+        if (script.includes("Get-AppxPackage")) {
+          return [
+            {
+              Name: "Appx Game",
+              InstallLocation: "C:\\Program Files\\WindowsApps\\AppxGame",
+              IsFramework: false,
+              HasConfig: true,
+            },
+          ];
+        }
+
+        return undefined;
+      },
+      steamApps: async () => [
+        {
+          source: "steam" as const,
+          name: "Steam Game",
+          installDir: "C:\\Steam\\Game",
+          exes: ["C:\\Steam\\Game\\steam.exe"],
+        },
+      ],
+    };
+
+    const sources = (await readInstalledGames(seams)).map(
+      (game) => game.source,
+    );
+
+    expect(sources).toEqual(["steam", "epic", "gog", "itch", "xbox", "appx"]);
+    expect(sources).not.toContain("uninstall");
+  });
+
   it("collapses two empty-exe entries with the same install root", async () => {
     const seams = {
       ...seamsOf({
