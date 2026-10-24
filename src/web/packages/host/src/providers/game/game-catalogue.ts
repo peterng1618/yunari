@@ -399,7 +399,8 @@ function parseItchManifest(text: string): {
     if (pair === null) continue;
 
     const key = pair[1]?.toLowerCase();
-    const value = pair[2]?.trim() ?? "";
+    // TOML basic strings write a literal backslash as `\\`.
+    const value = (pair[2]?.trim() ?? "").replace(/\\\\/g, "\\");
 
     if (key === undefined || value === "") continue;
 
@@ -519,8 +520,11 @@ function uninstallExecutable(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
 
   const withoutIndex = value.replace(DISPLAY_ICON_INDEX, "").trim();
+  const withoutQuotes = withoutIndex.replace(/^"(.*)"$/, "$1").trim();
 
-  return withoutIndex.toLowerCase().endsWith(".exe") ? withoutIndex : undefined;
+  return withoutQuotes.toLowerCase().endsWith(".exe")
+    ? withoutQuotes
+    : undefined;
 }
 
 /**

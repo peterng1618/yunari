@@ -401,19 +401,23 @@ describe("readXboxGames", () => {
  * own executables are all the reader has.
  */
 const ITCH_ROOT = "C:\\Users\\player\\AppData\\Roaming\\itch\\apps";
-const ITCH_APP = `${ITCH_ROOT}\\Baba Is You`;
+/** The folder name and the manifest's name differ, so only the latter can pass. */
+const ITCH_APP = `${ITCH_ROOT}\\baba-is-you`;
 
 const ITCH_MANIFEST_TOML = `[app]
 name = "Baba Is You"
 [[actions]]
 name = "Play"
 path = "Baba Is You.exe"
+[[actions]]
+name = "Settings"
+path = "settings.exe"
 `;
 
 describe("readItchGames", () => {
   it("reads an app's .itch.toml name and first action path", async () => {
     const seams = seamsOf({
-      directories: { [ITCH_ROOT]: ["Baba Is You"] },
+      directories: { [ITCH_ROOT]: ["baba-is-you"] },
       files: { [`${ITCH_APP}\\.itch.toml`]: ITCH_MANIFEST_TOML },
     });
 
@@ -448,6 +452,25 @@ describe("readItchGames", () => {
     ]);
   });
 
+  it("unescapes a TOML-escaped Windows path", async () => {
+    const seams = seamsOf({
+      directories: { [ITCH_ROOT]: ["Escaped"] },
+      files: {
+        [`${ITCH_ROOT}\\Escaped\\.itch.toml`]:
+          '[[actions]]\npath = "C:\\\\Games\\\\g.exe"',
+      },
+    });
+
+    await expect(readItchGames(seams)).resolves.toEqual([
+      {
+        source: "itch",
+        name: "Escaped",
+        installDir: `${ITCH_ROOT}\\Escaped`,
+        exes: ["C:\\Games\\g.exe"],
+      },
+    ]);
+  });
+
   it("keeps an app whose manifest names no executable", async () => {
     const seams = seamsOf({
       directories: { [ITCH_ROOT]: ["No Launcher"] },
@@ -471,7 +494,13 @@ describe("readItchGames", () => {
     const seams = seamsOf({
       directories: {
         [ITCH_ROOT]: ["Scanned"],
-        [`${ITCH_ROOT}\\Scanned`]: ["Game.exe", "readme.txt", "tool.EXE"],
+        [`${ITCH_ROOT}\\Scanned`]: [
+          "Game.exe",
+          "readme.txt",
+          "tool.EXE",
+          "sub",
+        ],
+        [`${ITCH_ROOT}\\Scanned\\sub`]: ["nested.exe"],
       },
     });
 
@@ -546,6 +575,16 @@ describe("readUninstallGames", () => {
           InstallLocation: "C:\\Games\\G",
           DisplayIcon: "C:\\Games\\G\\g.exe,0",
         },
+        {
+          DisplayName: "Quoted Index",
+          InstallLocation: "C:\\Games\\Q",
+          DisplayIcon: '"C:\\Games\\Q\\q.exe",0',
+        },
+        {
+          DisplayName: "Quoted Only",
+          InstallLocation: "C:\\Games\\R",
+          DisplayIcon: '"C:\\Games\\R\\r.exe"',
+        },
       ],
     });
 
@@ -555,6 +594,18 @@ describe("readUninstallGames", () => {
         name: "A Game",
         installDir: "C:\\Games\\G",
         exes: ["C:\\Games\\G\\g.exe"],
+      },
+      {
+        source: "uninstall",
+        name: "Quoted Index",
+        installDir: "C:\\Games\\Q",
+        exes: ["C:\\Games\\Q\\q.exe"],
+      },
+      {
+        source: "uninstall",
+        name: "Quoted Only",
+        installDir: "C:\\Games\\R",
+        exes: ["C:\\Games\\R\\r.exe"],
       },
     ]);
   });
@@ -568,6 +619,25 @@ describe("readUninstallGames", () => {
     });
 
     await expect(readUninstallGames(seams)).resolves.toEqual([]);
+  });
+
+  it("skips non-object entries and keeps a valid neighbour", async () => {
+    const seams = seamsOf({
+      powerShell: [
+        null,
+        7,
+        {
+          DisplayName: "A Game",
+          InstallLocation: "C:\\Games\\G",
+          DisplayIcon: "C:\\Games\\G\\g.exe",
+        },
+      ],
+    });
+
+    const games = await readUninstallGames(seams);
+
+    expect(games).toHaveLength(1);
+    expect(games[0]?.name).toBe("A Game");
   });
 
   it("keeps a non-game DisplayName; filtering is the classifier's job", async () => {
