@@ -1,7 +1,7 @@
 /**
  * Linux tray adapter: the staged `systray2` binary is driven over JSON lines
- * on stdin, and clicks come back as `__id` numbers that address the row table
- * the binary built from the first menu it read.
+ * on stdin, and clicks come back addressed by the row table the binary built
+ * from the first menu it read.
  *
  * The pinned binary speaks a narrower protocol than its npm wrapper's typings:
  * the first line after `ready` is a bare `Menu` (no `type`), later changes are
@@ -9,10 +9,9 @@
  * was not in the first menu cannot be added later, so the row set must stay
  * stable and only the rows the binary knows are ever addressed.
  *
- * Row ids are issued from one monotonic counter and never reused; update lines
- * carry the array index as `seq_id` and the new id as `item.__id`. A bounded
- * history of id→action keeps a click that raced an update pointing at the row
- * the user actually clicked.
+ * The binary's slot→id table is built once at init and never rewritten, so a
+ * row is identified by its slot: update lines carry the 0-based index as
+ * `seq_id` and the init id as `item.__id`, and a click routes by `seq_id`.
  */
 
 import { spawn } from "node:child_process";
@@ -82,9 +81,6 @@ const SEPARATOR_TITLE = " ";
 /** Linux has no native check mark; the documented encoding is a suffix. */
 const CHECK_SUFFIX = " (√)";
 
-/** How many issued row ids stay resolvable after later menus replace them. */
-const ID_HISTORY_MAX = 200;
-
 /** How long `exit` keeps the tray informative before the process is killed. */
 const KILL_GRACE_MS = 300;
 
@@ -92,18 +88,17 @@ const KILL_GRACE_MS = 300;
 const STDERR_TAIL_MAX = 500;
 
 /**
- * Every row takes a fresh id from the view's one monotonic counter: ids are
- * globally unique and never reused, so an update can never overwrite a row it
- * did not mean and a click that raced an update still names the row it saw.
+ * `__id` is the row's 1-based slot in the initial menu. The binary builds its
+ * slot→id table once at init and never rewrites it on an update, so an invented
+ * later id would never come back in a click.
  */
 function buildLinuxMenu(
   items: readonly TrayMenuItem[],
   iconBase64: string,
-  nextId: () => number,
 ): LinuxMenu {
   const actions = new Map<number, TrayAction>();
-  const wire = items.map((item) => {
-    const __id = nextId();
+  const wire = items.map((item, index) => {
+    const __id = index + 1;
     if (item.action !== undefined) actions.set(__id, item.action);
     if (item.separator === true) {
       return { title: SEPARATOR_TITLE, enabled: false, __id };
@@ -126,8 +121,7 @@ export function linuxMenu(
   items: readonly TrayMenuItem[],
   iconBase64: string,
 ): LinuxMenu {
-  let id = 1;
-  return buildLinuxMenu(items, iconBase64, () => id++);
+  return buildLinuxMenu(items, iconBase64);
 }
 
 function messageOf(error: unknown): string {
@@ -145,6 +139,7 @@ const defaultSpawn: SpawnLinuxTrayProcess = (executable, args, options) =>
 
 interface TrayLine {
   readonly type?: unknown;
+  readonly seq_id?: unknown;
   readonly __id?: unknown;
 }
 
@@ -190,16 +185,13 @@ export async function startLinuxTray(
       return;
     }
 
+    /** The rows currently applied, by slot; clicks route through this. */
     let items: readonly TrayMenuItem[] | undefined;
-    /** One counter for the view: an id is issued once and never reused. */
-    let nextId = 1;
     let tooltip = "Yunari";
-    /** The rows the binary currently holds, by array index. */
+    /** The rows the binary currently holds, by the same slot. */
     let sentRows: LinuxMenuItem[] = [];
     /** Set only once the bare first menu was actually written. */
     let sentTooltip: string | undefined;
-    /** Every id ever issued with an action, oldest pruned first. */
-    const idHistory = new Map<number, TrayAction>();
     let warnedRowCount: number | undefined;
     let started = false;
     let failed = false;
@@ -221,17 +213,6 @@ export async function startLinuxTray(
       }
     }
 
-    function remember(actions: Map<number, TrayAction>): void {
-      for (const [id, action] of actions) {
-        idHistory.set(id, action);
-        while (idHistory.size > ID_HISTORY_MAX) {
-          const oldest = idHistory.keys().next();
-          if (oldest.done === true) break;
-          idHistory.delete(oldest.value);
-        }
-      }
-    }
-
     function sameRow(a: LinuxMenuItem, b: LinuxMenuItem): boolean {
       return (
         a.title === b.title &&
@@ -240,37 +221,45 @@ export async function startLinuxTray(
       );
     }
 
-    function sendMenu(): void {
-      if (items === undefined) return;
-      const built = buildLinuxMenu(items, TRAY_ICON_PNG_BASE64, () => nextId++);
-      const menu: LinuxMenuMessage = { ...built.menu, tooltip };
-
+    /**
+     * `next` is the menu asked for; `undefined` re-sends the applied rows for
+     * a tooltip-only change. A row set that does not match the binary's slots
+     * is a mismatch: warn, apply only the rows it can address, and leave the
+     * routing rows alone so the visible rows still click correctly.
+     */
+    function sendMenu(next?: readonly TrayMenuItem[]): void {
       if (sentTooltip === undefined) {
         // An empty menu cannot initialise the binary, so wait for the first
         // real one. Latch only after the write landed: a dropped line leaves
         // the binary uninitialised and the next call must retry this menu.
-        if (menu.items.length === 0) return;
+        if (next === undefined || next.length === 0) return;
+        const built = buildLinuxMenu(next, TRAY_ICON_PNG_BASE64);
+        const menu: LinuxMenuMessage = { ...built.menu, tooltip };
         if (!send(JSON.stringify(menu))) return;
+        items = next;
         sentRows = [...menu.items];
         sentTooltip = tooltip;
-        remember(built.actions);
         return;
       }
 
-      // The binary's row table was built from the first menu and an update
-      // cannot append a row, so only those rows are addressable.
-      if (menu.items.length !== sentRows.length) {
-        if (warnedRowCount !== menu.items.length) {
-          warnedRowCount = menu.items.length;
-          process.emitWarning(
-            `the Linux tray menu has ${menu.items.length} rows but the tray was ` +
-              `built with ${sentRows.length}; the systray2 binary cannot add or remove rows.`,
-          );
+      if (next !== undefined) {
+        if (next.length !== sentRows.length) {
+          if (warnedRowCount !== next.length) {
+            warnedRowCount = next.length;
+            process.emitWarning(
+              `the Linux tray menu has ${next.length} rows but the tray was ` +
+                `built with ${sentRows.length}; the systray2 binary cannot add or remove rows.`,
+            );
+          }
+        } else {
+          warnedRowCount = undefined;
+          items = next;
         }
-      } else {
-        warnedRowCount = undefined;
       }
 
+      const source = next ?? items ?? [];
+      const built = buildLinuxMenu(source, TRAY_ICON_PNG_BASE64);
+      const menu: LinuxMenuMessage = { ...built.menu, tooltip };
       const rows = menu.items.slice(0, sentRows.length);
       let wrote = false;
       for (let index = 0; index < rows.length; index += 1) {
@@ -278,8 +267,8 @@ export async function startLinuxTray(
         if (item === undefined) continue;
         const previous = sentRows[index];
         if (previous !== undefined && sameRow(previous, item)) continue;
-        // `seq_id` is the array index the binary stores; `__id` is the id a
-        // click will echo back. They are different namespaces on purpose.
+        // `seq_id` is the 0-based slot the binary updates in place; the item's
+        // `__id` stays the slot's init id, which is what a click echoes.
         if (
           !send(
             JSON.stringify({
@@ -293,8 +282,6 @@ export async function startLinuxTray(
           continue;
         }
         sentRows[index] = item;
-        const action = built.actions.get(item.__id);
-        if (action !== undefined) remember(new Map([[item.__id, action]]));
         wrote = true;
       }
       // The tooltip travels on the menu, which every update line carries; with
@@ -312,8 +299,6 @@ export async function startLinuxTray(
           )
         ) {
           sentRows[0] = first;
-          const action = built.actions.get(first.__id);
-          if (action !== undefined) remember(new Map([[first.__id, action]]));
           wrote = true;
         }
       }
@@ -322,8 +307,7 @@ export async function startLinuxTray(
 
     function setMenu(next: readonly TrayMenuItem[]): void {
       if (dead) return;
-      items = next;
-      sendMenu();
+      sendMenu(next);
     }
 
     function setTooltip(text: string): void {
@@ -402,12 +386,34 @@ export async function startLinuxTray(
 
       if (message.type === "clicked") {
         if (dead) return;
+        const rows = items ?? [];
+        // The binary echoes the slot it stored; prefer it over `__id`, which
+        // is only the init-slot fallback the binary also sends.
+        const seq = message.seq_id;
+        if (
+          typeof seq === "number" &&
+          Number.isInteger(seq) &&
+          seq >= 0 &&
+          seq < rows.length
+        ) {
+          const row = rows[seq];
+          if (row?.enabled === true && row.action !== undefined) {
+            onAction(row.action);
+          }
+          return;
+        }
         const id = message.__id;
-        // The binary echoes the id it was given; anything else is not ours.
-        if (typeof id !== "number" || !Number.isInteger(id)) return;
-        const action = idHistory.get(id);
-        if (action === undefined) return;
-        onAction(action);
+        if (
+          typeof id === "number" &&
+          Number.isInteger(id) &&
+          id >= 1 &&
+          id <= rows.length
+        ) {
+          const row = rows[id - 1];
+          if (row?.enabled === true && row.action !== undefined) {
+            onAction(row.action);
+          }
+        }
       }
     }
 
