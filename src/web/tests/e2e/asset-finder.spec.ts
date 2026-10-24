@@ -7,8 +7,7 @@ import type {
   AssetSourceListing,
 } from "@yunari/renderer-core";
 import { captureVisualReview } from "./editor-canvas.js";
-import { openPane } from "./editor-rail.js";
-import { readScene } from "./rebuild-driver.js";
+import { placeText, readScene } from "./rebuild-driver.js";
 import { isDesktopSurface } from "./surface.js";
 
 /**
@@ -337,11 +336,10 @@ test("the font field no longer mounts the picker and opens the finder on Fonts",
   });
   await page.goto(EDITOR);
   await page.waitForFunction(() => "yunariEditorBridge" in window);
-  await openPane(page, "Add");
-  await page
-    .locator('[data-yunari-panel="add"]')
-    .getByRole("button", { name: "Text", exact: true })
-    .click();
+  await placeText(page);
+  // The field below belongs to a text selection, so the placed object has to be
+  // the text class that carries runs.
+  expect((await readScene(page)).at(-1)?.type).toBe("i-text");
 
   // The inspector's own column, not the whole shell: FontPicker may exist in
   // the finder once it is open, and the claim is about this surface.

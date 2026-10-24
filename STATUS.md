@@ -16,14 +16,13 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- The run editor shows one run at a time behind Base UI tabs numbered 1..N, each named `Run N`.
-- `+` appends a run and selects it; removing the selected run falls back to the first remaining run.
-- Tab selection is React-local and writes nothing: no document edit and no history entry.
-- Run fields, `Remove run N` and the class-gated Overflow/vertical align are unchanged.
+- `placeText` in `rebuild-driver` presses the Add tile then clicks the canvas at scene coordinates read from `viewportTransform`.
+- `insert(page, "Text", "text")` arms and places; other groups keep the immediate path.
+- The four direct Text sites now place through the helper and assert the `i-text` class.
 
 ## Next
 
-1. Phase 3 / Task 3.1: update e2e insertion to the click-or-drag gesture.
+1. Phase 3 / Task 3.2: prove click, drag, cancel, reload and player parity.
 
 ## Blockers / unverified
 

@@ -183,6 +183,61 @@ export function addButton(page: Page, label: string, group: AddGroup): Locator {
   return scope.getByRole("button", { name: label, exact: true });
 }
 
+/**
+ * Places a Text through the armed gesture: the Add pane's tile arms it, and the
+ * next primary press on the canvas creates the object at that point.
+ *
+ * **The press is a pointer event at scene coordinates, not a locator click**:
+ * the canvas is one element, so where the press lands is scene geometry. Fabric
+ * puts scene units on the element through `viewportTransform`, and the
+ * element's own box puts that on the page. The default is the element's centre,
+ * which is where the camera fit puts the artboard's centre too.
+ */
+export async function placeText(
+  page: Page,
+  point?: { readonly x: number; readonly y: number },
+): Promise<void> {
+  await openPane(page, "Add");
+  const before = (await readScene(page)).length;
+  await addButton(page, "Text", "text").click();
+  const target = await page.evaluate((scenePoint) => {
+    const handle = Object.values(window).find(
+      (value) =>
+        value !== null &&
+        typeof value === "object" &&
+        "canvas" in value &&
+        "historyManager" in value,
+    ) as
+      | {
+          canvas: {
+            viewportTransform: [number, number, number, number, number, number];
+            upperCanvasEl: HTMLCanvasElement;
+          };
+        }
+      | undefined;
+    if (handle === undefined)
+      throw new Error("the editor handle is not on the page");
+    const { canvas } = handle;
+    // `[0]` is the scale, `[4]`/`[5]` the translation; the tuple is not rotated
+    // in this editor, so `[3]` is the vertical scale.
+    const [scaleX, , , scaleY, translateX, translateY] =
+      canvas.viewportTransform;
+    const rect = canvas.upperCanvasEl.getBoundingClientRect();
+    const scene = scenePoint ?? {
+      x: (rect.width / 2 - translateX) / scaleX,
+      y: (rect.height / 2 - translateY) / scaleY,
+    };
+    return {
+      x: rect.left + translateX + scene.x * scaleX,
+      y: rect.top + translateY + scene.y * scaleY,
+    };
+  }, point ?? null);
+  await page.mouse.click(target.x, target.y);
+  await expect
+    .poll(async () => (await readScene(page)).length)
+    .toBe(before + 1);
+}
+
 /** Inserts an object from the Add pane, by the word on the control and the group
  *  that carries it — see `addButton`. **The family is the caller's to name and
  *  never the driver's to infer**: the two Lines are told apart by the group they
@@ -192,6 +247,12 @@ export async function insert(
   label: string,
   group: AddGroup,
 ): Promise<void> {
+  // Text's tile arms a one-shot placement gesture and creates nothing itself,
+  // so the tile press alone is not an insert.
+  if (label === "Text" && group === "text") {
+    await placeText(page);
+    return;
+  }
   // The rail shows one pane, and selecting a layer switches it to Composition
   // — so an author comes back to Add the same way this does. The selection's
   // own fields are in the right column, which no pane affects.
