@@ -577,7 +577,19 @@ export const uiCopy = {
       remove: "Delete",
       test: "Test",
       testing: "Testing…",
+      /** One accessible name per row's command, because three rows of "Edit"
+       *  are three buttons a screen reader cannot tell apart. */
+      editSource: (name: string): string => `Edit ${name}`,
+      testSource: (name: string): string => `Test ${name}`,
+      deleteSource: (name: string): string => `Delete ${name}`,
+      deleting: "Deleting…",
+      deleteFailed: (reason: string): string => `Could not delete: ${reason}`,
       id: "Id",
+      /** A source id is embedded in every theme key that reads it
+       *  (`custom.<id>.<field>`), so an edit keeps it: a rename would be a new
+       *  source plus rebinding, not an in-place change. */
+      idFixed:
+        "A source's id cannot change: themes read its fields as custom.id.field, so a new id needs a new source and rebinding.",
       name: "Name",
       url: "Address",
       /** What the address is, and what it is not: a key referenced through

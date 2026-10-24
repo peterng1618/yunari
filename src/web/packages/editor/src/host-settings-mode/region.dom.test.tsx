@@ -150,6 +150,8 @@ interface Fixture {
   readonly sourceTest?: TestResult;
   /** What a delete answers about a credential it no longer sees referenced. */
   readonly sourceRemoval?: RemovalAnswer;
+  /** The sentence a delete fails with, or `undefined` for a landed delete. */
+  readonly sourceRemoveFailure?: string;
 }
 
 /** Every write the region made, in the order it made them. */
@@ -308,6 +310,9 @@ function sourcesClient(fixture: Fixture): {
       },
       remove: async (id) => {
         wrote.removed.push(id);
+        if (fixture.sourceRemoveFailure !== undefined) {
+          throw new Error(fixture.sourceRemoveFailure);
+        }
         rows = rows.filter((entry) => entry.id !== id);
         return fixture.sourceRemoval ?? { unreferencedCredential: null };
       },
@@ -1161,6 +1166,29 @@ const SOURCE_ROW: SourceRow = {
   lastSuccessAt: "2026-10-24T10:00:00.000Z",
 };
 
+/** A source whose field carries every property the form does not show. An edit
+ *  that rebuilt the field from the five shown would drop all five, and the
+ *  route replaces the whole entry, so nothing would warn. */
+const SCALED_ROW: SourceRow = {
+  ...SOURCE_ROW,
+  id: "scaled",
+  name: "Scaled",
+  fields: [
+    {
+      id: "temperature",
+      label: "Temperature",
+      pointer: "/temp",
+      type: "number",
+      family: "thermal",
+      unit: "C",
+      unitKind: "temperature",
+      scale: 0.01,
+      offset: 2,
+      expectedTier: "extended",
+    },
+  ],
+};
+
 const BROKEN_ROW: SourceRow = {
   id: "broken",
   name: "",
@@ -1244,6 +1272,21 @@ it("lists each source with health, last success, field count and last error", as
   expect(broken.textContent, "the field count is missing").toContain(
     SOURCES_COPY.fieldCount(2),
   );
+
+  // Three rows of "Edit" are three buttons a screen reader cannot tell apart;
+  // each one's name carries the source it acts on.
+  expect(
+    healthy
+      .querySelector('[data-yunari-source-edit="fixture"]')
+      ?.getAttribute("aria-label"),
+    "the edit button does not name its source",
+  ).toBe(SOURCES_COPY.editSource("Fixture"));
+  expect(
+    healthy
+      .querySelector('[data-yunari-source-delete="fixture"]')
+      ?.getAttribute("aria-label"),
+    "the delete button does not name its source",
+  ).toBe(SOURCES_COPY.deleteSource("Fixture"));
 });
 
 /**
@@ -1256,7 +1299,7 @@ it("lists each source with health, last success, field count and last error", as
  */
 it("refuses a bad address locally and shows the route's reason beside the form", async () => {
   const hostReason = 'source "fixture" url must be an http or https URL';
-  const { container, sources } = await mountHost({
+  const { container, sources, published } = await mountHost({
     ...TWO_DISPLAYS,
     sourceRefusal: { field: "fixture", reason: hostReason },
   });
@@ -1290,6 +1333,12 @@ it("refuses a bad address locally and shows the route's reason beside the form",
     ).textContent,
     "the refusal is not in the host's own words",
   ).toBe(hostReason);
+  // The region's strip is what outlives the form; it must not be left on
+  // "Saving…" while the form holds the refusal.
+  expect(
+    statusLine(published).status,
+    "the status line still reads as a write in flight",
+  ).toBe(uiCopy.hostSettings.status.failed(hostReason));
 });
 
 /**
@@ -1433,4 +1482,178 @@ it("renders the authored address and no credential", async () => {
     address.textContent,
     "the key's query name reached the address",
   ).not.toContain("apikey");
+});
+
+/** Opens one row's edit form. */
+async function openEdit(container: HTMLElement, id: string): Promise<void> {
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        `[data-yunari-source-edit="${id}"]`,
+      ),
+      `the ${id} edit button`,
+    ).click(),
+  );
+}
+
+/**
+ * **An edit keeps every field property the form does not show.** The route
+ * replaces the whole source, so a field rebuilt from id/label/pointer/type/unit
+ * would drop the scale and offset the provider multiplies and adds, and the
+ * family and tier the catalogue names — silently, on a name change alone.
+ */
+it("keeps field properties the form does not show when an edit is saved", async () => {
+  const { container, sources } = await mountHost({
+    ...TWO_DISPLAYS,
+    sources: [SCALED_ROW],
+  });
+
+  await openEdit(container, "scaled");
+  await type(input(container, "data-yunari-source-name"), "Scaled renamed");
+  await submitSource(container);
+
+  expect(sources.saved, "the edit did not reach the host").toHaveLength(1);
+  expect(
+    sources.saved[0]?.fields[0],
+    "an unshown field property was stripped by the edit",
+  ).toEqual(SCALED_ROW.fields[0]);
+  expect(sources.saved[0]?.name).toBe("Scaled renamed");
+});
+
+/**
+ * **A source id is immutable once created.** The keys a theme reads embed it
+ * (`custom.<id>.<field>`), so the edit form shows it read-only and the write
+ * always uses the stored id; a draft that changed it anyway is refused rather
+ * than appended as a second source.
+ */
+it("keeps the stored id while editing and refuses a changed draft id", async () => {
+  const { container, sources } = await mountHost({
+    ...TWO_DISPLAYS,
+    sources: [SOURCE_ROW],
+  });
+
+  await openEdit(container, "fixture");
+  const idField = input(container, "data-yunari-source-id");
+  expect(idField.readOnly, "the id field is editable while editing").toBe(true);
+  expect(
+    container.textContent,
+    "the form does not say why the id is fixed",
+  ).toContain(SOURCES_COPY.idFixed);
+
+  await type(input(container, "data-yunari-source-name"), "Renamed");
+  await submitSource(container);
+
+  expect(sources.saved, "the edit did not reach the host").toHaveLength(1);
+  expect(sources.saved[0]?.id, "the save did not use the stored id").toBe(
+    "fixture",
+  );
+
+  // The field is read-only; this forces the draft directly to prove the guard
+  // behind it, because a rename would otherwise append a second source.
+  await openEdit(container, "fixture");
+  await type(input(container, "data-yunari-source-id"), "fixture2");
+  await submitSource(container);
+
+  expect(sources.saved, "a changed id reached the host").toHaveLength(1);
+  expect(
+    must(
+      container.querySelector("[data-yunari-source-field-reason]"),
+      "the id refusal",
+    ).textContent,
+    "the changed id was not refused in the form's own words",
+  ).toBe(SOURCES_COPY.idFixed);
+});
+
+/**
+ * **The credential offer's accept path clears the key the route named.** The
+ * decline case proves nothing is touched; this proves the accept reaches the
+ * credential route with the id and reports what happened.
+ */
+it("clears the credential the delete offer names, when accepted", async () => {
+  const calls: { readonly method: string; readonly url: string }[] = [];
+  const fetcher = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      calls.push({ method: init?.method ?? "GET", url: String(input) });
+      return new Response("{}", { status: 200 });
+    },
+  );
+  vi.stubGlobal("fetch", fetcher);
+  try {
+    const { container, published } = await mountHost({
+      ...TWO_DISPLAYS,
+      sources: [SOURCE_ROW],
+      sourceRemoval: { unreferencedCredential: "fixture-key" },
+    });
+
+    await act(async () =>
+      must(
+        container.querySelector<HTMLButtonElement>(
+          '[data-yunari-source-delete="fixture"]',
+        ),
+        "the delete button",
+      ).click(),
+    );
+    await act(async () =>
+      must(
+        container.querySelector<HTMLButtonElement>(
+          '[data-yunari-source-confirm-delete="fixture"]',
+        ),
+        "the confirm button",
+      ).click(),
+    );
+    await act(async () =>
+      must(
+        container.querySelector<HTMLButtonElement>(
+          "[data-yunari-source-remove-credential]",
+        ),
+        "the remove-credential button",
+      ).click(),
+    );
+    await act(async () => {});
+
+    expect(calls, "the accept did not reach the credential route").toEqual([
+      { method: "DELETE", url: "/api/credentials/fixture-key" },
+    ]);
+    expect(
+      container.querySelector("[data-yunari-source-credential-offer]"),
+      "the offer stayed after the key was removed",
+    ).toBeNull();
+    expect(statusLine(published).status).toBe(SOURCES_COPY.credentialRemoved);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+/**
+ * **A failed delete reports itself in the delete's own words.** The save
+ * sentence says "Could not save", which is wrong for a delete and was the only
+ * sentence the status line had.
+ */
+it("reports a failed delete with the delete's own sentence", async () => {
+  const failure = "The host refused the delete (500).";
+  const { container, published } = await mountHost({
+    ...TWO_DISPLAYS,
+    sources: [SOURCE_ROW],
+    sourceRemoveFailure: failure,
+  });
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        '[data-yunari-source-delete="fixture"]',
+      ),
+      "the delete button",
+    ).click(),
+  );
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        '[data-yunari-source-confirm-delete="fixture"]',
+      ),
+      "the confirm button",
+    ).click(),
+  );
+
+  expect(statusLine(published).status).toBe(SOURCES_COPY.deleteFailed(failure));
+  expect(statusLine(published).status).not.toContain("Could not save");
 });

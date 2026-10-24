@@ -25,8 +25,9 @@ import { chooseIn } from "./control-set.js";
  * the worktree never sees a test store.
  */
 
-/** The host's port. 4221–4222 and 4224–4237 belong to other own-host proofs. */
-const PORT = 4223;
+/** The host's port. 4221–4224 belong to other proofs and 4223 is the display
+ *  runner's editor preview, so this spec owns 4225. */
+const PORT = 4225;
 /** The fixture endpoint's port, distinct from every Playwright host port. */
 const FIXTURE_PORT = 4291;
 

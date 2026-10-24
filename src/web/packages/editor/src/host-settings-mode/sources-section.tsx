@@ -56,6 +56,10 @@ interface FieldDraft {
   readonly pointer: string;
   readonly type: SourceField["type"];
   readonly unit: string;
+  /** The stored field this row was opened from. The form shows five of its
+   *  properties; the rest travel through an edit untouched because the route
+   *  replaces the whole source. Absent on a field the author just added. */
+  readonly original?: SourceField;
 }
 
 interface Draft {
@@ -84,6 +88,7 @@ function draftOf(row: SourceRow): Draft {
       pointer: field.pointer,
       type: field.type,
       unit: field.unit ?? "",
+      original: field,
     })),
   };
 }
@@ -115,8 +120,17 @@ function wholeSeconds(
 
 /** The first thing wrong with the form, in the host's own terms. Each answer
  *  names the form field it belongs beside, so the reason can be shown there. */
-function problem(draft: Draft): Refusal | undefined {
+function problem(
+  draft: Draft,
+  stored: SourceRow | undefined,
+): Refusal | undefined {
   const copy = uiCopy.hostSettings.sources;
+  // A rename is a new source, not an edit: the id is embedded in every theme
+  // key that reads `custom.<id>.<field>`. The field is read-only while editing,
+  // and this is the guard for a draft that reached here some other way.
+  if (stored !== undefined && draft.id !== stored.id) {
+    return { field: "id", reason: copy.idFixed };
+  }
   if (!SOURCE_ID.test(draft.id)) {
     return { field: "id", reason: copy.invalidId };
   }
@@ -168,12 +182,43 @@ function problem(draft: Draft): Refusal | undefined {
   return undefined;
 }
 
+/**
+ * One field as the wire carries it: the stored object underneath, so every
+ * property the form does not show survives the replace, and the draft's own
+ * five over it.
+ *
+ * `unit` is the one shown property that may be removed, so it is taken off the
+ * stored object rather than left to be overridden only when the draft has one.
+ */
+function mergedField(field: FieldDraft): SourceField {
+  const stored: Partial<SourceField> =
+    field.original === undefined
+      ? {}
+      : (Object.fromEntries(
+          Object.entries(field.original).filter(([key]) => key !== "unit"),
+        ) as Partial<SourceField>);
+  const unit = field.unit.trim();
+  return {
+    ...stored,
+    id: field.id,
+    label: field.label,
+    pointer: field.pointer,
+    type: field.type,
+    ...(unit === "" ? {} : { unit }),
+  };
+}
+
 /** The wire object, keeping the parts the form does not edit when it is editing
  *  an existing row: the route replaces the whole source, so a save that dropped
- *  `auth` would unbind the credential the row already had. */
+ *  `auth` would unbind the credential the row already had, and a save that
+ *  rebuilt fields from the five shown would drop `family`, `unitKind`, `scale`,
+ *  `offset` and `expectedTier`.
+ *
+ * **The stored id is the id written**, because a rename would append a second
+ * source rather than change the first. */
 function sourceOf(draft: Draft, base: SourceRow | undefined): Source {
   return {
-    id: draft.id,
+    id: base?.id ?? draft.id,
     name: draft.name,
     url: draft.url,
     ...(base?.query === undefined ? {} : { query: base.query }),
@@ -181,13 +226,7 @@ function sourceOf(draft: Draft, base: SourceRow | undefined): Source {
     intervalMs: Number(draft.interval) * 1000,
     timeoutMs: Number(draft.timeout) * 1000,
     ...(base?.auth === undefined ? {} : { auth: base.auth }),
-    fields: draft.fields.map((field) => ({
-      id: field.id,
-      label: field.label,
-      pointer: field.pointer,
-      type: field.type,
-      ...(field.unit.trim() === "" ? {} : { unit: field.unit.trim() }),
-    })),
+    fields: draft.fields.map(mergedField),
   };
 }
 
@@ -296,7 +335,7 @@ export function SourcesSection(props: {
 
   const submit = (): void => {
     if (draft === undefined || busy) return;
-    const found = problem(draft);
+    const found = problem(draft, editing);
     if (found !== undefined) {
       setRefusal(found);
       return;
@@ -324,12 +363,15 @@ export function SourcesSection(props: {
             ? { field: error.field, reason: error.reason }
             : { field: "", reason: reason(error) },
         );
+        // The status line is the region's own report of the write; leaving it
+        // on "Saving…" would outlive the refusal it was waiting for.
+        report(uiCopy.hostSettings.status.failed(reason(error)));
       },
     );
   };
 
   const remove = (row: SourceRow): void => {
-    report(uiCopy.hostSettings.status.saving);
+    report(uiCopy.hostSettings.sources.deleting);
     void sources.remove(row.id).then(
       (answer: RemovalAnswer) => {
         if (!mounted.current) return;
@@ -346,7 +388,7 @@ export function SourcesSection(props: {
       },
       (error: unknown) => {
         if (!mounted.current) return;
-        report(uiCopy.hostSettings.status.failed(reason(error)));
+        report(uiCopy.hostSettings.sources.deleteFailed(reason(error)));
       },
     );
   };
@@ -464,6 +506,7 @@ export function SourcesSection(props: {
               <button
                 type="button"
                 data-yunari-source-edit={row.id}
+                aria-label={copy.editSource(row.name || row.id)}
                 className={plainButtonClasses}
                 onClick={() => openEdit(row)}
               >
@@ -472,6 +515,7 @@ export function SourcesSection(props: {
               <button
                 type="button"
                 data-yunari-source-test={row.id}
+                aria-label={copy.testSource(row.name || row.id)}
                 className={plainButtonClasses}
                 disabled={testing === row.id}
                 onClick={() => runTest(row)}
@@ -481,6 +525,7 @@ export function SourcesSection(props: {
               <button
                 type="button"
                 data-yunari-source-delete={row.id}
+                aria-label={copy.deleteSource(row.name || row.id)}
                 className={plainButtonClasses}
                 onClick={() => setDeleting(row.id)}
               >
@@ -585,7 +630,9 @@ export function SourcesSection(props: {
           <FormField
             label={copy.id}
             value={draft.id}
+            hint={editing === undefined ? undefined : copy.idFixed}
             reason={inline("id")}
+            readOnly={editing !== undefined}
             attribute="data-yunari-source-id"
             onChange={(id) => change({ id })}
           />
@@ -750,6 +797,8 @@ function FormField(props: {
   readonly attribute: string;
   readonly hint?: string | undefined;
   readonly reason?: string | undefined;
+  /** A value the form shows but does not change — the source id while editing. */
+  readonly readOnly?: boolean;
   readonly onChange: (value: string) => void;
 }): React.JSX.Element {
   const id = useId();
@@ -762,6 +811,7 @@ function FormField(props: {
         id={id}
         {...{ [props.attribute]: "" }}
         value={props.value}
+        readOnly={props.readOnly}
         onChange={(event) => props.onChange(event.target.value)}
         className="h-[26px] rounded-md border border-edge bg-panel-1 px-[var(--space-6)] text-sm text-text"
       />
@@ -769,7 +819,11 @@ function FormField(props: {
         <p className="m-0 text-2xs text-faint">{props.hint}</p>
       )}
       {props.reason === undefined ? null : (
-        <p role="alert" className="m-0 text-2xs text-muted">
+        <p
+          role="alert"
+          data-yunari-source-field-reason=""
+          className="m-0 text-2xs text-muted"
+        >
           {props.reason}
         </p>
       )}
