@@ -68,9 +68,10 @@ export interface AskGroup {
  * because it changes the words a provider puts beside those readings, and one
  * poll has one answer.
  *
- * Keyed by the assignment's own JSON. `currentAssignment` builds the object in
- * one shape, so two displays that resolved the same devices serialize alike.
- * The keys are unioned, as they were across every connection before.
+ * Keyed by both parts: the assignment's own JSON, a NUL separator, and the
+ * language. `currentAssignment` builds the assignment in one shape, so two
+ * displays that resolved the same devices serialize alike. The keys are unioned,
+ * as they were across every connection before.
  */
 export function groupByAsk(asks: readonly DisplayAsk[]): readonly AskGroup[] {
   const groups = new Map<

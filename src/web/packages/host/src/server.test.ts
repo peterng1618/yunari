@@ -27,6 +27,8 @@ import { type ListenableServer, listenWithFallback } from "./cli/net.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
 import type { SampleContext, SensorProvider } from "./providers/provider.js";
 import { ProviderRegistry } from "./providers/registry.js";
+import { OPEN_METEO_BERLIN_CAPTURE } from "./providers/weather/open-meteo.fixture.js";
+import { WeatherProvider } from "./providers/weather/provider.js";
 import { createDisplayLauncher } from "./serve/display-launcher.js";
 import {
   CA_CERTIFICATE_PATH,
@@ -49,6 +51,7 @@ import { createDisplaySettingsStore } from "./settings/display.js";
 import {
   createDisplayStore,
   DEFAULT_DISPLAY,
+  type DisplayRecord,
   hashToken,
   LOCAL_DISPLAY_ID,
 } from "./settings/displays.js";
@@ -61,6 +64,8 @@ import { createThemeSettingsStore } from "./settings/theme-settings.js";
 import {
   createWeatherSettingsStore,
   DEFAULT_WEATHER_SETTINGS,
+  normalizeWeatherSettings,
+  type WeatherSettingsStore,
 } from "./settings/weather.js";
 import { createThemeStore, type ThemeContent } from "./themes/store.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
@@ -5876,10 +5881,47 @@ describe("The assignment a display is served", () => {
     );
   });
 
+  it("lets the newest connection's language speak for the display", async () => {
+    sampleStream(hosted.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=en`);
+    await vi.waitFor(() =>
+      expect(echo.contexts.at(-1)).toMatchObject({ language: "en" }),
+    );
+
+    sampleStream(
+      hosted.server,
+      `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=de-DE`,
+    );
+
+    await vi.waitFor(() =>
+      expect(echo.contexts.at(-1)).toMatchObject({ language: "de-DE" }),
+    );
+  });
+
+  it("accepts a tag as long as the published schema allows", async () => {
+    // The envelope validator caps `metadata.themeLanguage` at 64 characters, so
+    // the host must not drop a tag its own schema published.
+    const tag =
+      "de-Latn-DE-1996-x-yunari-display-abcdefg-abcdefg-abcdefg-abcdefg";
+
+    expect(tag).toHaveLength(64);
+
+    sampleStream(
+      hosted.server,
+      `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=${tag}`,
+    );
+
+    await vi.waitFor(() =>
+      expect(echo.contexts.at(-1)).toMatchObject({ language: tag }),
+    );
+  });
+
   it("opens the stream when lang is unusable, and asks without a language", async () => {
     // A malformed tag and a syntactically valid one past the length ceiling:
     // both are dropped, and neither refusal closes the stream.
-    for (const lang of ["de_DE", "de-Latn-DE-1996-yunari-display-extra"]) {
+    for (const lang of [
+      "de_DE",
+      "de-Latn-DE-1996-x-yunari-display-abcdefg-abcdefg-abcdefg-abcdefg-abcdefg",
+    ]) {
       const answer = await streamStatus(
         hosted.server,
         `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=${lang}`,
@@ -5891,6 +5933,103 @@ describe("The assignment a display is served", () => {
 
     await vi.waitFor(() => expect(echo.contexts.length).toBeGreaterThan(0));
     expect(echo.contexts.at(-1)).not.toHaveProperty("language");
+  });
+});
+
+/**
+ * The served payload, not the provider's own return value: two displays that
+ * resolved the same devices but declared different languages must get one
+ * reading in two words.
+ */
+describe("A display's language in the served payload", () => {
+  let tmpDir: string;
+  let hosted: ReturnType<typeof createHostServer>;
+  let desk: DisplayRecord;
+  let wall: DisplayRecord;
+
+  /** Berlin, so the fixture's OVC reading maps to both tables. */
+  function berlinStore(): WeatherSettingsStore {
+    const settings = normalizeWeatherSettings({
+      provider: "open-meteo",
+      label: "Berlin, Berlin, DE",
+      latitude: 52.52,
+      longitude: 13.41,
+      useWindowsLocation: false,
+      pollIntervalMs: 600_000,
+    });
+
+    return {
+      read: async () => settings,
+      write: async () => settings,
+      problem: () => undefined,
+    };
+  }
+
+  function servedSample(
+    stream: { readonly frames: () => string },
+    semanticKey: string,
+  ): { readonly textValue?: string; readonly value?: number } | undefined {
+    const decoded = decodeBatch(lastFrame(stream.frames()));
+
+    return decoded.ok
+      ? decoded.batch.samples.find((entry) => entry.semanticKey === semanticKey)
+          ?.sample
+      : undefined;
+  }
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-lang-payload-"));
+    const displays = createDisplayStore(tmpDir);
+    desk = await displays.createLocal("Desk monitor", {
+      deviceName: "DELL U2722D",
+    });
+    wall = await displays.createLocal("Wall monitor", {
+      deviceName: "LG C2",
+    });
+    hosted = createHostServer({
+      registry: new ProviderRegistry([
+        new WeatherProvider({
+          settings: berlinStore(),
+          fetcher: (async () =>
+            new Response(JSON.stringify(OPEN_METEO_BERLIN_CAPTURE), {
+              status: 200,
+            })) as unknown as typeof fetch,
+        }),
+      ]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      displays,
+      sampleIntervalMs: 10,
+    });
+  });
+
+  afterEach(async () => {
+    await hosted.close();
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("serves one reading in German and English for two displays on one assignment", async () => {
+    const keys = "weather.temp,weather.condition";
+    const german = sampleStream(
+      hosted.server,
+      `${SAMPLE_STREAM_PATH}?keys=${keys}&display=${desk.id}&lang=de`,
+    );
+    const english = sampleStream(
+      hosted.server,
+      `${SAMPLE_STREAM_PATH}?keys=${keys}&display=${wall.id}&lang=en`,
+    );
+
+    await vi.waitFor(() => {
+      expect(servedSample(german, "weather.condition")?.textValue).toBe(
+        "Bedeckt",
+      );
+      expect(servedSample(english, "weather.condition")?.textValue).toBe(
+        "Overcast",
+      );
+    });
+
+    // The words differ; the measurement does not.
+    expect(servedSample(german, "weather.temp")?.value).toBe(11.3);
+    expect(servedSample(english, "weather.temp")?.value).toBe(11.3);
   });
 });
 

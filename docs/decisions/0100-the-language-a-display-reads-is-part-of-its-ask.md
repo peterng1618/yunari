@@ -2,7 +2,13 @@
 
 - **Date:** 2026-10-24
 - **Status:** accepted
-- **Paths:** `src/web/packages/host/src/providers/registry.ts`
+- **Paths:** `src/web/packages/host/src/providers/registry.ts`,
+  `src/web/packages/host/src/server.ts`,
+  `src/web/packages/host/src/providers/weather/conditions.ts`
+
+`server.ts`'s display identity is decision 0072's and `conditions.ts`'s weather
+vocabulary is 0099's; this note owns the sample-language shape those files now
+carry.
 
 ## The problem
 

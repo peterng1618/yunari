@@ -495,7 +495,8 @@ export async function displayKeyFor(
 
 /** A BCP-47-shaped tag, bounded: enough for `de`, `de-DE`, `zh-Hant-TW`. */
 const LANGUAGE_TAG = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
-const MAX_LANGUAGE_LENGTH = 35;
+/** The published schema's `metadata.themeLanguage` ceiling (`maxLength: 64`). */
+const MAX_LANGUAGE_LENGTH = 64;
 
 /**
  * The language a display declares on its stream URL, or none.

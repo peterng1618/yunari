@@ -224,6 +224,26 @@ describe("WeatherProvider", () => {
     expect(sampleOf(de, "weather.temp")).toEqual(sampleOf(en, "weather.temp"));
   });
 
+  it("does not fetch again when only the language changes", async () => {
+    // The language localizes the cached reading; it is not a reason to acquire
+    // a new one, and the poll's own clock must not be restarted by a sample.
+    const now = Date.now();
+    const { fetcher, calls } = fetcherOf();
+    const provider = host(settingsStore(), fetcher);
+
+    await provider.sample(["weather.condition"], now, { language: "en" });
+    await settle();
+
+    expect(calls()).toBe(1);
+
+    const german = await provider.sample(["weather.condition"], now + 1_000, {
+      language: "de",
+    });
+
+    expect(calls()).toBe(1);
+    expect(german[0]?.sample).toMatchObject({ textValue: "Bedeckt" });
+  });
+
   it("reports no place as unavailable and never fetches", async () => {
     const { fetcher, calls } = fetcherOf();
     const provider = host(

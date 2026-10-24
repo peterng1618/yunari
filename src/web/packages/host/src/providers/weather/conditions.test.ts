@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { conditionText, WMO_CONDITIONS, windCompass } from "./conditions.js";
+import {
+  conditionText,
+  DE_CONDITIONS,
+  WMO_CONDITIONS,
+  windCompass,
+} from "./conditions.js";
 
 describe("conditionText", () => {
   it("names a canonical code in English", () => {
@@ -21,6 +26,14 @@ describe("conditionText", () => {
 
   it("covers the whole canonical WMO vocabulary", () => {
     expect(Object.keys(WMO_CONDITIONS)).toHaveLength(28);
+  });
+
+  it("keeps the German table in step with the English source", () => {
+    // A code added to one table and not the other would read `Unknown` in that
+    // language rather than fail, so the key sets are the test.
+    expect(Object.keys(DE_CONDITIONS).sort()).toEqual(
+      Object.keys(WMO_CONDITIONS).sort(),
+    );
   });
 
   it("names every canonical code in German", () => {

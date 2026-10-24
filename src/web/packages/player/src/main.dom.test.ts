@@ -1198,9 +1198,12 @@ describe("the language a display sends with its samples", () => {
   });
 
   /** Mounts a display showing a theme whose declared language is `language`,
-   *  and returns the sample stream URL it opened. */
+   *  and returns the sample stream URL it opened. The document starts in
+   *  another language, so a read of `document.documentElement.lang` instead of
+   *  the theme's own metadata cannot pass as the sent value. */
   async function mountWithLanguage(language: string): Promise<URL> {
     skeleton();
+    document.documentElement.lang = "fr";
     history.replaceState({}, "", "/?theme=living-room");
     vi.stubGlobal("EventSource", RecordingEventSource);
     vi.stubGlobal(
@@ -1238,5 +1241,8 @@ describe("the language a display sends with its samples", () => {
     expect(url.pathname).toBe("/ws");
     expect(url.searchParams.has("keys")).toBe(true);
     expect(url.searchParams.get("lang")).toBe("de-DE");
+    // The theme's tag, not the document language `declareDocumentLanguage`
+    // would have reduced it to.
+    expect(document.documentElement.lang).not.toBe("de-DE");
   });
 });

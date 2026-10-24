@@ -39,7 +39,7 @@ export const WMO_CONDITIONS: Readonly<Record<number, string>> = {
 
 /** The German names for the same 28 codes, kept beside the source vocabulary
  *  rather than translated at runtime: a table is what a reviewer can check. */
-const DE_CONDITIONS: Readonly<Record<number, string>> = {
+export const DE_CONDITIONS: Readonly<Record<number, string>> = {
   0: "Klarer Himmel",
   1: "Überwiegend klar",
   2: "Teilweise bewölkt",
