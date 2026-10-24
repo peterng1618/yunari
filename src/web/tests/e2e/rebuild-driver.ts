@@ -337,6 +337,7 @@ export async function place(
 }
 
 export async function setName(page: Page, value: string): Promise<void> {
+  await page.locator("[data-yunari-subject-name]").dblclick();
   await fill(page, "[data-yunari-name]", value);
 }
 

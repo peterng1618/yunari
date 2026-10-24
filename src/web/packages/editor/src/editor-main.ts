@@ -36,7 +36,6 @@ import {
   createNewFabricTheme,
 } from "./new-fabric-theme.js";
 import { createPublisher, type PublishSwitch } from "./publish-client.js";
-import { DEFAULT_RUN_DISPLAY_MODE } from "./run-placeholder.js";
 import { loadStarterBackdrop } from "./starter-backdrop.js";
 import { importThemePackage } from "./theme-import.js";
 import { createThemeLibraryClient } from "./theme-library-client.js";
@@ -147,9 +146,6 @@ async function start(): Promise<void> {
       mode = next;
       replaceSource();
     },
-    runDisplay: () =>
-      active?.extensions.runDisplay() ?? DEFAULT_RUN_DISPLAY_MODE,
-    setRunDisplay: (runMode) => active?.extensions.setRunDisplay(runMode),
     chartRefreshRate: () => chartRefreshRate,
     // The loop is the only owner of cadence: the charts draw when their data
     // moves, so a rate change is a rate change here and nothing downstream.

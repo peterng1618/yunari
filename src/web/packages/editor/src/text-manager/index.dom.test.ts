@@ -89,6 +89,30 @@ describe("TextManager", () => {
 
     expect(text.get("id")).toBe("explicit-id");
   });
+
+  it("gives a new text an authored box that holds its first line", () => {
+    // A Textbox with no width measures itself from its longest unbreakable run,
+    // so "New text" used to arrive 64 units wide and wrap onto two lines — and,
+    // with no authored box, the first handle drag had nothing to write to.
+    const canvas = new Canvas(document.createElement("canvas"));
+    const manager = createTextManager(canvas, vi.fn());
+
+    const text = manager.addText({
+      text: "New text",
+      fontSize: 32,
+      yunariText: {
+        runs: [{ kind: "literal", text: "New text" }],
+      },
+    });
+
+    const authored = text.get(YUNARI_TEXT_PROPERTY) as {
+      box?: { width: number; height: number };
+    };
+    expect(authored.box).toBeDefined();
+    expect(text.textLines).toHaveLength(1);
+    expect(text.width).toBe(authored.box?.width);
+    expect(text.height).toBeCloseTo(authored.box?.height ?? -1, 6);
+  });
 });
 
 describe("double-clicking a bound run", () => {
@@ -125,6 +149,24 @@ describe("double-clicking a bound run", () => {
       0,
       object.text.length,
     ]);
+    text.destroy();
+  });
+
+  it("puts the value back on the frame the edit ends, not on the next tick", () => {
+    // The token belongs to the edit. Waiting for the sample loop would leave it
+    // on the canvas for up to a quarter second after Escape, which reads as a
+    // mode rather than as an editing view.
+    const object = reading();
+    const canvas = scene(object);
+    const text = createTextManager(canvas, vi.fn());
+    const repaint = vi.fn();
+    text.setAuthoringView((target) => target.set("text", TOKEN));
+    text.setRepaint(repaint);
+    canvas.fire("mouse:dblclick", { target: object } as never);
+
+    object.exitEditing();
+
+    expect(repaint).toHaveBeenCalled();
     text.destroy();
   });
 
@@ -199,6 +241,37 @@ describe("a width the author dragged", () => {
       };
       expect(authored.box?.width, `step ${width}`).toBe(width);
     }
+    text.destroy();
+  });
+
+  it("records the first drag on a text that has no box yet", () => {
+    // The editor's new text carries runs and no box until something states a
+    // size. The resize handler used to return early on that shape, so the pass
+    // that followed measured the old clip and the drag snapped back.
+    const object = new Textbox("New text", {
+      id: "new-text",
+      left: 40,
+      top: 30,
+      width: 180,
+      fontSize: 32,
+    });
+    object.set(YUNARI_TEXT_PROPERTY, {
+      runs: [{ kind: "literal", text: "New text" }],
+    });
+    const canvas = scene(object);
+    const text = createTextManager(canvas, vi.fn());
+
+    object.set("width", 260);
+    canvas.fire("object:resizing", {
+      transform: { target: object },
+    } as never);
+
+    const authored = object.get(YUNARI_TEXT_PROPERTY) as {
+      box?: { width: number; height: number };
+    };
+    expect(authored.box?.width).toBe(260);
+    // The other dimension is seeded, so the box is never half-written.
+    expect(authored.box?.height).toBeCloseTo(object.height, 6);
     text.destroy();
   });
 

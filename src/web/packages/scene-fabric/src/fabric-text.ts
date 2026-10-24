@@ -73,6 +73,53 @@ function isEditing(object: PlanTextObject): boolean {
   return object instanceof IText && object.isEditing;
 }
 
+/** Marks a `Textbox` whose line origin has been made to follow `verticalAlign`. */
+const VERTICAL_ALIGNED = Symbol.for("yunari.textVerticalAlign");
+
+/** The alignment each guarded object currently paints with. */
+const verticalAlignOf = new WeakMap<object, PlanTextLayout["verticalAlign"]>();
+
+/**
+ * Move the type inside a fixed box, the way the authored vertical alignment asks.
+ *
+ * Fabric draws every line from the top of the object, and a `Textbox` in this
+ * renderer is the authored box on both axes (`assertBox`), so `placeInBox` has
+ * no slack to move it through: the object's height already is the box. The
+ * renderer's own line origin is the one place Fabric asks where the first line
+ * starts (`_getTopOffset`, `fabric/dist/index.mjs:15850`), so the slack between
+ * the box and the measured text is added there. Installed as an instance method
+ * rather than a fork of `Textbox`: everything else about the measurement,
+ * wrapping and clipping stays Fabric's.
+ */
+function applyVerticalAlign(
+  object: PlanTextObject,
+  verticalAlign: PlanTextLayout["verticalAlign"],
+): void {
+  if (!(object instanceof Textbox)) {
+    // An unwrapped object is its own measurement, so `placeInBox` already moves
+    // it inside the box on both axes.
+    return;
+  }
+
+  if (!(VERTICAL_ALIGNED in object)) {
+    const base = (
+      object as unknown as { _getTopOffset(): number }
+    )._getTopOffset.bind(object);
+    Object.defineProperty(object, "_getTopOffset", {
+      configurable: true,
+      value: () => {
+        const align = verticalAlignOf.get(object) ?? "top";
+        if (align === "top") return base();
+        const slack = object.height - object.calcTextHeight();
+        return base() + (align === "bottom" ? slack : slack / 2);
+      },
+    });
+    Object.defineProperty(object, VERTICAL_ALIGNED, { value: true });
+  }
+
+  verticalAlignOf.set(object, verticalAlign);
+}
+
 /**
  * The alignment scalars the author wrote, with Fabric's fallbacks.
  *
@@ -101,15 +148,21 @@ function runtimeLayout(
     | RuntimeTextLayout
     | undefined;
   if (saved !== undefined) {
-    // The box and the line capacity are measurements this pass would have to
-    // take again, so the cache still serves them. The alignment is authored
-    // state the author can edit between two passes, so it is re-read: `Align`
-    // and `Vertical text align` both work by rewriting the authored content and
-    // calling `applyAuthoredText`, and returning `saved` whole made the object
-    // placed by the values the control had just replaced.
+    // The box and the alignment are authored state the author can edit between
+    // two passes — `Size`, `Align` and `Vertical text align` all work by
+    // rewriting the authored content and calling `applyAuthoredText`. Returning
+    // `saved` whole made the object keep the width and placement the control
+    // had just replaced, so both are re-read here; only the style and the
+    // measured capacity survive from the cache.
+    const box = authoredBox(object, authored) ?? saved.box;
     return {
       ...saved,
-      layout: { ...saved.layout, ...authoredAlignment(object, authored) },
+      box,
+      layout: withLineCapacity(
+        object,
+        box,
+        authoredAlignment(object, authored),
+      ),
     };
   }
 
@@ -415,6 +468,7 @@ function refreshLayout(
   // carries the two caches `_set` would have refreshed, so the selection frame,
   // the snap guides and `arrange` read the box rather than the widened text.
   assertBox(object, box);
+  applyVerticalAlign(object, layout.verticalAlign);
   placeInBox(object, box, layout);
   applyClip(object, layout, box);
 }
@@ -438,6 +492,7 @@ function applyText(object: PlanTextObject, node: PlanNode, box: PlanBox): void {
   }
 
   placeInBox(object, box, layout);
+  applyVerticalAlign(object, layout.verticalAlign);
   applyClip(object, layout, box);
 }
 

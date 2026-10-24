@@ -117,8 +117,6 @@ function viewStub(
     setSourceMode: vi.fn(),
     chartRefreshRate: () => 30,
     setChartRefreshRate: vi.fn(),
-    runDisplay: () => "values",
-    setRunDisplay: vi.fn(),
     ...overrides,
   };
 }
@@ -1118,7 +1116,6 @@ it("opens every View setting's choices instead of toggling on a bare click", asy
   expect(triggers.map((item) => item.textContent)).toEqual([
     `${uiCopy.view.dataSource}: ${uiCopy.view.preview}`,
     `${uiCopy.view.chartRefresh}: ${uiCopy.view.fps30}`,
-    `${uiCopy.view.valueRuns}: ${uiCopy.view.values}`,
   ]);
 
   // The trigger keeps naming the current value, so the state is legible without
@@ -1188,10 +1185,10 @@ function pickRadio(submenu: HTMLElement, text: string): void {
   item.click();
 }
 
-/** The other two readings answer for the theme's sensors and for what this
- *  machine reports (§6), and each is proven by picking it: the refresh case
- *  above only ever opened the third setting, so `setSourceMode` and
- *  `setRunDisplay` reached their owners with nothing asserting it (`vg-339`). */
+/** The two readings answer for the theme's sensors and for what this machine
+ *  reports (§6), and each is proven by picking it: the refresh case above only
+ *  ever opened one setting, so `setSourceMode` reached its owner with nothing
+ *  asserting it (`vg-339`). */
 it("routes the readings submenu's choice to setSourceMode", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
@@ -1210,26 +1207,6 @@ it("routes the readings submenu's choice to setSourceMode", async () => {
   pickRadio(submenu, uiCopy.view.live);
   await Promise.resolve();
   expect(view.setSourceMode).toHaveBeenCalledWith("live");
-
-  layout.destroy();
-});
-
-it("routes the value-runs submenu's choice to setRunDisplay", async () => {
-  const root = document.createElement("div");
-  const layout = createShellLayout(root);
-  const view = viewStub();
-  layout.setBridge(bridgeStub(), view);
-  await Promise.resolve();
-
-  const submenu = await openViewSetting(root, uiCopy.view.valueRuns);
-  expect(openRadioItems(submenu)).toEqual([
-    [uiCopy.view.values, "true"],
-    [uiCopy.view.tokens, "false"],
-  ]);
-
-  pickRadio(submenu, uiCopy.view.tokens);
-  await Promise.resolve();
-  expect(view.setRunDisplay).toHaveBeenCalledWith("tokens");
 
   layout.destroy();
 });

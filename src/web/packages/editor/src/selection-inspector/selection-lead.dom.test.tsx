@@ -10,8 +10,7 @@ import {
 } from "./selection-lead.js";
 
 /**
- * The block that leads the column: the arrange actions (`vg-463`) and the
- * reason a subject is offered no glass section (`vg-465`).
+ * The block that leads the column: the arrange actions (`vg-463`).
  *
  * The contract this file can see is the one the value walk cannot: the block
  * decides no eligibility — it draws exactly the buttons it is handed, and greys
@@ -66,80 +65,25 @@ const publish = (
 ): void => root.publish(view, run);
 
 describe("createSelectionLeadRoot", () => {
-  it("renders nothing at all for a selection with neither a reason nor an action", () => {
+  it("renders nothing at all for a selection with no action", () => {
     const { host, root } = mount();
 
-    publish(root, { glassRefusal: undefined, arrange: [] });
+    publish(root, { arrange: [] });
 
-    // Not an empty row: one object has no arrange question and no glass refusal
-    // to state, so the block is absent rather than drawn blank. The block's own
-    // edge goes with it — a rule with nothing between it and the subject's own
-    // would be the boundary this component exists to place, drawn twice.
+    // Not an empty row: one object has no arrange question, so the block is
+    // absent rather than drawn blank. The block's own edge goes with it — a
+    // rule with nothing between it and the subject's own would be the boundary
+    // this component exists to place, drawn twice.
     expect(host.querySelector("[data-yunari-selection-lead]")).toBeNull();
     expect(host.innerHTML).toBe("");
     expect(host.querySelector("[data-yunari-arrange-row]")).toBeNull();
-    expect(host.querySelector("[data-yunari-glass-refusal]")).toBeNull();
-    root.destroy();
-  });
-
-  it("prints the glass refusal as words, under the hook the browser suite reads", () => {
-    const { host, root } = mount();
-    const reason = uiCopy.inspectorFields.glassRefused("Group");
-
-    publish(root, { glassRefusal: reason, arrange: [] });
-
-    expect(host.querySelector("[data-yunari-glass-refusal]")?.textContent).toBe(
-      reason,
-    );
-    root.destroy();
-  });
-
-  it("draws every action it is handed, in order, disabled exactly where the view says", () => {
-    const { host, root } = mount();
-    const arrange = arrangeView(true, false, true);
-
-    publish(root, { glassRefusal: undefined, arrange });
-
-    // Greyed rather than filtered: `Distribute` is on screen and disabled
-    // beside two selected objects, which is the treatment the dock gave it.
-    expect(
-      arrangeButtons(host).map((button) => button.getAttribute("aria-label")),
-    ).toEqual(arrange.map((action) => action.label));
-    expect(arrangeButtons(host).map((button) => button.disabled)).toEqual([
-      false,
-      true,
-      false,
-    ]);
-    root.destroy();
-  });
-
-  it("prints the glass refusal above the actions", () => {
-    const { host, root } = mount();
-
-    publish(root, {
-      glassRefusal: uiCopy.inspectorFields.glassRefused("Group"),
-      arrange: arrangeView(true),
-    });
-
-    // The refusal is about the subject the panel has just named, so it stands
-    // with it — above the actions, which are the column's first controls.
-    const refusal = host.querySelector("[data-yunari-glass-refusal]");
-    const row = host.querySelector("[data-yunari-arrange-row]");
-    expect(refusal).not.toBeNull();
-    expect(row).not.toBeNull();
-    expect(
-      refusal!.compareDocumentPosition(row!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
     root.destroy();
   });
 
   it("closes with its own edge, since the sections draw none under it", () => {
     const { host, root } = mount();
 
-    publish(root, {
-      glassRefusal: uiCopy.inspectorFields.glassRefused("Group"),
-      arrange: arrangeView(true),
-    });
+    publish(root, { arrange: arrangeView(true) });
 
     // The boundary between this block and the sections is this block's: the
     // first section suppresses its `border-t` when it follows the subject's
@@ -150,11 +94,9 @@ describe("createSelectionLeadRoot", () => {
     const block = host.querySelector("[data-yunari-selection-lead]");
     expect(block?.className).toContain("border-b");
     expect(block?.className).toContain("border-edge");
-    // And the block is the one that carries both parts, so a case that moves
-    // the rule elsewhere has to move it out of the element they share.
-    const refusal = host.querySelector("[data-yunari-glass-refusal]");
+    // And the block is the one that carries the row, so a case that moves the
+    // rule elsewhere has to move it out of the element they share.
     const row = host.querySelector("[data-yunari-arrange-row]");
-    expect(refusal?.parentElement).toBe(block);
     expect(row?.parentElement).toBe(block);
     root.destroy();
   });
@@ -164,7 +106,7 @@ describe("createSelectionLeadRoot", () => {
     const run = vi.fn();
     const arrange = arrangeView(true, false);
 
-    publish(root, { glassRefusal: undefined, arrange }, run);
+    publish(root, { arrange }, run);
 
     const [live, greyed] = arrangeButtons(host);
     await click(live!);
@@ -182,15 +124,13 @@ describe("createSelectionLeadRoot", () => {
   it("replaces what it drew on the next publish", () => {
     const { host, root } = mount();
 
-    publish(root, { glassRefusal: undefined, arrange: arrangeView(true) });
+    publish(root, { arrange: arrangeView(true) });
     expect(arrangeButtons(host)).toHaveLength(1);
 
-    publish(root, { glassRefusal: "why not", arrange: [] });
+    publish(root, { arrange: [] });
 
     expect(arrangeButtons(host)).toHaveLength(0);
-    expect(host.querySelector("[data-yunari-glass-refusal]")?.textContent).toBe(
-      "why not",
-    );
+    expect(host.querySelector("[data-yunari-selection-lead]")).toBeNull();
     root.destroy();
   });
 });

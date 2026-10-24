@@ -1,4 +1,4 @@
-import { glassRefusalKinds, uiCopy } from "./ui-copy.js";
+import { uiCopy } from "./ui-copy.js";
 
 /**
  * What a surface says, for the copy net's cases.
@@ -77,16 +77,12 @@ export function paragraphsOf(element: Element): string[] {
  * collects the sentence a template composes *around* its value, which is the
  * concept `spokenIn` reads in place of a label that ends in a reading.
  *
- * **What it cannot cover.** A keyed function's answer is chosen by its key, so a
- * generic argument reaches only its fallback: `glassRefused` is probed over
- * `glassRefusalKinds`, the kinds the table answers in their own terms, because a
- * second list here would agree with it only until someone added a kind to one
- * and not the other. And a function of two or more arguments is still called
- * with one, so its later arguments arrive `undefined` and the sentence it
- * composes over a dynamic value is collected by nothing —
- * `panels.artboardOutside` and `draftRecovery.lead` are the two, and a surface
- * printing one goes falsely **red**. Widening the pool cannot close that: a
- * sentence interpolating the theme's own name can never equal a probe's output.
+ * **What it cannot cover.** A function of two or more arguments is called with
+ * one, so its later arguments arrive `undefined` and the sentence it composes
+ * over a dynamic value is collected by nothing — `panels.artboardOutside` and
+ * `draftRecovery.lead` are the two, and a surface printing one goes falsely
+ * **red**. Widening the pool cannot close that: a sentence interpolating the
+ * theme's own name can never equal a probe's output.
  *
  * `chartFamilyLabels` needs no probe of its own: it is reachable as
  * `uiCopy.chartFamilies`, so the object walk above already collects it.
@@ -105,8 +101,6 @@ export function copy(): string[] {
       Object.values(value).forEach(walk);
   };
   walk(uiCopy);
-  for (const kind of glassRefusalKinds)
-    out.push(uiCopy.inspectorFields.glassRefused(kind));
   return out;
 }
 
@@ -145,14 +139,21 @@ export function spokenIn(element: Element): string[] {
     out.push(
       named.hasAttribute("data-yunari-zoom")
         ? name.replace(/: \d+(?:\.\d+)?%$/, "")
-        : named.hasAttribute("data-yunari-qr")
-          ? // The code's label is the concept and then the address it encodes,
-            // which is a reading: the address is dropped by its own shape, and
-            // what is left is compared against the sentence the table composes
-            // around an empty value — so a rename in the table still reaches
-            // this label, and the address never has to have an owner.
-            name.replace(/\S+$/, "")
-          : name,
+        : named.hasAttribute("data-yunari-subject-name")
+          ? // The heading's label is the rename concept and then the object's
+            // own name, which is data of the same kind as a palette's. Only the
+            // concept is read, so it still has to be a word the table holds.
+            name.startsWith(`${uiCopy.panels.rename} `)
+            ? uiCopy.panels.rename
+            : name
+          : named.hasAttribute("data-yunari-qr")
+            ? // The code's label is the concept and then the address it encodes,
+              // which is a reading: the address is dropped by its own shape, and
+              // what is left is compared against the sentence the table composes
+              // around an empty value — so a rename in the table still reaches
+              // this label, and the address never has to have an owner.
+              name.replace(/\S+$/, "")
+            : name,
     );
   }
   for (const button of element.querySelectorAll("button")) {

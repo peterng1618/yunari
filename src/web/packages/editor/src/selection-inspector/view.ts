@@ -1,4 +1,4 @@
-import { isObjectName } from "@yunari/renderer-core";
+import { isObjectName, objectName } from "@yunari/renderer-core";
 import { isLocked } from "@yunari/scene-fabric";
 import type { FabricObject } from "fabric/es";
 import type {
@@ -44,6 +44,15 @@ export interface SelectionView {
  */
 export interface SubjectView {
   readonly name: string;
+  /**
+   * What the object stores as its name, or `""` when it stores none.
+   *
+   * `name` is what the heading reads, with `layer-tree`'s fallback to the id;
+   * this is what the rename field has to start from, because seeding it with
+   * the fallback would make an unnamed object look named the moment it is
+   * opened for editing.
+   */
+  readonly authoredName: string;
   readonly kind: SelectionKind;
   /**
    * The binding key this node reads, where one is bound. It is the fact that
@@ -632,6 +641,7 @@ export function projectSelection(
     targetRevision,
     subject: {
       name: subjectNameOf(target),
+      authoredName: objectName(target) ?? "",
       kind: selectionKindOf(target),
       key: bindingKeyOf(target, ports),
     },

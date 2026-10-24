@@ -17,8 +17,7 @@
  */
 import { expect, it } from "vitest";
 import { EDIT_MENU_ROWS } from "./editor-shell/shell-menu-bar.js";
-import { glassRefusalKinds, uiCopy } from "./ui-copy.js";
-import { copy } from "./ui-copy-readers.js";
+import { uiCopy } from "./ui-copy.js";
 
 /**
  * No pictograph is copy. §35 keeps visible copy in this table, and a glyph is
@@ -49,24 +48,6 @@ function pictographs(value: unknown, path = "uiCopy"): string[] {
   }
   return [];
 }
-
-/**
- * `vg-417`: the walk collects what a keyed function answers, not only what its
- * fallback says. `copy()` calls every function with a count and a name, and
- * `glassRefused` chooses its sentence by the kind it is asked with — so every
- * refusal the table holds read as a string with no owner, and a surface
- * printing one went falsely **red**. Disable the keyed pass in `copy()` and
- * this fails on the first kind: the sentences are in the table and nothing
- * collected them.
- *
- * The other keyed function needs no case: `chartFamilyLabels` is reachable as
- * `uiCopy.chartFamilies`, so the object walk already collects it.
- */
-it("collects every string a keyed copy function answers with", () => {
-  const owned = new Set(copy());
-  for (const kind of glassRefusalKinds)
-    expect(owned, kind).toContain(uiCopy.inspectorFields.glassRefused(kind));
-});
 
 /**
  * §6: the two readings answer different questions, and neither is the fallback

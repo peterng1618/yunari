@@ -869,12 +869,11 @@ test.describe("Fabric editor route", () => {
     ).toBeVisible();
     expect(await isOpen("position")).toBe(true);
     // **Two questions, not four, because the wordmark is a text run.** A text
-    // object's only Paint row was the glass refusal, and `vg-465` moved that
-    // sentence into the lead block above the sections rather than leaving a
-    // section standing over one refusal — so `per-kind-column.ts`'s
-    // empty-section rule takes the whole section away, and asking for it here
-    // would be asking for the surface `vg-006` was reversed to remove. The
-    // read-only question is gone outright (item 17).
+    // object's only Paint row was the glass refusal, and `vg-465` removed the
+    // section rather than leave it standing over one refusal — so
+    // `per-kind-column.ts`'s empty-section rule takes the whole section away,
+    // and asking for it here would be asking for the surface `vg-006` was
+    // reversed to remove. The read-only question is gone outright (item 17).
     for (const id of ["content", "layer"]) {
       expect(await isOpen(id), id).toBe(true);
     }
@@ -1555,30 +1554,67 @@ test.describe("Fabric editor route", () => {
 
     await expect.poll(painted, { timeout: 15_000 }).toMatch(/^\d+%$/);
 
-    // The token view is the deliberate override, and it is what an author needs
-    // to see which binding a run names. Nothing else proves it survives the
-    // canvas default moving away from it, so it is switched on and off here.
-    // **Pick the mode, rather than re-opening the menu and hoping.** These View
-    // entries are submenu triggers labelled with the *current* value, so
-    // clicking "Value runs: values" opens the modes and changes nothing — the
-    // body below then asserted the token view and the value view against a
-    // setting it had never actually touched, which is why it was red at base
-    // as well as here.
-    // **Matched on the label, not on its current value.** The trigger reads
-    // `Value runs: <current>`, so pinning the whole string means the test has to
-    // predict which of the two the menu will be showing when it looks — and a
-    // wrong guess is a 30s wait on an element that exists under another name.
-    // **The menu is opened once.** Picking a radio closes the submenu and
-    // leaves the parent open, so re-clicking `View` closed the whole thing and
-    // the next lookup waited out the budget on a menu that had been dismissed.
-    await page.getByRole("button", { name: "View", exact: true }).click();
-    const valueRuns = async (mode: "tokens" | "values"): Promise<void> => {
-      await page.getByRole("menuitem", { name: /^Value runs:/ }).click();
-      await page.getByRole("menuitemradio", { name: mode }).click();
-    };
-    await valueRuns("tokens");
-    await expect.poll(painted, { timeout: 15_000 }).toContain("cpu.load");
-    await valueRuns("values");
+    // The token is the **editing** view now: there is no View-menu mode to
+    // switch it on. Fabric enters inline editing on a double-click, the text
+    // manager asks the runtime for the authoring view, and escaping the edit
+    // puts the reading back through the same runtime. Driving the gesture
+    // through the real handler is what proves the two are wired together; a
+    // token painted by the test itself would prove neither.
+    const editingText = await page.evaluate(() => {
+      const bridge = (
+        window as unknown as {
+          yunariEditorBridge: {
+            editor: {
+              canvas: {
+                getObjects(): Array<{
+                  get(name: string): unknown;
+                  getObjects?: () => readonly unknown[];
+                  enterEditing?: () => void;
+                  exitEditing?: () => void;
+                }>;
+                fire(name: string, payload: unknown): void;
+              };
+            };
+          };
+        }
+      ).yunariEditorBridge;
+      const find = (
+        objects: ReadonlyArray<{
+          get(name: string): unknown;
+          getObjects?: () => readonly unknown[];
+        }>,
+      ):
+        | {
+            get(name: string): unknown;
+            exitEditing?: () => void;
+          }
+        | undefined => {
+        for (const candidate of objects) {
+          if (candidate.get("id") === "cpu-card-value") return candidate;
+          const found = find(
+            (candidate.getObjects?.() ?? []) as ReadonlyArray<{
+              get(name: string): unknown;
+            }>,
+          );
+          if (found !== undefined) return found;
+        }
+        return undefined;
+      };
+      const target = find(
+        bridge.editor.canvas.getObjects() as ReadonlyArray<{
+          get(name: string): unknown;
+          getObjects?: () => readonly unknown[];
+        }>,
+      );
+      if (target === undefined) return "";
+      bridge.editor.canvas.fire("mouse:dblclick", { target });
+      const shown = String(target.get("text"));
+      target.exitEditing?.();
+      return shown;
+    });
+    expect(editingText).toContain("cpu.load");
+    // Escaping the edit is the end of the token: the value returns at once,
+    // through the runtime, rather than waiting for the sample tick.
     await expect.poll(painted, { timeout: 15_000 }).toMatch(/^\d+%$/);
 
     await captureVisualReview(page, testInfo, "editor-starter-cpu-card");
@@ -1759,7 +1795,7 @@ test.describe("Fabric editor route", () => {
     // zoom menu also satisfies `:visible`, so a popup-agnostic locator would let
     // the positive control pass while measuring the wrong menu.
     await expect(
-      popup.getByRole("menuitem", { name: /Value runs/ }),
+      popup.getByRole("menuitem", { name: /Chart refresh/ }),
     ).toBeVisible();
     await expect.poll(() => injectedTransition(popup)).toBe("0.2s");
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -1771,7 +1807,7 @@ test.describe("Fabric editor route", () => {
     // line is its only suppression. Without this assertion, adding a transition
     // to a menu row and deleting the `*` lines leaves the suite green under
     // `reduce`.
-    const menuItem = popup.getByRole("menuitem", { name: /Value runs/ });
+    const menuItem = popup.getByRole("menuitem", { name: /Chart refresh/ });
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await expect.poll(() => injectedTransition(menuItem)).toBe("0.2s");
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -1803,28 +1839,17 @@ test.describe("Fabric editor route", () => {
     await expect.poll(() => injectedTransition(tooltip)).toBe("0s");
   });
 
-  test("a subject the treatment cannot reach is offered no glass section, and says why in the column", async ({
+  test("a subject the treatment cannot reach is offered no glass section and no explanation", async ({
     page,
   }, testInfo) => {
     /**
-     * **Re-pointed twice, and this is the second reversal.** The reason used to
-     * reach the row through `tooltip()`, and the browser half of the fix this
-     * case proved was placement: an out-of-flow popup measured before it was
-     * pinned landed on top of its own trigger, so hover never settled and only
-     * focus showed it. DESIGN.md §5.3 moved refusals out of tooltips and into the
-     * row — `control-well.tsx`'s `ControlRow` renders the reason as words — so
-     * there is no popup left to place, and the flicker it caused cannot recur.
-     * Then `vg-465`, the author's own ruling, took the row away with the section
-     * for a subject the treatment cannot reach.
+     * `vg-465` withheld the section from a subject the treatment cannot reach.
+     * The author has since ruled the reason out too: a capability a kind does
+     * not have is not shown as a field, and it is not narrated either. What is
+     * asserted is the absence on both surfaces — no control, and no sentence
+     * standing where it would have been.
      *
-     * What survives both is the claim, and it is the one asserted here: the
-     * author is **told**, in words they meet without an interaction, on the
-     * surface that names the thing the words are about. The control is gone, so
-     * there is no longer an `aria-describedby` to follow and no tab stop to
-     * argue about — what is read instead is the absence, and the sentence.
-     *
-     * A `Path` is one of the kinds the treatment cannot reach, and the reason
-     * named for it is a full sentence.
+     * A `Path` is one of the kinds the treatment cannot reach.
      */
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
@@ -1848,13 +1873,9 @@ test.describe("Fabric editor route", () => {
     await expect(control).toHaveCount(0);
     await expect(page.locator("[data-yunari-glass-blur]")).toHaveCount(0);
 
-    // The words the author meets instead, under the subject the column names.
-    // Read off the hook the block publishes rather than a spelled control id:
-    // the claim is that the reason is on screen and is the one named for this
-    // kind, which holds whatever the column mints ids as.
-    const reason = page.locator("[data-yunari-glass-refusal]");
-    await expect(reason).toBeVisible();
-    await expect(reason).toContainText("Path");
+    // And nothing is printed in its place: the inability is a fact about the
+    // kind, not a question the column has to answer.
+    await expect(page.locator("[data-yunari-glass-refusal]")).toHaveCount(0);
   });
 
   test("captures selected chart binding controls for visual review", async ({
@@ -1897,6 +1918,14 @@ test.describe("Fabric editor route", () => {
     await page.locator('[data-yunari-layer="time"]').click();
     const source = page.locator('[data-yunari-run-source="0"]');
     await expect(source).toBeVisible();
+    // The run group must stay flex: the inspector styles every `section` in the
+    // panel as `display: block`, which silently removes the gap between a run's
+    // controls when the group is marked up as one.
+    expect(
+      await page
+        .locator('[data-yunari-run="0"]')
+        .evaluate((element) => getComputedStyle(element).display),
+    ).toBe("flex");
     // The run's pickers are plan 1's selects now, so what they show is the label
     // of the choice rather than the value behind it: `time.now` reads `Time`.
     expect(await choiceOf(source)).toBe("Time");
@@ -2964,11 +2993,15 @@ test.describe("Fabric editor route", () => {
     await page.locator('[data-yunari-layer="wordmark"]').click();
 
     // Driven through the control, not the bridge: reaching into the page would
-    // prove the bridge works, not that an author can name anything.
+    // prove the bridge works, not that an author can name anything. The name is
+    // typed in the column's heading, which opens a field on a double-click.
     const name = page.locator("[data-yunari-name]");
+    await expect(name).toHaveCount(0);
+    await page.locator("[data-yunari-subject-name]").dblclick();
     await expect(name).toBeVisible();
     await name.fill("Brand mark");
     await name.press("Tab");
+    await expect(name).toHaveCount(0);
 
     await expect(page.locator('[data-yunari-layer="wordmark"]')).toContainText(
       "Brand mark",
@@ -3020,6 +3053,7 @@ test.describe("Fabric editor route", () => {
       "panel",
     );
     await page.locator('[data-yunari-layer="panel"]').click();
+    await page.locator("[data-yunari-subject-name]").dblclick();
     await page.locator("[data-yunari-name]").fill("Card");
     await page.locator("[data-yunari-name]").press("Tab");
     await expect(page.locator('[data-yunari-layer="panel"]')).toContainText(

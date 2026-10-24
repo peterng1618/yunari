@@ -1,11 +1,25 @@
 import type { TextContent, TextRun } from "@yunari/renderer-core";
 import {
+  guardBoxWidth,
   type PlanTextObject,
   writeAuthoredBoxDimension,
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
 import { type Canvas, IText, Textbox } from "fabric/es";
 import { uiCopy } from "../ui-copy.js";
+
+/**
+ * How much room a new text gets beyond its own measured words.
+ *
+ * Wide enough that the first word does not sit against the edge of its own box,
+ * so the box reads as a box rather than as a glyph outline, and narrow enough
+ * that the handle is still on screen. The exact number is a product default,
+ * not a measurement.
+ */
+const NEW_TEXT_SLACK = 24;
+
+/** A width no scene uses, so the measurement reports one line rather than a wrap. */
+const UNCONSTRAINED_WIDTH = 100_000;
 
 interface TextManager {
   /** A `Textbox`, so the run editor's Wrap and Overflow mean what they say. */
@@ -83,8 +97,13 @@ function adoptResizedBox(object: object): void {
   if (!isText(target)) return;
 
   const authored = authoredOf(target);
-  if (authored?.box === undefined) return;
+  if (authored === undefined) return;
 
+  // A text the editor just made carries its runs but no box until something
+  // states a size, so this write is also what gives it one. Returning early
+  // here is why the first drag on a new text snapped back: the pass that
+  // followed had no authored box to restore and measured the clip instead.
+  //
   // Unscaled: `yunariText.box` is the object's size *before* `scaleX`.
   // `assertBox` divides the stored number by the scale to get Fabric's `width`
   // and `boxFrom` multiplies it back for the clip and the placement, so the
@@ -94,6 +113,29 @@ function adoptResizedBox(object: object): void {
   // author dragged to (240 units dragged at `scaleX` 0.7432, 177.6 landed:
   // `vg-233`).
   writeAuthoredBoxDimension(target, "width", target.width);
+}
+
+/**
+ * Give a text that has runs but no box one that holds its first line.
+ *
+ * A `Textbox` with no width is measured from its longest unbreakable run, so a
+ * new "New text" arrives 64 units wide and wraps onto two lines before the
+ * author has touched it. Measuring it at an unconstrained width and storing
+ * that is the same number a single-line `FabricText` would have, and it makes
+ * both alignment controls and the width handle mean something from birth:
+ * without a box, an alignment has no slack to act in and a resize has nothing
+ * to write to.
+ */
+function seedAuthoredBox(object: Textbox): void {
+  const authored = authoredOf(object);
+  if (authored === undefined || authored.box !== undefined) return;
+
+  object.set("width", UNCONSTRAINED_WIDTH);
+  const width = Math.ceil(object.calcTextWidth()) + NEW_TEXT_SLACK;
+  object.set("width", width);
+  // Seeds the other dimension from the object's own measured edge, which is the
+  // single-line height the width above just established.
+  writeAuthoredBoxDimension(object, "width", width);
 }
 
 function isText(value: unknown): value is PlanTextObject & {
@@ -173,20 +215,25 @@ export function createTextManager(
       // restores it, so after a double-click and nothing else `text` is still
       // the token this view painted. Writing that back would turn a sensor card
       // into prose from a gesture that changed nothing.
-      if (target.text === painted) {
-        return;
+      if (target.text !== painted) {
+        if (keepTypedText(target) === "refused") {
+          warn?.(uiCopy.inspectorFields.multiRunRefused);
+          // Fabric has already left editing, so the object's own text is the only
+          // thing standing where the authored runs should be. Putting them back
+          // is what makes the refusal honest rather than a warning the author
+          // watches scroll away from text that was never kept.
+          repaint(target);
+          canvas.requestRenderAll();
+          return;
+        }
+        save();
       }
-      if (keepTypedText(target) === "refused") {
-        warn?.(uiCopy.inspectorFields.multiRunRefused);
-        // Fabric has already left editing, so the object's own text is the only
-        // thing standing where the authored runs should be. Putting them back
-        // is what makes the refusal honest rather than a warning the author
-        // watches scroll away from text that was never kept.
-        repaint(target);
-        canvas.requestRenderAll();
-        return;
-      }
-      save();
+      // The token was this edit's view and it ends with the edit: repaint now
+      // rather than at the next sample tick, so Escape puts the reading back on
+      // the frame the author pressed it. The refresh loop's own copy is at most
+      // a quarter second behind and is what restores every *other* object.
+      repaint(target);
+      canvas.requestRenderAll();
     });
   };
 
@@ -221,6 +268,13 @@ export function createTextManager(
         typeof options["text"] === "string" ? options["text"] : "",
         { id: `text-${crypto.randomUUID()}`, ...options },
       );
+      // Installed at construction, not on the first authored pass: the author
+      // types into a new text immediately, and both passes skip an object that
+      // is being edited — so a handle dragged while those passes are skipping
+      // would otherwise be widened back to its longest word by Fabric's own
+      // `initDimensions` before it ever met the guard.
+      guardBoxWidth(text);
+      seedAuthoredBox(text);
       canvas.add(text);
       canvas.setActiveObject(text);
       save();

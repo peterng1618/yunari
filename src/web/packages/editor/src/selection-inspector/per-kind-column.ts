@@ -20,7 +20,6 @@ import type { EditorInteraction } from "../editor-interaction.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   type AppearanceContext,
-  nameField,
   opacityField,
   resolveToken,
   typePresetOf,
@@ -345,9 +344,6 @@ function contentBody(
 ): SectionParts {
   const fields: FieldView[] = [];
   const extras: ExtraView[] = [];
-
-  // The name is a field that writes, so a locked object is not offered one.
-  if (!locked) fields.push(nameField(target));
 
   // The run editor is the one sub-surface the row union cannot express, so it
   // crosses as an extra carrying its projected value. `projectRuns` returns

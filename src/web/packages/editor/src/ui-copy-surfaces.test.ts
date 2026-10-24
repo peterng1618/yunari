@@ -19,10 +19,10 @@
  * **What it deliberately does not read, and why.** Two owners of words are
  * carved out by name, because the words are theirs and not this table's:
  * `shellPalettes`' stored ids (`isStoredName`) and the shortcut reference's
- * action words (`isShortcutWord`). And only the shell's paragraphs are read:
- * the inspector, the picker and the panes print data in paragraphs of their
- * own — a run's binding id, a colour's reading — which is the same carve-out
- * the panel net makes for a select's trigger.
+ * action words (`isShortcutWord`). Paragraphs are not read at all: the
+ * inspector, the picker and the panes print data in paragraphs of their own —
+ * a run's binding id, a colour's reading — which is the same carve-out the panel
+ * net makes for a select's trigger, and the shell now carries none of its own.
  *
  * The table's own rules are `ui-copy.test.ts`, and the imperative panels and
  * the picker they mount are `ui-copy-panels.test.ts`.
@@ -97,12 +97,9 @@ it("leaves the React surfaces with no copy of their own", async () => {
     if (found === null) throw new Error(`no ${surface} surface rendered`);
     expect(spokenIn(found), surface).not.toEqual([]);
   }
-  // `vg-338`: the shell's own paragraphs, which `spokenIn` reads none of. Only
-  // the shell's are read here — the header says why — and the sentence had no
-  // net at all while it was a literal.
-  const hints = paragraphsOf(shell);
-  expect(hints.length).toBeGreaterThan(0);
-  expect(hints.filter((text) => !owned.has(text))).toEqual([]);
+  // The shell's hint paragraph is gone (`vg-338` was its net); what remains is
+  // chrome whose words `spokenIn` reads, so there is nothing left to walk here.
+  expect(paragraphsOf(shell)).toEqual([]);
   destroy();
 });
 

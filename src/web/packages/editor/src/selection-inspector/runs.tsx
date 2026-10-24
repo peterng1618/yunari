@@ -455,7 +455,9 @@ function RunRow(props: {
   const index = row.index;
 
   return (
-    <section
+    // A row group, not a `<section>`: the inspector's section rule sets
+    // `display: block` on every section in the panel and would flatten the gap.
+    <div
       data-yunari-run={String(index)}
       className="flex flex-col gap-[var(--space-6)]"
     >
@@ -557,7 +559,7 @@ function RunRow(props: {
           {uiCopy.inspectorFields.removeRun(index + 1)}
         </button>
       ) : null}
-    </section>
+    </div>
   );
 }
 

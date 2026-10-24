@@ -23,7 +23,12 @@ const edits: SelectionEdits = {
 function view(overrides: Partial<SelectionView> = {}): SelectionView {
   return {
     targetRevision: 1,
-    subject: { name: "CPU card", kind: "group", key: "cpu.load" },
+    subject: {
+      name: "CPU card",
+      authoredName: "CPU card",
+      kind: "group",
+      key: "cpu.load",
+    },
     locked: false,
     sections: [],
     ...overrides,
@@ -67,7 +72,14 @@ describe("createInspectorRoot", () => {
     const root = createInspectorRoot(host);
 
     root.publish(
-      view({ subject: { name: "CPU card", kind: "text", key: undefined } }),
+      view({
+        subject: {
+          name: "CPU card",
+          authoredName: "CPU card",
+          kind: "text",
+          key: undefined,
+        },
+      }),
       edits,
     );
 
@@ -89,7 +101,12 @@ describe("createInspectorRoot", () => {
 
     root.publish(
       view({
-        subject: { name: "Selection", kind: "activeSelection", key: undefined },
+        subject: {
+          name: "Selection",
+          authoredName: "",
+          kind: "activeSelection",
+          key: undefined,
+        },
       }),
       edits,
     );
@@ -106,7 +123,14 @@ describe("createInspectorRoot", () => {
     const root = createInspectorRoot(host);
 
     root.publish(
-      view({ subject: { name: "CPU card", kind: "group", key: undefined } }),
+      view({
+        subject: {
+          name: "CPU card",
+          authoredName: "CPU card",
+          kind: "group",
+          key: undefined,
+        },
+      }),
       edits,
     );
 
@@ -168,7 +192,12 @@ describe("createInspectorRoot", () => {
     root.publish(
       view({
         targetRevision: 2,
-        subject: { name: "Header", kind: "shape", key: undefined },
+        subject: {
+          name: "Header",
+          authoredName: "Header",
+          kind: "shape",
+          key: undefined,
+        },
       }),
       edits,
     );

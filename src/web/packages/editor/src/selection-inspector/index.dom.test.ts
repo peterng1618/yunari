@@ -198,6 +198,18 @@ async function edit(input: HTMLInputElement, value: string): Promise<void> {
   await leave(input);
 }
 
+/** Opens the heading's rename field, the gesture the author uses. */
+async function beginRename(host: HTMLElement): Promise<HTMLInputElement> {
+  const heading = host.querySelector<HTMLElement>("[data-yunari-subject-name]");
+  expect(heading, "the heading is the name control").not.toBeNull();
+  await act(async () => {
+    heading!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+  });
+  const input = host.querySelector<HTMLInputElement>("[data-yunari-name]");
+  expect(input, "double-clicking the name opens a field").not.toBeNull();
+  return input!;
+}
+
 /** The starter's CPU card, revived from `CARD_LIBRARY`'s own authored JSON
  *  through Fabric's enliven utility — so the case starts from the document the
  *  product ships rather than from numbers re-typed into this file. Its panel is
@@ -550,8 +562,11 @@ describe("the selection inspector", () => {
   it("shows the object's display name and writes an edit back to it", async () => {
     rect.set("name", "Header panel");
     const { host, history } = setup(rect);
-    const name = host.querySelector<HTMLInputElement>("[data-yunari-name]")!;
 
+    expect(host.querySelector("[data-yunari-subject-name]")?.textContent).toBe(
+      "Header panel",
+    );
+    const name = await beginRename(host);
     expect(name.value).toBe("Header panel");
 
     await edit(name, "Header rule");
@@ -559,13 +574,18 @@ describe("the selection inspector", () => {
     expect(rect.get("name")).toBe("Header rule");
     // One committed edit, one history entry (§67).
     expect(history.saveState).toHaveBeenCalledTimes(1);
+    // The field closes onto the heading, which is where the name is read.
+    expect(host.querySelector("[data-yunari-name]")).toBeNull();
+    expect(host.querySelector("[data-yunari-subject-name]")?.textContent).toBe(
+      "Header rule",
+    );
   });
 
-  it("leaves the name field empty for an object that has none", () => {
+  it("leaves the heading's field empty for an object that has none", async () => {
     // Absence is what a scene authored before the field looks like; showing the
     // id in the field would make an unnamed object look named.
     const { host } = setup(rect);
-    const name = host.querySelector<HTMLInputElement>("[data-yunari-name]")!;
+    const name = await beginRename(host);
 
     expect(name.value).toBe("");
   });
@@ -573,7 +593,7 @@ describe("the selection inspector", () => {
   it("clears the name when the author empties the field", async () => {
     rect.set("name", "Header panel");
     const { host, history } = setup(rect);
-    const name = host.querySelector<HTMLInputElement>("[data-yunari-name]")!;
+    const name = await beginRename(host);
 
     await edit(name, "   ");
 
@@ -586,7 +606,7 @@ describe("the selection inspector", () => {
   it("refuses a name past the published bound rather than storing it", async () => {
     rect.set("name", "Header panel");
     const { host, history, editor } = setup(rect);
-    const name = host.querySelector<HTMLInputElement>("[data-yunari-name]")!;
+    const name = await beginRename(host);
 
     await edit(name, "x".repeat(MAX_OBJECT_NAME_LENGTH + 1));
 
@@ -598,23 +618,29 @@ describe("the selection inspector", () => {
     expect(editor.errorManager.warn).toHaveBeenCalled();
   });
 
-  it("gives the name field an accessible label", () => {
+  it("gives the rename field an accessible label", async () => {
     const { host } = setup(rect);
-    const name = host.querySelector<HTMLInputElement>("[data-yunari-name]")!;
-    const label = host.querySelector<HTMLLabelElement>(
-      `label[for="${name.id}"]`,
-    );
 
-    expect(label?.textContent).toBe("Name");
-    // A field the author can only reach by pointer is not a control.
-    expect(name.tagName).toBe("INPUT");
+    // A field the author can only reach by pointer is not a control: the
+    // heading is a button, so Enter and F2 open the same field.
+    const heading = host.querySelector<HTMLElement>(
+      "[data-yunari-subject-name]",
+    );
+    expect(heading?.getAttribute("role")).toBe("button");
+    expect(heading?.tabIndex).toBe(0);
+
+    const name = await beginRename(host);
+    expect(name.getAttribute("aria-label")).toBe("Name");
   });
 
-  it("withholds the name field on a locked object, like every other write", () => {
+  it("withholds the rename field on a locked object, like every other write", () => {
     rect.set("locked", true);
     const { host } = setup(rect);
 
     expect(host.querySelector("[data-yunari-name]")).toBeNull();
+    expect(
+      host.querySelector("[data-yunari-subject-name]")?.getAttribute("role"),
+    ).toBeNull();
   });
 
   it("announces the edit so the layer list republishes the row", async () => {
@@ -623,7 +649,7 @@ describe("the selection inspector", () => {
     // disagreeing until something else happened to republish.
     rect.set("name", "Header panel");
     const { host, editor } = setup(rect);
-    const name = host.querySelector<HTMLInputElement>("[data-yunari-name]")!;
+    const name = await beginRename(host);
 
     await edit(name, "Header rule");
 
@@ -636,7 +662,7 @@ describe("the selection inspector", () => {
   it("announces nothing when a name is refused", async () => {
     rect.set("name", "Header panel");
     const { host, editor } = setup(rect);
-    const name = host.querySelector<HTMLInputElement>("[data-yunari-name]")!;
+    const name = await beginRename(host);
 
     await edit(name, "x".repeat(MAX_OBJECT_NAME_LENGTH + 1));
 
@@ -692,7 +718,7 @@ describe("the selection inspector", () => {
       return call?.[1] as () => void;
     };
 
-    expect(host.querySelector("[data-yunari-name]")).not.toBeNull();
+    expect(host.querySelector("[data-yunari-subject-name]")).not.toBeNull();
 
     // A pointer deselect: Fabric clears the selection and no history is
     // involved. The column names where to choose from and holds no field.
@@ -702,7 +728,7 @@ describe("the selection inspector", () => {
       host.querySelector("[data-yunari-nothing-selected]"),
       "a deselect must empty the column",
     ).not.toBeNull();
-    expect(host.querySelector("[data-yunari-name]")).toBeNull();
+    expect(host.querySelector("[data-yunari-subject-name]")).toBeNull();
 
     // A history restore drops the selection too, and must NOT empty it: the id
     // survives the rebuild, so the author keeps the panel they were working in.
@@ -711,7 +737,7 @@ describe("the selection inspector", () => {
     active = undefined;
     handlerFor("editor:history-state-loaded")();
     expect(
-      host.querySelector("[data-yunari-name]"),
+      host.querySelector("[data-yunari-subject-name]"),
       "a history restore must keep the panel the author was working in",
     ).not.toBeNull();
     expect(host.querySelector("[data-yunari-nothing-selected]")).toBeNull();
@@ -787,13 +813,16 @@ describe("the selection inspector", () => {
       refreshGlass: vi.fn(),
     });
 
-    expect(host.querySelector("[data-yunari-name]")).not.toBeNull();
+    expect(host.querySelector("[data-yunari-subject-name]")).not.toBeNull();
     expect(host.textContent).not.toContain(uiCopy.inspectorFields.locked);
 
     createObjectLockManager(canvas, vi.fn()).lockObject();
 
     expect(host.textContent).toContain(uiCopy.inspectorFields.locked);
-    expect(host.querySelector("[data-yunari-name]")).toBeNull();
+    // The heading still names the object, but it is no longer a rename control.
+    expect(
+      host.querySelector("[data-yunari-subject-name]")?.getAttribute("role"),
+    ).toBeNull();
     expect(host.querySelector('[data-yunari-geometry="width"]')).toBeNull();
   });
 
@@ -1017,15 +1046,17 @@ describe("the column's sections", () => {
       `[data-yunari-section="${id}"] > h2 > button`,
     )!;
 
-  it("asks the four questions in order, and opens every one of them", () => {
+  it("asks the questions a plain object has, in order, and opens every one", () => {
     const { host } = setup(rect);
 
-    expect(ids(host)).toEqual(["content", "position", "layer", "paint"]);
+    // A rect has no Content question of its own since the name moved into the
+    // heading, so the column is the three questions it does have.
+    expect(ids(host)).toEqual(["position", "layer", "paint"]);
     // Position was the one section put away, on the reasoning that geometry is
     // set once. An object is usually selected *for* its position, so it opens
     // with the rest (item 13) — and the author may still close what they are
     // not using.
-    for (const id of ["content", "position", "layer", "paint"]) {
+    for (const id of ["position", "layer", "paint"]) {
       expect(isOpen(host, id), id).toBe(true);
     }
   });
@@ -1071,9 +1102,9 @@ describe("the column's sections", () => {
     expect(isOpen(host, "paint")).toBe(true);
   });
 
-  it("keeps the caret in the field being typed into", () => {
+  it("keeps the caret in the field being typed into", async () => {
     const { host, inspector } = setup(rect);
-    const name = host.querySelector<HTMLInputElement>("[data-yunari-name]")!;
+    const name = await beginRename(host);
     name.focus();
     expect(document.activeElement).toBe(name);
 
@@ -1148,9 +1179,9 @@ describe("the column's sections", () => {
       };
     }
 
-    /** The draft in the name field, left uncommitted. */
+    /** The draft in the heading's rename field, left uncommitted. */
     async function typedName(host: HTMLElement): Promise<HTMLInputElement> {
-      const field = host.querySelector<HTMLInputElement>("[data-yunari-name]")!;
+      const field = await beginRename(host);
       await draft(field, "Typed A");
       return field;
     }
@@ -1161,8 +1192,11 @@ describe("the column's sections", () => {
 
       select(b);
       inspector.render();
+      // The draft belonged to A's revision, so the heading is B's again and no
+      // field stands open over it.
+      expect(host.querySelector("[data-yunari-name]")).toBeNull();
       expect(
-        host.querySelector<HTMLInputElement>("[data-yunari-name]")?.value,
+        host.querySelector("[data-yunari-subject-name]")?.textContent,
       ).toBe("Panel B");
 
       // The blur A's field was queued for now lands on an element that has left
@@ -1203,8 +1237,9 @@ describe("the column's sections", () => {
       rebuilt.set({ id: a.get("id"), name: "Panel A" });
       select(rebuilt);
       inspector.render();
+      expect(host.querySelector("[data-yunari-name]")).toBeNull();
       expect(
-        host.querySelector<HTMLInputElement>("[data-yunari-name]")?.value,
+        host.querySelector("[data-yunari-subject-name]")?.textContent,
       ).toBe("Panel A");
 
       await act(async () => {
@@ -1255,7 +1290,10 @@ describe("the column's sections", () => {
     const inSection = (id: string, selector: string): Element | null =>
       host.querySelector(`[data-yunari-section="${id}"] ${selector}`);
 
-    expect(inSection("content", "[data-yunari-name]")).not.toBeNull();
+    // The name is the heading's, not a row: a plain rect has no Content
+    // question left, so the section is not rendered at all.
+    expect(inSection("content", "[data-yunari-name]")).toBeNull();
+    expect(host.querySelector('[data-yunari-section="content"]')).toBeNull();
     expect(
       inSection("position", '[data-yunari-geometry="left"]'),
     ).not.toBeNull();
@@ -1341,7 +1379,6 @@ describe("the column's sections", () => {
     });
 
     expect(sections.map((section) => section.id)).toEqual([
-      "content",
       "position",
       "layer",
       "paint",
@@ -1351,7 +1388,7 @@ describe("the column's sections", () => {
       sections
         .filter((section) => section.defaultOpen)
         .map((section) => section.id),
-    ).toEqual(["content", "position", "layer", "paint"]);
+    ).toEqual(["position", "layer", "paint"]);
     for (const section of sections) {
       // The count is every row the section renders — its fields and its extras
       // — and the header's count has to agree.
@@ -1744,11 +1781,14 @@ describe("the column a kind gets", () => {
    *   is what proves the surface renders them, not only that jsdom's tree does.
    *
    * So the count here is deliberately the shared floor, not the ceiling — and
-   * the figures are exact so the parts sum to the whole. This table names **16**
-   * distinct hooks: three in `EVERY_OBJECT` (`geometry`'s five selectors are one
-   * name), six added by `shape`, six by `text`, one by `image`. It named 19 while
-   * the read-only section stood, and item 17 removed the two that were its:
-   * `data-yunari-resolution` (`EVERY_OBJECT` and `text`'s Type-preset row) and
+   * the figures are exact so the parts sum to the whole. This table names **15**
+   * distinct hooks: two in `EVERY_OBJECT` (`geometry`'s five selectors are one
+   * name, plus `opacity`), six added by `shape`, six by `text`, one by `image`.
+   * The name left this table when it moved out of the Content section and into
+   * the heading, where it renders only while being renamed; `index.dom.test.ts`
+   * drives that gesture directly. It named 19 while the read-only section stood,
+   * and item 17 removed the two that were its: `data-yunari-resolution`
+   * (`EVERY_OBJECT` and `text`'s Type-preset row) and
    * `data-yunari-reveal-type-presets` (`text`). It named 17 until Task 25.7,
    * which removed `data-yunari-bleeds` from `EVERY_OBJECT` with the deliberate
    * bleed control (`docs/decisions/0069`). The pre-plan inspector at
@@ -1757,12 +1797,12 @@ describe("the column a kind gets", () => {
    * src/web/packages/editor/src/selection-inspector | sort -u | wc -l`) prints
    * 47 — one high: a docblock at `190dc1a4:selection-inspector/index.ts:230`
    * quotes the bare prefix `data-yunari-`, which the pattern counts as a name.
-   * So the remaining **30** are 27 carried by the per-domain tests and the e2e
-   * specs and those **3** the product no longer renders at all. Reading the 16 as
-   * the inventory would understate the coverage by 30.
+   * So the remaining **31** are 27 carried by the per-domain tests and the e2e
+   * specs, plus the rename field the heading now owns and those **3** the
+   * product no longer renders at all. Reading the 15 as the inventory would
+   * understate the coverage by 31.
    */
   const EVERY_OBJECT: readonly string[] = [
-    "[data-yunari-name]",
     '[data-yunari-geometry="left"]',
     '[data-yunari-geometry="top"]',
     '[data-yunari-geometry="width"]',

@@ -1,7 +1,6 @@
 import {
   type FabricGlobals,
   type FabricPalette,
-  objectName,
   type TypePreset,
 } from "@yunari/renderer-core";
 import type { FabricObject } from "fabric/es";
@@ -106,21 +105,5 @@ export function opacityField(object: FabricObject): FieldView {
     max: 100,
     integer: true,
     data: { "data-yunari-opacity": "" },
-  };
-}
-
-/**
- * The object's display name — the one control that says what a layer is called,
- * as against the id every reference uses. An empty field clears the name rather
- * than storing a blank label, so the layer list falls back to the id exactly as
- * it does for a scene authored before the field existed.
- */
-export function nameField(object: FabricObject): FieldView {
-  return {
-    id: "name",
-    control: "text",
-    label: uiCopy.inspectorFields.name,
-    value: objectName(object) ?? "",
-    data: { "data-yunari-name": "" },
   };
 }

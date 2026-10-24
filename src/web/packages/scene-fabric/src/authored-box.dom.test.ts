@@ -355,6 +355,66 @@ describe("alignment acts inside the authored box", () => {
     );
   });
 
+  it("moves a fixed-height box's lines, not the box, for vertical align", () => {
+    // A `Textbox` here *is* its authored box on both axes, so `placeInBox` has
+    // no height slack to move the text through and Fabric's renderer would
+    // otherwise draw every line from the box's top. The line origin is where
+    // Fabric asks (`_getTopOffset`), so that is where the alignment has to be.
+    const middle = reading({ verticalAlign: "middle" });
+    const middleCanvas = canvasOf(middle);
+    paint(middleCanvas);
+
+    const middleText = middle.calcTextHeight();
+    const middleSlack = BOX.height - middleText;
+    const topOffsetOf = (object: Textbox): number =>
+      (object as unknown as { _getTopOffset(): number })._getTopOffset();
+
+    expect(middle.height).toBe(BOX.height);
+    expect(topOffsetOf(middle)).toBeCloseTo(
+      -BOX.height / 2 + middleSlack / 2,
+      6,
+    );
+
+    const bottom = reading({ verticalAlign: "bottom" });
+    const bottomCanvas = canvasOf(bottom);
+    paint(bottomCanvas);
+
+    const bottomSlack = BOX.height - bottom.calcTextHeight();
+    expect(topOffsetOf(bottom)).toBeCloseTo(-BOX.height / 2 + bottomSlack, 6);
+  });
+
+  it("re-reads the authored box rather than the pass cache", () => {
+    // `buildText` caches the box it first laid out with, and a later author
+    // write (`writeAuthoredBoxDimension`, a Size field, a dragged handle) only
+    // rewrites `yunariText`. A cache that kept serving its own box would undo
+    // every resize on the next repaint.
+    const object = reading({}, { width: 120, height: BOX.height });
+    const canvas = canvasOf(object);
+    paint(canvas);
+    expect(object.width).toBe(120);
+
+    // The cache `buildText` leaves behind: the box it measured at construction.
+    object.set("yunariTextLayout", {
+      box: { width: 120, height: BOX.height },
+      layout: {
+        wrap: true,
+        overflow: "clip",
+        align: "left",
+        verticalAlign: "top",
+      },
+      style: {},
+    });
+
+    object.set(YUNARI_TEXT_PROPERTY, {
+      runs: runs(),
+      box: { width: 240, height: BOX.height },
+    });
+    paint(canvas);
+
+    expect(object.width).toBe(240);
+    expect(Object.hasOwn(object, "yunariTextLayout")).toBe(true);
+  });
+
   it("keeps both edges when a reading grows a digit", () => {
     // The §89 requirement: a sensor box does not move when its reading
     // changes. The reading really does get wider, and the box is the clip, so

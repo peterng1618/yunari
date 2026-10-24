@@ -52,16 +52,21 @@ Three states must not collapse into one:
 
 Today the last two both render `—`, which is the ambiguity worth removing.
 
-### Reconciliation with live preview
+### Reconciled with live preview: the edit is the mode
 
-Preview exists so an author can see the design *with* values. Both are useful, so
-keep both: a small editor control switches how value runs render —
+The first design kept a small editor control switching every value run between
+**Tokens** and **Values**. The owner has since ruled it out: a token is what the
+author is editing, and nothing else. A run renders its token **only while its
+own text box is in typing mode** — Fabric's `isEditing`, entered by a
+double-click — and the moment the author leaves that edit the run renders its
+data value again. There is no menu setting, no persisted mode, and therefore no
+way to leave a whole dashboard showing `@ram.used.percent` where a reader will
+later see `61%`.
 
-- **Tokens** (default while authoring): `@cpu.temp`.
-- **Values**: the current behaviour, live or synthetic.
-
-Default to **tokens**. Seeing the structure is the more common need while laying
-out; values matter when judging fit, which is when the author switches.
+The reason is fit as well as clarity: a token is usually longer than the box
+that holds it, so a canvas-wide token mode ellipsised every reading it touched
+and made the layout impossible to judge. One object at a time, while it is
+being edited, is the only place the token is worth its width.
 
 ### The marker must be unmistakable
 
@@ -87,13 +92,14 @@ style (muted or outlined), so a glance separates structure from data.
 
 ## Acceptance
 
-- With tokens mode on, a bound value run's canvas text reads `@<semanticKey>`,
+- A bound value run is in typing mode: its canvas text reads `@<semanticKey>`,
   and the persisted envelope still holds the run list unchanged.
-- Switching to values mode restores the current behaviour, live or preview.
+- Leaving that edit restores the current value at once, live or preview.
+- No setting elsewhere on the canvas changes how value runs render.
 - A declared-but-unmapped binding is visibly distinct from a resolvable one.
 - A run with no binding is visibly distinct from both.
-- A display never shows a token name, in any mode.
-- Switching modes produces no history entry and no dirty state.
+- A display never shows a token name.
+- Entering and leaving an edit produces no history entry and no dirty state.
 - Rendered inspection of all four states, plus the full local browser suite.
 
 ## Verification

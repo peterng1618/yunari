@@ -71,45 +71,6 @@ const layerRoles = {
   },
 } as const;
 
-/**
- * One reason per kind, keyed by the kind `renderer-core` is asked with.
- *
- * Three causes, not one sentence: an open path has no interior to sample
- * through, a path's closedness is author data the product cannot know, and a
- * glyph, a photograph or a plotted series is not a panel at all. `Group` is
- * here because the owner admits it and the renderer still refuses it — Fabric
- * draws a group's children directly, so no boundary is left to sample through
- * (`scene-fabric/src/glass.ts`).
- */
-const glassRefusals: Readonly<Record<string, string>> = {
-  Polyline:
-    "A Polyline is an open path, so there is no interior to sample the backdrop through.",
-  Line: "A Line is an open path, so there is no interior to sample the backdrop through.",
-  Path: "A Path is author-drawn data and the product cannot know whether it is closed.",
-  Group:
-    "A Group has no render boundary of its own — put frosted glass on the panel inside it.",
-  Textbox:
-    "Text is not a panel, and there is no surface behind a glyph to frost.",
-  Text: "Text is not a panel, and there is no surface behind a glyph to frost.",
-  IText:
-    "Text is not a panel, and there is no surface behind a glyph to frost.",
-  Image: "An image is not a panel, and there is nothing behind it to frost.",
-  YunariChart:
-    "A chart is not a panel, and there is nothing behind a plotted series to frost.",
-  ActiveSelection:
-    "Frosted glass applies to one shape at a time — select the shape you want to frost.",
-};
-
-/**
- * The kinds `glassRefused` answers in their own terms — the refused ones, not
- * the document's whole vocabulary: `Rect` and `Circle` are frostable and are
- * not here. Exported so the copy walk can probe that function over them: its
- * answer is chosen by the key, so a probe that passes a generic argument reaches
- * only the fallback `glassRefused` composes and the sentences above read as
- * strings with no owner.
- */
-export const glassRefusalKinds: readonly string[] = Object.keys(glassRefusals);
-
 /** A row's file size. `Intl` owns the unit word, the separator and the
  *  rounding; the only choice here is which unit the number is in. */
 const KILOBYTE = new Intl.NumberFormat(undefined, {
@@ -298,19 +259,6 @@ export const uiCopy = {
     /** The frosted-glass treatment and its one parameter. */
     glassEnabled: "Frosted glass",
     glassBlur: "Glass blur",
-    /**
-     * Why one shape cannot be frosted, in that shape's own terms.
-     *
-     * "Glass applies to panels" teaches an author a rule they still cannot act
-     * on; naming the shape they selected tells them what to select instead. The
-     * kinds are the ones `renderer-core` is asked with, and membership is
-     * decided there — this table only says why an answer of no came back, so a
-     * kind it admits never reaches it and a kind added later falls to the
-     * sentence below rather than to no explanation at all.
-     */
-    glassRefused: (kind: string) =>
-      glassRefusals[kind] ??
-      `${kind} is not a shape frosted glass can be applied to.`,
     opacity: "Opacity %",
     /** A picture layer's two paint-time mirrors. */
     flipX: "Flip horizontally",
@@ -1236,19 +1184,14 @@ export const uiCopy = {
    *  sensor the theme names, the other for what this machine reports. Neither is
    *  the fallback for the other, so neither is called a preview of the other.
    *
-   *  A row here is a menu row and a menu row is sentence case (§9), so the two
-   *  run-display rows read `Values` and `Tokens`; the mode ids they set stay
-   *  lower case (`RunDisplayMode`), and only the words an author reads are
-   *  capitalised. */
+   *  A row here is a menu row and a menu row is sentence case (§9). Value runs
+   *  have no row: their token is the *editing* view and ends with the edit. */
   view: {
     dataSource: "Readings from",
     chartRefresh: "Chart refresh",
     preview: "The theme's sensors",
     live: "This machine",
     previewDetail: "every sensor this theme names",
-    valueRuns: "Value runs",
-    tokens: "Tokens",
-    values: "Values",
     fps30: "30 FPS",
     fps1: "1 FPS",
   },
@@ -1297,9 +1240,6 @@ export const uiCopy = {
   /** The stage's own name: the region the artboard is drawn in, so a reader
    *  reaching the canvas is told which surface it is before the drawing. */
   stage: { label: "Editor canvas" },
-  /** The shell's one sentence about the dock, printed under the selection
-   *  column while a selection exists — chrome copy, not the selection's own. */
-  selectionHint: "Move and lock the selection with the canvas dock.",
   /** The shared control set's refusal copy. A control that refuses a value the
    *  author can repair says why, and those words are user-visible text, so they
    *  belong here rather than as literals inside `components/ui/` (`vg-264`).

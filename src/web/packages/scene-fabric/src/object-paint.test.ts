@@ -228,8 +228,8 @@ describe("an arc that carries a fill", () => {
  * one arrives is a document written by hand or by an older build. It then opens,
  * paints no fill, and shows "Ink: not set" — with nothing said, the author
  * cannot tell that their document asked for something the editor declined to
- * draw. `glassRefused` is the house's existing sentence for a shape the product
- * will not draw the way a document asks, and this is the same situation.
+ * draw. Telling them is the same situation as any other refusal the editor
+ * reports out loud rather than leaving silent.
  */
 describe("a refusal the author is told about", () => {
   it("reports the arc and names the shape, once", async () => {

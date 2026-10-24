@@ -188,11 +188,18 @@ async function typeInto(input: HTMLInputElement, value: string): Promise<void> {
 
 describe("SelectionColumn", () => {
   it("renders the questions in the order SETTINGS_SECTIONS decides", () => {
+    // A plain rect has no Content question of its own — the name moved into the
+    // heading — so the column is the vocabulary minus that empty section, in the
+    // owner's order.
     const ids = renderedSections(
       viewOf(new Rect({ width: 40, height: 20 })),
     ).map((element) => element.dataset["yunariSection"]);
 
-    expect(ids).toEqual(SETTINGS_SECTIONS.map((section) => section.id));
+    expect(ids).toEqual(
+      SETTINGS_SECTIONS.map((section) => section.id).filter(
+        (id) => id !== "content",
+      ),
+    );
   });
 
   it("renders no header at all for a section with nothing in it", () => {
@@ -218,15 +225,15 @@ describe("SelectionColumn", () => {
   });
 
   it("starts every section open, Position included", () => {
-    renderedSections(viewOf(new Rect({ width: 40, height: 20 })));
+    const view = viewOf(new Rect({ width: 40, height: 20 }));
+    renderedSections(view);
 
     // Position was the one section put away, on the reasoning that geometry is
     // set once. It is what an object is usually selected *for*, so it is open —
-    // and so is every other question: the column stops deciding that for the
-    // author (item 13, DESIGN.md §7.4).
-    for (const id of ["content", "position", "layer", "paint"]) {
-      expect(isOpen(id), id).toBe(true);
-    }
+    // and so is every other question the kind has: the column stops deciding
+    // that for the author (item 13, DESIGN.md §7.4).
+    for (const section of view.sections)
+      expect(isOpen(section.id), section.id).toBe(true);
   });
 
   /** `vg-466`: the subject block's `border-b` is the boundary between the
@@ -351,7 +358,12 @@ describe("SelectionColumn", () => {
     };
     const view: SelectionView = {
       targetRevision: 1,
-      subject: { name: "Background", kind: "background", key: undefined },
+      subject: {
+        name: "Background",
+        authoredName: "",
+        kind: "background",
+        key: undefined,
+      },
       locked: false,
       sections: backgroundColumn({
         background: {

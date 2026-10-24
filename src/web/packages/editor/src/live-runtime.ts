@@ -5,11 +5,7 @@ import type {
 } from "@yunari/renderer-core";
 import { applyAuthoredText, refreshBoundText } from "@yunari/scene-fabric";
 import type { StaticCanvas } from "fabric/es";
-import {
-  DEFAULT_RUN_DISPLAY_MODE,
-  type RunDisplayMode,
-  toAuthoringSegments,
-} from "./run-placeholder.js";
+import { toAuthoringSegments } from "./run-placeholder.js";
 
 /**
  * How often the sample pass repaints text.
@@ -32,7 +28,6 @@ export class LiveRuntime {
   #source: SampleSource;
   #globals: FabricGlobals | undefined;
   #themeLanguage: string | undefined;
-  #runDisplay: RunDisplayMode = DEFAULT_RUN_DISPLAY_MODE;
   /** Set by every input a repaint resolves against; cleared by the repaint. */
   #authoredDue = true;
   #lastSampleMs: number | undefined;
@@ -119,16 +114,6 @@ export class LiveRuntime {
     this.refresh();
   }
 
-  /** How value runs are shown while authoring; a display never sees this. */
-  setRunDisplay(mode: RunDisplayMode): void {
-    this.#runDisplay = mode;
-    this.refresh();
-  }
-
-  get runDisplay(): RunDisplayMode {
-    return this.#runDisplay;
-  }
-
   /**
    * Repaint every text object now, because something changed.
    *
@@ -179,16 +164,16 @@ export class LiveRuntime {
     // unbound object's text, so switching back has to restore it even though
     // `refreshBoundText` only handles objects a sample resolves. The object
     // being edited inline is the one exception, and both passes make it.
+    //
+    // A token is the *editing* view, never a canvas mode: `showAuthoringView`
+    // paints it on the object about to be typed into, and this pass is what
+    // puts the reading back when that edit ends.
     applyAuthoredText(this.#canvas, this.#globals, {
       bindings: this.#bindings,
-      ...(this.#runDisplay === "tokens"
-        ? { transform: toAuthoringSegments }
-        : {}),
     });
   }
 
   #paintSample(): void {
-    if (this.#runDisplay === "tokens") return;
     refreshBoundText(
       this.#canvas,
       this.#bindings,

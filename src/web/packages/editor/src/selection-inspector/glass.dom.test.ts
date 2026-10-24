@@ -27,7 +27,6 @@ import {
   Triangle,
 } from "fabric/es";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { uiCopy } from "../ui-copy.js";
 import { supportsGlassControl, writeGlassField } from "./glass.js";
 import { idleCrop } from "./idle-crop.test-stage.js";
 import { createSelectionInspector } from "./index.js";
@@ -193,18 +192,6 @@ function invalidLine(host: HTMLElement): Element | null {
   return host.querySelector("[id$='-invalid']");
 }
 
-/**
- * The words the panel prints for a subject it offers no glass section — the
- * element the column renders under the subject's own name, or the empty string
- * where the section was offered (`vg-465`).
- */
-function refusalNote(host: HTMLElement): string {
-  return (
-    host.querySelector<HTMLElement>("[data-yunari-glass-refusal]")
-      ?.textContent ?? ""
-  );
-}
-
 /** A live object of every kind the editor can have selected. */
 const LIVE_KIND: Readonly<Record<string, () => unknown>> = {
   Rect: () => panel(),
@@ -278,12 +265,6 @@ const UNFROSTABLE: readonly string[] = [
   "Textbox",
   "YunariChart",
 ];
-
-/** What the author calls the kind, where that is not the class name. */
-const SHOWN_AS: Readonly<Record<string, string>> = {
-  YunariChart: "chart",
-  Textbox: "Text",
-};
 
 describe("the glass control in the selection inspector", () => {
   it("offers frosted glass with a blur radius, both named", async () => {
@@ -456,18 +437,16 @@ describe("the glass control in the selection inspector", () => {
 
   it("offers no glass section on a subject that cannot carry it, and takes nothing else with it", () => {
     // `vg-465`: the section is **withheld** from a kind the treatment cannot
-    // reach, which reverses `vg-006`. What that ruling was against — a silence
-    // an author has to infer a rule from — is answered by the reason beside the
-    // subject, not by a control that looks operable and is not.
+    // reach, which reverses `vg-006` — and no reason is printed for it either:
+    // the subject's inability is a fact about its kind, not a question the
+    // column has to answer. The fields the editor does serve stay untouched.
     const text = new Textbox("Hi", { left: 0, top: 0, width: 40 });
     const { host } = setup(text);
 
     expect(glassControl(host)).toBeNull();
-    // The refusal replaces the control and nothing else: the fields the editor
-    // does serve for this subject are untouched.
-    expect(refusalNote(host)).toContain("Text");
+    expect(host.querySelector("[data-yunari-glass-refusal]")).toBeNull();
     expect(host.querySelector("[data-yunari-opacity]")).not.toBeNull();
-    expect(host.querySelector("[data-yunari-name]")).not.toBeNull();
+    expect(host.querySelector("[data-yunari-subject-name]")).not.toBeNull();
   });
 
   it.each(FROSTABLE)("offers the control enabled on a %s", (kind) => {
@@ -481,12 +460,12 @@ describe("the glass control in the selection inspector", () => {
     expect(control?.getAttribute("aria-disabled"), kind).toBeNull();
     expect(control?.hasAttribute("disabled"), kind).toBe(false);
     expect(control?.getAttribute("aria-checked"), kind).toBe("false");
-    // A kind that can carry the treatment is never told it cannot.
-    expect(refusalNote(host), kind).toBe("");
+    // A kind that can carry the treatment is never refused it.
+    expect(host.querySelector("[data-yunari-glass-refusal]"), kind).toBeNull();
   });
 
   it.each(UNFROSTABLE_KINDS)(
-    "withholds the control from a %s and says why under the subject",
+    "withholds the control from a %s, and offers no explanation",
     (kind) => {
       const make = LIVE_KIND[kind];
       expect(typeof make, `${kind} has no live object`).toBe("function");
@@ -494,18 +473,12 @@ describe("the glass control in the selection inspector", () => {
       const { host } = setup(make());
 
       expect(glassControl(host), kind).toBeNull();
-
-      // The reason is **words**, under the name of the thing it is about, and
-      // it is this kind's own sentence rather than the catch-all — "glass
-      // applies to panels" tells an author nothing they can act on.
-      const reason = refusalNote(host);
-      expect(reason, kind).not.toBe("");
-      expect(reason, kind).toBe(uiCopy.inspectorFields.glassRefused(kind));
-      expect(reason, kind).not.toBe(
-        uiCopy.inspectorFields.glassRefused("__not a shape__"),
-      );
-      const shownAs = SHOWN_AS[kind];
-      if (shownAs !== undefined) expect(reason, kind).toContain(shownAs);
+      // The absence itself is the answer; a sentence for every unsupported
+      // kind was noise beside the subject, so nothing is printed for it.
+      expect(
+        host.querySelector("[data-yunari-glass-refusal]"),
+        kind,
+      ).toBeNull();
     },
   );
 
@@ -568,9 +541,7 @@ describe("the glass control in the selection inspector", () => {
     // only thing left in it, and a section whose whole body is one refusal is
     // not a question a group is asked (`vg-465`).
     expect(absence.querySelector('[data-yunari-section="paint"]')).toBeNull();
-    expect(refusalNote(absence)).toBe(
-      uiCopy.inspectorFields.glassRefused("Group"),
-    );
+    expect(absence.querySelector("[data-yunari-glass-refusal]")).toBeNull();
   });
 
   it("withholds glass from a locked object, which the editor refuses to write", () => {
@@ -683,11 +654,8 @@ describe("the glass control in the selection inspector", () => {
     // `Group` alone, and named: it is the one kind the owner admits that this
     // renderer cannot composite. Listing the disagreement rather than excluding
     // it is what keeps it from being the first kind quietly left out of the
-    // next widening — and its reason has to say what to do instead.
+    // next widening.
     expect(disagrees).toEqual(["Group"]);
-    expect(uiCopy.inspectorFields.glassRefused("Group")).toMatch(
-      /panel inside/,
-    );
 
     // And the two hand-kept lists below are the independent witness: the cases
     // are driven from the predicate's own answers, so these are what fail if it
@@ -709,14 +677,7 @@ describe("the glass control in the selection inspector", () => {
       );
   });
 
-  it("answers every kind the schema allows, authorable or explained", () => {
-    /**
-     * The gap the controller ruled on: a kind the published schema lets carry
-     * `yunariGlass` but the inspector gives no control for — and, since
-     * `vg-465`, the second half of it: a kind the panel answers with silence.
-     * Every kind either offers the control or says why it does not, so a kind
-     * added to the vocabulary cannot reopen the gap silently.
-     */
+  it("offers the control exactly for the kinds the renderer can frost", () => {
     for (const type of PUBLISHED_GLASS_TYPES) {
       const make = LIVE_KIND[type];
       // Named first: a kind added to the vocabulary with no live object here
@@ -727,14 +688,16 @@ describe("the glass control in the selection inspector", () => {
       ).toBe("function");
       if (make === undefined) continue;
 
+      const object = make() as never;
       const { host } = setup(make());
-      const answered =
-        glassControl(host) !== null || refusalNote(host).length > 0;
-
+      expect(glassControl(host) !== null, type).toBe(
+        supportsGlassControl(object),
+      );
+      // A withheld control is the whole answer: no sentence is printed for it.
       expect(
-        answered,
-        `${type} is offered neither a control nor a reason`,
-      ).toBe(true);
+        host.querySelector("[data-yunari-glass-refusal]"),
+        type,
+      ).toBeNull();
     }
   });
 });

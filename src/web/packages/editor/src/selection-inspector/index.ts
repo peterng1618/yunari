@@ -27,7 +27,7 @@ import type { TypePresetFontActions } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
 import { backgroundColumn, writeBackgroundField } from "./background-column.js";
 import { createSelectionColumnRoot } from "./column.js";
-import { glassRefusal, writeGlassField } from "./glass.js";
+import { writeGlassField } from "./glass.js";
 import { createInspectorRoot } from "./inspector.js";
 import { writePanelField, writeShapeGeometryField } from "./panel.js";
 import {
@@ -847,7 +847,7 @@ export function createSelectionInspector(
    * Publishes the background's column. Its sections are `backgroundColumn`'s
    * values, exactly the shape `perKindColumn` returns, so the same section root
    * renders them and the background is not a lesser surface. There is no lead:
-   * the layer has no arrange actions and no glass refusal to carry.
+   * the layer has no arrange actions to carry.
    */
   const renderBackground = (): void => {
     if (!describingBackground) {
@@ -859,6 +859,8 @@ export function createSelectionInspector(
       targetRevision: backgroundRevision,
       subject: {
         name: uiCopy.panels.layerKinds.background,
+        // The background is not a scene object, so it has nothing to rename.
+        authoredName: "",
         kind: "background",
         key: undefined,
       },
@@ -871,7 +873,7 @@ export function createSelectionInspector(
     };
 
     column.publish(view, edits);
-    lead.publish({ glassRefusal: undefined, arrange: [] }, runArrange);
+    lead.publish({ arrange: [] }, runArrange);
     sectionColumn.publish(
       view,
       edits,
@@ -921,10 +923,6 @@ export function createSelectionInspector(
     column.publish(view, edits);
     lead.publish(
       {
-        // A refusal is about the object the panel describes, so it follows
-        // `target()` — including the crop session's own subject — rather than
-        // the live selection the arrange row reads.
-        glassRefusal: object === undefined ? undefined : glassRefusal(object),
         arrange: object === undefined ? [] : arrangeRow(),
       },
       runArrange,
