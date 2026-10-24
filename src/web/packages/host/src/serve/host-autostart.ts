@@ -79,6 +79,13 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** A folder from the environment or a test seam. Windows treats an empty value
+ *  as unset and the XDG spec says the same of `XDG_CONFIG_HOME`; keeping `""`
+ *  would make the entry path relative to whatever directory the host started in. */
+function configuredFolder(value: string | undefined): string | undefined {
+  return value === undefined || value.trim().length === 0 ? undefined : value;
+}
+
 /**
  * The host this run is, ready to start again at sign-in: this interpreter, the
  * shim it was started through, and the flags this run was given, so the host
@@ -101,7 +108,13 @@ export function hostEntry(
 
 /** A token as Windows' own parser would read it back. */
 function windowsToken(part: string): string {
-  return part.length === 0 || /[\s]/.test(part) ? `"${part}"` : part;
+  if (part.length === 0) return '""';
+  if (!/\s/.test(part)) return part;
+
+  // CommandLineToArgvW reads the run of backslashes before a closing quote as
+  // escaping that quote; undoubled, a trailing `\` would swallow the flags the
+  // entry appends to the command.
+  return `"${part.replace(/(\\+)$/, "$1$1")}"`;
 }
 
 /**
@@ -169,10 +182,14 @@ export function createHostAutostart(
   options: HostAutostartOptions = {},
 ): HostAutostart {
   const platform = options.platform ?? process.platform;
-  const home = options.home ?? os.homedir();
-  const appData = options.appData ?? process.env["APPDATA"];
-  const configHome = options.configHome ?? process.env["XDG_CONFIG_HOME"];
-  const systemRoot = options.systemRoot ?? process.env["SystemRoot"];
+  const home = configuredFolder(options.home ?? os.homedir());
+  const appData = configuredFolder(options.appData ?? process.env["APPDATA"]);
+  const configHome = configuredFolder(
+    options.configHome ?? process.env["XDG_CONFIG_HOME"],
+  );
+  const systemRoot = configuredFolder(
+    options.systemRoot ?? process.env["SystemRoot"],
+  );
   const exists = options.exists ?? existsSync;
   const execFileImpl = options.execFileImpl ?? defaultExecFile;
 
@@ -263,7 +280,10 @@ export function createHostAutostart(
         }
 
         await mkdir(path.dirname(windowsFile), { recursive: true });
-        await writeFile(windowsFile, body, "utf8");
+        // WSH reads a BOM-less script as ANSI, so a non-ASCII path would be
+        // mojibake and the entry would silently start nothing. UTF-16LE with a
+        // BOM is the encoding it reads back correctly.
+        await writeFile(windowsFile, `﻿${body}`, "utf16le");
 
         return { ok: true, message: STARTED, enabled: true };
       } catch (error) {

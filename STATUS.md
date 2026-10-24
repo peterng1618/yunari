@@ -21,9 +21,9 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 ## Last completed change
 
 - **Sign-in entry:** `host/src/serve/host-autostart.ts` owns a hidden `Yunari.vbs` on Windows and an XDG autostart entry on Linux, and removes the legacy `YunariHost` task first.
-- **`hostEntry`** starts the same host with `--tray -n`; the server's `registerAutostart` now calls `autostart.enable(entry)`.
-- **Validation:** a command with a quote or line break is refused, not written broken; an undefined APPDATA/HOME reads as "no entry".
-- **Tests:** 8 new in `packages/host/src/serve/host-autostart.test.ts`; 23 pass across both serve suites, `@yunari/host` typecheck exit 0.
+- **Hidden and readable:** the VBS is UTF-16LE with a BOM, so a non-ASCII path is not mojibake; an empty `APPDATA`/`XDG_CONFIG_HOME` counts as unset, never a relative path.
+- **`hostEntry`** starts the same host with `--tray -n`; a trailing backslash is doubled so the appended flags survive, and the server's `registerAutostart` calls `autostart.enable(entry)`.
+- **Tests:** 14 in `packages/host/src/serve/host-autostart.test.ts`; 29 pass across both serve suites, `@yunari/host` typecheck, Biome and `status:check` exit 0.
 
 ## Next
 
