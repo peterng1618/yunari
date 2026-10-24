@@ -85,7 +85,7 @@ describe("startJsonLineHelper", () => {
     expect(String(onExit.mock.calls[0]?.[0])).toMatch(
       /PowerShell was not found/,
     );
-    expect(exitKind(onExit)).toBe("failed");
+    expect(exitKind(onExit)).toBe("unavailable");
   });
 
   it("spawns the explicit executable with an encoded UTF-16LE script", () => {

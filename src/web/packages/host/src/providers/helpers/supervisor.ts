@@ -48,8 +48,9 @@ export type SpawnProcess = (
 /** Ends the process and everything it started; `.kill()` leaves children. */
 export type KillTree = (child: HelperChild) => void;
 
-/** Why a helper ended: a deliberate stop is not a failure to reconnect. */
-export type HelperExitKind = "failed" | "timed out" | "stopped";
+/** Why a helper ended: a deliberate stop is not a failure to reconnect, and
+ *  an absent program is a state rather than a crash. */
+export type HelperExitKind = "failed" | "timed out" | "stopped" | "unavailable";
 
 export interface HelperOptions {
   readonly id: string;
@@ -194,7 +195,7 @@ export function startJsonLineHelper(options: HelperOptions): HelperHandle {
     stopped = true;
     options.onExit(
       `PowerShell was not found, so the ${options.id} helper cannot run.`,
-      "failed",
+      "unavailable",
     );
     return { pid: undefined, stop: () => undefined };
   }

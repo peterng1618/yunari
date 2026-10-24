@@ -46,10 +46,17 @@ describe("LOCATION_SCRIPT", () => {
       "[Windows.Devices.Geolocation.Geolocator]::RequestAccessAsync()",
     );
     expect(LOCATION_SCRIPT).toContain(
-      "[System.WindowsRuntimeSystemExtensions]::AsTask(",
-    );
-    expect(LOCATION_SCRIPT).toContain(
       "Add-Type -AssemblyName System.Runtime.WindowsRuntime",
+    );
+    // Both WinRT operations go through the helper; one correct call must not
+    // hide the other regressing to an instance `.GetAwaiter()`.
+    expect(LOCATION_SCRIPT.match(/AsTask\(/g) ?? []).toHaveLength(2);
+    expect(LOCATION_SCRIPT).toContain(
+      "$positionOperation = $locator.GetGeopositionAsync()",
+    );
+    expect(LOCATION_SCRIPT).toContain("AsTask($positionOperation)");
+    expect(LOCATION_SCRIPT).not.toContain(
+      ".GetGeopositionAsync().GetAwaiter()",
     );
     // An instance has no RequestAccessAsync; the wrong form must not return.
     expect(LOCATION_SCRIPT).not.toContain("$locator.RequestAccessAsync");
@@ -246,6 +253,27 @@ describe("readLocation", () => {
     expect(children).toHaveLength(0);
     expect(onError).toHaveBeenCalledWith(LOCATION_UNAVAILABLE_REASON);
     expect(LOCATION_UNAVAILABLE_REASON).toMatch(/PowerShell/);
+  });
+
+  it("does not report a location failure when the caller stops it early", () => {
+    const { spawnProcess } = fakeSpawner();
+    const onPosition = vi.fn();
+    const onError = vi.fn();
+    const killTree = vi.fn();
+
+    const handle = readLocation({
+      spawnProcess,
+      killTree,
+      onPosition,
+      onError,
+      pathExists: () => true,
+    });
+
+    handle.stop();
+
+    expect(onPosition).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    expect(killTree).toHaveBeenCalled();
   });
 
   it("waits past a malformed line for one it can read", () => {

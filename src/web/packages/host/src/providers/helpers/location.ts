@@ -175,10 +175,12 @@ export function readLocation(options: LocationOptions): HelperHandle {
         );
       }
     },
-    onExit: (reason, kind) => {
+    onExit: (_reason, kind) => {
+      // A caller that stops the helper early is not a location failure.
+      if (kind === "stopped") return;
       if (kind === "timed out") {
         fail(LOCATION_TIMEOUT_REASON);
-      } else if (reason.startsWith("PowerShell was not found")) {
+      } else if (kind === "unavailable") {
         fail(LOCATION_UNAVAILABLE_REASON);
       } else {
         fail(LOCATION_FAILED_REASON);
