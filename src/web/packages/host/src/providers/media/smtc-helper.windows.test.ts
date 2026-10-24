@@ -153,35 +153,108 @@ function runPowerShell(script: string): Promise<RunResult> {
   });
 }
 
+interface WindowRecord {
+  readonly kind?: unknown;
+  readonly hasArtwork?: unknown;
+  readonly app?: unknown;
+  readonly title?: unknown;
+}
+
 type WindowVerdict = "no-session" | "error" | "session";
+type ArtworkExpectation =
+  | "no-session"
+  | "session-closed"
+  | "no-thumbnail"
+  | "artwork-expected";
+
+function recordsOf(lines: readonly string[]): WindowRecord[] {
+  return lines.map((line) => JSON.parse(line) as WindowRecord);
+}
 
 /**
  * The window's outcome, decided from its first line. A `none` from a later
  * poll means the session disappeared; it is not a session-less machine, and
  * must not turn the artwork assertion into a vacuous pass.
  */
-function windowVerdict(lines: readonly string[]): WindowVerdict {
-  const kinds = lines.map(
-    (line) => (JSON.parse(line) as { kind?: unknown }).kind,
-  );
+function windowVerdict(records: readonly WindowRecord[]): WindowVerdict {
+  const kinds = records.map((record) => record.kind);
   if (kinds[0] === "none") return "no-session";
   if (kinds.includes("error")) return "error";
   return "session";
 }
 
-describe("artwork window classification", () => {
-  const line = (kind: string): string => JSON.stringify({ kind });
+/**
+ * Artwork is required only when a session stayed present and reported a
+ * thumbnail. A session that closed mid-window, or one with no thumbnail,
+ * leaves the artwork path unverified rather than failing.
+ */
+function artworkExpectation(
+  records: readonly WindowRecord[],
+): ArtworkExpectation {
+  const kinds = records.map((record) => record.kind);
+  if (kinds[0] === "none") return "no-session";
 
-  it("treats a session that disappears mid-window as a session window", () => {
-    expect(windowVerdict([line("session"), line("none")])).toBe("session");
+  const sessionAcrossWindow =
+    kinds.every((kind) => kind === "session" || kind === "artwork") ||
+    kinds.at(-1) === "session";
+  if (!sessionAcrossWindow) return "session-closed";
+
+  const thumbnailSeen = records.some(
+    (record) => record.kind === "session" && record.hasArtwork === true,
+  );
+  if (!thumbnailSeen) return "no-thumbnail";
+
+  return "artwork-expected";
+}
+
+describe("artwork window classification", () => {
+  const record = (fields: WindowRecord): string => JSON.stringify(fields);
+
+  it("treats a session that disappears mid-window as unverifiable", () => {
+    const records = recordsOf([
+      record({ kind: "session", hasArtwork: true }),
+      record({ kind: "none" }),
+    ]);
+    expect(windowVerdict(records)).toBe("session");
+    expect(artworkExpectation(records)).toBe("session-closed");
   });
 
   it("treats a first-line none as a session-less machine", () => {
-    expect(windowVerdict([line("none"), line("none")])).toBe("no-session");
+    const records = recordsOf([
+      record({ kind: "none" }),
+      record({ kind: "none" }),
+    ]);
+    expect(artworkExpectation(records)).toBe("no-session");
   });
 
   it("does not hide an error line behind a later none", () => {
-    expect(windowVerdict([line("session"), line("error")])).toBe("error");
+    expect(
+      windowVerdict(
+        recordsOf([record({ kind: "session" }), record({ kind: "error" })]),
+      ),
+    ).toBe("error");
+  });
+
+  it("does not require artwork from a session with no thumbnail", () => {
+    expect(
+      artworkExpectation(
+        recordsOf([
+          record({ kind: "session", hasArtwork: false }),
+          record({ kind: "session", hasArtwork: false }),
+        ]),
+      ),
+    ).toBe("no-thumbnail");
+  });
+
+  it("requires artwork from a session that reported a thumbnail", () => {
+    expect(
+      artworkExpectation(
+        recordsOf([
+          record({ kind: "session", hasArtwork: true }),
+          record({ kind: "session", hasArtwork: true }),
+        ]),
+      ),
+    ).toBe("artwork-expected");
   });
 });
 
@@ -214,37 +287,51 @@ describe.skipIf(!available)("SMTC helper on Windows", () => {
     expect(failure, "the helper must answer within its window").toBeUndefined();
     expect(lines.length).toBeGreaterThan(0);
 
-    const kinds = lines.map(
-      (line) => (JSON.parse(line) as { kind?: unknown }).kind,
-    );
-    const verdict = windowVerdict(lines);
+    const records = recordsOf(lines);
+    const verdict = windowVerdict(records);
 
     if (verdict === "no-session") {
-      // Decided from the first line: no session exists. Report that plainly
-      // and mark the run vacuous instead of claiming an artwork proof.
       context.skip("no media session on this machine; artwork unverified");
       return;
     }
 
-    // A session was present, so the artwork branch must have executed. Without
-    // a line the test would otherwise pass while proving nothing.
-    expect(verdict).not.toBe("error");
-    for (const kind of kinds) {
-      expect(["session", "artwork", "none"]).toContain(kind);
+    expect(verdict, "the helper reported an error line").not.toBe("error");
+    for (const record of records) {
+      expect(["session", "artwork", "none"]).toContain(record.kind);
+    }
+
+    const expectation = artworkExpectation(records);
+    if (expectation !== "artwork-expected") {
+      // Not fine, but not this test's defect: the machine cannot show whether
+      // a track that has artwork produces its line.
+      context.skip(
+        expectation === "session-closed"
+          ? "the session closed before the window ended; artwork unverified"
+          : "the session reported no thumbnail; artwork unverified",
+      );
+      return;
     }
 
     const artworkLines = lines.filter(
-      (line) => (JSON.parse(line) as { kind?: unknown }).kind === "artwork",
+      (line) => (JSON.parse(line) as WindowRecord).kind === "artwork",
     );
+    const firstSession = records.find((record) => record.kind === "session");
+    const app =
+      typeof firstSession?.app === "string" ? firstSession.app : "unknown app";
+    const title =
+      typeof firstSession?.title === "string"
+        ? firstSession.title
+        : "unknown title";
 
     expect(
       artworkLines.length,
-      "a media session was present but no artwork line appeared in the window; " +
-        "silence from the artwork half is a failure, not a pass",
+      `${app} / ${title} reported a thumbnail but emitted no artwork line in ` +
+        `${ARTWORK_WINDOW_MS} ms; a track without artwork emits nothing, so a ` +
+        "red here is a defect only for a track that has one",
     ).toBeGreaterThan(0);
 
     for (const line of lines) {
-      const record = JSON.parse(line) as { kind?: unknown };
+      const record = JSON.parse(line) as WindowRecord;
 
       if (record.kind === "session") {
         expect(parseSmtcLine(line)).toBeDefined();
@@ -264,32 +351,50 @@ describe.skipIf(!available)("SMTC helper on Windows", () => {
     }
   }, 40_000);
 
-  it("reads a definitive miss once and retries only a thrown load", async () => {
-    // The real artwork functions, with the WinRT read stood in for: a null is
-    // the over-cap/no-thumbnail/trailer answer, a throw is a load error.
+  it("emits a stub line, reads over-cap once, and retries misses and throws", async () => {
+    // The real artwork functions with the WinRT read stood in for. The first
+    // block proves the emission itself reaches stdout, so deleting it reds
+    // this test without needing a live thumbnail.
     const harness = [
       SMTC_ARTWORK_FUNCTIONS,
       "$WantArtwork = $true",
       "$lastArtwork = @{}",
       "$script:reads = 0",
-      "function Get-ArtworkLine($session) { $script:reads += 1; return $null }",
+      "function Get-ArtworkResult($session) { $script:reads += 1; return @{ status = 'artwork'; line = [ordered]@{ kind = 'artwork'; sessionId = 'x'; sha256 = 'a' * 64; ext = 'png'; base64 = 'AQ==' } } }",
       "Try-EmitArtwork $null @{ sessionId = 'x'; title = 't'; artist = 'a'; album = 'b' }",
-      "Try-EmitArtwork $null @{ sessionId = 'x'; title = 't'; artist = 'a'; album = 'b' }",
-      '[Console]::Out.WriteLine("definite=$script:reads")',
+      '[Console]::Out.WriteLine("emitted=$script:reads")',
+      "$script:reads = 0",
+      "function Get-ArtworkResult($session) { $script:reads += 1; return @{ status = 'over' } }",
+      "Try-EmitArtwork $null @{ sessionId = 'y'; title = 't'; artist = 'a'; album = 'b' }",
+      "Try-EmitArtwork $null @{ sessionId = 'y'; title = 't'; artist = 'a'; album = 'b' }",
+      '[Console]::Out.WriteLine("over=$script:reads")',
+      "$script:reads = 0",
+      "$script:beat = 0",
+      "function Get-ArtworkResult($session) { $script:reads += 1; $script:beat += 1; if ($script:beat -lt 3) { return @{ status = 'retry' } }; return @{ status = 'artwork'; line = [ordered]@{ kind = 'artwork'; sessionId = 'z'; sha256 = 'b' * 64; ext = 'png'; base64 = 'AQ==' } } }",
+      "Try-EmitArtwork $null @{ sessionId = 'z'; title = 't'; artist = 'a'; album = 'b' }",
+      "Try-EmitArtwork $null @{ sessionId = 'z'; title = 't'; artist = 'a'; album = 'b' }",
+      "Try-EmitArtwork $null @{ sessionId = 'z'; title = 't'; artist = 'a'; album = 'b' }",
+      '[Console]::Out.WriteLine("retried=$script:reads")',
       "$script:reads = 0",
       "$script:fail = $true",
-      "function Get-ArtworkLine($session) { $script:reads += 1; if ($script:fail) { $script:fail = $false; throw 'load failed' }; return $null }",
-      "Try-EmitArtwork $null @{ sessionId = 'y'; title = 't'; artist = 'a'; album = 'b' }",
-      "Try-EmitArtwork $null @{ sessionId = 'y'; title = 't'; artist = 'a'; album = 'b' }",
+      "function Get-ArtworkResult($session) { $script:reads += 1; if ($script:fail) { $script:fail = $false; throw 'load failed' }; return @{ status = 'over' } }",
+      "Try-EmitArtwork $null @{ sessionId = 'w'; title = 't'; artist = 'a'; album = 'b' }",
+      "Try-EmitArtwork $null @{ sessionId = 'w'; title = 't'; artist = 'a'; album = 'b' }",
       '[Console]::Out.WriteLine("thrown=$script:reads")',
     ].join("\n");
 
     const { stdout, failure } = await runPowerShell(harness);
 
     expect(failure).toBeUndefined();
-    // A definitive miss is recorded: two polls, one read.
-    expect(stdout).toContain("definite=1");
-    // A thrown read is not recorded: it is attempted again on the next poll.
+    // A complete result reaches stdout as its own JSON line.
+    expect(stdout).toContain('"kind":"artwork"');
+    expect(stdout).toContain('"base64":"AQ=="');
+    expect(stdout).toContain("emitted=1");
+    // Over-cap is definitive: two polls, one read.
+    expect(stdout).toContain("over=1");
+    // A retryable miss on polls 1 and 2 still emits on poll 3.
+    expect(stdout).toContain("retried=3");
+    // A thrown load is not recorded: it is attempted again on the next poll.
     expect(stdout).toContain("thrown=2");
   }, 30_000);
 });

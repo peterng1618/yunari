@@ -137,18 +137,30 @@ describe("SMTC_SCRIPT", () => {
     expect(artwork).toContain("Test-CompleteImage $buffer $ext");
   });
 
-  it("records a track after the emit attempt, including a definitive miss", () => {
+  it("caches only over-cap and an exhausted retry count as a negative", () => {
     const artwork = smtcScript({ artwork: true });
+
+    // Absent thumbnail and truncated image are retryable, not final.
+    expect(artwork).toContain(
+      "if ($null -eq $thumbnail) { return @{ status = 'retry' } }",
+    );
+    expect(artwork).toContain(
+      "if (-not (Test-CompleteImage $buffer $ext)) { return @{ status = 'retry' } }",
+    );
+    // Over-cap is the one definitive answer.
+    expect(artwork).toContain(
+      `if ($chunks.Count -gt ${SMTC_ARTWORK_RAW_BYTES}) { return @{ status = 'over' } }`,
+    );
+    // Bounded retries: 5 attempts, about 5 s at one poll a second.
+    expect(artwork).toContain("$ArtworkRetryLimit = 5");
+    expect(artwork).toContain("$attempt['count'] -ge $ArtworkRetryLimit");
+
     const emit = artwork.indexOf(
-      "[Console]::Out.WriteLine(($artwork | ConvertTo-Json -Compress))",
+      "[Console]::Out.WriteLine(($result['line'] | ConvertTo-Json -Compress))",
     );
     const record = artwork.indexOf("$lastArtwork[$sessionId] = $key");
-
     expect(emit).toBeGreaterThan(-1);
     expect(record).toBeGreaterThan(emit);
-    // A null read is a recorded miss, not an early return that would re-read
-    // the thumbnail on every poll.
-    expect(artwork).not.toContain("if ($null -eq $artwork) { return }");
   });
 
   it("reads each session inside its own try, so one failure cannot hide others", () => {
@@ -173,7 +185,7 @@ describe("SMTC_SCRIPT", () => {
     );
 
     expect(smtcScript({ artwork: true })).toContain(
-      `if ($chunks.Count -gt ${SMTC_ARTWORK_RAW_BYTES}) { return $null }`,
+      `if ($chunks.Count -gt ${SMTC_ARTWORK_RAW_BYTES}) { return @{ status = 'over' } }`,
     );
   });
 

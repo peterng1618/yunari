@@ -110,6 +110,8 @@ function Get-SessionLine($session) {
     state = $state
     positionS = [math]::Round($position, 3)
     durationS = [math]::Round($timeline.EndTime.TotalSeconds, 3)
+    # The artwork half reads this to tell "no thumbnail" from "broken emit".
+    hasArtwork = ($null -ne $properties.Thumbnail)
   }
 }
 `;
@@ -118,6 +120,12 @@ const ARTWORK = `
 $null = [Windows.Storage.Streams.DataReader,Windows.Storage.Streams,ContentType=WindowsRuntime]
 $null = [Windows.Storage.Streams.IInputStream,Windows.Storage.Streams,ContentType=WindowsRuntime]
 $null = [Windows.Storage.Streams.IRandomAccessStreamWithContentType,Windows.Storage.Streams,ContentType=WindowsRuntime]
+
+# A retryable miss (no thumbnail yet, truncated image) is re-read for up to 5
+# attempts, about 5 s at one poll a second, before its negative is cached.
+# Over-cap is definitive at once; a thrown load error is never cached.
+$ArtworkRetryLimit = 5
+$artworkAttempts = @{}
 
 # The stream arrives as a bare __ComObject, so PowerShell cannot read its Size,
 # ContentType or call AsTask on its load operation. Load in chunks and read the
@@ -151,15 +159,17 @@ function Test-CompleteImage($buffer, $ext) {
   return $false
 }
 
-function Get-ArtworkLine($session) {
+# The outcome of one artwork read: an emitted line, a definitive over-cap
+# answer, or a retryable miss. A thrown load error is the caller's to retry.
+function Get-ArtworkResult($session) {
   $properties = Wait-WinRt ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
   $thumbnail = $properties.Thumbnail
-  if ($null -eq $thumbnail) { return $null }
+  if ($null -eq $thumbnail) { return @{ status = 'retry' } }
   $stream = Wait-WinRt ($thumbnail.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
 
   # No public constructor to bind: select the IInputStream overload.
   $constructor = ${DATA_READER_CONSTRUCTOR}
-  if ($null -eq $constructor) { return $null }
+  if ($null -eq $constructor) { return @{ status = 'retry' } }
   $reader = $constructor.Invoke(@($stream))
   $chunks = [System.Collections.Generic.List[byte]]::new()
   try {
@@ -170,50 +180,64 @@ function Get-ArtworkLine($session) {
       $reader.ReadBytes($chunk)
       $chunks.AddRange($chunk)
       # Derived from the supervisor's line cap; see SMTC_ARTWORK_RAW_BYTES.
-      if ($chunks.Count -gt ${SMTC_ARTWORK_RAW_BYTES}) { return $null }
+      if ($chunks.Count -gt ${SMTC_ARTWORK_RAW_BYTES}) { return @{ status = 'over' } }
     }
   } finally {
     $reader.Dispose()
   }
 
   $buffer = $chunks.ToArray()
-  if ($buffer.Length -lt 12) { return $null }
+  if ($buffer.Length -lt 12) { return @{ status = 'retry' } }
   $ext = $null
   if ($buffer[0] -eq 0x89 -and $buffer[1] -eq 0x50 -and $buffer[2] -eq 0x4e -and $buffer[3] -eq 0x47) { $ext = 'png' }
   elseif ($buffer[0] -eq 0xff -and $buffer[1] -eq 0xd8 -and $buffer[2] -eq 0xff) { $ext = 'jpg' }
   elseif ([Text.Encoding]::ASCII.GetString($buffer, 0, 4) -eq 'RIFF' -and [Text.Encoding]::ASCII.GetString($buffer, 8, 4) -eq 'WEBP') { $ext = 'webp' }
-  if ($null -eq $ext) { return $null }
-  if (-not (Test-CompleteImage $buffer $ext)) { return $null }
+  if ($null -eq $ext) { return @{ status = 'retry' } }
+  if (-not (Test-CompleteImage $buffer $ext)) { return @{ status = 'retry' } }
 
   $hash = [System.Security.Cryptography.SHA256]::Create().ComputeHash($buffer)
   $hex = -join ($hash | ForEach-Object { $_.ToString('x2') })
-  [ordered]@{
+  @{ status = 'artwork'; line = [ordered]@{
     kind = 'artwork'
     sessionId = $session.SourceAppUserModelId
     sha256 = $hex
     ext = $ext
     base64 = [Convert]::ToBase64String($buffer)
-  }
+  } }
 }
 
-# One failed read is a gap for this track; a definite miss (no thumbnail, over
-# the cap, bad trailer) is recorded so it is not re-read every second. Only a
-# thrown load error retries, and never reaches the next session in the poll.
+# Only over-cap and the exhausted retry count cache a negative for the track;
+# a track that gains artwork later still gets it. One failure never reaches
+# the next session in the poll.
 function Try-EmitArtwork($session, $line) {
   $sessionId = $line['sessionId']
   $key = "$sessionId|$($line['title'])|$($line['artist'])|$($line['album'])"
   if ($lastArtwork.ContainsKey($sessionId) -and $lastArtwork[$sessionId] -eq $key) { return }
   try {
-    $artwork = Get-ArtworkLine $session
+    $result = Get-ArtworkResult $session
   } catch {
     return
   }
-  if ($null -ne $artwork) {
-    [Console]::Out.WriteLine(($artwork | ConvertTo-Json -Compress))
+  if ($result['status'] -eq 'artwork') {
+    [Console]::Out.WriteLine(($result['line'] | ConvertTo-Json -Compress))
+    $lastArtwork[$sessionId] = $key
+    $artworkAttempts.Remove($sessionId)
+    return
   }
-  # Recorded after the emit attempt either way: silence from a definitive miss
-  # must not become a WinRT read on every poll.
-  $lastArtwork[$sessionId] = $key
+  if ($result['status'] -eq 'over') {
+    $lastArtwork[$sessionId] = $key
+    $artworkAttempts.Remove($sessionId)
+    return
+  }
+  $attempt = @{ key = $key; count = 0 }
+  if ($artworkAttempts.ContainsKey($sessionId)) { $attempt = $artworkAttempts[$sessionId] }
+  if ($attempt['key'] -ne $key) { $attempt = @{ key = $key; count = 0 } }
+  $attempt['count'] = $attempt['count'] + 1
+  $artworkAttempts[$sessionId] = $attempt
+  if ($attempt['count'] -ge $ArtworkRetryLimit) {
+    $lastArtwork[$sessionId] = $key
+    $artworkAttempts.Remove($sessionId)
+  }
 }
 `;
 
