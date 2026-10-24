@@ -1,33 +1,37 @@
 # Yunari status
 
-Updated: 2026-10-24
-Branch: `main`
+Updated: 2026-10-25
+Branch: `peterng1618/Build-systray`
 
 ## Current objective
 
-The **sensor platform** ([`spec`](docs/superpowers/specs/2026-10-24-sensor-platform-design.md), [`archived plan`](docs/superpowers/plans/archive/2026-10-24-sensor-platform.md)) is delivered: seven phases from vocabulary/units/image binding through hardware, weather, media, custom sources, frame/game presence, and Steam store metadata. The text-elements and Wallpaper Engine plans are merged; no plan is in flight.
+The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-design.md), [`plan`](docs/superpowers/plans/2026-10-25-systray.md)) is in flight: run the host hidden at sign-in with a tray icon that opens the editor's existing surfaces, pairs a display, reports and starts installed external programs, and exits the host.
+
+- **Active plan:** `docs/superpowers/plans/2026-10-25-systray.md`
 
 ## Active work
 
-- **All seven sensor-platform phases are complete**; the final gate after the Phase 7 review fixes ran green.
-- **Phase 7 is proven end to end**: a real host and player, a fixture Steam store, the canonical name and cover painted, a cached reload with no request, and the cover fallback.
-- **Every sensor-platform review finding is closed**: two whole-phase reviews, their scoped re-reviews, and the per-task fix rounds all returned clear.
-- **Text elements are merged and unchanged by this merge**: `IText` and `Textbox` are separate classes, and the preset library holds palettes and gradients.
-- **Open register findings include** vg-723 (every foreground process reads as a game), vg-724 (non-Steam identity), vg-717 (player descriptor catalogue), vg-699, vg-701 and vg-708.
+- **Task 1 (menu model) is done**; Phase 1 continues with external-program detection and the autostart entry.
+- **Controller next:** the 5-second snapshot poll, action dispatch and 10-second notices are still to be built.
+- **Windows adapter** renders the model through a hidden PowerShell WinForms `NotifyIcon` fed by JSON lines on stdin.
+- **Linux adapter** stages the pinned `systray2@2.1.4` x86-64 binary; no new npm dependency and no runtime install.
+- **External programs:** LHM and RTSS rows exist only when installed or running; RTSS starts only on an explicit click.
+- **Deep links** reuse `?mode=`/`?publish=1` on the existing editor page, never a new route.
 
 ## Last completed change
 
-- **Register ids repaired after the merge:** the branch's vg-709–vg-716 findings collided with ids main already used, so they are now vg-718–vg-724.
-- **vg-725 closes as verified:** the Steam store lookup answers the row that said store metadata was unused; the branch's stale vg-405 and vg-439 copies left the live file.
-- **Citations follow the ids:** STATUS, ADR 0109, the spec and the archived plan now name vg-722/723/724/725.
-- **Merged into `main`** with the run-display mode left to main's superseding commit and the sensor catalogue, descriptor seam and image sensor field kept.
-- **Gate:** `npm run gate` exit 0 — web 382 test files / 5677 tests; store-worker 12 files / 72 tests; backlog-check 725 items valid.
+- **Menu model added:** `host/src/tray/menu.ts` builds the status, Auto start, editor, external-program and Exit rows from a `TraySnapshot`.
+- **External rows hide when absent** and share one `externalRow` label rule; separators appear only between non-empty groups.
+- **Tooltip** repeats the status title, capped at Windows' 63 characters.
+- **Tests:** 8 pass in `packages/host/src/tray/menu.test.ts`; hiding the rows makes the labelled cases fail.
 
 ## Next
 
-1. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
-2. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
-3. Choose the next objective from `docs/product/backlog.jsonl` (vg-723, vg-724 and vg-717 are the largest).
+1. Task 2: external-program presence and start, behind injected probes.
+2. Task 3: controller polling, action dispatch and notices.
+3. Task 4+: Windows and Linux adapters, autostart entry, editor deep links and `--tray` wiring.
+4. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
+5. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
 
 ## Blockers / unverified
 

@@ -1,7 +1,7 @@
 # System tray host — design
 
 - **Date:** 2026-10-25
-- **Status:** draft 2026-10-25.
+- **Status:** active 2026-10-25.
 - **Register:** no row. This is a requested feature, not a defect against
   shipped behaviour.
 - **Related:** [`docs/architecture/ownership.md`](../../architecture/ownership.md);
