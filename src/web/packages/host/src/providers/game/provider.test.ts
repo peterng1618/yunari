@@ -639,6 +639,97 @@ describe("GameProvider classification", () => {
     h.provider.stop();
   });
 
+  it("classifies a runtime marker through the injected readdir", async () => {
+    vi.useFakeTimers();
+    const listed: string[] = [];
+    const h = harness({
+      readdir: async (dir) => {
+        listed.push(dir);
+        return ["steam_api64.dll"];
+      },
+    });
+    await h.sample(["game.running"]);
+    h.emit(
+      h.children[0] as FakeChild,
+      foregroundLine(99, "C:\\Games\\Marker\\game.exe", "game"),
+    );
+
+    const samples = await h.sample(["game.running"]);
+
+    expect(samples.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: true,
+    });
+    expect(listed).toEqual(["C:\\Games\\Marker"]);
+    h.provider.stop();
+  });
+
+  it("does not advance the streak on an unparseable helper line", async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    await h.sample(["game.running"]);
+    const line = foregroundLine(99, "C:\\Games\\Unknown\\game.exe", "game", {
+      class: "UnityWndClass",
+      fullscreen: true,
+    });
+    h.emit(h.children[0] as FakeChild, line);
+    const first = await h.sample(["game.running"]);
+    expect(first.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: false,
+    });
+
+    h.emit(h.children[0] as FakeChild, "not a foreground line");
+    const malformed = await h.sample(["game.running"]);
+    expect(malformed.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: false,
+    });
+
+    h.emit(h.children[0] as FakeChild, line);
+    const second = await h.sample(["game.running"]);
+    expect(second.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: true,
+    });
+    h.provider.stop();
+  });
+
+  it("starts a new streak when the foreground pid changes", async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    await h.sample(["game.running"]);
+    const first = foregroundLine(99, "C:\\Games\\Unknown\\game.exe", "game", {
+      class: "UnityWndClass",
+      fullscreen: true,
+    });
+    h.emit(h.children[0] as FakeChild, first);
+    const started = await h.sample(["game.running"]);
+    expect(started.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: false,
+    });
+
+    const other = foregroundLine(100, "C:\\Games\\Other\\game.exe", "game", {
+      class: "UnityWndClass",
+      fullscreen: true,
+    });
+    h.emit(h.children[0] as FakeChild, other);
+    const changed = await h.sample(["game.running"]);
+    expect(changed.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: false,
+    });
+
+    h.emit(h.children[0] as FakeChild, other);
+    const settled = await h.sample(["game.running"]);
+    expect(settled.get("game.running")).toMatchObject({
+      status: "ok",
+      booleanValue: true,
+    });
+    h.provider.stop();
+  });
+
   it("builds the default catalogue from the provider's Steam seams", async () => {
     vi.useFakeTimers();
     // A synthetic root no real Steam install can match: only the provider's
