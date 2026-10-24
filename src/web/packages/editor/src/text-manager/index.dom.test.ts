@@ -36,7 +36,6 @@ function reading(id = "ram-value"): Textbox {
     originY: "top",
   });
   object.set(YUNARI_TEXT_PROPERTY, {
-    wrap: true,
     overflow: "ellipsis",
     align: "center",
     box: { width: 180, height: 72 },
@@ -185,7 +184,6 @@ describe("double-clicking a bound run", () => {
     object.exitEditing();
 
     expect(object.get(YUNARI_TEXT_PROPERTY)).toEqual({
-      wrap: true,
       overflow: "ellipsis",
       align: "center",
       box: { width: 180, height: 72 },
@@ -396,7 +394,6 @@ describe("what a text object an author inserts can do", () => {
     // read and a Height field that is right about a box that is wrong.
     const object = reading("cpu-card-title");
     object.set(YUNARI_TEXT_PROPERTY, {
-      wrap: true,
       overflow: "clip",
       align: "left",
       verticalAlign: "top",

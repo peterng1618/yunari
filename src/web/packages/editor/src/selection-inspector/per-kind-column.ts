@@ -11,6 +11,7 @@ import {
   FabricImage,
   type FabricObject,
   Group,
+  Textbox,
 } from "fabric/es";
 import type {
   ChartContentFieldsView,
@@ -362,6 +363,8 @@ function contentBody(
       locale: context.locale,
       nodeBindings: context.nodeBindings,
       sampleSource: context.sampleSource,
+      // The live class, not authored content: it is the width-mode owner.
+      wraps: target instanceof Textbox,
       swatchValue: (ref) => resolveToken(context.globals, ref),
     },
   );

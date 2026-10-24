@@ -401,6 +401,7 @@ async function runUnitDisplayOptions(root: HTMLElement): Promise<string[]> {
     locale: undefined,
     nodeBindings: () => bindings,
     sampleSource: () => ({ latest: () => undefined, history: () => [] }),
+    wraps: true,
     swatchValue: () => undefined,
   });
   if (runs !== undefined) {

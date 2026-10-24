@@ -30,6 +30,15 @@ it("holds no pictographs, so an icon cannot be stored as copy", () => {
   expect(pictographs(uiCopy)).toEqual([]);
 });
 
+/**
+ * The Wrap control is gone because the Fabric class is the width mode, so its
+ * word is gone with it: an orphaned key is how a removed control comes back
+ * through a later surface reading the table rather than the rule.
+ */
+it("no longer words a Wrap control", () => {
+  expect(uiCopy.inspectorFields).not.toHaveProperty("wrap");
+});
+
 /** Every string the table reaches, paired with the key that holds it. Letters
  * are labels (`X`, `W`) and stay; the Unicode symbol blocks are decoration. */
 function pictographs(value: unknown, path = "uiCopy"): string[] {

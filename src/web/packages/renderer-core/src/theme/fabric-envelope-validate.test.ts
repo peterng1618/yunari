@@ -775,6 +775,51 @@ describe("Fabric theme envelope validation", () => {
     });
   });
 
+  it('accepts a serialised display text, whose type is "Text"', () => {
+    // `FabricText` serialises as `"Text"`; the developer-facing class name never
+    // appears in a document. A legacy auto-width object has to validate as text
+    // so it reaches the editor's revival rather than being dropped as unknown.
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      bindings: {},
+      globals: {
+        palette: {
+          none: {
+            name: "None",
+            value: { kind: "solid", color: "transparent" },
+          },
+          text: { name: "Text", value: { kind: "solid", color: "#fff" } },
+        },
+        typePresets: {
+          body: { name: "Body", value: { family: "Inter", size: 16 } },
+        },
+      },
+      scene: {
+        version: "7.4.0",
+        objects: [
+          {
+            type: "Text",
+            id: "label",
+            fill: "#fff",
+            yunariPaint: { fill: "palette.text" },
+            yunariText: {
+              runs: [
+                {
+                  kind: "literal",
+                  text: "CPU",
+                  typePreset: "typePresets.body",
+                  style: { color: { ref: "palette.text" } },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result).toMatchObject({ ok: true });
+  });
+
   it("accepts typed presets as v2 globals", () => {
     expect(
       validateFabricThemeEnvelope({

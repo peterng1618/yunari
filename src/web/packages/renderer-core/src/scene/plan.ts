@@ -64,6 +64,11 @@ export interface PlanTextSegment {
 }
 
 export interface PlanTextLayout {
+  /**
+   * Derived from the element's Fabric class (`instanceof Textbox`) where the
+   * class is known; never read from authored content. `renderer-core` stays
+   * Fabric-free, so the scene builder owns the conversion.
+   */
   readonly wrap: boolean;
   readonly overflow: "clip" | "ellipsis" | "visible";
   readonly align: "left" | "center" | "right";

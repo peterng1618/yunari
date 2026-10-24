@@ -689,7 +689,6 @@ describe("the selection inspector", () => {
     // A shape has no text layout to edit, so it must not be offered one.
     for (const field of [
       "[data-yunari-text-align]",
-      "[data-yunari-text-wrap]",
       "[data-yunari-text-overflow]",
     ]) {
       expect(host.querySelector(field)).toBeNull();
@@ -1781,9 +1780,9 @@ describe("the column a kind gets", () => {
    *   is what proves the surface renders them, not only that jsdom's tree does.
    *
    * So the count here is deliberately the shared floor, not the ceiling — and
-   * the figures are exact so the parts sum to the whole. This table names **15**
+   * the figures are exact so the parts sum to the whole. This table names **14**
    * distinct hooks: two in `EVERY_OBJECT` (`geometry`'s five selectors are one
-   * name, plus `opacity`), six added by `shape`, six by `text`, one by `image`.
+   * name, plus `opacity`), six added by `shape`, five by `text`, one by `image`.
    * The name left this table when it moved out of the Content section and into
    * the heading, where it renders only while being renamed; `index.dom.test.ts`
    * drives that gesture directly. It named 19 while the read-only section stood,
@@ -1797,10 +1796,10 @@ describe("the column a kind gets", () => {
    * src/web/packages/editor/src/selection-inspector | sort -u | wc -l`) prints
    * 47 — one high: a docblock at `190dc1a4:selection-inspector/index.ts:230`
    * quotes the bare prefix `data-yunari-`, which the pattern counts as a name.
-   * So the remaining **31** are 27 carried by the per-domain tests and the e2e
-   * specs, plus the rename field the heading now owns and those **3** the
-   * product no longer renders at all. Reading the 15 as the inventory would
-   * understate the coverage by 31.
+   * So the remaining **32** are 27 carried by the per-domain tests and the e2e
+   * specs, plus the rename field the heading now owns and those **4** the
+   * product no longer renders at all. Reading the 14 as the inventory would
+   * understate the coverage by 32.
    */
   const EVERY_OBJECT: readonly string[] = [
     '[data-yunari-geometry="left"]',
@@ -1831,7 +1830,6 @@ describe("the column a kind gets", () => {
       "[data-yunari-runs]",
       "[data-yunari-text-align]",
       "[data-yunari-text-vertical-align]",
-      "[data-yunari-text-wrap]",
       "[data-yunari-text-overflow]",
       "[data-yunari-run-source]",
     ],

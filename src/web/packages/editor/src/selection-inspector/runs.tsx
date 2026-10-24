@@ -51,6 +51,12 @@ interface RunsProjection {
   readonly nodeBindings: ((nodeId: string) => readonly Binding[]) | undefined;
   readonly sampleSource: (() => SampleSource) | undefined;
   /**
+   * Whether the selected object is a `Textbox`, the class that owns width,
+   * overflow, vertical alignment and ellipsis. Passed in because this module
+   * sees the authored content, not the live Fabric class.
+   */
+  readonly wraps: boolean;
+  /**
    * What a palette reference resolves to, for a swatch. Passed in rather than
    * imported so this module does not reach back into `appearance.ts`, which
    * reads `textRunsOf` from here.
@@ -288,7 +294,6 @@ export function projectRuns(
         typeof content["verticalAlign"] === "string"
           ? content["verticalAlign"]
           : "top",
-      wrap: content["wrap"] === false ? "nowrap" : "wrap",
       overflow:
         typeof content["overflow"] === "string" ? content["overflow"] : "clip",
     },
@@ -326,11 +331,6 @@ const VERTICAL_OPTIONS = [
   { id: "top", name: uiCopy.inspectorFields.verticalTop },
   { id: "middle", name: uiCopy.inspectorFields.verticalMiddle },
   { id: "bottom", name: uiCopy.inspectorFields.verticalBottom },
-];
-
-const WRAP_OPTIONS = [
-  { id: "wrap", name: uiCopy.inspectorFields.on },
-  { id: "nowrap", name: uiCopy.inspectorFields.off },
 ];
 
 const OVERFLOW_OPTIONS = [
@@ -602,15 +602,6 @@ export function RunEditor(props: {
         options={VERTICAL_OPTIONS}
         onChange={(verticalAlign: string) =>
           edits.writeLayout({ verticalAlign })
-        }
-      />
-      <ControlSegmented
-        label={uiCopy.inspectorFields.wrap}
-        data={{ "data-yunari-text-wrap": "" }}
-        value={view.layout.wrap}
-        options={WRAP_OPTIONS}
-        onChange={(wrap: string) =>
-          edits.writeLayout({ wrap: wrap === "wrap" })
         }
       />
       <ControlSegmented

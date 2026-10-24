@@ -257,7 +257,6 @@ export interface RunsView {
   readonly layout: {
     readonly align: string;
     readonly verticalAlign: string;
-    readonly wrap: string;
     readonly overflow: string;
   };
   readonly presets: readonly RunOptionView[];
@@ -377,7 +376,6 @@ export interface RunEdits {
 interface TextLayoutPatch {
   readonly align?: string;
   readonly verticalAlign?: string;
-  readonly wrap?: boolean;
   readonly overflow?: string;
 }
 

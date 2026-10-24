@@ -864,8 +864,12 @@ describe("identity survives a round trip", () => {
     text.set("id", "readout");
     text.clipPath = new Rect({ width: 40, height: 30 });
     text.set(YUNARI_TEXT_PROPERTY, {
-      runs: [{ kind: "value", bindingId: "load" }],
-      wrap: false,
+      // A word break is what a `Textbox` wraps at; an unbreakable numeric run
+      // is the auto text's case, not this class's.
+      runs: [
+        { kind: "literal", text: "CPU " },
+        { kind: "value", bindingId: "load" },
+      ],
       overflow: "ellipsis",
       align: "right",
       verticalAlign: "bottom",
@@ -882,7 +886,7 @@ describe("identity survives a round trip", () => {
     );
 
     expect(text.text).toContain("…");
-    expect(text.text).not.toBe("123456789");
+    expect(text.text).not.toBe("CPU 123456789");
     expect((text.clipPath as Rect).width).toBe(40);
   });
 

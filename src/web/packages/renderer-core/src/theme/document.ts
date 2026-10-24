@@ -261,13 +261,17 @@ interface TextBox {
 export interface TextContent {
   readonly runs: readonly TextRun[];
   /**
-   * The fixed box. Absent means the text measures its own, which is what a
-   * document saved before fixed boxes existed keeps doing.
+   * The fixed box, meaningful only on a Text box (`Textbox`). An auto text
+   * (`IText`) ignores it; the class is the width-mode owner, not this key.
    */
   readonly box?: TextBox;
-  readonly wrap?: boolean;
+  /**
+   * What a Text box does with text that outgrows its authored height. An auto
+   * text is its own measurement, so it has nothing to clip and ignores this.
+   */
   readonly overflow?: "clip" | "ellipsis" | "visible";
   readonly align?: "left" | "center" | "right";
+  /** Text box only; an auto text is placed at the top of its measured height. */
   readonly verticalAlign?: "top" | "middle" | "bottom";
 }
 

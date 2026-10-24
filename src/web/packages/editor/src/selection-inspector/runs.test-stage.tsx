@@ -144,6 +144,7 @@ export function mountRunEditor(options: {
       locale: options.locale,
       nodeBindings: () => bindings,
       sampleSource,
+      wraps: object instanceof Textbox,
       swatchValue: () => undefined,
     });
     if (view === undefined) {

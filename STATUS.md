@@ -16,10 +16,9 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- Committed the branch's earlier text work and merged it into local `main`: a value run shows its token only while editing, a `Textbox` honours vertical alignment, and a new text seeds its measured box.
-- The glass-refusal sentence and the canvas selection hint are removed, with their copy.
-- The run-placeholder design record now states the owner's "the edit is the mode" ruling.
-- Added the text-elements design and plan documents.
+- Text layout derives from the Fabric class: `IText` measures itself, `Textbox` wraps; the authored `wrap` key is deleted and an old one is ignored.
+- The inspector's Wrap control and its copy are gone; the runs projection carries `wraps` for later class-specific controls.
+- Decision 0098 records why the persisted class, not a flag, owns the width mode.
 
 ## Next
 

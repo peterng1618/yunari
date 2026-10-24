@@ -468,10 +468,16 @@ function sceneTypeReferences(
   );
 }
 
+/**
+ * Fabric serialises `FabricText` as `"Text"`, its base display class; the
+ * developer-facing name never appears in a document. `IText`/`Textbox` are the
+ * two editable width modes, and `"FabricText"` is kept for a hand-written scene.
+ */
 function isTextObject(object: Record<string, unknown>): boolean {
   return (
     object["type"] === "Textbox" ||
     object["type"] === "IText" ||
+    object["type"] === "Text" ||
     object["type"] === "FabricText"
   );
 }

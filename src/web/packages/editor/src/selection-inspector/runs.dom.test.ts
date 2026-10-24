@@ -263,18 +263,27 @@ describe("binding a text run to a sensor", () => {
     return box.dispose();
   });
 
-  it("writes alignment, wrap and overflow into the object's authored text", async () => {
+  it("writes alignment and overflow into the object's authored text", async () => {
     const box = mountRunEditor({ runs: literalClock });
 
     await segment(box.host, "data-yunari-text-align", "Centre");
-    await segment(box.host, "data-yunari-text-wrap", "Off");
     await segment(box.host, "data-yunari-text-overflow", "Ellipsis");
 
     // These are the object's layout, which the renderer already honours; they
     // persist in the same authored content the runs do.
     expect(box.content()["align"]).toBe("center");
-    expect(box.content()["wrap"]).toBe(false);
     expect(box.content()["overflow"]).toBe("ellipsis");
+    return box.dispose();
+  });
+
+  it("offers no Wrap control, because the Fabric class is the width mode", async () => {
+    // A `Textbox` wraps and an `IText` does not; a control that wrote a flag
+    // changed no pixel until a reload, so the control is gone rather than
+    // disabled.
+    const box = mountRunEditor({ runs: literalClock });
+
+    expect(box.host.querySelector("[data-yunari-text-wrap]")).toBeNull();
+    expect(box.host.querySelector("[data-yunari-text-align]")).not.toBeNull();
     return box.dispose();
   });
 
@@ -341,7 +350,7 @@ describe("binding a text run to a sensor", () => {
     return box.dispose();
   });
 
-  it("shows alignment, wrap and overflow again from what was stored", async () => {
+  it("shows alignment and overflow again from what was stored", async () => {
     const box = mountRunEditor({ runs: literalClock });
     await segment(box.host, "data-yunari-text-align", "Right");
 

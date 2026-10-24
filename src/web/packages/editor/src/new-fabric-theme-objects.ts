@@ -231,15 +231,11 @@ export function text(
     ...(spacing === undefined ? {} : { charSpacing: spacing }),
     yunariPaint: { fill: `palette.${first.token}` },
     yunariText: {
-      // `wrap` is not cosmetic: it is what decides the Fabric class. With it
-      // false, `adapter.ts` revives the object as a `FabricText`, and Fabric's
-      // `Text.initDimensions` sets `width = calcTextWidth()` — the measured
-      // run. With it true, the object is a `Textbox` built at `box.width` and
-      // `updateText` restores that width on every refresh, so the box the
-      // placement arithmetic reads is the box the author wrote. That is the
-      // whole difference between a centred reading landing in its card and
-      // rendering flush-left and overflowing out of it.
-      wrap: true,
+      // The Fabric `type` is `Textbox`, and the class is the whole width mode:
+      // its width is the authored box, its height the authored box height, and
+      // `updateText` restores that width on every refresh. That is the
+      // difference between a centred reading landing in its card and rendering
+      // flush-left and overflowing out of it.
       // The author's box, and the copy that survives a save. See
       // `docs/decisions/0003`.
       box: { width, height },

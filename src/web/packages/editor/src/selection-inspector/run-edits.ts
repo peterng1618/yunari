@@ -241,13 +241,12 @@ export function writeBindingZone(
   return true;
 }
 
-/** Alignment, wrap and overflow, in the same authored content the runs live in. */
+/** Alignment, overflow and vertical alignment, in the same authored content the runs live in. */
 export function writeTextLayout(
   target: RunTarget,
   patch: {
     readonly align?: string;
     readonly verticalAlign?: string;
-    readonly wrap?: boolean;
     readonly overflow?: string;
   },
 ): boolean {

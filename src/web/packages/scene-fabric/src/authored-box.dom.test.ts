@@ -87,7 +87,6 @@ function reading(
     originY: "top",
   });
   object.set(YUNARI_TEXT_PROPERTY, {
-    wrap: true,
     overflow: "ellipsis",
     ...layout,
     box,
@@ -192,7 +191,7 @@ describe("the authored box outlives a token wider than it", () => {
     // The migration: a theme saved before this change carries no box, and must
     // not be repaired by a guess.
     const object = reading();
-    object.set(YUNARI_TEXT_PROPERTY, { wrap: true, runs: runs() });
+    object.set(YUNARI_TEXT_PROPERTY, { runs: runs() });
     const canvas = canvasOf(object);
 
     paint(canvas);
@@ -552,7 +551,7 @@ describe("an object with no authored box", () => {
     // through a centre origin moves a corner-anchored object off its corner by
     // half its own size.
     const object = reading();
-    object.set(YUNARI_TEXT_PROPERTY, { wrap: true, runs: runs() });
+    object.set(YUNARI_TEXT_PROPERTY, { runs: runs() });
     const canvas = canvasOf(object);
     const left = object.left;
     const top = object.top;
@@ -567,7 +566,7 @@ describe("an object with no authored box", () => {
     // The counter-case, so the test above cannot pass by leaving the fallback
     // alone.
     const object = reading();
-    object.set(YUNARI_TEXT_PROPERTY, { wrap: true, runs: runs() });
+    object.set(YUNARI_TEXT_PROPERTY, { runs: runs() });
     object.set({ originX: "center", originY: "center" });
     object.left += BOX.width / 2;
     object.top += BOX.height / 2;
@@ -721,7 +720,7 @@ describe("the canvas's own idea of the box", () => {
             align: "left",
             verticalAlign: "top",
           },
-          authored: { wrap: true, runs: [{ kind: "literal", text: TOKEN }] },
+          authored: { runs: [{ kind: "literal", text: TOKEN }] },
         },
       } as unknown as PlanNode,
       target,
@@ -764,7 +763,6 @@ describe("an ellipsis on wrapped text inside a fixed box", () => {
       originY: "top",
     });
     object.set(YUNARI_TEXT_PROPERTY, {
-      wrap: true,
       overflow: "ellipsis",
       align: "center",
       box: { width: BOX.width, height: 0 },
