@@ -1,12 +1,29 @@
+import { type ChildProcess, spawn } from "node:child_process";
 import os, { type NetworkInterfaceInfo } from "node:os";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type LanSource,
   lanAddress,
+  openCommand,
+  openTarget,
   rankLanAddresses,
   readLanSource,
   VIRTUAL_ADAPTER_PATTERNS,
 } from "./net.js";
+
+vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
+
+const spawnMock = vi.mocked(spawn);
+
+/** A child that accepts the two calls `openTarget` makes on it. */
+function stubSpawn(): {
+  on: ReturnType<typeof vi.fn>;
+  unref: ReturnType<typeof vi.fn>;
+} {
+  const child = { on: vi.fn(), unref: vi.fn() };
+  spawnMock.mockReturnValue(child as unknown as ChildProcess);
+  return child;
+}
 
 function ipv4(address: string, internal = false): NetworkInterfaceInfo {
   return {
@@ -35,6 +52,69 @@ function hyperVFirst(): LanSource["interfaces"] {
 function isVirtual(name: string): boolean {
   return VIRTUAL_ADAPTER_PATTERNS.some((pattern) => pattern.test(name));
 }
+
+describe("openCommand", () => {
+  it("opens a Windows URL through rundll32, not cmd", () => {
+    expect(
+      openCommand("https://localhost:5227/editor", { platform: "win32" }),
+    ).toEqual({
+      file: "rundll32.exe",
+      args: ["url.dll,FileProtocolHandler", "https://localhost:5227/editor"],
+    });
+  });
+
+  it("opens a Windows folder through explorer", () => {
+    expect(
+      openCommand("C:\\Users\\a\\.yunari", {
+        platform: "win32",
+        directory: true,
+      }),
+    ).toEqual({ file: "explorer.exe", args: ["C:\\Users\\a\\.yunari"] });
+  });
+
+  it.each([
+    ["linux", "xdg-open"],
+    ["darwin", "open"],
+  ] as const)("uses %s's opener", (platform, file) => {
+    expect(openCommand("/tmp/yunari", { platform })).toEqual({
+      file,
+      args: ["/tmp/yunari"],
+    });
+  });
+});
+
+describe("openTarget", () => {
+  beforeEach(() => {
+    spawnMock.mockReset();
+  });
+
+  it("spawns exactly the command openCommand returns, detached and hidden", () => {
+    const child = stubSpawn();
+    const target = "C:\\Users\\a\\.yunari";
+    const options = { platform: "win32", directory: true } as const;
+
+    openTarget(target, options);
+
+    const expected = openCommand(target, options);
+    expect(spawnMock).toHaveBeenCalledWith(expected.file, expected.args, {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    expect(child.on).toHaveBeenCalledWith("error", expect.any(Function));
+    expect(child.unref).toHaveBeenCalledOnce();
+  });
+
+  it("swallows a spawn failure, because the printed URL stays usable", () => {
+    spawnMock.mockImplementation(() => {
+      throw new Error("no opener here");
+    });
+
+    expect(() =>
+      openTarget("https://localhost:5227/editor", { platform: "linux" }),
+    ).not.toThrow();
+  });
+});
 
 describe("rankLanAddresses", () => {
   it("passes over a virtual switch and a link-local pseudo-adapter ahead of the physical NIC", () => {

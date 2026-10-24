@@ -11,7 +11,7 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Active work
 
-- **Tasks 1–7 are done** (menu model, external programs, sign-in entry, both tray adapters, controller, CLI flags); Phases 1–2 complete, Phase 3 in flight.
+- **Tasks 1–8 are done** (menu model, external programs, sign-in entry, both tray adapters, controller, CLI flags, console-free opener); Phases 1–2 complete, Phase 3 in flight.
 - **Controller** polls every 5 s, sends only a changed menu or tooltip, dispatches clicks and shows action or snapshot failures as 10 s notices.
 - **Windows adapter** renders the model through a hidden PowerShell WinForms `NotifyIcon` fed by JSON lines on stdin.
 - **Linux adapter** stages the pinned `systray2@2.1.4` x86-64 binary; no new npm dependency and no runtime install.
@@ -20,14 +20,15 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Last completed change
 
-- **CLI:** `host/src/cli/args.ts` learns `--tray` and `--rtss-exe`; RTSS resolves like `--lhm-exe` and rejects a missing path.
-- **Ordering:** `--tray` forces `openBrowser` false at return, so a later flag cannot reopen a browser the tray host must not show.
-- **Tests:** 4 new CLI tests; all 44 in `args.test.ts` pass.
-- **Gates:** host typecheck, Biome and `status:check` exit 0.
+- **Opener:** `host/src/cli/net.ts` splits pure `openCommand` from `openTarget`; `openBrowser` delegates to it.
+- **Windows:** URLs go through `rundll32.exe url.dll,FileProtocolHandler`, folders through `explorer.exe`; no `cmd /c start`, no shell.
+- **Spawn:** keeps detached, `stdio: "ignore"`, the swallowed error and `unref()`, and adds `windowsHide: true`.
+- **Tests:** 6 new in `net.test.ts`, 20 pass; the old `cmd` branch fails the rundll32 case.
+- **Gates:** host typecheck, Biome `check` on both files and `status:check` exit 0.
 
 ## Next
 
-1. Task 8+: open URLs and folders, wire the tray into the host, editor deep links.
+1. Task 9+: wire the tray into the host, editor deep links.
 2. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
 3. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
 
