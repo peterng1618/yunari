@@ -4,7 +4,10 @@ import type { CropManager } from "./crop-manager/index.js";
 import type { DeletionManager } from "./deletion-manager/index.js";
 import type { ErrorManager } from "./error-manager/index.js";
 import type { GroupingManager } from "./grouping-manager/index.js";
-import type { TextCreationOptions } from "./text-manager/index.js";
+import type {
+  TextCreationOptions,
+  TextPlacementPort,
+} from "./text-manager/index.js";
 import type { ViewportManager } from "./viewport-manager/index.js";
 
 /** Product panels depend only on the editor mechanics they exercise. */
@@ -32,6 +35,8 @@ export interface EditorInteraction {
     /** The class the request chose — an `IText` with no box, a `Textbox` with
      *  one — as a text object so the caller can put the caret in it. */
     addText(options?: TextCreationOptions): IText;
+    /** Arms the one-shot placement gesture the session's text route owns. */
+    beginPlacement(port: TextPlacementPort): void;
     /**
      * Installs who paints an object's authoring view when the author starts
      * editing it. The session owns the run display that comes from, and the

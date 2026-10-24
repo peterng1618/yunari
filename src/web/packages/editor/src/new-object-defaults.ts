@@ -37,6 +37,9 @@ interface NewPaintDefaults {
 interface NewTextDefaults extends NewPaintDefaults {
   /** What the layer list shows until the author renames it; the id stays the key. */
   readonly name: string;
+  /** The authored box of a fixed text. Absent for a Text, which measures its
+   *  own ink. */
+  readonly box?: { readonly width: number; readonly height: number };
   /** Placement, so a new object does not straddle the artboard corner. */
   readonly left: number;
   readonly top: number;
@@ -525,11 +528,14 @@ export function newInk(globals: FabricGlobals | undefined): {
   return { color, ref };
 }
 
-/** Supplies the paint and per-run typography required by a new text object. */
+/** Supplies the paint and per-run typography required by a new text object. A
+ *  `box` is the gesture's drag rectangle: it names the object `Text box` and
+ *  travels to `addText`, which constructs a `Textbox` from it. */
 export function createNewTextDefaults(
   globals: FabricGlobals | undefined,
   text: string,
   placement: { readonly left: number; readonly top: number },
+  box?: { readonly width: number; readonly height: number },
 ): NewTextDefaults {
   const paint = createNewPaintDefaults(globals);
   const [id, preset] = firstTypePreset(globals);
@@ -541,11 +547,12 @@ export function createNewTextDefaults(
 
   return {
     ...paint,
-    name: newObjectName("text"),
+    name: box === undefined ? newObjectName("text") : uiCopy.panels.textBox,
     // Fabric's own default is (0,0), which puts a new object on the artboard
     // corner where it is awkward to select. Charts already start inset; text
     // must too — and from the same cascade, not its own inset.
     ...placed(placement),
+    ...(box === undefined ? {} : { box }),
     fontFamily: preset.family,
     fontSize: preset.size,
     ...(preset.weight === undefined ? {} : { fontWeight: preset.weight }),

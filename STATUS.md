@@ -16,13 +16,13 @@ The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10
 
 ## Last completed change
 
-- The canvas's next primary press places text: a click makes an `IText` at the press point, a drag of 4 CSS pixels or more makes a `Textbox` from the normalised rectangle.
-- Escape, a non-primary press and a press outside the artboard cancel; arming saves and restores `skipTargetFind`, `selection` and `defaultCursor`.
-- The dashed drag outline is painted on `after:render` and is never canvas content; the gesture itself never saves, so construction owns the one history entry.
+- Every text surface now arms one session route: the Add tile, canvas context menu and footer carry no placement of their own, and `addText` no longer constructs at the click.
+- At the gesture's end a click constructs an `IText` at the point and a drag a `Textbox` from the drawn box, named `Text`/`Text box`, reported once if the theme refuses.
+- Shapes, charts and cards keep their cascade placement; text no longer calls `nextNewObjectPlacement`.
 
 ## Next
 
-1. Task 2.1: arm the one placement route from the Add tile, context menu and footer, constructing at the gesture.
+1. Task 2.2: the inspector states the class's remaining contract.
 
 ## Blockers / unverified
 

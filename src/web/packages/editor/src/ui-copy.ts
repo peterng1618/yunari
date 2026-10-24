@@ -1372,6 +1372,10 @@ export const uiCopy = {
     enter: "Enter",
     leave: "Leave",
     text: "Text",
+    /** A fixed text, whose row must say which of the two elements it is: both
+     *  share the `text` layer kind, so the name is the only place the class
+     *  shows in the layer list. */
+    textBox: "Text box",
     panel: "Panel",
     /** A pasted image and a fresh group arrive without an authored name, so
         the layer row would print their uuid; these are what they are called

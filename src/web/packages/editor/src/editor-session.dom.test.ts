@@ -4,6 +4,7 @@ import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { IText } from "fabric/es";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { installReadableFile } from "./readable-file.fixture.js";
+import type { TextPlacementPort } from "./text-manager/index.js";
 
 installReadableFile();
 
@@ -64,9 +65,34 @@ vi.mock("./type-preset-manager/index.js", () => ({
     return panel();
   },
 }));
-vi.mock("./new-object-panel.js", () => ({
-  createNewObjectPanel: () => panel(),
+/** The actions the last Add pane was handed, so a test can drive a tile the
+ *  way the pane does without mounting the pane's React tree. */
+const newObjectActionsMock = vi.hoisted(() => ({
+  last: undefined as
+    | {
+        addText: () => void;
+        addChart: (family: unknown) => void;
+        insertCard: (cardId: string) => void;
+      }
+    | undefined,
 }));
+vi.mock("./new-object-panel.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./new-object-panel.js")>();
+  return {
+    ...actual,
+    // Only the renderer is doubled: the arming route's construction and its
+    // refusal wrapper are the real ones, so a test drives the real seam.
+    createNewObjectPanel: (
+      _host: unknown,
+      _editor: unknown,
+      _globals: unknown,
+      actions?: typeof newObjectActionsMock.last,
+    ) => {
+      newObjectActionsMock.last = actions;
+      return panel();
+    },
+  };
+});
 vi.mock("./chart-manager/index.js", () => ({
   ChartManager: class {
     destroy = vi.fn();
@@ -2168,6 +2194,199 @@ describe("the Wallpaper Engine import transaction", () => {
     });
     expect(requests.some((url) => url.includes("normalize-video"))).toBe(false);
     extensions.destroy();
+  });
+});
+
+describe("arming a text placement from every surface", () => {
+  /** The globals a successful construction needs, in the same shape the Add
+   *  pane's own fixtures use: one paintable token and one type preset. */
+  const globals = {
+    palette: {
+      ink: { name: "Ink", value: { kind: "solid" as const, color: "#102030" } },
+    },
+    typePresets: {
+      body: {
+        name: "Body",
+        value: { family: "Inter", size: 16, weight: "600" },
+      },
+    },
+  };
+  const withGlobals = { ...envelope, globals };
+
+  function placementSession(theme: FabricThemeEnvelope = withGlobals) {
+    /** The port the session armed, so a test can play the gesture's own end. */
+    let armed: TextPlacementPort | undefined;
+    const created = { enterEditing: vi.fn(), selectAll: vi.fn() };
+    const addText = vi.fn(
+      (_options?: Record<string, unknown>): unknown => created,
+    );
+    const beginPlacement = vi.fn((port: TextPlacementPort) => {
+      armed = port;
+    });
+    const canvasAdd = vi.fn();
+    const warn = vi.fn();
+    const saveState = vi.fn();
+    const editor = {
+      canvas: {
+        on: vi.fn(),
+        off: vi.fn(),
+        add: canvasAdd,
+        // Nothing is selected while the session mounts; the caret's deferred
+        // guard then leaves these fakes alone.
+        getActiveObject: () => undefined,
+        getObjects: () => [],
+        requestRenderAll: vi.fn(),
+      },
+      artboard: () => ({ width: 1920, height: 1080 }),
+      historyManager: { saveState },
+      errorManager: { warn, error: vi.fn() },
+      clipboardManager: { setImageImporter: vi.fn(), setBindings: vi.fn() },
+      textManager: {
+        addText,
+        beginPlacement,
+        setAuthoringView: vi.fn(),
+        setRepaint: vi.fn(),
+      },
+      cropManager: idleCrop(),
+    };
+    const session = new EditorSession({
+      assetManager: new AssetManager(),
+      shell: {
+        editor,
+        scene: {},
+        snapshot: vi.fn(() => theme),
+        setBackgroundMedia: vi.fn(),
+      } as never,
+      source: {} as never,
+      envelope: theme,
+      panelHosts: {
+        add: document.body,
+        document: document.body,
+        tokens: document.body,
+        selection: document.body,
+      },
+      libraryClient: {
+        list: vi.fn(async () => []),
+        open: vi.fn(async () => ({ envelope: theme, assets: {} })),
+        save: vi.fn(async () => "base-after-save"),
+        assign: vi.fn(async () => undefined),
+        listDisplays: vi.fn(async () => ({ default: null, displays: [] })),
+      },
+      onNew: vi.fn(),
+      onNewFromStarter: vi.fn(),
+      onSaved: vi.fn(),
+    });
+    return {
+      session,
+      facade: session.actionFacade(),
+      port: () => armed,
+      addText,
+      beginPlacement,
+      canvasAdd,
+      warn,
+      saveState,
+    };
+  }
+
+  it("arms from the Add pane's text action and constructs nothing yet", () => {
+    const wired = placementSession();
+
+    newObjectActionsMock.last?.addText();
+
+    expect(wired.beginPlacement).toHaveBeenCalledOnce();
+    expect(wired.addText).not.toHaveBeenCalled();
+    expect(wired.canvasAdd).not.toHaveBeenCalled();
+    wired.session.destroy();
+  });
+
+  it("arms from the session façade's own addText", () => {
+    const wired = placementSession();
+
+    wired.facade.addText();
+
+    expect(wired.beginPlacement).toHaveBeenCalledOnce();
+    expect(wired.addText).not.toHaveBeenCalled();
+    wired.session.destroy();
+  });
+
+  it("keeps a click inside the artboard and refuses one outside it", () => {
+    const wired = placementSession();
+
+    newObjectActionsMock.last?.addText();
+    const port = wired.port()!;
+
+    expect(port.contained({ x: 0, y: 0 })).toBe(true);
+    expect(port.contained({ x: 1920, y: 1080 })).toBe(true);
+    expect(port.contained({ x: -0.5, y: 10 })).toBe(false);
+    expect(port.contained({ x: 10, y: 1080.5 })).toBe(false);
+    wired.session.destroy();
+  });
+
+  it("constructs a Text at the click point, with no box and its own name", () => {
+    const wired = placementSession();
+
+    newObjectActionsMock.last?.addText();
+    wired.port()?.onPlace({ left: 120, top: 80 });
+
+    const options = wired.addText.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(options).toMatchObject({
+      text: "New text",
+      left: 120,
+      top: 80,
+      name: "Text",
+    });
+    expect("box" in options).toBe(false);
+    wired.session.destroy();
+  });
+
+  it("constructs a Text box from the rectangle a drag drew", () => {
+    const wired = placementSession();
+
+    newObjectActionsMock.last?.addText();
+    wired.port()?.onPlace({
+      left: 120,
+      top: 80,
+      box: { width: 240, height: 96 },
+    });
+
+    expect(wired.addText.mock.calls[0]?.[0]).toMatchObject({
+      name: "Text box",
+      box: { width: 240, height: 96 },
+    });
+    wired.session.destroy();
+  });
+
+  it("reports a refused construction once, at the gesture's end", () => {
+    // The arming step itself cannot fail; the theme's missing palette is met
+    // when the pointer has finished placing, which is the one report an author
+    // gets and the one place it is useful.
+    const wired = placementSession(envelope);
+
+    wired.facade.addText();
+    expect(wired.warn).not.toHaveBeenCalled();
+    wired.port()?.onPlace({ left: 10, top: 10 });
+
+    expect(wired.warn).toHaveBeenCalledOnce();
+    expect(wired.warn).toHaveBeenCalledWith(
+      "controls",
+      expect.stringContaining("palette token"),
+    );
+    expect(wired.addText).not.toHaveBeenCalled();
+    expect(wired.canvasAdd).not.toHaveBeenCalled();
+    wired.session.destroy();
+  });
+
+  it("constructs once per gesture, leaving the history entry to addText", () => {
+    // `TextManager.addText` writes the one save; a second save here would make
+    // undoing a placement take two presses.
+    const wired = placementSession();
+
+    newObjectActionsMock.last?.addText();
+    wired.port()?.onPlace({ left: 10, top: 10 });
+
+    expect(wired.addText).toHaveBeenCalledOnce();
+    expect(wired.saveState).not.toHaveBeenCalled();
+    wired.session.destroy();
   });
 });
 
