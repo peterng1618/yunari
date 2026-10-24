@@ -20,6 +20,10 @@ import { handleSubmitRoute } from "./catalogue/submit.js";
 import { DEFAULT_THEMES_DIR } from "./cli/args.js";
 import type { HostBinding } from "./cli/hosting.js";
 import type { ListenableServer } from "./cli/net.js";
+import type {
+  CustomSourceStatus,
+  SourceTestResult,
+} from "./providers/custom/provider.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
 import {
   ARTWORK_NAME,
@@ -56,6 +60,7 @@ import {
   type CredentialRow,
   KNOWN_CREDENTIALS,
   type KnownCredential,
+  sourcesInUse,
 } from "./settings/credentials-registry.js";
 import {
   type AssignableGroup,
@@ -85,6 +90,7 @@ import type { FontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
 import { listMonitors, type Monitor } from "./settings/monitors.js";
 import { requiredDeviceGroups } from "./settings/required-devices.js";
+import type { SourceStore } from "./settings/sources.js";
 import type { StoreSessionStore } from "./settings/store-session.js";
 import type { ThemeOriginsStore } from "./settings/theme-origins.js";
 import type { ThemeSettingsStore } from "./settings/theme-settings.js";
@@ -161,11 +167,31 @@ const LOCAL_DISPLAY_LABEL = "This PC";
 /** A search term longer than this is a paste, not a place. */
 const MAX_PLACE_QUERY_LENGTH = 200;
 
+/** The store's source-id pattern, repeated for the path so a malformed id is a
+ *  400 rather than a lookup. `settings/sources.ts` owns what a write accepts. */
+const SOURCE_ID = /^[a-z0-9_-]{1,32}$/;
+
 export interface BundleRoots {
   readonly player: string;
   readonly editor: string;
   /** Admin pages served from source (no build step), e.g. the settings page. */
   readonly admin?: string;
+}
+
+/**
+ * Custom HTTP sources, as the settings routes see them.
+ *
+ * The store is the only writer of `sources.json`; the provider is the only
+ * reader that fetches, so a write reloads it and a Test goes through it rather
+ * than a second fetch path.
+ */
+export interface SourceRouteOptions {
+  readonly store: SourceStore;
+  readonly provider: {
+    reload(): Promise<void>;
+    status(): readonly CustomSourceStatus[];
+    test(sourceId: string): Promise<SourceTestResult | undefined>;
+  };
 }
 
 export interface HostServerOptions {
@@ -218,6 +244,9 @@ export interface HostServerOptions {
   /** The credential ids this host knows. Omitted uses the shipped table, which
    *  is empty in v1; supplied so a route test can hold a cookie fixture. */
   readonly knownCredentials?: readonly KnownCredential[];
+  /** Custom HTTP sources. Omitted when this host serves none — the routes then
+   *  say so rather than falling through to the static 404. */
+  readonly sources?: SourceRouteOptions;
   /** The asset finder's sources. Omitted when this host serves none; the
    *  routes then say so rather than falling through to the static 404. */
   readonly assets?: AssetRouteOptions;
@@ -944,7 +973,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const weather = options.weather;
   const fontFavorites = options.fontFavorites;
   const credentials = options.credentials;
-  const knownCredentials = options.knownCredentials ?? KNOWN_CREDENTIALS;
+  const sourceRoutes = options.sources;
+  /** The fixed half of the credential table; the dynamic half is the custom
+   *  sources' referenced ids, refreshed after every source write. */
+  const baseCredentials = options.knownCredentials ?? KNOWN_CREDENTIALS;
+  let knownCredentials = baseCredentials;
   const assets = options.assets;
   const artwork = options.artwork;
   const wallpaperEngine = options.wallpaperEngine;
@@ -972,6 +1005,17 @@ export function createHostServer(options: HostServerOptions): HostServer {
     const outcome = await options.hosting?.setLan(on);
     // A refused binding moved nothing, so nothing is remembered.
     if (outcome?.ok === true) await saved?.(on);
+  }
+
+  /**
+   * Re-derives the credential ids a source may name. Called before a credential
+   * route answers and after a source write, so a newly referenced id is
+   * writable without a restart and a removed one stops being admitted.
+   */
+  async function refreshCredentialTable(): Promise<void> {
+    if (sourceRoutes === undefined) return;
+    const file = await sourceRoutes.store.read();
+    knownCredentials = sourcesInUse(file.issues, file.sources, baseCredentials);
   }
 
   /**
@@ -2052,6 +2096,190 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
+    // Custom HTTP sources. Every route is admin on this PC, so the guard order
+    // is the credential routes': loopback, then a foreign page, then the store.
+    if (
+      url.pathname === "/api/sources" ||
+      url.pathname.startsWith("/api/sources/")
+    ) {
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Sources are available on this PC only.");
+        return;
+      }
+
+      if (isForeignOrigin(request)) {
+        sendText(response, 403, "Sources are not available to another page.");
+        return;
+      }
+
+      if (sourceRoutes === undefined) {
+        sendText(response, 503, "Custom sources are not enabled on this host.");
+        return;
+      }
+
+      if (url.pathname === "/api/sources") {
+        if (request.method !== "GET") {
+          sendText(response, 405, "Only GET is supported.");
+          return;
+        }
+
+        const file = await sourceRoutes.store.read();
+        const statuses = new Map(
+          sourceRoutes.provider
+            .status()
+            .map((entry) => [entry.sourceId, entry]),
+        );
+
+        sendJson(response, 200, {
+          sources: file.sources.map((source) => {
+            const status = statuses.get(source.id);
+            const lastError =
+              status?.lastError === undefined
+                ? null
+                : redactForBrowser(status.lastError);
+            const lastSuccessMs = status?.lastSuccessMs;
+
+            return {
+              ...source,
+              fieldCount: source.fields.length,
+              health:
+                lastError !== null
+                  ? "error"
+                  : lastSuccessMs === undefined
+                    ? "waiting"
+                    : "ok",
+              lastError,
+              lastSuccessAt:
+                lastSuccessMs === undefined
+                  ? null
+                  : new Date(lastSuccessMs).toISOString(),
+            };
+          }),
+          issues: file.issues.map((issue) => ({
+            sourceId: issue.sourceId,
+            reason: redactForBrowser(issue.reason),
+          })),
+        });
+        return;
+      }
+
+      const parts = url.pathname.slice("/api/sources/".length).split("/");
+      const id = parts[0] ?? "";
+
+      if (!SOURCE_ID.test(id)) {
+        sendText(response, 400, "That source id is not valid.");
+        return;
+      }
+
+      if (parts.length === 2 && parts[1] === "test") {
+        if (request.method !== "POST") {
+          sendText(response, 405, "Only POST is supported.");
+          return;
+        }
+
+        const result = await sourceRoutes.provider.test(id);
+        if (result === undefined) {
+          sendText(response, 404, "No such source.");
+          return;
+        }
+
+        sendJson(response, 200, {
+          ...result,
+          ...(result.reason === undefined
+            ? {}
+            : { reason: redactForBrowser(result.reason) }),
+        });
+        return;
+      }
+
+      if (parts.length !== 1) {
+        sendText(response, 404, "No such source route.");
+        return;
+      }
+
+      if (request.method === "PUT") {
+        let body: unknown;
+        try {
+          body = JSON.parse(await readBody(request)) as unknown;
+        } catch {
+          sendText(response, 400, "That request body is not JSON.");
+          return;
+        }
+
+        if (typeof body !== "object" || body === null || Array.isArray(body)) {
+          sendText(response, 400, "A source must be an object.");
+          return;
+        }
+
+        const givenId = (body as { id?: unknown }).id;
+        if (givenId !== undefined && givenId !== id) {
+          sendText(response, 400, 'The source "id" must match the path.');
+          return;
+        }
+
+        const current = await sourceRoutes.store.read();
+        // Normalized over the whole resulting file, so an upsert is refused
+        // exactly when the store would refuse what it is about to hold.
+        const written = await sourceRoutes.store.write({
+          sources: [
+            ...current.sources.filter((source) => source.id !== id),
+            { ...body, id },
+          ],
+        });
+
+        const issue = written.issues[0];
+        if (issue !== undefined) {
+          sendJson(response, 400, {
+            ok: false,
+            field: issue.sourceId,
+            reason: redactForBrowser(issue.reason),
+          });
+          return;
+        }
+
+        await sourceRoutes.provider.reload();
+        await refreshCredentialTable();
+        sendJson(response, 200, { ok: true });
+        return;
+      }
+
+      if (request.method === "DELETE") {
+        const current = await sourceRoutes.store.read();
+        const removed = current.sources.find((source) => source.id === id);
+
+        if (removed === undefined) {
+          sendText(response, 404, "No such source.");
+          return;
+        }
+
+        // The credential is never touched here: an entry the source no longer
+        // references is the owner's to clear, and the answer says so.
+        const written = await sourceRoutes.store.write({
+          sources: current.sources.filter((source) => source.id !== id),
+        });
+        await sourceRoutes.provider.reload();
+        await refreshCredentialTable();
+
+        const credentialId = removed.auth?.credentialId;
+        const unreferenced =
+          credentialId !== undefined &&
+          !written.sources.some(
+            (source) => source.auth?.credentialId === credentialId,
+          )
+            ? credentialId
+            : null;
+
+        sendJson(response, 200, {
+          ok: true,
+          unreferencedCredential: unreferenced,
+        });
+        return;
+      }
+
+      sendText(response, 405, "Only PUT and DELETE are supported.");
+      return;
+    }
+
     // Provider credentials. The value is write-only from the browser: the read
     // answers `set` and a four-character hint, never the value, and every method
     // stays on this PC because this file is the one secret the host holds.
@@ -2078,6 +2306,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
+      // A source written a moment ago makes its credential id writable here
+      // without a restart; the store stays the only record of sources.
+      await refreshCredentialTable();
+
       if (url.pathname === "/api/credentials") {
         if (request.method !== "GET") {
           sendText(response, 405, "Only GET is supported.");
@@ -2098,14 +2330,33 @@ export function createHostServer(options: HostServerOptions): HostServer {
           });
         }
 
+        // A credential whose source was deleted stays visible and clearable,
+        // rather than becoming a secret the owner can see no way to remove.
+        for (const [id, entry] of Object.entries(await credentials.read())) {
+          if (knownCredentials.some((known) => known.id === id)) continue;
+          rows.push({
+            id,
+            label: "Unreferenced credential",
+            set: true,
+            hint: hintOf(entry.value),
+            verify: false,
+            helpText: null,
+            helpUrl: null,
+          });
+        }
+
         sendJson(response, 200, rows);
         return;
       }
 
       const parts = url.pathname.slice("/api/credentials/".length).split("/");
-      const known = knownCredentials.find((entry) => entry.id === parts[0]);
+      const credentialId = parts[0] ?? "";
+      const known = knownCredentials.find((entry) => entry.id === credentialId);
+      const orphan =
+        known === undefined &&
+        Object.hasOwn(await credentials.read(), credentialId);
 
-      if (known === undefined) {
+      if (known === undefined && !orphan) {
         sendText(response, 400, "That credential is not one this host knows.");
         return;
       }
@@ -2113,6 +2364,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
       if (parts.length === 2 && parts[1] === "verify") {
         if (request.method !== "POST") {
           sendText(response, 405, "Only POST is supported.");
+          return;
+        }
+
+        if (known === undefined) {
+          sendText(
+            response,
+            400,
+            "That credential is not one this host knows.",
+          );
           return;
         }
 
@@ -2144,6 +2404,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       if (request.method === "PUT") {
+        if (known === undefined) {
+          sendText(
+            response,
+            400,
+            "That credential is not one this host knows.",
+          );
+          return;
+        }
+
         if (known.kind === "cookie") {
           sendText(
             response,
@@ -2173,7 +2442,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       if (request.method === "DELETE") {
-        await credentials.clear(known.id);
+        // An unreferenced id is still clearable: deleting a source must not
+        // strand a secret with no route that can remove it.
+        await credentials.clear(credentialId);
         sendJson(response, 200, { ok: true });
         return;
       }

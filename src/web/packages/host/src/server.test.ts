@@ -24,6 +24,7 @@ import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
 import { type ListenableServer, listenWithFallback } from "./cli/net.js";
+import { CustomSourceProvider } from "./providers/custom/provider.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
 import { createArtworkCache } from "./providers/media/artwork.js";
 import type { SampleContext, SensorProvider } from "./providers/provider.js";
@@ -38,6 +39,7 @@ import {
   type HostingState,
   type HostServerOptions,
   MAX_THEME_UPLOAD_BYTES,
+  type SourceRouteOptions,
 } from "./server.js";
 import { newToken } from "./session/pairing.js";
 import { createPairingCodeStore } from "./session/pairing-code.js";
@@ -62,6 +64,7 @@ import {
 import { createFontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
 import type { Monitor } from "./settings/monitors.js";
+import { createSourceStore, type SourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
 import { createThemeSettingsStore } from "./settings/theme-settings.js";
@@ -8747,5 +8750,601 @@ describe("The media artwork route", () => {
         })
       ).status,
     ).toBe(200);
+  });
+});
+
+describe("Custom source routes", () => {
+  let tmpDir: string;
+  let credentials: ReturnType<typeof createCredentialStore>;
+  let sources: SourceStore;
+  let hosted: ReturnType<typeof createHostServer>;
+
+  const LAN = { remoteAddress: "192.168.1.50" };
+  const FOREIGN = {
+    headers: { origin: "https://evil.example", host: "127.0.0.1:5173" },
+  };
+
+  const sourceFile = () => path.join(tmpDir, "sources.json");
+
+  function fixtureSource(
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    return {
+      id: "fixture",
+      name: "Fixture",
+      // A loopback IP literal: the fetch client refuses nothing, and the
+      // stubbed fetcher answers without a DNS lookup.
+      url: "http://127.0.0.1:8787/read",
+      intervalMs: 60_000,
+      timeoutMs: 5_000,
+      fields: [
+        {
+          id: "load",
+          label: "CPU load",
+          pointer: "/cpu/load",
+          type: "number",
+        },
+      ],
+      ...overrides,
+    };
+  }
+
+  function jsonFetch(
+    body: unknown,
+    status = 200,
+    calls: URL[] = [],
+  ): typeof fetch {
+    return (async (input: string | URL | Request) => {
+      calls.push(new URL(String(input)));
+      return new Response(JSON.stringify(body), {
+        status,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+  }
+
+  async function start(
+    options: {
+      readonly fetch?: typeof fetch;
+      readonly provider?: SourceRouteOptions["provider"];
+    } = {},
+  ): Promise<void> {
+    credentials = createCredentialStore(tmpDir);
+    sources = createSourceStore(tmpDir);
+
+    const provider = new CustomSourceProvider({
+      sources,
+      credentials,
+      ...(options.fetch === undefined ? {} : { fetcher: options.fetch }),
+    });
+    await provider.reload();
+
+    hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      credentials,
+      sources: { store: sources, provider: options.provider ?? provider },
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    });
+  }
+
+  const rows = async () =>
+    (await request(hosted.server, "GET", "/api/credentials")).json() as {
+      id: string;
+      label: string;
+      set: boolean;
+      hint: string;
+    }[];
+
+  const list = async () =>
+    (await request(hosted.server, "GET", "/api/sources")).json() as {
+      sources: Record<string, unknown>[];
+      issues: { sourceId: string; reason: string }[];
+    };
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-sources-"));
+  });
+
+  afterEach(async () => {
+    await hosted.close();
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("keeps every source route on this PC and refuses another page", async () => {
+    await start({ fetch: jsonFetch({ cpu: { load: 1 } }) });
+
+    for (const [method, url] of [
+      ["GET", "/api/sources"],
+      ["PUT", "/api/sources/fixture"],
+      ["DELETE", "/api/sources/fixture"],
+      ["POST", "/api/sources/fixture/test"],
+    ] as const) {
+      const body = method === "PUT" ? json(fixtureSource()) : undefined;
+      expect(
+        (await request(hosted.server, method, url, body, LAN)).status,
+      ).toBe(403);
+      expect(
+        (await request(hosted.server, method, url, body, FOREIGN)).status,
+      ).toBe(403);
+    }
+
+    // Refused, so nothing was written: no file, not even an empty envelope.
+    await expect(fs.readFile(sourceFile(), "utf8")).rejects.toThrow();
+  });
+
+  it("refuses an id the store's pattern does not admit, before any lookup", async () => {
+    await start({ fetch: jsonFetch({}) });
+
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PUT",
+          "/api/sources/Bad",
+          json(fixtureSource()),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (await request(hosted.server, "DELETE", "/api/sources/Bad")).status,
+    ).toBe(400);
+    expect(
+      (await request(hosted.server, "POST", "/api/sources/Bad/test")).status,
+    ).toBe(400);
+    expect(
+      (await request(hosted.server, "DELETE", `/api/sources/${"a".repeat(33)}`))
+        .status,
+    ).toBe(400);
+  });
+
+  it("upserts a source and lists it with field count and health, never a credential value", async () => {
+    await start({ fetch: jsonFetch({}) });
+
+    const put = await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource({ auth: { kind: "bearer", credentialId: "srckey" } })),
+    );
+    expect(put.status).toBe(200);
+
+    // The write refreshed the table: the referenced id is writable now.
+    const credential = await request(
+      hosted.server,
+      "PUT",
+      "/api/credentials/srckey",
+      json({ value: "sk-live-9f2c" }),
+    );
+    expect(credential.status).toBe(200);
+
+    const res = await request(hosted.server, "GET", "/api/sources");
+    expect(res.status).toBe(200);
+    expect(res.json()).toEqual({
+      sources: [
+        expect.objectContaining({
+          id: "fixture",
+          name: "Fixture",
+          fieldCount: 1,
+          health: "waiting",
+          lastError: null,
+          lastSuccessAt: null,
+          auth: { kind: "bearer", credentialId: "srckey" },
+        }),
+      ],
+      issues: [],
+    });
+    // The reference is all the route carries: no value and no hint.
+    expect(res.text()).not.toContain("sk-live-9f2c");
+    expect(res.text()).not.toContain("9f2c");
+  });
+
+  it("refuses an invalid upsert and leaves the file byte-identical", async () => {
+    await start({ fetch: jsonFetch({}) });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource()),
+    );
+
+    const before = await fs.readFile(sourceFile());
+    const refused = await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(
+        fixtureSource({
+          fields: [
+            {
+              id: "load",
+              label: "CPU load",
+              pointer: "/cpu/load",
+              type: "date",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(refused.status).toBe(400);
+    expect(refused.json()).toMatchObject({ ok: false, field: "fixture" });
+    expect((refused.json() as { reason: string }).reason).toContain(
+      "type must be number|text|boolean",
+    );
+    expect((await fs.readFile(sourceFile())).equals(before)).toBe(true);
+  });
+
+  it("reports the provider's last error redacted and its last success time", async () => {
+    const stub: SourceRouteOptions["provider"] = {
+      reload: async () => undefined,
+      status: () => [
+        {
+          sourceId: "fixture",
+          lastError: "could not reach https://192.168.1.9:8080/read",
+          lastSuccessMs: 1_700_000_000_000,
+        },
+      ],
+      test: async () => ({ ok: false, elapsedMs: 0, values: [] }),
+    };
+
+    await start({ provider: stub, fetch: jsonFetch({}) });
+    await sources.write({ sources: [fixtureSource()] });
+
+    const [row] = (await list()).sources;
+
+    expect(row).toMatchObject({
+      id: "fixture",
+      fieldCount: 1,
+      health: "error",
+      lastError: "could not reach its configured address",
+      lastSuccessAt: new Date(1_700_000_000_000).toISOString(),
+    });
+    expect(JSON.stringify(row)).not.toContain("192.168.1.9");
+  });
+
+  it("tests one fetch with the real credential, bounded, and writes nothing", async () => {
+    const calls: URL[] = [];
+    await start({
+      fetch: jsonFetch(
+        {
+          cpu: { load: 42.5 },
+          v0: 0,
+          v1: 1,
+          v2: 2,
+          v3: 3,
+          v4: 4,
+          v5: 5,
+          v6: 6,
+          v7: 7,
+          v8: 8,
+          v9: 9,
+        },
+        200,
+        calls,
+      ),
+    });
+
+    const fields = [
+      { id: "load", label: "CPU load", pointer: "/cpu/load", type: "number" },
+      ...Array.from({ length: 9 }, (_, index) => ({
+        id: `v${index}`,
+        label: `Value ${index}`,
+        pointer: `/v${index}`,
+        type: "number",
+      })),
+      { id: "extra", label: "Extra", pointer: "/v0", type: "number" },
+    ];
+
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(
+        fixtureSource({
+          auth: { kind: "bearer", credentialId: "srckey" },
+          fields,
+        }),
+      ),
+    );
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/credentials/srckey",
+      json({ value: "sk-live-9f2c" }),
+    );
+
+    const before = await fs.readFile(sourceFile());
+    const beforeStat = await fs.stat(sourceFile());
+    const beforeDir = (await fs.readdir(tmpDir)).sort();
+
+    const res = await request(
+      hosted.server,
+      "POST",
+      "/api/sources/fixture/test",
+    );
+
+    expect(res.status).toBe(200);
+    const tested = res.json() as {
+      ok: boolean;
+      elapsedMs: number;
+      values: { id: string; value: unknown }[];
+    };
+    expect(tested.ok).toBe(true);
+    expect(typeof tested.elapsedMs).toBe("number");
+    expect(tested.values[0]).toEqual({ id: "load", value: 42.5 });
+    // Bounded: eleven mapped fields, ten answered.
+    expect(tested.values).toHaveLength(10);
+    expect(calls).toHaveLength(1);
+    expect(String(calls[0])).toBe("http://127.0.0.1:8787/read");
+
+    // A test stores neither the fetched body nor a reading: file bytes, the
+    // file's mtime and the directory's contents are unchanged, and the list
+    // still says no fetch has succeeded.
+    expect((await fs.readFile(sourceFile())).equals(before)).toBe(true);
+    expect((await fs.stat(sourceFile())).mtimeMs).toBe(beforeStat.mtimeMs);
+    expect((await fs.readdir(tmpDir)).sort()).toEqual(beforeDir);
+    expect((await list()).sources[0]).toMatchObject({
+      lastSuccessAt: null,
+      health: "waiting",
+    });
+  });
+
+  it("redacts a test result's reason before it leaves the host", async () => {
+    const stub: SourceRouteOptions["provider"] = {
+      reload: async () => undefined,
+      status: () => [],
+      test: async () => ({
+        ok: false,
+        elapsedMs: 1,
+        values: [],
+        reason: "could not reach https://192.168.1.9:8080/read",
+      }),
+    };
+
+    await start({ provider: stub, fetch: jsonFetch({}) });
+    await sources.write({ sources: [fixtureSource()] });
+
+    const res = await request(
+      hosted.server,
+      "POST",
+      "/api/sources/fixture/test",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.text()).toContain("its configured address");
+    expect(res.text()).not.toContain("192.168.1.9");
+  });
+
+  it("answers a failed test with the status and a redacted reason", async () => {
+    await start({
+      fetch: jsonFetch({ error: "denied" }, 500),
+    });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource()),
+    );
+
+    const res = await request(
+      hosted.server,
+      "POST",
+      "/api/sources/fixture/test",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.json()).toEqual({
+      ok: false,
+      status: 500,
+      elapsedMs: expect.any(Number),
+      values: [],
+      reason: "the source answered HTTP 500",
+    });
+  });
+
+  it("names a missing credential and makes no request", async () => {
+    const calls: URL[] = [];
+    await start({ fetch: jsonFetch({}, 200, calls) });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(
+        fixtureSource({
+          auth: { kind: "bearer", credentialId: "absentkey" },
+        }),
+      ),
+    );
+
+    const res = await request(
+      hosted.server,
+      "POST",
+      "/api/sources/fixture/test",
+    );
+
+    expect(res.json()).toMatchObject({
+      ok: false,
+      values: [],
+      reason: "credential is missing",
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("accepts a source-referenced credential id and still refuses an unknown one", async () => {
+    await start({ fetch: jsonFetch({}) });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource({ auth: { kind: "bearer", credentialId: "srckey" } })),
+    );
+
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PUT",
+          "/api/credentials/srckey",
+          json({ value: "sk-live-9f2c" }),
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PUT",
+          "/api/credentials/arbitrary",
+          json({ value: "sk-live-9f2c" }),
+        )
+      ).status,
+    ).toBe(400);
+  });
+
+  it("does not admit the credential id of a source the store refused", async () => {
+    await start({ fetch: jsonFetch({}) });
+
+    // Written by hand, as a malformed file would be: one valid source and one
+    // the store rejects. Only the valid one's credential is admitted.
+    await fs.writeFile(
+      sourceFile(),
+      JSON.stringify({
+        sources: [
+          fixtureSource({
+            id: "valid",
+            auth: { kind: "bearer", credentialId: "goodkey" },
+          }),
+          fixtureSource({
+            id: "broken",
+            auth: { kind: "bearer", credentialId: "evilkey" },
+            fields: [
+              {
+                id: "load",
+                label: "CPU load",
+                pointer: "/cpu/load",
+                type: "date",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const listed = await rows();
+    expect(listed.map((row) => row.id)).toContain("goodkey");
+    expect(listed.map((row) => row.id)).not.toContain("evilkey");
+
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PUT",
+          "/api/credentials/evilkey",
+          json({ value: "sk-live-9f2c" }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PUT",
+          "/api/credentials/goodkey",
+          json({ value: "sk-live-9f2c" }),
+        )
+      ).status,
+    ).toBe(200);
+
+    const response = await list();
+    expect(response.issues).toHaveLength(1);
+    expect(response.issues[0]?.sourceId).toBe("broken");
+  });
+
+  it("deletes a source without deleting its credential, and says it is unreferenced", async () => {
+    await start({ fetch: jsonFetch({}) });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/fixture",
+      json(fixtureSource({ auth: { kind: "bearer", credentialId: "srckey" } })),
+    );
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/credentials/srckey",
+      json({ value: "sk-live-9f2c" }),
+    );
+
+    const removed = await request(
+      hosted.server,
+      "DELETE",
+      "/api/sources/fixture",
+    );
+
+    expect(removed.status).toBe(200);
+    expect(removed.json()).toEqual({
+      ok: true,
+      unreferencedCredential: "srckey",
+    });
+
+    // The secret is still on disk and still listed as an orphan, so it can be
+    // cleared rather than stranded.
+    expect(
+      await fs.readFile(path.join(tmpDir, "credentials.json"), "utf8"),
+    ).toContain("sk-live-9f2c");
+    expect(await rows()).toContainEqual(
+      expect.objectContaining({
+        id: "srckey",
+        label: "Unreferenced credential",
+        set: true,
+        hint: "9f2c",
+      }),
+    );
+
+    expect(
+      (await request(hosted.server, "DELETE", "/api/credentials/srckey"))
+        .status,
+    ).toBe(200);
+    expect(
+      await fs.readFile(path.join(tmpDir, "credentials.json"), "utf8"),
+    ).not.toContain("srckey");
+  });
+
+  it("reports no unreferenced credential while a sibling still names it", async () => {
+    await start({ fetch: jsonFetch({}) });
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/first",
+      json(
+        fixtureSource({
+          id: "first",
+          auth: { kind: "bearer", credentialId: "srckey" },
+        }),
+      ),
+    );
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/sources/second",
+      json(
+        fixtureSource({
+          id: "second",
+          auth: { kind: "bearer", credentialId: "srckey" },
+        }),
+      ),
+    );
+
+    const removed = await request(
+      hosted.server,
+      "DELETE",
+      "/api/sources/first",
+    );
+
+    expect(removed.json()).toEqual({
+      ok: true,
+      unreferencedCredential: null,
+    });
   });
 });

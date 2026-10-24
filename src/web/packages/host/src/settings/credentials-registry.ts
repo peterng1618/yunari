@@ -2,6 +2,7 @@ import type { CredentialRow } from "@yunari/renderer-core";
 import { verifyUnsplash } from "../assets/images/unsplash.js";
 import { verifyOpenWeatherMap } from "../providers/weather/openweathermap.js";
 import { verifyWeatherApi } from "../providers/weather/weatherapi.js";
+import type { CustomSource, SourceIssue } from "./sources.js";
 
 /**
  * The credentials this host knows how to store.
@@ -61,3 +62,40 @@ export const KNOWN_CREDENTIALS: readonly KnownCredential[] = [
     },
   },
 ];
+
+/**
+ * The table a credential write is checked against: the built-ins plus one entry
+ * per credential id a valid custom source references.
+ *
+ * A source refused by `normalizeSources` is named in `sourceIssues` and is not
+ * in `sources`; it is skipped again here so a caller that passes both cannot
+ * widen the surface with an entry the store rejected. Built-ins win a shared
+ * id, and an id referenced twice is listed once.
+ */
+export function sourcesInUse(
+  sourceIssues: readonly SourceIssue[],
+  sources: readonly CustomSource[],
+  known: readonly KnownCredential[] = KNOWN_CREDENTIALS,
+): readonly KnownCredential[] {
+  const refused = new Set(sourceIssues.map((issue) => issue.sourceId));
+  const admitted = new Set(known.map((entry) => entry.id));
+  const table: KnownCredential[] = [...known];
+
+  for (const source of sources) {
+    if (refused.has(source.id)) continue;
+
+    const credentialId = source.auth?.credentialId;
+    if (credentialId === undefined || admitted.has(credentialId)) continue;
+
+    admitted.add(credentialId);
+    table.push({
+      id: credentialId,
+      label: `Custom source credential "${credentialId}"`,
+      // The value is a single string; the source's own auth block decides how
+      // it is attached, so the table's kind only has to be writable.
+      kind: "bearer",
+    });
+  }
+
+  return table;
+}

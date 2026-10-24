@@ -79,6 +79,32 @@ export interface CustomSourceProviderOptions {
   readonly now?: () => number;
 }
 
+/** One source's latest outcome, for the settings page's listing. */
+export interface CustomSourceStatus {
+  readonly sourceId: string;
+  /** Already redacted; cleared by the next successful fetch. */
+  readonly lastError: string | undefined;
+  /** When the last fetch succeeded, or undefined when none has. */
+  readonly lastSuccessMs: number | undefined;
+}
+
+export interface SourceTestValue {
+  readonly id: string;
+  readonly value: number | string | boolean;
+}
+
+/** The bounded field list a Test answers with, so one response is not a dump. */
+export const TEST_VALUE_LIMIT = 10;
+
+export interface SourceTestResult {
+  readonly ok: boolean;
+  readonly status?: number;
+  readonly elapsedMs: number;
+  readonly values: readonly SourceTestValue[];
+  /** Redacted; absent when the fetch succeeded. */
+  readonly reason?: string;
+}
+
 /** The longest pointer a reason quotes, so a hand-written one cannot turn one
  *  line into a paragraph. */
 const MAX_POINTER_CHARS = 64;
@@ -325,6 +351,66 @@ export class CustomSourceProvider implements SensorProvider {
     }
 
     return { available: true };
+  }
+
+  /** Each source's latest outcome. The store owns which sources exist; this
+   *  answers only what the last fetch did, and a source that was never fetched
+   *  has neither a time nor an error. */
+  status(): readonly CustomSourceStatus[] {
+    return [...this.#runtimes.values()].map((runtime) => ({
+      sourceId: runtime.source.id,
+      lastError: runtime.failure,
+      lastSuccessMs: runtime.reading?.fetchedAtMs,
+    }));
+  }
+
+  /**
+   * The settings page's Test: one real fetch through the same SSRF-bounded
+   * client the timer uses, for the first fields that mapped. It reads state and
+   * writes none — not the fetched body, not a cached reading, not the timer.
+   */
+  async test(sourceId: string): Promise<SourceTestResult | undefined> {
+    const runtime = this.#runtimes.get(sourceId);
+    if (runtime === undefined) return undefined;
+
+    const startedAt = this.#now();
+    const credential = await this.#credentialOf(runtime.source);
+
+    if (!credential.ok) {
+      return {
+        ok: false,
+        elapsedMs: this.#now() - startedAt,
+        values: [],
+        reason: MISSING_CREDENTIAL,
+      };
+    }
+
+    const outcome = await fetchSource(
+      runtime.source,
+      credential.value,
+      this.#fetcher,
+      this.#now,
+    );
+    const elapsedMs = this.#now() - startedAt;
+
+    if (!outcome.ok) {
+      return {
+        ok: false,
+        ...(outcome.status === undefined ? {} : { status: outcome.status }),
+        elapsedMs,
+        values: [],
+        reason: redactForBrowser(outcome.reason),
+      };
+    }
+
+    const values: SourceTestValue[] = [];
+    for (const [id, reading] of readFields(runtime.source, outcome.body)) {
+      if (reading.kind !== "value") continue;
+      values.push({ id, value: reading.value });
+      if (values.length === TEST_VALUE_LIMIT) break;
+    }
+
+    return { ok: true, elapsedMs, values };
   }
 
   /**

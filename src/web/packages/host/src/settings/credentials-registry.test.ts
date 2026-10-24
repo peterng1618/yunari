@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { KNOWN_CREDENTIALS } from "./credentials-registry.js";
+import { KNOWN_CREDENTIALS, sourcesInUse } from "./credentials-registry.js";
+import type { CustomSource } from "./sources.js";
 
 const unsplash = KNOWN_CREDENTIALS.find((entry) => entry.id === "unsplash");
 const weatherapi = KNOWN_CREDENTIALS.find((entry) => entry.id === "weatherapi");
@@ -135,5 +136,61 @@ describe("the weather credentials", () => {
     const message = result?.ok === false ? result.message : "";
     expect(message).toContain("401");
     expect(message).not.toContain("key-1234");
+  });
+});
+
+describe("sourcesInUse", () => {
+  function sourceOf(id: string, credentialId?: string): CustomSource {
+    return {
+      id,
+      name: id,
+      url: "https://example.test/read",
+      intervalMs: 60_000,
+      timeoutMs: 5_000,
+      ...(credentialId === undefined
+        ? {}
+        : { auth: { kind: "bearer" as const, credentialId } }),
+      fields: [],
+    };
+  }
+
+  it("keeps the built-ins and appends a source-referenced id once", () => {
+    const table = sourcesInUse(
+      [],
+      [sourceOf("first", "srckey"), sourceOf("second", "srckey")],
+    );
+
+    expect(table.map((entry) => entry.id)).toEqual([
+      "unsplash",
+      "weatherapi",
+      "openweathermap",
+      "srckey",
+    ]);
+    expect(table.at(-1)).toMatchObject({
+      id: "srckey",
+      kind: "bearer",
+    });
+  });
+
+  it("keeps a built-in's own entry when a source reuses its id", () => {
+    const table = sourcesInUse([], [sourceOf("first", "unsplash")]);
+
+    expect(table.filter((entry) => entry.id === "unsplash")).toHaveLength(1);
+    expect(table.find((entry) => entry.id === "unsplash")?.label).toBe(
+      "Unsplash",
+    );
+  });
+
+  it("does not admit an id from a source the store refused", () => {
+    const table = sourcesInUse(
+      [{ sourceId: "first", reason: "source has a bad field" }],
+      [sourceOf("first", "srckey")],
+    );
+
+    expect(table.map((entry) => entry.id)).not.toContain("srckey");
+  });
+
+  it("ignores a source that names no credential", () => {
+    expect(sourcesInUse([], [sourceOf("first")])).toEqual(KNOWN_CREDENTIALS);
   });
 });
