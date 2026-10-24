@@ -1,36 +1,33 @@
 # Yunari status
 
-Updated: 2026-10-23
-Branch: `main`
+Updated: 2026-10-24
+Branch: `peterng1618/Fixing-the-text-element`
 
 ## Current objective
 
-The **Wallpaper Engine import** ([`spec`](docs/superpowers/specs/2026-10-21-wallpaper-engine-import-design.md), [`plan`](docs/superpowers/plans/archive/2026-10-21-wallpaper-engine-import.md)) is merged into `main`; the owner-run live export and the queued work remain: the host reads the local Steam library and serves the item list, and the asset finder imports images and videos and guides a scene's PNG/MP4 export.
+The **Text and text box elements** plan ([`spec`](docs/superpowers/specs/2026-10-24-text-elements-design.md), [`plan`](docs/superpowers/plans/2026-10-24-text-elements.md)) is active: split one text element into `IText` and `Textbox`, chosen by a click-or-drag gesture, with the authored `wrap` flag removed.
 
 ## Active work
 
-- **The plan is complete and merged** — Tasks 1–9, the whole-branch review and its fix pass closed clean; the Orca worktree stays until it is retired.
-- **The R2 store backend stays merged**; its owner-run Task 5.2 deploy and live proof remain pending and are not part of this plan.
-- **Task 5.1's import is unrun**: the smoke item `6041df49-9c61-4d51-a184-716890560bdb` exists only in the old catalogue; the script is ready.
-- **Open register findings:** `vg-699` stale `vite preview` reuse on a shared port, `vg-701` biome never reads `.mjs`, `vg-695` a pre-existing `server.test.ts` flake, `vg-708` a theme's credits are written but never drawn.
+- **Active plan:** `docs/superpowers/plans/2026-10-24-text-elements.md`
+- Phase 1 — the class is the width model: layout derived from the class, legacy `"Text"` revives as `IText`, `addText` constructs the chosen class, the placement gesture lands.
+- Phase 2 — one arming route across Add, context and footer, and an inspector that shows only the selected class's controls.
+- Phase 3 — e2e text placement through the gesture, browser proof, ownership docs, full gate.
 
 ## Last completed change
 
-- **The Wallpaper Engine import is merged into `main`**: the plan is archived, the spec is implemented, and the Orca worktree and branch remain for cleanup.
-- **A scene's exported MP4 and a video item both cross the host's normalizer**; a refusal writes no credit and no background.
-- **The finder lists the library with a kind filter and title search**, states once that a baked-in clock cannot be removed, and guides a still scene to PNG and an animated one to MP4.
-- **Tailwind's preflight no longer caps the media layer**: `max-width`/`max-height: none` is inline in `mountBackgroundMedia`, and a background video is sized from its metadata.
-- **Final gate before the merge:** `npm run gate` exit 0 — 341 files / 4728 tests, worker 12 files / 72 tests.
+- Committed the branch's earlier text work and merged it into local `main`: a value run shows its token only while editing, a `Textbox` honours vertical alignment, and a new text seeds its measured box.
+- The glass-refusal sentence and the canvas selection hint are removed, with their copy.
+- The run-placeholder design record now states the owner's "the edit is the mode" ruling.
+- Added the text-elements design and plan documents.
 
 ## Next
 
-1. One owner-run real export (PNG or MP4) through the sheet, to prove the flow's last step.
-2. The owner's R2 Task 5.2 deploy, live proof and import still wait, and so does `vg-699`.
+1. Task 1.1: decision note 0098, then derive layout from the Fabric class and delete the authored `wrap`.
+2. Task 1.2: revive a legacy `"Text"` as `IText` in the editor only.
+3. Tasks 1.3–1.4: construct the chosen class, then place text by click or drag.
 
 ## Blockers / unverified
 
-- **The store Worker is not deployed and no live store path has run**: no D1 database, R2 bucket, secret, real `database_id`, deploy, `/migrate`, health check, OAuth round trip, live CPU measurement or import; `CATALOGUE_ORIGIN` is still the placeholder `https://yunari-store.workers.dev`, and no normalized video has played in a browser.
-- **Version 2 now identifies two shapes**: a stored or catalogued document carrying `artboard.background`/`backgroundMedia`, or `fit`/`scale` on its media, is refused by the unknown-key check; the live catalogue's smoke theme carries the old shape and needs reseeding (owner action).
-- **No live Wallpaper Engine export has been offered by the sheet**: the scene flow's last step is owner-run, and the export dialog's default location is unverified.
-- **The listing re-reads and reclassifies every scene package on each mount** (no facts cache), and a video import posts the file as base64 to the host.
-- **Background and artboard edits are not undoable**, and the compact editor header stays wider than a phone — `vg-707` waits on a ruling.
+- No browser proof yet for the click-or-drag gesture; Phase 3 owns it.
+- Outside this plan: the store Worker is undeployed, and the live catalogue's smoke theme still carries the old media shape.
