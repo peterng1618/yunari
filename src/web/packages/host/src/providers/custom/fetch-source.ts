@@ -102,6 +102,20 @@ function mappedIpv4(address: string): number | undefined {
   return high * 0x10000 + low;
 }
 
+/** An IPv4 encoded in a translation prefix, or undefined. NAT64's well-known
+ *  prefix `64:ff9b::/96` carries it in the low 32 bits; 6to4's `2002::/16`
+ *  carries it in bits 16..47. Canonical URLs always print both compressed. */
+function translatedIpv4(address: string): number | undefined {
+  const nat64 = /^64:ff9b::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(address);
+  const sixToFour =
+    nat64 ?? /^2002:([0-9a-f]{1,4}):([0-9a-f]{1,4})(?::|$)/.exec(address);
+  if (sixToFour === null) return undefined;
+
+  const high = Number.parseInt(sixToFour[1] ?? "", 16);
+  const low = Number.parseInt(sixToFour[2] ?? "", 16);
+  return high * 0x10000 + low;
+}
+
 /** IPv4 `169.254.0.0/16` and IPv6 `fe80::/10`: metadata and link-local only.
  *  Loopback and the private LAN ranges are deliberate: the user typed the URL. */
 function isBlockedAddress(address: string): boolean {
@@ -114,6 +128,9 @@ function isBlockedAddress(address: string): boolean {
 
   const mapped = mappedIpv4(lower);
   if (mapped !== undefined) return isLinkLocalV4(mapped);
+
+  const translated = translatedIpv4(lower);
+  if (translated !== undefined) return isLinkLocalV4(translated);
 
   return /^fe[89ab][0-9a-f]:/.test(lower);
 }

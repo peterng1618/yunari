@@ -39,11 +39,13 @@ Searched: `@yunari/host`'s manifest and the workspace manifests for an HTTP
 client, an IP-range library, a pointer library or a concurrency limiter.
 
 Found: the host declares workspace packages, `ffmpeg-static`, `node-forge` and
-`systeminformation`; no HTTP client. `undici` reaches the workspace only by
-`packages/store-worker`'s dev dependency `wrangler` → `miniflare` → `undici`,
-not as a host dependency. Adding any of these would be a new shipped dependency
-for a few dozen lines and would still leave the host's policy (cap, hop count,
-header and credential drop) as the part that matters.
+`systeminformation`; no HTTP client. `undici` reaches the workspace only through
+dev chains — `wrangler` → `miniflare` → `undici` and
+`@cloudflare/vitest-pool-workers` → its own `wrangler` → `miniflare` → `undici`,
+at 7.29.1 and 7.29.0 in the lockfile — never as a host dependency. Adding any of
+these would be a new shipped dependency for a few dozen lines and would still
+leave the host's policy (cap, hop count, header and credential drop) as the part
+that matters.
 
 ## Rung 3 — platform
 
@@ -102,29 +104,28 @@ The suite drives the policy with an injected seam and one real loopback server:
 exactly 1 MiB accepted, 1 MiB + 1 refused mid-stream, three redirects followed
 and a fourth refused, a scheme change refused, a cross-origin hop stripped of
 every source header and its credential, a userinfo `Location` refused,
-metadata/link-local refused before any call, four in flight with a fifth
-waiting, and one source serialised.
+metadata/link-local refused before any call (including IPv4-mapped, NAT64 and
+6to4 spellings), four in flight with a fifth waiting, and one source serialised.
 
-### Stated ceiling
+### Residual window
 
-Two encodings of the metadata address are outside the range checks: NAT64
-(`64:ff9b::/96`, e.g. `[64:ff9b::a9fe:a9fe]`) and 6to4 (`2002::/16`, e.g.
-`[2002:a9fe:a9fe::]`). Neither is link-local by literal prefix, and each is a
-metadata address only on a translator or relay network, so refusing the prefix
-would refuse ordinary addresses elsewhere. They join the DNS-rebinding window
-as named, deliberate gaps rather than undiscovered ones: the check resolves and
-then native `fetch` resolves again, so a nameserver that answers the two lookups
-differently can connect somewhere the check allowed. Closing either would need
-an address-aware connect (an undici `Agent` or a socket we dial ourselves).
+The check resolves and then native `fetch` resolves again, so a nameserver that
+answers the two lookups differently can connect somewhere the check allowed.
+Closing it needs an address-aware connect (an undici `Agent` with a custom
+`lookup`, or a socket we dial ourselves), which is why it is the one gap left
+open rather than decoded away. Translation prefixes do not belong here: NAT64
+(`64:ff9b::/96`) and 6to4 (`2002::/16`) embed the IPv4 in known bits, so the
+check decodes the embedded address and applies the same link-local test.
 
 ## Rung 7 — build
 
-Built: `fetch-source.ts` owns the whole policy — destination check per hop,
-manual redirects, credential construction, a cross-origin hop stripped of every
-source header and of the auth credential, a userinfo hop refused, byte-counted
-body cap, JSON content-type check, `AbortSignal.timeout`, a module-level
-four-slot semaphore and a per-source tail, returning a redacted reason rather
-than throwing. `pointer.ts` is the RFC 6901 walk with misses instead of
-exceptions. `fetch-source.fixture.ts` is the suite's shared seam, split out so
-the redirect and address cases live in their own file. Both source owners are
-consumed by the custom provider, not by the settings UI.
+Built: `fetch-source.ts` owns the whole policy — destination check per hop
+(IPv4, IPv4-mapped, NAT64 and 6to4 link-local), manual redirects, credential
+construction, a cross-origin hop stripped of every source header and of the
+auth credential, a userinfo hop refused, byte-counted body cap, JSON
+content-type check, `AbortSignal.timeout`, a module-level four-slot semaphore
+and a per-source tail, returning a redacted reason rather than throwing.
+`pointer.ts` is the RFC 6901 walk with misses instead of exceptions.
+`fetch-source.fixture.ts` is the suite's shared seam, split out so the redirect
+and address cases live in their own file. Both source owners are consumed by the
+custom provider, not by the settings UI.

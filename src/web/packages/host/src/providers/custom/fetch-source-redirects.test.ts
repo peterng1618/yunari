@@ -174,6 +174,9 @@ describe("fetchSource refused destinations", () => {
       "http://[fe80::1]/",
       // `::ffff:169.254.169.254` canonicalises to `::ffff:a9fe:a9fe`.
       "http://[::ffff:169.254.169.254]/",
+      // The same address inside NAT64 and 6to4 translation prefixes.
+      "http://[64:ff9b::a9fe:a9fe]/",
+      "http://[2002:a9fe:a9fe::]/",
     ]) {
       const { fetchImpl, calls } = serve(() => json({}));
 
@@ -196,6 +199,10 @@ describe("fetchSource refused destinations", () => {
       "http://192.168.1.20:8080/",
       "http://10.1.2.3:8080/",
       "http://[::1]:8080/",
+      // Translation prefixes are decoded, not refused wholesale: these are
+      // 8.8.8.8, an address the check has no business blocking.
+      "http://[64:ff9b::808:808]/",
+      "http://[2002:808:808::]/",
     ]) {
       const { fetchImpl, calls } = serve(() => json({}));
 
