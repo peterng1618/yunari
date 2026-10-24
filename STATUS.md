@@ -11,7 +11,7 @@ Branch: `feat/game-identity`
 
 ## Active work
 
-- **Phase 3 (shared descriptor mapping) is next**, then the player catalogue and its e2e.
+- **Phase 3 (shared descriptor mapping)**: Task 3.1 done; **Task 3.2 (editor uses the shared mapper) is next**, then the player catalogue and its e2e.
 - **Phase 2 (classifier)** replaces `game.running`'s pid check with catalogue, runtime-marker and window evidence, debounced.
 - **Phase 4 (player catalogue)** moves the wire mapping to `renderer-core` and passes descriptors to `refreshBoundText`.
 - **Windows-first**: Linux catalogue readers and foreground detection stay out, recorded in the spec.
@@ -19,11 +19,9 @@ Branch: `feat/game-identity`
 
 ## Last completed change
 
-- **Phase 2 complete** (`801fe2b5`, fixes `3bd6e6b4`, tests `eb0d1be9`): `game.running` follows the classifier; catalogued games name themselves with no store request.
-- **Review caught three real defects before close:** the fullscreen streak counted `sample()` calls not helper lines, the default catalogue bypassed `YUNARI_STEAM_ROOT`, and artwork identity differed with `game.name` present.
-- **Gate:** `npm run gate` exit 1 only on the two pre-existing live SMTC tests (vg-726); 392 files / 5774 tests pass otherwise.
-- **Known costs kept:** Steam is read twice per demand window, and one `readdir` runs per sample for a non-catalogue foreground.
-- **No tray icon exists**: host lifetime remains terminal-owned (`host/src/main.ts`), and this plan does not add one.
+- **Task 3.1** (`1e1667ef`, tests `541184d7`, `acfd95d0`): `renderer-core/src/data/sensor-catalogue.ts` owns `descriptorFromWire` + `descriptorsFromWire`, exported from the package index; editor file untouched until 3.2.
+- **Review** passed spec and quality; two fix commits made each filtered-field test prove the entry survives, not just that the field is absent.
+- **Evidence:** focused 14/14 tests exit 0 (renderer-core + editor), reviewer re-ran renderer-core typecheck exit 0; full gate not re-run (pure move, Phase 3 gate follows 3.2).
 
 ## Next
 
