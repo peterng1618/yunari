@@ -4,7 +4,13 @@ import {
   SEMANTIC_KEYS,
   SETTINGS_SECTIONS,
 } from "@yunari/renderer-core";
-import { FabricImage, type FabricObject, IText, Rect, Textbox } from "fabric/es";
+import {
+  FabricImage,
+  type FabricObject,
+  IText,
+  Rect,
+  Textbox,
+} from "fabric/es";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -575,9 +581,9 @@ describe("an image's sensor field", () => {
       (section) => section.id === "content",
     );
     // A plain shape has no content section at all, so absence is the whole claim.
-    expect(content?.fields.some((field) => field.id === "image-binding") ?? false).toBe(
-      false,
-    );
+    expect(
+      content?.fields.some((field) => field.id === "image-binding") ?? false,
+    ).toBe(false);
   });
 
   it("renders the bound reading on the control a suite can locate", () => {
