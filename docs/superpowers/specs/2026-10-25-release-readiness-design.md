@@ -1,8 +1,9 @@
 # Release readiness — versioning, dependency hygiene and publishing — design
 
 - **Date:** 2026-10-25
-- **Status:** approved 2026-10-25; plan
-  [`2026-10-25-release-readiness.md`](../plans/2026-10-25-release-readiness.md).
+- **Status:** landed 2026-10-25; commits `d8b223a6` (design) through
+  `c24a166b` (close), 30 commits; plan archived at
+  [`archive/2026-10-25-release-readiness.md`](../plans/archive/2026-10-25-release-readiness.md).
 - **Register:** no row. Nothing here is a defect against shipped behaviour.
 - **Related:** [`STATUS.md`](../../../STATUS.md);
   [`docs/architecture/ownership.md`](../../architecture/ownership.md);
@@ -95,7 +96,7 @@ Levels follow semver:
 |---|---|
 | `major` | An incompatible CLI, storage, config or theme-format change. |
 | `minor` | A new user-visible capability that keeps existing data working. |
-| `patch` | A fix, dependency/security update, documentation or internal change. |
+| `patch` | A fix or dependency/security update — the `fix` and `deps` commit types. |
 
 Conventional Commits already map to this: `feat` → minor, `fix` (and `deps`) →
 patch, `!` or `BREAKING CHANGE` → major. A non-breaking `refactor`, `perf`,
@@ -385,4 +386,8 @@ only if its text changes.
 
 ## Landing note
 
-Not yet implemented.
+Landed 2026-10-25 across the commits above. The gate at `c24a166b` exits 1 with
+the two known live-SMTC cases as its only failures, accepted by a recorded
+ruling; `npm run audit:check` exits 0 with four allowlisted high findings and no
+stale rows. The publish workflow, the first publish and a real N−1 migration
+remain unverified, as listed under Risks.

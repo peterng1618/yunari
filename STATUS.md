@@ -5,32 +5,30 @@ Branch: `main`
 
 ## Current objective
 
-The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-release-readiness-design.md), [`plan`](docs/superpowers/plans/2026-10-25-release-readiness.md)) makes the first published release possible: semantic product and schema versions with N−1 theme migration, a dependency audit policy that fails closed, and a GitHub Release + npm publish pipeline. Phase C is complete; Phase D continues with D3.
+Drain `docs/product/backlog.jsonl`: the queued [`spec`](docs/superpowers/specs/2026-10-12-the-backlog-drain-design.md) and [`plan`](docs/superpowers/plans/2026-10-12-the-backlog-drain.md) close the rows the reproduction pass proved discharged, take the rulings the register waits on, then do the real work; 245 rows carry `state: "open"`.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-release-readiness.md` — Phases A, B and C complete; D1–D2 committed, D3 remains.
-- **A1 is complete:** decisions 0110 (migrate the previous schema major on open) and 0111 (stage the workspace as `yunari`) claim every watched path later tasks write.
-- **A2 is complete:** `schemaVersion` is `"2.0.0"`; the strict validator accepts a semver major and still refuses every integer.
-- **A3 is complete:** `readFabricThemeEnvelope` migrates the legacy integer and accepted older majors, then validates.
-- **A4 is complete:** every open path reads through the migration; save, snapshot, package write and `requestVersion` stay strict.
+- **Active plan:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md` — queued, not started; no task dispatched.
+- **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 
 ## Last completed change
 
-- **Gate stays offline:** `scripts/audit-policy.mjs` runs only as its entry point, with a spawned-import test proving the import is side-effect free.
-- **Weather icons ship:** `packages/host/vendor` is staged, and the stage test, tarball list and installed-host smoke check assert it.
-- **Store worker migrates the stored envelope:** a legacy integer baseline no longer plans a false major bump.
-- **Docs corrected:** ownership names `migrateFabricThemeEnvelope`, dependency versions match the manifest, and spec D2 states the implemented refusals.
-- **`docs:check` and `status:check` exit 0;** the gate's only failures are the two known live-SMTC cases.
+- **Plan closed:** the release-readiness plan moved to `docs/superpowers/plans/archive/`, and its spec records `landed 2026-10-25` with the commit range.
+- **Bump rule consistent:** the spec's patch row now names `fix` and `deps` only; `docs`, `refactor`, `perf` and `chore` open no release.
+- **Audit evidence:** `npm run audit:check` exits 0 with the four allowlisted high findings and no stale rows.
+- **Gate evidence at `c24a166b`:** 385 of 386 files and 5739 of 5741 tests pass; both failures are the known live-SMTC cases.
+- **`status:check` and `docs:check` exit 0** after the move; STATUS replaced, not appended.
 
 ## Next
 
-1. D3 — close the plan.
+1. Start the backlog-drain plan at Phase 0: prove the close mechanics on one row, then work Task 0.2–0.5.
+2. Run the ruling sessions (Phase 1), then the spec's W1–W9 work rows (Phase 2 onward).
 
 ## Blockers / unverified
 
 - **The publish workflow is unverified end to end:** no dispatch was authorised, so only its parse and its stage/pack/smoke/publish-dry-run commands were exercised, locally.
-- **The first publish is a one-time local publish:** trusted publishing is configured on an existing package, so the owner builds and packs locally and runs `npm publish <tarball>` with their own token; the trusted publisher for `peterng1618/yunari`, workflow `publish.yml` applies from the second release, when the workflow takes over OIDC.
+- **The first publish is a one-time local publish:** the owner packs locally and runs `npm publish <tarball>` with their own token; trusted publishing for `peterng1618/yunari`, workflow `publish.yml`, applies from the second release.
 - **The release-token choice is open:** a `RELEASE_PLEASE_TOKEN` PAT or App token makes publication automatic, while a `GITHUB_TOKEN` release cannot trigger this workflow, leaving a manual dispatch on the tag.
-- **Migration is a forward obligation only:** at `2.0.0` there is no earlier supported major beyond the legacy integer, so no real N−1 migration is exercised by data.
-- **Two dependency deviations remain:** `ffmpeg-static` installs with scripts but no media playback was exercised, and `npm ls` marks the overridden edges `invalid`, accepted in `docs/engineering/dependencies.md` with the audit policy as the backstop.
+- **No real N−1 migration is exercised:** at `2.0.0` there is no earlier supported major beyond the legacy integer; the dispatch seam is a forward obligation.
+- **Two dependency deviations remain:** `ffmpeg-static` installs with scripts but no media playback was exercised, and `npm ls` marks the overridden edges `invalid`, accepted in `docs/engineering/dependencies.md`.
