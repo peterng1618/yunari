@@ -173,12 +173,14 @@ export async function run(argv: readonly string[]): Promise<number> {
   // provider because a BYOK backend reads its key from here.
   const credentials = createCredentialStore(settingsDir);
   // Custom sources sit beside the credentials they reference, and the provider
-  // that reads them arrives with the custom-source task. A rejected entry is
-  // surfaced here meanwhile: silently dropping one looks like never saving it.
+  // that reads them arrives with the custom-source task. Rejected entries are
+  // counted here meanwhile, never quoted: a reason can echo a key name or a
+  // pasted value, and a log line may not carry one.
   const customSources = createSourceStore(settingsDir);
-  for (const issue of (await customSources.read()).issues) {
+  const rejectedSources = (await customSources.read()).issues.length;
+  if (rejectedSources > 0) {
     console.warn(
-      `Custom source ${issue.sourceId || "(file)"}: ${issue.reason}`,
+      `${rejectedSources} custom source entr${rejectedSources === 1 ? "y was" : "ies were"} rejected; see the sources settings page.`,
     );
   }
   // Weather's place, backend and cadence are this PC's own settings, and the

@@ -1,6 +1,10 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { SensorTier, UnitKind } from "@yunari/renderer-core";
+import {
+  type SensorTier,
+  UNIT_KINDS,
+  type UnitKind,
+} from "@yunari/renderer-core";
 
 /**
  * Custom HTTP sources, authored on the host and read by the custom provider.
@@ -102,25 +106,9 @@ const AUTH_KEYS: ReadonlySet<string> = new Set([
   "queryName",
 ]);
 
-/** The conversion kinds the vocabulary declares. The wire is unvalidated JSON,
- *  so an unknown kind is refused rather than cast. */
-const UNIT_KINDS: ReadonlySet<string> = new Set<UnitKind>([
-  "percent",
-  "temperature",
-  "clock",
-  "data",
-  "dataRate",
-  "power",
-  "voltage",
-  "current",
-  "rotation",
-  "duration",
-  "speed",
-  "pressure",
-  "count",
-  "text",
-  "boolean",
-]);
+/** The conversion kinds the vocabulary declares, imported rather than copied so
+ *  the wire refuses exactly what the renderer cannot honour. */
+const UNIT_KIND_SET: ReadonlySet<string> = new Set(UNIT_KINDS);
 
 type Auth = NonNullable<CustomSource["auth"]>;
 
@@ -296,7 +284,7 @@ function asField(
 
   const unitKind = value.unitKind;
   if (unitKind !== undefined) {
-    if (typeof unitKind !== "string" || !UNIT_KINDS.has(unitKind)) {
+    if (typeof unitKind !== "string" || !UNIT_KIND_SET.has(unitKind)) {
       return fail(`${fieldOwner} unitKind is not a known kind`);
     }
   }
@@ -439,7 +427,9 @@ function asSource(value: unknown): Checked<CustomSource> {
     value: {
       id: rawId,
       name: value.name,
-      url: value.url,
+      // The parsed href, so a typed `HTTP://Host:80/x` or stray whitespace is
+      // stored canonically; validation and the fetch then read one address.
+      url: url.href,
       ...(query === undefined ? {} : { query }),
       ...(headers === undefined ? {} : { headers }),
       intervalMs: interval.value,
@@ -542,12 +532,19 @@ export function createSourceStore(
 
   const save = async (sources: readonly CustomSource[]): Promise<void> => {
     await mkdir(directory, { recursive: true });
-    await writeFile(
-      temporary,
-      `${JSON.stringify({ sources }, null, 2)}\n`,
-      "utf8",
-    );
-    await replace(temporary, file);
+    try {
+      await writeFile(
+        temporary,
+        `${JSON.stringify({ sources }, null, 2)}\n`,
+        "utf8",
+      );
+      await replace(temporary, file);
+    } catch (error) {
+      // A failed save must not leave the next attempt reading a stale temp
+      // file as if it were the write that failed.
+      await rm(temporary, { force: true }).catch(() => undefined);
+      throw error;
+    }
   };
 
   let writing: Promise<unknown> = Promise.resolve();

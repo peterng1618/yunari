@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { describeDynamicKey, UNIT_KINDS } from "@yunari/renderer-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createSourceStore, normalizeSources } from "./sources.js";
 
@@ -56,6 +57,78 @@ describe("normalizeSources", () => {
     expect(issues).toEqual([]);
     expect(sources.map((one) => one.intervalMs)).toEqual([10_000, 86_400_000]);
     expect(sources.map((one) => one.timeoutMs)).toEqual([1_000, 10_000]);
+  });
+
+  it("accepts exactly the unit kinds renderer-core declares", () => {
+    // The literal vocabulary is the contract; the loop proves the host set is
+    // derived from the exported tuple rather than copied beside it.
+    const declared = [
+      "percent",
+      "temperature",
+      "clock",
+      "data",
+      "dataRate",
+      "power",
+      "voltage",
+      "current",
+      "rotation",
+      "duration",
+      "speed",
+      "pressure",
+      "count",
+      "text",
+      "boolean",
+    ];
+
+    expect([...UNIT_KINDS]).toEqual(declared);
+
+    for (const unitKind of declared) {
+      const { sources, issues } = normalizeOne({
+        fields: [{ ...field("value"), unitKind }],
+      });
+
+      expect(issues).toEqual([]);
+      expect(sources[0]?.fields[0]?.unitKind).toBe(unitKind);
+    }
+  });
+
+  it("accepts exactly 64 fields on one source", () => {
+    const fields = Array.from({ length: 64 }, (_, index) =>
+      field(`field_${index}`),
+    );
+
+    const { sources, issues } = normalizeOne({ fields });
+
+    expect(issues).toEqual([]);
+    expect(sources[0]?.fields).toHaveLength(64);
+  });
+
+  it("accepts ids whose custom.<source>.<field> key is legal", () => {
+    const { sources, issues } = normalizeOne({
+      id: "_local-source",
+      fields: [{ ...field("_my_field"), type: "number" }],
+    });
+
+    expect(issues).toEqual([]);
+
+    // Built from the store's own accepted set, not a hand-picked string.
+    const stored = sources[0];
+    if (stored === undefined) throw new Error("expected the source to survive");
+    const storedField = stored.fields[0];
+    if (storedField === undefined) throw new Error("expected its field");
+
+    const key = `custom.${stored.id}.${storedField.id}`;
+    expect(describeDynamicKey(key)?.family).toBe("custom");
+  });
+
+  it("refuses a duplicate source id and keeps the first", () => {
+    const { sources, issues } = normalizeSources({
+      sources: [source(), source()],
+    });
+
+    expect(sources).toHaveLength(1);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.reason).toContain("repeats an id");
   });
 
   it("refuses a 33rd source and keeps the first 32", () => {
@@ -296,6 +369,17 @@ describe("source store", () => {
     expect(await readFile(sourcesFile(dir))).toEqual(before);
   });
 
+  it("stores the parsed URL so typed case and whitespace do not persist", async () => {
+    const store = createSourceStore(dir);
+
+    await store.write({
+      sources: [source({ url: "  HTTP://LocalHost:8080/Data  " })],
+    });
+
+    const read = await store.read();
+    expect(read.sources[0]?.url).toBe("http://localhost:8080/Data");
+  });
+
   it("serializes overlapping writes so the file is never interleaved", async () => {
     const store = createSourceStore(dir);
 
@@ -307,6 +391,34 @@ describe("source store", () => {
     const read = await store.read();
     expect(read.issues).toEqual([]);
     expect(read.sources.map((one) => one.id)).toEqual(["right"]);
+  });
+
+  it("starts the second save only after the first rename resolves", async () => {
+    let release = (): void => undefined;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const events: string[] = [];
+    let saves = 0;
+    const store = createSourceStore(dir, {
+      rename: async () => {
+        saves += 1;
+        const save = saves;
+        events.push(`start:${save}`);
+        if (save === 1) await blocked;
+        events.push(`end:${save}`);
+      },
+    });
+
+    const first = store.write({ sources: [source({ id: "first" })] });
+    const second = store.write({ sources: [source({ id: "second" })] });
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(events).toEqual(["start:1"]);
+
+    release();
+    await Promise.all([first, second]);
+    expect(events).toEqual(["start:1", "end:1", "start:2", "end:2"]);
   });
 
   it("leaves the previous file byte-identical when the rename fails", async () => {
@@ -325,5 +437,19 @@ describe("source store", () => {
     ).rejects.toThrow("EPERM");
 
     expect(await readFile(sourcesFile(dir))).toEqual(before);
+  });
+
+  it("removes the temp file when the rename fails", async () => {
+    const failing = createSourceStore(dir, {
+      rename: async () => {
+        throw new Error("EPERM: rename failed");
+      },
+    });
+
+    await expect(failing.write({ sources: [source()] })).rejects.toThrow(
+      "EPERM",
+    );
+
+    expect(await readdir(dir)).toEqual([]);
   });
 });

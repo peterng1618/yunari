@@ -263,6 +263,20 @@ describe("describeDynamicKey", () => {
     expect(declared?.valueKind).toBe("number");
   });
 
+  it("accepts the store's id alphabet in a custom key", () => {
+    expect(describeDynamicKey("custom._local-source._my_field")?.family).toBe(
+      "custom",
+    );
+    expect(describeDynamicKey("custom.my_source.Field2")?.family).toBe(
+      "custom",
+    );
+  });
+
+  it("rejects a custom key whose source segment is too long", () => {
+    const id = "a".repeat(33);
+    expect(describeDynamicKey(`custom.${id}.value`)).toBeUndefined();
+  });
+
   it("describes the static image and text media keys", () => {
     expect(describeDynamicKey("weather.icon")?.mediaKind).toBe("image");
     expect(describeDynamicKey("media.title")?.valueKind).toBe("text");

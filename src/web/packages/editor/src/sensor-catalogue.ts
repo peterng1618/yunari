@@ -1,6 +1,7 @@
 import {
   SEMANTIC_KEYS,
   type SemanticKeyDescriptor,
+  UNIT_KINDS,
   type UnitKind,
   type ValueKind,
 } from "@yunari/renderer-core";
@@ -43,31 +44,15 @@ function valueKindOf(value: unknown): ValueKind | undefined {
     : undefined;
 }
 
-/** The conversion kinds the vocabulary declares. Kept here because the wire is
- *  unvalidated JSON: a kind the renderer does not know is dropped, not cast. */
-const UNIT_KINDS: ReadonlySet<string> = new Set<UnitKind>([
-  "percent",
-  "temperature",
-  "clock",
-  "data",
-  "dataRate",
-  "power",
-  "voltage",
-  "current",
-  "rotation",
-  "duration",
-  "speed",
-  "pressure",
-  "count",
-  "text",
-  "boolean",
-]);
+/** The conversion kinds the vocabulary declares, imported rather than copied:
+ *  a kind the renderer does not know is dropped, not cast. */
+const UNIT_KIND_SET: ReadonlySet<string> = new Set(UNIT_KINDS);
 
 /** Trusted-host shape, not a schema: the host is ours, and a malformed entry is
  *  dropped rather than crashing the picker. Every enumerated field is
  *  whitelisted, so a kind the renderer cannot honour reads as absent. */
 function unitKindOf(value: unknown): UnitKind | undefined {
-  return typeof value === "string" && UNIT_KINDS.has(value)
+  return typeof value === "string" && UNIT_KIND_SET.has(value)
     ? (value as UnitKind)
     : undefined;
 }

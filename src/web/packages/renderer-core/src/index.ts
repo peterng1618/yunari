@@ -178,6 +178,7 @@ export {
   SEMANTIC_KEYS,
   semanticId,
   semanticKeysByFamily,
+  UNIT_KINDS,
 } from "./data/semantic-keys.js";
 export type { SampleSource } from "./data/source.js";
 export { emptySampleSource } from "./data/source.js";

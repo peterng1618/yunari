@@ -34,22 +34,26 @@ export const BUILT_IN_FAMILIES: readonly string[] = [
 ];
 
 /** The conversion contract; a unit without one is shown as measured. */
-export type UnitKind =
-  | "percent"
-  | "temperature"
-  | "clock"
-  | "data"
-  | "dataRate"
-  | "power"
-  | "voltage"
-  | "current"
-  | "rotation"
-  | "duration"
-  | "speed"
-  | "pressure"
-  | "count"
-  | "text"
-  | "boolean";
+export const UNIT_KINDS = [
+  "percent",
+  "temperature",
+  "clock",
+  "data",
+  "dataRate",
+  "power",
+  "voltage",
+  "current",
+  "rotation",
+  "duration",
+  "speed",
+  "pressure",
+  "count",
+  "text",
+  "boolean",
+] as const;
+
+/** Derived, so the runtime list and the type cannot disagree. */
+export type UnitKind = (typeof UNIT_KINDS)[number];
 
 export type ValueKind = "number" | "text" | "boolean";
 
@@ -1223,8 +1227,10 @@ const DYNAMIC_KEY_SHAPES: readonly DynamicKeyShape[] = [
     }),
   },
   {
-    pattern:
-      /^custom\.([a-z0-9][a-z0-9-]{0,63})\.([A-Za-z0-9][A-Za-z0-9_-]{0,63})$/,
+    // The spec's custom-key alphabet, not a slug: a source or field id may
+    // carry `_` and may start with one, and the key must stay legal because
+    // the store validated the same ids before persisting them.
+    pattern: /^custom\.([a-z0-9_-]{1,32})\.([A-Za-z0-9_-]{1,32})$/,
     describe: (match) => ({
       family: "custom",
       label: `${match[1]} ${match[2]}`,
