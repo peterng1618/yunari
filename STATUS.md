@@ -11,7 +11,7 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Active work
 
-- **Tasks 1–9 are done** (menu model, external programs, sign-in entry, both tray adapters, controller, CLI flags, console-free opener, host wiring); Phases 1–2 complete, Phase 3 in flight.
+- **Tasks 1–10 are done** (menu model, external programs, sign-in entry, both tray adapters, controller, CLI flags, console-free opener, host wiring, editor deep links); Phases 1–2 complete, Phase 3 in flight.
 - **Controller** polls every 5 s, sends only a changed menu or tooltip, dispatches clicks and shows action or snapshot failures as 10 s notices.
 - **Windows adapter** renders the model through a hidden PowerShell WinForms `NotifyIcon` fed by JSON lines on stdin.
 - **Linux adapter** stages the pinned `systray2@2.1.4` x86-64 binary; no new npm dependency and no runtime install.
@@ -20,15 +20,15 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 ## Last completed change
 
-- **Wiring:** `host/src/main.ts` builds one `createExternalApps`, starts LHM in the background only in tray mode, and routes all nine actions.
-- **Exit:** controller gains `onExit`; it closes its own view on Exit and never dispatches that action, so Exit now stops the host rather than only the icon.
-- **Foreground:** `--lhm-exe` without `--tray` still starts LHM synchronously; the banner keeps its wording and tray mode names the background start.
-- **Tests:** host typecheck 0; tray + cli 136 pass; full host 1770 pass, 2 SMTC-helper failures reproduce standalone on this machine.
-- **Live:** `--tray --port 5299` with a fresh temp app dir and APPDATA stayed up with a PowerShell helper child; after the host was killed, both were gone and the temp folders removed.
+- **Deep links:** `shell-entry.ts` reads `mode=themes|this-pc` and `publish=1`, and any other mode value opens the editor.
+- **Shell wiring:** `ShellRoot` opens on the parsed mode; one mount effect opens the existing publish surface, and `publish=1` is ignored where another mode is named.
+- **Unit:** `shell-entry.test.ts` pins six query cases; the red proof (defaults unconditionally) failed 4 of 6.
+- **Browser:** `editor-deep-links.spec.ts` drives the 4174 preview with `index.json`, `/api/themes` and `/api/hosting` stubbed; red proof failed 3 of 5, restored run 5 pass.
+- **Gates:** editor and e2e typecheck 0, biome 0 on the four files, `shell-layout.dom` 38 pass; editor, player and host bundles rebuilt for the preview.
 
 ## Next
 
-1. Task 10+: editor deep links, then Task 11 documentation, notices and the gate.
+1. Task 11: documentation, notices and the full gate.
 2. Raise the stale AGENTS.md port range (4215–4237) with the user; 4239 and 4245 are now used.
 3. Run a live adapter check with a game (RTSS or PresentMon) and a live Steam store lookup when the user can.
 

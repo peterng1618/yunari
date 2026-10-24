@@ -46,6 +46,7 @@ import { Rail, type RailSlot } from "./rail.js";
 import { SaveState } from "./save-state.js";
 import type { EditorViewControls } from "./session-facade.js";
 import { Settings, type SettingsTab } from "./settings.js";
+import { parseShellEntry } from "./shell-entry.js";
 import { ShellMenuBar } from "./shell-menu-bar.js";
 import {
   FinderStore,
@@ -248,6 +249,11 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
   const initialOverrides: ShortcutOverrides =
     storage === undefined ? {} : readShortcutOverrides(storage);
   setActiveShortcuts(resolveShortcuts(initialOverrides));
+
+  /** The URL's request, read once at mount. The shell does not follow the
+   *  address bar afterwards — a mode switch or a closed surface writes nothing
+   *  back — so this is an entry and not a route. */
+  const entry = parseShellEntry(window.location.search);
 
   const hosts: ShellHosts = {
     canvas: element(),
@@ -760,7 +766,14 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
    * than left floating for the runtime to report.
    */
   function ShellRoot(): React.JSX.Element {
-    const [mode, setMode] = useState<ShellMode>("editor");
+    const [mode, setMode] = useState<ShellMode>(entry.mode);
+    // The URL's publish request, applied once after the header has mounted.
+    // `publishSurface` is the store the header control and the chord already
+    // drive, so this opens that one surface rather than a second publish path;
+    // the effect is a mount one, so closing the surface does not reopen it.
+    useEffect(() => {
+      if (entry.publish) publishSurface.set(true);
+    }, []);
     const requestMode = (next: ShellMode): void => {
       if (next === mode) return;
       const session = mode === "editor" ? store.bridge?.session : undefined;
