@@ -52,9 +52,10 @@ entry point, because nothing today converts.
 
 ## Rung 2 — dependencies
 
-Searched: `git grep -n "ajv|json-schema"` across `src/web/**/package.json`
-(Grep tool, glob `**/package.json`), then read every workspace manifest's
-dependency list.
+Searched: `git grep -n -E "ajv|json-schema" -- 'src/web/**/package.json'` and
+`git grep -n -E '"node_modules/(ajv|json-schema)' -- src/web/package-lock.json`
+(both re-run 2026-10-25; both exit 1 with no output, i.e. no direct or
+transitive match), then read every workspace manifest's dependency list.
 
 Found: **nothing.** No schema library, no ajv, no `migrate*`/`upcast*` package
 in any manifest. Validation is hand-written against hand-maintained key lists

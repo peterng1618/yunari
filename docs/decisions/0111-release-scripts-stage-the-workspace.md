@@ -26,7 +26,7 @@ Searched: read `src/web/packages/host/bin/yunari.js`, `packages/host/vite.config
 `packages/host/src/main.ts`, and every workspace manifest (`src/web/package.json`
 plus each `packages/*/package.json`, summarised with a Node script).
 
-Found: **all nine workspace packages are `private: true` at `0.0.0`; the only
+Found: **all eight workspace members are `private: true` at `0.0.0`; the only
 version a release owns is `src/web/package.json`'s `0.1.0`** (`//version` records
 the `vg-279` ruling). The host build is an SSR bundle
 (`vite.config.ts`: `ssr: "src/main.ts"`, `target: "node22"`, `format: "esm"`,
@@ -43,14 +43,17 @@ has to move.
 
 ## Rung 2 — dependencies
 
-Searched: every workspace manifest's dependency list; the npm CLI's own pack and
-publish support (`npm --version` → 11.6.2, `npm publish --help`).
+Searched: every workspace manifest's dependency list; the lockfile for a
+packaging library (`git grep -n -E '"node_modules/(pacote|libnpmpublish|npm-packlist|arborist)"'
+-- src/web/package-lock.json`, exit 1); the npm CLI's own pack and publish
+support (`npm --version` → 11.6.2, `npm publish --help`).
 
-Found: **no packaging dependency exists, and none is needed.** The only archive
-library in the tree is `fflate` in `theme-package`, which zips `.yunari-theme`
-files — unrelated to npm packaging. `npm pack` and `npm publish` are the
-platform and were exercised directly in the probe below. A staging script needs
-`node:fs` and `node:path` only.
+Found: **no packaging dependency exists, direct or transitive, and none is
+needed.** The only archive library in the tree is `fflate` in `theme-package`,
+which zips `.yunari-theme` files — unrelated to npm packaging. `npm pack` was
+exercised directly in the probe below; `npm publish` support was read from
+`npm publish --help`, not run. A staging script needs `node:fs` and `node:path`
+only.
 
 ## Rung 3 — platform
 
@@ -64,7 +67,9 @@ a release needs; a GitHub Release can carry the `.tgz` and a `.zip` of the stage
 directory. The parts it leaves to us are the ones the probe exposed: which files
 the tarball contains, which dependencies the staged manifest must declare, and
 that the version the manifest states matches the tag. Trusted publishing is a
-publisher-side setting, not something the workflow can grant itself.
+publisher-side setting, not something the workflow can grant itself, and it was
+**not verified against live docs** on 2026-10-25 (web search returned no
+results); it is a risk carried into C3.
 
 ## Rung 4 — ecosystem
 
@@ -98,10 +103,16 @@ the fetched README are the evidence.
 | **Stage a workspace-shaped package outside the repo** | Complete: `packages/…` layout is what the launcher already resolves | One script and a CI step | The staged manifest must match what the bundle actually imports — proved by the probe | **Chosen** |
 | Bundle the host into a single SEA executable | Fits winget later | Out of scope; no SEA config, no signing | Slower to first release, and it defeats the npm install path that is the primary distribution | **Deferred** (spec D7) |
 
-Staging wins because it needs **no production path change**: `bin/yunari.js`'s
-`../dist/main.js`, `packagesDir`'s `player/dist`/`editor/dist`/`host/public`, and
-`productVersion()`'s `../../../package.json` all resolve inside the tarball, and
-the probe proves the resulting command runs.
+Staging wins because it needs **no production path change**, and the probe
+separates what it proved from what it did not. It copied
+`packages/host/{bin,dist}`, `packages/player/dist` and `packages/editor/dist`
+(no `host/public`, no `schema/`), and proved two of the three assumptions:
+`bin/yunari.js`'s `../dist/main.js` and `productVersion()`'s
+`../../../package.json` resolve inside the tarball, because the installed
+command printed `0.1.0`. It did **not** exercise `packagesDir` /
+`host/public`, because `--version` exits before the server starts; C1's Step 5
+(boot the installed host, fetch `/api/health`, `/editor` and `/`) owns that
+proof.
 
 ## Rung 6 — probe
 
