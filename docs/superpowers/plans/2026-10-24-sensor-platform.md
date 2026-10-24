@@ -1381,9 +1381,12 @@ wording; the spec has been amended to say the same thing.
   Expected: FAIL, module not found.
 
 - [ ] **Step 3: Implement the normaliser and tiers**
-  Fold case and Unicode (`normalize("NFKD")`, strip combining marks), strip the
-  symbols, punctuation and articles, drop the qualifier list, collapse
-  whitespace. Accept a candidate only when the normalised base titles are equal
+  Strip `™`/`®`/`©` before `normalize("NFKD")` (NFKD turns `™` into `TM`), fold
+  case, and strip combining marks only when the base character is Latin — kana
+  voicing and Cyrillic phonemic marks are meaningful, so `が` must not become
+  `か`. Then strip punctuation and articles, drop the trailing qualifier words
+  (with or without `edition`), collapse whitespace. Two results with one appid
+  are one candidate. Accept a candidate only when the normalised base titles are equal
   or their token sets are equal; return a winner only when exactly one candidate
   survives. No prefix, substring or edit-distance rule — it is the rule that
   turns a sequel into the wrong cover.

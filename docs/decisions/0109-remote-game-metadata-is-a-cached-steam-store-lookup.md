@@ -96,8 +96,8 @@ ledger's Phase 7 probe entry.
 
 ## Rung 7 — build
 
-Smallest thing that holds the invariant: `name-match.ts` (normaliser plus three
-tiers, returning a winner only when exactly one candidate survives),
+Smallest thing that holds the invariant: `name-match.ts` (normaliser plus two
+acceptance tiers, returning a winner only when exactly one candidate survives),
 `store-metadata.ts` (the two requests, a name→appid cache including "no match",
 cover bytes cached by appid, a 10-minute backoff after 429 or a failed request),
 and the existing route extended to serve cached remote covers under the same

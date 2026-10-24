@@ -625,11 +625,14 @@ small on-disk map from normalised name to appid (including "no match") and the
 downloaded cover bytes, so a lookup happens once per game and the display works
 offline afterwards.
 
-**Matching is tiered, and ambiguity is refused.** Normalisation folds case and
-Unicode, strips `™ ® ©`, punctuation and leading articles, and drops edition
-qualifiers (`definitive`, `deluxe`, `ultimate`, `complete`, `goty`, `enhanced`,
-`remastered`, `special`, `gold`, `anniversary`, `legendary`, `collector's`,
-`director's cut`). A match is accepted only when the base titles are equal or
+**Matching is tiered, and ambiguity is refused.** Normalisation folds case,
+strips `™ ® ©`, punctuation and leading articles, removes Latin diacritics but
+never the marks that distinguish non-Latin letters (kana voicing, Cyrillic
+phonemic marks), and drops edition qualifiers (`definitive`, `deluxe`,
+`ultimate`, `complete`, `goty`, `enhanced`, `remastered`, `special`, `gold`,
+`anniversary`, `legendary`, `collector's`, `director's cut`) as trailing words,
+with or without a following `edition`. Two search entries carrying one appid are
+one candidate. A match is accepted only when the base titles are equal or
 their token sets are equal after the qualifiers are dropped, and only if exactly
 one candidate remains. `Doom` must not match `Doom Eternal`, and no prefix or
 substring rule is used at all: a sequel's extra word is not a qualifier, so it
