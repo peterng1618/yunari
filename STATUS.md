@@ -22,7 +22,7 @@ The **system tray host** ([`spec`](docs/superpowers/specs/2026-10-25-systray-des
 
 - **Open rows:** `tray/actions.ts` owns them; the folder takes the directory branch so Windows uses `explorer.exe`, and a failed open reports `ok: false`.
 - **Sign-in entry:** path flags resolve against this run's cwd, `--tray`/`-n` are not appended twice, and XDG `Exec` escapes `$` and a backtick.
-- **Tray fixes:** a Linux row-count change writes nothing, Windows assigns `ContextMenuStrip` for keyboard opening, process presence is cached 30 s, and first-refresh/stop failures are guarded.
+- **Tray fixes:** a Linux row-count change writes nothing, Windows assigns `ContextMenuStrip` for keyboard opening, process presence is cached 30 s, first-refresh/stop failures are guarded, and the server close runs in a `finally`.
 - **Docs:** RTSS help and the untracked-PROVENANCE wording corrected; the spec records the unexecuted sign-in entry as unverified.
 - **Verification:** 161 focused tray/cli/autostart tests pass; the behavioural new cases were red-proven by reverting each fix.
 
