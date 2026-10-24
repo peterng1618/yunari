@@ -458,14 +458,17 @@ export async function mountEditorShell({
       "An editor shell accepts either a scene plan or a Fabric envelope, not both.",
     );
   }
-  if (envelope !== undefined) {
-    const validation = readFabricThemeEnvelope(envelope);
-    if (!validation.ok) {
-      throw new Error(
-        `Invalid theme: ${validation.issues[0]?.message ?? "unknown validation error"}`,
-      );
-    }
+  // The migrated document is the one the shell mounts: validating the migrated
+  // shape and then reviving the raw one would hand the first real N−1
+  // migration a document its migration was meant to replace.
+  const read =
+    envelope === undefined ? undefined : readFabricThemeEnvelope(envelope);
+  if (read !== undefined && !read.ok) {
+    throw new Error(
+      `Invalid theme: ${read.issues[0]?.message ?? "unknown validation error"}`,
+    );
   }
+  const opened = read?.ok === true ? read.envelope : undefined;
   const container = document.createElement("div");
   container.id = `${EDITOR_CONTAINER_ID}-${nextEditorContainer}`;
   nextEditorContainer += 1;
@@ -477,8 +480,8 @@ export async function mountEditorShell({
   container.style.inset = "0";
   container.style.visibility = "hidden";
   let currentArtboard = artboard;
-  let currentBackground: Background | undefined = envelope?.background;
-  let globals: Globals | undefined = envelope?.globals;
+  let currentBackground: Background | undefined = opened?.background;
+  let globals: Globals | undefined = opened?.globals;
   host.append(container);
   const paintMemo: PaintMemo = { background: undefined, clip: undefined };
 
@@ -516,14 +519,14 @@ export async function mountEditorShell({
     // re-applies the serialized background after it.
     editor.canvas.on("editor:history-state-loaded" as never, paintArtboard);
 
-    if (envelope !== undefined) {
+    if (opened !== undefined) {
       // The same warning channel the paint pass reports through, so a document
       // that loses a figure at revival says so through the shell's own line —
       // and says it once, because `refuseUndrawablePaint` leaves the
       // reference-carrying arc to the paint pass below.
       await reviveThemeEnvelope(
         editor.canvas,
-        envelope,
+        opened,
         resolveSceneAsset,
         {
           onRefusedPaint: (message) =>
@@ -537,7 +540,7 @@ export async function mountEditorShell({
     }
 
     const scene =
-      plan === undefined && envelope === undefined
+      plan === undefined && opened === undefined
         ? undefined
         : createSceneAdapter({ canvas: editor.canvas });
 
@@ -553,7 +556,7 @@ export async function mountEditorShell({
     host.replaceChildren(container);
     container.id = EDITOR_CONTAINER_ID;
     container.style.visibility = "";
-    let mediaAssets = assets ?? envelope?.assets;
+    let mediaAssets = assets ?? opened?.assets;
     let mediaResolve = resolveAsset;
     const reportMediaError = (message: string): void => {
       editor.errorManager.warn("background-media", message);

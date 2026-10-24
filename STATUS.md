@@ -21,7 +21,7 @@ The **release-readiness** plan ([`spec`](docs/superpowers/specs/2026-10-25-relea
 - **Opens migrate, writes stay strict:** the editor mount, store read, player loader, both catalogue readers, the package reader and the publish route call `readFabricThemeEnvelope`.
 - **Publish serves the migrated envelope:** a legacy-integer document is published as `"2.0.0"`, and `"1.0.0"` is refused with the unsupported sentence.
 - **Strict write paths unchanged:** `checked()`, the editor `snapshot`, `writeThemePackage` and `requestVersion` still call the validator and refuse the integer.
-- **Ten reader cases added** across the six existing suites; affected suites pass (3 failures: two SMTC, one load-timeout rerun green) and typecheck is clean.
+- **Seventeen cases added** across the six existing suites (16 open-path, one strict-writer); affected suites pass and typecheck is clean.
 
 ## Next
 
