@@ -21,8 +21,7 @@ Drain `docs/product/backlog.jsonl`: the queued [`spec`](docs/superpowers/specs/2
 - **Release readiness merged:** schema `2.0.0` with the previous major migrated on read, an audit policy that fails closed, a staged npm package, release-please and the publish workflow, and a rewritten README.
 - **Register merged by id:** `vg-728` and `vg-729` filed; `vg-717`, `vg-723` and `vg-726` dropped from the branch's copy because main had already verified them.
 - **Decision notes renumbered:** 0112 (migrate the previous major on open) and 0113 (stage the workspace) leave main's 0110 and 0111 in place.
-- **Branch gate at `c24a166b`:** 385 of 386 files and 5739 of 5741 tests; both failures are the known live-SMTC cases.
-- **`status:check`, `docs:check` and `backlog:check` exit 0** after the resolution.
+- **Merged gate exit 0** at `3819bb58`: 398 files and 5853 tests pass, 1 skipped, Worker 73; `status:check`, `docs:check` and `backlog:check` also exit 0.
 
 ## Next
 
