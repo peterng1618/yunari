@@ -469,10 +469,11 @@ git commit -m "test(e2e): place text through the click-or-drag gesture"
 
 - [ ] **Step 1: Write the failing browser cases**
 
-- Add → Text → click creates an instance of type `i-text`, grows while typing, its `ml`/`mr` controls scale rather than writing a width, and it exposes no `mt`/`mb` edge handles while the drag-created Text box keeps them.
+- Add → Text → click creates an instance of type `i-text`, grows while typing, its corner controls scale rather than writing a width, and it exposes none of `ml`/`mr`/`mt`/`mb` while the drag-created Text box keeps them.
 - Typing on the canvas into a just-placed Text, then leaving the edit, keeps the words through the repaint and a reload (Task 2.5); no case may be pinned as an expected failure.
-- The click-created Text exposes no `mt`/`mb` edge handles (edge controls are Textbox-only), while the drag-created Text box keeps them.
-- Add → Text → drag creates a `textbox` at the drawn rectangle, wraps inside it, keeps the box while typing, and its `ml`/`mr` controls use `changeWidth`.
+- Add → Text → drag creates a `textbox` at the drawn rectangle, wraps inside it, keeps the box while typing, and its `ml`/`mr` controls use `changeWidth`. Its authored box height is asserted and survives reopen.
+- Runs render as numbered tabs, selecting one shows only its fields, and `+` adds and selects a run (Task 2.3).
+- A plan-built scene produces `IText` for auto and `Textbox` for fixed. The player mounts no plans, so this is discharged by the adapter's DOM test rather than a browser case; say so where the evidence is recorded.
 - Escape during placement leaves the scene and the history unchanged.
 - Save, reload and reopen preserves both classes and their geometry.
 - A legacy `Textbox` with `wrap: false` still wraps, and a legacy `"Text"` object opens editable as `IText`.
