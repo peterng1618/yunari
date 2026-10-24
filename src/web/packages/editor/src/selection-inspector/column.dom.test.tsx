@@ -574,7 +574,8 @@ describe("an image's sensor field", () => {
     const content = perKindColumn(new Rect(), context()).find(
       (section) => section.id === "content",
     );
-    expect(content?.fields.some((field) => field.id === "image-binding")).toBe(
+    // A plain shape has no content section at all, so absence is the whole claim.
+    expect(content?.fields.some((field) => field.id === "image-binding") ?? false).toBe(
       false,
     );
   });
