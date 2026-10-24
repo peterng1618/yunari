@@ -394,6 +394,10 @@ describe("source store", () => {
   });
 
   it("starts the second save only after the first rename resolves", async () => {
+    let markStarted = (): void => undefined;
+    const firstStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
     let release = (): void => undefined;
     const blocked = new Promise<void>((resolve) => {
       release = resolve;
@@ -405,7 +409,10 @@ describe("source store", () => {
         saves += 1;
         const save = saves;
         events.push(`start:${save}`);
-        if (save === 1) await blocked;
+        if (save === 1) {
+          markStarted();
+          await blocked;
+        }
         events.push(`end:${save}`);
       },
     });
@@ -413,7 +420,14 @@ describe("source store", () => {
     const first = store.write({ sources: [source({ id: "first" })] });
     const second = store.write({ sources: [source({ id: "second" })] });
 
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    // Wait for the observed first save, not for wall clock. Once it is held
+    // open, drain the event loop a bounded number of turns: a save that
+    // skipped the queue would reach its rename here, while a queued one cannot
+    // start at all until the held save finishes.
+    await firstStarted;
+    for (let turn = 0; turn < 100 && events.length === 1; turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
     expect(events).toEqual(["start:1"]);
 
     release();
