@@ -279,6 +279,77 @@ describe("ChartManager", () => {
     manager.destroy();
   });
 
+  it("redraws only the charts whose palette ink the change moves", () => {
+    // A palette edit is a live sample per pointer move. Every chart used to be
+    // redrawn for every sample — seven ECharts `setOption` calls and their
+    // animation work — even when the token the author was dragging is one no
+    // chart names. The chart's own plan is what decides its ink, so the ink is
+    // part of its reading.
+    const accentChart = Object.assign(Object.create(YunariChart.prototype), {
+      id: "accent-gauge",
+      family: "gauge",
+      settings: {
+        ...defaultGaugeSettings,
+        track: { kind: "solid", color: "rgb(32 32 32)" },
+        progress: { ref: "palette.accent" },
+      },
+      setOption: vi.fn(),
+    }) as YunariChart;
+    const plainChart = Object.assign(Object.create(YunariChart.prototype), {
+      id: "plain-gauge",
+      family: "gauge",
+      settings: {
+        ...defaultGaugeSettings,
+        track: { kind: "solid", color: "rgb(32 32 32)" },
+        progress: { kind: "solid", color: "rgb(64 64 64)" },
+      },
+      setOption: vi.fn(),
+    }) as YunariChart;
+    const canvas = {
+      on: vi.fn(),
+      off: vi.fn(),
+      getActiveObject: vi.fn(),
+      getObjects: vi.fn(() => [accentChart, plainChart]),
+      requestRenderAll: vi.fn(),
+    };
+    const palette = (accent: string) => ({
+      accent: {
+        name: "Accent",
+        value: { kind: "solid" as const, color: accent },
+      },
+      track: {
+        name: "Track",
+        value: { kind: "solid" as const, color: "rgb(32 32 32)" },
+      },
+    });
+    const manager = new ChartManager({
+      editor: { canvas, artboard } as unknown as EditorInteraction,
+      scene: {} as SceneAdapter,
+      source: createDemoSource(0),
+      globals: { palette: palette("rgb(0 184 217)") },
+    });
+    vi.mocked(accentChart.setOption).mockClear();
+    vi.mocked(plainChart.setOption).mockClear();
+
+    manager.setGlobals({ palette: palette("rgb(0 184 217)") });
+    expect(
+      accentChart.setOption,
+      "a change to an unreferenced token draws nothing",
+    ).not.toHaveBeenCalled();
+    expect(plainChart.setOption).not.toHaveBeenCalled();
+
+    manager.setGlobals({ palette: palette("rgb(255 0 0)") });
+    expect(
+      accentChart.setOption,
+      "the chart that names the token is redrawn",
+    ).toHaveBeenCalledOnce();
+    expect(
+      plainChart.setOption,
+      "and a chart with no reference is not",
+    ).not.toHaveBeenCalled();
+    manager.destroy();
+  });
+
   it("updates the selected Fabric chart from envelope bindings", async () => {
     const listeners = new Map<string, (event?: unknown) => void>();
     const chart = Object.assign(Object.create(YunariChart.prototype), {

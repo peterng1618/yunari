@@ -254,9 +254,11 @@ export class ChartManager {
 
   setGlobals(globals: FabricGlobals | undefined): void {
     this.#globals = globals;
-    // A palette decides every chart's ink, so new globals move a chart the
-    // data did not.
-    this.#applyCharts(true);
+    // A palette decides every chart's ink, so the ink is part of a chart's
+    // reading (`#readingSignature`). Forcing here redrew all seven Starter
+    // charts — seven ECharts `setOption`s and their animation work — on every
+    // live sample of a colour drag, including tokens no chart names.
+    this.#applyCharts(false);
   }
 
   /**
@@ -575,7 +577,32 @@ export class ChartManager {
         }:${sample?.value ?? sample?.textValue ?? "-"}`;
       })
       .join("|");
-    return content.family === "line" ? `${readings}|now:${nowMs}` : readings;
+    const drawn =
+      content.family === "line" ? `${readings}|now:${nowMs}` : readings;
+    // The palette is an input to the plan, not to the document: a token named
+    // by this chart's settings and given a new value changes the picture, and
+    // one the chart does not name does not.
+    return `${this.#inkSignature(chart.settings)}|${drawn}`;
+  }
+
+  /** The palette values this chart's own settings name, as one comparable
+   *  string. The settings are the plan's paint input, so a `ref` found here is
+   *  the whole set of tokens the chart can draw with. */
+  #inkSignature(settings: unknown): string {
+    const refs = new Set<string>();
+    collectRefs(settings, refs);
+    if (refs.size === 0) return "";
+    const palette = this.#globals?.palette;
+    return [...refs]
+      .sort()
+      .map((ref) => {
+        const id = ref.startsWith("palette.")
+          ? ref.slice("palette.".length)
+          : "";
+        const value = id === "" ? undefined : palette?.[id]?.value;
+        return `${ref}=${value === undefined ? "-" : JSON.stringify(value)}`;
+      })
+      .join("|");
   }
 
   #chartFor(id: string): YunariChart | undefined {
@@ -633,5 +660,20 @@ export class ChartManager {
   #selectedChart(): YunariChart | undefined {
     const object = this.#editor.canvas.getActiveObject();
     return object instanceof YunariChart ? object : undefined;
+  }
+}
+
+/** Every `ref` an authored settings bag carries, however deep. Paint fields are
+ *  the only place a chart names a token, and their shape differs by family, so
+ *  the walker is the one rule that covers all four without a second list. */
+function collectRefs(value: unknown, into: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) collectRefs(entry, into);
+    return;
+  }
+  if (typeof value !== "object" || value === null) return;
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "ref" && typeof entry === "string") into.add(entry);
+    else collectRefs(entry, into);
   }
 }

@@ -142,15 +142,23 @@ export function ColourPicker({
   label,
   onValueChange,
   onValueCommit,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   readonly value: string;
   readonly label: string;
   readonly onValueChange: (next: string) => void;
   readonly onValueCommit: (next: string) => void;
+  /** Defaults to the trigger owning the bit. A caller that opens the popover
+   *  from somewhere else — a gradient stop — passes both and keeps one answer. */
+  readonly open?: boolean | undefined;
+  readonly onOpenChange?: ((next: boolean) => void) | undefined;
 }): React.JSX.Element {
   const api = useColourPicker({ value, onValueChange, onValueCommit });
   const presets = usePresetLibrary();
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = controlledOpen ?? ownOpen;
+  const setOpen = onOpenChange ?? setOwnOpen;
   const [menu, setMenu] = useState<PresetMenuTarget | undefined>(undefined);
   const ids = useControlIds(undefined);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -169,8 +177,9 @@ export function ColourPicker({
     const y = (clientY - box.top) / box.height;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     const next = areaFromPoint(x, y);
-    api.setChannel("saturation", next.s * 100);
-    api.setChannel("value", next.v * 100);
+    // One change: the point is one colour, and two samples would publish a
+    // colour nobody asked for between them.
+    api.setChannels({ saturation: next.s * 100, value: next.v * 100 });
   };
 
   const areaKeys = (event: React.KeyboardEvent<HTMLDivElement>): void => {
@@ -195,8 +204,10 @@ export function ColourPicker({
         : undefined;
     if (horizontal === undefined && vertical === undefined) return;
     event.preventDefault();
-    if (horizontal !== undefined) api.setChannel("saturation", horizontal);
-    if (vertical !== undefined) api.setChannel("value", vertical);
+    api.setChannels({
+      ...(horizontal === undefined ? {} : { saturation: horizontal }),
+      ...(vertical === undefined ? {} : { value: vertical }),
+    });
     api.commit();
   };
 
@@ -340,7 +351,7 @@ export function ColourPicker({
                   value={api.text}
                   onValueChange={(next) => api.choosePreset(next)}
                   aria-label={uiCopy.panels.pickerPresets}
-                  className="space-y-1"
+                  className="flex flex-wrap gap-[var(--space-4)]"
                 >
                   {presets.colours.map((preset) => (
                     <span
@@ -367,6 +378,7 @@ export function ColourPicker({
                       }}
                     >
                       <ControlChoiceRow
+                        shape="chip"
                         label={preset.name}
                         value={preset.value}
                         data={{
@@ -377,14 +389,14 @@ export function ColourPicker({
                           <span
                             aria-hidden
                             data-yunari-value=""
-                            className="size-4 flex-none rounded-sm border border-edge"
+                            className="block size-full"
                             style={{
                               backgroundImage: `${CHECKERBOARD}`,
                               backgroundSize: "0.5rem 0.5rem",
                             }}
                           >
                             <span
-                              className="block size-full rounded-sm"
+                              className="block size-full"
                               style={{ background: preset.value }}
                             />
                           </span>

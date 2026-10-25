@@ -246,6 +246,22 @@ it("emits live on every area move and settles exactly once at pointer-up", async
   await picker.close();
 });
 
+it("publishes one colour per area sample, not one per channel", async () => {
+  const picker = await openPicker(GREY);
+  const area = picker.find("picker-area");
+  stubRect(area, 200, 200);
+
+  await pointer(area, "pointerdown", 20, 20);
+  expect(picker.change, "a press is one colour").toHaveBeenCalledOnce();
+  await pointer(area, "pointermove", 80, 80);
+  expect(
+    picker.change,
+    "and a move is one colour, though it writes two channels",
+  ).toHaveBeenCalledTimes(2);
+
+  await picker.close();
+});
+
 it("moves the area from the keyboard and settles once per press", async () => {
   const picker = await openPicker(GREY);
   const area = picker.find("picker-area");
@@ -341,6 +357,22 @@ it("offers the library's colours as one labelled radiogroup, and choosing one se
   expect(picker.settled).toHaveBeenCalledWith(first.value);
 
   await picker.close();
+});
+
+it("draws a colour preset as a named chip carrying no printed name", async () => {
+  const picker = await openPicker(PURE_RED);
+  try {
+    const first = presetLibrary.getSnapshot().colours[0];
+    if (first === undefined) throw new Error("The preset library is empty.");
+    const chip = picker.find(`picker-preset-${first.id}`);
+
+    // The name is the chip's programmatic label; drawing it beside the swatch is
+    // the full-width row the library replaced.
+    expect(chip.textContent?.trim()).toBe("");
+    expect(chip.getAttribute("aria-label")).toBe(first.name);
+  } finally {
+    await picker.close();
+  }
 });
 
 it("adds a colour to the open row, deletes it by right-click and by Shift+F10, and by Delete", async () => {

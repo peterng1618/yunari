@@ -495,9 +495,10 @@ The vocabulary is closed. A control is one of these, or it is not a control.
 | **Labelled button** | A label in `--text-sm` on the `--yunari-control-bg` fill, 1px `--edge`, `--radius-md`, `6px 12px` padding | You can answer the surface that raised it; it is chrome around an answer, not a control in a panel |
 | **Rail slot** | A 36px square at `--radius-lg`, glyph only | One of §7.2's four panes; at most one is open |
 | **Choice row** | A `--radius-md` row at `--panel-2` carrying a swatch and a name; the chosen row is lifted to `--stage` with the accent border | One member of a closed set where each member has its own colour |
+| **Preset chip** | A 24px rounded square at `--radius-sm` carrying only a swatch; the chosen one takes the accent border and §4's accent halo, its name staying the programmatic label | One member of a swatch library, where the swatch is what the author recognises |
 | **Checkbox choice row** | The choice row, with a 14px box and a count in place of the swatch; the chosen row is lifted to `--stage` with a `--text` check | One member of a set you may choose **several** of |
 | **2-D colour area** | A 128px-tall `--radius-sm` surface with a 1px `--edge` and the saturation × brightness plane as its fill | A pointer picks both channels; focus paints §4's boundary role |
-| **Gradient track** | A 24px-tall `--radius-sm` surface with a 1px `--edge` and the value's own gradient as its fill; 16px stop marks fill with the stop's colour, a `--text` border, and an `--edge` ring | It is both the preview and the manipulator |
+| **Gradient track** | A 24px-tall `--radius-sm` surface with a 1px `--edge` and the value's own gradient as its fill; 16px stop marks fill with the stop's colour, a `--text` border, and an `--edge` ring; the selected mark takes the accent border, and a press that does not travel opens its picker | It is both the preview and the manipulator |
 
 **`Segmented` has a bare form, and the header's mode switch is it.** §7.1's
 switch is the well this table describes — `--panel-2` inside a 1px `--edge` at
@@ -584,7 +585,7 @@ draw (`padding:4px 6px`) and what `wellClasses` writes.
 5. **Every control has a label, a programmatic name, and an id.** A control with
    neither `aria-label` nor a `<label for>` is a defect, not a style choice.
 6. **Hover raises `--edge` to `--muted`.** On a control that carries a resting `--edge` — the well, the toggle — the border brightens. On a glyph-only control with no resting border — the icon button — it is the border it acquires on hover. Nothing moves, nothing scales.
-7. **A set too large for `Segmented` is a list of choice rows, each a radio in one labelled `radiogroup`.** The row is the whole target, the group owns which one is chosen, and the group's own keyboard model walks the rows in reading order — a multi-column layout changes the grid and never the arrow keys.
+7. **A set too large for `Segmented` is a list of choice rows, each a radio in one labelled `radiogroup`.** The row is the whole target, the group owns which one is chosen, and the group's own keyboard model walks the rows in reading order — a multi-column layout changes the grid and never the arrow keys. **A swatch library is the same set drawn as preset chips**: the swatch alone, the name as the control's programmatic label, wrapped in reading order, with the group's arrow keys unchanged.
 
 ### Editing and recovery
 

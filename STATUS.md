@@ -18,11 +18,11 @@ Drain `docs/product/backlog.jsonl`: the queued [`spec`](docs/superpowers/specs/2
 
 ## Last completed change
 
-- **System tray merged:** host-owned tray with a Windows WinForms adapter, a staged Linux `systray2@2.1.4` binary, external-program rows, sign-in autostart, editor deep links and `--tray`.
-- **Register merged by id:** main's `vg-727`, `vg-724`, `vg-728` and `vg-729` stand; the branch's `vg-726` was dropped because main had already verified it at `15978c51`.
-- **Decision notes renumbered:** the tray notes became 0114 (RTSS on request) and 0115 (host-owned shell), leaving main's 0110 and 0111 in place.
-- **SMTC fix superseded:** main's array materialisation in `POLL` replaced the branch's test change; `smtc-helper.windows.test.ts` passes with the merged code.
-- **Merged gate** at `6d2f62a`: 408 files and 5963 tests pass with 1 skipped, Worker 73; `status:check`, `docs:check` and `backlog:check` exit 0.
+- **Colour and gradient presets are chips:** both libraries draw a small swatch chip with the name as its programmatic label, wrapped in reading order (decision 0116, DESIGN §5).
+- **A gradient stop shows its selection and opens its picker:** the chosen mark takes the accent border; a press that does not travel opens the stop's picker while a drag still adjusts it.
+- **Rotated gradient paint follows its angle:** `gradientLine` flips the y component for the stored `90 - cssDegrees` convention, fixing the canvas plate and the glass backdrop sampling together.
+- **Picker sampling costs less:** one channel change per pointer sample, one dirty reading per document change, and a chart redraw only when the palette ink it reads moves.
+- **Evidence:** 121 focused tests green; browser checks read 12 colour chips in two rows, the picker open from a pressed stop, and a vertical sweep at angle 90 with no background media.
 
 ## Next
 

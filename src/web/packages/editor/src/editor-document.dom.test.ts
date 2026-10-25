@@ -158,6 +158,69 @@ describe("EditorDocument globals commits", () => {
   });
 });
 
+describe("EditorDocument's unsaved mark", () => {
+  it("reads the document once per change, however many surfaces ask", () => {
+    // Three subscribers ask on every document change — the identity chip, the
+    // status line and the publish control — and each read used to serialise and
+    // validate the whole scene. A live palette sample during a picker drag pays
+    // that for every pointer move, which is what made the drag sluggish.
+    const snapshot = vi.fn((value: unknown) => value);
+    const document = new EditorDocument({
+      source: {
+        shell: {
+          snapshot,
+          setGlobals: vi.fn(),
+          setBackground: vi.fn(),
+          editor: {
+            errorManager: { report: () => {} },
+            historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+            canvas: { getObjects: () => [] },
+          },
+        } as unknown as EditorShell,
+        envelope: createNewFabricTheme() as unknown as FabricThemeEnvelopeInput,
+        assetManager: new AssetManager(),
+        onNew: async () => {},
+        onNewFromStarter: async () => {},
+        onSaved: () => {},
+      },
+      consumers: {
+        palette: () => ({ render: () => {} }),
+        types: () => ({ render: () => {} }),
+        runtime: () => ({ setGlobals: () => {} }),
+        charts: () => ({
+          setGlobals: () => {},
+          reassignPaletteReferences: () => {},
+        }),
+        newObjects: () => ({ setGlobals: () => {} }),
+        selection: () => ({ setGlobals: () => {} }),
+      } as never,
+    });
+    snapshot.mockClear();
+
+    document.isDirty();
+    document.isDirty();
+    document.isDirty();
+    expect(
+      snapshot,
+      "three readers of one change read the scene once",
+    ).toHaveBeenCalledTimes(1);
+
+    document.setPalette({
+      accent: {
+        name: "Accent",
+        value: { kind: "solid", color: "rgb(200 0 0)" },
+      },
+    } as never);
+    document.isDirty();
+    document.isDirty();
+    expect(
+      snapshot,
+      "and the next change recomputes exactly once",
+    ).toHaveBeenCalledTimes(2);
+    document.destroy();
+  });
+});
+
 describe("EditorDocument undo", () => {
   it("re-renders the types panel when an undo restores the globals", () => {
     let port: HistoryGlobalsPort | undefined;

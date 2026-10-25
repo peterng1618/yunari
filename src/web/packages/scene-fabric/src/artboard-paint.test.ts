@@ -91,6 +91,21 @@ describe("artboard paint", () => {
     );
   });
 
+  it("points a rotated gradient the way the CSS form does", () => {
+    // The stored angle is `90 - cssDegrees`, so 90 is CSS's `0deg`: the first
+    // stop at the bottom, the last at the top. The canvas forms used `sin` for
+    // y in screen coordinates, which mirrored every non-horizontal angle
+    // against the CSS preview and the editor's own gradient track.
+    const vertical = { ...gradient, angle: 90 };
+
+    expect(cssArtboardPaint(vertical)).toBe(
+      "linear-gradient(0deg, #102030 0%, #d0e0f0 100%)",
+    );
+    expect(fabricArtboardPaint(vertical, 800, 600)).toMatchObject({
+      coords: { x1: 400, y1: 600, x2: 400, y2: 0 },
+    });
+  });
+
   it("passes Fabric-compatible solid colors through unchanged", () => {
     expect(fabricArtboardPaint("#102030", 1, 1)).toBe("#102030");
     expect(cssArtboardPaint("rgb(16 32 48)")).toBe("rgb(16 32 48)");

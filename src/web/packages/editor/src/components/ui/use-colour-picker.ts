@@ -15,6 +15,10 @@ export interface ColourPickerApi {
   readonly invalid: boolean;
   readonly eyedropper: boolean;
   setChannel(channel: ColourChannel, value: number): void;
+  /** Several channels in one change: the 2-D area picks saturation and
+   *  brightness together, and two writes per pointer sample doubled the
+   *  document fan-out a drag pays for. */
+  setChannels(channels: Partial<Record<ColourChannel, number>>): void;
   commit(): void;
   commitText(input: string): void;
   choosePreset(hex: string): void;
@@ -111,15 +115,25 @@ export function useColourPicker(options: ColourPickerOptions): ColourPickerApi {
     onValueCommit(text);
   };
 
-  const setChannel = (channel: ColourChannel, channelValue: number): void => {
+  const setChannels = (
+    channels: Partial<Record<ColourChannel, number>>,
+  ): void => {
     const prev = stateRef.current;
-    const hsva = withChannel(prev.hsva, channel, channelValue);
+    let hsva = prev.hsva;
+    for (const channel of ["hue", "saturation", "value", "alpha"] as const) {
+      const next = channels[channel];
+      if (next !== undefined) hsva = withChannel(hsva, channel, next);
+    }
     // A refused value comes back as the same object: say nothing, emit nothing.
     if (hsva === prev.hsva) return;
     const text = formatColor(fromHsv(hsva));
     latest.current = text;
     apply({ ...prev, hsva, text, invalid: false });
     onValueChange(text);
+  };
+
+  const setChannel = (channel: ColourChannel, channelValue: number): void => {
+    setChannels({ [channel]: channelValue });
   };
 
   const choosePreset = (hex: string): void => {
@@ -169,6 +183,7 @@ export function useColourPicker(options: ColourPickerOptions): ColourPickerApi {
     invalid: current.invalid,
     eyedropper,
     setChannel,
+    setChannels,
     commit,
     commitText,
     choosePreset,
