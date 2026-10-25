@@ -81,7 +81,11 @@ import {
   normalizeWeatherSettings,
   type WeatherSettingsStore,
 } from "./settings/weather.js";
-import { createThemeStore, type ThemeContent } from "./themes/store.js";
+import {
+  createThemeStore,
+  type ThemeContent,
+  ThemeTooLargeError,
+} from "./themes/store.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
 import { TrashRefusal } from "./themes/trash.js";
 import { encodeThemeContent } from "./themes/wire.js";
@@ -705,6 +709,38 @@ describe("Host theme routes", () => {
       themes: readonly { id: string }[];
     };
     expect(list.themes.map((entry) => entry.id)).not.toContain("oversized");
+  });
+
+  it("answers a save past the size bound with 413, not a blamed request", async () => {
+    // The write cap is new, so this refusal is reachable from a save for the
+    // first time: the document is well-formed and the author has to make it
+    // smaller, which is the same 413 the GET of such a stored theme answers.
+    // A stub store rejects exactly the error the cap raises, so the route's
+    // mapping is what is under test rather than the store producing a 32 MB
+    // document per run.
+    const refusing = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      themeStore: {
+        ...createThemeStore(path.join(tmpDir, "stub")),
+        write: () => Promise.reject(new ThemeTooLargeError("living-room")),
+      },
+    });
+
+    try {
+      const refused = await request(
+        refusing.server,
+        "PUT",
+        "/api/themes/living-room",
+        themeBody(validEmptyAssetTheme),
+      );
+
+      expect(refused.status).toBe(413);
+      // The author is told the bound, which is the half a bare status lacks.
+      expect(refused.text()).toContain("33,554,432 bytes");
+    } finally {
+      await refusing.close();
+    }
   });
 
   it("refuses a save built from a document the stored theme has moved past", async () => {

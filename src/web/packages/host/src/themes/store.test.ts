@@ -868,6 +868,36 @@ describe("ThemeStore", () => {
     }
   });
 
+  it("does not read a document linked in from outside the theme folder", async () => {
+    const store = createThemeStore(tmpDir);
+    await store.write("living-room", {
+      envelope: envelopeFor("living-room", "Living Room"),
+      assets: {},
+    });
+
+    const elsewhere = await fs.mkdtemp(
+      path.join(os.tmpdir(), "yunari-elsewhere-"),
+    );
+    try {
+      // Valid, and named for the theme it is linked into: without containment
+      // the store would read it as this theme's document and serve it.
+      const document = JSON.stringify(envelopeFor("living-room", "Linked"));
+      await fs.writeFile(path.join(elsewhere, "theme.json"), document);
+
+      const themeJson = path.join(tmpDir, "living-room", "theme.json");
+      await fs.rm(themeJson);
+      await fs.symlink(path.join(elsewhere, "theme.json"), themeJson, "file");
+
+      // Readable through the plain path first, so this cannot pass on a file
+      // that merely fails to open.
+      expect((await fs.readFile(themeJson)).toString()).toBe(document);
+
+      expect(await store.read("living-room")).toBeUndefined();
+    } finally {
+      await fs.rm(elsewhere, { recursive: true, force: true });
+    }
+  });
+
   it("keeps an invalid theme out of the listing, and answers a save over it", async () => {
     // The listing half is a different decision (ADR-0043): an unreadable
     // document is not a library line, and `list()` skips it exactly as before.

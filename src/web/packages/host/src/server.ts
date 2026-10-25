@@ -3992,6 +3992,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
             sendText(response, 413, error.message);
             return;
           }
+          // The document itself past the store's write bound: the same 413 the
+          // GET of such a stored theme answers, and for the same reason — the
+          // document is well-formed and the author has to make it smaller.
+          if (error instanceof ThemeTooLargeError) {
+            sendText(response, 413, error.message);
+            return;
+          }
           // A theme the store's own rules refused is the caller's, with the
           // store's words; a write the filesystem refused is this machine's,
           // and its message names a path the browser must not read.

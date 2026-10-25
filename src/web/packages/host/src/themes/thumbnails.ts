@@ -23,7 +23,9 @@ const MAX_BYTES = 2 * 1024 * 1024;
 /** The largest declared size the library will hand a browser. A picture is
  *  drawn at gallery-cell size, so both bounds are far above anything a capture
  *  produces; what they refuse is a header claiming a surface a decoder would
- *  then try to allocate. */
+ *  then try to allocate. The pixel cap is implied by the edge cap (4096² is
+ *  exactly 16 777 216) while the edge stays at 4096; both are stated because
+ *  the bound is about a surface and each unit is one an author can picture. */
 export const MAX_THUMBNAIL_EDGE = 4096;
 export const MAX_THUMBNAIL_PIXELS = 16_777_216;
 
@@ -118,22 +120,19 @@ export function createThumbnailStore(library: string): ThumbnailStore {
         return undefined;
       }
 
-      try {
-        // Contained, like every other file this host reads out of a theme
-        // folder: a picture linked in from outside is not this theme's.
-        const bytes = await readContainedFile(library, `${id}/${FILE}`);
+      // Contained, like every other file this host reads out of a theme
+      // folder: a picture linked in from outside is not this theme's. Absent is
+      // ordinary — an older package, or a capture that failed — and the helper
+      // answers `undefined` for it rather than throwing.
+      const bytes = await readContainedFile(library, `${id}/${FILE}`);
 
-        // A file someone else wrote must not be served as an image — nor one
-        // whose header declares a surface the library will not draw.
-        return bytes !== undefined &&
-          isPng(bytes) &&
-          pixelRefusal(bytes) === undefined
-          ? new Uint8Array(bytes)
-          : undefined;
-      } catch {
-        // Absent is ordinary: an older package, or a capture that failed.
-        return undefined;
-      }
+      // A file someone else wrote must not be served as an image — nor one
+      // whose header declares a surface the library will not draw.
+      return bytes !== undefined &&
+        isPng(bytes) &&
+        pixelRefusal(bytes) === undefined
+        ? new Uint8Array(bytes)
+        : undefined;
     },
 
     async write(id, bytes) {
