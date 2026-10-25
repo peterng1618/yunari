@@ -4477,6 +4477,27 @@ describe("A loopback admin request must prove it is same-origin (§0116)", () =>
       ).status,
     ).toBe(200);
   });
+
+  it("does not apply to a non-loopback peer", async () => {
+    const shown = await request(hosted.server, "GET", "/api/pairing/code");
+    const { code } = shown.json() as { code: string };
+
+    const claimed = await request(
+      hosted.server,
+      "POST",
+      "/api/pairing/claim",
+      JSON.stringify({ code, label: "Kitchen tablet" }),
+      {
+        remoteAddress: "192.168.1.50",
+        headers: { host: "192.168.1.50:5227" },
+      },
+    );
+
+    // `isForeignOrigin` is true here, because the Host is not a loopback name;
+    // the 200 is the loopback-peer condition doing its work, not the route
+    // answering anyway.
+    expect(claimed.status).toBe(200);
+  });
 });
 
 /** A template the product ships, and the list the host's pages read it from. */

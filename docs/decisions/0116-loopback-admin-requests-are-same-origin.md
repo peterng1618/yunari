@@ -118,9 +118,12 @@ is added.
 
 ## Decision
 
-1. Apply one pre-dispatch guard to `/api/*` for a loopback peer with a
-   non-loopback `Host`, exempting `/api/host`; keep `isForeignOrigin` for the
-   routes that need an Origin check even on a LAN peer.
+1. Apply one pre-dispatch guard to `/api/*` for a loopback peer when
+   `isForeignOrigin` is true — a missing or non-loopback `Host`, or a stated
+   `Origin` that disagrees with the `Host` — exempting `/api/host`. The guard
+   runs only for a loopback peer; a LAN peer's routes keep their own auth and
+   checks, and the per-route `isForeignOrigin` calls remain as defence in depth
+   behind the guard.
 2. Let the declared asset kind own the response MIME and refuse a kind/extension
    mismatch in validation and again at the route; add `nosniff` and a sandbox
    CSP to every theme asset.

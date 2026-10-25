@@ -111,7 +111,7 @@ git commit -m "docs: open the hardening plan and its decisions"
 
 **Interfaces:**
 - Consumes: `isLoopbackRemote(address)`, `isForeignOrigin(request)`.
-- Produces: `export function refusesLoopbackApi(request: http.IncomingMessage, url: URL): boolean` — true for a loopback peer with a non-loopback `Host`, for `/api/*`, except `/api/host`.
+- Produces: `export function refusesLoopbackApi(request: http.IncomingMessage, url: URL): boolean` — true for a loopback peer when the whole `isForeignOrigin(request)` rule holds (a missing or non-loopback `Host`, or a stated `Origin` that disagrees with `Host`), for `/api/*`, except `/api/host`.
 
 - [ ] **Step 1: Write the failing test**
 
