@@ -4,6 +4,7 @@ import {
   buildLineOption,
   defaultLineSettings,
   type Interpolation,
+  lineHistorySeconds,
   type LinearGradientColor,
   type LineSettings,
   type SeriesInput,
@@ -340,6 +341,10 @@ describe("buildLineOption", () => {
     const option = buildLineOption(defaultLineSettings, [], NOW);
     expect(option.xAxis.axisLabel.show).toBe(false);
     expect(option.yAxis.axisLabel.show).toBe(false);
+  });
+
+  it("asks for the window plus one playback delay", () => {
+    expect(lineHistorySeconds(60, 1_000)).toBe(61);
   });
 
   it("omits axis bounds when unset rather than sending undefined", () => {

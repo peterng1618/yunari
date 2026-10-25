@@ -84,28 +84,17 @@ export function linePlaybackDelayMs(delayMs: number | undefined): number {
 /**
  * Seconds of history a line must be handed, for the axis this file draws.
  *
- * **The axis window plus two delays.** The axis spans `windowSeconds` plus the
- * source's playback delay, and `toSeriesPoints` keeps one sample *before* that
- * window so the line is drawn reaching the left clip edge instead of beginning
- * inside it. A source answers a trailing window at its own batch cadence, so the
- * oldest sample it returns can sit up to one cadence above the cutoff it was
- * given; a request that ends exactly at the axis start therefore usually has
- * nothing to offer, and the line's left end floats — measured on 72 % of
- * steady-state frames of a live host (`vg-571`).
- *
- * **The delay stands in for a cadence the source never declares.** It is a
- * nominal one: `LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS` is a fixed 1 000 ms, while
- * the host's own batch interval measured p50 1 006–1 021 ms and up to 3 243 ms
- * on a live display, so more than half of its gaps already exceed the number.
- * Two delays is the most this file can honestly ask for without a cadence to ask
- * for, and the frames where a gap outruns it are the 16–19.5 % that still begin
- * inside the plot. The right edge leans on the same nominal figure.
+ * **The axis window plus one playback delay.** The axis ends at the delayed
+ * render clock and begins one window earlier, while `toSeriesPoints` keeps the
+ * sample before that start. The source now returns that predecessor itself, so
+ * the request is the axis window plus the delay that moves the clock — no
+ * second delay to compensate for a missing sample (`vg-571`).
  */
 export function lineHistorySeconds(
   windowSeconds: number,
   chartPlaybackDelayMs: number | undefined,
 ): number {
-  return windowSeconds + 2 * (linePlaybackDelayMs(chartPlaybackDelayMs) / 1000);
+  return windowSeconds + linePlaybackDelayMs(chartPlaybackDelayMs) / 1000;
 }
 
 /** Local emitted shape keeps raw engine options out of the theme model (§87). */
