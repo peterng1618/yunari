@@ -102,6 +102,10 @@ export class AssetManager {
     });
     imported.image.setCoords();
     editor.canvas.setActiveObject(imported.image);
+    // R3: an import's one automatic placement is the canvas centre, so every
+    // "place this file" path lands where the author is looking rather than at
+    // the object's default origin.
+    editor.canvas.centerObject(imported.image);
     return imported.image;
   }
 

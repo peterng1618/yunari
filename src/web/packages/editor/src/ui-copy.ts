@@ -1598,19 +1598,15 @@ export const uiCopy = {
     cards: "Card",
     shapes: "Shape",
     charts: "Chart",
-    /** The Add pane's file path: the declared-asset library the Assets pane
-        used to be. `import` and `replace` are the two actions the section can
-        take on a local file, so they are named as actions; the select is
-        labelled by what it lists rather than by the pane. An author imports a
-        *file* — the extension is what decides whether it becomes a layer or is
-        only declared — and replaces or removes the *asset* it became. */
+    /** The Assets pane's two import paths. An author imports a *file* — the
+        extension is what decides whether it becomes a layer or is only
+        declared — and the second control forces the file into background
+        media instead of the kind's automatic placement. */
     importFile: "Import a file",
     /** The import that skips the kind's automatic placement: an image would
         otherwise land on the canvas, and the author wanted it as the board's
         background. */
     importAsBackground: "Import as background",
-    replaceAsset: "Replace asset",
-    assetList: "Asset",
     /** The Assets pane's cards. `kind` is the metadata line's word, a total map
      *  over the manager's kinds so a fifth kind fails to compile here rather
      *  than drawing a card with no kind word. */
@@ -1642,11 +1638,13 @@ export const uiCopy = {
     assetBackgroundFontRefused: "A font cannot be set as the background.",
     assetDeclaredFont:
       "Imported and declared. A font is not placed on the canvas.",
+    /** Shown when the kind's automatic placement had no callback to run — a
+        pane mounted without a document can declare the file but place nothing. */
+    assetDeclaredOnly: "Imported and declared.",
     /** Shown when a removal is refused because something still points at it. */
     assetReferenced: "That asset is in use and cannot be removed.",
     /** Shown when the declaration the row drew is gone from the manager. */
     assetRemoveFailed: "That file could not be removed.",
-    removeAsset: "Remove asset",
     /** Bringing a declared video into the publish envelope keeps the whole
         frame: cropping is the background layer's job at render time, where it is
         reversible and has the pixels to pan with. The host answers with a held

@@ -170,8 +170,14 @@ export function AssetsPane({
       return;
     }
     if (intent === "background" || asset.kind === "video") {
-      onBackground?.(asset);
-      setMessage(uiCopy.panels.assetBackgroundSet);
+      // The sentence names what actually ran: a pane mounted without the
+      // callback declared the file and set no background.
+      if (onBackground === undefined) {
+        setMessage(uiCopy.panels.assetDeclaredOnly);
+      } else {
+        onBackground(asset);
+        setMessage(uiCopy.panels.assetBackgroundSet);
+      }
       onChanged?.();
       return;
     }
@@ -419,6 +425,7 @@ export function AssetsPane({
         <button
           type="button"
           data-yunari-asset-import-background=""
+          disabled={onBackground === undefined}
           onClick={() => {
             importIntent.current = "background";
             importInput.current?.click();
@@ -594,7 +601,9 @@ function importMessage(asset: LocalAssetReference): string {
     case "svg":
       return uiCopy.panels.assetPlaced;
     case "video":
-      return uiCopy.panels.assetBackgroundSet;
+      // Reached only where no background callback ran; the background sentence
+      // is written on that path instead.
+      return uiCopy.panels.assetDeclaredOnly;
     case "font":
       return uiCopy.panels.assetDeclaredFont;
   }

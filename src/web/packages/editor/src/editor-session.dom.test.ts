@@ -542,6 +542,7 @@ describe("EditorSession", () => {
   it("adopts a trio and replaces every assigned preset face", async () => {
     const fetch = vi.fn(async () => new Response(new Uint8Array([1, 2, 3])));
     vi.stubGlobal("fetch", fetch);
+    const onAssetCountChange = vi.fn();
     const shell = {
       editor: {
         canvas: {
@@ -605,9 +606,17 @@ describe("EditorSession", () => {
       onNew: vi.fn(),
       onNewFromStarter: vi.fn(),
       onSaved: vi.fn(),
+      onAssetCountChange,
     });
 
+    expect(onAssetCountChange).toHaveBeenLastCalledWith(0);
     const result = await extensions.applyFontTrio("minimal");
+    // The trio adopted one declaration per face, so the count the Assets pane's
+    // title draws moved with the declarations — a trio applied from Tokens must
+    // not leave a stale number beside the new font cards.
+    expect(onAssetCountChange).toHaveBeenLastCalledWith(
+      fontTrio("minimal")!.faces.length,
+    );
     const heading = fontTrio("minimal")!.faces[0]!;
 
     expect(fetch).toHaveBeenCalledTimes(3);

@@ -351,7 +351,7 @@ describe("AssetManager.placeImage", () => {
           image: new FabricImage(document.createElement("img")),
         })),
       },
-      canvas: { setActiveObject: vi.fn() },
+      canvas: { setActiveObject: vi.fn(), centerObject: vi.fn() },
     } as never;
 
     await manager.placeImage(editor, source, declared);
@@ -368,12 +368,32 @@ describe("AssetManager.placeImage", () => {
           image: new FabricImage(document.createElement("img")),
         })),
       },
-      canvas: { setActiveObject: vi.fn() },
+      canvas: { setActiveObject: vi.fn(), centerObject: vi.fn() },
     } as never;
 
     await manager.placeImage(editor, file(PNG, "solo.png", "image/png"));
 
     expect(manager.declarations).toHaveLength(1);
+  });
+
+  it("places an imported image at the canvas centre", async () => {
+    // R3: an import's one automatic placement is the canvas centre. Fabric owns
+    // the operation, so the proof is that the declared object is handed to it
+    // after it becomes active — reverting the call leaves the image at its
+    // default origin and reds this case.
+    const manager = new AssetManager();
+    const image = new FabricImage(document.createElement("img"));
+    const centerObject = vi.fn();
+    const editor = {
+      imageManager: {
+        importImage: vi.fn(async () => ({ image })),
+      },
+      canvas: { setActiveObject: vi.fn(), centerObject },
+    } as never;
+
+    await manager.placeImage(editor, file(PNG, "centred.png", "image/png"));
+
+    expect(centerObject).toHaveBeenCalledWith(image);
   });
 });
 

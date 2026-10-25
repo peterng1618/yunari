@@ -338,6 +338,7 @@ interface Harness {
 async function mountWithManager(
   isReferenced: (assetId: string) => boolean = () => false,
   objects: readonly unknown[] = [],
+  withBackground = true,
 ): Promise<Harness> {
   const host = document.createElement("div");
   document.body.append(host);
@@ -382,7 +383,7 @@ async function mountWithManager(
         isReferenced={isReferenced}
         onChanged={changed}
         onFindAssets={onFindAssets}
-        onBackground={onBackground}
+        {...(withBackground ? { onBackground } : {})}
       />,
     );
   });
@@ -540,6 +541,27 @@ describe("the Assets pane's import", () => {
     );
     expect(alert(host).textContent).toBe(uiCopy.panels.assetBackgroundSet);
     expect(changed).toHaveBeenCalled();
+  });
+
+  it("says declared, not background, where no callback can set one", async () => {
+    const { host, onBackground } = await mountWithManager(
+      () => false,
+      [],
+      false,
+    );
+    // The same disabled treatment the cards' unwired actions get: a control
+    // that offers a write the pane cannot perform stays off.
+    const control = host.querySelector<HTMLButtonElement>(
+      "[data-yunari-asset-import-background]",
+    )!;
+    expect(control.disabled).toBe(true);
+
+    // A video's automatic route is the background, and with no callback there
+    // is no background: the sentence must name what actually happened.
+    await importFile(host, VIDEO_FILE);
+
+    expect(onBackground).not.toHaveBeenCalled();
+    expect(alert(host).textContent).toBe(uiCopy.panels.assetDeclaredOnly);
   });
 
   it("declares an imported font and places nothing", async () => {

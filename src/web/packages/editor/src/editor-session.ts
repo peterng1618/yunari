@@ -343,13 +343,11 @@ export class EditorSession {
       },
       applyFace: async (id, face) => {
         await this.#document.runFontAction(() =>
-          this.#document.applyPresetFace(id, face),
+          this.applyPresetFace(id, face),
         );
       },
       applyTrio: async (id) => {
-        await this.#document.runFontAction(() =>
-          this.#document.applyFontTrio(id),
-        );
+        await this.#document.runFontAction(() => this.applyFontTrio(id));
       },
     };
     this.#types = createTypePresetPanel(
@@ -458,18 +456,11 @@ export class EditorSession {
         insertCard: (cardId) => this.#document.insertCard(cardId),
       },
     );
-    /** The declarations moved: the background column offers the declared
-     *  pictures, and the artboard resolves their bytes, so both re-resolve now. */
-    const assetsChanged = (): void => {
-      this.#selection.render();
-      this.#document.refreshBackgroundMedia();
-      this.#announceAssetCount();
-    };
     this.#assetsPanel = createAssetsPane(options.panelHosts.assets, {
       manager: this.#assets,
       editor: options.shell.editor,
       isReferenced: (assetId) => this.#document.holdsAsset(assetId),
-      onChanged: assetsChanged,
+      onChanged: () => this.#declarationsChanged(),
       onFindAssets: () => options.onFindAssets?.(),
       // Preview and preset creation are Tasks 20 and 12; the pane disables an
       // action whose callback is absent, so leaving these two unwired is the
@@ -508,8 +499,7 @@ export class EditorSession {
     // silently, because the save succeeds.
     options.shell.editor.clipboardManager.setImageImporter(async (file) => {
       const placed = await this.#assets.placeImage(options.shell.editor, file);
-      // A pasted picture is a declaration, so the Assets pane's count moves.
-      this.#announceAssetCount();
+      this.#declarationsChanged();
       return placed;
     });
     // Same reason, same shape: a pasted or duplicated object is given a new id
@@ -719,8 +709,7 @@ export class EditorSession {
           bounds: background?.media?.bounds ?? "theme",
         },
       });
-      this.#document.refreshBackgroundMedia();
-      this.#announceAssetCount();
+      this.#declarationsChanged();
       return { ok: true, assetId: reference.id };
     } catch (error) {
       return {
@@ -731,9 +720,17 @@ export class EditorSession {
   }
 
   /**
-   * The manager has no event for a declaration moving, so every path that adds
-   * or drops one reports the count the Assets pane's title draws.
+   * The declarations moved: the Assets pane's title count, the background
+   * column's picture list and the bytes the artboard resolves all read them, so
+   * one method serves every path that adds or drops one.
    */
+  #declarationsChanged(): void {
+    this.#selection.render();
+    this.#document.refreshBackgroundMedia();
+    this.#announceAssetCount();
+  }
+
+  /** The initial count, before anything has moved. */
   #announceAssetCount(): void {
     this.#options.onAssetCountChange?.(this.#assets.declarations.length);
   }
@@ -914,10 +911,8 @@ export class EditorSession {
         });
         if (outcome.ok === true) {
           // A finder import makes a declaration just as the Assets pane's own
-          // file does, and a declared asset is what the background layer resolves
-          // its bytes through.
-          this.#document.refreshBackgroundMedia();
-          this.#announceAssetCount();
+          // file does, so the pane's title and the background column re-resolve.
+          this.#declarationsChanged();
         }
         return outcome.ok
           ? { ok: true as const }
@@ -998,15 +993,21 @@ export class EditorSession {
     await this.#assets.hydrate(shell.editor.canvas);
   }
 
-  applyFontTrio(id: string): Promise<FabricThemeEnvelope> {
-    return this.#document.applyFontTrio(id);
+  async applyFontTrio(id: string): Promise<FabricThemeEnvelope> {
+    const envelope = await this.#document.applyFontTrio(id);
+    // The trio adopted three declarations, so the Assets pane's count moves
+    // here as it does for an import.
+    this.#declarationsChanged();
+    return envelope;
   }
 
-  applyPresetFace(
+  async applyPresetFace(
     id: string,
     face: CuratedFontFace,
   ): Promise<FabricThemeEnvelope> {
-    return this.#document.applyPresetFace(id, face);
+    const envelope = await this.#document.applyPresetFace(id, face);
+    this.#declarationsChanged();
+    return envelope;
   }
 
   destroy(): void {
