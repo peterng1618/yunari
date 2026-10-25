@@ -557,3 +557,41 @@ it("moves focus with the arrow keys inside the grid", () => {
     results[69]!.id,
   );
 });
+
+it("keeps exactly one tile as the tab stop when the focused index leaves the window", () => {
+  const results = manyFamilies(100);
+  mount(
+    <FontGrid results={results} selectedId={undefined} onSelect={() => {}} />,
+  );
+
+  const stops = (): readonly HTMLElement[] =>
+    [
+      ...document.querySelectorAll<HTMLElement>("[data-yunari-font-tile]"),
+    ].filter((tile) => tile.tabIndex === 0);
+  expect(stops()).toHaveLength(1);
+  expect(stops()[0]?.getAttribute("data-yunari-font-tile")).toBe(
+    results[0]!.id,
+  );
+
+  const rows = [
+    ...document.querySelectorAll<HTMLElement>("[data-yunari-font-grid-row]"),
+  ];
+  const pitch =
+    Number.parseFloat(rows[1]!.style.top) -
+    Number.parseFloat(rows[0]!.style.top);
+  const grid = document.querySelector<HTMLElement>("[data-yunari-font-grid]")!;
+  act(() => {
+    grid.scrollTop = pitch * 10;
+    grid.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+
+  // `focusAt` is still 0, which the scrolled window no longer mounts: the first
+  // visible tile carries the one stop rather than the listbox having none.
+  const drawn = [
+    ...document.querySelectorAll<HTMLElement>("[data-yunari-font-tile]"),
+  ];
+  const moved = drawn.filter((tile) => tile.tabIndex === 0);
+  expect(moved).toHaveLength(1);
+  expect(moved[0]).toBe(drawn[0]);
+  expect(drawn[0]?.getAttribute("data-yunari-font-tile")).toBe(results[40]!.id);
+});

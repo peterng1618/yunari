@@ -7,10 +7,12 @@ import { uiCopy } from "../ui-copy.js";
  *  Up mean something, so the count lives here rather than in a class alone. */
 const COLUMNS = 4;
 
-/** One row's own height — the tile's `min-h-[112px]` — and the gap below it,
- *  `--space-8`. The pitch is derived so the scroll maths and the placed rows
- *  cannot disagree; a rem-based class would drift the moment the shell's root
- *  font-size is not 16px, and the window would land between two rows. */
+/** One row's own height, matching the `--font-tile-min-height` token (112px),
+ *  and the gap below it, `--space-8`. Absolute row placement reads this JS
+ *  constant, so changing the token alone desynchronises the tiles from their
+ *  rows; the two must move together. A rem-based class would drift the moment
+ *  the shell's root font-size is not 16px, and the window would land between
+ *  two rows. */
 const ROW_HEIGHT = 112;
 const ROW_GAP = 8;
 const ROW_PITCH = ROW_HEIGHT + ROW_GAP;
@@ -222,6 +224,9 @@ export function FontGrid({
     }
     event.preventDefault();
     const target = Math.min(results.length - 1, Math.max(0, next));
+    // A key that cannot move (Left/Home at the start, Right/End at the end)
+    // must not leave a focus request armed for the next window change.
+    if (target === at) return;
     setFocusAt(target);
     reveal(target);
     pendingFocus.current = true;
@@ -243,6 +248,7 @@ export function FontGrid({
         className="relative min-h-0 flex-1 overflow-y-auto"
       >
         <div
+          role="presentation"
           data-yunari-font-grid-spacer=""
           className="relative"
           style={{ height: rowCount * ROW_PITCH }}
@@ -250,6 +256,7 @@ export function FontGrid({
           {visibleRows.map((row) => (
             <div
               key={row}
+              role="presentation"
               data-yunari-font-grid-row=""
               className="grid grid-cols-4 gap-[var(--space-8)]"
               style={{
