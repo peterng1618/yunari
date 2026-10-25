@@ -118,6 +118,32 @@ function mount(element: React.ReactElement): void {
   });
 }
 
+function rerender(element: React.ReactElement): void {
+  act(() => {
+    container?.render(element);
+  });
+}
+
+/** jsdom has neither `FontFace` nor `document.fonts`, so a panel test that
+ *  wants to see faces received and freed supplies both. */
+function stubFonts(load: () => Promise<unknown> = async () => undefined) {
+  const fonts = { add: vi.fn(), delete: vi.fn() };
+  Object.defineProperty(document, "fonts", {
+    configurable: true,
+    value: fonts,
+  });
+  class FakeFontFace {
+    readonly load = vi.fn(load);
+    constructor(
+      readonly family: string,
+      readonly source: string,
+      readonly descriptors: FontFaceDescriptors,
+    ) {}
+  }
+  vi.stubGlobal("FontFace", FakeFontFace);
+  return fonts;
+}
+
 function panel(props: {
   readonly selected: FontResult;
   readonly presets?: TypePresets;
@@ -166,6 +192,8 @@ it("renders heading, body and mono in the trio card", () => {
   for (const node of specimenRoles()) {
     expect(node.textContent).toBe(uiCopy.assets.fontPreview.sampleDefault);
   }
+  // No Apply button is drawn without its callback, so no reason explains one.
+  expect(document.querySelector("[data-yunari-font-apply-reason]")).toBeNull();
 });
 
 it("edits the sample line and re-renders the card", () => {
@@ -199,6 +227,12 @@ it("names the apply scope and each before→after row", () => {
   expect(
     document.querySelector('[data-yunari-font-change="heading"]')?.textContent,
   ).toBe("Clock 108 · 300 → Manrope 700");
+  expect(
+    document.querySelector('[data-yunari-font-change="body"]')?.textContent,
+  ).toBe("Body 16 · 400 → IBM Plex Sans 400");
+  expect(
+    document.querySelector('[data-yunari-font-change="mono"]')?.textContent,
+  ).toBe("Mono 14 · 400 → IBM Plex Mono 400");
 
   act(() => {
     button("[data-yunari-font-add-presets]").click();
@@ -244,34 +278,30 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
 
   act(() => {
     chips[1]?.click();
+  });
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLSelectElement.prototype,
+    "value",
+  )?.set;
+  act(() => {
+    setter?.call(role, "heading");
     role?.dispatchEvent(new Event("change", { bubbles: true }));
   });
+  expect(role?.value).toBe("heading");
+  expect(document.body.textContent).toContain("Heading — Manrope · adds one");
   act(() => {
     button("[data-yunari-font-add-preset]").click();
   });
   act(() => {
     button("[data-yunari-font-apply]").click();
   });
-  expect(onAddPreset).toHaveBeenCalledWith(family.font.cuts[1], "body");
+  expect(onAddPreset).toHaveBeenCalledWith(family.font.cuts[1], "heading");
   expect(onApplyToSelected).toHaveBeenCalledWith(family.font.cuts[1]);
   expect(chips[1]?.getAttribute("aria-pressed")).toBe("true");
 });
 
 it("releases every face it added when the panel unmounts", () => {
-  const fonts = { add: vi.fn(), delete: vi.fn() };
-  Object.defineProperty(document, "fonts", {
-    configurable: true,
-    value: fonts,
-  });
-  class FakeFontFace {
-    readonly load = vi.fn(async () => this);
-    constructor(
-      readonly family: string,
-      readonly source: string,
-      readonly descriptors: FontFaceDescriptors,
-    ) {}
-  }
-  vi.stubGlobal("FontFace", FakeFontFace);
+  const fonts = stubFonts();
 
   mount(panel({ selected: trio }));
   expect(fonts.add).toHaveBeenCalledTimes(3);
@@ -280,4 +310,34 @@ it("releases every face it added when the panel unmounts", () => {
     container?.unmount();
   });
   expect(fonts.delete).toHaveBeenCalledTimes(3);
+});
+
+it("releases the previous selection's faces when the selection moves", () => {
+  const fonts = stubFonts();
+
+  mount(panel({ selected: trio }));
+  expect(fonts.add).toHaveBeenCalledTimes(3);
+
+  rerender(panel({ selected: family }));
+  const released = fonts.delete.mock.calls.map((call) => call[0]);
+  expect(released).toEqual(
+    fonts.add.mock.calls.slice(0, 3).map((call) => call[0]),
+  );
+  expect(fonts.add).toHaveBeenCalledTimes(5);
+});
+
+it("keeps the card drawn when a specimen will not load", async () => {
+  stubFonts(async () => {
+    throw new Error("the provider is down");
+  });
+
+  mount(panel({ selected: trio }));
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(specimenRoles()).toHaveLength(3);
+  for (const node of specimenRoles()) {
+    expect(node.textContent).toBe(uiCopy.assets.fontPreview.sampleDefault);
+  }
 });

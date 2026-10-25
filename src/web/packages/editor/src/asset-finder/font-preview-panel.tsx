@@ -118,6 +118,11 @@ export function FontPreviewPanel({
 
   const selectedCut =
     selected.font.cuts.find((cut) => cut.id === cutId) ?? selected.font.cuts[0];
+  // No role-tagged preset means Apply has nothing to rewrite; only trio panels
+  // draw that button, and only with it does the reason have a subject.
+  const roleless = ROLES.every(
+    (roleName) => rolePresets(presets, roleName).length === 0,
+  );
 
   return (
     <section
@@ -366,9 +371,7 @@ export function FontPreviewPanel({
             })}
           </div>
 
-          {ROLES.every(
-            (roleName) => rolePresets(presets, roleName).length === 0,
-          ) ? (
+          {onApplyTrio !== undefined && roleless ? (
             <p
               data-yunari-font-apply-reason=""
               className="text-[10px] leading-[1.45] text-faint"
@@ -383,9 +386,7 @@ export function FontPreviewPanel({
                 type="button"
                 data-yunari-font-trio-apply=""
                 data-yunari-font-apply=""
-                disabled={ROLES.every(
-                  (roleName) => rolePresets(presets, roleName).length === 0,
-                )}
+                disabled={roleless}
                 onClick={() => {
                   onApplyTrio(trio);
                 }}

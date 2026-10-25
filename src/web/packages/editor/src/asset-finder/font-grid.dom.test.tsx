@@ -257,6 +257,30 @@ it("asks the font body and draws trios and families in one grid", async () => {
   expect(tiles("trio")[0]?.getAttribute("aria-selected")).toBe("true");
 });
 
+it("opens the preview panel on the pressed tile", async () => {
+  searchAssets.mockResolvedValue({
+    pages: [
+      page("curated-fonts", [interTrio]),
+      page("google-fonts", [manrope]),
+    ],
+  });
+  await render();
+  await type("Inter");
+  await settle();
+
+  press(`[data-yunari-font-tile="${interTrio.id}"]`);
+  const trioPanel = document.querySelector('[data-yunari-font-preview="trio"]');
+  expect(trioPanel).not.toBeNull();
+  expect(trioPanel?.textContent).toContain(interTrio.name);
+
+  press(`[data-yunari-font-tile="${manrope.id}"]`);
+  const familyPanel = document.querySelector(
+    '[data-yunari-font-preview="family"]',
+  );
+  expect(familyPanel).not.toBeNull();
+  expect(familyPanel?.textContent).toContain(manrope.name);
+});
+
 it("asks the next page and appends it", async () => {
   searchAssets.mockResolvedValueOnce({
     pages: [
