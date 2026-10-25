@@ -2,7 +2,8 @@ import { env, SELF } from "cloudflare:test";
 import { type FabricThemeEnvelope, facetRecordOf } from "@yunari/renderer-core";
 import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
 import { beforeAll, describe, expect, it } from "vitest";
-import { insertVersion, markFinalized } from "../src/db/items";
+import { finalizeStoredVersion } from "../src/db/finalize";
+import { markFinalized } from "../src/db/items";
 import { differentBytes, takenDown } from "../src/routes/me";
 import { pendingKey, thumbnailKey } from "../src/storage/keys";
 import { inspectObject } from "../src/storage/objects";
@@ -119,6 +120,70 @@ describe("finalize", () => {
     expect(await versionsOf(env.DB, ITEM_ID)).toEqual([]);
   });
 
+  it("picks the reservation whose object exists, not the newest row", async () => {
+    const headers = await sessionHeaders();
+    await reset();
+    const older = await reserve(headers);
+    const newer = await reserve(headers);
+    expect(newer.version).toBe(older.version);
+    await putPackage(older.key, PACKAGE_BYTES);
+
+    const response = await finalize(headers, older.version);
+    expect(response.status).toBe(200);
+    expect(await storedPackageKey(older.version)).toBe(older.key);
+    expect((await uploadRow(older.uploadId))?.finalized_at).not.toBeNull();
+    expect((await uploadRow(newer.uploadId))?.finalized_at).toBeNull();
+  });
+
+  it("releases only the row the stored version names", async () => {
+    const headers = await sessionHeaders();
+    await reset();
+    const older = await reserve(headers);
+    const newer = await reserve(headers);
+    await putPackage(older.key, PACKAGE_BYTES);
+    await putPackage(newer.key, PACKAGE_BYTES);
+
+    expect((await finalize(headers, older.version)).status).toBe(200);
+
+    const stored = await storedPackageKey(older.version);
+    const storedIsOlder = stored === older.key;
+    const released = await uploadRow(
+      storedIsOlder ? older.uploadId : newer.uploadId,
+    );
+    const untouched = await uploadRow(
+      storedIsOlder ? newer.uploadId : older.uploadId,
+    );
+    expect(storedIsOlder || stored === newer.key).toBe(true);
+    expect(released?.finalized_at).not.toBeNull();
+    expect(released?.bytes).toBe(PACKAGE_BYTES.byteLength);
+    expect(untouched?.finalized_at).toBeNull();
+    expect(untouched?.bytes).toBeNull();
+  });
+
+  it("releases the stored row after a lost insert race, not the picked one", async () => {
+    const headers = await sessionHeaders();
+    await reset();
+    await verifyAuthor(1);
+    const older = await reserve(headers);
+    const newer = await reserve(headers);
+    await putPackage(older.key, PACKAGE_BYTES);
+    await putPackage(newer.key, PACKAGE_BYTES);
+
+    // The shape a lost `OR IGNORE` race leaves: a parallel finalize landed the
+    // version row naming the older reservation, and this request would pick the
+    // newer one. The release has to follow the stored key, not the pick.
+    await insertLandedVersion(
+      older.version,
+      oneSecondAfter(await itemUpdatedAt()),
+      older.key,
+    );
+
+    expect((await finalize(headers, older.version)).status).toBe(200);
+    expect(await storedPackageKey(older.version)).toBe(older.key);
+    expect((await uploadRow(older.uploadId))?.finalized_at).not.toBeNull();
+    expect((await uploadRow(newer.uploadId))?.finalized_at).toBeNull();
+  });
+
   it("hashes a package by streaming it, never buffering it", async () => {
     const bytes = new TextEncoder().encode("streamed package");
     const bucket = {
@@ -182,7 +247,7 @@ describe("finalize", () => {
     const headers = await sessionHeaders();
     await reset();
     await verifyAuthor(1);
-    const { version, key } = await reserve(headers);
+    const { version, uploadId, key } = await reserve(headers);
     await putPackage(key, PACKAGE_BYTES);
 
     const first = await finalize(headers, version, base64Of(FIRST_PNG));
@@ -207,15 +272,10 @@ describe("finalize", () => {
     expect(await versionsOf(env.DB, ITEM_ID)).toEqual([version]);
     expect(await publishedAtOf()).toBe(publishedBefore);
     expect(await thumbnailBytes()).toEqual(Array.from(FIRST_PNG));
-    // The retry released nothing a second time: one finalize mark for the row.
-    const marks = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM upload
-       WHERE user_id = ? AND item_id = ? AND version = ?
-         AND finalized_at IS NOT NULL`,
-    )
-      .bind(USER_ID, ITEM_ID, version)
-      .first<{ n: number }>();
-    expect(marks?.n).toBe(1);
+    // Per-row, not a count: deleting the release leaves both fields null.
+    const upload = await uploadRow(uploadId);
+    expect(upload?.finalized_at).not.toBeNull();
+    expect(upload?.bytes).toBe(PACKAGE_BYTES.byteLength);
 
     await putPackage(key, new TextEncoder().encode("different bytes"));
     expect((await finalize(headers, version)).status).toBe(409);
@@ -225,7 +285,7 @@ describe("finalize", () => {
     const headers = await sessionHeaders();
     await reset();
     await verifyAuthor(1);
-    const { version, key } = await reserve(headers);
+    const { version, uploadId, key } = await reserve(headers);
     await putPackage(key, PACKAGE_BYTES);
 
     // The crash the retry has to survive: the version row landed, and the item
@@ -246,6 +306,10 @@ describe("finalize", () => {
       version,
     });
     expect(await statusOf(env.DB, ITEM_ID)).toBe("published");
+    // The retry heals the release the interrupted attempt never wrote.
+    const upload = await uploadRow(uploadId);
+    expect(upload?.finalized_at).not.toBeNull();
+    expect(upload?.bytes).toBe(PACKAGE_BYTES.byteLength);
   });
 
   it("replays an unpublished item's version without republishing it", async () => {
@@ -382,8 +446,12 @@ describe("finalize", () => {
       created_at: "2026-10-01T00:00:00.000Z",
     };
 
-    expect(await insertVersion(env.DB, row)).toBe(true);
-    expect(await insertVersion(env.DB, row)).toBe(false);
+    expect(
+      await finalizeStoredVersion(env.DB, row, "2026-10-01T00:00:01.000Z"),
+    ).toBe(true);
+    expect(
+      await finalizeStoredVersion(env.DB, row, "2026-10-01T00:00:01.000Z"),
+    ).toBe(false);
     expect(await versionsOf(env.DB, ITEM_ID)).toEqual(["1.0.0"]);
   });
 
@@ -559,6 +627,16 @@ async function uploadRow(id: string): Promise<{
   )
     .bind(id)
     .first();
+}
+
+/** The key the stored version names; the release must follow it. */
+async function storedPackageKey(version: string): Promise<string | undefined> {
+  const row = await env.DB.prepare(
+    "SELECT package_key FROM item_version WHERE item_id = ? AND version = ?",
+  )
+    .bind(ITEM_ID, version)
+    .first<{ package_key: string }>();
+  return row?.package_key;
 }
 
 /** The same theme with a different tag set, so the ladder mints a minor bump. */

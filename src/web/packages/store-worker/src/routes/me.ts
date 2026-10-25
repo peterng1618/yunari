@@ -18,7 +18,10 @@ import {
   toggleFavorite,
 } from "../db/favorites.js";
 import {
-  insertVersion,
+  finalizeStoredVersion,
+  releaseReservedUpload,
+} from "../db/finalize.js";
+import {
   itemById,
   latestVersion,
   markFinalized,
@@ -34,7 +37,7 @@ import {
   UPLOAD_RESERVATION_TTL_MS,
 } from "../db/quota.js";
 import type { ItemRow, UploadRow } from "../db/types.js";
-import { markUploadFinalized, uploadsForVersion } from "../db/uploads.js";
+import { uploadsForVersion } from "../db/uploads.js";
 import type { Env } from "../env.js";
 import { pendingKey, thumbnailKey } from "../storage/keys.js";
 import { inspectObject } from "../storage/objects.js";
@@ -655,9 +658,9 @@ export async function pumpInto(
 /**
  * The uploaded object becomes a version only here: the envelope is the one the
  * version request validated, the bytes and hash are read from the reservation's
- * own R2 key, and the status transition is applied last. The reservation is
- * released with the actual size once the version row is settled. A finalize of
- * the same bytes is a no-op so a retried request cannot double-write.
+ * own R2 key, and the status transition is applied last. The version row and
+ * its reservation release are one batch. A finalize of the same bytes is a
+ * no-op so a retried request cannot double-write.
  */
 async function finalizeVersion(
   request: Request,
@@ -726,9 +729,9 @@ async function finalizeVersion(
 
     // A retry whose first attempt landed the version row but not the release
     // heals here; a finished replay is a no-op on the predicate. The release
-    // also runs on the equal-instant replay path, where the row is already
-    // finalized and the UPDATE changes nothing.
-    await markUploadFinalized(env.DB, stored.id, inspected.bytes, now);
+    // follows the stored version's `package_key`, so a parallel finalize's row
+    // is released rather than the one this request picked.
+    await releaseReservedUpload(env.DB, itemId, version, inspected.bytes, now);
 
     // A retry whose first attempt was interrupted between the two writes has
     // not moved the item since the version row landed, so it re-applies the
@@ -749,17 +752,23 @@ async function finalizeVersion(
   await env.BUCKET.put(thumbnailKey(itemId), thumbnail.bytes, {
     httpMetadata: { contentType: "image/png" },
   });
-  const wrote = await insertVersion(env.DB, {
-    item_id: itemId,
-    version,
-    envelope_json: presign.envelope_json,
-    facets_json: JSON.stringify(facetRecordOf(parseEnvelope(presign))),
-    package_key: stored.key,
-    thumbnail_key: thumbnailKey(itemId),
-    bytes: inspected.bytes,
-    sha256: inspected.sha256,
-    created_at: now,
-  });
+  // The version row and the reservation release are one batch, so a failure
+  // cannot leave the version naming a row cleanup will delete.
+  const wrote = await finalizeStoredVersion(
+    env.DB,
+    {
+      item_id: itemId,
+      version,
+      envelope_json: presign.envelope_json,
+      facets_json: JSON.stringify(facetRecordOf(parseEnvelope(presign))),
+      package_key: stored.key,
+      thumbnail_key: thumbnailKey(itemId),
+      bytes: inspected.bytes,
+      sha256: inspected.sha256,
+      created_at: now,
+    },
+    now,
+  );
   // A parallel finalize of the same version won the insert. The comparison the
   // serial path made above is the same one, so both requests give one answer.
   if (!wrote) {
@@ -772,10 +781,6 @@ async function finalizeVersion(
       return differentBytes(version);
   }
 
-  // The version row lands before the reservation is released, never after: for
-  // a few milliseconds both count against the author, which can only refuse a
-  // concurrent version request conservatively. The reverse would count neither.
-  await markUploadFinalized(env.DB, stored.id, inspected.bytes, now);
   return await settle(env, session, item, version, now);
 }
 

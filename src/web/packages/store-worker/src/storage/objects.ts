@@ -1,13 +1,16 @@
-/**
- * `crypto.DigestStream` exists at runtime but the declared `Crypto` type here
- * does not expose it, so its constructor is named once rather than casting at
- * the call site.
- */
-const DigestStream: new (
+type DigestStreamConstructor = new (
   algorithm: string,
 ) => WritableStream<ArrayBuffer | ArrayBufferView> & {
   readonly digest: Promise<ArrayBuffer>;
-} = (crypto as unknown as { readonly DigestStream: never }).DigestStream;
+};
+
+/**
+ * `crypto.DigestStream` exists at runtime but the declared `Crypto` type here
+ * does not expose it; the cast names the constructor it really is.
+ */
+const DigestStream = (
+  crypto as unknown as { readonly DigestStream: DigestStreamConstructor }
+).DigestStream;
 
 /**
  * The stored size and lowercase SHA-256 of an object; `undefined` for a missing

@@ -22,23 +22,3 @@ export async function uploadsForVersion(
     .all<UploadRow>();
   return rows.results;
 }
-
-/**
- * Releases one reservation with the size the package actually stored. The
- * `finalized_at IS NULL` predicate makes a replay a no-op; answers whether this
- * call wrote, which the route does not need but a caller that must know can use.
- */
-export async function markUploadFinalized(
-  db: D1Database,
-  uploadId: string,
-  bytes: number,
-  now: string,
-): Promise<boolean> {
-  const result = await db
-    .prepare(
-      "UPDATE upload SET finalized_at = ?, bytes = ? WHERE id = ? AND finalized_at IS NULL",
-    )
-    .bind(now, bytes, uploadId)
-    .run();
-  return result.meta.changes > 0;
-}

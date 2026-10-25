@@ -109,37 +109,6 @@ export async function presignEventOf(
 }
 
 /**
- * A version row is written once, at finalize. `OR IGNORE` because two
- * overlapping finalizes of one version both reach here; the row that won is
- * compared by the caller rather than a second insert failing on the key.
- * Answers whether this call wrote the row.
- */
-export async function insertVersion(
-  db: D1Database,
-  row: VersionRow,
-): Promise<boolean> {
-  const result = await db
-    .prepare(
-      `INSERT OR IGNORE INTO item_version (item_id, version, envelope_json,
-         facets_json, package_key, thumbnail_key, bytes, sha256, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
-      row.item_id,
-      row.version,
-      row.envelope_json,
-      row.facets_json,
-      row.package_key,
-      row.thumbnail_key,
-      row.bytes,
-      row.sha256,
-      row.created_at,
-    )
-    .run();
-  return result.meta.changes > 0;
-}
-
-/**
  * Finalize's status write. `published_at` is the last transition *into*
  * `published`, so a new version on a still-published item keeps it; the
  * pre-update `status` is what makes that distinction. A rejection reason never
