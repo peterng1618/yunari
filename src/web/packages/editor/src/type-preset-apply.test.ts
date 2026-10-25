@@ -1,6 +1,7 @@
 import type { FontCut, FontTrioInfo } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import { applyFontTrio } from "./type-preset-apply.js";
+import type { TypePresets } from "./type-preset-manager/index.js";
 
 function cut(
   role: "heading" | "body" | "mono",
@@ -133,5 +134,50 @@ describe("applyFontTrio", () => {
       trio,
     );
     expect(result.only).toEqual(custom);
+  });
+
+  it("creates each missing role at its own size without overwriting a taken id", () => {
+    const authored = {
+      name: "Authored mono",
+      value: { family: "Georgia", size: 19 },
+    };
+    const result = applyFontTrio({ mono: authored }, trio);
+
+    expect(result.mono).toEqual(authored);
+    expect(result.heading?.value.size).toBe(46);
+    expect(result.body?.value.size).toBe(24);
+    expect(result["mono-2"]).toEqual({
+      name: "Mono — Fira Code",
+      value: {
+        family: "Fira Code",
+        size: 14,
+        weight: 400,
+        face: { assetId: "mono-400" },
+        trioRole: "mono",
+      },
+    });
+  });
+
+  it("keeps a preset keyed __proto__", () => {
+    // A literal `{ "__proto__": … }` sets the prototype, so the fixture has to
+    // be parsed: JSON.parse defines `__proto__` as an own key, which is the
+    // shape a schema-valid theme file can carry.
+    const presets = JSON.parse(
+      '{"__proto__":{"name":"Proto","value":{"family":"Georgia","size":19,"trioRole":"heading"}}}',
+    ) as TypePresets;
+    const result = applyFontTrio(presets, trio);
+
+    expect(Object.hasOwn(result, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect(result["__proto__"]).toEqual({
+      name: "Proto",
+      value: {
+        family: "Manrope",
+        size: 19,
+        weight: 700,
+        face: { assetId: "heading-700" },
+        trioRole: "heading",
+      },
+    });
   });
 });

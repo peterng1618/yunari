@@ -29,11 +29,15 @@ export function applyFontTrio(
   presets: TypePresets,
   trio: FontTrioInfo,
 ): TypePresets {
-  const rewritten: Record<string, PresetEntry> = {};
+  // `fromEntries`, not assignment: `__proto__` is a legal, schema-valid preset
+  // id, and `rewritten["__proto__"] = preset` would reach the prototype setter
+  // and lose the preset.
+  const entries: [string, PresetEntry][] = [];
   for (const [id, preset] of Object.entries(presets)) {
     const role = preset.value.trioRole;
     const cut = role === undefined ? undefined : trio.roles[role];
-    rewritten[id] =
+    entries.push([
+      id,
       cut === undefined
         ? preset
         : {
@@ -44,8 +48,10 @@ export function applyFontTrio(
               weight: cut.weight,
               face: { assetId: cut.id },
             },
-          };
+          },
+    ]);
   }
+  const rewritten = Object.fromEntries(entries);
 
   const present = new Set(
     Object.values(rewritten).map((preset) => preset.value.trioRole),
