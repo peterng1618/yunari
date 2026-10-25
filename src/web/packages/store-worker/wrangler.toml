@@ -23,3 +23,8 @@ bucket_name = "yunari-store-packages"
 # The owner replaces this placeholder with the URL `npx wrangler deploy` prints,
 # then deploys again (README.md step 5).
 BETTER_AUTH_URL = "https://yunari-store.workers.dev"
+
+# Cleanup's cadence: the backlog is bounded by arrivals, so one wake per 15
+# minutes drains it without a paging loop (storage/cleanup.ts).
+[triggers]
+crons = ["*/15 * * * *"]

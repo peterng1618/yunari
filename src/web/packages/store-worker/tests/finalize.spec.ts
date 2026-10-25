@@ -4,6 +4,7 @@ import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
 import { beforeAll, describe, expect, it } from "vitest";
 import { finalizeStoredVersion } from "../src/db/finalize";
 import { markFinalized } from "../src/db/items";
+import { UPLOAD_RESERVATION_TTL_MS } from "../src/db/quota";
 import { differentBytes, takenDown } from "../src/routes/me";
 import { pendingKey, thumbnailKey } from "../src/storage/keys";
 import { inspectObject } from "../src/storage/objects";
@@ -589,6 +590,42 @@ describe("finalize", () => {
     expect((await finalize(headers, "1.0.0")).status).toBe(409);
   });
 
+  it("refuses a reservation older than the hour without writing a version", async () => {
+    const headers = await sessionHeaders();
+    await reset();
+    const { version, uploadId, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
+    await ageReservation(uploadId);
+
+    const response = await finalize(headers, version);
+    expect(response.status).toBe(409);
+    expect(await response.text()).toBe(
+      "This upload expired; request a new version.",
+    );
+    expect(await versionsOf(env.DB, ITEM_ID)).toEqual([]);
+    expect(await env.BUCKET.get(thumbnailKey(ITEM_ID))).toBeNull();
+    expect((await uploadRow(uploadId))?.finalized_at).toBeNull();
+  });
+
+  it("replays an existing version on an expired reservation", async () => {
+    const headers = await sessionHeaders();
+    await reset();
+    await verifyAuthor(1);
+    const { version, uploadId, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
+    expect((await finalize(headers, version)).status).toBe(200);
+
+    // The replay must answer what it always did: only the insert path expires.
+    await ageReservation(uploadId);
+    const replay = await finalize(headers, version);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual({
+      ok: true,
+      status: "published",
+      version,
+    });
+  });
+
   it("refuses a thumbnail that is not a PNG or is over 2 MiB", async () => {
     const headers = await sessionHeaders();
     await reset();
@@ -657,6 +694,16 @@ async function reserve(
   };
   const uploadId = new URL(uploadUrl).pathname.slice(UPLOAD_PREFIX.length);
   return { version, uploadId, key: pendingKey(uploadId) };
+}
+
+/** Ages a reservation one second past the TTL cleanup and finalize share. */
+async function ageReservation(id: string): Promise<void> {
+  await env.DB.prepare("UPDATE upload SET created_at = ? WHERE id = ?")
+    .bind(
+      new Date(Date.now() - UPLOAD_RESERVATION_TTL_MS - 1000).toISOString(),
+      id,
+    )
+    .run();
 }
 
 /** The `upload` row a reservation minted, as finalize's release left it. */

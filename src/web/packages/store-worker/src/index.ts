@@ -6,6 +6,7 @@ import type { Env } from "./env.js";
 import { handleAdmin } from "./routes/admin.js";
 import { handleMe } from "./routes/me.js";
 import { handlePublic } from "./routes/public.js";
+import { cleanupPending } from "./storage/cleanup.js";
 
 const AUTH_PREFIX = "/api/auth/";
 const PROVIDERS = new Set(["github", "google"]);
@@ -42,6 +43,9 @@ export default {
     const publicResponse = await handlePublic(request, env, url);
     if (publicResponse !== undefined) return publicResponse;
     return new Response("Not found", { status: 404 });
+  },
+  scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(cleanupPending(env, new Date(controller.scheduledTime)));
   },
 } satisfies ExportedHandler<Env>;
 

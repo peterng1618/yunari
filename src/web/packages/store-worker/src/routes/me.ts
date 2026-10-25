@@ -718,7 +718,8 @@ async function finalizeVersion(
   const inspected = await inspectObject(env.BUCKET, stored.key);
   if (inspected === undefined) return notFound();
 
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
   const existing = await versionOf(env.DB, itemId, version);
   if (existing !== undefined) {
     if (
@@ -731,7 +732,7 @@ async function finalizeVersion(
     // heals here; a finished replay is a no-op on the predicate. The release
     // follows the stored version's `package_key`, so a parallel finalize's row
     // is released rather than the one this request picked.
-    await releaseReservedUpload(env.DB, itemId, version, now);
+    await releaseReservedUpload(env.DB, itemId, version, nowIso);
 
     // A retry whose first attempt was interrupted between the two writes has
     // not moved the item since the version row landed, so it re-applies the
@@ -745,9 +746,21 @@ async function finalizeVersion(
     // later state. The limit is the same millisecond — a transition that lands
     // within the version's own millisecond is indistinguishable here.
     if (item.updated_at < existing.created_at)
-      return await settle(env, session, item, version, now);
+      return await settle(env, session, item, version, nowIso);
     return Response.json({ ok: true, status: item.status, version });
   }
+
+  // Cleanup deletes the object of a reservation older than the same hour, so an
+  // expired one must not become a version naming a key that is about to go. A
+  // replay answered above; only the insert path expires, and its key is then
+  // the one a stored version names, which cleanup's guard already keeps.
+  if (
+    Date.parse(stored.created_at) <=
+    now.getTime() - UPLOAD_RESERVATION_TTL_MS
+  )
+    return new Response("This upload expired; request a new version.", {
+      status: 409,
+    });
 
   await env.BUCKET.put(thumbnailKey(itemId), thumbnail.bytes, {
     httpMetadata: { contentType: "image/png" },
@@ -765,9 +778,9 @@ async function finalizeVersion(
       thumbnail_key: thumbnailKey(itemId),
       bytes: inspected.bytes,
       sha256: inspected.sha256,
-      created_at: now,
+      created_at: nowIso,
     },
-    now,
+    nowIso,
   );
   // A parallel finalize of the same version won the insert. The comparison the
   // serial path made above is the same one, so both requests give one answer.
@@ -781,7 +794,7 @@ async function finalizeVersion(
       return differentBytes(version);
   }
 
-  return await settle(env, session, item, version, now);
+  return await settle(env, session, item, version, nowIso);
 }
 
 /** No reservation and a reservation with no row answer the same 409. */
