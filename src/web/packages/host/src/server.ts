@@ -6,8 +6,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createBatch,
+  formatSseEvent,
   knownTimeZones,
   readFabricThemeEnvelope,
+  SAMPLE_EVENT,
   SAMPLE_STREAM_PATH,
   themeAssetContentType,
 } from "@yunari/renderer-core";
@@ -4506,12 +4508,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
       const payload = JSON.stringify(
         createBatch([...cycle.entries, ...gaps], at),
       );
+      // Framed once for the group: every connection that shares this batch
+      // receives the same bytes rather than formatting its own copy.
+      const frame = formatSseEvent(SAMPLE_EVENT, payload);
 
       for (const key of cycle.unmapped) unmapped.add(key);
 
       for (const display of group.displays) {
         for (const connection of byDisplay.get(display) ?? []) {
-          connection.offer(payload);
+          connection.offer(frame);
         }
       }
     }

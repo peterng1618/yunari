@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import type { Stats } from "node:fs";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
@@ -163,31 +164,102 @@ export function createWeatherSettingsStore(
    *  write: `/api/health` asks the store rather than parsing the file itself. */
   let problem: string | undefined;
 
+  /** The last read's identity and what it answered. Every poll reads settings,
+   *  and the file changes only when a person saves; an absent file caches the
+   *  same way, so a poll does not even re-stat. `write()` clears this rather
+   *  than predicting the stat its own rename will produce. */
+  let cached:
+    | {
+        readonly mtimeMs: number | undefined;
+        readonly size: number | undefined;
+        readonly settings: WeatherSettings;
+        readonly problem: string | undefined;
+      }
+    | undefined;
+
+  const missing = {
+    mtimeMs: undefined,
+    size: undefined,
+    settings: DEFAULT_WEATHER_SETTINGS,
+    problem: undefined,
+  } as const;
+
   return {
     problem: () => problem,
 
     async read(): Promise<WeatherSettings> {
+      // An absent file is a cached answer like any other: the poll must not ask
+      // the filesystem about a file it knows is not there. A save through this
+      // store clears the record, which is the only writer of this file.
+      if (cached !== undefined && cached.mtimeMs === undefined) {
+        problem = cached.problem;
+        return cached.settings;
+      }
+
+      let info: Stats;
+
+      try {
+        info = await stat(file);
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          // Not evidence of no file: the next poll retries the stat.
+          cached = undefined;
+          problem = reasonOf(error);
+          return DEFAULT_WEATHER_SETTINGS;
+        }
+
+        // No file is no choice yet, which is the defaults and not a problem.
+        // Reached when the file was deleted since the cached read, or when no
+        // read has been made at all.
+        cached = missing;
+        problem = undefined;
+        return DEFAULT_WEATHER_SETTINGS;
+      }
+
+      if (
+        cached !== undefined &&
+        cached.mtimeMs === info.mtimeMs &&
+        cached.size === info.size
+      ) {
+        problem = cached.problem;
+        return cached.settings;
+      }
+
       let stored: string;
 
       try {
         stored = await readFile(file, "utf8");
       } catch (error: unknown) {
-        // No file is no choice yet, which is the defaults and not a problem.
-        problem =
-          (error as NodeJS.ErrnoException).code === "ENOENT"
-            ? undefined
-            : reasonOf(error);
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          cached = missing;
+          problem = undefined;
+        } else {
+          cached = undefined;
+          problem = reasonOf(error);
+        }
+
         return DEFAULT_WEATHER_SETTINGS;
       }
+
+      const identity = { mtimeMs: info.mtimeMs, size: info.size };
 
       try {
         const settings = normalizeWeatherSettings(JSON.parse(stored));
         problem = undefined;
+        cached = { ...identity, settings, problem: undefined };
         return settings;
       } catch (error: unknown) {
         // Unparsable, or a field this build refuses: the defaults can still be
-        // polled, and the reason is what a person reads in `/api/health`.
-        problem = reasonOf(error);
+        // polled, and the reason is what a person reads in `/api/health`. The
+        // refusal is cached with its stat: the same bytes deserve the same
+        // answer until the file changes.
+        const reason = reasonOf(error);
+        problem = reason;
+        cached = {
+          ...identity,
+          settings: DEFAULT_WEATHER_SETTINGS,
+          problem: reason,
+        };
         return DEFAULT_WEATHER_SETTINGS;
       }
     },
@@ -214,6 +286,7 @@ export function createWeatherSettingsStore(
       );
       await rename(temporary, file);
       problem = undefined;
+      cached = undefined;
       return normalized;
     },
   };

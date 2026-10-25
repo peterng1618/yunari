@@ -4,6 +4,7 @@ import {
   readFile,
   rename,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -213,6 +214,58 @@ describe("weather settings", () => {
 
     expect(await store.read()).toEqual(DEFAULT_WEATHER_SETTINGS);
     expect(store.problem()).toMatch(/latitude/);
+  });
+
+  it("answers a repeat read of an unchanged file from one file read", async () => {
+    const store = createWeatherSettingsStore(dir);
+    await store.write({ ...PLACED });
+
+    expect(await store.read()).toEqual(PLACED);
+    const filesRead = vi.mocked(readFile).mock.calls.length;
+    expect(await store.read()).toEqual(PLACED);
+    // A poll is the store's main reader, so the file is parsed once, not per
+    // display per tick.
+    expect(vi.mocked(readFile).mock.calls.length).toBe(filesRead);
+  });
+
+  it("answers a missing file from the cache rather than re-statting it", async () => {
+    const store = createWeatherSettingsStore(dir);
+
+    expect(await store.read()).toEqual(DEFAULT_WEATHER_SETTINGS);
+    const stats = vi.mocked(stat).mock.calls.length;
+    expect(await store.read()).toEqual(DEFAULT_WEATHER_SETTINGS);
+    expect(vi.mocked(stat).mock.calls.length).toBe(stats);
+  });
+
+  it("re-reads a file someone else changed", async () => {
+    const store = createWeatherSettingsStore(dir);
+    await store.write({ ...PLACED });
+    expect(await store.read()).toEqual(PLACED);
+
+    // A longer label, so the size alone would catch it even if the two writes
+    // landed in the same millisecond.
+    const changed = { ...PLACED, label: "Hamburg, Hamburg, DE" };
+    await writeFile(
+      path.join(dir, "weather.json"),
+      JSON.stringify(changed),
+      "utf8",
+    );
+
+    expect(await store.read()).toEqual(changed);
+  });
+
+  it("serves what a write stored without waiting for the stat to differ", async () => {
+    const store = createWeatherSettingsStore(dir);
+    await store.write({ ...PLACED });
+    expect(await store.read()).toEqual(PLACED);
+
+    // Same encoded size as the record just read: only clearing the cache on the
+    // write makes this read observe the new coordinate.
+    const rewritten = { ...PLACED, latitude: 52.53 };
+    await store.write(rewritten);
+    const filesRead = vi.mocked(readFile).mock.calls.length;
+    expect(await store.read()).toEqual(rewritten);
+    expect(vi.mocked(readFile).mock.calls.length).toBe(filesRead + 1);
   });
 });
 
