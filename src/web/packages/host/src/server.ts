@@ -426,6 +426,30 @@ export function isLoopbackName(name: string | undefined): boolean {
 }
 
 /**
+ * Whether a loopback request asks an admin route it has not proved it may
+ * reach.
+ *
+ * A browser lured to another name can resolve that name to 127.0.0.1, so the
+ * peer is loopback while the request is not this machine's page. `Host` and
+ * `Origin` are what such a page cannot forge, so the existing same-origin rule
+ * answers once here rather than route by route, which missed some (ADR-0116).
+ * A non-loopback peer is untouched.
+ *
+ * `/api/host` is the one exemption, because a re-find sweep is cross-origin.
+ */
+export function refusesLoopbackApi(
+  request: http.IncomingMessage,
+  url: URL,
+): boolean {
+  return (
+    url.pathname.startsWith("/api/") &&
+    url.pathname !== "/api/host" &&
+    isLoopbackRemote(request.socket.remoteAddress) &&
+    isForeignOrigin(request)
+  );
+}
+
+/**
  * Whether a request states an origin other than its own.
  *
  * A page in another origin can reach a loopback route with a `text/plain` POST
@@ -1280,6 +1304,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
     response: http.ServerResponse,
   ): Promise<void> {
     const url = new URL(request.url ?? "/", "http://host.invalid");
+
+    // One same-origin decision ahead of every route branch: the route-by-route
+    // checks left routes reachable by a page that rebound a name to loopback.
+    if (refusesLoopbackApi(request, url)) {
+      sendText(response, 403, "That request is from another origin.");
+      return;
+    }
 
     // Before every gate below, and before pairing in particular: a device
     // reading this is being asked to trust the host, which is the step that has

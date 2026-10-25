@@ -4402,6 +4402,83 @@ describe("A display with no camera pairs by typing the one-time code", () => {
   });
 });
 
+describe("A loopback admin request must prove it is same-origin (§0116)", () => {
+  let dir: string;
+  let hosted: ReturnType<typeof createHostServer>;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-loopback-origin-"));
+    hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: createThemeStore(dir),
+      displays: createDisplayStore(dir),
+      pairingCodes: createPairingCodeStore({ wait: async () => {} }),
+      host: { id: "3f9a1c0b7d2e4a68", name: "Study PC" },
+    });
+  });
+
+  afterEach(async () => {
+    await hosted.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("refuses a rebound Host on a loopback admin route", async () => {
+    const answer = await request(
+      hosted.server,
+      "GET",
+      "/api/pairing/code",
+      undefined,
+      {
+        remoteAddress: "127.0.0.1",
+        headers: { host: "evil.example:5227" },
+      },
+    );
+    expect(answer.status).toBe(403);
+    expect(answer.text()).toBe("That request is from another origin.");
+  });
+
+  it("refuses another page's Origin even when the Host says localhost", async () => {
+    const answer = await request(
+      hosted.server,
+      "GET",
+      "/api/pairing/code",
+      undefined,
+      {
+        remoteAddress: "127.0.0.1",
+        headers: { host: "localhost:5227", origin: "https://evil.example" },
+      },
+    );
+    expect(answer.status).toBe(403);
+    expect(answer.text()).toBe("That request is from another origin.");
+  });
+
+  it("still serves localhost, 127.0.0.1 and [::1]", async () => {
+    for (const host of ["localhost:5227", "127.0.0.1:5227", "[::1]:5227"]) {
+      expect(
+        (
+          await request(hosted.server, "GET", "/api/pairing/code", undefined, {
+            remoteAddress: "127.0.0.1",
+            headers: { host },
+          })
+        ).status,
+        host,
+      ).toBe(200);
+    }
+  });
+
+  it("leaves the cross-origin /api/host discovery route alone", async () => {
+    expect(
+      (
+        await request(hosted.server, "GET", "/api/host", undefined, {
+          remoteAddress: "127.0.0.1",
+          headers: { host: "evil.example:5227" },
+        })
+      ).status,
+    ).toBe(200);
+  });
+});
+
 /** A template the product ships, and the list the host's pages read it from. */
 describe("The templates the host serves", () => {
   let tmpDir: string;
@@ -5126,7 +5203,9 @@ describe("Credential routes", () => {
     );
 
     expect(put.status).toBe(403);
-    expect(put.text()).toBe("Credentials are not available to another page.");
+    // The same-origin guard ahead of dispatch answers first (ADR-0116); the
+    // route keeps its own refusal behind it.
+    expect(put.text()).toBe("That request is from another origin.");
     const read = await rows();
     expect(read).toEqual([
       expect.objectContaining({ id: "demo", set: false }),
