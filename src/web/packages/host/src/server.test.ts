@@ -542,6 +542,14 @@ function sampleStream(
   };
 }
 
+/** A tick, a socket connect or a child process can outlast the 1 s default on
+ *  a box running the whole gate; the assertion is what is being proved, not
+ *  how quickly it held. */
+const waitFor = (
+  assertion: () => void,
+  options: { timeout?: number } = {},
+): Promise<void> => vi.waitFor(assertion, { timeout: 15_000, ...options });
+
 /** The newest frame's payload, or "" before the first tick reached it. */
 function lastFrame(frames: string): string {
   const data = frames.split("\n").filter((line) => line.startsWith("data: "));
@@ -553,7 +561,7 @@ function lastFrame(frames: string): string {
 async function servedCard(stream: {
   frames: () => string;
 }): Promise<string | undefined> {
-  await vi.waitFor(() => expect(lastFrame(stream.frames())).not.toBe(""));
+  await waitFor(() => expect(lastFrame(stream.frames())).not.toBe(""));
 
   const decoded = decodeBatch(lastFrame(stream.frames()));
 
@@ -6063,7 +6071,7 @@ describe("A theme's own device answers", () => {
 
   /** Waits for a tick to serve this PC the assignment the case expects. */
   async function serves(expected: DeviceAssignment): Promise<void> {
-    await vi.waitFor(() => expect(echo.assignments.at(-1)).toEqual(expected));
+    await waitFor(() => expect(echo.assignments.at(-1)).toEqual(expected));
   }
 
   beforeEach(async () => {
@@ -6303,7 +6311,7 @@ describe("A theme's own device answers", () => {
     );
     await request(hosted.server, "PUT", "/api/devices", json({ assigned }));
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const served = echo.assignments.at(-1) as
         | Readonly<Record<string, unknown>>
         | undefined;
@@ -6479,13 +6487,13 @@ describe("The assignment a display is served", () => {
     // Every display served before any gap is read: a tick that has not yet seen
     // the third connection polls one group instead of two, and its gap is the
     // ramp-up rather than the property. Counting starts once all three are in.
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(one.frames().length).toBeGreaterThan(0);
       expect(two.frames().length).toBeGreaterThan(0);
       expect(three.frames().length).toBeGreaterThan(0);
     });
     polls.length = 0;
-    await vi.waitFor(() => expect(polls.length).toBeGreaterThanOrEqual(6));
+    await waitFor(() => expect(polls.length).toBeGreaterThanOrEqual(6));
     const perTick = polls
       .slice(1)
       .map((count, index) => count - (polls[index] ?? count));
@@ -6507,14 +6515,14 @@ describe("The assignment a display is served", () => {
       `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=de-DE`,
     );
 
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(echo.contexts.at(-1)).toMatchObject({ language: "de-DE" }),
     );
   });
 
   it("lets the newest connection's language speak for the display", async () => {
     sampleStream(hosted.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=en`);
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(echo.contexts.at(-1)).toMatchObject({ language: "en" }),
     );
 
@@ -6523,7 +6531,7 @@ describe("The assignment a display is served", () => {
       `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=de-DE`,
     );
 
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(echo.contexts.at(-1)).toMatchObject({ language: "de-DE" }),
     );
   });
@@ -6541,7 +6549,7 @@ describe("The assignment a display is served", () => {
       `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=${tag}`,
     );
 
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(echo.contexts.at(-1)).toMatchObject({ language: tag }),
     );
   });
@@ -6562,7 +6570,7 @@ describe("The assignment a display is served", () => {
       expect(answer.status).toBe(200);
     }
 
-    await vi.waitFor(() => expect(echo.contexts.length).toBeGreaterThan(0));
+    await waitFor(() => expect(echo.contexts.length).toBeGreaterThan(0));
     expect(echo.contexts.at(-1)).not.toHaveProperty("language");
   });
 });
@@ -6649,7 +6657,7 @@ describe("A display's language in the served payload", () => {
       `${SAMPLE_STREAM_PATH}?keys=${keys}&display=${wall.id}&lang=en`,
     );
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(servedSample(german, "weather.condition")?.textValue).toBe(
         "Bedeckt",
       );
@@ -6883,7 +6891,7 @@ describe("One tick at a time", () => {
     }
 
     // The tick has resolved all four displays by the time it samples.
-    await vi.waitFor(() => expect(gated.samples()).toBeGreaterThanOrEqual(1));
+    await waitFor(() => expect(gated.samples()).toBeGreaterThanOrEqual(1));
 
     expect(counted.reads()).toBe(1);
     gated.release();
@@ -6904,12 +6912,12 @@ describe("One tick at a time", () => {
 
     sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
 
-    await vi.waitFor(() => expect(gated.samples()).toBe(1));
+    await waitFor(() => expect(gated.samples()).toBe(1));
     gated.fail(new Error("provider stalled"));
 
     // The rejection ended that tick; the next interval must sample again
     // rather than leave the loop wedged behind a flag nothing cleared.
-    await vi.waitFor(() => expect(gated.samples()).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(gated.samples()).toBeGreaterThanOrEqual(2));
     gated.release();
   });
 
@@ -6918,7 +6926,7 @@ describe("One tick at a time", () => {
     const host = start(gated);
 
     sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
-    await vi.waitFor(() => expect(gated.samples()).toBe(1));
+    await waitFor(() => expect(gated.samples()).toBe(1));
 
     gated.release();
     await host.close();
@@ -6993,7 +7001,7 @@ it("does not keep a connection whose client left while its display was resolved"
 
     // Ended is what proves the guard ran — nothing else closes a connection
     // that was never added.
-    await vi.waitFor(() => expect(stream.ended()).toBe(true));
+    await waitFor(() => expect(stream.ended()).toBe(true));
     expect(hosted.connectionCount).toBe(0);
   } finally {
     await hosted.close();
@@ -7087,7 +7095,7 @@ describe("The sample stream is bounded", () => {
       }
       // Sixty-four sockets open against a loaded box; the 1 s default expires
       // a few connects short and reports a cap failure that is not one.
-      await vi.waitFor(
+      await waitFor(
         () =>
           expect(hosted.connectionCount).toBe(
             (index + 1) * MAX_STREAM_CONNECTIONS_PER_DISPLAY,
@@ -7115,7 +7123,7 @@ describe("The sample stream is bounded", () => {
       // against rather than resolving every one to this PC.
       sampleStream(hosted.server, streamFor(busy), "192.168.1.50");
     }
-    await vi.waitFor(
+    await waitFor(
       () =>
         expect(hosted.connectionCount).toBe(MAX_STREAM_CONNECTIONS_PER_DISPLAY),
       { timeout: 15_000 },
@@ -7794,7 +7802,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     });
 
     // And the move does happen, once that answer has finished.
-    await vi.waitFor(() => expect(remembered).toBe(true));
+    await waitFor(() => expect(remembered).toBe(true));
     expect(lan).toBe(true);
   });
 
@@ -7853,7 +7861,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     expect(answered.status).toBe(200);
     expect(answered.json()).toMatchObject({ lan: false, refusal: null });
 
-    await vi.waitFor(() => expect(refusal).not.toBeNull());
+    await waitFor(() => expect(refusal).not.toBeNull());
     const after = await request(hosted.server, "GET", "/api/hosting");
 
     // Read from the route that follows, which is where the editor shows it.
@@ -11426,7 +11434,7 @@ describe("Custom source routes", () => {
     );
 
     const testing = request(hosted.server, "POST", "/api/sources/fixture/test");
-    await vi.waitFor(() => expect(called).toBe(true));
+    await waitFor(() => expect(called).toBe(true));
 
     // A write reloads the provider, which retires the runtime the test is
     // still holding; its answer belongs to a source that has been replaced.
