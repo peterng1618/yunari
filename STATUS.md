@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–10 complete, Task 11 next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–11 complete, Task 12 next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,10 +18,10 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 10 landed:** the Fonts body searches the host's font sources and draws trios and families in one grid, with provider chips and an `All / Trios / Fonts` filter that re-searches nothing.
-- **A failed source no longer blanks the grid:** rows are kept per source, and a state line distinguishes searching from failed.
-- **The empty term is never sent**, and the curated adapter's trio-name, trio-description and folded-query clauses are now pinned by tests.
-- **Evidence:** asset-finder 88 tests, ui-copy 22, typecheck and biome exit 0.
+- **Task 11 landed:** the finder has a 336px preview column — trio specimens in heading/body/mono, family cuts as chips with a Role select, the apply scope read from `presets` only.
+- **Specimens load from `cut.previewUrl`** on evidence: no CSP is declared in the repo and both providers are CORS-open; faces are released on unmount and on selection change, and a failed load falls back instead of blocking.
+- **The panel is presentational:** its five callbacks are optional until Task 12 wires them, so the running finder has no pressable apply yet.
+- **Evidence:** asset-finder 97 tests, typecheck and biome exit 0.
 
 ## Next
 
