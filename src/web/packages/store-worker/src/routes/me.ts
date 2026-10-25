@@ -526,14 +526,21 @@ async function putUpload(
 
   // A foreign id is indistinguishable from a missing one.
   const row = await env.DB.prepare(
-    "SELECT finalized_at FROM upload WHERE id = ? AND user_id = ?",
+    "SELECT created_at, finalized_at FROM upload WHERE id = ? AND user_id = ?",
   )
     .bind(uploadId, session.userId)
-    .first<{ finalized_at: string | null }>();
+    .first<{ created_at: string; finalized_at: string | null }>();
   if (row === null) return notFound();
   if (row.finalized_at !== null) {
     return new Response("This upload is already finalized.", { status: 409 });
   }
+  // Cleanup may already have deleted this reservation's object after the hour,
+  // and finalize would refuse it; writing now spends bandwidth on an object
+  // nothing will finalize and the prune could orphan.
+  if (Date.parse(row.created_at) <= Date.now() - UPLOAD_RESERVATION_TTL_MS)
+    return new Response("This upload expired; request a new version.", {
+      status: 409,
+    });
 
   // Decimal digits only: `Number` would take `1e3`, `0x10`, `""` and padded
   // forms as lengths.

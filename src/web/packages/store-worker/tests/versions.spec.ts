@@ -1,6 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
 import { beforeAll, describe, expect, it } from "vitest";
+import { UPLOAD_RESERVATION_TTL_MS } from "../src/db/quota";
 import type { Env } from "../src/env";
 import { handleMe, pumpInto } from "../src/routes/me";
 import { pendingKey } from "../src/storage/keys";
@@ -687,6 +688,35 @@ describe("version requests", () => {
       body: new Uint8Array([1, 2, 3]),
     });
     expect(response.status).toBe(409);
+  });
+
+  it("refuses a PUT to an expired reservation and still writes a fresh one", async () => {
+    const headers = await sessionHeaders();
+    const { id, url } = await reserved(headers);
+    // One hour old: finalize refuses it and cleanup will delete its object.
+    await env.DB.prepare("UPDATE upload SET created_at = ? WHERE id = ?")
+      .bind(new Date(Date.now() - UPLOAD_RESERVATION_TTL_MS).toISOString(), id)
+      .run();
+
+    const bytes = new TextEncoder().encode("too late");
+    const expired = await SELF.fetch(url, {
+      method: "PUT",
+      headers: { ...headers, "content-length": String(bytes.byteLength) },
+      body: bytes,
+    });
+    expect(expired.status).toBe(409);
+    expect(await expired.text()).toBe(
+      "This upload expired; request a new version.",
+    );
+    expect(await env.BUCKET.head(pendingKey(id))).toBeNull();
+
+    const fresh = await reserved(headers);
+    const stored = await SELF.fetch(fresh.url, {
+      method: "PUT",
+      headers: { ...headers, "content-length": String(bytes.byteLength) },
+      body: bytes,
+    });
+    expect(stored.status).toBe(201);
   });
 
   it("sees the first reservation in the next request's quota check", async () => {
