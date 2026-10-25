@@ -220,6 +220,18 @@ export interface ResolvedAddress {
   readonly family: number;
 }
 
+/** Carries the policy's answer for one hop to the connection that fetch makes
+ *  for it, so no shared state decides which address a request dials. */
+export const PINNED_ADDRESSES: unique symbol = Symbol("pinnedAddresses");
+
+export type PinnedRequestInit = RequestInit & {
+  readonly [PINNED_ADDRESSES]?: readonly ResolvedAddress[];
+};
+
+/** Refused on every hop, whatever the source's own `allowPrivate` says. */
+export const BLOCKED_ADDRESS_REASON =
+  "the source resolves to a link-local or metadata address";
+
 /** The policy's one resolution. A test injects it so a second resolution at
  *  connect time would show up as a second call. */
 export type HostLookup = (host: string) => Promise<readonly ResolvedAddress[]>;
@@ -231,26 +243,6 @@ export const dnsLookup: HostLookup = async (host) => {
     family: entry.family,
   }));
 };
-
-/** The addresses the policy checked for a hostname, so the connection can pin
- *  one instead of resolving again. Every policy resolution replaces the entry,
- *  so a later fetch re-resolves rather than reusing a stale answer. A hostname
- *  is the only key `connect.lookup` receives, so two sources resolving the same
- *  name at once share whichever answer was recorded last. */
-const checkedByHost = new Map<string, readonly ResolvedAddress[]>();
-
-export function recordCheckedAddresses(
-  host: string,
-  addresses: readonly ResolvedAddress[],
-): void {
-  checkedByHost.set(host, addresses);
-}
-
-export function checkedAddressesFor(
-  host: string,
-): readonly ResolvedAddress[] | undefined {
-  return checkedByHost.get(host);
-}
 
 type Resolved =
   | { readonly ok: true; readonly addresses: readonly ResolvedAddress[] }
@@ -292,7 +284,7 @@ function refusalOf(
   allowPrivate: boolean,
 ): string | undefined {
   if (addresses.some(isBlockedAddress)) {
-    return "the source resolves to a link-local or metadata address";
+    return BLOCKED_ADDRESS_REASON;
   }
   if (!allowPrivate && addresses.some(isPrivateAddress)) {
     return "the source resolves to a private or loopback address";
@@ -300,21 +292,23 @@ function refusalOf(
   return undefined;
 }
 
-async function refusalReason(
+type CheckedDestination =
+  | { readonly ok: true; readonly addresses: readonly ResolvedAddress[] }
+  | { readonly ok: false; readonly reason: string };
+
+async function checkDestination(
   destination: URL,
   options: { readonly allowPrivate: boolean },
   resolve: HostLookup,
-): Promise<string | undefined> {
+): Promise<CheckedDestination> {
   const resolved = await resolveDestination(destination, resolve);
-  if (!resolved.ok) return resolved.reason;
+  if (!resolved.ok) return resolved;
 
-  const addresses = resolved.addresses.map((entry) => entry.address);
-  const refused = refusalOf(addresses, options.allowPrivate);
-  // Only an address that passed the policy may be pinned for the connection.
-  if (refused === undefined && !isIpLiteral(destination.hostname)) {
-    recordCheckedAddresses(destination.hostname, resolved.addresses);
-  }
-  return refused;
+  const refused = refusalOf(
+    resolved.addresses.map((entry) => entry.address),
+    options.allowPrivate,
+  );
+  return refused === undefined ? resolved : { ok: false, reason: refused };
 }
 
 interface BuiltRequest {
@@ -473,6 +467,7 @@ async function run(
   let redirects = 0;
   let allowPrivate = false;
   let firstHop = true;
+  let pinned: readonly ResolvedAddress[] = [];
 
   for (;;) {
     if (firstHop) {
@@ -484,30 +479,32 @@ async function run(
       allowPrivate = addresses.every(isPrivateAddress);
       const refused = refusalOf(addresses, true);
       if (refused !== undefined) return fail(refused);
-      if (!isIpLiteral(destination.hostname)) {
-        recordCheckedAddresses(destination.hostname, resolved.addresses);
-      }
+      pinned = resolved.addresses;
       firstHop = false;
     } else {
-      const refused = await refusalReason(
+      const checked = await checkDestination(
         destination,
         { allowPrivate },
         resolve,
       );
-      if (refused !== undefined) return fail(refused);
+      if (!checked.ok) return fail(checked.reason);
+      pinned = checked.addresses;
     }
     if (signal.aborted) return fail(TIMEOUT_REASON);
 
     const built = buildRequest(source, destination, credential, sameOrigin);
     if (!responseOf(built)) return fail(built.reason);
 
+    const init: PinnedRequestInit = {
+      headers: built.headers,
+      signal,
+      redirect: "manual",
+      [PINNED_ADDRESSES]: pinned,
+    };
+
     let response: Response;
     try {
-      response = await fetchImpl(built.url, {
-        headers: built.headers,
-        signal,
-        redirect: "manual",
-      });
+      response = await fetchImpl(built.url, init);
     } catch (error) {
       return fail(signal.aborted ? TIMEOUT_REASON : messageOf(error));
     }
