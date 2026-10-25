@@ -107,6 +107,7 @@ export {
   computeComposition,
   defaultPieSettings,
 } from "./charts/pie.js";
+export { chartReadingSignature } from "./charts/reading-signature.js";
 export {
   carriedPaintFor,
   seriesPaintFor,

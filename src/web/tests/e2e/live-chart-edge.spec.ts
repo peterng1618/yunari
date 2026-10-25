@@ -14,12 +14,9 @@ import { HOST_PORT } from "./host-theme.js";
  * frames in a row. This records that series and writes it to a file; the reading
  * is the evidence, and what it shows decides whether there is anything to fix.
  *
- * **The overscan gutter is why the pixels are read and not just the times.** The
- * visible window is not `xAxis.min..max`: `YunariChart._render` blits only the
- * left `_visibleBackingWidth()` px of an ECharts canvas that is `overscan` px
- * wider, so the axis's right end is off the visible surface by design. A reading
- * of `xAxis.max` alone would report the window's right edge as the newest
- * sample's own x, which is the one thing it is not. `convertToPixel` is the
+ * **The axis edge is the visible edge.** `YunariChart._render` blits the whole
+ * ECharts canvas, whose width is the authored box at raster scale; the axis's
+ * right end and the visible surface end together. `convertToPixel` is the
  * engine's own mapping, so the pixel column of a timestamp is measured rather
  * than recomputed here.
  *
@@ -106,6 +103,7 @@ test.describe("the live line chart's edge", () => {
       };
 
       const read = (object: {
+        family?: string;
         option?: Record<string, unknown>;
         width: number;
         height: number;
@@ -118,7 +116,6 @@ test.describe("the live line chart's edge", () => {
         };
         _chart?: { convertToPixel(finder: unknown, value: number): number };
         _element?: { width: number };
-        _visibleBackingWidth?: () => number;
       }): void => {
         const option = object.option;
         const axis = option?.["xAxis"] as
@@ -162,20 +159,17 @@ test.describe("the live line chart's edge", () => {
 
         frames.push({
           at: Date.now(),
+          family: object.family ?? null,
           batches: globals.yunari?.live?.batchCount ?? null,
           axisMin: axis.min,
           axisMax: axis.max,
-          overscan: (option?.["renderOverscanRightMs"] as number) ?? 0,
           grid: option?.["grid"] as unknown,
           readings,
           width: object.width,
           height: object.height,
           renderScale: object.renderScale,
           canvasWidth: object._element?.width ?? null,
-          visibleWidth:
-            typeof object._visibleBackingWidth === "function"
-              ? object._visibleBackingWidth()
-              : null,
+          visibleWidth: object._element?.width ?? null,
           pxMin: toPixel(axis.min),
           pxMax: toPixel(axis.max),
           pxFirst: toPixel(readings[0]?.first ?? undefined),
@@ -258,5 +252,55 @@ test.describe("the live line chart's edge", () => {
 
     expect(frames.length, `readings written to ${OUT}`).toBeGreaterThan(100);
     expect(testInfo.project.name).toBeTruthy();
+
+    // The canvas is the authored box now, so the axis edge is the visible edge.
+    type Frame = {
+      at: number;
+      family: string | null;
+      axisMax: number;
+      canvasWidth: number;
+      visibleWidth: number;
+      pxMax: number;
+      readings: { last: number | null }[];
+      rect: { left: number; top: number; width: number; height: number };
+    };
+    const live = (frames as Frame[]).filter(
+      (frame) =>
+        frame.canvasWidth > 0 &&
+        frame.readings.length > 0 &&
+        frame.readings[0]?.last !== null,
+    );
+    expect(live.length, `readings written to ${OUT}`).toBeGreaterThan(100);
+
+    for (const frame of live) {
+      expect(frame.canvasWidth).toBe(frame.visibleWidth);
+      expect(frame.pxMax).toBeGreaterThanOrEqual(0);
+      expect(frame.pxMax).toBeLessThanOrEqual(frame.canvasWidth);
+    }
+
+    // Each line's own edge never moves backwards, and never runs ahead of the
+    // one playback delay. A read between two repaints legitimately lags.
+    const lines = new Map<string, Frame[]>();
+    for (const frame of live) {
+      if (frame.family !== "line") continue;
+      const key = `${frame.rect.left},${frame.rect.top},${frame.rect.width},${frame.rect.height}`;
+      lines.set(key, [...(lines.get(key) ?? []), frame]);
+    }
+    expect(lines.size).toBeGreaterThan(0);
+    for (const framesOfLine of lines.values()) {
+      for (const frame of framesOfLine) {
+        const lag = frame.at - frame.axisMax - 1_000;
+        expect(lag).toBeGreaterThanOrEqual(-50);
+        expect(lag).toBeLessThanOrEqual(1_200);
+      }
+      for (let index = 1; index < framesOfLine.length; index += 1) {
+        expect(framesOfLine[index]!.axisMax).toBeGreaterThanOrEqual(
+          framesOfLine[index - 1]!.axisMax,
+        );
+        expect(framesOfLine[index]!.readings[0]!.last!).toBeGreaterThanOrEqual(
+          framesOfLine[index - 1]!.readings[0]!.last!,
+        );
+      }
+    }
   });
 });

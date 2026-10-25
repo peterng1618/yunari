@@ -275,6 +275,7 @@ async function start(): Promise<void> {
     const options = {
       shell,
       source: source.source,
+      chartRefreshRate: () => chartRefreshRate,
       envelope: next.input,
       // The package's own picture, so a theme keeps the look its author saw
       // even where this machine cannot render one.

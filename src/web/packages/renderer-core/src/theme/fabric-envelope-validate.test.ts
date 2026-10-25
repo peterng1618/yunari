@@ -787,6 +787,18 @@ describe("Fabric theme envelope validation", () => {
     ]);
   });
 
+  it("refuses the removed label keys", () => {
+    for (const [family, settings] of [
+      ["bar", { showCategoryLabels: true }],
+      ["pie", { showLabels: true }],
+    ] as const) {
+      const issues = issuesOf(
+        validateFabricThemeEnvelope(chartEnvelope(family, settings)),
+      );
+      expect(issues.some((issue) => issue.code === "unknown-field")).toBe(true);
+    }
+  });
+
   it("refuses a fixed pie total with no finite value", () => {
     const absent = validateFabricThemeEnvelope(
       chartEnvelope("pie", { total: { kind: "fixed" } }),

@@ -73,7 +73,7 @@ function chartOptions(
 }
 
 describe("constructing a chart", () => {
-  it("renders live-line overscan outside the authored Fabric crop", () => {
+  it("sizes the backing canvas to the authored box", () => {
     const option = buildLineOption(
       defaultLineSettings,
       [{ sensorId: "cpu.load", samples: [sample(1, 1000), sample(2)] }],
@@ -86,9 +86,7 @@ describe("constructing a chart", () => {
     const element = (chart as unknown as { _element: HTMLCanvasElement })
       ._element;
 
-    // At the default 2x raster scale, the five authored-pixel gutter is ten
-    // backing pixels; Fabric still draws only the first 600 pixels.
-    expect(element.width).toBe(610);
+    expect(element.width).toBe(600);
     chart.dispose();
   });
 

@@ -47,7 +47,29 @@ describe("SampleStore", () => {
       NOW,
     );
 
-    expect(store.history("a", 60).map((sample) => sample.value)).toEqual([2]);
+    expect(store.history("a", 60).map((sample) => sample.value)).toEqual([
+      1, 2,
+    ]);
+  });
+
+  it("returns the last sample before the window as a predecessor", () => {
+    const store = new SampleStore();
+    store.ingest(
+      [
+        ["a", ok(1, NOW - 61_000)],
+        ["a", ok(2, NOW - 60_500)],
+        ["a", ok(3, NOW - 1000)],
+      ],
+      NOW,
+    );
+
+    expect(store.history("a", 60).map((s) => s.value)).toEqual([2, 3]);
+  });
+
+  it("returns only the predecessor when the window is empty", () => {
+    const store = new SampleStore();
+    store.ingest([["a", ok(1, NOW - 61_000)]], NOW);
+    expect(store.history("a", 60).map((s) => s.value)).toEqual([1]);
   });
 
   it("windows delayed live samples by presentation time", () => {

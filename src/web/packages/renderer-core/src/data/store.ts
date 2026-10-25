@@ -72,11 +72,26 @@ export class SampleStore implements SampleSource {
     }
 
     const start = this.lastNowMs - Math.max(0, windowSeconds) * 1000;
+    let predecessor: Sample | undefined;
+    let predecessorTime = Number.NEGATIVE_INFINITY;
+    const inWindow: Sample[] = [];
 
-    return list.filter((sample) => {
+    for (const sample of list) {
       const time = sampleTimeMs(sample);
-      return Number.isFinite(time) && time >= start && time <= this.lastNowMs;
-    });
+      if (!Number.isFinite(time)) {
+        continue;
+      }
+      if (time < start) {
+        if (time > predecessorTime) {
+          predecessor = sample;
+          predecessorTime = time;
+        }
+      } else if (time <= this.lastNowMs) {
+        inWindow.push(sample);
+      }
+    }
+
+    return predecessor === undefined ? inWindow : [predecessor, ...inWindow];
   }
 
   /** Clear on reconnect so old and server-replayed timelines cannot interleave. */

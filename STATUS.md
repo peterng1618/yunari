@@ -5,37 +5,36 @@ Branch: `main`
 
 ## Current objective
 
-Drain `docs/product/backlog.jsonl`: the queued [`spec`](docs/superpowers/specs/2026-10-12-the-backlog-drain-design.md) and [`plan`](docs/superpowers/plans/2026-10-12-the-backlog-drain.md) close the rows the reproduction pass proved discharged, take the rulings the register waits on, then do the real work; 244 rows carry `state: "open"`.
+Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](docs/superpowers/specs/2026-10-25-chart-playback-and-segmented-fill-design.md): Plan 1 playback and label removal is landed; Plans 2 (segmented fill) and 3 (radar and polar bar) remain.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md` — queued, not started; no task dispatched.
-- **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
-- **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
-- **`vg-724` is open for art only:** naming for Steam, Epic, GOG, itch, Xbox and GDK Store packages landed; catalogue-matched non-Steam titles still report no artwork.
-- **Windows-first boundary:** Linux catalogue readers and foreground detection are out of scope (spec D4) and owned by `vg-727`.
-- **System tray merged:** [`spec`](docs/superpowers/specs/2026-10-25-systray-design.md) and plan are landed; the rows, clicks and the staged Linux binary still need a live run.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-chart-segmented-fill.md` — next; the playback plan is landed.
+- **Queued plan:** `docs/superpowers/plans/2026-10-25-radar-and-polar-bar.md` — runs after the segmented-fill checkpoint.
+- **Playback plan landed:** labels removed, line axis at the delayed clock, history predecessor, and engine animation selected by family and rate.
+- **Owner testing follows the run:** each plan merges locally into `main`; nothing is pushed, and the owner tests after the sequence.
+- **Decision note:** [0116](docs/decisions/0116-chart-motion-is-the-engines-and-the-line-is-a-clock.md) claims the chart mechanism boundaries.
 
 ## Last completed change
 
-- **System tray merged:** host-owned tray with a Windows WinForms adapter, a staged Linux `systray2@2.1.4` binary, external-program rows, sign-in autostart, editor deep links and `--tray`.
-- **Register merged by id:** main's `vg-727`, `vg-724`, `vg-728` and `vg-729` stand; the branch's `vg-726` was dropped because main had already verified it at `15978c51`.
-- **Decision notes renumbered:** the tray notes became 0114 (RTSS on request) and 0115 (host-owned shell), leaving main's 0110 and 0111 in place.
-- **SMTC fix superseded:** main's array materialisation in `POLL` replaced the branch's test change; `smtc-helper.windows.test.ts` passes with the merged code.
-- **Merged gate** at `6d2f62a`: 408 files and 5963 tests pass with 1 skipped, Worker 73; `status:check`, `docs:check` and `backlog:check` exit 0.
+- **Engine labels removed:** bar and pie label settings, all axis text, and pie labels are gone; the validator refuses the removed keys.
+- **Line edge fixed:** `xAxis.max` is `nowMs − playbackDelay`, the overscan canvas and guard are deleted, and history returns one predecessor.
+- **Motion policy:** a shared reading signature gates `setOption` on both surfaces; value families animate at 30 fps and the line stays clock-driven.
+- **Animation reaches ECharts:** `YunariChart` no longer forces `animation: false` over a plan that asked for a transition.
+- **Evidence:** edge probe read 18,024 live line frames across four lines with canvas equal to visible width, monotonic axis and newest sample, lag 7–1018 ms; gate exit 0 with 408 files and 5,975 tests passing, 1 skipped.
 
 ## Next
 
-1. A live tray run by the owner: inspect the menu's rows, toggle Auto start, open each editor surface, start RTSS, and Exit.
-2. Run the staged Linux tray binary on a Linux desktop session; it was never executed here.
-3. Work `vg-724`'s art half: local art for catalogue-matched non-Steam titles.
-4. Work `vg-727`, `vg-728` and `vg-729`: Linux presence, the renamed Worker test plugin and the jsdom 30 DOM cases.
-5. Start the backlog-drain plan at Phase 0.
+1. Execute the segmented-fill plan: divisor model, discrete slider, gauge bands, pie spacers, bar custom series.
+2. Run its browser evidence, gate, `STATUS.md` update and local `main` merge.
+3. Execute the radar and polar-bar plan, then merge it locally into `main`.
+4. Capture phone performance and value-chart transition evidence at the owner's test.
+5. Keep every checkpoint local; no push until the owner asks.
 
 ## Blockers / unverified
 
-- **The publish path is unverified end to end:** no workflow dispatch, no trusted-publisher run and no first publish, which stays a one-time local token publish; the release-token choice is open.
-- **No real N−1 migration is exercised:** at `2.0.0` the only older shape is the legacy integer; the dispatcher is a forward obligation.
-- **No live fullscreen game check:** window evidence is unit-tested through injected readings and a fixed foreground seam.
-- **Epic, itch, Xbox and Store readers are fixture-tested only**, and both live Steam reads stay fixture-tested.
-- **Two dependency deviations remain:** `ffmpeg-static` installs with scripts but no playback was exercised, and `npm ls` marks the overridden edges `invalid`.
+- **Value-chart engine transitions are not browser-verified:** the gate proves the option flag and signature, not motion across frames.
+- **Phone performance is unmeasured:** thirty applications per second across several charts is unproven on the phone that reported the defect.
+- **A late batch leaves a blank right edge:** chosen honest behaviour, not a correction; the next batch grows into the gap.
+- **The edge probe is a manual measurement:** it is skipped unless `YUNARI_EDGE_PROBE` is set and is not part of `npm run gate`.
+- **Older readers refuse the removed label keys:** accepted pre-release; no converter is written.

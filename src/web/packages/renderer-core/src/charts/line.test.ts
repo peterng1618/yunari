@@ -6,6 +6,7 @@ import {
   type Interpolation,
   type LinearGradientColor,
   type LineSettings,
+  lineHistorySeconds,
   type SeriesInput,
   toEngineColor,
   toSeriesPoints,
@@ -247,7 +248,7 @@ describe("buildLineOption", () => {
     ]);
   });
 
-  it("renders the delayed live segment in a right-side overscan gutter", () => {
+  it("ends the axis at the delayed render clock and keeps later samples", () => {
     const option = buildLineOption(
       defaultLineSettings,
       [{ sensorId: "a", samples: [at(59, 10), at(60, 20)] }],
@@ -257,8 +258,9 @@ describe("buildLineOption", () => {
       1_000,
     );
 
-    expect(option.xAxis.max).toBe(NOW);
-    expect(option.renderOverscanRightMs).toBe(1_000);
+    expect(option.xAxis.max).toBe(NOW - 1_000);
+    expect(option.xAxis.min).toBe(NOW - 1_000 - 60_000);
+    expect("renderOverscanRightMs" in option).toBe(false);
     expect(option.series[0]!.data).toEqual([
       [T0 + 59_000, 10],
       [NOW, 20],
@@ -333,6 +335,16 @@ describe("buildLineOption", () => {
     expect(option.grid.right).toBe(0);
     expect(option.xAxis.show).toBe(false);
     expect(option.yAxis.show).toBe(false);
+  });
+
+  it("draws axes without any engine text", () => {
+    const option = buildLineOption(defaultLineSettings, [], NOW);
+    expect(option.xAxis.axisLabel.show).toBe(false);
+    expect(option.yAxis.axisLabel.show).toBe(false);
+  });
+
+  it("asks for the window plus one playback delay", () => {
+    expect(lineHistorySeconds(60, 1_000)).toBe(61);
   });
 
   it("omits axis bounds when unset rather than sending undefined", () => {

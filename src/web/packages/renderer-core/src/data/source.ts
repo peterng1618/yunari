@@ -13,7 +13,10 @@ export interface SampleSource {
   readonly chartPlaybackDelayMs?: number;
   /** The newest sample for a semantic key, or undefined when nothing is mapped. */
   latest(semanticKey: string): Sample | undefined;
-  /** Samples within the trailing window, oldest first. Empty when unmapped. */
+  /**
+   * Samples within the trailing window, oldest first, plus the last sample
+   * strictly before the window's cutoff when one is retained.
+   */
   history(semanticKey: string, windowSeconds: number): readonly Sample[];
 }
 
