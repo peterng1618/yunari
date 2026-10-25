@@ -343,6 +343,7 @@ async function chartUnitDisplayOptions(root: HTMLElement): Promise<string[]> {
         track: { kind: "solid", color: "#000" },
         progress: { kind: "solid", color: "#fff" },
         roundCap: true,
+        segmentDivisor: 100,
       },
     },
     bindings: [{ id: "g", semanticKey: "ram.used.percent" }],

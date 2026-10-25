@@ -1,5 +1,6 @@
 import type { ChartFamily } from "../theme/document.js";
 import { ANIMATION_EASINGS, type AnimationEasing } from "./animation.js";
+import { SEGMENT_DIVISORS } from "./segments.js";
 
 /**
  * Which settings each chart family accepts, as editable field descriptors.
@@ -176,6 +177,15 @@ export interface SettingsFieldDescriptor {
     readonly value: string;
     readonly label: string;
   }[];
+  /**
+   * For `number`, the only values the field accepts, in ascending order.
+   *
+   * A discrete setting is not a bounded one: `min`/`max` alone would offer every
+   * integer between the ends, and each of those is a value the adapters cannot
+   * draw. The list is the document's own — the envelope refuses a present value
+   * outside it — so the control, the loader and the adapters read one list.
+   */
+  readonly values?: readonly number[];
 }
 
 /** Persisted chart paint settings; token choice is shared across editor surfaces. */
@@ -343,6 +353,16 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       kind: "boolean",
       section: "content",
       hint: "Rounds the two cut ends of the arc instead of leaving them square.",
+    },
+    {
+      property: "segmentDivisor",
+      label: "Segments",
+      kind: "number",
+      section: "content",
+      hint: "Splits the arc into equal slices, each inheriting the rounded ends; 100 leaves it continuous.",
+      min: 1,
+      max: 100,
+      values: SEGMENT_DIVISORS,
     },
     {
       property: "gradientSegments",
@@ -516,6 +536,16 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       bound: "halfDrawnBox",
     },
     {
+      property: "segmentDivisor",
+      label: "Segments",
+      kind: "number",
+      section: "content",
+      hint: "Splits the bar into equal slices, each inheriting the corner radius; 100 leaves it continuous.",
+      min: 1,
+      max: 100,
+      values: SEGMENT_DIVISORS,
+    },
+    {
       property: "showAxes",
       label: "Show axes",
       kind: "boolean",
@@ -583,6 +613,16 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       hint: "How much each slice's outer corners are rounded, in pixels.",
       min: 0,
       bound: "halfDrawnBox",
+    },
+    {
+      property: "segmentDivisor",
+      label: "Segments",
+      kind: "number",
+      section: "content",
+      hint: "Splits each slice's fill into equal wedges, each inheriting the corner radius; 100 leaves it continuous.",
+      min: 1,
+      max: 100,
+      values: SEGMENT_DIVISORS,
     },
     {
       property: "total",

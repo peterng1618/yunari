@@ -3,6 +3,7 @@ import type { Sample, SensorStatus } from "../types.js";
 import {
   buildLineOption,
   defaultLineSettings,
+  heldTail,
   type Interpolation,
   type LinearGradientColor,
   type LineSettings,
@@ -38,6 +39,38 @@ function bad(
     unit: "%",
   };
 }
+
+describe("heldTail — the last reading fills the edge", () => {
+  it("holds the last reading to the render clock", () => {
+    expect(
+      heldTail(
+        [
+          [T0, 40],
+          [T0 + 1000, 55],
+        ],
+        T0 + 1400,
+        1000,
+      ),
+    ).toEqual([
+      [T0, 40],
+      [T0 + 1000, 55],
+      [T0 + 1400, 55],
+    ]);
+  });
+
+  it("leaves a reported gap alone", () => {
+    const points = [
+      [T0, 40],
+      [T0 + 1000, null],
+    ] as const;
+
+    expect(heldTail(points, T0 + 1400, 1000)).toEqual(points);
+  });
+
+  it("stops at the playback delay, so an outage stays visible", () => {
+    expect(heldTail([[T0, 40]], T0 + 3000, 1000)).toEqual([[T0, 40]]);
+  });
+});
 
 describe("toSeriesPoints — the gap rule (§83)", () => {
   it.each(["missing", "error", "unavailable", "stale"] as const)(

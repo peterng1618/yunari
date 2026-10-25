@@ -1,4 +1,10 @@
-import { BarChart, GaugeChart, LineChart, PieChart } from "echarts/charts";
+import {
+  BarChart,
+  CustomChart,
+  GaugeChart,
+  LineChart,
+  PieChart,
+} from "echarts/charts";
 import { GridComponent, VisualMapComponent } from "echarts/components";
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
@@ -10,6 +16,9 @@ echarts.use([
   GaugeChart,
   LineChart,
   BarChart,
+  // The segmented bar's bands are a custom series; without this registration
+  // the engine accepts the option and draws nothing.
+  CustomChart,
   PieChart,
   GridComponent,
   VisualMapComponent,

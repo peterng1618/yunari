@@ -1425,6 +1425,8 @@ export const uiCopy = {
     wholeNumber: "a whole number",
     atLeast: (min: number) => `at least ${min}`,
     atMost: (max: number) => `at most ${max}`,
+    /** A discrete field: the values between two members are not drawable. */
+    oneOf: (values: readonly number[]) => `one of ${values.join(", ")}`,
   },
   /** The stage camera's control: the display the stage looks through, and the
    *  two framings that are not a display. `label` names what the control is;

@@ -736,6 +736,18 @@ describe("Fabric theme envelope validation", () => {
     ]);
   });
 
+  it("refuses a segment divisor that is not an allowed value", () => {
+    const issues = issuesOf(
+      validateFabricThemeEnvelope(chartEnvelope("bar", { segmentDivisor: 33 })),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        code: "out-of-range",
+        path: "/scene/objects/0/settings/segmentDivisor",
+      }),
+    );
+  });
+
   it("refuses a crossed pair the family's own descriptors own", () => {
     const gauge = validateFabricThemeEnvelope(
       chartEnvelope("gauge", { min: 10, max: 1 }),

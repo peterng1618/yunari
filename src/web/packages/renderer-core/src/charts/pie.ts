@@ -8,6 +8,11 @@ import {
 } from "./animation.js";
 import { NO_INK, resolveChartPaint } from "./chart-paint.js";
 import { type EngineColor, resolveFlatColor } from "./fill.js";
+import {
+  SEGMENT_GAP_RATIO,
+  segmentCount,
+  segmentDivisorOf,
+} from "./segments.js";
 
 /**
  * Pie/donut adapter. Composition differs from gauge progress: missing parts must
@@ -26,6 +31,8 @@ export interface PieSettings {
   readonly endAngle?: number;
   readonly padAngle: number;
   readonly cornerRadius: number;
+  /** How many slices each part's fill is cut into; 100 is continuous. */
+  readonly segmentDivisor: number;
   readonly total: PieTotal;
   /** Drawn only for fixed totals, where the remainder is measurable. */
   readonly remainderFill?: ChartPaint;
@@ -39,6 +46,7 @@ export const defaultPieSettings: PieSettings = {
   startAngle: 90,
   padAngle: 2,
   cornerRadius: 4,
+  segmentDivisor: 100,
   total: { kind: "sum" },
   palette: [
     { kind: "solid", color: "#00b8d9" },
@@ -202,6 +210,10 @@ export function buildPieOption(
     });
   }
 
+  const count = segmentCount(segmentDivisorOf(settings));
+  const padAngle = Math.max(0, settings.padAngle);
+  const segmented = count > 1;
+
   return {
     ...toEngineAnimation(settings.animation, animate),
     series: [
@@ -216,15 +228,70 @@ export function buildPieOption(
         ...(settings.endAngle === undefined
           ? {}
           : { endAngle: settings.endAngle }),
-        padAngle: Math.max(0, settings.padAngle),
+        // The renderer's own pad is replaced by spacer items on the segmented
+        // path, so the authored gap is not applied twice.
+        padAngle: segmented ? 0 : padAngle,
         label: { show: false },
         labelLine: { show: false },
         // Preserve authored order; composition order can carry meaning.
         avoidLabelOverlap: false,
-        data,
+        data: segmented ? toSegmentedPieData(data, count, padAngle) : data,
         silent: true,
       },
     ],
+  };
+}
+
+/**
+ * Each slice's share split into `count` equal items, with a spacer between them
+ * and one after the slice.
+ *
+ * **A spacer is how a gap is drawn at all.** ECharts' `padAngle` pads between
+ * *data items*, not between the slices an author authored, so splitting one
+ * slice into several would put its own authored gap between every piece. The
+ * series pad is therefore zero here and the gaps are items: `NO_INK`, no
+ * rounding, and a value chosen to take the angle each gap should occupy.
+ *
+ * A piece's value is inflated by `k` so the visible pieces still fill the share
+ * the slice had; the internal gaps take `SEGMENT_GAP_RATIO` of a piece, and the
+ * boundary gap takes the value that draws the authored `padAngle` once the
+ * inflated total and the spacers' own values are accounted for.
+ */
+export function toSegmentedPieData(
+  items: readonly PieDataItem[],
+  count: number,
+  padAngle: number,
+): PieDataItem[] {
+  const segments = Math.max(1, Math.floor(count));
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  const internalShare = (SEGMENT_GAP_RATIO * (segments - 1)) / segments;
+  const inflation = 1 + internalShare;
+  const denominator = 1 - (items.length * padAngle) / 360;
+  const boundary =
+    denominator > 0
+      ? ((inflation * total) / denominator) * (padAngle / 360)
+      : 0;
+
+  const data: PieDataItem[] = [];
+  for (const item of items) {
+    const piece = (inflation * item.value) / segments;
+    for (let index = 0; index < segments; index += 1) {
+      data.push({ ...item, value: piece });
+      if (index < segments - 1) {
+        data.push(spacer(SEGMENT_GAP_RATIO * piece));
+      }
+    }
+    data.push(spacer(boundary));
+  }
+  return data;
+}
+
+/** An unpainted, unrounded item whose only job is to occupy an angle. */
+function spacer(value: number): PieDataItem {
+  return {
+    name: "",
+    value,
+    itemStyle: { color: NO_INK, borderRadius: 0 },
   };
 }
 

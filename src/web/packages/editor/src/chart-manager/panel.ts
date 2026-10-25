@@ -247,6 +247,29 @@ function settingRows(
     const id = `yunari-chart-setting-${field.property}`;
 
     if (field.kind === "number") {
+      // A discrete number is a track over its own list: its ends are the list's,
+      // and the values between two members are not commits any adapter draws.
+      if (field.values !== undefined) {
+        const values = field.values;
+        rows.push({
+          id,
+          key: field.property,
+          label: field.label,
+          hint: field.hint,
+          path,
+          control: "slider",
+          value:
+            authoredNumber(value) ??
+            authoredNumber(readSetting(defaultsOf(content.family), path)) ??
+            values.at(-1) ??
+            1,
+          min: values[0] ?? 1,
+          max: values.at(-1) ?? 1,
+          values,
+          clearable: false,
+        });
+        continue;
+      }
       const bound = ceilingOf(field, drawnEdge);
       if (bound !== undefined) {
         rows.push({

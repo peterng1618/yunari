@@ -182,6 +182,33 @@ export function toSeriesPoints(
   return points;
 }
 
+/**
+ * The last reading, drawn on to the render clock's edge.
+ *
+ * Between two host ticks the axis clock moves while the newest sample stays
+ * where it arrived, so a late batch leaves a blank sliver at the right edge and
+ * the next batch fills it — read as the chart correcting itself. Holding the
+ * last value across that sliver is the display's own continuity policy, not a
+ * measurement: the synthetic point carries the reading that was last reported,
+ * at the axis edge, so the line never breaks while the clock waits.
+ *
+ * **Bounded by `maxHoldMs`** — the playback delay, i.e. the same window the
+ * clock is allowed to run ahead of a sample. A longer silence is an outage, and
+ * an outage must stay visible rather than be painted as a flat line. A trailing
+ * `null` is a reported gap and is never bridged either (§83).
+ */
+export function heldTail(
+  points: readonly SeriesPoint[],
+  renderNowMs: number,
+  maxHoldMs: number,
+): readonly SeriesPoint[] {
+  const last = points.at(-1);
+  if (last === undefined || last[1] === null) return points;
+  const gapMs = renderNowMs - last[0];
+  if (gapMs <= 0 || gapMs > maxHoldMs) return points;
+  return [...points, [renderNowMs, last[1]]];
+}
+
 export function buildLineOption(
   settings: LineSettings,
   series: readonly SeriesInput[],
@@ -245,7 +272,11 @@ export function buildLineOption(
     series: series.map((input, index) => ({
       type: "line" as const,
       name: input.label ?? input.sensorId,
-      data: toSeriesPoints(input.samples, settings, nowMs, windowStart),
+      data: heldTail(
+        toSeriesPoints(input.samples, settings, nowMs, windowStart),
+        renderNowMs,
+        linePlaybackDelayMs(chartPlaybackDelayMs),
+      ),
       showSymbol: settings.showMarkers,
       symbolSize: settings.markerSize,
       smooth: settings.interpolation === "smooth",

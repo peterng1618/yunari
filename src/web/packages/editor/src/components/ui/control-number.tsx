@@ -43,6 +43,9 @@ export function ControlNumber(
     readonly unit?: string;
     readonly min?: number;
     readonly max?: number;
+    /** The only values the owner accepts; a value between two members is
+     *  refused rather than coerced to the nearest one the owner can draw. */
+    readonly oneOf?: readonly number[];
     /** The owner asked for whole numbers; a fraction is refused like out-of-bounds. */
     readonly integer?: boolean;
     /**
@@ -83,6 +86,7 @@ export function ControlNumber(
     unit,
     min,
     max,
+    oneOf,
     integer,
     readOnly,
     inline,
@@ -135,6 +139,10 @@ export function ControlNumber(
     }
     if (max !== undefined && parsed > max) {
       setInvalid(uiCopy.controls.atMost(max));
+      return;
+    }
+    if (oneOf !== undefined && !oneOf.includes(parsed)) {
+      setInvalid(uiCopy.controls.oneOf(oneOf));
       return;
     }
     setInvalid(undefined);
