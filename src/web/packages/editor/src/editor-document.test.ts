@@ -1,15 +1,23 @@
 import type { FabricThemeEnvelopeInput } from "@yunari/renderer-core";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AssetManager } from "./asset-manager/index.js";
 import { EditorDocument } from "./editor-document.js";
 import type { EditorShell } from "./editor-shell.js";
-import { createNewFabricTheme } from "./new-fabric-theme.js";
+import {
+  createBlankFabricTheme,
+  createNewFabricTheme,
+} from "./new-fabric-theme.js";
 
 /**
  * A document whose shell and consumers do nothing: these tests count the
  * notification, not what a subscriber does with it.
  */
-function documentWith(): EditorDocument {
+function documentWith(
+  options: {
+    readonly assets?: AssetManager;
+    readonly envelope?: FabricThemeEnvelopeInput;
+  } = {},
+): EditorDocument {
   return new EditorDocument({
     source: {
       shell: {
@@ -19,15 +27,95 @@ function documentWith(): EditorDocument {
           historyManager: { attachGlobals: () => {} },
         },
       } as unknown as EditorShell,
-      envelope: createNewFabricTheme() as unknown as FabricThemeEnvelopeInput,
-      assetManager: new AssetManager(),
+      envelope:
+        options.envelope ??
+        (createNewFabricTheme() as unknown as FabricThemeEnvelopeInput),
+      assetManager: options.assets ?? new AssetManager(),
       onNew: async () => {},
       onNewFromStarter: async () => {},
       onSaved: () => {},
     },
-    consumers: {} as never,
+    consumers: {
+      runtime: () => ({ setThemeLanguage: () => undefined }),
+      selection: () => ({ setLocale: () => undefined }),
+    } as never,
   });
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("EditorDocument dirty state", () => {
+  it("computes once for two reads with nothing announced between them", () => {
+    const document = documentWith();
+    const snapshot = vi.spyOn(document, "snapshot");
+
+    expect(document.isDirty()).toBe(false);
+    expect(document.isDirty()).toBe(false);
+
+    expect(snapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it("sees an edit once its announcement has flushed", async () => {
+    const document = documentWith();
+    expect(document.isDirty()).toBe(false);
+
+    document.setMetadata({
+      ...document.envelope.metadata,
+      name: "Renamed",
+    });
+    await Promise.resolve();
+
+    expect(document.isDirty()).toBe(true);
+  });
+
+  it("reports clean straight after a save, before the flush", async () => {
+    // The downloader is the only DOM the save touches; nothing here reads the
+    // file it produces.
+    vi.stubGlobal("document", {
+      createElement: () => ({ click: () => undefined }),
+    });
+    const document = documentWith({
+      envelope: createBlankFabricTheme({
+        width: 640,
+        height: 360,
+      }) as unknown as FabricThemeEnvelopeInput,
+    });
+    expect(document.isDirty()).toBe(false);
+    document.setMetadata({
+      ...document.envelope.metadata,
+      name: "Renamed",
+    });
+    await Promise.resolve();
+    expect(document.isDirty()).toBe(true);
+
+    // The flush is what would normally move the revision, so removing it is the
+    // same task as the baseline move — the case the save has to handle itself.
+    vi.spyOn(document, "announceChange").mockImplementation(() => undefined);
+    await document.save();
+
+    // The announcement is stubbed out, so this is the same task as the baseline
+    // move: the revision has not changed and the memo has to have been cleared
+    // by the save rather than by a flush.
+    expect(document.isDirty()).toBe(false);
+  });
+
+  it("does not keep a clean marker after an import that announces nothing", async () => {
+    // The Add pane imports through the manager and never writes the envelope,
+    // so nothing schedules a flush: the asset map is the only signal the dirty
+    // answer changed.
+    const assets = new AssetManager();
+    const document = documentWith({ assets });
+    expect(document.isDirty()).toBe(false);
+
+    await assets.import(
+      new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" }),
+    );
+
+    expect(document.isDirty()).toBe(true);
+  });
+});
 
 describe("EditorDocument change notification", () => {
   it("notifies once for fifty synchronous announcements, after the task", async () => {

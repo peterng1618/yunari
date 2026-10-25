@@ -208,6 +208,75 @@ describe("EditorHistory", () => {
     expect(globals).toEqual(attached);
   });
 
+  it("keeps the newest 100 entries and makes the older ones unreachable", async () => {
+    let value = 0;
+    const history = new EditorHistory({
+      canvas: canvasStub() as never,
+      serialize: () => ({ value }) as never,
+      revive: async (_canvas, scene) => {
+        value = (scene as unknown as { value: number }).value;
+      },
+    });
+    history.reset();
+    for (let state = 1; state <= 101; state += 1) {
+      value = state;
+      history.save();
+    }
+
+    const visited: number[] = [];
+    for (let press = 0; press < 120; press += 1) {
+      const before = value;
+      await history.undo();
+      if (value !== before) visited.push(value);
+    }
+
+    // States 0 and 1 fell off the front with the cap; the walk back is the
+    // retained 100, newest first, with no repeat and no gap.
+    expect(visited).toEqual(
+      Array.from({ length: 99 }, (_, step) => 100 - step),
+    );
+    expect(value).toBe(2);
+  });
+
+  it("fingerprints a captured state once per save", () => {
+    let value = 0;
+    const history = new EditorHistory({
+      canvas: canvasStub() as never,
+      serialize: () => ({ value }) as never,
+      revive: async () => {},
+    });
+    history.reset();
+    const stringify = vi.spyOn(JSON, "stringify");
+
+    history.save(); // the same state as the current entry
+    expect(stringify).toHaveBeenCalledTimes(1);
+    value = 1;
+    history.save(); // a new state
+    expect(stringify).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-fingerprints the first entry when the port attaches", () => {
+    const canvas = canvasStub();
+    let globals: FabricGlobals | undefined = paletteOf("red");
+    const history = new EditorHistory({
+      canvas: canvas as never,
+      serialize: () => ({ version: "7.4.0", objects: [] }) as never,
+      revive: async () => {},
+    });
+    history.reset();
+    history.attachGlobals({
+      read: () => globals,
+      write: (next) => {
+        globals = next;
+      },
+    });
+
+    // The entry now carries the globals it could not capture at reset, so the
+    // same state is still a repeat rather than a second, identical entry.
+    history.save();
+    expect(canvas.fire).not.toHaveBeenCalled();
+  });
+
   it("records one entry when neither the scene nor the globals changed", async () => {
     const canvas = canvasStub();
     let globals: FabricGlobals | undefined = paletteOf("red");

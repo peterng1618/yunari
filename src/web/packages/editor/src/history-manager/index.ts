@@ -15,7 +15,17 @@ export interface HistoryGlobalsPort {
 interface HistoryEntry {
   readonly scene: SerialisedScene;
   readonly globals: FabricGlobals | undefined;
+  /** `scene` and `globals` serialised once, at capture. Comparing two of these
+   *  is string equality, so a save no longer re-serialises the entry it is
+   *  compared against — and an undo target older than the cap is dropped with
+   *  the string it already paid for. */
+  readonly fingerprint: string;
 }
+
+/** Undoable steps kept in memory. Past this, the oldest entry is dropped: a
+ *  long session would otherwise hold every undo target it ever made, and
+ *  re-serialise them together on each comparison. */
+export const MAX_HISTORY_ENTRIES = 100;
 
 /** Owns authored Fabric-scene undo state. The selection is not undo state, but
  *  a revive replaces every object the selection held, so carrying it across is
@@ -63,7 +73,9 @@ export class EditorHistory {
     this.#port = port;
     const entry = this.#entries[this.#index];
     if (entry === undefined) return;
-    this.#entries[this.#index] = { ...entry, globals: port.read() };
+    // Re-captured rather than patched: the fingerprint has to cover the globals
+    // the entry could not read at reset, or the same state would compare as new.
+    this.#entries[this.#index] = captureWith(entry.scene, port.read());
   }
 
   /** Interactive sessions mutate the canvas before the user commits. */
@@ -84,10 +96,21 @@ export class EditorHistory {
     this.#entries.splice(this.#index + 1);
     this.#entries.push(entry);
     this.#index += 1;
+    this.#bound();
     // A recorded entry is the one signal that an edit landed, so it is where a
     // reason the author was given goes stale. A refused edit records nothing
     // and so never reaches here: the refusal survives the field that raised it.
     this.#canvas.fire("editor:edit-committed" as never);
+  }
+
+  /** Drops the oldest entries past the cap, keeping `#index` on the newest one.
+   *  The push has just made the newest entry the last one, so it stays the last
+   *  one after the front is cut. */
+  #bound(): void {
+    const excess = this.#entries.length - MAX_HISTORY_ENTRIES;
+    if (excess <= 0) return;
+    this.#entries.splice(0, excess);
+    this.#index = Math.max(0, this.#index - excess);
   }
 
   undo(): Promise<void> {
@@ -118,7 +141,7 @@ export class EditorHistory {
   /** `scene` and `globals` captured together, so one entry is one authored
    *  state: the palette alone can change while no Fabric object moves. */
   #capture(scene: SerialisedScene): HistoryEntry {
-    return { scene, globals: this.#port?.read() };
+    return captureWith(scene, this.#port?.read());
   }
 
   async #restore(index: number): Promise<void> {
@@ -185,9 +208,17 @@ function reselect(canvas: HistoryCanvas, ids: readonly string[]): void {
     canvas.setActiveObject(new ActiveSelection(many, { canvas }));
 }
 
+/** One entry, its two halves serialised together once. */
+function captureWith(
+  scene: SerialisedScene,
+  globals: FabricGlobals | undefined,
+): HistoryEntry {
+  return { scene, globals, fingerprint: JSON.stringify({ scene, globals }) };
+}
+
 function sameEntry(
   left: HistoryEntry,
   right: HistoryEntry | undefined,
 ): boolean {
-  return right !== undefined && JSON.stringify(left) === JSON.stringify(right);
+  return right !== undefined && left.fingerprint === right.fingerprint;
 }

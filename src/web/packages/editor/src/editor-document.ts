@@ -14,7 +14,10 @@ import {
   type ThemeCreditsEntry,
 } from "@yunari/theme-package";
 import type { ArtboardPanel } from "./artboard-panel.js";
-import type { AssetManager } from "./asset-manager/index.js";
+import type {
+  AssetManager,
+  LocalAssetReference,
+} from "./asset-manager/index.js";
 import { insertCard } from "./card-library.js";
 import type { ChartManager } from "./chart-manager/index.js";
 import type { EditorShell } from "./editor-shell.js";
@@ -150,6 +153,20 @@ export class EditorDocument {
    *  announcements a paste or a revive makes in one task collapse into one
    *  recompute rather than one per Fabric event. */
   #announceScheduled = false;
+  /** Bumped once per flush, so every Fabric event in one batch is one revision.
+   *  The dirty answer is memoised against it rather than against the clock. */
+  #revision = 0;
+  /** The last dirty answer and what it was computed from. A save moves the
+   *  baseline without bumping the revision, so it clears this outright; the
+   *  declarations are part of the key because an import or a removal writes the
+   *  asset map without announcing anything. */
+  #dirty:
+    | {
+        readonly revision: number;
+        readonly declarations: readonly LocalAssetReference[];
+        readonly value: boolean;
+      }
+    | undefined;
   /** A stable reference, so whoever registers it can keep it without binding:
    *  the library manager takes it as a port and the session hands it to every
    *  canvas event that means "the document moved". */
@@ -161,6 +178,7 @@ export class EditorDocument {
       // flush is a second batch, so it schedules one more pass rather than
       // being folded into the pass that is already reading stale state.
       this.#announceScheduled = false;
+      this.#revision += 1;
       // A copy, so a listener added or removed during the flush does not
       // change who this batch reaches.
       for (const listener of [...this.#documentChangeListeners]) listener();
@@ -192,7 +210,12 @@ export class EditorDocument {
       snapshot: () => this.snapshot(),
       assets: this.#assets,
       picture: () => this.picture(),
-      markSaved: (theme, assets) => this.#persistence.markSaved(theme, assets),
+      // The baseline, not the document: a save in the same task has bumped no
+      // revision, so the memo would answer for the old one.
+      markSaved: (theme, assets) => {
+        this.#persistence.markSaved(theme, assets);
+        this.#dirty = undefined;
+      },
       announceChange: this.announceChange,
       errors: source.shell.editor.errorManager,
       confirmReplacement: () => this.confirmReplacement(),
@@ -233,9 +256,32 @@ export class EditorDocument {
 
   /** Whether the document differs from what was last saved. Pulled, never held:
    *  the comparison already exists for the replace prompt, and a stored flag
-   *  would be one more thing to keep true. */
+   *  would be one more thing to keep true. Two JSON passes over the document and
+   *  its assets are what the timer and the identity chip used to pay per read,
+   *  so the answer is kept until the revision or the asset declarations move. */
   isDirty(): boolean {
-    return this.#persistence.isDirty(this.snapshot(), this.#assets.assets);
+    const declarations = this.#assets.declarations;
+    const memo = this.#dirty;
+    if (
+      memo !== undefined &&
+      memo.revision === this.#revision &&
+      memo.declarations.length === declarations.length &&
+      memo.declarations.every((asset, at) => asset === declarations[at])
+    ) {
+      return memo.value;
+    }
+    const value = this.#persistence.isDirty(
+      this.snapshot(),
+      this.#assets.assets,
+    );
+    // A copy: the manager mutates its list in place, and an entry it replaces
+    // is a new object, so identity per element is what an asset edit looks like.
+    this.#dirty = {
+      revision: this.#revision,
+      declarations: [...declarations],
+      value,
+    };
+    return value;
   }
 
   /** The attribution the saved package will carry, in arrival order. */
@@ -295,6 +341,9 @@ export class EditorDocument {
         await this.picture(),
         this.#creditsPackage(),
       );
+      // The baseline moved while the revision did not: keep the memo from
+      // answering with the pre-save document for the rest of this task.
+      this.#dirty = undefined;
       this.announceChange();
       options.onSaved("Theme package saved");
     } catch (error) {
@@ -366,6 +415,7 @@ export class EditorDocument {
           undefined,
           this.#creditsPackage(),
         );
+        this.#dirty = undefined;
         this.#source.onSaved("Theme package saved");
       }
     }
