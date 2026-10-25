@@ -2451,6 +2451,84 @@ describe("arming a text placement from every surface", () => {
   });
 });
 
+/**
+ * A session's React roots are its disposal path's, not the document's.
+ *
+ * The pane hosts outlive a document replacement — a new session mounts into the
+ * same node — so a root the old session does not unmount is still attached
+ * beside the new one, and the Assets panel draws twice. The browser specs read
+ * that as a strict-mode duplicate rather than as a layout accident.
+ */
+describe("the session's disposal", () => {
+  function build(assets: HTMLElement): EditorSession {
+    return new EditorSession({
+      assetManager: new AssetManager(),
+      shell: {
+        editor: {
+          canvas: {
+            on: vi.fn(),
+            off: vi.fn(),
+            getActiveObject: () => undefined,
+            getObjects: () => [],
+            requestRenderAll: vi.fn(),
+          },
+          clipboardManager: {
+            setImageImporter: vi.fn(),
+            setBindings: vi.fn(),
+          },
+          textManager: {
+            addText: vi.fn(),
+            setAuthoringView: vi.fn(),
+            setRepaint: vi.fn(),
+          },
+          cropManager: idleCrop(),
+          historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+        },
+        scene: {},
+        snapshot: vi.fn(() => envelope),
+        setArtboard: vi.fn(),
+        setBackground: vi.fn(),
+        setBackgroundMedia: vi.fn(),
+      } as never,
+      source: {} as never,
+      envelope,
+      panelHosts: {
+        add: document.body,
+        assets,
+        document: document.body,
+        tokens: document.body,
+        selection: document.body,
+      },
+      onNew: vi.fn(),
+      onNewFromStarter: vi.fn(),
+      onSaved: vi.fn(),
+    });
+  }
+
+  it("unmounts the Assets pane, so the next session does not draw it twice", () => {
+    const assets = document.createElement("div");
+    document.body.append(assets);
+
+    const first = build(assets);
+    expect(assets.querySelector("[data-yunari-asset-import]")).not.toBeNull();
+    first.destroy();
+    // The root, not only its content: React is released only by `unmount`.
+    expect(assets.childElementCount, "the pane's root is still attached").toBe(
+      0,
+    );
+
+    // The user-visible consequence: File -> New reuses the host, so a stranded
+    // root is a second Assets panel on screen.
+    const second = build(assets);
+    expect(
+      assets.querySelectorAll("[data-yunari-asset-import]"),
+      "the previous session's pane is still drawn",
+    ).toHaveLength(1);
+    second.destroy();
+    assets.remove();
+  });
+});
+
 function panel() {
   return {
     root: document.createElement("section"),

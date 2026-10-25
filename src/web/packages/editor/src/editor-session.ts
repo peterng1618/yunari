@@ -1022,6 +1022,7 @@ export class EditorSession {
     this.#palette.destroy();
     this.#types.destroy();
     this.#newObjects.destroy();
+    this.#assetsPanel.destroy();
     this.#snapping.destroy();
     this.#indicators.destroy();
   }
