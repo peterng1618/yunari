@@ -1,6 +1,7 @@
-/** An end-of-central-directory record is 22 bytes plus at most a 65,535-byte
- *  archive comment, which is all a backwards scan ever has to cover. */
-const END_RECORD_SEARCH_BYTES = 65_557;
+/** fflate gives up only when a *non-matching* offset is more than this far from
+ *  the end: it still tests the signature one byte past it, at 65,559. A
+ *  tighter window would skip an end record that extraction accepts. */
+const END_RECORD_MAX_DISTANCE = 65_558;
 
 export const ZIP_MAX_ENTRIES = 128;
 export const ZIP_MAX_CENTRAL_DIRECTORY_BYTES = 8 * 1024 * 1024;
@@ -29,9 +30,10 @@ function readUint32(bytes: Uint8Array, offset: number): number {
  * anything walks it: a crafted ZIP64 record can claim 4,294,967,295 entries
  * and `unzipSync` allocates per declared entry.
  *
- * The parse mirrors fflate's own end-record walk — the same backwards scan over
- * the tail, the same 16-bit EOCD count, the same 32-bit ZIP64 fields with
- * out-of-range bytes read as zero — so the count refused here is the count
+ * The parse mirrors fflate's own end-record walk — the same backwards scan (a
+ * match is accepted at 65,559 bytes from the end, a non-matching offset past
+ * 65,558 ends it), the same 16-bit EOCD count, the same 32-bit ZIP64 fields
+ * with out-of-range bytes read as zero — so the count refused here is the count
  * extraction would use. The central-directory size is not something extraction
  * reads: the 8 MiB bound below is this module's own.
  */
@@ -41,7 +43,7 @@ export function readZipDeclaration(
   let eocd = bytes.byteLength - 22;
   for (; eocd >= 0; --eocd) {
     if (readUint32(bytes, eocd) === 0x0605_4b50) break;
-    if (bytes.byteLength - eocd > END_RECORD_SEARCH_BYTES) return undefined;
+    if (bytes.byteLength - eocd > END_RECORD_MAX_DISTANCE) return undefined;
   }
   if (eocd < 0) return undefined;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -49,8 +51,9 @@ export function readZipDeclaration(
   // Extraction returns an empty archive for this, so there is nothing to bound.
   if (entries === 0) return { entries: 0, centralDirectoryBytes: 0 };
   // The ZIP64 locator sits immediately before the EOCD. fflate follows it on
-  // the signatures alone — never on the record being complete — and reads the 32-bit low half of the 64-bit count, so this does too: once the two
-  // signatures match, the 16-bit count is not a fallback.
+  // the signatures alone, never on the record being complete, and reads the
+  // 32-bit low half of the 64-bit count; this does too. Once both signatures
+  // match the 16-bit count is not a fallback.
   if (readUint32(bytes, eocd - 20) === 0x0706_4b50) {
     const zip64 = readUint32(bytes, eocd - 12);
     if (readUint32(bytes, zip64) === 0x0606_4b50)

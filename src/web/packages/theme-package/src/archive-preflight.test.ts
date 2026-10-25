@@ -60,6 +60,32 @@ describe("archive preflight", () => {
     return bytes;
   };
 
+  /**
+   * An EOCD at 65,559 bytes from the end — one byte past the old give-up
+   * distance — with a non-matching dword at 65,558 and a valid locator/ZIP64
+   * record. fflate still tests that far. The count is 5,000, never the 32-bit
+   * maximum, so a red run that goes on to extract terminates.
+   */
+  const distantEndRecord = (): Uint8Array => {
+    const bytes = new Uint8Array(65_559 + 200);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(100, 0x0606_4b50, true);
+    view.setUint32(132, 5000, true);
+    view.setUint32(180, 0x0706_4b50, true);
+    view.setUint32(188, 100, true);
+    view.setUint32(200, 0x0605_4b50, true);
+    view.setUint16(208, 2, true);
+    view.setUint16(210, 2, true);
+    return bytes;
+  };
+
+  it("reads an end record at 65,559 bytes from the end", () => {
+    const bytes = distantEndRecord();
+
+    expect(zipEntryCount(bytes)).toBe(5000);
+    expect(zipCentralDirectoryBytes(bytes)).toBe(0);
+  });
+
   it("reads the ZIP64 count out of a record truncated by the buffer's end", () => {
     const bytes = truncatedZip64Record();
 

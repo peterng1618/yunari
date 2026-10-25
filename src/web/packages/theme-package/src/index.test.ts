@@ -574,6 +574,26 @@ describe("a package's archive declaration", () => {
     });
   });
 
+  it("refuses an end record at 65,559 bytes from the end", () => {
+    // A non-matching dword sits at 65,558 and the EOCD one byte past it: the
+    // window fflate accepts, and the one the preflight must not give up before.
+    const bytes = new Uint8Array(65_559 + 200);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(100, 0x0606_4b50, true);
+    view.setUint32(132, 5000, true);
+    view.setUint32(180, 0x0706_4b50, true);
+    view.setUint32(188, 100, true);
+    view.setUint32(200, 0x0605_4b50, true);
+    view.setUint16(208, 2, true);
+    view.setUint16(210, 2, true);
+
+    expect(zipEntryCount(bytes)).toBe(5000);
+    expect(readThemePackage(bytes)).toEqual({
+      ok: false,
+      message: "That package declares more than 128 archive entries.",
+    });
+  });
+
   it("opens a package whose ZIP64 record declares a small count", () => {
     // A saturated 16-bit count is not a refusal on its own: the locator's
     // record says 2 — the manifest and the document — and extraction uses it.
