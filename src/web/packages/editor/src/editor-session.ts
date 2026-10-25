@@ -59,12 +59,10 @@ import {
 } from "./palette-manager/index.js";
 import { createAssetsPane } from "./panes/assets/assets-pane.js";
 import type { PresetSelection } from "./panes/tokens/preset-list.js";
-import { typePresetOf } from "./selection-inspector/appearance.js";
 import {
   createSelectionInspector,
   type SelectionInspector,
 } from "./selection-inspector/index.js";
-import { isTextObject } from "./selection-inspector/view.js";
 import type { SensorCatalogue } from "./sensor-catalogue.js";
 import { ShortcutManager } from "./shortcut-manager/index.js";
 import { createSnapManager, type SnapManager } from "./snap-manager/index.js";
@@ -774,26 +772,10 @@ export class EditorSession {
       savePackage: () => this.#document.save(),
       releasePackage: () => this.#document.release(),
       openLibrary: () => this.#document.openLibrary(),
-      // The finder's Fonts body. The body searches the host's font sources;
-      // the two writes are still the session's, held for the preview panel.
-      // A face applies to the preset the selected text is set in — the same
-      // reading the inspector's own field performed before the picker moved.
-      fontPickerBody: () =>
-        createElement(FontsBody, {
-          onApplyFace: (face) => {
-            const active = editor.canvas.getActiveObject();
-            const ref =
-              active !== undefined && isTextObject(active)
-                ? typePresetOf(active)
-                : undefined;
-            if (ref !== undefined) {
-              void this.applyPresetFace(ref.slice("typePresets.".length), face);
-            }
-          },
-          onApplyTrio: (trioId) => {
-            void this.applyFontTrio(trioId);
-          },
-        }),
+      // The finder's Fonts body. The body searches the host's font sources and
+      // owns the selection; the preview panel's actions are wired in Task 12,
+      // whose writes stay the session's.
+      fontPickerBody: () => createElement(FontsBody),
       // The finder's Wallpaper Engine body. The listing is the body's own fetch
       // — it is a library, not a search — so the session owns only the import a
       // row triggers.

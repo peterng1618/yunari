@@ -114,7 +114,13 @@ function page(
   results: readonly AssetResult[] = [],
   extra: Partial<AssetPage> = {},
 ): AssetPage {
-  return { source, results, totalPages: undefined, failure: undefined, ...extra };
+  return {
+    source,
+    results,
+    totalPages: undefined,
+    failure: undefined,
+    ...extra,
+  };
 }
 
 function deferred<T>() {
@@ -161,8 +167,6 @@ async function render(props: { readonly client?: client.ClientOptions } = {}) {
   listSources.mockResolvedValue({ ok: true, sources: [curated, google] });
   mount(
     <FontsBody
-      onApplyFace={() => {}}
-      onApplyTrio={() => {}}
       {...(props.client === undefined ? {} : { client: props.client })}
     />,
   );
@@ -219,7 +223,10 @@ function tiles(kind?: "trio" | "family"): readonly HTMLElement[] {
 
 it("asks the font body and draws trios and families in one grid", async () => {
   searchAssets.mockResolvedValue({
-    pages: [page("curated-fonts", [interTrio]), page("google-fonts", [manrope])],
+    pages: [
+      page("curated-fonts", [interTrio]),
+      page("google-fonts", [manrope]),
+    ],
   });
   await render();
 
@@ -236,12 +243,12 @@ it("asks the font body and draws trios and families in one grid", async () => {
     undefined,
   );
   expect(document.querySelector("[data-yunari-font-grid]")).not.toBeNull();
-  expect(tiles("trio").map((tile) => tile.getAttribute("data-yunari-font-tile"))).toEqual([
-    interTrio.id,
-  ]);
-  expect(tiles("family").map((tile) => tile.getAttribute("data-yunari-font-tile"))).toEqual([
-    manrope.id,
-  ]);
+  expect(
+    tiles("trio").map((tile) => tile.getAttribute("data-yunari-font-tile")),
+  ).toEqual([interTrio.id]);
+  expect(
+    tiles("family").map((tile) => tile.getAttribute("data-yunari-font-tile")),
+  ).toEqual([manrope.id]);
   // One badge per tile, named by the host's own label for the source.
   expect(tiles("trio")[0]?.textContent).toContain("Curated fonts");
   expect(tiles("family")[0]?.textContent).toContain("Google Fonts");
@@ -285,7 +292,10 @@ it("asks the next page and appends it", async () => {
 
 it("filters to trios or families without re-searching", async () => {
   searchAssets.mockResolvedValue({
-    pages: [page("curated-fonts", [interTrio]), page("google-fonts", [manrope])],
+    pages: [
+      page("curated-fonts", [interTrio]),
+      page("google-fonts", [manrope]),
+    ],
   });
   await render();
   await type("Inter");
@@ -308,7 +318,10 @@ it("filters to trios or families without re-searching", async () => {
 
 it("keeps the previous results when a source fails", async () => {
   searchAssets.mockResolvedValueOnce({
-    pages: [page("curated-fonts", [interTrio]), page("google-fonts", [manrope])],
+    pages: [
+      page("curated-fonts", [interTrio]),
+      page("google-fonts", [manrope]),
+    ],
   });
   await render();
   await type("Inter");
@@ -328,10 +341,9 @@ it("keeps the previous results when a source fails", async () => {
 
   // The failed source keeps the rows already drawn; the live one is redrawn.
   // A–Z across the mixed grid: the live source's Sora follows the kept Manrope.
-  expect(tiles().map((tile) => tile.getAttribute("data-yunari-font-tile"))).toEqual([
-    manrope.id,
-    sora.id,
-  ]);
+  expect(
+    tiles().map((tile) => tile.getAttribute("data-yunari-font-tile")),
+  ).toEqual([manrope.id, sora.id]);
   expect(
     document.querySelector('[data-yunari-font-failure="google-fonts"]')
       ?.textContent,
@@ -368,7 +380,7 @@ it("says the first search is out rather than drawing an empty grid", async () =>
   // Every source failed: the failure lines are the answer, and neither an
   // empty listbox nor "no results" is drawn.
   await act(async () => {
-    answer.resolve({
+    void answer.resolve({
       pages: [
         page("curated-fonts", [], {
           failure: { reason: "failed", message: "curated is down" },
@@ -383,15 +395,18 @@ it("says the first search is out rather than drawing an empty grid", async () =>
   });
 
   expect(document.querySelector("[data-yunari-font-grid]")).toBeNull();
-  expect(
-    document.querySelectorAll("[data-yunari-font-failure]"),
-  ).toHaveLength(2);
+  expect(document.querySelectorAll("[data-yunari-font-failure]")).toHaveLength(
+    2,
+  );
   expect(document.body.textContent).not.toContain(uiCopy.assets.noResults);
 });
 
 it("re-searches when a provider chip changes and keeps the last source on", async () => {
   searchAssets.mockResolvedValue({
-    pages: [page("curated-fonts", [interTrio]), page("google-fonts", [manrope])],
+    pages: [
+      page("curated-fonts", [interTrio]),
+      page("google-fonts", [manrope]),
+    ],
   });
   await render();
   await type("Inter");
@@ -436,11 +451,16 @@ it("moves focus with the arrow keys inside the grid", () => {
       results={results}
       selectedId={interTrio.id}
       onSelect={() => {}}
-      providers={{ "curated-fonts": "Curated fonts", "google-fonts": "Google Fonts" }}
+      providers={{
+        "curated-fonts": "Curated fonts",
+        "google-fonts": "Google Fonts",
+      }}
     />,
   );
 
-  const drawn = [...document.querySelectorAll<HTMLElement>("[data-yunari-font-tile]")];
+  const drawn = [
+    ...document.querySelectorAll<HTMLElement>("[data-yunari-font-tile]"),
+  ];
   drawn[0]?.focus();
   act(() => {
     drawn[0]?.dispatchEvent(

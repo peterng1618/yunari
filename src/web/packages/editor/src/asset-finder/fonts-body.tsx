@@ -1,10 +1,21 @@
-import type { AssetPage, AssetResult, AssetSourceListing } from "@yunari/renderer-core";
+import type {
+  AssetPage,
+  AssetResult,
+  AssetSourceListing,
+  FontCut,
+  FontTrioInfo,
+} from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
-import type { CuratedFontFace } from "../font-catalog.js";
+import type { TypePresets } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
 import { type ClientOptions, listSources, searchAssets } from "./client.js";
 import { FontGrid } from "./font-grid.js";
+import {
+  FontPreviewPanel,
+  type FontResult,
+  type FontRole,
+} from "./font-preview-panel.js";
 import { SEARCH_DEBOUNCE_MS } from "./modal.js";
 
 /** R5's three-way filter: it narrows what is drawn and never what is asked. */
@@ -22,29 +33,41 @@ function kindOf(result: AssetResult): "trio" | "family" {
   return result.font?.trio === undefined ? "family" : "trio";
 }
 
+function isFontResult(result: AssetResult | undefined): result is FontResult {
+  return result !== undefined && result.font !== undefined;
+}
+
 /**
  * The finder's Fonts body: a search over the host's font sources, one mixed
- * grid of trios and families, and the source chips that choose which providers
- * answer (spec R5, R6).
+ * grid of trios and families, the source chips that choose which providers
+ * answer, and the preview column a selection opens (spec R5, R6).
  *
- * The body owns the question and never a write. A failed source leaves the rows
- * it already drew on screen, because one dead provider must not empty a grid a
- * second one is still answering.
+ * The body owns the question and the selection; the panel beside it owns the
+ * specimen and its sample, and the session owns every write. A failed source
+ * leaves the rows it already drew on screen, because one dead provider must not
+ * empty a grid a second one is still answering.
  */
 export function FontsBody(props: {
   readonly client?: ClientOptions;
-  /** Kept wired for the preview panel (Task 11): the grid reports a selection,
-   *  and the session's two writes are what a chosen result reaches the document
-   *  through. Nothing in this body applies on its own. */
-  readonly onApplyFace: (face: CuratedFontFace) => void;
-  readonly onApplyTrio: (trioId: string) => void;
+  /** The document's role presets, read only to name the preview's apply scope.
+   *  Absent while the session has not wired the panel: every role then reads
+   *  zero and Apply has nothing to rewrite. */
+  readonly presets?: TypePresets;
+  /** The preview panel's actions. Each is drawn only when the session supplies
+   *  it; the body never applies one itself. */
+  readonly onApplyTrio?: (trio: FontTrioInfo) => void;
+  readonly onAddTrioPresets?: (trio: FontTrioInfo) => void;
+  readonly onAddPreset?: (cut: FontCut, role: FontRole) => void;
+  readonly onApplyToSelected?: (cut: FontCut) => void;
 }): React.JSX.Element {
   const client = props.client;
   const [sources, setSources] = useState<
     readonly AssetSourceListing[] | undefined
   >(undefined);
   const [listingFailed, setListingFailed] = useState(false);
-  const [disabled, setDisabled] = useState<ReadonlySet<string>>(() => new Set());
+  const [disabled, setDisabled] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FontFilter>("all");
   const [sort, setSort] = useState<FontSort>("name");
@@ -215,10 +238,7 @@ export function FontsBody(props: {
 
   if (listingFailed) {
     return (
-      <p
-        data-yunari-font-listing-failure=""
-        className="text-sm text-muted"
-      >
+      <p data-yunari-font-listing-failure="" className="text-sm text-muted">
         {copy.hostUnavailable}
       </p>
     );
@@ -231,140 +251,156 @@ export function FontsBody(props: {
   const allOff = enabled.length === 0;
   const empty = term !== "" && !allOff && asked.size > 0 && shown.length === 0;
   const canLoadMore = !pending && Object.keys(nextPages).length > 0;
+  // The selection outlives a filter: a trio filtered out of the grid keeps its
+  // preview, because the panel is about the chosen result, not the list.
+  const selected = rows.find((result) => result.id === selectedId);
+  const preview = isFontResult(selected) ? selected : undefined;
 
   return (
-    <div className="flex min-h-0 flex-col gap-[var(--space-8)]">
-      <div className="flex flex-wrap items-center gap-[var(--space-8)]">
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-          }}
-          placeholder={copy.fontSearch}
-          aria-label={copy.fontSearch}
-          data-yunari-font-search=""
-          className="min-w-56 flex-1 rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-10)] py-[var(--space-6)] text-sm"
-        />
-        <div
-          role="group"
-          aria-label={copy.fontFilterLabel}
-          className="flex items-center gap-[var(--space-4)]"
-        >
-          {(["all", "trio", "family"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={filter === option}
-              data-yunari-font-filter={option}
-              onClick={() => {
-                setFilter(option);
-              }}
-              className="rounded-full border border-edge px-[var(--space-10)] py-[var(--space-4)] text-xs aria-pressed:border-accent aria-pressed:text-accent"
-            >
-              {copy.fontFilter[option]}
-            </button>
-          ))}
-        </div>
-        <label className="flex items-center gap-[var(--space-6)] text-xs text-muted">
-          {copy.fontSortLabel}
-          <select
-            value={sort}
-            data-yunari-font-sort=""
+    <div className="flex min-h-0 gap-[var(--space-12)]">
+      <div className="flex min-h-0 flex-1 flex-col gap-[var(--space-8)]">
+        <div className="flex flex-wrap items-center gap-[var(--space-8)]">
+          <input
+            type="search"
+            value={query}
             onChange={(event) => {
-              setSort(event.target.value as FontSort);
+              setQuery(event.target.value);
             }}
-            className="rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-6)] py-[var(--space-4)] text-xs"
+            placeholder={copy.fontSearch}
+            aria-label={copy.fontSearch}
+            data-yunari-font-search=""
+            className="min-w-56 flex-1 rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-10)] py-[var(--space-6)] text-sm"
+          />
+          <div
+            role="group"
+            aria-label={copy.fontFilterLabel}
+            className="flex items-center gap-[var(--space-4)]"
           >
-            {(["name", "provider"] as const).map((option) => (
-              <option key={option} value={option}>
-                {copy.fontSort[option]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {fontSources.length > 1 ? (
-        <div
-          role="group"
-          aria-label={copy.fontSourcesLabel}
-          className="flex flex-wrap items-center gap-[var(--space-6)]"
-        >
-          {fontSources.map((source) => {
-            const off = disabled.has(source.id);
-            return (
+            {(["all", "trio", "family"] as const).map((option) => (
               <button
-                key={source.id}
+                key={option}
                 type="button"
-                aria-pressed={!off}
-                data-yunari-font-chip={source.id}
-                data-disabled={off ? "" : undefined}
+                aria-pressed={filter === option}
+                data-yunari-font-filter={option}
                 onClick={() => {
-                  setDisabled((current) => {
-                    const next = new Set(current);
-                    if (next.has(source.id)) next.delete(source.id);
-                    // The last enabled source stays on: with none, there is no
-                    // question to ask and nothing to undo from this row.
-                    else if (enabled.length > 1) next.add(source.id);
-                    return next;
-                  });
+                  setFilter(option);
                 }}
-                className="rounded-full border border-edge px-[var(--space-10)] py-[var(--space-4)] text-xs aria-pressed:border-accent aria-pressed:text-accent data-[disabled]:text-faint"
+                className="rounded-full border border-edge px-[var(--space-10)] py-[var(--space-4)] text-xs aria-pressed:border-accent aria-pressed:text-accent"
               >
-                {source.label}
+                {copy.fontFilter[option]}
               </button>
-            );
-          })}
+            ))}
+          </div>
+          <label className="flex items-center gap-[var(--space-6)] text-xs text-muted">
+            {copy.fontSortLabel}
+            <select
+              value={sort}
+              data-yunari-font-sort=""
+              onChange={(event) => {
+                setSort(event.target.value as FontSort);
+              }}
+              className="rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-6)] py-[var(--space-4)] text-xs"
+            >
+              {(["name", "provider"] as const).map((option) => (
+                <option key={option} value={option}>
+                  {copy.fontSort[option]}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-      ) : null}
 
-      {[...failures.values()].map((page) => {
-        const failure = page.failure;
-        if (failure === undefined) return null;
-        const label = labels[page.source] ?? page.source;
-        return (
-          <p
-            key={page.source}
-            data-yunari-font-failure={page.source}
-            className="text-sm text-muted"
+        {fontSources.length > 1 ? (
+          <div
+            role="group"
+            aria-label={copy.fontSourcesLabel}
+            className="flex flex-wrap items-center gap-[var(--space-6)]"
           >
-            {failure.reason === "needs-credential"
-              ? copy.needsCredential(label)
-              : copy.sourceFailed(label, failure.message)}
-          </p>
-        );
-      })}
+            {fontSources.map((source) => {
+              const off = disabled.has(source.id);
+              return (
+                <button
+                  key={source.id}
+                  type="button"
+                  aria-pressed={!off}
+                  data-yunari-font-chip={source.id}
+                  data-disabled={off ? "" : undefined}
+                  onClick={() => {
+                    setDisabled((current) => {
+                      const next = new Set(current);
+                      if (next.has(source.id)) next.delete(source.id);
+                      // The last enabled source stays on: with none, there is no
+                      // question to ask and nothing to undo from this row.
+                      else if (enabled.length > 1) next.add(source.id);
+                      return next;
+                    });
+                  }}
+                  className="rounded-full border border-edge px-[var(--space-10)] py-[var(--space-4)] text-xs aria-pressed:border-accent aria-pressed:text-accent data-[disabled]:text-faint"
+                >
+                  {source.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
 
-      {allOff ? (
-        <p data-yunari-font-sources-off="" className="text-sm text-muted">
-          {copy.kindSourcesOff}
-        </p>
-      ) : term === "" ? (
-        <p data-yunari-font-empty="" className="text-sm text-muted">
-          {copy.fontEmptyQuery}
-        </p>
-      ) : shown.length > 0 ? (
-        <FontGrid
-          results={shown}
-          selectedId={selectedId}
-          onSelect={(result) => {
-            setSelectedId(result.id);
-          }}
-          providers={labels}
-          {...(canLoadMore ? { onLoadMore: loadMore } : {})}
+        {[...failures.values()].map((page) => {
+          const failure = page.failure;
+          if (failure === undefined) return null;
+          const label = labels[page.source] ?? page.source;
+          return (
+            <p
+              key={page.source}
+              data-yunari-font-failure={page.source}
+              className="text-sm text-muted"
+            >
+              {failure.reason === "needs-credential"
+                ? copy.needsCredential(label)
+                : copy.sourceFailed(label, failure.message)}
+            </p>
+          );
+        })}
+
+        {allOff ? (
+          <p data-yunari-font-sources-off="" className="text-sm text-muted">
+            {copy.kindSourcesOff}
+          </p>
+        ) : term === "" ? (
+          <p data-yunari-font-empty="" className="text-sm text-muted">
+            {copy.fontEmptyQuery}
+          </p>
+        ) : shown.length > 0 ? (
+          <FontGrid
+            results={shown}
+            selectedId={selectedId}
+            onSelect={(result) => {
+              setSelectedId(result.id);
+            }}
+            providers={labels}
+            {...(canLoadMore ? { onLoadMore: loadMore } : {})}
+          />
+        ) : pending ? (
+          // Nothing drawn yet: say the question is out rather than draw an empty
+          // listbox that reads as a broken body. Rows already drawn stay up.
+          <p data-yunari-font-searching="" className="text-sm text-muted">
+            {copy.fontSearching}
+          </p>
+        ) : empty ? (
+          <p data-yunari-font-no-matches="" className="text-sm text-muted">
+            {copy.noResults}
+          </p>
+        ) : null}
+      </div>
+      {preview === undefined ? null : (
+        <FontPreviewPanel
+          selected={preview}
+          presets={props.presets ?? {}}
+          onApplyTrio={props.onApplyTrio}
+          onAddTrioPresets={props.onAddTrioPresets}
+          onAddPreset={props.onAddPreset}
+          onApplyToSelected={props.onApplyToSelected}
         />
-      ) : pending ? (
-        // Nothing drawn yet: say the question is out rather than draw an empty
-        // listbox that reads as a broken body. Rows already drawn stay up.
-        <p data-yunari-font-searching="" className="text-sm text-muted">
-          {copy.fontSearching}
-        </p>
-      ) : empty ? (
-        <p data-yunari-font-no-matches="" className="text-sm text-muted">
-          {copy.noResults}
-        </p>
-      ) : null}
+      )}
     </div>
   );
 }

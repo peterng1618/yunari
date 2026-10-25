@@ -1181,6 +1181,53 @@ export const uiCopy = {
     fontFamilyMeta: (cuts: number): string =>
       `${cuts} ${cuts === 1 ? "cut" : "cuts"}`,
     fontLoadMore: "Load more",
+    /** The preview panel beside the grid (spec R6, R7, R9). The sample line is
+     *  the author's own words, so its default is copy rather than a value the
+     *  panel invents; the scope and change lines read the document's presets
+     *  without the panel ever opening one. */
+    fontPreview: {
+      trioTitle: "Trio preview",
+      familyTitle: "Font family",
+      sampleLabel: "Sample text",
+      sampleDefault: "Runtime at a glance",
+      sampleReset: "Reset",
+      glyphs: "Aa Bb Cc Dd Ee Ff Gg 0123456789",
+      appliesTo: "Applies to",
+      addsMissingRoles: "adds missing roles",
+      roleLabel: "Role",
+      role: { heading: "Heading", body: "Body", mono: "Mono" },
+      roleCount: (count: number): string =>
+        `${count} ${count === 1 ? "preset" : "presets"}`,
+      scopeCount: (role: string, count: number): string => `${role} × ${count}`,
+      willBeCreated: "will be created",
+      /** `Clock 108 · 300 → Manrope 700`: the preset's own name and weight
+       *  before the trio's family and weight after. */
+      change: (
+        name: string,
+        weight: string | number | undefined,
+        family: string,
+        newWeight: string | number,
+      ): string =>
+        weight === undefined
+          ? `${name} → ${family} ${newWeight}`
+          : `${name} · ${weight} → ${family} ${newWeight}`,
+      rolelessReason:
+        "No preset carries a role, so Apply to theme has nothing to rewrite.",
+      applyToTheme: "Apply to theme",
+      addThreePresets: "Add 3 presets",
+      cuts: "Cuts",
+      cutLabel: (weight: string | number, italic: boolean): string =>
+        italic ? `${weight} italic` : String(weight),
+      newPreset: "New type preset",
+      newPresetSummary: (role: string, family: string): string =>
+        `${role} — ${family} · adds one`,
+      addAsPreset: "Add as type preset",
+      applyToSelected: "Apply to selected preset",
+      trioNote:
+        "Apply rewrites every role preset and adds any role the theme does not have. Add 3 presets leaves the theme as it is.",
+      familyNote:
+        "Cuts are fetched when you add or apply one. A family you only look at costs nothing.",
+    },
     remoteHostNotice: (hosts: string): string =>
       `Search terms go to ${hosts}. Nothing else leaves this computer.`,
     /** An image's second action: the theme's background is one thing an author
