@@ -106,6 +106,20 @@ export function AssetsPane({
   const referenced = (assetId: string): boolean =>
     assetReferencedBy(objects, assetId) || isReferenced?.(assetId) === true;
 
+  // One submission at a time: the pickers are cleared after every use, so a
+  // re-fire of the same file is caught here rather than importing twice.
+  const busy = useRef(false);
+  const submit = async (task: () => Promise<void>): Promise<void> => {
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      await task();
+    } finally {
+      busy.current = false;
+      render();
+    }
+  };
+
   /** The manager's or the error surface's own refusal, told in words. */
   const refuse = (error: unknown): void => {
     setMessage(uiCopy.panels.assetImportFailed);
@@ -122,7 +136,6 @@ export function AssetsPane({
       return;
     }
     setMessage("");
-    render();
   };
 
   const replaceFile = async (file: File): Promise<void> => {
@@ -143,7 +156,6 @@ export function AssetsPane({
     setMessage("");
     editor.historyManager.saveState();
     editor.canvas.requestRenderAll();
-    render();
   };
 
   /** Puts a declared picture on the canvas. The bytes are the manager's; the
@@ -171,7 +183,6 @@ export function AssetsPane({
     }
     editor.historyManager.saveState();
     editor.canvas.requestRenderAll();
-    render();
   };
 
   const remove = (asset: LocalAssetReference): void => {
@@ -183,7 +194,11 @@ export function AssetsPane({
       setMessage("");
       setChosenId(undefined);
       render();
+      return;
     }
+    // The declaration was not there to remove — a row drawn from a list the
+    // manager has already moved would otherwise press onto nothing.
+    setMessage(uiCopy.panels.assetRemoveFailed);
   };
 
   /** The actions a chosen card draws. The two canvas writes are absent where
@@ -193,6 +208,7 @@ export function AssetsPane({
       <ControlIconButton
         key="preview"
         label={uiCopy.panels.assetCard.preview}
+        disabled={onPreview === undefined}
         onClick={() => onPreview?.(asset)}
       >
         <Glyph icon={VISIBLE_GLYPH} size={13} />
@@ -203,7 +219,7 @@ export function AssetsPane({
         <ControlIconButton
           key="place"
           label={uiCopy.assets.placeOnCanvas}
-          onClick={() => void place(asset)}
+          onClick={() => void submit(() => place(asset))}
         >
           <Glyph icon={PLACE_ON_CANVAS_GLYPH} size={13} />
         </ControlIconButton>,
@@ -213,7 +229,12 @@ export function AssetsPane({
       actions.push(
         <ControlIconButton
           key="background"
-          label={uiCopy.assets.action.image}
+          label={
+            asset.kind === "video"
+              ? uiCopy.assets.action.video
+              : uiCopy.assets.action.image
+          }
+          disabled={onBackground === undefined}
           onClick={() => onBackground?.(asset)}
         >
           <Glyph icon={KIND_GLYPHS.image} size={13} />
@@ -244,6 +265,7 @@ export function AssetsPane({
         <ControlIconButton
           key="preset"
           label={uiCopy.panels.assetCard.createTypePreset}
+          disabled={onCreatePreset === undefined}
           onClick={() => onCreatePreset?.(asset)}
         >
           <Glyph icon={KIND_GLYPHS.text} size={13} />
@@ -284,22 +306,26 @@ export function AssetsPane({
               {section.label}
             </h3>
             <ul className="flex flex-col gap-[var(--space-4)]">
-              {assets.map((asset) => (
-                <li key={asset.id}>
-                  <AssetCard
-                    asset={asset}
-                    chosen={asset.id === chosen?.id}
-                    referenced={referenced(asset.id)}
-                    onChoose={() => {
-                      setChosenId(asset.id);
-                      setMessage("");
-                    }}
-                    {...(asset.id === chosen?.id
-                      ? { actions: actionsFor(asset) }
-                      : {})}
-                  />
-                </li>
-              ))}
+              {assets.map((asset) => {
+                const previewUrl = manager.previewUrl(asset.id);
+                return (
+                  <li key={asset.id}>
+                    <AssetCard
+                      asset={asset}
+                      chosen={asset.id === chosen?.id}
+                      referenced={referenced(asset.id)}
+                      {...(previewUrl === undefined ? {} : { previewUrl })}
+                      onChoose={() => {
+                        setChosenId(asset.id);
+                        setMessage("");
+                      }}
+                      {...(asset.id === chosen?.id
+                        ? { actions: actionsFor(asset) }
+                        : {})}
+                    />
+                  </li>
+                );
+              })}
             </ul>
           </section>
         );
@@ -314,7 +340,7 @@ export function AssetsPane({
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
-          if (file !== undefined) void importFile(file);
+          if (file !== undefined) void submit(() => importFile(file));
         }}
       />
       <input
@@ -326,7 +352,7 @@ export function AssetsPane({
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
-          if (file !== undefined) void replaceFile(file);
+          if (file !== undefined) void submit(() => replaceFile(file));
         }}
       />
     </section>

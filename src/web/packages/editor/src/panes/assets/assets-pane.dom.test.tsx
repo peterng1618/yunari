@@ -51,18 +51,20 @@ const FONT: LocalAssetReference = {
 
 /** A manager that declares what the case names and nothing else: no action the
  *  cases press reaches the byte store, so a structural double is the whole of
- *  what the pane is given. */
+ *  what the pane is given. Its two answers a case can steer are the preview URL
+ *  and the removal result. */
 function managerStub(
   declarations: readonly LocalAssetReference[],
+  previewUrl: (assetId: string) => string | undefined = () => undefined,
 ): AssetManager {
   return {
     declarations,
     assets: {},
-    previewUrl: () => undefined,
+    previewUrl,
     placeImage: vi.fn(),
     replace: vi.fn(),
     hydrate: vi.fn(),
-    remove: vi.fn(),
+    remove: vi.fn(() => true),
   } as unknown as AssetManager;
 }
 
@@ -84,22 +86,28 @@ afterEach(async () => {
 
 function mount(
   declarations: readonly LocalAssetReference[],
-  isReferenced?: (assetId: string) => boolean,
-): HTMLElement {
+  options: {
+    readonly isReferenced?: (assetId: string) => boolean;
+    readonly previewUrl?: (assetId: string) => string | undefined;
+  } = {},
+): { readonly host: HTMLElement; readonly manager: AssetManager } {
   const host = document.createElement("div");
   document.body.append(host);
+  const manager = managerStub(declarations, options.previewUrl);
   const mounted = createRoot(host);
   root = mounted;
   act(() =>
     mounted.render(
       <AssetsPane
-        manager={managerStub(declarations)}
+        manager={manager}
         editor={editorStub()}
-        {...(isReferenced === undefined ? {} : { isReferenced })}
+        {...(options.isReferenced === undefined
+          ? {}
+          : { isReferenced: options.isReferenced })}
       />,
     ),
   );
-  return host;
+  return { host, manager };
 }
 
 /** The pane's section headings, in the order it drew them. */
@@ -134,6 +142,21 @@ function badgeOf(host: HTMLElement, name: string): string | null | undefined {
     ?.textContent;
 }
 
+/** One named action on a card, or nothing where the card did not draw it. */
+function actionOf(
+  host: HTMLElement,
+  name: string,
+  label: string,
+): HTMLButtonElement | null {
+  const card = cardOf(host, name);
+  if (card === null) return null;
+  return (
+    [...card.querySelectorAll<HTMLButtonElement>("button[aria-label]")].find(
+      (button) => button.getAttribute("aria-label") === label,
+    ) ?? null
+  );
+}
+
 /** Points the pane at one asset, the way a press on its row does. */
 async function choose(host: HTMLElement, name: string): Promise<void> {
   const card = cardOf(host, name);
@@ -147,7 +170,7 @@ async function choose(host: HTMLElement, name: string): Promise<void> {
 
 describe("the Assets pane", () => {
   it("groups cards by kind and marks the chosen row's actions", async () => {
-    const host = mount([IMAGE, OTHER_IMAGE, FONT]);
+    const { host } = mount([IMAGE, OTHER_IMAGE, FONT]);
 
     // The mockup's order: Fonts, then Images. The font is declared even though
     // no object can hold it, which is the list-is-declarations rule.
@@ -173,7 +196,7 @@ describe("the Assets pane", () => {
   });
 
   it("shows an unused font without a preset as Unused", async () => {
-    const host = mount([FONT]);
+    const { host } = mount([FONT]);
 
     expect(badgeOf(host, "body.woff2")).toBe(uiCopy.panels.assetCard.unused);
 
@@ -186,8 +209,41 @@ describe("the Assets pane", () => {
   it("badges an asset In use when only the envelope references it", () => {
     // No object holds `logo`; the envelope-side reference is the artboard's
     // background media or a preset's face, and the pane has to hear it.
-    const host = mount([IMAGE], (assetId) => assetId === IMAGE.id);
+    const { host } = mount([IMAGE], {
+      isReferenced: (assetId) => assetId === IMAGE.id,
+    });
 
     expect(badgeOf(host, "logo.png")).toBe(uiCopy.panels.assetCard.inUse);
+  });
+
+  it("draws the manager's own preview as a picture card's thumbnail", () => {
+    // A card that built no `<img>` from `previewUrl` would still pass every
+    // other case, because the thumbnail is presentation only — this one asks
+    // the manager for the URL and the card for the picture it made of it.
+    const { host } = mount([IMAGE], {
+      previewUrl: (assetId) =>
+        assetId === IMAGE.id ? "blob:logo-preview" : undefined,
+    });
+
+    expect(
+      cardOf(host, "logo.png")
+        ?.querySelector("img[data-yunari-asset-preview]")
+        ?.getAttribute("src"),
+    ).toBe("blob:logo-preview");
+  });
+
+  it("reaches the manager from an action, and marks an unwired one disabled", async () => {
+    const { host, manager } = mount([IMAGE]);
+
+    const remove = actionOf(host, "logo.png", uiCopy.panels.assetCard.remove);
+    if (remove === null) throw new Error("the chosen card drew no Remove");
+    await act(async () => remove.click());
+    expect(manager.remove).toHaveBeenCalledWith(IMAGE.id);
+
+    // No `onPreview` was handed in, so the control says so rather than pressing
+    // onto nothing. Task 9 supplies it from the session.
+    expect(
+      actionOf(host, "logo.png", uiCopy.panels.assetCard.preview)?.disabled,
+    ).toBe(true);
   });
 });

@@ -1304,8 +1304,7 @@ export const uiCopy = {
    * *unit* an author inserts (`card-library.ts`), and it is the word the Add
    * pane's title bar carries in the drawing. `tokens` is the Tokens pane's own
    * list, the theme's paints; the reserved `none` is not one of them, because
-   * `PaintList` lists every token but that one. `files` is the Assets pane's
-   * declared library.
+   * `PaintList` lists every token but that one.
    *
    * **The Composition pane's count is deliberately not here.** Its list is the
    * scene's own objects, which §7.6's strip already names, so the pane reads
@@ -1316,8 +1315,6 @@ export const uiCopy = {
       `${count} ${count === 1 ? "unit" : "units"}`,
     tokens: (count: number): string =>
       `${count} ${count === 1 ? "token" : "tokens"}`,
-    files: (count: number): string =>
-      `${count} ${count === 1 ? "file" : "files"}`,
   },
   /** The publish surface. §145: plain LAN HTTP has no confidentiality, so the
    *  words that turn it on have to say what it is. */
@@ -1638,6 +1635,8 @@ export const uiCopy = {
       "Imported and declared. A font is not placed on the canvas.",
     /** Shown when a removal is refused because something still points at it. */
     assetReferenced: "That asset is in use and cannot be removed.",
+    /** Shown when the declaration the row drew is gone from the manager. */
+    assetRemoveFailed: "That file could not be removed.",
     removeAsset: "Remove asset",
     /** Bringing a declared video into the publish envelope keeps the whole
         frame: cropping is the background layer's job at render time, where it is
