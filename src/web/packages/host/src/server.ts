@@ -1313,29 +1313,6 @@ export function createHostServer(options: HostServerOptions): HostServer {
   }
 
   /**
-   * The stored theme, with a document that exists but cannot be served —
-   * one that does not validate, and one past the size bound — answered as the
-   * same absence one that is not there is. Every read that is not the open route
-   * wants this: a display, an asset lookup, the active-theme resolution and
-   * every existence check can serve neither, and a corrupt or oversized theme
-   * must not turn a listing or a page into a 500. The open route reads the
-   * store directly so it can tell the three apart (decisions/0043, 0084).
-   */
-  async function readThemeOrAbsent(id: string): Promise<ThemeRecord> {
-    try {
-      return await themeStore.read(id);
-    } catch (error) {
-      if (
-        error instanceof ThemeValidationError ||
-        error instanceof ThemeTooLargeError
-      ) {
-        return undefined;
-      }
-      throw error;
-    }
-  }
-
-  /**
    * The theme the display was assigned, or the default's when it holds no entry
    * of its own — and none when that too is unset, which leaves the caller to
    * decide what to show. A display nobody has assigned a theme to is an unpaired
@@ -2250,12 +2227,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // host answers none rather than one the follower would act on — and pays
       // no listing for an answer it discards.
       if (!url.searchParams.has("theme")) {
-        const available = await themeStore.list();
-
         theme =
-          (await assignedThemeFor(display, async (id) =>
-            available.some((entry) => entry.id === id),
-          )) ?? null;
+          (await assignedThemeFor(display, (id) => themeStore.exists(id))) ??
+          null;
       }
 
       sendJson(response, 200, {
@@ -3436,19 +3410,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
         sendText(response, 400, "Invalid theme asset path.");
         return;
       }
-      const record = isValidThemeId(id)
-        ? await readThemeOrAbsent(id)
-        : undefined;
-      const declared = record?.envelope.assets?.find(
-        (asset) => asset.path === assetPath,
-      );
-      const bytes =
-        declared === undefined ? undefined : record?.assets[declared.path];
-      if (declared === undefined || bytes === undefined) {
+      const found = await themeStore.readAsset(id, assetPath);
+      if (found === undefined) {
         sendText(response, 404, "Theme asset not found.");
         return;
       }
-      const contentType = themeAssetContentType(declared);
+      const contentType = themeAssetContentType({
+        kind: found.kind,
+        path: assetPath,
+      });
       if (contentType === undefined) {
         // The declared kind is the authority on what these bytes are. A path it
         // does not admit is a package the host cannot serve the way it says,
@@ -3464,7 +3434,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         "content-security-policy": "sandbox; default-src 'none'",
         "cache-control": "no-store",
       });
-      response.end(Buffer.from(bytes));
+      response.end(Buffer.from(found.bytes));
       return;
     }
 
@@ -3501,10 +3471,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       if (request.method === "GET") {
-        const record = await readThemeOrAbsent(rawId);
+        const envelope = await themeStore.readEnvelope(rawId);
         sendJson(response, 200, {
           answers: await themeSettings.read(named, rawId),
-          required: requiredDeviceGroups(record?.envelope),
+          required: requiredDeviceGroups(envelope),
         });
         return;
       }
@@ -3875,12 +3845,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // A display's view of the document: a theme that does not validate is
       // one it cannot serve, which is the same answer as a theme that is not
       // there — not the 422 the editor's own open gets (ADR-0043).
-      const record = await readThemeOrAbsent(rawId);
-      if (record === undefined) {
+      const envelope = await themeStore.readEnvelope(rawId);
+      if (envelope === undefined) {
         sendText(response, 404, "Theme not found.");
         return;
       }
-      sendJson(response, 200, record.envelope);
+      sendJson(response, 200, envelope);
       return;
     }
 
@@ -4130,7 +4100,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // The assets a display fetches come from the theme's own folder, so a
         // document with no folder would render with holes. Refusing is honest;
         // publishing it anyway is not.
-        if ((await readThemeOrAbsent(id)) === undefined) {
+        if (!(await themeStore.exists(id))) {
           // 404, the same answer `/api/themes/:id` gives for the same fact.
           sendText(
             response,

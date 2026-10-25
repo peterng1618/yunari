@@ -993,6 +993,82 @@ describe("Host theme routes", () => {
     );
   });
 
+  it("serves one declared asset by reading that asset alone", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-asset-read-"));
+    const store = createThemeStore(dir);
+    await store.write(
+      "living-room",
+      createPackageWithAsset("assets/inter-400.woff2", [1, 2]),
+    );
+    const readAsset = vi.fn((id: string, assetPath: string) =>
+      store.readAsset(id, assetPath),
+    );
+    const read = vi.fn((id: string) => store.read(id));
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: { ...store, readAsset, read },
+    });
+
+    try {
+      const asset = await request(
+        hosted.server,
+        "GET",
+        "/api/themes/living-room/assets/inter-400.woff2",
+      );
+      expect(asset.status).toBe(200);
+      expect([...asset.body]).toEqual([1, 2]);
+      expect(asset.headers["content-type"]).toBe("font/woff2");
+      // Exactly one file, named exactly as the document declares it — not the
+      // whole theme read back to pick one asset out of it.
+      expect(readAsset).toHaveBeenCalledTimes(1);
+      expect(readAsset).toHaveBeenCalledWith(
+        "living-room",
+        "assets/inter-400.woff2",
+      );
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("serves the theme document without reading a single asset", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-doc-read-"));
+    const store = createThemeStore(dir);
+    await store.write(
+      "living-room",
+      createPackageWithAsset("assets/inter-400.woff2", [1, 2]),
+    );
+    const readEnvelope = vi.fn((id: string) => store.readEnvelope(id));
+    const readAsset = vi.fn((id: string, assetPath: string) =>
+      store.readAsset(id, assetPath),
+    );
+    const read = vi.fn((id: string) => store.read(id));
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: { ...store, readEnvelope, readAsset, read },
+    });
+
+    try {
+      const doc = await request(
+        hosted.server,
+        "GET",
+        "/api/themes/living-room/document",
+      );
+      expect(doc.status).toBe(200);
+      expect((doc.json() as FabricThemeEnvelope).id).toBe("living-room");
+      expect(readEnvelope).toHaveBeenCalledTimes(1);
+      expect(readEnvelope).toHaveBeenCalledWith("living-room");
+      expect(readAsset).not.toHaveBeenCalled();
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("refuses undeclared and traversal-like asset paths", async () => {
     await request(
       hosted.server,
@@ -1007,6 +1083,10 @@ describe("Host theme routes", () => {
     // A well-formed package path the theme never declared.
     await expect(
       status("/api/themes/living-room/assets/assets/missing.woff2"),
+    ).resolves.toBe(404);
+    // A path under a theme the library does not hold is the same 404.
+    await expect(
+      status("/api/themes/absent/assets/assets/missing.woff2"),
     ).resolves.toBe(404);
     // `..` cannot walk out of the package: the lookup is by declared path, so a
     // traversal decodes to something the theme does not declare.
@@ -1035,22 +1115,17 @@ describe("Host theme routes", () => {
       "living-room",
       createPackageWithAsset("assets/inter-400.woff2", [1, 2]),
     );
-    const stored = await store.read("living-room");
-    if (stored === undefined) {
-      throw new Error("expected the fixture theme to be stored");
-    }
 
     let declaredPath = "";
     const themeStore = {
       ...store,
-      read: async () => ({
-        ...stored,
-        envelope: {
-          ...stored.envelope,
-          assets: [{ id: "x", kind: "image" as const, path: declaredPath }],
-        },
-        assets: { [declaredPath]: new Uint8Array([1]) },
-      }),
+      // The route takes the MIME from the kind this read answers, so a lying
+      // declaration is expressed here rather than in the folder — where the
+      // current validator would have refused it.
+      readAsset: async (_id: string, assetPath: string) =>
+        assetPath === declaredPath
+          ? { bytes: new Uint8Array([1]), kind: "image" as const }
+          : undefined,
     };
     const lying = createHostServer({
       registry: new ProviderRegistry([]),
@@ -8182,21 +8257,75 @@ describe("The published overlay", () => {
     }
   });
 
-  it("does not list the library for a poll that named a theme", async () => {
+  it("asks the library about the assigned id alone, and never lists it", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-published-"));
     const store = createThemeStore(dir);
+    const exists = vi.fn((id: string) => store.exists(id));
     const list = vi.fn(() => store.list());
+    const read = vi.fn((id: string) => store.read(id));
+    const activeTheme = createActiveThemeStore(dir);
     const displays = createDisplayStore(dir);
     const hosted = createHostServer({
       registry: new ProviderRegistry([]),
       bundles: { player: dir, editor: dir },
-      themeStore: { ...store, list },
+      themeStore: { ...store, exists, list, read },
+      activeTheme,
+      displays,
+    });
+
+    try {
+      await store.write("living-room", createValidPackage());
+      await store.write("studio", createValidPackage("studio", "Studio"));
+      const token = newToken();
+      await displays.create("Kitchen tablet", token);
+      await activeTheme.write("kitchen-tablet", "studio");
+
+      const answer = await request(
+        hosted.server,
+        "GET",
+        "/api/published",
+        undefined,
+        {
+          remoteAddress: "192.168.1.50",
+          headers: { "x-yunari-session": token },
+        },
+      );
+      expect(answer.status).toBe(200);
+      expect((answer.json() as { display: unknown }).display).toEqual({
+        id: "kitchen-tablet",
+        theme: "studio",
+        chartFps: 30,
+      });
+      // One `theme.json` for the id the display is assigned — not a directory
+      // read plus one document per theme, on a poll that runs every two seconds.
+      expect(exists).toHaveBeenCalledWith("studio");
+      expect(list).not.toHaveBeenCalled();
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not list or probe the library for a poll that named a theme", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-published-"));
+    const store = createThemeStore(dir);
+    const list = vi.fn(() => store.list());
+    const exists = vi.fn((id: string) => store.exists(id));
+    const activeTheme = createActiveThemeStore(dir);
+    const displays = createDisplayStore(dir);
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: { ...store, list, exists },
+      activeTheme,
       displays,
     });
 
     try {
       const token = newToken();
       await displays.create("Kitchen tablet", token);
+      await activeTheme.write("kitchen-tablet", "living-room");
       const asked = {
         remoteAddress: "192.168.1.50",
         headers: { "x-yunari-session": token },
@@ -8211,10 +8340,11 @@ describe("The published overlay", () => {
       );
       expect(linked.status).toBe(200);
 
-      // The listing is only what the map's answer is read against, and a link
-      // is answered none: a directory read plus one `theme.json` per theme, on
-      // every poll of every link page, is a cost with nothing in it.
+      // A link is answered none: a directory read, one `theme.json` per theme,
+      // or even one existence probe, on every poll of every link page, is a
+      // cost with nothing in it.
       expect(list).not.toHaveBeenCalled();
+      expect(exists).not.toHaveBeenCalled();
 
       // The same display without one is answered its assignment, so the skip
       // above is the link rather than a route that never resolves.
@@ -8226,7 +8356,8 @@ describe("The published overlay", () => {
         asked,
       );
       expect(assigned.status).toBe(200);
-      expect(list).toHaveBeenCalledTimes(1);
+      expect(list).not.toHaveBeenCalled();
+      expect(exists).toHaveBeenCalledTimes(1);
     } finally {
       await hosted.close();
       await fs.rm(dir, { recursive: true, force: true });
