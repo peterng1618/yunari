@@ -119,6 +119,52 @@ describe("AssetManager", () => {
     );
   });
 
+  it("imports a ttf and writes a local reference without a sourceUrl", async () => {
+    const manager = new AssetManager();
+
+    const asset = await manager.importFont(
+      file(new Uint8Array([0, 1, 2]), "Inter-Bold.ttf", "font/ttf"),
+      { family: "Inter", weight: 700, style: "normal", licence: "unknown" },
+      async () => undefined,
+    );
+
+    expect(asset).toMatchObject({
+      id: "Inter-Bold",
+      kind: "font",
+      path: "assets/Inter-Bold.ttf",
+      family: "Inter",
+      weight: 700,
+      style: "normal",
+      format: "ttf",
+      license: { name: "unknown" },
+    });
+    // A local file names no origin; an absent URL is not an empty one.
+    expect(asset.sourceUrl).toBeUndefined();
+    expect(manager.assets["assets/Inter-Bold.ttf"]).toEqual(
+      new Uint8Array([0, 1, 2]),
+    );
+  });
+
+  it("refuses a file whose bytes do not parse as a font", async () => {
+    const manager = new AssetManager();
+    const loadFace = vi.fn(async () => {
+      throw new Error("not a font");
+    });
+
+    await expect(
+      manager.importFont(
+        file(new Uint8Array([0, 1, 2]), "Inter-Bold.ttf", "font/ttf"),
+        { family: "Inter", weight: 700, style: "normal", licence: "unknown" },
+        loadFace,
+      ),
+    ).rejects.toThrow("not a font the browser can read");
+
+    expect(loadFace).toHaveBeenCalledTimes(1);
+    // The refusal happens before the declaration, so nothing is left behind.
+    expect(manager.declarations).toEqual([]);
+    expect(manager.assets).toEqual({});
+  });
+
   it("rejects a MIME type that does not match a WebM extension", async () => {
     const manager = new AssetManager();
 

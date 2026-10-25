@@ -325,6 +325,7 @@ export {
   BACKGROUND_MEDIA_DEFAULTS,
   bumpSemanticVersion,
   CHART_FAMILIES,
+  FONT_ASSET_FORMATS,
   GLOBAL_GROUPS,
   isSemanticVersion,
   MAX_ARTBOARD_DIMENSION,

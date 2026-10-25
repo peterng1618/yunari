@@ -3266,6 +3266,32 @@ test.describe("Fabric editor route", () => {
     });
   });
 
+  test("opens the metadata form when a font is picked", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    await page.goto(EDITOR);
+    await openPane(page, "Assets");
+    const assets = page.locator('[data-yunari-panel="assets"]');
+    // A fake `.ttf`: nothing parses until Create type preset, which this case
+    // does not press — a parseable font binary is not available to the test.
+    await chooseAssetFile(page, "import", {
+      name: "Inter-Bold.ttf",
+      mimeType: "font/ttf",
+      buffer: Buffer.from("not-a-real-font"),
+    });
+    // The pick itself declares nothing: the form is what the author confirms,
+    // and its family and weight come from the filename.
+    const details = assets.locator("[data-yunari-font-details]");
+    await expect(details).toBeVisible();
+    await expect(details.locator("[data-yunari-font-family]")).toHaveValue(
+      "Inter",
+    );
+    await expect(details.locator("[data-yunari-font-weight]")).toHaveValue(
+      "700",
+    );
+  });
+
   test("authors a packaged background image through the inspector", async ({
     page,
   }, testInfo) => {

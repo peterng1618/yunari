@@ -464,6 +464,32 @@ async function importFile(host: HTMLElement, chosen: File): Promise<void> {
   await pickFile(host, "[data-yunari-asset-import-input]", chosen);
 }
 
+/** jsdom has no parser; a font's bytes are declared at the form's commit, so a
+ *  case that needs a declared card stubs the loader. */
+function stubFontParser(): void {
+  vi.stubGlobal(
+    "FontFace",
+    class {
+      load(): Promise<this> {
+        return Promise.resolve(this);
+      }
+    },
+  );
+}
+
+/** A font pick followed by Cancel — the route that declares without a preset. */
+async function declareFont(host: HTMLElement): Promise<void> {
+  await importFile(host, FONT_FILE);
+  const cancel = host.querySelector<HTMLButtonElement>(
+    "[data-yunari-font-cancel]",
+  );
+  if (cancel === null) throw new Error("no Cancel control.");
+  await act(async () => {
+    cancel.click();
+    await drain();
+  });
+}
+
 /** Imports through *Import as background*. */
 async function importAsBackground(
   host: HTMLElement,
@@ -564,17 +590,42 @@ describe("the Assets pane's import", () => {
     expect(alert(host).textContent).toBe(uiCopy.panels.assetDeclaredOnly);
   });
 
-  it("declares an imported font and places nothing", async () => {
+  it("opens the font details form on a pick and declares nothing yet", async () => {
     const { host, manager, placeImage, onBackground } =
       await mountWithManager();
 
     await importFile(host, FONT_FILE);
 
-    expect(manager.declarations.map((asset) => asset.kind)).toEqual(["font"]);
+    // The pick is not a declaration: the form is where the author confirms the
+    // metadata, and Cancel or Create type preset is what writes the file.
+    expect(manager.declarations).toEqual([]);
     expect(placeImage).not.toHaveBeenCalled();
     expect(onBackground).not.toHaveBeenCalled();
-    expect(alert(host).textContent).toBe(uiCopy.panels.assetDeclaredFont);
+    expect(host.querySelector("[data-yunari-font-details]")).not.toBeNull();
+    expect(
+      host.querySelector<HTMLInputElement>("[data-yunari-font-family]")?.value,
+    ).toBe("body");
+  });
+
+  it("keeps the file declared when the form is cancelled", async () => {
+    // The manager's declaration path is what this case proves; the form's own
+    // parse is `font-metadata-form`'s.
+    stubFontParser();
+    const { host, manager, changed } = await mountWithManager();
+
+    await importFile(host, FONT_FILE);
+    expect(manager.declarations).toEqual([]);
+    await act(async () => {
+      host
+        .querySelector<HTMLButtonElement>("[data-yunari-font-cancel]")!
+        .click();
+      await drain();
+    });
+
+    expect(manager.declarations.map((asset) => asset.kind)).toEqual(["font"]);
+    expect(host.querySelector("[data-yunari-font-details]")).toBeNull();
     expect(cardOf(host, "body.woff2")).not.toBeNull();
+    expect(changed).toHaveBeenCalled();
   });
 
   it("places an imported SVG through the canvas", async () => {
@@ -616,9 +667,10 @@ describe("the Assets pane's import", () => {
   });
 
   it("keeps a declared-but-unplaced font in the list, because it has no layer", async () => {
+    stubFontParser();
     const { host } = await mountWithManager();
 
-    await importFile(host, FONT_FILE);
+    await declareFont(host);
 
     // Review Focus 5: the list is the declarations, not the placed objects —
     // which is what keeps a font imported once removable. The card is reached
@@ -860,13 +912,14 @@ describe("the behaviours the file section carried", () => {
  */
 describe("normalizing a declared video", () => {
   it("offers the normalize control only for a declared video", async () => {
+    stubFontParser();
     const { host } = await mountWithManager();
 
     await importFile(host, IMAGE_FILE);
     await selectCard(host, "logo.png");
     expect(normalizeControl(host)).toBeNull();
 
-    await importFile(host, FONT_FILE);
+    await declareFont(host);
     await selectCard(host, "body.woff2");
     expect(normalizeControl(host)).toBeNull();
 

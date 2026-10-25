@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–14 and 15a–15b complete, Task 16 (local font import) next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–16 complete, Task 17 (unused assets and opt-in cleanup) next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,11 +18,11 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 15b landed:** the paints pane is a list too — a row press selects the paint and its name, kind, value, usage and reassignment moved into the inspector beside the preset section.
-- **One inspector, two sections**, chosen from the selected token's kind, so a paint id can never draw preset fields.
-- **A held token the document no longer declares is dropped** and the object column returns — whether the token went by Delete or by undo.
-- **Paint rows now show their selection** (`aria-pressed` plus the accent border), matching the preset rows.
-- **Evidence:** 2558 editor tests, the affected unit files 117, typecheck/biome/design-tokens exit 0, browser batch 91 passed / 91 skipped / 0 unexpected.
+- **Task 16 landed:** a font pick opens an inline metadata form and declares nothing; the file is written at Create type preset or Cancel.
+- **Create type preset** writes one preset through `addTypePresetFromLocalFont` and a credit carrying the `assetId`, after the cap check; Cancel declares the file without either.
+- **`importFont` validates bytes through the browser's own `FontFace`** (injectable loader for jsdom) and writes family/weight/style/format/licence/source URL; `amendFont` rewrites them in place.
+- **The filename parser peels style and weight tokens from the end** (`Inter-Bold.ttf` → Inter / 700); the form refuses an empty family or a weight outside 120–900.
+- **Evidence:** 2566 editor tests, focused files 113, typecheck/biome/design-tokens exit 0, `editor.spec.ts` 70 passed / 70 skipped / 0 unexpected; dead-selectors exits 1 with 16 pre-existing findings, none naming a changed file.
 
 ## Next
 

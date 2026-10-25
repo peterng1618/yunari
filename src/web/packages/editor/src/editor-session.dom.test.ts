@@ -2,6 +2,7 @@
 
 import type { FabricPalette, FabricThemeEnvelope } from "@yunari/renderer-core";
 import { IText } from "fabric/es";
+import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { presetLibrary } from "./preset-library/index.js";
 import { installReadableFile } from "./readable-file.fixture.js";
@@ -144,6 +145,7 @@ vi.mock("./shortcut-manager/index.js", () => ({
 }));
 
 import { AssetManager } from "./asset-manager/index.js";
+import { EditorDocument } from "./editor-document.js";
 import { EditorSession } from "./editor-session.js";
 import {
   SelectionStore,
@@ -2448,6 +2450,147 @@ describe("the Wallpaper Engine import transaction", () => {
     });
     expect(requests.some((url) => url.includes("normalize-video"))).toBe(false);
     extensions.destroy();
+  });
+});
+
+describe("the local font import", () => {
+  beforeEach(() => {
+    saveMock.mockReset();
+    document.body.replaceChildren();
+  });
+
+  /** A session whose Assets pane is the real one, over a real manager. */
+  function fontSession(manager: AssetManager): EditorSession {
+    return new EditorSession({
+      assetManager: manager,
+      shell: {
+        editor: {
+          canvas: {
+            on: vi.fn(),
+            off: vi.fn(),
+            getActiveObject: () => undefined,
+            getObjects: () => [],
+            requestRenderAll: vi.fn(),
+          },
+          clipboardManager: { setImageImporter: vi.fn(), setBindings: vi.fn() },
+          textManager: {
+            addText: vi.fn(),
+            setAuthoringView: vi.fn(),
+            setRepaint: vi.fn(),
+          },
+          cropManager: idleCrop(),
+          historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+        },
+        scene: {},
+        snapshot: vi.fn((input) => ({ ...envelope, ...input })),
+        setBackground: vi.fn(),
+        setBackgroundMedia: vi.fn(),
+        // The preset write runs the globals fan-out, which the shell owns.
+        setGlobals: vi.fn(),
+      } as never,
+      source: {} as never,
+      envelope,
+      panelHosts: {
+        add: document.body,
+        assets: document.body,
+        document: document.body,
+        tokens: document.body,
+        selection: document.body,
+      },
+      onNew: vi.fn(),
+      onNewFromStarter: vi.fn(),
+      onSaved: vi.fn(),
+    });
+  }
+
+  /** Lets the pane's commit and the manager's byte hash settle. */
+  async function settle(): Promise<void> {
+    for (let round = 0; round < 5; round += 1)
+      await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  it("creates one preset and one credit carrying the assetId", async () => {
+    // jsdom has no parser; the declaration path is what this case proves.
+    vi.stubGlobal(
+      "FontFace",
+      class {
+        load(): Promise<this> {
+          return Promise.resolve(this);
+        }
+      },
+    );
+    const manager = new AssetManager();
+    const extensions = fontSession(manager);
+    const addCredit = vi.spyOn(EditorDocument.prototype, "addCredit");
+    const input = document.body.querySelector<HTMLInputElement>(
+      "[data-yunari-asset-import-input]",
+    );
+    if (input === null) throw new Error("no import input");
+    const bytes = new TextEncoder().encode("ttf");
+    const font = Object.assign(
+      new File([bytes as unknown as BlobPart], "Inter-Bold.ttf", {
+        type: "font/ttf",
+      }),
+      {
+        arrayBuffer: async () =>
+          bytes.buffer.slice(
+            bytes.byteOffset,
+            bytes.byteOffset + bytes.byteLength,
+          ),
+      },
+    );
+    Object.defineProperty(input, "files", {
+      value: [font],
+      configurable: true,
+    });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      await settle();
+    });
+
+    // The pick is not a declaration; Create type preset is the one write.
+    expect(manager.declarations).toEqual([]);
+    const create = document.body.querySelector<HTMLButtonElement>(
+      "[data-yunari-font-create]",
+    );
+    if (create === null) throw new Error("no Create type preset control");
+    await act(async () => {
+      create.click();
+      await settle();
+    });
+
+    expect(manager.declarations).toMatchObject([
+      { kind: "font", family: "Inter", weight: 700, format: "ttf" },
+    ]);
+    expect(addCredit).toHaveBeenCalledTimes(1);
+
+    await extensions.actionFacade().savePackage();
+    const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
+    const presets =
+      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typePresets ??
+      {};
+    expect(Object.values(presets)).toHaveLength(1);
+    expect(Object.values(presets)[0]).toMatchObject({
+      value: { family: "Inter", weight: 700, face: { assetId: "Inter-Bold" } },
+    });
+    expect(saveMock).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      expect.objectContaining({
+        entries: [
+          expect.objectContaining({
+            kind: "font",
+            title: "Inter",
+            license: "unknown",
+            assetId: "Inter-Bold",
+          }),
+        ],
+      }),
+    );
+
+    extensions.destroy();
+    vi.unstubAllGlobals();
   });
 });
 

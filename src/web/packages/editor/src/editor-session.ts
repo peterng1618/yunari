@@ -62,7 +62,10 @@ import {
   type PaletteTokenUse,
   paletteTokenUsage,
 } from "./palette-manager/index.js";
-import { createAssetsPane } from "./panes/assets/assets-pane.js";
+import {
+  createAssetsPane,
+  type FontCommitInput,
+} from "./panes/assets/assets-pane.js";
 import type { PresetSelection } from "./panes/tokens/preset-list.js";
 import {
   createTokenInspectorPanel,
@@ -535,9 +538,9 @@ export class EditorSession {
       isReferenced: (assetId) => this.#document.holdsAsset(assetId),
       onChanged: () => this.#declarationsChanged(),
       onFindAssets: () => options.onFindAssets?.(),
-      // Preview and preset creation are Tasks 20 and 12; the pane disables an
-      // action whose callback is absent, so leaving these two unwired is the
-      // deliberate state, not a dead control.
+      onFontCommit: (input) => this.#commitFont(input),
+      // Preview is Task 20; the pane disables an action whose callback is
+      // absent, so leaving it unwired is the deliberate state.
       onBackground: (asset) => {
         const background = this.#document.envelope.background;
         this.#document.setBackground({
@@ -789,6 +792,68 @@ export class EditorSession {
         ok: false,
         message: error instanceof Error ? error.message : String(error),
       };
+    }
+  }
+
+  /**
+   * The one font commit the Assets pane reports: a fresh file or a declared
+   * face, with or without the preset.
+   *
+   * The cap is checked before anything is declared, because nothing removes a
+   * credit and the package writer refuses an over-cap list at the next save.
+   * A fresh file has no id until it is declared, so the pre-check carries none:
+   * only the length can refuse it, and a file not yet in the package has no
+   * earlier credit to replace. Cancel declares the file and writes neither the
+   * preset nor the credit.
+   */
+  async #commitFont(
+    input: FontCommitInput,
+  ): Promise<
+    | { readonly ok: true; readonly message: string }
+    | { readonly ok: false; readonly message: string }
+  > {
+    const { source, metadata, role, withPreset } = input;
+    if (!withPreset) {
+      try {
+        if (!("file" in source))
+          throw new Error("A declared font has nothing to import.");
+        await this.#assets.importFont(source.file, metadata);
+        this.#declarationsChanged();
+        return { ok: true, message: uiCopy.panels.assetDeclaredFont };
+      } catch (error) {
+        return { ok: false, message: messageOf(error) };
+      }
+    }
+
+    const credit: ThemeCreditsEntry = {
+      kind: "font",
+      title: metadata.family,
+      license: metadata.licence,
+      changes: "Imported unchanged",
+      ...(metadata.sourceUrl === undefined
+        ? {}
+        : { source: { url: metadata.sourceUrl } }),
+      ...("assetId" in source ? { assetId: source.assetId } : {}),
+    };
+    if (!this.#document.canAddCredit(credit))
+      return { ok: false, message: uiCopy.assets.creditsFull };
+
+    try {
+      const asset =
+        "file" in source
+          ? await this.#assets.importFont(source.file, metadata)
+          : this.#assets.amendFont(source.assetId, metadata);
+      this.#document.addTypePresetFromLocalFont(asset, role);
+      this.#document.addCredit({ ...credit, assetId: asset.id });
+      this.#declarationsChanged();
+      // Only a fresh import is an import; amending a declared face writes the
+      // preset, which the Tokens pane shows.
+      return {
+        ok: true,
+        message: "file" in source ? uiCopy.panels.assetDeclaredFont : "",
+      };
+    } catch (error) {
+      return { ok: false, message: messageOf(error) };
     }
   }
 
@@ -1207,6 +1272,11 @@ async function normalizeWallpaperVideo(
     ),
     reencoded: normalized.reencoded,
   };
+}
+
+/** A refusal's own words, or the value itself when it was not an `Error`. */
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /** The host's content type is the first answer; the name covers a host that

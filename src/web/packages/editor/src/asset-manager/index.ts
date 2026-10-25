@@ -1,7 +1,9 @@
-import type {
-  AssetReference,
-  FabricThemeEnvelope,
-  FontAssetReference,
+import {
+  type AssetReference,
+  type FabricThemeEnvelope,
+  FONT_ASSET_FORMATS,
+  type FontAssetFormat,
+  type FontAssetReference,
 } from "@yunari/renderer-core";
 import {
   objectAssetReference,
@@ -16,6 +18,11 @@ import {
 import type { EditorInteraction } from "../editor-interaction.js";
 import type { CuratedFontFace } from "../font-catalog.js";
 import { boundedImageElement } from "../image-manager/index.js";
+import {
+  FONT_WEIGHT_MAX,
+  FONT_WEIGHT_MIN,
+  type FontMetadata,
+} from "./font-metadata.js";
 
 const TYPES = {
   png: { mime: "image/png", kind: "image" },
@@ -164,6 +171,75 @@ export class AssetManager {
     else this.#declarations.push(reference);
     this.#assets[path] = new Uint8Array(bytes);
     return reference;
+  }
+
+  /**
+   * Declares a local font with the metadata its filename cannot settle.
+   *
+   * The bytes are validated by the browser's own parser before anything is
+   * declared: a file that is not a font would otherwise sit in the package as a
+   * shapeless declaration, and a second, weaker signature check here would be
+   * exactly the wrong owner. `loadFace` is the browser's `FontFace`; jsdom has
+   * none, so a test injects one.
+   */
+  async importFont(
+    file: File,
+    metadata: FontMetadata,
+    loadFace: FontLoader = loadWithFontFace,
+  ): Promise<FontAssetReference> {
+    const checked = fontMetadataOrThrow(metadata);
+    const extension = extensionOf(file.name);
+    if (extension === undefined || !isFontFormat(extension))
+      throw new Error("Unsupported font file type.");
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    try {
+      await loadFace(checked.family, bytes);
+    } catch {
+      throw new Error("The file's bytes are not a font the browser can read.");
+    }
+
+    // `import` has already validated the MIME type and allocated the path;
+    // amending it is what writes the facts the file cannot answer.
+    const imported = await this.import(file);
+    return this.amendFont(imported.id, checked);
+  }
+
+  /** Declares a face: the bytes, path and id are the declaration's, and the
+   *  form's values are the facts about it. */
+  amendFont(assetId: string, metadata: FontMetadata): FontAssetReference {
+    const checked = fontMetadataOrThrow(metadata);
+    const index = this.#declarations.findIndex((asset) => asset.id === assetId);
+    const existing = this.#declarations[index];
+    if (index < 0 || existing === undefined || existing.kind !== "font")
+      throw new Error(`No declared font to amend: ${assetId}.`);
+
+    // A bare import writes no `format`; the path's tail is the one `#allocate`
+    // gave it, so the declaration and the file name cannot disagree.
+    const format =
+      "format" in existing ? existing.format : extensionOf(existing.path);
+    if (format === undefined || !isFontFormat(format))
+      throw new Error(`No declared font to amend: ${assetId}.`);
+
+    const {
+      sourceUrl: _previousSourceUrl,
+      license: _previousLicense,
+      ...kept
+    } = existing;
+    const next: FontAssetReference = {
+      ...kept,
+      kind: "font",
+      format: format as FontAssetFormat,
+      family: checked.family,
+      weight: checked.weight,
+      style: checked.style,
+      license: { name: checked.licence },
+      ...(checked.sourceUrl === undefined
+        ? {}
+        : { sourceUrl: checked.sourceUrl }),
+    };
+    this.#declarations.splice(index, 1, next);
+    return next;
   }
 
   remove(assetId: string): boolean {
@@ -377,6 +453,45 @@ export class AssetManager {
     if (url !== undefined) URL.revokeObjectURL(url);
     this.#previewUrls.delete(assetId);
   }
+}
+
+/** The browser's own parser, as the one owner of "is this a font". */
+export type FontLoader = (
+  family: string,
+  bytes: Uint8Array,
+) => Promise<unknown>;
+
+function loadWithFontFace(family: string, bytes: Uint8Array): Promise<unknown> {
+  return new FontFace(family, bytes as unknown as BufferSource).load();
+}
+
+function isFontFormat(extension: AssetExtension): boolean {
+  return (FONT_ASSET_FORMATS as readonly string[]).includes(extension);
+}
+
+/** The form's values, trimmed and refused where unusable — never coerced. An
+ *  empty licence is the documented default, not a value nobody chose. */
+function fontMetadataOrThrow(metadata: FontMetadata): FontMetadata {
+  const family = metadata.family.trim();
+  if (family === "") throw new Error("A font needs a family name.");
+  const weight = metadata.weight;
+  if (
+    !Number.isFinite(weight) ||
+    weight < FONT_WEIGHT_MIN ||
+    weight > FONT_WEIGHT_MAX
+  )
+    throw new Error(
+      `A font weight must be between ${FONT_WEIGHT_MIN} and ${FONT_WEIGHT_MAX}.`,
+    );
+  const licence = metadata.licence.trim();
+  const sourceUrl = metadata.sourceUrl?.trim();
+  return {
+    family,
+    weight,
+    style: metadata.style,
+    licence: licence === "" ? "unknown" : licence,
+    ...(sourceUrl === undefined || sourceUrl === "" ? {} : { sourceUrl }),
+  };
 }
 
 function extensionOf(name: string): AssetExtension | undefined {

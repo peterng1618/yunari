@@ -7,6 +7,7 @@ import {
   type FabricPalette,
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
+  type FontAssetReference,
   type FontCut,
   type FontTrioInfo,
 } from "@yunari/renderer-core";
@@ -52,6 +53,7 @@ import {
   fontAssetId,
   fontWeight,
   freePresetId,
+  presetForRole,
   rolePreset,
 } from "./type-preset-apply.js";
 import {
@@ -796,6 +798,33 @@ export class EditorDocument {
     const presets = this.#typePresets();
     const id = freePresetId(role ?? "body", presets);
     this.setTypes({ ...presets, [id]: rolePreset(role, cut) });
+    return id;
+  }
+
+  /**
+   * One preset from a local file already declared in the package.
+   *
+   * Not routed through `addTypePresetFromCut`: that path reads the cut's bytes
+   * from the host and throws for a local source, while the bytes here are
+   * already the manager's.
+   */
+  addTypePresetFromLocalFont(
+    asset: FontAssetReference,
+    role: FontTrioRole | null,
+  ): string {
+    const weight = Number(asset.weight);
+    if (!Number.isFinite(weight) || weight <= 0)
+      throw new Error(`"${asset.family}" has no usable font weight.`);
+    const entry = presetForRole(role, asset.family, weight);
+    const presets = this.#typePresets();
+    const id = freePresetId(role ?? "body", presets);
+    this.setTypes({
+      ...presets,
+      [id]: {
+        ...entry,
+        value: { ...entry.value, face: { assetId: asset.id } },
+      },
+    });
     return id;
   }
 

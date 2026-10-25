@@ -1,3 +1,4 @@
+import type { FontAssetReference } from "@yunari/renderer-core";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -18,9 +19,15 @@ import {
   REPLACE_ASSET_GLYPH,
   VISIBLE_GLYPH,
 } from "../../editor-shell/icons.js";
+import type { FontTrioRole } from "../../type-preset-apply.js";
 import { uiCopy } from "../../ui-copy.js";
 import { requestNormalizedVideo } from "../../video-normalizer.js";
 import { AssetCard, assetFileName } from "./asset-card.js";
+import {
+  type FontMetadata,
+  FontMetadataForm,
+  fontMetadataFromFilename,
+} from "./font-metadata-form.js";
 
 /**
  * The Assets pane's body: every declared file as a card, grouped by kind.
@@ -56,9 +63,44 @@ interface AssetsPaneProps {
   /** Writes the asset as the artboard's background media — envelope state the
    *  pane cannot reach itself. */
   readonly onBackground?: (asset: LocalAssetReference) => void;
-  /** Creates a type preset from a declared face; the preset library owns the
-   *  write. */
-  readonly onCreatePreset?: (asset: LocalAssetReference) => void;
+  /** The one font commit: declares or amends the face, then writes the preset
+   *  and the credit. The cap check and the document writes are the caller's,
+   *  because neither can be reached from the pane. */
+  readonly onFontCommit?: FontCommit;
+}
+
+export interface FontCommitInput {
+  readonly source: { readonly file: File } | { readonly assetId: string };
+  readonly metadata: FontMetadata;
+  readonly role: FontTrioRole | null;
+  readonly withPreset: boolean;
+}
+
+export type FontCommit = (
+  input: FontCommitInput,
+) => Promise<
+  | { readonly ok: true; readonly message: string }
+  | { readonly ok: false; readonly message: string }
+>;
+
+/** What a chosen font's form is being drawn for: a file not yet declared, or a
+ *  declaration whose metadata the form may amend. */
+type FontDraft =
+  | { readonly file: File; readonly metadata: FontMetadata }
+  | { readonly assetId: string; readonly metadata: FontMetadata };
+
+/** The metadata a declared face carries, read back into the form. */
+function metadataOfFont(asset: FontAssetReference): FontMetadata {
+  const weight = Number(asset.weight);
+  return {
+    family: asset.family,
+    // A declaration always carries a usable weight; a hand-edited package that
+    // does not falls back to the parser's default rather than printing NaN.
+    weight: Number.isFinite(weight) && weight > 0 ? weight : 400,
+    style: asset.style,
+    licence: asset.license?.name ?? "unknown",
+    ...(asset.sourceUrl === undefined ? {} : { sourceUrl: asset.sourceUrl }),
+  };
 }
 
 type LocalAssetKind = LocalAssetReference["kind"];
@@ -94,7 +136,7 @@ export function AssetsPane({
   onFindAssets,
   onPreview,
   onBackground,
-  onCreatePreset,
+  onFontCommit,
 }: AssetsPaneProps): React.JSX.Element {
   const importInput = useRef<HTMLInputElement>(null);
   const replaceInput = useRef<HTMLInputElement>(null);
@@ -111,6 +153,10 @@ export function AssetsPane({
     { readonly assetId: string; readonly bytes: Uint8Array } | undefined
   >();
   const [normalizing, setNormalizing] = useState(false);
+  /** The font whose metadata form is open. A pick opens one before anything is
+   *  declared; Create type preset on a card opens the same form for its face. */
+  const [font, setFont] = useState<FontDraft | undefined>();
+  const [fontBusy, setFontBusy] = useState(false);
   // The manager's declarations are live external state, so a mutation is
   // followed by a render rather than by a state copy that could go stale.
   const [, render] = useReducer((count: number) => count + 1, 0);
@@ -145,8 +191,8 @@ export function AssetsPane({
   /**
    * Declares the picked file and takes the one automatic placement its kind
    * makes unambiguous: a picture is placed, a video becomes the artboard's
-   * background media, and a font is only declared (its metadata form is the
-   * preset library's, not this pane's).
+   * background media, and a font opens its metadata form — nothing is declared
+   * at the pick, so a file the author walks away from leaves no declaration.
    *
    * `background` is the author overriding that choice: an image or a video is
    * forced into background media, and a font is refused before the manager
@@ -158,6 +204,11 @@ export function AssetsPane({
   ): Promise<void> => {
     if (intent === "background" && mimeOf(file.name)?.startsWith("font/")) {
       setMessage(uiCopy.panels.assetBackgroundFontRefused);
+      return;
+    }
+    if (intent === "auto" && mimeOf(file.name)?.startsWith("font/")) {
+      setFont({ file, metadata: fontMetadataFromFilename(file.name) });
+      setMessage("");
       return;
     }
     let asset: LocalAssetReference;
@@ -199,6 +250,99 @@ export function AssetsPane({
     // The selection stays where it was: an author pointing at one asset must
     // not find the list moved because they added a file.
     onChanged?.();
+  };
+
+  /** Opens the same form for a face the package already declares. */
+  const openFontForm = (asset: LocalAssetReference): void => {
+    if (!("format" in asset)) return;
+    setFont({ assetId: asset.id, metadata: metadataOfFont(asset) });
+    setMessage("");
+  };
+
+  /** Create type preset: one commit for the declaration, the preset and the
+   *  credit. The caller holds the cap check, so a refusal declares nothing. */
+  const commitFont = (
+    metadata: FontMetadata,
+    role: FontTrioRole | null,
+  ): void => {
+    const pending = font;
+    if (pending === undefined) return;
+    if (onFontCommit === undefined) {
+      // A pane mounted without a document has nowhere to write a preset; the
+      // card's own button says the same by staying disabled.
+      setMessage(uiCopy.panels.assetImportFailed);
+      return;
+    }
+    void submit(async () => {
+      setFontBusy(true);
+      try {
+        const source =
+          "file" in pending
+            ? { file: pending.file }
+            : { assetId: pending.assetId };
+        const outcome = await onFontCommit({
+          source,
+          metadata,
+          role,
+          withPreset: true,
+        });
+        setMessage(outcome.message);
+        if (!outcome.ok) return;
+        setFont(undefined);
+        if ("file" in pending) {
+          // The declaration the commit just made is the card to point at.
+          const fonts = manager.declarations.filter(
+            (asset) => asset.kind === "font",
+          );
+          setChosenId(fonts.at(-1)?.id);
+        }
+      } finally {
+        setFontBusy(false);
+      }
+    });
+  };
+
+  /** Cancel on a fresh pick still declares the file — with the values on the
+   *  form, and no preset or credit; on a declared face it only closes. */
+  const cancelFont = (metadata: FontMetadata): void => {
+    const pending = font;
+    if (pending === undefined) return;
+    if (!("file" in pending)) {
+      setFont(undefined);
+      return;
+    }
+    void submit(async () => {
+      setFontBusy(true);
+      try {
+        if (onFontCommit !== undefined) {
+          const outcome = await onFontCommit({
+            source: { file: pending.file },
+            metadata,
+            role: null,
+            withPreset: false,
+          });
+          setMessage(outcome.message);
+          if (!outcome.ok) return;
+          setFont(undefined);
+          const fonts = manager.declarations.filter(
+            (asset) => asset.kind === "font",
+          );
+          setChosenId(fonts.at(-1)?.id);
+          return;
+        }
+        // A pane mounted without a document still keeps the file it was given.
+        const asset = await manager.importFont(pending.file, metadata);
+        setFont(undefined);
+        setChosenId(asset.id);
+        setMessage(uiCopy.panels.assetDeclaredFont);
+        onChanged?.();
+      } catch (error) {
+        // The form stays open, so the values it refuses can be repaired.
+        refuse(error);
+      } finally {
+        setFontBusy(false);
+      }
+    });
   };
 
   const replaceFile = async (file: File): Promise<void> => {
@@ -394,8 +538,8 @@ export function AssetsPane({
         <ControlIconButton
           key="preset"
           label={uiCopy.panels.assetCard.createTypePreset}
-          disabled={onCreatePreset === undefined}
-          onClick={() => onCreatePreset?.(asset)}
+          data={{ "data-yunari-font-open": "" }}
+          onClick={() => openFontForm(asset)}
         >
           <Glyph icon={KIND_GLYPHS.text} size={13} />
         </ControlIconButton>,
@@ -443,6 +587,19 @@ export function AssetsPane({
           {uiCopy.file.findAssets}
         </button>
       </div>
+      {/* A picked font has no card until the form's commit or cancel, so its
+          form stands where the card will be rather than waiting for one. */}
+      {font !== undefined && "file" in font && (
+        <div className="mb-[var(--space-8)] overflow-hidden rounded-[var(--radius-md)] border border-accent bg-panel">
+          <FontMetadataForm
+            filename={font.file.name}
+            initial={font.metadata}
+            busy={fontBusy}
+            onCommit={commitFont}
+            onCancel={cancelFont}
+          />
+        </div>
+      )}
       {SECTIONS.map((section) => {
         const assets = declarations.filter(
           (asset) => GROUP_OF[asset.kind] === section.id,
@@ -465,14 +622,27 @@ export function AssetsPane({
                       {...(previewUrl === undefined ? {} : { previewUrl })}
                       onChoose={() => {
                         setChosenId(asset.id);
-                        // A held copy belongs to the asset it was produced for.
+                        // A held copy belongs to the asset it was produced for,
+                        // and an open form to the card it was opened on.
                         setHeld(undefined);
+                        setFont(undefined);
                         setMessage("");
                       }}
                       {...(asset.id === chosen?.id
                         ? { actions: actionsFor(asset) }
                         : {})}
                     />
+                    {font !== undefined &&
+                      "assetId" in font &&
+                      font.assetId === asset.id && (
+                        <FontMetadataForm
+                          filename={assetFileName(asset)}
+                          initial={font.metadata}
+                          busy={fontBusy}
+                          onCommit={commitFont}
+                          onCancel={cancelFont}
+                        />
+                      )}
                   </li>
                 );
               })}

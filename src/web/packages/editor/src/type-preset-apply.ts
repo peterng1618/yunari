@@ -62,21 +62,34 @@ export function fontWeight(cut: FontCut): number {
 }
 
 /** The preset a role is created at: a role-first name, the role's starter size,
- *  and the role tagged unless the author asked for none. */
+ *  and the role tagged unless the author asked for none. The face is the
+ *  caller's — a provider cut and a local file name it differently. */
+export function presetForRole(
+  role: FontTrioRole | null,
+  family: string,
+  weight: number,
+): TypePresetEntry {
+  const named = role ?? "body";
+  return {
+    name: `${ROLE_NAMES[named]} — ${family}`,
+    value: {
+      family,
+      size: ROLE_SIZES[named],
+      weight,
+      ...(role === null ? {} : { trioRole: role }),
+    },
+  };
+}
+
+/** The preset a provider cut is adopted at, bound to the packaged face. */
 export function rolePreset(
   role: FontTrioRole | null,
   cut: FontCut,
 ): TypePresetEntry {
-  const named = role ?? "body";
+  const entry = presetForRole(role, cut.family, fontWeight(cut));
   return {
-    name: `${ROLE_NAMES[named]} — ${cut.family}`,
-    value: {
-      family: cut.family,
-      size: ROLE_SIZES[named],
-      weight: fontWeight(cut),
-      face: { assetId: fontAssetId(cut) },
-      ...(role === null ? {} : { trioRole: role }),
-    },
+    ...entry,
+    value: { ...entry.value, face: { assetId: fontAssetId(cut) } },
   };
 }
 

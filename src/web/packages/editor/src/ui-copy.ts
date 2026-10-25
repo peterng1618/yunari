@@ -1687,6 +1687,17 @@ export const uiCopy = {
       remove: "Remove",
       createTypePreset: "Create type preset",
     },
+    /** The inline form a chosen font expands to: the facts the file cannot
+     *  answer for itself, and the one write that binds it to a preset. */
+    fontDetails: "Font details",
+    licence: "Licence",
+    sourceUrl: "Source URL",
+    role: "Role",
+    fontStyle: { normal: "Normal", italic: "Italic" },
+    /** A face is a package declaration, not a canvas object — said where the
+     *  author presses the button that writes one. */
+    fontDeclaredNote:
+      "A font is declared in the package; it is not placed on the canvas.",
     /** Shown when a chosen file is not a readable image, video or font the
         package accepts. The author's other work is untouched. */
     assetImportFailed: "That file could not be imported.",
@@ -1859,6 +1870,9 @@ export const uiCopy = {
     colourUnpaintable: (value: string) =>
       `Not a colour the browser can paint: "${value}". Hex, rgb(), hsl() or a CSS colour name.`,
     family: "Family",
+    /** The font form's own label; the panel vocabulary had no style word. */
+    style: "Style",
+    cancel: "Cancel",
     size: "Size",
     /** The three controls that choose an artboard size. They choose it
         together; the width and height boxes stay because an author who wants a
