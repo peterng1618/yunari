@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 2; Tasks 1–4 complete, Task 5 next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 2; Tasks 1–5 complete, Task 6 next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,9 +18,9 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 4 landed:** the Fonttrio catalogue is generated into the host, and the editor's trio rewrite now consumes the wire payload and keeps a `__proto__`-keyed preset.
-- **Task 3 landed earlier:** the assets wire carries font cuts and trios, and `searchSources` asks only the body the request names.
-- **Evidence:** the rewrite suite passes 4 tests; typecheck and biome exit 0.
+- **Task 5 landed:** `curated-fonts` is a host source over the moved catalogue, with shape and wire-mapping tests; a dead CDN cannot fail search.
+- **Task 4 landed earlier:** the catalogue moved into the host and the trio rewrite consumes the wire payload.
+- **Evidence:** the curated adapter suite passes 20 tests; typecheck and biome exit 0.
 
 ## Next
 
