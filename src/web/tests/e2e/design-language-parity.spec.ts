@@ -203,10 +203,10 @@ test("the shell and the settings modal are what the drawings draw", async ({
   //
   // A surface the product renders that no drawing draws is one **no row can
   // address**: the parity table holds a *value* of an element both sides carry,
-  // so an element the drawing omits has nothing to be read against. The Add
+  // so an element the drawing omits has nothing to be read against. The Assets
   // pane's asset preview was that surface (`vg-314`): its contract is a **bound**
   // (`max-height:120px` with `object-fit:contain`) rather than a size, and the
-  // Add pane is `display:none` while Document is open, so even now that
+  // pane is `display:none` while Document is open, so even now that
   // `current/shell.html` draws it, it cannot be a `PARITY` row.
   //
   // **What it reads is a NAME, on three sides, and the row is `open` because of
@@ -238,12 +238,12 @@ test("the shell and the settings modal are what the drawings draw", async ({
   }[] = [
     {
       surface: "yunari-asset-preview",
-      component: "src/web/packages/editor/src/panes/add/file-section.tsx",
+      component: "src/web/packages/editor/src/panes/assets/assets-pane.tsx",
       componentUrl: new URL(
-        "../../packages/editor/src/panes/add/file-section.tsx",
+        "../../packages/editor/src/panes/assets/assets-pane.tsx",
         import.meta.url,
       ),
-      // The Add pane is the shell drawing's, not a settings panel's.
+      // The Assets pane is the shell drawing's, not a settings panel's.
       drawing: MOCKUP_PATH,
       drawingName: DRAWING_NAMES.get(MOCKUP_PATH) ?? MOCKUP_PATH,
     },

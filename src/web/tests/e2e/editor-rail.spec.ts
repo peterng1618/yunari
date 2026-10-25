@@ -10,7 +10,12 @@ import {
   captureVisualReview,
   chooseAssetFile,
 } from "./editor-canvas.js";
-import { openEveryGroup, openPane, paneBody } from "./editor-rail.js";
+import {
+  chooseAssetCard,
+  openEveryGroup,
+  openPane,
+  paneBody,
+} from "./editor-rail.js";
 import { selectLayer } from "./rebuild-driver.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
@@ -295,39 +300,40 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
   await expect(list).toBeHidden();
 
   await openPane(page, "Add");
-  await expect(page.locator("[data-yunari-asset-import]")).toBeVisible();
+  await expect(page.locator('[data-yunari-panel="add"]')).toBeVisible();
   await openPane(page, "Composition");
   await expect(page.locator('[data-yunari-panel="layers"]')).toBeVisible();
 
   await expect.poll(() => list.evaluate((node) => node.scrollTop)).toBe(offset);
 });
 
-/** §7.7's per-pane offsets, on every pane and not only the layer list.
- *
- *  The rule is one sentence — "preserve per-pane offsets and disclosure state
- *  across routine updates" — and `choosePane` implements it once, over a map
- *  keyed by the rail's slot. The case above pins it for the Composition pane;
- *  a proof of one pane is a proof of that pane's luck, so this walks all four
- *  and asserts each one comes back where it was left.
+/** §7.7's per-pane offsets, on every pane that can hold one. The rule is one
+ *  sentence — "preserve per-pane offsets and disclosure state across routine
+ *  updates" — and `choosePane` implements it once, over a map keyed by the
+ *  rail's slot. The case above pins it for the Composition pane; a proof of one
+ *  pane is a proof of that pane's luck, so this walks the panes long enough to
+ *  scroll and asserts each one comes back where it was left.
  *
  *  **A pane that cannot scroll proves nothing**, so each slot's offset is read
  *  back off the element after it is written: a pane whose body fits fails here
  *  with the slot named rather than passing on a `0` that survived a swap.
  *  Composition is opened to its full length first for the reason the case above
- *  gives — a collapsed starter does not overflow the panel. Add, Tokens and
- *  Document overflow at rest, and two of them are the surfaces the archived
- *  bullet named: the declared-asset library renders inside the Add pane's body,
- *  so Add is where the Assets pane that bullet named survives, and Document is
- *  the other. Their overflow heights are deliberately not stated — measured
- *  twice at this viewport they differed by tens of px, because they move with
- *  font loading — and the guard above is the load-bearing claim, not the sizes.
+ *  gives — a collapsed starter does not overflow the panel. Tokens and Document
+ *  overflow at rest, and they are the surfaces the archived bullet named. Add is
+ *  not walked any more: the file section that gave it a long tail is the Assets
+ *  pane's, and what is left — shapes, text and the card library — fits the
+ *  panel. Assets is not walked either: it declares the starter's one backdrop, a
+ *  single card that fits. Their overflow heights are deliberately not stated —
+ *  measured twice at this viewport they differed by tens of px, because they
+ *  move with font loading — and the guard above is the load-bearing claim, not
+ *  the sizes.
  *
  *  The offset lives on the showing pane's **body** (§7.7, `vg-208`), and a
  *  browser discards a `display: none` box's scroll position — the swap hides
  *  the pane it leaves — so what the read-back finds after the return is the
  *  shell's own restore and not the box remembering.
  */
-test("each pane comes back to the offset it was left at", async ({
+test("each pane long enough to scroll comes back to the offset it was left at", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -339,7 +345,7 @@ test("each pane comes back to the offset it was left at", async ({
   await openEveryGroup(page);
 
   const measured: Record<string, number> = {};
-  for (const slot of ["Composition", "Add", "Tokens", "Document"]) {
+  for (const slot of ["Composition", "Tokens", "Document"]) {
     await openPane(page, slot);
     const body = paneBody(page);
     await expect(body, `${slot} is the pane showing`).toHaveCount(1);
@@ -3605,7 +3611,7 @@ test("normalizes a declared video without replacing its master", async ({
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(EDITOR);
-  await openPane(page, "Add");
+  await openPane(page, "Assets");
   await chooseAssetFile(page, "import", {
     name: "clip.mp4",
     mimeType: "video/mp4",
@@ -3614,15 +3620,16 @@ test("normalizes a declared video without replacing its master", async ({
 
   // The artboard's background media is the one surface that renders a video,
   // and it is the background layer's, so it is chosen where that layer is
-  // selected; the Add pane was showing, so the selection is a real pane swap.
+  // selected; the Assets pane was showing, so the selection is a real pane
+  // swap.
   await selectLayer(page, "Background");
   await chooseIn(page, "[data-yunari-background-asset]", "clip");
-  await openPane(page, "Add");
-  await chooseIn(page, "[data-yunari-asset-select]", "clip");
+  await openPane(page, "Assets");
+  await chooseAssetCard(page, "clip.mp4");
 
   const normalize = page.locator("[data-yunari-asset-normalize]");
   const useCopy = page.locator("[data-yunari-asset-use-normalized]");
-  const alert = page.locator('[data-yunari-panel="add"] [role="alert"]');
+  const alert = page.locator('[data-yunari-panel="assets"] [role="alert"]');
   // One action, keeping the whole frame: the layer crops at render time (0095).
   await expect(normalize).toBeVisible();
 
@@ -3646,14 +3653,14 @@ test("normalizes a declared video without replacing its master", async ({
   await expect(useCopy).toHaveCount(0);
   // A refusal is an answer, not a broken run: the control stays pressable.
   await expect(normalize).toBeEnabled();
-  // The section is the pane's foot, so a capture of the pane has to be told to
-  // bring the refusal into frame rather than cropping it below the fold.
+  // The refusal sits below the normalization row, so a capture of the pane has
+  // to be told to bring it into frame rather than cropping it below the fold.
   await alert.scrollIntoViewIfNeeded();
   await captureVisualReview(
     page,
     testInfo,
     "editor-video-normalize",
-    page.locator('[data-yunari-panel="add"]'),
+    page.locator('[data-yunari-panel="assets"]'),
   );
 
   const background = page.locator("[data-yunari-background-media] video");

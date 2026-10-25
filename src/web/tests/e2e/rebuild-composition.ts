@@ -699,41 +699,48 @@ export async function buildComposition(page: Page): Promise<void> {
 /**
  * The backdrop, through the controls an author has.
  *
- * Two of them, in the order an author would: **Import a file** at the foot of
- * the Add pane's file section (F0.4's control, the visible button that opens
- * the file chooser), then **Background media** in the artboard panel. The file
- * is a test input, not a fixture — nothing here writes a declaration, and the
- * id the package keys the asset by is minted by the editor.
+ * Two of them, in the order an author would: **Import a file** at the head of
+ * the Assets pane's body (F0.4's control, the visible button that opens the file
+ * chooser), then **Background media** in the artboard panel. The file is a test
+ * input, not a fixture — nothing here writes a declaration, and the id the
+ * package keys the asset by is minted by the editor.
  */
 export async function importBackdrop(page: Page, file: string): Promise<void> {
-  await openPane(page, "Add");
+  await openPane(page, "Assets");
   const chooser = page.waitForEvent("filechooser");
-  await page.locator("[data-yunari-asset-import]").click();
+  await page
+    .locator('[data-yunari-panel="assets"] [data-yunari-asset-import]')
+    .click();
   await (await chooser).setFiles(file);
-  // The pane lists the asset by the file the author chose while the package
-  // keys it by an id the editor minted: that is the pair F0.4's fix made
-  // readable, and the id is what the artboard panel stores. The label is the
-  // file's own name, derived here rather than hardcoded — a helper that
-  // guessed the name would pass on one photograph and fail on the next.
+  // The card lists the asset by the file the author chose. That is the only
+  // handle a card carries — the row is a choose button, not a popup select, so
+  // it exposes no `data-yunari-option` id. The label is the file's own name,
+  // derived here rather than hardcoded: a helper that guessed the name would
+  // pass on one photograph and fail on the next.
   const label = path.basename(file);
-  // The list is a plan-1 select: it renders no option until its popup is open,
-  // and the import that adds the row is asynchronous — so the wait opens the
-  // popup each turn and reads the pair, the same shape `optionsOf` reads ids in.
-  let assetId: string | undefined;
-  await expect
-    .poll(async () => {
-      const listed = await optionPairs(page, "[data-yunari-asset-select]");
-      assetId = listed.find((option) => option.label === label)?.id;
-      return assetId;
-    })
-    .not.toBeUndefined();
+  await expect(
+    page.locator('[data-yunari-panel="assets"] [data-yunari-asset-select]', {
+      hasText: label,
+    }),
+  ).toHaveCount(1);
 
   // The picture and its box are the background layer's properties, so they are
   // written where that layer is selected. Selecting it opens Composition, so
-  // this is a real swap from the Add pane, not a no-op.
+  // this is a real swap from the Assets pane, not a no-op.
   await selectLayer(page, "Background");
+  // The id the editor minted is read from the media control's own opened list,
+  // the control that commits it — the same claim F0.4's pair made, taken from
+  // the one surface that still prints the id. A blank document declares no
+  // picture before this import, so the imported file is the list's only
+  // non-blank entry.
+  const media = await optionPairs(page, "[data-yunari-background-asset]");
+  const declared = media.filter((option) => option.id !== "");
+  expect(
+    declared,
+    `the background media list should offer the imported ${label}`,
+  ).toHaveLength(1);
   // Both are plan 1's selects — a button opening a listbox, not a `select` — so
   // they are driven the way an author drives them.
-  await chooseIn(page, "[data-yunari-background-asset]", assetId ?? "");
+  await chooseIn(page, "[data-yunari-background-asset]", declared[0]?.id ?? "");
   await chooseIn(page, "[data-yunari-background-bounds]", "theme");
 }

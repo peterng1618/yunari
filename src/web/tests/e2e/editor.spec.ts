@@ -11,7 +11,6 @@ import { installFixedClock } from "./clock.js";
 import {
   choiceOf,
   chooseIn,
-  optionPairs,
   optionsOf,
   sectionExpanded,
   typeIntoControl,
@@ -44,7 +43,7 @@ import {
   PLATE_PAINT,
   storedColour,
 } from "./editor-fixture.js";
-import { openPane } from "./editor-rail.js";
+import { assetCard, chooseAssetCard, openPane } from "./editor-rail.js";
 import {
   openPosition,
   placeText,
@@ -3104,13 +3103,14 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     await page.goto(EDITOR);
     // **The pane is opened first, because an author opens it first.** The import
-    // and replace below go through the buttons the pane renders, and a control
-    // behind a closed pane is not one a person can press. Driving the hidden
-    // input directly is the route this finding is about: it stays green while
-    // the feature is unreachable, so it proves nothing.
-    await openPane(page, "Add");
-    await expect(page.locator("[data-yunari-asset-import]")).toBeVisible();
-    await expect(page.locator("[data-yunari-asset-replace]")).toBeVisible();
+    // and replace below go through the controls the Assets pane renders, and a
+    // control behind a closed pane is not one a person can press. Driving the
+    // hidden input directly is the route this finding is about: it stays green
+    // while the feature is unreachable, so it proves nothing.
+    await openPane(page, "Assets");
+    const assets = page.locator('[data-yunari-panel="assets"]');
+    await expect(assets.locator("[data-yunari-asset-import]")).toBeVisible();
+    await expect(assets.locator("[data-yunari-asset-replace]")).toBeVisible();
     await chooseAssetFile(page, "import", {
       name: "logo.png",
       mimeType: "image/png",
@@ -3119,25 +3119,22 @@ test.describe("Fabric editor route", () => {
         "base64",
       ),
     });
-    // The list is a plan-1 select: it renders no option until its popup is
-    // open, and the import that adds the row is asynchronous, so a read of what
-    // it prints opens the popup each turn.
-    const listedAssets = (): ReturnType<typeof optionPairs> =>
-      optionPairs(page, "[data-yunari-asset-select]");
+    // The list is the pane's cards, one per declaration: a card prints the file
+    // the author chose, so the import that adds one is counted by that text.
+    const listedAssets = (): Locator =>
+      assets.locator("[data-yunari-asset-select]");
     const importedCount = async (fragment: string): Promise<number> =>
-      (await listedAssets()).filter((option) => option.label.includes(fragment))
-        .length;
+      listedAssets().filter({ hasText: fragment }).count();
     // The starter declares a packaged backdrop of its own, so the claim is that
-    // this import produced exactly one option named for it — not a bare total,
-    // which a starter change would silently move. An option carries the file the
+    // this import produced exactly one card named for it — not a bare total,
+    // which a starter change would silently move. A card carries the file the
     // author chose, so that is what it is matched on.
     await expect.poll(() => importedCount("logo")).toBe(1);
-    // **The asset to replace is named, not assumed.** The select keeps
-    // whatever was selected, and a fresh document's first declaration is now
-    // the starter's own backdrop — so a bare "replace" here would rewrite that
-    // one. Saying which asset is meant keeps the test independent of
-    // declaration order.
-    await chooseIn(page, "[data-yunari-asset-select]", "logo");
+    // **The asset to replace is named, not assumed.** The pane keeps whatever
+    // was chosen, and a fresh document's first declaration is now the starter's
+    // own backdrop — so a bare "replace" here would rewrite that one. Saying
+    // which asset is meant keeps the test independent of declaration order.
+    await chooseAssetCard(page, "logo.png");
     // **A different extension is refused, and this is now pinned as one.**
     // `replace` keeps the declared path and its bytes in step, so swapping a
     // `.png` for `.svg` would leave the package claiming `.png` over SVG bytes.
@@ -3163,7 +3160,7 @@ test.describe("Fabric editor route", () => {
     // bytes, everything bound to it re-pointed. **Reselected first**, because a
     // refused replace clears the selection and the geometry below reads the
     // active object.
-    await chooseIn(page, "[data-yunari-asset-select]", "logo");
+    await chooseAssetCard(page, "logo.png");
     // **A PNG that actually decodes, and that is the whole fix.** The previous
     // fixture was 50 bytes of a truncated PNG — `libpng` rejects it outright —
     // so the *reopened* document had no image object and the tail of this test
@@ -3196,14 +3193,14 @@ test.describe("Fabric editor route", () => {
     // package does not grow by one file per press. The count is asserted so a
     // regression that went back to declaring would be caught here.
     await expect.poll(() => importedCount("logo")).toBe(1);
-    // **What the select holds afterwards is asserted, because the panel now
-    // guarantees it.** Re-rendering rebuilds the options and restores the
-    // previous selection, so replacing must not move the author off the asset
-    // they were pointing at. The committed id is read off the hook `Select.Value`
-    // prints it with — the native element's `.value` in the only place it is.
-    await expect(
-      page.locator("[data-yunari-asset-select] [data-yunari-value]"),
-    ).toHaveAttribute("data-yunari-value", "logo");
+    // **What the pane holds afterwards is asserted, because the pane now
+    // guarantees it.** The chosen card keeps its `aria-pressed` across the
+    // re-render a replacement causes, so replacing must not move the author off
+    // the asset they were pointing at.
+    await expect(assetCard(page, "logo.png")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     // What the round trip owes is the one declaration, re-pointed at the new
     // file, and the object still bound to it.
     await expect(assetReferences(page)).resolves.toEqual([
@@ -3292,10 +3289,10 @@ test.describe("Fabric editor route", () => {
       controls: { tl: true, tr: true, bl: true, br: true },
       hasSelectionGeometry: true,
     });
-    await openPane(page, "Add");
-    // The declared-asset library is the Add pane's foot now, not a pane of its
-    // own, so what is scrolled to is the section's own import control.
-    await page.locator("[data-yunari-asset-import]").scrollIntoViewIfNeeded();
+    await openPane(page, "Assets");
+    // The declared-asset library is the Assets pane's body, so what is scrolled
+    // to is the card the import declared.
+    await assetCard(page, "logo.png").scrollIntoViewIfNeeded();
     await captureVisualReview(page, testInfo, "editor-assets");
     const saved = await savePackage(page);
     expect(saved.parsed.ok).toBe(true);
@@ -3325,7 +3322,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     await page.goto(EDITOR);
-    await openPane(page, "Add");
+    await openPane(page, "Assets");
     await chooseAssetFile(page, "import", {
       name: "hero.png",
       mimeType: "image/png",
