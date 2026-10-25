@@ -155,9 +155,12 @@ test.describe("the settings panels name every control", () => {
     // The gradient branch renders the track, its marks and its two wells, which
     // a solid token does not, so the audit opens the branch an author opens.
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
-    // The preset chooser is a plan-1 select too, so it is opened and chosen the
-    // way the palette's is rather than by `selectOption`.
-    await chooseIn(page, "[data-yunari-type-preset]", "20-500");
+    // The preset library is a list of pressable rows now: its chooser died
+    // with the field set it browsed, so the setup presses a row the way an
+    // author selects a token. `20-500` is the starter theme's "Rate".
+    const presetRow = page.locator('[data-yunari-type-preset-row="20-500"]');
+    await expect(presetRow).toBeVisible();
+    await presetRow.click();
   });
 
   test("no control is unnamed", async ({ page }) => {
@@ -227,14 +230,13 @@ test.describe("the settings panels name every control", () => {
     expect(snapshot.trim()).toMatch(/^- status "Release version"/);
   });
 
-  test("each panel's chooser says what it lists", async ({ page }) => {
-    // Both choosers are the Tokens pane's, open from the setup.
+  test("the palette's chooser says what it lists", async ({ page }) => {
+    // The Tokens pane's one remaining chooser, open from the setup. The type
+    // preset chooser is gone with the field set it browsed; the preset library
+    // is a list of pressable rows now.
     expect(
       await accessibleName(page.locator("[data-yunari-palette-token]")),
     ).toBe("Colour token");
-    expect(
-      await accessibleName(page.locator("[data-yunari-type-preset]")),
-    ).toBe("Type preset");
   });
 
   test("the three panels are the ones the audit claims to cover", async ({
