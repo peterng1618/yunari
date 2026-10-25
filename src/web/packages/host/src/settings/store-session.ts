@@ -115,13 +115,20 @@ export function createStoreSessionStore(
    */
   const readAll = async (): Promise<StoreSession | undefined> => {
     const stored = await secrets.read(SECRET);
-    if (stored !== undefined) return decode(stored);
+    if (stored !== undefined) {
+      // The encrypted copy is the source of truth. A plaintext an earlier
+      // removal failed to delete is retired here; a failure now is retried on
+      // the next read rather than failing this one.
+      await rm(legacyFile, { force: true }).catch(() => undefined);
+      return decode(stored);
+    }
 
     const legacy = await readLegacy(legacyFile);
     if (legacy === undefined) return undefined;
 
     await secrets.write(SECRET, encode(legacy));
-    await rm(legacyFile, { force: true });
+    // The same retry rule as above; the encrypted write already succeeded.
+    await rm(legacyFile, { force: true }).catch(() => undefined);
     return legacy;
   };
 

@@ -98,13 +98,11 @@ function encode(all: Record<string, StoredCredential>): Buffer {
 }
 
 /**
- * The legacy file's validated contents, or nothing when it is absent or is not
- * JSON. Unreadable content is left alone: only what this reader understood is
- * ever deleted after its encrypted copy lands.
+ * The legacy file's parsed document, or undefined when it is absent or is not
+ * JSON. Returned whole: the caller decides what validates and whether the
+ * document may be migrated.
  */
-async function readLegacy(
-  file: string,
-): Promise<Record<string, StoredCredential> | undefined> {
+async function readLegacy(file: string): Promise<unknown> {
   let text: string;
   try {
     text = await readFile(file, "utf8");
@@ -113,10 +111,31 @@ async function readLegacy(
   }
 
   try {
-    return normalizeCredentials(JSON.parse(text));
+    return JSON.parse(text);
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The document when every part of it would survive normalization, else nothing.
+ *
+ * Migrating a partly valid document would delete the rejected entries from the
+ * only place their values exist, so such a file is left for its owner to repair
+ * and the next read retries. A valid JSON non-object validates nothing whole.
+ */
+function wholeDocument(
+  input: unknown,
+): Record<string, StoredCredential> | undefined {
+  if (!isObject(input)) return undefined;
+
+  for (const [id, raw] of Object.entries(input)) {
+    if (!CREDENTIAL_ID.test(id) || asCredential(raw) === undefined) {
+      return undefined;
+    }
+  }
+
+  return normalizeCredentials(input);
 }
 
 export function createCredentialStore(
@@ -135,14 +154,30 @@ export function createCredentialStore(
    */
   const readAll = async (): Promise<Record<string, StoredCredential>> => {
     const stored = await secrets.read(SECRET);
-    if (stored !== undefined) return decode(stored);
+    if (stored !== undefined) {
+      // The encrypted copy is the source of truth. A plaintext an earlier
+      // removal failed to delete is retired here; a failure now is retried on
+      // the next read rather than failing this one.
+      await rm(legacyFile, { force: true }).catch(() => undefined);
+      return decode(stored);
+    }
 
     const legacy = await readLegacy(legacyFile);
     if (legacy === undefined) return {};
 
-    await secrets.write(SECRET, encode(legacy));
-    await rm(legacyFile, { force: true });
-    return legacy;
+    const answer = normalizeCredentials(legacy);
+    const whole = wholeDocument(legacy);
+    if (whole === undefined) {
+      // Not migrated and not deleted: the owner can repair the rejected entry
+      // and the next read retries. The entries that do validate are still
+      // answered, as the plaintext reader always answered them.
+      return answer;
+    }
+
+    await secrets.write(SECRET, encode(whole));
+    // The same retry rule as above; the encrypted write already succeeded.
+    await rm(legacyFile, { force: true }).catch(() => undefined);
+    return answer;
   };
 
   const save = async (all: Record<string, StoredCredential>): Promise<void> => {

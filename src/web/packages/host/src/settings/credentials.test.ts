@@ -117,12 +117,45 @@ describe("credentials", () => {
     expect(read["__proto__"]).toEqual(stored);
     expect(Object.getPrototypeOf(read)).toBe(Object.prototype);
     expect(Object.keys(read).sort()).toEqual(["__proto__", "good"]);
+
+    // A document with a rejected entry is not migrated and not deleted: the
+    // rejected value exists nowhere else, so the owner has to repair it.
+    expect(await readFile(legacyFile(dir), "utf8")).toContain("sk-live-9f2c");
+    await expect(readFile(secretFile(dir))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
-  it("treats a non-object file as no credentials", async () => {
+  it("migrates a broken document once the rejected entry is repaired", async () => {
+    await seed(
+      JSON.stringify({
+        good: stored,
+        empty: { value: "", savedAt: savedAt.toISOString() },
+      }),
+    );
+
+    expect(await store.read()).toEqual({ good: stored });
+    await expect(readFile(secretFile(dir))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+
+    await seed(JSON.stringify({ good: stored }));
+
+    expect(await store.read()).toEqual({ good: stored });
+    await expect(readFile(legacyFile(dir))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(await store.read()).toEqual({ good: stored });
+  });
+
+  it("treats a non-object file as no credentials and does not migrate it", async () => {
     await seed("[]");
 
     expect(await store.read()).toEqual({});
+    expect(await readFile(legacyFile(dir), "utf8")).toBe("[]");
+    await expect(readFile(secretFile(dir))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("refuses an id that is not a credential id, on write", async () => {
@@ -178,6 +211,26 @@ describe("credentials", () => {
       await expect(readFile(secretFile(dir))).rejects.toMatchObject({
         code: "ENOENT",
       });
+      await expect(
+        readFile(path.join(dir, "secret.key"), "utf8"),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    });
+
+    it("retires a plaintext left beside the encrypted copy", async () => {
+      await seed(JSON.stringify({ fontawesome: stored }));
+      await store.read();
+
+      // A removal that failed after the migration left the plaintext behind;
+      // the encrypted copy is the source of truth, so the next read retires it
+      // and still answers the same values.
+      await seed(JSON.stringify({ fontawesome: stored }));
+      expect(await store.read()).toEqual({ fontawesome: stored });
+      await expect(readFile(legacyFile(dir))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+
+      // A read whose only job was the retry, once the file is gone.
+      expect(await store.read()).toEqual({ fontawesome: stored });
     });
 
     it("throws on a tampered ciphertext rather than answering no credentials", async () => {

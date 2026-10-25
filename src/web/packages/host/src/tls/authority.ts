@@ -145,12 +145,16 @@ async function readAuthorityKey(
   directory: string,
   secrets: SecretStore,
 ): Promise<string | undefined> {
+  const legacyFile = path.join(directory, LEGACY_CA_KEY_FILE);
   const stored = await secrets.read(CA_KEY_SECRET);
   if (stored !== undefined) {
+    // The encrypted copy is the source of truth. A plaintext an earlier
+    // removal failed to delete is retired here; a failure now is retried on
+    // the next read rather than failing this one.
+    await rm(legacyFile, { force: true }).catch(() => undefined);
     return Buffer.from(stored.toString("utf8"), "base64").toString("utf8");
   }
 
-  const legacyFile = path.join(directory, LEGACY_CA_KEY_FILE);
   let legacy: string;
   try {
     legacy = await readFile(legacyFile, "utf8");
@@ -164,8 +168,9 @@ async function readAuthorityKey(
     Buffer.from(Buffer.from(legacy, "utf8").toString("base64"), "utf8"),
   );
   // Only after the encrypted copy succeeded; a failed write leaves the
-  // plaintext for a later run to migrate.
-  await rm(legacyFile, { force: true });
+  // plaintext for a later run to migrate. A failed removal is retried by the
+  // next read rather than failing this one.
+  await rm(legacyFile, { force: true }).catch(() => undefined);
   return legacy;
 }
 

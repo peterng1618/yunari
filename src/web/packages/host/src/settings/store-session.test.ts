@@ -180,6 +180,49 @@ describe("store session", () => {
       await expect(readFile(secretFile(dir))).rejects.toMatchObject({
         code: "ENOENT",
       });
+      await expect(
+        readFile(path.join(dir, "secret.key"), "utf8"),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    });
+
+    it("retires a plaintext left beside the encrypted copy", async () => {
+      await store.write(session("session-token"));
+
+      // A removal that failed after the migration left the plaintext behind;
+      // the encrypted copy is the source of truth, so the next read retires it
+      // and still answers the same session.
+      await writeFile(
+        legacyFile(dir),
+        JSON.stringify(session("session-token")),
+        "utf8",
+      );
+      expect(await store.read()).toEqual(session("session-token"));
+      await expect(readFile(legacyFile(dir))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      expect(await store.read()).toEqual(session("session-token"));
+    });
+
+    it("writes the encrypted session before removing a legacy plaintext", async () => {
+      await writeFile(
+        legacyFile(dir),
+        JSON.stringify(session("legacy-token")),
+        "utf8",
+      );
+      const refusing = createStoreSessionStore(
+        dir,
+        createSecretStore(dir, createFakeProtector(false)),
+      );
+
+      await expect(refusing.write(session("new-token"))).rejects.toThrow(
+        /protector is unavailable/,
+      );
+
+      // Reversing the order would delete the only copy when the write refuses.
+      expect(await readFile(legacyFile(dir), "utf8")).toContain("legacy-token");
+      await expect(readFile(secretFile(dir))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
     });
 
     it("throws on a tampered ciphertext rather than answering no session", async () => {

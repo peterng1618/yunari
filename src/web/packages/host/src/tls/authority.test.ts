@@ -210,7 +210,9 @@ describe("the host's own certificate authority", () => {
     expect(origin.certificatePath).toBe(path.join(directory, "ca.crt"));
 
     // The leaf's key is never written: a leaf is re-issued at every start, so
-    // there is nothing for a file to save.
+    // there is nothing for a file to save — but it is still handed to the
+    // server, which is the public contract.
+    expect(origin.key).toContain("BEGIN PRIVATE KEY");
     expect(origin.leaf).not.toContain("PRIVATE KEY");
   });
 
@@ -256,6 +258,25 @@ describe("the host's own certificate authority", () => {
       ).rejects.toMatchObject({ code: "ENOENT" });
       const encrypted = await readFile(path.join(directory, "ca-key.bin"));
       expect(encrypted.includes(Buffer.from("BEGIN PRIVATE KEY"))).toBe(false);
+
+      // A restart with a fresh secret store reads the migrated root back.
+      const restarted = createSecretStore(directory, createFakeProtector());
+      expect((await open(restarted)).certificate).toBe(legacy.certificate);
+    });
+
+    it("retires a plaintext ca.key left beside the encrypted copy", async () => {
+      const first = await open();
+      const legacy = legacyAuthority();
+      await writeFile(path.join(directory, "ca.key"), legacy.key, "utf8");
+
+      // A removal that failed after the migration left the plaintext behind;
+      // the encrypted copy is the source of truth, so the next read retires
+      // it, keeps the same root, and does not use the leftover key.
+      const second = await open();
+      expect(second.certificate).toBe(first.certificate);
+      await expect(
+        readFile(path.join(directory, "ca.key"), "utf8"),
+      ).rejects.toMatchObject({ code: "ENOENT" });
     });
 
     it("keeps a legacy ca.key when the protector is unavailable", async () => {
@@ -276,6 +297,9 @@ describe("the host's own certificate authority", () => {
       );
       await expect(
         readFile(path.join(directory, "ca-key.bin")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(
+        readFile(path.join(directory, "secret.key"), "utf8"),
       ).rejects.toMatchObject({ code: "ENOENT" });
     });
 
