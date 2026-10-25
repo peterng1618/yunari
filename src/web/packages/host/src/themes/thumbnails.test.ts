@@ -152,6 +152,16 @@ describe("thumbnails", () => {
     expect(await createThumbnailStore(dir).read("living-room")).toBeUndefined();
   });
 
+  it("will not serve a stored picture over the write bound", async () => {
+    await mkdir(path.join(dir, "living-room"), { recursive: true });
+    // A valid PNG at the head, so only the size bound can refuse it.
+    const huge = new Uint8Array(3 * 1024 * 1024);
+    huge.set(PNG);
+    await writeFile(path.join(dir, "living-room", "thumbnail.png"), huge);
+
+    expect(await createThumbnailStore(dir).read("living-room")).toBeUndefined();
+  });
+
   it("refuses an id that could name something outside the library", async () => {
     const store = createThumbnailStore(dir);
 
