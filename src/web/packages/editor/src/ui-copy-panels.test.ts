@@ -125,7 +125,10 @@ it("leaves the three panels with no copy of their own", async () => {
       applyTrio: async () => undefined,
     },
   ).render({
-    body: { name: "Body", value: { family: "Inter", size: 16 } },
+    body: {
+      name: "Body",
+      value: { family: "Inter", size: 16, trioRole: "heading" },
+    },
     caption: { name: "Caption", value: { family: "Inter", size: 12 } },
   });
 
@@ -144,6 +147,11 @@ it("leaves the three panels with no copy of their own", async () => {
   // what the pane offers (`solid`, `gradient`), read off the opened list.
   expect(paintKinds).toHaveLength(2);
   const owned = new Set(copy());
+  // The badge route below reads nothing when no fixture preset carries a role, so
+  // the count is said out loud: the fixture declares one `trioRole`, and a net
+  // that measured zero badges would pass without covering the word at all.
+  const roleBadges = root.querySelectorAll("[data-yunari-type-preset-role]");
+  expect(roleBadges).toHaveLength(1);
   const spoken = [
     ...Array.from(root.querySelectorAll("label"), (label) => label.textContent),
     // The gradient editor's stop marks are `role="slider"` divs, not labels or
