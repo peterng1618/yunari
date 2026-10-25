@@ -167,10 +167,11 @@ describe("createPinnedFetch", () => {
           : [{ address: "127.0.0.2", family: 4 }];
       };
 
+      const fetcher = createPinnedFetch({ lookup });
       const a = fetchSource(
         sourceOf({ id: "a", url: `http://split.example:${portA}/data` }),
         undefined,
-        createPinnedFetch({ lookup }),
+        fetcher,
         () => 0,
         lookup,
       );
@@ -178,7 +179,7 @@ describe("createPinnedFetch", () => {
       const b = fetchSource(
         sourceOf({ id: "b", url: `http://split.example:${portB}/data` }),
         undefined,
-        createPinnedFetch({ lookup }),
+        fetcher,
         () => 0,
         lookup,
       );
@@ -195,17 +196,25 @@ describe("createPinnedFetch", () => {
   });
 
   it("pins each redirect hop to the address its own policy checked", async () => {
-    const target = await listenAt("127.0.0.1", jsonAt({ hop: 2 }));
-    const targetPort = new URL(target.origin).port;
-    const start = await listenAt("127.0.0.1", (_request, response) => {
-      response.writeHead(302, {
-        location: `http://second.example:${targetPort}/data`,
-      });
-      response.end();
+    // The two hops answer from different loopback hosts: a hop that reused the
+    // first pin would dial the second server's port on 127.0.0.1, where nothing
+    // listens.
+    const second = await listen(jsonAt({ served: "second" }), "127.0.0.2");
+    const secondPort = new URL(second.origin).port;
+    const first = await listen((request, response) => {
+      if (request.url === "/start") {
+        response.writeHead(302, {
+          location: `http://second.example:${secondPort}/data`,
+        });
+        response.end();
+        return;
+      }
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ served: "first" }));
     });
 
     try {
-      const startPort = new URL(start.origin).port;
+      const firstPort = new URL(first.origin).port;
       const hosts: string[] = [];
       const lookup: HostLookup = async (host) => {
         hosts.push(host);
@@ -214,23 +223,27 @@ describe("createPinnedFetch", () => {
         }
         const seen = hosts.filter((entry) => entry === host).length;
         return seen === 1
-          ? [{ address: "127.0.0.1", family: 4 }]
-          : [{ address: "127.0.0.2", family: 4 }];
+          ? [{ address: "127.0.0.2", family: 4 }]
+          : [{ address: "127.0.0.3", family: 4 }];
       };
 
       const outcome = await fetchSource(
-        sourceOf({ url: `http://first.example:${startPort}/start` }),
+        sourceOf({ url: `http://first.example:${firstPort}/start` }),
         undefined,
         createPinnedFetch({ lookup }),
         () => 0,
         lookup,
       );
 
-      expect(outcome).toEqual({ ok: true, body: { hop: 2 }, elapsedMs: 0 });
+      expect(outcome).toEqual({
+        ok: true,
+        body: { served: "second" },
+        elapsedMs: 0,
+      });
       expect(hosts.filter((host) => host === "second.example")).toHaveLength(1);
     } finally {
-      await start.close();
-      await target.close();
+      await first.close();
+      await second.close();
     }
   });
 
