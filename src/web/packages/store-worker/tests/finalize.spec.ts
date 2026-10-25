@@ -100,6 +100,9 @@ describe("finalize", () => {
     expect(upload?.key).toBe(key);
     expect(upload?.finalized_at).not.toBeNull();
     expect(upload?.bytes).toBe(PACKAGE_BYTES.byteLength);
+    // The release records the version's own size, read from the row that names
+    // the key, never a figure supplied by the request.
+    expect(upload?.bytes).toBe(row?.bytes);
     expect(await env.BUCKET.head(key)).not.toBeNull();
 
     // The version row now exists, but a missing object is still a 404.

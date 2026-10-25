@@ -731,7 +731,7 @@ async function finalizeVersion(
     // heals here; a finished replay is a no-op on the predicate. The release
     // follows the stored version's `package_key`, so a parallel finalize's row
     // is released rather than the one this request picked.
-    await releaseReservedUpload(env.DB, itemId, version, inspected.bytes, now);
+    await releaseReservedUpload(env.DB, itemId, version, now);
 
     // A retry whose first attempt was interrupted between the two writes has
     // not moved the item since the version row landed, so it re-applies the

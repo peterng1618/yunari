@@ -30,7 +30,7 @@ export async function finalizeStoredVersion(
         row.sha256,
         row.created_at,
       ),
-    releaseStatement(db, row.item_id, row.version, row.bytes, now),
+    releaseStatement(db, row.item_id, row.version, now),
   ]);
   return (results[0]?.meta.changes ?? 0) > 0;
 }
@@ -39,36 +39,40 @@ export async function finalizeStoredVersion(
  * Releases the reservation whose pending key a stored version names.
  *
  * Selecting by `package_key` rather than by a row id makes a lost `OR IGNORE`
- * race release the winner's row, not the one this request picked. Any other
- * reservation for the same version stays unfinalized on purpose: cleanup
- * deletes its object after the hour and `pendingBytes` counts it until then,
- * so marking it finalized would make the object permanent and uncounted.
+ * race release the winner's row, not the one this request picked. The size is
+ * read from that same version row, never from the caller: a losing finalize
+ * with different bytes runs its batch before the 409 comparison, so a
+ * caller-supplied size could write one request's figure onto another's row.
+ * Any other reservation for the same version stays unfinalized on purpose:
+ * cleanup deletes its object after the hour and `pendingBytes` counts it until
+ * then, so marking it finalized would make the object permanent and uncounted.
  */
 export async function releaseReservedUpload(
   db: D1Database,
   itemId: string,
   version: string,
-  bytes: number,
   now: string,
 ): Promise<void> {
-  await releaseStatement(db, itemId, version, bytes, now).run();
+  await releaseStatement(db, itemId, version, now).run();
 }
 
 function releaseStatement(
   db: D1Database,
   itemId: string,
   version: string,
-  bytes: number,
   now: string,
 ): D1PreparedStatement {
   return db
     .prepare(
-      `UPDATE upload SET finalized_at = ?, bytes = ?
+      `UPDATE upload
+       SET finalized_at = ?,
+           bytes = (SELECT v.bytes FROM item_version v
+                    WHERE v.item_id = ? AND v.version = ?
+                      AND v.package_key = upload.key)
        WHERE finalized_at IS NULL
-         AND id IN (
-           SELECT u.id FROM upload u
-           JOIN item_version v ON v.package_key = u.key
-           WHERE v.item_id = ? AND v.version = ?)`,
+         AND key IN (
+           SELECT package_key FROM item_version
+           WHERE item_id = ? AND version = ?)`,
     )
-    .bind(now, bytes, itemId, version);
+    .bind(now, itemId, version, itemId, version);
 }
