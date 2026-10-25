@@ -121,8 +121,9 @@ are pinned by Task 7.1's tests.
 
 ## Rung 7 — build
 
-`settings/secret-store.ts` writes `secret.key` (the wrapped 32-byte data key)
-and `secrets/<name>.json` (base64 IV, tag and ciphertext). The protector spawns
+`settings/secret-store.ts` writes `secret.key` (the wrapped 32-byte data key,
+base64 in `{ "version": 1, "wrapped": "…" }`) and one `<name>.bin` per
+secret: a 12-byte IV, the 16-byte GCM tag, then the ciphertext. The protector spawns
 `powershell -NoProfile -NonInteractive -Command` on Windows and `secret-tool`
 on Linux; no shell interpolation of secret bytes. The host bundle gains the
 module; no native addon and no generated asset. Legacy plaintext files are read
@@ -132,9 +133,10 @@ once, re-encrypted and removed; the CA key is moved into the same store.
 
 1. One random 32-byte data key per app folder, wrapped by DPAPI `CurrentUser`
    on Windows or `secret-tool` on Linux, stored in `secret.key`.
-2. Credentials, the store session, literal source secrets and the CA private
-   key are AES-256-GCM encrypted with that key; the file format carries a
-   version, a random 12-byte IV and a 16-byte tag.
+2. Credentials, the store session and the CA private key are AES-256-GCM
+   encrypted with that key; each file carries a random 12-byte IV, a 16-byte
+   tag and the ciphertext. `sources.json` is not encrypted: it holds a
+   `credentialId` reference, never a literal secret.
 3. No plaintext fallback. If the protector is unavailable, saving refuses and
    says why; reading a legacy plaintext file migrates it once and removes the
    plaintext.
