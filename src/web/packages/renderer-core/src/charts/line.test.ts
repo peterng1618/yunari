@@ -247,7 +247,7 @@ describe("buildLineOption", () => {
     ]);
   });
 
-  it("renders the delayed live segment in a right-side overscan gutter", () => {
+  it("ends the axis at the delayed render clock and keeps later samples", () => {
     const option = buildLineOption(
       defaultLineSettings,
       [{ sensorId: "a", samples: [at(59, 10), at(60, 20)] }],
@@ -257,8 +257,9 @@ describe("buildLineOption", () => {
       1_000,
     );
 
-    expect(option.xAxis.max).toBe(NOW);
-    expect(option.renderOverscanRightMs).toBe(1_000);
+    expect(option.xAxis.max).toBe(NOW - 1_000);
+    expect(option.xAxis.min).toBe(NOW - 1_000 - 60_000);
+    expect("renderOverscanRightMs" in option).toBe(false);
     expect(option.series[0]!.data).toEqual([
       [T0 + 59_000, 10],
       [NOW, 20],

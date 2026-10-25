@@ -110,8 +110,6 @@ export function lineHistorySeconds(
 
 /** Local emitted shape keeps raw engine options out of the theme model (§87). */
 export interface LineOption extends EngineAnimation {
-  /** Runtime-only future interval rendered outside Fabric's authored crop. */
-  readonly renderOverscanRightMs?: number;
   readonly grid: CartesianGrid;
   readonly xAxis: {
     readonly type: "time";
@@ -204,10 +202,8 @@ export function buildLineOption(
   chartPlaybackDelayMs?: number,
 ): LineOption {
   const windowMs = settings.windowSeconds * 1000;
-  const viewportNowMs = nowMs - linePlaybackDelayMs(chartPlaybackDelayMs);
-  const renderOverscanRightMs = nowMs - viewportNowMs;
-  const windowStart = viewportNowMs - windowMs;
-  const windowEnd = nowMs;
+  const renderNowMs = nowMs - linePlaybackDelayMs(chartPlaybackDelayMs);
+  const windowStart = renderNowMs - windowMs;
   const sampling =
     settings.sampling && settings.sampling !== "none"
       ? settings.sampling
@@ -218,7 +214,6 @@ export function buildLineOption(
   const threshold = thresholdBands(strokeFor(settings, 0), palette, settings);
   return {
     ...toEngineAnimation(settings.animation, animate),
-    ...(renderOverscanRightMs === 0 ? {} : { renderOverscanRightMs }),
     ...(threshold === undefined
       ? {}
       : {
@@ -249,7 +244,7 @@ export function buildLineOption(
       axisLabel: { show: false },
       // Preview history reveals left-to-right; live data fills from render start.
       min: windowStart,
-      max: windowEnd,
+      max: renderNowMs,
     },
     yAxis: {
       type: "value",

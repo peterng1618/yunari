@@ -14,12 +14,9 @@ import { HOST_PORT } from "./host-theme.js";
  * frames in a row. This records that series and writes it to a file; the reading
  * is the evidence, and what it shows decides whether there is anything to fix.
  *
- * **The overscan gutter is why the pixels are read and not just the times.** The
- * visible window is not `xAxis.min..max`: `YunariChart._render` blits only the
- * left `_visibleBackingWidth()` px of an ECharts canvas that is `overscan` px
- * wider, so the axis's right end is off the visible surface by design. A reading
- * of `xAxis.max` alone would report the window's right edge as the newest
- * sample's own x, which is the one thing it is not. `convertToPixel` is the
+ * **The axis edge is the visible edge.** `YunariChart._render` blits the whole
+ * ECharts canvas, whose width is the authored box at raster scale; the axis's
+ * right end and the visible surface end together. `convertToPixel` is the
  * engine's own mapping, so the pixel column of a timestamp is measured rather
  * than recomputed here.
  *
@@ -118,7 +115,6 @@ test.describe("the live line chart's edge", () => {
         };
         _chart?: { convertToPixel(finder: unknown, value: number): number };
         _element?: { width: number };
-        _visibleBackingWidth?: () => number;
       }): void => {
         const option = object.option;
         const axis = option?.["xAxis"] as
@@ -165,17 +161,13 @@ test.describe("the live line chart's edge", () => {
           batches: globals.yunari?.live?.batchCount ?? null,
           axisMin: axis.min,
           axisMax: axis.max,
-          overscan: (option?.["renderOverscanRightMs"] as number) ?? 0,
           grid: option?.["grid"] as unknown,
           readings,
           width: object.width,
           height: object.height,
           renderScale: object.renderScale,
           canvasWidth: object._element?.width ?? null,
-          visibleWidth:
-            typeof object._visibleBackingWidth === "function"
-              ? object._visibleBackingWidth()
-              : null,
+          visibleWidth: object._element?.width ?? null,
           pxMin: toPixel(axis.min),
           pxMax: toPixel(axis.max),
           pxFirst: toPixel(readings[0]?.first ?? undefined),
