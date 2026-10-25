@@ -173,7 +173,7 @@ git commit -m "fix(host): refuse foreign Host on loopback API routes"
 
 - [ ] **Step 1: Write the failing tests**
 
-Assert `themeAssetContentType({kind:"image", path:"assets/x.html"})` is `undefined`; `image/x.png` is `image/png`; `svg/x.svg` is `image/svg+xml`; `video/x.mp4` is `video/mp4`; `font/x.woff2` is `font/woff2`. Assert the envelope validator reports an `invalid-asset-path` issue for a kind/extension mismatch.
+Assert `themeAssetContentType({kind:"image", path:"assets/x.html"})` is `undefined`; `image/x.png` is `image/png`; `svg/x.svg` is `image/svg+xml`; `video/x.mp4` is `video/mp4`; `font/x.woff2` is `font/woff2`. Assert `image` excludes `.svg` and `.gif` as well as `.html`. Assert the envelope validator reports an `invalid-asset-path` issue for a kind/extension mismatch.
 
 - [ ] **Step 2: Verify they fail**
 

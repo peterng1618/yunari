@@ -26,9 +26,6 @@ const TYPES = {
   mp4: { mime: "video/mp4", kind: "video" },
   webm: { mime: "video/webm", kind: "video" },
   woff2: { mime: "font/woff2", kind: "font" },
-  woff: { mime: "font/woff", kind: "font" },
-  ttf: { mime: "font/ttf", kind: "font" },
-  otf: { mime: "font/otf", kind: "font" },
 } as const;
 
 type AssetExtension = keyof typeof TYPES;

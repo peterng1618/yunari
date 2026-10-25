@@ -21,9 +21,6 @@ const CONTENT_TYPES = {
   mp4: "video/mp4",
   webm: "video/webm",
   woff2: "font/woff2",
-  woff: "font/woff",
-  ttf: "font/ttf",
-  otf: "font/otf",
 } as const;
 
 type AssetExtension = keyof typeof CONTENT_TYPES;
@@ -36,7 +33,7 @@ export const ASSET_EXTENSIONS: Readonly<
   svg: ["svg"],
   gif: ["gif"],
   video: ["mp4", "webm"],
-  font: ["woff2", "woff", "ttf", "otf"],
+  font: ["woff2"],
 };
 
 function extensionsOf(kind: string): readonly string[] | undefined {
