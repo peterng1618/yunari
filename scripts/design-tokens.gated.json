@@ -58,7 +58,6 @@
     "src/web/packages/editor/src/new-document-chooser.tsx",
     "src/web/packages/editor/src/theme-library-dialog.tsx",
     "src/web/packages/editor/src/persistence-manager/replace-document-prompt.tsx",
-    "src/web/packages/editor/src/font-picker/font-picker.tsx",
     "src/web/packages/editor/src/editor-shell/icons.ts",
     "src/web/packages/editor/src/editor-shell/icons.test.tsx",
     "src/web/packages/editor/src/editor-shell/diagnostic-message.tsx",

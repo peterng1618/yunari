@@ -1,11 +1,24 @@
 import type { AssetResult } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { uiCopy } from "../ui-copy.js";
 
 /** The grid's own geometry: a result's column position is what makes Down and
  *  Up mean something, so the count lives here rather than in a class alone. */
 const COLUMNS = 4;
+
+/** One row's own height — the tile's `min-h-[112px]` — and the gap below it,
+ *  `--space-8`. The pitch is derived so the scroll maths and the placed rows
+ *  cannot disagree; a rem-based class would drift the moment the shell's root
+ *  font-size is not 16px, and the window would land between two rows. */
+const ROW_HEIGHT = 112;
+const ROW_GAP = 8;
+const ROW_PITCH = ROW_HEIGHT + ROW_GAP;
+
+/** Rows mounted at once. 379 results is 95 rows, so this is 60 tiles rather
+ *  than 379; the rest are placed only when the scroll or the focus reaches
+ *  them. */
+const WINDOW_ROWS = 15;
 
 /** The trio's roles in the order the tile names them, not the map's insertion
  *  order: a source that omits a role still reads heading, body, mono. */
@@ -50,7 +63,9 @@ function FontTile({
   const cuts = result.font?.cuts.length ?? 0;
   // A trio is one role family each; `cuts` can carry every weight variant, so
   // it is not a family count.
-  const families = ROLES.filter((role) => trio?.roles[role] !== undefined).length;
+  const families = ROLES.filter(
+    (role) => trio?.roles[role] !== undefined,
+  ).length;
   return (
     <button
       ref={focus}
@@ -113,10 +128,67 @@ export function FontGrid({
   readonly providers?: Readonly<Record<string, string>>;
 }): React.JSX.Element {
   const tiles = useRef<(HTMLButtonElement | null)[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [focusAt, setFocusAt] = useState(0);
+  const [start, setStart] = useState(0);
+  /** Set when a key press needs the tile focused after the window has moved;
+   *  the tile it names is not in the DOM until the next render. */
+  const pendingFocus = useRef(false);
+
+  const rowCount = Math.ceil(results.length / COLUMNS);
+  /** Clamped so a search that shortens the list cannot leave the window past
+   *  its end — the container resets `scrollTop` on its own, but `start` is
+   *  state and would not. */
+  const firstRow = Math.min(
+    Math.max(0, start),
+    Math.max(0, rowCount - WINDOW_ROWS),
+  );
+
   const selectedAt = results.findIndex((result) => result.id === selectedId);
-  const tabStop =
+  const preferred =
     selectedAt >= 0 ? selectedAt : Math.min(focusAt, results.length - 1);
+  const windowStart = firstRow * COLUMNS;
+  const windowEnd = Math.min(
+    results.length,
+    windowStart + WINDOW_ROWS * COLUMNS,
+  );
+  // Exactly one mounted tile is the tab stop. The preferred one can be outside
+  // the window (a filter changed under a scrolled list), so the first visible
+  // tile stands in rather than leaving the listbox with no stop at all.
+  const tabStop =
+    preferred >= windowStart && preferred < windowEnd ? preferred : windowStart;
+
+  const onScroll = useCallback(() => {
+    const element = scrollRef.current;
+    if (element === null) return;
+    // Re-mounting the window on every pixel of scroll is the thing
+    // virtualisation exists to avoid, so a row's worth of movement is the
+    // threshold rather than one pixel.
+    const next = Math.floor(element.scrollTop / ROW_PITCH);
+    setStart((current) => (Math.abs(current - next) > 4 ? next : current));
+  }, []);
+
+  /** Puts `at`'s row in the window, moving the scroll with it so the next
+   *  scroll event does not immediately put the window back. */
+  const reveal = (at: number): void => {
+    const row = Math.floor(at / COLUMNS);
+    if (row >= firstRow && row < firstRow + WINDOW_ROWS) return;
+    const lastStart = Math.max(0, rowCount - WINDOW_ROWS);
+    const next = Math.min(
+      lastStart,
+      Math.max(0, row - Math.floor(WINDOW_ROWS / 2)),
+    );
+    setStart(next);
+    if (scrollRef.current !== null) {
+      scrollRef.current.scrollTop = next * ROW_PITCH;
+    }
+  };
+
+  useEffect(() => {
+    if (!pendingFocus.current) return;
+    pendingFocus.current = false;
+    tiles.current[focusAt]?.focus();
+  }, [focusAt, firstRow]);
 
   const moveFocus = (
     event: React.KeyboardEvent<HTMLElement>,
@@ -148,36 +220,70 @@ export function FontGrid({
     event.preventDefault();
     const target = Math.min(results.length - 1, Math.max(0, next));
     setFocusAt(target);
-    tiles.current[target]?.focus();
+    reveal(target);
+    pendingFocus.current = true;
   };
+
+  const visibleRows = Array.from(
+    { length: Math.min(WINDOW_ROWS, rowCount - firstRow) },
+    (_, offset) => firstRow + offset,
+  );
 
   return (
     <div className="flex min-h-0 flex-col gap-[var(--space-8)]">
       <div
+        ref={scrollRef}
+        onScroll={onScroll}
         role="listbox"
         aria-label={uiCopy.assets.fontResults}
         data-yunari-font-grid=""
-        className="grid min-h-0 flex-1 content-start grid-cols-4 gap-[var(--space-8)] overflow-y-auto"
+        className="relative min-h-0 flex-1 overflow-y-auto"
       >
-        {results.map((result, at) => (
-          <FontTile
-            key={result.id}
-            result={result}
-            selected={result.id === selectedId}
-            tabStop={at === tabStop}
-            focus={(node) => {
-              tiles.current[at] = node;
-            }}
-            providers={providers}
-            onSelect={() => {
-              setFocusAt(at);
-              onSelect(result);
-            }}
-            onKeyDown={(event) => {
-              moveFocus(event, at);
-            }}
-          />
-        ))}
+        <div
+          data-yunari-font-grid-spacer=""
+          className="relative"
+          style={{ height: rowCount * ROW_PITCH }}
+        >
+          {visibleRows.map((row) => (
+            <div
+              key={row}
+              data-yunari-font-grid-row=""
+              className="grid grid-cols-4 gap-[var(--space-8)]"
+              style={{
+                position: "absolute",
+                top: row * ROW_PITCH,
+                left: 0,
+                right: 0,
+                height: ROW_HEIGHT,
+              }}
+            >
+              {results
+                .slice(row * COLUMNS, row * COLUMNS + COLUMNS)
+                .map((result, column) => {
+                  const at = row * COLUMNS + column;
+                  return (
+                    <FontTile
+                      key={result.id}
+                      result={result}
+                      selected={result.id === selectedId}
+                      tabStop={at === tabStop}
+                      focus={(node) => {
+                        tiles.current[at] = node;
+                      }}
+                      providers={providers}
+                      onSelect={() => {
+                        setFocusAt(at);
+                        onSelect(result);
+                      }}
+                      onKeyDown={(event) => {
+                        moveFocus(event, at);
+                      }}
+                    />
+                  );
+                })}
+            </div>
+          ))}
+        </div>
       </div>
       {onLoadMore === undefined ? null : (
         <button

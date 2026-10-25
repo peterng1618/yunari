@@ -463,40 +463,97 @@ it("re-searches when a provider chip changes and keeps the last source on", asyn
   ).toBe("true");
 });
 
-it("moves focus with the arrow keys inside the grid", () => {
-  const results = [
-    interTrio,
-    manrope,
-    sora,
-    familyResult("google-fonts", "Inter Tight"),
-  ];
+/** Distinct family names, so each result has its own id and the tile picked by
+ *  an index is identifiable after the window has moved. */
+function manyFamilies(count: number): AssetResult[] {
+  return Array.from({ length: count }, (_, at) =>
+    familyResult("google-fonts", `Family ${at}`),
+  );
+}
+
+it("renders only the rows near the viewport for a 379-row result set", () => {
   mount(
     <FontGrid
-      results={results}
-      selectedId={interTrio.id}
+      results={manyFamilies(379)}
+      selectedId={undefined}
       onSelect={() => {}}
-      providers={{
-        "curated-fonts": "Curated fonts",
-        "google-fonts": "Google Fonts",
-      }}
     />,
   );
 
   const drawn = [
     ...document.querySelectorAll<HTMLElement>("[data-yunari-font-tile]"),
   ];
+  expect(drawn.length).toBeGreaterThan(0);
+  // Well below 379: a window, not the list. The number is generous enough to
+  // allow a viewport-sized window but not to allow the whole set.
+  expect(drawn.length).toBeLessThan(100);
+
+  const spacer = document.querySelector<HTMLElement>(
+    "[data-yunari-font-grid-spacer]",
+  );
+  const rows = [
+    ...document.querySelectorAll<HTMLElement>("[data-yunari-font-grid-row]"),
+  ];
+  expect(spacer).not.toBeNull();
+  expect(rows.length).toBeGreaterThan(1);
+  // The pitch is read off two placed rows rather than restated, so a height the
+  // spacer and the rows disagree about is the failure.
+  const pitch =
+    Number.parseFloat(rows[1]!.style.top) -
+    Number.parseFloat(rows[0]!.style.top);
+  expect(pitch).toBeGreaterThan(0);
+  expect(spacer!.style.height).toBe(`${Math.ceil(379 / 4) * pitch}px`);
+});
+
+it("moves focus with the arrow keys inside the grid", () => {
+  const results = manyFamilies(100);
+  mount(
+    <FontGrid
+      results={results}
+      selectedId={results[0]!.id}
+      onSelect={() => {}}
+      providers={{ "google-fonts": "Google Fonts" }}
+    />,
+  );
+
+  const drawn = [
+    ...document.querySelectorAll<HTMLElement>("[data-yunari-font-tile]"),
+  ];
+  // The far rows are not mounted, so reaching one proves the window moved with
+  // the focus rather than that every tile was already there.
+  expect(drawn.length).toBeLessThan(results.length);
   drawn[0]?.focus();
-  act(() => {
-    drawn[0]?.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
-    );
-  });
-  expect(document.activeElement).toBe(drawn[1]);
 
   act(() => {
-    drawn[1]?.dispatchEvent(
+    drawn[0]?.dispatchEvent(
       new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
     );
   });
-  expect(document.activeElement).toBe(drawn[3]);
+  expect(document.activeElement?.getAttribute("data-yunari-font-tile")).toBe(
+    results[4]!.id,
+  );
+
+  // Sixteen more Down presses walk past the first window's last row, so the
+  // focused tile can only be mounted because the window followed it.
+  for (let step = 0; step < 16; step += 1) {
+    const current = document.activeElement as HTMLElement | null;
+    act(() => {
+      current?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+      );
+    });
+  }
+  expect(document.activeElement?.getAttribute("data-yunari-font-tile")).toBe(
+    results[68]!.id,
+  );
+
+  const current = document.activeElement as HTMLElement | null;
+  act(() => {
+    current?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+    );
+  });
+  expect(document.activeElement?.getAttribute("data-yunari-font-tile")).toBe(
+    results[69]!.id,
+  );
 });

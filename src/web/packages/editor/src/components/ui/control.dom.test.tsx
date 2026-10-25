@@ -121,10 +121,6 @@ const BINDS_HOOK = /const\s+(\w+)\s*=\s*useDraftCommit\s*\(/;
  */
 const EXEMPT: readonly (readonly [string, string])[] = [
   [
-    "font-picker/font-picker.tsx",
-    'a `type="search"` filter and a checkbox: neither holds an authored value',
-  ],
-  [
     "host-settings-mode/region.tsx",
     "a copy: its own Enter and blur commit, with no Escape and no composing guard",
   ],

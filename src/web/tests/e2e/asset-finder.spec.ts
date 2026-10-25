@@ -16,8 +16,8 @@ import { isDesktopSurface } from "./surface.js";
  * The host is routed, not real: every source's answer is a fixture, so the
  * proof is the modal's own behaviour — the mixed grid, the chip that stops a
  * source, the pager, a failure beside a survivor, the notice's one appearance,
- * and the font field that now opens the finder instead of mounting the picker.
- * Spec §12's claims are asserted here against those fixtures.
+ * and the font field that opens the finder on Fonts. Spec §12's claims are
+ * asserted here against those fixtures.
  */
 
 const EDITOR = "http://127.0.0.1:4174/";
@@ -40,6 +40,17 @@ const fontAwesome: AssetSourceListing = {
   body: "grid",
   requires: null,
   configurable: true,
+  presetKind: null,
+  host: null,
+};
+
+const curatedFonts: AssetSourceListing = {
+  id: "curated-fonts",
+  label: "Curated fonts",
+  category: "font",
+  body: "font-picker",
+  requires: null,
+  configurable: false,
   presetKind: null,
   host: null,
 };
@@ -86,6 +97,33 @@ const result = (id: string, name = id): AssetResult => ({
   licence: "ISC",
   sourceUrl: `https://lucide.dev/icons/${name}`,
 });
+
+/** One curated family, which is all the Fonts grid needs to draw a tile. */
+const fontResult: AssetResult = {
+  id: "curated-fonts:cut:inter-400",
+  name: "Inter",
+  kind: "font",
+  preview: "",
+  subtitle: "sans · 1 cut",
+  licence: "OFL-1.1",
+  sourceUrl: "https://cdn.example/inter-400.woff2",
+  font: {
+    cuts: [
+      {
+        id: "cut:inter-400",
+        source: "curated-fonts",
+        family: "Inter",
+        weight: 400,
+        style: "normal",
+        subset: "latin",
+        format: "woff2",
+        previewUrl: "https://cdn.example/inter-400.woff2",
+        licence: "OFL-1.1",
+        sourceUrl: "https://cdn.example/inter-400.woff2",
+      },
+    ],
+  },
+};
 
 const answered = (
   source: string,
@@ -349,14 +387,12 @@ test("the first search names the host once, and the second does not", async ({
   await expect(notice).toHaveCount(0);
 });
 
-test("the font field no longer mounts the picker and opens the finder on Fonts", async ({
-  page,
-}, testInfo) => {
+test("the font field opens the finder on Fonts", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   await stubAssets(page, {
-    sources: [lucide],
-    answer: () => ({ pages: [answered("lucide", [])] }),
+    sources: [curatedFonts],
+    answer: () => ({ pages: [answered("curated-fonts", [fontResult])] }),
   });
   await page.goto(EDITOR);
   await page.waitForFunction(() => "yunariEditorBridge" in window);
@@ -365,7 +401,7 @@ test("the font field no longer mounts the picker and opens the finder on Fonts",
   // the text class that carries runs.
   expect((await readScene(page)).at(-1)?.type).toBe("i-text");
 
-  // The inspector's own column, not the whole shell: FontPicker may exist in
+  // The inspector's own column, not the whole shell: the font body lives in
   // the finder once it is open, and the claim is about this surface.
   const column = page.locator('[data-yunari-panel="selection"]');
   const field = column.locator("[data-yunari-open-font-picker]").first();
@@ -379,19 +415,22 @@ test("the font field no longer mounts the picker and opens the finder on Fonts",
     "aria-selected",
     "true",
   );
-  await expect(page.locator("[data-yunari-font-picker]")).toBeVisible();
+  // The font finder asks once there is a term; the grid is what it draws.
+  await page.locator("[data-yunari-font-search]").fill("inter");
+  await expect(page.locator("[data-yunari-font-grid]")).toBeVisible();
 });
 
 test("captures the finder on Fonts", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   await stubAssets(page, {
-    sources: [lucide],
-    answer: () => ({ pages: [answered("lucide", [])] }),
+    sources: [curatedFonts],
+    answer: () => ({ pages: [answered("curated-fonts", [fontResult])] }),
   });
   await openFinder(page);
   await page.locator('[data-yunari-asset-tab="font"]').click();
-  await expect(page.locator("[data-yunari-font-picker]")).toBeVisible();
+  await page.locator("[data-yunari-font-search]").fill("inter");
+  await expect(page.locator("[data-yunari-font-grid]")).toBeVisible();
 
   await captureVisualReview(page, testInfo, "editor-finder-fonts");
 });

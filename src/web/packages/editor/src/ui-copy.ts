@@ -1884,42 +1884,10 @@ export const uiCopy = {
     lineHeight: "Line height",
     letterSpacing: "Letter spacing",
     /** The curated face a preset adopts, and the trio whose faces are written
-        across the presets. Named "Font face"/"Font trio" so the two adoption
-        controls are told apart from the Font picker's own trio chooser
-        (`trio`), which is a different control on a different surface. */
+        across the presets. */
     fontFace: "Font face",
     fontTrioAdopt: "Font trio",
-    trio: "Trio",
-    /** The picker's own search and filter row. */
-    fontSearch: "Search fonts",
-    /** The three facet kinds by what an author chooses between — `mood`,
-     *  `useCase` and `superfamily` are the words a `CatalogQuery` is keyed on,
-     *  and none of them is a word an author reads. Keyed by that same field
-     *  name, so a fourth kind cannot be added to the query without a word for
-     *  it appearing here. */
-    fontFacetKinds: {
-      mood: "Mood",
-      useCase: "Use",
-      superfamily: "Superfamily",
-    },
-    /** One active facet is all a `CatalogQuery` holds, so choosing a second
-     *  kind silently drops the first. The author cannot see that from three
-     *  selects that each look independent, so the picker says the rule rather
-     *  than letting them discover it by clicking. */
-    fontFacetRule: "Filters are exclusive: choosing one clears the other two.",
-    fontSort: "Sort",
-    fontSortName: "Name",
-    fontSortFamily: "Family",
-    fontFavoritesOnly: "Favourites only",
-    fontFavorite: "Add to favourites",
-    fontUnfavorite: "Remove from favourites",
-    fontTrios: "Trios",
-    /** Shown on a face row whose weight is the nearest the family ships, so the
-     *  number the row shows is the number the apply will write. */
-    fontClamped: "nearest available",
     fontBound: "Bound to a packaged face",
     unbindFont: "Unbind",
-    noFontMatches: "No font matches this search.",
-    loadingFont: "Loading font…",
   },
 } as const;

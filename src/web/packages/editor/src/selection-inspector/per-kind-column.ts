@@ -78,7 +78,7 @@ interface SectionParts {
  *
  * All five are wired: `runs`, `chartContent` and `chartPaint` when their
  * sections moved to React, `crop` with Position, and `fontFace` with the face
- * field the ruling gave `FontPicker`. The section's count and
+ * field the ruling moved into the finder. The section's count and
  * the column's rows are the same decision made once, so emitting an extra whose
  * renderer has not landed cannot make a header claim a row that is not there.
  * Wiring one is a change to this predicate and to the column's row together,
