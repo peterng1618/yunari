@@ -157,6 +157,14 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     "host-settings-mode/source-form.tsx",
     "the source form's fields are committed by the form's own Save button, never on blur or Enter",
   ],
+  [
+    "asset-finder/fonts-body.tsx",
+    "the type=search field filters the host's font listing as you type; nothing is authored to commit or cancel",
+  ],
+  [
+    "asset-finder/font-preview-panel.tsx",
+    "the sample is transient preview text applied on every keystroke and reset by its own button; nothing is written to the theme, so there is no commit or cancel to take",
+  ],
 ];
 
 /**

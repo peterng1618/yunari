@@ -30,12 +30,35 @@ export type TypePresetEntry = {
  * nor a legal package path tail; the theme carries this instead. Deterministic,
  * so re-applying a trio replaces its own declaration rather than growing the
  * package.
+ *
+ * The hash covers the raw `<source>:<id>`: sanitising every separator to `-`
+ * would make `a/b` and `a@b` mint one id, and `adoptFont` splices by id, so one
+ * cut's bytes would silently replace the other's.
  */
 export function fontAssetId(cut: FontCut): string {
-  const full = `${cut.source}-${cut.id}`.replace(/[^A-Za-z0-9_-]/g, "-");
-  // `stableId` caps at 64 characters; the tail carries the cut's weight and
-  // style, which is what tells two cuts of one family apart.
-  return full.length <= 64 ? full : `${full.slice(0, 55)}-${full.slice(-8)}`;
+  const raw = `${cut.source}:${cut.id}`;
+  const slug = raw.replace(/[^A-Za-z0-9_-]/g, "-");
+  // `stableId` caps at 64 characters; 55 + "-" + 8 is the longest legal form.
+  return `${slug.slice(0, 55)}-${shortHash(raw)}`;
+}
+
+/** FNV-1a, 32 bits: a small sync hash for an id, not a security primitive. */
+function shortHash(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+/** The numeric weight a provider cut names. A provider may send it as a
+ *  string, and the packaged asset and the preset must agree on one number. */
+export function fontWeight(cut: FontCut): number {
+  const weight = Number(cut.weight);
+  if (!Number.isFinite(weight) || weight <= 0)
+    throw new Error(`"${cut.family}" has no usable font weight.`);
+  return weight;
 }
 
 /** The preset a role is created at: a role-first name, the role's starter size,
@@ -50,7 +73,7 @@ export function rolePreset(
     value: {
       family: cut.family,
       size: ROLE_SIZES[named],
-      weight: cut.weight,
+      weight: fontWeight(cut),
       face: { assetId: fontAssetId(cut) },
       ...(role === null ? {} : { trioRole: role }),
     },
@@ -82,7 +105,7 @@ export function applyFontTrio(
             value: {
               ...preset.value,
               family: cut.family,
-              weight: cut.weight,
+              weight: fontWeight(cut),
               face: { assetId: fontAssetId(cut) },
             },
           },

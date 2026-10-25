@@ -50,6 +50,7 @@ import {
   FONT_ROLES,
   type FontTrioRole,
   fontAssetId,
+  fontWeight,
   freePresetId,
   rolePreset,
 } from "./type-preset-apply.js";
@@ -138,8 +139,7 @@ function creditKey(entry: ThemeCreditsEntry): string {
  * here and is refused rather than mislabelled.
  */
 function faceOfCut(cut: FontCut, role: FontTrioRole): CuratedFontFace {
-  const weight = Number(cut.weight);
-  if (cut.format !== "woff2" || !Number.isFinite(weight) || weight <= 0) {
+  if (cut.format !== "woff2") {
     throw new Error(
       `"${cut.family}" is not a font file this editor can package.`,
     );
@@ -148,7 +148,7 @@ function faceOfCut(cut: FontCut, role: FontTrioRole): CuratedFontFace {
     id: fontAssetId(cut),
     role,
     family: cut.family,
-    weight,
+    weight: fontWeight(cut),
     style: cut.style,
     format: "woff2",
     subset: cut.subset,
@@ -815,7 +815,7 @@ export class EditorDocument {
         value: {
           ...current.value,
           family: cut.family,
-          weight: cut.weight,
+          weight: fontWeight(cut),
           face: { assetId: fontAssetId(cut) },
         },
       },

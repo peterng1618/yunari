@@ -11,6 +11,7 @@ import { EditorDocument } from "./editor-document.js";
 import type { EditorShell } from "./editor-shell.js";
 import type { HistoryGlobalsPort } from "./history-manager/index.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
+import { fontAssetId } from "./type-preset-apply.js";
 import type { TypePresets } from "./type-preset-manager/index.js";
 
 /** The host's byte route, mocked: no document test reaches a real host. */
@@ -241,8 +242,10 @@ describe("EditorDocument undo", () => {
 function presetDocument(presets: TypePresets): {
   readonly document: EditorDocument;
   readonly onError: ReturnType<typeof vi.fn>;
+  readonly saveState: ReturnType<typeof vi.fn>;
 } {
   const onError = vi.fn();
+  const saveState = vi.fn();
   const document = new EditorDocument({
     source: {
       shell: {
@@ -250,7 +253,7 @@ function presetDocument(presets: TypePresets): {
         setGlobals: vi.fn(),
         editor: {
           errorManager: { report: () => {} },
-          historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+          historyManager: { attachGlobals: () => {}, saveState },
         },
       } as unknown as EditorShell,
       envelope: {
@@ -272,7 +275,7 @@ function presetDocument(presets: TypePresets): {
       selection: () => ({ setGlobals: () => {} }),
     } as never,
   });
-  return { document, onError };
+  return { document, onError, saveState };
 }
 
 function cutFor(
@@ -338,7 +341,7 @@ describe("EditorDocument preset actions", () => {
       family: "Manrope",
       weight: 700,
       size: 32,
-      face: { assetId: "google-fonts-cut-heading-700" },
+      face: { assetId: fontAssetId(trio.roles.heading!) },
     });
     expect(written.body?.value).toMatchObject({
       family: "Inter",
@@ -352,7 +355,7 @@ describe("EditorDocument preset actions", () => {
         family: "Fira Code",
         size: 14,
         weight: 400,
-        face: { assetId: "google-fonts-cut-mono-400" },
+        face: { assetId: fontAssetId(trio.roles.mono!) },
         trioRole: "mono",
       },
     });
@@ -389,7 +392,7 @@ describe("EditorDocument preset actions", () => {
         family: "Manrope",
         size: 46,
         weight: 700,
-        face: { assetId: "google-fonts-cut-heading-700" },
+        face: { assetId: fontAssetId(trio.roles.heading!) },
         trioRole: "heading",
       },
     });
@@ -417,7 +420,7 @@ describe("EditorDocument preset actions", () => {
         family: "Fira Code",
         size: 14,
         weight: 400,
-        face: { assetId: "google-fonts-cut-mono-400" },
+        face: { assetId: fontAssetId(trio.roles.mono!) },
         trioRole: "mono",
       },
     });
@@ -470,6 +473,44 @@ describe("EditorDocument preset actions", () => {
     expect(onError).toHaveBeenCalledWith(expect.stringContaining("Inter"));
     expect(presetsOf(document)).toEqual(authored);
     expect(document.snapshot().assets).toEqual(before.assets);
+    document.destroy();
+  });
+
+  it("applies a cut to the selected preset and keeps its authored spacing", async () => {
+    const authored: TypePresets = {
+      metric: {
+        name: "Metric",
+        value: {
+          family: "Segoe UI",
+          size: 32,
+          weight: "500",
+          lineHeight: 1.2,
+          letterSpacing: 2,
+          trioRole: "heading",
+        },
+      },
+    };
+    const { document, saveState } = presetDocument(authored);
+    saveState.mockClear();
+    const cut = cutFor("heading", "Manrope", 700);
+    assetBytesMock.mockResolvedValue({
+      bytes: new Uint8Array([9]),
+      filename: "manrope.woff2",
+    });
+
+    await document.applyCutToPreset("metric", cut);
+
+    // The explicit target keeps what the author set; only the face treatment
+    // moves, and the write is one history entry.
+    expect(presetsOf(document).metric?.value).toMatchObject({
+      family: "Manrope",
+      weight: 700,
+      size: 32,
+      lineHeight: 1.2,
+      letterSpacing: 2,
+      face: { assetId: fontAssetId(cut) },
+    });
+    expect(saveState).toHaveBeenCalledTimes(1);
     document.destroy();
   });
 

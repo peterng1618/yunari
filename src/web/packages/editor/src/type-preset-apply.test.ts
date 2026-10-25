@@ -1,6 +1,6 @@
 import type { FontCut, FontTrioInfo } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
-import { applyFontTrio } from "./type-preset-apply.js";
+import { applyFontTrio, fontAssetId } from "./type-preset-apply.js";
 import type { TypePresets } from "./type-preset-manager/index.js";
 
 function cut(
@@ -33,6 +33,10 @@ const trio: FontTrioInfo = {
     mono: cut("mono", "Fira Code", 400),
   },
 };
+
+const headingId = fontAssetId(trio.roles.heading!);
+const bodyId = fontAssetId(trio.roles.body!);
+const monoId = fontAssetId(trio.roles.mono!);
 
 describe("applyFontTrio", () => {
   it("rewrites every role preset and creates the missing roles", () => {
@@ -75,7 +79,7 @@ describe("applyFontTrio", () => {
           weight: 700,
           lineHeight: 1.2,
           trioRole: "heading",
-          face: { assetId: "curated-fonts-heading-700" },
+          face: { assetId: headingId },
         },
       },
       metric: {
@@ -86,7 +90,7 @@ describe("applyFontTrio", () => {
           weight: 700,
           letterSpacing: 2,
           trioRole: "heading",
-          face: { assetId: "curated-fonts-heading-700" },
+          face: { assetId: headingId },
         },
       },
       body: {
@@ -96,7 +100,7 @@ describe("applyFontTrio", () => {
           size: 14,
           weight: 400,
           trioRole: "body",
-          face: { assetId: "curated-fonts-body-400" },
+          face: { assetId: bodyId },
         },
       },
       custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
@@ -106,7 +110,7 @@ describe("applyFontTrio", () => {
           family: "Fira Code",
           size: 14,
           weight: 400,
-          face: { assetId: "curated-fonts-mono-400" },
+          face: { assetId: monoId },
           trioRole: "mono",
         },
       },
@@ -152,7 +156,7 @@ describe("applyFontTrio", () => {
         family: "Fira Code",
         size: 14,
         weight: 400,
-        face: { assetId: "curated-fonts-mono-400" },
+        face: { assetId: monoId },
         trioRole: "mono",
       },
     });
@@ -175,9 +179,39 @@ describe("applyFontTrio", () => {
         family: "Manrope",
         size: 19,
         weight: 700,
-        face: { assetId: "curated-fonts-heading-700" },
+        face: { assetId: headingId },
         trioRole: "heading",
       },
     });
+  });
+});
+
+describe("fontAssetId", () => {
+  it("keeps cuts apart that differ only in a separator", () => {
+    // Sanitising both to `-` would mint one id, and `adoptFont` splices by id:
+    // the second cut's bytes would silently replace the first's.
+    const slash = { ...trio.roles.body!, id: "cut:a/b" };
+    const at = { ...trio.roles.body!, id: "cut:a@b" };
+
+    expect(fontAssetId(slash)).not.toBe(fontAssetId(at));
+    expect(fontAssetId(slash)).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+  });
+});
+
+describe("cut weight", () => {
+  it("normalises a provider's string weight to the number the asset carries", () => {
+    const body = { ...trio.roles.body!, weight: "400" };
+    const result = applyFontTrio(
+      {
+        body: {
+          name: "Body",
+          value: { family: "Segoe UI", size: 14, trioRole: "body" },
+        },
+      },
+      { ...trio, roles: { body } },
+    );
+
+    expect(result.body?.value.weight).toBe(400);
+    expect(typeof result.body?.value.weight).toBe("number");
   });
 });
