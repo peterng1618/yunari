@@ -174,6 +174,25 @@ describe("EditorDocument dirty state", () => {
     expect(document.isDirty()).toBe(false);
   });
 
+  it("sees a load that moves only the byte map", () => {
+    // The shape the mutation counter exists for: `load` rewrites the bytes and
+    // the path set while the declaration list stays empty. A memo keyed on
+    // declaration identity sees [] === [] and answers with the old value.
+    const assets = new AssetManager();
+    const document = documentWith({
+      assets,
+      envelope: createBlankFabricTheme({
+        width: 640,
+        height: 360,
+      }) as unknown as FabricThemeEnvelopeInput,
+    });
+    expect(document.isDirty()).toBe(false);
+
+    assets.load({ assets: [] }, { "assets/x.png": new Uint8Array([1]) });
+
+    expect(document.isDirty()).toBe(true);
+  });
+
   it("does not resurrect a removed last asset from the opened envelope", async () => {
     const assets = new AssetManager();
     const declared = await assets.import(pngFile());
