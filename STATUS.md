@@ -1,6 +1,6 @@
 # Yunari status
 
-Updated: 2026-10-25
+Updated: 2026-10-26
 Branch: `main`
 
 ## Current objective
@@ -11,17 +11,17 @@ Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](d
 
 - **Queued plan:** `docs/superpowers/plans/2026-10-25-radar-and-polar-bar.md` — next; the chart already holds a theme per display.
 - **Segmented-fill plan landed:** divisor setting, discrete slider, gauge bands, pie spacers and bar custom series.
-- **Live-line policy:** the delay is two host cadences and a delayed line draws straight; a stall holds the last reading to the edge and steps at the next batch.
+- **Live-line policy:** the delay is two host cadences; the line never smooths — Interpolation offers Linear and Step — and a stall holds the last reading to the edge and steps at the next batch.
 - **Owner testing follows the run:** each plan merges locally into `main`; nothing is pushed, and the owner tests after the sequence.
 - **Decision note:** [0116](docs/decisions/0116-chart-motion-is-the-engines-and-the-line-is-a-clock.md) claims the chart mechanism boundaries.
 
 ## Last completed change
 
-- **Delay:** `LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS` is 2,000 ms — two host cadences, so an ordinary 1 s gap stays a slope and only a real stall holds.
-- **Stall:** the last reading paints to the axis edge for as long as the stall lasts; the batch that ends it repeats that reading at its own timestamp and steps, so painted history is not revised.
-- **Linearity:** a delayed line draws straight, because a smoothed tail cannot hold a stretch still; `step` stays available and the Interpolation hint says so.
-- **Tests:** the line suite pins the two-cadence edge, the hold, the step and a frame-identical stall ending; a host test pins the cadence-to-delay ratio.
-- **Spec and ADR:** A3/A5/A6 and decision 0116 record the two-cadence rule and the straight live line.
+- **Smooth removed:** `Interpolation` is `linear | step` and the line always draws `smooth: false`, so no segment depends on the next batch.
+- **Envelope refuses it:** a theme declaring `"smooth"` is rejected as `invalid-enum` rather than loaded and silently straightened.
+- **Both surfaces:** the editor preview draws straight with or without the delay, pinned by `preview-source.test.ts`.
+- **Descriptor:** the Interpolation picker offers Linear and Step, and its hint says how samples are joined.
+- **Docs:** spec A3/A5 and decision 0116 record why smoothing is not an authorable choice.
 
 ## Next
 

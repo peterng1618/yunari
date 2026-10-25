@@ -202,9 +202,10 @@ export interface ChartPaintFieldDescriptor {
   readonly multiple?: true;
 }
 
+/** No `smooth`: a smoothed segment is bent by the points either side of it, so
+    a live line's painted history would move on every batch (0116). */
 const INTERPOLATION = [
   { value: "linear", label: "Linear" },
-  { value: "smooth", label: "Smooth" },
   { value: "step", label: "Step" },
 ] as const;
 
@@ -392,7 +393,7 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       label: "Interpolation",
       kind: "select",
       section: "content",
-      hint: "How samples are joined: straight segments, a smoothed curve, or steps. A live line is drawn straight, because a smoothed tail cannot hold still.",
+      hint: "How samples are joined: straight segments or steps.",
       options: INTERPOLATION,
     },
     {

@@ -49,10 +49,9 @@ describe("createPreviewSource", () => {
     expect(preview.source.latest("cpu.load")).not.toEqual(tick);
   });
 
-  it("draws a line straight, because the preview edge is delayed too", () => {
-    // The editor must show what the player will draw. The preview source
-    // carries the playback delay, so the same straight-line rule applies; a
-    // source without a delay is the control, and smoothing stays there.
+  it("draws a line straight, the same as the player, with or without a delay", () => {
+    // The editor must show what the player will draw. Smoothing is not an
+    // authorable choice, so neither surface can disagree about it (0116).
     const now = 60_000;
     const preview = createPreviewSource({ keys: ["cpu.load"], now: () => now });
     const undelayed: SampleSource = {
@@ -64,7 +63,7 @@ describe("createPreviewSource", () => {
         "line",
         {
           family: "line",
-          settings: { ...defaultLineSettings, interpolation: "smooth" },
+          settings: { ...defaultLineSettings, interpolation: "linear" },
         },
         [{ id: "b", semanticKey: "cpu.load" }],
         { source, nowMs: now },
@@ -75,6 +74,6 @@ describe("createPreviewSource", () => {
     };
 
     expect(smooth(preview.source)).toBe(false);
-    expect(smooth(undelayed)).toBe(true);
+    expect(smooth(undelayed)).toBe(false);
   });
 });

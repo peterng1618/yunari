@@ -19,7 +19,7 @@ export type { EngineColor, LinearGradientColor };
  * `connectNulls` stays false so outages remain visible (§83).
  */
 
-export type Interpolation = "linear" | "smooth" | "step";
+export type Interpolation = "linear" | "step";
 type DashPattern = "solid" | "dashed" | "dotted";
 export type SeriesPoint = readonly [number, number | null];
 
@@ -48,7 +48,7 @@ export interface LineSettings {
 
 export const defaultLineSettings: LineSettings = {
   lineWidth: 2,
-  interpolation: "smooth",
+  interpolation: "linear",
   stroke: { kind: "solid", color: "#00b8d9" },
   area: {
     kind: "gradient",
@@ -300,12 +300,12 @@ export function buildLineOption(
       ),
       showSymbol: settings.showMarkers,
       symbolSize: settings.markerSize,
-      // **Linear whenever the edge is delayed.** A smooth segment is drawn
-      // from the points either side of it, so the stretch a stall holds flat
-      // would bend as the edge advances and would bend again when the next
-      // batch arrives — the visible history would move. A delayed line has no
-      // smooth tail it can keep (0116).
-      smooth: settings.interpolation === "smooth" && delayMs === 0,
+      // **Never smoothed.** ECharts draws a smooth segment from the points
+      // either side of it, so the stretch a stall holds flat would bend as the
+      // edge advances and bend again when the next batch arrives: the history a
+      // reader has seen would move. Linear and step segments depend only on
+      // their own endpoints, so smoothing is not an authorable choice (0116).
+      smooth: false as const,
       step:
         settings.interpolation === "step" ? ("end" as const) : (false as const),
       connectNulls: false as const,

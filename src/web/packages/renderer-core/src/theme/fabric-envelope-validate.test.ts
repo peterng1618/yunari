@@ -736,6 +736,28 @@ describe("Fabric theme envelope validation", () => {
     ]);
   });
 
+  it("refuses an interpolation the line no longer offers", () => {
+    // `smooth` was removed rather than silently straightened: a theme asking
+    // for it is authored data the renderer cannot honour (0116).
+    const accepted = validateFabricThemeEnvelope(
+      chartEnvelope("line", { interpolation: "step" }),
+    );
+    const refused = issuesOf(
+      validateFabricThemeEnvelope(
+        chartEnvelope("line", { interpolation: "smooth" }),
+      ),
+    );
+
+    expect(accepted).toMatchObject({ ok: true });
+    expect(refused).toEqual([
+      {
+        code: "invalid-enum",
+        path: "/scene/objects/0/settings/interpolation",
+        message: "interpolation must be one of linear, step.",
+      },
+    ]);
+  });
+
   it("refuses a segment divisor that is not an allowed value", () => {
     const issues = issuesOf(
       validateFabricThemeEnvelope(chartEnvelope("bar", { segmentDivisor: 33 })),
