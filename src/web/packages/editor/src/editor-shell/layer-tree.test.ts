@@ -18,7 +18,7 @@ import {
   Textbox,
   util,
 } from "fabric/es";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CARD_LIBRARY, instantiateCard } from "../card-library.js";
 import { createNewFabricTheme } from "../new-fabric-theme.js";
 import { uiCopy } from "../ui-copy.js";
@@ -35,7 +35,10 @@ import {
 
 /** Nothing is open: the default an author meets, and the state a flat scene is
  * permanently in. A group with children is shut unless it is named here. */
-const base = { expanded: new Set<string>(), selected: [] } as const;
+const base = {
+  expanded: new Set<string>(),
+  selected: new Set<string>(),
+} as const;
 
 /** The same projection with the named groups opened. */
 const opened = (...ids: string[]) => ({
@@ -153,10 +156,81 @@ describe("layer projection", () => {
     const rows = projectLayers({
       ...opened("group"),
       root: [group],
-      selected: [group],
+      selected: new Set(["group"]),
     });
     expect(rows.find((row) => row.id === "group")?.selected).toBe(true);
     expect(rows.find((row) => row.id === "child")?.selected).toBe(false);
+  });
+
+  it("reads each group's children once and looks the selection up as a set", () => {
+    // 500 objects across four cards, each with an inner group: the shape a
+    // starter takes, and the one a projection paid twice per group to walk.
+    const cards: Group[] = [];
+    const groups: Group[] = [];
+    const openedIds: string[] = [];
+    const members = new Set<FabricObject>();
+    for (let card = 0; card < 4; card += 1) {
+      const rects = Array.from(
+        { length: 123 },
+        (_, at) =>
+          new Rect({ id: `card-${card}-${at}`, width: 10, height: 10 }),
+      );
+      for (const rect of rects) members.add(rect);
+      const inner = new Group(rects.slice(0, 61));
+      inner.set("id", `inner-${card}`);
+      const outer = new Group([inner, ...rects.slice(61)]);
+      outer.set("id", `card-${card}`);
+      groups.push(inner, outer);
+      openedIds.push(`inner-${card}`, `card-${card}`);
+      cards.push(outer);
+    }
+    const getObjects = groups.map((group) => vi.spyOn(group, "getObjects"));
+    const selected = new Set(["card-2-60"]);
+    const has = vi.spyOn(selected, "has");
+    const includes = vi.spyOn(Array.prototype, "includes");
+
+    const rows = projectLayers({
+      root: cards,
+      selected,
+      expanded: new Set(openedIds),
+    });
+
+    // 4 × (123 rects + 2 groups), every group open so every row is emitted.
+    expect(rows).toHaveLength(500);
+    for (const [at, spy] of getObjects.entries())
+      expect(spy, `group ${at}`).toHaveBeenCalledTimes(1);
+    // One member test per emitted row, from the set — never a scan of an array.
+    expect(has).toHaveBeenCalledTimes(rows.length);
+    expect(
+      includes.mock.calls.filter(([needle]) =>
+        members.has(needle as FabricObject),
+      ),
+    ).toHaveLength(0);
+    expect(rows.filter((row) => row.selected).map((row) => row.id)).toEqual([
+      "card-2-60",
+    ]);
+  });
+
+  it("marks only the row its id names, through a shut group and a hidden row", () => {
+    const child = new Rect({ id: "child", width: 10, height: 10 });
+    const group = new Group([child]);
+    group.set("id", "group");
+    const hidden = new Rect({
+      id: "hidden",
+      width: 10,
+      height: 10,
+      visible: false,
+    });
+    const rows = projectLayers({
+      ...base,
+      root: [group, hidden],
+      selected: new Set(["child", "hidden"]),
+    });
+    // `child` sits behind a shut group, so no row carries it; the hidden object
+    // still has a row and is the one selected id on screen.
+    expect(rows.filter((row) => row.selected).map((row) => row.id)).toEqual([
+      "hidden",
+    ]);
   });
 
   it("prefers the object's own display name over the id", () => {
@@ -437,7 +511,11 @@ describe("a scene with no groups at all", () => {
     // styleable" is the constraint, and a panel that hid or merged rows would
     // break it while still projecting the right number of them.
     const scene = loose(200);
-    const rows = projectLayers({ ...base, root: scene, selected: [scene[7]!] });
+    const rows = projectLayers({
+      ...base,
+      root: scene,
+      selected: new Set(["loose-7"]),
+    });
     expect(rows.filter((row) => row.selected)).toHaveLength(1);
     expect(rows.find((row) => row.selected)?.id).toBe("loose-7");
     // Reversed paint order, so row 7 is `loose-192` — and it has to resolve

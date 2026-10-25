@@ -53,6 +53,29 @@ beforeAll(() => {
   }, matches);
 });
 
+/** What a display would be shown for a stored document, in the envelope shape
+ *  `publishableDocument()` answers. */
+function publishableOf(document: {
+  readonly id: string;
+  readonly name: string;
+}): {
+  readonly id: string;
+  readonly envelope: {
+    readonly id: string;
+    readonly artboard: { readonly width: number; readonly height: number };
+    readonly metadata: { readonly name: string };
+  };
+} {
+  return {
+    id: document.id,
+    envelope: {
+      id: document.id,
+      artboard: { width: 1920, height: 1080 },
+      metadata: { name: document.name },
+    },
+  };
+}
+
 /** A session that answers only what the surface asks it. The two methods are
  *  the whole of this control's conversation with the document; the other
  *  twenty are the shell's and are not reachable from here. */
@@ -61,19 +84,46 @@ function sessionShowing(
 ): EditorActionFacade {
   return {
     publishableDocument: () =>
-      document === undefined
-        ? undefined
-        : {
-            id: document.id,
-            envelope: {
-              id: document.id,
-              artboard: { width: 1920, height: 1080 },
-              metadata: { name: document.name },
-            },
-          },
+      document === undefined ? undefined : publishableOf(document),
     subscribeDocumentChange: () => () => undefined,
   } as unknown as EditorActionFacade;
 }
+
+/** A session whose document changes on demand, and a counter of how often the
+ *  control asked what would be published — the whole cost this task removes. */
+function watchedSession(initial: {
+  readonly id: string;
+  readonly name: string;
+}) {
+  let document = initial;
+  const listeners = new Set<() => void>();
+  const read = vi.fn(() => publishableOf(document));
+  const session = {
+    publishableDocument: read,
+    subscribeDocumentChange: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  } as unknown as EditorActionFacade;
+  return {
+    session,
+    read,
+    /** An edit landed: the document moved, and every subscriber is told. */
+    change(next: { readonly id: string; readonly name: string }): void {
+      document = next;
+      for (const listener of listeners) listener();
+    },
+  };
+}
+
+/** The publication transport the header hands in. The control starts and stops
+ *  it; neither is this control's subject here. */
+const publishStub = {
+  start: (): void => undefined,
+  stop: async (): Promise<void> => undefined,
+};
 
 /**
  * A host whose state actually **moves**.
@@ -183,7 +233,12 @@ async function mount(session?: EditorActionFacade): Promise<HTMLDivElement> {
   surface = opened;
   await act(async () =>
     created.render(
-      <PublishControl session={session} hosting={hosting} surface={opened} />,
+      <PublishControl
+        session={session}
+        publish={publishStub}
+        hosting={hosting}
+        surface={opened}
+      />,
     ),
   );
   await vi.waitFor(() =>
@@ -489,6 +544,60 @@ it("names a document the theme never named by its id, as the chip and the status
 
   await vi.waitFor(() =>
     expect(popupText()).toContain(uiCopy.publish.live("living-room")),
+  );
+});
+
+it("reads no document at all while the LAN is off", async () => {
+  // A paste storm while nothing is publishing used to serialise the whole
+  // publishable document once per flushed batch, to name a display that is not
+  // being served. The opt-in is the LAN: with it off there is nothing to read.
+  hostServing({ lan: false });
+  const watched = watchedSession({ id: "living-room", name: "Living room" });
+  await mount(watched.session);
+
+  await act(async () => watched.change({ id: "den", name: "Den" }));
+
+  expect(watched.read).not.toHaveBeenCalled();
+});
+
+it("reads one document per change while publishing, and names it", async () => {
+  hostServing({ lan: true });
+  const watched = watchedSession({ id: "living-room", name: "Living room" });
+  const container = await mount(watched.session);
+  await openSurface(container);
+  await vi.waitFor(() =>
+    expect(popupText()).toContain(uiCopy.publish.live("Living room")),
+  );
+
+  const before = watched.read.mock.calls.length;
+  await act(async () => watched.change({ id: "den", name: "Den" }));
+
+  // Coalesced by Task 5.1, a flushed batch is one notification, so it is one
+  // read — not one per object that moved in it.
+  expect(watched.read.mock.calls.length).toBe(before + 1);
+  await vi.waitFor(() =>
+    expect(popupText()).toContain(uiCopy.publish.live("Den")),
+  );
+});
+
+it("reads the current document when publishing turns on after edits", async () => {
+  hostServing({ lan: false });
+  const watched = watchedSession({ id: "living-room", name: "Living room" });
+  const container = await mount(watched.session);
+  await act(async () => watched.change({ id: "den", name: "Den" }));
+  expect(watched.read).not.toHaveBeenCalled();
+
+  await openSurface(container);
+  await act(async () => hostSwitch()?.click());
+  await vi.waitFor(() =>
+    expect(hostSwitch()?.getAttribute("aria-pressed")).toBe("true"),
+  );
+
+  // Turning on names what the display now shows, rather than the state the
+  // document had when the surface mounted.
+  expect(watched.read).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() =>
+    expect(popupText()).toContain(uiCopy.publish.live("Den")),
   );
 });
 

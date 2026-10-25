@@ -25,6 +25,7 @@ import {
   ownerOf,
   pathTo,
   projectLayers,
+  selectionIds,
 } from "./layer-tree.js";
 
 import type { EditorActionFacade } from "./session-facade.js";
@@ -374,10 +375,11 @@ export function createEditorShellBridge(input: {
         : active === undefined
           ? []
           : [active];
+    const root = canvas.getObjects();
     return [
       ...projectLayers({
-        root: canvas.getObjects(),
-        selected,
+        root,
+        selected: selectionIds(root, selected),
         expanded: expansionFor(),
         // Pulled, never held: bindings are envelope state the session owns, and
         // a row whose bound key went stale after an edit would name a key the
