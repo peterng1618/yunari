@@ -119,6 +119,10 @@ vi.mock("./shortcut-manager/index.js", () => ({
 
 import { AssetManager } from "./asset-manager/index.js";
 import { EditorSession } from "./editor-session.js";
+import {
+  SelectionStore,
+  TokenSelectionStore,
+} from "./editor-shell/shell-stores.js";
 import { fontTrio } from "./font-catalog.js";
 import { idleCrop } from "./selection-inspector/idle-crop.test-stage.js";
 import { ThemeConflictError } from "./theme-library-client.js";
@@ -1033,6 +1037,89 @@ describe("EditorSession", () => {
 
     expect(printed()).toBe("Body Renamed");
     extensions.destroy();
+  });
+
+  it("gives the selected token its own column, and gives the object column back", () => {
+    // The right column has one owner at a time (spec, Tokens pane). The session
+    // owns both halves — the token panel's mounts and the suppression — because
+    // it already owns the document the token fields write through; a panel built
+    // by `shell-layout` would need a second copy of it.
+    const selectionHost = document.createElement("div");
+    document.body.append(selectionHost);
+    const tokenSelection = new TokenSelectionStore(new SelectionStore());
+    const presets = {
+      body: { name: "Body", value: { family: "Inter", size: 16 } },
+    };
+    const shell = {
+      editor: {
+        canvas: {
+          on: vi.fn(),
+          off: vi.fn(),
+          getActiveObject: () => undefined,
+          getObjects: () => [],
+          requestRenderAll: vi.fn(),
+          fire: vi.fn(),
+        },
+        clipboardManager: { setImageImporter: vi.fn(), setBindings: vi.fn() },
+        textManager: {
+          addText: vi.fn(),
+          setAuthoringView: vi.fn(),
+          setRepaint: vi.fn(),
+        },
+        cropManager: idleCrop(),
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+        errorManager: { warn: vi.fn(), error: vi.fn() },
+      },
+      scene: {},
+      snapshot: vi.fn((input) => ({ ...envelope, ...input })),
+      setBackgroundMedia: vi.fn(),
+      setGlobals: vi.fn(),
+      refreshGlass: vi.fn(),
+    };
+    const extensions = new EditorSession({
+      assetManager: new AssetManager(),
+      shell: shell as never,
+      source: {} as never,
+      envelope: { ...envelope, globals: { typePresets: presets } },
+      panelHosts: {
+        add: document.body,
+        assets: document.body,
+        document: document.body,
+        tokens: document.body,
+        selection: selectionHost,
+      },
+      tokenSelection,
+      onNew: vi.fn(),
+      onNewFromStarter: vi.fn(),
+      onSaved: vi.fn(),
+    });
+
+    const objectColumn = selectionHost.querySelector<HTMLElement>(
+      '[data-yunari-panel="selection"]',
+    );
+    const tokenColumn = selectionHost.querySelector<HTMLElement>(
+      "[data-yunari-token-inspector]",
+    );
+    expect(objectColumn).not.toBeNull();
+    expect(tokenColumn).not.toBeNull();
+    expect(objectColumn?.style.display).toBe("");
+
+    tokenSelection.set({ kind: "preset", id: "body" });
+    expect(objectColumn?.style.display).toBe("none");
+    expect(
+      tokenColumn?.querySelector("[data-yunari-token-name]"),
+    ).not.toBeNull();
+
+    tokenSelection.clear();
+    expect(objectColumn?.style.display).toBe("");
+    expect(tokenColumn?.textContent).toBe("");
+
+    extensions.destroy();
+    // The duplicate-pane defect `4ede5585` fixed for the Assets pane: a panel
+    // whose `destroy()` is never called leaves its section in the host.
+    expect(
+      selectionHost.querySelector("[data-yunari-token-inspector]"),
+    ).toBeNull();
   });
 
   it("falls back to the shipped thumbnail when a capture fails, on both save paths", async () => {

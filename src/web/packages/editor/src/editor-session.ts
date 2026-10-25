@@ -39,7 +39,6 @@ import type { TokenSelectionStore } from "./editor-shell/shell-stores.js";
 import { type EditorShell } from "./editor-shell.js";
 import type { FavoritesClient } from "./favorites-client.js";
 import { type CuratedFontFace } from "./font-catalog.js";
-import { previewFontFace, releaseFontPreview } from "./font-preview.js";
 import {
   createIndicatorManager,
   type IndicatorManager,
@@ -61,6 +60,10 @@ import {
 } from "./palette-manager/index.js";
 import { createAssetsPane } from "./panes/assets/assets-pane.js";
 import type { PresetSelection } from "./panes/tokens/preset-list.js";
+import {
+  createTokenInspectorPanel,
+  type TokenInspectorPanel,
+} from "./panes/tokens/token-inspector.js";
 import {
   createSelectionInspector,
   type SelectionInspector,
@@ -201,6 +204,13 @@ export class EditorSession {
   readonly #newObjects: NewObjectPanel;
   readonly #assetsPanel: { destroy(): void };
   readonly #selection: SelectionInspector;
+  /** The selected token's own column, a sibling section of the object
+   *  inspector's under the same host. */
+  readonly #tokenInspector: TokenInspectorPanel;
+  /** Releases the token-selection subscription the inspector follows. */
+  #unsubscribeTokenSelection: (() => void) | undefined;
+  /** Releases the document-change subscription the inspector re-renders on. */
+  #unsubscribeTokenDocument: (() => void) | undefined;
   readonly #snapping: SnapManager;
   readonly #indicators: IndicatorManager;
   readonly #assets: AssetManager;
@@ -341,9 +351,6 @@ export class EditorSession {
     // inspector's face field are the same owner answering the same question
     // (`vg-268`), so neither re-implements a face or trio write.
     const fontActions: TypePresetFontActions = {
-      preview: async (face) => {
-        await this.#document.runFontAction(() => previewFontFace(face));
-      },
       applyFace: async (id, face) => {
         await this.#document.runFontAction(() =>
           this.applyPresetFace(id, face),
@@ -441,6 +448,38 @@ export class EditorSession {
     this.#unsubscribeSelection = options.selection?.subscribe(() =>
       this.#selection.render(),
     );
+    // The selected token's own properties, in the same host as the object
+    // column — exactly one of the two draws. The session owns both halves: the
+    // document's writes (which reach history through `setTypes`) and the
+    // suppression the token selection drives. A new surface built in
+    // `shell-layout` would need a second copy of the document.
+    this.#tokenInspector = createTokenInspectorPanel(
+      options.panelHosts.selection,
+      {
+        onChange: (presets) => this.#document.setTypes(presets),
+        onDelete: (id, replacement) =>
+          this.#document.deleteType(id, replacement),
+        setRole: (id, role) => this.#document.setPresetRole(id, role),
+        unbindFace: (id) => this.#document.unbindPresetFace(id),
+      },
+    );
+    const renderTokenInspector = (): void => {
+      const token = options.tokenSelection?.get();
+      this.#selection.setSuppressed(token !== undefined);
+      this.#tokenInspector.render(
+        token,
+        (this.#document.envelope.globals?.typePresets ?? {}) as TypePresets,
+        this.#document.envelope.globals,
+      );
+    };
+    // A canvas selection clears the token store, which notifies here; a type
+    // edit announces through the document, which re-renders the fields with the
+    // value just written.
+    this.#unsubscribeTokenSelection =
+      options.tokenSelection?.subscribe(renderTokenInspector);
+    this.#unsubscribeTokenDocument =
+      this.#document.subscribeDocumentChange(renderTokenInspector);
+    renderTokenInspector();
     // Entering inline editing asks the runtime for the authoring view: the
     // shell built the text manager before this session existed, so the
     // dependency is installed here rather than passed in.
@@ -1040,13 +1079,15 @@ export class EditorSession {
 
   destroy(): void {
     this.#unsubscribeSelection?.();
+    this.#unsubscribeTokenSelection?.();
+    this.#unsubscribeTokenDocument?.();
     this.#shortcuts.destroy();
     this.#nudge.dispose();
     this.#document.destroy();
     this.#assets.destroy();
-    releaseFontPreview();
     this.charts.destroy();
     this.#selection.root.remove();
+    this.#tokenInspector.destroy();
     this.#artboard.destroy();
     this.#palette.destroy();
     this.#types.destroy();

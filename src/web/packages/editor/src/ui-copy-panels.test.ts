@@ -120,7 +120,6 @@ it("leaves the three panels with no copy of their own", async () => {
     () => undefined,
     () => undefined,
     {
-      preview: async () => undefined,
       applyFace: async () => undefined,
       applyTrio: async () => undefined,
     },

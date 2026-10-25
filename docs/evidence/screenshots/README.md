@@ -167,7 +167,7 @@ result, not merely a mounted editor.
 | Palette | Edit or reassign a palette token | `editor-palette-solid` or `editor-palette-reassignment` / `edits an artboard palette token|reassigns palette references` |
 | Palette | Open the colour picker and commit a picked colour | `editor-colour-picker` / `picks a palette colour in the picker` |
 | Palette | Edit a gradient stop by drag and by number | `editor-gradient-editor` / `builds a gradient with a drag and a number` |
-| Type presets | Edit, reassign or apply a font trio | `editor-type-preset`, `editor-type-reassignment` or `editor-font-trio` / `edits a global type preset|reassigns text type presets|captures curated font trio` — two files, `-desktop-chromium` (graphite) and `-editorial-desktop-chromium`, because the face and trio choosers are wells whose boundary and popup read against the paper they sit on |
+| Type presets | Edit or reassign a type preset | `editor-type-preset` or `editor-type-reassignment` / `edits a global type preset|reassigns text type presets` — one file, `-desktop-chromium` (graphite). The trio choosers' capture is gone with the controls Task 14 removed; the finder owns the trio surface and Task 22 owns the evidence sweep |
 | Background layer | Author a background image in the selection inspector's background column | `editor-background-media` / `authors a packaged background image through the inspector` |
 | Viewport | Resize or change zoom | `editor-zoom-readout` / `tracks the camera's zoom in the stage readout` |
 | Viewport | Read the same composition at a two-device-pixel ratio | `editor-reference-dpr2` / `the fitted, reference-size and DPR views` |

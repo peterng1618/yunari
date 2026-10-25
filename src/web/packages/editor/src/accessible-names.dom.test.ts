@@ -443,7 +443,6 @@ function mountPanels(): { root: HTMLElement } {
     {
       applyFace: async () => undefined,
       applyTrio: async () => undefined,
-      preview: async () => undefined,
     },
   ).render({
     body: { name: "Body", value: { family: "Inter", size: 16 } },

@@ -95,6 +95,16 @@ export interface SelectionInspector {
   setGlobals(next: FabricGlobals | undefined): void;
   /** The document's language changed, so a formatted preview may have too. */
   setLocale(next: string | undefined): void;
+  /**
+   * Whether another surface owns this column for now — the token inspector,
+   * while a token is selected.
+   *
+   * Inline `display`, not a class or the `hidden` attribute: the root carries
+   * Tailwind display utilities, and either of those loses to them in the
+   * cascade. `render()` is a no-op while suppressed, so the hidden column does
+   * not project an object nobody can see; clearing it re-renders.
+   */
+  setSuppressed(suppressed: boolean): void;
   /** Unmounts the three trees and detaches the column. A host that replaces the
    *  inspector needs this: a portal is removed against the container it was
    *  opened in, and a detached container makes that removal throw. */
@@ -210,6 +220,8 @@ export function createSelectionInspector(
   let globals = options.globals;
   /** The document's language; a format preview is spelled in it. */
   let locale: string | undefined;
+  /** Whether another surface owns the column; see `setSuppressed`. */
+  let suppressed = false;
   const root = document.createElement("section");
   root.dataset["yunariPanel"] = "selection";
   host.append(root);
@@ -922,6 +934,9 @@ export function createSelectionInspector(
    * container.
    */
   const render = (): void => {
+    // Another surface owns the column (the token inspector, while a token is
+    // selected), so nothing is projected into a column nobody can see.
+    if (suppressed) return;
     // The background is no Fabric object: `target()` has nothing to describe
     // for it, so the branch is decided before the Fabric path is entered.
     if (options.backgroundSelected?.() === true) {
@@ -1010,6 +1025,16 @@ export function createSelectionInspector(
     },
     setLocale(next) {
       locale = next;
+      render();
+    },
+    setSuppressed(next) {
+      if (next === suppressed) return;
+      suppressed = next;
+      if (next) {
+        root.style.display = "none";
+        return;
+      }
+      root.style.removeProperty("display");
       render();
     },
     destroy() {

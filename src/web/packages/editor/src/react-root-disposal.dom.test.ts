@@ -306,6 +306,9 @@ const SHIPPED_ROOTS: readonly (readonly [string, number])[] = [
   ["palette-manager/panel.ts", 1],
   // the Assets pane's own tree, released by `createAssetsPane`'s `destroy()`.
   ["panes/assets/assets-pane.tsx", 1],
+  // the selected token's own column, released by `destroy()` (Task 15a) — the
+  // same duplicate-pane shape the Assets pane's entry above pins.
+  ["panes/tokens/token-inspector.tsx", 1],
   ["selection-inspector/column.tsx", 1],
   ["selection-inspector/inspector.tsx", 1],
   // the lead block's own tree, between the subject and the sections, released

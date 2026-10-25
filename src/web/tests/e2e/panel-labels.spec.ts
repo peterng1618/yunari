@@ -47,9 +47,24 @@ const TOKENS_CONTROLS = [
   '[data-testid="gradient-angle"]',
   // Type presets. The pane is a list now: one pressable row per preset and the
   // add action. The chooser and the field set that went with it are the token
-  // inspector's (Task 15), so they are audited there, not here.
+  // inspector's, so they are audited there rather than here — and the setup
+  // below presses a row so that inspector is the state being measured.
   "[data-yunari-type-preset-row]",
   "[data-yunari-type-preset-add]",
+  // The selected token's own properties, in the right column's token inspector.
+  // `unbind` renders only for a preset bound to a packaged face, and the starter
+  // preset the setup selects is free, so that selector is audited when a
+  // scenario binds one.
+  "[data-yunari-token-name]",
+  "[data-yunari-token-role]",
+  "[data-yunari-token-family]",
+  "[data-yunari-token-weight]",
+  "[data-yunari-token-size]",
+  "[data-yunari-token-line-height]",
+  "[data-yunari-token-letter-spacing]",
+  "[data-yunari-token-unbind]",
+  "[data-yunari-token-replacement]",
+  "[data-yunari-token-delete]",
 ];
 
 /** The Document pane's controls: the artboard panel's theme settings. */

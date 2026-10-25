@@ -25,7 +25,6 @@ export interface TypePresetPanel {
   destroy(): void;
 }
 export interface TypePresetFontActions {
-  readonly preview: (face: CuratedFontFace) => Promise<void>;
   readonly applyFace: (
     presetId: string,
     face: CuratedFontFace,
