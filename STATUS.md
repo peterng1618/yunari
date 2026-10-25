@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–11 complete, Task 12 next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–12 complete, Task 13 next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,10 +18,11 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 11 landed:** the finder has a 336px preview column — trio specimens in heading/body/mono, family cuts as chips with a Role select, the apply scope read from `presets` only.
-- **Specimens load from `cut.previewUrl`** on evidence: no CSP is declared in the repo and both providers are CORS-open; faces are released on unmount and on selection change, and a failed load falls back instead of blocking.
-- **The panel is presentational:** its five callbacks are optional until Task 12 wires them, so the running finder has no pressable apply yet.
-- **Evidence:** asset-finder 97 tests, typecheck and biome exit 0.
+- **Task 12 landed:** the document owns the five preset actions — apply a trio, add its three presets, add one from a cut, set a role, unbind a face — and the preview panel is wired.
+- **Bytes come from the host** (`/api/assets/bytes`) and every write goes through `setTypes`, so history and the unsaved marker see one entry per action.
+- **Provider cuts mint their own packaged asset id**, hashed so two ids differing only in a separator cannot overwrite each other's bytes, and weight conversion has one owner.
+- **The input walk is green** with two ruled exemptions: the finder search is a filter, the sample line is transient preview text.
+- **Evidence:** 151 tests across the review's suites, typecheck and biome exit 0.
 
 ## Next
 
