@@ -238,10 +238,13 @@ describe("mountFabricScene's resize", () => {
 
     // The same CSS size on a monitor with another pixel ratio is a different
     // backing store, so it is a fit: the ratio is part of what was recorded.
-    const ratio = window.devicePixelRatio;
+    const ratioDescriptor = Object.getOwnPropertyDescriptor(
+      window,
+      "devicePixelRatio",
+    );
     Object.defineProperty(window, "devicePixelRatio", {
       configurable: true,
-      value: ratio * 2,
+      value: (window.devicePixelRatio ?? 1) * 2,
     });
     try {
       scene.resize();
@@ -250,10 +253,13 @@ describe("mountFabricScene's resize", () => {
         "a changed pixel ratio at the same size fits again",
       ).toHaveBeenCalledTimes(2);
     } finally {
-      Object.defineProperty(window, "devicePixelRatio", {
-        configurable: true,
-        value: ratio,
-      });
+      // The original is jsdom's accessor; restoring the value as a data
+      // property would leave the file with a different `window`.
+      if (ratioDescriptor === undefined) {
+        delete (window as { devicePixelRatio?: number }).devicePixelRatio;
+      } else {
+        Object.defineProperty(window, "devicePixelRatio", ratioDescriptor);
+      }
     }
 
     scene.dispose();
