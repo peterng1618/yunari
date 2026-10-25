@@ -194,6 +194,9 @@ function issueKey(issue: SourceIssue): string {
   return `${issue.sourceId}\u0000${issue.reason}`;
 }
 
+/** This PC's device settings, as the store hands them to a tick. */
+type StoredDeviceSettings = Awaited<ReturnType<DeviceSettingsStore["read"]>>;
+
 export interface BundleRoots {
   readonly player: string;
   readonly editor: string;
@@ -1219,14 +1222,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
    * Assignments in the shape providers consume; unset groups mean defaults.
    *
    * Resolved for one display, because both inputs are per display: which theme
-   * it holds, and the answers it gave for that theme. Nothing is held between
-   * ticks — a consumer who reassigns a device is served it on that display's
-   * next sample.
+   * it holds, and the answers it gave for that theme. `stored` is the tick's
+   * one read of the settings: they are this PC's, not the display's. Nothing
+   * is held between ticks — a consumer who reassigns a device is served it on
+   * that display's next sample.
    */
-  async function currentAssignment(display: string): Promise<DeviceAssignment> {
-    const stored =
-      devices === undefined ? EMPTY_DEVICE_SETTINGS : await devices.read();
-
+  async function currentAssignment(
+    display: string,
+    stored: StoredDeviceSettings,
+  ): Promise<DeviceAssignment> {
     // The theme this display holds, else the default's — the same fallback
     // `assignedThemeFor` makes, and what keeps a theme chosen through
     // `/api/themes/active` (which still writes `default`, ruling 38) applying
@@ -4426,10 +4430,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
    * connections it holds, and two displays holding the same devices share one
    * poll: a poll is this PC's work, and the devices are what it reads.
    */
-  async function tick(): Promise<void> {
+  async function sampleOnce(): Promise<void> {
     if (connections.size === 0) {
       return;
     }
+
+    // This PC's settings, read once for every display in the tick: which GPU
+    // answers is this machine's question, not a screen's.
+    const stored =
+      devices === undefined ? EMPTY_DEVICE_SETTINGS : await devices.read();
 
     const byDisplay = new Map<string, SseConnection[]>();
 
@@ -4459,7 +4468,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         semanticKeys: unionOfKeys(
           held.map((connection) => connection.semanticKeys),
         ),
-        assignment: await currentAssignment(display),
+        assignment: await currentAssignment(display, stored),
         ...(language === undefined ? {} : { language }),
       });
     }
@@ -4513,7 +4522,28 @@ export function createHostServer(options: HostServerOptions): HostServer {
     lastUnmapped = [...unmapped].sort();
   }
 
+  /**
+   * A tick in flight makes the interval skip its next fire, so a provider that
+   * stalls cannot stack a second sample batch on the first.
+   */
+  let ticking = false;
+
+  async function tick(): Promise<void> {
+    ticking = true;
+
+    try {
+      await sampleOnce();
+    } finally {
+      // A rejected sample must not wedge the loop behind a flag nothing clears.
+      ticking = false;
+    }
+  }
+
   const timer = setInterval(() => {
+    if (ticking) {
+      return;
+    }
+
     void tick().catch(() => {
       // Provider failures are isolated; keep future cycles running.
     });

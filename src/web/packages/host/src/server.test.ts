@@ -20,6 +20,7 @@ import {
   decodeBatch,
   type FabricThemeEnvelope,
   SAMPLE_STREAM_PATH,
+  type SampleEntry,
 } from "@yunari/renderer-core";
 import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -59,12 +60,14 @@ import {
 import {
   ASSIGNABLE_GROUPS,
   createDeviceSettingsStore,
+  type DeviceSettingsStore,
 } from "./settings/devices.js";
 import { createDisplaySettingsStore } from "./settings/display.js";
 import {
   createDisplayStore,
   DEFAULT_DISPLAY,
   type DisplayRecord,
+  type DisplayStore,
   hashToken,
   LOCAL_DISPLAY_ID,
 } from "./settings/displays.js";
@@ -6597,6 +6600,196 @@ describe("A display's language in the served payload", () => {
     // The words differ; the measurement does not.
     expect(servedSample(german, "weather.temp")?.value).toBe(11.3);
     expect(servedSample(english, "weather.temp")?.value).toBe(11.3);
+  });
+});
+
+/**
+ * A provider whose every `sample` stays open until the case settles it, so a
+ * tick can be held in flight across the interval that would start the next.
+ */
+function gatedProvider(): {
+  readonly provider: SensorProvider;
+  readonly samples: () => number;
+  readonly release: () => void;
+  readonly fail: (reason: Error) => void;
+} {
+  let calls = 0;
+  const held: Array<{
+    readonly resolve: (entries: readonly SampleEntry[]) => void;
+    readonly reject: (reason: Error) => void;
+  }> = [];
+
+  return {
+    provider: {
+      id: "gated",
+      label: "gated",
+      describe: () =>
+        Promise.resolve([
+          {
+            sensorId: "gated:gpu.temp",
+            semanticKey: "gpu.temp",
+            label: "GPU",
+            tier: "baseline" as const,
+          },
+        ]),
+      sample(): Promise<readonly SampleEntry[]> {
+        calls += 1;
+
+        return new Promise((resolve, reject) => {
+          held.push({ resolve, reject });
+        });
+      },
+      health: () => ({ available: true }),
+    },
+    samples: () => calls,
+    release: () => {
+      for (const one of held.splice(0)) one.resolve([]);
+    },
+    fail: (reason) => {
+      for (const one of held.splice(0)) one.reject(reason);
+    },
+  };
+}
+
+/**
+ * A tick is this PC's work, not the connections': a slow one must not let the
+ * next interval pile a second batch on top, and the device settings it resolves
+ * are the same for every display, so a tick reads them once.
+ */
+describe("One tick at a time", () => {
+  let dir: string;
+  let hosted: ReturnType<typeof createHostServer> | undefined;
+
+  const sleep = (ms: number): Promise<void> =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+  /** A device store that counts every read a tick makes. */
+  function countingDevices(): {
+    readonly store: DeviceSettingsStore;
+    readonly reads: () => number;
+  } {
+    const store = createDeviceSettingsStore(dir);
+    let read = 0;
+
+    return {
+      store: {
+        ...store,
+        async read() {
+          read += 1;
+          return store.read();
+        },
+      },
+      reads: () => read,
+    };
+  }
+
+  function start(
+    gated: ReturnType<typeof gatedProvider>,
+    options: {
+      readonly devices?: DeviceSettingsStore;
+      readonly displays?: DisplayStore;
+    } = {},
+  ): ReturnType<typeof createHostServer> {
+    hosted = createHostServer({
+      registry: new ProviderRegistry([gated.provider]),
+      bundles: { player: dir, editor: dir },
+      ...(options.devices === undefined ? {} : { devices: options.devices }),
+      ...(options.displays === undefined ? {} : { displays: options.displays }),
+      sampleIntervalMs: 10,
+    });
+
+    return hosted;
+  }
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-single-tick-"));
+  });
+
+  afterEach(async () => {
+    await hosted?.close();
+    hosted = undefined;
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("starts no second batch while one tick is in flight", async () => {
+    const gated = gatedProvider();
+    const host = start(gated);
+
+    sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
+
+    await vi.waitFor(() => expect(gated.samples()).toBe(1));
+    // Three intervals with the first sample still held: a tick in flight makes
+    // every one of them skip rather than pile another batch on top.
+    await sleep(30);
+
+    expect(gated.samples()).toBe(1);
+  });
+
+  it("samples again once the stalled tick settles", async () => {
+    const gated = gatedProvider();
+    const host = start(gated);
+
+    sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
+
+    await vi.waitFor(() => expect(gated.samples()).toBe(1));
+    gated.release();
+
+    await vi.waitFor(() => expect(gated.samples()).toBeGreaterThanOrEqual(2));
+    gated.release();
+  });
+
+  it("reads devices once per tick however many displays ask", async () => {
+    const counted = countingDevices();
+    const gated = gatedProvider();
+    const displays = createDisplayStore(dir);
+    const tokens: string[] = [];
+
+    for (const name of ["Kitchen", "Hall", "Attic"]) {
+      const token = newToken();
+      await displays.create(name, token);
+      tokens.push(token);
+    }
+
+    const host = start(gated, { devices: counted.store, displays });
+
+    sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
+    for (const token of tokens) {
+      sampleStream(
+        host.server,
+        `${SAMPLE_STREAM_PATH}?keys=gpu.temp&session=${encodeURIComponent(token)}`,
+        "192.168.1.50",
+      );
+    }
+
+    // The tick has resolved all four displays by the time it samples.
+    await vi.waitFor(() => expect(gated.samples()).toBeGreaterThanOrEqual(1));
+
+    expect(counted.reads()).toBe(1);
+    gated.release();
+  });
+
+  it("reads devices zero times when no display is connected", async () => {
+    const counted = countingDevices();
+    start(gatedProvider(), { devices: counted.store });
+
+    await sleep(50);
+
+    expect(counted.reads()).toBe(0);
+  });
+
+  it("releases the guard when a tick's sample rejects", async () => {
+    const gated = gatedProvider();
+    const host = start(gated);
+
+    sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
+
+    await vi.waitFor(() => expect(gated.samples()).toBe(1));
+    gated.fail(new Error("provider stalled"));
+
+    // The rejection ended that tick; the next interval must sample again
+    // rather than leave the loop wedged behind a flag nothing cleared.
+    await vi.waitFor(() => expect(gated.samples()).toBeGreaterThanOrEqual(2));
+    gated.release();
   });
 });
 
