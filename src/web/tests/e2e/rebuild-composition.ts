@@ -608,9 +608,6 @@ export async function buildStorage(page: Page): Promise<void> {
     paint: ["CPU blue"],
   });
   await page.locator('[data-yunari-chart-setting="showAxes"]').uncheck();
-  await page
-    .locator('[data-yunari-chart-setting="showCategoryLabels"]')
-    .uncheck();
   await addText(page, {
     name: "storage-card-name",
     text: "Games (D:)",

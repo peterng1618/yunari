@@ -4,8 +4,10 @@ import {
   buildPieOption,
   computeComposition,
   defaultPieSettings,
+  type PieDataItem,
   type PieSettings,
   type PieSliceInput,
+  toSegmentedPieData,
 } from "./pie.js";
 
 function sample(value: number, sensorId = "ram.used"): Sample {
@@ -163,6 +165,61 @@ describe("computeComposition — fixed total", () => {
   });
 });
 
+describe("toSegmentedPieData", () => {
+  const item = (name: string, value: number, color: string): PieDataItem => ({
+    name,
+    value,
+    itemStyle: { color, borderRadius: 4 },
+  });
+
+  it("splits every slice into equal real items with spacers between", () => {
+    const items = toSegmentedPieData(
+      [item("cpu", 50, "#0f0"), item("gpu", 50, "#00f")],
+      2,
+      0,
+    );
+
+    expect(items.filter((entry) => entry.name === "cpu")).toHaveLength(2);
+    expect(items.filter((entry) => entry.name === "gpu")).toHaveLength(2);
+    // One internal gap per slice plus one slice-boundary gap per slice.
+    expect(items.filter((entry) => entry.name === "")).toHaveLength(4);
+  });
+
+  it("keeps the visible shares equal", () => {
+    const items = toSegmentedPieData(
+      [item("a", 75, "#0f0"), item("b", 25, "#00f")],
+      4,
+      2,
+    );
+    const real = items.filter((entry) => entry.name !== "");
+    const a = real.filter((entry) => entry.name === "a");
+    const b = real.filter((entry) => entry.name === "b");
+
+    expect(
+      a.reduce((sum, entry) => sum + entry.value, 0) /
+        b.reduce((sum, entry) => sum + entry.value, 0),
+    ).toBeCloseTo(3);
+  });
+
+  it("leaves the continuous data at 100", () => {
+    const option = buildPieOption(defaultPieSettings, parts(50));
+
+    expect(option.series[0].padAngle).toBe(defaultPieSettings.padAngle);
+    expect(option.series[0].data).toHaveLength(1);
+  });
+
+  it("emits no labels and a zero series pad for the segmented path", () => {
+    const option = buildPieOption(
+      { ...defaultPieSettings, segmentDivisor: 10 },
+      parts(50),
+    );
+
+    expect(option.series[0].padAngle).toBe(0);
+    expect(option.series[0].label.show).toBe(false);
+    expect(option.series[0].labelLine.show).toBe(false);
+  });
+});
+
 describe("buildPieOption", () => {
   it("emits a donut radius pair from the percentages", () => {
     const option = buildPieOption(defaultPieSettings, parts(1, 1));
@@ -268,10 +325,11 @@ describe("buildPieOption", () => {
     expect(option.series[0].data[0]!.itemStyle.color).toBe("#ff0000");
   });
 
-  it("keeps engine labels off by default so typography stays ours", () => {
+  it("never draws engine text, with no setting to turn it on", () => {
     const option = buildPieOption(defaultPieSettings, parts(1));
     expect(option.series[0].label.show).toBe(false);
     expect(option.series[0].labelLine.show).toBe(false);
+    expect("showLabels" in defaultPieSettings).toBe(false);
   });
 
   it("never emits a negative pad angle or corner radius", () => {

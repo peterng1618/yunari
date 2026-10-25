@@ -1,41 +1,38 @@
 # Yunari status
 
-Updated: 2026-10-25
+Updated: 2026-10-26
 Branch: `main`
 
 ## Current objective
 
-Drain `docs/product/backlog.jsonl`: the queued [`spec`](docs/superpowers/specs/2026-10-12-the-backlog-drain-design.md) and [`plan`](docs/superpowers/plans/2026-10-12-the-backlog-drain.md) close the rows the reproduction pass proved discharged, take the rulings the register waits on, then do the real work; 244 rows carry `state: "open"`.
+Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](docs/superpowers/specs/2026-10-25-chart-playback-and-segmented-fill-design.md): Plans 1 (playback) and 2 (segmented fill) are landed; Plan 3 (radar and polar bar) remains.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md` — queued, not started; no task dispatched.
-- **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
-- **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
-- **`vg-724` is open for art only:** naming for Steam, Epic, GOG, itch, Xbox and GDK Store packages landed; catalogue-matched non-Steam titles still report no artwork.
-- **Windows-first boundary:** Linux catalogue readers and foreground detection are out of scope (spec D4) and owned by `vg-727`.
-- **System tray merged:** [`spec`](docs/superpowers/specs/2026-10-25-systray-design.md) and plan are landed; the rows, clicks and the staged Linux binary still need a live run.
+- **Queued plan:** `docs/superpowers/plans/2026-10-25-radar-and-polar-bar.md` — next; the chart already holds a theme per display.
+- **Segmented-fill plan landed:** divisor setting, discrete slider, gauge bands, pie spacers and bar custom series.
+- **Live-line policy:** the delay is two host cadences and a delayed line draws straight; a stall holds the last reading to the edge and steps at the next batch.
+- **Owner testing follows the run:** each plan merges locally into `main`; nothing is pushed, and the owner tests after the sequence.
+- **Decision note:** [0116](docs/decisions/0116-chart-motion-is-the-engines-and-the-line-is-a-clock.md) claims the chart mechanism boundaries.
 
 ## Last completed change
 
-- **Colour and gradient presets are chips:** both libraries draw a small swatch chip with the name as its programmatic label, wrapped in reading order (decision 0116, DESIGN §5).
-- **A gradient stop shows its selection and opens its picker:** the chosen mark takes the accent border; a press that does not travel opens the stop's picker while a drag still adjusts it.
+- **Main merged before the picker branch closes:** chart playback, segmented fill and the extracted `chartReadingSignature` are in, and the palette half of a chart's reading now lives in that shared signature.
+- **Colour and gradient presets are chips:** both libraries draw a small swatch chip with the name as its programmatic label, wrapped in reading order (decision 0117, DESIGN §5).
+- **A gradient stop shows its selection and opens its picker:** the chosen mark takes the accent border; a press that does not travel opens its picker while a drag still adjusts it.
 - **Rotated gradient paint follows its angle:** `gradientLine` flips the y component for the stored `90 - cssDegrees` convention, fixing the canvas plate and the glass backdrop sampling together.
-- **Picker sampling costs less:** one channel change per pointer sample, one dirty reading per document change, and a chart redraw only when the palette ink it reads moves.
-- **Evidence:** 121 focused tests green; browser checks read 12 colour chips in two rows, the picker open from a pressed stop, and a vertical sweep at angle 90 with no background media.
+- **Picker sampling costs less:** one channel change per pointer sample, one dirty reading per document change, and a chart redraw only when a palette token its settings name moves.
 
 ## Next
 
-1. A live tray run by the owner: inspect the menu's rows, toggle Auto start, open each editor surface, start RTSS, and Exit.
-2. Run the staged Linux tray binary on a Linux desktop session; it was never executed here.
-3. Work `vg-724`'s art half: local art for catalogue-matched non-Steam titles.
-4. Work `vg-727`, `vg-728` and `vg-729`: Linux presence, the renamed Worker test plugin and the jsdom 30 DOM cases.
-5. Start the backlog-drain plan at Phase 0.
+1. Execute the radar and polar-bar plan, then merge it locally into `main`.
+2. Capture phone performance and value-chart transition evidence at the owner's test.
+3. Keep every checkpoint local; no push until the owner asks.
 
 ## Blockers / unverified
 
-- **The publish path is unverified end to end:** no workflow dispatch, no trusted-publisher run and no first publish, which stays a one-time local token publish; the release-token choice is open.
-- **No real N−1 migration is exercised:** at `2.0.0` the only older shape is the legacy integer; the dispatcher is a forward obligation.
-- **No live fullscreen game check:** window evidence is unit-tested through injected readings and a fixed foreground seam.
-- **Epic, itch, Xbox and Store readers are fixture-tested only**, and both live Steam reads stay fixture-tested.
-- **Two dependency deviations remain:** `ffmpeg-static` installs with scripts but no playback was exercised, and `npm ls` marks the overridden edges `invalid`.
+- **Value-chart engine transitions are not browser-verified:** the gate proves the option flag and signature, not motion across frames.
+- **Phone performance is unmeasured:** thirty applications per second across several charts is unproven on the phone that reported the defect.
+- **Segmented captures are opt-in:** the browser case calls the capture helper per divisor, and writes PNGs only under `YUNARI_CAPTURE=1`.
+- **The edge probe is a manual measurement:** it is skipped unless `YUNARI_EDGE_PROBE` is set and is not part of `npm run gate`.
+- **Older readers refuse the removed label keys:** accepted pre-release; no converter is written.

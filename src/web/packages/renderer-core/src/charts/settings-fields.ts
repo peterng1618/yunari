@@ -1,5 +1,6 @@
 import type { ChartFamily } from "../theme/document.js";
 import { ANIMATION_EASINGS, type AnimationEasing } from "./animation.js";
+import { SEGMENT_DIVISORS } from "./segments.js";
 
 /**
  * Which settings each chart family accepts, as editable field descriptors.
@@ -176,6 +177,15 @@ export interface SettingsFieldDescriptor {
     readonly value: string;
     readonly label: string;
   }[];
+  /**
+   * For `number`, the only values the field accepts, in ascending order.
+   *
+   * A discrete setting is not a bounded one: `min`/`max` alone would offer every
+   * integer between the ends, and each of those is a value the adapters cannot
+   * draw. The list is the document's own — the envelope refuses a present value
+   * outside it — so the control, the loader and the adapters read one list.
+   */
+  readonly values?: readonly number[];
 }
 
 /** Persisted chart paint settings; token choice is shared across editor surfaces. */
@@ -345,6 +355,16 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       hint: "Rounds the two cut ends of the arc instead of leaving them square.",
     },
     {
+      property: "segmentDivisor",
+      label: "Segments",
+      kind: "number",
+      section: "content",
+      hint: "Splits the arc into equal slices, each inheriting the rounded ends; 100 leaves it continuous.",
+      min: 1,
+      max: 100,
+      values: SEGMENT_DIVISORS,
+    },
+    {
       property: "gradientSegments",
       label: "Gradient segments",
       kind: "number",
@@ -372,7 +392,7 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       label: "Interpolation",
       kind: "select",
       section: "content",
-      hint: "How samples are joined: straight segments, a smoothed curve, or steps.",
+      hint: "How samples are joined: straight segments, a smoothed curve, or steps. A live line is drawn straight, because a smoothed tail cannot hold still.",
       options: INTERPOLATION,
     },
     {
@@ -438,7 +458,7 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       label: "Show axes",
       kind: "boolean",
       section: "content",
-      hint: "Draws the time and value axes and their grid.",
+      hint: "Draws the time and value axes and their gridlines.",
     },
     {
       property: "sampling",
@@ -516,18 +536,21 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       bound: "halfDrawnBox",
     },
     {
+      property: "segmentDivisor",
+      label: "Segments",
+      kind: "number",
+      section: "content",
+      hint: "Splits the bar into equal slices, each inheriting the corner radius; 100 leaves it continuous.",
+      min: 1,
+      max: 100,
+      values: SEGMENT_DIVISORS,
+    },
+    {
       property: "showAxes",
       label: "Show axes",
       kind: "boolean",
       section: "content",
-      hint: "Draws the value axis with its labels and gridlines.",
-    },
-    {
-      property: "showCategoryLabels",
-      label: "Show labels",
-      kind: "boolean",
-      section: "content",
-      hint: "Draws each series' name beside its own bar.",
+      hint: "Draws the value axis and its gridlines.",
     },
     ...ANIMATION_FIELDS,
   ],
@@ -592,6 +615,16 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       bound: "halfDrawnBox",
     },
     {
+      property: "segmentDivisor",
+      label: "Segments",
+      kind: "number",
+      section: "content",
+      hint: "Splits each slice's fill into equal wedges, each inheriting the corner radius; 100 leaves it continuous.",
+      min: 1,
+      max: 100,
+      values: SEGMENT_DIVISORS,
+    },
+    {
       property: "total",
       label: "Total",
       kind: "select",
@@ -612,13 +645,6 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       path: ["total", "value"],
       visibleWhen: { path: ["total", "kind"], equals: "fixed" },
       min: 0,
-    },
-    {
-      property: "showLabels",
-      label: "Show labels",
-      kind: "boolean",
-      section: "content",
-      hint: "Draws each slice's name and its leader line.",
     },
     ...ANIMATION_FIELDS,
   ],

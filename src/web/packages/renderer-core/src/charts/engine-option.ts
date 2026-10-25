@@ -49,7 +49,5 @@ export type ChartOption = ChartOptionByFamily[ChartFamily];
  * builders' outputs, and the question to answer first is why.
  */
 export function toEngineOption(option: ChartOption): EChartsCoreOption {
-  const { renderOverscanRightMs: _renderOverscanRightMs, ...engineOption } =
-    option as LineOption;
-  return engineOption as unknown as EChartsCoreOption;
+  return option as unknown as EChartsCoreOption;
 }

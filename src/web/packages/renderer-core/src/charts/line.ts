@@ -84,44 +84,33 @@ export function linePlaybackDelayMs(delayMs: number | undefined): number {
 /**
  * Seconds of history a line must be handed, for the axis this file draws.
  *
- * **The axis window plus two delays.** The axis spans `windowSeconds` plus the
- * source's playback delay, and `toSeriesPoints` keeps one sample *before* that
- * window so the line is drawn reaching the left clip edge instead of beginning
- * inside it. A source answers a trailing window at its own batch cadence, so the
- * oldest sample it returns can sit up to one cadence above the cutoff it was
- * given; a request that ends exactly at the axis start therefore usually has
- * nothing to offer, and the line's left end floats — measured on 72 % of
- * steady-state frames of a live host (`vg-571`).
- *
- * **The delay stands in for a cadence the source never declares.** It is a
- * nominal one: `LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS` is a fixed 1 000 ms, while
- * the host's own batch interval measured p50 1 006–1 021 ms and up to 3 243 ms
- * on a live display, so more than half of its gaps already exceed the number.
- * Two delays is the most this file can honestly ask for without a cadence to ask
- * for, and the frames where a gap outruns it are the 16–19.5 % that still begin
- * inside the plot. The right edge leans on the same nominal figure.
+ * **The axis window plus one playback delay.** The axis ends at the delayed
+ * render clock and begins one window earlier, while `toSeriesPoints` keeps the
+ * sample before that start. The source now returns that predecessor itself, so
+ * the request is the axis window plus the delay that moves the clock — no
+ * second delay to compensate for a missing sample (`vg-571`).
  */
 export function lineHistorySeconds(
   windowSeconds: number,
   chartPlaybackDelayMs: number | undefined,
 ): number {
-  return windowSeconds + 2 * (linePlaybackDelayMs(chartPlaybackDelayMs) / 1000);
+  return windowSeconds + linePlaybackDelayMs(chartPlaybackDelayMs) / 1000;
 }
 
 /** Local emitted shape keeps raw engine options out of the theme model (§87). */
 export interface LineOption extends EngineAnimation {
-  /** Runtime-only future interval rendered outside Fabric's authored crop. */
-  readonly renderOverscanRightMs?: number;
   readonly grid: CartesianGrid;
   readonly xAxis: {
     readonly type: "time";
     readonly show: boolean;
+    readonly axisLabel: { readonly show: false };
     readonly min: number;
     readonly max: number;
   };
   readonly yAxis: {
     readonly type: "value";
     readonly show: boolean;
+    readonly axisLabel: { readonly show: false };
     readonly min?: number;
     readonly max?: number;
   };
@@ -193,6 +182,53 @@ export function toSeriesPoints(
   return points;
 }
 
+/**
+ * The display's continuity policy for a live line.
+ *
+ * Between batches the axis clock moves while the newest sample stays where it
+ * arrived, so the edge can run past it. Holding the last reading to the edge
+ * keeps the line continuous, and it holds for as long as the stall lasts: a
+ * gap is more jarring than a flat stretch, and the last reading is still the
+ * last thing measured.
+ *
+ * **A stall that ends must not revise the stretch it painted.** When the next
+ * batch arrives after the edge has passed the previous sample, the previous
+ * reading is repeated at the new sample's arrival, so the line runs flat to
+ * that instant and then changes there — a step for a reading, a break for a
+ * reported gap. Everything left of the current edge is then exactly what the
+ * previous frame drew. The threshold is the playback delay: the edge can only
+ * have passed the sample when the gap is longer than it.
+ *
+ * A trailing `null` is a reported gap, not a late tick: it is never held
+ * forward (§83), but the flat stretch before it is still preserved. A
+ * zero-delay source cannot hold or step, because its edge never runs ahead of
+ * its data.
+ */
+export function liveTail(
+  points: readonly SeriesPoint[],
+  renderNowMs: number,
+  delayMs: number,
+): readonly SeriesPoint[] {
+  const last = points.at(-1);
+  if (last === undefined) return points;
+
+  let tail: readonly SeriesPoint[] = points;
+  const previous = tail.at(-2);
+  if (
+    delayMs > 0 &&
+    previous !== undefined &&
+    previous[1] !== null &&
+    last[0] - previous[0] > delayMs
+  ) {
+    tail = [...tail.slice(0, -1), [last[0], previous[1]], last];
+  }
+
+  if (last[1] === null || delayMs === 0 || renderNowMs <= last[0]) {
+    return tail;
+  }
+  return [...tail, [renderNowMs, last[1]]];
+}
+
 export function buildLineOption(
   settings: LineSettings,
   series: readonly SeriesInput[],
@@ -202,10 +238,9 @@ export function buildLineOption(
   chartPlaybackDelayMs?: number,
 ): LineOption {
   const windowMs = settings.windowSeconds * 1000;
-  const viewportNowMs = nowMs - linePlaybackDelayMs(chartPlaybackDelayMs);
-  const renderOverscanRightMs = nowMs - viewportNowMs;
-  const windowStart = viewportNowMs - windowMs;
-  const windowEnd = nowMs;
+  const delayMs = linePlaybackDelayMs(chartPlaybackDelayMs);
+  const renderNowMs = nowMs - delayMs;
+  const windowStart = renderNowMs - windowMs;
   const sampling =
     settings.sampling && settings.sampling !== "none"
       ? settings.sampling
@@ -216,7 +251,6 @@ export function buildLineOption(
   const threshold = thresholdBands(strokeFor(settings, 0), palette, settings);
   return {
     ...toEngineAnimation(settings.animation, animate),
-    ...(renderOverscanRightMs === 0 ? {} : { renderOverscanRightMs }),
     ...(threshold === undefined
       ? {}
       : {
@@ -239,28 +273,39 @@ export function buildLineOption(
         top: 8,
         bottom: settings.showAxes ? 8 : 0,
       },
-      settings.showAxes,
+      false,
     ),
     xAxis: {
       type: "time",
       show: settings.showAxes,
+      axisLabel: { show: false },
       // Preview history reveals left-to-right; live data fills from render start.
       min: windowStart,
-      max: windowEnd,
+      max: renderNowMs,
     },
     yAxis: {
       type: "value",
       show: settings.showAxes,
+      axisLabel: { show: false },
       ...(settings.min === undefined ? {} : { min: settings.min }),
       ...(settings.max === undefined ? {} : { max: settings.max }),
     },
     series: series.map((input, index) => ({
       type: "line" as const,
       name: input.label ?? input.sensorId,
-      data: toSeriesPoints(input.samples, settings, nowMs, windowStart),
+      data: liveTail(
+        toSeriesPoints(input.samples, settings, nowMs, windowStart),
+        renderNowMs,
+        delayMs,
+      ),
       showSymbol: settings.showMarkers,
       symbolSize: settings.markerSize,
-      smooth: settings.interpolation === "smooth",
+      // **Linear whenever the edge is delayed.** A smooth segment is drawn
+      // from the points either side of it, so the stretch a stall holds flat
+      // would bend as the edge advances and would bend again when the next
+      // batch arrives — the visible history would move. A delayed line has no
+      // smooth tail it can keep (0116).
+      smooth: settings.interpolation === "smooth" && delayMs === 0,
       step:
         settings.interpolation === "step" ? ("end" as const) : (false as const),
       connectNulls: false as const,

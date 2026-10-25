@@ -171,7 +171,7 @@ describe("history", () => {
     const source = new FakeSampleSource(T0, { sampleIntervalMs: 1000 });
     const history = source.history("cpu.load.total", 60);
 
-    expect(history).toHaveLength(61);
+    expect(history).toHaveLength(62);
   });
 
   it("is ordered oldest first", () => {
@@ -199,8 +199,17 @@ describe("history", () => {
 
   it("returns a single sample for a zero-length window", () => {
     expect(new FakeSampleSource(T0).history("cpu.load.total", 0)).toHaveLength(
-      1,
+      2,
     );
+  });
+
+  it("puts exactly one sample before the window's cutoff", () => {
+    const source = new FakeSampleSource(T0, { sampleIntervalMs: 1000 });
+    const history = source.history("cpu.load.total", 10);
+    const cutoff = Date.parse(history.at(-1)!.timestamp) - 10_000;
+    const before = history.filter((s) => Date.parse(s.timestamp) < cutoff);
+
+    expect(before).toHaveLength(1);
   });
 });
 

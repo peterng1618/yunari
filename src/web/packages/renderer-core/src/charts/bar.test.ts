@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Sample, SensorStatus } from "../types.js";
 import {
+  type BarOption,
+  type BarRenderApi,
   type BarSettings,
   buildBarOption,
+  type ContinuousBarSeries,
   defaultBarSettings,
   toBarColor,
   toBarDataItem,
@@ -45,6 +48,126 @@ const thresholds: BarSettings = {
   },
 };
 
+/**
+ * The rects a segmented series would draw, through its own `renderItem`.
+ *
+ * The engine's `params`/`api` are not constructible in a unit test, so this is
+ * the smallest honest stand-in: a value axis mapped linearly onto the box, and
+ * one category occupying a whole band. What it checks is the geometry the
+ * renderer computes, not the engine's own layout.
+ */
+function collectRects(
+  option: BarOption,
+  box: { readonly width: number; readonly height: number },
+): {
+  readonly track: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  }[];
+  readonly fill: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  }[];
+} {
+  const series = option.series[0];
+  if (series.type !== "custom") {
+    throw new Error("the series is not segmented");
+  }
+  const horizontal = option.xAxis.type === "value";
+  const axis = horizontal ? option.xAxis : option.yAxis;
+  if (axis.type !== "value") throw new Error("no value axis");
+  const count = series.data.length;
+  const api: BarRenderApi = {
+    coord: ([value, category]) => {
+      const along = (value - axis.min) / (axis.max - axis.min);
+      const across = (category + 0.5) / count;
+      return horizontal
+        ? [along * box.width, across * box.height]
+        : [across * box.width, (1 - along) * box.height];
+    },
+    size: () => (horizontal ? [0, box.height / count] : [box.width / count, 0]),
+  };
+  const group = series.renderItem({ dataIndex: 0 }, api);
+  const shapes = (name: "track" | "fill") =>
+    group.children
+      .filter((rect) => rect.name === name)
+      .map((rect) => rect.shape);
+  return { track: shapes("track"), fill: shapes("fill") };
+}
+
+/** The continuous series, for the cases that assert its own fields. */
+function barSeries(option: BarOption): ContinuousBarSeries {
+  const series = option.series[0];
+  if (series.type !== "bar") throw new Error("expected a bar series");
+  return series;
+}
+
+describe("buildBarOption — segmented", () => {
+  it("draws N bands with a 20% gap and a partial final band", () => {
+    const option = buildBarOption(
+      {
+        ...defaultBarSettings,
+        segmentDivisor: 10,
+        min: 0,
+        max: 100,
+        track: { kind: "solid", color: "#222" },
+        fill: { kind: "solid", color: "#0f0" },
+      },
+      [{ sensorId: "a", sample: sample(55) }],
+      true,
+    );
+
+    expect(option.series[0].type).toBe("custom");
+    const rendered = collectRects(option, { width: 100, height: 20 });
+
+    // Ten track bands, five full fills, one half-filled band: 8px visible × 50%.
+    expect(rendered.track).toHaveLength(10);
+    expect(rendered.fill).toHaveLength(6);
+    expect(rendered.fill.at(-1)!.width).toBeCloseTo(4, 5);
+  });
+
+  it("draws no fill for a missing sample but keeps the track", () => {
+    const option = buildBarOption(
+      { ...defaultBarSettings, segmentDivisor: 10 },
+      [{ sensorId: "a", sample: undefined }],
+    );
+
+    const rendered = collectRects(option, { width: 100, height: 20 });
+    expect(rendered.fill).toHaveLength(0);
+    expect(rendered.track).toHaveLength(10);
+  });
+
+  it("draws the bands upward for a vertical bar", () => {
+    const option = buildBarOption(
+      {
+        ...defaultBarSettings,
+        orientation: "vertical",
+        segmentDivisor: 10,
+        min: 0,
+        max: 100,
+      },
+      [{ sensorId: "a", sample: sample(55) }],
+    );
+
+    const rendered = collectRects(option, { width: 20, height: 100 });
+    // The first band sits at the bottom of the box, and the axis grows upward.
+    expect(rendered.track[0]!.y).toBeCloseTo(92, 5);
+    expect(rendered.fill.at(-1)!.height).toBeCloseTo(4, 5);
+  });
+
+  it("keeps the continuous series at 100", () => {
+    const option = buildBarOption(defaultBarSettings, [
+      { sensorId: "a", sample: sample(55) },
+    ]);
+
+    expect(option.series[0].type).toBe("bar");
+  });
+});
+
 describe("buildBarOption", () => {
   it("puts categories on the y axis for horizontal bars", () => {
     const option = buildBarOption(defaultBarSettings, [
@@ -80,6 +203,26 @@ describe("buildBarOption", () => {
     }
   });
 
+  it("draws axes without any engine text", () => {
+    const option = buildBarOption(defaultBarSettings, [
+      { sensorId: "cpu.load.total", sample: sample(50) },
+    ]);
+
+    expect(option.xAxis).toMatchObject({ show: false });
+    expect(option.yAxis).toMatchObject({
+      show: false,
+      axisLabel: { show: false },
+    });
+  });
+
+  it("draws the value axis but still no labels", () => {
+    const option = buildBarOption({ ...defaultBarSettings, showAxes: true }, [
+      { sensorId: "cpu.load.total", sample: sample(50) },
+    ]);
+    const valueAxis = option.xAxis;
+    expect(valueAxis).toMatchObject({ show: true, axisLabel: { show: false } });
+  });
+
   it("labels categories, falling back to the sensor id", () => {
     const option = buildBarOption(defaultBarSettings, [
       { sensorId: "cpu.load.total", sample: sample(10), label: "CPU" },
@@ -99,7 +242,7 @@ describe("buildBarOption", () => {
       { sensorId: "c", sample: sample(30) },
     ]);
 
-    expect(option.series[0].data.map((d) => d.value)).toEqual([10, 20, 30]);
+    expect(barSeries(option).data.map((d) => d.value)).toEqual([10, 20, 30]);
   });
 
   it("shows a background only when a track is configured", () => {
@@ -107,14 +250,14 @@ describe("buildBarOption", () => {
     const unround = { ...defaultBarSettings };
     delete (unround as { trackCornerRadius?: unknown }).trackCornerRadius;
     const withTrack = buildBarOption(unround, []);
-    expect(withTrack.series[0].showBackground).toBe(true);
-    expect(withTrack.series[0].backgroundStyle).toEqual({ color: "#2a2f3a" });
+    expect(barSeries(withTrack).showBackground).toBe(true);
+    expect(barSeries(withTrack).backgroundStyle).toEqual({ color: "#2a2f3a" });
 
     const plain = { ...defaultBarSettings };
     delete (plain as { track?: unknown }).track;
     const withoutTrack = buildBarOption(plain, []);
-    expect(withoutTrack.series[0].showBackground).toBe(false);
-    expect("backgroundStyle" in withoutTrack.series[0]).toBe(false);
+    expect(barSeries(withoutTrack).showBackground).toBe(false);
+    expect("backgroundStyle" in barSeries(withoutTrack)).toBe(false);
   });
 
   it("rounds the track from its own radius, and leaves the bar's alone", () => {
@@ -127,8 +270,8 @@ describe("buildBarOption", () => {
       [{ sensorId: "a", sample: sample(50) }],
     );
 
-    expect(option.series[0].backgroundStyle?.borderRadius).toBe(20);
-    expect(option.series[0].data[0]?.itemStyle.borderRadius).toBe(2);
+    expect(barSeries(option).backgroundStyle?.borderRadius).toBe(20);
+    expect(barSeries(option).data[0]?.itemStyle.borderRadius).toBe(2);
   });
 
   it("leaves the bar's radius alone when only the track's is set", () => {
@@ -137,7 +280,7 @@ describe("buildBarOption", () => {
       [{ sensorId: "a", sample: sample(50) }],
     );
 
-    expect(option.series[0].data[0]?.itemStyle.borderRadius).toBe(
+    expect(barSeries(option).data[0]?.itemStyle.borderRadius).toBe(
       defaultBarSettings.cornerRadius,
     );
   });
@@ -150,7 +293,7 @@ describe("buildBarOption", () => {
     delete (settings as { trackCornerRadius?: unknown }).trackCornerRadius;
 
     const option = buildBarOption(settings, []);
-    expect("borderRadius" in (option.series[0].backgroundStyle ?? {})).toBe(
+    expect("borderRadius" in (barSeries(option).backgroundStyle ?? {})).toBe(
       false,
     );
   });
@@ -160,7 +303,7 @@ describe("buildBarOption", () => {
       { ...defaultBarSettings, trackCornerRadius: -5 },
       [],
     );
-    expect(option.series[0].backgroundStyle?.borderRadius).toBe(0);
+    expect(barSeries(option).backgroundStyle?.borderRadius).toBe(0);
   });
 
   it("omits barWidth entirely when unset", () => {
@@ -170,17 +313,19 @@ describe("buildBarOption", () => {
     delete (settings as { barWidth?: unknown }).barWidth;
 
     const option = buildBarOption(settings, []);
-    expect("barWidth" in option.series[0]).toBe(false);
+    expect("barWidth" in barSeries(option)).toBe(false);
   });
 
   it("clamps the category gap into 0–100 and formats it as a percentage", () => {
     expect(
-      buildBarOption({ ...defaultBarSettings, categoryGapPercent: 250 }, [])
-        .series[0].barCategoryGap,
+      barSeries(
+        buildBarOption({ ...defaultBarSettings, categoryGapPercent: 250 }, []),
+      ).barCategoryGap,
     ).toBe("100%");
     expect(
-      buildBarOption({ ...defaultBarSettings, categoryGapPercent: -10 }, [])
-        .series[0].barCategoryGap,
+      barSeries(
+        buildBarOption({ ...defaultBarSettings, categoryGapPercent: -10 }, []),
+      ).barCategoryGap,
     ).toBe("0%");
   });
 
@@ -383,7 +528,7 @@ describe("a bar whose fill has no palette entry", () => {
     const option = buildBarOption(unresolved, [
       { sensorId: "disk.used", sample: sample(46.8) },
     ]);
-    expect(option.series[0].data[0]!.value).toBeNull();
+    expect(barSeries(option).data[0]!.value).toBeNull();
   });
 
   it("still resolves the track, which is not the value", () => {
@@ -393,7 +538,7 @@ describe("a bar whose fill has no palette entry", () => {
       false,
       { track: { name: "Track", value: { kind: "solid", color: "#2a2f3a" } } },
     );
-    expect(option.series[0].backgroundStyle).toEqual({
+    expect(barSeries(option).backgroundStyle).toEqual({
       color: "#2a2f3a",
       borderRadius: 20,
     });

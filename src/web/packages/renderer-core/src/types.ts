@@ -54,6 +54,8 @@ export interface GaugeSettings {
   readonly track: ChartPaint;
   readonly progress: ChartPaint;
   readonly roundCap: boolean;
+  /** How many slices the fill is cut into; 100 is one continuous arc. */
+  readonly segmentDivisor: number;
   /** Segment count for approximating angular gradients on the ring. */
   readonly gradientSegments?: number;
   readonly animation?: AnimationSettings;
@@ -68,5 +70,6 @@ export const defaultGaugeSettings: GaugeSettings = {
   track: { kind: "solid", color: "#2a2f3a" },
   progress: { kind: "solid", color: "#00b8d9" },
   roundCap: true,
+  segmentDivisor: 100,
   gradientSegments: 64,
 };

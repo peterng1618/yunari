@@ -9,6 +9,11 @@ import {
   normalizePosition,
   resolveFlatColor,
 } from "./fill.js";
+import {
+  SEGMENT_GAP_RATIO,
+  segmentCount,
+  segmentDivisorOf,
+} from "./segments.js";
 
 // Preserved public export; implementation moved to fill.ts.
 export { mixHex } from "./fill.js";
@@ -75,6 +80,16 @@ export function buildGaugeOption(
     ? clamp(sample.value, settings.min, settings.max)
     : settings.min;
 
+  // A segmented gauge draws the ring as colour bands and leaves `progress` out
+  // entirely: two fills over the same arc cannot both own the slices.
+  const bands = segmentedBands(
+    segmentCount(segmentDivisorOf(settings)),
+    plottable && progress !== undefined,
+    normalizePosition(displayValue, settings.min, settings.max),
+    track,
+    progress,
+  );
+
   return {
     series: [
       {
@@ -89,11 +104,11 @@ export function buildGaugeOption(
           roundCap: settings.roundCap,
           lineStyle: {
             width: settings.thickness,
-            color: toColorSegments(track ?? NO_PAINT, settings),
+            color: bands ?? toColorSegments(track ?? NO_PAINT, settings),
           },
         },
         progress: {
-          show: arcDrawn,
+          show: bands === undefined && arcDrawn,
           width: settings.thickness,
           roundCap: settings.roundCap,
           ...progressItemStyle(progress ?? NO_PAINT, settings, displayValue),
@@ -108,7 +123,7 @@ export function buildGaugeOption(
         // inside the data-diff update callback and only fills it after a render
         // that drew an arc, so a datum outliving `progress.show: false` throws
         // inside its renderer (0008).
-        data: arcDrawn ? [{ value: displayValue }] : [],
+        data: bands === undefined && arcDrawn ? [{ value: displayValue }] : [],
         silent: true,
         ...toEngineAnimation(settings.animation, animate),
       },
@@ -131,6 +146,61 @@ export function toColorSegments(
     case "gradient":
       return approximateGradient(fill.stops, settings.gradientSegments ?? 64);
   }
+}
+
+/**
+ * The ring as equal bands with transparent gaps, or `undefined` when the
+ * divisor asks for one continuous arc.
+ *
+ * A band is filled when **its own end** reaches the reading, so a partial band
+ * never draws half a slice: the boundary is a slice edge, not a percentage. The
+ * reading stays out of the tick list entirely — `progress.show` is false — which
+ * is what makes the slices independent of the arc's smooth fill.
+ */
+function segmentedBands(
+  count: number,
+  filled: boolean,
+  position: number,
+  track: Fill | undefined,
+  progress: Fill | undefined,
+): ColorSegment[] | undefined {
+  if (count <= 1) return undefined;
+
+  const bands: ColorSegment[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const end = (index + 1) / count;
+    const midpoint = (index + 0.5) / count;
+    const reaches = filled && end - SEGMENT_GAP_RATIO / count <= position;
+    const paint = reaches ? progress : track;
+    bands.push([
+      end - SEGMENT_GAP_RATIO / count,
+      bandColor(paint ?? NO_PAINT, reaches, position, midpoint),
+    ]);
+    // The gap belongs to the slice it follows, so the final band reaches the
+    // ring's end rather than trailing an unpainted sliver.
+    if (index < count - 1) bands.push([end, "transparent"]);
+  }
+  return bands;
+}
+
+/** One band's flat colour, sampled from a paint the author authored. */
+function bandColor(
+  paint: Fill,
+  filled: boolean,
+  position: number,
+  midpoint: number,
+): string {
+  if (paint.kind === "gradient") {
+    // The band's midpoint, so a gradient still follows the ring rather than
+    // repeating one colour per slice.
+    return colorAt(paint.stops, midpoint);
+  }
+  if (paint.kind === "thresholds") {
+    // A filled band answers the reading; an unfilled one is the track, whose
+    // colour is the top of its own scale — the backstop behind every value.
+    return resolveFlatColor(paint, filled ? position : 1);
+  }
+  return paint.color;
 }
 
 /** ECharts needs ascending, unique segment ends covering the full ring. */

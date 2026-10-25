@@ -98,6 +98,7 @@ const CHART: ChartFieldTarget = {
       track: { ref: "palette.ink" },
       progress: { ref: "palette.ink" },
       roundCap: true,
+      segmentDivisor: 100,
     },
   },
   bindings: [{ id: "b1", semanticKey: "cpu.load" }],

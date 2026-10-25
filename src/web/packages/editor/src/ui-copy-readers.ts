@@ -82,7 +82,10 @@ export function paragraphsOf(element: Element): string[] {
  * over a dynamic value is collected by nothing — `panels.artboardOutside` and
  * `draftRecovery.lead` are the two, and a surface printing one goes falsely
  * **red**. Widening the pool cannot close that: a sentence interpolating the
- * theme's own name can never equal a probe's output.
+ * theme's own name can never equal a probe's output. A function that **refuses**
+ * a probe argument — `controls.oneOf` takes a list and the pool holds numbers
+ * and strings — is skipped for the same reason: its sentence is composed over a
+ * value the probe pool cannot supply.
  *
  * `chartFamilyLabels` needs no probe of its own: it is reachable as
  * `uiCopy.chartFamilies`, so the object walk above already collects it.
@@ -93,8 +96,15 @@ export function copy(): string[] {
     if (typeof value === "string") out.push(value);
     else if (typeof value === "function")
       for (const argument of [1, 2, 3, 4, "x", ""]) {
-        const produced: unknown = (value as (a: unknown) => unknown)(argument);
-        if (typeof produced === "string") out.push(produced);
+        try {
+          const produced: unknown = (value as (a: unknown) => unknown)(
+            argument,
+          );
+          if (typeof produced === "string") out.push(produced);
+        } catch {
+          // A probe the function's own signature does not accept: it composes
+          // over an argument the pool has no honest example of.
+        }
       }
     else if (Array.isArray(value)) value.forEach(walk);
     else if (typeof value === "object" && value !== null)

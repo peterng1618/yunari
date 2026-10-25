@@ -6,6 +6,7 @@ import { ANIMATION_EASINGS, type AnimationSettings } from "./animation.js";
 import { type BarSettings, defaultBarSettings } from "./bar.js";
 import { defaultLineSettings, type LineSettings } from "./line.js";
 import { defaultPieSettings, type PieSettings } from "./pie.js";
+import { SEGMENT_DIVISORS } from "./segments.js";
 import {
   CHART_PAINT_FIELDS,
   CHART_SETTINGS_FIELDS,
@@ -102,6 +103,7 @@ const GAUGE_COVERAGE: Record<keyof GaugeSettings, "setting" | "paint"> = {
   track: "paint",
   progress: "paint",
   roundCap: "setting",
+  segmentDivisor: "setting",
   gradientSegments: "setting",
   animation: "setting",
 };
@@ -134,8 +136,8 @@ const BAR_COVERAGE: Record<keyof BarSettings, "setting" | "paint"> = {
   fill: "paint",
   track: "paint",
   trackCornerRadius: "setting",
+  segmentDivisor: "setting",
   showAxes: "setting",
-  showCategoryLabels: "setting",
   animation: "setting",
 };
 
@@ -146,10 +148,10 @@ const PIE_COVERAGE: Record<keyof PieSettings, "setting" | "paint"> = {
   endAngle: "setting",
   padAngle: "setting",
   cornerRadius: "setting",
+  segmentDivisor: "setting",
   total: "setting",
   remainderFill: "paint",
   palette: "paint",
-  showLabels: "setting",
   animation: "setting",
 };
 
@@ -261,6 +263,16 @@ describe("coverage against the real settings shapes", () => {
   });
 });
 
+describe("the segment divisor", () => {
+  it("declares the discrete divisors on all three segmented families", () => {
+    for (const family of ["gauge", "bar", "pie"] as const) {
+      expect(
+        settingsFieldsFor(family).find((f) => f.property === "segmentDivisor"),
+      ).toMatchObject({ kind: "number", values: SEGMENT_DIVISORS });
+    }
+  });
+});
+
 describe("the collapsed-and-counted treatment", () => {
   it("collapses at least one obscure setting of each family's own", () => {
     // The animation appearance pair is obscure too, so a family whose only
@@ -353,6 +365,7 @@ describe("descriptor order is the likelihood order", () => {
       "max",
       "thickness",
       "roundCap",
+      "segmentDivisor",
       "gradientSegments",
       ...ANIMATION_PROPERTIES,
     ],
@@ -378,8 +391,8 @@ describe("descriptor order is the likelihood order", () => {
       "categoryGapPercent",
       "cornerRadius",
       "trackCornerRadius",
+      "segmentDivisor",
       "showAxes",
-      "showCategoryLabels",
       ...ANIMATION_PROPERTIES,
     ],
     pie: [
@@ -389,9 +402,9 @@ describe("descriptor order is the likelihood order", () => {
       "endAngle",
       "padAngle",
       "cornerRadius",
+      "segmentDivisor",
       "total",
       "total.value",
-      "showLabels",
       ...ANIMATION_PROPERTIES,
     ],
   };

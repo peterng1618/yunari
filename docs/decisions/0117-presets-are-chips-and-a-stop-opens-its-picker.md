@@ -1,10 +1,14 @@
-# 0116 — Presets are swatch chips, and a gradient stop opens its own picker
+# 0117 — Presets are swatch chips, and a gradient stop opens its own picker
 
 - **Date:** 2026-10-25
 - **Status:** accepted
 - **Paths:** `src/web/packages/editor/src/components/ui/control-choice-row.tsx`,
   `src/web/packages/editor/src/components/ui/colour-picker.tsx`,
-  `src/web/packages/editor/src/components/ui/gradient-editor.tsx`
+  `src/web/packages/editor/src/components/ui/gradient-editor.tsx`,
+  `src/web/packages/editor/src/chart-manager/index.ts`,
+  `src/web/packages/renderer-core/src/charts/chart-paint.ts`,
+  `src/web/packages/renderer-core/src/charts/reading-signature.ts`,
+  `src/web/packages/player/src/main.ts`
 
 ## The problem
 
@@ -68,6 +72,26 @@ Measured in the built editor on 2026-10-25 with a CDP sampling profiler and
 
 The chip and picker-open changes are rendered behaviour, so their evidence is
 the DOM suites plus the browser capture; no timing claim is made for them.
+
+## The chart reading's palette half
+
+Main extracted the chart reading signature into
+`renderer-core/src/charts/reading-signature.ts` while this branch was open, so
+the palette inputs this work adds moved with it rather than staying in the
+editor's private copy.
+
+Searched: `reading-signature.ts` and the two call sites
+(`chart-manager/index.ts`, `player/src/main.ts`); `chart-paint.ts`, whose
+`reassignChartPaintReferences` already walks every `ref` in authored settings;
+`plan.ts`'s paint resolver; and `rg` for a read-only ref collector or a typed
+list of paint fields across renderer-core, editor and player.
+
+Found: the generic walk in `reassignChartPaintReferences` is the existing rule,
+so the collector is its read-only twin in the same module rather than a second
+per-family field list that four settings shapes would have to keep in step. Both
+call sites already hold the palette they resolve paint with, so the signature
+takes it as one more input; the platform and installed dependencies offer
+nothing for comparing authored paint values.
 
 ## Decision
 Preset libraries use a third `ControlChoiceRow` geometry — a 24px `--radius-sm`

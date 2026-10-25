@@ -107,6 +107,13 @@ export {
   computeComposition,
   defaultPieSettings,
 } from "./charts/pie.js";
+export { chartReadingSignature } from "./charts/reading-signature.js";
+export {
+  SEGMENT_DIVISORS,
+  SEGMENT_GAP_RATIO,
+  segmentCount,
+  segmentDivisorOf,
+} from "./charts/segments.js";
 export {
   carriedPaintFor,
   seriesPaintFor,

@@ -90,6 +90,59 @@ describe("buildGaugeOption", () => {
     const option = buildGaugeOption(defaultGaugeSettings, sample(), false);
     expect(option.series[0].animation).toBe(false);
   });
+
+  it("splits the ring into equal bands with transparent gaps", () => {
+    const option = buildGaugeOption(
+      { ...defaultGaugeSettings, segmentDivisor: 10 },
+      sample(55),
+    );
+    const colors = option.series[0].axisLine.lineStyle.color;
+
+    // 10 bands: each visible band followed by a gap, except the last band's end.
+    expect(colors).toHaveLength(19);
+    expect(colors[0]![0]).toBeCloseTo(0.08);
+    expect(colors[1]).toEqual([0.1, "transparent"]);
+    expect(option.series[0].progress.show).toBe(false);
+    expect(option.series[0].data).toEqual([]);
+  });
+
+  it("fills bands the reading reaches and tracks the rest", () => {
+    const option = buildGaugeOption(
+      {
+        ...defaultGaugeSettings,
+        segmentDivisor: 10,
+        track: { kind: "solid", color: "#222222" },
+        progress: { kind: "solid", color: "#00b8d9" },
+      },
+      sample(55),
+    );
+    const colors = option.series[0].axisLine.lineStyle.color;
+    const solid = colors.filter(([, color]) => color !== "transparent");
+
+    expect(solid.slice(0, 5).every(([, color]) => color === "#00b8d9")).toBe(
+      true,
+    );
+    expect(solid.slice(5).every(([, color]) => color === "#222222")).toBe(true);
+  });
+
+  it("leaves a missing sample entirely in track paint", () => {
+    const option = buildGaugeOption(
+      { ...defaultGaugeSettings, segmentDivisor: 10 },
+      undefined,
+    );
+    const solid = option.series[0].axisLine.lineStyle.color.filter(
+      ([, color]) => color !== "transparent",
+    );
+
+    expect(new Set(solid.map(([, color]) => color)).size).toBe(1);
+  });
+
+  it("keeps the continuous option at 100", () => {
+    const option = buildGaugeOption(defaultGaugeSettings, sample(55));
+
+    expect(option.series[0].progress.show).toBe(true);
+    expect(option.series[0].axisLine.lineStyle.color).toEqual([[1, "#2a2f3a"]]);
+  });
 });
 
 describe("toColorSegments", () => {

@@ -736,6 +736,18 @@ describe("Fabric theme envelope validation", () => {
     ]);
   });
 
+  it("refuses a segment divisor that is not an allowed value", () => {
+    const issues = issuesOf(
+      validateFabricThemeEnvelope(chartEnvelope("bar", { segmentDivisor: 33 })),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        code: "out-of-range",
+        path: "/scene/objects/0/settings/segmentDivisor",
+      }),
+    );
+  });
+
   it("refuses a crossed pair the family's own descriptors own", () => {
     const gauge = validateFabricThemeEnvelope(
       chartEnvelope("gauge", { min: 10, max: 1 }),
@@ -785,6 +797,18 @@ describe("Fabric theme envelope validation", () => {
     expect(issuesOf(unknown)).toMatchObject([
       { code: "unknown-field", path: "/scene/objects/0/settings/minimum" },
     ]);
+  });
+
+  it("refuses the removed label keys", () => {
+    for (const [family, settings] of [
+      ["bar", { showCategoryLabels: true }],
+      ["pie", { showLabels: true }],
+    ] as const) {
+      const issues = issuesOf(
+        validateFabricThemeEnvelope(chartEnvelope(family, settings)),
+      );
+      expect(issues.some((issue) => issue.code === "unknown-field")).toBe(true);
+    }
   });
 
   it("refuses a fixed pie total with no finite value", () => {

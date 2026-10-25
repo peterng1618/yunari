@@ -1,3 +1,9 @@
+import {
+  buildChartPlan,
+  defaultLineSettings,
+  LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
+  type SampleSource,
+} from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import { createPreviewSource } from "./preview-source.js";
 
@@ -6,7 +12,9 @@ describe("createPreviewSource", () => {
     let now = 0;
     const preview = createPreviewSource({ keys: ["cpu.load"], now: () => now });
 
-    expect(preview.source.chartPlaybackDelayMs).toBe(1_000);
+    expect(preview.source.chartPlaybackDelayMs).toBe(
+      LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
+    );
 
     const first = preview.source.latest("cpu.load");
     now += 1_000;
@@ -20,7 +28,7 @@ describe("createPreviewSource", () => {
       preview.source.latest("cpu.load");
     }
 
-    expect(preview.source.history("cpu.load", 1_000)).toHaveLength(301);
+    expect(preview.source.history("cpu.load", 1_000)).toHaveLength(302);
   });
 
   it("reads on the source's sampling cadence, not the frame clock", () => {
@@ -39,5 +47,34 @@ describe("createPreviewSource", () => {
 
     now = 1_001_000;
     expect(preview.source.latest("cpu.load")).not.toEqual(tick);
+  });
+
+  it("draws a line straight, because the preview edge is delayed too", () => {
+    // The editor must show what the player will draw. The preview source
+    // carries the playback delay, so the same straight-line rule applies; a
+    // source without a delay is the control, and smoothing stays there.
+    const now = 60_000;
+    const preview = createPreviewSource({ keys: ["cpu.load"], now: () => now });
+    const undelayed: SampleSource = {
+      latest: (key) => preview.source.latest(key),
+      history: (key, seconds) => preview.source.history(key, seconds),
+    };
+    const smooth = (source: SampleSource): boolean => {
+      const chart = buildChartPlan(
+        "line",
+        {
+          family: "line",
+          settings: { ...defaultLineSettings, interpolation: "smooth" },
+        },
+        [{ id: "b", semanticKey: "cpu.load" }],
+        { source, nowMs: now },
+        [],
+      );
+      if (chart.family !== "line") throw new Error("expected a line chart");
+      return chart.option.series[0]!.smooth;
+    };
+
+    expect(smooth(preview.source)).toBe(false);
+    expect(smooth(undelayed)).toBe(true);
   });
 });

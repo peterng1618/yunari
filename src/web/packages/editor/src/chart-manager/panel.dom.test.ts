@@ -4,6 +4,7 @@ import {
   defaultPieSettings,
   type FabricPalette,
   type PieSettings,
+  SEGMENT_DIVISORS,
   SEMANTIC_KEYS,
   type SemanticKeyDescriptor,
   settingsFieldsFor,
@@ -49,6 +50,7 @@ const charts: readonly ChartFieldTarget[] = [
         track: { kind: "solid", color: "#000" },
         progress: { kind: "solid", color: "#fff" },
         roundCap: true,
+        segmentDivisor: 100,
       },
     },
     bindings: [{ id: "g", semanticKey: "ram.used.percent" }],
@@ -92,10 +94,10 @@ const charts: readonly ChartFieldTarget[] = [
         categoryGapPercent: 40,
         cornerRadius: 10,
         trackCornerRadius: 10,
+        segmentDivisor: 100,
         fill: { ref: "palette.cpu" },
         track: { ref: "palette.gpu" },
         showAxes: false,
-        showCategoryLabels: false,
       },
     },
     bindings: [{ id: "disk", semanticKey: "disk.used" }],
@@ -111,7 +113,7 @@ const charts: readonly ChartFieldTarget[] = [
         endAngle: 360,
         padAngle: 0,
         cornerRadius: 4,
-        showLabels: false,
+        segmentDivisor: 100,
         palette: [{ ref: "palette.cpu" }],
         remainderFill: { ref: "palette.gpu" },
         total: { kind: "sum" },
@@ -232,6 +234,20 @@ describe("a chart's bounded settings, as the owner hands them over", () => {
     });
   });
 
+  it("offers the segment divisor as the discrete track", () => {
+    // The track's own range comes from the list, not from the descriptor's
+    // numeric bounds: the values between two divisors are not commits anyone
+    // can make, so the control steps index to index.
+    expect(rowOf(charts[0]!, "segmentDivisor")).toMatchObject({
+      control: "slider",
+      value: 100,
+      min: 1,
+      max: 100,
+      values: SEGMENT_DIVISORS,
+      clearable: false,
+    });
+  });
+
   it("leaves the three a track cannot honour typed, and says why", () => {
     // Bounded by the sample store and by the chart's own data: a slider would
     // offer a range the store or the data does not honour.
@@ -274,9 +290,9 @@ describe("a chart's bounded settings, as the owner hands them over", () => {
           max: 100,
           categoryGapPercent: 40,
           cornerRadius: 7,
+          segmentDivisor: 100,
           fill: { kind: "solid", color: "#000" },
           showAxes: false,
-          showCategoryLabels: false,
         },
       },
       bindings: [],
@@ -552,6 +568,7 @@ describe("what a chart paints its data with", () => {
             track: { ref: "palette.cpu" },
             progress: { ref: "palette.gpu" },
             roundCap: true,
+            segmentDivisor: 100,
           },
         },
         bindings: [],

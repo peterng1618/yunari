@@ -665,6 +665,24 @@ it("a refused slider cannot be moved by arrow keys or by pointer", async () => {
   expect(applied).toHaveBeenCalledWith(6);
 });
 
+it("writes the divisor, while its track moves over indices", async () => {
+  const commits: number[] = [];
+  await mount(
+    <ControlSlider
+      label="Segments"
+      value={100}
+      min={1}
+      max={100}
+      values={[1, 2, 4, 5, 10, 20, 25, 50, 100]}
+      onCommit={(value) => commits.push(value)}
+    />,
+  );
+  const track = labelled("Segments");
+  expect(track.getAttribute("aria-valuetext")).toBe("100");
+  await press(track, "ArrowLeft");
+  expect(commits).toEqual([50]);
+});
+
 it("refuses a non-numeric entry instead of coercing it to zero", async () => {
   const onCommit = vi.fn();
   await mount(

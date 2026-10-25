@@ -1,0 +1,66 @@
+import { describe, expect, it } from "vitest";
+import type { SampleSource } from "../data/source.js";
+import type { Sample } from "../types.js";
+import { defaultBarSettings } from "./bar.js";
+import { defaultLineSettings } from "./line.js";
+import { chartReadingSignature } from "./reading-signature.js";
+
+const sample: Sample = {
+  sensorId: "cpu.load.total",
+  timestamp: "2026-01-01T00:00:01.000Z",
+  status: "ok",
+  value: 42,
+  unit: "%",
+};
+const source: SampleSource = {
+  latest: () => sample,
+  history: () => [sample],
+};
+
+describe("chartReadingSignature", () => {
+  it("moves a value chart only when its reading moves", () => {
+    const chart = { family: "bar", settings: defaultBarSettings } as const;
+    const bindings = [{ id: "b", semanticKey: "cpu.load.total" }];
+
+    expect(chartReadingSignature(chart, bindings, source, 1_000)).toBe(
+      chartReadingSignature(chart, bindings, source, 1_500),
+    );
+  });
+
+  it("moves a line with the render clock", () => {
+    const chart = { family: "line", settings: defaultLineSettings } as const;
+    const bindings = [{ id: "b", semanticKey: "cpu.load.total" }];
+
+    expect(chartReadingSignature(chart, bindings, source, 1_000)).not.toBe(
+      chartReadingSignature(chart, bindings, source, 1_500),
+    );
+  });
+
+  it("moves only with the palette tokens the settings name", () => {
+    const chart = {
+      family: "bar",
+      settings: {
+        ...defaultBarSettings,
+        fill: { ref: "palette.accent" },
+      },
+    } as const;
+    const bindings = [{ id: "b", semanticKey: "cpu.load.total" }];
+    const palette = (accent: string) => ({
+      accent: { name: "Accent", value: { kind: "solid" as const, color: accent } },
+      other: { name: "Other", value: { kind: "solid" as const, color: "#123" } },
+    });
+
+    // A token the settings do not name is not an input to the plan.
+    expect(
+      chartReadingSignature(chart, bindings, source, 1_000, palette("#111")),
+    ).toBe(
+      chartReadingSignature(chart, bindings, source, 1_000, palette("#111")),
+    );
+    // The one they do name is.
+    expect(
+      chartReadingSignature(chart, bindings, source, 1_000, palette("#111")),
+    ).not.toBe(
+      chartReadingSignature(chart, bindings, source, 1_000, palette("#222")),
+    );
+  });
+});
