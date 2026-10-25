@@ -54,6 +54,20 @@ const READ_FAMILIES = {
 
 type ReadFamily = keyof typeof READ_FAMILIES;
 
+/**
+ * A family's answer for one tick. A failure is this tick's answer too: every
+ * ask group at the same `nowMs` must see one verdict, or two displays would be
+ * told `ok` and `missing` for the same machine read.
+ */
+type FamilyRead<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly reason: string };
+
+interface TickReads {
+  readonly atMs: number;
+  readonly reads: Map<ReadFamily, Promise<FamilyRead<unknown>>>;
+}
+
 export const LIBRARY_PROVIDER_ID = "library";
 
 const BYTES_PER_GB = 1024 ** 3;
@@ -827,14 +841,9 @@ export class LibrarySensorProvider implements SensorProvider {
    * The machine-wide reads already started for the tick at `atMs`. Ask groups
    * are sampled one after another against the same clock, so without this a
    * family two groups both need is walked twice; four displays were four walks.
-   * Replaced whole at a new tick, so a resolved figure never outlives its tick.
+   * Replaced whole at a new tick, so neither a figure nor a failure outlives it.
    */
-  private tick:
-    | {
-        readonly atMs: number;
-        readonly reads: Map<ReadFamily, Promise<unknown>>;
-      }
-    | undefined;
+  private tick: TickReads | undefined;
 
   constructor(private readonly library?: LibraryModule) {}
 
@@ -915,34 +924,57 @@ export class LibrarySensorProvider implements SensorProvider {
   }
 
   /**
-   * One machine-wide read per family per tick. The in-flight promise is shared
-   * by every ask group sampled at `nowMs`; a rejection is dropped immediately so
-   * it cannot poison a later group's read, while a resolved one is reused until
-   * the tick ends — these are live figures, never kept past their tick.
+   * Starts a tick's cache when `nowMs` differs from the recorded one, so the
+   * previous tick's verdict — a figure or a failure — is not carried forward.
+   */
+  private beginTick(nowMs: number): TickReads {
+    const current = this.tick;
+
+    if (current?.atMs === nowMs) {
+      return current;
+    }
+
+    const tick: TickReads = { atMs: nowMs, reads: new Map() };
+    this.tick = tick;
+    this.failure = undefined;
+    return tick;
+  }
+
+  /**
+   * One machine-wide read per family per tick. Every ask group sampled at
+   * `nowMs` awaits the same promise, so a family starts at most once and a
+   * failure is the tick's answer rather than a reason to retry it per display.
+   * A rejection is folded into the promise, so `sample` never throws from it;
+   * the outcome is dropped only when the tick is replaced.
    */
   private readOnce<T>(
     nowMs: number,
     family: ReadFamily,
     start: () => Promise<T>,
-  ): Promise<T> {
-    if (this.tick?.atMs !== nowMs) {
-      this.tick = { atMs: nowMs, reads: new Map() };
-    }
-
-    const tick = this.tick;
+  ): Promise<FamilyRead<T>> {
+    const tick = this.beginTick(nowMs);
     const started = tick.reads.get(family);
 
     if (started !== undefined) {
-      return started as Promise<T>;
+      return started as Promise<FamilyRead<T>>;
     }
 
-    const pending = start();
+    const pending = start().then(
+      (value): FamilyRead<T> => ({ ok: true, value }),
+      (error: unknown): FamilyRead<T> => {
+        const reason = redactForBrowser(
+          error instanceof Error ? error.message : String(error),
+        );
+
+        // Only the tick that started this read owns its verdict.
+        if (this.tick === tick) {
+          this.failure ??= reason;
+        }
+
+        return { ok: false, reason };
+      },
+    );
     tick.reads.set(family, pending);
-    pending.catch(() => {
-      if (tick.reads.get(family) === pending) {
-        tick.reads.delete(family);
-      }
-    });
 
     return pending;
   }
@@ -998,11 +1030,13 @@ export class LibrarySensorProvider implements SensorProvider {
 
     try {
       const library = await this.module();
+      // A new tick is judged by its own reads: this also keeps a group with no
+      // machine-wide keys from carrying the previous tick's verdict forward.
+      this.beginTick(nowMs);
       // A family is started only when an owned key needs a figure it supplies,
       // and each is contained: graphics failing still answers CPU load, while
       // its own keys become gaps with the reason.
-      const failed = new Set<ReadFamily>();
-      let failure: string | undefined;
+      const failed = new Map<ReadFamily, string>();
       const read = async <T>(
         family: ReadFamily,
         start: () => Promise<T>,
@@ -1011,15 +1045,14 @@ export class LibrarySensorProvider implements SensorProvider {
           return undefined;
         }
 
-        try {
-          return await this.readOnce(nowMs, family, start);
-        } catch (error) {
-          failed.add(family);
-          failure ??= redactForBrowser(
-            error instanceof Error ? error.message : String(error),
-          );
-          return undefined;
+        const outcome = await this.readOnce(nowMs, family, start);
+
+        if (outcome.ok) {
+          return outcome.value;
         }
+
+        failed.set(family, outcome.reason);
+        return undefined;
       };
       const [load, speed, mem, filesystems, network, graphics] =
         await Promise.all([
@@ -1030,8 +1063,6 @@ export class LibrarySensorProvider implements SensorProvider {
           read("network", () => library.networkStats()),
           read("graphics", () => library.graphics()),
         ]);
-
-      this.failure = failure;
 
       // The assignment this sample was given, read once here: one selection
       // answers the figures and the caption, and the two expensive discovery
@@ -1146,29 +1177,40 @@ export class LibrarySensorProvider implements SensorProvider {
         nowMs,
       );
 
-      if (failure === undefined) {
+      if (failed.size === 0) {
         return entries;
       }
 
       // A family that rejects is a gap for its own keys alone, carrying the
       // reason; every other family's entries stand.
-      const reason = failure;
       const timestamp = new Date(nowMs).toISOString();
-      const unavailable = (semanticKey: string): SampleEntry => ({
-        semanticKey,
-        sample: {
-          sensorId: `${LIBRARY_PROVIDER_ID}:${semanticKey}`,
-          timestamp,
-          status: "missing",
-          message: `system information is unavailable: ${reason}`,
-        },
-      });
 
-      return entries.map((entry) =>
-        [...failed].some((family) => READ_FAMILIES[family](entry.semanticKey))
-          ? unavailable(entry.semanticKey)
-          : entry,
-      );
+      return entries.map((entry) => {
+        const family = [...failed.keys()].find((candidate) =>
+          READ_FAMILIES[candidate](entry.semanticKey),
+        );
+
+        if (family === undefined) {
+          return entry;
+        }
+
+        // The name comes from the drive index, not from `fsSize`: a failed
+        // volume walk must not discard a name that was read successfully. A
+        // failed index leaves the name absent on its own.
+        if (family === "filesystems" && entry.semanticKey === "disk.name") {
+          return entry;
+        }
+
+        return {
+          semanticKey: entry.semanticKey,
+          sample: {
+            sensorId: `${LIBRARY_PROVIDER_ID}:${entry.semanticKey}`,
+            timestamp,
+            status: "missing" as const,
+            message: `system information is unavailable: ${failed.get(family)}`,
+          },
+        };
+      });
     } catch (error) {
       // `systeminformation` shells out, so its errors quote the command and
       // the machine's own paths. This message reaches every display on the

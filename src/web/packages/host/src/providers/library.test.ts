@@ -631,6 +631,53 @@ describe("the machine-wide reads each family needs", () => {
     });
     expect(provider.health().available).toBe(true);
   });
+
+  it("reads a failing family once for every group sharing a tick", async () => {
+    let reads = 0;
+    const machine = fakeMachine();
+    const provider = new LibrarySensorProvider({
+      ...machine,
+      graphics: async () => {
+        reads += 1;
+        throw new Error("wmi said no");
+      },
+    });
+
+    const first = await provider.sample(["gpu.load"], 0);
+    const second = await provider.sample(["gpu.load"], 0);
+    const third = await provider.sample(["cpu.load"], 0);
+
+    // A broken GPU read is one shell-out per tick, not one per display, and
+    // both groups are told the same thing about it.
+    expect(reads).toBe(1);
+    expect(sampleOf(first, "gpu.load")).toMatchObject({ status: "missing" });
+    expect(sampleOf(second, "gpu.load")).toMatchObject({ status: "missing" });
+    expect(sampleOf(third, "cpu.load")).toMatchObject({
+      status: "ok",
+      value: 12,
+    });
+  });
+
+  it("keeps the tick's failure for a later group that needs nothing failing", async () => {
+    const machine = fakeMachine();
+    const provider = new LibrarySensorProvider({
+      ...machine,
+      graphics: async () => {
+        throw new Error("wmi said no");
+      },
+    });
+
+    await provider.sample(["gpu.load"], 0);
+    await provider.sample(["cpu.load"], 0);
+
+    // A cpu-only group must not erase the fact that this tick's GPU read
+    // failed: health is the tick's verdict, not the last group's.
+    expect(provider.health()).toMatchObject({ available: false });
+
+    await provider.sample(["cpu.load"], 1000);
+
+    expect(provider.health()).toMatchObject({ available: true });
+  });
 });
 
 describe("the existing library keys", () => {
