@@ -9,7 +9,7 @@ Fix every finding in the 2026-10-25 performance and security audit, plus anythin
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-performance-security-hardening.md` — Phase 0 in progress; no task dispatched.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-performance-security-hardening.md` — Phase 1 complete; Phase 2 is next.
 - **Spec:** [`2026-10-25-performance-security-hardening-design.md`](docs/superpowers/specs/2026-10-25-performance-security-hardening-design.md) is approved and all findings are marked Fix.
 - **Decision notes 0116–0120 are landed** for the request boundary, chart repaint, store upload, provenance checks and secrets at rest.
 - **Backlog drain is queued behind this plan:** [`spec`](docs/superpowers/specs/2026-10-12-the-backlog-drain-design.md) and [`plan`](docs/superpowers/plans/2026-10-12-the-backlog-drain.md) start after this closes.
@@ -17,23 +17,23 @@ Fix every finding in the 2026-10-25 performance and security audit, plus anythin
 
 ## Last completed change
 
-- **Audit complete:** five read-only surfaces, every high finding spot-verified in source, 30 security and 23 performance findings recorded.
-- **Spec and plan written:** design sections A–I, decision notes 0116–0120 and a 38-task TDD plan under `docs/superpowers/`.
-- **Spec review passed:** `docs:check` exit 0; no placeholder or contradiction remains.
-- **Plan self-review caught three gaps:** store-origin validation, line-point caching and the zero-glass video callback are now tasks.
+- **Host request boundary hardened:** central same-origin guard on loopback API routes, asset MIME from the declared kind, and import, Wallpaper Engine and health gated by surface.
+- **Pairing and streams bounded:** a code is consumed by one claim after the penalty wait; stream keys, connections and pre-handshake sockets are capped.
+- **Admin I/O contained:** oversized theme bodies share one slot, admin store failures answer fixed sentences with detail logged, bundle serving refuses links and dotfiles and answers ETag/304.
+- **Editor font table aligned:** formats the theme format cannot declare are refused instead of offered; the served asset kind stays WOFF2-only.
+- **Plan corrected:** 41 tasks, exact watchlist claims, and Task 1.2's table owned by `renderer-core`.
 
 ## Next
 
-1. Finish Phase 0: baseline gate, Worker suite and the focused Playwright smoke set.
-2. Run Phase 1 (host request boundary) and Phase 2 (untrusted files and outbound fetches).
-3. Run Phase 3 (player) and Phase 4 (host IO), with a built-bundle browser check.
-4. Run Phase 5 (editor) and Phase 6 (store uploads and Worker).
-5. Run Phase 7 (secrets, sessions, TLS) and Phase 8 (supply chain and close).
+1. Run Phase 2 (untrusted files and outbound fetches): ZIP preflight, contained reads, private redirects and pinned DNS.
+2. Run Phase 3 (player) and rebuild bundles before its browser check.
+3. Run Phase 4 (host IO) and Phase 5 (editor).
+4. Run Phase 6 (store uploads and Worker) and Phase 7 (secrets, sessions, TLS).
+5. Run Phase 8 (supply chain and close), then the final whole-branch review.
 
 ## Blockers / unverified
 
-- **Baseline gate is running:** exact exit code is recorded before any product code changes.
 - **The store upload proxy is unverified live:** the Worker tests and the host client are the evidence until a real upload runs.
 - **No Linux secret-store probe:** `secret-tool` is absent on this Windows host; the protector must refuse rather than fall back.
-- **The CA fingerprint and cookie flow are unit-tested first:** a real phone pairing needs a live run after Phase 7.
-
+- **The CA fingerprint and cookie flow are unit-tested only:** a real phone pairing needs a live run after Phase 7.
+- **Phase 1 visible behaviour is not yet browser-checked:** `npm run gate` does not build; rebuild before the Phase 3 check.
