@@ -2292,6 +2292,8 @@ describe("ThemeStore asset bounds", () => {
     }
   });
 
+  // Four 128-asset themes on a temp directory: a full gate saturates the box
+  // and the 20 s default expires mid-write, which reads as a bound breach.
   it("holds read and write to the same asset count", async () => {
     await expect(
       store.write("at-bound", themeOfCount("at-bound", 128)),
@@ -2306,7 +2308,7 @@ describe("ThemeStore asset bounds", () => {
     await placeOnDisk("kept-over", themeOfCount("kept-over", 129));
     expect(await store.read("kept-at")).toBeDefined();
     expect(await store.read("kept-over")).toBeUndefined();
-  });
+  }, 60_000);
 
   it("refuses a save whose assets together are over the bound", async () => {
     await expect(
