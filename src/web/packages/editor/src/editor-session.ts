@@ -35,6 +35,7 @@ import {
 import { ChartManager } from "./chart-manager/index.js";
 import { EditorDocument } from "./editor-document.js";
 import type { EditorActionFacade } from "./editor-shell/session-facade.js";
+import type { TokenSelectionStore } from "./editor-shell/shell-stores.js";
 import { type EditorShell } from "./editor-shell.js";
 import type { FavoritesClient } from "./favorites-client.js";
 import { type CuratedFontFace } from "./font-catalog.js";
@@ -163,9 +164,12 @@ interface EditorSessionOptions {
    *  without a shell's chrome simply has no publish chord. */
   readonly onPublishSurface?: () => void;
   /** The shell's own projection of the selection, handed to the preset list so
-   *  its chooser opens on the preset the selection is set in rather than on the
-   *  first declared one (`vg-094`). Optional for the same reason as above. */
+   *  it says what the canvas selection is set in rather than showing the first
+   *  declared preset (`vg-094`). Optional for the same reason as above. */
   readonly selection?: PresetSelection;
+  /** The shell's token selection, handed to the preset list so a row press
+   *  reaches the store the inspector reads. Optional, like `selection`. */
+  readonly tokenSelection?: TokenSelectionStore;
   /** The Assets pane's title count. The store is the shell chrome's, so the
    *  session reports the manager's declaration count rather than the shell
    *  reaching for a manager it does not hold. */
@@ -354,10 +358,12 @@ export class EditorSession {
       (presets) => this.#document.setTypes(presets),
       (id, replacement) => this.#document.deleteType(id, replacement),
       fontActions,
-      // The shell's own selection projection, so the list's chooser opens on
-      // what the selection is set in. Pulled from the live snapshot rather than
-      // a copy held here, because the selection is Fabric's.
+      // The shell's own selection projection, so the list says what the canvas
+      // selection is set in. Pulled from the live snapshot rather than a copy
+      // held here, because the selection is Fabric's.
       options.selection,
+      // The token a row press selects, which the inspector will read.
+      options.tokenSelection,
     );
     this.#types.render(
       this.#document.envelope.globals?.typePresets as TypePresets | undefined,

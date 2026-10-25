@@ -326,9 +326,13 @@ async function start(): Promise<void> {
       // both open the surface, and the switch inside it is the one owner of
       // whether the host is serving.
       onPublishSurface: () => layout.showPublishing(),
-      // The shell's selection projection, so the Tokens pane opens on the
-      // preset the selection is set in rather than on the first declared one.
+      // The shell's selection projection, so the Tokens pane says what the
+      // canvas selection is set in rather than showing the first declared
+      // preset.
       selection: layout.selection,
+      // The shell's token selection, so a preset row's press reaches the
+      // store the inspector will read.
+      tokenSelection: layout.tokenSelection,
       // The Assets pane's count is the session's manager's list, and the title
       // bar is the shell's, so the reading crosses back through the store that
       // already carries the document's own facts.

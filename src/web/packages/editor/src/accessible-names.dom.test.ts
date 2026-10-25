@@ -265,13 +265,11 @@ describe("editor panels", () => {
       "INPUT[type=radio][aria-hidden]", // Dusty Cactus
       // The palette's reassignment chooser, rendered after the paint fields.
       "INPUT[type=][aria-hidden]", // Reassign (palette)
-      // The Tokens pane's preset library, four by the same primitive: the preset
-      // chooser, the curated face, the trio and the reassignment chooser. The
-      // panel was imperative until Task 6, so it contributed none before.
-      "INPUT[type=][aria-hidden]", // Type preset (chooser)
-      "INPUT[type=][aria-hidden]", // Font face
-      "INPUT[type=][aria-hidden]", // Font trio
-      "INPUT[type=][aria-hidden]", // Reassign (preset)
+      // The Tokens pane's preset library renders no value carrier any more: it
+      // is a list of pressable rows now, and the chooser, the face and trio
+      // controls and the reassignment row went with the fields they edited.
+      // Those fields — and the carrier each will bring back — belong to the
+      // selection inspector's token section.
       // The run editor's five: four `ControlSelect`s and one `ControlSwatch`,
       // which is `SelectControl` with an adornment — each a Base UI select's
       // value carrier.

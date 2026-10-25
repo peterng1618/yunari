@@ -156,15 +156,17 @@ it("leaves the three panels with no copy of their own", async () => {
       (stop) => stop.getAttribute("aria-label"),
     ),
     // Two kinds of button are excluded, both because their text is data. A token
-    // well prints the document's own token name and usage figure; a select's
-    // trigger prints the chosen value, which on every panel here is a token's
-    // name, a preset's, a unit's or a locale's — the chevron beside it is
-    // decoration. The words a select *offers* are copy and are read from its
-    // open list, so excluding the closed control loses nothing.
+    // well prints the document's own token name and usage figure; a type-preset
+    // row prints the preset's own name and resolution. A select's trigger prints
+    // the chosen value, which on every panel here is a token's name, a preset's,
+    // a unit's or a locale's — the chevron beside it is decoration. The words a
+    // select *offers* are copy and are read from its open list, so excluding the
+    // closed control loses nothing.
     ...Array.from(root.querySelectorAll("button"))
       .filter(
         (button) =>
           button.getAttribute("data-yunari-palette-token-row") === null &&
+          button.getAttribute("data-yunari-type-preset-row") === null &&
           button.querySelector("[data-yunari-value]") === null,
       )
       .map((button) => spokenText(button)),

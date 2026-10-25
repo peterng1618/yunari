@@ -2,11 +2,14 @@ import type { TypePreset } from "@yunari/renderer-core";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+import type { TokenSelectionStore } from "../editor-shell/shell-stores.js";
 import type { CuratedFontFace } from "../font-catalog.js";
+import { newPresetType } from "../new-fabric-theme-globals.js";
 import {
   PresetList,
   type PresetSelection,
 } from "../panes/tokens/preset-list.js";
+import { uiCopy } from "../ui-copy.js";
 
 export type TypePresets = Readonly<
   Record<string, { readonly name: string; readonly value: TypePreset }>
@@ -35,16 +38,23 @@ export interface TypePresetFontActions {
  * references.
  *
  * The factory keeps its signature and its `root`/`render` pair, so
- * `editor-session.ts` keeps its construction site; what changed is the
- * rendering, which is the Tokens pane's React tree. The heading, the chooser and
- * every field are children of that tree rather than a second `createRoot`, and
- * the panel is a **sibling** section of the palette panel's under the same
- * Tokens-pane host (R36) — it builds its own section and never reaches into the
- * palette's tree.
+ * `editor-session.ts` keeps its construction site; what it renders is the Tokens
+ * pane's React tree — the heading, the canvas-binding readout, the preset rows
+ * and the add action — rather than an imperative panel, and it is a **sibling**
+ * section of the palette panel's under the same Tokens-pane host (R36) — it
+ * builds its own section and never reaches into the palette's tree.
  *
  * `selection` is the shell's own projection of the selection, handed in so the
- * list can open on the preset the selection is set in and say so (`vg-094`); it
- * is optional, and a panel built without one reads as nothing selected.
+ * list can say what the canvas selection is set in (`vg-094`); `tokenSelection`
+ * is the shell's, handed in so a row press selects the token the inspector will
+ * edit. Both are optional, and a panel built without them reads as nothing
+ * selected.
+ *
+ * `onDelete` and `fontActions` stay on the signature even though the list no
+ * longer renders a control for either: the session builds `fontActions` for the
+ * selection inspector's face field as well, and this factory's positional
+ * parameters are the session's call site. The preset's editable fields — and
+ * the delete row among them — now belong to the token inspector.
  */
 export function createTypePresetPanel(
   host: HTMLElement,
@@ -52,6 +62,7 @@ export function createTypePresetPanel(
   onDelete?: (id: string, replacement: string) => void,
   fontActions?: TypePresetFontActions,
   selection?: PresetSelection,
+  tokenSelection?: TokenSelectionStore,
 ): TypePresetPanel {
   const root = document.createElement("section");
   // No `data-yunari-panel` and no title here: `Pane` owns the identity and the
@@ -61,17 +72,23 @@ export function createTypePresetPanel(
 
   const reactRoot: Root = createRoot(root);
   const draw = (presets: TypePresets | undefined): void => {
+    const current = presets ?? {};
     // Flushed, so a caller that reads the pane straight after building or
     // refreshing it sees the presets rather than the frame before React commits
     // — the contract the imperative panel had.
     flushSync(() => {
       reactRoot.render(
         createElement(PresetList, {
-          presets: presets ?? {},
-          onChange,
-          onDelete,
-          fontActions,
+          presets: current,
+          // The list mints the id; the record is built here because `onChange`
+          // is this factory's write port.
+          onAdd: (id: string) =>
+            onChange({
+              ...current,
+              [id]: { name: uiCopy.panels.newType, value: newPresetType },
+            }),
           selection,
+          tokenSelection,
         }),
       );
     });

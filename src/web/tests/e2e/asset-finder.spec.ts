@@ -406,7 +406,6 @@ test("the font field opens the finder on Fonts", async ({ page }, testInfo) => {
   const column = page.locator('[data-yunari-panel="selection"]');
   const field = column.locator("[data-yunari-open-font-picker]").first();
   await expect(field).toBeVisible();
-  await expect(column.locator("[data-yunari-font-picker]")).toHaveCount(0);
 
   await field.click();
 

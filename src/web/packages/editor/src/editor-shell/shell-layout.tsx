@@ -53,6 +53,7 @@ import {
   PublishSurfaceStore,
   SelectionStore,
   SheetStore,
+  TokenSelectionStore,
   useFinder,
   useSelection,
   useSheet,
@@ -177,9 +178,12 @@ export interface ShellLayout {
   readonly stage: HTMLElement;
   readonly dock: HTMLElement;
   /** The shell's own projection of the selection, for the panes that read it —
-   *  the Tokens pane's preset chooser opens on the preset the selection is set
-   *  in rather than on the first declared one (`vg-094`). */
+   *  the Tokens pane's preset list says what the canvas selection is set in
+   *  rather than showing the first declared preset (`vg-094`). */
   readonly selection: SelectionStore;
+  /** The token the Tokens pane has selected for the inspector. Exclusive with
+   *  the canvas selection in both directions; it lives as long as the shell. */
+  readonly tokenSelection: TokenSelectionStore;
   setBridge(
     bridge: EditorShellBridge | undefined,
     view: EditorViewControls | undefined,
@@ -278,6 +282,9 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
   let publish: PublishSwitch | undefined;
   let reactRoot: Root | undefined;
   const store = new SelectionStore();
+  // Beside the selection it follows, and never disposed: the shell outlives
+  // every document it opens.
+  const tokenSelection = new TokenSelectionStore(store);
   const sheet = new SheetStore();
   const publishSurface = new PublishSurfaceStore();
   const finder = new FinderStore();
@@ -844,6 +851,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
     stage,
     dock,
     selection: store,
+    tokenSelection,
     setBridge(nextBridge, nextView, nextPublish) {
       // The store notifies subscribers, so React re-renders the inspector and
       // menus without a manual root re-render — and it keeps working when the
