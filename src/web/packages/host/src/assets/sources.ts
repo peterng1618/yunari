@@ -1,5 +1,6 @@
 import { colorhuntSource } from "./colours/colorhunt.js";
 import { colorswoopSource } from "./colours/colorswoop.js";
+import { curatedFontSource } from "./fonts/curated.js";
 import { uigradientsSource } from "./gradients/uigradients.js";
 import { webgradientsSource } from "./gradients/webgradients.js";
 import { fontAwesomeSource } from "./icons/fontawesome.js";
@@ -24,5 +25,6 @@ export const ASSET_SOURCES: readonly AssetSource[] = [
   colorswoopSource,
   uigradientsSource,
   webgradientsSource,
+  curatedFontSource,
   wallpaperEngineSource,
 ];
