@@ -54,7 +54,11 @@ export async function handleMe(
   // Before the item routes, and before the Worker's generic `/api/me` handler
   // ever sees it: a proxied upload's body goes straight to R2.
   if (url.pathname.startsWith(UPLOADS_PREFIX)) {
-    if (request.method !== "PUT") return undefined;
+    if (request.method !== "PUT")
+      return new Response("Method not allowed", {
+        status: 405,
+        headers: { allow: "PUT" },
+      });
     return putUpload(request, env, url.pathname.slice(UPLOADS_PREFIX.length));
   }
 
@@ -324,9 +328,22 @@ async function requestVersion(
   if (!(await presignAllowed(env.DB, session.userId, now)))
     return tooMany("Too many upload requests; try again in an hour.");
 
-  // The reservation row is written here, before the answer: a burst of version
+  // A parallel first submission may win the insert; that loser is ignored
+  // rather than failing on the PRIMARY KEY, then reads the row it shares. An
+  // item another account created in the race is not ours to write.
+  let stored = item;
+  if (newItemName !== undefined) {
+    await createDraft(env, envelope, session.userId, newItemName, nowIso);
+    stored = await itemById(env.DB, envelope.id);
+    if (stored === undefined || stored.author_user_id !== session.userId)
+      return notFound();
+  }
+
+  // The reservation row is written before the answer: a burst of version
   // requests that each passed the check above would otherwise all receive a
   // URL with none of their bytes reserved, and the quota would never see them.
+  // It comes after the ownership race, so a request that loses that race leaves
+  // no reservation counting against the author for an hour.
   const uploadId = crypto.randomUUID();
   await env.DB.prepare(
     `INSERT INTO upload (id, user_id, item_id, version, envelope_json, key,
@@ -347,17 +364,6 @@ async function requestVersion(
 
   // The route's own origin, so a custom domain keeps answering with itself.
   const uploadUrl = `${new URL(request.url).origin}${UPLOADS_PREFIX}${uploadId}`;
-
-  // A parallel first submission may win the insert; that loser is ignored
-  // rather than failing on the PRIMARY KEY, then reads the row it shares. An
-  // item another account created in the race is not ours to write.
-  let stored = item;
-  if (newItemName !== undefined) {
-    await createDraft(env, envelope, session.userId, newItemName, nowIso);
-    stored = await itemById(env.DB, envelope.id);
-    if (stored === undefined || stored.author_user_id !== session.userId)
-      return notFound();
-  }
 
   await env.DB.prepare(
     `INSERT INTO presign_event (user_id, at, item_id, version, envelope_json)
@@ -389,8 +395,10 @@ async function requestVersion(
  * Streams one reserved upload to R2 under its pending key.
  *
  * The declared length is checked before the body is touched, so an over-cap
- * package costs neither a read nor an object; a length that disagrees with the
- * stored size deletes what landed rather than leaving bytes nobody counted.
+ * package costs neither a read nor an object. It is then the length the stream
+ * is pinned to: a body that sends more (or fewer) bytes errors the pump instead
+ * of writing them, which is what makes an understated header harmless. The
+ * stored size is checked again afterwards as the second gate.
  */
 async function putUpload(
   request: Request,
@@ -412,9 +420,14 @@ async function putUpload(
     return new Response("This upload is already finalized.", { status: 409 });
   }
 
+  // Decimal digits only: `Number` would take `1e3`, `0x10`, `""` and padded
+  // forms as lengths.
   const declared = request.headers.get("content-length");
-  const length = declared === null ? Number.NaN : Number(declared);
-  if (!Number.isSafeInteger(length) || length < 0) {
+  if (declared === null || !/^\d+$/.test(declared)) {
+    return new Response("A content-length is required.", { status: 411 });
+  }
+  const length = Number(declared);
+  if (!Number.isSafeInteger(length)) {
     return new Response("A content-length is required.", { status: 411 });
   }
   if (length > MAX_ARCHIVE_BYTES) {
@@ -425,14 +438,42 @@ async function putUpload(
   }
 
   const key = pendingKey(uploadId);
-  // The body is a stream: the Worker never holds the package in memory.
+  // One reservation is one write. An object already here means this URL was
+  // written (or another PUT of it is finishing), so a captured URL cannot be
+  // replayed into repeated Worker→R2 streams. A retry after an aborted stream
+  // finds no object and is still allowed.
+  if ((await env.BUCKET.head(key)) !== null) {
+    return new Response("This upload URL has already been written.", {
+      status: 409,
+    });
+  }
+
   const body = request.body;
   if (body === null) return badRequest("The upload has no body.");
-  const stored = await env.BUCKET.put(key, body);
+
+  // R2 needs a known length, so the declared one is the sink: more bytes than
+  // the header promised (or fewer) error it, and nothing larger than the cap
+  // can pass because the header itself is capped above.
+  const sink = new FixedLengthStream(length);
+  // Not awaited on the failure path: an abandoned sink would leave the pump
+  // pending forever, and the attached catch keeps that from going unhandled.
+  const pumped = body.pipeTo(sink.writable).catch(() => undefined);
+  let stored: R2Object | null;
+  try {
+    stored = await env.BUCKET.put(key, sink.readable);
+  } catch {
+    return badRequest("The upload's size does not match its content-length.");
+  }
+  await pumped;
   if (stored === null)
     return badRequest("The upload could not be stored; try again.");
   if (stored.size !== length) {
-    await env.BUCKET.delete(key);
+    // Two PUTs of one row can both stream. A size that now matches the declared
+    // length is a concurrent winner's object, and deleting it would leave the
+    // row finalising to a missing key; only a still-mismatched object goes.
+    const current = await env.BUCKET.head(key);
+    if (current?.size !== length) await env.BUCKET.delete(key);
+    else return new Response(null, { status: 201 });
     return badRequest("The upload's size does not match its content-length.");
   }
   return new Response(null, { status: 201 });

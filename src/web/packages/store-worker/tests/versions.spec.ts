@@ -44,7 +44,11 @@ async function reserved(
   headers: Record<string, string>,
 ): Promise<{ readonly id: string; readonly url: string }> {
   // A first submission of the item, so the ladder's version is `1.0.0` whatever
-  // the earlier cases in this file stored.
+  // the earlier cases in this file stored. Earlier reservations are cleared:
+  // each is a 95 MiB cap against a 1 GiB author budget.
+  await env.DB.prepare("DELETE FROM upload WHERE user_id = ?")
+    .bind(USER_ID)
+    .run();
   await seedItem(ITEM_ID, USER_ID);
   const response = await createVersion(headers, ITEM_ID);
   expect(response.status, await response.clone().text()).toBe(200);
@@ -298,6 +302,21 @@ describe("version requests", () => {
 
     const response = await SELF.fetch(url, { method: "PUT", headers });
     expect(response.status).toBe(411);
+
+    // Only decimal digits are a length: `Number` would read exponents, hex,
+    // an empty string and a signed form as a number. (Surrounding whitespace
+    // never reaches the route: the transport trims header values.)
+    const { url: strictUrl } = await reserved(headers);
+    for (const value of ["1e3", "0x10", "", "+1", "1.0"]) {
+      const request = {
+        method: "PUT",
+        url: strictUrl,
+        headers: new Headers({ ...headers, "content-length": value }),
+        body: null,
+      } as unknown as Request;
+      const strict = await handleMe(request, env, new URL(strictUrl));
+      expect(strict?.status, `content-length "${value}"`).toBe(411);
+    }
   });
 
   it("refuses an over-cap upload before consuming its body", async () => {
@@ -326,6 +345,73 @@ describe("version requests", () => {
     expect(response?.status).toBe(413);
     expect(touched).toBe(false);
     expect(await env.BUCKET.head(pendingKey(id))).toBeNull();
+  });
+
+  it("stops a body that outruns its declared length at the cap", async () => {
+    const headers = await sessionHeaders();
+    const { id, url } = await reserved(headers);
+
+    // An understated header with a larger stream: the route must stop reading
+    // once the cap is passed rather than store the bytes and delete them after.
+    const MIB = 1024 * 1024;
+    const SENT = 120;
+    let produced = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (produced >= SENT * MIB) {
+          controller.close();
+          return;
+        }
+        produced += MIB;
+        controller.enqueue(new Uint8Array(MIB));
+      },
+    });
+    const request = {
+      method: "PUT",
+      url,
+      headers: new Headers({ ...headers, "content-length": "1" }),
+      body,
+    } as unknown as Request;
+    const response = await handleMe(request, env, new URL(url));
+
+    expect(response?.status).toBeGreaterThanOrEqual(400);
+    expect(response?.status).toBeLessThan(500);
+    expect(await env.BUCKET.head(pendingKey(id))).toBeNull();
+    // R2 errored once the stream passed the cap, so the source was cancelled
+    // within one chunk of it; a post-hoc size delete would have read all 120.
+    expect(produced).toBeLessThanOrEqual((MAX_ARCHIVE_BYTES / MIB + 1) * MIB);
+  });
+
+  it("refuses a second PUT of the same unfinalised upload URL", async () => {
+    const headers = await sessionHeaders();
+    const { id, url } = await reserved(headers);
+    const bytes = new TextEncoder().encode("the only write");
+
+    const first = await SELF.fetch(url, {
+      method: "PUT",
+      headers: { ...headers, "content-length": String(bytes.byteLength) },
+      body: bytes,
+    });
+    expect(first.status).toBe(201);
+
+    const replay = await SELF.fetch(url, {
+      method: "PUT",
+      headers: { ...headers, "content-length": String(bytes.byteLength) },
+      body: bytes,
+    });
+    expect(replay.status).toBe(409);
+    // The URL has already been written once; the object is the first write's.
+    expect((await env.BUCKET.head(pendingKey(id)))?.size).toBe(
+      bytes.byteLength,
+    );
+  });
+
+  it("answers 405 for any method other than PUT on an upload route", async () => {
+    const response = await SELF.fetch(`${BASE}/api/me/uploads/anything`, {
+      method: "GET",
+    });
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("PUT");
   });
 
   it("refuses an upload with no session and another account's upload", async () => {

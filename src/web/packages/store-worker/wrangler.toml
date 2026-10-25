@@ -17,8 +17,9 @@ binding = "BUCKET"
 bucket_name = "yunari-store-packages"
 
 [vars]
-# No secrets here. BETTER_AUTH_SECRET, the OAuth pairs, the R2 credentials,
-# OWNER_EMAILS and MIGRATE_TOKEN are `wrangler secret put` values.
+# No secrets here. BETTER_AUTH_SECRET, the OAuth pairs, OWNER_EMAILS and
+# MIGRATE_TOKEN are `wrangler secret put` values. Uploads are proxied through
+# the Worker, so R2 needs only the binding above.
 # The owner replaces this placeholder with the URL `npx wrangler deploy` prints,
 # then deploys again (README.md step 5).
 BETTER_AUTH_URL = "https://yunari-store.workers.dev"

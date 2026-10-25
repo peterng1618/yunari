@@ -26,8 +26,9 @@ npx wrangler r2 bucket create yunari-store-packages
 `d1 create` prints a `database_id`. Paste it into `[[d1_databases]]` in
 `wrangler.toml`, replacing the `00000000-…` placeholder. Never invent an id: a
 wrong one deploys against the wrong or a missing database. The bucket stays
-private (its default); the Worker reaches it through the `BUCKET` binding and
-signs uploads with the R2 S3 credentials below.
+private (its default); the Worker reaches it through the `BUCKET` binding, and
+packages are uploaded through the Worker's own `/api/me/uploads/:id` route, so
+no R2 credential is needed outside the binding.
 
 ## 3. Bindings the code reads
 
@@ -41,15 +42,11 @@ signs uploads with the R2 S3 credentials below.
 | `GITHUB_CLIENT_SECRET` | secret | GitHub OAuth app | `env.GITHUB_CLIENT_SECRET` |
 | `GOOGLE_CLIENT_ID` | secret | Google OAuth client | `env.GOOGLE_CLIENT_ID` |
 | `GOOGLE_CLIENT_SECRET` | secret | Google OAuth client | `env.GOOGLE_CLIENT_SECRET` |
-| `R2_ACCOUNT_ID` | secret | Cloudflare account id | `env.R2_ACCOUNT_ID` |
-| `R2_ACCESS_KEY_ID` | secret | R2 API token | `env.R2_ACCESS_KEY_ID` |
-| `R2_SECRET_ACCESS_KEY` | secret | R2 API token | `env.R2_SECRET_ACCESS_KEY` |
-| `R2_BUCKET_NAME` | secret | `yunari-store-packages` | `env.R2_BUCKET_NAME` |
 | `OWNER_EMAILS` | secret | comma-separated owner emails | `env.OWNER_EMAILS` |
 | `MIGRATE_TOKEN` | secret | random string | `env.MIGRATE_TOKEN` |
 
-`R2_*` sign the presigned upload (`presignPut` in `src/routes/me.ts`);
-`R2_BUCKET_NAME` must equal the R2 binding's `bucket_name`.
+The upload is proxied: the Worker streams the body to `BUCKET` itself, so the
+only R2 access it needs is the binding above.
 `OWNER_EMAILS` is split on commas and compared case-insensitively
 (`isOwner` in `src/auth/owner.ts`).
 
@@ -63,10 +60,6 @@ npx wrangler secret put GITHUB_CLIENT_ID
 npx wrangler secret put GITHUB_CLIENT_SECRET
 npx wrangler secret put GOOGLE_CLIENT_ID
 npx wrangler secret put GOOGLE_CLIENT_SECRET
-npx wrangler secret put R2_ACCOUNT_ID
-npx wrangler secret put R2_ACCESS_KEY_ID
-npx wrangler secret put R2_SECRET_ACCESS_KEY
-npx wrangler secret put R2_BUCKET_NAME
 npx wrangler secret put OWNER_EMAILS
 npx wrangler secret put MIGRATE_TOKEN
 ```
@@ -78,10 +71,6 @@ Where each value comes from:
 - `GITHUB_CLIENT_*` — Settings → Developer settings → OAuth Apps → your app.
 - `GOOGLE_CLIENT_*` — Google Cloud console → APIs & Services → Credentials →
   OAuth 2.0 Client.
-- `R2_ACCOUNT_ID` — Cloudflare dashboard's account id (Workers & Pages sidebar).
-- `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` — R2 → Manage R2 API Tokens →
-  Create API token (Object Read & Write on `yunari-store-packages`).
-- `R2_BUCKET_NAME` — the bucket name, literally `yunari-store-packages`.
 - `OWNER_EMAILS` — the account(s) allowed to approve and unpublish, comma-separated.
 - `MIGRATE_TOKEN` — any random string; you send the same value in step 6.
 
@@ -185,5 +174,5 @@ npx wrangler secret put <NAME>
 ```
 
 Enter the new value; the secret takes effect for subsequent requests. For an
-OAuth client secret or R2 token, also rotate it at the provider (GitHub, Google
-or the R2 token page) — the Worker does not do that half.
+OAuth client secret, also rotate it at the provider (GitHub or Google) — the
+Worker does not do that half.
