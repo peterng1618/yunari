@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { followPublished, reResolveUrl } from "./publish-follower.js";
 
 const answer = (body: unknown, status = 200) =>
@@ -337,6 +337,110 @@ describe("followPublished's unreachable report", () => {
     stop();
 
     expect(onUnreachable.mock.calls.length).toBeGreaterThan(1);
+  });
+});
+
+describe("followPublished's poll cadence", () => {
+  // Fake timers, and the fetch answer handed over by the test: the question is
+  // the *ordering* of the wake against the settle, which a real timeout races.
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A fetch the test answers one request at a time. */
+  function controlled() {
+    const pending: ((response: Response) => void)[] = [];
+
+    return {
+      fetch: vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            pending.push(resolve);
+          }),
+      ),
+      answer: (response: Response): void => {
+        const resolve = pending.shift();
+        if (!resolve) throw new Error("no request in flight to answer");
+        resolve(response);
+      },
+    };
+  }
+
+  it("keeps one request in flight and re-arms only once it settles", async () => {
+    const { fetch, answer } = controlled();
+    const stop = followPublished({ pageUrl: MAP_PAGE, fetch }, vi.fn(), {
+      intervalMs: 2_000,
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    // Two intervals pass while the first request is still out. A fixed
+    // interval would have stacked two more requests on top of it.
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    answer(new Response(JSON.stringify({ revision: 1 })));
+    await vi.advanceTimersByTimeAsync(0);
+    // Settling is not itself a wake: the next poll waits a full interval.
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    stop();
+  });
+
+  it.each([403, 404])(
+    "stops polling after the host answers %i",
+    async (status) => {
+      const refused = vi.fn();
+      const fetch = vi.fn(async () => new Response("{}", { status }));
+      const stop = followPublished({ pageUrl: MAP_PAGE, fetch }, vi.fn(), {
+        intervalMs: 2_000,
+        onRefused: refused,
+      });
+
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(refused).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      stop();
+    },
+  );
+
+  it("stops polling when its returned stop function is called", async () => {
+    const fetch = vi.fn(
+      async () => new Response(JSON.stringify({ revision: 1 })),
+    );
+    const stop = followPublished({ pageUrl: MAP_PAGE, fetch }, vi.fn(), {
+      intervalMs: 2_000,
+    });
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    stop();
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not re-arm a request that settles after the stop", async () => {
+    const { fetch, answer } = controlled();
+    const stop = followPublished({ pageUrl: MAP_PAGE, fetch }, vi.fn(), {
+      intervalMs: 2_000,
+    });
+
+    stop();
+    answer(new Response(JSON.stringify({ revision: 1 })));
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
 
