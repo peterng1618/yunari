@@ -383,6 +383,13 @@ export interface HostServer {
 
 export const DEFAULT_SAMPLE_INTERVAL_MS = 1000;
 
+/** What one stream request may ask for, and how many streams may be open: the
+ *  ceiling a request can reach rather than a budget the player works within. */
+export const MAX_STREAM_KEYS = 64;
+export const MAX_STREAM_KEY_BYTES = 128;
+export const MAX_STREAM_CONNECTIONS = 64;
+export const MAX_STREAM_CONNECTIONS_PER_DISPLAY = 8;
+
 /** The committed Meteocons bytes. A request names a file here only when that
  *  exact slug is in the provider's allow-list; no request path reaches the
  *  filesystem. */
@@ -901,6 +908,15 @@ async function serveStatic(
  *  begins with. */
 const TLS_HANDSHAKE_BYTE = 0x16;
 
+/** How long an accepted socket may stay silent before this port destroys it:
+ *  long enough for a phone to start a handshake, short enough that a client
+ *  holding a connection slot without saying anything gives it back. */
+const HANDSHAKE_TIMEOUT_MS = 5_000;
+
+/** Sockets this port holds at once. Below the operating system's own accept
+ *  backlog, so a flood is refused here rather than exhausting file handles. */
+const MAX_SOCKET_CONNECTIONS = 256;
+
 /**
  * One port, two protocols.
  *
@@ -917,7 +933,7 @@ const TLS_HANDSHAKE_BYTE = 0x16;
  * reaches the secure origin by typing `https` in front of the address until
  * then. Recorded in `docs/decisions/0070`.
  */
-function createPortListener(
+export function createPortListener(
   plain: http.Server,
   secure: https.Server,
 ): ListenableServer {
@@ -949,6 +965,11 @@ function createPortListener(
     handed.set(name, socket);
     socket.once("close", () => handed.delete(name));
 
+    // Nothing bounds a socket that has said nothing: neither inner server has
+    // seen it, so neither one's own timeout applies. Cleared at handover below,
+    // before any byte this connection does send can be called idle.
+    socket.setTimeout(HANDSHAKE_TIMEOUT_MS, () => socket.destroy());
+
     socket.once("readable", () => {
       const first = socket.read(1) as Buffer | null;
 
@@ -957,6 +978,10 @@ function createPortListener(
         return;
       }
 
+      // The socket is no longer this port's to time: from here it is a request
+      // the inner server's own timeouts govern.
+      socket.setTimeout(0);
+
       // Put the byte back before handing the socket over: the inner server
       // parses it as though it had accepted the connection itself.
       socket.unshift(first);
@@ -964,6 +989,10 @@ function createPortListener(
       owner.emit("connection", socket);
     });
   });
+
+  /** A silence this port will not keep: enough for a client to start a
+   *  handshake, short enough that a caller holding a slot says why. */
+  listener.maxConnections = MAX_SOCKET_CONNECTIONS;
 
   // **The pruning the binding asks for is this port's, not an inner server's.**
   // A server handed sockets by `emit("connection")` never builds the connection
@@ -4104,6 +4133,27 @@ export function createHostServer(options: HostServerOptions): HostServer {
       .map((key) => key.trim())
       .filter((key) => key.length > 0);
 
+    // **Bounds before the connection exists**, because a stream is held for as
+    // long as its client keeps it: an oversized request refused only after the
+    // headers were written would be a held connection that answers 400.
+    if (keys.length > MAX_STREAM_KEYS) {
+      sendText(
+        response,
+        400,
+        `A stream may ask for ${MAX_STREAM_KEYS} keys at most.`,
+      );
+      return;
+    }
+
+    if (keys.some((key) => Buffer.byteLength(key) > MAX_STREAM_KEY_BYTES)) {
+      sendText(
+        response,
+        400,
+        `A stream key may be ${MAX_STREAM_KEY_BYTES} bytes at most.`,
+      );
+      return;
+    }
+
     // Resolving the display reads the store, and a client that leaves during
     // that read has already emitted the `close` the listeners below would have
     // removed this connection on. So the event is kept until there is a
@@ -4118,20 +4168,40 @@ export function createHostServer(options: HostServerOptions): HostServer {
     request.on("error", noteGone);
 
     const display = await displayKeyFor(request, url, displays);
+
+    request.off("close", noteGone);
+    request.off("error", noteGone);
+
+    // The caps are counted after the display is known, because one of them is
+    // per display: a single display cannot take every slot, and the total is
+    // what a flood of distinct displays would otherwise spend.
+    const held = [...connections].filter(
+      (connection) => connection.display === display,
+    ).length;
+
+    if (
+      connections.size >= MAX_STREAM_CONNECTIONS ||
+      held >= MAX_STREAM_CONNECTIONS_PER_DISPLAY
+    ) {
+      sendText(
+        response,
+        429,
+        "This host is already streaming to as many displays as it will.",
+      );
+      return;
+    }
+
+    if (gone) {
+      response.end();
+      return;
+    }
+
     const connection = new SseConnection(
       response,
       keys,
       display,
       streamLanguage(url),
     );
-
-    request.off("close", noteGone);
-    request.off("error", noteGone);
-
-    if (gone) {
-      connection.close();
-      return;
-    }
 
     connections.add(connection);
 

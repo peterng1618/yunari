@@ -85,7 +85,6 @@ export function createPairingCodeStore(
     current,
 
     async claim(code, source): Promise<boolean> {
-      const shown = current();
       const missed = misses.get(source) ?? 0;
 
       // **Reserved before the await, not counted after it.** The count is read
@@ -104,6 +103,12 @@ export function createPairingCodeStore(
           Math.min(BASE_PENALTY_MS * 2 ** (missed - 1), MAX_PENALTY_MS),
         );
       }
+
+      // **Re-read after the wait, never before it.** The code can be spent by
+      // the claim that was waiting beside this one, or expire while this one
+      // waited, so a copy taken before the delay would let two correct callers
+      // both succeed and would accept a window that has since closed.
+      const shown = current();
 
       if (shown !== undefined && sameToken(code, shown.code)) {
         live = undefined;

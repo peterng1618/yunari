@@ -17,6 +17,16 @@ function fast(
   });
 }
 
+/** A wait a case resolves by hand, so two claims can be in flight together. */
+function gate(): { wait: Promise<void>; open: () => void } {
+  let open: () => void = () => undefined;
+  const wait = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+
+  return { wait, open };
+}
+
 describe("the one-time pairing code", () => {
   it("draws only from the alphabet a person can read back", () => {
     const store = fast();
@@ -80,6 +90,45 @@ describe("the one-time pairing code", () => {
     // And the right code still succeeds, which is the whole difference between
     // a penalty and a lockout.
     expect(await store.claim(code, "10.0.0.9")).toBe(true);
+  });
+
+  it("gives a code to exactly one of two concurrent correct claims", async () => {
+    const waiting = gate();
+    const store = createPairingCodeStore({ wait: () => waiting.wait });
+    const { code } = store.mint();
+
+    // One prior miss, so both correct claims below serve a penalty and are in
+    // flight together. Without it the first claim runs to completion
+    // synchronously and consumes the code before the second starts, which would
+    // pass whether or not the code is re-read after the wait.
+    await store.claim("ZZZZZZ", "192.168.1.5");
+
+    const first = store.claim(code, "192.168.1.5");
+    const second = store.claim(code, "192.168.1.5");
+    waiting.open();
+
+    // The second read the code after the wait and found it spent. A copy taken
+    // before the wait would leave both true — one code, two displays.
+    await expect(Promise.all([first, second])).resolves.toEqual([true, false]);
+  });
+
+  it("refuses a correct code that expires while the penalty is being served", async () => {
+    let clock = Date.parse("2026-10-18T10:00:00.000Z");
+    const store = createPairingCodeStore({
+      now: () => clock,
+      ttlMs: 1000,
+      // The window closes while the claim is held — the same clock a real
+      // timeout reads, advanced from the other side of the await.
+      wait: async () => {
+        clock += 1000;
+      },
+    });
+    const { code } = store.mint();
+
+    // A free miss, so the claim below takes the penalty and waits.
+    await store.claim("ZZZZZZ", "192.168.1.5");
+
+    expect(await store.claim(code, "192.168.1.5")).toBe(false);
   });
 
   it("counts a rung per guess even when the guesses are in flight together", async () => {

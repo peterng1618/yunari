@@ -4,6 +4,7 @@ import {
   spawn,
 } from "node:child_process";
 import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
 import fs from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
@@ -36,9 +37,14 @@ import { createDisplayLauncher } from "./serve/display-launcher.js";
 import {
   CA_CERTIFICATE_PATH,
   createHostServer,
+  createPortListener,
   displayKeyFor,
   type HostingState,
   type HostServerOptions,
+  MAX_STREAM_CONNECTIONS,
+  MAX_STREAM_CONNECTIONS_PER_DISPLAY,
+  MAX_STREAM_KEY_BYTES,
+  MAX_STREAM_KEYS,
   MAX_THEME_UPLOAD_BYTES,
   type SourceRouteOptions,
 } from "./server.js";
@@ -6384,6 +6390,133 @@ it("does not keep a connection whose client left while its display was resolved"
   }
 });
 
+describe("The sample stream is bounded", () => {
+  let dir: string;
+  let displays: ReturnType<typeof createDisplayStore>;
+  let hosted: ReturnType<typeof createHostServer>;
+
+  /** Pairs a display and answers the credential its stream has to carry. */
+  async function pair(label: string): Promise<string> {
+    const token = newToken();
+    await displays.create(label, token);
+    return token;
+  }
+
+  const streamFor = (token: string): string =>
+    `${SAMPLE_STREAM_PATH}?keys=cpu.load&session=${encodeURIComponent(token)}`;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-stream-cap-"));
+    displays = createDisplayStore(dir);
+    hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      displays,
+    });
+  });
+
+  afterEach(async () => {
+    await hosted.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("refuses a request that asks for more keys than a stream may carry", async () => {
+    const keys = Array.from(
+      { length: MAX_STREAM_KEYS + 1 },
+      (_, index) => `k${index}`,
+    ).join(",");
+
+    const answer = await request(
+      hosted.server,
+      "GET",
+      `${SAMPLE_STREAM_PATH}?keys=${keys}`,
+    );
+
+    expect(answer.status).toBe(400);
+    // Refused before a connection existed, which is the point: a stream held
+    // by a request that has already been told no is a stream nobody closes.
+    expect(hosted.connectionCount).toBe(0);
+  });
+
+  it("refuses a key longer than a stream key may be", async () => {
+    const key = "k".repeat(MAX_STREAM_KEY_BYTES + 1);
+
+    const answer = await request(
+      hosted.server,
+      "GET",
+      `${SAMPLE_STREAM_PATH}?keys=${key}`,
+    );
+
+    expect(answer.status).toBe(400);
+    expect(hosted.connectionCount).toBe(0);
+  });
+
+  it("refuses the connection past the total it will stream to", async () => {
+    // Every display but the last is filled to its own cap, so the refusal can
+    // only be the total: the sixty-fifth names a display holding none.
+    const tokens: string[] = [];
+    for (
+      let display = 0;
+      display < MAX_STREAM_CONNECTIONS / MAX_STREAM_CONNECTIONS_PER_DISPLAY;
+      display += 1
+    ) {
+      tokens.push(await pair(`display-${display}`));
+    }
+    const ninth = await pair("display-9");
+
+    for (const [index, token] of tokens.entries()) {
+      for (
+        let connection = 0;
+        connection < MAX_STREAM_CONNECTIONS_PER_DISPLAY;
+        connection += 1
+      ) {
+        // Each display is a LAN client, so its credential is what resolves it;
+        // a loopback stream would resolve to this PC and share one slot count.
+        sampleStream(hosted.server, streamFor(token), "192.168.1.50");
+      }
+      await vi.waitFor(() =>
+        expect(hosted.connectionCount).toBe(
+          (index + 1) * MAX_STREAM_CONNECTIONS_PER_DISPLAY,
+        ),
+      );
+    }
+
+    expect(hosted.connectionCount).toBe(MAX_STREAM_CONNECTIONS);
+    expect((await streamStatus(hosted.server, streamFor(ninth))).status).toBe(
+      429,
+    );
+  });
+
+  it("refuses one display's ninth stream while another display may still open one", async () => {
+    const busy = await pair("busy");
+    const other = await pair("other");
+
+    for (
+      let connection = 0;
+      connection < MAX_STREAM_CONNECTIONS_PER_DISPLAY;
+      connection += 1
+    ) {
+      // A LAN client, so the credential resolves the display these are counted
+      // against rather than resolving every one to this PC.
+      sampleStream(hosted.server, streamFor(busy), "192.168.1.50");
+    }
+    await vi.waitFor(() =>
+      expect(hosted.connectionCount).toBe(MAX_STREAM_CONNECTIONS_PER_DISPLAY),
+    );
+
+    expect((await streamStatus(hosted.server, streamFor(busy))).status).toBe(
+      429,
+    );
+
+    // The per-display cap is separate from the total: one display cannot take
+    // every slot, and refusing it must not refuse anyone else.
+    expect((await streamStatus(hosted.server, streamFor(other))).status).toBe(
+      200,
+    );
+    expect(hosted.connectionCount).toBe(MAX_STREAM_CONNECTIONS_PER_DISPLAY + 1);
+  });
+});
+
 describe("A bundle 404 names the cause it can prove", () => {
   const dirs: string[] = [];
 
@@ -8106,6 +8239,77 @@ describe("The host's secure origin", () => {
       hosted.server.closeAllConnections();
       await hosted.close();
     }
+  });
+
+  it("destroys a socket that is slow to say what it is", () => {
+    // **The case that fails without the pre-handshake timeout.** A socket this
+    // port accepted has sent nothing, so neither inner server has seen it and
+    // neither one's timeout applies: a client that connects and stays silent
+    // holds its slot until the process ends. Scripted rather than dialled, so
+    // the first byte is the case's to decide and the five seconds are read back
+    // rather than waited out.
+    const plain = new EventEmitter() as unknown as http.Server;
+    const secure = new EventEmitter() as unknown as https.Server;
+    const listener = createPortListener(plain, secure);
+
+    function accepted(first: Buffer | null): {
+      readonly waits: number[];
+      readonly fireTimeout: () => void;
+      readonly say: () => void;
+      readonly destroyed: () => boolean;
+    } {
+      const waits: number[] = [];
+      let timedOut: (() => void) | undefined;
+      let readable: () => void = () => undefined;
+      let destroyed = false;
+
+      const socket = {
+        remoteAddress: "10.0.0.9",
+        remotePort: 40_001,
+        localAddress: "10.0.0.1",
+        localPort: 5227,
+        on: () => socket,
+        once: (event: string, listener: () => void) => {
+          if (event === "readable") readable = listener;
+          return socket;
+        },
+        setTimeout: (ms: number, fire: () => void) => {
+          waits.push(ms);
+          timedOut = fire;
+          return socket;
+        },
+        read: () => first,
+        unshift: () => undefined,
+        destroy: () => {
+          destroyed = true;
+          return socket;
+        },
+      } as unknown as Socket;
+
+      listener.emit("connection", socket);
+
+      return {
+        waits,
+        fireTimeout: () => timedOut?.(),
+        say: () => readable(),
+        destroyed: () => destroyed,
+      };
+    }
+
+    expect(listener.maxConnections).toBe(256);
+
+    const silent = accepted(null);
+    expect(silent.waits).toEqual([5_000]);
+    expect(silent.destroyed()).toBe(false);
+    silent.fireTimeout();
+    expect(silent.destroyed()).toBe(true);
+
+    // And the wait ends at the first byte: a stream that is quiet between
+    // batches is not a stream this port destroys.
+    const talking = accepted(Buffer.from("GET / HTTP/1.1\r\n", "utf8"));
+    talking.say();
+    expect(talking.waits).toEqual([5_000, 0]);
+    expect(talking.destroyed()).toBe(false);
   });
 
   it("is plain http when the caller brings no certificate, which is why the launcher always does", async () => {
