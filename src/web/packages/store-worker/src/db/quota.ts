@@ -1,9 +1,10 @@
 /**
  * The author limits the spec sets to fit the free tier. They are defaults, not
- * measured against usage ("Security and abuse", open question 5).
+ * measured against usage ("Security and abuse", open question 5). Exported
+ * because the route's atomic guarded insert enforces the same two ceilings.
  */
-const MAX_AUTHOR_ITEMS = 20;
-const MAX_AUTHOR_BYTES = 1024 * 1024 * 1024;
+export const MAX_AUTHOR_ITEMS = 20;
+export const MAX_AUTHOR_BYTES = 1024 * 1024 * 1024;
 const PRESIGN_WINDOW_MS = 60 * 60 * 1000;
 const PRESIGN_LIMIT = 60;
 

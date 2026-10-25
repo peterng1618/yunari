@@ -26,7 +26,13 @@ import {
   setStatus,
   versionOf,
 } from "../db/items.js";
-import { authorQuotaExceeded, presignAllowed } from "../db/quota.js";
+import {
+  authorQuotaExceeded,
+  MAX_AUTHOR_BYTES,
+  MAX_AUTHOR_ITEMS,
+  presignAllowed,
+  UPLOAD_RESERVATION_TTL_MS,
+} from "../db/quota.js";
 import type { ItemRow } from "../db/types.js";
 import type { Env } from "../env.js";
 import { packageKey, pendingKey, thumbnailKey } from "../storage/keys.js";
@@ -313,20 +319,43 @@ async function requestVersion(
   });
   if (!plan.ok) return badRequest(plan.message);
 
-  // Cheapest refusals first: nothing below this line may run for a red request,
-  // and the presign count is only spent once every other check has passed.
-  const exceeded = await authorQuotaExceeded(
-    env.DB,
-    session.userId,
-    MAX_ARCHIVE_BYTES,
-    item === undefined,
-  );
-  if (exceeded === "items")
-    return tooMany("An account may own at most 20 items.");
-  if (exceeded === "bytes")
-    return tooMany("An author's stored packages may total at most 1 GiB.");
+  // Cheapest refusal first, and the presign count is only spent once the
+  // version plan has passed.
   if (!(await presignAllowed(env.DB, session.userId, now)))
     return tooMany("Too many upload requests; try again in an hour.");
+
+  // The reservation is written before the answer and before the ownership race
+  // below, in one statement that also re-checks the quota: a burst of requests
+  // that all passed an earlier check must not all reserve past the ceiling, and
+  // only the database can decide that atomically. A losing race deletes its row.
+  const uploadId = crypto.randomUUID();
+  const creatingNewItem = item === undefined;
+  const reserved = await reserveUpload(env, {
+    uploadId,
+    userId: session.userId,
+    itemId: envelope.id,
+    version: plan.version,
+    envelopeJson: JSON.stringify(envelope),
+    now,
+    nowIso,
+    creatingNewItem,
+  });
+  if (!reserved) {
+    // Name what the guard refused; a reservation once again expired can make
+    // this read undefined, and the rate sentence is the honest fallback.
+    const exceeded = await authorQuotaExceeded(
+      env.DB,
+      session.userId,
+      MAX_ARCHIVE_BYTES,
+      creatingNewItem,
+      now,
+    );
+    if (exceeded === "items")
+      return tooMany("An account may own at most 20 items.");
+    if (exceeded === "bytes")
+      return tooMany("An author's stored packages may total at most 1 GiB.");
+    return tooMany("Too many upload requests; try again in an hour.");
+  }
 
   // A parallel first submission may win the insert; that loser is ignored
   // rather than failing on the PRIMARY KEY, then reads the row it shares. An
@@ -335,32 +364,15 @@ async function requestVersion(
   if (newItemName !== undefined) {
     await createDraft(env, envelope, session.userId, newItemName, nowIso);
     stored = await itemById(env.DB, envelope.id);
-    if (stored === undefined || stored.author_user_id !== session.userId)
+    if (stored === undefined || stored.author_user_id !== session.userId) {
+      // The loser takes its reservation with it: a URL they cannot write must
+      // not count against the author for the reservation's lifetime.
+      await env.DB.prepare("DELETE FROM upload WHERE id = ?")
+        .bind(uploadId)
+        .run();
       return notFound();
+    }
   }
-
-  // The reservation row is written before the answer: a burst of version
-  // requests that each passed the check above would otherwise all receive a
-  // URL with none of their bytes reserved, and the quota would never see them.
-  // It comes after the ownership race, so a request that loses that race leaves
-  // no reservation counting against the author for an hour.
-  const uploadId = crypto.randomUUID();
-  await env.DB.prepare(
-    `INSERT INTO upload (id, user_id, item_id, version, envelope_json, key,
-       reserved_bytes, created_at, finalized_at, bytes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
-  )
-    .bind(
-      uploadId,
-      session.userId,
-      envelope.id,
-      plan.version,
-      JSON.stringify(envelope),
-      pendingKey(uploadId),
-      MAX_ARCHIVE_BYTES,
-      nowIso,
-    )
-    .run();
 
   // The route's own origin, so a custom domain keeps answering with itself.
   const uploadUrl = `${new URL(request.url).origin}${UPLOADS_PREFIX}${uploadId}`;
@@ -389,6 +401,66 @@ async function requestVersion(
         : "pending";
 
   return Response.json({ version: plan.version, status, uploadUrl });
+}
+
+/**
+ * Writes one reservation only if the author's quota still has room for it.
+ *
+ * The check and the insert are one statement, because two requests that each
+ * passed `authorQuotaExceeded` can otherwise both insert and overrun the
+ * ceiling; D1 has no transaction to wrap the pair in. The pending side repeats
+ * `pendingBytes`' predicate, cutoff included, so both read the same rows.
+ * Answers whether the row was written.
+ */
+async function reserveUpload(
+  env: Env,
+  input: {
+    readonly uploadId: string;
+    readonly userId: string;
+    readonly itemId: string;
+    readonly version: string;
+    readonly envelopeJson: string;
+    readonly now: Date;
+    readonly nowIso: string;
+    readonly creatingNewItem: boolean;
+  },
+): Promise<boolean> {
+  const cutoff = new Date(
+    input.now.getTime() - UPLOAD_RESERVATION_TTL_MS,
+  ).toISOString();
+  const result = await env.DB.prepare(
+    `INSERT INTO upload (id, user_id, item_id, version, envelope_json, key,
+       reserved_bytes, created_at, finalized_at, bytes)
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL
+     WHERE (
+       (SELECT COALESCE(SUM(v.bytes), 0) FROM item_version v
+          JOIN item i ON i.id = v.item_id WHERE i.author_user_id = ?)
+       + (SELECT COALESCE(SUM(reserved_bytes), 0) FROM upload
+          WHERE user_id = ? AND finalized_at IS NULL AND created_at > ?)
+       + ? <= ?)
+     AND (? = 0 OR
+       (SELECT COUNT(*) FROM item WHERE author_user_id = ?) < ?)`,
+  )
+    .bind(
+      input.uploadId,
+      input.userId,
+      input.itemId,
+      input.version,
+      input.envelopeJson,
+      pendingKey(input.uploadId),
+      MAX_ARCHIVE_BYTES,
+      input.nowIso,
+      input.userId,
+      input.userId,
+      cutoff,
+      MAX_ARCHIVE_BYTES,
+      MAX_AUTHOR_BYTES,
+      input.creatingNewItem ? 1 : 0,
+      input.userId,
+      MAX_AUTHOR_ITEMS,
+    )
+    .run();
+  return result.meta.changes > 0;
 }
 
 /**
@@ -438,45 +510,70 @@ async function putUpload(
   }
 
   const key = pendingKey(uploadId);
-  // One reservation is one write. An object already here means this URL was
-  // written (or another PUT of it is finishing), so a captured URL cannot be
-  // replayed into repeated Worker→R2 streams. A retry after an aborted stream
-  // finds no object and is still allowed.
-  if ((await env.BUCKET.head(key)) !== null) {
+  const body = request.body;
+  if (body === null) return badRequest("The upload has no body.");
+
+  // The pinned sink makes the stored size exactly the declared length, so a
+  // body that overruns or stops short is refused before R2 keeps any of it.
+  const sink = new FixedLengthStream(length);
+  // The pump owns its own rejection handling and never rejects, so nothing is
+  // left floating once the response is sent.
+  const pumped = pumpInto(body, sink);
+  let stored: R2Object | null;
+  try {
+    // The conditional put makes this request the first writer, atomically: a
+    // second PUT of the same URL cannot overwrite the winner, which is the one
+    // thing a head-then-put cannot promise.
+    stored = await env.BUCKET.put(key, sink.readable, {
+      onlyIf: { etagDoesNotMatch: "*" },
+    });
+  } catch {
+    await pumped;
+    return badRequest("The upload's size does not match its content-length.");
+  }
+  if (stored === null) {
+    // A winner already holds the key. Releasing the unread sink lets the pump
+    // settle; a pending write is not a rejection, so nothing goes unhandled.
+    await sink.readable.cancel().catch(() => undefined);
     return new Response("This upload URL has already been written.", {
       status: 409,
     });
   }
-
-  const body = request.body;
-  if (body === null) return badRequest("The upload has no body.");
-
-  // R2 needs a known length, so the declared one is the sink: more bytes than
-  // the header promised (or fewer) error it, and nothing larger than the cap
-  // can pass because the header itself is capped above.
-  const sink = new FixedLengthStream(length);
-  // Not awaited on the failure path: an abandoned sink would leave the pump
-  // pending forever, and the attached catch keeps that from going unhandled.
-  const pumped = body.pipeTo(sink.writable).catch(() => undefined);
-  let stored: R2Object | null;
-  try {
-    stored = await env.BUCKET.put(key, sink.readable);
-  } catch {
-    return badRequest("The upload's size does not match its content-length.");
-  }
   await pumped;
-  if (stored === null)
-    return badRequest("The upload could not be stored; try again.");
-  if (stored.size !== length) {
-    // Two PUTs of one row can both stream. A size that now matches the declared
-    // length is a concurrent winner's object, and deleting it would leave the
-    // row finalising to a missing key; only a still-mismatched object goes.
-    const current = await env.BUCKET.head(key);
-    if (current?.size !== length) await env.BUCKET.delete(key);
-    else return new Response(null, { status: 201 });
-    return badRequest("The upload's size does not match its content-length.");
-  }
   return new Response(null, { status: 201 });
+}
+
+/**
+ * Feeds the request body into the length-pinned sink, one chunk at a time.
+ *
+ * Every failure is this function's own: the sink errors on a body that overruns
+ * or stops short, and the store may stop reading before the body ends. Both
+ * settle here so the route answers from the put and no rejected promise
+ * outlives the response.
+ */
+async function pumpInto(
+  source: ReadableStream<Uint8Array>,
+  sink: FixedLengthStream,
+): Promise<void> {
+  const reader = source.getReader();
+  const writer = sink.writable.getWriter();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      await writer.write(value);
+    }
+    await writer.close();
+  } catch {
+    await writer.abort().catch(() => undefined);
+  } finally {
+    try {
+      reader.releaseLock();
+      writer.releaseLock();
+    } catch {
+      // A locked stream is being torn down anyway; nothing to report.
+    }
+  }
 }
 
 /**

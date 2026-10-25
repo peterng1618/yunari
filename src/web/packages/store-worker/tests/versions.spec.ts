@@ -377,9 +377,9 @@ describe("version requests", () => {
     expect(response?.status).toBeGreaterThanOrEqual(400);
     expect(response?.status).toBeLessThan(500);
     expect(await env.BUCKET.head(pendingKey(id))).toBeNull();
-    // R2 errored once the stream passed the cap, so the source was cancelled
-    // within one chunk of it; a post-hoc size delete would have read all 120.
-    expect(produced).toBeLessThanOrEqual((MAX_ARCHIVE_BYTES / MIB + 1) * MIB);
+    // The pump stops within one chunk of the declared length (1 byte), so a
+    // transformer that ran to the 95 MiB cap before stopping cannot pass here.
+    expect(produced).toBeLessThanOrEqual(1 + MIB);
   });
 
   it("refuses a second PUT of the same unfinalised upload URL", async () => {
@@ -401,6 +401,34 @@ describe("version requests", () => {
     });
     expect(replay.status).toBe(409);
     // The URL has already been written once; the object is the first write's.
+    expect((await env.BUCKET.head(pendingKey(id)))?.size).toBe(
+      bytes.byteLength,
+    );
+  });
+
+  it("refuses a concurrent second writer of one upload URL", async () => {
+    const headers = await sessionHeaders();
+    const { id, url } = await reserved(headers);
+    const bytes = new TextEncoder().encode("the race winner");
+
+    // Called on the route directly, both started before either answers: the
+    // test pool's `SELF.fetch` serialises requests, which would hide the race
+    // behind a head check that always sees the first write.
+    const put = () =>
+      handleMe(
+        new Request(url, {
+          method: "PUT",
+          headers: { ...headers, "content-length": String(bytes.byteLength) },
+          body: new Uint8Array(bytes),
+        }),
+        env,
+        new URL(url),
+      );
+    const [first, second] = await Promise.all([put(), put()]);
+
+    // The write itself is exclusive: both requests pass any pre-check, so only
+    // the conditional put can decide, and exactly one of them wins.
+    expect([first?.status, second?.status].sort()).toEqual([201, 409]);
     expect((await env.BUCKET.head(pendingKey(id)))?.size).toBe(
       bytes.byteLength,
     );
@@ -481,9 +509,11 @@ describe("version requests", () => {
     expect(response.status).toBe(409);
   });
 
-  it("sees a burst's first reservation in the second request's quota check", async () => {
+  it("sees the first reservation in the next request's quota check", async () => {
     const headers = await sessionHeaders();
     // One reservation fits the remaining budget exactly; a second breaks it.
+    // Sequential by construction: it proves the row is visible after the first
+    // request answered, not that two in-flight requests cannot both pass.
     await env.DB.prepare("DELETE FROM upload WHERE user_id = ?")
       .bind(USER_ID)
       .run();
@@ -525,5 +555,71 @@ describe("version requests", () => {
     expect(first.status, await first.clone().text()).toBe(200);
     const second = await createVersion(headers, ITEM_ID, bumped);
     expect(second.status).toBe(429);
+  });
+
+  it("gives a parallel first submission's budget to exactly one request", async () => {
+    const headers = await sessionHeaders();
+    const STORED_ID = "20000000-0000-4000-8000-000000000001";
+    const ID_A = "9f1c2a3b-4d5e-4f60-8a71-2b3c4d5e6f71";
+    const ID_B = "9f1c2a3b-4d5e-4f60-8a71-2b3c4d5e6f72";
+
+    await env.DB.prepare("DELETE FROM upload WHERE user_id = ?")
+      .bind(USER_ID)
+      .run();
+    await env.DB.prepare(
+      "DELETE FROM item_version WHERE item_id IN (SELECT id FROM item WHERE author_user_id = ?)",
+    )
+      .bind(USER_ID)
+      .run();
+    await env.DB.prepare("DELETE FROM item WHERE author_user_id = ?")
+      .bind(USER_ID)
+      .run();
+    // One stored version leaves room for exactly one reservation; both requests
+    // race that single room, and nothing between the checks may let both in.
+    await env.DB.prepare(
+      `INSERT INTO item (id, kind, author_user_id, name, status, created_at,
+         updated_at, downloads)
+       VALUES (?, 'dashboard-theme', ?, 'Stored', 'draft', ?, ?, 0)`,
+    )
+      .bind(
+        STORED_ID,
+        USER_ID,
+        "2026-10-01T00:00:00.000Z",
+        "2026-10-01T00:00:00.000Z",
+      )
+      .run();
+    await env.DB.prepare(
+      `INSERT INTO item_version (item_id, version, envelope_json, facets_json,
+         package_key, thumbnail_key, bytes, sha256, created_at)
+       VALUES (?, '1.0.0', '{}', '{}', 'packages/k.zip', 'thumbnails/k.png', ?,
+         'sha', '2026-10-01T00:00:00.000Z')`,
+    )
+      .bind(STORED_ID, GIB - MAX_ARCHIVE_BYTES)
+      .run();
+
+    // Two different new items, both started before either can answer, and
+    // dispatched to the route directly: the test pool's `SELF.fetch` serialises
+    // requests, which would prove only the sequence.
+    const version = (id: string) => {
+      const path = `${BASE}/api/me/items/${id}/versions`;
+      return handleMe(
+        new Request(path, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ envelope: candidate(id), name: "Mine" }),
+        }),
+        env,
+        new URL(path),
+      );
+    };
+    const [a, b] = await Promise.all([version(ID_A), version(ID_B)]);
+
+    expect([a?.status, b?.status].sort()).toEqual([200, 429]);
+    const reservations = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM upload WHERE user_id = ?",
+    )
+      .bind(USER_ID)
+      .first<{ n: number }>();
+    expect(reservations?.n).toBe(1);
   });
 });
