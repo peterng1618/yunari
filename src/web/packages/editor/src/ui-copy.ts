@@ -15,6 +15,7 @@ import {
   type SemanticFamily,
 } from "@yunari/renderer-core";
 import type { VersionLevel } from "@yunari/theme-package";
+import type { LocalAssetReference } from "./asset-manager/index.js";
 import type { DisplayLensId } from "./display-lens.js";
 import type { AssignableGroup } from "./host-settings-mode/client.js";
 import type { ShortcutPrefix } from "./shortcut-manager/display.js";
@@ -1303,7 +1304,8 @@ export const uiCopy = {
    * *unit* an author inserts (`card-library.ts`), and it is the word the Add
    * pane's title bar carries in the drawing. `tokens` is the Tokens pane's own
    * list, the theme's paints; the reserved `none` is not one of them, because
-   * `PaintList` lists every token but that one.
+   * `PaintList` lists every token but that one. `files` is the Assets pane's
+   * declared library.
    *
    * **The Composition pane's count is deliberately not here.** Its list is the
    * scene's own objects, which §7.6's strip already names, so the pane reads
@@ -1314,6 +1316,8 @@ export const uiCopy = {
       `${count} ${count === 1 ? "unit" : "units"}`,
     tokens: (count: number): string =>
       `${count} ${count === 1 ? "token" : "tokens"}`,
+    files: (count: number): string =>
+      `${count} ${count === 1 ? "file" : "files"}`,
   },
   /** The publish surface. §145: plain LAN HTTP has no confidentiality, so the
    *  words that turn it on have to say what it is. */
@@ -1603,6 +1607,23 @@ export const uiCopy = {
     importFile: "Import a file",
     replaceAsset: "Replace asset",
     assetList: "Asset",
+    /** The Assets pane's cards. `kind` is the metadata line's word, a total map
+     *  over the manager's kinds so a fifth kind fails to compile here rather
+     *  than drawing a card with no kind word. */
+    assetCard: {
+      kind: {
+        image: "Image",
+        svg: "SVG",
+        video: "Video",
+        font: "Font",
+      } satisfies Record<LocalAssetReference["kind"], string>,
+      inUse: "In use",
+      unused: "Unused",
+      preview: "Preview",
+      replace: "Replace",
+      remove: "Remove",
+      createTypePreset: "Create type preset",
+    },
     /** Shown when a chosen file is not a readable image, video or font the
         package accepts. The author's other work is untouched. */
     assetImportFailed: "That file could not be imported.",

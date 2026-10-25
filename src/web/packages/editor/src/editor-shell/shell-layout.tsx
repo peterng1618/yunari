@@ -364,7 +364,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
     /** The box that scrolls, which is the showing pane's **body** and not the
      *  column around it (§7.7, `vg-208`): the column clips, so its own
      *  `scrollTop` is always 0 and the offset has to come off the body inside
-     *  it. Only the showing pane's body carries this — the other three are
+     *  it. Only the showing pane's body carries this — the other four are
      *  `hidden`, so their bodies are not scrollable boxes at all. */
     const paneBody = useRef<HTMLDivElement | null>(null);
 
@@ -489,13 +489,13 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
                 host's content with it. The pane is the one owner of the
                 `data-yunari-panel` name, so the Composition pane's is
                 `layers` — the name the specs and the panel CSS already browse
-                by — and the other three are named for their rail slot. The
-                visible title is the slot's own word, as the other three are;
+                by — and the other four are named for their rail slot. The
+                visible title is the slot's own word, as the other four are;
                 the `layers` name is only the DOM handle.
 
                 **Each title bar carries its own list's count (§7.3), and the
-                list is named at the mount rather than in the pane.** Three of
-                the four panes are imperative hosts, so no React component
+                list is named at the mount rather than in the pane.** Four of
+                the five panes are imperative hosts, so no React component
                 inside one owns its list and the count has to be sourced here.
                 The source of each:
                 - Composition — the scene's objects, through the bridge's own
@@ -511,6 +511,10 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
                   holds no list of its own, so it draws no count rather than a
                   fabricated `0` (the same rule the two counts above take before
                   a bridge is set).
+                - Assets — nothing here. Its list is the asset manager's
+                  declarations, and the shell never holds that manager; a `0`
+                  while a document declares files would be fabricated, so the
+                  count waits for the pane's content to bring its own source.
 
                 A count is `undefined` where the list has not loaded, and `Pane`
                 then draws no count span at all. */}
@@ -542,6 +546,18 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
               bodyRef={paneBody}
             >
               <Host node={hosts.add} hidden={slot !== "add"} />
+            </Pane>
+            {/* The declared files' own pane. Its body is the persistent host
+                the session's asset library mounts into; until that content
+                lands the chrome is all this slot draws. */}
+            <Pane
+              id="assets"
+              title={uiCopy.rail.slots.assets}
+              icon={RAIL_GLYPHS.assets}
+              hidden={slot !== "assets"}
+              bodyRef={paneBody}
+            >
+              <Host node={hosts.assets} hidden={slot !== "assets"} />
             </Pane>
             <Pane
               id="tokens"

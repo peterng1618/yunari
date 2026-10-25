@@ -269,18 +269,16 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
   const root = document.createElement("div");
   const layout = createShellLayout(root);
 
-  // A pane per slot that has one, each wearing a title bar, its own
-  // `data-yunari-panel` name and `hidden` unless its slot is chosen. The Assets
-  // slot's pane is the next step of this plan and is not mounted yet, so the
-  // four here are the panes that exist. The Composition pane's DOM name
-  // is the `layers` the browser specs and the panel CSS already browse by, so
-  // the chrome moved around the contract rather than the contract moving; its
-  // visible title, like the other three, is the slot's own word.
+  // A pane per slot, each wearing a title bar, its own `data-yunari-panel` name
+  // and `hidden` unless its slot is chosen. The Composition pane's DOM name is
+  // the `layers` the browser specs and the panel CSS already browse by, so the
+  // chrome moved around the contract rather than the contract moving; its
+  // visible title, like the other four, is the slot's own word.
   const panes = root.querySelectorAll(".editor-shell-pane");
-  expect(panes).toHaveLength(4);
+  expect(panes).toHaveLength(5);
   expect(
     [...panes].map((pane) => pane.getAttribute("data-yunari-panel")).sort(),
-  ).toEqual(["add", "document", "layers", "tokens"]);
+  ).toEqual(["add", "assets", "document", "layers", "tokens"]);
   for (const pane of panes) {
     expect(pane.querySelector(".editor-shell-pane-title")).not.toBeNull();
   }
@@ -308,12 +306,14 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
  * The row ruled per pane rather than per editor: the Add pane counts the card
  * library, the Composition pane the scene's objects, the Tokens pane the
  * theme's paints. Each source is named at the mount in `shell-layout`, because
- * three of the four panes are imperative hosts with no React component inside
+ * four of the five panes are imperative hosts with no React component inside
  * that owns a list.
  *
- * Two absences are the whole of the negative half. **Document draws none** —
+ * Three absences are the whole of the negative half. **Document draws none** —
  * its body is two sections of fields and it holds no list of its own, so a
- * count there would be fabricated. And **before a bridge is set the two
+ * count there would be fabricated. **Assets draws none yet** — its list is the
+ * asset manager's declarations and the shell holds no manager, so a `0` would
+ * be the same fabrication. And **before a bridge is set the two
  * snapshot-fed counts draw none either**: `0 objects` over a canvas that has not
  * mounted its document is a claim the product does not have (DESIGN.md §9). The
  * Add pane's count is the exception, and it proves the rule rather than
@@ -330,6 +330,7 @@ it("prints each pane's own count, and no count where a pane has no list", () => 
 
   expect(countOf("add")).toBe(uiCopy.paneCounts.units(CARD_LIBRARY.length));
   expect(countOf("layers")).toBeNull();
+  expect(countOf("assets")).toBeNull();
   expect(countOf("tokens")).toBeNull();
   expect(countOf("document")).toBeNull();
 
@@ -352,7 +353,9 @@ it("prints each pane's own count, and no count where a pane has no list", () => 
   expect(countOf("tokens")).toBe(uiCopy.paneCounts.tokens(5));
   expect(countOf("add")).toBe(uiCopy.paneCounts.units(CARD_LIBRARY.length));
   expect(countOf("document")).toBeNull();
-  // Three spans, not four: the Document pane is the one pane that prints none.
+  expect(countOf("assets")).toBeNull();
+  // Three spans, not five: Document and Assets are the two panes that print
+  // none.
   expect(root.querySelectorAll(".editor-shell-pane-count")).toHaveLength(3);
 
   layout.destroy();

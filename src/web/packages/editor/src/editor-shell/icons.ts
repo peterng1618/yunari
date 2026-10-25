@@ -34,12 +34,14 @@ import {
   Pencil,
   Pipette,
   Plus,
+  RefreshCw,
   Scan,
   Search,
   Settings,
   Shapes,
   Spline,
   Square,
+  SquarePlus,
   Star,
   Trash2,
   TriangleAlert,
@@ -210,6 +212,13 @@ export const ENTER_GLYPH: LucideIcon = LogIn;
 export const LEAVE_GLYPH: LucideIcon = LogOut;
 export const VISIBLE_GLYPH: LucideIcon = Eye;
 export const HIDDEN_GLYPH: LucideIcon = EyeOff;
+
+/** The Assets pane's two card actions that have no other surface: putting a
+ *  file on the canvas, and swapping the bytes of the asset already chosen. The
+ *  pair is the drawing's (`assets-pane.html`) — a square with a plus, and the
+ *  refresh arrows. */
+export const PLACE_ON_CANVAS_GLYPH: LucideIcon = SquarePlus;
+export const REPLACE_ASSET_GLYPH: LucideIcon = RefreshCw;
 
 /** The store cell's four actions, from the drawing's facts band
  *  (`mockups/current/store-themes.html`): a folder for opening the item, a
