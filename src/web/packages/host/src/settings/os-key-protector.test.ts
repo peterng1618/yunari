@@ -104,6 +104,9 @@ describe("the OS key protector", () => {
 
       expect(await protector.available()).toBe(true);
       expect(spawnMock).toHaveBeenCalledTimes(2);
+      // Retrying `powershell` would satisfy the count above, so pin the
+      // fallback's actual target.
+      expect(spawnMock.mock.calls[1]?.[0]).toBe("pwsh");
     },
     30_000,
   );
@@ -179,6 +182,37 @@ describe("the OS key protector", () => {
     expect(await protector.available()).toBe(true);
     expect(lookups).toBe(2);
   });
+
+  it("rejects a timed-out Linux probe and retries", async () => {
+    vi.useFakeTimers();
+    const kill = vi.fn();
+
+    let lookups = 0;
+    installSpawn(() => {
+      lookups += 1;
+      // The first lookup never answers; the next runs and finds no key, which
+      // still means the facility is there.
+      return lookups === 1 ? undefined : { code: 1 };
+    }, kill);
+
+    vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+
+    const fresh = await freshProtectorModule();
+    const protector = fresh.createOsKeyProtector(
+      path.join(os.tmpdir(), "yunari-linux-timeout"),
+    );
+
+    const rejected = expect(protector.available()).rejects.toThrow(
+      /did not finish in time/,
+    );
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejected;
+    expect(kill).toHaveBeenCalledWith("SIGKILL");
+
+    // The cached rejection must clear so the next call probes again.
+    expect(await protector.available()).toBe(true);
+    expect(lookups).toBe(2);
+  }, 30_000);
 
   it("kills a wedged child with SIGKILL at the deadline", async () => {
     vi.useFakeTimers();
@@ -259,7 +293,10 @@ describe("the OS key protector", () => {
     }
   });
 
-  it("spawns one probe child for three cold protectors", async () => {
+  it("spawns one probe child for three cold Windows protectors", async () => {
+    const platform = vi
+      .spyOn(process, "platform", "get")
+      .mockReturnValue("win32");
     installSpawn(() => ({ code: 0 }));
 
     const fresh = await freshProtectorModule();
@@ -275,5 +312,34 @@ describe("the OS key protector", () => {
 
     expect(answers).toEqual([true, true, true]);
     expect(spawnMock).toHaveBeenCalledTimes(1);
+    platform.mockRestore();
+  });
+
+  it("probes once per cold Linux protector", async () => {
+    // The Linux branch has no shared module-level probe, so the counterpart
+    // invariant is one `secret-tool lookup` per protector, not one per process.
+    const platform = vi
+      .spyOn(process, "platform", "get")
+      .mockReturnValue("linux");
+    installSpawn(() => ({ code: 1 }));
+
+    const fresh = await freshProtectorModule();
+    const protectors = ["a", "b", "c"].map((name) =>
+      fresh.createOsKeyProtector(
+        path.join(os.tmpdir(), `yunari-linux-three-${name}`),
+      ),
+    );
+
+    const answers = await Promise.all(
+      protectors.map((protector) => protector.available()),
+    );
+
+    expect(answers).toEqual([true, true, true]);
+    expect(spawnMock).toHaveBeenCalledTimes(3);
+    for (const [command, args] of spawnMock.mock.calls) {
+      expect(command).toBe("secret-tool");
+      expect(args[0]).toBe("lookup");
+    }
+    platform.mockRestore();
   });
 });
