@@ -172,7 +172,17 @@ export interface PlanInputs {
 }
 
 /** Runtime inputs required to derive one authored chart's display option. */
-export type ChartPlanContext = Pick<PlanInputs, "source" | "nowMs" | "animate">;
+export type ChartPlanContext = Pick<
+  PlanInputs,
+  "source" | "nowMs" | "animate"
+> & {
+  /**
+   * The delay the caller's cadence allows, when it differs from the source's
+   * own. `0` drops the delay — what a once-a-second redraw needs, since it has
+   * no trail to hide and every delayed reading would only be late.
+   */
+  readonly playbackDelayMs?: number;
+};
 
 /**
  * The artboard's geometry with the background layer's colour resolved through
@@ -509,6 +519,8 @@ export function buildChartPlan(
   palette?: import("../theme/fabric-envelope.js").FabricPalette,
 ): PlanChart {
   const animate = context.animate ?? true;
+  const playbackDelayMs =
+    context.playbackDelayMs ?? context.source.chartPlaybackDelayMs;
 
   // Adapters handle absent samples; report unmapped semantic keys separately.
   for (const binding of bindings) {
@@ -549,7 +561,7 @@ export function buildChartPlan(
       // plot (vg-571).
       const historySeconds = lineHistorySeconds(
         content.settings.windowSeconds,
-        context.source.chartPlaybackDelayMs,
+        playbackDelayMs,
       );
       const series: SeriesInput[] = bindings.map((binding) => ({
         sensorId: binding.semanticKey,
@@ -568,7 +580,7 @@ export function buildChartPlan(
           context.nowMs,
           animate,
           palette,
-          context.source.chartPlaybackDelayMs,
+          playbackDelayMs,
         ),
       };
     }

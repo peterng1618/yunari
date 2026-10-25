@@ -32,6 +32,9 @@ import { lineHistorySeconds } from "./line.js";
  * settings name the tokens they paint with, so the values of those tokens are
  * part of what the chart would draw; a token the chart does not name is not.
  * Without that, a live palette sample forced every chart to redraw.
+ *
+ * Pass `playbackDelayMs` when the display's cadence overrides the source's
+ * delay, so the signature asks for the history that will actually be drawn.
  */
 export function chartReadingSignature(
   content: ChartContent,
@@ -39,7 +42,9 @@ export function chartReadingSignature(
   source: SampleSource,
   nowMs: number,
   palette?: FabricPalette,
+  playbackDelayMs?: number,
 ): string {
+  const delayMs = playbackDelayMs ?? source.chartPlaybackDelayMs;
   const readings = bindings
     .map((binding) => {
       const sample =
@@ -47,10 +52,7 @@ export function chartReadingSignature(
           ? source
               .history(
                 binding.semanticKey,
-                lineHistorySeconds(
-                  content.settings.windowSeconds,
-                  source.chartPlaybackDelayMs,
-                ),
+                lineHistorySeconds(content.settings.windowSeconds, delayMs),
               )
               .at(-1)
           : source.latest(binding.semanticKey);

@@ -36,6 +36,30 @@ describe("chartReadingSignature", () => {
     );
   });
 
+  it("asks for the history its delay needs, and less when the delay is dropped", () => {
+    // The signature must read what the chart would draw: a 1 fps caller drops
+    // the delay, so the plan asks for the window alone and so must this.
+    const chart = { family: "line", settings: defaultLineSettings } as const;
+    const bindings = [{ id: "b", semanticKey: "cpu.load.total" }];
+    const asked: number[] = [];
+    const delayed: SampleSource = {
+      chartPlaybackDelayMs: 2_000,
+      latest: () => sample,
+      history: (_key, seconds) => {
+        asked.push(seconds);
+        return [sample];
+      },
+    };
+
+    chartReadingSignature(chart, bindings, delayed, 1_000);
+    chartReadingSignature(chart, bindings, delayed, 1_000, undefined, 0);
+
+    expect(asked).toEqual([
+      defaultLineSettings.windowSeconds + 2,
+      defaultLineSettings.windowSeconds,
+    ]);
+  });
+
   it("moves only with the palette tokens the settings name", () => {
     const chart = {
       family: "bar",
@@ -46,8 +70,14 @@ describe("chartReadingSignature", () => {
     } as const;
     const bindings = [{ id: "b", semanticKey: "cpu.load.total" }];
     const palette = (accent: string) => ({
-      accent: { name: "Accent", value: { kind: "solid" as const, color: accent } },
-      other: { name: "Other", value: { kind: "solid" as const, color: "#123" } },
+      accent: {
+        name: "Accent",
+        value: { kind: "solid" as const, color: accent },
+      },
+      other: {
+        name: "Other",
+        value: { kind: "solid" as const, color: "#123" },
+      },
     });
 
     // A token the settings do not name is not an input to the plan.

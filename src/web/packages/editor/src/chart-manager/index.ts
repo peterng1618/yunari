@@ -15,6 +15,7 @@ import {
 import {
   type ChartRefreshRate,
   chartAnimationFor,
+  chartPlaybackDelayFor,
   type SceneAdapter,
   YunariChart,
 } from "@yunari/scene-fabric";
@@ -499,6 +500,10 @@ export class ChartManager {
     // the same one: read twice, a chart that moved between the two reads is
     // skipped for a window it never drew.
     const nowMs = Date.now();
+    const playbackDelayMs = chartPlaybackDelayFor(
+      this.#refreshRate(),
+      this.#source.chartPlaybackDelayMs,
+    );
     const visit = (objects: readonly object[]): void => {
       for (const object of objects) {
         if (object instanceof YunariChart) {
@@ -518,6 +523,7 @@ export class ChartManager {
               this.#source,
               nowMs,
               this.#globals?.palette,
+              playbackDelayMs,
             );
           } catch {
             reading = undefined;
@@ -572,6 +578,10 @@ export class ChartManager {
           source: this.#source,
           nowMs,
           animate: chartAnimationFor(chart.family, this.#refreshRate()),
+          playbackDelayMs: chartPlaybackDelayFor(
+            this.#refreshRate(),
+            this.#source.chartPlaybackDelayMs,
+          ),
         },
         [],
         this.#globals?.palette,

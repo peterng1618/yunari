@@ -116,8 +116,10 @@ after owner testing:** the delay is two host cadences, and the line is never
 smoothed — `smooth` is removed from the interpolation setting, leaving `linear`
 and `step`, and a theme declaring it is refused. A flat stretch held at the
 edge, and the batch that ends a stall, must not reshape anything the reader has
-already seen, and ECharts can only promise that for straight segments.
-Segmented fill uses custom cartesian bars,
+already seen, and ECharts can only promise that for straight segments. **At
+1 fps the delay is zero:** that mode redraws once a second, so the delay cannot
+keep its edge inside a segment and would only make each reading two seconds
+late. Segmented fill uses custom cartesian bars,
 native gauge bands and pie spacer items. Radar and polar bar are families, radar
 with one shared scale and polar bar with no segmentation. The reason is the
 probes: each chosen mechanism already owns the geometry and corner behaviour,

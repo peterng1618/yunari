@@ -169,6 +169,11 @@ reserve the hold-and-step for a real stall. The same two intervals also keep a
 smooth line's reshaped segment off-screen, which is why the one-interval build
 appeared to correct itself at the edge; smoothing is not offered at all (A5).
 
+**The delay belongs to the 30 fps mode.** A display set to 1 fps redraws once a
+second, so its edge already trails the newest batch by a cadence and the delay
+only makes every reading late: `chartPlaybackDelayFor` drops it to zero, and the
+plan and the reading signature both take that value.
+
 ### A4. History returns the predecessor
 
 `SampleSource.history(key, seconds)` gains one contract line: it returns the

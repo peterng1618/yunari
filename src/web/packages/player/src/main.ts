@@ -17,6 +17,7 @@ import {
   applyAuthoredText,
   type ChartRefreshRate,
   chartAnimationFor,
+  chartPlaybackDelayFor,
   loadFontAssets,
   mountFabricScene,
   refreshBoundImages,
@@ -481,6 +482,10 @@ function hydrateCharts(
 ): void {
   const issues: PlanIssue[] = [];
   const nowMs = Date.now();
+  const playbackDelayMs = chartPlaybackDelayFor(
+    rate,
+    source.chartPlaybackDelayMs,
+  );
   for (const object of objects) {
     if (object instanceof YunariChart) {
       const id = object.get("id");
@@ -503,6 +508,7 @@ function hydrateCharts(
           source,
           nowMs,
           palette,
+          playbackDelayMs,
         );
         if (drawnReadings.get(object) === reading) continue;
         const plan = buildChartPlan(
@@ -513,6 +519,7 @@ function hydrateCharts(
             source,
             nowMs,
             animate: chartAnimationFor(content.family, rate),
+            playbackDelayMs,
           },
           issues,
           palette,

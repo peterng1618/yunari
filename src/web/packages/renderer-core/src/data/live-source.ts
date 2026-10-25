@@ -42,9 +42,11 @@ export interface LiveSourceHandle {
  * the edge reaches the newest sample exactly when the next batch is due: every
  * ordinary tick would paint a flat stretch and then step, and the line would
  * become a staircase. Two intervals keep a normal gap inside the last segment,
- * where it reads as a slope, and leave the hold-and-step for a real stall. The
- * same margin keeps a smooth line's reshaped segment off-screen, though a
- * delayed line is drawn linearly for a stronger reason (§A5 in the design).
+ * where it reads as a slope, and leave the hold-and-step for a real stall.
+ *
+ * **The delay is what the source offers, not what every display uses.** A chart
+ * that redraws once a second has a cadence of its own and drops it
+ * (`chartPlaybackDelayFor` in `scene-fabric`).
  */
 export const LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS = 2_000;
 

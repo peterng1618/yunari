@@ -894,6 +894,34 @@ describe("charts", () => {
     expect(windows).toEqual([defaultLineSettings.windowSeconds + 1]);
   });
 
+  it("drops the source's delay when the caller's cadence does not need one", () => {
+    // A 1 fps display draws once a second, so a delayed edge only makes every
+    // reading late: the caller passes 0 and both the history request and the
+    // axis edge follow it.
+    const windows: number[] = [];
+    const source = {
+      chartPlaybackDelayMs: LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
+      latest: () => undefined,
+      history: (_key: string, windowSeconds: number) => {
+        windows.push(windowSeconds);
+        return [];
+      },
+    };
+
+    const chart = buildChartPlan(
+      "line",
+      { family: "line", settings: defaultLineSettings },
+      [{ id: "b", semanticKey: "cpu.load.total" }],
+      { source, nowMs: NOW, animate: false, playbackDelayMs: 0 },
+      [],
+    );
+
+    expect(windows).toEqual([defaultLineSettings.windowSeconds]);
+    if (chart.family === "line") {
+      expect(chart.option.xAxis.max).toBe(NOW);
+    }
+  });
+
   /**
    * **The quantisation, not a duration.** A source answers a trailing window at
    * its own cadence, so the oldest sample it returns sits somewhere inside the
