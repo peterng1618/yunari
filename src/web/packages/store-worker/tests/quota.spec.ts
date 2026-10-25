@@ -152,6 +152,54 @@ describe("author quota", () => {
     );
   });
 
+  it("expires a reservation exactly at the TTL boundary", async () => {
+    const userId = "user-quota-boundary";
+    await seedStoredVersion(userId, "quota-item-boundary", GIB - 10);
+    const now = new Date("2030-01-01T00:00:00.000Z");
+    const expiredAt = new Date(
+      now.getTime() - UPLOAD_RESERVATION_TTL_MS,
+    ).toISOString();
+    const liveAt = new Date(
+      now.getTime() - UPLOAD_RESERVATION_TTL_MS + 1,
+    ).toISOString();
+
+    // Exactly one hour old is the cutoff itself, and the query is `>`.
+    await reserve({
+      id: "quota-upload-boundary-expired",
+      userId,
+      reservedBytes: MAX_ARCHIVE_BYTES,
+      createdAt: expiredAt,
+    });
+    expect(
+      await authorQuotaExceeded(env.DB, userId, 0, false, now),
+    ).toBeUndefined();
+    expect(await pendingBytes(env.DB, userId, now)).toBe(0);
+
+    // One millisecond younger still counts.
+    await reserve({
+      id: "quota-upload-boundary-live",
+      userId,
+      reservedBytes: MAX_ARCHIVE_BYTES,
+      createdAt: liveAt,
+    });
+    expect(await authorQuotaExceeded(env.DB, userId, 0, false, now)).toBe(
+      "bytes",
+    );
+    expect(await pendingBytes(env.DB, userId, now)).toBe(MAX_ARCHIVE_BYTES);
+  });
+
+  it("refuses a finalized upload with no byte count", async () => {
+    await expect(
+      reserve({
+        id: "quota-upload-finalized-no-bytes",
+        userId: "user-quota-no-bytes",
+        reservedBytes: MAX_ARCHIVE_BYTES,
+        finalizedAt: STORED_AT,
+        bytes: null,
+      }),
+    ).rejects.toThrow(/CHECK constraint failed/);
+  });
+
   it("refuses non-finite or negative extra bytes", async () => {
     for (const extraBytes of [Number.NaN, Infinity, -Infinity, -1]) {
       await expect(

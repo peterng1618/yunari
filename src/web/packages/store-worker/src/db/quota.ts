@@ -13,7 +13,8 @@ export const UPLOAD_RESERVATION_TTL_MS = 60 * 60 * 1000;
 /**
  * Bytes an author's unexpired proxied uploads still hold. A finalized upload
  * is not counted here: its size is already an `item_version` row. Instants are
- * ISO text, so a lexical comparison against the cutoff orders them.
+ * fixed-width UTC ISO-8601 text from `toISOString()`, so a lexical comparison
+ * against the cutoff orders them.
  */
 export async function pendingBytes(
   db: D1Database,
@@ -42,13 +43,16 @@ export async function pendingBytes(
  * Unexpired proxied uploads reserve their cap too, so several in flight cannot
  * overrun the account limit before any of them finalizes.
  * `creatingNewItem` is the route's own knowledge — an existing item's new
- * version does not count against the item limit.
+ * version does not count against the item limit. `now` is the request's clock,
+ * so the reservation cutoff is not read from a second instant; the default
+ * keeps four-argument callers working.
  */
 export async function authorQuotaExceeded(
   db: D1Database,
   userId: string,
   extraBytes: number,
   creatingNewItem: boolean,
+  now: Date = new Date(),
 ): Promise<"items" | "bytes" | undefined> {
   if (!Number.isFinite(extraBytes) || extraBytes < 0) {
     throw new RangeError(
@@ -70,7 +74,7 @@ export async function authorQuotaExceeded(
     )
     .bind(userId)
     .first<{ total: number }>();
-  const pending = await pendingBytes(db, userId, new Date());
+  const pending = await pendingBytes(db, userId, now);
   return (stored?.total ?? 0) + pending + extraBytes > MAX_AUTHOR_BYTES
     ? "bytes"
     : undefined;

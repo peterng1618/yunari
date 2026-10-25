@@ -9,9 +9,14 @@ CREATE TABLE upload (
   envelope_json TEXT NOT NULL,
   key TEXT NOT NULL,
   reserved_bytes INTEGER NOT NULL CHECK (reserved_bytes >= 0),
+  -- UTC ISO-8601, e.g. 2026-10-25T10:00:00.000Z; compared lexically against
+  -- the quota cutoff, so a writer must use Date#toISOString().
   created_at TEXT NOT NULL,
   finalized_at TEXT,
-  bytes INTEGER CHECK (bytes IS NULL OR bytes >= 0)
+  bytes INTEGER CHECK (bytes IS NULL OR bytes >= 0),
+  -- A finalised row without its size would count in neither the item_version
+  -- join nor the reservations, silently undercounting the author.
+  CHECK ((finalized_at IS NULL) = (bytes IS NULL))
 );
 
 CREATE INDEX upload_user_id_created_at ON upload (user_id, created_at);
