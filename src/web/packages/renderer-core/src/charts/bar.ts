@@ -10,6 +10,7 @@ import { NO_INK, NO_PAINT, resolveChartPaint } from "./chart-paint.js";
 import {
   colorAt,
   type EngineColor,
+  type GradientDirection,
   normalizePosition,
   resolveFlatColor,
   toLinearGradient,
@@ -69,6 +70,16 @@ export const defaultBarSettings: BarSettings = {
   segmentDivisor: 100,
   showAxes: false,
 };
+
+/**
+ * What both bar families carry for paint and data.
+ *
+ * A polar bar has no orientation, so the helpers below ask whether one is
+ * present rather than forcing a cartesian growth direction onto it (§E1).
+ */
+export type BarPaintSettings =
+  | BarSettings
+  | Omit<BarSettings, "orientation" | "segmentDivisor">;
 
 export interface BarInput {
   readonly sensorId: string;
@@ -417,7 +428,7 @@ function bandColor(paint: Fill, midpoint: number, reading: number): string {
 
 /** Missing samples return `null`; a zero-length bar would be indistinguishable from real zero. */
 export function toBarDataItem(
-  settings: BarSettings,
+  settings: BarPaintSettings,
   input: BarInput,
   palette?: FabricPalette,
 ): BarDataItem {
@@ -447,17 +458,14 @@ export function toBarDataItem(
 
 /** Resolve per-bar solid/threshold colour or a cartesian growth-direction gradient. */
 export function toBarColor(
-  settings: BarSettings,
+  settings: BarPaintSettings,
   position: number,
   palette?: FabricPalette,
 ): EngineColor | undefined {
   const fill = resolveChartPaint(settings.fill, palette);
   if (fill === undefined) return undefined;
   if (fill.kind === "gradient") {
-    return toLinearGradient(
-      fill.stops,
-      settings.orientation === "horizontal" ? "to-right" : "to-top",
-    );
+    return toLinearGradient(fill.stops, gradientDirection(settings));
   }
 
   return resolveFlatColor(fill, position);
@@ -471,8 +479,8 @@ export function toBarColor(
  * rounds the two ends of the progress bar rather than the outside of a larger
  * background.
  */
-function toBackgroundStyle(
-  settings: BarSettings,
+export function toBackgroundStyle(
+  settings: BarPaintSettings,
   palette: FabricPalette | undefined,
 ): { readonly color: EngineColor; readonly borderRadius?: number } {
   const radius = settings.trackCornerRadius;
@@ -487,7 +495,7 @@ function toBackgroundStyle(
 
 /** Track gradients span the whole slot; threshold tracks resolve to their top band. */
 function toTrackColor(
-  settings: BarSettings,
+  settings: BarPaintSettings,
   palette: FabricPalette | undefined,
 ): EngineColor {
   const track = settings.track;
@@ -498,13 +506,17 @@ function toTrackColor(
 
   const resolved = resolveChartPaint(track, palette) ?? NO_PAINT;
   if (resolved.kind === "gradient") {
-    return toLinearGradient(
-      resolved.stops,
-      settings.orientation === "horizontal" ? "to-right" : "to-top",
-    );
+    return toLinearGradient(resolved.stops, gradientDirection(settings));
   }
 
   return resolveFlatColor(resolved, 1);
+}
+
+/** A cartesian bar reads its orientation; a polar bar grows to the top. */
+function gradientDirection(settings: BarPaintSettings): GradientDirection {
+  return "orientation" in settings && settings.orientation === "horizontal"
+    ? "to-right"
+    : "to-top";
 }
 
 function clampPercent(value: number): number {

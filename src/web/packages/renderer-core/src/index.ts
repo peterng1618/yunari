@@ -108,6 +108,14 @@ export {
   defaultPieSettings,
 } from "./charts/pie.js";
 export type {
+  PolarBarOption,
+  PolarBarSettings,
+} from "./charts/polar-bar.js";
+export {
+  buildPolarBarOption,
+  defaultPolarBarSettings,
+} from "./charts/polar-bar.js";
+export type {
   RadarInput,
   RadarOption,
   RadarSettings,
