@@ -868,6 +868,21 @@ function sendText(
   response.end(body);
 }
 
+/**
+ * Whether an error is this machine's rather than the caller's.
+ *
+ * A filesystem or trash refusal carries an errno `code`, and its message names
+ * an absolute path; a store's validation message does not. That is what lets a
+ * catch keep answering the caller's typo with its own words (400) while keeping
+ * a platform failure off the wire (500, detail to the console).
+ */
+function isPlatformError(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    error instanceof Error &&
+    typeof (error as NodeJS.ErrnoException).code === "string"
+  );
+}
+
 /** A route module's answer, written as the node response this server speaks. */
 async function writeWebResponse(
   response: http.ServerResponse,
@@ -3498,6 +3513,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
           const saved = await themeSettings.write(named, rawId, body);
           sendJson(response, 200, { ok: true, answers: saved });
         } catch (error) {
+          // A body the parser or the store's rules refused is the caller's; a
+          // failed write names this machine's file and says so only here.
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(response, 500, "The theme's answers could not be saved.");
+            return;
+          }
           sendText(
             response,
             400,
@@ -3571,6 +3593,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
           await store.write(rawId, new Uint8Array(Buffer.concat(chunks)));
           sendJson(response, 200, { ok: true });
         } catch (error) {
+          // A PNG the store would not read is the caller's; a write it could
+          // not perform is this machine's, and its path stays off the wire.
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(response, 500, "That thumbnail could not be saved.");
+            return;
+          }
           sendText(
             response,
             400,
@@ -3961,6 +3990,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
             sendText(response, 413, error.message);
             return;
           }
+          // A theme the store's own rules refused is the caller's, with the
+          // store's words; a write the filesystem refused is this machine's,
+          // and its message names a path the browser must not read.
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(response, 500, "That theme could not be saved.");
+            return;
+          }
           sendText(
             response,
             400,
@@ -4004,12 +4041,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
         } catch (error) {
           // A trash that refused is not a malformed request: nothing was
           // removed, the theme is exactly where it was, and the author's copy
-          // is intact. The reason is the platform's own, so it travels as is.
-          sendText(
-            response,
-            500,
-            error instanceof Error ? error.message : String(error),
-          );
+          // is intact. The platform's words name the folder, so they go to the
+          // console and the caller gets the fact without them.
+          console.error(error);
+          sendText(response, 500, "That theme could not be removed.");
         }
         return;
       }

@@ -6865,6 +6865,165 @@ describe("A bundle is build output: no links, and cacheable files", () => {
   });
 });
 
+describe("An admin write keeps the platform's words off the wire", () => {
+  const dirs: string[] = [];
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await Promise.all(
+      dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    );
+  });
+
+  /** A write the filesystem refused: the one shape whose message carries an
+   *  absolute path this machine owns and the browser must not read. */
+  function refusedWrite(): () => Promise<never> {
+    return () => {
+      const refused = new Error(
+        "EPERM: operation not permitted, open 'C:\\secret\\theme'",
+      ) as NodeJS.ErrnoException;
+      // What `fs` sets and what tells a platform failure from a store's rule.
+      refused.code = "EPERM";
+      return Promise.reject(refused);
+    };
+  }
+
+  async function host(
+    overrides: Partial<HostServerOptions>,
+  ): Promise<ReturnType<typeof createHostServer>> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-admin-write-"));
+    dirs.push(dir);
+
+    return createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: createThemeStore(dir),
+      thumbnails: createThumbnailStore(dir),
+      themeSettings: createThemeSettingsStore(dir),
+      ...overrides,
+    });
+  }
+
+  /** The answer body, with the detail asserted to have gone to the console. */
+  async function refusedBody(
+    answer: { readonly status: number; text(): string },
+    sentence: string,
+  ): Promise<void> {
+    expect(answer.status).toBe(500);
+    expect(answer.text()).toBe(sentence);
+    expect(answer.text()).not.toContain("C:\\secret");
+    expect(console.error).toHaveBeenCalled();
+  }
+
+  it("answers a fixed sentence for a failed theme-settings write", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      themeSettings: {
+        ...createThemeSettingsStore(os.tmpdir()),
+        write: refusedWrite(),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room/answers",
+        "{}",
+      );
+      await refusedBody(answer, "The theme's answers could not be saved.");
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers a fixed sentence for a failed thumbnail write", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      thumbnails: {
+        ...createThumbnailStore(os.tmpdir()),
+        write: refusedWrite(),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room/thumbnail",
+        new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+      );
+      await refusedBody(answer, "That thumbnail could not be saved.");
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers a fixed sentence for a failed theme save, and keeps a decode refusal at 400", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      themeStore: {
+        ...createThemeStore(os.tmpdir()),
+        write: refusedWrite(),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room",
+        themeBody(createValidPackage("living-room")),
+      );
+      await refusedBody(answer, "That theme could not be saved.");
+      expect(logged).toHaveBeenCalled();
+
+      // A body the decoder refuses is the caller's, and stays a 400.
+      const malformed = await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room",
+        "not json",
+      );
+      expect(malformed.status).toBe(400);
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers a fixed sentence for a failed theme removal", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      themeStore: {
+        ...createThemeStore(os.tmpdir()),
+        remove: refusedWrite(),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "DELETE",
+        "/api/themes/living-room",
+      );
+      await refusedBody(answer, "That theme could not be removed.");
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+    }
+  });
+});
+
 describe("a pairing guard protects dashboard content, not the bundle", () => {
   /** A bundle file is served to anything that asks; content is not. */
   it("serves the bundle to an unpaired device and refuses everything else", async () => {
