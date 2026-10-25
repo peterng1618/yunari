@@ -87,6 +87,72 @@ describe("SampleStore", () => {
     }
   });
 
+  it("keeps the window intact when an unreadable time sits mid-list", () => {
+    const store = new SampleStore();
+
+    store.ingest(
+      [
+        ["a", ok(1, NOW - 3000)],
+        ["a", { ...ok(2, NOW - 2000), timestamp: "not a date" }],
+        ["a", ok(3, NOW - 1000)],
+      ],
+      NOW,
+    );
+
+    expect(store.history("a", 60).map((sample) => sample.value)).toEqual([
+      1, 3,
+    ]);
+  });
+
+  it("returns no samples for a non-finite window", () => {
+    const store = new SampleStore();
+    store.ingest([["a", ok(1)]], NOW);
+
+    expect(store.history("a", Number.NaN)).toEqual([]);
+  });
+
+  it("keeps samples paired with their times after the count cap", () => {
+    const store = new SampleStore({ maxSamplesPerKey: 2 });
+    store.ingest(
+      [
+        ["a", ok(1, NOW - 2000)],
+        ["a", ok(2, NOW - 1000)],
+        ["a", ok(3, NOW)],
+      ],
+      NOW,
+    );
+
+    expect(store.history("a", 0.5).map((sample) => sample.value)).toEqual([3]);
+  });
+
+  it("keeps an unreadable sample out of history while it is retained", () => {
+    const store = new SampleStore({ maxSamplesPerKey: 2 });
+    store.ingest(
+      [
+        ["a", { ...ok(1, NOW - 1000), timestamp: "not a date" }],
+        ["a", ok(2, NOW)],
+      ],
+      NOW,
+    );
+
+    expect(store.history("a", 3600).map((sample) => sample.value)).toEqual([2]);
+    expect(store.latest("a")?.value).toBe(2);
+  });
+
+  it("drops an unreadable sample at the count cap like any other", () => {
+    const store = new SampleStore({ maxSamplesPerKey: 1 });
+    store.ingest(
+      [
+        ["a", { ...ok(1, NOW - 1000), timestamp: "not a date" }],
+        ["a", ok(2, NOW)],
+      ],
+      NOW,
+    );
+
+    expect(store.history("a", 3600).map((sample) => sample.value)).toEqual([2]);
+    expect(store.latest("a")?.value).toBe(2);
+  });
+
   it("returns the latest ingested sample per key", () => {
     const store = new SampleStore();
     store.ingest(
