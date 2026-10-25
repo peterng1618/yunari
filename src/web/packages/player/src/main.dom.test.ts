@@ -310,14 +310,21 @@ describe("the player's re-find", () => {
 describe("the rate the display repaints at", () => {
   let chartFps: unknown = 1;
   let pending = new Map<number, FrameRequestCallback>();
+  let pendingTimers = new Map<
+    number,
+    { callback: () => void; dueMs: number }
+  >();
   let nextHandle = 0;
+  let nextTimer = 0;
   let clock = 0;
 
   beforeEach(() => {
     vi.resetModules();
     chartFps = 1;
     pending = new Map();
+    pendingTimers = new Map();
     nextHandle = 0;
+    nextTimer = 0;
     clock = 0;
   });
 
@@ -327,11 +334,16 @@ describe("the rate the display repaints at", () => {
     vi.resetModules();
   });
 
-  /** One frame of the loop's own clock. The clock is monotonic across calls
-   *  because the loop's own `lastRefreshMs` is: rewinding it would make every
-   *  frame look too early to repaint. */
+  /** One wake of the loop's own clock, whichever kind is pending: at 1 fps the
+   *  loop sleeps on a timer and requests no frame until it is due. The clock is
+   *  monotonic across calls because the loop's schedule is. */
   function driveFrame(stepMs = 1): void {
     clock += stepMs;
+    for (const [id, timer] of pendingTimers) {
+      if (timer.dueMs > clock) continue;
+      pendingTimers.delete(id);
+      timer.callback();
+    }
     const due = [...pending.values()];
     pending.clear();
     for (const callback of due) callback(clock);
@@ -356,16 +368,18 @@ describe("the rate the display repaints at", () => {
     throw new Error("the loop repainted fewer than twice in 5000 frames");
   }
 
-  /** How many self-re-arming frame callbacks the page keeps alive. The step is
-   *  inside every interval, so this frame refreshes nothing: a refresh's own
-   *  canvas render is one-shot and has run, and what remains is the loops.
+  /** How many self-re-arming wakes the page keeps alive — frames and timers
+   *  together, because at 1 fps the chart loop's wake is a timer while the
+   *  line's own engine keeps an animation frame. The step is inside every
+   *  interval, so this wake refreshes nothing: a refresh's own canvas render is
+   *  one-shot and has run, and what remains is the loops.
    *
-   * It is a count to compare, not a constant: the line's own engine keeps an
-   * animation frame of its own, so the answer is "unchanged after `setRate`",
-   * not "exactly one". */
+   * It is a count to compare, not a constant: the line's own engine keeps a
+   * frame of its own, so the answer is "unchanged after `setRate`", not
+   * "exactly one". */
   function refreshLoopsStarted(): number {
     driveFrame(0);
-    return pending.size;
+    return pending.size + pendingTimers.size;
   }
 
   /** Mounts the player and hands back a count of the canvas's repaints and of
@@ -400,6 +414,23 @@ describe("the rate the display repaints at", () => {
     });
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation((handle) => {
       pending.delete(handle);
+    });
+    // The chart loop binds `window`'s timers as well as its frames, and at
+    // 1 fps its wake is a timer: without this the loop's schedule lives on real
+    // time and the clock below never reaches it. `vi.waitFor` uses vitest's own
+    // safe timers, so the poll and mount waits are unaffected.
+    vi.spyOn(window, "setTimeout").mockImplementation(
+      (handler: TimerHandler, delayMs?: number): number => {
+        nextTimer += 1;
+        pendingTimers.set(nextTimer, {
+          callback: handler as () => void,
+          dueMs: clock + (delayMs ?? 0),
+        });
+        return nextTimer;
+      },
+    );
+    vi.spyOn(window, "clearTimeout").mockImplementation((id?: number) => {
+      if (id !== undefined) pendingTimers.delete(id);
     });
     Object.defineProperty(window, "fetch", {
       configurable: true,
@@ -491,7 +522,10 @@ describe("the rate the display repaints at", () => {
     );
 
     driveFrame(0);
-    expect(pending.size, "one refresh loop after mount").toBe(1);
+    expect(
+      pending.size + pendingTimers.size,
+      "one refresh wake after mount",
+    ).toBe(1);
 
     chartFps = 30;
     const before = polls();
@@ -502,7 +536,7 @@ describe("the rate the display repaints at", () => {
     });
 
     driveFrame(0);
-    expect(pending.size, "setRate added no frame").toBe(1);
+    expect(pending.size + pendingTimers.size, "setRate added no wake").toBe(1);
   });
 });
 

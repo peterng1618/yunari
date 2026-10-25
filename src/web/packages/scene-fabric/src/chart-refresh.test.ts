@@ -6,6 +6,9 @@ import { startChartRefresh } from "./chart-refresh.js";
 function fakeFrameDriver() {
   const frames = new Map<number, FrameRequestCallback>();
   const timers = new Map<number, { callback: () => void; dueMs: number }>();
+  // Every timer ever armed, including one cleared before it fired: a real
+  // browser can still deliver a callback that was queued before `clearTimer`.
+  const armed: (() => void)[] = [];
   let nextFrame = 0;
   let nextTimer = 0;
   let nowMs = 0;
@@ -20,6 +23,7 @@ function fakeFrameDriver() {
   });
   const setTimer = vi.fn((callback: () => void, delayMs: number): number => {
     nextTimer += 1;
+    armed.push(callback);
     timers.set(nextTimer, { callback, dueMs: nowMs + delayMs });
     return nextTimer;
   });
@@ -47,8 +51,13 @@ function fakeFrameDriver() {
     advance: (delayMs: number): void => run(nowMs + delayMs),
     pendingFrames: (): number => frames.size,
     pendingFrame: (): number | undefined => frames.keys().next().value,
+    pendingTimers: (): number => timers.size,
+    /** Frames plus timers: the loop must arm exactly one of them. */
+    pendingWakes: (): number => frames.size + timers.size,
+    armedTimers: (): readonly (() => void)[] => armed,
     requestFrame,
     cancelFrame,
+    clearTimer,
   };
 }
 
@@ -65,11 +74,13 @@ describe("startChartRefresh", () => {
 
     scheduler.setRate(1);
     fake.run(50);
+    // A stall's worth of time, so the clamped due time is a second past the
+    // refresh rather than the old interval behind it.
     fake.run(1_034);
     expect(refresh).toHaveBeenCalledTimes(3);
 
     scheduler.setRate(30);
-    fake.run(1_068);
+    fake.run(2_068);
     expect(refresh).toHaveBeenCalledTimes(4);
 
     scheduler.dispose();
@@ -120,7 +131,7 @@ describe("startChartRefresh", () => {
     // cache came back to a loop that could never run again (vg-510).
     scheduler.stop();
     expect(fake.cancelFrame).toHaveBeenCalledTimes(1);
-    expect(fake.pendingFrames()).toBe(0);
+    expect(fake.pendingWakes()).toBe(0);
 
     // Nothing is scheduled while the page is away, and nothing repaints.
     expect(refresh).toHaveBeenCalledTimes(1);
@@ -168,22 +179,141 @@ describe("startChartRefresh", () => {
     const refresh = vi.fn();
     const scheduler = startChartRefresh(refresh, 1, fake.driver);
 
-    for (let step = 0; step < 60; step += 1) fake.advance(1_000 / 60);
+    // 1 ms steps, so every time is an exact integer: a sum of 1000/60 lands
+    // just under the second and would hide whether the due wake really fired.
+    for (let ms = 1; ms <= 1_000; ms += 1) fake.run(ms);
+    expect(refresh, "one repaint in the first second").toHaveBeenCalledTimes(1);
+    expect(
+      fake.requestFrame.mock.calls.length,
+      "no frame polled between the wakes",
+    ).toBeLessThanOrEqual(2);
 
-    expect(refresh).toHaveBeenCalledTimes(1);
+    // The second second is a real second of sleep, not a leftover from the first.
+    for (let ms = 1_001; ms <= 2_000; ms += 1) fake.run(ms);
+    expect(refresh, "one more repaint in the second").toHaveBeenCalledTimes(2);
     expect(fake.requestFrame.mock.calls.length).toBeLessThanOrEqual(2);
     scheduler.dispose();
   });
 
-  it("keeps the 30 fps frame cadence", () => {
+  it("keeps the 30 fps cadence and requests one frame per wake", () => {
     const fake = fakeFrameDriver();
     const refresh = vi.fn();
     const scheduler = startChartRefresh(refresh, 30, fake.driver);
 
-    for (let step = 0; step < 60; step += 1) fake.advance(1_000 / 60);
+    fake.run(0);
+    // The step is the loop's own interval, so a wake lands exactly on each due
+    // time rather than on a 60 Hz grid whose rounding drifts against it.
+    const frameMs = 1_000 / 30;
+    for (let step = 1; step <= 30; step += 1) {
+      const before = fake.requestFrame.mock.calls.length;
+      fake.advance(frameMs);
+      // One wake, one frame request: at 30 fps the loop polls at 30, not 60.
+      expect(fake.requestFrame.mock.calls.length - before).toBe(1);
+    }
+    // The first wake plus one per interval: 31 repaints in the second.
+    expect(refresh).toHaveBeenCalledTimes(31);
+    scheduler.dispose();
+  });
 
-    expect(refresh.mock.calls.length).toBeGreaterThanOrEqual(30);
-    expect(refresh.mock.calls.length).toBeLessThanOrEqual(31);
+  it("arms exactly one wake at a time", () => {
+    const fake = fakeFrameDriver();
+    const scheduler = startChartRefresh(() => {}, 30, fake.driver);
+
+    expect(fake.pendingWakes(), "after construction").toBe(1);
+    fake.run(0);
+    expect(fake.pendingWakes(), "after a tick").toBe(1);
+
+    scheduler.setRate(1);
+    expect(fake.pendingWakes(), "after 30 → 1").toBe(1);
+    fake.run(34);
+    expect(fake.pendingWakes(), "the frame became a timer").toBe(1);
+
+    scheduler.setRate(30);
+    expect(fake.pendingWakes(), "after 1 → 30").toBe(1);
+
+    scheduler.stop();
+    expect(fake.pendingWakes(), "stopped").toBe(0);
+    scheduler.start();
+    expect(fake.pendingWakes(), "after start").toBe(1);
+    scheduler.dispose();
+    expect(fake.pendingWakes(), "disposed").toBe(0);
+  });
+
+  it("clears a pending timer on stop and on dispose", () => {
+    const fake = fakeFrameDriver();
+    const refresh = vi.fn();
+    const scheduler = startChartRefresh(refresh, 1, fake.driver);
+
+    fake.run(0);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(fake.pendingTimers(), "the loop is asleep").toBe(1);
+
+    scheduler.stop();
+    expect(fake.clearTimer).toHaveBeenCalledTimes(1);
+    expect(fake.pendingTimers()).toBe(0);
+
+    scheduler.start();
+    fake.run(1_000);
+    expect(refresh).toHaveBeenCalledTimes(2);
+
+    scheduler.dispose();
+    expect(fake.clearTimer).toHaveBeenCalledTimes(2);
+    expect(fake.pendingTimers()).toBe(0);
+  });
+
+  it("ignores a timer that fires after disposal", () => {
+    const fake = fakeFrameDriver();
+    const refresh = vi.fn();
+    const scheduler = startChartRefresh(refresh, 1, fake.driver);
+
+    fake.run(0);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    const armed = fake.armedTimers();
+
+    // `clearTimer` cannot unqueue a callback the browser already holds.
+    scheduler.dispose();
+    for (const callback of armed) callback();
+
+    expect(refresh, "a disposed loop repainted").toHaveBeenCalledTimes(1);
+    expect(fake.pendingFrames(), "a disposed loop asked for a frame").toBe(0);
+  });
+
+  it("drops the intervals it missed after a stall at 1 fps", () => {
+    const fake = fakeFrameDriver();
+    const refresh = vi.fn();
+    const scheduler = startChartRefresh(refresh, 1, fake.driver);
+
+    fake.run(0);
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    // 59 s with no wake: a backgrounded tab or a back/forward-cache freeze.
+    fake.run(59_000);
+    expect(refresh, "the resume repaint").toHaveBeenCalledTimes(2);
+    fake.run(59_500);
+    expect(refresh, "no replay of the missed intervals").toHaveBeenCalledTimes(
+      2,
+    );
+
+    // The next repaint is one second after the resume, not one per interval.
+    fake.run(60_000);
+    expect(refresh).toHaveBeenCalledTimes(3);
+    scheduler.dispose();
+  });
+
+  it("drops the intervals it missed after a stall at 30 fps", () => {
+    const fake = fakeFrameDriver();
+    const refresh = vi.fn();
+    const scheduler = startChartRefresh(refresh, 30, fake.driver);
+
+    fake.run(0);
+    fake.run(59_000);
+    expect(refresh).toHaveBeenCalledTimes(2);
+
+    // Two seconds of frames after the gap: the cadence, not one repaint per
+    // frame while the loop catches up.
+    for (let ms = 59_001; ms <= 61_000; ms += 1) fake.run(ms);
+    expect(refresh.mock.calls.length).toBeGreaterThanOrEqual(59);
+    expect(refresh.mock.calls.length).toBeLessThanOrEqual(60);
     scheduler.dispose();
   });
 });
