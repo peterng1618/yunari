@@ -124,6 +124,18 @@ describe("createLiveSource", () => {
     });
   });
 
+  it("reports the store's revision, once per accepted batch", () => {
+    const { handle, sendBatch } = setup();
+
+    expect(handle.source.revision).toBe(0);
+
+    sendBatch(["cpu.load", ok(10)], ["cpu.load", ok(20)]);
+    expect(handle.source.revision).toBe(1);
+
+    sendBatch(["cpu.load", ok(30)]);
+    expect(handle.source.revision).toBe(2);
+  });
+
   it("accumulates history across batches", () => {
     const { handle, sendBatch, advance } = setup();
 

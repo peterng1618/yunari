@@ -945,6 +945,7 @@ describe("identity survives a round trip", () => {
       canvas,
       { readout: [{ id: "load", semanticKey: "cpu.load" }] },
       {
+        revision: 0,
         latest: () => sample(48),
         history: () => [],
       },
@@ -980,6 +981,7 @@ describe("identity survives a round trip", () => {
       canvasOf(text),
       { readout: [{ id: "load", semanticKey: "cpu.load" }] },
       {
+        revision: 0,
         latest: () => sample(123456789),
         history: () => [],
       },
@@ -1016,6 +1018,7 @@ describe("identity survives a round trip", () => {
       revived,
       { readout: [{ id: "load", semanticKey: "cpu.load" }] },
       {
+        revision: 0,
         latest: () => sample(123456789),
         history: () => [],
       },
@@ -1039,6 +1042,7 @@ describe("identity survives a round trip", () => {
       runs: [{ kind: "value", bindingId: "temp", precision: 0 }],
     });
     const source = {
+      revision: 0,
       latest: () => ({
         sensorId: "gpu.temp",
         timestamp: new Date(NOW_MS).toISOString(),

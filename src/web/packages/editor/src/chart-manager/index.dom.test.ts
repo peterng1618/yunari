@@ -938,7 +938,7 @@ describe("a line chart's trailing window", () => {
       } as unknown as EditorInteraction,
       scene: {} as SceneAdapter,
       // Whatever the clock says, this source answers with the same sample.
-      source: { latest: () => sample, history: () => [sample] },
+      source: { revision: 0, latest: () => sample, history: () => [sample] },
       bindings: { cpu: [{ id: "cpu-read", semanticKey: "cpu.load" }] },
     });
     const setOption = vi.spyOn(chart, "setOption");

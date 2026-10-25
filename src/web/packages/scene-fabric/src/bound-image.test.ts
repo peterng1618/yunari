@@ -22,7 +22,7 @@ const NODE_ID = "artwork";
 const BINDING: Binding = { id: "image", semanticKey: "media.artwork" };
 
 function sourceOf(sample: Sample | undefined): SampleSource {
-  return { latest: () => sample, history: () => [] };
+  return { revision: 0, latest: () => sample, history: () => [] };
 }
 
 function sample(textValue: string | undefined): Sample {

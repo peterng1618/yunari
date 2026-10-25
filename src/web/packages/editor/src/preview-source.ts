@@ -15,6 +15,7 @@ export function createPreviewSource(options: {
 
   return {
     source: {
+      revision: 0,
       chartPlaybackDelayMs: LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
       latest(key) {
         if (!keys.has(key)) return undefined;

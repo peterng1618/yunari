@@ -873,6 +873,7 @@ describe("charts", () => {
   it("requests the delayed line viewport's left-edge predecessor", () => {
     const windows: number[] = [];
     const source = {
+      revision: 0,
       chartPlaybackDelayMs: 1_000,
       latest: () => undefined,
       history: (_key: string, windowSeconds: number) => {
@@ -928,6 +929,7 @@ describe("charts", () => {
         );
       }
       const source = {
+        revision: store.revision,
         chartPlaybackDelayMs: LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
         latest: (key: string) => store.latest(key),
         history: (key: string, windowSeconds: number) =>

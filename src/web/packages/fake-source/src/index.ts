@@ -81,6 +81,8 @@ export interface FakeSourceOptions {
 }
 
 export class FakeSampleSource implements SampleSource {
+  /** Synthetic values are regenerated on read, not ingested, so nothing advances. */
+  readonly revision = 0;
   readonly #intervalMs: number;
   readonly #forcedStatus: Readonly<Record<string, Exclude<SensorStatus, "ok">>>;
   readonly #outages: readonly OutageRule[];

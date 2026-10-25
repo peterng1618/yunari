@@ -36,6 +36,7 @@ const BOX = { left: 40, top: 40, width: 200, height: 60 };
 
 function instant(key: string, iso: string) {
   return {
+    revision: 0,
     latest: (semanticKey: string) =>
       semanticKey === key
         ? {
@@ -51,6 +52,7 @@ function instant(key: string, iso: string) {
 
 function number(key: string, value: number, unit?: string) {
   return {
+    revision: 0,
     latest: (semanticKey: string) =>
       semanticKey === key
         ? {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Sample } from "../types.js";
 import { emptySampleSource } from "./source.js";
 import { SampleStore } from "./store.js";
@@ -17,12 +17,76 @@ function ok(value: number, atMs = NOW): Sample {
 
 describe("emptySampleSource", () => {
   it("maps nothing", () => {
+    expect(emptySampleSource.revision).toBe(0);
     expect(emptySampleSource.latest("cpu.load.total")).toBeUndefined();
     expect(emptySampleSource.history("cpu.load.total", 60)).toEqual([]);
   });
 });
 
 describe("SampleStore", () => {
+  it("counts accepted ingests, not the entries they carried", () => {
+    const store = new SampleStore();
+
+    expect(store.revision).toBe(0);
+
+    store.ingest(
+      [
+        ["a", ok(1)],
+        ["b", ok(2)],
+        ["a", ok(3)],
+      ],
+      NOW,
+    );
+    expect(store.revision).toBe(1);
+
+    store.ingest([["a", ok(4)]], NOW);
+    expect(store.revision).toBe(2);
+
+    store.reset();
+    expect(store.revision).toBe(0);
+  });
+
+  it("keeps history for a sample mutated after ingest", () => {
+    const store = new SampleStore();
+    const sample = {
+      ...ok(1, NOW),
+      presentationTimestamp: new Date(NOW).toISOString(),
+    };
+
+    store.ingest([["a", sample]], NOW);
+
+    // The time is captured at ingest, so destroying the source strings later
+    // cannot drop a sample that was valid when accepted.
+    const mutated = sample as {
+      presentationTimestamp?: string;
+      timestamp: string;
+    };
+    mutated.presentationTimestamp = "not a date";
+    mutated.timestamp = "not a date";
+
+    expect(store.history("a", 60)).toEqual([sample]);
+  });
+
+  it("queries a full window without re-parsing timestamps", () => {
+    const store = new SampleStore();
+    const entries: [string, Sample][] = [];
+
+    for (let i = 0; i < 600; i++) {
+      entries.push(["a", ok(i, NOW - (599 - i) * 500)]);
+    }
+
+    store.ingest(entries, NOW);
+
+    const parse = vi.spyOn(Date, "parse");
+
+    try {
+      expect(store.history("a", 600)).toHaveLength(600);
+      expect(parse).not.toHaveBeenCalled();
+    } finally {
+      parse.mockRestore();
+    }
+  });
+
   it("returns the latest ingested sample per key", () => {
     const store = new SampleStore();
     store.ingest(

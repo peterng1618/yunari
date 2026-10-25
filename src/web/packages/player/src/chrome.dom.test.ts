@@ -187,11 +187,12 @@ function gapSource(): SampleSource {
     status: "missing",
     message: "no provider on this PC reports that sensor",
   };
-  return { latest: () => sample, history: () => [] };
+  return { revision: 0, latest: () => sample, history: () => [] };
 }
 
 /** The same display with its reading back — the condition clearing. */
 const recoveredSource: SampleSource = {
+  revision: 0,
   latest: () => ({
     sensorId: GAP_KEYS[0] ?? "",
     timestamp: "2026-10-17T00:00:00.000Z",
