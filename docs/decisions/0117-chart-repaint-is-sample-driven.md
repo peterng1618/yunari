@@ -6,7 +6,7 @@
   `src/web/packages/scene-fabric/src/chart-refresh.ts`,
   `src/web/packages/scene-fabric/src/scene.ts`,
   `src/web/packages/scene-fabric/src/background-media.ts`,
-  `src/web/packages/renderer-core/src/charts/`
+  `src/web/packages/renderer-core/src/charts/line.ts`
 
 ## The problem
 

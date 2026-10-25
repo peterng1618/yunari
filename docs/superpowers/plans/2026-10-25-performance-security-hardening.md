@@ -159,16 +159,17 @@ git commit -m "fix(host): refuse foreign Host on loopback API routes"
 ### Task 1.2: Derive theme asset MIME from the declared kind
 
 **Files:**
-- Create: `src/web/packages/host/src/themes/asset-media-type.ts`
+- Create: `src/web/packages/renderer-core/src/theme/asset-media-type.ts`
+- Modify: `src/web/packages/renderer-core/src/index.ts`
 - Modify: `src/web/packages/renderer-core/src/theme/envelope-semantics.ts`
 - Modify: `src/web/packages/host/src/server.ts`
-- Test: `src/web/packages/host/src/themes/asset-media-type.test.ts`
+- Test: `src/web/packages/renderer-core/src/theme/asset-media-type.test.ts`
 - Test: `src/web/packages/renderer-core/src/theme/envelope-semantics.test.ts`
 - Test: `src/web/packages/host/src/server.test.ts`
 
 **Interfaces:**
-- Produces: `themeAssetContentType(asset: { kind: string; path: string }): string | undefined` and `ASSET_EXTENSIONS: Readonly<Record<AssetKind, readonly string[]>>`.
-- Consumes: the existing asset kind union.
+- Produces: `themeAssetContentType(asset: { kind: string; path: string }): string | undefined` and `ASSET_EXTENSIONS: Readonly<Record<AssetKind, readonly string[]>>`; both exported from `renderer-core/src/index.ts`, with `AssetKind` re-exported there.
+- Consumes: the existing asset kind union in `renderer-core/src/theme/document.ts`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -193,7 +194,7 @@ Run: `npx vitest run packages/host/src/themes packages/renderer-core/src/theme p
 Expected: PASS.
 
 ```bash
-git add src/web/packages/host/src/themes/asset-media-type.ts src/web/packages/host/src/themes/asset-media-type.test.ts src/web/packages/renderer-core/src/theme/envelope-semantics.ts src/web/packages/renderer-core/src/theme/envelope-semantics.test.ts src/web/packages/host/src/server.ts src/web/packages/host/src/server.test.ts
+git add src/web/packages/renderer-core/src/theme/asset-media-type.ts src/web/packages/renderer-core/src/theme/asset-media-type.test.ts src/web/packages/renderer-core/src/index.ts src/web/packages/renderer-core/src/theme/envelope-semantics.ts src/web/packages/renderer-core/src/theme/envelope-semantics.test.ts src/web/packages/host/src/server.ts src/web/packages/host/src/server.test.ts src/web/packages/host/src/themes/store.test.ts src/web/packages/host/src/themes/submission.test.ts
 git commit -m "fix(host): bind theme asset MIME to the declared kind"
 ```
 

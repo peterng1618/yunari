@@ -2,7 +2,10 @@
 
 - **Date:** 2026-10-25
 - **Status:** accepted 2026-10-25
-- **Paths:** `scripts/`
+- **Paths:** `scripts/stage-npm-package.mjs`,
+  `scripts/check-third-party.mjs`,
+  `scripts/check-workflows.mjs`,
+  `scripts/verify-ffmpeg.mjs`
 
 ## The problem
 
