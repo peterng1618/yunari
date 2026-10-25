@@ -260,6 +260,40 @@ describe("version requests", () => {
     expect(items).toEqual({ n: 0 });
   });
 
+  it("bounds a new item's name in UTF-8 bytes", async () => {
+    const headers = await sessionHeaders();
+    // The case creates an item, so the author's earlier rows and hourly budget
+    // must not stand in the way of the version ladder.
+    await seedItems({ userId: USER_ID, count: 0 });
+    await env.DB.prepare("DELETE FROM presign_event WHERE user_id = ?")
+      .bind(USER_ID)
+      .run();
+    await env.DB.prepare("DELETE FROM upload WHERE user_id = ?")
+      .bind(USER_ID)
+      .run();
+
+    const long = await createVersion(headers, NEW_ID, {
+      name: "a".repeat(201),
+    });
+    expect(long.status).toBe(400);
+    expect(await long.text()).toBe("An item name may be at most 200 bytes.");
+
+    // 67 three-byte characters: 201 UTF-8 bytes but only 67 UTF-16 units, so a
+    // `.length` check would let it through.
+    expect(
+      (await createVersion(headers, NEW_ID, { name: "あ".repeat(67) })).status,
+    ).toBe(400);
+
+    const accepted = await createVersion(headers, NEW_ID, {
+      name: "a".repeat(200),
+    });
+    expect(accepted.status).toBe(200);
+    const stored = await env.DB.prepare("SELECT name FROM item WHERE id = ?")
+      .bind(NEW_ID)
+      .first<{ name: string }>();
+    expect(stored).toEqual({ name: "a".repeat(200) });
+  });
+
   it("answers the author's baseline in any state and hides a foreign one", async () => {
     const headers = await sessionHeaders();
     await seedPublished({ owner: USER_ID, status: "unpublished" });

@@ -57,11 +57,29 @@ export default {
 async function migrate(request: Request, env: Env): Promise<Response> {
   const token = request.headers.get("x-migrate-token");
   if (token === null) return new Response("Not found", { status: 404 });
-  if (token !== env.MIGRATE_TOKEN)
+  if (!sameToken(token, env.MIGRATE_TOKEN))
     return new Response("Forbidden", { status: 403 });
   const { runMigrations } = await getMigrations(createAuth(env).options);
   await runMigrations();
   return Response.json({ ok: true });
+}
+
+/**
+ * Constant-time comparison of the migrate token. The length is public, so an
+ * unequal length is answered without a comparison; equal lengths go to
+ * `timingSafeEqual`, which the runtime requires to match.
+ */
+function sameToken(given: string, expected: string): boolean {
+  const encoder = new TextEncoder();
+  const left = encoder.encode(given);
+  const right = encoder.encode(expected);
+  if (left.byteLength !== right.byteLength) return false;
+  // This project compiles with the DOM lib, whose `SubtleCrypto` shadows the
+  // workers-types class that declares the method.
+  const subtle = crypto.subtle as unknown as {
+    timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean;
+  };
+  return subtle.timingSafeEqual(left, right);
 }
 
 async function me(request: Request, env: Env): Promise<Response> {

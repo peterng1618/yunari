@@ -1,11 +1,16 @@
 import { env, SELF } from "cloudflare:test";
 import { type FabricThemeEnvelope, facetRecordOf } from "@yunari/renderer-core";
 import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { finalizeStoredVersion } from "../src/db/finalize";
 import { markFinalized } from "../src/db/items";
 import { UPLOAD_RESERVATION_TTL_MS } from "../src/db/quota";
-import { differentBytes, takenDown } from "../src/routes/me";
+import {
+  differentBytes,
+  MAX_FINALIZE_BODY,
+  MAX_THUMBNAIL_BASE64,
+  takenDown,
+} from "../src/routes/me";
 import { pendingKey, thumbnailKey } from "../src/storage/keys";
 import { inspectObject } from "../src/storage/objects";
 import {
@@ -643,6 +648,51 @@ describe("finalize", () => {
 
     expect(await versionsOf(env.DB, ITEM_ID)).toEqual([]);
     expect(await env.BUCKET.get(thumbnailKey(ITEM_ID))).toBeNull();
+  });
+
+  it("refuses a base64 thumbnail over the cap before decoding it", async () => {
+    const headers = await sessionHeaders();
+    await reset();
+    const { version, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
+
+    const over = "A".repeat(MAX_THUMBNAIL_BASE64 + 1);
+    const atobSpy = vi.spyOn(globalThis, "atob");
+    try {
+      expect((await finalize(headers, version, over)).status).toBe(413);
+      expect(atobSpy.mock.calls.some(([value]) => value === over)).toBe(false);
+    } finally {
+      atobSpy.mockRestore();
+    }
+    expect(await versionsOf(env.DB, ITEM_ID)).toEqual([]);
+    expect(await env.BUCKET.get(thumbnailKey(ITEM_ID))).toBeNull();
+  });
+
+  it("refuses an oversized finalize body without parsing it", async () => {
+    const headers = await sessionHeaders();
+    await reset();
+    const { version, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
+
+    // The finalize cap carries the base64 thumbnail, so the wrapper alone puts
+    // this body one byte past MAX_FINALIZE_BODY.
+    const body = JSON.stringify({ thumbnail: "A".repeat(MAX_FINALIZE_BODY) });
+    const parseSpy = vi.spyOn(JSON, "parse");
+    try {
+      const response = await SELF.fetch(
+        `${BASE}/api/me/items/${ITEM_ID}/versions/${version}/finalize`,
+        {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body,
+        },
+      );
+      expect(response.status).toBe(413);
+      expect(parseSpy.mock.calls.some(([text]) => text === body)).toBe(false);
+    } finally {
+      parseSpy.mockRestore();
+    }
+    expect(await versionsOf(env.DB, ITEM_ID)).toEqual([]);
   });
 });
 

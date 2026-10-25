@@ -29,7 +29,11 @@ describe("admin", () => {
   });
 
   it("matches owner emails case-insensitively over a comma-separated secret", () => {
-    const session = { userId: "u", email: "Owner@Example.com" };
+    const session = {
+      userId: "u",
+      email: "Owner@Example.com",
+      emailVerified: true,
+    };
     expect(isOwner(session, "owner@example.com")).toBe(true);
     expect(isOwner(session, " someone@example.com , OWNER@EXAMPLE.COM ")).toBe(
       true,
@@ -39,10 +43,29 @@ describe("admin", () => {
     // An empty secret matches nobody, not everybody.
     expect(isOwner(session, "")).toBe(false);
     expect(isOwner(session, " , ")).toBe(false);
+    // An unverified address is not a claim to the allow-list entry.
+    expect(
+      isOwner({ ...session, emailVerified: false }, "owner@example.com"),
+    ).toBe(false);
     // Neither does a session with no email: comparing blanks would let a
     // whitespace-only secret admit the session.
-    expect(isOwner({ userId: "u", email: "" }, " , ")).toBe(false);
-    expect(isOwner({ userId: "u", email: "   " }, "")).toBe(false);
+    expect(
+      isOwner({ userId: "u", email: "", emailVerified: true }, " , "),
+    ).toBe(false);
+    expect(
+      isOwner({ userId: "u", email: "   ", emailVerified: true }, ""),
+    ).toBe(false);
+  });
+
+  it("404s an unverified account whose email is on the owner list", async () => {
+    // First user with this email in the file, so the row can be left verified
+    // for the owner fixtures below: Better Auth's email is unique.
+    const unverified = await loginAs(OWNER_ID, OWNER_EMAIL, false);
+    expect((await admin(unverified, "queue")).status).toBe(404);
+
+    await env.DB.prepare('UPDATE "user" SET emailVerified = 1 WHERE id = ?')
+      .bind(OWNER_ID)
+      .run();
   });
 
   it("401s without a session and 404s an authenticated non-owner", async () => {
@@ -364,13 +387,14 @@ describe("admin", () => {
 async function loginAs(
   userId: string,
   email: string,
+  emailVerified = true,
 ): Promise<Record<string, string>> {
   const test = await testHelpers();
   const existing = await env.DB.prepare('SELECT id FROM "user" WHERE id = ?')
     .bind(userId)
     .first();
   if (existing === null)
-    await test.saveUser(test.createUser({ id: userId, email }));
+    await test.saveUser(test.createUser({ id: userId, email, emailVerified }));
   const { headers } = await test.login({ userId });
   return Object.fromEntries(headers.entries());
 }

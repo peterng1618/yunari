@@ -47,6 +47,15 @@ const ITEMS_PREFIX = "/api/me/items/";
 const UPLOADS_PREFIX = "/api/me/uploads/";
 /** The thumbnail is rewritten on every version, so it is kept small. */
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
+/** Base64 padding is why this is not exactly 4/3 of the byte cap. */
+export const MAX_THUMBNAIL_BASE64 =
+  Math.ceil((MAX_THUMBNAIL_BYTES * 4) / 3) + 4;
+/** A version request's body is an envelope and a name, nothing else. */
+export const MAX_JSON_BODY = 256 * 1024;
+/** One cap per route: a finalize body carries the base64 thumbnail too. */
+export const MAX_FINALIZE_BODY = MAX_THUMBNAIL_BASE64 + MAX_JSON_BODY;
+/** UTF-8 bytes, not UTF-16 units: a 200-character CJK name is 600 bytes. */
+const MAX_ITEM_NAME_BYTES = 200;
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 /**
@@ -279,9 +288,9 @@ async function requestVersion(
   const session = await sessionOf(request, env);
   if (session === undefined) return unauthorized();
 
-  const body = await readBody(request);
-  if (body === undefined)
-    return badRequest("A JSON body with an envelope and a name is required.");
+  const read = await readJsonBody(request, MAX_JSON_BODY);
+  if (!read.ok) return read.response;
+  const body = read.body;
 
   const validated = validateFabricThemeEnvelope(body["envelope"]);
   if (!validated.ok)
@@ -311,6 +320,10 @@ async function requestVersion(
   if (item === undefined) {
     if (!isNonEmptyString(name))
       return badRequest("A name is required for a new item.");
+    // Checked before the draft exists: `.length` is UTF-16 units, so a
+    // 200-character CJK name would pass at 600 UTF-8 bytes.
+    if (new TextEncoder().encode(name).byteLength > MAX_ITEM_NAME_BYTES)
+      return badRequest("An item name may be at most 200 bytes.");
     newItemName = name;
   }
 
@@ -697,11 +710,11 @@ async function finalizeVersion(
   );
   if (uploads.length === 0) return noUploadRequested(version);
 
-  const body = await readBody(request);
-  if (body === undefined)
-    return badRequest("A JSON body with a thumbnail is required.");
-  const thumbnail = decodeThumbnail(body["thumbnail"]);
-  if (!thumbnail.ok) return unprocessable(thumbnail.message);
+  const read = await readJsonBody(request, MAX_FINALIZE_BODY);
+  if (!read.ok) return read.response;
+  const thumbnail = decodeThumbnail(read.body["thumbnail"]);
+  if (!thumbnail.ok)
+    return new Response(thumbnail.message, { status: thumbnail.status });
 
   // Newest first: a second version request after a failed PUT mints a later
   // row, so the newest row with an object is the one the author wrote. A row
@@ -867,21 +880,43 @@ function nextStatus(
 
 type Thumbnail =
   | { readonly ok: true; readonly bytes: Uint8Array }
-  | { readonly ok: false; readonly message: string };
+  | {
+      readonly ok: false;
+      readonly status: 413 | 422;
+      readonly message: string;
+    };
 
 function decodeThumbnail(value: unknown): Thumbnail {
   if (typeof value !== "string" || value.length === 0)
-    return { ok: false, message: "A base64 PNG thumbnail is required." };
+    return {
+      ok: false,
+      status: 422,
+      message: "A base64 PNG thumbnail is required.",
+    };
+
+  // Checked before `atob`: decoding an over-cap string would allocate first,
+  // and the decoded size is the thing being bounded.
+  if (value.length > MAX_THUMBNAIL_BASE64)
+    return {
+      ok: false,
+      status: 413,
+      message: "The thumbnail exceeds the 2 MiB limit.",
+    };
 
   let binary: string;
   try {
     binary = atob(value);
   } catch {
-    return { ok: false, message: "The thumbnail is not valid base64." };
+    return {
+      ok: false,
+      status: 422,
+      message: "The thumbnail is not valid base64.",
+    };
   }
   if (binary.length > MAX_THUMBNAIL_BYTES)
     return {
       ok: false,
+      status: 422,
       message: "The thumbnail exceeds the 2 MiB limit.",
     };
 
@@ -890,7 +925,7 @@ function decodeThumbnail(value: unknown): Thumbnail {
     bytes.length < PNG_SIGNATURE.length ||
     PNG_SIGNATURE.some((byte, index) => bytes[index] !== byte)
   )
-    return { ok: false, message: "The thumbnail is not a PNG." };
+    return { ok: false, status: 422, message: "The thumbnail is not a PNG." };
   return { ok: true, bytes };
 }
 
@@ -982,18 +1017,72 @@ async function isVerified(db: D1Database, userId: string): Promise<boolean> {
   return row?.verified === 1;
 }
 
-async function readBody(
+type BodyResult =
+  | { readonly ok: true; readonly body: Record<string, unknown> }
+  | { readonly ok: false; readonly response: Response };
+
+/**
+ * A bounded JSON read. The bytes are counted as they arrive because
+ * `content-length` is attacker-controlled and `request.json()` has no bound.
+ * Crossing `maxBytes` answers 413 without parsing; a null body or a parse
+ * failure keeps the 400.
+ */
+async function readJsonBody(
   request: Request,
-): Promise<Record<string, unknown> | undefined> {
-  let body: unknown;
+  maxBytes: number,
+): Promise<BodyResult> {
+  const body = request.body;
+  if (body === null) return { ok: false, response: badJson() };
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
   try {
-    body = await request.json();
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      size += chunk.value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        return {
+          ok: false,
+          response: new Response(
+            `The request body exceeds ${Math.floor(maxBytes / 1024)} KiB.`,
+            { status: 413 },
+          ),
+        };
+      }
+      chunks.push(chunk.value);
+    }
   } catch {
-    return undefined;
+    return { ok: false, response: badJson() };
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // A stream being torn down holds no lock worth reporting.
+    }
   }
-  return typeof body === "object" && body !== null && !Array.isArray(body)
-    ? (body as Record<string, unknown>)
-    : undefined;
+
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return { ok: false, response: badJson() };
+  }
+  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    ? { ok: true, body: parsed as Record<string, unknown> }
+    : { ok: false, response: badJson() };
+}
+
+function badJson(): Response {
+  return badRequest("A JSON body is required.");
 }
 
 function isNonEmptyString(value: unknown): value is string {
