@@ -6688,6 +6688,8 @@ describe("One tick at a time", () => {
     options: {
       readonly devices?: DeviceSettingsStore;
       readonly displays?: DisplayStore;
+      /** Real cadence, unless a case drives the clock itself. */
+      readonly intervalMs?: number;
     } = {},
   ): ReturnType<typeof createHostServer> {
     hosted = createHostServer({
@@ -6695,7 +6697,7 @@ describe("One tick at a time", () => {
       bundles: { player: dir, editor: dir },
       ...(options.devices === undefined ? {} : { devices: options.devices }),
       ...(options.displays === undefined ? {} : { displays: options.displays }),
-      sampleIntervalMs: 10,
+      sampleIntervalMs: options.intervalMs ?? 10,
     });
 
     return hosted;
@@ -6706,35 +6708,57 @@ describe("One tick at a time", () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     await hosted?.close();
     hosted = undefined;
     await fs.rm(dir, { recursive: true, force: true });
   });
 
-  it("starts no second batch while one tick is in flight", async () => {
+  it("drops the fires that land while one tick is in flight, rather than queueing them", async () => {
+    vi.useFakeTimers();
     const gated = gatedProvider();
-    const host = start(gated);
+    const host = start(gated, { intervalMs: 200 });
 
     sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
+    // Let the stream's connection be added before the clock moves.
+    await vi.advanceTimersByTimeAsync(0);
 
-    await vi.waitFor(() => expect(gated.samples()).toBe(1));
-    // Three intervals with the first sample still held: a tick in flight makes
-    // every one of them skip rather than pile another batch on top.
-    await sleep(30);
-
+    // The first fire starts the tick, which the provider holds open.
+    await vi.advanceTimersByTimeAsync(200);
     expect(gated.samples()).toBe(1);
+
+    // Three more fires with the tick still in flight: each is dropped.
+    await vi.advanceTimersByTimeAsync(600);
+    expect(gated.samples()).toBe(1);
+
+    // Settling the held tick must not replay the dropped fires. A queue would
+    // start the next sample in this same microtask chain; a drop waits for the
+    // next fire, which the clock has not reached yet.
+    gated.release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(gated.samples()).toBe(1);
+
+    // One interval later there is a fire, and it samples once more.
+    await vi.advanceTimersByTimeAsync(200);
+    expect(gated.samples()).toBe(2);
+    gated.release();
   });
 
-  it("samples again once the stalled tick settles", async () => {
+  it("samples again on the interval after the stalled tick settles", async () => {
+    vi.useFakeTimers();
     const gated = gatedProvider();
-    const host = start(gated);
+    const host = start(gated, { intervalMs: 200 });
 
     sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
+    await vi.advanceTimersByTimeAsync(0);
 
-    await vi.waitFor(() => expect(gated.samples()).toBe(1));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(gated.samples()).toBe(1);
+
     gated.release();
+    await vi.advanceTimersByTimeAsync(200);
 
-    await vi.waitFor(() => expect(gated.samples()).toBeGreaterThanOrEqual(2));
+    expect(gated.samples()).toBe(2);
     gated.release();
   });
 
@@ -6790,6 +6814,23 @@ describe("One tick at a time", () => {
     // rather than leave the loop wedged behind a flag nothing cleared.
     await vi.waitFor(() => expect(gated.samples()).toBeGreaterThanOrEqual(2));
     gated.release();
+  });
+
+  it("samples no more once closed", async () => {
+    const gated = gatedProvider();
+    const host = start(gated);
+
+    sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
+    await vi.waitFor(() => expect(gated.samples()).toBe(1));
+
+    gated.release();
+    await host.close();
+    hosted = undefined;
+
+    const before = gated.samples();
+    await sleep(50);
+
+    expect(gated.samples()).toBe(before);
   });
 });
 

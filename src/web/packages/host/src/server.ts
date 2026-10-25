@@ -4558,6 +4558,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
     },
     close(): Promise<void> {
       clearInterval(timer);
+      // A tick in flight across `close()` would otherwise leave the flag set
+      // for the life of this closure.
+      ticking = false;
 
       for (const connection of connections) {
         connection.close();
