@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import {
   mkdir,
   mkdtemp,
@@ -19,6 +20,40 @@ const NOW = "2026-10-23T10:00:00.000Z";
 const legacyFile = (dir: string) => path.join(dir, "store-session.json");
 /** The encrypted secret, `<name>.bin` as the secret store names it. */
 const secretFile = (dir: string) => path.join(dir, "store-session.bin");
+
+/**
+ * Holds a real Windows share lock on `file`: readers are allowed, deletion is
+ * refused. A Node handle cannot express this, and only Windows refuses to
+ * unlink a file another handle holds, so callers skip elsewhere rather than
+ * mocking the removal.
+ */
+async function holdForReading(file: string): Promise<() => Promise<void>> {
+  const literal = file.replace(/'/g, "''");
+  const script =
+    `$f=[IO.File]::Open('${literal}','Open','Read','Read');` +
+    "[Console]::Out.WriteLine('held');[Console]::In.ReadLine()|Out-Null;" +
+    "$f.Dispose()";
+
+  const child = spawn(
+    "powershell",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    { stdio: ["pipe", "pipe", "ignore"], windowsHide: true },
+  );
+
+  await new Promise<void>((resolve, reject) => {
+    child.stdout.once("data", () => resolve());
+    child.once("error", reject);
+    child.once("exit", (code) =>
+      reject(new Error(`the lock process exited with ${String(code)}`)),
+    );
+  });
+
+  return () =>
+    new Promise<void>((resolve) => {
+      child.once("exit", () => resolve());
+      child.stdin.end("release\n");
+    });
+}
 
 /** A reversible transform, so no case here spawns the OS protector. */
 function createFakeProtector(usable = true): KeyProtector {
@@ -240,6 +275,41 @@ describe("store session", () => {
       // the encrypted copy answers meanwhile.
       expect(await store.read()).toEqual(session());
       expect(await readFile(legacyFile(dir), "utf8")).toBe("{ not json");
+    });
+
+    it("never promotes a stale locked legacy session over a newer sign-in", async () => {
+      if (process.platform !== "win32") return;
+
+      await writeFile(
+        legacyFile(dir),
+        JSON.stringify(session("older-token")),
+        "utf8",
+      );
+      const release = await holdForReading(legacyFile(dir));
+
+      try {
+        // Migrates the older token, but the removal is refused.
+        expect(await store.read()).toEqual(session("older-token"));
+
+        await store.write(session("newer-token"));
+
+        // The stored copy wins: the leftover must not roll the sign-in back.
+        expect(await store.read()).toEqual(session("newer-token"));
+      } finally {
+        await release();
+      }
+
+      expect(await store.read()).toEqual(session("newer-token"));
+      await expect(readFile(legacyFile(dir))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+
+      // The newer token is what the encrypted copy itself holds.
+      const restarted = createStoreSessionStore(
+        dir,
+        createSecretStore(dir, createFakeProtector()),
+      );
+      expect(await restarted.read()).toEqual(session("newer-token"));
     });
 
     it("answers a successful write when the legacy removal is refused", async () => {

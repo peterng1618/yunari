@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +11,40 @@ import { createSecretStore, type SecretStore } from "./secret-store.js";
 const legacyFile = (dir: string) => path.join(dir, "credentials.json");
 /** The encrypted secret, `<name>.bin` as the secret store names it. */
 const secretFile = (dir: string) => path.join(dir, "credentials.bin");
+
+/**
+ * Holds a real Windows share lock on `file`: readers are allowed, deletion is
+ * refused. A Node handle cannot express this (every Node open shares delete),
+ * and only Windows refuses to unlink a file another handle holds, so callers
+ * skip on other platforms rather than mocking the removal.
+ */
+async function holdForReading(file: string): Promise<() => Promise<void>> {
+  const literal = file.replace(/'/g, "''");
+  const script =
+    `$f=[IO.File]::Open('${literal}','Open','Read','Read');` +
+    "[Console]::Out.WriteLine('held');[Console]::In.ReadLine()|Out-Null;" +
+    "$f.Dispose()";
+
+  const child = spawn(
+    "powershell",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    { stdio: ["pipe", "pipe", "ignore"], windowsHide: true },
+  );
+
+  await new Promise<void>((resolve, reject) => {
+    child.stdout.once("data", () => resolve());
+    child.once("error", reject);
+    child.once("exit", (code) =>
+      reject(new Error(`the lock process exited with ${String(code)}`)),
+    );
+  });
+
+  return () =>
+    new Promise<void>((resolve) => {
+      child.once("exit", () => resolve());
+      child.stdin.end("release\n");
+    });
+}
 
 /**
  * The store's format is what these cases prove, so the protector is a
@@ -184,6 +219,46 @@ describe("credentials", () => {
     await expect(readFile(legacyFile(dir))).rejects.toMatchObject({
       code: "ENOENT",
     });
+  });
+
+  it("merges a locked legacy document instead of promoting it", async () => {
+    if (process.platform !== "win32") return;
+
+    const first = { value: "first-value", savedAt: savedAt.toISOString() };
+    await seed(JSON.stringify({ first }));
+    const release = await holdForReading(legacyFile(dir));
+
+    try {
+      // Migrates, but the removal is refused, so the plaintext survives.
+      expect(await store.read()).toEqual({ first });
+      expect(await readFile(legacyFile(dir), "utf8")).toContain("first-value");
+
+      await store.write("second", "second-value", savedAt);
+
+      // The stored copy is authoritative: the merge adds nothing, and the key
+      // saved after the leftover was made is not overwritten by it.
+      expect(await store.read()).toEqual({
+        first,
+        second: { value: "second-value", savedAt: "2026-10-21T09:00:00.000Z" },
+      });
+    } finally {
+      await release();
+    }
+
+    // Once the lock is gone the leftover is retired and the answer is the same.
+    const both = {
+      first,
+      second: { value: "second-value", savedAt: "2026-10-21T09:00:00.000Z" },
+    };
+    expect(await store.read()).toEqual(both);
+    await expect(readFile(legacyFile(dir))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(await store.read()).toEqual(both);
+
+    // A cleared id stays cleared; the leftover cannot put it back.
+    await store.clear("first");
+    expect(await store.read()).toEqual({ second: both.second });
   });
 
   it("treats a non-object file as no credentials and does not migrate it", async () => {

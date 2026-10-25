@@ -157,16 +157,17 @@ export function createCredentialStore(
   };
 
   /**
-   * Every credential, migrating the plaintext file on first read.
+   * Every credential: the encrypted copy, plus a merge of any legacy file.
    *
-   * The encrypted write comes first and the removal second: a write that throws
+   * The stored document is authoritative. A whole legacy document found beside
+   * it contributes only the ids the store does not already hold, so a repaired
+   * entry migrates while a newer saved value or a clear is never undone. The
+   * merged write comes first and the removal second: a write that throws
    * (unavailable protector, missing key) leaves the plaintext where a later run
-   * can still migrate it, and a removal that fails is retried next read. Only a
-   * document that validates whole is ever migrated or removed; one with a
-   * rejected entry is kept so its owner can repair it, and the entries that do
-   * validate are still answered, as the plaintext reader always answered them.
-   * A present `.bin` that cannot be read throws from the secret store rather
-   * than being treated as "no credentials".
+   * can still merge it, and a removal that fails is retried next read. A
+   * document that does not validate whole is kept for its owner to repair. A
+   * present `.bin` that cannot be read throws from the secret store rather than
+   * being treated as "no credentials".
    */
   const readAll = async (): Promise<Record<string, StoredCredential>> => {
     const stored = await secrets.read(SECRET);
@@ -175,14 +176,17 @@ export function createCredentialStore(
       const whole = await wholeLegacy();
       if (whole === undefined) return current;
 
-      // A plaintext left by a failed removal migrates to the values already
-      // stored; a repaired hand-edit is the newer document and is migrated
-      // over them. Either way the encrypted copy exists before the removal.
-      if (JSON.stringify(current) !== JSON.stringify(whole)) {
-        await secrets.write(SECRET, encode(whole));
+      // Later entries win, so a shared id keeps the stored value; only the
+      // ids the store is missing are added.
+      const merged = Object.fromEntries([
+        ...Object.entries(whole),
+        ...Object.entries(current),
+      ]);
+      if (JSON.stringify(current) !== JSON.stringify(merged)) {
+        await secrets.write(SECRET, encode(merged));
       }
       await rm(legacyFile, { force: true }).catch(() => undefined);
-      return whole;
+      return merged;
     }
 
     const legacy = await readLegacy(legacyFile);

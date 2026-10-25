@@ -35,8 +35,10 @@ export interface StoreSessionStore {
 const SECRET = "store-session";
 /**
  * The pre-encryption file. A session that validates is migrated and removed on
- * the first read whose removal succeeds; one that does not is kept until its
- * owner repairs it, when the next read migrates and removes it.
+ * the first read whose removal succeeds; one that does not is kept by reads
+ * until its owner repairs it. A successful sign-in supersedes it whatever it
+ * holds: the sign-in's write removes it, because a stale or unreadable token
+ * file must not outlive the session that replaced it.
  */
 const LEGACY_FILE = "store-session.json";
 /** The superseded GitHub device-flow token; deleted the first time a store
@@ -110,31 +112,27 @@ export function createStoreSessionStore(
   const legacyFile = path.join(directory, LEGACY_FILE);
 
   /**
-   * The session, migrating the plaintext file on first read.
+   * The session: the encrypted copy, retiring a legacy file beside it.
    *
-   * The encrypted write comes first and the removal second: a write that throws
-   * (unavailable protector, missing key) leaves the plaintext where a later run
-   * can still migrate it, and a removal that fails is retried next read. Only a
-   * session that validates whole is migrated or removed; a hand-edit this
-   * reader cannot use is kept for its owner to repair. A present `.bin` that
-   * cannot be read throws from the secret store rather than answering "no
-   * session".
+   * The stored session is authoritative whenever it holds one — a session has
+   * no repair semantics, and promoting a stale leftover would roll a newer
+   * sign-in back to a previous, possibly revoked, token. A legacy file found
+   * beside it is removed once it validates; a removal that fails is retried
+   * next read. Only when there is no stored copy is the legacy file migrated,
+   * write first and removal second, so a write that throws (unavailable
+   * protector, missing key) leaves the plaintext for a later run. A present
+   * `.bin` that cannot be read throws from the secret store rather than
+   * answering "no session".
    */
   const readAll = async (): Promise<StoreSession | undefined> => {
     const stored = await secrets.read(SECRET);
     if (stored !== undefined) {
-      const legacy = await readLegacy(legacyFile);
-      if (legacy === undefined) return decode(stored);
-
-      // A repaired hand-edit is the newer document and is migrated over the
-      // stored one; a leftover from a failed removal migrates to the same
-      // values. Either way the encrypted copy exists before the removal.
-      const current = decode(stored);
-      if (JSON.stringify(current) !== JSON.stringify(legacy)) {
-        await secrets.write(SECRET, encode(legacy));
+      // Never promoted: a valid leftover is retired, a malformed one waits for
+      // a sign-in to supersede it.
+      if ((await readLegacy(legacyFile)) !== undefined) {
+        await rm(legacyFile, { force: true }).catch(() => undefined);
       }
-      await rm(legacyFile, { force: true }).catch(() => undefined);
-      return legacy;
+      return decode(stored);
     }
 
     const legacy = await readLegacy(legacyFile);
