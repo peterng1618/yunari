@@ -2,6 +2,7 @@
 import type {
   AssetPage,
   AssetResult,
+  AssetSearchAnswer,
   AssetSourceListing,
   FontCut,
 } from "@yunari/renderer-core";
@@ -114,6 +115,14 @@ function page(
   extra: Partial<AssetPage> = {},
 ): AssetPage {
   return { source, results, totalPages: undefined, failure: undefined, ...extra };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
 }
 
 const interTrio = trioResult("curated-fonts", "inter-poppins", [
@@ -339,6 +348,80 @@ it("does not send an empty term", async () => {
   await type("   ");
   await settle();
   expect(searchAssets).not.toHaveBeenCalled();
+});
+
+it("says the first search is out rather than drawing an empty grid", async () => {
+  // The host has not answered yet: an empty listbox would read as a broken
+  // body, so the body says the question is out.
+  const answer = deferred<AssetSearchAnswer>();
+  searchAssets.mockReturnValueOnce(answer.promise);
+  await render();
+  await type("Inter");
+  await act(async () => {
+    vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
+    await Promise.resolve();
+  });
+
+  expect(document.querySelector("[data-yunari-font-grid]")).toBeNull();
+  expect(document.body.textContent).toContain(uiCopy.assets.fontSearching);
+
+  // Every source failed: the failure lines are the answer, and neither an
+  // empty listbox nor "no results" is drawn.
+  await act(async () => {
+    answer.resolve({
+      pages: [
+        page("curated-fonts", [], {
+          failure: { reason: "failed", message: "curated is down" },
+        }),
+        page("google-fonts", [], {
+          failure: { reason: "failed", message: "the registry is down" },
+        }),
+      ],
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(document.querySelector("[data-yunari-font-grid]")).toBeNull();
+  expect(
+    document.querySelectorAll("[data-yunari-font-failure]"),
+  ).toHaveLength(2);
+  expect(document.body.textContent).not.toContain(uiCopy.assets.noResults);
+});
+
+it("re-searches when a provider chip changes and keeps the last source on", async () => {
+  searchAssets.mockResolvedValue({
+    pages: [page("curated-fonts", [interTrio]), page("google-fonts", [manrope])],
+  });
+  await render();
+  await type("Inter");
+  await settle();
+  expect(tiles()).toHaveLength(2);
+
+  press('[data-yunari-font-chip="google-fonts"]');
+  await settle();
+  expect(searchAssets).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      enabled: ["curated-fonts"],
+      pages: { "curated-fonts": 1 },
+    }),
+    undefined,
+  );
+  // The switched-off source's rows leave with it.
+  expect(
+    tiles().map((tile) => tile.getAttribute("data-yunari-font-tile")),
+  ).toEqual([interTrio.id]);
+
+  const asked = searchAssets.mock.calls.length;
+  press('[data-yunari-font-chip="curated-fonts"]');
+  await settle();
+  // The last enabled source stays on, so there is no new question to ask.
+  expect(searchAssets).toHaveBeenCalledTimes(asked);
+  expect(
+    document
+      .querySelector('[data-yunari-font-chip="curated-fonts"]')
+      ?.getAttribute("aria-pressed"),
+  ).toBe("true");
 });
 
 it("moves focus with the arrow keys inside the grid", () => {

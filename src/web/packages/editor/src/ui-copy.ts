@@ -1175,8 +1175,9 @@ export const uiCopy = {
     fontSort: { name: "A–Z", provider: "Provider" },
     fontSourcesLabel: "Font sources",
     fontEmptyQuery: "Type a font name to find a trio or a family.",
-    fontTrioMeta: (faces: number): string =>
-      `${faces} ${faces === 1 ? "face" : "faces"}`,
+    fontSearching: "Searching fonts…",
+    fontTrioMeta: (families: number): string =>
+      `${families} ${families === 1 ? "family" : "families"}`,
     fontFamilyMeta: (cuts: number): string =>
       `${cuts} ${cuts === 1 ? "cut" : "cuts"}`,
     fontLoadMore: "Load more",

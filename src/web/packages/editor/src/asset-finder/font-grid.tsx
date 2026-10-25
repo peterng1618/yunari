@@ -48,6 +48,9 @@ function FontTile({
   const source = sourceIdOf(result);
   const trio = result.font?.trio;
   const cuts = result.font?.cuts.length ?? 0;
+  // A trio is one role family each; `cuts` can carry every weight variant, so
+  // it is not a family count.
+  const families = ROLES.filter((role) => trio?.roles[role] !== undefined).length;
   return (
     <button
       ref={focus}
@@ -81,7 +84,7 @@ function FontTile({
       <span className="max-w-full truncate text-[10px] text-faint">
         {trio === undefined
           ? `${uiCopy.assets.fontFamilyMeta(cuts)} · ${result.licence}`
-          : `${uiCopy.assets.fontTrioMeta(cuts)} · ${ROLES.filter((role) => trio.roles[role] !== undefined).join(" · ")}`}
+          : `${uiCopy.assets.fontTrioMeta(families)} · ${ROLES.filter((role) => trio.roles[role] !== undefined).join(" · ")}`}
       </span>
     </button>
   );

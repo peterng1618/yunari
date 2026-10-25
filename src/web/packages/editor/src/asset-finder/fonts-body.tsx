@@ -60,6 +60,8 @@ export function FontsBody(props: {
   const [failures, setFailures] = useState<ReadonlyMap<string, AssetPage>>(
     new Map(),
   );
+  /** A question is out and no answer has landed for it yet. */
+  const [pending, setPending] = useState(false);
   const ticket = useRef(0);
 
   useEffect(() => {
@@ -138,6 +140,7 @@ export function FontsBody(props: {
     // Any change of question discards an answer already in flight.
     ticket.current += 1;
     const issued = ticket.current;
+    setPending(false);
 
     // An empty term is never sent: the curated source ignores the page and
     // answers the whole catalogue at once (~1 MB), so the guard is the body's.
@@ -151,6 +154,7 @@ export function FontsBody(props: {
     }
 
     const timer = setTimeout(() => {
+      setPending(true);
       void searchAssets(
         {
           query: term,
@@ -161,6 +165,7 @@ export function FontsBody(props: {
         client,
       ).then((next) => {
         if (issued !== ticket.current) return;
+        setPending(false);
         draw(next.pages, new Map(enabled.map((id) => [id, 1])));
         setSelectedId(undefined);
       });
@@ -172,7 +177,10 @@ export function FontsBody(props: {
   }, [term, enabledKey, client, sources]);
 
   const rows: AssetResult[] = [];
-  for (const source of fontSources) rows.push(...(bySource.get(source.id) ?? []));
+  // A source switched off after its rows landed leaves the grid at once.
+  for (const source of fontSources) {
+    if (!disabled.has(source.id)) rows.push(...(bySource.get(source.id) ?? []));
+  }
   const filtered = rows.filter(
     (result) => filter === "all" || kindOf(result) === filter,
   );
@@ -222,6 +230,7 @@ export function FontsBody(props: {
 
   const allOff = enabled.length === 0;
   const empty = term !== "" && !allOff && asked.size > 0 && shown.length === 0;
+  const canLoadMore = !pending && Object.keys(nextPages).length > 0;
 
   return (
     <div className="flex min-h-0 flex-col gap-[var(--space-8)]">
@@ -335,11 +344,7 @@ export function FontsBody(props: {
         <p data-yunari-font-empty="" className="text-sm text-muted">
           {copy.fontEmptyQuery}
         </p>
-      ) : empty ? (
-        <p data-yunari-font-no-matches="" className="text-sm text-muted">
-          {copy.noResults}
-        </p>
-      ) : (
+      ) : shown.length > 0 ? (
         <FontGrid
           results={shown}
           selectedId={selectedId}
@@ -347,11 +352,19 @@ export function FontsBody(props: {
             setSelectedId(result.id);
           }}
           providers={labels}
-          {...(Object.keys(nextPages).length === 0
-            ? {}
-            : { onLoadMore: loadMore })}
+          {...(canLoadMore ? { onLoadMore: loadMore } : {})}
         />
-      )}
+      ) : pending ? (
+        // Nothing drawn yet: say the question is out rather than draw an empty
+        // listbox that reads as a broken body. Rows already drawn stay up.
+        <p data-yunari-font-searching="" className="text-sm text-muted">
+          {copy.fontSearching}
+        </p>
+      ) : empty ? (
+        <p data-yunari-font-no-matches="" className="text-sm text-muted">
+          {copy.noResults}
+        </p>
+      ) : null}
     </div>
   );
 }
