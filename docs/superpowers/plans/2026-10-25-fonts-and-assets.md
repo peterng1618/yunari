@@ -187,6 +187,7 @@ git commit -m "feat(package): link a credit to its asset"
 export type FontFormat = "woff2" | "woff" | "ttf" | "otf";
 export interface FontCut {
   readonly id: string;
+  readonly source: string;
   readonly family: string;
   readonly weight: string | number;
   readonly style: "normal" | "italic";
@@ -250,9 +251,12 @@ git commit -m "feat(assets): search a named body and carry font results"
 - Modify: `scripts/generate-font-trios.mjs` (output path)
 - Move: `packages/editor/src/font-trios.generated.ts` → `packages/host/src/assets/fonts/curated.generated.ts`
 - Create: `packages/host/src/assets/fonts/curated-data.ts`
-- Delete: `packages/editor/src/font-catalog.ts`, `packages/editor/src/font-catalog-query.ts` and their tests
 - Create: `packages/editor/src/type-preset-apply.ts`
 - Test: `packages/editor/src/type-preset-apply.test.ts`
+
+The editor's generated catalogue and query helpers stay in place until Task 14.
+`PresetList` still reads them, so deleting them here would leave the tree without
+a typecheckable build; the editor's copy is removed with the panel rebuild.
 
 **Interfaces:**
 - Produces: `packages/host/src/assets/fonts/curated-data.ts` exports
@@ -284,9 +288,9 @@ Expected: FAIL — module not found.
 
 Change the generator's output path to
 `packages/host/src/assets/fonts/curated.generated.ts`; regenerate with
-`npm run fonts:generate`. Move the file; delete the editor copies of the
-catalogue and its query helpers. Add `curated-data.ts` exporting the lookups and
-the wire mapping (Task 5 consumes it).
+`npm run fonts:generate`. Move the file; add `curated-data.ts` exporting the
+lookups and the wire mapping (Task 5 consumes it). The editor's copy and query
+helpers stay until Task 14, because `preset-list.tsx` still imports them.
 
 - [ ] **Step 4: Implement `applyFontTrio` without catalogue data**
 
@@ -308,9 +312,6 @@ git add scripts/generate-font-trios.mjs \
   packages/host/src/assets/fonts/curated-data.ts \
   packages/editor/src/type-preset-apply.ts \
   packages/editor/src/type-preset-apply.test.ts
-git add -u packages/editor/src/font-trios.generated.ts packages/editor/src/font-catalog.ts \
-  packages/editor/src/font-catalog-query.ts packages/editor/src/font-catalog.test.ts \
-  packages/editor/src/font-catalog-query.test.ts packages/editor/src/font-trios.generated.test.ts
 git commit -m "refactor(fonts): move the curated catalogue into the host"
 ```
 
@@ -549,6 +550,8 @@ git commit -m "feat(editor): draw the Assets pane"
   Auto: image/SVG → `editor.placeImage` at the canvas centre; video →
   background media; font → the metadata form (Task 16). Background: forces an
   image or video into background media and refuses a font.
+- The pane itself is mounted in Task 8; this task only wires import, the finder
+  entry and the Add pane's removal.
 - The finder opens from the pane's **Find assets** control and the File menu;
   Add renders only shapes, text and cards.
 
@@ -651,9 +654,10 @@ git commit -m "feat(finder): browse fonts as one result grid"
 **Interfaces:**
 - Consumes: the selected `FontTrioInfo` or `FontCut[]`; `document.fonts` for
   specimen loading; `uiCopy`.
-- Produces: the panel's callbacks
-  `{ onApplyTrio(trio), onAddTrioPresets(trio), onAddPreset(cut, role), onApplyToSelected(cut) }`
-  (Task 12 implements them).
+- Produces: `FontPreviewPanel` props
+  `{ selected: FontResult; presets: TypePresets; onApplyTrio, onAddTrioPresets, onAddPreset, onApplyToSelected }`
+  (Task 12 implements the callbacks). The scope line reads from `presets`; the
+  panel never reads the document itself.
 
 - [ ] **Step 1: Write the failing DOM test**
 
@@ -715,9 +719,9 @@ unbindPresetFace(id: string): void;
 The id-based `applyFontTrio(id)` is deleted with the old picker in Task 13; until
 then both exist and the new one is the only caller the finder uses.
 
-All bytes come from the host's `/api/assets/bytes`; `#downloadFace` is replaced
-by a host-bytes read. Every action goes through `setTypes`, so history and the
-unsaved marker see it.
+All bytes come from the host's `/api/assets/bytes`, addressed by
+`cut.source` and `cut.id`; `#downloadFace` is replaced by a host-bytes read.
+Every action goes through `setTypes`, so history and the unsaved marker see it.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -814,7 +818,11 @@ git commit -m "refactor(fonts): retire the facet picker"
 - Modify: `packages/editor/src/panes/tokens/tokens-pane.tsx`
 - Modify: `packages/editor/src/panes/tokens/preset-list.tsx`
 - Create: `packages/editor/src/panes/tokens/token-selection.ts`
+- Create: `packages/editor/src/panes/tokens/token-selection.ts`
 - Modify: `packages/editor/src/editor-shell/shell-layout.tsx` (own the store)
+- Delete: `packages/editor/src/font-catalog.ts`, `packages/editor/src/font-catalog-query.ts`,
+  `packages/editor/src/font-trios.generated.ts` and their tests, once nothing in
+  `preset-list.tsx` imports them
 - Test: `packages/editor/src/panes/tokens/preset-list.dom.test.tsx`
 
 **Interfaces:**
@@ -841,7 +849,10 @@ Expected: FAIL — the row still renders fields and there is no store.
 
 Move the fields out of `PresetList`; keep New type preset and Import font… as
 pane actions. The specimen is `Aa` in the preset's own family — packaged faces
-are already in `document.fonts`, so no network is needed.
+are already in `document.fonts`, so no network is needed. Once the panel no
+longer imports the catalogue, delete the editor's `font-catalog.ts`,
+`font-catalog-query.ts`, `font-trios.generated.ts` and their tests (the host copy
+from Task 4 is the only one left).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
