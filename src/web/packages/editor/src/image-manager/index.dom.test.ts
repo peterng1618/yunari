@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { Canvas, FabricImage } from "fabric/es";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   boundedImageElement,
   boundedImportSize,
@@ -29,6 +29,22 @@ beforeEach(() => {
     );
   }
 });
+
+afterEach(() => {
+  // `createImageBitmap` does not exist in jsdom; each test that needs it stubs
+  // the global, and `restoreMocks` does not undo a `stubGlobal`.
+  vi.unstubAllGlobals();
+});
+
+/** A plain bitmap stand-in: jsdom's canvas cannot draw one, and the size and
+ *  `close` are the two things the decode path is observable through. */
+function bitmapStub(
+  width: number,
+  height: number,
+  close = vi.fn(),
+): ImageBitmap {
+  return { width, height, close } as unknown as ImageBitmap;
+}
 
 /** jsdom never loads images; capture decode's src and resolve the load event. */
 function interceptDecode(): { readonly urls: string[] } {
@@ -156,6 +172,112 @@ describe("ImageManager", () => {
 
     expect(canvas.getActiveObject()).toBeUndefined();
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it("decodes and resizes an oversized image through createImageBitmap", async () => {
+    const canvas = new Canvas(document.createElement("canvas"));
+    const manager = createImageManager(canvas, vi.fn());
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:image");
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL");
+    const probeClose = vi.fn();
+    const scaledClose = vi.fn();
+    const createImageBitmap = vi
+      .fn()
+      .mockResolvedValueOnce(bitmapStub(8192, 4096, probeClose))
+      .mockResolvedValueOnce(bitmapStub(4096, 2048, scaledClose));
+    vi.stubGlobal("createImageBitmap", createImageBitmap);
+    const createElement = vi.spyOn(document, "createElement");
+    const file = new File(["pixels"], "photo.png", { type: "image/png" });
+
+    const result = await manager.importImage({ source: file });
+
+    // The resize pair is `boundedImportSize` of the source, so the browser
+    // downscales off the main thread instead of the drawImage doing it.
+    expect(createImageBitmap).toHaveBeenNthCalledWith(2, file, {
+      resizeWidth: 4096,
+      resizeHeight: 2048,
+      resizeQuality: "high",
+    });
+    expect(
+      createElement.mock.calls.filter(([tag]) => tag === "img"),
+    ).toHaveLength(0);
+    const element = (result?.image as FabricImage).getElement();
+    expect(element).toBeInstanceOf(HTMLCanvasElement);
+    const bounded = element as HTMLCanvasElement;
+    expect([bounded.width, bounded.height]).toEqual([4096, 2048]);
+    expect(probeClose).toHaveBeenCalledOnce();
+    expect(scaledClose).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("keeps the object URL as the persisted src after a bitmap decode", async () => {
+    // A canvas element would otherwise persist its pixels as a data URL, so
+    // every history entry would carry a second copy of the image. The field
+    // undo and the package name is the object URL.
+    const canvas = new Canvas(document.createElement("canvas"));
+    const manager = createImageManager(canvas, vi.fn());
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:image");
+    vi.spyOn(URL, "revokeObjectURL");
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn().mockResolvedValue(bitmapStub(1920, 1080)),
+    );
+
+    const result = await manager.importImage({
+      source: new File(["pixels"], "photo.png", { type: "image/png" }),
+    });
+
+    const image = result?.image as FabricImage;
+    expect(image.getSrc()).toBe("blob:image");
+    expect(image.toObject()).toMatchObject({ src: "blob:image" });
+  });
+
+  it("falls back to the element path when createImageBitmap is absent", async () => {
+    const canvas = new Canvas(document.createElement("canvas"));
+    const manager = createImageManager(canvas, vi.fn());
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:image");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    // jsdom has no `createImageBitmap`, and no stub is installed here.
+    expect("createImageBitmap" in globalThis).toBe(false);
+    vi.spyOn(HTMLImageElement.prototype, "src", "set").mockImplementation(
+      function (this: HTMLImageElement, value: string) {
+        Object.defineProperty(this, "naturalWidth", { value: 8192 });
+        Object.defineProperty(this, "naturalHeight", { value: 4096 });
+        this.dispatchEvent(new Event("load"));
+      },
+    );
+
+    const result = await manager.importImage({
+      source: new File(["pixels"], "photo.png", { type: "image/png" }),
+    });
+
+    const bounded = (
+      result?.image as FabricImage
+    ).getElement() as HTMLCanvasElement;
+    expect([bounded.width, bounded.height]).toEqual([4096, 2048]);
+  });
+
+  it("revokes the URL when both decode paths fail", async () => {
+    const canvas = new Canvas(document.createElement("canvas"));
+    const manager = createImageManager(canvas, vi.fn());
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:image");
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL");
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn().mockRejectedValue(new Error("not a bitmap")),
+    );
+    vi.spyOn(HTMLImageElement.prototype, "src", "set").mockImplementation(
+      function (this: HTMLImageElement) {
+        this.dispatchEvent(new Event("error"));
+      },
+    );
+
+    await expect(
+      manager.importImage({
+        source: new File(["pixels"], "logo.png", { type: "image/png" }),
+      }),
+    ).rejects.toThrow("Could not decode the selected image.");
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:image");
   });
 });
 
