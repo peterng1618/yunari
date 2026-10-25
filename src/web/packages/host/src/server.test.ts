@@ -19,6 +19,7 @@ import {
   DASHBOARD_THEME_KIND,
   decodeBatch,
   type FabricThemeEnvelope,
+  formatSseEvent,
   SAMPLE_STREAM_PATH,
   type SampleEntry,
 } from "@yunari/renderer-core";
@@ -94,6 +95,19 @@ import { TrashRefusal } from "./themes/trash.js";
 import { encodeThemeContent } from "./themes/wire.js";
 import { createSecureOrigin } from "./tls/authority.js";
 import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
+
+/**
+ * A partial mock, so one batch's formatting is countable without a
+ * production-only seam: every other export is the real one, and the formatter
+ * still produces the bytes the connection tests expect.
+ */
+vi.mock("@yunari/renderer-core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@yunari/renderer-core")>();
+  return {
+    ...actual,
+    formatSseEvent: vi.fn(actual.formatSseEvent),
+  };
+});
 
 /** The library is a folder, so a save is the document and its bytes (ADR-0017),
  *  plus what the client says the save is based on. */
@@ -6760,6 +6774,42 @@ describe("One tick at a time", () => {
 
     expect(gated.samples()).toBe(2);
     gated.release();
+  });
+
+  it("formats one frame per batch, however many connections share it", async () => {
+    vi.useFakeTimers();
+    const gated = gatedProvider();
+    const host = start(gated, { intervalMs: 200 });
+
+    // Both connections are the local display asking the same keys, so a tick
+    // builds one batch for the two of them.
+    const first = sampleStream(
+      host.server,
+      `${SAMPLE_STREAM_PATH}?keys=gpu.temp`,
+    );
+    const second = sampleStream(
+      host.server,
+      `${SAMPLE_STREAM_PATH}?keys=gpu.temp`,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    const format = vi.mocked(formatSseEvent);
+    format.mockClear();
+
+    await vi.advanceTimersByTimeAsync(200);
+    gated.release();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(format).toHaveBeenCalledTimes(1);
+    // The same frame text reached both, byte for byte.
+    expect(first.frames()).toContain("event: samples");
+    expect(second.frames()).toBe(first.frames());
+
+    // The next tick is a new batch, and formats again.
+    await vi.advanceTimersByTimeAsync(200);
+    gated.release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(format).toHaveBeenCalledTimes(2);
   });
 
   it("reads devices once per tick however many displays ask", async () => {

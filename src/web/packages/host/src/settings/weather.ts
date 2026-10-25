@@ -164,55 +164,38 @@ export function createWeatherSettingsStore(
    *  write: `/api/health` asks the store rather than parsing the file itself. */
   let problem: string | undefined;
 
-  /** The last read's identity and what it answered. Every poll reads settings,
-   *  and the file changes only when a person saves; an absent file caches the
-   *  same way, so a poll does not even re-stat. `write()` clears this rather
-   *  than predicting the stat its own rename will produce. */
+  /** The last parsed settings, with the identity they were parsed from. Every
+   *  poll reads settings, and the file changes only when a person saves, so a
+   *  matching stat skips the parse; the stat itself is cheap and is always
+   *  taken, because a file created or deleted by anything else must be seen.
+   *  `write()` clears this rather than predicting the stat its own rename
+   *  will produce. */
   let cached:
     | {
-        readonly mtimeMs: number | undefined;
-        readonly size: number | undefined;
+        readonly mtimeMs: number;
+        readonly size: number;
         readonly settings: WeatherSettings;
         readonly problem: string | undefined;
       }
     | undefined;
 
-  const missing = {
-    mtimeMs: undefined,
-    size: undefined,
-    settings: DEFAULT_WEATHER_SETTINGS,
-    problem: undefined,
-  } as const;
-
   return {
     problem: () => problem,
 
     async read(): Promise<WeatherSettings> {
-      // An absent file is a cached answer like any other: the poll must not ask
-      // the filesystem about a file it knows is not there. A save through this
-      // store clears the record, which is the only writer of this file.
-      if (cached !== undefined && cached.mtimeMs === undefined) {
-        problem = cached.problem;
-        return cached.settings;
-      }
-
       let info: Stats;
 
       try {
         info = await stat(file);
       } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-          // Not evidence of no file: the next poll retries the stat.
-          cached = undefined;
-          problem = reasonOf(error);
-          return DEFAULT_WEATHER_SETTINGS;
-        }
-
         // No file is no choice yet, which is the defaults and not a problem.
-        // Reached when the file was deleted since the cached read, or when no
-        // read has been made at all.
-        cached = missing;
-        problem = undefined;
+        // A read that found one caches nothing more: a file restored, created
+        // or replaced by another program must be seen on the next read.
+        cached = undefined;
+        problem =
+          (error as NodeJS.ErrnoException).code === "ENOENT"
+            ? undefined
+            : reasonOf(error);
         return DEFAULT_WEATHER_SETTINGS;
       }
 
@@ -231,7 +214,7 @@ export function createWeatherSettingsStore(
         stored = await readFile(file, "utf8");
       } catch (error: unknown) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-          cached = missing;
+          cached = undefined;
           problem = undefined;
         } else {
           cached = undefined;

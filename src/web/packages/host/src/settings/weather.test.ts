@@ -5,6 +5,7 @@ import {
   rename,
   rm,
   stat,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -228,13 +229,20 @@ describe("weather settings", () => {
     expect(vi.mocked(readFile).mock.calls.length).toBe(filesRead);
   });
 
-  it("answers a missing file from the cache rather than re-statting it", async () => {
+  it("sees a file another process created after a read found none", async () => {
     const store = createWeatherSettingsStore(dir);
+    expect(await store.read()).toEqual(DEFAULT_WEATHER_SETTINGS);
 
-    expect(await store.read()).toEqual(DEFAULT_WEATHER_SETTINGS);
-    const stats = vi.mocked(stat).mock.calls.length;
-    expect(await store.read()).toEqual(DEFAULT_WEATHER_SETTINGS);
-    expect(vi.mocked(stat).mock.calls.length).toBe(stats);
+    // Restored from a backup or written by another tool: not this store's
+    // write, so the next read must find it rather than trust a memo.
+    await writeFile(
+      path.join(dir, "weather.json"),
+      JSON.stringify(PLACED),
+      "utf8",
+    );
+
+    expect(await store.read()).toEqual(PLACED);
+    expect(store.problem()).toBeUndefined();
   });
 
   it("re-reads a file someone else changed", async () => {
@@ -254,15 +262,27 @@ describe("weather settings", () => {
     expect(await store.read()).toEqual(changed);
   });
 
-  it("serves what a write stored without waiting for the stat to differ", async () => {
+  it("serves what a write stored even when the file's identity did not change", async () => {
     const store = createWeatherSettingsStore(dir);
     await store.write({ ...PLACED });
-    expect(await store.read()).toEqual(PLACED);
+    const file = path.join(dir, "weather.json");
+    // A whole-second timestamp, so `utimes` restores it exactly below.
+    const stamped = new Date(1_700_000_000_000);
+    await utimes(file, stamped, stamped);
 
-    // Same encoded size as the record just read: only clearing the cache on the
-    // write makes this read observe the new coordinate.
+    expect(await store.read()).toEqual(PLACED);
+    const before = await stat(file);
+
     const rewritten = { ...PLACED, latitude: 52.53 };
     await store.write(rewritten);
+    await utimes(file, stamped, stamped);
+
+    // Same mtime and length as the record the last read cached: only clearing
+    // the record on write makes this read see the new coordinate.
+    const after = await stat(file);
+    expect(after.mtimeMs).toBe(before.mtimeMs);
+    expect(after.size).toBe(before.size);
+
     const filesRead = vi.mocked(readFile).mock.calls.length;
     expect(await store.read()).toEqual(rewritten);
     expect(vi.mocked(readFile).mock.calls.length).toBe(filesRead + 1);
