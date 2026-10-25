@@ -462,23 +462,23 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: every task above.
 - Produces: rendered evidence at divisors `100, 50, 10, 2, 1`, a green gate and a local `main` merge.
 
-- [ ] **Step 1: Add the browser case**
+- [x] **Step 1: Add the browser case**
 
 In `inspector-sections.spec.ts`, add one case that inserts a bar, gauge and pie, binds one reading, sets `data-yunari-chart-setting="segmentDivisor"` to each of `100, 50, 10, 2, 1`, and captures a screenshot per divisor. Assert the canvas changed between `100` and `10` for each family; restore the divisor and assert the continuous option has no custom series. Register the new capture in `docs/evidence/screenshots/README.md` only if the repository's capture registry requires it.
 
-- [ ] **Step 2: Run the focused browser case**
+- [x] **Step 2: Run the focused browser case**
 
 Run: `cd src/web && npx playwright test tests/e2e/inspector-sections.spec.ts --grep "segmented fill" --workers=1`
 
 Expected: PASS. If the port is owned by another run, wait or run in a separate worktree; do not change `strictPort`.
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 Run: `cd src/web && npm run gate`
 
 Expected: exit 0. Fix failures in this plan before merging.
 
-- [ ] **Step 4: Update STATUS.md and commit**
+- [x] **Step 4: Update STATUS.md and commit**
 
 Replace the completed-change section with 1–5 bullets for this plan: the divisor, the slider, and the three segmented paths. Keep one item per line. Then:
 
@@ -489,7 +489,7 @@ git commit -m "docs(status): record the segmented-fill checkpoint
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 5: Merge locally into main and stop**
+- [x] **Step 5: Merge locally into main and stop**
 
 From the checkout that has `main` checked out:
 
