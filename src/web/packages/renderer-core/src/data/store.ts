@@ -103,7 +103,7 @@ export class SampleStore implements SampleSource {
     // at ingest, so the stored times stay ascending.
     const start = this.lastNowMs - Math.max(0, windowSeconds) * 1000;
 
-    if (!Number.isFinite(start)) {
+    if (Number.isNaN(start)) {
       return [];
     }
 

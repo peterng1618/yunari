@@ -104,10 +104,21 @@ describe("SampleStore", () => {
     ]);
   });
 
-  it("returns no samples for a non-finite window", () => {
+  it("reads an infinite window as unbounded and a NaN window as empty", () => {
     const store = new SampleStore();
-    store.ingest([["a", ok(1)]], NOW);
+    store.ingest(
+      [
+        ["a", ok(1, NOW - 1000)],
+        ["a", ok(2, NOW)],
+      ],
+      NOW,
+    );
 
+    expect(
+      store
+        .history("a", Number.POSITIVE_INFINITY)
+        .map((sample) => sample.value),
+    ).toEqual([1, 2]);
     expect(store.history("a", Number.NaN)).toEqual([]);
   });
 
