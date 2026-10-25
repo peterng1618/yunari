@@ -184,7 +184,7 @@ export function PresetList(props: PresetListProps): React.JSX.Element {
                   selectedToken?.kind === "preset" && selectedToken.id === id
                 }
                 onClick={() => onSelect(id)}
-                className="flex w-full items-baseline gap-[var(--space-8)] rounded-[var(--radius-sm)] border border-edge px-[var(--space-6)] py-[var(--space-4)] text-left hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent aria-pressed:border-accent"
+                className="flex w-full items-baseline gap-[var(--space-8)] rounded-[var(--radius-sm)] border border-transparent px-[var(--space-6)] py-[var(--space-4)] text-left hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent aria-pressed:border-accent aria-pressed:bg-panel-2"
               >
                 <span
                   data-yunari-type-preset-specimen=""

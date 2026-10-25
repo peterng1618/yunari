@@ -69,9 +69,18 @@ describe("TokenSelectionStore", () => {
     const shell = selected();
 
     shell.tokens.set({ kind: "preset", id: "body" });
+    // Subscribed after the set, so the count below is the clear's own
+    // notification: a `clear()` that moved the ref silently would leave
+    // `aria-pressed` stale and fail here.
+    let notified = 0;
+    shell.tokens.subscribe(() => {
+      notified += 1;
+    });
+
     shell.selectOnCanvas("object", 1);
 
     expect(shell.tokens.get()).toBeUndefined();
+    expect(notified).toBe(1);
   });
 
   it("treats the background as a selection, though it reports no object", () => {

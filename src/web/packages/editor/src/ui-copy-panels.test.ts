@@ -157,10 +157,11 @@ it("leaves the three panels with no copy of their own", async () => {
     ),
     // Two kinds of button are excluded, both because their text is data. A token
     // well prints the document's own token name and usage figure; a type-preset
-    // row prints the preset's own name and resolution. A select's trigger prints
-    // the chosen value, which on every panel here is a token's name, a preset's,
-    // a unit's or a locale's — the chevron beside it is decoration. The words a
-    // select *offers* are copy and are read from its open list, so excluding the
+    // row prints the preset's own name and resolution — its role badge is copy
+    // and is read on its own below. A select's trigger prints the chosen value,
+    // which on every panel here is a token's name, a preset's, a unit's or a
+    // locale's — the chevron beside it is decoration. The words a select
+    // *offers* are copy and are read from its open list, so excluding the
     // closed control loses nothing.
     ...Array.from(root.querySelectorAll("button"))
       .filter(
@@ -170,6 +171,12 @@ it("leaves the three panels with no copy of their own", async () => {
           button.querySelector("[data-yunari-value]") === null,
       )
       .map((button) => spokenText(button)),
+    // The preset row's role badge prints a copy word (Heading/Body/Mono), not
+    // data, so it goes through the net even though the row around it does not.
+    ...Array.from(
+      root.querySelectorAll("[data-yunari-type-preset-role]"),
+      (badge) => spokenText(badge),
+    ),
     ...paintKinds,
   ]
     .map((text) => text?.trim() ?? "")

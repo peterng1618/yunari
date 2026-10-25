@@ -45,18 +45,11 @@ const TOKENS_CONTROLS = [
   '[data-testid="gradient-remove"]',
   '[data-testid="gradient-offset"]',
   '[data-testid="gradient-angle"]',
-  // Type presets
-  "[data-yunari-type-preset]",
-  "[data-yunari-type-name]",
-  "[data-yunari-type-family]",
-  "[data-yunari-type-size]",
-  "[data-yunari-type-weight]",
-  "[data-yunari-type-line-height]",
-  "[data-yunari-type-letter-spacing]",
-  "[data-yunari-font-face]",
-  "[data-yunari-font-trio]",
-  "[data-yunari-type-replacement]",
-  "[data-yunari-type-delete]",
+  // Type presets. The pane is a list now: one pressable row per preset and the
+  // add action. The chooser and the field set that went with it are the token
+  // inspector's (Task 15), so they are audited there, not here.
+  "[data-yunari-type-preset-row]",
+  "[data-yunari-type-preset-add]",
 ];
 
 /** The Document pane's controls: the artboard panel's theme settings. */

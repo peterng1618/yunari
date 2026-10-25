@@ -267,7 +267,12 @@ it("draws each preset as a row with a specimen and a resolution, and no input co
   expect(specimen?.style.fontFamily).toBe("Inter");
 
   expect(row.textContent).toContain(withRoles.display?.name);
-  expect(row.textContent).toContain(uiCopy.assets.fontPreview.role.heading);
+  // The badge is the copy table's word, read on the badge itself rather than
+  // matched anywhere in the row: a hardcoded "Heading" would otherwise hide
+  // behind the preset's own name.
+  expect(row.querySelector("[data-yunari-type-preset-role]")?.textContent).toBe(
+    uiCopy.assets.fontPreview.role.heading,
+  );
 
   const expected = resolveTypePreset(
     { typePresets: withRoles },
