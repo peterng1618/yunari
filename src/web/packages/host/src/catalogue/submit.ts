@@ -11,9 +11,10 @@ import type { ThumbnailStore } from "../themes/thumbnails.js";
  * sign-in routes are: that file is already past the size a reader can hold.
  *
  * The browser sends one id; the host does the rest — read the library theme,
- * bump it against the Worker's baseline, request a version, PUT the package to
- * the presigned address and finalize with the thumbnail. The session token
- * reaches this module and the `Authorization` header, and nothing else.
+ * bump it against the Worker's baseline, request a version, PUT the package
+ * through the Worker's upload route and finalize with the thumbnail. The
+ * session token reaches this module and the `Authorization` header, and
+ * nothing else.
  */
 
 export const SUBMIT_PATH = "/api/themes/submit";
@@ -58,9 +59,8 @@ function text(status: number, body: string): Response {
 /** The status a thrown store refusal deserves: the session's own refusal is a
  *  sign-in problem, a 4xx is the author's submission being refused, and
  *  everything else is the store being unreachable. A 401 from an authenticated
- *  call also spends the stored session, so the next press asks for a sign-in
- *  rather than repeating it. The presigned PUT is not such a call: its 401 is
- *  R2 refusing the signature, and the session is still good. */
+ *  call spends the stored session, so the next press asks for a sign-in rather
+ *  than repeating it. Every call here is authenticated, the upload included. */
 async function refusal(
   error: unknown,
   store: StoreSessionStore | undefined,
@@ -150,12 +150,12 @@ export async function handleSubmitRoute(
     return json(400, { ok: false, message: plan.message });
   }
 
-  // The presigned PUT is the one call whose 401 is not a session refusal: R2
-  // signs it, and an expired signature is a retry, not a sign-out.
+  // The upload is the Worker's own authenticated route, so its 401 is the
+  // same session refusal every other call's is.
   try {
     await client.upload(plan.files.uploadUrl, plan.files.packageBytes);
   } catch (error) {
-    return refusal(error, deps.sessionStore, false);
+    return refusal(error, deps.sessionStore, true);
   }
 
   try {

@@ -5,6 +5,7 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  CATALOGUE_ORIGIN,
   createBatch,
   formatSseEvent,
   knownTimeZones,
@@ -474,6 +475,30 @@ export function isLoopbackName(name: string | undefined): boolean {
   return (
     name === "localhost" || name === "[::1]" || /^127(\.\d{1,3}){3}$/.test(name)
   );
+}
+
+/**
+ * The store origin a host may talk to.
+ *
+ * The session token is sent here, so a mis-set variable must not be able to
+ * point it at another host: only the compiled catalogue origin, or a loopback
+ * address for a Worker under test, survives. Anything else is answered as if
+ * the variable were unset.
+ */
+export function resolveStoreOrigin(
+  raw: string | undefined,
+): string | undefined {
+  if (raw === undefined) return undefined;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return undefined;
+  }
+  if (url.origin === CATALOGUE_ORIGIN) return url.origin;
+  if (url.protocol === "http:" && isLoopbackName(url.hostname))
+    return url.origin;
+  return undefined;
 }
 
 /**
@@ -1189,7 +1214,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const published = options.published ?? createPublishedStore();
   const caCertificate = options.caCertificate;
   const hostRecord = options.host;
-  const storeOrigin = options.storeOrigin ?? process.env.YUNARI_STORE_ORIGIN;
+  const storeOrigin = resolveStoreOrigin(
+    options.storeOrigin ?? process.env.YUNARI_STORE_ORIGIN,
+  );
   const storeSession = options.storeSession;
   /** The store sign-in states this server minted, so another instance in the
    *  same process cannot redeem them. */

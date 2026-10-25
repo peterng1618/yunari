@@ -29,14 +29,12 @@ import {
 import { authorQuotaExceeded, presignAllowed } from "../db/quota.js";
 import type { ItemRow } from "../db/types.js";
 import type { Env } from "../env.js";
-import { packageKey, thumbnailKey } from "../storage/keys.js";
+import { packageKey, pendingKey, thumbnailKey } from "../storage/keys.js";
 import { inspectObject } from "../storage/objects.js";
-import { presignPut } from "../storage/presign.js";
 import { planVersion } from "../version/plan.js";
 
 const ITEMS_PREFIX = "/api/me/items/";
-/** The spec's upload window; the object is signed, never buffered, by us. */
-const UPLOAD_EXPIRY_SECONDS = 900;
+const UPLOADS_PREFIX = "/api/me/uploads/";
 /** The thumbnail is rewritten on every version, so it is kept small. */
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -53,6 +51,13 @@ export async function handleMe(
   env: Env,
   url: URL,
 ): Promise<Response | undefined> {
+  // Before the item routes, and before the Worker's generic `/api/me` handler
+  // ever sees it: a proxied upload's body goes straight to R2.
+  if (url.pathname.startsWith(UPLOADS_PREFIX)) {
+    if (request.method !== "PUT") return undefined;
+    return putUpload(request, env, url.pathname.slice(UPLOADS_PREFIX.length));
+  }
+
   // The listing itself, beside the item routes that all carry a trailing id.
   if (url.pathname === "/api/me/items" && request.method === "GET")
     return mine(request, env, url);
@@ -251,7 +256,7 @@ async function baseline(
   });
 }
 
-/** `{ version, status, uploadUrl }`: the validated version, signed PUT. */
+/** `{ version, status, uploadUrl }`: the validated version and its upload route. */
 async function requestVersion(
   request: Request,
   env: Env,
@@ -319,16 +324,29 @@ async function requestVersion(
   if (!(await presignAllowed(env.DB, session.userId, now)))
     return tooMany("Too many upload requests; try again in an hour.");
 
-  // Signing comes before any write: a signing failure must burn no event row
-  // and leave no item behind.
-  const uploadUrl = await presignPut({
-    accountId: env.R2_ACCOUNT_ID,
-    accessKeyId: env.R2_ACCESS_KEY_ID,
-    secretAccessKey: env.R2_SECRET_ACCESS_KEY,
-    bucket: env.R2_BUCKET_NAME,
-    key: packageKey(envelope.id, plan.version),
-    expiresSeconds: UPLOAD_EXPIRY_SECONDS,
-  });
+  // The reservation row is written here, before the answer: a burst of version
+  // requests that each passed the check above would otherwise all receive a
+  // URL with none of their bytes reserved, and the quota would never see them.
+  const uploadId = crypto.randomUUID();
+  await env.DB.prepare(
+    `INSERT INTO upload (id, user_id, item_id, version, envelope_json, key,
+       reserved_bytes, created_at, finalized_at, bytes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
+  )
+    .bind(
+      uploadId,
+      session.userId,
+      envelope.id,
+      plan.version,
+      JSON.stringify(envelope),
+      pendingKey(uploadId),
+      MAX_ARCHIVE_BYTES,
+      nowIso,
+    )
+    .run();
+
+  // The route's own origin, so a custom domain keeps answering with itself.
+  const uploadUrl = `${new URL(request.url).origin}${UPLOADS_PREFIX}${uploadId}`;
 
   // A parallel first submission may win the insert; that loser is ignored
   // rather than failing on the PRIMARY KEY, then reads the row it shares. An
@@ -365,6 +383,59 @@ async function requestVersion(
         : "pending";
 
   return Response.json({ version: plan.version, status, uploadUrl });
+}
+
+/**
+ * Streams one reserved upload to R2 under its pending key.
+ *
+ * The declared length is checked before the body is touched, so an over-cap
+ * package costs neither a read nor an object; a length that disagrees with the
+ * stored size deletes what landed rather than leaving bytes nobody counted.
+ */
+async function putUpload(
+  request: Request,
+  env: Env,
+  uploadId: string,
+): Promise<Response> {
+  const session = await sessionOf(request, env);
+  if (session === undefined) return unauthorized();
+  if (uploadId.length === 0 || uploadId.includes("/")) return notFound();
+
+  // A foreign id is indistinguishable from a missing one.
+  const row = await env.DB.prepare(
+    "SELECT finalized_at FROM upload WHERE id = ? AND user_id = ?",
+  )
+    .bind(uploadId, session.userId)
+    .first<{ finalized_at: string | null }>();
+  if (row === null) return notFound();
+  if (row.finalized_at !== null) {
+    return new Response("This upload is already finalized.", { status: 409 });
+  }
+
+  const declared = request.headers.get("content-length");
+  const length = declared === null ? Number.NaN : Number(declared);
+  if (!Number.isSafeInteger(length) || length < 0) {
+    return new Response("A content-length is required.", { status: 411 });
+  }
+  if (length > MAX_ARCHIVE_BYTES) {
+    return new Response(
+      `The uploaded package exceeds the ${MAX_ARCHIVE_BYTES / (1024 * 1024)} MiB limit.`,
+      { status: 413 },
+    );
+  }
+
+  const key = pendingKey(uploadId);
+  // The body is a stream: the Worker never holds the package in memory.
+  const body = request.body;
+  if (body === null) return badRequest("The upload has no body.");
+  const stored = await env.BUCKET.put(key, body);
+  if (stored === null)
+    return badRequest("The upload could not be stored; try again.");
+  if (stored.size !== length) {
+    await env.BUCKET.delete(key);
+    return badRequest("The upload's size does not match its content-length.");
+  }
+  return new Response(null, { status: 201 });
 }
 
 /**

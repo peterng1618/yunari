@@ -462,6 +462,11 @@ async function reset(): Promise<void> {
   await env.DB.prepare("DELETE FROM presign_event WHERE user_id = ?")
     .bind(USER_ID)
     .run();
+  // Each version request now reserves its archive cap in `upload`; without
+  // this the file's own cases exhaust the author's 1 GiB before its last test.
+  await env.DB.prepare("DELETE FROM upload WHERE user_id = ?")
+    .bind(USER_ID)
+    .run();
   await env.DB.prepare("DELETE FROM author_profile WHERE user_id = ?")
     .bind(USER_ID)
     .run();

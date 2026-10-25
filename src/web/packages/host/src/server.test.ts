@@ -14,6 +14,7 @@ import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import {
+  CATALOGUE_ORIGIN,
   cataloguePackageUrl,
   createAssetResolver,
   DASHBOARD_THEME_KIND,
@@ -48,6 +49,7 @@ import {
   MAX_STREAM_KEY_BYTES,
   MAX_STREAM_KEYS,
   MAX_THEME_UPLOAD_BYTES,
+  resolveStoreOrigin,
   type SourceRouteOptions,
 } from "./server.js";
 import { newToken } from "./session/pairing.js";
@@ -562,6 +564,33 @@ async function servedCard(stream: {
   return decoded.batch.samples.find((entry) => entry.semanticKey === "gpu.temp")
     ?.sample.textValue;
 }
+
+describe("The store origin a host will talk to", () => {
+  it("accepts the compiled catalogue origin and nothing else on the internet", () => {
+    expect(resolveStoreOrigin(CATALOGUE_ORIGIN)).toBe(CATALOGUE_ORIGIN);
+    expect(resolveStoreOrigin("http://evil.example")).toBeUndefined();
+    expect(resolveStoreOrigin("https://evil.example")).toBeUndefined();
+    expect(
+      resolveStoreOrigin("http://yunari-store.workers.dev"),
+    ).toBeUndefined();
+  });
+
+  it("accepts a loopback address as a test origin", () => {
+    expect(resolveStoreOrigin("http://127.0.0.1:8787")).toBe(
+      "http://127.0.0.1:8787",
+    );
+    expect(resolveStoreOrigin("http://localhost:8787")).toBe(
+      "http://localhost:8787",
+    );
+    expect(resolveStoreOrigin("http://192.168.1.10:8787")).toBeUndefined();
+  });
+
+  it("keeps an absent value absent", () => {
+    expect(resolveStoreOrigin(undefined)).toBeUndefined();
+    expect(resolveStoreOrigin("")).toBeUndefined();
+    expect(resolveStoreOrigin("not a url")).toBeUndefined();
+  });
+});
 
 describe("Host theme routes", () => {
   let tmpDir: string;
@@ -1921,7 +1950,9 @@ describe("Host theme routes", () => {
   });
 
   describe("The store session routes", () => {
-    const ORIGIN = "https://store.example";
+    // A loopback test origin: the only non-catalogue address `resolveStoreOrigin`
+    // admits, and the fake Worker below intercepts every call anyway.
+    const ORIGIN = "http://127.0.0.1:8787";
     // A slash is URL-encoded on the wire, so every case that redeems this token
     // also exercises the decode.
     const SESSION_TOKEN = "session/token.value";
@@ -2351,13 +2382,13 @@ describe("Host theme routes", () => {
   });
 
   describe("The submit route", () => {
-    const ORIGIN = "https://store.example";
+    const ORIGIN = "http://127.0.0.1:8787";
     // A slash is URL-encoded on the wire, so the token path is exercised too.
     const SESSION_TOKEN = "session/token.value";
     // New documents get UUID ids; these fixtures mirror that.
     const THEME_ID = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
     const BARE_ID = "0a1b2c3d-4e5f-4a6b-8c9d-0e1f2a3b4c5d";
-    const UPLOAD_URL = `https://r2.example/packages/${THEME_ID}/1.0.0.zip`;
+    const UPLOAD_URL = `${ORIGIN}/api/me/uploads/5c2e9a10-3b4d-4e6f-8a90-1b2c3d4e5f60`;
     // The store's own check: a picture is a PNG, and a submission refuses a
     // theme without one. The header's declared size has to be within bounds.
     const PNG = new Uint8Array([
@@ -2492,19 +2523,19 @@ describe("Host theme routes", () => {
       });
 
       // The four calls, in the order the store's own protocol requires: the
-      // baseline, the version request, the presigned PUT, the finalize.
+      // baseline, the version request, the proxied upload, the finalize.
       expect(calls.map((call) => [call.method, call.url])).toEqual([
         ["GET", `${ORIGIN}/api/me/items/${THEME_ID}/baseline`],
         ["POST", `${ORIGIN}/api/me/items/${THEME_ID}/versions`],
         ["PUT", UPLOAD_URL],
         ["POST", `${ORIGIN}/api/me/items/${THEME_ID}/versions/1.0.0/finalize`],
       ]);
-      // The session token travels on every authenticated call and on no other:
-      // the presigned PUT is the one call that must not carry it.
+      // The session token travels on all four: the upload is the Worker's own
+      // authenticated route, not a presigned R2 address.
       expect(calls.map((call) => call.authorization)).toEqual([
         `Bearer ${SESSION_TOKEN}`,
         `Bearer ${SESSION_TOKEN}`,
-        null,
+        `Bearer ${SESSION_TOKEN}`,
         `Bearer ${SESSION_TOKEN}`,
       ]);
       expect(res.text()).not.toContain(SESSION_TOKEN);
@@ -2588,9 +2619,9 @@ describe("Host theme routes", () => {
       }
     });
 
-    it("keeps the session when the presigned PUT answers 401", async () => {
+    it("spends the session when the upload route answers 401", async () => {
       await signedIn();
-      const expiredSignature = createHostServer({
+      const refused = createHostServer({
         registry: new ProviderRegistry([]),
         bundles: { player: library, editor: library },
         themeStore: createThemeStore(library),
@@ -2604,24 +2635,25 @@ describe("Host theme routes", () => {
           if (url === `${ORIGIN}/api/me/items/${THEME_ID}/versions`)
             return json(plan);
           if (url === UPLOAD_URL)
-            return new Response("Signature expired", { status: 401 });
+            return new Response("Unauthorized", { status: 401 });
           return new Response("unknown", { status: 404 });
         },
       });
 
       try {
         const res = await request(
-          expiredSignature.server,
+          refused.server,
           "POST",
           "/api/themes/submit",
           submitBody(),
         );
 
         expect(res.status).toBe(401);
-        // R2's refusal is not the session's: the author is still signed in.
-        expect(await session.read()).toBeDefined();
+        // The upload route authenticates with the session, so its 401 is the
+        // session's refusal: the next press asks for a sign-in.
+        expect(await session.read()).toBeUndefined();
       } finally {
-        await expiredSignature.close();
+        await refused.close();
       }
     });
 
@@ -2792,7 +2824,7 @@ describe("Host theme routes", () => {
       }
     });
 
-    it("answers 503 when the host has no store address", async () => {
+    it("answers 503 when the host has no usable store address", async () => {
       await signedIn();
       const saved = process.env.YUNARI_STORE_ORIGIN;
       delete process.env.YUNARI_STORE_ORIGIN;
@@ -2803,17 +2835,32 @@ describe("Host theme routes", () => {
         thumbnails: createThumbnailStore(library),
         storeSession: session,
       });
+      // A refused address reaches no request: the routes answer as if unset.
+      const refused = createHostServer({
+        registry: new ProviderRegistry([]),
+        bundles: { player: library, editor: library },
+        themeStore: createThemeStore(library),
+        thumbnails: createThumbnailStore(library),
+        storeOrigin: "https://evil.example",
+        storeSession: session,
+        fetch: async () => {
+          throw new Error("a refused origin must not be contacted");
+        },
+      });
 
       try {
-        const res = await request(
-          unaddressed.server,
-          "POST",
-          "/api/themes/submit",
-          submitBody(),
-        );
-        expect(res.status).toBe(503);
+        for (const host of [unaddressed, refused]) {
+          const res = await request(
+            host.server,
+            "POST",
+            "/api/themes/submit",
+            submitBody(),
+          );
+          expect(res.status).toBe(503);
+        }
       } finally {
         await unaddressed.close();
+        await refused.close();
         if (saved !== undefined) process.env.YUNARI_STORE_ORIGIN = saved;
       }
     });

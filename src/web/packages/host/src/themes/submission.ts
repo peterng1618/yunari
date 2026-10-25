@@ -41,7 +41,7 @@ export interface SubmissionFiles {
   readonly level: VersionLevel;
   /** The state the item holds after finalize, as the version request answered. */
   readonly status: CatalogueStatus;
-  /** The presigned address this package is PUT to. */
+  /** The Worker's upload route this package is PUT to. */
   readonly uploadUrl: string;
 }
 

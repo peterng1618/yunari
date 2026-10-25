@@ -1,5 +1,8 @@
 import { env, SELF } from "cloudflare:test";
+import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
 import { beforeAll, describe, expect, it } from "vitest";
+import { handleMe } from "../src/routes/me";
+import { pendingKey } from "../src/storage/keys";
 import {
   BASE,
   candidate,
@@ -15,10 +18,40 @@ import {
   seedPublished,
 } from "./seed";
 
-/** `R2_BUCKET_NAME` in vitest.config.ts's bindings. */
-const BUCKET = "yunari-store-packages";
 const FOREIGN_ID = "00000000-0000-4000-8000-000000000000";
 const NEW_ID = "9f1c2a3b-4d5e-4f60-8a71-2b3c4d5e6f70";
+const GIB = 1024 * 1024 * 1024;
+const OTHER_USER_ID = "user-other";
+
+interface UploadRow {
+  readonly id: string;
+  readonly user_id: string;
+  readonly item_id: string;
+  readonly version: string;
+  readonly key: string;
+  readonly reserved_bytes: number;
+  readonly finalized_at: string | null;
+}
+
+async function uploadRow(id: string): Promise<UploadRow | null> {
+  return await env.DB.prepare("SELECT * FROM upload WHERE id = ?")
+    .bind(id)
+    .first<UploadRow>();
+}
+
+/** One reservation minted by a version request, and its route. */
+async function reserved(
+  headers: Record<string, string>,
+): Promise<{ readonly id: string; readonly url: string }> {
+  // A first submission of the item, so the ladder's version is `1.0.0` whatever
+  // the earlier cases in this file stored.
+  await seedItem(ITEM_ID, USER_ID);
+  const response = await createVersion(headers, ITEM_ID);
+  expect(response.status, await response.clone().text()).toBe(200);
+  const { uploadUrl } = (await response.json()) as { uploadUrl: string };
+  const url = new URL(uploadUrl);
+  return { id: url.pathname.slice("/api/me/uploads/".length), url: uploadUrl };
+}
 
 describe("version requests", () => {
   beforeAll(async () => {
@@ -31,7 +64,7 @@ describe("version requests", () => {
     expect(migrated.status).toBe(200);
   });
 
-  it("signs only the key derived from the session and the computed version", async () => {
+  it("reserves the upload derived from the session and the computed version", async () => {
     const headers = await sessionHeaders();
     const response = await createVersion(headers, ITEM_ID);
     expect(response.status).toBe(200);
@@ -44,10 +77,25 @@ describe("version requests", () => {
     // No `author_profile` row yet, so the finalize these presigns is pending.
     expect(body.status).toBe("pending");
 
+    // The URL is this Worker's own route, not an R2 address: the bytes go
+    // through the Worker so their size can be bounded before they land.
     const upload = new URL(body.uploadUrl);
-    expect(upload.pathname).toBe(`/${BUCKET}/packages/${ITEM_ID}/1.0.0.zip`);
-    expect(upload.searchParams.get("X-Amz-Expires")).toBe("900");
-    expect(upload.searchParams.get("X-Amz-Signature")).not.toBeNull();
+    expect(upload.origin).toBe(BASE);
+    const uploadId = upload.pathname.slice("/api/me/uploads/".length);
+    expect(upload.pathname).toBe(`/api/me/uploads/${uploadId}`);
+    expect(uploadId.length).toBeGreaterThan(0);
+
+    // The reservation exists before the response, with the cap it stands for:
+    // the next request's quota check must see these bytes already spoken for.
+    const row = await uploadRow(uploadId);
+    expect(row).toMatchObject({
+      user_id: USER_ID,
+      item_id: ITEM_ID,
+      version: "1.0.0",
+      key: pendingKey(uploadId),
+      reserved_bytes: MAX_ARCHIVE_BYTES,
+      finalized_at: null,
+    });
 
     // Finalize (Task 2.3) reads this row instead of re-validating the upload.
     const event = await env.DB.prepare(
@@ -63,7 +111,7 @@ describe("version requests", () => {
     );
 
     // Another account's item answers exactly as a missing one.
-    await seedItem(FOREIGN_ID, "user-other");
+    await seedItem(FOREIGN_ID, OTHER_USER_ID);
     expect((await createVersion(headers, FOREIGN_ID)).status).toBe(404);
 
     // The response names the state finalize will apply: a verified author's
@@ -223,5 +271,173 @@ describe("version requests", () => {
     expect((await response.json()) as { version: string }).toMatchObject({
       version: "1.0.1",
     });
+  });
+
+  it("stores an authenticated upload under its pending key", async () => {
+    const headers = await sessionHeaders();
+    const { id, url } = await reserved(headers);
+    const bytes = new TextEncoder().encode("the uploaded package");
+
+    const response = await SELF.fetch(url, {
+      method: "PUT",
+      headers: { ...headers, "content-length": String(bytes.byteLength) },
+      body: bytes,
+    });
+    expect(response.status).toBe(201);
+
+    const head = await env.BUCKET.head(pendingKey(id));
+    expect(head?.size).toBe(bytes.byteLength);
+    expect(await (await env.BUCKET.get(pendingKey(id)))?.text()).toBe(
+      "the uploaded package",
+    );
+  });
+
+  it("refuses an upload with no content-length", async () => {
+    const headers = await sessionHeaders();
+    const { url } = await reserved(headers);
+
+    const response = await SELF.fetch(url, { method: "PUT", headers });
+    expect(response.status).toBe(411);
+  });
+
+  it("refuses an over-cap upload before consuming its body", async () => {
+    const headers = await sessionHeaders();
+    const { id, url } = await reserved(headers);
+
+    // A hand-built request whose `body` is a getter: the route's only use of the
+    // request before the refusal is its headers, and workerd's `Request` would
+    // buffer a stream at construction, so this is the one shape that can show
+    // the body was never reached.
+    let touched = false;
+    const request = {
+      method: "PUT",
+      url,
+      headers: new Headers({
+        ...headers,
+        "content-length": String(MAX_ARCHIVE_BYTES + 1),
+      }),
+      get body() {
+        touched = true;
+        return new ReadableStream<Uint8Array>();
+      },
+    } as unknown as Request;
+    const response = await handleMe(request, env, new URL(url));
+
+    expect(response?.status).toBe(413);
+    expect(touched).toBe(false);
+    expect(await env.BUCKET.head(pendingKey(id))).toBeNull();
+  });
+
+  it("refuses an upload with no session and another account's upload", async () => {
+    const headers = await sessionHeaders();
+    const { url } = await reserved(headers);
+
+    expect(
+      (
+        await SELF.fetch(url, {
+          method: "PUT",
+          headers: { "content-length": "1" },
+          body: new Uint8Array([1]),
+        })
+      ).status,
+    ).toBe(401);
+
+    const foreignId = "foreign-upload";
+    await env.DB.prepare(
+      `INSERT INTO upload (id, user_id, item_id, version, envelope_json, key,
+         reserved_bytes, created_at, finalized_at, bytes)
+       VALUES (?, ?, ?, '1.0.0', '{}', ?, ?, ?, NULL, NULL)`,
+    )
+      .bind(
+        foreignId,
+        OTHER_USER_ID,
+        ITEM_ID,
+        pendingKey(foreignId),
+        MAX_ARCHIVE_BYTES,
+        new Date().toISOString(),
+      )
+      .run();
+    expect(
+      (
+        await SELF.fetch(`${BASE}/api/me/uploads/${foreignId}`, {
+          method: "PUT",
+          headers: { ...headers, "content-length": "1" },
+          body: new Uint8Array([1]),
+        })
+      ).status,
+    ).toBe(404);
+  });
+
+  it("refuses a second upload of a finalised reservation", async () => {
+    const headers = await sessionHeaders();
+    const finalizedId = "finalized-upload";
+    await env.DB.prepare(
+      `INSERT INTO upload (id, user_id, item_id, version, envelope_json, key,
+         reserved_bytes, created_at, finalized_at, bytes)
+       VALUES (?, ?, ?, '1.0.0', '{}', ?, ?, ?, ?, 3)`,
+    )
+      .bind(
+        finalizedId,
+        USER_ID,
+        ITEM_ID,
+        pendingKey(finalizedId),
+        MAX_ARCHIVE_BYTES,
+        new Date().toISOString(),
+        new Date().toISOString(),
+      )
+      .run();
+
+    const response = await SELF.fetch(`${BASE}/api/me/uploads/${finalizedId}`, {
+      method: "PUT",
+      headers: { ...headers, "content-length": "3" },
+      body: new Uint8Array([1, 2, 3]),
+    });
+    expect(response.status).toBe(409);
+  });
+
+  it("sees a burst's first reservation in the second request's quota check", async () => {
+    const headers = await sessionHeaders();
+    // One reservation fits the remaining budget exactly; a second breaks it.
+    await env.DB.prepare("DELETE FROM upload WHERE user_id = ?")
+      .bind(USER_ID)
+      .run();
+    await env.DB.prepare(
+      "DELETE FROM item_version WHERE item_id IN (SELECT id FROM item WHERE author_user_id = ?)",
+    )
+      .bind(USER_ID)
+      .run();
+    await env.DB.prepare("DELETE FROM item WHERE author_user_id = ?")
+      .bind(USER_ID)
+      .run();
+    await env.DB.prepare(
+      `INSERT INTO item (id, kind, author_user_id, name, status, created_at,
+         updated_at, downloads)
+       VALUES (?, 'dashboard-theme', ?, 'Burst', 'draft', ?, ?, 0)`,
+    )
+      .bind(
+        ITEM_ID,
+        USER_ID,
+        "2026-10-01T00:00:00.000Z",
+        "2026-10-01T00:00:00.000Z",
+      )
+      .run();
+    await env.DB.prepare(
+      `INSERT INTO item_version (item_id, version, envelope_json, facets_json,
+         package_key, thumbnail_key, bytes, sha256, created_at)
+       VALUES (?, '1.0.0', ?, '{}', 'packages/k.zip', 'thumbnails/k.png', ?,
+         'sha', '2026-10-01T00:00:00.000Z')`,
+    )
+      .bind(
+        ITEM_ID,
+        JSON.stringify(candidate(ITEM_ID)),
+        GIB - MAX_ARCHIVE_BYTES,
+      )
+      .run();
+
+    const bumped = { envelope: candidate(ITEM_ID, "1.0.1") };
+    const first = await createVersion(headers, ITEM_ID, bumped);
+    expect(first.status, await first.clone().text()).toBe(200);
+    const second = await createVersion(headers, ITEM_ID, bumped);
+    expect(second.status).toBe(429);
   });
 });

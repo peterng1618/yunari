@@ -4,7 +4,7 @@ import { createStoreClient, StoreClientError } from "./store-client.js";
 
 const ITEM_ID = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
 const ORIGIN = "https://store.test";
-const UPLOAD_URL = "https://r2.test/packages/the-theme/1.0.1.zip";
+const UPLOAD_URL = `${ORIGIN}/api/me/uploads/3a1b2c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d`;
 const PNG = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3,
 ]);
@@ -77,9 +77,38 @@ describe("createStoreClient", () => {
     });
     expect(seen).toContain(`${ORIGIN}/api/me/items/${ITEM_ID}/baseline`);
 
-    // The token travels on every authenticated call and on no other: the
-    // presigned PUT is the only one that must not carry it.
-    expect(authorization).toEqual(["Bearer t", "Bearer t", null, "Bearer t"]);
+    // The token travels on every call, the upload included: it is an
+    // authenticated Worker route now, not a presigned R2 address.
+    expect(authorization).toEqual([
+      "Bearer t",
+      "Bearer t",
+      "Bearer t",
+      "Bearer t",
+    ]);
+  });
+
+  it("sends the token and the declared length with the upload", async () => {
+    let uploadInit: RequestInit | undefined;
+    const client = createStoreClient({
+      origin: ORIGIN,
+      token: "t",
+      fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+        if (String(input) === UPLOAD_URL) {
+          uploadInit = init;
+          return new Response(null, { status: 201 });
+        }
+        return json({});
+      }) as typeof fetch,
+    });
+
+    await client.upload(UPLOAD_URL, PACKAGE_BYTES);
+
+    const headers = new Headers(uploadInit?.headers);
+    expect(uploadInit?.method).toBe("PUT");
+    expect(headers.get("authorization")).toBe("Bearer t");
+    expect(headers.get("content-length")).toBe(
+      String(PACKAGE_BYTES.byteLength),
+    );
   });
 
   it("toggles the favourite under the item, never under /api/me/favorites", async () => {
