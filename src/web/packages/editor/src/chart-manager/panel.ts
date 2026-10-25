@@ -8,6 +8,8 @@ import {
   defaultGaugeSettings,
   defaultLineSettings,
   defaultPieSettings,
+  defaultPolarBarSettings,
+  defaultRadarSettings,
   type FabricPalette,
   paletteTokenOptions,
   readSetting,
@@ -77,6 +79,8 @@ function defaultsOf(family: ChartFamily): unknown {
     line: defaultLineSettings,
     bar: defaultBarSettings,
     pie: defaultPieSettings,
+    radar: defaultRadarSettings,
+    polarBar: defaultPolarBarSettings,
   };
   return {
     animation: defaultAnimationSettings,
@@ -126,6 +130,9 @@ const MAX_BINDINGS: Readonly<Record<ChartFamily, number>> = {
   line: Number.POSITIVE_INFINITY,
   bar: Number.POSITIVE_INFINITY,
   pie: Number.POSITIVE_INFINITY,
+  // More spokes than twelve collapse the polygon at theme sizes (§D1).
+  radar: 12,
+  polarBar: Number.POSITIVE_INFINITY,
 };
 
 /** The ratios the line-chart control group offers, widest last. It lives here

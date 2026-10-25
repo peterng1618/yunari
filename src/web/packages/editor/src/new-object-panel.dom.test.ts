@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { CHART_FAMILIES } from "@yunari/renderer-core";
 import { YUNARI_PAINT_PROPERTY } from "@yunari/scene-fabric";
 import { Ellipse, Line, Path, Polygon, Polyline, Rect } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
@@ -579,7 +580,7 @@ describe("the chooser offers units and primitives", () => {
 
     expect(cards).toHaveLength(CARD_LIBRARY.length);
     expect(shapes).toHaveLength(SHAPE_KINDS.length);
-    expect(charts).toHaveLength(4);
+    expect(charts).toHaveLength(CHART_FAMILIES.length);
     // Text stands on its own outside any fieldset, and is still offered.
     expect(
       [...root.querySelectorAll("button")].map((b) => b.textContent),

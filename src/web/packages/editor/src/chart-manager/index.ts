@@ -89,6 +89,18 @@ function newChart(
         family,
         settings: createNewChartDefaults(globals, family),
       });
+    case "radar":
+      return new YunariChart({
+        ...common,
+        family,
+        settings: createNewChartDefaults(globals, family),
+      });
+    case "polarBar":
+      return new YunariChart({
+        ...common,
+        family,
+        settings: createNewChartDefaults(globals, family),
+      });
   }
 }
 

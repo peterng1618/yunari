@@ -1161,6 +1161,65 @@ test.describe("the per-kind inspector column", () => {
     }
   });
 
+  test("offers radar and polar bar from the Add pane, read rendered", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    await page.goto(EDITOR);
+    await page.waitForFunction(() => "yunariEditorBridge" in window);
+    await openBlank(page);
+
+    await addChart(page, {
+      family: "Radar",
+      name: "radar",
+      x: 40,
+      y: 60,
+      w: 320,
+      h: 300,
+      series: ["cpu.load", "gpu.load", "ram.used"],
+    });
+    await addChart(page, {
+      family: "Polar bar",
+      name: "polar-bar",
+      x: 420,
+      y: 60,
+      w: 320,
+      h: 300,
+      series: ["cpu.load"],
+    });
+
+    // The palette the blank document carries: one spoke per bound series, on
+    // the settings' shared scale, and one category around the polar axis.
+    const radar = (await builtOption(page, "radar")) as {
+      radar: { indicator: { name: string }[]; axisName: { show: boolean } };
+      series: { type: string; data: { value: number[] }[] }[];
+    };
+    expect(radar.radar.indicator.map((spoke) => spoke.name)).toEqual([
+      "cpu.load",
+      "gpu.load",
+      "ram.used",
+    ]);
+    expect(radar.radar.axisName.show).toBe(false);
+    expect(radar.series[0]?.type).toBe("radar");
+    expect(radar.series[0]?.data[0]?.value).toHaveLength(3);
+
+    const polar = (await builtOption(page, "polar-bar")) as {
+      angleAxis: { data: string[]; axisLabel: { show: boolean } };
+      series: { type: string; coordinateSystem: string }[];
+    };
+    expect(polar.angleAxis.data).toEqual(["cpu.load"]);
+    expect(polar.angleAxis.axisLabel.show).toBe(false);
+    expect(polar.series[0]).toMatchObject({
+      type: "bar",
+      coordinateSystem: "polar",
+    });
+
+    // The option says what was built; the backing canvas says it reached the
+    // glass rather than stopping at an option nobody drew.
+    expect(await chartCanvasHash(page, "radar")).toBeTruthy();
+    expect(await chartCanvasHash(page, "polar-bar")).toBeTruthy();
+  });
+
   test("gives every bounded number in the chart manager the pair, read rendered", async ({
     page,
   }, testInfo) => {

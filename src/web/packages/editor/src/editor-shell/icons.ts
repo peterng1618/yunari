@@ -22,6 +22,7 @@ import {
   Layers2,
   Link,
   LoaderCircle,
+  LoaderPinwheel,
   Lock,
   LogIn,
   LogOut,
@@ -33,6 +34,7 @@ import {
   Pencil,
   Pipette,
   Plus,
+  Radar,
   Scan,
   Search,
   Settings,
@@ -149,11 +151,13 @@ export const CHECK_GLYPH: LucideIcon = Check;
 export const ERROR_GLYPH: LucideIcon = OctagonAlert;
 export const WARNING_GLYPH: LucideIcon = TriangleAlert;
 
-/** The four chart families the document can name. */
+/** The six chart families the document can name. */
 export const CHART_GAUGE_GLYPH: LucideIcon = Gauge;
 export const CHART_LINE_GLYPH: LucideIcon = ChartLine;
 export const CHART_BAR_GLYPH: LucideIcon = ChartColumn;
 export const CHART_PIE_GLYPH: LucideIcon = ChartPie;
+export const CHART_RADAR_GLYPH: LucideIcon = Radar;
+export const CHART_POLAR_BAR_GLYPH: LucideIcon = LoaderPinwheel;
 
 /**
  * One glyph per primitive the Add pane offers, keyed by `ShapeKind`, so a

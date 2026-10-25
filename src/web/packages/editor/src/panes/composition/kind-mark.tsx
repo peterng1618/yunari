@@ -3,6 +3,8 @@ import {
   CHART_GAUGE_GLYPH,
   CHART_LINE_GLYPH,
   CHART_PIE_GLYPH,
+  CHART_POLAR_BAR_GLYPH,
+  CHART_RADAR_GLYPH,
   Glyph,
   KIND_GLYPHS,
   type LucideIcon,
@@ -25,6 +27,8 @@ const CHART_ICONS: Readonly<Record<string, LucideIcon>> = {
   line: CHART_LINE_GLYPH,
   bar: CHART_BAR_GLYPH,
   pie: CHART_PIE_GLYPH,
+  radar: CHART_RADAR_GLYPH,
+  polarBar: CHART_POLAR_BAR_GLYPH,
 };
 
 /**
