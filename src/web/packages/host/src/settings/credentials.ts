@@ -34,6 +34,13 @@ export function hintOf(value: string): string {
 
 const SECRET = "credentials";
 /**
+ * The ids the owner cleared, so a leftover legacy file cannot serve them again.
+ * Encrypted like the credentials themselves; see `readRetired`.
+ */
+const RETIRED = "credentials-retired";
+/** The newest ids kept in the retired set; see `retire`. */
+const RETIRED_LIMIT = 256;
+/**
  * The pre-encryption file. A document that validates whole is migrated and
  * removed on the first read whose removal succeeds; one that does not is kept
  * until its owner repairs it, when the next read migrates and removes it.
@@ -142,6 +149,27 @@ function wholeDocument(
   return normalizeCredentials(input);
 }
 
+/** The entries whose id is not in `retired`, as a fresh document. */
+function without(
+  all: Record<string, StoredCredential>,
+  retired: ReadonlySet<string>,
+): Record<string, StoredCredential> {
+  return Object.fromEntries(
+    Object.entries(all).filter(([id]) => !retired.has(id)),
+  );
+}
+
+/** `stored` wins a shared id; `legacy` contributes only the ids it alone holds. */
+function merge(
+  legacy: Record<string, StoredCredential>,
+  stored: Record<string, StoredCredential>,
+): Record<string, StoredCredential> {
+  return Object.fromEntries([
+    ...Object.entries(legacy),
+    ...Object.entries(stored),
+  ]);
+}
+
 export function createCredentialStore(
   directory: string,
   secrets: SecretStore = createSecretStore(directory),
@@ -157,46 +185,109 @@ export function createCredentialStore(
   };
 
   /**
+   * The ids the owner cleared, oldest first.
+   *
+   * An absent set is the empty set. A set that has bytes but will not decrypt
+   * throws out of `secrets.read`, as a credential's would: "I cannot read which
+   * ids were retired" is not "nothing was retired". Decrypted bytes that are
+   * not a list of credential ids read as the empty set, the same lenient rule
+   * `decode` applies to the stored document.
+   */
+  const readRetired = async (): Promise<string[]> => {
+    const bytes = await secrets.read(RETIRED);
+    if (bytes === undefined) return [];
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(bytes.toString("utf8"));
+    } catch {
+      return [];
+    }
+    if (!Array.isArray(parsed)) return [];
+
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const id of parsed) {
+      if (typeof id === "string" && CREDENTIAL_ID.test(id) && !seen.has(id)) {
+        seen.add(id);
+        ids.push(id);
+      }
+    }
+    return ids.slice(-RETIRED_LIMIT);
+  };
+
+  const writeRetired = async (ids: readonly string[]): Promise<void> => {
+    await secrets.write(
+      RETIRED,
+      Buffer.from(`${JSON.stringify(ids)}\n`, "utf8"),
+    );
+  };
+
+  /**
+   * Record `id` as cleared, newest last.
+   *
+   * Only the newest `RETIRED_LIMIT` tombstones are kept, dropping the oldest
+   * first, so a long-lived folder cannot grow the set without bound. Dropping
+   * one can only let a leftover legacy file re-add an id that has already been
+   * gone for that many clears.
+   */
+  const retire = async (id: string): Promise<void> => {
+    const ids = (await readRetired()).filter((other) => other !== id);
+    ids.push(id);
+    await writeRetired(ids.slice(-RETIRED_LIMIT));
+  };
+
+  /** An explicit save re-authorizes the id; this is the only way back. */
+  const unretire = async (id: string): Promise<void> => {
+    const ids = await readRetired();
+    if (!ids.includes(id)) return;
+    await writeRetired(ids.filter((other) => other !== id));
+  };
+
+  /**
    * Every credential: the encrypted copy, plus a merge of any legacy file.
    *
    * The stored document is authoritative. A whole legacy document found beside
    * it contributes only the ids the store does not already hold, so a repaired
-   * entry migrates while a newer saved value or a clear is never undone. The
-   * merged write comes first and the removal second: a write that throws
-   * (unavailable protector, missing key) leaves the plaintext where a later run
-   * can still merge it, and a removal that fails is retried next read. A
-   * document that does not validate whole is kept for its owner to repair. A
-   * present `.bin` that cannot be read throws from the secret store rather than
-   * being treated as "no credentials".
+   * entry migrates while a newer saved value or a clear is never undone;
+   * retired ids are excluded from the merge and from the answer. The merged
+   * write comes first and the removal second: a write that throws (unavailable
+   * protector, missing key) leaves the plaintext where a later run can still
+   * merge it, and a removal that fails is retried next read. A document that
+   * does not validate whole is kept for its owner to repair. A present `.bin`
+   * that cannot be read throws from the secret store rather than being treated
+   * as "no credentials".
    */
   const readAll = async (): Promise<Record<string, StoredCredential>> => {
+    const retired = new Set(await readRetired());
     const stored = await secrets.read(SECRET);
     if (stored !== undefined) {
       const current = decode(stored);
       const whole = await wholeLegacy();
-      if (whole === undefined) return current;
+      const live = without(
+        whole === undefined ? current : merge(whole, current),
+        retired,
+      );
 
-      // Later entries win, so a shared id keeps the stored value; only the
-      // ids the store is missing are added.
-      const merged = Object.fromEntries([
-        ...Object.entries(whole),
-        ...Object.entries(current),
-      ]);
-      if (JSON.stringify(current) !== JSON.stringify(merged)) {
-        await secrets.write(SECRET, encode(merged));
+      // One write covers both a repaired legacy id merged in and a clear a
+      // crash left recorded only by its tombstone.
+      if (JSON.stringify(current) !== JSON.stringify(live)) {
+        await secrets.write(SECRET, encode(live));
       }
-      await rm(legacyFile, { force: true }).catch(() => undefined);
-      return merged;
+      if (whole !== undefined) {
+        await rm(legacyFile, { force: true }).catch(() => undefined);
+      }
+      return live;
     }
 
     const legacy = await readLegacy(legacyFile);
     if (legacy === undefined) return {};
 
-    const answer = normalizeCredentials(legacy);
+    const answer = without(normalizeCredentials(legacy), retired);
     const whole = wholeDocument(legacy);
     if (whole === undefined) return answer;
 
-    await secrets.write(SECRET, encode(whole));
+    await secrets.write(SECRET, encode(without(whole, retired)));
     // The same retry rule as above; the encrypted write already succeeded.
     await rm(legacyFile, { force: true }).catch(() => undefined);
     return answer;
@@ -248,6 +339,9 @@ export function createCredentialStore(
             [id]: { value, savedAt: savedAt.toISOString() },
           }),
         );
+        // After the stored write: a save whose tombstone removal fails is still
+        // persisted, and retrying the save finishes the re-authorization.
+        await unretire(id);
       });
     },
 
@@ -255,15 +349,11 @@ export function createCredentialStore(
       await writeExclusively(async () => {
         if (!CREDENTIAL_ID.test(id)) return;
 
-        const all = await readAll();
-        // Nothing to remove is no write: a document without the id is already
-        // the file that is there, and saving it would rewrite the ciphertext.
-        // `Object.hasOwn` because `__proto__` is a legal id and `in` walks
-        // the prototype chain.
-        if (!Object.hasOwn(all, id)) return;
-
-        delete all[id];
-        await save(all);
+        // The tombstone lands before the stored removal, so a crash between
+        // the two still leaves the id retired.
+        await retire(id);
+        // The read hides it and purges it from `.bin` when it was still there.
+        await readAll();
       });
     },
   };

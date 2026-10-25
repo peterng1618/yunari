@@ -261,6 +261,76 @@ describe("credentials", () => {
     expect(await store.read()).toEqual({ second: both.second });
   });
 
+  it("keeps a credential retired when it is cleared while its legacy file is locked", async () => {
+    if (process.platform !== "win32") return;
+
+    const first = { value: "first-value", savedAt: savedAt.toISOString() };
+    await seed(JSON.stringify({ first }));
+    const release = await holdForReading(legacyFile(dir));
+
+    try {
+      // Migrates, but the removal is refused, so the leftover survives.
+      expect(await store.read()).toEqual({ first });
+
+      await store.clear("first");
+      expect(await store.read()).toEqual({});
+      expect(await readFile(legacyFile(dir), "utf8")).toContain("first-value");
+    } finally {
+      await release();
+    }
+
+    // Past the lock window the leftover is retired and the clear still holds.
+    expect(await store.read()).toEqual({});
+    await expect(readFile(legacyFile(dir), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(await store.read()).toEqual({});
+
+    // An explicit save is the only way back.
+    await store.write("first", "first-value-2", savedAt);
+    expect(await store.read()).toEqual({
+      first: { value: "first-value-2", savedAt: "2026-10-21T09:00:00.000Z" },
+    });
+  });
+
+  it("leaves a legacy entry alone when a different id is retired", async () => {
+    await store.write("cleared", "value-cleared", savedAt);
+    await seed(JSON.stringify({ legacy: stored }));
+
+    await store.clear("cleared");
+
+    expect(await store.read()).toEqual({ legacy: stored });
+  });
+
+  it("caps the retired set at the newest 256 ids", async () => {
+    for (let index = 0; index < 260; index += 1) {
+      await store.write(`id${index}`, "value", savedAt);
+    }
+    for (let index = 0; index < 260; index += 1) {
+      await store.clear(`id${index}`);
+    }
+
+    const raw = await secrets.read("credentials-retired");
+    const ids = JSON.parse((raw as Buffer).toString("utf8")) as string[];
+
+    expect(ids).toHaveLength(256);
+    expect(ids[0]).toBe("id4");
+    expect(ids.at(-1)).toBe("id259");
+  });
+
+  it("throws when the retired set will not decrypt", async () => {
+    await store.write("one", "value-one", savedAt);
+    await store.clear("one");
+
+    const retiredFile = path.join(dir, "credentials-retired.bin");
+    const raw = await readFile(retiredFile);
+    // Past the 12-byte IV and 16-byte tag: the ciphertext's first byte.
+    raw[28] = (raw[28] as number) ^ 0xff;
+    await writeFile(retiredFile, raw);
+
+    await expect(store.read()).rejects.toThrow();
+  });
+
   it("treats a non-object file as no credentials and does not migrate it", async () => {
     await seed("[]");
 

@@ -34,11 +34,13 @@ export interface StoreSessionStore {
 
 const SECRET = "store-session";
 /**
- * The pre-encryption file. A session that validates is migrated and removed on
- * the first read whose removal succeeds; one that does not is kept by reads
- * until its owner repairs it. A successful sign-in supersedes it whatever it
- * holds: the sign-in's write removes it, because a stale or unreadable token
- * file must not outlive the session that replaced it.
+ * The pre-encryption file. With no encrypted session yet, a validating file is
+ * migrated and then removed, and a removal that fails is retried on a later
+ * read. When an encrypted session already exists the file is never migrated: a
+ * validating one is only removed (also retried on a later read), and one that
+ * does not validate is kept for its owner. A successful sign-in removes it in
+ * either case, because a stale or unreadable token file must not outlive the
+ * session that replaced it.
  */
 const LEGACY_FILE = "store-session.json";
 /** The superseded GitHub device-flow token; deleted the first time a store
