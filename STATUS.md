@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 2; Tasks 1–7 complete, Task 8 next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 3; Tasks 1–8 complete, Task 9 next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,10 +18,10 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 7 landed:** the rail has five slots, Assets between Add and Tokens, with its glyph, copy and host; DESIGN.md §7.2 says five.
-- **Three Playwright specs followed:** each asserted four rail slots and now asserts five, with the false "one pane each" wording gone.
-- **Known red, filed as `vg-730`:** `tests/e2e/mockup-values.test.ts:160` predates the plan — commit `775e2f54` removed the duplicate asset trigger the assertion needed.
-- **Evidence:** rail 8/8, editor-shell 389/389, the two design-language specs 7 passed / 7 phone-skipped, typecheck, biome and design:check exit 0.
+- **Task 8 landed:** the Assets pane draws kind-grouped cards with In use/Unused badges, thumbnails and named per-kind actions; shell mounts its chrome.
+- **Unwired actions are disabled, not dead:** Preview, Set as background and Create type preset disable while their callback is absent; Task 9 supplies them.
+- **Assets count is deferred with its source:** the manager lives in the session, so the pane mounts without a count and `paneCounts.files` waits for Task 9.
+- **Evidence:** pane 5/5, panes+editor-shell 519 tests, typecheck, biome exit 0.
 
 ## Next
 
