@@ -111,9 +111,13 @@ ECharts 6.1.0 SSR probes, recorded in the spec:
 Value families animate through ECharts at 30 fps and are re-applied only when a
 shared reading signature moves. The line stays `animate: false` and is placed by
 `nowMs − playbackDelay`; its axis ends at that render clock, the overscan canvas
-and guard are deleted, and history returns one predecessor sample. Segmented
-fill uses custom cartesian bars, native gauge bands and pie spacer items. Radar
-and polar bar are families, radar with one shared scale and polar bar with no
-segmentation. The reason is the probes: each chosen mechanism already owns the
-geometry and corner behaviour, while the rejected ones either duplicate layout
-or cannot honour the authored settings.
+and guard are deleted, and history returns one predecessor sample. **Amended
+after owner testing:** the delay is two host cadences, and a delayed line draws
+linearly — a flat stretch held at the edge, and the batch that ends a stall,
+must not reshape anything the reader has already seen, and ECharts can only
+promise that for straight segments. Segmented fill uses custom cartesian bars,
+native gauge bands and pie spacer items. Radar and polar bar are families, radar
+with one shared scale and polar bar with no segmentation. The reason is the
+probes: each chosen mechanism already owns the geometry and corner behaviour,
+while the rejected ones either duplicate layout or cannot honour the authored
+settings.

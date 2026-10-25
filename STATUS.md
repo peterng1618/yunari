@@ -11,16 +11,17 @@ Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](d
 
 - **Queued plan:** `docs/superpowers/plans/2026-10-25-radar-and-polar-bar.md` — next; the chart already holds a theme per display.
 - **Segmented-fill plan landed:** divisor setting, discrete slider, gauge bands, pie spacers and bar custom series.
+- **Live-line policy:** the delay is two host cadences and a delayed line draws straight; a stall holds the last reading to the edge and steps at the next batch.
 - **Owner testing follows the run:** each plan merges locally into `main`; nothing is pushed, and the owner tests after the sequence.
 - **Decision note:** [0116](docs/decisions/0116-chart-motion-is-the-engines-and-the-line-is-a-clock.md) claims the chart mechanism boundaries.
 
 ## Last completed change
 
-- **Segment divisor:** gauge, bar and pie persist `segmentDivisor`; the descriptor list owns its allowed values and the validator refuses the rest.
-- **Discrete slider:** the track moves over list indices, the well refuses a value between members, and the field projects through the chart panel.
-- **Three segmented paths:** gauge native colour bands, pie split data items with spacers, bar a custom series with per-band rects.
-- **Line edge held:** the last reading extends to the delayed render edge, bounded by the playback delay, so a late batch leaves no blank sliver.
-- **Evidence:** browser case drives 100 → 1 on all three families with pixel hashes and option shapes; gate exit 0 with 6,000 tests passing, 1 skipped.
+- **Delay:** `LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS` is 2,000 ms — two host cadences, so an ordinary 1 s gap stays a slope and only a real stall holds.
+- **Stall:** the last reading paints to the axis edge for as long as the stall lasts; the batch that ends it repeats that reading at its own timestamp and steps, so painted history is not revised.
+- **Linearity:** a delayed line draws straight, because a smoothed tail cannot hold a stretch still; `step` stays available and the Interpolation hint says so.
+- **Tests:** the line suite pins the two-cadence edge, the hold, the step and a frame-identical stall ending; a host test pins the cadence-to-delay ratio.
+- **Spec and ADR:** A3/A5/A6 and decision 0116 record the two-cadence rule and the straight live line.
 
 ## Next
 

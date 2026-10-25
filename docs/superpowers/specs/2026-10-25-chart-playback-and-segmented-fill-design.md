@@ -35,8 +35,14 @@ Three user-visible outcomes:
    form. Both use the existing latest-sample data path and inherit the playback
    model above.
 
-The 1 s presentation delay is accepted. Charts may trail the measured value by
-about a second; numeric text must not.
+The presentation delay is two sampling intervals (2 s against the host's 1 s
+cadence). Charts may trail the measured value by that much; numeric text must
+not. One interval was implemented first and the owner still saw the right edge
+correct itself: a smoothed segment is drawn from the points either side of it,
+so the stretch nearest the edge was reshaped every time a batch arrived. The
+line is now drawn linearly and the edge waits two intervals, so an ordinary
+1 s gap stays inside the last segment as a slope and only a real stall holds
+and steps (A3, A5).
 
 ## What this is not
 
@@ -151,9 +157,18 @@ and the special-case type guard are deleted. The Fabric object's canvas is its
 visible box again.
 
 This makes the visible right edge exactly `renderNowMs`. A sample arriving later
-has an arrival timestamp at or after `renderNowMs + delay`, so it enters to the
-right of the edge and slides in as the clock advances. It cannot appear inside
-the window and cannot cause a correction.
+has an arrival timestamp after the edge, so it enters to the right of the edge
+and slides in as the clock advances.
+
+**The delay is two host cadences, and one cadence was not enough.** Host gaps are
+never shorter than the cadence, so at one interval the edge reaches the newest
+sample at the instant the next batch is due: every ordinary tick would paint a
+flat stretch and then step, and the line would become a staircase. Two intervals
+keep a normal 1 s gap inside the last segment, where it reads as a slope, and
+reserve the hold-and-step for a real stall. The same two intervals also keep a
+smooth line's reshaped segment off-screen, which is why the one-interval build
+appeared to correct itself at the edge; a delayed line is drawn linearly anyway
+(A5).
 
 ### A4. History returns the predecessor
 
@@ -167,11 +182,24 @@ axis minimum, regardless of the host's cadence.
 
 ### A5. Failure modes are gaps, not invention
 
-- If no batch has arrived for longer than the playback delay, there is no sample
-  after `renderNowMs`; the line ends at the last measured sample and the right
-  edge is briefly blank. When the batch arrives, the line grows into the gap.
-- No frame draws a value that was never measured. Value-chart motion is
-  ECharts interpolation between measured samples, which §122 permits as
+- If no batch has arrived, the line is painted with the last measured reading
+  from that sample to the axis edge — for as long as the stall lasts, because a
+  gap is more jarring than a flat stretch and that reading is still the last
+  thing measured.
+- When the batch finally arrives after the edge has passed the previous sample,
+  the previous reading is repeated at the new sample's timestamp and the line
+  steps there. The stretch already painted is therefore drawn again unchanged;
+  a frame never revises history the reader has seen.
+- A delayed line draws **linearly**. ECharts draws a smooth segment from the
+  points either side of it, so a smoothed tail bends as the edge advances and
+  bends again when the next batch arrives; a smoothed line cannot keep a
+  painted stretch. `step` is exact and stays available.
+- A reported non-`ok` sample is still an explicit `null` gap, never a held
+  reading: the sensor said it had no value, which is not a late tick. The
+  stretch painted before it is kept and the line breaks at that sample.
+- No frame invents a value: a held reading repeats one that was measured, and
+  nothing is drawn as zero or as a default in a gap's place. Value-chart motion
+  is ECharts interpolation between measured samples, which §122 permits as
   presentation animation.
 - Numeric text continues to use `latest`; it is neither delayed nor
   interpolated.
@@ -543,8 +571,11 @@ compile until it is filled. That is the guard; the sites are:
 - **Engine transitions are not rate-capped.** They run at display refresh. If
   the owner requires literal 30 Hz, the alternative is a delayed clock plus
   interpolation for every family, which is more code and more per-frame work.
-- **Late batches produce a blank right edge, not a correction.** This is the
-  chosen honest failure; the host cadence can exceed the 1 s delay.
+- **A stall is held, not left blank.** The edge runs past the newest sample and
+  `liveTail` paints the last reading to it for as long as the stall lasts; the
+  batch that ends the stall repeats that reading at its own timestamp and steps,
+  so the stretch already painted is not revised. The cost is that a held reading
+  and a measured one look the same; only a reported `null` is drawn as a gap.
 - **Phone performance is not measured.** Thirty option updates per second across
   several charts may be expensive on a phone; the browser/phone pass must report
   frame timing.
