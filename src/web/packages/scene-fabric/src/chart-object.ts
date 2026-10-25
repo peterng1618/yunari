@@ -30,11 +30,6 @@ type _EveryContentKeyIsPersisted = AssertNever<
   Exclude<keyof ChartContent, ChartSerialisedKey>
 >;
 
-/** Disable ECharts animation without mutating the pure plan option. */
-export function withoutEngineAnimation(option: ChartOption): ChartOption {
-  return { ...(option as object), animation: false } as ChartOption;
-}
-
 /** `option` and `renderScale` are runtime-only and never persisted. */
 export type YunariChartOptions = ChartContent &
   Record<string, unknown> & {
@@ -144,7 +139,7 @@ export class YunariChart extends FabricObject {
     }
 
     this._resizeBackingCanvas();
-    this._chart?.setOption(toEngineOption(withoutEngineAnimation(option)), {
+    this._chart?.setOption(toEngineOption(option), {
       notMerge: true,
       lazyUpdate: false,
     });

@@ -47,9 +47,9 @@ export type {
 } from "./chart-object.js";
 export {
   CHART_SERIALISED_KEYS,
-  withoutEngineAnimation,
   YunariChart,
 } from "./chart-object.js";
+export { chartAnimationFor } from "./chart-animation.js";
 export { type ChartRefreshRate, startChartRefresh } from "./chart-refresh.js";
 export type { UnsupportedReporter } from "./fabric-nodes.js";
 export {

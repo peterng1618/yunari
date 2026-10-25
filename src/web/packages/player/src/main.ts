@@ -2,6 +2,7 @@ import {
   type Binding,
   buildChartPlan,
   type ChartContent,
+  chartReadingSignature,
   createAssetResolver,
   createLiveSource,
   type FabricPalette,
@@ -14,6 +15,8 @@ import {
 } from "@yunari/renderer-core";
 import {
   applyAuthoredText,
+  chartAnimationFor,
+  type ChartRefreshRate,
   loadFontAssets,
   mountFabricScene,
   refreshBoundImages,
@@ -256,12 +259,20 @@ async function startHostedTheme(
   applyAuthoredText(handle.canvas, theme.globals, {
     ...(theme.bindings === undefined ? {} : { bindings: theme.bindings }),
   });
+  // The reading each chart last drew with. Unchanged readings skip `setOption`
+  // so an engine transition can finish instead of restarting every frame.
+  const drawnReadings = new WeakMap<object, string>();
+  // The host's rate arrives on the poll below, so the first frame uses the
+  // paired default and is re-rated in place.
+  let chartRate: ChartRefreshRate = 30;
   const refresh = (): void => {
     hydrateCharts(
       handle.canvas.getObjects(),
       theme.bindings ?? {},
       liveHandle.source,
       theme.globals?.palette,
+      chartRate,
+      drawnReadings,
     );
     // An image reading is a URL on this host, resolved through the session the
     // way every other packaged asset is. The pass refuses anything else and puts
@@ -415,7 +426,7 @@ async function startHostedTheme(
   // The display's own rate arrives on the poll below, so the loop starts on the
   // paired default and is re-rated in place the moment an answer lands: a rate
   // change is a `setRate` on the loop that exists, not a second loop.
-  const chartRefresh = startChartRefresh(refresh, 30, undefined, {
+  const chartRefresh = startChartRefresh(refresh, chartRate, undefined, {
     onError: reportRepaintError,
   });
   const stopFollowing = followPublished(session, reResolve, {
@@ -426,7 +437,10 @@ async function startHostedTheme(
     // `refind` decides whether this display has an identity to match and
     // whether the last sweep is far enough behind it to run another.
     onUnreachable: () => void refind(),
-    onRateChange: (rate) => chartRefresh.setRate(rate),
+    onRateChange: (rate) => {
+      chartRate = rate;
+      chartRefresh.setRate(rate);
+    },
   });
   const observer = new ResizeObserver(() => handle.resize());
   observer.observe(host);
@@ -462,8 +476,11 @@ function hydrateCharts(
   bindings: Readonly<Record<string, readonly Binding[]>>,
   source: SampleSource,
   palette: FabricPalette | undefined,
+  rate: ChartRefreshRate,
+  drawnReadings: WeakMap<object, string>,
 ): void {
   const issues: PlanIssue[] = [];
+  const nowMs = Date.now();
   for (const object of objects) {
     if (object instanceof YunariChart) {
       const id = object.get("id");
@@ -479,19 +496,28 @@ function hydrateCharts(
           family: object.family,
           settings: object.settings,
         } as ChartContent;
+        const chartBindings = bindings[id] ?? [];
+        const reading = chartReadingSignature(
+          content,
+          chartBindings,
+          source,
+          nowMs,
+        );
+        if (drawnReadings.get(object) === reading) continue;
         const plan = buildChartPlan(
           id,
           content,
-          bindings[id] ?? [],
+          chartBindings,
           {
             source,
-            nowMs: Date.now(),
-            animate: false,
+            nowMs,
+            animate: chartAnimationFor(content.family, rate),
           },
           issues,
           palette,
         );
         object.setOption(plan.option);
+        drawnReadings.set(object, reading);
       } catch (error) {
         reportRepaintError(
           `Chart "${id}" failed to draw and was left as it was. ${
@@ -504,7 +530,14 @@ function hydrateCharts(
     // walk goes into groups: the starter's cards are groups, and stopping at
     // the canvas would freeze every reading in the composition at load.
     if (object instanceof Group) {
-      hydrateCharts(object.getObjects(), bindings, source, palette);
+      hydrateCharts(
+        object.getObjects(),
+        bindings,
+        source,
+        palette,
+        rate,
+        drawnReadings,
+      );
     }
   }
   // One line per distinct cause: this runs on every refresh cadence, and a
