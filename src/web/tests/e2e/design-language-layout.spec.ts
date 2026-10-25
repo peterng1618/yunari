@@ -200,7 +200,7 @@ test("captures the control set on both registered grounds", async ({
  * **It fails if the shell is not the new one**, which is the point: an old
  * shell photographed happily is a comparison against the wrong thing. Two
  * facts are asserted before the picture is written — the rail carries DESIGN.md
- * §7.2's four slots (the pre-rail shell had an Insert menu and no rail, so the
+ * §7.2's five slots (the pre-rail shell had an Insert menu and no rail, so the
  * count is 0) and exactly one of the rail's panes is showing (the shell keeps
  * every pane mounted and hides the others, so a leftover second pane in the
  * column shows as two).
@@ -218,8 +218,8 @@ test("captures the shell with the Add pane open and nothing selected", async ({
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
 
-  // §7.2's four slots, and only a shell that has the rail has them.
-  await expect(page.locator(".editor-shell-rail-slot")).toHaveCount(4);
+  // §7.2's five slots, and only a shell that has the rail has them.
+  await expect(page.locator(".editor-shell-rail-slot")).toHaveCount(5);
 
   await openPane(page, "Add");
   await expect(page.locator('[data-yunari-panel="add"]')).toBeVisible();
@@ -296,8 +296,8 @@ test("captures each pane of the four-slot rail in the design language", async ({
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
 
-  // §7.2's four slots, one pane each.
-  await expect(page.locator(".editor-shell-rail-slot")).toHaveCount(4);
+  // §7.2's five slots; the Assets pane itself is not mounted yet.
+  await expect(page.locator(".editor-shell-rail-slot")).toHaveCount(5);
 
   /** The rail's slot word, and the DOM handle that slot's pane is mounted
    *  under. The two differ for Composition only: `layers` is the name the

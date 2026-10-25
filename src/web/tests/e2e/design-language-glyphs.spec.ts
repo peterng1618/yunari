@@ -62,8 +62,8 @@ test("captures the shell glyphs and words with the Add pane open", async ({
     "the shell is not on the drawing's ground, so the two pictures would not compare",
   ).toHaveAttribute("data-shell-palette", "graphite");
 
-  // §7.2's four slots, and only a shell that has the rail has them.
-  await expect(page.locator(".editor-shell-rail-slot")).toHaveCount(4);
+  // §7.2's five slots, and only a shell that has the rail has them.
+  await expect(page.locator(".editor-shell-rail-slot")).toHaveCount(5);
   await openPane(page, "Add");
   await expect(page.locator('[data-yunari-panel="add"]')).toBeVisible();
   // Exactly one of the rail's four panes is out, by the direct-child reading the
