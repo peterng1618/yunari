@@ -7,6 +7,12 @@ import {
   createBlankFabricTheme,
   createNewFabricTheme,
 } from "./new-fabric-theme.js";
+import type { ThemeLibraryClient } from "./theme-library-client.js";
+
+/** One PNG's bytes, enough for an import to declare and digest it. */
+function pngFile(name = "shot.png"): File {
+  return new File([new Uint8Array([1, 2, 3])], name, { type: "image/png" });
+}
 
 /**
  * A document whose shell and consumers do nothing: these tests count the
@@ -16,12 +22,24 @@ function documentWith(
   options: {
     readonly assets?: AssetManager;
     readonly envelope?: FabricThemeEnvelopeInput;
+    /** When given, `snapshot` reports the scene from this live list, so a test
+     *  can move the canvas's half of the document. */
+    readonly sceneObjects?: unknown[];
+    readonly libraryClient?: ThemeLibraryClient;
+    readonly libraryBase?: string;
   } = {},
 ): EditorDocument {
+  const sceneObjects = options.sceneObjects;
   return new EditorDocument({
     source: {
       shell: {
-        snapshot: (value: unknown) => value,
+        snapshot: (value: unknown) =>
+          sceneObjects === undefined
+            ? value
+            : {
+                ...(value as object),
+                scene: { version: "7.4.0", objects: [...sceneObjects] },
+              },
         editor: {
           errorManager: { report: () => {} },
           historyManager: { attachGlobals: () => {} },
@@ -34,6 +52,12 @@ function documentWith(
       onNew: async () => {},
       onNewFromStarter: async () => {},
       onSaved: () => {},
+      ...(options.libraryClient === undefined
+        ? {}
+        : { libraryClient: options.libraryClient }),
+      ...(options.libraryBase === undefined
+        ? {}
+        : { libraryBase: options.libraryBase }),
     },
     consumers: {
       runtime: () => ({ setThemeLanguage: () => undefined }),
@@ -65,6 +89,28 @@ describe("EditorDocument dirty state", () => {
       ...document.envelope.metadata,
       name: "Renamed",
     });
+    await Promise.resolve();
+
+    expect(document.isDirty()).toBe(true);
+  });
+
+  it("sees a canvas object:added once its flush has run", async () => {
+    // The scene half of the key, through the event the bridge binds: the
+    // document's own fields did not move, only the canvas's content.
+    const objects: unknown[] = [];
+    const document = documentWith({ sceneObjects: objects });
+    const handlers = new Map<string, () => void>();
+    const canvas = {
+      on: (event: string, handler: () => void) => {
+        handlers.set(event, handler);
+      },
+      fire: (event: string) => handlers.get(event)?.(),
+    };
+    canvas.on("object:added", document.announceChange);
+    expect(document.isDirty()).toBe(false);
+
+    objects.push({ type: "Rect", id: "added" });
+    canvas.fire("object:added");
     await Promise.resolve();
 
     expect(document.isDirty()).toBe(true);
@@ -109,11 +155,78 @@ describe("EditorDocument dirty state", () => {
     const document = documentWith({ assets });
     expect(document.isDirty()).toBe(false);
 
-    await assets.import(
-      new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" }),
-    );
+    await assets.import(pngFile());
 
     expect(document.isDirty()).toBe(true);
+  });
+
+  it("recomputes the answer after an asset is removed as well as added", async () => {
+    const assets = new AssetManager();
+    const document = documentWith({ assets });
+    await assets.import(pngFile());
+    expect(document.isDirty()).toBe(true);
+
+    const declared = assets.declarations[0]!;
+    expect(assets.remove(declared.id)).toBe(true);
+
+    // Back to the blank document it was opened as: a memo that only saw the
+    // import would still say dirty.
+    expect(document.isDirty()).toBe(false);
+  });
+
+  it("does not resurrect a removed last asset from the opened envelope", async () => {
+    const assets = new AssetManager();
+    const declared = await assets.import(pngFile());
+    const document = documentWith({
+      assets,
+      envelope: {
+        ...createBlankFabricTheme({ width: 640, height: 360 }),
+        // A copy: the envelope is what the document opened from, and the
+        // manager's live list is what the removal changes.
+        assets: [...assets.declarations],
+      } as unknown as FabricThemeEnvelopeInput,
+    });
+    expect(document.isDirty()).toBe(false);
+
+    expect(assets.remove(declared.id)).toBe(true);
+
+    // The baseline carried the asset, so the removal is a change; and the
+    // snapshot describes the manager, not the envelope the document opened from.
+    expect(document.isDirty()).toBe(true);
+    expect(document.snapshot().assets).toEqual([]);
+  });
+
+  it("reports clean straight after a library save moved the baseline", async () => {
+    const document = documentWith({
+      envelope: createBlankFabricTheme({
+        width: 640,
+        height: 360,
+      }) as unknown as FabricThemeEnvelopeInput,
+      libraryClient: {
+        save: async () => "stored-1",
+      } as unknown as ThemeLibraryClient,
+    });
+    expect(document.isDirty()).toBe(false);
+    document.setMetadata({
+      ...document.envelope.metadata,
+      name: "Renamed",
+    });
+    await Promise.resolve();
+    expect(document.isDirty()).toBe(true);
+
+    // The library holds its own reference to `announceChange`, so stubbing the
+    // instance cannot stop the flush it schedules. Hold the microtask queue
+    // instead: the markSaved port's clear is then the only invalidation.
+    const queued: (() => void)[] = [];
+    vi.stubGlobal("queueMicrotask", (flush: () => void) => {
+      queued.push(flush);
+    });
+    await document.saveLibrary();
+
+    expect(document.isDirty()).toBe(false);
+    // The held flush still finds a clean document when it eventually runs.
+    for (const flush of queued) flush();
+    expect(document.isDirty()).toBe(false);
   });
 });
 

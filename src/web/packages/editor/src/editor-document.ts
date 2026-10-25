@@ -14,10 +14,7 @@ import {
   type ThemeCreditsEntry,
 } from "@yunari/theme-package";
 import type { ArtboardPanel } from "./artboard-panel.js";
-import type {
-  AssetManager,
-  LocalAssetReference,
-} from "./asset-manager/index.js";
+import type { AssetManager } from "./asset-manager/index.js";
 import { insertCard } from "./card-library.js";
 import type { ChartManager } from "./chart-manager/index.js";
 import type { EditorShell } from "./editor-shell.js";
@@ -158,12 +155,12 @@ export class EditorDocument {
   #revision = 0;
   /** The last dirty answer and what it was computed from. A save moves the
    *  baseline without bumping the revision, so it clears this outright; the
-   *  declarations are part of the key because an import or a removal writes the
-   *  asset map without announcing anything. */
+   *  manager's mutation count is the other half of the key because an import or
+   *  a removal writes the asset map without announcing anything. */
   #dirty:
     | {
         readonly revision: number;
-        readonly declarations: readonly LocalAssetReference[];
+        readonly assets: number;
         readonly value: boolean;
       }
     | undefined;
@@ -248,9 +245,12 @@ export class EditorDocument {
   snapshot(): FabricThemeEnvelope {
     return this.#shell.snapshot({
       ...this.#envelope,
-      ...(this.#assets.declarations.length === 0
-        ? {}
-        : { assets: this.#assets.declarations }),
+      // Always the manager's list, empty included: spreading the envelope would
+      // otherwise supply the declarations of the package this document opened
+      // from, so removing the last asset would resurrect it here — a document
+      // declaring bytes it no longer holds, and reading clean because the
+      // baseline carried the same fake.
+      assets: this.#assets.declarations,
     });
   }
 
@@ -258,15 +258,13 @@ export class EditorDocument {
    *  the comparison already exists for the replace prompt, and a stored flag
    *  would be one more thing to keep true. Two JSON passes over the document and
    *  its assets are what the timer and the identity chip used to pay per read,
-   *  so the answer is kept until the revision or the asset declarations move. */
+   *  so the answer is kept until the revision or an asset mutation moves. */
   isDirty(): boolean {
-    const declarations = this.#assets.declarations;
     const memo = this.#dirty;
     if (
       memo !== undefined &&
       memo.revision === this.#revision &&
-      memo.declarations.length === declarations.length &&
-      memo.declarations.every((asset, at) => asset === declarations[at])
+      memo.assets === this.#assets.mutationCount
     ) {
       return memo.value;
     }
@@ -274,11 +272,9 @@ export class EditorDocument {
       this.snapshot(),
       this.#assets.assets,
     );
-    // A copy: the manager mutates its list in place, and an entry it replaces
-    // is a new object, so identity per element is what an asset edit looks like.
     this.#dirty = {
       revision: this.#revision,
-      declarations: [...declarations],
+      assets: this.#assets.mutationCount,
       value,
     };
     return value;

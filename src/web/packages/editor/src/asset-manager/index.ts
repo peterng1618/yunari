@@ -56,6 +56,10 @@ export class AssetManager {
   #assets: Record<string, Uint8Array> = {};
   #declarations: LocalAssetReference[] = [];
   #previewUrls = new Map<string, string>();
+  /** How many times the byte map or the declaration list has changed. A reader
+   *  that memoises a decision over both watches this rather than the values:
+   *  `load` can change either while reusing declaration references. */
+  #mutationCount = 0;
 
   get assets(): Readonly<Record<string, Uint8Array>> {
     return { ...this.#assets };
@@ -63,6 +67,11 @@ export class AssetManager {
 
   get declarations(): readonly LocalAssetReference[] {
     return this.#declarations;
+  }
+
+  /** Bumped by every path that writes the byte map or the declaration list. */
+  get mutationCount(): number {
+    return this.#mutationCount;
   }
 
   /**
@@ -122,6 +131,7 @@ export class AssetManager {
 
     this.#assets[path] = bytes;
     this.#declarations.push(reference);
+    this.#mutationCount += 1;
     if (type.kind === "image" || type.kind === "svg") {
       this.#previewUrls.set(
         id,
@@ -156,6 +166,7 @@ export class AssetManager {
     if (existing >= 0) this.#declarations.splice(existing, 1, reference);
     else this.#declarations.push(reference);
     this.#assets[path] = new Uint8Array(bytes);
+    this.#mutationCount += 1;
     return reference;
   }
 
@@ -165,6 +176,7 @@ export class AssetManager {
     const [asset] = this.#declarations.splice(index, 1);
     if (asset !== undefined) delete this.#assets[asset.path];
     this.#revoke(assetId);
+    this.#mutationCount += 1;
     return true;
   }
 
@@ -234,6 +246,7 @@ export class AssetManager {
     // The preview URL is a blob of the old bytes; keeping it would leave the
     // pane showing the picture the author just replaced.
     this.#revoke(assetId);
+    this.#mutationCount += 1;
     return next;
   }
 
@@ -255,6 +268,7 @@ export class AssetManager {
         new Uint8Array(bytes),
       ]),
     );
+    this.#mutationCount += 1;
   }
 
   async hydrate(canvas: StaticCanvas): Promise<void> {

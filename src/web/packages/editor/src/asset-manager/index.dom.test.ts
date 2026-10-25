@@ -44,6 +44,33 @@ describe("AssetManager", () => {
     expect(manager.assets["assets/logo-2.png"]).toEqual(PNG);
   });
 
+  it("counts every change to the bytes or the declarations", async () => {
+    const manager = new AssetManager();
+    expect(manager.mutationCount).toBe(0);
+
+    const logo = await manager.import(file(PNG, "logo.png", "image/png"));
+    expect(manager.mutationCount).toBe(1);
+
+    await manager.replace(logo.id, file(PNG, "logo.png", "image/png"));
+    expect(manager.mutationCount).toBe(2);
+
+    await manager.replaceBytes(logo.id, new Uint8Array([1, 2]));
+    expect(manager.mutationCount).toBe(3);
+
+    const face = fontTrio("minimal")!.faces[0]!;
+    await manager.adoptFont(face, new Uint8Array([0, 1, 2]));
+    expect(manager.mutationCount).toBe(4);
+
+    expect(manager.remove(logo.id)).toBe(true);
+    expect(manager.mutationCount).toBe(5);
+    // A refused removal changed nothing, so it must not move the counter.
+    expect(manager.remove(logo.id)).toBe(false);
+    expect(manager.mutationCount).toBe(5);
+
+    manager.load({ assets: [] }, {});
+    expect(manager.mutationCount).toBe(6);
+  });
+
   it("leaves package bytes unchanged for unsafe or mismatched files", async () => {
     const manager = new AssetManager();
     const unsafe = file(
