@@ -41,6 +41,32 @@ function zip64EndRecords(
 }
 
 describe("archive preflight", () => {
+  /**
+   * A 200-byte archive whose EOCD claims 2 entries and whose ZIP64 record is
+   * real at 160 but truncated: the 56-byte extent runs past the buffer while
+   * the count at +32 is still inside it. Extraction takes the count; a
+   * preflight that demanded a whole record would skip it and see 2 instead.
+   */
+  const truncatedZip64Record = (): Uint8Array => {
+    const bytes = new Uint8Array(200);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(160, 0x0606_4b50, true);
+    view.setUint32(192, 5000, true);
+    view.setUint32(80, 0x0706_4b50, true);
+    view.setUint32(88, 160, true);
+    view.setUint32(100, 0x0605_4b50, true);
+    view.setUint16(108, 2, true);
+    view.setUint16(110, 2, true);
+    return bytes;
+  };
+
+  it("reads the ZIP64 count out of a record truncated by the buffer's end", () => {
+    const bytes = truncatedZip64Record();
+
+    expect(zipEntryCount(bytes)).toBe(5000);
+    expect(zipCentralDirectoryBytes(bytes)).toBe(0);
+  });
+
   it("reads the declaration of an ordinary archive", () => {
     const bytes = zipSync({
       "one.json": strToU8("{}"),

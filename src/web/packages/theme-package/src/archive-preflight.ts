@@ -11,44 +11,55 @@ export type ZipDeclaration = {
 };
 
 /**
+ * Four little-endian bytes as fflate's `b4` reads them: a byte past either end
+ * is 0. A truncated record is still a record extraction will use, so refusing
+ * the same fields with a bounds guard would let the two readers disagree.
+ */
+function readUint32(bytes: Uint8Array, offset: number): number {
+  let value = 0;
+  for (let index = 0; index < 4; index += 1) {
+    const byte = bytes[offset + index];
+    if (byte !== undefined) value |= byte << (8 * index);
+  }
+  return value >>> 0;
+}
+
+/**
  * Reads the entry count and central-directory size an archive declares, before
  * anything walks it: a crafted ZIP64 record can claim 4,294,967,295 entries
  * and `unzipSync` allocates per declared entry.
  *
  * The parse mirrors fflate's own end-record walk — the same backwards scan over
- * the tail, the same 16-bit EOCD count and 32-bit ZIP64 fields — so the number
- * refused here is the number extraction would use. A stricter parse would be a
- * bypass: a record it skipped could still steer the extractor.
+ * the tail, the same 16-bit EOCD count, the same 32-bit ZIP64 fields with
+ * out-of-range bytes read as zero — so the count refused here is the count
+ * extraction would use. The central-directory size is not something extraction
+ * reads: the 8 MiB bound below is this module's own.
  */
 export function readZipDeclaration(
   bytes: Uint8Array,
 ): ZipDeclaration | undefined {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let eocd = bytes.byteLength - 22;
   for (; eocd >= 0; --eocd) {
-    if (view.getUint32(eocd, true) === 0x0605_4b50) break;
+    if (readUint32(bytes, eocd) === 0x0605_4b50) break;
     if (bytes.byteLength - eocd > END_RECORD_SEARCH_BYTES) return undefined;
   }
   if (eocd < 0) return undefined;
-  // Extraction returns an empty archive for this, so there is nothing to bound.
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const entries = view.getUint16(eocd + 8, true);
+  // Extraction returns an empty archive for this, so there is nothing to bound.
   if (entries === 0) return { entries: 0, centralDirectoryBytes: 0 };
-  let centralDirectoryBytes = view.getUint32(eocd + 12, true);
-  // The ZIP64 locator sits immediately before the EOCD. fflate follows it and
-  // reads the 32-bit low half of the 64-bit counts, so this does too.
-  if (eocd >= 20 && view.getUint32(eocd - 20, true) === 0x0706_4b50) {
-    const zip64 = view.getUint32(eocd - 12, true);
-    if (
-      zip64 + 56 <= bytes.byteLength &&
-      view.getUint32(zip64, true) === 0x0606_4b50
-    ) {
+  // The ZIP64 locator sits immediately before the EOCD. fflate follows it on
+  // the signatures alone — never on the record being complete — and reads the 32-bit low half of the 64-bit count, so this does too: once the two
+  // signatures match, the 16-bit count is not a fallback.
+  if (readUint32(bytes, eocd - 20) === 0x0706_4b50) {
+    const zip64 = readUint32(bytes, eocd - 12);
+    if (readUint32(bytes, zip64) === 0x0606_4b50)
       return {
-        entries: view.getUint32(zip64 + 32, true),
-        centralDirectoryBytes: view.getUint32(zip64 + 40, true),
+        entries: readUint32(bytes, zip64 + 32),
+        centralDirectoryBytes: readUint32(bytes, zip64 + 40),
       };
-    }
   }
-  return { entries, centralDirectoryBytes };
+  return { entries, centralDirectoryBytes: readUint32(bytes, eocd + 12) };
 }
 
 export function zipEntryCount(bytes: Uint8Array): number | undefined {

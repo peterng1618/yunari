@@ -490,12 +490,11 @@ describe("a package's archive declaration", () => {
   }
 
   /**
-   * Replaces a package's end records with an EOCD/ZIP64 pair declaring
-   * 0xffffffff entries. The first member's deflate stream is wrecked too: an
-   * extractor that trusts the count without a preflight then fails on entry
-   * one instead of looping four billion times, so the failing run stays finite.
+   * Replaces a package's end records with an EOCD/ZIP64 pair that has a
+   * saturated 16-bit EOCD count and `entries` in the ZIP64 record, so only a
+   * reader that follows the locator sees the real declaration.
    */
-  function declaringZip64Entries(base: Uint8Array): Uint8Array {
+  function withZip64Count(base: Uint8Array, entries: number): Uint8Array {
     const source = new DataView(base.buffer, base.byteOffset, base.byteLength);
     const eocd = endRecord(base);
     const directoryBytes = source.getUint32(eocd + 12, true);
@@ -509,8 +508,8 @@ describe("a package's archive declaration", () => {
     view.setBigUint64(eocd + 4, 44n, true);
     view.setUint16(eocd + 12, 45, true);
     view.setUint16(eocd + 14, 45, true);
-    view.setBigUint64(eocd + 24, 0xffff_ffffn, true);
-    view.setBigUint64(eocd + 32, 0xffff_ffffn, true);
+    view.setBigUint64(eocd + 24, BigInt(entries), true);
+    view.setBigUint64(eocd + 32, BigInt(entries), true);
     view.setBigUint64(eocd + 40, BigInt(directoryBytes), true);
     view.setBigUint64(eocd + 48, BigInt(directoryOffset), true);
     view.setUint32(eocd + 56, 0x0706_4b50, true);
@@ -521,7 +520,16 @@ describe("a package's archive declaration", () => {
     view.setUint16(eocd + 86, 0xffff, true);
     view.setUint32(eocd + 88, directoryBytes, true);
     view.setUint32(eocd + 92, directoryOffset, true);
+    return bytes;
+  }
 
+  /**
+   * Wrecks the first member's deflate stream: an extractor that trusts a huge
+   * declared count then fails on entry one instead of looping four billion
+   * times, so the failing run stays finite.
+   */
+  function corruptFirstMember(bytes: Uint8Array): Uint8Array {
+    const view = new DataView(bytes.buffer);
     // A fflate archive starts with the first member's local header.
     if (view.getUint32(0, true) !== 0x0403_4b50)
       throw new Error("fixture has no leading local header");
@@ -534,13 +542,51 @@ describe("a package's archive declaration", () => {
     const written = writeThemePackage({ envelope, assets });
     expect(written.ok).toBe(true);
     if (!written.ok) return;
-    const crafted = declaringZip64Entries(written.bytes);
+    const crafted = corruptFirstMember(
+      withZip64Count(written.bytes, 0xffff_ffff),
+    );
 
     expect(zipEntryCount(crafted)).toBe(0xffff_ffff);
     expect(readThemePackage(crafted)).toEqual({
       ok: false,
       message: "That package declares more than 128 archive entries.",
     });
+  });
+
+  it("refuses a truncated ZIP64 record declaring 5000 entries", () => {
+    // The buffer ends inside the 56-byte ZIP64 record, but the count at +32 is
+    // still readable and extraction would take it. The 16-bit EOCD count of 2
+    // is not a fallback.
+    const bytes = new Uint8Array(200);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(160, 0x0606_4b50, true);
+    view.setUint32(192, 5000, true);
+    view.setUint32(80, 0x0706_4b50, true);
+    view.setUint32(88, 160, true);
+    view.setUint32(100, 0x0605_4b50, true);
+    view.setUint16(108, 2, true);
+    view.setUint16(110, 2, true);
+
+    expect(zipEntryCount(bytes)).toBe(5000);
+    expect(readThemePackage(bytes)).toEqual({
+      ok: false,
+      message: "That package declares more than 128 archive entries.",
+    });
+  });
+
+  it("opens a package whose ZIP64 record declares a small count", () => {
+    // A saturated 16-bit count is not a refusal on its own: the locator's
+    // record says 2 — the manifest and the document — and extraction uses it.
+    const written = writeThemePackage({
+      envelope: { ...envelope, assets: [] },
+      assets: {},
+    });
+    expect(written.ok).toBe(true);
+    if (!written.ok) return;
+    const bytes = withZip64Count(written.bytes, 2);
+
+    expect(zipEntryCount(bytes)).toBe(2);
+    expect(readThemePackage(bytes)).toMatchObject({ ok: true });
   });
 
   it("refuses a declared central directory past the bound", () => {
