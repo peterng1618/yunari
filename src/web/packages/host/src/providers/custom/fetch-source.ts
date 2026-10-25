@@ -87,52 +87,125 @@ function isLinkLocalV4(value: number): boolean {
   return value >= 0xa9fe0000 && value <= 0xa9feffff;
 }
 
-/** `::ffff:169.254.169.254` canonicalises to `::ffff:a9fe:a9fe`, so the mapped
- *  IPv4 has to be decoded from either spelling before the range test. */
-function mappedIpv4(address: string): number | undefined {
-  const match =
-    /^::ffff:(?:(\d{1,3}(?:\.\d{1,3}){3})|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/.exec(
-      address,
-    );
-  if (match === null) return undefined;
-  if (match[1] !== undefined) return asIpv4(match[1]);
-
-  const high = Number.parseInt(match[2] ?? "", 16);
-  const low = Number.parseInt(match[3] ?? "", 16);
-  return high * 0x10000 + low;
+function bareAddress(address: string): string {
+  return address.replace(/^\[/, "").replace(/\]$/, "").split("%")[0] ?? "";
 }
 
-/** An IPv4 encoded in a translation prefix, or undefined. NAT64's well-known
- *  prefix `64:ff9b::/96` carries it in the low 32 bits; 6to4's `2002::/16`
- *  carries it in bits 16..47. Canonical URLs always print both compressed. */
-function translatedIpv4(address: string): number | undefined {
-  const nat64 = /^64:ff9b::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(address);
-  const sixToFour =
-    nat64 ?? /^2002:([0-9a-f]{1,4}):([0-9a-f]{1,4})(?::|$)/.exec(address);
-  if (sixToFour === null) return undefined;
+/** Eight 16-bit groups, expanding `::` and a trailing dotted quad, or
+ *  undefined when the text is not IPv6. */
+function ipv6Groups(address: string): number[] | undefined {
+  let text = address;
 
-  const high = Number.parseInt(sixToFour[1] ?? "", 16);
-  const low = Number.parseInt(sixToFour[2] ?? "", 16);
-  return high * 0x10000 + low;
+  const dotted = /^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/.exec(text);
+  if (dotted !== null) {
+    const v4 = asIpv4(dotted[2] ?? "");
+    if (v4 === undefined) return undefined;
+    const high = Math.floor(v4 / 0x10000).toString(16);
+    const low = (v4 % 0x10000).toString(16);
+    text = `${dotted[1]}${high}:${low}`;
+  }
+
+  const halves = text.split("::");
+  if (halves.length > 2) return undefined;
+
+  const parse = (part: string): number[] | undefined => {
+    const groups: number[] = [];
+    if (part === "") return groups;
+    for (const group of part.split(":")) {
+      if (!/^[0-9a-f]{1,4}$/i.test(group)) return undefined;
+      groups.push(Number.parseInt(group, 16));
+    }
+    return groups;
+  };
+
+  const head = parse(halves[0] ?? "");
+  const tail = halves.length === 2 ? parse(halves[1] ?? "") : [];
+  if (head === undefined || tail === undefined) return undefined;
+  if (halves.length === 1) return head.length === 8 ? head : undefined;
+
+  const missing = 8 - head.length - tail.length;
+  if (missing < 1) return undefined;
+  return [...head, ...Array.from({ length: missing }, () => 0), ...tail];
 }
 
-/** IPv4 `169.254.0.0/16` and IPv6 `fe80::/10`: metadata and link-local only.
- *  Loopback and the private LAN ranges are deliberate: the user typed the URL. */
+/** The IPv4 an address carries inside a mapped (`::ffff:a.b.c.d`), translated
+ *  (`::ffff:0:a.b.c.d`), NAT64 (`64:ff9b::/96` and `64:ff9b:1::/96`), 6to4
+ *  (`2002::/16`) or Teredo (`2001::/32`) form. Teredo hides the client in the
+ *  last 32 bits XORed with all ones, so it is decoded before any range test. */
+function embeddedIpv4(groups: readonly number[]): number | undefined {
+  const group = (index: number): number => groups[index] ?? 0;
+  const low = group(6) * 0x10000 + group(7);
+  const zeros = (until: number): boolean => {
+    for (let index = 0; index < until; index += 1) {
+      if (group(index) !== 0) return false;
+    }
+    return true;
+  };
+
+  if (zeros(5) && group(5) === 0xffff) return low;
+  if (zeros(4) && group(4) === 0xffff && group(5) === 0) return low;
+
+  if (group(0) === 0x64 && group(1) === 0xff9b) {
+    const wellKnown =
+      group(2) === 0 && group(3) === 0 && group(4) === 0 && group(5) === 0;
+    const localUse =
+      group(2) === 1 && group(3) === 0 && group(4) === 0 && group(5) === 0;
+    if (wellKnown || localUse) return low;
+  }
+
+  if (group(0) === 0x2002) return group(1) * 0x10000 + group(2);
+  if (group(0) === 0x2001 && group(1) === 0) return 0xffffffff - low;
+
+  return undefined;
+}
+
+/** RFC 1918, loopback, CGNAT (`100.64.0.0/10`) and `0.0.0.0/8`. Link-local is
+ *  not here: it is refused on every hop, including the first. */
+function isPrivateV4(value: number): boolean {
+  const top = Math.floor(value / 0x1000000);
+  return (
+    top === 0 ||
+    top === 10 ||
+    top === 127 ||
+    (value >= 0x64400000 && value <= 0x647fffff) ||
+    (value >= 0xac100000 && value <= 0xac1fffff) ||
+    (value >= 0xc0a80000 && value <= 0xc0a8ffff)
+  );
+}
+
+function isPrivateAddress(address: string): boolean {
+  const lower = bareAddress(address).toLowerCase();
+  const v4 = asIpv4(lower);
+  if (v4 !== undefined) return isPrivateV4(v4);
+
+  const groups = ipv6Groups(lower);
+  if (groups === undefined) return false;
+
+  const embedded = embeddedIpv4(groups);
+  if (embedded !== undefined) return isPrivateV4(embedded);
+
+  const first = groups[0] ?? 0;
+  if (groups.every((group) => group === 0)) return true;
+  if (groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1) {
+    return true;
+  }
+  return (first & 0xfe00) === 0xfc00;
+}
+
+/** IPv4 `169.254.0.0/16` and IPv6 `fe80::/10`: metadata and link-local, refused
+ *  on every hop. Private ranges depend on who typed the URL. */
 function isBlockedAddress(address: string): boolean {
-  const bare = address.replace(/^\[/, "").replace(/\]$/, "").split("%")[0];
-  if (bare === undefined) return true;
-  const lower = bare.toLowerCase();
-
+  const lower = bareAddress(address).toLowerCase();
   const v4 = asIpv4(lower);
   if (v4 !== undefined) return isLinkLocalV4(v4);
 
-  const mapped = mappedIpv4(lower);
-  if (mapped !== undefined) return isLinkLocalV4(mapped);
+  const groups = ipv6Groups(lower);
+  if (groups === undefined) return false;
 
-  const translated = translatedIpv4(lower);
-  if (translated !== undefined) return isLinkLocalV4(translated);
+  const embedded = embeddedIpv4(groups);
+  if (embedded !== undefined) return isLinkLocalV4(embedded);
 
-  return /^fe[89ab][0-9a-f]:/.test(lower);
+  return ((groups[0] ?? 0) & 0xffc0) === 0xfe80;
 }
 
 function isIpLiteral(host: string): boolean {
@@ -140,9 +213,13 @@ function isIpLiteral(host: string): boolean {
   return asIpv4(bare) !== undefined || bare.includes(":");
 }
 
-async function refusalReason(destination: URL): Promise<string | undefined> {
+type Resolved =
+  | { readonly ok: true; readonly addresses: readonly string[] }
+  | { readonly ok: false; readonly reason: string };
+
+async function resolveDestination(destination: URL): Promise<Resolved> {
   if (destination.protocol !== "http:" && destination.protocol !== "https:") {
-    return "the source URL must be http or https";
+    return { ok: false, reason: "the source URL must be http or https" };
   }
 
   const host = destination.hostname;
@@ -155,17 +232,36 @@ async function refusalReason(destination: URL): Promise<string | undefined> {
       const resolved = await lookup(host, { all: true, verbatim: true });
       for (const entry of resolved) addresses.push(entry.address);
     } catch {
-      return "the source host could not be resolved";
+      return { ok: false, reason: "the source host could not be resolved" };
     }
-    if (addresses.length === 0) return "the source host has no address";
+    if (addresses.length === 0) {
+      return { ok: false, reason: "the source host has no address" };
+    }
   }
 
-  for (const address of addresses) {
-    if (isBlockedAddress(address)) {
-      return "the source resolves to a link-local or metadata address";
-    }
+  return { ok: true, addresses };
+}
+
+function refusalOf(
+  addresses: readonly string[],
+  allowPrivate: boolean,
+): string | undefined {
+  if (addresses.some(isBlockedAddress)) {
+    return "the source resolves to a link-local or metadata address";
+  }
+  if (!allowPrivate && addresses.some(isPrivateAddress)) {
+    return "the source resolves to a private or loopback address";
   }
   return undefined;
+}
+
+async function refusalReason(
+  destination: URL,
+  options: { readonly allowPrivate: boolean },
+): Promise<string | undefined> {
+  const resolved = await resolveDestination(destination);
+  if (!resolved.ok) return resolved.reason;
+  return refusalOf(resolved.addresses, options.allowPrivate);
 }
 
 interface BuiltRequest {
@@ -321,10 +417,23 @@ async function run(
   const signal = AbortSignal.timeout(source.timeoutMs);
   let sameOrigin = true;
   let redirects = 0;
+  let allowPrivate = false;
+  let firstHop = true;
 
   for (;;) {
-    const refused = await refusalReason(destination);
-    if (refused !== undefined) return fail(refused);
+    if (firstHop) {
+      // The user typed the first URL, so its private ranges are allowed; a
+      // redirect may only reach them when that first URL already did.
+      const resolved = await resolveDestination(destination);
+      if (!resolved.ok) return fail(resolved.reason);
+      allowPrivate = resolved.addresses.every(isPrivateAddress);
+      const refused = refusalOf(resolved.addresses, true);
+      if (refused !== undefined) return fail(refused);
+      firstHop = false;
+    } else {
+      const refused = await refusalReason(destination, { allowPrivate });
+      if (refused !== undefined) return fail(refused);
+    }
     if (signal.aborted) return fail(TIMEOUT_REASON);
 
     const built = buildRequest(source, destination, credential, sameOrigin);

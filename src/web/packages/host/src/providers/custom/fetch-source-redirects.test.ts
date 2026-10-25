@@ -136,6 +136,55 @@ describe("fetchSource redirects", () => {
     expect(calls[1]?.headers.get("authorization")).toBeNull();
   });
 
+  it("refuses a public source that redirects to a private or transition address", async () => {
+    for (const location of [
+      "http://127.0.0.1/",
+      "http://10.0.0.1/",
+      "http://0.0.0.0/",
+      "http://[::1]/",
+      // IPv4-translated `::ffff:0:0/96` carrying link-local metadata.
+      "http://[::ffff:0:169.254.169.254]/",
+      // The local-use NAT64 prefix, and a Teredo address whose last 32 bits
+      // are 10.0.0.1 XORed with `0xffffffff`.
+      "http://[64:ff9b:1::a9fe:a9fe]/",
+      "http://[2001:0:4136:e378:8000:63bf:f5ff:fffe]/",
+    ]) {
+      const { fetchImpl, calls } = serve(() => redirect(location));
+
+      const outcome = await fetchSource(
+        sourceOf({ url: "http://93.184.216.34/start" }),
+        undefined,
+        fetchImpl,
+        () => 0,
+      );
+
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) expect(outcome.reason).toMatch(/private|link-local/i);
+      expect(calls).toHaveLength(1);
+    }
+  });
+
+  it("allows a private source to redirect within its private range", async () => {
+    const { fetchImpl, calls } = serve(({ url }) =>
+      url.pathname === "/start"
+        ? redirect("http://192.168.1.11:8080/next")
+        : json({}),
+    );
+
+    const outcome = await fetchSource(
+      sourceOf({ url: "http://192.168.1.10:8080/start" }),
+      undefined,
+      fetchImpl,
+      () => 0,
+    );
+
+    expect(outcome.ok).toBe(true);
+    expect(calls.map((call) => call.url.hostname)).toEqual([
+      "192.168.1.10",
+      "192.168.1.11",
+    ]);
+  });
+
   it("drops every source header when the redirect changes the origin", async () => {
     // A named header is often a secret even when it is not `Authorization`;
     // browser stripping would keep `x-api-key` and send it to the new origin.
