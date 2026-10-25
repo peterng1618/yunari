@@ -36,6 +36,7 @@ import {
   chartPaintView,
 } from "./chart-manager/panel.js";
 import { createPalettePanel } from "./palette-manager/panel.js";
+import { createTokenInspectorPanel } from "./panes/tokens/token-inspector.js";
 import { projectRuns, RunEditor } from "./selection-inspector/runs.js";
 import type { RunEdits } from "./selection-inspector/view.js";
 import { createTypePresetPanel } from "./type-preset-manager/panel.js";
@@ -129,6 +130,24 @@ it("leaves the three panels with no copy of their own", async () => {
       value: { family: "Inter", size: 16, trioRole: "heading" },
     },
     caption: { name: "Caption", value: { family: "Inter", size: 12 } },
+  });
+
+  // The selected token's column is the Tokens pane's other half, and it is
+  // where the field set's labels moved. Its select triggers print values and are
+  // excluded from the button net; the labels and Delete are copy and are read.
+  const tokenPresets = {
+    body: {
+      name: "Body",
+      value: { family: "Inter", size: 16, trioRole: "heading" as const },
+    },
+  };
+  createTokenInspectorPanel(root, {
+    onChange: () => undefined,
+    onDelete: () => undefined,
+    setRole: () => undefined,
+    unbindFace: () => undefined,
+  }).render({ kind: "preset", id: "body" }, tokenPresets, {
+    typePresets: tokenPresets,
   });
 
   // The palette's paint kinds, which are copy. They live in a Base UI popup that

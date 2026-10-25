@@ -36,6 +36,16 @@ window.PointerEvent ??= MouseEvent as never;
 beforeAll(() => {
   Element.prototype.setPointerCapture ??= () => undefined;
   Element.prototype.releasePointerCapture ??= () => undefined;
+  // jsdom has no `:modal` or `:popover-open`; Base UI asks both while opening a
+  // popup, and an unpatched `matches` throws where the library expects a boolean.
+  const matches = Element.prototype.matches;
+  Element.prototype.matches = Object.assign(function (
+    this: Element,
+    selector: string,
+  ): boolean {
+    if (selector === ":modal" || selector === ":popover-open") return false;
+    return matches.call(this, selector);
+  }, matches);
 });
 
 afterEach(() => document.body.replaceChildren());
@@ -116,6 +126,39 @@ async function click(target: Element): Promise<void> {
   await flush();
 }
 
+/** Base UI commits a list item only when the press that precedes the click
+ *  started on it, so the press is part of the interaction. */
+async function pointerDown(target: Element): Promise<void> {
+  await act(async () => {
+    target.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        pointerType: "mouse",
+        button: 0,
+      }),
+    );
+  });
+}
+
+/** Picks the option whose value is `id` — the id the control commits, never the
+ *  label it prints. */
+async function chooseIn(
+  host: HTMLElement,
+  control: string,
+  id: string,
+): Promise<void> {
+  const trigger = host.querySelector<HTMLElement>(control);
+  if (trigger === null) throw new Error(`no control matches ${control}`);
+  await click(trigger);
+  const option = document.querySelector<HTMLElement>(
+    `[role="option"][data-yunari-option="${id}"]`,
+  );
+  if (option === null) throw new Error(`no option ${id} in ${control}`);
+  await pointerDown(option);
+  await click(option);
+}
+
 describe("token inspector", () => {
   it("shows name, role, size, weight, line height and letter spacing for a preset", () => {
     const write = actions();
@@ -160,6 +203,23 @@ describe("token inspector", () => {
     expect(
       panel.root.querySelector("[data-yunari-token-unbind]")?.textContent,
     ).toBe(uiCopy.panels.unbindFont);
+    panel.destroy();
+  });
+
+  it("writes the role the author chooses, and clears it with None", async () => {
+    const write = actions();
+    const panel = createTokenInspectorPanel(document.body, write);
+    panel.render({ kind: "preset", id: "body" }, PRESETS, {
+      typePresets: PRESETS,
+    });
+
+    await chooseIn(panel.root, "[data-yunari-token-role]", "heading");
+    expect(write.setRole).toHaveBeenCalledWith("body", "heading");
+
+    // `""` is the None row's id; the panel maps it to the document's `null`,
+    // which is the branch that removes `trioRole` rather than writing a role.
+    await chooseIn(panel.root, "[data-yunari-token-role]", "");
+    expect(write.setRole).toHaveBeenLastCalledWith("body", null);
     panel.destroy();
   });
 

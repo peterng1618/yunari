@@ -363,7 +363,7 @@ export class EditorSession {
     this.#types = createTypePresetPanel(
       options.panelHosts.tokens,
       (presets) => this.#document.setTypes(presets),
-      (id, replacement) => this.#document.deleteType(id, replacement),
+      (id, replacement) => this.#deleteType(id, replacement),
       fontActions,
       // The shell's own selection projection, so the list says what the canvas
       // selection is set in. Pulled from the live snapshot rather than a copy
@@ -457,8 +457,9 @@ export class EditorSession {
       options.panelHosts.selection,
       {
         onChange: (presets) => this.#document.setTypes(presets),
-        onDelete: (id, replacement) =>
-          this.#document.deleteType(id, replacement),
+        // The same port the preset library is handed: one delete route, so the
+        // reference reassignment and the token clear cannot disagree.
+        onDelete: (id, replacement) => this.#deleteType(id, replacement),
         setRole: (id, role) => this.#document.setPresetRole(id, role),
         unbindFace: (id) => this.#document.unbindPresetFace(id),
       },
@@ -1075,6 +1076,21 @@ export class EditorSession {
     const envelope = await this.#document.applyPresetFace(id, face);
     this.#declarationsChanged();
     return envelope;
+  }
+
+  /**
+   * The one type-preset delete route, handed to both the preset library and the
+   * token inspector.
+   *
+   * The document re-points the references; a token selection still naming the
+   * deleted preset is cleared here, so the object column comes back rather than
+   * the right column staying suppressed over a token that no longer exists.
+   */
+  #deleteType(id: string, replacement: string): void {
+    this.#document.deleteType(id, replacement);
+    const selection = this.#options.tokenSelection;
+    const token = selection?.get();
+    if (token?.kind === "preset" && token.id === id) selection?.clear();
   }
 
   destroy(): void {

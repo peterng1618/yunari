@@ -17,6 +17,7 @@ import { chooseArtboardSize } from "./new-document-chooser.js";
 import { createNewObjectPanel } from "./new-object-panel.js";
 import { createPalettePanel } from "./palette-manager/panel.js";
 import { createAssetsPane } from "./panes/assets/assets-pane.js";
+import { createTokenInspectorPanel } from "./panes/tokens/token-inspector.js";
 import { createSelectionInspector } from "./selection-inspector/index.js";
 import { createTypePresetPanel } from "./type-preset-manager/panel.js";
 import { uiCopy } from "./ui-copy.js";
@@ -268,8 +269,10 @@ describe("editor panels", () => {
       // The Tokens pane's preset library renders no value carrier any more: it
       // is a list of pressable rows now, and the chooser, the face and trio
       // controls and the reassignment row went with the fields they edited.
-      // Those fields — and the carrier each will bring back — belong to the
-      // selection inspector's token section.
+      // Those fields live in the token inspector below, which brings back its
+      // role and reassignment carriers.
+      "INPUT[type=][aria-hidden]", // Role (token)
+      "INPUT[type=][aria-hidden]", // Reassign (token)
       // The run editor's five: four `ControlSelect`s and one `ControlSwatch`,
       // which is `SelectControl` with an adornment — each a Base UI select's
       // value carrier.
@@ -370,6 +373,23 @@ describe("editor panels", () => {
       uiCopy.panels.stopPosition(2),
     ]);
   });
+
+  it("mounts the token inspector, so the fields it adds are audited", () => {
+    // An entry in `mountPanels` that renders nothing is the same vacuity the
+    // file's header warns about, so this reads the controls back rather than
+    // trusting the mount: a free preset renders name, role, family, weight,
+    // size, line height, letter spacing, the reassignment select and Delete.
+    const { root } = mountPanels();
+    const inspector = root.querySelector("[data-yunari-token-inspector]");
+    expect(inspector).not.toBeNull();
+    const controls = Array.from(
+      inspector?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [],
+    ).filter(reached);
+    expect(controls).toHaveLength(9);
+    expect(controls.map((control) => accessibleName(control))).not.toContain(
+      "",
+    );
+  });
 });
 
 /**
@@ -447,6 +467,24 @@ function mountPanels(): { root: HTMLElement } {
   ).render({
     body: { name: "Body", value: { family: "Inter", size: 16 } },
     caption: { name: "Caption", value: { family: "Inter", size: 12 } },
+  });
+
+  // The selected token's own column. A free preset, because the editable
+  // family and weight are the controls its bound form replaces with Unbind; the
+  // face branch's one button is named by its own text either way.
+  const tokenPresets = {
+    body: {
+      name: "Body",
+      value: { family: "Inter", size: 16, trioRole: "body" as const },
+    },
+  };
+  createTokenInspectorPanel(root, {
+    onChange: () => undefined,
+    onDelete: () => undefined,
+    setRole: () => undefined,
+    unbindFace: () => undefined,
+  }).render({ kind: "preset", id: "body" }, tokenPresets, {
+    typePresets: tokenPresets,
   });
 
   mountSelectionInspector(root);

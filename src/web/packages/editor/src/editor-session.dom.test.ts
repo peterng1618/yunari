@@ -2,6 +2,7 @@
 
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { IText } from "fabric/es";
+import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { presetLibrary } from "./preset-library/index.js";
 import { installReadableFile } from "./readable-file.fixture.js";
@@ -55,17 +56,24 @@ const typePresetPortMock = vi.hoisted(() => ({
   change: undefined as ((presets: Record<string, unknown>) => void) | undefined,
   remove: undefined as ((id: string, replacement: string) => void) | undefined,
 }));
-vi.mock("./type-preset-manager/index.js", () => ({
-  createTypePresetPanel: (
-    _host: unknown,
-    change: (presets: Record<string, unknown>) => void,
-    remove: (id: string, replacement: string) => void,
-  ) => {
-    typePresetPortMock.change = change;
-    typePresetPortMock.remove = remove;
-    return panel();
-  },
-}));
+vi.mock("./type-preset-manager/index.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./type-preset-manager/index.js")>();
+  return {
+    // Only the panel is doubled. `reassignTypePresetToken` is the document's
+    // delete path and stays the real one, so a delete case exercises it.
+    ...actual,
+    createTypePresetPanel: (
+      _host: unknown,
+      change: (presets: Record<string, unknown>) => void,
+      remove: (id: string, replacement: string) => void,
+    ) => {
+      typePresetPortMock.change = change;
+      typePresetPortMock.remove = remove;
+      return panel();
+    },
+  };
+});
 /** The actions the last Add pane was handed, so a test can drive a tile the
  *  way the pane does without mounting the pane's React tree. */
 const newObjectActionsMock = vi.hoisted(() => ({
@@ -1039,7 +1047,7 @@ describe("EditorSession", () => {
     extensions.destroy();
   });
 
-  it("gives the selected token its own column, and gives the object column back", () => {
+  it("gives the selected token its own column, and gives the object column back", async () => {
     // The right column has one owner at a time (spec, Tokens pane). The session
     // owns both halves — the token panel's mounts and the suppression — because
     // it already owns the document the token fields write through; a panel built
@@ -1049,6 +1057,7 @@ describe("EditorSession", () => {
     const tokenSelection = new TokenSelectionStore(new SelectionStore());
     const presets = {
       body: { name: "Body", value: { family: "Inter", size: 16 } },
+      caption: { name: "Caption", value: { family: "Inter", size: 12 } },
     };
     const shell = {
       editor: {
@@ -1111,6 +1120,20 @@ describe("EditorSession", () => {
     ).not.toBeNull();
 
     tokenSelection.clear();
+    expect(objectColumn?.style.display).toBe("");
+    expect(tokenColumn?.textContent).toBe("");
+
+    // Deleting the preset the token names clears the token too: the column must
+    // show the object selection again rather than staying suppressed over a
+    // preset the document no longer has. The replacement is the other preset.
+    tokenSelection.set({ kind: "preset", id: "body" });
+    expect(objectColumn?.style.display).toBe("none");
+    await act(async () => {
+      tokenColumn
+        ?.querySelector<HTMLButtonElement>("[data-yunari-token-delete]")
+        ?.click();
+    });
+    expect(tokenSelection.get()).toBeUndefined();
     expect(objectColumn?.style.display).toBe("");
     expect(tokenColumn?.textContent).toBe("");
 
