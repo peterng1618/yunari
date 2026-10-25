@@ -7022,6 +7022,69 @@ describe("An admin write keeps the platform's words off the wire", () => {
       await hosted.close();
     }
   });
+
+  it("reports a completed removal as success when the origins sweep fails", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      themeStore: {
+        ...createThemeStore(os.tmpdir()),
+        remove: () => Promise.resolve(true),
+      },
+      themeOrigins: {
+        ...createThemeOriginsStore(os.tmpdir()),
+        removeTheme: refusedWrite(),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "DELETE",
+        "/api/themes/living-room",
+      );
+
+      // The folder is already in the trash: a sweep that failed afterwards
+      // cannot turn a removal that happened into one that did not.
+      expect(answer.status).toBe(200);
+      expect(answer.json()).toEqual({ ok: true });
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("keeps the store's own retry sentence when a removal is refused as busy", async () => {
+    const hosted = await host({
+      themeStore: {
+        ...createThemeStore(os.tmpdir()),
+        // The store's refusal while a save owns the folder: plain text, no
+        // errno code and no path, so it is the caller's to act on.
+        remove: () =>
+          Promise.reject(
+            new Error(
+              '"living-room" is being saved right now; try again in a moment.',
+            ),
+          ),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "DELETE",
+        "/api/themes/living-room",
+      );
+
+      expect(answer.status).toBe(500);
+      expect(answer.text()).toBe(
+        '"living-room" is being saved right now; try again in a moment.',
+      );
+    } finally {
+      await hosted.close();
+    }
+  });
 });
 
 describe("a pairing guard protects dashboard content, not the bundle", () => {

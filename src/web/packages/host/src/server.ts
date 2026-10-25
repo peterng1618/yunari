@@ -4019,33 +4019,51 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
+        // The store moves the folder to the OS trash (docs/decisions/0021) and
+        // answers false for anything it would not have listed, so a 404 here
+        // means the same "no such theme" an open would have said.
+        let removed: boolean;
+
         try {
-          // The store moves the folder to the OS trash (docs/decisions/0021) and
-          // answers false for anything it would not have listed, so a 404 here
-          // means the same "no such theme" an open would have said.
-          const removed = await themeStore.remove(rawId);
-          // The origin goes only with a removal that happened, because it is a
-          // fact about a copy that is on disk. Unguarded, like the display
-          // route's `themeSettings?.removeDisplay(id)`: a sweep that throws
-          // reaches this handler's catch and answers 500 for a request whose
-          // folder is already in the trash — a real fault the caller should
-          // hear about, not one to swallow.
-          if (removed) await themeOrigins?.removeTheme(rawId);
-          sendJson(
-            response,
-            removed ? 200 : 404,
-            removed
-              ? { ok: true }
-              : { error: `No theme "${rawId}" in this library.` },
-          );
+          removed = await themeStore.remove(rawId);
         } catch (error) {
-          // A trash that refused is not a malformed request: nothing was
-          // removed, the theme is exactly where it was, and the author's copy
-          // is intact. The platform's words name the folder, so they go to the
-          // console and the caller gets the fact without them.
-          console.error(error);
-          sendText(response, 500, "That theme could not be removed.");
+          // A save in flight answers the store's own retry sentence: plain
+          // text, no path, and the caller is the one who can act on it. A
+          // platform refusal names the folder, so it goes to the console and
+          // the caller is told only that the removal did not happen.
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(response, 500, "That theme could not be removed.");
+            return;
+          }
+          sendText(
+            response,
+            500,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
         }
+
+        // The origin goes only with a removal that happened, because it is a
+        // fact about a copy that is on disk. **Its failure cannot undo the
+        // removal**: the folder is already in the trash, so answering a failure
+        // here would report a removal that did happen as one that did not. The
+        // stale origin is logged and the removal stands.
+        if (removed) {
+          try {
+            await themeOrigins?.removeTheme(rawId);
+          } catch (error) {
+            console.error(error);
+          }
+        }
+
+        sendJson(
+          response,
+          removed ? 200 : 404,
+          removed
+            ? { ok: true }
+            : { error: `No theme "${rawId}" in this library.` },
+        );
         return;
       }
 
