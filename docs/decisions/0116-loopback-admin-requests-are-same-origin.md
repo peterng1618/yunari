@@ -5,6 +5,7 @@
 - **Paths:** `src/web/packages/host/src/server.ts`,
   `src/web/packages/host/src/serve/static-path.ts`,
   `src/web/packages/host/src/providers/custom/fetch-source.ts`,
+  `src/web/packages/host/src/providers/custom/pinned-fetch.ts`,
   `src/web/packages/renderer-core/src/theme/asset-media-type.ts`,
   `src/web/packages/renderer-core/src/theme/envelope-semantics.ts`,
   `src/web/packages/editor/src/editor-shell/bridge.ts`,

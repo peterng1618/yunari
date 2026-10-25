@@ -32,6 +32,7 @@ declares. The closure half is this file's own **Release rule** below.
 | `@types/node` | 22.10.2 | MIT | types |
 | `@types/node-forge` | 1.3.11 | MIT | types for `node-forge` |
 | `node-forge` | 1.4.0 | BSD-3-Clause (of `BSD-3-Clause OR GPL-2.0`) | host: issues the local CA and leaf a display's secure origin needs |
+| `undici` | 7.30.1 | MIT | host: pins the address a custom source's policy checked to the connection that fetches it; already present transitively, now declared directly |
 | `qr` | 0.7.2 | MIT OR Apache-2.0 | QR symbol for the display link |
 | `jsqr` | 1.4.0 | Apache-2.0 | devDependency: decodes the QR round-trip |
 | `@google/design.md` | 0.4.0 | Apache-2.0 | devDependency: lints `DESIGN.md` in the design gate |

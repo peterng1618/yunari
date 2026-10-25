@@ -196,7 +196,7 @@ function isPrivateAddress(address: string): boolean {
 
 /** IPv4 `169.254.0.0/16` and IPv6 `fe80::/10`: metadata and link-local, refused
  *  on every hop. Private ranges depend on who typed the URL. */
-function isBlockedAddress(address: string): boolean {
+export function isBlockedAddress(address: string): boolean {
   const lower = bareAddress(address).toLowerCase();
   const v4 = asIpv4(lower);
   if (v4 !== undefined) return isLinkLocalV4(v4);
@@ -215,33 +215,76 @@ function isIpLiteral(host: string): boolean {
   return asIpv4(bare) !== undefined || bare.includes(":");
 }
 
+export interface ResolvedAddress {
+  readonly address: string;
+  readonly family: number;
+}
+
+/** The policy's one resolution. A test injects it so a second resolution at
+ *  connect time would show up as a second call. */
+export type HostLookup = (host: string) => Promise<readonly ResolvedAddress[]>;
+
+export const dnsLookup: HostLookup = async (host) => {
+  const entries = await lookup(host, { all: true, verbatim: true });
+  return entries.map((entry) => ({
+    address: entry.address,
+    family: entry.family,
+  }));
+};
+
+/** The addresses the policy checked for a hostname, so the connection can pin
+ *  one instead of resolving again. Every policy resolution replaces the entry,
+ *  so a later fetch re-resolves rather than reusing a stale answer. A hostname
+ *  is the only key `connect.lookup` receives, so two sources resolving the same
+ *  name at once share whichever answer was recorded last. */
+const checkedByHost = new Map<string, readonly ResolvedAddress[]>();
+
+export function recordCheckedAddresses(
+  host: string,
+  addresses: readonly ResolvedAddress[],
+): void {
+  checkedByHost.set(host, addresses);
+}
+
+export function checkedAddressesFor(
+  host: string,
+): readonly ResolvedAddress[] | undefined {
+  return checkedByHost.get(host);
+}
+
 type Resolved =
-  | { readonly ok: true; readonly addresses: readonly string[] }
+  | { readonly ok: true; readonly addresses: readonly ResolvedAddress[] }
   | { readonly ok: false; readonly reason: string };
 
-async function resolveDestination(destination: URL): Promise<Resolved> {
+async function resolveDestination(
+  destination: URL,
+  resolve: HostLookup,
+): Promise<Resolved> {
   if (destination.protocol !== "http:" && destination.protocol !== "https:") {
     return { ok: false, reason: "the source URL must be http or https" };
   }
 
   const host = destination.hostname;
-  const addresses: string[] = [];
 
   if (isIpLiteral(host)) {
-    addresses.push(host.replace(/^\[/, "").replace(/\]$/, ""));
-  } else {
-    try {
-      const resolved = await lookup(host, { all: true, verbatim: true });
-      for (const entry of resolved) addresses.push(entry.address);
-    } catch {
-      return { ok: false, reason: "the source host could not be resolved" };
-    }
-    if (addresses.length === 0) {
-      return { ok: false, reason: "the source host has no address" };
-    }
+    const bare = host.replace(/^\[/, "").replace(/\]$/, "");
+    return {
+      ok: true,
+      addresses: [{ address: bare, family: bare.includes(":") ? 6 : 4 }],
+    };
   }
 
-  return { ok: true, addresses };
+  let resolved: readonly ResolvedAddress[];
+  try {
+    resolved = await resolve(host);
+  } catch {
+    return { ok: false, reason: "the source host could not be resolved" };
+  }
+  if (resolved.length === 0) {
+    return { ok: false, reason: "the source host has no address" };
+  }
+
+  return { ok: true, addresses: resolved };
 }
 
 function refusalOf(
@@ -260,10 +303,18 @@ function refusalOf(
 async function refusalReason(
   destination: URL,
   options: { readonly allowPrivate: boolean },
+  resolve: HostLookup,
 ): Promise<string | undefined> {
-  const resolved = await resolveDestination(destination);
+  const resolved = await resolveDestination(destination, resolve);
   if (!resolved.ok) return resolved.reason;
-  return refusalOf(resolved.addresses, options.allowPrivate);
+
+  const addresses = resolved.addresses.map((entry) => entry.address);
+  const refused = refusalOf(addresses, options.allowPrivate);
+  // Only an address that passed the policy may be pinned for the connection.
+  if (refused === undefined && !isIpLiteral(destination.hostname)) {
+    recordCheckedAddresses(destination.hostname, resolved.addresses);
+  }
+  return refused;
 }
 
 interface BuiltRequest {
@@ -401,6 +452,7 @@ async function run(
   source: CustomSource,
   credential: string | undefined,
   fetchImpl: typeof fetch,
+  resolve: HostLookup,
   nowMs: () => number,
   fail: Fail,
 ): Promise<FetchOutcome> {
@@ -426,14 +478,22 @@ async function run(
     if (firstHop) {
       // The user typed the first URL, so its private ranges are allowed; a
       // redirect may only reach them when that first URL already did.
-      const resolved = await resolveDestination(destination);
+      const resolved = await resolveDestination(destination, resolve);
       if (!resolved.ok) return fail(resolved.reason);
-      allowPrivate = resolved.addresses.every(isPrivateAddress);
-      const refused = refusalOf(resolved.addresses, true);
+      const addresses = resolved.addresses.map((entry) => entry.address);
+      allowPrivate = addresses.every(isPrivateAddress);
+      const refused = refusalOf(addresses, true);
       if (refused !== undefined) return fail(refused);
+      if (!isIpLiteral(destination.hostname)) {
+        recordCheckedAddresses(destination.hostname, resolved.addresses);
+      }
       firstHop = false;
     } else {
-      const refused = await refusalReason(destination, { allowPrivate });
+      const refused = await refusalReason(
+        destination,
+        { allowPrivate },
+        resolve,
+      );
       if (refused !== undefined) return fail(refused);
     }
     if (signal.aborted) return fail(TIMEOUT_REASON);
@@ -536,6 +596,7 @@ export async function fetchSource(
   credential: string | undefined,
   fetchImpl: typeof fetch,
   nowMs: () => number,
+  resolve: HostLookup = dnsLookup,
 ): Promise<FetchOutcome> {
   const fail: Fail = (reason, status) => {
     const clean = reasonOf(reason, credential);
@@ -547,7 +608,7 @@ export async function fetchSource(
   return withSourceLock(source.id, async () => {
     await acquireSlot();
     try {
-      return await run(source, credential, fetchImpl, nowMs, fail);
+      return await run(source, credential, fetchImpl, resolve, nowMs, fail);
     } catch (error) {
       return fail(messageOf(error));
     } finally {

@@ -29,6 +29,7 @@ where its section is one.
 | Lineicons 1.3.2 | MIT | development-only: generates the asset finder's Lineicons manifest; no runtime import |
 | systeminformation 5.33.13 | MIT | host hardware metrics (no dependencies of its own) |
 | node-forge 1.4.0 | BSD-3-Clause (of `BSD-3-Clause OR GPL-2.0`) | host: encodes and signs the local CA and leaf that give a display a secure origin (no dependencies of its own) |
+| undici 7.30.1 | MIT | host: pins the DNS address checked by a custom source's policy to the connection that fetches it (decision 0116) |
 | qr 0.7.2 | MIT OR Apache-2.0 | QR symbol for the display link (no dependencies of its own) |
 | class-variance-authority 0.7.1 | Apache-2.0 | editor component variants |
 | clsx 2.1.1 | MIT | editor class-name joins |
