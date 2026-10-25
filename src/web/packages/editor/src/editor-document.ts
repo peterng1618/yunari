@@ -146,11 +146,25 @@ export class EditorDocument {
   readonly #onBindingsChange: (() => void) | undefined;
   /** Told the document may have moved; see `#writeEnvelope`. */
   readonly #documentChangeListeners = new Set<() => void>();
+  /** Whether a flush is already queued. Set before scheduling, so the dozens of
+   *  announcements a paste or a revive makes in one task collapse into one
+   *  recompute rather than one per Fabric event. */
+  #announceScheduled = false;
   /** A stable reference, so whoever registers it can keep it without binding:
    *  the library manager takes it as a port and the session hands it to every
    *  canvas event that means "the document moved". */
   readonly announceChange = (): void => {
-    for (const listener of this.#documentChangeListeners) listener();
+    if (this.#announceScheduled) return;
+    this.#announceScheduled = true;
+    queueMicrotask(() => {
+      // Cleared before the listeners run: an announcement made during the
+      // flush is a second batch, so it schedules one more pass rather than
+      // being folded into the pass that is already reading stale state.
+      this.#announceScheduled = false;
+      // A copy, so a listener added or removed during the flush does not
+      // change who this batch reaches.
+      for (const listener of [...this.#documentChangeListeners]) listener();
+    });
   };
 
   constructor(options: EditorDocumentOptions) {

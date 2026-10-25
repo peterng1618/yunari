@@ -67,6 +67,7 @@ function bridgeFor(
   bridgeExtra: Record<string, unknown> = {},
 ) {
   const listeners = new Map<string, () => void>();
+  const documentListeners = new Set<() => void>();
   const objects = active === undefined ? [] : [active];
   const canvas = {
     getActiveObject: () => active,
@@ -100,7 +101,19 @@ function bridgeFor(
     historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
     ...extra,
   };
-  const session = { ...facadeStub(), ...sessionExtra };
+  const session = {
+    ...facadeStub(),
+    // The bridge is told the document moved by the document's own coalesced
+    // announcement; a test that fires a canvas event goes through this on the
+    // same path the session wires it to.
+    subscribeDocumentChange: (listener: () => void) => {
+      documentListeners.add(listener);
+      return () => {
+        documentListeners.delete(listener);
+      };
+    },
+    ...sessionExtra,
+  };
   return {
     bridge: createEditorShellBridge({
       editor,
@@ -110,6 +123,9 @@ function bridgeFor(
     canvas,
     session,
     editor,
+    announceDocument: () => {
+      for (const listener of [...documentListeners]) listener();
+    },
   };
 }
 
@@ -371,26 +387,57 @@ it("republishes when an object is deleted, so the row goes with it", () => {
   // for something the canvas no longer had. The layer list, the canvas and the
   // inspector disagreed about what the document contained.
   const rect = new Rect({ id: "header", width: 10, height: 10 });
-  const { bridge, canvas } = bridgeFor(rect);
+  const { bridge, canvas, announceDocument } = bridgeFor(rect);
   const heard = vi.fn();
   bridge.subscribe(heard);
 
   canvas.remove(rect);
+  // The session routes Fabric's remove to the document's coalesced
+  // announcement; the bridge listens there rather than to the canvas event.
   canvas.fire("object:removed", { target: rect });
-  expect(heard).toHaveBeenCalled();
+  announceDocument();
+  expect(heard).toHaveBeenCalledTimes(1);
   expect(bridge.layers().map((row) => row.id)).not.toContain("header");
 });
 
 it("republishes when an object is added", () => {
-  const { bridge, canvas } = bridgeFor(undefined);
+  const { bridge, canvas, announceDocument } = bridgeFor(undefined);
   const heard = vi.fn();
   bridge.subscribe(heard);
 
   const added = new Rect({ id: "footer", width: 10, height: 10 });
   canvas.add(added);
   canvas.fire("object:added", { target: added });
-  expect(heard).toHaveBeenCalled();
+  announceDocument();
+  expect(heard).toHaveBeenCalledTimes(1);
   expect(bridge.layers().map((row) => row.id)).toContain("footer");
+});
+
+it("recomputes once for a revive's remove-then-add storm, and records no history", () => {
+  // A revive takes every object out and puts each one back, so Fabric fires a
+  // storm of events that all mean the same thing. The bridge used to repaint
+  // the rows per event; routing the storm through the document's coalesced
+  // announcement makes it one recompute.
+  const before = new Rect({ id: "before", width: 10, height: 10 });
+  const { bridge, canvas, editor, announceDocument } = bridgeFor(before);
+  const heard = vi.fn();
+  bridge.subscribe(heard);
+
+  canvas.remove(before);
+  canvas.fire("object:removed", { target: before });
+  const after = new Rect({ id: "after", width: 10, height: 10 });
+  canvas.add(after);
+  canvas.fire("object:added", { target: after });
+
+  // Neither Fabric event is a second notification path.
+  expect(heard).not.toHaveBeenCalled();
+
+  announceDocument();
+  expect(heard).toHaveBeenCalledTimes(1);
+  expect(
+    editor.historyManager.saveState,
+    "a restore suspends history; the notification must not record an entry",
+  ).not.toHaveBeenCalled();
 });
 
 it("carries the object's display name into the projection and back out again", () => {

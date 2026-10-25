@@ -245,12 +245,6 @@ export function createEditorShellBridge(input: {
   ] as const;
   const events = [
     "object:modified",
-    // A deleted object fires no selection event, so the layer list kept
-    // showing a row for something the canvas no longer had — and the inspector
-    // went on reading its geometry. Deletion is the one edit that most needs the
-    // projection to move, because the row it removes is the proof it happened.
-    "object:removed",
-    "object:added",
     // Entering or leaving a group moves no selection, so Fabric fires nothing
     // for it — the panel would repaint only when something unrelated did.
     GROUP_CONTEXT_EVENT,
@@ -258,10 +252,11 @@ export function createEditorShellBridge(input: {
   for (const event of selectionEvents)
     canvas.on(event as never, settleSelection);
   for (const event of events) canvas.on(event as never, notify);
-  // A rename moves no object, so none of the canvas events above fire for it —
-  // the session's own document change is the only signal that the name it
-  // reports has moved. Without it a snapshot keeps the name the bridge was
-  // built with for as long as the document is open.
+  // Adding and removing are the document's own signals, not a second path this
+  // bridge listens to: the session already routes them — and the rename no
+  // canvas event fires for — through the document's coalesced announcement.
+  // Subscribing to Fabric's events here as well made a revive's remove-then-add
+  // storm repaint the rows once per object instead of once for the batch.
   const offDocumentChange = input.session.subscribeDocumentChange(notify);
   const activeObject = ():
     | (FabricObject & { readonly locked?: boolean })
