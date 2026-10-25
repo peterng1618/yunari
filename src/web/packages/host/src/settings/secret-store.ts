@@ -44,13 +44,15 @@ async function readIfExists(file: string): Promise<Buffer | undefined> {
 /**
  * The wrapped key's bytes, or nothing when the file is absent.
  *
- * A present file that cannot be read as `{ version: 1, wrapped }` throws: it
- * may be a key every stored secret needs, so it is not the same fact as "no
- * key yet", and regenerating it would discard those secrets.
+ * An empty file wraps no key, so no secret can depend on it; it reads as
+ * absent and the writer recreates it. A non-empty file that cannot be read as
+ * `{ version: 1, wrapped }` throws: it may be a key every stored secret needs,
+ * so it is not the same fact as "no key yet", and regenerating it would discard
+ * those secrets.
  */
 async function readWrappedKey(file: string): Promise<Buffer | undefined> {
   const raw = await readIfExists(file);
-  if (raw === undefined) return undefined;
+  if (raw === undefined || raw.length === 0) return undefined;
 
   let parsed: unknown;
   try {
@@ -71,11 +73,12 @@ async function readWrappedKey(file: string): Promise<Buffer | undefined> {
 
 export function createSecretStore(
   directory: string,
-  protector: KeyProtector = createOsKeyProtector(),
+  protector: KeyProtector = createOsKeyProtector(directory),
 ): SecretStore {
   const keyFile = path.join(directory, KEY_FILE);
   const fileFor = (name: string): string => path.join(directory, `${name}.bin`);
-  const temporaryFor = (name: string): string => `${fileFor(name)}.tmp`;
+  const temporaryFor = (name: string): string =>
+    `${fileFor(name)}.${randomBytes(6).toString("hex")}.tmp`;
 
   let cachedKey: Buffer | undefined;
 
@@ -112,24 +115,31 @@ export function createSecretStore(
 
     await mkdir(directory, { recursive: true });
 
-    try {
-      await writeFile(keyFile, body, {
-        encoding: "utf8",
-        mode: MODE,
-        flag: "wx",
-      });
-      cachedKey = created;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await writeFile(keyFile, body, {
+          encoding: "utf8",
+          mode: MODE,
+          flag: "wx",
+        });
+        cachedKey = created;
+        return cachedKey;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
 
-      const winner = await readWrappedKey(keyFile);
-      if (winner === undefined) {
-        throw new Error("The secret key file is unreadable.");
+        // A concurrent creator won, or the file that is there is the empty one
+        // that wraps no key. Only the empty case may be replaced.
+        const winner = await readWrappedKey(keyFile);
+        if (winner !== undefined) {
+          cachedKey = await unwrapKey(winner);
+          return cachedKey;
+        }
+
+        await rm(keyFile, { force: true });
       }
-      cachedKey = await unwrapKey(winner);
     }
 
-    return cachedKey;
+    throw new Error("The secret key file could not be created.");
   };
 
   // Reads and writes queue rather than overlap: on Windows a rename over a
@@ -169,7 +179,13 @@ export function createSecretStore(
         if (payload === undefined) return undefined;
 
         const wrapped = await readWrappedKey(keyFile);
-        if (wrapped === undefined) return undefined;
+        if (wrapped === undefined) {
+          // A stored secret without its key would otherwise read as "no
+          // credentials" and silently sign the user out or mint a new CA.
+          throw new Error(
+            `Stored secret "${name}" exists but its secret key is missing.`,
+          );
+        }
 
         if (!(await protector.available())) {
           throw new Error(
@@ -215,7 +231,10 @@ export function createSecretStore(
 
         const iv = randomBytes(IV_BYTES);
         const cipher = createCipheriv("aes-256-gcm", key, iv);
-        const ciphertext = Buffer.concat([cipher.update(bytes), cipher.final()]);
+        const ciphertext = Buffer.concat([
+          cipher.update(bytes),
+          cipher.final(),
+        ]);
         const tag = cipher.getAuthTag();
 
         await mkdir(directory, { recursive: true });

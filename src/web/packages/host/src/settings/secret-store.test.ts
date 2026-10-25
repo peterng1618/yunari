@@ -1,8 +1,16 @@
 import { randomBytes } from "node:crypto";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { createOsKeyProtector, type KeyProtector } from "./os-key-protector.js";
 import { createSecretStore } from "./secret-store.js";
 
@@ -95,6 +103,70 @@ describe("secret store", () => {
     await expect(store.read("tampered")).rejects.toThrow();
   });
 
+  it("throws on a truncated secret file", async () => {
+    await store.write("short", bytesOf(16));
+
+    const file = secretFile(dir, "short");
+    await writeFile(file, (await readFile(file)).subarray(0, 10));
+
+    await expect(store.read("short")).rejects.toThrow();
+  });
+
+  it("answers undefined when neither the secret nor its key exists", async () => {
+    await rm(keyFile(dir), { force: true });
+
+    expect(await store.read("alpha")).toBeUndefined();
+  });
+
+  it("throws when a stored secret's key file is gone", async () => {
+    await store.write("alpha", bytesOf(6));
+    await rm(keyFile(dir), { force: true });
+
+    await expect(store.read("alpha")).rejects.toThrow();
+  });
+
+  it("creates nothing when asked only whether it is available", async () => {
+    expect(await store.available()).toBe(true);
+    expect(await readdir(dir)).toEqual([]);
+  });
+
+  it("recreates an empty key file, which wraps no key", async () => {
+    await writeFile(keyFile(dir), "", "utf8");
+
+    await store.write("alpha", bytesOf(3));
+
+    expect((await readFile(keyFile(dir))).length).toBeGreaterThan(0);
+    const read = await store.read("alpha");
+    expect(read?.equals(Buffer.from(bytesOf(3)))).toBe(true);
+  });
+
+  it("throws on a non-empty key file that does not parse", async () => {
+    await writeFile(keyFile(dir), "not a key", "utf8");
+
+    await expect(store.write("alpha", bytesOf(3))).rejects.toThrow();
+  });
+
+  it("creates one key when two stores first write together", async () => {
+    const first = createSecretStore(dir, createFakeProtector());
+    const second = createSecretStore(dir, createFakeProtector());
+
+    await Promise.all([
+      first.write("one", bytesOf(9)),
+      second.write("two", bytesOf(13)),
+    ]);
+
+    expect((await readdir(dir)).sort()).toEqual([
+      "one.bin",
+      "secret.key",
+      "two.bin",
+    ]);
+
+    const fromFirst = await first.read("one");
+    const fromSecond = await second.read("two");
+    expect(fromFirst?.equals(Buffer.from(bytesOf(9)))).toBe(true);
+    expect(fromSecond?.equals(Buffer.from(bytesOf(13)))).toBe(true);
+  });
+
   it("shares one wrapped key between stores in the same directory", async () => {
     await store.write("alpha", bytesOf(17));
     const keyBefore = await readFile(keyFile(dir));
@@ -159,24 +231,44 @@ describe("secret store", () => {
       available = await protectorForThisMachine.available();
     });
 
-    it(
-      "wraps and unwraps a random 32-byte key through the OS facility",
-      async (ctx) => {
-        // `secret-tool` does not exist on this Windows host; the Linux branch is
-        // unexercised here rather than falsely reported as proven.
-        if (!available) {
-          ctx.skip();
-          return;
-        }
+    it("wraps and unwraps a random 32-byte key through the OS facility", async (ctx) => {
+      // `secret-tool` does not exist on this Windows host; the Linux branch is
+      // unexercised here rather than falsely reported as proven.
+      if (!available) {
+        ctx.skip();
+        return;
+      }
 
-        const key = randomBytes(32);
-        const wrapped = await protectorForThisMachine.wrap(key);
-        expect(wrapped.length > 0).toBe(true);
+      const key = randomBytes(32);
+      const wrapped = await protectorForThisMachine.wrap(key);
 
-        const unwrapped = await protectorForThisMachine.unwrap(wrapped);
-        expect(Buffer.from(unwrapped).equals(key)).toBe(true);
-      },
-      60_000,
-    );
+      // Only the round trip is asserted: on Linux the wrapped blob is the
+      // empty marker and the key itself lives in the keyring.
+      const unwrapped = await protectorForThisMachine.unwrap(wrapped);
+      expect(Buffer.from(unwrapped).equals(key)).toBe(true);
+    }, 60_000);
+
+    it("shares one availability probe when two ask at once", async (ctx) => {
+      if (!available) {
+        ctx.skip();
+        return;
+      }
+
+      // A fresh module instance has a cold probe cache, which is where the
+      // two-callers race lives.
+      vi.resetModules();
+      const fresh = await import("./os-key-protector.js");
+      const first = fresh.createOsKeyProtector(dir);
+      const second = fresh.createOsKeyProtector(dir);
+
+      const answers = await Promise.all([
+        first.available(),
+        second.available(),
+      ]);
+
+      expect(answers).toEqual([true, true]);
+      // The loser must not keep a cached `false` after the winner answered.
+      expect(await second.available()).toBe(true);
+    }, 60_000);
   });
 });
