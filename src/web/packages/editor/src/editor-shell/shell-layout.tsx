@@ -156,8 +156,7 @@ function ModeSwitch(props: ShellLayoutProps): React.JSX.Element {
  * directly. */
 interface ShellHosts {
   readonly canvas: HTMLElement;
-  /** The Add pane's body: the insert list. Its foot still holds the
-      declared-asset library until the Assets pane takes it over. */
+  /** The Add pane's body: shapes, text and the card library. */
   readonly add: HTMLElement;
   /** The Assets pane: every declared file, its import and placement, and the
       finder link (DESIGN.md §7.2). */
@@ -329,7 +328,8 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
      *  shell's one reading of `ThemeMetadata` — the bridge snapshot — so the
      *  About tab's version is the same fact the Document pane's
      *  `releaseVersion` row reads, never a second source. */
-    const { releaseVersion, objectCount, tokenCount } = useSelection(store);
+    const { releaseVersion, objectCount, tokenCount, assetCount } =
+      useSelection(store);
     const sheetOpen = useSheet(sheet);
     const finderState = useFinder(finder);
     const finderOpen = finderState.open;
@@ -511,10 +511,9 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
                   holds no list of its own, so it draws no count rather than a
                   fabricated `0` (the same rule the two counts above take before
                   a bridge is set).
-                - Assets — nothing here. Its list is the asset manager's
-                  declarations, and the shell never holds that manager; a `0`
-                  while a document declares files would be fabricated, so the
-                  count waits for the pane's content to bring its own source.
+                - Assets — the asset manager's declarations, through
+                  `assetCount`, which the session reports because the manager is
+                  the session's and the shell never holds it.
 
                 A count is `undefined` where the list has not loaded, and `Pane`
                 then draws no count span at all. */}
@@ -533,10 +532,9 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
             >
               <CompositionPane bridge={store.bridge} />
             </Pane>
-            {/* The Add pane's body is one host and one React tree. It still
-                draws the declared-asset library at its foot, but the files now
-                belong to the Assets slot (DESIGN.md §7.2); the library moves
-                there rather than staying a second route to the same list. */}
+            {/* The Add pane's body is one host and one React tree: shapes,
+                text and the card library. Local files belong to the Assets slot
+                (DESIGN.md §7.2). */}
             <Pane
               id="add"
               title={uiCopy.rail.slots.add}
@@ -548,12 +546,16 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
               <Host node={hosts.add} hidden={slot !== "add"} />
             </Pane>
             {/* The declared files' own pane. Its body is the persistent host
-                the session's asset library mounts into; until that content
-                lands the chrome is all this slot draws. */}
+                the session's asset library mounts into. */}
             <Pane
               id="assets"
               title={uiCopy.rail.slots.assets}
               icon={RAIL_GLYPHS.assets}
+              count={
+                assetCount === undefined
+                  ? undefined
+                  : uiCopy.paneCounts.files(assetCount)
+              }
               hidden={slot !== "assets"}
               bodyRef={paneBody}
             >

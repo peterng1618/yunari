@@ -1315,6 +1315,9 @@ export const uiCopy = {
       `${count} ${count === 1 ? "unit" : "units"}`,
     tokens: (count: number): string =>
       `${count} ${count === 1 ? "token" : "tokens"}`,
+    /** The Assets pane's list, which is the asset manager's declarations. */
+    files: (count: number): string =>
+      `${count} ${count === 1 ? "file" : "files"}`,
   },
   /** The publish surface. §145: plain LAN HTTP has no confidentiality, so the
    *  words that turn it on have to say what it is. */
@@ -1602,6 +1605,10 @@ export const uiCopy = {
         *file* — the extension is what decides whether it becomes a layer or is
         only declared — and replaces or removes the *asset* it became. */
     importFile: "Import a file",
+    /** The import that skips the kind's automatic placement: an image would
+        otherwise land on the canvas, and the author wanted it as the board's
+        background. */
+    importAsBackground: "Import as background",
     replaceAsset: "Replace asset",
     assetList: "Asset",
     /** The Assets pane's cards. `kind` is the metadata line's word, a total map
@@ -1626,11 +1633,13 @@ export const uiCopy = {
     assetImportFailed: "That file could not be imported.",
     /** Shown when an import declared the file and put it on the canvas. */
     assetPlaced: "Imported and placed on the canvas.",
-    /** Shown when an import declared the file and did not place it, because a
-        video is not a canvas object. The pane says which of the two happened
-        rather than leaving the canvas's silence to say it. */
-    assetDeclaredVideo:
-      "Imported and declared. A video is not placed on the canvas.",
+    /** Shown when an import declared the file and wrote it as the artboard's
+        background media — the automatic choice for a video, and the forced one
+        for Import as background. */
+    assetBackgroundSet: "Imported and set as the background.",
+    /** Shown when Import as background is given a font: a face has no
+        background form, and the file is not declared either. */
+    assetBackgroundFontRefused: "A font cannot be set as the background.",
     assetDeclaredFont:
       "Imported and declared. A font is not placed on the canvas.",
     /** Shown when a removal is refused because something still points at it. */

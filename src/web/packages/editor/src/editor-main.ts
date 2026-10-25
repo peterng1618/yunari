@@ -284,6 +284,7 @@ async function start(): Promise<void> {
       assetManager,
       panelHosts: {
         add: layout.hosts.add,
+        assets: layout.hosts.assets,
         tokens: layout.hosts.tokens,
         document: layout.hosts.document,
         selection: layout.hosts.selection,
@@ -328,6 +329,11 @@ async function start(): Promise<void> {
       // The shell's selection projection, so the Tokens pane opens on the
       // preset the selection is set in rather than on the first declared one.
       selection: layout.selection,
+      // The Assets pane's count is the session's manager's list, and the title
+      // bar is the shell's, so the reading crosses back through the store that
+      // already carries the document's own facts.
+      onAssetCountChange: (count: number) =>
+        layout.selection.setAssetCount(count),
       onOpenTheme: async (
         envelope: FabricThemeEnvelope,
         assets: Readonly<Record<string, Uint8Array>>,

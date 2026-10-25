@@ -129,7 +129,7 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     "a copy: its own Enter and blur commit, with no Escape and no composing guard",
   ],
   [
-    "panes/add/file-section.tsx",
+    "panes/assets/assets-pane.tsx",
     'two hidden `type="file"` inputs, driven by their own buttons',
   ],
   [

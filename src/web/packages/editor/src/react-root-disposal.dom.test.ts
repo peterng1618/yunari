@@ -304,6 +304,8 @@ const SHIPPED_ROOTS: readonly (readonly [string, number])[] = [
   // per field-set rebuild. They are React children of the Tokens pane now, so
   // the file creates one root and this declaration follows the code.
   ["palette-manager/panel.ts", 1],
+  // the Assets pane's own tree, released by `createAssetsPane`'s `destroy()`.
+  ["panes/assets/assets-pane.tsx", 1],
   ["selection-inspector/column.tsx", 1],
   ["selection-inspector/inspector.tsx", 1],
   // the lead block's own tree, between the subject and the sections, released

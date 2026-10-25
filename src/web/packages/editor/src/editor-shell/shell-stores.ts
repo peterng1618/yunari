@@ -5,10 +5,18 @@ import type { EditorShellBridge, EditorShellSnapshot } from "./bridge.js";
 /** The shell snapshot as external mutable state — the selection, which Fabric
  * owns, and the document's identity, which the session does — so every reader
  * shares one subscription and a late-set bridge still propagates. */
+export interface SelectionSnapshot extends EditorShellSnapshot {
+  /** The Assets pane's list count. The manager is the session's, not the
+   *  shell's, so the session reports it; `undefined` means no document, which
+   *  must not read as "0 files". */
+  readonly assetCount: number | undefined;
+}
+
 export class SelectionStore {
   #bridge: EditorShellBridge | undefined;
   readonly #listeners = new Set<() => void>();
-  #snapshot: EditorShellSnapshot = {
+  #assetCount: number | undefined;
+  #snapshot: SelectionSnapshot = {
     objectCount: undefined,
     tokenCount: undefined,
     selectedCount: 0,
@@ -16,6 +24,7 @@ export class SelectionStore {
     activeKind: "none",
     documentName: undefined,
     selectionPresetId: undefined,
+    assetCount: undefined,
   };
   #unsubscribe: (() => void) | undefined;
 
@@ -24,15 +33,17 @@ export class SelectionStore {
     this.#unsubscribe = undefined;
     this.#bridge = bridge;
     if (bridge !== undefined) {
-      this.#snapshot = bridge.snapshot();
+      this.#snapshot = { ...bridge.snapshot(), assetCount: this.#assetCount };
       this.#unsubscribe = bridge.subscribe(() => {
-        this.#snapshot = bridge.snapshot();
+        this.#snapshot = { ...bridge.snapshot(), assetCount: this.#assetCount };
         for (const listener of this.#listeners) listener();
       });
     } else {
       // No scene to count, so the strip's count readout has nothing to draw —
       // never `0`, which is a blank document's own answer. The Tokens pane's
-      // count is absent for the same reason: no document is no palette.
+      // count is absent for the same reason: no document is no palette. The
+      // Assets pane's count is the session's and goes with the document too.
+      this.#assetCount = undefined;
       this.#snapshot = {
         objectCount: undefined,
         tokenCount: undefined,
@@ -41,8 +52,18 @@ export class SelectionStore {
         activeKind: "none",
         documentName: undefined,
         selectionPresetId: undefined,
+        assetCount: undefined,
       };
     }
+    for (const listener of this.#listeners) listener();
+  }
+
+  /** The Assets pane's count, reported by the session after every declaration
+   *  change — the manager has no event to subscribe to. */
+  setAssetCount(count: number): void {
+    if (this.#assetCount === count) return;
+    this.#assetCount = count;
+    this.#snapshot = { ...this.#snapshot, assetCount: count };
     for (const listener of this.#listeners) listener();
   }
 
@@ -51,14 +72,14 @@ export class SelectionStore {
     return () => this.#listeners.delete(listener);
   };
 
-  readonly get = (): EditorShellSnapshot => this.#snapshot;
+  readonly get = (): SelectionSnapshot => this.#snapshot;
 
   get bridge(): EditorShellBridge | undefined {
     return this.#bridge;
   }
 }
 
-export function useSelection(store: SelectionStore): EditorShellSnapshot {
+export function useSelection(store: SelectionStore): SelectionSnapshot {
   return useSyncExternalStore(store.subscribe, store.get, store.get);
 }
 

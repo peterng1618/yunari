@@ -193,6 +193,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -269,6 +270,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -325,6 +327,7 @@ describe("EditorSession", () => {
         envelope,
         panelHosts: {
           add: document.body,
+          assets: document.body,
           document: document.body,
           tokens: document.body,
           selection: document.body,
@@ -383,6 +386,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -440,6 +444,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -497,6 +502,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -591,6 +597,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -682,6 +689,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -771,6 +779,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -853,6 +862,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -910,6 +920,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -991,6 +1002,7 @@ describe("EditorSession", () => {
       envelope: { ...envelope, globals: { typePresets: presets("Body") } },
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: documentHost,
         tokens: document.body,
         selection: selectionHost,
@@ -1065,6 +1077,7 @@ describe("EditorSession", () => {
       thumbnail,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -1135,6 +1148,7 @@ describe("opening a theme over a document that has unsaved changes", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -1374,6 +1388,7 @@ describe("a save the host refused", () => {
 
   const panelHosts = {
     add: document.body,
+    assets: document.body,
     document: document.body,
     tokens: document.body,
     selection: document.body,
@@ -1676,6 +1691,7 @@ describe("a save that carries only what changed", () => {
 
   const panelHosts = {
     add: document.body,
+    assets: document.body,
     document: document.body,
     tokens: document.body,
     selection: document.body,
@@ -1693,7 +1709,7 @@ describe("a save that carries only what changed", () => {
   };
   const storedBadge = {
     id: "badge",
-    kind: "image" as const,
+    kind: "svg" as const,
     path: "assets/badge.svg",
     sha256: "b".repeat(64),
   };
@@ -1955,6 +1971,7 @@ describe("the Wallpaper Engine import transaction", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -2304,6 +2321,7 @@ describe("arming a text placement from every surface", () => {
       envelope: theme,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,

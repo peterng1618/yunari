@@ -6,7 +6,6 @@ import {
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import type { AssetManager } from "./asset-manager/index.js";
 import { CARD_LIBRARY, type CardDiagram } from "./card-library.js";
 import type { EditorInteraction } from "./editor-interaction.js";
 import {
@@ -17,7 +16,6 @@ import {
   type ShapeKind,
 } from "./new-object-defaults.js";
 import { AddPane } from "./panes/add/add-pane.js";
-import { FileSection } from "./panes/add/file-section.js";
 import type { TextPlacement } from "./text-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
 
@@ -56,23 +54,6 @@ export interface NewObjectActions {
    * panel's `constructing` has no rejection left to report a second time.
    */
   readonly insertCard: (cardId: string) => void;
-}
-
-/**
- * The Add pane's file path: the declared-asset library the Assets pane used to
- * be. The session owns every part of it, so the pane is handed the manager and
- * the two ports rather than building any of them.
- */
-export interface NewObjectAssets {
-  readonly manager: AssetManager;
-  /** Told the declarations moved, so the document's own panels re-resolve. */
-  readonly changed: () => void;
-  /** The envelope-side references no object carries — the artboard's background
-   *  media and a type preset's face. */
-  readonly isReferenced: (assetId: string) => boolean;
-  /** Opens the finder. The modal is the shell's, so the session hands this port
-   *  down rather than the panel inventing a second entry path. */
-  readonly onFindAssets?: () => void;
 }
 
 /** One object an author can insert, named as the control that inserts it. */
@@ -336,7 +317,6 @@ export function createNewObjectPanel(
   editor: EditorInteraction,
   globals: FabricGlobals | undefined,
   actions?: NewObjectActions,
-  assets?: NewObjectAssets,
 ): NewObjectPanel {
   // Read at construction time rather than captured by the render, so a theme
   // edit that arrives through `setGlobals` reaches the next insertion — the
@@ -354,28 +334,11 @@ export function createNewObjectPanel(
   // the tiles rather than the empty frame before React's first commit.
   flushSync(() => {
     reactRoot.render(
-      createElement(
-        AddPane,
-        {
-          groups: insertGroups(),
-          onInsert: (object) =>
-            insertObject(editor, current.globals, actions, object),
-        },
-        // The file path sits at the foot, inside the pane `Pane` already named:
-        // `§5.2` puts the declared-asset library in Add, and a second surface
-        // under its own name is what this task removes.
-        assets === undefined
-          ? null
-          : createElement(FileSection, {
-              manager: assets.manager,
-              editor,
-              changed: assets.changed,
-              isReferenced: assets.isReferenced,
-              ...(assets.onFindAssets === undefined
-                ? {}
-                : { onFindAssets: assets.onFindAssets }),
-            }),
-      ),
+      createElement(AddPane, {
+        groups: insertGroups(),
+        onInsert: (object) =>
+          insertObject(editor, current.globals, actions, object),
+      }),
     );
   });
 

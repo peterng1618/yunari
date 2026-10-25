@@ -57,6 +57,7 @@ import {
   type PalettePanel,
   paletteTokenUsage,
 } from "./palette-manager/index.js";
+import { createAssetsPane } from "./panes/assets/assets-pane.js";
 import type { PresetSelection } from "./panes/tokens/preset-list.js";
 import { typePresetOf } from "./selection-inspector/appearance.js";
 import {
@@ -90,8 +91,10 @@ import type { WallpaperExportOutcome } from "./wallpaper-engine/export-sheet.js"
 const IMPORTED_ICON_SHARE = 0.12;
 
 interface EditorPanelHosts {
-  /** Text and chart creation, and the declared-asset library at its foot. */
+  /** Text and chart creation, and the card library. */
   readonly add: HTMLElement;
+  /** The declared files, their import and placement, in the Assets pane. */
+  readonly assets: HTMLElement;
   /** The theme's own paints and type presets, in the Tokens pane. */
   readonly tokens: HTMLElement;
   /** The document's own panels, in the Document pane: the artboard and the
@@ -164,6 +167,10 @@ interface EditorSessionOptions {
    *  its chooser opens on the preset the selection is set in rather than on the
    *  first declared one (`vg-094`). Optional for the same reason as above. */
   readonly selection?: PresetSelection;
+  /** The Assets pane's title count. The store is the shell chrome's, so the
+   *  session reports the manager's declaration count rather than the shell
+   *  reaching for a manager it does not hold. */
+  readonly onAssetCountChange?: (count: number) => void;
   readonly onOpenTheme?: (
     envelope: FabricThemeEnvelope,
     assets: Readonly<Record<string, Uint8Array>>,
@@ -189,6 +196,7 @@ export class EditorSession {
   readonly #palette: PalettePanel;
   readonly #types: TypePresetPanel;
   readonly #newObjects: NewObjectPanel;
+  readonly #assetsPanel: { destroy(): void };
   readonly #selection: SelectionInspector;
   readonly #snapping: SnapManager;
   readonly #indicators: IndicatorManager;
@@ -449,22 +457,36 @@ export class EditorSession {
         addChart: (family) => this.charts.addChart(family),
         insertCard: (cardId) => this.#document.insertCard(cardId),
       },
-      // The file path travels in the Add pane rather than beside it (`§5.2`),
-      // so the manager, the reference check and the re-resolve are handed to
-      // the panel that already owns the pane's body.
-      {
-        manager: this.#assets,
-        changed: () => {
-          // The background column offers the declared pictures, so a picture
-          // that lands while the background is selected is offered then rather
-          // than at the next selection change.
-          this.#selection.render();
-          this.#document.refreshBackgroundMedia();
-        },
-        isReferenced: (assetId) => this.#document.holdsAsset(assetId),
-        onFindAssets: () => options.onFindAssets?.(),
-      },
     );
+    /** The declarations moved: the background column offers the declared
+     *  pictures, and the artboard resolves their bytes, so both re-resolve now. */
+    const assetsChanged = (): void => {
+      this.#selection.render();
+      this.#document.refreshBackgroundMedia();
+      this.#announceAssetCount();
+    };
+    this.#assetsPanel = createAssetsPane(options.panelHosts.assets, {
+      manager: this.#assets,
+      editor: options.shell.editor,
+      isReferenced: (assetId) => this.#document.holdsAsset(assetId),
+      onChanged: assetsChanged,
+      onFindAssets: () => options.onFindAssets?.(),
+      // Preview and preset creation are Tasks 20 and 12; the pane disables an
+      // action whose callback is absent, so leaving these two unwired is the
+      // deliberate state, not a dead control.
+      onBackground: (asset) => {
+        const background = this.#document.envelope.background;
+        this.#document.setBackground({
+          ...background,
+          media: {
+            assetId: asset.id,
+            bounds: background?.media?.bounds ?? "theme",
+          },
+        });
+        this.#document.refreshBackgroundMedia();
+      },
+    });
+    this.#announceAssetCount();
     this.#source = options.source;
     this.#runtime = new LiveRuntime({
       canvas: options.shell.editor.canvas,
@@ -484,9 +506,12 @@ export class EditorSession {
     // path saves a document whose image is a handle into this session's memory
     // and is gone from every other tab, every other browser and every reload —
     // silently, because the save succeeds.
-    options.shell.editor.clipboardManager.setImageImporter((file) =>
-      this.#assets.placeImage(options.shell.editor, file),
-    );
+    options.shell.editor.clipboardManager.setImageImporter(async (file) => {
+      const placed = await this.#assets.placeImage(options.shell.editor, file);
+      // A pasted picture is a declaration, so the Assets pane's count moves.
+      this.#announceAssetCount();
+      return placed;
+    });
     // Same reason, same shape: a pasted or duplicated object is given a new id
     // by the clipboard, and a binding is keyed by the object that shows it, so
     // the copy's readings have to be re-keyed by whoever owns the envelope.
@@ -695,6 +720,7 @@ export class EditorSession {
         },
       });
       this.#document.refreshBackgroundMedia();
+      this.#announceAssetCount();
       return { ok: true, assetId: reference.id };
     } catch (error) {
       return {
@@ -702,6 +728,14 @@ export class EditorSession {
         message: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  /**
+   * The manager has no event for a declaration moving, so every path that adds
+   * or drops one reports the count the Assets pane's title draws.
+   */
+  #announceAssetCount(): void {
+    this.#options.onAssetCountChange?.(this.#assets.declarations.length);
   }
 
   /**
@@ -879,10 +913,11 @@ export class EditorSession {
           },
         });
         if (outcome.ok === true) {
-          // A finder import makes a declaration just as the Add pane's own file
-          // does, and a declared asset is what the background layer resolves its
-          // bytes through.
+          // A finder import makes a declaration just as the Assets pane's own
+          // file does, and a declared asset is what the background layer resolves
+          // its bytes through.
           this.#document.refreshBackgroundMedia();
+          this.#announceAssetCount();
         }
         return outcome.ok
           ? { ok: true as const }

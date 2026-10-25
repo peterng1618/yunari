@@ -16,6 +16,7 @@ import { Settings } from "./editor-shell/settings.js";
 import { chooseArtboardSize } from "./new-document-chooser.js";
 import { createNewObjectPanel } from "./new-object-panel.js";
 import { createPalettePanel } from "./palette-manager/panel.js";
+import { createAssetsPane } from "./panes/assets/assets-pane.js";
 import { createSelectionInspector } from "./selection-inspector/index.js";
 import { createTypePresetPanel } from "./type-preset-manager/panel.js";
 import { uiCopy } from "./ui-copy.js";
@@ -289,12 +290,10 @@ describe("editor panels", () => {
       // section — a `Textbox` cannot be frosted, so `vg-465` offers it no glass
       // section at all rather than a switch that writes nothing.
       "INPUT[type=checkbox][aria-hidden]", // Frosted glass, shape
-      // The Add pane's file section: its declared-asset chooser is a
-      // `ControlSelect` now that the list moved onto the control set, so a Base
-      // UI select renders one carrier ahead of the two file pickers.
-      "INPUT[type=][aria-hidden]", // Asset (the Add pane's declared-asset chooser)
-      // Two file pickers, `[hidden]` and driven by the Import and Replace
-      // buttons rendered beside them.
+      // The Assets pane's two file pickers, `[hidden]` and driven by the Import
+      // and Replace controls. The declared-asset chooser that used to sit ahead
+      // of them was a `ControlSelect`; the list is a card per file now, so it
+      // renders no value carrier.
       "INPUT[type=file]", // Import
       "INPUT[type=file]", // Replace
       // The new-theme chooser, mounted as the session opens it: a `Dialog`, and
@@ -455,47 +454,41 @@ function mountPanels(): { root: HTMLElement } {
 
   mountSelectionInspector(root);
 
-  // The Add pane, whole: the insert tiles and, at their foot, the file section
-  // the Assets pane used to be. Mounted as one pane because that is one pane —
-  // the file pickers, their buttons and the declared-asset select are what this
-  // audit stopped seeing when the two lived in separate hosts.
-  createNewObjectPanel(
-    root,
-    {
-      canvas: {
-        add: vi.fn(),
-        setActiveObject: vi.fn(),
-        requestRenderAll: vi.fn(),
-        getObjects: () => [],
-      },
-      artboard: () => ({ width: 1280, height: 720 }),
-      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
-      textManager: { addText: vi.fn() },
-      errorManager: { warn: vi.fn(), error: vi.fn() },
-    } as never,
-    undefined,
-    undefined,
-    {
-      manager: {
-        declarations: [
-          { id: "hero", kind: "image", path: "assets/hero.png" },
-          { id: "clip", kind: "video", path: "assets/clip.mp4" },
-        ],
-        previewUrl: () => "blob:hero",
-        placeImage: vi.fn(async () => undefined),
-        remove: vi.fn(() => false),
-        import: vi.fn(async () => ({
-          id: "new",
-          kind: "image",
-          path: "a.png",
-        })),
-        replace: vi.fn(async () => undefined),
-        hydrate: vi.fn(async () => undefined),
-      } as never,
-      changed: () => undefined,
-      isReferenced: () => false,
+  // The Add pane draws only the insert tiles now; the declared files and their
+  // import live in the Assets pane, so the audit has to read both panes.
+  const editor = {
+    canvas: {
+      add: vi.fn(),
+      setActiveObject: vi.fn(),
+      requestRenderAll: vi.fn(),
+      getObjects: () => [],
     },
-  );
+    artboard: () => ({ width: 1280, height: 720 }),
+    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+    textManager: { addText: vi.fn() },
+    errorManager: { warn: vi.fn(), error: vi.fn() },
+  } as never;
+  createNewObjectPanel(root, editor, undefined, undefined);
+  createAssetsPane(root, {
+    editor,
+    manager: {
+      declarations: [
+        { id: "hero", kind: "image", path: "assets/hero.png" },
+        { id: "clip", kind: "video", path: "assets/clip.mp4" },
+      ],
+      previewUrl: () => "blob:hero",
+      placeImage: vi.fn(async () => undefined),
+      remove: vi.fn(() => false),
+      import: vi.fn(async () => ({
+        id: "new",
+        kind: "image",
+        path: "a.png",
+      })),
+      replace: vi.fn(async () => undefined),
+      hydrate: vi.fn(async () => undefined),
+    } as never,
+    isReferenced: () => false,
+  });
 
   // The new-theme chooser, opened as the session opens it: a `Dialog`, so it is
   // portalled to `body` and audited through the body the caller returns, and

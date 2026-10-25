@@ -311,16 +311,17 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
  *
  * Three absences are the whole of the negative half. **Document draws none** —
  * its body is two sections of fields and it holds no list of its own, so a
- * count there would be fabricated. **Assets draws none yet** — its list is the
- * asset manager's declarations and the shell holds no manager, so a `0` would
- * be the same fabrication. And **before a bridge is set the two
+ * count there would be fabricated. **Assets draws none until the session
+ * reports one** — its list is the asset manager's declarations and the shell
+ * holds no manager, so `assetCount` arrives through the store and a `0` before
+ * that would be the same fabrication. And **before a bridge is set the
  * snapshot-fed counts draw none either**: `0 objects` over a canvas that has not
  * mounted its document is a claim the product does not have (DESIGN.md §9). The
  * Add pane's count is the exception, and it proves the rule rather than
  * breaking it: `CARD_LIBRARY` is a module constant, so eight units is a reading
  * at every moment the pane exists, never a default standing in for one.
  */
-it("prints each pane's own count, and no count where a pane has no list", () => {
+it("prints each pane's own count, and no count where a pane has no list", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
 
@@ -357,6 +358,15 @@ it("prints each pane's own count, and no count where a pane has no list", () => 
   // Three spans, not five: Document and Assets are the two panes that print
   // none.
   expect(root.querySelectorAll(".editor-shell-pane-count")).toHaveLength(3);
+
+  // The session's own reading of the manager moves the Assets count, and the
+  // bridge snapshot's silence on it never fabricates a zero.
+  await act(async () => layout.selection.setAssetCount(4));
+  expect(countOf("assets")).toBe(uiCopy.paneCounts.files(4));
+  expect(root.querySelectorAll(".editor-shell-pane-count")).toHaveLength(4);
+  // No document is no assets: the store drops the reading with the bridge.
+  layout.setBridge(undefined, undefined);
+  expect(countOf("assets")).toBeNull();
 
   layout.destroy();
 });
