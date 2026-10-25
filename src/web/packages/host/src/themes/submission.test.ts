@@ -467,10 +467,10 @@ describe("submissionFiles", () => {
     randomFillSync(big);
     const envelope: FabricThemeEnvelope = {
       ...themeOf(THEME_ID, "Big", "1.0.0").envelope,
-      assets: [{ id: "big", kind: "image", path: "assets/big.bin" }],
+      assets: [{ id: "big", kind: "image", path: "assets/big.png" }],
     };
     const oversized = {
-      read: async () => ({ envelope, assets: { "assets/big.bin": big } }),
+      read: async () => ({ envelope, assets: { "assets/big.png": big } }),
       // The version write itself succeeds; the package is what is measured.
       write: async () => ({ ok: true }),
     } as unknown as ThemeStore;

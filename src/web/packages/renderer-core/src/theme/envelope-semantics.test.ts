@@ -248,6 +248,18 @@ describe("assets (§141)", () => {
     ).toEqual(["invalid-asset-path"]);
   });
 
+  it("rejects a path whose extension the declared kind does not allow", () => {
+    // The kind is the authority: a browser decides what to do with the bytes
+    // from this declaration, so a path that contradicts it is a package that
+    // cannot be served the way it says it should be.
+    expect(
+      codes(withAssets([{ id: "a", kind: "image", path: "assets/x.html" }])),
+    ).toEqual(["invalid-asset-path"]);
+    expect(
+      codes(withAssets([{ id: "a", kind: "video", path: "assets/x.png" }])),
+    ).toEqual(["invalid-asset-path"]);
+  });
+
   it("rejects an unknown asset kind", () => {
     expect(
       codes(

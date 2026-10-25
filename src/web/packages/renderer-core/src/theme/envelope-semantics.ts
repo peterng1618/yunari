@@ -1,5 +1,7 @@
+import { ASSET_EXTENSIONS, themeAssetContentType } from "./asset-media-type.js";
 import {
   ASSET_PATH_PATTERN,
+  type AssetKind,
   BACKGROUND_MEDIA_BOUNDS,
   GLOBAL_GROUPS,
   MAX_ARTBOARD_DIMENSION,
@@ -521,7 +523,7 @@ function validateAssets(issues: Issues, value: unknown): Set<string> {
       "An asset kind",
     );
 
-    validateAssetPath(issues, asset["path"], `${path}/path`);
+    validateAssetPath(issues, asset["kind"], asset["path"], `${path}/path`);
 
     if (asset["kind"] === "font") validateFontAsset(issues, asset, path);
 
@@ -540,8 +542,17 @@ function validateAssets(issues: Issues, value: unknown): Set<string> {
   return ids;
 }
 
-/** Pattern matching alone does not reject `..`; traversal is checked explicitly. */
-function validateAssetPath(issues: Issues, value: unknown, path: string): void {
+/**
+ * Pattern matching alone does not reject `..`; traversal is checked explicitly.
+ * The extension is checked against the *declared kind*, because the kind is what
+ * the host serves the bytes as — an `.html` named as an image is neither.
+ */
+function validateAssetPath(
+  issues: Issues,
+  kind: unknown,
+  value: unknown,
+  path: string,
+): void {
   if (typeof value !== "string") {
     issues.add(
       "missing-field",
@@ -565,6 +576,24 @@ function validateAssetPath(issues: Issues, value: unknown, path: string): void {
       "invalid-asset-path",
       path,
       'An asset path must not contain a ".." segment: it would escape the package.',
+    );
+    return;
+  }
+
+  // An unknown kind is already an `invalid-enum` of its own; saying the path is
+  // wrong too would name a fault the author cannot fix from the path field.
+  if (typeof kind !== "string" || !Object.hasOwn(ASSET_EXTENSIONS, kind)) {
+    return;
+  }
+
+  if (themeAssetContentType({ kind, path: value }) === undefined) {
+    const allowed = ASSET_EXTENSIONS[kind as AssetKind]
+      .map((extension) => `.${extension}`)
+      .join(", ");
+    issues.add(
+      "invalid-asset-path",
+      path,
+      `An asset declared as "${kind}" must use a path ending in ${allowed}.`,
     );
   }
 }

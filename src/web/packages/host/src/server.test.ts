@@ -684,7 +684,7 @@ describe("Host theme routes", () => {
         assets: [
           {
             id: "badge",
-            kind: "image",
+            kind: "svg",
             path: "assets/badge.svg",
             sha256: createHash("sha256").update(bytes).digest("hex"),
           } as never,
@@ -862,6 +862,12 @@ describe("Host theme routes", () => {
     expect([...asset.body]).toEqual([1, 2]);
     // A browser decodes an image only if the response says it is one.
     expect(asset.headers["content-type"]).toBe("font/woff2");
+    // Nothing this route answers is a document: the declared kind decided the
+    // media type, so the browser must not redecide it by sniffing.
+    expect(asset.headers["x-content-type-options"]).toBe("nosniff");
+    expect(asset.headers["content-security-policy"]).toBe(
+      "sandbox; default-src 'none'",
+    );
   });
 
   it("refuses undeclared and traversal-like asset paths", async () => {
@@ -891,6 +897,62 @@ describe("Host theme routes", () => {
     await expect(
       status("/api/themes/living-room/assets/assets/.%2Fsecret"),
     ).resolves.toBe(404);
+  });
+
+  it("refuses an asset whose declared kind contradicts its extension", async () => {
+    // Import refuses this package, so the route is reached the only way a
+    // library written before that refusal can reach it: a stored record whose
+    // declaration the current validator would reject. Validation is not
+    // weakened to make this a round trip.
+    const dir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "yunari-host-mime-test-"),
+    );
+    const store = createThemeStore(dir);
+    await store.write(
+      "living-room",
+      createPackageWithAsset("assets/inter-400.woff2", [1, 2]),
+    );
+    const stored = await store.read("living-room");
+    if (stored === undefined) {
+      throw new Error("expected the fixture theme to be stored");
+    }
+
+    let declaredPath = "";
+    const themeStore = {
+      ...store,
+      read: async () => ({
+        ...stored,
+        envelope: {
+          ...stored.envelope,
+          assets: [{ id: "x", kind: "image" as const, path: declaredPath }],
+        },
+        assets: { [declaredPath]: new Uint8Array([1]) },
+      }),
+    };
+    const lying = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore,
+    });
+
+    try {
+      for (const assetPath of ["assets/x.html", "assets/x.js"]) {
+        declaredPath = assetPath;
+        const res = await request(
+          lying.server,
+          "GET",
+          `/api/themes/living-room/${assetPath}`,
+        );
+        // 415, not 200 with a media type the kind never declared.
+        expect(res.status).toBe(415);
+        expect(String(res.headers["content-type"] ?? "")).not.toContain(
+          "text/html",
+        );
+      }
+    } finally {
+      await lying.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("forbids PUT from non-loopback addresses (§7)", async () => {

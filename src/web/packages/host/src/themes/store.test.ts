@@ -44,7 +44,7 @@ function withAsset(
       assets: [
         {
           id: "badge",
-          kind: "image",
+          kind: assetPath.endsWith(".svg") ? "svg" : "image",
           path: assetPath,
         },
       ],
@@ -1166,7 +1166,9 @@ describe("ThemeStore asset reuse", () => {
         ...envelopeFor("living-room", "Living Room"),
         assets: contents.map(([assetPath, bytes], index) => ({
           id: `asset-${index}`,
-          kind: "image" as const,
+          kind: assetPath.endsWith(".svg")
+            ? ("svg" as const)
+            : ("image" as const),
           path: assetPath,
           ...(hash ? { sha256: sha256Of(bytes) } : {}),
         })),
@@ -1405,7 +1407,9 @@ describe("ThemeStore partial saves", () => {
         ...envelopeFor("living-room", name),
         assets: contents.map(([assetPath, bytes], index) => ({
           id: `asset-${index}`,
-          kind: "image" as const,
+          kind: assetPath.endsWith(".svg")
+            ? ("svg" as const)
+            : ("image" as const),
           path: assetPath,
           sha256: sha256Of(bytes),
         })),
@@ -1860,7 +1864,9 @@ describe("ThemeStore asset bounds", () => {
         ...envelopeFor(id, name),
         assets: bytes.map(([assetPath, content], index) => ({
           id: `asset-${index}`,
-          kind: "image" as const,
+          kind: assetPath.endsWith(".svg")
+            ? ("svg" as const)
+            : ("image" as const),
           path: assetPath,
           ...(hash ? { sha256: sha256Of(content) } : {}),
         })),

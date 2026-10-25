@@ -244,6 +244,10 @@ export {
   resolveTextSegments,
 } from "./scene/plan.js";
 export type { SceneHandle } from "./scene/scene-handle.js";
+export {
+  ASSET_EXTENSIONS,
+  themeAssetContentType,
+} from "./theme/asset-media-type.js";
 export type { AssetResolver, AssetResolverOptions } from "./theme/assets.js";
 export {
   createAssetResolver,
@@ -291,6 +295,7 @@ export {
 } from "./theme/catalogue-location.js";
 export type {
   Artboard,
+  AssetKind,
   AssetLicense,
   AssetReference,
   Background,

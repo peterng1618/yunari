@@ -9,6 +9,7 @@ import {
   knownTimeZones,
   readFabricThemeEnvelope,
   SAMPLE_STREAM_PATH,
+  themeAssetContentType,
 } from "@yunari/renderer-core";
 import type { ChartRefreshRate } from "@yunari/scene-fabric";
 import { type AssetRouteOptions, handleAssetRoutes } from "./assets/routes.js";
@@ -3238,11 +3239,20 @@ export function createHostServer(options: HostServerOptions): HostServer {
         sendText(response, 404, "Theme asset not found.");
         return;
       }
+      const contentType = themeAssetContentType(declared);
+      if (contentType === undefined) {
+        // The declared kind is the authority on what these bytes are. A path it
+        // does not admit is a package the host cannot serve the way it says,
+        // so nothing is served rather than a type the path chose.
+        sendText(response, 415, "That asset's kind and path disagree.");
+        return;
+      }
       response.writeHead(200, {
-        // A browser will not decode an `<img>` or a `<video>` whose response is
-        // not a media type, and never sniffs SVG, so octet-stream here is a
-        // packaged image no display can show.
-        "content-type": contentTypeFor(declared.path),
+        "content-type": contentType,
+        // The kind decided the media type; the browser must not redecide it by
+        // sniffing, and the bytes stay inert even if they are a document.
+        "x-content-type-options": "nosniff",
+        "content-security-policy": "sandbox; default-src 'none'",
         "cache-control": "no-store",
       });
       response.end(Buffer.from(bytes));
