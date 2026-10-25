@@ -1,6 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
 import { beforeAll, describe, expect, it } from "vitest";
+import type { Env } from "../src/env";
 import { handleMe } from "../src/routes/me";
 import { pendingKey } from "../src/storage/keys";
 import {
@@ -141,6 +142,53 @@ describe("version requests", () => {
     // trailing-hour presign count can refuse it.
     await seedPresigns({ userId: USER_ID, count: 60, withinHour: true });
     expect((await createVersion(headers, ITEM_ID)).status).toBe(429);
+  });
+
+  it("gates the item ceiling at the draft insert", async () => {
+    const headers = await sessionHeaders();
+    const ID_A = "9f1c2a3b-4d5e-4f60-8a71-2b3c4d5e6f81";
+    const ID_B = "9f1c2a3b-4d5e-4f60-8a71-2b3c4d5e6f82";
+
+    await env.DB.prepare("DELETE FROM upload WHERE user_id = ?")
+      .bind(USER_ID)
+      .run();
+    await env.DB.prepare("DELETE FROM presign_event WHERE user_id = ?")
+      .bind(USER_ID)
+      .run();
+    // 19 items: both requests pass the reservation's item arm, because neither
+    // new draft row exists yet, so only the draft insert can refuse the 20th.
+    await seedItems({ userId: USER_ID, count: 19 });
+
+    // Both started before either answers, and dispatched to the route directly:
+    // the test pool's `SELF.fetch` serialises requests, which would prove only
+    // the sequence.
+    const version = (id: string) => {
+      const path = `${BASE}/api/me/items/${id}/versions`;
+      return handleMe(
+        new Request(path, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ envelope: candidate(id), name: "Mine" }),
+        }),
+        env,
+        new URL(path),
+      );
+    };
+    const [a, b] = await Promise.all([version(ID_A), version(ID_B)]);
+
+    expect([a?.status, b?.status].sort()).toEqual([200, 429]);
+    const items = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM item WHERE author_user_id = ?",
+    )
+      .bind(USER_ID)
+      .first<{ n: number }>();
+    expect(items?.n).toBe(20);
+    const reservations = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM upload WHERE user_id = ?",
+    )
+      .bind(USER_ID)
+      .first<{ n: number }>();
+    expect(reservations?.n).toBe(1);
   });
 
   it("refuses a removed item with its reason", async () => {
@@ -380,6 +428,45 @@ describe("version requests", () => {
     // The pump stops within one chunk of the declared length (1 byte), so a
     // transformer that ran to the 95 MiB cap before stopping cannot pass here.
     expect(produced).toBeLessThanOrEqual(1 + MIB);
+
+    // The runtime logs two `uncaught exception ... client disconnected` lines
+    // for this case: the sink is torn down under `BUCKET.put` when the body
+    // overruns. They are workerd's teardown of that stream, not an unhandled
+    // rejection from this route, and they are accepted — do not assert on
+    // stderr.
+  });
+
+  it("answers 500, not 400, when the store itself fails", async () => {
+    const headers = await sessionHeaders();
+    const { url } = await reserved(headers);
+    const bytes = new TextEncoder().encode("the uploaded package");
+
+    // R2 faults after reading a well-formed body: the body was not at fault, so
+    // the refusal is the Worker's and not the client's.
+    const faulty = {
+      ...env,
+      BUCKET: {
+        put: async (
+          _key: string,
+          value: ReadableStream<Uint8Array>,
+        ): Promise<never> => {
+          await new Response(value).arrayBuffer();
+          throw new Error("R2 fault");
+        },
+      },
+    } as unknown as Env;
+
+    const response = await handleMe(
+      new Request(url, {
+        method: "PUT",
+        headers: { ...headers, "content-length": String(bytes.byteLength) },
+        body: new Uint8Array(bytes),
+      }),
+      faulty,
+      new URL(url),
+    );
+    expect(response?.status).toBe(500);
+    expect(await response?.text()).toBe("The upload could not be stored.");
   });
 
   it("refuses a second PUT of the same unfinalised upload URL", async () => {

@@ -1,7 +1,8 @@
 /**
  * The author limits the spec sets to fit the free tier. They are defaults, not
  * measured against usage ("Security and abuse", open question 5). Exported
- * because the route's atomic guarded insert enforces the same two ceilings.
+ * because the route's reservation insert re-checks both ceilings as a fast
+ * path; `createDraft`'s guarded insert is the item ceiling's atomic gate.
  */
 export const MAX_AUTHOR_ITEMS = 20;
 export const MAX_AUTHOR_BYTES = 1024 * 1024 * 1024;

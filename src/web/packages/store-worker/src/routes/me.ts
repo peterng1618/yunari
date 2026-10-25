@@ -341,8 +341,10 @@ async function requestVersion(
     creatingNewItem,
   });
   if (!reserved) {
-    // Name what the guard refused; a reservation once again expired can make
-    // this read undefined, and the rate sentence is the honest fallback.
+    // Name what the guard refused. A reservation that expired between the
+    // insert and this read leaves the answer undefined, so the fallback is a
+    // quota sentence true of both arms rather than the rate refusal, which is
+    // answered above this reservation ever exists.
     const exceeded = await authorQuotaExceeded(
       env.DB,
       session.userId,
@@ -354,63 +356,98 @@ async function requestVersion(
       return tooMany("An account may own at most 20 items.");
     if (exceeded === "bytes")
       return tooMany("An author's stored packages may total at most 1 GiB.");
-    return tooMany("Too many upload requests; try again in an hour.");
+    return tooMany(
+      "Your account has no room for another package; try again later.",
+    );
   }
 
   // A parallel first submission may win the insert; that loser is ignored
   // rather than failing on the PRIMARY KEY, then reads the row it shares. An
   // item another account created in the race is not ours to write.
+  //
+  // Everything after the reservation may still throw, and a URL the author
+  // never received must not hold their budget for an hour: the catch deletes
+  // the row. The two refusals below delete it as part of their own answer.
   let stored = item;
-  if (newItemName !== undefined) {
-    await createDraft(env, envelope, session.userId, newItemName, nowIso);
-    stored = await itemById(env.DB, envelope.id);
-    if (stored === undefined || stored.author_user_id !== session.userId) {
-      // The loser takes its reservation with it: a URL they cannot write must
-      // not count against the author for the reservation's lifetime.
-      await env.DB.prepare("DELETE FROM upload WHERE id = ?")
-        .bind(uploadId)
-        .run();
-      return notFound();
+  try {
+    if (newItemName !== undefined) {
+      const wrote = await createDraft(
+        env,
+        envelope,
+        session.userId,
+        newItemName,
+        nowIso,
+      );
+      stored = await itemById(env.DB, envelope.id);
+      if (stored === undefined && !wrote) {
+        // The draft insert's count arm refused: a parallel first submission
+        // took the last of the 20 items between this request's reservation and
+        // its insert. 0 rows and no row for the id is that arm by construction;
+        // a PK conflict would have left the row this read finds.
+        await env.DB.prepare("DELETE FROM upload WHERE id = ?")
+          .bind(uploadId)
+          .run();
+        return tooMany("An account may own at most 20 items.");
+      }
+      if (stored === undefined || stored.author_user_id !== session.userId) {
+        // The loser takes its reservation with it: a URL they cannot write must
+        // not count against the author for the reservation's lifetime.
+        await env.DB.prepare("DELETE FROM upload WHERE id = ?")
+          .bind(uploadId)
+          .run();
+        return notFound();
+      }
     }
-  }
 
-  // The route's own origin, so a custom domain keeps answering with itself.
-  const uploadUrl = `${new URL(request.url).origin}${UPLOADS_PREFIX}${uploadId}`;
+    // The route's own origin, so a custom domain keeps answering with itself.
+    const uploadUrl = `${new URL(request.url).origin}${UPLOADS_PREFIX}${uploadId}`;
 
-  await env.DB.prepare(
-    `INSERT INTO presign_event (user_id, at, item_id, version, envelope_json)
-     VALUES (?, ?, ?, ?, ?)`,
-  )
-    .bind(
-      session.userId,
-      nowIso,
-      envelope.id,
-      plan.version,
-      JSON.stringify(envelope),
+    await env.DB.prepare(
+      `INSERT INTO presign_event (user_id, at, item_id, version, envelope_json)
+       VALUES (?, ?, ?, ?, ?)`,
     )
-    .run();
+      .bind(
+        session.userId,
+        nowIso,
+        envelope.id,
+        plan.version,
+        JSON.stringify(envelope),
+      )
+      .run();
 
-  // A rejected item's new version goes back in the owner's queue whatever the
-  // author's state (status machine: `rejected -> pending`); otherwise a
-  // verified author publishes and an unverified one queues.
-  const status =
-    stored?.status === "rejected"
-      ? "pending"
-      : (await isVerified(env.DB, session.userId))
-        ? "published"
-        : "pending";
+    // A rejected item's new version goes back in the owner's queue whatever the
+    // author's state (status machine: `rejected -> pending`); otherwise a
+    // verified author publishes and an unverified one queues.
+    const status =
+      stored?.status === "rejected"
+        ? "pending"
+        : (await isVerified(env.DB, session.userId))
+          ? "published"
+          : "pending";
 
-  return Response.json({ version: plan.version, status, uploadUrl });
+    return Response.json({ version: plan.version, status, uploadUrl });
+  } catch (error) {
+    // A failed delete must not replace the original failure.
+    await env.DB.prepare("DELETE FROM upload WHERE id = ?")
+      .bind(uploadId)
+      .run()
+      .catch(() => undefined);
+    throw error;
+  }
 }
 
 /**
- * Writes one reservation only if the author's quota still has room for it.
+ * Writes one reservation only if the author's byte budget still has room.
  *
  * The check and the insert are one statement, because two requests that each
- * passed `authorQuotaExceeded` can otherwise both insert and overrun the
+ * passed `authorQuotaExceeded` can otherwise both insert and overrun the byte
  * ceiling; D1 has no transaction to wrap the pair in. The pending side repeats
  * `pendingBytes`' predicate, cutoff included, so both read the same rows.
- * Answers whether the row was written.
+ *
+ * The item arm here is a fast path only: a new item's row is written later by
+ * `createDraft`, so the count in this statement is stale by construction and
+ * that insert is the item ceiling's atomic gate. Answers whether the row was
+ * written.
  */
 async function reserveUpload(
   env: Env,
@@ -517,7 +554,8 @@ async function putUpload(
   // body that overruns or stops short is refused before R2 keeps any of it.
   const sink = new FixedLengthStream(length);
   // The pump owns its own rejection handling and never rejects, so nothing is
-  // left floating once the response is sent.
+  // left floating once the response is sent. Its answer separates a body that
+  // broke the pinned length from a store that failed to keep it.
   const pumped = pumpInto(body, sink);
   let stored: R2Object | null;
   try {
@@ -528,8 +566,9 @@ async function putUpload(
       onlyIf: { etagDoesNotMatch: "*" },
     });
   } catch {
-    await pumped;
-    return badRequest("The upload's size does not match its content-length.");
+    if (await pumped)
+      return badRequest("The upload's size does not match its content-length.");
+    return new Response("The upload could not be stored.", { status: 500 });
   }
   if (stored === null) {
     // A winner already holds the key. Releasing the unread sink lets the pump
@@ -550,11 +589,15 @@ async function putUpload(
  * or stops short, and the store may stop reading before the body ends. Both
  * settle here so the route answers from the put and no rejected promise
  * outlives the response.
+ *
+ * Answers whether the body was at fault — it overran the pinned length, ended
+ * short of it, or its reader threw — so a put failure the pump caused is a
+ * client error and any other put failure is the store's.
  */
 async function pumpInto(
   source: ReadableStream<Uint8Array>,
   sink: FixedLengthStream,
-): Promise<void> {
+): Promise<boolean> {
   const reader = source.getReader();
   const writer = sink.writable.getWriter();
   try {
@@ -564,8 +607,10 @@ async function pumpInto(
       await writer.write(value);
     }
     await writer.close();
+    return false;
   } catch {
     await writer.abort().catch(() => undefined);
+    return true;
   } finally {
     try {
       reader.releaseLock();
@@ -803,9 +848,13 @@ function parseEnvelope(row: {
 
 /**
  * Draft is invisible to the public routes until a finalize applies a status.
- * `OR IGNORE` because two parallel first submissions of one id both reach here;
- * the caller re-reads the row and checks its owner instead of trusting the
- * insert.
+ *
+ * This insert is the item ceiling's atomic gate: the count and the write are
+ * one statement, so two parallel first submissions cannot both make a 21st
+ * item. `OR IGNORE` because two parallel first submissions of one id both reach
+ * here, which also makes 0 rows ambiguous — the caller distinguishes the two by
+ * re-reading the row: present means the conflict, absent means the count arm
+ * refused. Answers whether this call wrote the row.
  */
 async function createDraft(
   env: Env,
@@ -813,12 +862,13 @@ async function createDraft(
   userId: string,
   name: string,
   now: string,
-): Promise<void> {
-  await env.DB.prepare(
+): Promise<boolean> {
+  const result = await env.DB.prepare(
     `INSERT OR IGNORE INTO item (id, kind, author_user_id, name, status,
        status_reason, created_at, updated_at, published_at, unpublished_at,
        removed_at, downloads, remix_of_id)
-     VALUES (?, ?, ?, ?, 'draft', NULL, ?, ?, NULL, NULL, NULL, 0, ?)`,
+     SELECT ?, ?, ?, ?, 'draft', NULL, ?, ?, NULL, NULL, NULL, 0, ?
+     WHERE (SELECT COUNT(*) FROM item WHERE author_user_id = ?) < ?`,
   )
     .bind(
       envelope.id,
@@ -828,8 +878,11 @@ async function createDraft(
       now,
       now,
       envelope.metadata?.remixOf?.catalogueId ?? null,
+      userId,
+      MAX_AUTHOR_ITEMS,
     )
     .run();
+  return result.meta.changes > 0;
 }
 
 async function isVerified(db: D1Database, userId: string): Promise<boolean> {
