@@ -1058,12 +1058,27 @@ describe("ThemeStore", () => {
         await store.readAsset("living-room", "../living-room/assets/badge.svg"),
       ).toBeUndefined();
 
-      // Past the per-asset cap the store already refuses on `read`.
+      // Past the per-asset cap both the one-asset read and `read`'s loop refuse
+      // the file — and refuse it before reading it, so a hostile folder cannot
+      // make the host buffer a file only to say no.
       const badge = path.join(tmpDir, "living-room", "assets", "badge.svg");
       await fs.writeFile(badge, Buffer.alloc(80 * 1024 * 1024 + 1));
-      expect(
-        await store.readAsset("living-room", "assets/badge.svg"),
-      ).toBeUndefined();
+      const readFile = vi.spyOn(fs, "readFile");
+      try {
+        expect(
+          await store.readAsset("living-room", "assets/badge.svg"),
+        ).toBeUndefined();
+        expect(await store.read("living-room")).toBeUndefined();
+        expect(
+          readFile.mock.calls.some(([file]) =>
+            String(file).endsWith(`assets${path.sep}badge.svg`),
+          ),
+        ).toBe(false);
+        // The probe: the document was still opened, so the spy is live.
+        expect(readFile).toHaveBeenCalled();
+      } finally {
+        readFile.mockRestore();
+      }
       await fs.writeFile(badge, bytesOf("<svg/>"));
 
       // A link standing where the asset folder belongs, pointing elsewhere:

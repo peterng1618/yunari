@@ -443,6 +443,31 @@ function declaredPaths(envelope: FabricThemeEnvelope): readonly string[] {
   return (envelope.assets ?? []).map((asset) => asset.path);
 }
 
+/**
+ * One declared asset's bytes, or `undefined` when that file is absent, resolves
+ * outside the theme's folder, or is past the per-asset bound — refused before it
+ * is buffered.
+ *
+ * `read`'s loop and `readAsset` both open a declared asset and both answer to
+ * this one bound, so a file one of them refuses is never a file the other
+ * serves. `read` keeps its own running total: that is a property of the folder,
+ * not of a file.
+ */
+async function readDeclaredAsset(
+  root: string,
+  declared: { readonly path: string },
+): Promise<Buffer | undefined> {
+  const bytes = await readContainedFile(root, declared.path, MAX_ASSET_BYTES);
+  if (bytes === undefined) {
+    return undefined;
+  }
+  // Kept beside the pre-read bound: a file that grew between the `stat` and the
+  // read is the same refusal.
+  return assetSizeRefusal(declared.path, bytes.byteLength) === undefined
+    ? bytes
+    : undefined;
+}
+
 /** What the document says each path holds, for the assets it says it hashes. */
 function declaredHashes(
   envelope: FabricThemeEnvelope,
@@ -811,16 +836,10 @@ export function createThemeStore(
         let total = 0;
 
         for (const assetPath of declared) {
-          // Contained, like the document: a declared path that resolves out of
-          // the theme's folder is not an asset this theme carries.
-          const bytes = await readContainedFile(
-            path.join(directory, id),
-            assetPath,
-          );
+          const bytes = await readDeclaredAsset(path.join(directory, id), {
+            path: assetPath,
+          });
           if (bytes === undefined) {
-            return undefined;
-          }
-          if (assetSizeRefusal(assetPath, bytes.byteLength) !== undefined) {
             return undefined;
           }
           total += bytes.byteLength;
@@ -874,14 +893,8 @@ export function createThemeStore(
       if (declared === undefined) {
         return undefined;
       }
-      const bytes = await readContainedFile(
-        path.join(directory, id),
-        assetPath,
-      );
+      const bytes = await readDeclaredAsset(path.join(directory, id), declared);
       if (bytes === undefined) {
-        return undefined;
-      }
-      if (assetSizeRefusal(assetPath, bytes.byteLength) !== undefined) {
         return undefined;
       }
       // The declaration's own kind, never one read off the extension: the
@@ -889,7 +902,7 @@ export function createThemeStore(
       return { bytes: new Uint8Array(bytes), kind: declared.kind };
     },
 
-    /** Whether a theme the listing would show is stored here. */
+    /** Whether a theme whose document the store can read is stored here. */
     async exists(id: string): Promise<boolean> {
       return (
         isValidThemeId(id) &&

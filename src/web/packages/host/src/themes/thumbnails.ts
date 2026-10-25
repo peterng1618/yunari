@@ -123,8 +123,13 @@ export function createThumbnailStore(library: string): ThumbnailStore {
       // Contained, like every other file this host reads out of a theme
       // folder: a picture linked in from outside is not this theme's. Absent is
       // ordinary — an older package, or a capture that failed — and the helper
-      // answers `undefined` for it rather than throwing.
-      const bytes = await readContainedFile(library, `${id}/${FILE}`);
+      // answers `undefined` for it rather than throwing. The write bound is the
+      // read bound too, refused before the file is buffered.
+      const bytes = await readContainedFile(
+        library,
+        `${id}/${FILE}`,
+        MAX_BYTES,
+      );
 
       // A file someone else wrote must not be served as an image — nor one
       // whose header declares a surface the library will not draw.

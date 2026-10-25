@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readContainedFile } from "./contained-read.js";
 
 describe("readContainedFile", () => {
@@ -68,5 +68,30 @@ describe("readContainedFile", () => {
     expect((await readContainedFile(root, "alias/badge.svg"))?.toString()).toBe(
       "<svg/>",
     );
+  });
+
+  it("refuses a file past the byte cap without reading it", async () => {
+    await fs.writeFile(path.join(root, "big.bin"), "0123456789");
+    const readFile = vi.spyOn(fs, "readFile");
+    try {
+      // At the cap it reads — the probe that this spy sees the call the
+      // refusal below must not make.
+      expect((await readContainedFile(root, "big.bin", 10))?.toString()).toBe(
+        "0123456789",
+      );
+      expect(readFile).toHaveBeenCalled();
+      readFile.mockClear();
+
+      // One byte over is refused on its size, so its bytes are never buffered.
+      expect(await readContainedFile(root, "big.bin", 9)).toBeUndefined();
+      expect(readFile).not.toHaveBeenCalled();
+
+      // No cap keeps the old behaviour: the same file reads.
+      expect((await readContainedFile(root, "big.bin"))?.toString()).toBe(
+        "0123456789",
+      );
+    } finally {
+      readFile.mockRestore();
+    }
   });
 });
