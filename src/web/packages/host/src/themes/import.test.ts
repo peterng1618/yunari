@@ -57,7 +57,10 @@ const fixture = (name: string): Uint8Array =>
   new Uint8Array(
     readFileSync(
       fileURLToPath(
-        new URL(`../../../theme-package/test-fixtures/${name}`, import.meta.url),
+        new URL(
+          `../../../theme-package/test-fixtures/${name}`,
+          import.meta.url,
+        ),
       ),
     ),
   );
@@ -270,9 +273,7 @@ describe("importThemePackage", () => {
       ok: false,
       message: "assets/clip.mp4: audio track present; video must be silent",
     });
-    await expect(
-      fs.stat(path.join(library, "family-room")),
-    ).rejects.toThrow();
+    await expect(fs.stat(path.join(library, "family-room"))).rejects.toThrow();
   });
 
   it("refuses an over-long video, and writes nothing", async () => {
@@ -289,9 +290,7 @@ describe("importThemePackage", () => {
       message:
         "assets/clip.mp4: duration 31500 ms exceeds the 30000 ms maximum",
     });
-    await expect(
-      fs.stat(path.join(library, "family-room")),
-    ).rejects.toThrow();
+    await expect(fs.stat(path.join(library, "family-room"))).rejects.toThrow();
   });
 
   it("imports a conforming video and stores its bytes", async () => {
