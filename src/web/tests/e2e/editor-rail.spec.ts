@@ -319,14 +319,17 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
  *  with the slot named rather than passing on a `0` that survived a swap.
  *  Composition is opened to its full length first for the reason the case above
  *  gives — a collapsed starter does not overflow the panel. Tokens and Document
- *  overflow at rest, and they are the surfaces the archived bullet named. Add is
- *  not walked any more: the file section that gave it a long tail is the Assets
- *  pane's, and what is left — shapes, text and the card library — fits the
- *  panel. Assets is not walked either: it declares the starter's one backdrop, a
- *  single card that fits. Their overflow heights are deliberately not stated —
- *  measured twice at this viewport they differed by tens of px, because they
- *  move with font loading — and the guard above is the load-bearing claim, not
- *  the sizes.
+ *  overflow at rest. The archived bullet this case descends from named the
+ *  asset-library surface and Document; the library is the Assets pane now, and
+ *  Assets is excluded because at rest it declares the starter's one backdrop — a
+ *  single card that fits, so it cannot hold an offset. Add is not walked any more
+ *  either: the file section that gave it a long tail is the Assets pane's, and
+ *  what is left — shapes, text and the card library — fits the panel. The slot
+ *  list is hand-written, so a starter that later made either pane overflow would
+ *  not re-enter this walk by itself. Their overflow heights are deliberately not
+ *  stated — measured twice at this viewport they differed by tens of px, because
+ *  they move with font loading — and the guard above is the load-bearing claim,
+ *  not the sizes.
  *
  *  The offset lives on the showing pane's **body** (§7.7, `vg-208`), and a
  *  browser discards a `display: none` box's scroll position — the swap hides

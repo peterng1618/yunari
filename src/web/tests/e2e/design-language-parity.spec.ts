@@ -206,29 +206,30 @@ test("the shell and the settings modal are what the drawings draw", async ({
   // so an element the drawing omits has nothing to be read against. The Assets
   // pane's asset preview was that surface (`vg-314`): its contract is a **bound**
   // (`max-height:120px` with `object-fit:contain`) rather than a size, and the
-  // pane is `display:none` while Document is open, so even now that
-  // `current/shell.html` draws it, it cannot be a `PARITY` row.
+  // pane is `display:none` while Document is open, so it cannot be a `PARITY`
+  // row even when a drawing names it.
   //
   // **What it reads is a NAME, on three sides, and the row is `open` because of
-  // it.** The drawn box in `current/shell.html:134` carries no class and no hook
-  // — it is an anonymous inline-styled div — so the drawing side is satisfied by
-  // the `<!-- asset preview (.yunari-asset-preview) … -->` comment at `:133`
-  // that documents it, as by any other mention in the file. And the list below is
-  // **hand-written and one entry long**, so a *new* product surface reddens
-  // nothing until someone adds it here — which is the class of defect the row
-  // exists for. Deriving the list from the product was measured and does not
-  // construct: the panes render **73** distinct `data-yunari-*` hooks, **5** of
-  // them named anywhere in `editor-shell.css`, and **no checked drawing names any of
-  // them** — the drawings are hand-authored HTML that names a product surface by
-  // its *class*, in prose beside the box, never by a hook on a drawn element
-  // (measured 2026-10-12 by walking `packages/editor/src/panes/**/*.tsx` and
-  // testing each hook against the stylesheet and the six checked drawings). So
-  // this proves the surface it names is named on all three sides — the component
-  // that renders it, the stylesheet that treats it, and the drawing that owns the
-  // region it sits in — and cannot prove an unlisted one is anywhere. **What it
-  // also does not check** is the drawn treatment's *values* (the drawn box's
-  // height against the stylesheet's bound); that is a comparator the drawn bound
-  // does not yet have.
+  // it.** The drawing side is the one currently failing: no checked drawing under
+  // `docs/design/mockups/current` names `yunari-asset-preview`. The shell
+  // drawing's `<!-- asset preview (.yunari-asset-preview) … -->` comment was
+  // removed in `775e2f54` (logged `vg-731`), so this row is red on that side
+  // until a drawing names the surface again; the entry stays in place rather than
+  // being deleted to reach green. The list below is **hand-written and one entry
+  // long**, so a *new* product surface reddens nothing until someone adds it here
+  // — which is the class of defect the row exists for. Deriving the list from the
+  // product was measured and does not construct: the panes render **73** distinct
+  // `data-yunari-*` hooks, **5** of them named anywhere in `editor-shell.css`, and
+  // **no checked drawing names any of them** — the drawings are hand-authored HTML
+  // that names a product surface by its *class*, in prose beside the box, never by
+  // a hook on a drawn element (measured 2026-10-12 by walking
+  // `packages/editor/src/panes/**/*.tsx` and testing each hook against the
+  // stylesheet and the six checked drawings). So the check reads all three sides
+  // — the component that renders it, the stylesheet that treats it, and the
+  // drawing that owns the region it sits in — and cannot prove an unlisted one is
+  // anywhere. **What it also does not check** is the drawn treatment's *values*
+  // (the drawn box's height against the stylesheet's bound); that is a comparator
+  // the drawn bound does not yet have.
   const SURFACES: readonly {
     readonly surface: string;
     readonly component: string;
