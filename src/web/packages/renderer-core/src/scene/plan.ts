@@ -8,6 +8,8 @@ import {
   type SeriesInput,
 } from "../charts/line.js";
 import { buildPieOption, type PieSliceInput } from "../charts/pie.js";
+import { buildPolarBarOption } from "../charts/polar-bar.js";
+import { buildRadarOption, type RadarInput } from "../charts/radar.js";
 import { chartPaintFieldsFor } from "../charts/settings-fields.js";
 import {
   describeSemanticKey,
@@ -616,6 +618,40 @@ export function buildChartPlan(
         family: "pie",
         settings: content.settings,
         option: buildPieOption(content.settings, slices, animate, palette),
+      };
+    }
+
+    case "radar": {
+      const spokes: RadarInput[] = bindings.map((binding) => ({
+        sensorId: binding.semanticKey,
+        sample: applyTransform(
+          context.source.latest(binding.semanticKey),
+          binding,
+        ),
+      }));
+
+      return {
+        kind: "chart",
+        family: "radar",
+        settings: content.settings,
+        option: buildRadarOption(content.settings, spokes, animate, palette),
+      };
+    }
+
+    case "polarBar": {
+      const bars: BarInput[] = bindings.map((binding) => ({
+        sensorId: binding.semanticKey,
+        sample: applyTransform(
+          context.source.latest(binding.semanticKey),
+          binding,
+        ),
+      }));
+
+      return {
+        kind: "chart",
+        family: "polarBar",
+        settings: content.settings,
+        option: buildPolarBarOption(content.settings, bars, animate, palette),
       };
     }
   }

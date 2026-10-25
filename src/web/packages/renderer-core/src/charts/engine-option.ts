@@ -4,6 +4,8 @@ import type { BarOption } from "./bar.js";
 import type { GaugeOption } from "./gauge.js";
 import type { LineOption } from "./line.js";
 import type { PieOption } from "./pie.js";
+import type { PolarBarOption } from "./polar-bar.js";
+import type { RadarOption } from "./radar.js";
 
 /**
  * The one place a Yunari chart option becomes an engine option.
@@ -36,6 +38,8 @@ export interface ChartOptionByFamily extends Record<ChartFamily, unknown> {
   readonly line: LineOption;
   readonly bar: BarOption;
   readonly pie: PieOption;
+  readonly radar: RadarOption;
+  readonly polarBar: PolarBarOption;
 }
 
 /** Any family's built option. */

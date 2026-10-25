@@ -758,6 +758,23 @@ describe("Fabric theme envelope validation", () => {
     ]);
   });
 
+  it("refuses crossed polar radii", () => {
+    const issues = issuesOf(
+      validateFabricThemeEnvelope(
+        chartEnvelope("polarBar", {
+          innerRadiusPercent: 80,
+          outerRadiusPercent: 20,
+        }),
+      ),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        code: "out-of-range",
+        path: "/scene/objects/0/settings/outerRadiusPercent",
+      }),
+    );
+  });
+
   it("refuses a segment divisor that is not an allowed value", () => {
     const issues = issuesOf(
       validateFabricThemeEnvelope(chartEnvelope("bar", { segmentDivisor: 33 })),
