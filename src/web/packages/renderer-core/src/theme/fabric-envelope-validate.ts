@@ -822,6 +822,19 @@ function chartScalars(
           `${descriptor.property} must be at most ${descriptor.max}.`,
         ),
       );
+    } else if (
+      descriptor.values !== undefined &&
+      !descriptor.values.includes(value)
+    ) {
+      // A discrete field's list is the document's bound, not only the control's:
+      // the adapters cannot draw the values between two members.
+      issues.push(
+        issue(
+          "out-of-range",
+          where,
+          `${descriptor.property} must be one of ${descriptor.values.join(", ")}.`,
+        ),
+      );
     }
   }
 

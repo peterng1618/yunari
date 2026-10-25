@@ -102,6 +102,8 @@ export type ChartSettingView =
       readonly value: number;
       readonly min: number;
       readonly max: number;
+      /** The only commits this track may make, when the setting is discrete. */
+      readonly values?: readonly number[];
       /** `descriptor.optional`: the well's empty draft is a removal, which is
        *  the one way back to "the renderer decides". */
       readonly clearable: boolean;
@@ -397,6 +399,7 @@ function ChartSettingRow(props: {
           value={row.value}
           min={row.min}
           max={row.max}
+          {...(row.values === undefined ? {} : { values: row.values })}
           onCommit={(value) => write(row.path, value)}
           {...(row.clearable
             ? { onClear: () => write(row.path, undefined) }

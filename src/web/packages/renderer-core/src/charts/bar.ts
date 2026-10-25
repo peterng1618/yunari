@@ -42,6 +42,8 @@ export interface BarSettings {
    * them independent. Absent means square, as a track has always been.
    */
   readonly trackCornerRadius?: number;
+  /** How many slices the fill is cut into; 100 is one continuous bar. */
+  readonly segmentDivisor: number;
   readonly showAxes: boolean;
   readonly animation?: AnimationSettings;
 }
@@ -58,6 +60,7 @@ export const defaultBarSettings: BarSettings = {
   // Matches the bar by default, because the two share one slot's geometry — but
   // it is its own value, so a theme can round one and not the other.
   trackCornerRadius: 7,
+  segmentDivisor: 100,
   showAxes: false,
 };
 

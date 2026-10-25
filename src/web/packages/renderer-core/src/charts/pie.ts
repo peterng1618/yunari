@@ -26,6 +26,8 @@ export interface PieSettings {
   readonly endAngle?: number;
   readonly padAngle: number;
   readonly cornerRadius: number;
+  /** How many slices each part's fill is cut into; 100 is continuous. */
+  readonly segmentDivisor: number;
   readonly total: PieTotal;
   /** Drawn only for fixed totals, where the remainder is measurable. */
   readonly remainderFill?: ChartPaint;
@@ -39,6 +41,7 @@ export const defaultPieSettings: PieSettings = {
   startAngle: 90,
   padAngle: 2,
   cornerRadius: 4,
+  segmentDivisor: 100,
   total: { kind: "sum" },
   palette: [
     { kind: "solid", color: "#00b8d9" },
