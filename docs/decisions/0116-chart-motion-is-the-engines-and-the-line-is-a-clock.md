@@ -2,10 +2,21 @@
 
 - **Date:** 2026-10-25
 - **Status:** accepted
-- **Paths:** `src/web/packages/renderer-core/src/charts/`
-  `src/web/packages/renderer-core/src/theme/`
+- **Paths:** `src/web/packages/renderer-core/src/charts/bar.ts`
+  `src/web/packages/renderer-core/src/charts/line.ts`
+  `src/web/packages/renderer-core/src/charts/pie.ts`
+  `src/web/packages/renderer-core/src/charts/gauge.ts`
+  `src/web/packages/renderer-core/src/charts/settings-fields.ts`
+  `src/web/packages/renderer-core/src/charts/engine-option.ts`
+  `src/web/packages/renderer-core/src/charts/reading-signature.ts`
+  `src/web/packages/renderer-core/src/charts/segments.ts`
+  `src/web/packages/renderer-core/src/charts/radar.ts`
+  `src/web/packages/renderer-core/src/charts/polar-bar.ts`
+  `src/web/packages/renderer-core/src/theme/document.ts`
+  `src/web/packages/renderer-core/src/theme/fabric-envelope-validate.ts`
   `src/web/packages/scene-fabric/src/chart-object.ts`
-  `src/web/packages/editor/src/components/ui/`
+  `src/web/packages/editor/src/components/ui/control-slider.tsx`
+  `src/web/packages/editor/src/components/ui/control-number.tsx`
   `src/web/packages/editor/src/editor-session.ts`
 
 ## The problem
