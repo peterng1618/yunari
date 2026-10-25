@@ -4,10 +4,14 @@ import {
   randomBytes,
   X509Certificate,
 } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
 import forge from "node-forge";
+import {
+  createSecretStore,
+  type SecretStore,
+} from "../settings/secret-store.js";
 
 /**
  * The certificates a secure origin needs: one root this machine keeps, and a
@@ -35,12 +39,11 @@ const CA_DAYS = 3_650;
 const CLOCK_SKEW_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 const CA_CERT_FILE = "ca.crt";
-const CA_KEY_FILE = "ca.key";
+/** The root's private key, kept encrypted; only the certificate is in the clear. */
+const CA_KEY_SECRET = "ca-key";
+/** The pre-encryption key file, migrated once on first read and then removed. */
+const LEGACY_CA_KEY_FILE = "ca.key";
 const CA_COMMON_NAME = "Yunari Local CA";
-/** The private key is a secret. Where the platform honours a mode this keeps it
- *  to its owner; on Windows the mode is ignored and the file inherits the
- *  profile directory's ACL, which is already this user's alone. */
-const KEY_MODE = 0o600;
 
 export interface SecureOrigin {
   /** The root, PEM — what a display installs to trust this host. */
@@ -76,9 +79,12 @@ export interface SecureOrigin {
 export async function createSecureOrigin(
   directory: string,
   names: readonly string[],
+  secrets: SecretStore = createSecretStore(directory),
 ): Promise<SecureOrigin> {
-  const { certificate, key, certificatePath } =
-    await loadOrCreateAuthority(directory);
+  const { certificate, key, certificatePath } = await loadOrCreateAuthority(
+    directory,
+    secrets,
+  );
   const leaf = issueLeaf(certificate, key, names);
 
   return {
@@ -127,33 +133,85 @@ function newKeyPair(): {
   };
 }
 
-async function loadOrCreateAuthority(directory: string): Promise<{
+/**
+ * The root's private key, migrating a legacy `ca.key` once.
+ *
+ * `undefined` means there is no key to use, which is an ordinary first run. A
+ * present encrypted key that cannot be read throws: that is not the same fact
+ * as having none, and treating it as one would mint a new root and invalidate
+ * every display's install.
+ */
+async function readAuthorityKey(
+  directory: string,
+  secrets: SecretStore,
+): Promise<string | undefined> {
+  const stored = await secrets.read(CA_KEY_SECRET);
+  if (stored !== undefined) {
+    return Buffer.from(stored.toString("utf8"), "base64").toString("utf8");
+  }
+
+  const legacyFile = path.join(directory, LEGACY_CA_KEY_FILE);
+  let legacy: string;
+  try {
+    legacy = await readFile(legacyFile, "utf8");
+  } catch {
+    return undefined;
+  }
+
+  // Base64 of the PEM text: the stored bytes never read as a private key.
+  await secrets.write(
+    CA_KEY_SECRET,
+    Buffer.from(Buffer.from(legacy, "utf8").toString("base64"), "utf8"),
+  );
+  // Only after the encrypted copy succeeded; a failed write leaves the
+  // plaintext for a later run to migrate.
+  await rm(legacyFile, { force: true });
+  return legacy;
+}
+
+async function loadOrCreateAuthority(
+  directory: string,
+  secrets: SecretStore,
+): Promise<{
   readonly certificate: string;
   readonly key: string;
   readonly certificatePath: string;
 }> {
   const certificatePath = path.join(directory, CA_CERT_FILE);
-  const keyPath = path.join(directory, CA_KEY_FILE);
 
+  // Outside the pair check below: a key that exists but cannot be decrypted is
+  // a throw, never "no key", so it must not land in a regeneration branch.
+  const key = await readAuthorityKey(directory, secrets);
+
+  let existingCertificate: string | undefined;
   try {
-    const [certificate, key] = await Promise.all([
-      readFile(certificatePath, "utf8"),
-      readFile(keyPath, "utf8"),
-    ]);
-
-    // **Present but not a pair is the one half-state a read cannot see.** The
-    // key is written first and the certificate second, so a crash between the
-    // two leaves a new key beside the old certificate; every leaf signed with
-    // that key would then fail to chain to the root the devices installed, and
-    // the owner would get a certificate warning with nothing to explain it.
-    // One verification costs nothing and is the only way to tell.
-    if (new X509Certificate(certificate).verify(createPublicKey(key))) {
-      return { certificate, key, certificatePath };
-    }
+    existingCertificate = await readFile(certificatePath, "utf8");
   } catch {
-    // Absent, unreadable, or not a matching pair. A root this machine cannot
-    // use is a root it does not have: generating a new one costs every display
-    // one re-install, and refusing to start costs the owner their host.
+    existingCertificate = undefined;
+  }
+
+  if (existingCertificate !== undefined && key !== undefined) {
+    try {
+      // **Present but not a pair is the one half-state a read cannot see.** The
+      // key is written first and the certificate second, so a crash between the
+      // two leaves a new key beside the old certificate; every leaf signed with
+      // that key would then fail to chain to the root the devices installed, and
+      // the owner would get a certificate warning with nothing to explain it.
+      // One verification costs nothing and is the only way to tell.
+      if (
+        new X509Certificate(existingCertificate).verify(createPublicKey(key))
+      ) {
+        return {
+          certificate: existingCertificate,
+          key,
+          certificatePath,
+        };
+      }
+    } catch {
+      // Absent, unreadable, or not a matching pair. A root this machine cannot
+      // use is a root it does not have: generating a new one costs every display
+      // one re-install, and refusing to start costs the owner their host.
+    }
   }
 
   const { pki, md } = forge;
@@ -179,12 +237,16 @@ async function loadOrCreateAuthority(directory: string): Promise<{
   const certificate = pki.certificateToPem(root);
 
   await mkdir(directory, { recursive: true });
-  // The key first: a certificate written without its key is the one half-state
-  // that would look usable and is not.
-  await writeFile(keyPath, keys.privateKey, {
-    encoding: "utf8",
-    mode: KEY_MODE,
-  });
+  // The key first, and readable, before the certificate: a certificate written
+  // without its key is the one half-state that would look usable and is not.
+  const encodedKey = Buffer.from(keys.privateKey, "utf8").toString("base64");
+  await secrets.write(CA_KEY_SECRET, Buffer.from(encodedKey, "utf8"));
+
+  const persisted = await secrets.read(CA_KEY_SECRET);
+  if (persisted === undefined || persisted.toString("utf8") !== encodedKey) {
+    throw new Error("The CA private key could not be read back after writing.");
+  }
+
   await writeFile(certificatePath, certificate, "utf8");
 
   return { certificate, key: keys.privateKey, certificatePath };

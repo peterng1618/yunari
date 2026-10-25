@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import type { MineEntry } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
+import type { KeyProtector } from "../settings/os-key-protector.js";
+import { createSecretStore } from "../settings/secret-store.js";
 import {
   createStoreSessionStore,
   type StoreSession,
@@ -18,6 +20,13 @@ import {
 const ORIGIN = "https://store.test";
 const TOKEN = "session/token.value";
 const ITEM_ID = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
+
+/** A reversible protector, so this suite never needs an OS keyring. */
+const fakeKeyProtector: KeyProtector = {
+  available: async () => true,
+  wrap: async (key) => Uint8Array.from(key, (byte) => byte ^ 0x5a),
+  unwrap: async (wrapped) => Uint8Array.from(wrapped, (byte) => byte ^ 0x5a),
+};
 
 const held: StoreSession = {
   token: TOKEN,
@@ -232,7 +241,10 @@ describe("the store author proxies", () => {
   it("forgets the stored session when the Worker answers 401", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "yunari-store-401-"));
     try {
-      const store = createStoreSessionStore(dir);
+      const store = createStoreSessionStore(
+        dir,
+        createSecretStore(dir, fakeKeyProtector),
+      );
       await store.write(held);
       const refused = worker(
         () => new Response("Session expired", { status: 401 }),
@@ -250,7 +262,7 @@ describe("the store author proxies", () => {
       // The stored token is spent, so the file is gone and the settings page
       // it feeds now says signed out.
       await expect(
-        readFile(path.join(dir, "store-session.json"), "utf8"),
+        readFile(path.join(dir, "store-session.bin"), "utf8"),
       ).rejects.toThrow();
       const state = await call("/api/store/session", {
         fetch: refused.fetch,

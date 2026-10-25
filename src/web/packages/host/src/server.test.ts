@@ -77,6 +77,8 @@ import {
 import { createFontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
 import type { Monitor } from "./settings/monitors.js";
+import type { KeyProtector } from "./settings/os-key-protector.js";
+import { createSecretStore } from "./settings/secret-store.js";
 import { createSourceStore, type SourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
@@ -97,6 +99,19 @@ import { TrashRefusal } from "./themes/trash.js";
 import { encodeThemeContent } from "./themes/wire.js";
 import { createSecureOrigin } from "./tls/authority.js";
 import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
+
+/**
+ * The encrypted stores below use a reversible protector, so this suite never
+ * depends on DPAPI or a Linux keyring being present.
+ */
+const fakeKeyProtector: KeyProtector = {
+  available: async () => true,
+  wrap: async (key) => Uint8Array.from(key, (byte) => byte ^ 0x5a),
+  unwrap: async (wrapped) => Uint8Array.from(wrapped, (byte) => byte ^ 0x5a),
+};
+
+const secretsIn = (directory: string) =>
+  createSecretStore(directory, fakeKeyProtector);
 
 /**
  * A partial mock, so one batch's formatting is countable without a
@@ -2022,7 +2037,7 @@ describe("Host theme routes", () => {
 
     beforeEach(async () => {
       settings = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-store-ui-"));
-      store = createStoreSessionStore(settings);
+      store = createStoreSessionStore(settings, secretsIn(settings));
       calls = [];
       verify = () =>
         json({}, { "set-auth-token": encodeURIComponent(SESSION_TOKEN) });
@@ -2431,7 +2446,7 @@ describe("Host theme routes", () => {
       settings = await fs.mkdtemp(
         path.join(os.tmpdir(), "yunari-submit-settings-ui-"),
       );
-      session = createStoreSessionStore(settings);
+      session = createStoreSessionStore(settings, secretsIn(settings));
       calls = [];
       storedBaseline = undefined;
       storedVersion = "1.0.0";
@@ -5653,7 +5668,7 @@ describe("Credential routes", () => {
     createHostServer({
       registry: new ProviderRegistry([]),
       bundles: { player: tmpDir, editor: tmpDir },
-      credentials: createCredentialStore(tmpDir),
+      credentials: createCredentialStore(tmpDir, secretsIn(tmpDir)),
       knownCredentials: known,
       ...extra,
     });
@@ -9069,7 +9084,11 @@ describe("The host's secure origin", () => {
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-origin-"));
-    origin = await createSecureOrigin(tmpDir, ["localhost", "127.0.0.1"]);
+    origin = await createSecureOrigin(
+      tmpDir,
+      ["localhost", "127.0.0.1"],
+      secretsIn(tmpDir),
+    );
   });
 
   afterEach(async () => {
@@ -10734,7 +10753,7 @@ describe("Custom source routes", () => {
       readonly provider?: SourceRouteOptions["provider"];
     } = {},
   ): Promise<void> {
-    credentials = createCredentialStore(tmpDir);
+    credentials = createCredentialStore(tmpDir, secretsIn(tmpDir));
     sources = createSourceStore(tmpDir);
 
     const provider = new CustomSourceProvider({
@@ -11213,11 +11232,10 @@ describe("Custom source routes", () => {
       unreferencedCredential: "srckey",
     });
 
-    // The secret is still on disk and still listed as an orphan, so it can be
-    // cleared rather than stranded.
-    expect(
-      await fs.readFile(path.join(tmpDir, "credentials.json"), "utf8"),
-    ).toContain("sk-live-9f2c");
+    // The secret is still stored and still listed as an orphan, so it can be
+    // cleared rather than stranded. Read through the store: the bytes on disk
+    // are ciphertext now, and the file name is the secret store's.
+    expect(await credentials.valueOf("srckey")).toBe("sk-live-9f2c");
     expect(await rows()).toContainEqual(
       expect.objectContaining({
         id: "srckey",
@@ -11231,9 +11249,7 @@ describe("Custom source routes", () => {
       (await request(hosted.server, "DELETE", "/api/credentials/srckey"))
         .status,
     ).toBe(200);
-    expect(
-      await fs.readFile(path.join(tmpDir, "credentials.json"), "utf8"),
-    ).not.toContain("srckey");
+    expect(await credentials.valueOf("srckey")).toBeUndefined();
   });
 
   it("reports no unreferenced credential while a sibling still names it", async () => {
