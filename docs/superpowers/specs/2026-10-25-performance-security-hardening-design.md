@@ -303,8 +303,9 @@ stores the pending key in `item_version.package_key`; downloads read that
 column. This removes the R2 S3 credentials and `presignPut`.
 
 **Quota.** `authorQuotaExceeded` counts finalized bytes plus unexpired pending
-reservations, so concurrent uploads cannot exceed the 1 GiB author cap. Pending
-reservations expire after the upload TTL (15 minutes).
+reservations, so concurrent uploads cannot exceed the 1 GiB author cap. A
+reservation expires after one hour — the same instant the cleanup uses, so a
+package can hold its reservation no longer than its pending object exists.
 
 **Cleanup.** A scheduled Worker runs every 15 minutes: it deletes pending
 objects whose upload row is unfinalized and older than one hour, and prunes
