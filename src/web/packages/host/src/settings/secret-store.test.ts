@@ -134,6 +134,27 @@ describe("secret store", () => {
     expect(await readdir(dir)).toEqual([]);
   });
 
+  it("answers false when the protector rejects, then true", async () => {
+    let calls = 0;
+    const flaky: KeyProtector = {
+      async available() {
+        calls += 1;
+        if (calls === 1) throw new Error("transient");
+        return true;
+      },
+      async wrap(key) {
+        return Uint8Array.from(key);
+      },
+      async unwrap(wrapped) {
+        return Uint8Array.from(wrapped);
+      },
+    };
+    const flakyStore = createSecretStore(dir, flaky);
+
+    expect(await flakyStore.available()).toBe(false);
+    expect(await flakyStore.available()).toBe(true);
+  });
+
   it("recreates an empty key file, which wraps no key", async () => {
     await writeFile(keyFile(dir), "", "utf8");
 

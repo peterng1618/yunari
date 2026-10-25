@@ -154,18 +154,24 @@ function windowsBinary(): Promise<string | undefined> {
 }
 
 async function probeWindowsBinaries(): Promise<string | undefined> {
+  let transient: Error | undefined;
+
   for (const candidate of WINDOWS_BINARIES) {
     try {
       await run(candidate, [...WINDOWS_ARGS, "exit 0"], Buffer.alloc(0));
       return candidate;
     } catch (error) {
-      // A missing binary is the ordinary "try the next one"; anything else is
-      // transient and must not be cached.
-      if (isAbsence(error)) continue;
-      throw error;
+      // A denied or wedged `powershell` may sit beside a healthy `pwsh`, so
+      // every candidate is tried. The first transient error is kept, and thrown
+      // only when no candidate works, so the cached rejection still clears. An
+      // absent binary is the ordinary "try the next one".
+      if (!isAbsence(error) && transient === undefined) {
+        transient = error instanceof Error ? error : new Error(String(error));
+      }
     }
   }
 
+  if (transient !== undefined) throw transient;
   return undefined;
 }
 
@@ -246,10 +252,16 @@ export function createOsKeyProtector(directory?: string): KeyProtector {
         await lookUp();
         return true;
       } catch (error) {
-        // A missing `secret-tool` is unavailable. A lookup that ran and simply
-        // found no stored key is not: the first write has to be able to store
-        // one, so only the spawn failing leaves the facility unusable.
-        return !(error instanceof SpawnFailure);
+        // An absent `secret-tool` is the only "no facility" answer. A timeout
+        // or another transient spawn failure rejects so the per-instance cache
+        // clears and the next call retries; a lookup that ran and simply found
+        // no stored key still counts, because the first write has to be able
+        // to store one.
+        if (isAbsence(error)) return false;
+        if (error instanceof SpawnFailure || error instanceof ChildTimeout) {
+          throw error;
+        }
+        return true;
       }
     }
 

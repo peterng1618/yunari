@@ -157,7 +157,10 @@ export function createSecretStore(
 
   return {
     async available() {
-      if (!(await protector.available())) return false;
+      // The protector may reject a transient failure. Its own cache is already
+      // cleared, so answering false keeps the `Promise<boolean>` contract and
+      // lets the next call retry.
+      if (!(await protector.available().catch(() => false))) return false;
 
       try {
         const wrapped = await readWrappedKey(keyFile);

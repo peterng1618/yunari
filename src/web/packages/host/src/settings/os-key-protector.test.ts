@@ -9,12 +9,22 @@ const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }));
 
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 
-interface Reply {
+interface Exit {
   readonly code: number;
   readonly stdout?: string;
 }
 
+interface SpawnError {
+  readonly error: Error;
+}
+
+type Reply = Exit | SpawnError;
+
 type ReplyFor = (args: readonly string[], input: string) => Reply | undefined;
+
+function errno(code: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(code), { code });
+}
 
 function fakeChild(
   args: readonly string[],
@@ -28,6 +38,11 @@ function fakeChild(
       const answer = reply(args, Buffer.from(chunk).toString("utf8"));
       // No reply means the child never finishes, which is the wedged case.
       if (answer === undefined) return;
+
+      if ("error" in answer) {
+        child.emit("error", answer.error);
+        return;
+      }
 
       if (answer.stdout !== undefined) {
         stdout.emit("data", Buffer.from(answer.stdout, "utf8"));
@@ -72,42 +87,98 @@ describe("the OS key protector", () => {
   });
 
   it.skipIf(process.platform !== "win32")(
-    "probes again after a transient failure instead of caching false",
+    "falls back to pwsh when powershell fails transiently",
     async () => {
-      vi.useFakeTimers();
-      let probes = 0;
       installSpawn((args) => {
-        if (args.at(-1) === "exit 0") {
-          probes += 1;
-          // The first probe hangs until the deadline; the next one answers.
-          return probes === 1 ? undefined : { code: 0 };
-        }
-        return { code: 1 };
-      }, vi.fn());
+        if (args.at(-1) !== "exit 0") return { code: 1 };
+        // The first candidate is denied; the second is healthy.
+        return spawnMock.mock.calls.length === 1
+          ? { error: errno("EACCES") }
+          : { code: 0 };
+      });
+
+      const fresh = await freshProtectorModule();
+      const protector = fresh.createOsKeyProtector(
+        path.join(os.tmpdir(), "yunari-fallback"),
+      );
+
+      expect(await protector.available()).toBe(true);
+      expect(spawnMock).toHaveBeenCalledTimes(2);
+    },
+    30_000,
+  );
+
+  it.skipIf(process.platform !== "win32")(
+    "probes again after every candidate fails transiently",
+    async () => {
+      let round = 0;
+      installSpawn((args) => {
+        if (args.at(-1) !== "exit 0") return { code: 1 };
+        return round === 0 ? { code: 1 } : { code: 0 };
+      });
 
       const fresh = await freshProtectorModule();
       const first = fresh.createOsKeyProtector(
         path.join(os.tmpdir(), "yunari-probe-a"),
       );
-      const pending = first.available();
-      // Attach the expectation before the deadline fires, or the rejection is
-      // briefly unhandled.
-      const rejected = expect(pending).rejects.toThrow(
-        /did not finish in time/,
+      // Attach the expectation before awaiting, or the rejection is briefly
+      // unhandled.
+      const rejected = expect(first.available()).rejects.toThrow(
+        /exited with status 1/,
       );
 
-      await vi.advanceTimersByTimeAsync(10_000);
       await rejected;
+      expect(spawnMock).toHaveBeenCalledTimes(2);
 
       // The failed probe must not be cached for the process.
+      round = 1;
       const second = fresh.createOsKeyProtector(
         path.join(os.tmpdir(), "yunari-probe-b"),
       );
       expect(await second.available()).toBe(true);
-      expect(probes).toBe(2);
+      expect(spawnMock).toHaveBeenCalledTimes(3);
     },
     30_000,
   );
+
+  it.skipIf(process.platform !== "win32")(
+    "caches a facility whose binaries are both absent",
+    async () => {
+      installSpawn(() => ({ error: errno("ENOENT") }));
+
+      const fresh = await freshProtectorModule();
+      const protector = fresh.createOsKeyProtector(
+        path.join(os.tmpdir(), "yunari-absent"),
+      );
+
+      expect(await protector.available()).toBe(false);
+      expect(await protector.available()).toBe(false);
+      // An absence is the one answer worth caching.
+      expect(spawnMock).toHaveBeenCalledTimes(2);
+    },
+    30_000,
+  );
+
+  it("rejects a transient Linux probe and retries", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+
+    let lookups = 0;
+    installSpawn(() => {
+      lookups += 1;
+      // The first lookup cannot reach the keyring; the next runs and finds no
+      // key, which still means the facility is there.
+      return lookups === 1 ? { error: errno("EMFILE") } : { code: 1 };
+    });
+
+    const fresh = await freshProtectorModule();
+    const protector = fresh.createOsKeyProtector(
+      path.join(os.tmpdir(), "yunari-linux-retry"),
+    );
+
+    await expect(protector.available()).rejects.toThrow(/could not be started/);
+    expect(await protector.available()).toBe(true);
+    expect(lookups).toBe(2);
+  });
 
   it("kills a wedged child with SIGKILL at the deadline", async () => {
     vi.useFakeTimers();
