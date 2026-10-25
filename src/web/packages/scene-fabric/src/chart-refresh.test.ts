@@ -230,6 +230,31 @@ describe("startChartRefresh", () => {
     scheduler.dispose();
   });
 
+  it("re-anchors a wake that missed exactly one interval", () => {
+    const fake = fakeFrameDriver();
+    const refresh = vi.fn();
+    const scheduler = startChartRefresh(refresh, 30, fake.driver);
+
+    const interval = 1_000 / 30;
+    fake.run(0);
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    // Exactly one interval late. Treating it as "not missed" would set the
+    // next due to `now`, repainting again on the very next frame.
+    fake.run(2 * interval);
+    expect(refresh, "the late wake refreshed").toHaveBeenCalledTimes(2);
+
+    fake.run(2.5 * interval);
+    expect(refresh, "no repaint on the frame between").toHaveBeenCalledTimes(2);
+
+    fake.run(3 * interval);
+    expect(
+      refresh,
+      "the following wake waited one interval",
+    ).toHaveBeenCalledTimes(3);
+    scheduler.dispose();
+  });
+
   it("arms exactly one wake at a time", () => {
     const fake = fakeFrameDriver();
     const scheduler = startChartRefresh(() => {}, 30, fake.driver);
