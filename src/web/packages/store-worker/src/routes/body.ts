@@ -1,7 +1,10 @@
 /** A JSON body any route accepts; a finalize composes a larger cap beside it. */
 export const MAX_JSON_BODY = 256 * 1024;
 
-export type BodyResult =
+/** The buffer starts here and doubles on demand, so a stalled request is cheap. */
+const INITIAL_BODY_BYTES = 64 * 1024;
+
+type BodyResult =
   | { readonly ok: true; readonly body: Record<string, unknown> }
   | { readonly ok: false; readonly response: Response };
 
@@ -11,9 +14,9 @@ export type BodyResult =
  * and `request.json()` has no bound. Exactly `maxBytes` is accepted; crossing
  * it answers 413 without parsing. A null body or a parse failure keeps the 400.
  *
- * One buffer of `maxBytes` is allocated up front and each chunk is copied into
- * it, so a body delivered in tiny chunks costs one copy per byte and no
- * per-chunk allocation of its own.
+ * One buffer starts at 64 KiB and doubles up to `maxBytes`, so reserving the
+ * cap is not paid by a request that never sends its body; each chunk is copied
+ * into it and no chunk is retained.
  */
 export async function readJsonBody(
   request: Request,
@@ -23,13 +26,14 @@ export async function readJsonBody(
   if (body === null) return { ok: false, response: badJson() };
 
   const reader = body.getReader();
-  const bytes = new Uint8Array(maxBytes);
+  let bytes = new Uint8Array(Math.min(maxBytes, INITIAL_BODY_BYTES));
   let offset = 0;
   try {
     for (;;) {
       const chunk = await reader.read();
       if (chunk.done) break;
-      if (offset + chunk.value.byteLength > maxBytes) {
+      const needed = offset + chunk.value.byteLength;
+      if (needed > maxBytes) {
         await reader.cancel().catch(() => undefined);
         return {
           ok: false,
@@ -39,8 +43,15 @@ export async function readJsonBody(
           ),
         };
       }
+      if (needed > bytes.byteLength) {
+        let capacity = bytes.byteLength * 2;
+        while (capacity < needed) capacity *= 2;
+        const grown = new Uint8Array(Math.min(capacity, maxBytes));
+        grown.set(bytes.subarray(0, offset));
+        bytes = grown;
+      }
       bytes.set(chunk.value, offset);
-      offset += chunk.value.byteLength;
+      offset = needed;
     }
   } catch {
     return { ok: false, response: badJson() };

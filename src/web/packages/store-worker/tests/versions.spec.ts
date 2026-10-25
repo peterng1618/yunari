@@ -3,7 +3,7 @@ import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
 import { beforeAll, describe, expect, it } from "vitest";
 import { UPLOAD_RESERVATION_TTL_MS } from "../src/db/quota";
 import type { Env } from "../src/env";
-import { MAX_JSON_BODY } from "../src/routes/body";
+import { MAX_JSON_BODY, readJsonBody } from "../src/routes/body";
 import { handleMe, pumpInto } from "../src/routes/me";
 import { pendingKey } from "../src/storage/keys";
 import {
@@ -305,7 +305,8 @@ describe("version requests", () => {
       .bind(USER_ID)
       .run();
 
-    // Trailing JSON whitespace pads the envelope to the byte the cap allows.
+    // Trailing JSON whitespace pads the envelope to the byte the cap allows,
+    // and the reader's 64 KiB floor doubles twice to hold it.
     const json = JSON.stringify({ envelope: candidate(NEW_ID), name: "Mine" });
     const exact = json + " ".repeat(MAX_JSON_BODY - json.length);
     expect(exact.length).toBe(MAX_JSON_BODY);
@@ -325,6 +326,26 @@ describe("version requests", () => {
       body: `${exact} `,
     });
     expect(over.status).toBe(413);
+  });
+
+  it("reassembles a multi-byte character split across one-byte chunks", async () => {
+    const text = JSON.stringify({ name: "héllo 世界" });
+    const encoded = new TextEncoder().encode(text);
+    // The route tests send whole bodies, so only this exercises the copy loop
+    // with chunks that split a character's UTF-8 sequence.
+    const request = new Request(`${BASE}/api/me/items/${NEW_ID}/versions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const byte of encoded)
+            controller.enqueue(new Uint8Array([byte]));
+          controller.close();
+        },
+      }),
+    });
+    const read = await readJsonBody(request, MAX_JSON_BODY);
+    expect(read.ok && read.body).toEqual({ name: "héllo 世界" });
   });
 
   it("answers the author's baseline in any state and hides a foreign one", async () => {

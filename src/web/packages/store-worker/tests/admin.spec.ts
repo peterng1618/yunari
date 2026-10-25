@@ -253,6 +253,24 @@ describe("admin", () => {
     expect(await statusOf(env.DB, ITEM_ID)).toBe("rejected");
   });
 
+  it("hides an admin route from a non-owner before reading its body", async () => {
+    const author = await loginAs(AUTHOR_ID, AUTHOR_EMAIL);
+    await seedItem(ITEM_ID, AUTHOR_ID, { status: "pending" });
+
+    // The session and owner gate run first: an oversized body that would be
+    // 413 for an owner answers 404 here, and no body is read at all.
+    const body = JSON.stringify({ reason: "x".repeat(MAX_JSON_BODY) });
+    const parseSpy = vi.spyOn(JSON, "parse");
+    try {
+      const response = await admin(author, `items/${ITEM_ID}/reject`, body);
+      expect(response.status).toBe(404);
+      expect(parseSpy.mock.calls.some(([text]) => text === body)).toBe(false);
+    } finally {
+      parseSpy.mockRestore();
+    }
+    expect(await statusOf(env.DB, ITEM_ID)).toBe("pending");
+  });
+
   it("removes with a reason and restores, clearing the reason", async () => {
     const owner = await loginAs(OWNER_ID, OWNER_EMAIL);
     const author = await loginAs(AUTHOR_ID, AUTHOR_EMAIL);
