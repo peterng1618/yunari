@@ -17,12 +17,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PAIRING_STORAGE_KEY, readStoredPairing } from "./host-refind.js";
 
 /**
- * A partial mock, so the call the player makes is countable without adding a
- * production-only seam beside it. Every other export is the real one.
+ * A partial mock, so the calls the player makes are countable without adding a
+ * production-only seam beside them. Every other export is the real one.
  */
 vi.mock("@yunari/renderer-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@yunari/renderer-core")>();
-  return { ...actual, buildLinePoints: vi.fn(actual.buildLinePoints) };
+  return {
+    ...actual,
+    buildLinePoints: vi.fn(actual.buildLinePoints),
+    collectChartIssues: vi.fn(actual.collectChartIssues),
+  };
 });
 
 /**
@@ -364,18 +368,17 @@ describe("the rate the display repaints at", () => {
     return pending.size;
   }
 
-  /** The refresh loop's own callback: `startChartRefresh` names its ticker
-   *  `tick`, and the callbacks the engine and Fabric schedule are their own. */
-  function refreshLoopsScheduled(): number {
-    return [...pending.values()].filter(
-      (callback) => (callback as { readonly name?: string }).name === "tick",
-    ).length;
-  }
-
-  /** Mounts the player and hands back a count of the canvas's repaints. */
+  /** Mounts the player and hands back a count of the canvas's repaints and of
+   *  the follower's polls. `envelope` is the theme served, so a case can mount
+   *  a display with no chart on it. */
   async function mountAt(
     search: string,
-  ): Promise<{ readonly repaints: () => number }> {
+    envelope: unknown = lineEnvelope(),
+  ): Promise<{
+    readonly repaints: () => number;
+    readonly polls: () => number;
+  }> {
+    let polled = 0;
     skeleton();
     history.replaceState({}, "", `/${search}`);
     vi.stubGlobal("EventSource", SilentEventSource);
@@ -404,6 +407,7 @@ describe("the rate the display repaints at", () => {
       value: vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
         if (url.startsWith("/api/published")) {
+          polled += 1;
           // A revision and a theme that never move, so the rate is the only
           // thing the host answers differently between one poll and the next.
           return json({
@@ -412,7 +416,7 @@ describe("the rate the display repaints at", () => {
             display: { id: "d1", theme: "living-room", chartFps },
           });
         }
-        if (url.endsWith("/document")) return json(lineEnvelope());
+        if (url.endsWith("/document")) return json(envelope);
         return json({});
       }),
     });
@@ -442,7 +446,10 @@ describe("the rate the display repaints at", () => {
       "requestRenderAll",
     );
 
-    return { repaints: () => render.mock.calls.length };
+    return {
+      repaints: () => render.mock.calls.length,
+      polls: () => polled,
+    };
   }
 
   it("runs at the rate the host answered, not the 30 it used to hardcode", async () => {
@@ -458,8 +465,6 @@ describe("the rate the display repaints at", () => {
       "?theme=living-room&display=d1&theme-source=map&session=paired-token",
     );
     await vi.waitFor(() => expect(refreshCadenceMs(repaints)).toBe(1_000));
-    // The absolute pin: the page runs one refresh loop, not a loop per mount.
-    expect(refreshLoopsScheduled(), "one refresh loop after mount").toBe(1);
     const loopsBefore = refreshLoopsStarted();
 
     chartFps = 30;
@@ -470,8 +475,34 @@ describe("the rate the display repaints at", () => {
       { timeout: 5_000 },
     );
 
+    // Relative here because a line's engine keeps a frame of its own; the
+    // absolute pin is the chart-free case below.
     expect(refreshLoopsStarted()).toBe(loopsBefore);
-    expect(refreshLoopsScheduled(), "setRate added no loop").toBe(1);
+  });
+
+  it("keeps exactly one refresh frame, after mount and after setRate", async () => {
+    // **Chart-free**, so the engine's animation frame is absent and the count
+    // is the page's own callbacks — no callback's name is consulted. The first
+    // 0 ms step consumes the one-shot canvas render the mount's refresh
+    // scheduled; the interval has not passed, so nothing else is armed.
+    const { polls } = await mountAt(
+      "?theme=living-room&display=d1&theme-source=map&session=paired-token",
+      textOnlyEnvelope(),
+    );
+
+    driveFrame(0);
+    expect(pending.size, "one refresh loop after mount").toBe(1);
+
+    chartFps = 30;
+    const before = polls();
+    // The follower polls every two seconds: a poll past the change is what
+    // hands the new rate to the loop that already exists.
+    await vi.waitFor(() => expect(polls()).toBeGreaterThan(before), {
+      timeout: 5_000,
+    });
+
+    driveFrame(0);
+    expect(pending.size, "setRate added no frame").toBe(1);
   });
 });
 
@@ -1091,6 +1122,58 @@ function lineEnvelope(): unknown {
 }
 
 /**
+ * A theme whose only repaintable work is bound text: no chart, so the only
+ * canvas render a refresh can ask for is the refresh branch's own.
+ */
+function textOnlyEnvelope(): unknown {
+  return {
+    schemaVersion: "2.0.0",
+    fabricVersion: "7.4.0",
+    id: "text-only",
+    artboard: { width: 1920, height: 1080 },
+    metadata: { themeLanguage: "en" },
+    globals: {
+      palette: {
+        none: { name: "None", value: { kind: "solid", color: "transparent" } },
+        ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
+      },
+      typePresets: {
+        body: { name: "Body", value: { family: "Inter", size: 24 } },
+      },
+    },
+    bindings: {
+      readout: [{ id: "t", semanticKey: "cpu.load.total" }],
+    },
+    scene: {
+      version: "7.4.0",
+      objects: [
+        {
+          type: "Textbox",
+          id: "readout",
+          left: 100,
+          top: 100,
+          width: 400,
+          height: 80,
+          text: "--",
+          yunariText: {
+            runs: [
+              {
+                kind: "value",
+                bindingId: "t",
+                typePreset: "typePresets.body",
+                style: { color: { ref: "palette.ink" } },
+              },
+            ],
+            box: { width: 400, height: 80 },
+            overflow: "visible",
+          },
+        },
+      ],
+    },
+  };
+}
+
+/**
  * The chooser's mount condition, driven through the real `main.ts`.
  *
  * A link page's id is the person's instruction, and `reResolveUrl` keeps it
@@ -1434,7 +1517,7 @@ describe("the work one refresh frame does", () => {
   /** Mounts a display and returns the spies the frame cases count. The spies are
    *  taken from the module instances `main.ts` itself imports — `beforeEach`
    *  reset the registry, so importing first is what makes them the same ones. */
-  async function mount(withLine: boolean, lineKey = "cpu.load.total") {
+  async function mount(envelope: unknown) {
     skeleton();
     history.replaceState({}, "", "/?theme=revisions");
     vi.stubGlobal("EventSource", RevisionStreamEventSource);
@@ -1458,8 +1541,7 @@ describe("the work one refresh frame does", () => {
       writable: true,
       value: vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url.endsWith("/document"))
-          return json(revisionsEnvelope(withLine, lineKey));
+        if (url.endsWith("/document")) return json(envelope);
         if (url === "/api/display") return json({ settings: {}, zones: [] });
         return json({});
       }),
@@ -1469,11 +1551,18 @@ describe("the work one refresh frame does", () => {
       .mockImplementation(() => undefined);
 
     const { YunariChart } = await import("@yunari/scene-fabric");
-    const { FabricObject } = await import("fabric/es");
+    const { FabricObject, StaticCanvas } = await import("fabric/es");
     const core = await import("@yunari/renderer-core");
     const setOption = vi.spyOn(YunariChart.prototype, "setOption");
     const set = vi.spyOn(FabricObject.prototype, "set");
+    // On the prototype, so the mount's own render is counted too: the canvas
+    // does not exist until `main.ts` mounts it.
+    const requestRenderAll = vi.spyOn(
+      StaticCanvas.prototype,
+      "requestRenderAll",
+    );
     const linePoints = vi.mocked(core.buildLinePoints);
+    const collectIssues = vi.mocked(core.collectChartIssues);
 
     await import("./main.js");
     await vi.waitFor(() =>
@@ -1483,26 +1572,24 @@ describe("the work one refresh frame does", () => {
       ).not.toBeNull(),
     );
 
-    const diagnostics = window as unknown as {
-      readonly yunari: {
-        readonly handle: {
-          readonly canvas: { requestRenderAll: () => void };
-        };
-      };
-    };
-    const requestRenderAll = vi.spyOn(
-      diagnostics.yunari.handle.canvas,
-      "requestRenderAll",
-    );
-
-    // The mount's own first refresh is not what these cases count: each counts
-    // from a revision the display has not drawn yet.
+    // The mount's own diagnostics call is the baseline that case counts from;
+    // the others count from a revision the display has not drawn yet.
+    const collectAtMount = collectIssues.mock.calls.length;
     setOption.mockClear();
     set.mockClear();
     linePoints.mockClear();
+    collectIssues.mockClear();
     requestRenderAll.mockClear();
 
-    return { setOption, set, linePoints, requestRenderAll, warned };
+    return {
+      setOption,
+      set,
+      linePoints,
+      collectIssues,
+      requestRenderAll,
+      collectAtMount,
+      warned,
+    };
   }
 
   /** `set` calls that wrote text; the layout passes also set geometry. */
@@ -1527,7 +1614,7 @@ describe("the work one refresh frame does", () => {
   }
 
   it("repaints the line every frame and the rest once per revision", async () => {
-    const { setOption, set, linePoints } = await mount(true);
+    const { setOption, set, linePoints } = await mount(revisionsEnvelope(true));
     streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
     await vi.waitFor(() => expect(liveRevision()).toBe(1));
 
@@ -1555,7 +1642,7 @@ describe("the work one refresh frame does", () => {
   });
 
   it("asks for no repaint when no sample has arrived", async () => {
-    const { requestRenderAll } = await mount(false);
+    const { requestRenderAll } = await mount(revisionsEnvelope(false));
 
     for (let frame = 0; frame < 30; frame += 1) driveFrame();
 
@@ -1565,20 +1652,38 @@ describe("the work one refresh frame does", () => {
   });
 
   it("repaints the scene for a sample that arrived", async () => {
-    const { requestRenderAll } = await mount(false);
+    // **Text only**, so no chart's own `setOption` can request the render: a
+    // canvas render on these frames can only come from the refresh branch and
+    // the binding pass. `refreshBoundText` asks for one render of its own, so
+    // the sample's frame is two calls with the branch and one without it — the
+    // pin fails if the branch is deleted. The mount's own total is not pinned:
+    // mounting the scene asks for renders of its own, which have nothing to do
+    // with this gate.
+    const { requestRenderAll } = await mount(textOnlyEnvelope());
+
+    for (let frame = 0; frame < 30; frame += 1) driveFrame();
+    expect(
+      requestRenderAll,
+      "idle frames repainted nothing",
+    ).not.toHaveBeenCalled();
+
     streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
     await vi.waitFor(() => expect(liveRevision()).toBe(1));
-
     driveFrame();
 
-    expect(requestRenderAll).toHaveBeenCalled();
+    expect(
+      requestRenderAll,
+      "the binding pass and the refresh branch",
+    ).toHaveBeenCalledTimes(2);
   });
 
   it("reports a line's unmapped key once, not every frame", async () => {
     // The line branch bypasses `buildChartPlan` every frame, so it has to ask
     // for the diagnostics itself — and only when a sample moved, leaving the
     // per-node dedupe to keep a persistent fault to one line.
-    const { warned } = await mount(true, "cpu.load.absent");
+    const { warned, collectIssues, collectAtMount } = await mount(
+      revisionsEnvelope(true, "cpu.load.absent"),
+    );
     const unmapped = (): number =>
       warned.mock.calls.filter(
         ([message]) =>
@@ -1586,16 +1691,70 @@ describe("the work one refresh frame does", () => {
           message.includes('No sensor is mapped to "cpu.load.absent"'),
       ).length;
 
+    // The dedupe set cannot tell "asked every frame" from "asked on a change",
+    // so the gate is counted at the call: the spy is a pass-through.
+    expect(collectAtMount, "asked once at mount").toBe(1);
     expect(unmapped(), "the mount reported the unmapped key").toBe(1);
 
     for (let frame = 0; frame < 30; frame += 1) driveFrame();
+    expect(collectIssues.mock.calls.length, "idle frames ask nothing").toBe(0);
     expect(unmapped(), "idle frames reported nothing new").toBe(1);
 
     streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
     await vi.waitFor(() => expect(liveRevision()).toBe(1));
     driveFrame();
 
-    expect(unmapped(), "the sample change did not repeat it").toBe(1);
+    expect(collectIssues.mock.calls.length, "the change asked again").toBe(1);
+    expect(unmapped(), "the dedupe kept it to one line").toBe(1);
+  });
+
+  it("reports a line's paint that names no global", async () => {
+    // The other half of the diagnostics: the line body's own paint resolution,
+    // which also lives in `collectChartIssues` and used to be reported by
+    // `buildChartPlan` for every family.
+    //
+    // **The fault is put on the revived chart, not on the served document.** A
+    // hosted document cannot carry a dangling paint — `readFabricThemeEnvelope`
+    // refuses it ("Chart paint must reference an existing palette token",
+    // measured) — so a served fixture would test the loader, not this report.
+    // A chart whose settings arrive unresolved is the case the report exists
+    // for, and the next sample is what asks the line for its diagnostics.
+    const { warned } = await mount(revisionsEnvelope(true));
+    const canvas = (
+      window as unknown as {
+        readonly yunari: {
+          readonly handle: {
+            readonly canvas: {
+              getObjects: () => readonly {
+                readonly family?: unknown;
+                readonly settings?: unknown;
+                set(key: string, value: unknown): void;
+              }[];
+            };
+          };
+        };
+      }
+    ).yunari.handle.canvas;
+    const line = canvas
+      .getObjects()
+      .find((object) => object.family === "line")!;
+
+    line.set("settings", {
+      ...(line.settings as Record<string, unknown>),
+      stroke: { ref: "palette.missing" },
+    });
+
+    streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
+    await vi.waitFor(() => expect(liveRevision()).toBe(1));
+    driveFrame();
+
+    expect(
+      warned.mock.calls.filter(
+        ([message]) =>
+          typeof message === "string" &&
+          message.includes('Chart paint "palette.missing" is not defined'),
+      ).length,
+    ).toBe(1);
   });
 
   /** A gauge, a bound reading, and optionally the line that keeps moving.
