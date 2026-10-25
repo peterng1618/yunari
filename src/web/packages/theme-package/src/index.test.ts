@@ -1,7 +1,12 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { readThemePackage, writeThemePackage } from "./index.js";
+import {
+  readThemePackage,
+  writeThemePackage,
+  ZIP_MAX_CENTRAL_DIRECTORY_BYTES,
+  zipEntryCount,
+} from "./index.js";
 
 const envelope = {
   schemaVersion: "2.0.0" as const,
@@ -468,5 +473,120 @@ describe("credits", () => {
       ok: false,
       message: "A theme package carries at most 256 credits.",
     });
+  });
+});
+
+describe("a package's archive declaration", () => {
+  const assets = { "assets/logo.png": new Uint8Array([1, 2, 3]) };
+
+  /** Location of the end-of-central-directory record, for the record surgery
+   *  the writer itself would never perform. */
+  function endRecord(bytes: Uint8Array): number {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let eocd = bytes.byteLength - 22;
+    while (eocd >= 0 && view.getUint32(eocd, true) !== 0x0605_4b50) eocd -= 1;
+    if (eocd < 0) throw new Error("fixture is not a ZIP archive");
+    return eocd;
+  }
+
+  /**
+   * Replaces a package's end records with an EOCD/ZIP64 pair declaring
+   * 0xffffffff entries. The first member's deflate stream is wrecked too: an
+   * extractor that trusts the count without a preflight then fails on entry
+   * one instead of looping four billion times, so the failing run stays finite.
+   */
+  function declaringZip64Entries(base: Uint8Array): Uint8Array {
+    const source = new DataView(base.buffer, base.byteOffset, base.byteLength);
+    const eocd = endRecord(base);
+    const directoryBytes = source.getUint32(eocd + 12, true);
+    const directoryOffset = source.getUint32(eocd + 16, true);
+
+    const bytes = new Uint8Array(eocd + 98);
+    bytes.set(base.subarray(0, eocd));
+    const view = new DataView(bytes.buffer);
+    // ZIP64 end of central directory, then its locator, then the EOCD.
+    view.setUint32(eocd, 0x0606_4b50, true);
+    view.setBigUint64(eocd + 4, 44n, true);
+    view.setUint16(eocd + 12, 45, true);
+    view.setUint16(eocd + 14, 45, true);
+    view.setBigUint64(eocd + 24, 0xffff_ffffn, true);
+    view.setBigUint64(eocd + 32, 0xffff_ffffn, true);
+    view.setBigUint64(eocd + 40, BigInt(directoryBytes), true);
+    view.setBigUint64(eocd + 48, BigInt(directoryOffset), true);
+    view.setUint32(eocd + 56, 0x0706_4b50, true);
+    view.setBigUint64(eocd + 64, BigInt(eocd), true);
+    view.setUint32(eocd + 72, 1, true);
+    view.setUint32(eocd + 76, 0x0605_4b50, true);
+    view.setUint16(eocd + 84, 0xffff, true);
+    view.setUint16(eocd + 86, 0xffff, true);
+    view.setUint32(eocd + 88, directoryBytes, true);
+    view.setUint32(eocd + 92, directoryOffset, true);
+
+    // A fflate archive starts with the first member's local header.
+    if (view.getUint32(0, true) !== 0x0403_4b50)
+      throw new Error("fixture has no leading local header");
+    const data = 30 + view.getUint16(26, true) + view.getUint16(28, true);
+    bytes.fill(0xff, data, data + 8);
+    return bytes;
+  }
+
+  it("refuses a crafted ZIP64 entry count before extracting anything", () => {
+    const written = writeThemePackage({ envelope, assets });
+    expect(written.ok).toBe(true);
+    if (!written.ok) return;
+    const crafted = declaringZip64Entries(written.bytes);
+
+    expect(zipEntryCount(crafted)).toBe(0xffff_ffff);
+    expect(readThemePackage(crafted)).toEqual({
+      ok: false,
+      message: "That package declares more than 128 archive entries.",
+    });
+  });
+
+  it("refuses a declared central directory past the bound", () => {
+    const written = writeThemePackage({ envelope, assets });
+    expect(written.ok).toBe(true);
+    if (!written.ok) return;
+    const bytes = written.bytes.slice();
+    new DataView(bytes.buffer).setUint32(
+      endRecord(bytes) + 12,
+      ZIP_MAX_CENTRAL_DIRECTORY_BYTES + 1,
+      true,
+    );
+
+    expect(readThemePackage(bytes)).toEqual({
+      ok: false,
+      message: "That package declares an oversized archive directory.",
+    });
+  });
+
+  it("opens a package that fills the entry bound exactly", () => {
+    const paths = Array.from(
+      { length: 126 },
+      (_unused, index) => `assets/a${index}.png`,
+    );
+    const bytes = zipSync({
+      "manifest.json": strToU8(
+        JSON.stringify({
+          format: "yunari-theme-package",
+          version: 1,
+          theme: "theme.json",
+        }),
+      ),
+      "theme.json": strToU8(
+        JSON.stringify({
+          ...envelope,
+          assets: paths.map((path, index) => ({
+            id: `a${index}`,
+            kind: "image" as const,
+            path,
+          })),
+        }),
+      ),
+      ...Object.fromEntries(paths.map((path) => [path, new Uint8Array([1])])),
+    });
+
+    expect(zipEntryCount(bytes)).toBe(128);
+    expect(readThemePackage(bytes)).toMatchObject({ ok: true });
   });
 });
