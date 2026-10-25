@@ -18,7 +18,7 @@ import {
   importFinderResult,
 } from "./asset-finder/actions.js";
 import { assetBytes } from "./asset-finder/client.js";
-import { FontsBodyHost } from "./asset-finder/fonts-body.js";
+import { FontsBody } from "./asset-finder/fonts-body.js";
 import {
   iconObject,
   iconShapes,
@@ -774,15 +774,12 @@ export class EditorSession {
       savePackage: () => this.#document.save(),
       releasePackage: () => this.#document.release(),
       openLibrary: () => this.#document.openLibrary(),
-      // The finder's Fonts body. The catalogue's data and the two writes are
-      // the session's already; the shell only has somewhere to put the body.
+      // The finder's Fonts body. The body searches the host's font sources;
+      // the two writes are still the session's, held for the preview panel.
       // A face applies to the preset the selected text is set in — the same
       // reading the inspector's own field performed before the picker moved.
       fontPickerBody: () =>
-        createElement(FontsBodyHost, {
-          ...(options.favoritesClient === undefined
-            ? {}
-            : { favoritesClient: options.favoritesClient }),
+        createElement(FontsBody, {
           onApplyFace: (face) => {
             const active = editor.canvas.getActiveObject();
             const ref =

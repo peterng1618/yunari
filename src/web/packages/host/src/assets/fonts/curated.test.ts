@@ -253,6 +253,53 @@ describe("curatedFontSource", () => {
     ]);
   });
 
+  it("finds a trio by its own title", async () => {
+    // The title names all three families in one phrase, which no single
+    // family name contains: this is the trio-name clause alone.
+    const page = await curatedFontSource.search(
+      "Yaldevi Libre Franklin",
+      1,
+      context(refusingFetch()),
+    );
+
+    expect(
+      page.results.some((entry) => entry.id === "trio:yaldevi-libre-franklin"),
+    ).toBe(true);
+  });
+
+  it("finds a trio by its description", async () => {
+    // "compact, neutral contrast" appears in one pairing's description and in
+    // no name, so only the description clause can answer it.
+    const page = await curatedFontSource.search(
+      "compact, neutral contrast",
+      1,
+      context(refusingFetch()),
+    );
+
+    expect(
+      page.results.some((entry) => entry.id === "trio:yaldevi-libre-franklin"),
+    ).toBe(true);
+  });
+
+  it("finds a family through a folded query", async () => {
+    // Case and separators fold: the catalogue separates "Fira" and "Code"
+    // with a space, and the author may type a hyphen in any case.
+    const page = await curatedFontSource.search(
+      "FIRA-CODE",
+      1,
+      context(refusingFetch()),
+    );
+
+    expect(
+      page.results.some(
+        (entry) => entry.font?.trio === undefined && entry.name === "Fira Code",
+      ),
+    ).toBe(true);
+    expect(
+      page.results.some((entry) => entry.id === "trio:yaldevi-libre-franklin"),
+    ).toBe(true);
+  });
+
   it("serves bytes for a cut through the injected fetch", async () => {
     const face = faceById("manrope-400");
     if (face === undefined) throw new Error("no manrope-400 face");

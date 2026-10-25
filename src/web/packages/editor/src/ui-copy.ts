@@ -1165,6 +1165,21 @@ export const uiCopy = {
       `${label} needs a key this host does not have.`,
     connectionsAction: "Open Connections",
     openFontPicker: "Browse the font catalogue",
+    /** The Fonts body's own search and filter row (spec R5). The old picker's
+     *  facet vocabulary and rule sentence die with it in Task 13. */
+    fontSearch: "Search trios and font names",
+    fontResults: "Font results",
+    fontFilterLabel: "Filter results",
+    fontFilter: { all: "All", trio: "Trios", family: "Fonts" },
+    fontSortLabel: "Sort",
+    fontSort: { name: "A–Z", provider: "Provider" },
+    fontSourcesLabel: "Font sources",
+    fontEmptyQuery: "Type a font name to find a trio or a family.",
+    fontTrioMeta: (faces: number): string =>
+      `${faces} ${faces === 1 ? "face" : "faces"}`,
+    fontFamilyMeta: (cuts: number): string =>
+      `${cuts} ${cuts === 1 ? "cut" : "cuts"}`,
+    fontLoadMore: "Load more",
     remoteHostNotice: (hosts: string): string =>
       `Search terms go to ${hosts}. Nothing else leaves this computer.`,
     /** An image's second action: the theme's background is one thing an author
