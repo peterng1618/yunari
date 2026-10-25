@@ -15,7 +15,7 @@ import {
 } from "../../editor-shell/icons.js";
 import type { LayerMark } from "../../editor-shell/layer-tree.js";
 import { SHAPE_KINDS } from "../../new-object-defaults.js";
-import { KindMark, chartFamilyGlyph } from "./kind-mark.js";
+import { chartFamilyGlyph, KindMark } from "./kind-mark.js";
 
 // React only flushes work scheduled inside `act` when it has been told it is in
 // a test; without this, `act` warns and the update lands after the assertion.
