@@ -4561,6 +4561,73 @@ describe("A loopback admin request must prove it is same-origin (§0116)", () =>
   });
 });
 
+describe("Import and health keep their detail on this PC", () => {
+  let dir: string;
+  let hosted: ReturnType<typeof createHostServer>;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-loopback-surface-"));
+    hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: createThemeStore(dir),
+    });
+  });
+
+  afterEach(async () => {
+    await hosted.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("refuses theme import from another origin even on loopback", async () => {
+    // The central guard answers this one; the branch check is defence in depth.
+    const answer = await request(
+      hosted.server,
+      "POST",
+      "/api/themes/import",
+      undefined,
+      {
+        headers: { host: "127.0.0.1:5173", origin: "https://evil.example" },
+      },
+    );
+    expect(answer.status).toBe(403);
+  });
+
+  it("refuses pairing from another origin even on loopback", async () => {
+    // Already the central guard's case, pinned so a refactor cannot lose it.
+    const answer = await request(
+      hosted.server,
+      "POST",
+      "/api/pairing/sessions",
+      undefined,
+      {
+        headers: { host: "127.0.0.1:5173", origin: "https://evil.example" },
+      },
+    );
+    expect(answer.status).toBe(403);
+  });
+
+  it("answers a LAN peer's health with only ok", async () => {
+    const answer = await request(
+      hosted.server,
+      "GET",
+      "/api/health",
+      undefined,
+      {
+        remoteAddress: "192.168.1.50",
+        headers: { host: "192.168.1.50:5173" },
+      },
+    );
+    expect(answer.status).toBe(200);
+    expect(answer.json()).toEqual({ ok: true });
+  });
+
+  it("keeps the health detail for a loopback peer", async () => {
+    const answer = await request(hosted.server, "GET", "/api/health");
+    expect(answer.json()).toMatchObject({ displays: 0, polling: [] });
+  });
+});
+
 /** A template the product ships, and the list the host's pages read it from. */
 describe("The templates the host serves", () => {
   let tmpDir: string;
@@ -8193,6 +8260,42 @@ describe("Host Wallpaper Engine routes", () => {
       );
       expect(answer.status).toBe(200);
       expect(answer.json()).toEqual(listingAnswer);
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("refuses every read from a paired LAN display", async () => {
+    // A paired display passes the dashboard guard, so only these routes
+    // themselves can keep this PC's Wallpaper Engine library off the LAN.
+    const displays = createDisplayStore(tmpDir);
+    const token = newToken();
+    await displays.create("phone", token);
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      themeStore: createThemeStore(tmpDir),
+      displays,
+      wallpaperEngine: fakeSource(),
+    });
+
+    try {
+      for (const route of [
+        "/api/wallpaper-engine",
+        "/api/wallpaper-engine/item/201/preview",
+        "/api/wallpaper-engine/item/201/asset",
+        "/api/wallpaper-engine/exports?since=1700000000000",
+        "/api/wallpaper-engine/export?name=shot.png",
+      ]) {
+        const answer = await request(hosted.server, "GET", route, undefined, {
+          remoteAddress: "192.168.1.50",
+          headers: {
+            host: "192.168.1.50:5173",
+            "x-yunari-session": token,
+          },
+        });
+        expect(answer.status, route).toBe(403);
+      }
     } finally {
       await hosted.close();
     }

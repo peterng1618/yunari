@@ -2745,6 +2745,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     if (url.pathname === "/api/health") {
+      // A display's liveness probe needs a heartbeat, not this machine's device
+      // count, sensor keys and pairing state. Detail stays on loopback.
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendJson(response, 200, { ok: true });
+        return;
+      }
+
       let weatherProblem: string | undefined;
 
       if (weather !== undefined) {
@@ -2752,8 +2759,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // watch, and a rewritten valid file has to clear it.
         await weather.read();
         const problem = weather.problem();
-        // `/api/health` answers anyone on the network, and a read error's own
-        // message carries the path it failed on — the person's home directory.
+        // The detail is a browser's to read even on loopback, and a read
+        // error's own message carries the path it failed on — the person's
+        // home directory.
         weatherProblem =
           problem === undefined ? undefined : redactForBrowser(problem);
       }
@@ -2938,6 +2946,17 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
+      // The library names files on this PC. A paired display reads dashboards,
+      // not this, so it stays admin like `/api/hosting`.
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Wallpaper Engine is available on this PC only.",
+        );
+        return;
+      }
+
       sendJson(
         response,
         200,
@@ -2954,6 +2973,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
     if (wallpaperEngineMatch) {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Wallpaper Engine is available on this PC only.",
+        );
         return;
       }
 
@@ -3032,6 +3059,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
         sendText(response, 405, "Only GET is supported.");
         return;
       }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Wallpaper Engine is available on this PC only.",
+        );
+        return;
+      }
 
       const asked = url.searchParams.get("since");
       // A missing or non-integer `since` would offer every old media file on
@@ -3060,6 +3095,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
     if (url.pathname === "/api/wallpaper-engine/export") {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Wallpaper Engine is available on this PC only.",
+        );
         return;
       }
 
@@ -3410,6 +3453,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // not add to the library.
       if (!isLoopbackRemote(request.socket.remoteAddress)) {
         sendText(response, 403, "Theme modification is loopback only.");
+        return;
+      }
+      // The central guard already refuses this; kept beside the sibling
+      // modification routes as defence in depth.
+      if (isForeignOrigin(request)) {
+        sendText(response, 403, "That request is from another origin.");
         return;
       }
 
