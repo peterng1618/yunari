@@ -78,7 +78,7 @@ function FontTile({
       data-yunari-font-tile={result.id}
       data-yunari-font-kind={trio === undefined ? "family" : "trio"}
       data-selected={selected ? "" : undefined}
-      className={`relative flex min-h-[112px] min-w-0 flex-col items-center justify-center gap-[var(--space-4)] rounded-[var(--radius-md)] border bg-[var(--panel-2)] p-[var(--space-10)] text-center ${
+      className={`relative flex min-h-[var(--font-tile-min-height)] min-w-0 flex-col items-center justify-center gap-[var(--space-4)] rounded-[var(--radius-md)] border bg-[var(--panel-2)] p-[var(--space-10)] text-center ${
         selected ? "border-accent ring-1 ring-accent" : "border-edge"
       }`}
     >
@@ -90,7 +90,10 @@ function FontTile({
       </span>
       {/* A specimen paper, not the family's own face: the editor never reads
           font bytes, and loading them is the preview panel's job (Task 11). */}
-      <span aria-hidden="true" className="text-[27px] leading-none">
+      <span
+        aria-hidden="true"
+        className="text-[length:var(--font-tile-glyph-size)] leading-none"
+      >
         Aa
       </span>
       <span className="max-w-full truncate text-xs font-medium">

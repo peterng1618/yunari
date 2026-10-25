@@ -534,6 +534,23 @@ body,
      stretch past reading. The measure is the drawing's own
      (`docs/design/mockups/current/host-settings.html:43`). */
   --host-settings-measure: 640px;
+  /* The finder's dimensions and the Assets card's mark are the drawings'
+     (`asset-finder-fonts.html`, `assets-pane.html`); the specimen glyph sizes
+     are the two panels' own. The specimen backdrop is fixed on purpose: a font
+     preview has to read the same under every palette, so it cannot be a §4
+     role. */
+  --font-preview-width: 336px;
+  --font-tile-min-height: 112px;
+  --font-tile-glyph-size: 27px;
+  --font-specimen-glyph-size: 31px;
+  --font-trio-specimen-height: 214px;
+  --font-specimen-backdrop: linear-gradient(
+    135deg,
+    #16202b,
+    #101820 60%,
+    #0e141b
+  );
+  --asset-thumbnail-size: 38px;
   /* Read through `theme()` by the media query below: a custom property cannot
      be a `@media` feature value, so the query is resolved at build time. */
   --breakpoint-compact: 980px;

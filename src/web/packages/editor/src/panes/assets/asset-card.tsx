@@ -57,7 +57,7 @@ export function AssetCard({
         </span>
         <span
           data-yunari-asset-badge=""
-          className={`flex-none rounded-[var(--radius-sm)] border px-[var(--space-4)] py-[var(--space-4)] text-[9px] ${
+          className={`flex-none rounded-[var(--radius-sm)] border px-[var(--space-4)] py-[var(--space-4)] text-2xs ${
             referenced ? "border-accent text-accent" : "border-edge text-faint"
           }`}
         >
@@ -93,14 +93,14 @@ function AssetMark({
         src={previewUrl}
         alt=""
         data-yunari-asset-preview=""
-        className="size-[38px] flex-none rounded-[var(--radius-sm)] border border-edge-2 bg-panel-2 object-cover"
+        className="size-[var(--asset-thumbnail-size)] flex-none rounded-[var(--radius-sm)] border border-edge-2 bg-panel-2 object-cover"
       />
     );
   }
   return (
     <span
       aria-hidden="true"
-      className="flex size-[38px] flex-none items-center justify-center rounded-[var(--radius-sm)] border border-edge-2 bg-panel-2 text-base text-text"
+      className="flex size-[var(--asset-thumbnail-size)] flex-none items-center justify-center rounded-[var(--radius-sm)] border border-edge-2 bg-panel-2 text-base text-text"
     >
       {asset.kind === "font" ? "Aa" : null}
     </span>

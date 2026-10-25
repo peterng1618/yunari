@@ -128,7 +128,7 @@ export function FontPreviewPanel({
     <section
       data-yunari-font-preview={trio === undefined ? "family" : "trio"}
       aria-label={trio === undefined ? copy.familyTitle : copy.trioTitle}
-      className="flex w-[336px] flex-none flex-col gap-[var(--space-10)] rounded-[var(--radius-md)] border border-edge bg-[var(--panel)] p-[var(--space-12)]"
+      className="flex w-[var(--font-preview-width)] flex-none flex-col gap-[var(--space-10)] rounded-[var(--radius-md)] border border-edge bg-[var(--panel)] p-[var(--space-12)]"
     >
       <div className="flex items-center gap-[var(--space-8)] border-b border-edge pb-[var(--space-6)]">
         <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-faint">
@@ -180,17 +180,17 @@ export function FontPreviewPanel({
         <>
           <div
             data-yunari-font-specimen="family"
-            className="flex h-[158px] flex-col justify-center gap-[var(--space-6)] rounded-[var(--radius-md)] bg-[linear-gradient(135deg,#16202b,#101820_60%,#0e141b)] p-[var(--space-12)]"
+            className="flex h-[158px] flex-col justify-center gap-[var(--space-6)] rounded-[var(--radius-md)] bg-[image:var(--font-specimen-backdrop)] p-[var(--space-12)]"
           >
             <span
               style={faceStyle(selectedCut)}
-              className="text-[31px] leading-[1.08]"
+              className="text-[length:var(--font-specimen-glyph-size)] leading-[1.08]"
             >
               {sample}
             </span>
             <span className="text-xs text-muted">{copy.glyphs}</span>
             {selectedCut === undefined ? null : (
-              <span className="font-mono text-[9px] text-faint">
+              <span className="font-mono text-2xs text-faint">
                 {selectedCut.family} · {selectedCut.weight}
               </span>
             )}
@@ -292,7 +292,7 @@ export function FontPreviewPanel({
         <>
           <div
             data-yunari-font-specimen="trio"
-            className="flex h-[214px] flex-col gap-[var(--space-6)] rounded-[var(--radius-md)] bg-[linear-gradient(135deg,#16202b,#101820_60%,#0e141b)] p-[var(--space-12)]"
+            className="flex h-[var(--font-trio-specimen-height)] flex-col gap-[var(--space-6)] rounded-[var(--radius-md)] bg-[image:var(--font-specimen-backdrop)] p-[var(--space-12)]"
           >
             {ROLES.map((roleName) => {
               const cut = trio.roles[roleName];
@@ -320,9 +320,7 @@ export function FontPreviewPanel({
               {copy.appliesTo}
             </span>
             <span className="flex-1 border-t border-edge" />
-            <span className="text-[9px] text-faint">
-              {copy.addsMissingRoles}
-            </span>
+            <span className="text-2xs text-faint">{copy.addsMissingRoles}</span>
           </div>
 
           <div data-yunari-font-scope="" className="font-mono text-[10px]">
@@ -347,7 +345,7 @@ export function FontPreviewPanel({
                 >
                   <span className="flex items-center gap-[var(--space-6)]">
                     <span className="text-[10px]">{copy.role[roleName]}</span>
-                    <span className="ml-auto font-mono text-[9px] text-faint">
+                    <span className="ml-auto font-mono text-2xs text-faint">
                       {entries.length === 0
                         ? copy.willBeCreated
                         : copy.roleCount(entries.length)}
