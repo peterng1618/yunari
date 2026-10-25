@@ -156,6 +156,8 @@ function embeddedIpv4(groups: readonly number[]): number | undefined {
   if (group(0) === 0x2002) return group(1) * 0x10000 + group(2);
   if (group(0) === 0x2001 && group(1) === 0) return 0xffffffff - low;
 
+  // Ceiling: IPv4-compatible `::a.b.c.d` is not decoded; not enumerated, not routable today.
+
   return undefined;
 }
 
