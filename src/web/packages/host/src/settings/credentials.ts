@@ -33,7 +33,11 @@ export function hintOf(value: string): string {
 }
 
 const SECRET = "credentials";
-/** The pre-encryption file, migrated once on first read and then removed. */
+/**
+ * The pre-encryption file. A document that validates whole is migrated and
+ * removed on the first read whose removal succeeds; one that does not is kept
+ * until its owner repairs it, when the next read migrates and removes it.
+ */
 const LEGACY_FILE = "credentials.json";
 const CREDENTIAL_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -144,22 +148,41 @@ export function createCredentialStore(
 ): CredentialStore {
   const legacyFile = path.join(directory, LEGACY_FILE);
 
+  /** The legacy document when it would migrate whole, and nothing otherwise. */
+  const wholeLegacy = async (): Promise<
+    Record<string, StoredCredential> | undefined
+  > => {
+    const legacy = await readLegacy(legacyFile);
+    return legacy === undefined ? undefined : wholeDocument(legacy);
+  };
+
   /**
    * Every credential, migrating the plaintext file on first read.
    *
    * The encrypted write comes first and the removal second: a write that throws
    * (unavailable protector, missing key) leaves the plaintext where a later run
-   * can still migrate it. A present `.bin` that cannot be read throws from the
-   * secret store rather than being treated as "no credentials".
+   * can still migrate it, and a removal that fails is retried next read. Only a
+   * document that validates whole is ever migrated or removed; one with a
+   * rejected entry is kept so its owner can repair it, and the entries that do
+   * validate are still answered, as the plaintext reader always answered them.
+   * A present `.bin` that cannot be read throws from the secret store rather
+   * than being treated as "no credentials".
    */
   const readAll = async (): Promise<Record<string, StoredCredential>> => {
     const stored = await secrets.read(SECRET);
     if (stored !== undefined) {
-      // The encrypted copy is the source of truth. A plaintext an earlier
-      // removal failed to delete is retired here; a failure now is retried on
-      // the next read rather than failing this one.
+      const current = decode(stored);
+      const whole = await wholeLegacy();
+      if (whole === undefined) return current;
+
+      // A plaintext left by a failed removal migrates to the values already
+      // stored; a repaired hand-edit is the newer document and is migrated
+      // over them. Either way the encrypted copy exists before the removal.
+      if (JSON.stringify(current) !== JSON.stringify(whole)) {
+        await secrets.write(SECRET, encode(whole));
+      }
       await rm(legacyFile, { force: true }).catch(() => undefined);
-      return decode(stored);
+      return whole;
     }
 
     const legacy = await readLegacy(legacyFile);
@@ -167,12 +190,7 @@ export function createCredentialStore(
 
     const answer = normalizeCredentials(legacy);
     const whole = wholeDocument(legacy);
-    if (whole === undefined) {
-      // Not migrated and not deleted: the owner can repair the rejected entry
-      // and the next read retries. The entries that do validate are still
-      // answered, as the plaintext reader always answered them.
-      return answer;
-    }
+    if (whole === undefined) return answer;
 
     await secrets.write(SECRET, encode(whole));
     // The same retry rule as above; the encrypted write already succeeded.
@@ -182,6 +200,12 @@ export function createCredentialStore(
 
   const save = async (all: Record<string, StoredCredential>): Promise<void> => {
     await secrets.write(SECRET, encode(all));
+    // The write path's retirement uses the read path's predicate: a broken
+    // hand-edit is never the thing a save destroys. A removal that fails here
+    // is retried by the next read, so it does not fail the save.
+    if ((await wholeLegacy()) !== undefined) {
+      await rm(legacyFile, { force: true }).catch(() => undefined);
+    }
   };
 
   let writing: Promise<unknown> = Promise.resolve();

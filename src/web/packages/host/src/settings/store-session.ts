@@ -33,7 +33,11 @@ export interface StoreSessionStore {
 }
 
 const SECRET = "store-session";
-/** The pre-encryption file, migrated once on first read and then removed. */
+/**
+ * The pre-encryption file. A session that validates is migrated and removed on
+ * the first read whose removal succeeds; one that does not is kept until its
+ * owner repairs it, when the next read migrates and removes it.
+ */
 const LEGACY_FILE = "store-session.json";
 /** The superseded GitHub device-flow token; deleted the first time a store
  *  session is written, since nothing reads it any more. */
@@ -110,17 +114,27 @@ export function createStoreSessionStore(
    *
    * The encrypted write comes first and the removal second: a write that throws
    * (unavailable protector, missing key) leaves the plaintext where a later run
-   * can still migrate it. A present `.bin` that cannot be read throws from the
-   * secret store rather than answering "no session".
+   * can still migrate it, and a removal that fails is retried next read. Only a
+   * session that validates whole is migrated or removed; a hand-edit this
+   * reader cannot use is kept for its owner to repair. A present `.bin` that
+   * cannot be read throws from the secret store rather than answering "no
+   * session".
    */
   const readAll = async (): Promise<StoreSession | undefined> => {
     const stored = await secrets.read(SECRET);
     if (stored !== undefined) {
-      // The encrypted copy is the source of truth. A plaintext an earlier
-      // removal failed to delete is retired here; a failure now is retried on
-      // the next read rather than failing this one.
+      const legacy = await readLegacy(legacyFile);
+      if (legacy === undefined) return decode(stored);
+
+      // A repaired hand-edit is the newer document and is migrated over the
+      // stored one; a leftover from a failed removal migrates to the same
+      // values. Either way the encrypted copy exists before the removal.
+      const current = decode(stored);
+      if (JSON.stringify(current) !== JSON.stringify(legacy)) {
+        await secrets.write(SECRET, encode(legacy));
+      }
       await rm(legacyFile, { force: true }).catch(() => undefined);
-      return decode(stored);
+      return legacy;
     }
 
     const legacy = await readLegacy(legacyFile);
@@ -156,13 +170,17 @@ export function createStoreSessionStore(
 
         await secrets.write(SECRET, encode(valid));
 
-        // Only after the ciphertext landed. The pre-encryption file and a
-        // failed rename's temporary are plaintext tokens, and the old
-        // device-flow token has no migration: a successful store sign-in is
-        // the moment its plaintext `public_repo` grant stops being needed.
-        await rm(legacyFile, { force: true });
-        await rm(`${legacyFile}.tmp`, { force: true });
-        await rm(path.join(directory, LEGACY_GITHUB_TOKEN), { force: true });
+        // Only after the ciphertext landed. A removal that fails is retried by
+        // a later read and does not fail this write: the session is saved. The
+        // pre-encryption file and a failed rename's temporary are plaintext
+        // tokens, and the old device-flow token has no migration — a successful
+        // store sign-in is the moment its plaintext `public_repo` grant stops
+        // being needed.
+        await rm(legacyFile, { force: true }).catch(() => undefined);
+        await rm(`${legacyFile}.tmp`, { force: true }).catch(() => undefined);
+        await rm(path.join(directory, LEGACY_GITHUB_TOKEN), {
+          force: true,
+        }).catch(() => undefined);
       });
     },
 

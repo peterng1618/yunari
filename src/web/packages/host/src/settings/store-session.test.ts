@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -223,6 +230,28 @@ describe("store session", () => {
       await expect(readFile(secretFile(dir))).rejects.toMatchObject({
         code: "ENOENT",
       });
+    });
+
+    it("keeps a malformed legacy session beside the encrypted copy", async () => {
+      await store.write(session());
+      await writeFile(legacyFile(dir), "{ not json", "utf8");
+
+      // A hand-edit this reader cannot use is not retired by the read retry;
+      // the encrypted copy answers meanwhile.
+      expect(await store.read()).toEqual(session());
+      expect(await readFile(legacyFile(dir), "utf8")).toBe("{ not json");
+    });
+
+    it("answers a successful write when the legacy removal is refused", async () => {
+      // A directory at the legacy path makes the non-recursive removal throw
+      // on every platform, after the ciphertext has already landed.
+      await mkdir(legacyFile(dir));
+
+      await expect(
+        store.write(session("session-token")),
+      ).resolves.toBeUndefined();
+
+      expect(await store.read()).toEqual(session("session-token"));
     });
 
     it("throws on a tampered ciphertext rather than answering no session", async () => {

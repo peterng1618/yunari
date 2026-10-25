@@ -148,6 +148,44 @@ describe("credentials", () => {
     expect(await store.read()).toEqual({ good: stored });
   });
 
+  it("keeps an un-migrated legacy document through a save", async () => {
+    await seed(
+      JSON.stringify({
+        good: stored,
+        bad: { value: "sk-live-bad", savedAt: "not a date" },
+      }),
+    );
+    expect(await store.read()).toEqual({ good: stored });
+
+    await store.write("other", "value-other", savedAt);
+
+    // The save wrote the encrypted copy and did not retire the document it
+    // could not migrate: the rejected entry's value exists only here.
+    expect(await readFile(legacyFile(dir), "utf8")).toContain("sk-live-bad");
+    expect(await store.read()).toEqual({
+      good: stored,
+      other: { value: "value-other", savedAt: "2026-10-21T09:00:00.000Z" },
+    });
+
+    // Repairing it lets the next read migrate the whole document and remove it.
+    await seed(
+      JSON.stringify({
+        good: stored,
+        other: { value: "value-other", savedAt: savedAt.toISOString() },
+        bad: { value: "sk-live-bad", savedAt: savedAt.toISOString() },
+      }),
+    );
+
+    expect(await store.read()).toEqual({
+      good: stored,
+      other: { value: "value-other", savedAt: "2026-10-21T09:00:00.000Z" },
+      bad: { value: "sk-live-bad", savedAt: "2026-10-21T09:00:00.000Z" },
+    });
+    await expect(readFile(legacyFile(dir))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
   it("treats a non-object file as no credentials and does not migrate it", async () => {
     await seed("[]");
 

@@ -41,7 +41,8 @@ const DAY_MS = 86_400_000;
 const CA_CERT_FILE = "ca.crt";
 /** The root's private key, kept encrypted; only the certificate is in the clear. */
 const CA_KEY_SECRET = "ca-key";
-/** The pre-encryption key file, migrated once on first read and then removed. */
+/** The pre-encryption key file, migrated and removed on the first read whose
+ *  removal succeeds; a failed removal is retried by the next read. */
 const LEGACY_CA_KEY_FILE = "ca.key";
 const CA_COMMON_NAME = "Yunari Local CA";
 
@@ -134,7 +135,8 @@ function newKeyPair(): {
 }
 
 /**
- * The root's private key, migrating a legacy `ca.key` once.
+ * The root's private key, migrating a legacy `ca.key` and retiring it on the
+ * first read whose removal succeeds; a failed removal is retried next read.
  *
  * `undefined` means there is no key to use, which is an ordinary first run. A
  * present encrypted key that cannot be read throws: that is not the same fact
