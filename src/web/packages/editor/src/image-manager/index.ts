@@ -103,15 +103,17 @@ async function boundedBitmapCanvas(
   // source's size — so the probe establishes it and is released before the
   // resized decode, which is the one that stays small.
   const probe = await createImageBitmap(blob);
-  const bounded = boundedImportSize(probe.width, probe.height, maxEdge);
-  if (bounded.width === probe.width && bounded.height === probe.height) {
-    try {
+  let bounded: { readonly width: number; readonly height: number };
+  try {
+    // The size call is inside the try so a refusal there still closes the
+    // probe before the error reaches the element-path retry.
+    bounded = boundedImportSize(probe.width, probe.height, maxEdge);
+    if (bounded.width === probe.width && bounded.height === probe.height) {
       return drawnIntoCanvas(probe);
-    } finally {
-      probe.close();
     }
+  } finally {
+    probe.close();
   }
-  probe.close();
   const resized = await createImageBitmap(blob, {
     resizeWidth: bounded.width,
     resizeHeight: bounded.height,

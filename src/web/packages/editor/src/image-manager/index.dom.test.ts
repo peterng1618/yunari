@@ -257,6 +257,62 @@ describe("ImageManager", () => {
     expect([bounded.width, bounded.height]).toEqual([4096, 2048]);
   });
 
+  it("retries through the element path when the bitmap decode rejects", async () => {
+    // SVG and formats the bitmap decoder refuses take the retry, not a failed
+    // import: the element path is the one that produced the image before.
+    const canvas = new Canvas(document.createElement("canvas"));
+    const manager = createImageManager(canvas, vi.fn());
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:image");
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL");
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn().mockRejectedValue(new Error("not a bitmap")),
+    );
+    vi.spyOn(HTMLImageElement.prototype, "src", "set").mockImplementation(
+      function (this: HTMLImageElement) {
+        Object.defineProperty(this, "naturalWidth", { value: 8192 });
+        Object.defineProperty(this, "naturalHeight", { value: 4096 });
+        this.dispatchEvent(new Event("load"));
+      },
+    );
+
+    const result = await manager.importImage({
+      source: new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" }),
+    });
+
+    const bounded = (
+      result?.image as FabricImage
+    ).getElement() as HTMLCanvasElement;
+    expect([bounded.width, bounded.height]).toEqual([4096, 2048]);
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("closes the probe when sizing refuses the decoded dimensions", async () => {
+    // The size call sits inside the same try as the draw, so a refusal there
+    // still releases the bitmap before the error reaches the retry.
+    const canvas = new Canvas(document.createElement("canvas"));
+    const manager = createImageManager(canvas, vi.fn());
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:image");
+    vi.spyOn(URL, "revokeObjectURL");
+    const probeClose = vi.fn();
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn().mockResolvedValue(bitmapStub(0, 0, probeClose)),
+    );
+    vi.spyOn(HTMLImageElement.prototype, "src", "set").mockImplementation(
+      function (this: HTMLImageElement) {
+        this.dispatchEvent(new Event("error"));
+      },
+    );
+
+    await expect(
+      manager.importImage({
+        source: new File(["pixels"], "logo.png", { type: "image/png" }),
+      }),
+    ).rejects.toThrow("Could not decode the selected image.");
+    expect(probeClose).toHaveBeenCalledOnce();
+  });
+
   it("revokes the URL when both decode paths fail", async () => {
     const canvas = new Canvas(document.createElement("canvas"));
     const manager = createImageManager(canvas, vi.fn());
