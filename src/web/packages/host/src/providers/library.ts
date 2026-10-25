@@ -38,6 +38,22 @@ const SYSTEM_TEXT_KEYS = ["system.hostname", "system.os", "system.osBuild"];
 /** `processes()` enumerates every process, so its count is reused this long. */
 const PROCESS_COUNT_TTL_MS = 5000;
 
+/**
+ * The machine-wide reads, and the owned keys that make each one necessary.
+ * `systeminformation` shells out for several of these (WMI/PowerShell on
+ * Windows), so a display binding one key must not pay for another family's walk.
+ */
+const READ_FAMILIES = {
+  load: (key: string) => key === "cpu.load",
+  speed: (key: string) => key === "cpu.clock",
+  memory: (key: string) => key.startsWith("ram."),
+  filesystems: (key: string) => key.startsWith("disk."),
+  network: (key: string) => key.startsWith("network."),
+  graphics: (key: string) => key.startsWith("gpu.") || key.startsWith("vram."),
+} as const;
+
+type ReadFamily = keyof typeof READ_FAMILIES;
+
 export const LIBRARY_PROVIDER_ID = "library";
 
 const BYTES_PER_GB = 1024 ** 3;
@@ -807,6 +823,18 @@ export class LibrarySensorProvider implements SensorProvider {
   private processReads:
     | { readonly count: number; readonly atMs: number }
     | undefined;
+  /**
+   * The machine-wide reads already started for the tick at `atMs`. Ask groups
+   * are sampled one after another against the same clock, so without this a
+   * family two groups both need is walked twice; four displays were four walks.
+   * Replaced whole at a new tick, so a resolved figure never outlives its tick.
+   */
+  private tick:
+    | {
+        readonly atMs: number;
+        readonly reads: Map<ReadFamily, Promise<unknown>>;
+      }
+    | undefined;
 
   constructor(private readonly library?: LibraryModule) {}
 
@@ -886,6 +914,39 @@ export class LibrarySensorProvider implements SensorProvider {
     return this.cpu;
   }
 
+  /**
+   * One machine-wide read per family per tick. The in-flight promise is shared
+   * by every ask group sampled at `nowMs`; a rejection is dropped immediately so
+   * it cannot poison a later group's read, while a resolved one is reused until
+   * the tick ends — these are live figures, never kept past their tick.
+   */
+  private readOnce<T>(
+    nowMs: number,
+    family: ReadFamily,
+    start: () => Promise<T>,
+  ): Promise<T> {
+    if (this.tick?.atMs !== nowMs) {
+      this.tick = { atMs: nowMs, reads: new Map() };
+    }
+
+    const tick = this.tick;
+    const started = tick.reads.get(family);
+
+    if (started !== undefined) {
+      return started as Promise<T>;
+    }
+
+    const pending = start();
+    tick.reads.set(family, pending);
+    pending.catch(() => {
+      if (tick.reads.get(family) === pending) {
+        tick.reads.delete(family);
+      }
+    });
+
+    return pending;
+  }
+
   private async processCount(
     library: LibraryModule,
     nowMs: number,
@@ -937,17 +998,40 @@ export class LibrarySensorProvider implements SensorProvider {
 
     try {
       const library = await this.module();
+      // A family is started only when an owned key needs a figure it supplies,
+      // and each is contained: graphics failing still answers CPU load, while
+      // its own keys become gaps with the reason.
+      const failed = new Set<ReadFamily>();
+      let failure: string | undefined;
+      const read = async <T>(
+        family: ReadFamily,
+        start: () => Promise<T>,
+      ): Promise<T | undefined> => {
+        if (!owned.some(READ_FAMILIES[family])) {
+          return undefined;
+        }
+
+        try {
+          return await this.readOnce(nowMs, family, start);
+        } catch (error) {
+          failed.add(family);
+          failure ??= redactForBrowser(
+            error instanceof Error ? error.message : String(error),
+          );
+          return undefined;
+        }
+      };
       const [load, speed, mem, filesystems, network, graphics] =
         await Promise.all([
-          library.currentLoad(),
-          library.cpuCurrentSpeed(),
-          library.mem(),
-          library.fsSize(),
-          library.networkStats(),
-          library.graphics(),
+          read("load", () => library.currentLoad()),
+          read("speed", () => library.cpuCurrentSpeed()),
+          read("memory", () => library.mem()),
+          read("filesystems", () => library.fsSize()),
+          read("network", () => library.networkStats()),
+          read("graphics", () => library.graphics()),
         ]);
 
-      this.failure = undefined;
+      this.failure = failure;
 
       // The assignment this sample was given, read once here: one selection
       // answers the figures and the caption, and the two expensive discovery
@@ -960,7 +1044,7 @@ export class LibrarySensorProvider implements SensorProvider {
       const wantsCpu = owned.some(
         (key) => CPU_NAME_KEYS.includes(key) || CPU_COUNT_KEYS.includes(key),
       );
-      const wantsVolumes = owned.some((key) => key.startsWith("disk."));
+      const wantsVolumes = owned.some(READ_FAMILIES.filesystems);
       // Each extra read is paid for only by the group that binds it: a theme
       // showing Wi-Fi must not wait for the process walk or the battery.
       const wantsWifi = owned.some((key) => key.startsWith("wifi."));
@@ -991,7 +1075,7 @@ export class LibrarySensorProvider implements SensorProvider {
         wantsBattery ? library.battery().catch(() => undefined) : undefined,
       ]);
 
-      const card = selectGpu(graphics.controllers ?? [], gpu);
+      const card = selectGpu(graphics?.controllers ?? [], gpu);
       const systemDrive =
         systemDisk === undefined
           ? undefined
@@ -1002,13 +1086,17 @@ export class LibrarySensorProvider implements SensorProvider {
       // to every volume would be a different device's figures under the name
       // the consumer chose for the one they removed.
       const systemVolumes =
-        systemDisk === undefined
-          ? filesystems
-          : systemDrive === undefined
-            ? []
-            : volumesOf(filesystems, systemDrive);
+        filesystems === undefined
+          ? undefined
+          : systemDisk === undefined
+            ? filesystems
+            : systemDrive === undefined
+              ? []
+              : volumesOf(filesystems, systemDrive);
       const dataVolumes =
-        dataDrive === undefined ? [] : volumesOf(filesystems, dataDrive);
+        filesystems === undefined || dataDrive === undefined
+          ? []
+          : volumesOf(filesystems, dataDrive);
       const slot = volumeTotals(dataVolumes);
 
       const readings = readingsFromLibrary({
@@ -1028,7 +1116,7 @@ export class LibrarySensorProvider implements SensorProvider {
         gpu: card,
       });
 
-      return samplesFromLibrary(
+      const entries = samplesFromLibrary(
         {
           ...readings,
           ...cpuNames(cpu),
@@ -1056,6 +1144,30 @@ export class LibrarySensorProvider implements SensorProvider {
         },
         owned,
         nowMs,
+      );
+
+      if (failure === undefined) {
+        return entries;
+      }
+
+      // A family that rejects is a gap for its own keys alone, carrying the
+      // reason; every other family's entries stand.
+      const reason = failure;
+      const timestamp = new Date(nowMs).toISOString();
+      const unavailable = (semanticKey: string): SampleEntry => ({
+        semanticKey,
+        sample: {
+          sensorId: `${LIBRARY_PROVIDER_ID}:${semanticKey}`,
+          timestamp,
+          status: "missing",
+          message: `system information is unavailable: ${reason}`,
+        },
+      });
+
+      return entries.map((entry) =>
+        [...failed].some((family) => READ_FAMILIES[family](entry.semanticKey))
+          ? unavailable(entry.semanticKey)
+          : entry,
       );
     } catch (error) {
       // `systeminformation` shells out, so its errors quote the command and
