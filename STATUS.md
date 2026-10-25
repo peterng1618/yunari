@@ -9,7 +9,7 @@ Fix every finding in the 2026-10-25 performance and security audit, plus anythin
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-performance-security-hardening.md` — Phases 0–3 complete; Phase 4 is next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-performance-security-hardening.md` — Phases 0–4 complete; Phase 5 is next.
 - **Spec:** [`2026-10-25-performance-security-hardening-design.md`](docs/superpowers/specs/2026-10-25-performance-security-hardening-design.md) is approved and all findings are marked Fix.
 - **Decision notes 0116–0120 are landed** for the request boundary, chart repaint, store upload, provenance checks and secrets at rest.
 - **Backlog drain is queued behind this plan:** [`spec`](docs/superpowers/specs/2026-10-12-the-backlog-drain-design.md) and [`plan`](docs/superpowers/plans/2026-10-12-the-backlog-drain.md) start after this closes.
@@ -17,18 +17,18 @@ Fix every finding in the 2026-10-25 performance and security audit, plus anythin
 
 ## Last completed change
 
-- **Phase 3 is complete:** a sample revision gates chart repaint, lines rebuild their series with `replaceMerge`, and the cadence re-anchors only after a whole missed interval.
-- **A hidden display stops both loops and pauses its video;** a restored page reloads and a page opened hidden starts paused.
-- **Media frames are followed only under a glass surface,** and a resize that changes nothing no longer re-fits — pixel ratio included.
-- **The publish poll keeps one request in flight** and stops on a refusal or a missing theme.
-- **Phase gate:** `npm run gate` exit 0 — 412 files / 6091 passed (1 skipped), Worker 12 / 73.
+- **Phase 4 is complete:** the published poll asks `exists` and the asset route reads one file, never the whole theme.
+- **A sensor family is read only when a bound key needs it,** once per tick per family, with failures attributed to the read that failed.
+- **Ticks single-flight:** a stalled provider drops its next fire instead of queueing it, and one device read serves every display.
+- **Weather settings, SSE frames and the LHM probe are paid for once:** a stat-keyed parse cache, one frame per batch, a one-byte probe.
+- **Phase gate:** `npm run gate` exit 0 — 413 files / 6135 passed (1 skipped), Worker 12 / 73.
 
 ## Next
 
-1. Run Phase 4 (host IO): scoped theme reads, key-gated library sampling, single-flight ticks.
-2. Run Phase 5 (editor) and Phase 6 (store uploads and Worker).
-3. Run Phase 7 (secrets, sessions, TLS) and Phase 8 (supply chain and close).
-4. Then the final whole-branch review on the most capable model.
+1. Run Phase 5 (editor): coalesced change notifications, bounded history, idle publish, off-path image decode.
+2. Run Phase 6 (store uploads and Worker) and Phase 7 (secrets, sessions, TLS).
+3. Run Phase 8 (supply chain and close), then the final whole-branch review on the most capable model.
+4. Finish the branch with `superpowers:finishing-a-development-branch`.
 
 ## Blockers / unverified
 
