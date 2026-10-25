@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 
 import type { FabricPalette, FabricThemeEnvelope } from "@yunari/renderer-core";
+import { MAX_CREDITS_ENTRIES } from "@yunari/theme-package";
 import { IText } from "fabric/es";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { presetLibrary } from "./preset-library/index.js";
 import { installReadableFile } from "./readable-file.fixture.js";
 import type { TextPlacementPort } from "./text-manager/index.js";
+import { uiCopy } from "./ui-copy.js";
 
 installReadableFile();
 
@@ -2509,8 +2511,8 @@ describe("the local font import", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
-  it("creates one preset and one credit carrying the assetId", async () => {
-    // jsdom has no parser; the declaration path is what this case proves.
+  /** jsdom has no parser; the declaration path is what these cases prove. */
+  function stubFontParser(): void {
     vi.stubGlobal(
       "FontFace",
       class {
@@ -2519,15 +2521,11 @@ describe("the local font import", () => {
         }
       },
     );
-    const manager = new AssetManager();
-    const extensions = fontSession(manager);
-    const addCredit = vi.spyOn(EditorDocument.prototype, "addCredit");
-    const input = document.body.querySelector<HTMLInputElement>(
-      "[data-yunari-asset-import-input]",
-    );
-    if (input === null) throw new Error("no import input");
+  }
+
+  function fontFile(): File {
     const bytes = new TextEncoder().encode("ttf");
-    const font = Object.assign(
+    return Object.assign(
       new File([bytes as unknown as BlobPart], "Inter-Bold.ttf", {
         type: "font/ttf",
       }),
@@ -2539,14 +2537,30 @@ describe("the local font import", () => {
           ),
       },
     );
+  }
+
+  /** Picks the file through the pane's own control. */
+  async function pickFont(): Promise<void> {
+    const input = document.body.querySelector<HTMLInputElement>(
+      "[data-yunari-asset-import-input]",
+    );
+    if (input === null) throw new Error("no import input");
     Object.defineProperty(input, "files", {
-      value: [font],
+      value: [fontFile()],
       configurable: true,
     });
     await act(async () => {
       input.dispatchEvent(new Event("change", { bubbles: true }));
       await settle();
     });
+  }
+
+  it("creates one preset and one credit carrying the assetId", async () => {
+    stubFontParser();
+    const manager = new AssetManager();
+    const extensions = fontSession(manager);
+    const addCredit = vi.spyOn(EditorDocument.prototype, "addCredit");
+    await pickFont();
 
     // The pick is not a declaration; Create type preset is the one write.
     expect(manager.declarations).toEqual([]);
@@ -2588,6 +2602,78 @@ describe("the local font import", () => {
         ],
       }),
     );
+
+    extensions.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it("declares a cancelled pick and writes neither a preset nor a credit", async () => {
+    stubFontParser();
+    const manager = new AssetManager();
+    const extensions = fontSession(manager);
+    const addCredit = vi.spyOn(EditorDocument.prototype, "addCredit");
+    await pickFont();
+    expect(manager.declarations).toEqual([]);
+
+    const cancel = document.body.querySelector<HTMLButtonElement>(
+      "[data-yunari-font-cancel]",
+    );
+    if (cancel === null) throw new Error("no Cancel control");
+    await act(async () => {
+      cancel.click();
+      await settle();
+    });
+
+    // Cancel keeps the file the author gave us, and nothing else.
+    expect(manager.declarations).toMatchObject([
+      { kind: "font", family: "Inter", weight: 700, format: "ttf" },
+    ]);
+    expect(addCredit).not.toHaveBeenCalled();
+    await extensions.actionFacade().savePackage();
+    const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
+    expect(
+      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typePresets,
+    ).toBeUndefined();
+    expect(saved?.[3]).toBeUndefined();
+
+    extensions.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it("refuses a fresh import at the cap even when a legacy credit shares its title", async () => {
+    stubFontParser();
+    const manager = new AssetManager();
+    const extensions = fontSession(manager);
+    // A pre-assetId credit with the same title would make `canAddCredit` treat
+    // the new one as a replacement; the list is still full.
+    vi.spyOn(EditorDocument.prototype, "credits").mockReturnValue([
+      {
+        kind: "font",
+        title: "Inter",
+        license: "unknown",
+        changes: "Imported unchanged",
+      },
+      ...Array.from({ length: MAX_CREDITS_ENTRIES - 1 }, (_, index) => ({
+        kind: "font",
+        title: `legacy-${index}`,
+        license: "unknown",
+        changes: "Imported unchanged",
+      })),
+    ]);
+    await pickFont();
+
+    const create = document.body.querySelector<HTMLButtonElement>(
+      "[data-yunari-font-create]",
+    );
+    if (create === null) throw new Error("no Create type preset control");
+    await act(async () => {
+      create.click();
+      await settle();
+    });
+
+    // Refused before the declaration: the file the author picked is not kept.
+    expect(manager.declarations).toEqual([]);
+    expect(document.body.textContent).toContain(uiCopy.assets.creditsFull);
 
     extensions.destroy();
     vi.unstubAllGlobals();

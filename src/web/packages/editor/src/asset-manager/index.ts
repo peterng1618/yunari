@@ -221,11 +221,7 @@ export class AssetManager {
     if (format === undefined || !isFontFormat(format))
       throw new Error(`No declared font to amend: ${assetId}.`);
 
-    const {
-      sourceUrl: _previousSourceUrl,
-      license: _previousLicense,
-      ...kept
-    } = existing;
+    const { sourceUrl: _previousSourceUrl, ...kept } = existing;
     const next: FontAssetReference = {
       ...kept,
       kind: "font",
@@ -233,7 +229,9 @@ export class AssetManager {
       family: checked.family,
       weight: checked.weight,
       style: checked.style,
-      license: { name: checked.licence },
+      // A curated face's licence carries a URL and sometimes an attribution;
+      // amending the name must not strip them from the saved package.
+      license: { ...existing.license, name: checked.licence },
       ...(checked.sourceUrl === undefined
         ? {}
         : { sourceUrl: checked.sourceUrl }),

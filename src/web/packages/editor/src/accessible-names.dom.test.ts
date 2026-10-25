@@ -544,6 +544,7 @@ function mountPanels(): { root: HTMLElement } {
       hydrate: vi.fn(async () => undefined),
     } as never,
     isReferenced: () => false,
+    onFontCommit: async () => ({ ok: true, message: "" }),
   });
 
   // The new-theme chooser, opened as the session opens it: a `Dialog`, so it is

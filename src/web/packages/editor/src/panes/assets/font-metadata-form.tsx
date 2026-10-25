@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   FONT_WEIGHT_MAX,
   FONT_WEIGHT_MIN,
@@ -136,6 +136,19 @@ export function FontMetadataForm(props: {
   const [sourceUrl, setSourceUrl] = useState(initial.sourceUrl ?? "");
   const [role, setRole] = useState<FontTrioRole | null>(null);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+
+  // A second pick replaces the file under the same form: without this the
+  // fields keep the first file's facts and Create would declare the new bytes
+  // as the old family.
+  useEffect(() => {
+    setFamily(initial.family);
+    setWeight(initial.weight);
+    setStyle(initial.style);
+    setLicence(initial.licence);
+    setSourceUrl(initial.sourceUrl ?? "");
+    setRole(null);
+    setRefusal(undefined);
+  }, [initial]);
 
   const current = (): FontMetadata => {
     const url = sourceUrl.trim();

@@ -7,7 +7,10 @@ import {
   type SemanticKeyDescriptor,
 } from "@yunari/renderer-core";
 import { sceneBoxesOf } from "@yunari/scene-fabric";
-import type { ThemeCreditsEntry } from "@yunari/theme-package";
+import {
+  MAX_CREDITS_ENTRIES,
+  type ThemeCreditsEntry,
+} from "@yunari/theme-package";
 import { ActiveSelection, type FabricObject } from "fabric/es";
 import { createElement, type ReactElement } from "react";
 import { applyArrange, canArrange } from "./arrange.js";
@@ -801,10 +804,10 @@ export class EditorSession {
    *
    * The cap is checked before anything is declared, because nothing removes a
    * credit and the package writer refuses an over-cap list at the next save.
-   * A fresh file has no id until it is declared, so the pre-check carries none:
-   * only the length can refuse it, and a file not yet in the package has no
-   * earlier credit to replace. Cancel declares the file and writes neither the
-   * preset nor the credit.
+   * The question here is the list's length, asked directly: a fresh file has no
+   * id until it is declared, and `canAddCredit`'s duplicate-key arm would let a
+   * legacy pre-assetId credit of the same title mask a full list. Cancel
+   * declares the file and writes neither the preset nor the credit.
    */
   async #commitFont(
     input: FontCommitInput,
@@ -835,7 +838,7 @@ export class EditorSession {
         : { source: { url: metadata.sourceUrl } }),
       ...("assetId" in source ? { assetId: source.assetId } : {}),
     };
-    if (!this.#document.canAddCredit(credit))
+    if (this.#document.credits().length >= MAX_CREDITS_ENTRIES)
       return { ok: false, message: uiCopy.assets.creditsFull };
 
     try {

@@ -65,8 +65,9 @@ interface AssetsPaneProps {
   readonly onBackground?: (asset: LocalAssetReference) => void;
   /** The one font commit: declares or amends the face, then writes the preset
    *  and the credit. The cap check and the document writes are the caller's,
-   *  because neither can be reached from the pane. */
-  readonly onFontCommit?: FontCommit;
+   *  because neither can be reached from the pane. Required: a face cannot be
+   *  declared without the document that credits it. */
+  readonly onFontCommit: FontCommit;
 }
 
 export interface FontCommitInput {
@@ -267,12 +268,6 @@ export function AssetsPane({
   ): void => {
     const pending = font;
     if (pending === undefined) return;
-    if (onFontCommit === undefined) {
-      // A pane mounted without a document has nowhere to write a preset; the
-      // card's own button says the same by staying disabled.
-      setMessage(uiCopy.panels.assetImportFailed);
-      return;
-    }
     void submit(async () => {
       setFontBusy(true);
       try {
@@ -314,28 +309,19 @@ export function AssetsPane({
     void submit(async () => {
       setFontBusy(true);
       try {
-        if (onFontCommit !== undefined) {
-          const outcome = await onFontCommit({
-            source: { file: pending.file },
-            metadata,
-            role: null,
-            withPreset: false,
-          });
-          setMessage(outcome.message);
-          if (!outcome.ok) return;
-          setFont(undefined);
-          const fonts = manager.declarations.filter(
-            (asset) => asset.kind === "font",
-          );
-          setChosenId(fonts.at(-1)?.id);
-          return;
-        }
-        // A pane mounted without a document still keeps the file it was given.
-        const asset = await manager.importFont(pending.file, metadata);
+        const outcome = await onFontCommit({
+          source: { file: pending.file },
+          metadata,
+          role: null,
+          withPreset: false,
+        });
+        setMessage(outcome.message);
+        if (!outcome.ok) return;
         setFont(undefined);
-        setChosenId(asset.id);
-        setMessage(uiCopy.panels.assetDeclaredFont);
-        onChanged?.();
+        const fonts = manager.declarations.filter(
+          (asset) => asset.kind === "font",
+        );
+        setChosenId(fonts.at(-1)?.id);
       } catch (error) {
         // The form stays open, so the values it refuses can be repaired.
         refuse(error);

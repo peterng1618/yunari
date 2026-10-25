@@ -119,6 +119,26 @@ describe("AssetManager", () => {
     );
   });
 
+  it("amends a face's licence name without dropping its URL", async () => {
+    const manager = new AssetManager();
+    const face = fontTrio("minimal")!.faces[0]!;
+    expect(face.license.url).toBeDefined();
+    await manager.adoptFont(face, new Uint8Array([0, 1, 2]));
+
+    const amended = manager.amendFont(face.id, {
+      family: face.family,
+      weight: 500,
+      style: "normal",
+      licence: "SIL OFL 1.1",
+    });
+
+    expect(amended.license).toEqual({
+      ...face.license,
+      name: "SIL OFL 1.1",
+    });
+    expect(amended.weight).toBe(500);
+  });
+
   it("imports a ttf and writes a local reference without a sourceUrl", async () => {
     const manager = new AssetManager();
 

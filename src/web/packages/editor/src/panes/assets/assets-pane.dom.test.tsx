@@ -38,7 +38,11 @@ import {
 } from "../../asset-manager/index.js";
 import type { EditorInteraction } from "../../editor-interaction.js";
 import { uiCopy } from "../../ui-copy.js";
-import { AssetsPane } from "./assets-pane.js";
+import {
+  AssetsPane,
+  type FontCommit,
+  type FontCommitInput,
+} from "./assets-pane.js";
 
 // Base UI's select popup needs three browser APIs jsdom has none of — the same
 // three `paint-list.dom.test.tsx` supplies, for the same reason.
@@ -140,6 +144,7 @@ function mount(
       <AssetsPane
         manager={manager}
         editor={editorStub()}
+        onFontCommit={async () => ({ ok: true, message: "" })}
         {...(options.isReferenced === undefined
           ? {}
           : { isReferenced: options.isReferenced })}
@@ -317,6 +322,7 @@ const IMAGE_FILE = file("logo.png", "image/png", "png-one");
 const OTHER_IMAGE_FILE = file("logo.png", "image/png", "png-two");
 const SVG_FILE = file("mark.svg", "image/svg+xml", "<svg/>");
 const FONT_FILE = file("body.woff2", "font/woff2", "woff2");
+const OTHER_FONT_FILE = file("Roboto-Light.ttf", "font/ttf", "ttf");
 const VIDEO_FILE = file("clip.mp4", "video/mp4", "mp4");
 
 interface Harness {
@@ -331,6 +337,7 @@ interface Harness {
   readonly changed: Mock;
   readonly onFindAssets: Mock;
   readonly onBackground: Mock;
+  readonly fontCommit: Mock;
 }
 
 /** The file section over a real `AssetManager`, on an editor stub that answers
@@ -364,6 +371,15 @@ async function mountWithManager(
   const changed = vi.fn();
   const onFindAssets = vi.fn();
   const onBackground = vi.fn();
+  /** The session's own declaration, minus the document: a Cancel declares and
+   *  a Create reports success, so a case can read what the pane asked for. */
+  const fontCommit = vi.fn<FontCommit>(async (input: FontCommitInput) => {
+    if (!input.withPreset && "file" in input.source) {
+      await manager.importFont(input.source.file, input.metadata);
+      return { ok: true, message: uiCopy.panels.assetDeclaredFont };
+    }
+    return { ok: true, message: "" };
+  });
   const editor = {
     canvas: {
       getObjects: () => objects,
@@ -383,6 +399,7 @@ async function mountWithManager(
         isReferenced={isReferenced}
         onChanged={changed}
         onFindAssets={onFindAssets}
+        onFontCommit={fontCommit}
         {...(withBackground ? { onBackground } : {})}
       />,
     );
@@ -400,6 +417,7 @@ async function mountWithManager(
     changed,
     onFindAssets,
     onBackground,
+    fontCommit,
   };
 }
 
@@ -607,11 +625,11 @@ describe("the Assets pane's import", () => {
     ).toBe("body");
   });
 
-  it("keeps the file declared when the form is cancelled", async () => {
-    // The manager's declaration path is what this case proves; the form's own
-    // parse is `font-metadata-form`'s.
+  it("reports a cancelled pick to the commit, which keeps the file declared", async () => {
+    // The stub commit declares the way the session does, so the assertion is
+    // about the request the pane makes — one fresh file with no preset.
     stubFontParser();
-    const { host, manager, changed } = await mountWithManager();
+    const { host, manager, fontCommit } = await mountWithManager();
 
     await importFile(host, FONT_FILE);
     expect(manager.declarations).toEqual([]);
@@ -622,10 +640,68 @@ describe("the Assets pane's import", () => {
       await drain();
     });
 
+    expect(fontCommit).toHaveBeenCalledWith({
+      source: { file: FONT_FILE },
+      metadata: {
+        family: "body",
+        weight: 400,
+        style: "normal",
+        licence: "unknown",
+      },
+      role: null,
+      withPreset: false,
+    });
     expect(manager.declarations.map((asset) => asset.kind)).toEqual(["font"]);
     expect(host.querySelector("[data-yunari-font-details]")).toBeNull();
     expect(cardOf(host, "body.woff2")).not.toBeNull();
-    expect(changed).toHaveBeenCalled();
+  });
+
+  it("re-prefills the form from a second pick", async () => {
+    const { host } = await mountWithManager();
+
+    await importFile(host, FONT_FILE);
+    await importFile(host, OTHER_FONT_FILE);
+
+    // The file under the form changed, so every field follows it — otherwise
+    // Create would declare Roboto's bytes as the first file's family.
+    expect(
+      host.querySelector<HTMLInputElement>("[data-yunari-font-family]")?.value,
+    ).toBe("Roboto");
+    expect(
+      host.querySelector<HTMLInputElement>("[data-yunari-font-weight]")?.value,
+    ).toBe("300");
+  });
+
+  it("opens the form on a declared face from the card's Create type preset", async () => {
+    const { host } = await mount([
+      {
+        id: "heading",
+        kind: "font",
+        path: "assets/Manrope-Variable.woff2",
+        family: "Manrope",
+        weight: 700,
+        style: "normal",
+        format: "woff2",
+      },
+    ]);
+    await selectCard(host, "Manrope-Variable.woff2");
+
+    const open = cardOf(host, "Manrope-Variable.woff2")?.querySelector(
+      "[data-yunari-font-open]",
+    );
+    if (open === null || open === undefined)
+      throw new Error("no Create type preset control.");
+    await act(async () =>
+      open.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+
+    expect(host.querySelector("[data-yunari-font-details]")).not.toBeNull();
+    expect(
+      host.querySelector<HTMLInputElement>("[data-yunari-font-family]")?.value,
+    ).toBe("Manrope");
+    expect(
+      host.querySelector<HTMLInputElement>("[data-yunari-font-weight]")?.value,
+    ).toBe("700");
   });
 
   it("places an imported SVG through the canvas", async () => {
