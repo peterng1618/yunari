@@ -63,11 +63,11 @@ async function pageOf(
 }
 
 /**
- * One search over every enabled grid source.
+ * One search over every enabled source serving the requested body.
  *
- * A page that was not asked for is not produced: a disabled source makes no
- * call. Pages come back in registry order whatever order they resolved in, so
- * the grid's interleave is stable.
+ * A page that was not asked for is not produced: a disabled source, or one of
+ * another body, makes no call. Pages come back in registry order whatever order
+ * they resolved in, so the grid's interleave is stable.
  */
 export async function searchSources(
   request: AssetSearchRequest,
@@ -75,8 +75,9 @@ export async function searchSources(
   sources: readonly AssetSource[] = ASSET_SOURCES,
 ): Promise<SearchOutcome> {
   const enabled = new Set(request.enabled);
+  const body = request.body ?? "grid";
   const asking = sources.filter(
-    (source) => enabled.has(source.id) && source.body === "grid",
+    (source) => enabled.has(source.id) && source.body === body,
   );
 
   const pages = await Promise.all(

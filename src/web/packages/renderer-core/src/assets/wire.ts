@@ -17,6 +17,34 @@ export type AssetPreset =
 
 export type SourceCategory = "font" | "icon" | "image" | "video" | "colour";
 
+/** Deliberately not the persisted `FontAssetFormat`: a host may learn a format
+ *  the schema still refuses, so the wire can widen without the file following. */
+export type FontFormat = "woff2" | "woff" | "ttf" | "otf";
+
+/** One font file a family offers, with what a picker needs to show and fetch it. */
+export interface FontCut {
+  readonly id: string;
+  readonly source: string;
+  readonly family: string;
+  readonly weight: string | number;
+  readonly style: "normal" | "italic";
+  readonly subset: string;
+  readonly format: FontFormat;
+  readonly previewUrl: string;
+  readonly licence: string;
+  readonly sourceUrl?: string;
+}
+
+/** A family's heading, body and mono cuts, when the source names them. */
+export interface FontTrioInfo {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly roles: Readonly<
+    Partial<Record<"heading" | "body" | "mono", FontCut>>
+  >;
+}
+
 /** `"local"` is a category no grid draws: it names a source that is a library
  *  on this PC rather than a provider, which is only Wallpaper Engine (R8). */
 export type ListingCategory = SourceCategory | "local";
@@ -36,6 +64,11 @@ export interface AssetResult {
   readonly sourceUrl: string;
   /** What adding this asset to the presets writes, when its source says. */
   readonly preset?: AssetPreset;
+  /** A font source's cuts, and its trio when it names one. */
+  readonly font?: {
+    readonly cuts: readonly FontCut[];
+    readonly trio?: FontTrioInfo;
+  };
 }
 
 export interface AssetSourceListing {
@@ -60,6 +93,8 @@ export interface AssetSearchRequest {
   /** The page each source is asked for, 1-based. Absent means page 1, which is
    *  the question a freshly opened grid asks. */
   readonly pages: Readonly<Record<string, number>>;
+  /** Which editor body asks. Absent means "grid". */
+  readonly body?: "grid" | "font-picker";
 }
 
 export interface AssetPage {
@@ -133,9 +168,13 @@ export function parseAssetSearchRequest(
 
   // `fromEntries` rather than assignment: `__proto__` is a legal source id and
   // assignment would reach the map's prototype instead of storing the page.
+  // A body this host does not name falls back to the grid, as an unknown
+  // source id does: a stale preference is not a failed search.
+  const body = value.body === "font-picker" ? "font-picker" : undefined;
   return {
     query,
     enabled: enabledIds,
     pages: Object.fromEntries(parsedPages),
+    ...(body === undefined ? {} : { body }),
   };
 }

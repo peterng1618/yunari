@@ -36,10 +36,11 @@ function fakeSource(
   };
 }
 
-const request = (enabled: string[]) => ({
+const request = (enabled: string[], body?: "grid" | "font-picker") => ({
   query: "arrow",
   enabled,
   pages: {},
+  ...(body === undefined ? {} : { body }),
 });
 
 describe("searchSources", () => {
@@ -74,6 +75,63 @@ describe("searchSources", () => {
 
     expect(called).not.toHaveBeenCalled();
     expect(outcome.pages).toEqual([]);
+  });
+
+  it("asks only the sources whose body the request names", async () => {
+    const grid = vi.fn(async () => ({
+      results: [result("1")],
+      totalPages: 1,
+    }));
+    const font = vi.fn(async () => ({
+      results: [result("2")],
+      totalPages: 1,
+    }));
+    const sources = [
+      fakeSource({ id: "grid-a", body: "grid", search: grid }),
+      fakeSource({ id: "font-a", body: "font-picker", search: font }),
+    ];
+
+    await searchSources(
+      request(["grid-a", "font-a"], "font-picker"),
+      context(),
+      sources,
+    );
+
+    expect(font).toHaveBeenCalledTimes(1);
+    expect(grid).not.toHaveBeenCalled();
+
+    await searchSources(
+      request(["grid-a", "font-a"], "grid"),
+      context(),
+      sources,
+    );
+
+    expect(grid).toHaveBeenCalledTimes(1);
+    expect(font).toHaveBeenCalledTimes(1);
+  });
+
+  it("defaults to the grid body when none is named", async () => {
+    const grid = vi.fn(async () => ({
+      results: [result("1")],
+      totalPages: 1,
+    }));
+    const font = vi.fn(async () => ({
+      results: [result("2")],
+      totalPages: 1,
+    }));
+
+    const outcome = await searchSources(
+      request(["grid-a", "font-a"]),
+      context(),
+      [
+        fakeSource({ id: "grid-a", body: "grid", search: grid }),
+        fakeSource({ id: "font-a", body: "font-picker", search: font }),
+      ],
+    );
+
+    expect(grid).toHaveBeenCalledTimes(1);
+    expect(font).not.toHaveBeenCalled();
+    expect(outcome.pages.map((page) => page.source)).toEqual(["grid-a"]);
   });
 
   it("prefixes every id with its source", async () => {
