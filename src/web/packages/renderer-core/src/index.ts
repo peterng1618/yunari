@@ -299,6 +299,7 @@ export type {
   Binding,
   ChartContent,
   ChartFamily,
+  FontAssetFormat,
   FontAssetReference,
   GlobalEntry,
   GlobalGroup,

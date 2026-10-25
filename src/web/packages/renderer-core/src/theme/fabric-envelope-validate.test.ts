@@ -967,6 +967,55 @@ describe("Fabric theme envelope validation", () => {
     });
   });
 
+  it.each(["woff2", "woff", "ttf", "otf"] as const)(
+    "accepts a local font reference in %s",
+    (format) => {
+      const result = validateFabricThemeEnvelope({
+        ...envelope(),
+        assets: [
+          {
+            id: "body-face",
+            kind: "font",
+            path: `assets/faces/body.${format}`,
+            family: "Inter",
+            weight: 400,
+            style: "normal",
+            format,
+          },
+        ],
+      });
+
+      expect(result).toMatchObject({ ok: true });
+    },
+  );
+
+  it("refuses a format that disagrees with the path extension", () => {
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      assets: [
+        {
+          id: "body-face",
+          kind: "font",
+          path: "assets/faces/body.ttf",
+          family: "Inter",
+          weight: 400,
+          style: "normal",
+          format: "woff2",
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "invalid-asset-path",
+          path: "/assets/0/path",
+        }),
+      ]),
+    });
+  });
+
   it("rejects transitional globals and literal background paint", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),

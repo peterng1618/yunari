@@ -144,13 +144,13 @@
       }
     },
     "fontAssetReference": {
-      "type": "object", "additionalProperties": false, "required": ["id", "kind", "path", "family", "weight", "style", "format", "sourceUrl", "license"],
+      "type": "object", "additionalProperties": false, "required": ["id", "kind", "path", "family", "weight", "style", "format"],
       "properties": {
         "id": { "$ref": "#/$defs/stableId" }, "kind": { "const": "font" },
-        "path": { "type": "string", "pattern": "^assets/[A-Za-z0-9._/-]{1,200}\\.woff2$" },
+        "path": { "type": "string", "pattern": "^assets/[A-Za-z0-9._/-]{1,200}\\.(woff2|woff|ttf|otf)$" },
         "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "family": { "type": "string", "minLength": 1 }, "weight": { "oneOf": [{ "type": "string" }, { "type": "number" }] },
-        "style": { "enum": ["normal", "italic"] }, "format": { "const": "woff2" },
+        "style": { "enum": ["normal", "italic"] }, "format": { "enum": ["woff2", "woff", "ttf", "otf"] },
         "sourceUrl": { "type": "string", "format": "uri" },
         "license": { "type": "object", "additionalProperties": false, "required": ["name", "url"], "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 200 }, "url": { "type": "string", "format": "uri" }, "attribution": { "type": "string", "maxLength": 500 } } }
       }
