@@ -1,7 +1,7 @@
 import { isOwner } from "../auth/owner.js";
 import { sessionOf } from "../auth/session.js";
-import { itemById, latestVersion, setStatus } from "../db/items.js";
-import type { ItemRow } from "../db/types.js";
+import type { QueueListing } from "../db/items.js";
+import { itemById, queueListings, setStatus } from "../db/items.js";
 import type { Env } from "../env.js";
 import { MAX_JSON_BODY, readJsonBody } from "./body.js";
 
@@ -102,26 +102,18 @@ async function dispatch(
 }
 
 async function queue(env: Env): Promise<Response> {
-  const items = await env.DB.prepare(
-    "SELECT * FROM item WHERE status = 'pending' ORDER BY created_at, id",
-  ).all<ItemRow>();
-
-  const entries: QueueEntry[] = [];
-  for (const item of items.results) entries.push(await queueEntryOf(env, item));
-  return Response.json({ entries });
+  // One statement: the item, its latest version and its author's email.
+  const rows = await queueListings(env.DB);
+  return Response.json({ entries: rows.map(queueEntryOf) });
 }
 
-async function queueEntryOf(env: Env, item: ItemRow): Promise<QueueEntry> {
-  const version = await latestVersion(env.DB, item.id);
-  // The table name is quoted: `user` is a keyword in SQLite.
-  const author = await env.DB.prepare('SELECT email FROM "user" WHERE id = ?')
-    .bind(item.author_user_id)
-    .first<{ email: string }>();
+function queueEntryOf(row: QueueListing): QueueEntry {
+  const { item, version, authorEmail } = row;
   return {
     id: item.id,
     name: item.name,
     authorUserId: item.author_user_id,
-    authorEmail: author?.email ?? null,
+    authorEmail,
     createdAt: item.created_at,
     updatedAt: item.updated_at,
     version: version?.version ?? null,

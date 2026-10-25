@@ -9,6 +9,7 @@ import { pendingKey, thumbnailKey } from "../src/storage/keys";
 /** Fixed ids and bytes so a spec can name what it seeded without a second read. */
 export const ITEM_ID = "6041df49-9c61-4d51-a184-716890560bdb";
 export const PACKAGE_BYTES = new TextEncoder().encode("yunari test package");
+const INDEX_URL = "https://store.test/index.json";
 
 /**
  * Where a seeded version's bytes live. A real package is never re-keyed after
@@ -305,9 +306,22 @@ export async function statusOf(
 
 /** The listing's ids as the editor receives them, not as D1 stores them. */
 export async function indexIds(): Promise<readonly string[]> {
-  const response = await SELF.fetch("https://store.test/index.json");
+  await clearIndexCache();
+  const response = await SELF.fetch(INDEX_URL);
   const index = (await response.json()) as CatalogueIndex;
   return index.entries.map((entry) => entry.id);
+}
+
+/**
+ * Drops the stored `/index.json`. The route caches it for 60 seconds and the
+ * pool keeps the cache between tests in one file, so a spec that changes what
+ * the index lists must clear it before reading.
+ */
+export async function clearIndexCache(): Promise<void> {
+  // The DOM lib's `CacheStorage` shadows workers-types', which declares
+  // `default`; this is the same cast `public.ts` needs.
+  const cache = (caches as unknown as { readonly default: Cache }).default;
+  await cache.delete(new Request(INDEX_URL));
 }
 
 /** Later versions are inserted later, so `created_at` orders the ladder. */

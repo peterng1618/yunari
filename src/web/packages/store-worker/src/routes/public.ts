@@ -68,6 +68,26 @@ async function indexResponse(
   env: Env,
   url: URL,
 ): Promise<Response> {
+  // The Cache API answers the 60-second window the response's own header
+  // declares, so a repeat request costs no D1 work at all.
+  // The DOM lib's `CacheStorage` shadows workers-types', which alone declares
+  // `default`; the same cast the store's `timingSafeEqual` call needs.
+  const cache = (caches as unknown as { readonly default: Cache }).default;
+  const cached = await cache.match(request);
+  if (cached !== undefined) {
+    // A revalidation only needs the stored ETag; the bytes never change within
+    // the window.
+    if (request.headers.get("if-none-match") === cached.headers.get("etag")) {
+      return new Response(null, { status: 304, headers: cached.headers });
+    }
+    // A cached response's headers are immutable, and `handlePublic` sets CORS
+    // on every answer, so the hit is copied into a fresh response.
+    return new Response(cached.body, {
+      status: cached.status,
+      headers: cached.headers,
+    });
+  }
+
   const listings = await publishedListings(env.DB);
   // One count query for the whole listing, not one per entry.
   const counts = await countsByItem(
@@ -96,7 +116,11 @@ async function indexResponse(
   if (request.headers.get("if-none-match") === etag) {
     return new Response(null, { status: 304, headers });
   }
-  return new Response(body, { headers });
+  const response = new Response(body, { headers });
+  // The stored copy is the body only; `handlePublic` adds the CORS header on
+  // the way out, hit or miss, so it is never cached with it.
+  await cache.put(request, response.clone());
+  return response;
 }
 
 async function itemResponse(

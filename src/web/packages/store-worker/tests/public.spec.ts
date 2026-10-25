@@ -1,6 +1,9 @@
 import { env, SELF } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { handlePublic } from "../src/routes/public";
+import { BASE, countingEnv } from "./helpers";
 import {
+  clearIndexCache,
   downloads,
   fixturePackageKey,
   ITEM_ID,
@@ -10,9 +13,11 @@ import {
   seedPublished,
 } from "./seed";
 
-const BASE = "https://store.test";
-
 describe("public reads", () => {
+  // `/index.json` is cached for 60 seconds, and the pool keeps the cache
+  // between tests in this file; each case starts from an empty cache.
+  beforeEach(clearIndexCache);
+
   it("serves the index, then 404s every unpublished read", async () => {
     await seedPublished({ versions: ["1.0.0", "1.0.1"] });
     const index = await SELF.fetch("https://store.test/index.json");
@@ -111,6 +116,29 @@ describe("public reads", () => {
     expect(await downloads(env.DB, ITEM_ID)).toBe(0);
   });
 
+  it("serves a second index from cache with no D1 work", async () => {
+    await seedPublished();
+    const first = await indexThroughHandler();
+    expect(first.response.status).toBe(200);
+    expect(first.queries.length).toBeGreaterThan(0);
+    const body = await first.response.text();
+    const etag = first.response.headers.get("etag");
+    expect(etag).not.toBeNull();
+
+    const second = await indexThroughHandler();
+    expect(second.queries).toHaveLength(0);
+    expect(second.response.status).toBe(200);
+    expect(await second.response.text()).toBe(body);
+    expect(second.response.headers.get("etag")).toBe(etag);
+
+    const revalidated = await indexThroughHandler({
+      "if-none-match": etag ?? "",
+    });
+    expect(revalidated.queries).toHaveLength(0);
+    expect(revalidated.response.status).toBe(304);
+    expect(revalidated.response.headers.get("etag")).toBe(etag);
+  });
+
   it("answers 304 for a matching index ETag and 404 for unknown ids", async () => {
     await seedPublished();
     const first = await SELF.fetch(`${BASE}/index.json`);
@@ -133,3 +161,21 @@ describe("public reads", () => {
     ).toBe(404);
   });
 });
+
+/** One `/index.json` through the route itself, so the env can count queries. */
+async function indexThroughHandler(
+  headers: Record<string, string> = {},
+): Promise<{
+  readonly response: Response;
+  readonly queries: readonly string[];
+}> {
+  const queries: string[] = [];
+  const request = new Request(`${BASE}/index.json`, { headers });
+  const response = await handlePublic(
+    request,
+    countingEnv(queries),
+    new URL(request.url),
+  );
+  if (response === undefined) throw new Error("index.json was not routed.");
+  return { response, queries };
+}

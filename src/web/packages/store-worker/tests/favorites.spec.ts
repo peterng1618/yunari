@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { createAuth } from "../src/auth";
 import { countsByItem } from "../src/db/favorites";
 import { BASE, USER_ID } from "./helpers";
-import { ITEM_ID, indexIds, seedPublished } from "./seed";
+import { clearIndexCache, ITEM_ID, indexIds, seedPublished } from "./seed";
 
 const MISSING_ID = "00000000-0000-4000-8000-000000000000";
 const CREATED_AT = "2026-10-01T00:00:00.000Z";
@@ -143,6 +143,7 @@ function favorite(
 }
 
 async function indexEntry(itemId: string): Promise<{ favorites: number }> {
+  await clearIndexCache();
   const index = (await (await SELF.fetch(`${BASE}/index.json`)).json()) as {
     entries: { id: string; favorites: number }[];
   };

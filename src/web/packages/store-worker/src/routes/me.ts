@@ -12,16 +12,13 @@ import {
 import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
 import { type Session, sessionOf } from "../auth/session.js";
 import { entryOf } from "../catalogue/entry.js";
-import {
-  countsByItem,
-  favoriteCount,
-  toggleFavorite,
-} from "../db/favorites.js";
+import { favoriteCount, toggleFavorite } from "../db/favorites.js";
 import {
   finalizeStoredVersion,
   releaseReservedUpload,
 } from "../db/finalize.js";
 import {
+  authorListings,
   itemById,
   latestVersion,
   markFinalized,
@@ -130,41 +127,23 @@ async function mine(request: Request, env: Env, url: URL): Promise<Response> {
   const session = await sessionOf(request, env);
   if (session === undefined) return unauthorized();
 
-  const items = await env.DB.prepare(
-    `SELECT * FROM item WHERE author_user_id = ?
-       AND EXISTS (SELECT 1 FROM item_version v WHERE v.item_id = item.id)
-     ORDER BY updated_at DESC, id ASC`,
-  )
-    .bind(session.userId)
-    .all<ItemRow>();
-
-  // One count query for the whole listing, as the public index does.
-  const counts = await countsByItem(
-    env.DB,
-    items.results.map((item) => item.id),
-  );
-
-  const entries: MineEntry[] = [];
-  for (const item of items.results) {
-    // The same latest-version selection `publishedListings` and the public
-    // item read use, so one item is shown at one version everywhere. One read
-    // per item; the 20-item quota bounds this — batch it if the limit rises.
-    const version = await latestVersion(env.DB, item.id);
-    if (version === undefined) continue;
-    entries.push({
-      ...entryOf(
-        item,
-        version,
-        counts.get(item.id) ?? 0,
-        `${url.origin}/catalogue/${item.id}/${version.version}.zip`,
-        `catalogue/${item.id}/thumbnail.png`,
-      ),
-      status: item.status,
-      ...(item.status_reason === null
-        ? {}
-        : { statusReason: item.status_reason }),
-    });
-  }
+  // One statement for the whole listing: the item, its latest version and its
+  // favourite count. `authorListings` owns the latest-version rule the public
+  // reads use, so one item is shown at one version everywhere.
+  const listings = await authorListings(env.DB, session.userId);
+  const entries: MineEntry[] = listings.map(({ item, version, favorites }) => ({
+    ...entryOf(
+      item,
+      version,
+      favorites,
+      `${url.origin}/catalogue/${item.id}/${version.version}.zip`,
+      `catalogue/${item.id}/thumbnail.png`,
+    ),
+    status: item.status,
+    ...(item.status_reason === null
+      ? {}
+      : { statusReason: item.status_reason }),
+  }));
 
   return Response.json({ entries });
 }

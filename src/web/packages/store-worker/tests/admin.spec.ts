@@ -3,8 +3,9 @@ import type { TestHelpers } from "better-auth/plugins";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createAuth } from "../src/auth";
 import { isOwner } from "../src/auth/owner";
+import { handleAdmin } from "../src/routes/admin";
 import { MAX_JSON_BODY } from "../src/routes/body";
-import { BASE, candidate } from "./helpers";
+import { BASE, candidate, countingEnv, listingStatements } from "./helpers";
 import { ITEM_ID, seedItem, statusOf } from "./seed";
 
 const OWNER_ID = "user-admin-owner";
@@ -375,6 +376,56 @@ describe("admin", () => {
     expect(await (await admin(owner, "queue")).text()).not.toContain(
       OWNER_EMAIL,
     );
+  });
+
+  it("reads a 50-item queue in one statement, oldest first with emails", async () => {
+    const owner = await loginAs(OWNER_ID, OWNER_EMAIL);
+    await loginAs(AUTHOR_ID, AUTHOR_EMAIL);
+    // Rows another case left pending are not this case's queue.
+    await env.DB.prepare(
+      "DELETE FROM item_version WHERE item_id IN (SELECT id FROM item WHERE status = 'pending')",
+    ).run();
+    await env.DB.prepare("DELETE FROM item WHERE status = 'pending'").run();
+
+    const ids = Array.from(
+      { length: 50 },
+      (_, index) =>
+        `32000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
+    );
+    const instant = (index: number): string =>
+      new Date(Date.UTC(2026, 9, 1, 0, 0, index)).toISOString();
+    for (const [index, id] of ids.entries()) {
+      await seedItem(id, AUTHOR_ID, { status: "pending" });
+      await env.DB.prepare(
+        "UPDATE item SET created_at = ?, updated_at = ? WHERE id = ?",
+      )
+        .bind(instant(index), instant(index), id)
+        .run();
+    }
+
+    const queries: string[] = [];
+    const path = `${BASE}/api/admin/queue`;
+    const response = await handleAdmin(
+      new Request(path, { headers: owner }),
+      countingEnv(queries),
+      new URL(path),
+    );
+    if (response === undefined)
+      throw new Error("The queue route did not answer.");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      readonly entries: readonly {
+        readonly id: string;
+        readonly authorEmail: string | null;
+      }[];
+    };
+
+    // One statement: the item, its latest version and the author ride it.
+    expect(listingStatements(queries)).toHaveLength(1);
+    expect(body.entries.map((entry) => entry.id)).toEqual(ids);
+    expect(
+      body.entries.every((entry) => entry.authorEmail === AUTHOR_EMAIL),
+    ).toBe(true);
   });
 
   it("verifies and unverifies an author, keeping the display name", async () => {

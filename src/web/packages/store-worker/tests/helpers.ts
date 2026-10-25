@@ -1,9 +1,49 @@
 import { env, SELF } from "cloudflare:test";
 import type { TestHelpers } from "better-auth/plugins";
 import { createAuth } from "../src/auth";
+import type { Env } from "../src/env";
 import { ITEM_ID } from "./seed";
 
 export const BASE = "https://store.test";
+
+/**
+ * `env` with every `DB.prepare` recorded: a shallow proxy, so Better Auth and
+ * the route share one binding and the caller filters which statements it owns
+ * with `listingStatements`. Nothing else about the env is wrapped.
+ */
+export function countingEnv(queries: string[]): Env {
+  const db = new Proxy(env.DB, {
+    get(target, prop, receiver) {
+      if (prop === "prepare") {
+        return (sql: string) => {
+          queries.push(sql);
+          return target.prepare(sql);
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return new Proxy(env, {
+    get(target, prop, receiver) {
+      if (prop === "DB") return db;
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as Env;
+}
+
+/**
+ * The statements a listing route issues. Better Auth's session read is the
+ * only other D1 traffic through the proxy and never names these tables.
+ */
+export function listingStatements(
+  queries: readonly string[],
+): readonly string[] {
+  return queries.filter((sql) =>
+    /FROM item\b|item_version|favorite/i.test(sql),
+  );
+}
 
 /** The account every author request in a spec acts as. */
 export const USER_ID = "user-versions-author";
