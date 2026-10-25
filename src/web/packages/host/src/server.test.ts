@@ -315,6 +315,86 @@ function request(
   });
 }
 
+/**
+ * A request whose body has begun but not finished, so the route reading it is
+ * still in flight. `started` resolves once the body has been asked for, which is
+ * after the route has claimed whatever gate it reads through.
+ */
+function pendingRequest(
+  server: ListenableServer,
+  method: string,
+  urlPath: string,
+): {
+  readonly started: Promise<void>;
+  readonly answered: Promise<{ status: number; text: string }>;
+  release(): void;
+} {
+  let begun: () => void = () => undefined;
+  const started = new Promise<void>((resolve) => {
+    begun = resolve;
+  });
+  let pushed = false;
+  let end: () => void = () => undefined;
+
+  const req = new Readable({
+    read() {
+      // One chunk, then silence: another push on every `_read` would feed the
+      // route an endless body and never hold anything still.
+      if (!pushed) {
+        pushed = true;
+        end = () => this.push(null);
+        this.push(Buffer.from([0]));
+        begun();
+      }
+    },
+  }) as unknown as http.IncomingMessage;
+
+  req.method = method;
+  req.url = urlPath;
+  req.headers = { host: "127.0.0.1:5173" };
+  (req as { socket: { remoteAddress: string } }).socket = {
+    remoteAddress: "127.0.0.1",
+  };
+
+  const chunks: Buffer[] = [];
+  let statusCode = 200;
+  let finish: (value: { status: number; text: string }) => void = () =>
+    undefined;
+  const answered = new Promise<{ status: number; text: string }>((resolve) => {
+    finish = resolve;
+  });
+
+  const res = new Writable({
+    write(chunk, _encoding, callback) {
+      chunks.push(Buffer.from(chunk));
+      callback();
+    },
+  }) as unknown as http.ServerResponse;
+
+  res.writeHead = ((status: number) => {
+    statusCode = status;
+    return res;
+  }) as unknown as typeof res.writeHead;
+
+  res.end = ((data?: unknown) => {
+    if (data) chunks.push(Buffer.from(data as string | Uint8Array));
+    finish({
+      status: statusCode,
+      text: Buffer.concat(chunks).toString("utf8"),
+    });
+    res.emit("finish");
+    return res;
+  }) as unknown as typeof res.end;
+
+  server.emit("request", req, res);
+
+  return {
+    started,
+    answered,
+    release: () => end(),
+  };
+}
+
 /** Resolves as soon as headers are written, for a stream that stays open. */
 function streamStatus(
   server: ListenableServer,
@@ -1265,6 +1345,37 @@ describe("Host theme routes", () => {
       "living-room",
       "living-room-2",
     ]);
+  });
+
+  it("refuses a second theme import while one is still arriving", async () => {
+    const first = pendingRequest(hosted.server, "POST", "/api/themes/import");
+    await first.started;
+
+    // The first body is still being read, so the one slot for a theme-sized
+    // body is held: the second caller is refused rather than queued behind it.
+    const second = await request(
+      hosted.server,
+      "POST",
+      "/api/themes/import",
+      packageBytes(validEmptyAssetTheme),
+    );
+    expect(second.status).toBe(429);
+    expect(second.text()).toBe("Another large upload is still in progress.");
+
+    // The unreadable one-byte body the first sent is its own refusal, not a 429.
+    first.release();
+    expect((await first.answered).status).toBe(400);
+
+    // The slot came back: the next import lands rather than inheriting a busy
+    // gate from a request that failed.
+    const third = await request(
+      hosted.server,
+      "POST",
+      "/api/themes/import",
+      packageBytes(validEmptyAssetTheme),
+    );
+    expect(third.status).toBe(200);
+    expect(third.json()).toEqual({ ok: true, id: "living-room" });
   });
 
   it("imports a package's picture, and refuses one the reader will not read", async () => {
@@ -3822,6 +3933,49 @@ describe("A local monitor is specified rather than paired", () => {
     // Written only if the next read would find it: a record the file drops is a
     // display that disappears, which is `vg-616`'s class of bug.
     expect(await listed()).toEqual([]);
+  });
+
+  it("answers a display-store failure with a fixed sentence and no path", async () => {
+    const failing = host({
+      displays: {
+        ...displays,
+        createLocal: () =>
+          Promise.reject(
+            new Error(
+              `EACCES: permission denied, open '${dir}\\displays.json'`,
+            ),
+          ),
+      },
+    });
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    try {
+      const refused = await request(
+        failing.server,
+        "POST",
+        "/api/displays",
+        json({
+          label: "Left screen",
+          monitor: { deviceName: "\\\\.\\DISPLAY2" },
+        }),
+      );
+
+      expect(refused.status).toBe(500);
+      expect(refused.text()).toBe("The host could not add that display.");
+      // The reason named this machine's file; only the console keeps it.
+      expect(refused.text()).not.toContain(dir);
+      expect(logged).toHaveBeenCalled();
+
+      // The listener is still there for the next request.
+      expect((await request(failing.server, "GET", "/api/health")).status).toBe(
+        200,
+      );
+    } finally {
+      logged.mockRestore();
+      await failing.close();
+    }
   });
 
   it("answers what is attached, for the owner to pick from", async () => {
@@ -6608,6 +6762,103 @@ describe("A path the player does not declare is not the player", () => {
       // Both answers are the honest 404, not a build hint that is not true.
       const miss = await request(hosted.server, "GET", "/play");
       expect(miss.text()).toBe("Not found.");
+    } finally {
+      await hosted.close();
+    }
+  });
+});
+
+describe("A bundle is build output: no links, and cacheable files", () => {
+  const dirs: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(
+      dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    );
+  });
+
+  async function bundle(): Promise<{
+    readonly dir: string;
+    readonly hosted: ReturnType<typeof createHostServer>;
+  }> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-static-"));
+    dirs.push(dir);
+    await fs.mkdir(path.join(dir, "assets"));
+    await fs.writeFile(
+      path.join(dir, "assets", "app.js"),
+      "export const answer = 42;",
+    );
+    await fs.writeFile(path.join(dir, "index.html"), "<!doctype html><title>x");
+
+    return {
+      dir,
+      hosted: createHostServer({
+        registry: new ProviderRegistry([]),
+        bundles: { player: dir, editor: dir },
+      }),
+    };
+  }
+
+  it("serves a regular file and refuses a link, even one pointing inside", async () => {
+    const { dir, hosted } = await bundle();
+
+    try {
+      expect(
+        (await request(hosted.server, "GET", "/assets/app.js")).status,
+      ).toBe(200);
+
+      // A build writes files, not links: the target is inside the root and the
+      // link is still refused, because the realpath cannot be trusted to say
+      // what a later swap would point at.
+      await fs.symlink(
+        path.join(dir, "assets", "app.js"),
+        path.join(dir, "assets", "linked.js"),
+      );
+      expect(
+        (await request(hosted.server, "GET", "/assets/linked.js")).status,
+      ).toBe(404);
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("refuses a dotfile instead of falling back to the document", async () => {
+    const { dir, hosted } = await bundle();
+    await fs.writeFile(path.join(dir, ".env"), "SECRET=1");
+
+    try {
+      // `/.env` has no extension, which is the fallback's shape; the dotfile
+      // rule has to win, or the entry document would answer it.
+      expect((await request(hosted.server, "GET", "/.env")).status).toBe(404);
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers an etag, and 304 with no body for a matching If-None-Match", async () => {
+    const { hosted } = await bundle();
+
+    try {
+      const first = await request(hosted.server, "GET", "/assets/app.js");
+      expect(first.status).toBe(200);
+      const etag = first.headers.etag;
+      expect(typeof etag).toBe("string");
+      expect(first.text()).toContain("answer = 42");
+
+      const again = await request(
+        hosted.server,
+        "GET",
+        "/assets/app.js",
+        undefined,
+        { headers: { "if-none-match": String(etag) } },
+      );
+
+      expect(again.status).toBe(304);
+      expect(again.body).toHaveLength(0);
+      // The type stays, because the browser reuses the stored representation.
+      expect(again.headers["content-type"]).toBe(
+        "text/javascript; charset=utf-8",
+      );
     } finally {
       await hosted.close();
     }

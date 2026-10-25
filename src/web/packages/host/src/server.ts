@@ -54,6 +54,7 @@ import {
 import {
   contentTypeFor,
   needsTrailingSlash,
+  realStaticPath,
   resolveStaticPath,
 } from "./serve/static-path.js";
 import { newToken } from "./session/pairing.js";
@@ -404,6 +405,42 @@ const WEATHER_ICON_DIR = path.join(
 export const MAX_THEME_UPLOAD_BYTES = 96 * 1024 * 1024;
 /** A dashboard screenshot; the store enforces the same bound. */
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
+
+/** The one sentence a caller gets while another theme-sized body is arriving. */
+const LARGE_BODY_BUSY = "Another large upload is still in progress.";
+
+/** Refusal a full gate raises, so a route can tell it from a body over the cap. */
+class LargeBodyBusyError extends Error {}
+
+/**
+ * One slot for theme-sized bodies, by default.
+ *
+ * A body is buffered whole before it is parsed, and two 96 MB imports in flight
+ * at once is a memory cost an idle host should not be asked to pay. The second
+ * caller is refused rather than queued: the browser retries a 429, whereas a
+ * queued request would hold its socket for as long as the first one took.
+ */
+export function createLargeBodyGate(maxConcurrent = 1): {
+  run<T>(work: () => Promise<T>): Promise<T>;
+  busy(): boolean;
+} {
+  let inFlight = 0;
+
+  return {
+    async run<T>(work: () => Promise<T>): Promise<T> {
+      if (inFlight >= maxConcurrent) throw new LargeBodyBusyError();
+
+      inFlight += 1;
+
+      try {
+        return await work();
+      } finally {
+        inFlight -= 1;
+      }
+    },
+    busy: () => inFlight >= maxConcurrent,
+  };
+}
 
 /** Recognizes loopback forms Node may report. */
 export function isLoopbackRemote(address: string | undefined): boolean {
@@ -847,13 +884,32 @@ async function writeWebResponse(
 }
 
 /**
+ * Whether the request already holds this representation. `*` covers "any", and
+ * `W/` is the weak form a cache may send for a strong validator.
+ */
+function matchesEtag(request: http.IncomingMessage, etag: string): boolean {
+  const header = request.headers["if-none-match"];
+
+  if (header === undefined) return false;
+
+  return header
+    .split(",")
+    .map((value) => value.trim())
+    .some((value) => value === "*" || value === etag || value === `W/${etag}`);
+}
+
+/**
  * Serves a bundle file. An extension-less path is a client route and may fall
  * back to `index.html` — but only where the bundle actually has client routes.
  * The editor does; the player is one document, and answering every unmatched
  * path with it hands an operator a live display for a typo, which is harder to
  * notice than a 404 and impossible to debug from the page.
+ *
+ * The request is taken because a bundle file is cacheable: the ETag is the
+ * `stat`, and `If-None-Match` answers 304 with the type and no body.
  */
 async function serveStatic(
+  request: http.IncomingMessage,
   response: http.ServerResponse,
   root: string,
   urlPath: string,
@@ -867,9 +923,21 @@ async function serveStatic(
     return;
   }
 
+  // The URL a resolved candidate would have been requested by, so the same
+  // containment rules decide every candidate rather than only the first.
+  const urlOf = (candidate: string): string =>
+    `/${path.relative(path.resolve(root), candidate).split(path.sep).join("/")}`;
+
+  const relative = path.relative(path.resolve(root), resolved);
+  const namesDotfile = relative
+    .split(path.sep)
+    .some((part) => part.startsWith("."));
+
   const candidates = [resolved];
 
-  if (clientRoutes && path.extname(resolved) === "") {
+  // A dotfile never falls back to the document: `/.env` has no extension, and
+  // index.html is not the answer to a path no build writes.
+  if (clientRoutes && !namesDotfile && path.extname(resolved) === "") {
     candidates.push(
       path.join(resolved, "index.html"),
       path.join(root, "index.html"),
@@ -877,20 +945,47 @@ async function serveStatic(
   }
 
   for (const candidate of candidates) {
-    try {
-      const body = await fs.readFile(candidate);
+    const real = await realStaticPath(root, urlOf(candidate));
 
-      response.writeHead(200, {
-        "content-type": contentTypeFor(candidate),
-        // Entry HTML must not retain references to an old build.
-        "cache-control":
-          path.extname(candidate) === ".html" ? "no-store" : "no-cache",
-      });
-      response.end(body);
-      return;
+    if (real === undefined) continue;
+
+    let info: Awaited<ReturnType<typeof fs.stat>>;
+
+    try {
+      info = await fs.stat(real);
     } catch {
       continue;
     }
+
+    // A link the realpath would have followed is already refused; a directory
+    // is not a body, and `fs.readFile` on one is a platform-dependent error.
+    if (!info.isFile()) continue;
+
+    const headers = {
+      "content-type": contentTypeFor(candidate),
+      // Entry HTML must not retain references to an old build.
+      "cache-control":
+        path.extname(candidate) === ".html" ? "no-store" : "no-cache",
+      etag: `"${info.size.toString(16)}-${Math.trunc(info.mtimeMs).toString(16)}"`,
+    };
+
+    if (matchesEtag(request, headers.etag)) {
+      response.writeHead(304, headers);
+      response.end();
+      return;
+    }
+
+    let body: Buffer;
+
+    try {
+      body = await fs.readFile(real);
+    } catch {
+      continue;
+    }
+
+    response.writeHead(200, headers);
+    response.end(body);
+    return;
   }
 
   // The hint is only true when the bundle itself is missing its entry; a file
@@ -1077,6 +1172,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
   /** The store sign-in states this server minted, so another instance in the
    *  same process cannot redeem them. */
   const storeSignInStates = createPendingStates();
+  /** Theme-sized bodies, one at a time; see `createLargeBodyGate`. */
+  const largeBody = createLargeBodyGate();
 
   /**
    * The move a PUT asked for, run once that PUT's answer is on the wire. Its
@@ -1305,7 +1402,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
     request: http.IncomingMessage,
     response: http.ServerResponse,
   ): void => {
-    handle(request, response).catch(() => {
+    handle(request, response).catch((error: unknown) => {
+      // The reason names this machine's own files, and this route answers LAN
+      // callers too: the console keeps it, the body does not.
+      console.error(error);
+
       // A response already on the wire cannot be replaced; ending the connection
       // is all that is left.
       if (response.headersSent || response.writableEnded) {
@@ -1371,6 +1472,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       await serveStatic(
+        request,
         response,
         bundles.admin,
         "/pair.html",
@@ -1681,6 +1783,20 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
+        // The label's own rule, asked before the write: a name the store would
+        // refuse is the caller's to fix, and the catch below keeps only the
+        // store's failures, whose words name this machine's files.
+        try {
+          mintedDisplayId(body.label);
+        } catch (error) {
+          sendText(
+            response,
+            400,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+
         let display: DisplayRecord;
 
         try {
@@ -1690,11 +1806,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
           // with what this host holds, not a body the store would not read —
           // and it is a conflict rather than a success, because two records for
           // one screen would put two windows on it.
-          sendText(
-            response,
-            error instanceof MonitorAlreadyHeldError ? 409 : 400,
-            error instanceof Error ? error.message : String(error),
-          );
+          if (error instanceof MonitorAlreadyHeldError) {
+            sendText(response, 409, error.message);
+            return;
+          }
+
+          // Anything else came from the store's own file: the detail goes to
+          // this host's console, and the caller is told only that it failed.
+          console.error(error);
+          sendText(response, 500, "The host could not add that display.");
           return;
         }
 
@@ -3493,8 +3613,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       let body: Uint8Array;
       try {
-        body = await readBytes(request, MAX_THEME_UPLOAD_BYTES);
-      } catch {
+        body = await largeBody.run(() =>
+          readBytes(request, MAX_THEME_UPLOAD_BYTES),
+        );
+      } catch (error) {
+        if (error instanceof LargeBodyBusyError) {
+          sendText(response, 429, LARGE_BODY_BUSY);
+          return;
+        }
         sendText(response, 413, "That package is too large to import.");
         return;
       }
@@ -3534,8 +3660,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       let raw: string;
       try {
-        raw = await readBody(request, MAX_THEME_UPLOAD_BYTES);
-      } catch {
+        raw = await largeBody.run(() =>
+          readBody(request, MAX_THEME_UPLOAD_BYTES),
+        );
+      } catch (error) {
+        if (error instanceof LargeBodyBusyError) {
+          sendText(response, 429, LARGE_BODY_BUSY);
+          return;
+        }
         sendText(response, 413, "That video is too large to normalize.");
         return;
       }
@@ -3784,8 +3916,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
         let body: string;
         try {
-          body = await readBody(request, MAX_THEME_UPLOAD_BYTES);
-        } catch {
+          body = await largeBody.run(() =>
+            readBody(request, MAX_THEME_UPLOAD_BYTES),
+          );
+        } catch (error) {
+          if (error instanceof LargeBodyBusyError) {
+            sendText(response, 429, LARGE_BODY_BUSY);
+            return;
+          }
           sendText(response, 413, "That theme is too large to save.");
           return;
         }
@@ -3891,11 +4029,23 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       if (request.method === "PUT") {
+        let raw: string;
+        try {
+          raw = await largeBody.run(() =>
+            readBody(request, MAX_THEME_UPLOAD_BYTES),
+          );
+        } catch (error) {
+          if (error instanceof LargeBodyBusyError) {
+            sendText(response, 429, LARGE_BODY_BUSY);
+            return;
+          }
+          sendText(response, 413, "That theme is too large to publish.");
+          return;
+        }
+
         let decoded: DecodedThemeSave;
         try {
-          decoded = decodeThemeSave(
-            await readBody(request, MAX_THEME_UPLOAD_BYTES),
-          );
+          decoded = decodeThemeSave(raw);
         } catch (error) {
           sendText(
             response,
@@ -4003,6 +4153,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       await serveStatic(
+        request,
         response,
         bundles.admin,
         url.pathname === "/settings"
@@ -4032,6 +4183,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       await serveStatic(
+        request,
         response,
         bundles.editor,
         url.pathname.slice("/editor".length) || "/",
@@ -4080,6 +4232,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
           // thumbnail; a second list here would be the copy without one.
           if (bundles.admin !== undefined) {
             await serveStatic(
+              request,
               response,
               bundles.admin,
               "/library.html",
@@ -4111,6 +4264,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     await serveStatic(
+      request,
       response,
       bundles.player,
       url.pathname,
