@@ -75,7 +75,7 @@ describe("applyFontTrio", () => {
           weight: 700,
           lineHeight: 1.2,
           trioRole: "heading",
-          face: { assetId: "heading-700" },
+          face: { assetId: "curated-fonts-heading-700" },
         },
       },
       metric: {
@@ -86,7 +86,7 @@ describe("applyFontTrio", () => {
           weight: 700,
           letterSpacing: 2,
           trioRole: "heading",
-          face: { assetId: "heading-700" },
+          face: { assetId: "curated-fonts-heading-700" },
         },
       },
       body: {
@@ -96,7 +96,7 @@ describe("applyFontTrio", () => {
           size: 14,
           weight: 400,
           trioRole: "body",
-          face: { assetId: "body-400" },
+          face: { assetId: "curated-fonts-body-400" },
         },
       },
       custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
@@ -106,7 +106,7 @@ describe("applyFontTrio", () => {
           family: "Fira Code",
           size: 14,
           weight: 400,
-          face: { assetId: "mono-400" },
+          face: { assetId: "curated-fonts-mono-400" },
           trioRole: "mono",
         },
       },
@@ -152,7 +152,7 @@ describe("applyFontTrio", () => {
         family: "Fira Code",
         size: 14,
         weight: 400,
-        face: { assetId: "mono-400" },
+        face: { assetId: "curated-fonts-mono-400" },
         trioRole: "mono",
       },
     });
@@ -175,7 +175,7 @@ describe("applyFontTrio", () => {
         family: "Manrope",
         size: 19,
         weight: 700,
-        face: { assetId: "heading-700" },
+        face: { assetId: "curated-fonts-heading-700" },
         trioRole: "heading",
       },
     });

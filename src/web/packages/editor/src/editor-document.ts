@@ -7,6 +7,8 @@ import {
   type FabricPalette,
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
+  type FontCut,
+  type FontTrioInfo,
 } from "@yunari/renderer-core";
 import {
   MAX_CREDITS_ENTRIES,
@@ -14,12 +16,13 @@ import {
   type ThemeCreditsEntry,
 } from "@yunari/theme-package";
 import type { ArtboardPanel } from "./artboard-panel.js";
+import { assetBytes } from "./asset-finder/client.js";
 import type { AssetManager } from "./asset-manager/index.js";
 import { insertCard } from "./card-library.js";
 import type { ChartManager } from "./chart-manager/index.js";
 import type { EditorShell } from "./editor-shell.js";
 import {
-  applyFontTrio,
+  applyFontTrio as applyCatalogTrio,
   type CuratedFontFace,
   fontTrio,
 } from "./font-catalog.js";
@@ -42,6 +45,14 @@ import type { SelectionInspector } from "./selection-inspector/index.js";
 import type { ThemeLibraryClient } from "./theme-library-client.js";
 import { ThemeLibraryManager } from "./theme-library-manager/index.js";
 import { captureThumbnail } from "./thumbnail-capture.js";
+import {
+  applyFontTrio as applyTrioPresets,
+  FONT_ROLES,
+  type FontTrioRole,
+  fontAssetId,
+  freePresetId,
+  rolePreset,
+} from "./type-preset-apply.js";
 import {
   reassignTypePresetToken,
   type TypePresetPanel,
@@ -118,6 +129,32 @@ interface EditorDocumentOptions {
  *  so its identity is what it always was. */
 function creditKey(entry: ThemeCreditsEntry): string {
   return `${entry.source?.url ?? ""}\n${entry.title}\n${entry.assetId ?? ""}`;
+}
+
+/**
+ * A provider cut as the catalogue face shape the asset manager adopts. The id
+ * is the packaged one, because a cut id is a byte address and not a stable id.
+ * Both font sources serve woff2; a cut in another format has no adoption path
+ * here and is refused rather than mislabelled.
+ */
+function faceOfCut(cut: FontCut, role: FontTrioRole): CuratedFontFace {
+  const weight = Number(cut.weight);
+  if (cut.format !== "woff2" || !Number.isFinite(weight) || weight <= 0) {
+    throw new Error(
+      `"${cut.family}" is not a font file this editor can package.`,
+    );
+  }
+  return {
+    id: fontAssetId(cut),
+    role,
+    family: cut.family,
+    weight,
+    style: cut.style,
+    format: "woff2",
+    subset: cut.subset,
+    sourceUrl: cut.sourceUrl ?? cut.previewUrl,
+    license: { name: cut.licence },
+  };
 }
 
 /**
@@ -662,20 +699,153 @@ export class EditorDocument {
     this.#shell.editor.historyManager.saveState();
   }
 
-  async applyFontTrio(id: string): Promise<FabricThemeEnvelope> {
-    const trio = fontTrio(id);
-    if (trio === undefined) throw new Error(`Unknown font trio "${id}".`);
-    const bytes = await Promise.all(
-      trio.faces.map((face) => this.#downloadFace(face)),
-    );
-    for (const [index, face] of trio.faces.entries()) {
-      await this.#assets.adoptFont(face, bytes[index]!);
+  /** The theme's type presets, or none before the first one is written. */
+  #typePresets(): TypePresets {
+    return (this.#envelope.globals?.typePresets ?? {}) as TypePresets;
+  }
+
+  /** The cuts a trio names, in reading order. */
+  #trioCuts(
+    trio: FontTrioInfo,
+  ): { readonly cut: FontCut; readonly role: FontTrioRole }[] {
+    return FONT_ROLES.flatMap((role) => {
+      const cut = trio.roles[role];
+      return cut === undefined ? [] : [{ cut, role }];
+    });
+  }
+
+  /**
+   * Reads every cut's bytes from the host and declares them. Every read and
+   * every conversion finishes before the first adoption, so a host that
+   * answered nothing leaves the theme untouched rather than half-imported.
+   */
+  async #adoptCuts(
+    entries: readonly { readonly cut: FontCut; readonly role: FontTrioRole }[],
+  ): Promise<void> {
+    if (entries.length === 0)
+      throw new Error("That font names no cut to import.");
+    const read: {
+      readonly face: CuratedFontFace;
+      readonly bytes: Uint8Array;
+    }[] = [];
+    for (const entry of entries) {
+      const face = faceOfCut(entry.cut, entry.role);
+      const answer = await assetBytes(entry.cut.source, entry.cut.id);
+      if (answer === undefined)
+        throw new Error(
+          `The host did not send "${entry.cut.family}", so nothing was changed.`,
+        );
+      read.push({ face, bytes: answer.bytes });
     }
-    const presets = this.#envelope.globals?.typePresets as
-      | TypePresets
-      | undefined;
-    if (presets !== undefined) this.setTypes(applyFontTrio(presets, trio));
-    return this.snapshot();
+    for (const entry of read) {
+      await this.#assets.adoptFont(entry.face, entry.bytes);
+    }
+  }
+
+  /**
+   * Applies a host trio to the theme, or opens a curated one by id for the old
+   * picker. The id form is retired with that picker in Task 13.
+   */
+  async applyFontTrio(id: string): Promise<FabricThemeEnvelope>;
+  async applyFontTrio(trio: FontTrioInfo): Promise<void>;
+  async applyFontTrio(
+    source: string | FontTrioInfo,
+  ): Promise<FabricThemeEnvelope | void> {
+    if (typeof source === "string") {
+      const trio = fontTrio(source);
+      if (trio === undefined) throw new Error(`Unknown font trio "${source}".`);
+      const bytes = await Promise.all(
+        trio.faces.map((face) => this.#downloadFace(face)),
+      );
+      for (const [index, face] of trio.faces.entries()) {
+        await this.#assets.adoptFont(face, bytes[index]!);
+      }
+      const presets = this.#envelope.globals?.typePresets as
+        | TypePresets
+        | undefined;
+      if (presets !== undefined) this.setTypes(applyCatalogTrio(presets, trio));
+      return this.snapshot();
+    }
+
+    await this.#adoptCuts(this.#trioCuts(source));
+    this.setTypes(applyTrioPresets(this.#typePresets(), source));
+  }
+
+  /** The three role presets a trio names, created beside whatever the theme
+   *  already has rather than rewriting it. */
+  async addTypePresetsFromTrio(trio: FontTrioInfo): Promise<void> {
+    const entries = this.#trioCuts(trio);
+    await this.#adoptCuts(entries);
+    let presets = this.#typePresets();
+    for (const { cut, role } of entries) {
+      presets = {
+        ...presets,
+        [freePresetId(role, presets)]: rolePreset(role, cut),
+      };
+    }
+    this.setTypes(presets);
+  }
+
+  /** One preset from one cut, named role-first and sized by its role. `null`
+   *  means the author chose no role: the name and size still follow Body. */
+  async addTypePresetFromCut(
+    cut: FontCut,
+    role: FontTrioRole | null,
+  ): Promise<string> {
+    await this.#adoptCuts([{ cut, role: role ?? "body" }]);
+    const presets = this.#typePresets();
+    const id = freePresetId(role ?? "body", presets);
+    this.setTypes({ ...presets, [id]: rolePreset(role, cut) });
+    return id;
+  }
+
+  /** Rewrites one named preset with a finder cut — the explicit target the
+   *  Apply to selected preset action names. */
+  async applyCutToPreset(id: string, cut: FontCut): Promise<void> {
+    const presets = this.#typePresets();
+    const preset = presets[id];
+    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
+    await this.#adoptCuts([{ cut, role: preset.value.trioRole ?? "body" }]);
+    const latest = this.#typePresets();
+    const current = latest[id] ?? preset;
+    this.setTypes({
+      ...latest,
+      [id]: {
+        ...current,
+        value: {
+          ...current.value,
+          family: cut.family,
+          weight: cut.weight,
+          face: { assetId: fontAssetId(cut) },
+        },
+      },
+    });
+  }
+
+  /** Sets or clears the role a preset participates in. */
+  setPresetRole(id: string, role: FontTrioRole | null): void {
+    const presets = this.#typePresets();
+    const preset = presets[id];
+    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
+    const { trioRole: _previous, ...value } = preset.value;
+    this.setTypes({
+      ...presets,
+      [id]: {
+        ...preset,
+        value: role === null ? value : { ...value, trioRole: role },
+      },
+    });
+  }
+
+  /** Releases a preset's packaged face. Family and weight stay as authored and
+   *  become editable again (R10). */
+  unbindPresetFace(id: string): void {
+    const presets = this.#typePresets();
+    const preset = presets[id];
+    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
+    if (preset.value.face === undefined) return;
+    const { face: _face, ...value } = preset.value;
+    this.setTypes({ ...presets, [id]: { ...preset, value } });
   }
 
   async applyPresetFace(

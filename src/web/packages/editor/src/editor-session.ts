@@ -1,6 +1,7 @@
 import {
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
+  type FontCut,
   type SampleSource,
   SEMANTIC_KEYS,
   type SemanticKeyDescriptor,
@@ -8,7 +9,7 @@ import {
 import { sceneBoxesOf } from "@yunari/scene-fabric";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import { ActiveSelection, type FabricObject } from "fabric/es";
-import { createElement } from "react";
+import { createElement, type ReactElement } from "react";
 import { applyArrange, canArrange } from "./arrange.js";
 import { type ArtboardPanel, createArtboardPanel } from "./artboard-panel.js";
 import {
@@ -758,8 +759,50 @@ export class EditorSession {
     });
   }
 
+  /**
+   * The finder's Fonts body with the preview panel's actions wired. Every
+   * action is the document's write; the panel only reports a press. Apply to
+   * selected preset travels only when the shell's own projection names a
+   * preset, because the panel draws that button on the callback's presence
+   * (R9).
+   */
+  #fontPickerBody(): ReactElement {
+    const document = this.#document;
+    const presets = document.envelope.globals?.typePresets as
+      | TypePresets
+      | undefined;
+    const selected = this.#options.selection?.get().selectionPresetId;
+    const run = (action: () => Promise<unknown>): void => {
+      void document.runFontAction(async () => {
+        await action();
+        // An adopted face is a declaration, so the Assets count and the
+        // background column re-resolve as they do after an import.
+        this.#declarationsChanged();
+      });
+    };
+    return createElement(FontsBody, {
+      ...(presets === undefined ? {} : { presets }),
+      onApplyTrio: (trio) => {
+        run(() => document.applyFontTrio(trio));
+      },
+      onAddTrioPresets: (trio) => {
+        run(() => document.addTypePresetsFromTrio(trio));
+      },
+      onAddPreset: (cut, role) => {
+        run(() => document.addTypePresetFromCut(cut, role));
+      },
+      ...(selected === undefined
+        ? {}
+        : {
+            onApplyToSelected: (cut: FontCut) => {
+              run(() => document.applyCutToPreset(selected, cut));
+            },
+          }),
+    });
+  }
+
   /** Reachability only: the shell menus dispatch through the existing owners,
-   * including the private document actions the panel section used to call. */
+   *  including the private document actions the panel section used to call. */
   actionFacade(): EditorActionFacade {
     const options = this.#options;
     const editor = options.shell.editor;
@@ -772,10 +815,10 @@ export class EditorSession {
       savePackage: () => this.#document.save(),
       releasePackage: () => this.#document.release(),
       openLibrary: () => this.#document.openLibrary(),
-      // The finder's Fonts body. The body searches the host's font sources and
-      // owns the selection; the preview panel's actions are wired in Task 12,
-      // whose writes stay the session's.
-      fontPickerBody: () => createElement(FontsBody),
+      // The finder's Fonts body, wired to the document's writes. The panel is
+      // presentational: every refusal reaches the author through
+      // `runFontAction`, and the selection-to-preset projection is the shell's.
+      fontPickerBody: () => this.#fontPickerBody(),
       // The finder's Wallpaper Engine body. The listing is the body's own fetch
       // — it is a library, not a search — so the session owns only the import a
       // row triggers.

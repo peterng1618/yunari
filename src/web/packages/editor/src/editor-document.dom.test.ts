@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import type { FabricThemeEnvelopeInput } from "@yunari/renderer-core";
+import type {
+  FabricThemeEnvelopeInput,
+  FontCut,
+  FontTrioInfo,
+} from "@yunari/renderer-core";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import { describe, expect, it, vi } from "vitest";
 import { AssetManager } from "./asset-manager/index.js";
@@ -7,6 +11,11 @@ import { EditorDocument } from "./editor-document.js";
 import type { EditorShell } from "./editor-shell.js";
 import type { HistoryGlobalsPort } from "./history-manager/index.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
+import type { TypePresets } from "./type-preset-manager/index.js";
+
+/** The host's byte route, mocked: no document test reaches a real host. */
+const assetBytesMock = vi.hoisted(() => vi.fn());
+vi.mock("./asset-finder/client.js", () => ({ assetBytes: assetBytesMock }));
 
 /**
  * The document's credits collection: what an import adds, what the package it
@@ -87,7 +96,10 @@ describe("EditorDocument credits", () => {
     ]);
 
     document.addCredit({ ...assetB, license: "ISC v2" });
-    expect(document.credits()).toEqual([assetA, { ...assetB, license: "ISC v2" }]);
+    expect(document.credits()).toEqual([
+      assetA,
+      { ...assetB, license: "ISC v2" },
+    ]);
   });
 
   it("refuses the entry past the package's own cap, but not a repeat", () => {
@@ -220,6 +232,280 @@ describe("EditorDocument undo", () => {
     port.write({ typePresets: presets });
 
     expect(typesRender).toHaveBeenCalledWith(presets);
+    document.destroy();
+  });
+});
+
+/** A document whose only state is its type presets, with stubs for the fan-out
+ *  `setTypes` performs. */
+function presetDocument(presets: TypePresets): {
+  readonly document: EditorDocument;
+  readonly onError: ReturnType<typeof vi.fn>;
+} {
+  const onError = vi.fn();
+  const document = new EditorDocument({
+    source: {
+      shell: {
+        snapshot: (value: unknown) => value,
+        setGlobals: vi.fn(),
+        editor: {
+          errorManager: { report: () => {} },
+          historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+        },
+      } as unknown as EditorShell,
+      envelope: {
+        ...createNewFabricTheme(),
+        globals: { typePresets: presets },
+      } as unknown as FabricThemeEnvelopeInput,
+      assetManager: new AssetManager(),
+      onNew: async () => {},
+      onNewFromStarter: async () => {},
+      onSaved: () => {},
+      onError,
+    },
+    consumers: {
+      palette: () => ({ render: () => {} }),
+      types: () => ({ render: () => {} }),
+      runtime: () => ({ setGlobals: () => {} }),
+      charts: () => ({ setGlobals: () => {} }),
+      newObjects: () => ({ setGlobals: () => {} }),
+      selection: () => ({ setGlobals: () => {} }),
+    } as never,
+  });
+  return { document, onError };
+}
+
+function cutFor(
+  role: "heading" | "body" | "mono",
+  family: string,
+  weight: number,
+): FontCut {
+  const url = `https://example.test/${role}.woff2`;
+  return {
+    id: `cut:${role}-${weight}`,
+    source: "google-fonts",
+    family,
+    weight,
+    style: "normal",
+    subset: "latin",
+    format: "woff2",
+    previewUrl: url,
+    licence: "OFL",
+    sourceUrl: url,
+  };
+}
+
+const trio: FontTrioInfo = {
+  id: "fixture",
+  name: "Fixture",
+  description: "",
+  roles: {
+    heading: cutFor("heading", "Manrope", 700),
+    body: cutFor("body", "Inter", 400),
+    mono: cutFor("mono", "Fira Code", 400),
+  },
+};
+
+function presetsOf(document: EditorDocument): TypePresets {
+  return document.snapshot().globals?.typePresets as TypePresets;
+}
+
+describe("EditorDocument preset actions", () => {
+  it("apply rewrites role presets, keeps size and creates a missing role", async () => {
+    const authored: TypePresets = {
+      heading: {
+        name: "Heading",
+        value: { family: "Segoe UI", size: 32, trioRole: "heading" },
+      },
+      body: {
+        name: "Body",
+        value: { family: "Segoe UI", size: 14, trioRole: "body" },
+      },
+      custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+    };
+    const { document } = presetDocument(authored);
+    assetBytesMock.mockResolvedValue({
+      bytes: new Uint8Array([1, 2, 3]),
+      filename: "face.woff2",
+    });
+
+    await document.applyFontTrio(trio);
+
+    const written = presetsOf(document);
+    // An authored size survives the rewrite; a missing role is created at the
+    // starter size, and an untagged preset is not touched.
+    expect(written.heading?.value).toMatchObject({
+      family: "Manrope",
+      weight: 700,
+      size: 32,
+      face: { assetId: "google-fonts-cut-heading-700" },
+    });
+    expect(written.body?.value).toMatchObject({
+      family: "Inter",
+      weight: 400,
+      size: 14,
+    });
+    expect(written.custom).toEqual(authored.custom);
+    expect(written.mono).toEqual({
+      name: "Mono — Fira Code",
+      value: {
+        family: "Fira Code",
+        size: 14,
+        weight: 400,
+        face: { assetId: "google-fonts-cut-mono-400" },
+        trioRole: "mono",
+      },
+    });
+    // Bytes are addressed by the cut's source and id, never the trio's.
+    expect(assetBytesMock).toHaveBeenCalledWith(
+      "google-fonts",
+      "cut:heading-700",
+    );
+    document.destroy();
+  });
+
+  it("add three creates Heading — X, Body — Y and Mono — Z without touching existing", async () => {
+    const existing: TypePresets = {
+      heading: {
+        name: "Heading",
+        value: { family: "Segoe UI", size: 32, trioRole: "heading" },
+      },
+      custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+    };
+    const { document } = presetDocument(existing);
+    assetBytesMock.mockResolvedValue({
+      bytes: new Uint8Array([1]),
+      filename: "face.woff2",
+    });
+
+    await document.addTypePresetsFromTrio(trio);
+
+    const written = presetsOf(document);
+    expect(written.heading).toEqual(existing.heading);
+    expect(written.custom).toEqual(existing.custom);
+    expect(written["heading-2"]).toEqual({
+      name: "Heading — Manrope",
+      value: {
+        family: "Manrope",
+        size: 46,
+        weight: 700,
+        face: { assetId: "google-fonts-cut-heading-700" },
+        trioRole: "heading",
+      },
+    });
+    expect(written.body?.name).toBe("Body — Inter");
+    expect(written.mono?.name).toBe("Mono — Fira Code");
+    document.destroy();
+  });
+
+  it("a single cut creates a role-first preset", async () => {
+    const { document } = presetDocument({});
+    assetBytesMock.mockResolvedValue({
+      bytes: new Uint8Array([1]),
+      filename: "code.woff2",
+    });
+
+    const id = await document.addTypePresetFromCut(
+      cutFor("mono", "Fira Code", 400),
+      "mono",
+    );
+
+    expect(id).toBe("mono");
+    expect(presetsOf(document).mono).toEqual({
+      name: "Mono — Fira Code",
+      value: {
+        family: "Fira Code",
+        size: 14,
+        weight: 400,
+        face: { assetId: "google-fonts-cut-mono-400" },
+        trioRole: "mono",
+      },
+    });
+    expect(assetBytesMock).toHaveBeenCalledWith("google-fonts", "cut:mono-400");
+    document.destroy();
+  });
+
+  it("a cut with no role takes the Body name and size but no role tag", async () => {
+    const { document } = presetDocument({});
+    assetBytesMock.mockResolvedValue({
+      bytes: new Uint8Array([1]),
+      filename: "body.woff2",
+    });
+
+    const id = await document.addTypePresetFromCut(
+      cutFor("body", "Inter", 400),
+      null,
+    );
+
+    expect(id).toBe("body");
+    const value = presetsOf(document).body?.value;
+    expect(presetsOf(document).body?.name).toBe("Body — Inter");
+    expect(value).toMatchObject({ family: "Inter", size: 24, weight: 400 });
+    expect(value === undefined ? true : "trioRole" in value).toBe(false);
+    document.destroy();
+  });
+
+  it("a failed host bytes read writes nothing and reports the failure", async () => {
+    const authored: TypePresets = {
+      body: {
+        name: "Body",
+        value: { family: "Segoe UI", size: 14, trioRole: "body" },
+      },
+    };
+    const { document, onError } = presetDocument(authored);
+    const before = document.snapshot();
+    // The heading read succeeds; the body read is the one the host drops. No
+    // adoption may survive that, because a half-applied trio is a theme the
+    // author never chose.
+    assetBytesMock
+      .mockResolvedValueOnce({
+        bytes: new Uint8Array([1]),
+        filename: "h.woff2",
+      })
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValue({ bytes: new Uint8Array([2]), filename: "m.woff2" });
+
+    await document.runFontAction(() => document.applyFontTrio(trio));
+
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining("Inter"));
+    expect(presetsOf(document)).toEqual(authored);
+    expect(document.snapshot().assets).toEqual(before.assets);
+    document.destroy();
+  });
+
+  it("unbinding leaves family and weight editable", async () => {
+    const { document } = presetDocument({
+      heading: {
+        name: "Heading",
+        value: {
+          family: "Manrope",
+          size: 46,
+          weight: 700,
+          face: { assetId: "face-id" },
+          trioRole: "heading",
+        },
+      },
+    });
+
+    document.unbindPresetFace("heading");
+
+    const value = presetsOf(document).heading?.value;
+    expect(value === undefined ? true : "face" in value).toBe(false);
+    expect(value).toMatchObject({ family: "Manrope", weight: 700 });
+    document.destroy();
+  });
+
+  it("sets and clears a preset's role", () => {
+    const { document } = presetDocument({
+      custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+    });
+
+    document.setPresetRole("custom", "heading");
+    expect(presetsOf(document).custom?.value.trioRole).toBe("heading");
+
+    document.setPresetRole("custom", null);
+    const value = presetsOf(document).custom?.value;
+    expect(value === undefined ? true : "trioRole" in value).toBe(false);
     document.destroy();
   });
 });
