@@ -335,6 +335,12 @@ describe("buildLineOption", () => {
     expect(option.yAxis.show).toBe(false);
   });
 
+  it("draws axes without any engine text", () => {
+    const option = buildLineOption(defaultLineSettings, [], NOW);
+    expect(option.xAxis.axisLabel.show).toBe(false);
+    expect(option.yAxis.axisLabel.show).toBe(false);
+  });
+
   it("omits axis bounds when unset rather than sending undefined", () => {
     const option = buildLineOption(
       defaultLineSettings,

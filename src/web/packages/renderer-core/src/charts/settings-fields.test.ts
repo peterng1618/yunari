@@ -135,7 +135,6 @@ const BAR_COVERAGE: Record<keyof BarSettings, "setting" | "paint"> = {
   track: "paint",
   trackCornerRadius: "setting",
   showAxes: "setting",
-  showCategoryLabels: "setting",
   animation: "setting",
 };
 
@@ -149,7 +148,6 @@ const PIE_COVERAGE: Record<keyof PieSettings, "setting" | "paint"> = {
   total: "setting",
   remainderFill: "paint",
   palette: "paint",
-  showLabels: "setting",
   animation: "setting",
 };
 
@@ -379,7 +377,6 @@ describe("descriptor order is the likelihood order", () => {
       "cornerRadius",
       "trackCornerRadius",
       "showAxes",
-      "showCategoryLabels",
       ...ANIMATION_PROPERTIES,
     ],
     pie: [
@@ -391,7 +388,6 @@ describe("descriptor order is the likelihood order", () => {
       "cornerRadius",
       "total",
       "total.value",
-      "showLabels",
       ...ANIMATION_PROPERTIES,
     ],
   };

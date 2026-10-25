@@ -80,6 +80,27 @@ describe("buildBarOption", () => {
     }
   });
 
+  it("draws axes without any engine text", () => {
+    const option = buildBarOption(defaultBarSettings, [
+      { sensorId: "cpu.load.total", sample: sample(50) },
+    ]);
+
+    expect(option.xAxis).toMatchObject({ show: false });
+    expect(option.yAxis).toMatchObject({
+      show: false,
+      axisLabel: { show: false },
+    });
+  });
+
+  it("draws the value axis but still no labels", () => {
+    const option = buildBarOption(
+      { ...defaultBarSettings, showAxes: true },
+      [{ sensorId: "cpu.load.total", sample: sample(50) }],
+    );
+    const valueAxis = option.xAxis;
+    expect(valueAxis).toMatchObject({ show: true, axisLabel: { show: false } });
+  });
+
   it("labels categories, falling back to the sensor id", () => {
     const option = buildBarOption(defaultBarSettings, [
       { sensorId: "cpu.load.total", sample: sample(10), label: "CPU" },

@@ -268,10 +268,11 @@ describe("buildPieOption", () => {
     expect(option.series[0].data[0]!.itemStyle.color).toBe("#ff0000");
   });
 
-  it("keeps engine labels off by default so typography stays ours", () => {
+  it("never draws engine text, with no setting to turn it on", () => {
     const option = buildPieOption(defaultPieSettings, parts(1));
     expect(option.series[0].label.show).toBe(false);
     expect(option.series[0].labelLine.show).toBe(false);
+    expect("showLabels" in defaultPieSettings).toBe(false);
   });
 
   it("never emits a negative pad angle or corner radius", () => {

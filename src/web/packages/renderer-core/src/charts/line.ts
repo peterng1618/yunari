@@ -116,12 +116,14 @@ export interface LineOption extends EngineAnimation {
   readonly xAxis: {
     readonly type: "time";
     readonly show: boolean;
+    readonly axisLabel: { readonly show: false };
     readonly min: number;
     readonly max: number;
   };
   readonly yAxis: {
     readonly type: "value";
     readonly show: boolean;
+    readonly axisLabel: { readonly show: false };
     readonly min?: number;
     readonly max?: number;
   };
@@ -239,11 +241,12 @@ export function buildLineOption(
         top: 8,
         bottom: settings.showAxes ? 8 : 0,
       },
-      settings.showAxes,
+      false,
     ),
     xAxis: {
       type: "time",
       show: settings.showAxes,
+      axisLabel: { show: false },
       // Preview history reveals left-to-right; live data fills from render start.
       min: windowStart,
       max: windowEnd,
@@ -251,6 +254,7 @@ export function buildLineOption(
     yAxis: {
       type: "value",
       show: settings.showAxes,
+      axisLabel: { show: false },
       ...(settings.min === undefined ? {} : { min: settings.min }),
       ...(settings.max === undefined ? {} : { max: settings.max }),
     },

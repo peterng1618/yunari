@@ -43,7 +43,6 @@ export interface BarSettings {
    */
   readonly trackCornerRadius?: number;
   readonly showAxes: boolean;
-  readonly showCategoryLabels: boolean;
   readonly animation?: AnimationSettings;
 }
 
@@ -60,7 +59,6 @@ export const defaultBarSettings: BarSettings = {
   // it is its own value, so a theme can round one and not the other.
   trackCornerRadius: 7,
   showAxes: false,
-  showCategoryLabels: false,
 };
 
 export interface BarInput {
@@ -83,7 +81,7 @@ interface CategoryAxis {
   readonly data: readonly string[];
   readonly axisTick: { readonly show: false };
   readonly axisLine: { readonly show: false };
-  readonly axisLabel: { readonly show: boolean };
+  readonly axisLabel: { readonly show: false };
   readonly boundaryGap: true;
   /** ECharts y categories run bottom-up; invert horizontal bars to authored order. */
   readonly inverse: boolean;
@@ -94,7 +92,7 @@ interface ValueAxis {
   readonly show: boolean;
   readonly min: number;
   readonly max: number;
-  readonly axisLabel: { readonly show: boolean };
+  readonly axisLabel: { readonly show: false };
   readonly splitLine: { readonly show: boolean };
 }
 
@@ -128,11 +126,11 @@ export function buildBarOption(
 
   const categoryAxis: CategoryAxis = {
     type: "category",
-    show: settings.showAxes || settings.showCategoryLabels,
+    show: false,
     data: inputs.map((input) => input.label ?? input.sensorId),
     axisTick: { show: false },
     axisLine: { show: false },
-    axisLabel: { show: settings.showCategoryLabels },
+    axisLabel: { show: false },
     boundaryGap: true,
     inverse: horizontal,
   };
@@ -143,7 +141,7 @@ export function buildBarOption(
     // Keep bar fractions stable instead of auto-rescaling with current data.
     min: settings.min,
     max: settings.max,
-    axisLabel: { show: settings.showAxes },
+    axisLabel: { show: false },
     splitLine: { show: settings.showAxes },
   };
 
@@ -151,12 +149,12 @@ export function buildBarOption(
     ...toEngineAnimation(settings.animation, animate),
     grid: cartesianGrid(
       {
-        left: settings.showAxes || settings.showCategoryLabels ? 8 : 0,
+        left: settings.showAxes ? 8 : 0,
         right: 0,
         top: 0,
         bottom: settings.showAxes ? 8 : 0,
       },
-      settings.showAxes || settings.showCategoryLabels,
+      false,
     ),
     xAxis: horizontal ? valueAxis : categoryAxis,
     yAxis: horizontal ? categoryAxis : valueAxis,

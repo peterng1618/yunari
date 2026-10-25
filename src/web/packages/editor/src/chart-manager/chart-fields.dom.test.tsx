@@ -88,7 +88,6 @@ const bar: ChartFieldTarget = {
       fill: { ref: "palette.cpu" },
       track: { ref: "palette.gpu" },
       showAxes: false,
-      showCategoryLabels: false,
     },
   },
   bindings: [{ id: "disk", semanticKey: "disk.used" }],

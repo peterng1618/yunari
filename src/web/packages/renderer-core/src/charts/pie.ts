@@ -30,8 +30,6 @@ export interface PieSettings {
   /** Drawn only for fixed totals, where the remainder is measurable. */
   readonly remainderFill?: ChartPaint;
   readonly palette: readonly ChartPaint[];
-  /** Engine labels are normally off; shared text owns typography (§91). */
-  readonly showLabels: boolean;
   readonly animation?: AnimationSettings;
 }
 
@@ -50,7 +48,6 @@ export const defaultPieSettings: PieSettings = {
     { kind: "solid", color: "#ff5630" },
   ],
   remainderFill: { kind: "solid", color: "#2a2f3a" },
-  showLabels: false,
 };
 
 export interface PieSliceInput {
@@ -98,8 +95,8 @@ export interface PieOption extends EngineAnimation {
       readonly startAngle: number;
       readonly endAngle?: number;
       readonly padAngle: number;
-      readonly label: { readonly show: boolean };
-      readonly labelLine: { readonly show: boolean };
+      readonly label: { readonly show: false };
+      readonly labelLine: { readonly show: false };
       readonly avoidLabelOverlap: false;
       readonly data: readonly PieDataItem[];
       readonly silent: true;
@@ -220,8 +217,8 @@ export function buildPieOption(
           ? {}
           : { endAngle: settings.endAngle }),
         padAngle: Math.max(0, settings.padAngle),
-        label: { show: settings.showLabels },
-        labelLine: { show: settings.showLabels },
+        label: { show: false },
+        labelLine: { show: false },
         // Preserve authored order; composition order can carry meaning.
         avoidLabelOverlap: false,
         data,
