@@ -113,9 +113,11 @@ interface EditorDocumentOptions {
   readonly consumers: EditorDocumentConsumers;
 }
 
-/** A credit's identity: the item, and where it came from. */
+/** A credit's identity: the item, where it came from, and the asset it
+ *  attributes. A credit written before `assetId` existed has no asset segment,
+ *  so its identity is what it always was. */
 function creditKey(entry: ThemeCreditsEntry): string {
-  return `${entry.source?.url ?? ""}\n${entry.title}`;
+  return `${entry.source?.url ?? ""}\n${entry.title}\n${entry.assetId ?? ""}`;
 }
 
 /**

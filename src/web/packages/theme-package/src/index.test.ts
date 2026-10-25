@@ -402,9 +402,54 @@ describe("credits", () => {
         license: "ISC",
         changes: "Imported unchanged",
         source: { url: "https://lucide.dev/icons/house" },
+        assetId: "asset-1",
       },
     ],
   };
+
+  it("round-trips an assetId on a credit", () => {
+    const written = writeThemePackage({
+      envelope,
+      assets: { "assets/logo.png": png(1) },
+      credits,
+    });
+    expect(written.ok).toBe(true);
+    if (!written.ok) return;
+
+    const read = readThemePackage(written.bytes);
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.credits?.entries[0]?.assetId).toBe("asset-1");
+  });
+
+  it("still reads a credit written before assetId existed", () => {
+    const before = {
+      format: "yunari-theme-credits" as const,
+      version: 1 as const,
+      entries: [
+        {
+          kind: "icon",
+          title: "house",
+          license: "ISC",
+          changes: "Imported unchanged",
+          source: { url: "https://lucide.dev/icons/house" },
+        },
+      ],
+    };
+    const written = writeThemePackage({
+      envelope,
+      assets: { "assets/logo.png": png(1) },
+      credits: before,
+    });
+    expect(written.ok).toBe(true);
+    if (!written.ok) return;
+
+    const read = readThemePackage(written.bytes);
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.credits).toEqual(before);
+    expect(read.credits?.entries[0]).not.toHaveProperty("assetId");
+  });
 
   it("writes the member the manifest names, and reads it back", () => {
     const written = writeThemePackage({

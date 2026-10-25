@@ -70,6 +70,26 @@ describe("EditorDocument credits", () => {
     expect(document.credits()[0]?.license).toBe("ISC v2");
   });
 
+  it("keeps two assets' credits apart, and replaces one asset's own", () => {
+    // Pruning names an asset id, so a credit that survived a re-import under
+    // another asset's identity would be removed for the wrong asset.
+    const document = documentWith();
+    const assetA: ThemeCreditsEntry = {
+      ...entry("house", "https://lucide.dev/icons/house"),
+      assetId: "asset-a",
+    };
+    const assetB: ThemeCreditsEntry = { ...assetA, assetId: "asset-b" };
+    document.addCredit(assetA);
+    document.addCredit(assetB);
+    expect(document.credits().map((credit) => credit.assetId)).toEqual([
+      "asset-a",
+      "asset-b",
+    ]);
+
+    document.addCredit({ ...assetB, license: "ISC v2" });
+    expect(document.credits()).toEqual([assetA, { ...assetB, license: "ISC v2" }]);
+  });
+
   it("refuses the entry past the package's own cap, but not a repeat", () => {
     const document = documentWith();
     const first = entry("icon-0", "https://lucide.dev/icons/icon-0");
