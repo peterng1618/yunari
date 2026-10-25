@@ -1,6 +1,5 @@
-import type { Binding } from "../theme/document.js";
-import type { ChartContent } from "../theme/document.js";
 import type { SampleSource } from "../data/source.js";
+import type { Binding, ChartContent } from "../theme/document.js";
 import { lineHistorySeconds } from "./line.js";
 
 /**

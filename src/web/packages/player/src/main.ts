@@ -15,8 +15,8 @@ import {
 } from "@yunari/renderer-core";
 import {
   applyAuthoredText,
-  chartAnimationFor,
   type ChartRefreshRate,
+  chartAnimationFor,
   loadFontAssets,
   mountFabricScene,
   refreshBoundImages,

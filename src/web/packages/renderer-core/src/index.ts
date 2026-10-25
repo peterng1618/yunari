@@ -93,7 +93,6 @@ export {
   toEngineColor,
   toSeriesPoints,
 } from "./charts/line.js";
-export { chartReadingSignature } from "./charts/reading-signature.js";
 export type {
   PieComposition,
   PieDataItem,
@@ -108,6 +107,7 @@ export {
   computeComposition,
   defaultPieSettings,
 } from "./charts/pie.js";
+export { chartReadingSignature } from "./charts/reading-signature.js";
 export {
   carriedPaintFor,
   seriesPaintFor,

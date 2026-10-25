@@ -138,12 +138,10 @@ describe("the grid option the engine receives", () => {
     expect(said, "the engine complained about the grid option").toEqual([]);
   });
 
-  it("reserves space for wide axis labels, and none for a sparkline", () => {
-    // Behaviour rather than keys, which is the instruction the inert key
-    // earned. Not a regression guard — the deprecated key laid out identically,
-    // measured — but the guard on the layout both are there to produce, and it
-    // fails if containment is ever emitted for the wrong one of the two.
-    expect(plotLeftEdge(lineOption(true))).toBeGreaterThan(AXIS_INSET_PX);
+  it("keeps the authored inset because no axis labels are drawn", () => {
+    // Behaviour rather than keys. Charts draw no engine text, so containment
+    // has nothing to reserve; the plot starts at the authored inset.
+    expect(plotLeftEdge(lineOption(true))).toBe(AXIS_INSET_PX);
 
     // A sparkline must reach the element edges the author laid out. This is the
     // half `outerBoundsMode: 'none'` buys: ECharts' default would contain

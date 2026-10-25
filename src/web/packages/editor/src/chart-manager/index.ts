@@ -13,8 +13,8 @@ import {
   seriesPaintFor,
 } from "@yunari/renderer-core";
 import {
-  chartAnimationFor,
   type ChartRefreshRate,
+  chartAnimationFor,
   type SceneAdapter,
   YunariChart,
 } from "@yunari/scene-fabric";

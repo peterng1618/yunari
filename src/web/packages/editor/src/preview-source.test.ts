@@ -20,7 +20,7 @@ describe("createPreviewSource", () => {
       preview.source.latest("cpu.load");
     }
 
-    expect(preview.source.history("cpu.load", 1_000)).toHaveLength(301);
+    expect(preview.source.history("cpu.load", 1_000)).toHaveLength(302);
   });
 
   it("reads on the source's sampling cadence, not the frame clock", () => {

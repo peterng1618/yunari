@@ -47,7 +47,9 @@ describe("SampleStore", () => {
       NOW,
     );
 
-    expect(store.history("a", 60).map((sample) => sample.value)).toEqual([1, 2]);
+    expect(store.history("a", 60).map((sample) => sample.value)).toEqual([
+      1, 2,
+    ]);
   });
 
   it("returns the last sample before the window as a predecessor", () => {

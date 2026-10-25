@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { SampleSource } from "../data/source.js";
 import type { Sample } from "../types.js";
 import { defaultBarSettings } from "./bar.js";
 import { defaultLineSettings } from "./line.js";
 import { chartReadingSignature } from "./reading-signature.js";
-import type { SampleSource } from "../data/source.js";
 
 const sample: Sample = {
   sensorId: "cpu.load.total",

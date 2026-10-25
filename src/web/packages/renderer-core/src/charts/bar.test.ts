@@ -93,10 +93,9 @@ describe("buildBarOption", () => {
   });
 
   it("draws the value axis but still no labels", () => {
-    const option = buildBarOption(
-      { ...defaultBarSettings, showAxes: true },
-      [{ sensorId: "cpu.load.total", sample: sample(50) }],
-    );
+    const option = buildBarOption({ ...defaultBarSettings, showAxes: true }, [
+      { sensorId: "cpu.load.total", sample: sample(50) },
+    ]);
     const valueAxis = option.xAxis;
     expect(valueAxis).toMatchObject({ show: true, axisLabel: { show: false } });
   });

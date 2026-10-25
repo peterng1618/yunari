@@ -103,6 +103,7 @@ test.describe("the live line chart's edge", () => {
       };
 
       const read = (object: {
+        family?: string;
         option?: Record<string, unknown>;
         width: number;
         height: number;
@@ -158,6 +159,7 @@ test.describe("the live line chart's edge", () => {
 
         frames.push({
           at: Date.now(),
+          family: object.family ?? null,
           batches: globals.yunari?.live?.batchCount ?? null,
           axisMin: axis.min,
           axisMax: axis.max,
@@ -250,5 +252,55 @@ test.describe("the live line chart's edge", () => {
 
     expect(frames.length, `readings written to ${OUT}`).toBeGreaterThan(100);
     expect(testInfo.project.name).toBeTruthy();
+
+    // The canvas is the authored box now, so the axis edge is the visible edge.
+    type Frame = {
+      at: number;
+      family: string | null;
+      axisMax: number;
+      canvasWidth: number;
+      visibleWidth: number;
+      pxMax: number;
+      readings: { last: number | null }[];
+      rect: { left: number; top: number; width: number; height: number };
+    };
+    const live = (frames as Frame[]).filter(
+      (frame) =>
+        frame.canvasWidth > 0 &&
+        frame.readings.length > 0 &&
+        frame.readings[0]?.last !== null,
+    );
+    expect(live.length, `readings written to ${OUT}`).toBeGreaterThan(100);
+
+    for (const frame of live) {
+      expect(frame.canvasWidth).toBe(frame.visibleWidth);
+      expect(frame.pxMax).toBeGreaterThanOrEqual(0);
+      expect(frame.pxMax).toBeLessThanOrEqual(frame.canvasWidth);
+    }
+
+    // Each line's own edge never moves backwards, and never runs ahead of the
+    // one playback delay. A read between two repaints legitimately lags.
+    const lines = new Map<string, Frame[]>();
+    for (const frame of live) {
+      if (frame.family !== "line") continue;
+      const key = `${frame.rect.left},${frame.rect.top},${frame.rect.width},${frame.rect.height}`;
+      lines.set(key, [...(lines.get(key) ?? []), frame]);
+    }
+    expect(lines.size).toBeGreaterThan(0);
+    for (const framesOfLine of lines.values()) {
+      for (const frame of framesOfLine) {
+        const lag = frame.at - frame.axisMax - 1_000;
+        expect(lag).toBeGreaterThanOrEqual(-50);
+        expect(lag).toBeLessThanOrEqual(1_200);
+      }
+      for (let index = 1; index < framesOfLine.length; index += 1) {
+        expect(framesOfLine[index]!.axisMax).toBeGreaterThanOrEqual(
+          framesOfLine[index - 1]!.axisMax,
+        );
+        expect(framesOfLine[index]!.readings[0]!.last!).toBeGreaterThanOrEqual(
+          framesOfLine[index - 1]!.readings[0]!.last!,
+        );
+      }
+    }
   });
 });

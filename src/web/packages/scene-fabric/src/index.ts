@@ -41,6 +41,7 @@ export {
   isHostRelativeImageUrl,
   refreshBoundImages,
 } from "./bound-image.js";
+export { chartAnimationFor } from "./chart-animation.js";
 export type {
   ChartSerialisedKey,
   YunariChartOptions,
@@ -49,7 +50,6 @@ export {
   CHART_SERIALISED_KEYS,
   YunariChart,
 } from "./chart-object.js";
-export { chartAnimationFor } from "./chart-animation.js";
 export { type ChartRefreshRate, startChartRefresh } from "./chart-refresh.js";
 export type { UnsupportedReporter } from "./fabric-nodes.js";
 export {
