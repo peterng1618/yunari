@@ -31,7 +31,7 @@ export type {
 } from "./assets/wire.js";
 export { parseAssetSearchRequest } from "./assets/wire.js";
 /**
- * The animation block's own defaults, exported beside the four families' because
+ * The animation block's own defaults, exported beside the families' because
  * a surface has to show the value a chart draws with: `AnimationSettings` is an
  * optional block, so an unauthored one is absent, and a control that shows an
  * empty track would be reporting a duration the chart does not use.

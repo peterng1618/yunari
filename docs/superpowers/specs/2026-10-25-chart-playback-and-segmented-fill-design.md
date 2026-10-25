@@ -446,8 +446,8 @@ Every binding is one category around the angle axis; its reading is the radius.
 - `startAngle` defaults to 90 and is drawn clockwise, so 90 is twelve o'clock.
 - `innerRadiusPercent` (20) and `outerRadiusPercent` (80) are percentages of
   half the smaller drawn side; the validator refuses `inner >= outer`.
-- `barWidth` is the angular thickness in pixels; leaving it empty lets
-  `categoryGapPercent` (40) size the bar.
+- `barWidth` is the angular thickness in degrees; it defaults to empty, which
+  lets `categoryGapPercent` (40) size the bar.
 - `cornerRadius` (7) and `trackCornerRadius` (7) round the bar and its track
   independently, as they do on a cartesian bar.
 - `showAxes` draws the radius axis, angle axis, ticks and gridlines with no

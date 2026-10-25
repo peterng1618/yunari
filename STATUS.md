@@ -18,7 +18,7 @@ Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](d
 ## Last completed change
 
 - **Radar and polar bar:** two new families; radar draws one polygon over a shared 0–100 scale and draws none with fewer than three plottable readings.
-- **Polar bar reuses the bar:** category angle axis, the bar's paint and data helpers, `to-top` gradients, no engine text, continuous only.
+- **Polar bar reuses the bar:** category angle axis, the bar's paint and data helpers, `to-top` gradients, no engine text; segmented polar bars are deferred.
 - **Engine views registered:** `RadarChart`, `RadarComponent` and `PolarComponent` were never registered, so both families built an option and painted nothing.
 - **Browser evidence:** the canvas check now counts painted pixels; a blank canvas hashed to `"0"`, which is truthy, so it passed on nothing.
 - **Editor:** six chart tiles, a twelve-spoke radar cap, "Polar bar" label and glyphs.
@@ -30,7 +30,7 @@ Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](d
 
 ## Blockers / unverified
 
-- **Polar bar evidence is a small arc:** the blank theme's `cpu.load` is 9.28 on a 0–100 scale, so the capture proves paint (1.8% of the canvas), not legibility at realistic readings.
+- **Polar bar evidence uses one low reading:** `cpu.load` is 9.28 on a 0–100 scale, so the sector sits at the inner radius (26.7% of the canvas); legibility at realistic 40–80% readings is unverified.
 - **Value-chart engine transitions are not browser-verified:** the gate proves the option flag and signature, not motion across frames.
 - **Phone performance is unmeasured:** thirty applications per second across several charts is unproven on the phone that reported the defect.
 - **Capture evidence is opt-in:** `YUNARI_CAPTURE=1` writes the PNGs; the gate runs without them.

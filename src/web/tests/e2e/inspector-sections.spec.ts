@@ -1302,11 +1302,12 @@ test.describe("the per-kind inspector column", () => {
     });
 
     // The option says what was built; the backing canvas says it reached the
-    // glass rather than stopping at an option nobody drew. Both families are
-    // sparse drawings — a four-spoke polygon and one polar bar — so the floor is
-    // a tenth of a percent rather than any ink at all.
-    expect(await chartCanvasInk(page, "radar")).toBeGreaterThan(0.001);
-    expect(await chartCanvasInk(page, "polar-bar")).toBeGreaterThan(0.001);
+    // glass rather than stopping at an option nobody drew. The floors are
+    // measured: the four-spoke polygon covers 4.9% and the polar bar's 216°
+    // sector 26.7%, while an empty frame is 0.16% — high enough that registering
+    // the component without its series still fails.
+    expect(await chartCanvasInk(page, "radar")).toBeGreaterThan(0.01);
+    expect(await chartCanvasInk(page, "polar-bar")).toBeGreaterThan(0.1);
   });
 
   test("gives every bounded number in the chart manager the pair, read rendered", async ({

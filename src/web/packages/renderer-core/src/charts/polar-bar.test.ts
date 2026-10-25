@@ -69,6 +69,21 @@ describe("buildPolarBarOption", () => {
     expect(option.angleAxis.startAngle).toBe(180);
   });
 
+  it("leaves a polar bar's width to the category gap", () => {
+    // A polar bar's width is an angle in degrees, and ECharts reads `barWidth`
+    // before it looks at `barCategoryGap`: the cartesian default of 14 pins
+    // every bar to a 14° sliver and makes the gap inert (§E1).
+    const option = buildPolarBarOption(defaultPolarBarSettings, [
+      { sensorId: "a", sample: ok(70) },
+      { sensorId: "b", sample: ok(40) },
+      { sensorId: "c", sample: ok(55) },
+    ]);
+
+    expect("barWidth" in defaultPolarBarSettings).toBe(false);
+    expect("barWidth" in option.series[0]!).toBe(false);
+    expect(option.series[0]!.barCategoryGap).toBe("40%");
+  });
+
   it("has no segment divisor", () => {
     expect("segmentDivisor" in defaultPolarBarSettings).toBe(false);
   });
