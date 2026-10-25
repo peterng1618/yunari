@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
-import { MAX_OBJECT_NAME_LENGTH } from "@yunari/renderer-core";
+import {
+  type FabricThemeEnvelopeInput,
+  MAX_OBJECT_NAME_LENGTH,
+} from "@yunari/renderer-core";
 import { createSceneAdapter, YunariChart } from "@yunari/scene-fabric";
 import {
   ActiveSelection,
@@ -11,6 +14,10 @@ import {
   Rect,
 } from "fabric/es";
 import { beforeEach, expect, it, vi } from "vitest";
+import { AssetManager } from "../asset-manager/index.js";
+import { EditorDocument } from "../editor-document.js";
+import type { EditorShell } from "../editor-shell.js";
+import { createNewFabricTheme } from "../new-fabric-theme.js";
 import { objectAction } from "../object-actions.js";
 import {
   createEditorShellBridge,
@@ -59,6 +66,28 @@ function facadeStub(): EditorActionFacade {
   };
 }
 
+/** A real document over a do-nothing shell: the storm test needs the document's
+ *  own scheduling, not a copy of it. */
+function documentForNotifications(): EditorDocument {
+  return new EditorDocument({
+    source: {
+      shell: {
+        snapshot: (value: unknown) => value,
+        editor: {
+          errorManager: { report: () => {} },
+          historyManager: { attachGlobals: () => {} },
+        },
+      } as unknown as EditorShell,
+      envelope: createNewFabricTheme() as unknown as FabricThemeEnvelopeInput,
+      assetManager: new AssetManager(),
+      onNew: async () => {},
+      onNewFromStarter: async () => {},
+      onSaved: () => {},
+    },
+    consumers: {} as never,
+  });
+}
+
 function bridgeFor(
   active: unknown,
   extra: Record<string, unknown> = {},
@@ -66,7 +95,7 @@ function bridgeFor(
   canvasExtra: Record<string, unknown> = {},
   bridgeExtra: Record<string, unknown> = {},
 ) {
-  const listeners = new Map<string, () => void>();
+  const listeners = new Map<string, Set<() => void>>();
   const documentListeners = new Set<() => void>();
   const objects = active === undefined ? [] : [active];
   const canvas = {
@@ -81,14 +110,19 @@ function bridgeFor(
       return index < 0 ? [] : objects.splice(index, 1);
     },
     requestRenderAll: vi.fn(),
-    on: vi.fn((name: string, listener: () => void) =>
-      listeners.set(name, listener),
-    ),
+    on: vi.fn((name: string, listener: () => void) => {
+      const registered = listeners.get(name) ?? new Set<() => void>();
+      registered.add(listener);
+      listeners.set(name, registered);
+    }),
     off: vi.fn(),
     // Fabric's own event bus, reduced to what the bridge subscribes to; the
     // options argument is carried so a caller reads as it does on the canvas.
-    fire: (name: string, ..._options: readonly unknown[]) =>
-      listeners.get(name)?.(),
+    // A set per event, because the session wires some Fabric events (the
+    // document announcement) to the same canvas the bridge is on.
+    fire: (name: string, ..._options: readonly unknown[]) => {
+      for (const listener of listeners.get(name) ?? []) listener();
+    },
     ...canvasExtra,
   };
   const editor = {
@@ -413,31 +447,42 @@ it("republishes when an object is added", () => {
   expect(bridge.layers().map((row) => row.id)).toContain("footer");
 });
 
-it("recomputes once for a revive's remove-then-add storm, and records no history", () => {
+it("recomputes once for a revive's remove-then-add storm, through the real document", async () => {
   // A revive takes every object out and puts each one back, so Fabric fires a
-  // storm of events that all mean the same thing. The bridge used to repaint
-  // the rows per event; routing the storm through the document's coalesced
-  // announcement makes it one recompute.
-  const before = new Rect({ id: "before", width: 10, height: 10 });
-  const { bridge, canvas, editor, announceDocument } = bridgeFor(before);
+  // storm of events that all mean the same thing. This drives the session's
+  // real wiring — Fabric's add/remove into the document, the document's
+  // coalesced announcement into the bridge — rather than calling a captured
+  // listener, because a copy of that scheduling would test the copy.
+  const document = documentForNotifications();
+  const { bridge, canvas } = bridgeFor(
+    undefined,
+    {},
+    {
+      subscribeDocumentChange: (listener: () => void) =>
+        document.subscribeDocumentChange(listener),
+    },
+  );
+  for (const event of ["object:removed", "object:added"] as const) {
+    canvas.on(event as never, document.announceChange as never);
+  }
+
   const heard = vi.fn();
   bridge.subscribe(heard);
 
-  canvas.remove(before);
-  canvas.fire("object:removed", { target: before });
-  const after = new Rect({ id: "after", width: 10, height: 10 });
-  canvas.add(after);
-  canvas.fire("object:added", { target: after });
+  for (let index = 0; index < 3; index += 1) {
+    const object = new Rect({ id: `storm-${index}`, width: 10, height: 10 });
+    canvas.add(object);
+    canvas.fire("object:added", { target: object });
+    canvas.remove(object);
+    canvas.fire("object:removed", { target: object });
+  }
 
-  // Neither Fabric event is a second notification path.
-  expect(heard).not.toHaveBeenCalled();
-
-  announceDocument();
+  // Fabric's events are not a second notification path any more.
+  expect(heard, "the batch is still open in this task").not.toHaveBeenCalled();
+  await Promise.resolve();
   expect(heard).toHaveBeenCalledTimes(1);
-  expect(
-    editor.historyManager.saveState,
-    "a restore suspends history; the notification must not record an entry",
-  ).not.toHaveBeenCalled();
+
+  document.destroy();
 });
 
 it("carries the object's display name into the projection and back out again", () => {

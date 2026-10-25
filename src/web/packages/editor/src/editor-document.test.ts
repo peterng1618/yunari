@@ -64,26 +64,35 @@ describe("EditorDocument change notification", () => {
     document.destroy();
   });
 
-  it("does not recurse without bound when a listener announces from the flush", async () => {
-    // A listener reacting to the notification by touching the document is a
-    // second batch, not a second notification of the same one. The flag is
-    // cleared before the listeners run, so this lands as one extra pass; the
-    // listener announces only once, which is what stops it there.
+  it("delivers an announcement made during a flush after the current iteration", async () => {
+    // The flush clears the schedule flag before it iterates, so an announcement
+    // made from a listener is a follow-up pass, never a re-entry into the
+    // iteration in progress. A listener that announces on every invocation
+    // therefore keeps the follow-up loop going — that would be a bug in the
+    // listener, not a bound this owner promises.
     const document = documentWith();
+    const second = vi.fn();
+    let secondCallsAtAnnounce = -1;
     let announced = false;
-    const heard = vi.fn(() => {
+    const first = vi.fn(() => {
       if (announced) return;
       announced = true;
       document.announceChange();
+      secondCallsAtAnnounce = second.mock.calls.length;
     });
-    document.subscribeDocumentChange(heard);
+    document.subscribeDocumentChange(first);
+    document.subscribeDocumentChange(second);
 
     document.announceChange();
     await Promise.resolve();
     await Promise.resolve();
-    await Promise.resolve();
 
-    expect(heard).toHaveBeenCalledTimes(2);
+    expect(
+      secondCallsAtAnnounce,
+      "the follow-up pass starts after this iteration, not inside it",
+    ).toBe(0);
+    expect(first).toHaveBeenCalledTimes(2);
+    expect(second).toHaveBeenCalledTimes(2);
     document.destroy();
   });
 
