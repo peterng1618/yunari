@@ -7085,10 +7085,14 @@ describe("The sample stream is bounded", () => {
         // a loopback stream would resolve to this PC and share one slot count.
         sampleStream(hosted.server, streamFor(token), "192.168.1.50");
       }
-      await vi.waitFor(() =>
-        expect(hosted.connectionCount).toBe(
-          (index + 1) * MAX_STREAM_CONNECTIONS_PER_DISPLAY,
-        ),
+      // Sixty-four sockets open against a loaded box; the 1 s default expires
+      // a few connects short and reports a cap failure that is not one.
+      await vi.waitFor(
+        () =>
+          expect(hosted.connectionCount).toBe(
+            (index + 1) * MAX_STREAM_CONNECTIONS_PER_DISPLAY,
+          ),
+        { timeout: 15_000 },
       );
     }
 
@@ -7111,8 +7115,10 @@ describe("The sample stream is bounded", () => {
       // against rather than resolving every one to this PC.
       sampleStream(hosted.server, streamFor(busy), "192.168.1.50");
     }
-    await vi.waitFor(() =>
-      expect(hosted.connectionCount).toBe(MAX_STREAM_CONNECTIONS_PER_DISPLAY),
+    await vi.waitFor(
+      () =>
+        expect(hosted.connectionCount).toBe(MAX_STREAM_CONNECTIONS_PER_DISPLAY),
+      { timeout: 15_000 },
     );
 
     expect((await streamStatus(hosted.server, streamFor(busy))).status).toBe(
