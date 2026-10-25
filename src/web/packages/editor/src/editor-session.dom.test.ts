@@ -232,6 +232,78 @@ describe("EditorSession", () => {
     extensions.destroy();
   });
 
+  it("notifies document listeners for the scene's add, remove and committed edit", async () => {
+    // The session is where Fabric's own events become the document's "look
+    // again" signal. The canvas stub is a real event bus here, so this reaches
+    // the registration loop in the constructor: delete an entry and a paste or
+    // a delete stops updating every panel, with no other test noticing.
+    const canvasListeners = new Map<string, Set<() => void>>();
+    const canvas = {
+      on: vi.fn((name: string, listener: () => void) => {
+        const registered = canvasListeners.get(name) ?? new Set<() => void>();
+        registered.add(listener);
+        canvasListeners.set(name, registered);
+      }),
+      off: vi.fn(),
+      fire: (name: string) => {
+        for (const listener of canvasListeners.get(name) ?? []) listener();
+      },
+      getActiveObject: () => undefined,
+      getObjects: () => [],
+      requestRenderAll: vi.fn(),
+    };
+    const session = new EditorSession({
+      assetManager: new AssetManager(),
+      shell: {
+        editor: {
+          canvas,
+          clipboardManager: { setImageImporter: vi.fn(), setBindings: vi.fn() },
+          textManager: {
+            addText: vi.fn(),
+            setAuthoringView: vi.fn(),
+            setRepaint: vi.fn(),
+          },
+          cropManager: idleCrop(),
+          historyManager: { attachGlobals: () => {} },
+        },
+        scene: {},
+        snapshot: vi.fn(() => envelope),
+        setBackgroundMedia: vi.fn(),
+      } as never,
+      source: {} as never,
+      envelope,
+      panelHosts: {
+        add: document.body,
+        document: document.body,
+        tokens: document.body,
+        selection: document.body,
+      },
+      onNew: vi.fn(),
+      onNewFromStarter: vi.fn(),
+      onSaved: vi.fn(),
+    });
+
+    const heard = vi.fn();
+    session.subscribeDocumentChange(heard);
+
+    canvas.fire("object:added");
+    canvas.fire("object:removed");
+    expect(
+      heard,
+      "the batch is still open in this task",
+    ).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(heard).toHaveBeenCalledTimes(1);
+
+    // The third event in the same registration block: a recorded edit moves
+    // the document even when no object moved with it.
+    canvas.fire("editor:edit-committed");
+    await Promise.resolve();
+    expect(heard).toHaveBeenCalledTimes(2);
+
+    session.destroy();
+  });
+
   it("binds the chord the header prints to the shell's own publish surface", () => {
     // §7.1. The header prints this chord beside the publish control, so the
     // gesture does what that control does — it opens the surface — and owns no
