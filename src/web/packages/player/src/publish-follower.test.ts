@@ -385,10 +385,14 @@ describe("followPublished's poll cadence", () => {
 
     answer(new Response(JSON.stringify({ revision: 1 })));
     await vi.advanceTimersByTimeAsync(0);
-    // Settling is not itself a wake: the next poll waits a full interval.
+    // Settling is not itself a wake: the next poll waits a full interval, not
+    // merely "by the end of one" — one millisecond short is still one request.
     expect(fetch).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
     expect(fetch).toHaveBeenCalledTimes(2);
 
     stop();
@@ -403,6 +407,14 @@ describe("followPublished's poll cadence", () => {
         intervalMs: 2_000,
         onRefused: refused,
       });
+
+      // The refusal is answered before any clock passes, which is the only
+      // moment a stray wake is visible: it fires later, early-returns at the
+      // `stopped` check, and leaves the fetch count unchanged.
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(refused).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount(), "a refused follower arms nothing").toBe(0);
 
       await vi.advanceTimersByTimeAsync(10_000);
 
@@ -425,9 +437,13 @@ describe("followPublished's poll cadence", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
 
     stop();
+    // The armed wake is cleared, not merely ignored: a pending timer is the
+    // difference the fetch count cannot see.
+    expect(vi.getTimerCount(), "the stop clears the poll").toBe(0);
     await vi.advanceTimersByTimeAsync(10_000);
 
     expect(fetch).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("does not re-arm a request that settles after the stop", async () => {
@@ -438,6 +454,9 @@ describe("followPublished's poll cadence", () => {
 
     stop();
     answer(new Response(JSON.stringify({ revision: 1 })));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount(), "a stopped follower arms nothing").toBe(0);
+
     await vi.advanceTimersByTimeAsync(10_000);
 
     expect(fetch).toHaveBeenCalledTimes(1);

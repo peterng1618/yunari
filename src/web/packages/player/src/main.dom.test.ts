@@ -555,8 +555,9 @@ describe("the rate the display repaints at", () => {
     chartFps = 30;
     const before = polls();
     // The follower chains its wake on a timer, which this harness holds, so the
-    // poll is driven rather than waited for; the wait then lets its answer land
-    // and re-rate the loop that already exists.
+    // poll is driven rather than waited for. The wait proves only that the
+    // request went out — `polls()` moves synchronously in the fetch mock — not
+    // that the answer re-rated the loop; the pin below holds either way.
     driveFrame(2_000);
     await vi.waitFor(() => expect(polls()).toBeGreaterThan(before), {
       timeout: 5_000,
