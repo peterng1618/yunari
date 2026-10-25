@@ -55,6 +55,32 @@ import {
 
 /** Display-only runtime. The phone renders; hardware acquisition stays on the host. */
 
+/**
+ * The one navigation this page performs on its own: a page restored from the
+ * back/forward cache is the document `pagehide` already tore down, so only a
+ * fresh load recovers it.
+ *
+ * A seam rather than a bare `window.location.reload()`, because jsdom's
+ * `location.reload` is unforgeable and the reload is otherwise untestable. It
+ * is held on the global because one jsdom window outlives a test's module
+ * registry: every mount in the file shares the listeners and must share the
+ * seam they call.
+ */
+export interface PageNavigation {
+  reload(): void;
+}
+
+const navigationHost = globalThis as {
+  __yunariPageNavigation?: PageNavigation;
+};
+
+export const pageNavigation: PageNavigation =
+  (navigationHost.__yunariPageNavigation ??= {
+    reload(): void {
+      window.location.reload();
+    },
+  });
+
 const artboardHost = document.querySelector<HTMLElement>("#artboard");
 
 if (!artboardHost) {
@@ -460,6 +486,25 @@ async function startHostedTheme(
   });
   const observer = new ResizeObserver(() => handle.resize());
   observer.observe(host);
+  // A hidden page repaints up to thirty times a second and keeps decoding a
+  // background video nobody can see. `disposed` is the pagehide flag: a page
+  // that teardown has torn down must not be revived by a late event.
+  window.addEventListener("visibilitychange", () => {
+    if (disposed) return;
+    if (document.hidden) {
+      chartRefresh.stop();
+      handle.pauseMedia();
+      return;
+    }
+    handle.resumeMedia();
+    chartRefresh.start();
+  });
+  window.addEventListener("pageshow", (event) => {
+    // A page restored from the back/forward cache is the document `pagehide`
+    // already tore down — `disposed` is exactly what it left behind — so a
+    // fresh load is the only recovery. A first load is already fresh.
+    if (event.persisted) pageNavigation.reload();
+  });
   window.addEventListener(
     "pagehide",
     () => {

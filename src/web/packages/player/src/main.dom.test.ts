@@ -568,6 +568,196 @@ describe("the rate the display repaints at", () => {
   });
 });
 
+/**
+ * A display whose page is hidden.
+ *
+ * A display repaints up to thirty times a second and keeps a background video
+ * decoding whether or not anyone can see it, which is battery spent on a page
+ * the browser is not showing. jsdom cannot hide a page, so `document.hidden` is
+ * overridden and the event dispatched by hand; the browser check in the task
+ * report says which half of that was real.
+ */
+describe("a display whose page is hidden", () => {
+  let frames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 0;
+  let frameTime = 0;
+
+  beforeEach(() => {
+    vi.resetModules();
+    frames = new Map();
+    nextFrame = 0;
+    frameTime = 0;
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(document, "hidden");
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  /** What the browser would report, and the event it would dispatch for it. */
+  function setHidden(hidden: boolean): void {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => hidden,
+    });
+  }
+
+  /** The loop's own clock: a frame is due time, and the refresh runs on it. */
+  function driveFrames(count: number): void {
+    for (let step = 0; step < count; step += 1) {
+      frameTime += 16;
+      const due = [...frames.values()];
+      frames.clear();
+      for (const callback of due) callback(frameTime);
+    }
+  }
+
+  /** Mounts a line display, whose option is rebuilt on every refresh, so its
+   *  repaints are the loop's own cadence. Returns the handle's media calls as
+   *  spies: `main.ts` holds the same handle object. */
+  async function mountLine(): Promise<{
+    readonly pause: ReturnType<typeof vi.spyOn>;
+    readonly resume: ReturnType<typeof vi.spyOn>;
+    readonly repaints: () => number;
+  }> {
+    skeleton();
+    history.replaceState(
+      {},
+      "",
+      "/?theme=living-room&display=d1&theme-source=map&session=paired-token",
+    );
+    vi.stubGlobal("EventSource", SilentEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      nextFrame += 1;
+      frames.set(nextFrame, callback);
+      return nextFrame;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((handle) => {
+      frames.delete(handle);
+    });
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("/api/published")) {
+          // 30, so the loop's wake is a frame rather than a timer and the
+          // driver below is its whole clock.
+          return json({
+            id: null,
+            revision: 0,
+            display: { id: "d1", theme: "living-room", chartFps: 30 },
+          });
+        }
+        if (url.endsWith("/document")) return json(lineEnvelope());
+        return json({});
+      }),
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await import("./main.js");
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector("[data-yunari-controls]"),
+        "the display mounted",
+      ).not.toBeNull(),
+    );
+
+    const diagnostics = window as unknown as {
+      readonly yunari: {
+        readonly handle: {
+          readonly canvas: { requestRenderAll: () => void };
+          pauseMedia: () => void;
+          resumeMedia: () => void;
+        };
+      };
+    };
+    const { handle } = diagnostics.yunari;
+    const pause = vi.spyOn(handle, "pauseMedia");
+    const resume = vi.spyOn(handle, "resumeMedia");
+    const render = vi.spyOn(handle.canvas, "requestRenderAll");
+
+    return {
+      pause,
+      resume,
+      repaints: () => render.mock.calls.length,
+    };
+  }
+
+  it("stops the loop and pauses media while hidden, and restores both", async () => {
+    const { pause, resume, repaints } = await mountLine();
+    driveFrames(10);
+    expect(repaints(), "the loop is repainting while visible").toBeGreaterThan(
+      0,
+    );
+    const before = repaints();
+
+    setHidden(true);
+    window.dispatchEvent(new Event("visibilitychange"));
+
+    expect(pause, "the media was paused").toHaveBeenCalledTimes(1);
+    // The line's own engine keeps a frame of its own, so the loop's wake cannot
+    // be singled out of the pending map; what proves it stopped is that driving
+    // the driver repaints nothing.
+    driveFrames(30);
+    expect(repaints(), "nothing repainted while hidden").toBe(before);
+
+    setHidden(false);
+    window.dispatchEvent(new Event("visibilitychange"));
+
+    expect(resume, "the media was resumed").toHaveBeenCalledTimes(1);
+    driveFrames(10);
+    expect(repaints(), "the loop restarted").toBeGreaterThan(before);
+  });
+
+  it("does not revive a loop a pagehide has disposed", async () => {
+    const { resume, repaints } = await mountLine();
+    window.dispatchEvent(new Event("pagehide"));
+    const before = repaints();
+
+    setHidden(false);
+    window.dispatchEvent(new Event("visibilitychange"));
+    driveFrames(10);
+
+    expect(resume, "a torn-down page resumed nothing").not.toHaveBeenCalled();
+    expect(repaints(), "and repainted nothing").toBe(before);
+  });
+
+  it("reloads for a persisted pageshow and ignores a fresh one", async () => {
+    await mountLine();
+    const { pageNavigation } = await import("./main.js");
+    const reload = vi
+      .spyOn(pageNavigation, "reload")
+      .mockImplementation(() => {});
+
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: false }),
+    );
+    expect(reload, "a first load reloads nothing").not.toHaveBeenCalled();
+
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    );
+    // Not "once": every mount this jsdom file has made still holds the shared
+    // window's listener, so the count is one per mount. What this pins is that
+    // a persisted pageshow navigates at all and a fresh one does not.
+    expect(
+      reload,
+      "a page restored from the back/forward cache reloads",
+    ).toHaveBeenCalled();
+  });
+});
+
 describe("a rejection that arrives after the scene mounted", () => {
   it("replaces the display that was already drawn", async () => {
     const host = skeleton();
