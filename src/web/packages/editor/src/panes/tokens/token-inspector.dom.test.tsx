@@ -9,11 +9,16 @@
  * The panel never writes the document — each case asserts the port, because the
  * session owns the write.
  */
+import type { FabricPalette } from "@yunari/renderer-core";
 import { act } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FontTrioRole } from "../../type-preset-apply.js";
 import type { TypePresets } from "../../type-preset-manager/panel.js";
 import { uiCopy } from "../../ui-copy.js";
+import {
+  BACKGROUND_PAINT,
+  PAINT_INSPECTOR_PALETTE as PAINTS,
+} from "./paint-list-fixture.js";
 import {
   createTokenInspectorPanel,
   type TokenInspectorActions,
@@ -75,12 +80,30 @@ const PRESETS: TypePresets = {
   caption: { name: "Caption", value: { family: "Inter", size: 12 } },
 };
 
-function actions(): TokenInspectorActions {
+type PaintPort = NonNullable<TokenInspectorActions["paints"]>;
+
+function paintActions(
+  options: {
+    readonly palette?: FabricPalette;
+    readonly usage?: PaintPort["usage"];
+  } = {},
+): PaintPort {
+  const palette = options.palette ?? PAINTS;
+  return {
+    palette: () => palette,
+    onChange: vi.fn<(next: FabricPalette) => void>(),
+    onDelete: vi.fn<(id: string, replacement: string) => void>(),
+    usage: options.usage,
+  };
+}
+
+function actions(paints?: PaintPort): TokenInspectorActions {
   return {
     onChange: vi.fn<(presets: TypePresets) => void>(),
     onDelete: vi.fn<(id: string, replacement: string) => void>(),
     setRole: vi.fn<(id: string, role: FontTrioRole | null) => void>(),
     unbindFace: vi.fn<(id: string) => void>(),
+    paints,
   };
 }
 
@@ -296,6 +319,163 @@ describe("token inspector", () => {
     panel.render(undefined, PRESETS, { typePresets: PRESETS });
 
     expect(panel.root.textContent).toBe("");
+    panel.destroy();
+  });
+});
+
+describe("the paint section", () => {
+  const valueOf = (host: HTMLElement, selector: string): string | null =>
+    host
+      .querySelector(`${selector} [data-yunari-value]`)
+      ?.getAttribute("data-yunari-value") ?? null;
+
+  it("shows a paint token's name, kind and value", () => {
+    const panel = createTokenInspectorPanel(
+      document.body,
+      actions(paintActions()),
+    );
+    panel.render({ kind: "paint", id: "background" }, PRESETS, {
+      typePresets: PRESETS,
+    });
+
+    // A paint's properties are its existing field set: the editable name, the
+    // paint kind and the value's one control.
+    expect(field(panel.root, "[data-yunari-palette-name]").value).toBe(
+      "Background",
+    );
+    expect(valueOf(panel.root, "[data-yunari-palette-kind]")).toBe("solid");
+    expect(
+      panel.root.querySelector("[data-yunari-palette-picker]")?.textContent,
+    ).toContain(BACKGROUND_PAINT);
+    panel.destroy();
+  });
+
+  it("writes a paint's edit through the palette port", async () => {
+    const paints = paintActions();
+    const panel = createTokenInspectorPanel(document.body, actions(paints));
+    panel.render({ kind: "paint", id: "background" }, PRESETS, {
+      typePresets: PRESETS,
+    });
+
+    await edit(field(panel.root, "[data-yunari-palette-name]"), "Renamed");
+
+    // The whole palette travels, edited under the token's stable id — the
+    // document's write is the session's, not the inspector's.
+    expect(paints.onChange).toHaveBeenLastCalledWith({
+      ...PAINTS,
+      background: { name: "Renamed", value: PAINTS.background?.value },
+    });
+    panel.destroy();
+  });
+
+  it("reassigns other paints before deleting one", async () => {
+    const paints = paintActions();
+    const panel = createTokenInspectorPanel(document.body, actions(paints));
+    panel.render({ kind: "paint", id: "background" }, PRESETS, {
+      typePresets: PRESETS,
+    });
+
+    // The replacement names the other paints only, and defaults to the first.
+    expect(valueOf(panel.root, "[data-yunari-palette-replacement]")).toBe(
+      "accent",
+    );
+    await click(
+      panel.root.querySelector("[data-yunari-palette-delete]") as HTMLElement,
+    );
+    expect(paints.onDelete).toHaveBeenCalledWith("background", "accent");
+    panel.destroy();
+  });
+
+  it("draws the objects a paint token is linked to", () => {
+    const paints = paintActions({
+      usage: () => ({ background: [{ objectId: "card", name: "Card title" }] }),
+    });
+    const panel = createTokenInspectorPanel(document.body, actions(paints));
+    panel.render({ kind: "paint", id: "background" }, PRESETS, {
+      typePresets: PRESETS,
+    });
+
+    expect(
+      panel.root.querySelector("[data-yunari-palette-users]")?.textContent,
+    ).toContain("Card title");
+
+    // With no scene, the reading is absent rather than an empty list: an empty
+    // one would read as a measured zero.
+    const bare = createTokenInspectorPanel(
+      document.body,
+      actions(paintActions()),
+    );
+    bare.render({ kind: "paint", id: "background" }, PRESETS, {
+      typePresets: PRESETS,
+    });
+    expect(bare.root.querySelector("[data-yunari-palette-users]")).toBeNull();
+    panel.destroy();
+    bare.destroy();
+  });
+
+  it("never draws a preset section for a paint token", () => {
+    const panel = createTokenInspectorPanel(
+      document.body,
+      actions(paintActions()),
+    );
+    panel.render({ kind: "paint", id: "background" }, PRESETS, {
+      typePresets: PRESETS,
+    });
+
+    expect(
+      panel.root.querySelector("[data-yunari-palette-fields]"),
+    ).not.toBeNull();
+    for (const selector of [
+      "[data-yunari-token-fields]",
+      "[data-yunari-token-name]",
+      "[data-yunari-token-delete]",
+    ]) {
+      expect(panel.root.querySelector(selector), selector).toBeNull();
+    }
+    panel.destroy();
+  });
+
+  it("rebuilds a paint's field set when the paint kind changes", () => {
+    // The measured defect: a field set that survives a kind switch keeps the
+    // picker's trigger, and the open popover then measures a detached node. The
+    // key carries the paint kind for exactly this.
+    const paints = paintActions();
+    const panel = createTokenInspectorPanel(document.body, actions(paints));
+    panel.render({ kind: "paint", id: "background" }, PRESETS, {
+      typePresets: PRESETS,
+    });
+    const before = panel.root.querySelector("[data-yunari-palette-fields]");
+    expect(before).not.toBeNull();
+
+    panel.render({ kind: "paint", id: "glow" }, PRESETS, {
+      typePresets: PRESETS,
+    });
+
+    expect(panel.root.querySelector("[data-yunari-palette-fields]")).not.toBe(
+      before,
+    );
+    panel.destroy();
+  });
+
+  it("rebuilds a paint's field set when the token changes", () => {
+    // The key's token term: both tokens here are solid, so only the id moves
+    // it. `ColourPicker` seeds its draft at mount, so a set that survived the
+    // switch would show the previous token for a frame.
+    const paints = paintActions();
+    const panel = createTokenInspectorPanel(document.body, actions(paints));
+    panel.render({ kind: "paint", id: "background" }, PRESETS, {
+      typePresets: PRESETS,
+    });
+    const before = panel.root.querySelector("[data-yunari-palette-fields]");
+    expect(before).not.toBeNull();
+
+    panel.render({ kind: "paint", id: "accent" }, PRESETS, {
+      typePresets: PRESETS,
+    });
+
+    expect(panel.root.querySelector("[data-yunari-palette-fields]")).not.toBe(
+      before,
+    );
     panel.destroy();
   });
 });

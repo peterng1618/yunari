@@ -1435,9 +1435,9 @@ test.describe("Fabric editor route", () => {
     // `text` is the token the new panel's border and shadow now point at. The
     // palette panel is the Tokens pane's, so it is in the Tokens pane.
     await openPane(page, "Tokens");
-    // The Tokens pane's choosers are Base UI selects now, so a choice is a
-    // click into an opened listbox rather than a native `selectOption`.
-    await chooseIn(page, "[data-yunari-palette-token]", "text");
+    // The Tokens pane's rows are selectors now; a press hands the token to the
+    // inspector, where the reassignment row lives.
+    await page.locator('[data-yunari-palette-token-row="text"]').click();
     await chooseIn(page, "[data-yunari-palette-replacement]", "dim");
     await page.locator("[data-yunari-palette-delete]").click();
 
@@ -2121,7 +2121,7 @@ test.describe("Fabric editor route", () => {
     await page.goto(EDITOR);
     // The palette panel is the Tokens pane's, so it is in the Tokens pane.
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     // The exact-value field is the popover's, so the trigger opens it first.
     await page.locator("[data-yunari-palette-picker]").click();
     const color = page.locator("[data-yunari-palette-color]");
@@ -2154,9 +2154,10 @@ test.describe("Fabric editor route", () => {
     // here where the background layer is selected — the pane that owns it.
     await selectLayer(page, "Background");
     await chooseIn(page, "[data-yunari-background]", "palette.bars");
-    // The palette panel is the Tokens pane's, so it is in the Tokens pane.
+    // The palette panel is the Tokens pane's, so it is in the Tokens pane; a row
+    // press hands the token to the inspector, where the delete row lives.
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-palette-token]", "bars");
+    await page.locator('[data-yunari-palette-token-row="bars"]').click();
     await chooseIn(page, "[data-yunari-palette-replacement]", "panel");
     await captureVisualReview(page, testInfo, "editor-palette-reassignment");
     await page.locator("[data-yunari-palette-delete]").click();
@@ -2181,9 +2182,10 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    // The palette panel is the Tokens pane's, so it is in the Tokens pane.
+    // The palette panel is the Tokens pane's, so it is in the Tokens pane; a row
+    // press hands the token to the inspector, where the delete row lives.
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-palette-token]", "chartTrack");
+    await page.locator('[data-yunari-palette-token-row="chartTrack"]').click();
     await chooseIn(page, "[data-yunari-palette-replacement]", "bars");
     await page.locator("[data-yunari-palette-delete]").click();
 

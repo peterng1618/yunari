@@ -28,6 +28,11 @@ export interface PalettePanelOptions {
    * changes call the panel's `onChange` repeatedly; this fires once per gesture.
    */
   readonly onSettled?: (() => void) | undefined;
+  /**
+   * The token a row press selects. The panel renders the `TokensPane`, so the
+   * port travels through this factory; without it a row press selects nothing.
+   */
+  readonly onSelect?: (id: string) => void;
 }
 
 export interface PalettePanel {
@@ -44,15 +49,14 @@ export interface PalettePanel {
  * Product-owned palette authoring; tokens retain stable ids so references stay
  * valid.
  *
- * The factory keeps its signature and its `root`/`render` pair, so
- * `editor-session.ts` keeps its construction site; what changed is the
- * rendering, which is the Tokens pane's React tree. The picker and the gradient
- * editor are children of that tree rather than nested `createRoot`s.
+ * The factory keeps its `root`/`render` pair, so `editor-session.ts` keeps its
+ * construction site; what changed is the rendering, which is the Tokens pane's
+ * React tree. The picker, the gradient editor and the delete row are the token
+ * inspector's now, reached through the pane's `onSelect` port.
  */
 export function createPalettePanel(
   host: HTMLElement,
   onChange: (palette: FabricPalette) => void,
-  onDelete?: (id: string, replacement: string) => void,
   options: PalettePanelOptions = {},
 ): PalettePanel {
   const root = document.createElement("section");
@@ -72,8 +76,8 @@ export function createPalettePanel(
           palette: palette ?? {},
           usage: options.usage,
           onChange,
+          onSelect: options.onSelect,
           onSettled: options.onSettled,
-          onDelete,
         }),
       );
     });

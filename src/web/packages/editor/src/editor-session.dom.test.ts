@@ -45,9 +45,16 @@ vi.mock("./theme-library-dialog.js", () => ({
 vi.mock("./artboard-panel.js", () => ({
   createArtboardPanel: () => (panels.last = panel()),
 }));
-vi.mock("./palette-manager/index.js", () => ({
-  createPalettePanel: () => panel(),
-}));
+vi.mock("./palette-manager/index.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./palette-manager/index.js")>();
+  return {
+    // Only the panel is doubled. The usage walk stays the real one, because the
+    // token inspector's paint section calls it whether or not a pane renders.
+    ...actual,
+    createPalettePanel: () => panel(),
+  };
+});
 /** The panel's two ports are held so a test can drive a rename the way the
  *  panel's own field does — the panel is a double here, so nothing else
  *  reaches `EditorDocument.setTypes`. */
@@ -1008,6 +1015,7 @@ describe("EditorSession", () => {
       },
       scene: {},
       snapshot: vi.fn((input) => ({ ...envelope, ...input })),
+      setBackground: vi.fn(),
       setBackgroundMedia: vi.fn(),
       setGlobals: vi.fn(),
       refreshGlass: vi.fn(),
@@ -1058,6 +1066,16 @@ describe("EditorSession", () => {
       body: { name: "Body", value: { family: "Inter", size: 16 } },
       caption: { name: "Caption", value: { family: "Inter", size: 12 } },
     };
+    const paints = {
+      background: {
+        name: "Background",
+        value: { kind: "solid" as const, color: "#102030" },
+      },
+      accent: {
+        name: "Accent",
+        value: { kind: "solid" as const, color: "#00b8d9" },
+      },
+    };
     const shell = {
       editor: {
         canvas: {
@@ -1080,6 +1098,7 @@ describe("EditorSession", () => {
       },
       scene: {},
       snapshot: vi.fn((input) => ({ ...envelope, ...input })),
+      setBackground: vi.fn(),
       setBackgroundMedia: vi.fn(),
       setGlobals: vi.fn(),
       refreshGlass: vi.fn(),
@@ -1088,7 +1107,10 @@ describe("EditorSession", () => {
       assetManager: new AssetManager(),
       shell: shell as never,
       source: {} as never,
-      envelope: { ...envelope, globals: { typePresets: presets } },
+      envelope: {
+        ...envelope,
+        globals: { typePresets: presets, palette: paints },
+      },
       panelHosts: {
         add: document.body,
         assets: document.body,
@@ -1133,6 +1155,21 @@ describe("EditorSession", () => {
     // not set, and React warns once per run when it is missing.
     tokenColumn
       ?.querySelector<HTMLButtonElement>("[data-yunari-token-delete]")
+      ?.click();
+    expect(tokenSelection.get()).toBeUndefined();
+    expect(objectColumn?.style.display).toBe("");
+    expect(tokenColumn?.textContent).toBe("");
+
+    // The same rule for a paint token: deleting the paint the inspector names
+    // must give the object column back rather than leave it suppressed over a
+    // token the palette no longer has. The replacement is the other paint.
+    tokenSelection.set({ kind: "paint", id: "background" });
+    expect(objectColumn?.style.display).toBe("none");
+    expect(
+      tokenColumn?.querySelector("[data-yunari-palette-name]"),
+    ).not.toBeNull();
+    tokenColumn
+      ?.querySelector<HTMLButtonElement>("[data-yunari-palette-delete]")
       ?.click();
     expect(tokenSelection.get()).toBeUndefined();
     expect(objectColumn?.style.display).toBe("");

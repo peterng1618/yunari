@@ -83,39 +83,45 @@ it("leaves the mounted panels with no copy of their own", async () => {
     { width: 1280, height: 720 },
     { name: "Living Room", themeLanguage: "en" },
   );
-  const palettePanel = createPalettePanel(
-    root,
-    () => undefined,
-    () => undefined,
-  );
+  const palettePanel = createPalettePanel(root, () => undefined);
+  const palette = {
+    background: {
+      name: "Background",
+      value: { kind: "solid" as const, color: "#000" },
+    },
+    glow: {
+      name: "Glow",
+      value: {
+        kind: "gradient" as const,
+        angle: 45,
+        stops: [
+          { offset: 0, color: "#ffffff" },
+          { offset: 1, color: "#000000" },
+        ],
+      },
+    },
+    accent: {
+      name: "Accent",
+      value: { kind: "solid" as const, color: "#0ff" },
+    },
+  };
   await act(async () => {
-    palettePanel.render({
-      background: {
-        name: "Background",
-        value: { kind: "solid", color: "#000" },
-      },
-      glow: {
-        name: "Glow",
-        value: {
-          kind: "gradient",
-          angle: 45,
-          stops: [
-            { offset: 0, color: "#ffffff" },
-            { offset: 1, color: "#000000" },
-          ],
-        },
-      },
-      accent: { name: "Accent", value: { kind: "solid", color: "#0ff" } },
-    });
-    // The gradient and delete branches, because a solid token renders neither.
-    // The token list is React now, so the branch is opened by choosing the row
-    // rather than by setting a native `<select>`'s value.
-    const glow = root.querySelector<HTMLElement>(
-      '[data-yunari-palette-token-row="glow"]',
-    );
-    if (glow === null) throw new Error("the Tokens pane listed no glow token");
-    glow.click();
+    palettePanel.render(palette);
   });
+  // The gradient and delete branches render in the token inspector now: the
+  // pane is lists-only, so the selected paint's field set is mounted there.
+  createTokenInspectorPanel(root, {
+    onChange: () => undefined,
+    onDelete: () => undefined,
+    setRole: () => undefined,
+    unbindFace: () => undefined,
+    paints: {
+      palette: () => palette,
+      onChange: () => undefined,
+      onDelete: undefined,
+      usage: undefined,
+    },
+  }).render({ kind: "paint", id: "glow" }, {}, undefined);
   createTypePresetPanel(
     root,
     () => undefined,
@@ -146,6 +152,7 @@ it("leaves the mounted panels with no copy of their own", async () => {
     onDelete: () => undefined,
     setRole: () => undefined,
     unbindFace: () => undefined,
+    paints: undefined,
   }).render({ kind: "preset", id: "body" }, tokenPresets, {
     typePresets: tokenPresets,
   });

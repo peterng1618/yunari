@@ -1,4 +1,8 @@
-import type { FabricGlobals, TypePreset } from "@yunari/renderer-core";
+import type {
+  FabricGlobals,
+  FabricPalette,
+  TypePreset,
+} from "@yunari/renderer-core";
 import type * as React from "react";
 import { useState } from "react";
 import { flushSync } from "react-dom";
@@ -8,14 +12,20 @@ import { ControlSelect } from "../../components/ui/control-select.js";
 import { ControlText } from "../../components/ui/control-text.js";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
 import type { TokenRef } from "../../editor-shell/shell-stores.js";
+import type { PaletteTokenUse } from "../../palette-manager/panel.js";
 import { FONT_ROLES, type FontTrioRole } from "../../type-preset-apply.js";
 import type { TypePresets } from "../../type-preset-manager/panel.js";
 import { uiCopy } from "../../ui-copy.js";
+import { PaintFields } from "./paint-fields.js";
 
 /**
  * The selected token's own properties, in the right column — the half of the
  * inspector's "exactly one column" the object column gives way to while a token
  * is selected.
+ *
+ * **One inspector, two sections.** A `kind: "preset"` ref draws `PresetFields`
+ * and a `kind: "paint"` ref draws `PaintFields`; the section is chosen from the
+ * ref, never from a property, so a paint id cannot show a preset's fields.
  *
  * **The panel is a sibling section of the object inspector's host.** Both are
  * appended to `panelHosts.selection`; `selection-inspector` hides itself while a
@@ -28,6 +38,7 @@ import { uiCopy } from "../../ui-copy.js";
  *
  * **Usage is not here yet.** The spec lists a preset's usage, but no counter
  * exists and the reference walk is Task 17's — this file does not invent one.
+ * A paint's users list already has its walk, through the paint port's `usage`.
  */
 export interface TokenInspectorPanel {
   readonly root: HTMLElement;
@@ -47,6 +58,22 @@ export interface TokenInspectorActions {
   readonly onDelete: (id: string, replacement: string) => void;
   readonly setRole: (id: string, role: FontTrioRole | null) => void;
   readonly unbindFace: (id: string) => void;
+  /** The paint half: the palette the ref names, its document writes and its
+   *  users walk. Absent when the mount has no palette behind it. */
+  readonly paints:
+    | {
+        readonly palette: () => FabricPalette;
+        readonly onChange: (palette: FabricPalette) => void;
+        readonly onSettled?: () => void;
+        readonly onDelete:
+          | ((id: string, replacement: string) => void)
+          | undefined;
+        /** The objects each token is linked to; re-read per draw, as today. */
+        readonly usage:
+          | (() => Readonly<Record<string, readonly PaletteTokenUse[]>>)
+          | undefined;
+      }
+    | undefined;
 }
 
 export function createTokenInspectorPanel(
@@ -87,9 +114,30 @@ function TokenInspector(props: {
   readonly actions: TokenInspectorActions;
 }): React.JSX.Element | null {
   const { tokenRef, presets, actions } = props;
-  // The paint rows are Task 15b's. A paint ref draws nothing here rather than
-  // borrowing the preset fields for a token that has none of them.
-  if (tokenRef === undefined || tokenRef.kind !== "preset") return null;
+  if (tokenRef === undefined) return null;
+  if (tokenRef.kind === "paint") {
+    const paints = actions.paints;
+    if (paints === undefined) return null;
+    const palette = paints.palette();
+    const entry = palette[tokenRef.id];
+    if (entry === undefined) return null;
+    return (
+      /* Keyed by the token **and the paint kind**, as the pane's field set was:
+         a colour change re-renders in place and the picker keeps its trigger; a
+         kind switch changes the shape of the fields, and a token switch must
+         remount so `ColourPicker` does not seed the previous token's draft. */
+      <PaintFields
+        key={`${tokenRef.id}|${entry.value.kind}`}
+        id={tokenRef.id}
+        entry={entry}
+        palette={palette}
+        usage={paints.usage}
+        onChange={paints.onChange}
+        onSettled={paints.onSettled}
+        onDelete={paints.onDelete}
+      />
+    );
+  }
   const entry = presets[tokenRef.id];
   if (entry === undefined) return null;
   return (

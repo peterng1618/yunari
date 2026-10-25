@@ -160,7 +160,7 @@ test.describe("the colour picker and the gradient track", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await openTokens(page);
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     const before = paletteOf(await saveEnvelope(page)).background?.value;
 
     await openPicker(page);
@@ -217,7 +217,7 @@ test.describe("the colour picker and the gradient track", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await openTokens(page);
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
 
     const seeded = paletteOf(await saveEnvelope(page)).background?.value;
@@ -280,7 +280,7 @@ test.describe("the colour picker and the gradient track", () => {
     expect(added.stops).toHaveLength(countBefore + 1);
   });
 
-  test("edits a gradient stop's keys without nudging or deleting the selected object", async ({
+  test("edits a gradient stop's keys without nudging or deleting a scene object", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -298,34 +298,50 @@ test.describe("the colour picker and the gradient track", () => {
         }
       ).yunariEditorBridge.selectLayer("time-rule");
     });
-    const active = (): Promise<{
-      readonly id: string | undefined;
+    // The scene object the dispatcher would nudge or delete, read by id rather
+    // than through the selection: a token press clears the canvas selection
+    // (token and canvas selection are exclusive), so the object stops being the
+    // active one the moment the paint's fields open.
+    const sceneObject = (): Promise<{
       readonly left: number;
       readonly top: number;
     }> =>
       page.evaluate(() => {
-        const object = (
-          window as unknown as {
-            yunariEditorBridge: {
-              editor: {
-                canvas: {
-                  getActiveObject():
-                    | { id?: string; left?: number; top?: number }
-                    | undefined;
+        interface SceneObject {
+          readonly id?: string;
+          readonly left?: number;
+          readonly top?: number;
+          getObjects?(): ReadonlyArray<SceneObject>;
+        }
+        const collect = (
+          objects: ReadonlyArray<SceneObject>,
+        ): ReadonlyArray<SceneObject> =>
+          objects.flatMap((object) => [
+            object,
+            ...(object.getObjects === undefined
+              ? []
+              : collect(object.getObjects())),
+          ]);
+        const object = collect(
+          (
+            window as unknown as {
+              yunariEditorBridge: {
+                editor: {
+                  canvas: { getObjects(): ReadonlyArray<SceneObject> };
                 };
               };
-            };
-          }
-        ).yunariEditorBridge.editor.canvas.getActiveObject();
+            }
+          ).yunariEditorBridge.editor.canvas.getObjects(),
+        ).find((candidate) => candidate.id === "time-rule");
         if (object?.left === undefined || object.top === undefined) {
-          throw new Error("The test needs a selected object to stay selected.");
+          throw new Error("The test needs the scene's time-rule to exist.");
         }
-        return { id: object.id, left: object.left, top: object.top };
+        return { left: object.left, top: object.top };
       });
-    const before = await active();
+    const before = await sceneObject();
 
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
     // Three stops, so Delete has one to remove while the two-stop floor holds.
     await page.getByTestId("gradient-add").click();
@@ -343,17 +359,20 @@ test.describe("the colour picker and the gradient track", () => {
     );
     // The dispatcher is a window bubble listener. Before the control stopped
     // its keys, the same arrow also nudged the selected group by one pixel.
-    expect(await active(), "the arrow belonged to the stop").toEqual(before);
+    expect(await sceneObject(), "the arrow belonged to the stop").toEqual(
+      before,
+    );
 
     const stops = page.locator('[data-testid^="gradient-stop-"]');
     await expect(stops).toHaveCount(3);
     await page.keyboard.press("Delete");
     await expect(stops, "Delete removed the stop").toHaveCount(2);
-    // And it removed *the stop*, not the selected object the dispatcher would
-    // also have deleted.
-    expect(await active(), "Delete removed the stop, not the object").toEqual(
-      before,
-    );
+    // And it removed *the stop*, not a scene object the dispatcher would also
+    // have deleted.
+    expect(
+      await sceneObject(),
+      "Delete removed the stop, not the object",
+    ).toEqual(before);
   });
 
   test("applies a gradient preset from the library's fifteen seeds", async ({
@@ -362,7 +381,7 @@ test.describe("the colour picker and the gradient track", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await openTokens(page);
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
 
     // The row is the library's, so its size is the evidence that the seeds
@@ -391,7 +410,7 @@ test.describe("the colour picker and the gradient track", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await openTokens(page);
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await openPicker(page);
 
     const doomed = page.getByTestId("picker-preset-default-colour-slate-900");
@@ -410,7 +429,7 @@ test.describe("the colour picker and the gradient track", () => {
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await openPicker(page);
 
     await expect(
@@ -437,7 +456,9 @@ test.describe("the colour picker and the gradient track", () => {
     for (const palette of PALETTES) {
       await choosePalette(page, palette);
       await openPane(page, "Tokens");
-      await chooseIn(page, "[data-yunari-palette-token]", "background");
+      await page
+        .locator('[data-yunari-palette-token-row="background"]')
+        .click();
       await openPicker(page);
 
       const area = page.getByTestId("picker-area");
@@ -514,7 +535,7 @@ test.describe("the colour picker and the gradient track", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await openTokens(page);
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await openPicker(page);
     await page.getByTestId("picker-preset-default-colour-blue").click();
     const blue = storedColour("rgb(59 130 246)");
@@ -535,7 +556,7 @@ test.describe("the colour picker and the gradient track", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await openTokens(page);
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
     await page
       .getByTestId("gradient-preset-default-gradient-vital-ocean")

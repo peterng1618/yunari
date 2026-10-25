@@ -56,6 +56,7 @@ import {
 import {
   createPalettePanel,
   type PalettePanel,
+  type PaletteTokenUse,
   paletteTokenUsage,
 } from "./palette-manager/index.js";
 import { createAssetsPane } from "./panes/assets/assets-pane.js";
@@ -328,21 +329,28 @@ export class EditorSession {
       this.#document.envelope.artboard,
       this.#document.envelope.metadata,
     );
+    // The one walk behind both the figure beside a token and the users list in
+    // the inspector, so the two cannot disagree about the scene.
+    const paletteUsage = (): Readonly<
+      Record<string, readonly PaletteTokenUse[]>
+    > =>
+      paletteTokenUsage(
+        options.shell.editor.canvas,
+        this.#document.envelope.globals?.palette ?? {},
+      );
     this.#palette = createPalettePanel(
       options.panelHosts.tokens,
       (palette) => this.#document.setPalette(palette),
-      (id, replacement) => this.#document.deletePalette(id, replacement),
       {
         // The same walk the delete uses, so the figure beside a token and the
         // references a deletion will move cannot disagree about the scene.
-        usage: () =>
-          paletteTokenUsage(
-            options.shell.editor.canvas,
-            this.#document.envelope.globals?.palette ?? {},
-          ),
+        usage: paletteUsage,
         // Live edits publish on every sample; the history entry is made once,
         // when the picker says the gesture ended.
         onSettled: () => options.shell.editor.historyManager.saveState(),
+        // A row press hands the token to the inspector; the store owns the
+        // canvas clear (ruling 2), so the pane never reaches Fabric.
+        onSelect: (id) => options.tokenSelection?.set({ kind: "paint", id }),
       },
     );
     this.#palette.render(this.#document.envelope.globals?.palette);
@@ -462,6 +470,15 @@ export class EditorSession {
         onDelete: (id, replacement) => this.#deleteType(id, replacement),
         setRole: (id, role) => this.#document.setPresetRole(id, role),
         unbindFace: (id) => this.#document.unbindPresetFace(id),
+        // The paint half: the selected paint token's fields write through the
+        // same document and history ports as the pane's rows once did.
+        paints: {
+          palette: () => this.#document.envelope.globals?.palette ?? {},
+          onChange: (palette) => this.#document.setPalette(palette),
+          onSettled: () => options.shell.editor.historyManager.saveState(),
+          onDelete: (id, replacement) => this.#deletePalette(id, replacement),
+          usage: paletteUsage,
+        },
       },
     );
     const renderTokenInspector = (): void => {
@@ -1091,6 +1108,21 @@ export class EditorSession {
     const selection = this.#options.tokenSelection;
     const token = selection?.get();
     if (token?.kind === "preset" && token.id === id) selection?.clear();
+  }
+
+  /**
+   * The one paint-token delete route, handed to the palette pane and the token
+   * inspector.
+   *
+   * The document re-points the references; a token selection still naming the
+   * deleted paint is cleared here, so the object column comes back rather than
+   * the right column staying suppressed over a token that no longer exists.
+   */
+  #deletePalette(id: string, replacement: string): void {
+    this.#document.deletePalette(id, replacement);
+    const selection = this.#options.tokenSelection;
+    const token = selection?.get();
+    if (token?.kind === "paint" && token.id === id) selection?.clear();
   }
 
   destroy(): void {

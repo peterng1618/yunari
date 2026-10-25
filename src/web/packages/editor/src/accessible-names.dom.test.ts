@@ -240,15 +240,17 @@ describe("editor panels", () => {
       "INPUT[type=][aria-hidden]", // Ratio
       "INPUT[type=][aria-hidden]", // Orientation
       "INPUT[type=][aria-hidden]", // Resolution
-      // The Tokens pane's token and paint-kind choosers, each a `ControlSelect`'s
-      // value carrier; the reassignment chooser is the same primitive but
-      // renders after the paint fields, so it sits below. The imperative
-      // panel's natives were not skipped at all.
-      "INPUT[type=][aria-hidden]", // Colour token
+      // The selected preset's token inspector, mounted after the palette pane:
+      // its role and reassignment choosers, each a `ControlSelect`'s value
+      // carrier. The palette's own chooser is gone with the field set it
+      // browsed, so the Tokens pane contributes none of these any more.
+      "INPUT[type=][aria-hidden]", // Role (token)
+      "INPUT[type=][aria-hidden]", // Reassign (token)
+      // The paint section of the same inspector, after the preset section: its
+      // kind switch, the gradient editor's fifteen preset rows (each a Base UI
+      // `Radio`'s value carrier, mounted because `glow` is a gradient), and its
+      // reassignment chooser.
       "INPUT[type=][aria-hidden]", // Paint kind
-      // The gradient editor's fifteen preset rows, each a Base UI `Radio`'s
-      // value carrier. The `glow` token below is a gradient, so the row is
-      // mounted and its radios are focusable inputs the census looks away from.
       "INPUT[type=radio][aria-hidden]", // Vital Ocean
       "INPUT[type=radio][aria-hidden]", // Kale Salad
       "INPUT[type=radio][aria-hidden]", // Disco Club
@@ -264,15 +266,7 @@ describe("editor panels", () => {
       "INPUT[type=radio][aria-hidden]", // Aqua Spray
       "INPUT[type=radio][aria-hidden]", // Mello Yellow
       "INPUT[type=radio][aria-hidden]", // Dusty Cactus
-      // The palette's reassignment chooser, rendered after the paint fields.
-      "INPUT[type=][aria-hidden]", // Reassign (palette)
-      // The Tokens pane's preset library renders no value carrier any more: it
-      // is a list of pressable rows now, and the chooser, the face and trio
-      // controls and the reassignment row went with the fields they edited.
-      // Those fields live in the token inspector below, which brings back its
-      // role and reassignment carriers.
-      "INPUT[type=][aria-hidden]", // Role (token)
-      "INPUT[type=][aria-hidden]", // Reassign (token)
+      "INPUT[type=][aria-hidden]", // Reassign (paint)
       // The run editor's five: four `ControlSelect`s and one `ControlSwatch`,
       // which is `SelectControl` with an adornment — each a Base UI select's
       // value carrier.
@@ -358,11 +352,11 @@ describe("editor panels", () => {
     expect(unnamed).toEqual([]);
   });
 
-  it("names the gradient editor's stop handles, which the palette panel reaches", () => {
+  it("names the gradient editor's stop handles, which the token inspector reaches", () => {
     // The census that also mounts the editor excludes these by its glyph clause
     // — a drag handle draws no glyph — so this audit is the only place their
-    // names are read, and only for as long as the palette panel mounts the
-    // editor for its gradient token. Pinned so the mount going quiet is a red
+    // names are read, and only for as long as the token inspector mounts the
+    // editor for its gradient paint. Pinned so the mount going quiet is a red
     // case rather than the gap `vg-333` found.
     const { root } = mountPanels();
     const handles = Array.from(
@@ -379,6 +373,8 @@ describe("editor panels", () => {
     // file's header warns about, so this reads the controls back rather than
     // trusting the mount: a free preset renders name, role, family, weight,
     // size, line height, letter spacing, the reassignment select and Delete.
+    // This is the preset section; `mountPanels` mounts the paint section as a
+    // second inspector, after it.
     const { root } = mountPanels();
     const inspector = root.querySelector("[data-yunari-token-inspector]");
     expect(inspector).not.toBeNull();
@@ -394,8 +390,8 @@ describe("editor panels", () => {
 
 /**
  * The panels this file audits, mounted at once: the artboard panel, the palette
- * panel, the type preset panel, the selected token's inspector, the selection
- * inspector on two disjoint field
+ * panel, the type preset panel, the token inspector's two sections (a preset and
+ * a paint), the selection inspector on two disjoint field
  * sets, the Add pane, the new-theme chooser and §7's Settings modal — and, since
  * plan 6 Task 4, the shell's own React chrome: the rail, the pane's chrome with
  * its action footer, and the canvas dock (`mountShellChrome`, which is also
@@ -434,11 +430,7 @@ function mountPanels(): { root: HTMLElement } {
     { name: "Living Room", version: "1.2.3", themeLanguage: "en" },
   );
 
-  createPalettePanel(
-    root,
-    () => undefined,
-    () => undefined,
-  ).render({
+  createPalettePanel(root, () => undefined).render({
     none: { name: "None", value: { kind: "solid", color: "transparent" } },
     accent: { name: "Accent", value: { kind: "solid", color: "#00b8d9" } },
     glow: {
@@ -453,9 +445,6 @@ function mountPanels(): { root: HTMLElement } {
       },
     },
   });
-  // The reserved token renders one field; every other renders the whole set,
-  // including reassign and delete, so the audit has to look at both.
-  selectPaletteToken(root, "glow");
 
   createTypePresetPanel(
     root,
@@ -484,9 +473,40 @@ function mountPanels(): { root: HTMLElement } {
     onDelete: () => undefined,
     setRole: () => undefined,
     unbindFace: () => undefined,
+    paints: undefined,
   }).render({ kind: "preset", id: "body" }, tokenPresets, {
     typePresets: tokenPresets,
   });
+
+  // The paint half of the token inspector, in its own section: the gradient
+  // branch renders the track, its two stop handles and the two wells, which a
+  // solid token does not. Mounted after the preset section so the inspector
+  // case below reads that one's controls.
+  const paintPalette = {
+    glow: {
+      name: "Glow",
+      value: {
+        kind: "gradient" as const,
+        angle: 45,
+        stops: [
+          { offset: 0, color: "#ffffff" },
+          { offset: 1, color: "#000000" },
+        ],
+      },
+    },
+  };
+  createTokenInspectorPanel(root, {
+    onChange: () => undefined,
+    onDelete: () => undefined,
+    setRole: () => undefined,
+    unbindFace: () => undefined,
+    paints: {
+      palette: () => paintPalette,
+      onChange: () => undefined,
+      onDelete: () => undefined,
+      usage: undefined,
+    },
+  }).render({ kind: "paint", id: "glow" }, {}, undefined);
 
   mountSelectionInspector(root);
 
@@ -709,15 +729,4 @@ function identity(element: HTMLElement): string {
   return data === undefined
     ? element.outerHTML.slice(0, 60)
     : `[data-${data[0]}]`;
-}
-
-/** Chooses a token the way an author does. The chooser stopped being a native
- *  `<select>` when the Tokens pane became React, so the drive is the row: a
- *  discrete event, which React commits before the next line. */
-function selectPaletteToken(root: HTMLElement, id: string): void {
-  const token = root.querySelector<HTMLElement>(
-    `[data-yunari-palette-token-row="${id}"]`,
-  );
-  if (token === null) throw new Error(`no token row for "${id}"`);
-  token.click();
 }
