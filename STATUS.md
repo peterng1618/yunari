@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 2; Tasks 1–5 complete, Task 6 next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 2; Tasks 1–6 complete, Task 7 next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,9 +18,9 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 5 landed:** `curated-fonts` is a host source over the moved catalogue, with shape and wire-mapping tests; a dead CDN cannot fail search.
-- **Task 4 landed earlier:** the catalogue moved into the host and the trio rewrite consumes the wire payload.
-- **Evidence:** the curated adapter suite passes 20 tests; typecheck and biome exit 0.
+- **Task 6 landed:** `google-fonts` is a host source over the Fontsource registry, with cuts built from published variants.
+- **One failed family detail read no longer blanks the page:** `Promise.allSettled` keeps the families that read cleanly.
+- **Evidence:** the Google adapter suite passes 9 tests; the host assets suite 116; typecheck and biome exit 0.
 
 ## Next
 
