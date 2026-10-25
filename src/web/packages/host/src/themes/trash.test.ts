@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { type TrashRoute, trashPlan } from "./trash.js";
+import {
+  moveToTrash,
+  TrashRefusal,
+  type TrashRoute,
+  trashPlan,
+} from "./trash.js";
 
 /**
  * What each platform's trash is reached by, without running any of them. The
@@ -78,5 +83,24 @@ describe("trashPlan", () => {
     // The message is the author's: it has to say the theme is still there.
     expect(plan.reason).toContain("aix");
     expect(plan.reason).toContain("left alone");
+  });
+});
+
+/**
+ * What a refused move raises. The class is the contract `server.ts` reads: its
+ * words carry the folder path, so only a typed refusal keeps them off the wire
+ * (fix round 3).
+ */
+describe("moveToTrash", () => {
+  it("refuses with a TrashRefusal, not a plain Error", async () => {
+    const refused = moveToTrash(
+      "/home/ada/.yunari/themes/living-room",
+      // A platform `trashPlan` names but no route reaches: the cheap refusal
+      // that runs no child process.
+      "aix",
+    );
+
+    await expect(refused).rejects.toBeInstanceOf(TrashRefusal);
+    await expect(refused).rejects.toThrow(/not implemented for aix/);
   });
 });

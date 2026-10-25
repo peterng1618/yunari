@@ -135,6 +135,7 @@ import {
 } from "./themes/store.js";
 import { SHIPPED_TEMPLATES } from "./themes/templates.js";
 import type { ThumbnailStore } from "./themes/thumbnails.js";
+import { TrashRefusal } from "./themes/trash.js";
 import {
   type DecodedThemeSave,
   decodeThemeSave,
@@ -869,12 +870,13 @@ function sendText(
 }
 
 /**
- * Whether an error is this machine's rather than the caller's.
+ * Whether an error is this machine's rather than the caller's, as far as an
+ * errno can say.
  *
- * A filesystem or trash refusal carries an errno `code`, and its message names
- * an absolute path; a store's validation message does not. That is what lets a
- * catch keep answering the caller's typo with its own words (400) while keeping
- * a platform failure off the wire (500, detail to the console).
+ * A filesystem refusal carries an errno `code`, and its message names an
+ * absolute path; a store's validation message does not. **Errno is not the only
+ * platform shape**: the trash wraps a failed child process in a `TrashRefusal`,
+ * which has no code to check for, so its route tests that class too.
  */
 function isPlatformError(error: unknown): error is NodeJS.ErrnoException {
   return (
@@ -4029,9 +4031,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
         } catch (error) {
           // A save in flight answers the store's own retry sentence: plain
           // text, no path, and the caller is the one who can act on it. A
-          // platform refusal names the folder, so it goes to the console and
-          // the caller is told only that the removal did not happen.
-          if (isPlatformError(error)) {
+          // platform refusal — an errno, or the trash's own wrapper around a
+          // child process's stderr — names the folder, so it goes to the
+          // console and the caller is told only that the removal did not happen.
+          if (error instanceof TrashRefusal || isPlatformError(error)) {
             console.error(error);
             sendText(response, 500, "That theme could not be removed.");
             return;

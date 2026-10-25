@@ -18,6 +18,32 @@ export interface TrashRoute {
   readonly args: readonly string[];
 }
 
+/**
+ * A refusal to move a folder to the trash.
+ *
+ * **Typed because its words name the folder.** The route that answers a caller
+ * must tell "the platform refused" from "the store's own rule refused", and the
+ * errno alone cannot: a failed `execFile` rejects with a plain `Error` carrying
+ * stderr or `Command failed: … '<path>'`, no `code`. This class is the second
+ * platform shape `server.ts` recognises, so the path stays in the log.
+ */
+export class TrashRefusal extends Error {
+  /** The child process's errno, when it had one: `ENOENT` is what lets the
+   *  Linux route list try its next command instead of giving up. */
+  readonly code: string | number | undefined;
+
+  constructor(
+    message: string,
+    options?: { readonly code?: string | number; readonly cause?: unknown },
+  ) {
+    super(
+      message,
+      options?.cause === undefined ? undefined : { cause: options.cause },
+    );
+    this.code = options?.code;
+  }
+}
+
 /** AppleScript string literals escape a backslash before the quote. */
 function appleScriptString(value: string): string {
   return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
@@ -129,7 +155,14 @@ function run(command: string, args: readonly string[]): Promise<string> {
       { windowsHide: true, timeout: 30_000 },
       (error, _stdout, stderr) => {
         if (error) {
-          reject(new Error(stderr.trim() || error.message));
+          const code = (error as NodeJS.ErrnoException).code;
+
+          reject(
+            new TrashRefusal(stderr.trim() || error.message, {
+              ...(code === undefined ? {} : { code }),
+              cause: error,
+            }),
+          );
           return;
         }
         resolve(stderr);
@@ -146,10 +179,13 @@ function run(command: string, args: readonly string[]): Promise<string> {
  * only copy of an author's theme is the defect this exists to prevent, and it
  * would come back on exactly the machines nobody tested.
  */
-export async function moveToTrash(folder: string): Promise<void> {
-  const plan = trashPlan(process.platform, folder);
+export async function moveToTrash(
+  folder: string,
+  platform: NodeJS.Platform = process.platform,
+): Promise<void> {
+  const plan = trashPlan(platform, folder);
   if (!plan.ok) {
-    throw new Error(plan.reason);
+    throw new TrashRefusal(plan.reason);
   }
 
   let last: string | undefined;
@@ -168,7 +204,7 @@ export async function moveToTrash(folder: string): Promise<void> {
     }
   }
 
-  throw new Error(
+  throw new TrashRefusal(
     `This PC has no trash command (${plan.routes
       .map((route) => route.command)
       .join(

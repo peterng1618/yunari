@@ -83,6 +83,7 @@ import {
 } from "./settings/weather.js";
 import { createThemeStore, type ThemeContent } from "./themes/store.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
+import { TrashRefusal } from "./themes/trash.js";
 import { encodeThemeContent } from "./themes/wire.js";
 import { createSecureOrigin } from "./tls/authority.js";
 import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
@@ -7049,6 +7050,38 @@ describe("An admin write keeps the platform's words off the wire", () => {
       // cannot turn a removal that happened into one that did not.
       expect(answer.status).toBe(200);
       expect(answer.json()).toEqual({ ok: true });
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers a fixed sentence when the trash refuses with a path-bearing message", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      themeStore: {
+        ...createThemeStore(os.tmpdir()),
+        // What `moveToTrash` really raises: a plain message from the child
+        // process, no errno code, and the folder inside it.
+        remove: () =>
+          Promise.reject(
+            new TrashRefusal(
+              "Command failed: powershell.exe -NoProfile 'C:\\secret\\theme'",
+            ),
+          ),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "DELETE",
+        "/api/themes/living-room",
+      );
+
+      await refusedBody(answer, "That theme could not be removed.");
       expect(logged).toHaveBeenCalled();
     } finally {
       await hosted.close();
