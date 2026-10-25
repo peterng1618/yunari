@@ -3,6 +3,7 @@ import type { Dirent } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  type AssetKind,
   type FabricThemeEnvelope,
   type FacetRecord,
   facetRecordOf,
@@ -214,6 +215,24 @@ interface ThemeStoreOptions {
 export interface ThemeStore {
   list(): Promise<readonly ThemeStoreEntry[]>;
   read(id: string): Promise<ThemeStoreRecord | undefined>;
+  /** The validated document without hashing it, for a route that serves or
+   *  inspects the document alone. `undefined` for a theme that is missing or
+   *  present-but-unreadable — the absence {@link ThemeStore.list} reports. */
+  readEnvelope(id: string): Promise<FabricThemeEnvelope | undefined>;
+  /** Exactly one declared asset, read on its own. The kind travels with the
+   *  bytes because the route's MIME comes from the declaration and must not be
+   *  re-derived from an extension or sniffed. `undefined` for a path the
+   *  document does not declare, one that resolves outside the theme's folder,
+   *  or one past the per-asset bound. */
+  readAsset(
+    id: string,
+    assetPath: string,
+  ): Promise<
+    { readonly bytes: Uint8Array; readonly kind: AssetKind } | undefined
+  >;
+  /** Whether a theme the listing would show is stored under this id. Reads the
+   *  document only, never an asset. */
+  exists(id: string): Promise<boolean>;
   write(
     id: string,
     content: ThemeContent,
@@ -550,6 +569,12 @@ async function occupied(library: string, id: string): Promise<boolean> {
     .catch(() => false);
 }
 
+/** The validated `theme.json` in a folder, before it is identified. */
+interface StoredDocument {
+  readonly envelope: FabricThemeEnvelope;
+  readonly bytes: Buffer;
+}
+
 /** The validated `theme.json` in a folder, and what those bytes identify. */
 interface StoredTheme {
   readonly envelope: FabricThemeEnvelope;
@@ -586,11 +611,14 @@ function parseThemeDocument(id: string, bytes: Buffer): unknown {
  * and one past the size bound is a {@link ThemeTooLargeError}. The size bound is
  * deliberately not a validation failure — the validator never sees the document
  * — and it is deliberately not an absence either.
+ *
+ * Nothing is hashed here. The hash is the save-conflict base's alone, and a
+ * reader asking for the document or a single asset has no use for it.
  */
-async function readStored(
+async function readDocument(
   library: string,
   id: string,
-): Promise<StoredTheme | undefined> {
+): Promise<StoredDocument | undefined> {
   const bytes = await readContainedFile(path.join(library, id), THEME_FILE);
   if (bytes === undefined) {
     return undefined;
@@ -602,23 +630,34 @@ async function readStored(
   if (!validation.ok) {
     throw new ThemeValidationError(id, validation.issues);
   }
-  return { envelope: validation.envelope, contentId: contentId(bytes) };
+  return { envelope: validation.envelope, bytes };
 }
 
-/**
- * {@link readStored} with a present-but-unreadable theme answered as the same
- * absence a missing one is — a document that does not validate, and one past the
- * size bound. Every reader that treats "no theme I can serve" as one answer uses
- * this — the listing, a removal, and the previous document a save is checked
- * against. Only {@link ThemeStore.read} calls `readStored` directly, because it
- * is the one caller the two facts are different answers for.
- */
-async function readStoredOrAbsent(
+/** {@link readDocument} plus the identity of the bytes, for a save's base. */
+async function readStored(
   library: string,
   id: string,
 ): Promise<StoredTheme | undefined> {
+  const document = await readDocument(library, id);
+  return document === undefined
+    ? undefined
+    : { envelope: document.envelope, contentId: contentId(document.bytes) };
+}
+
+/**
+ * {@link readDocument} with a present-but-unreadable theme answered as the
+ * same absence a missing one is — a document that does not validate, and one
+ * past the size bound. Every reader that treats "no theme I can serve" as one
+ * answer uses this — the listing, a removal, and the scoped reads. Only
+ * {@link ThemeStore.read} calls `readStored` directly, because it is the one
+ * caller the two facts are different answers for.
+ */
+async function readDocumentOrAbsent(
+  library: string,
+  id: string,
+): Promise<StoredDocument | undefined> {
   try {
-    return await readStored(library, id);
+    return await readDocument(library, id);
   } catch (error) {
     if (
       error instanceof ThemeValidationError ||
@@ -630,12 +669,23 @@ async function readStoredOrAbsent(
   }
 }
 
+/** {@link readStored}, with a present-but-unreadable theme as an absence. */
+async function readStoredOrAbsent(
+  library: string,
+  id: string,
+): Promise<StoredTheme | undefined> {
+  const document = await readDocumentOrAbsent(library, id);
+  return document === undefined
+    ? undefined
+    : { envelope: document.envelope, contentId: contentId(document.bytes) };
+}
+
 /** The validated `theme.json` in a folder, or undefined if it has none. */
-async function readEnvelope(
+async function storedEnvelope(
   library: string,
   id: string,
 ): Promise<FabricThemeEnvelope | undefined> {
-  return (await readStoredOrAbsent(library, id))?.envelope;
+  return (await readDocumentOrAbsent(library, id))?.envelope;
 }
 
 /**
@@ -724,7 +774,7 @@ export function createThemeStore(
               if (!isValidThemeId(entry.name)) {
                 return undefined;
               }
-              const envelope = await readEnvelope(directory, entry.name);
+              const envelope = await storedEnvelope(directory, entry.name);
               return envelope === undefined
                 ? undefined
                 : entryFor(directory, entry.name, envelope);
@@ -784,6 +834,67 @@ export function createThemeStore(
       } catch {
         return undefined;
       }
+    },
+
+    /**
+     * The document alone, unhashed: a route that serves or inspects the
+     * document does not need every declared asset, and one that wants the
+     * save-conflict base reads `read` instead.
+     */
+    async readEnvelope(id: string): Promise<FabricThemeEnvelope | undefined> {
+      if (!isValidThemeId(id)) {
+        return undefined;
+      }
+      return storedEnvelope(directory, id);
+    },
+
+    /**
+     * One declared asset, read on its own — that file only, not one read per
+     * declared asset. The declared path is matched exactly; a path the document
+     * does not name is not this theme's to serve, and a declared one that
+     * resolves outside the folder is not either.
+     *
+     * The per-asset bound applies because an asset this store would refuse to
+     * read whole must not be served a piece at a time. No total bound: one
+     * asset cannot exceed one theme.
+     */
+    async readAsset(
+      id: string,
+      assetPath: string,
+    ): Promise<
+      { readonly bytes: Uint8Array; readonly kind: AssetKind } | undefined
+    > {
+      if (!isValidThemeId(id)) {
+        return undefined;
+      }
+      const envelope = await storedEnvelope(directory, id);
+      const declared = (envelope?.assets ?? []).find(
+        (asset) => asset.path === assetPath,
+      );
+      if (declared === undefined) {
+        return undefined;
+      }
+      const bytes = await readContainedFile(
+        path.join(directory, id),
+        assetPath,
+      );
+      if (bytes === undefined) {
+        return undefined;
+      }
+      if (assetSizeRefusal(assetPath, bytes.byteLength) !== undefined) {
+        return undefined;
+      }
+      // The declaration's own kind, never one read off the extension: the
+      // route's MIME is this value.
+      return { bytes: new Uint8Array(bytes), kind: declared.kind };
+    },
+
+    /** Whether a theme the listing would show is stored here. */
+    async exists(id: string): Promise<boolean> {
+      return (
+        isValidThemeId(id) &&
+        (await storedEnvelope(directory, id)) !== undefined
+      );
     },
 
     /**
@@ -984,7 +1095,7 @@ export function createThemeStore(
       // Read first, so only what the library would have listed can be removed.
       // A directory whose name a theme id could claim but which holds no theme
       // is somebody's file, and its loss would be unexplained.
-      if ((await readEnvelope(directory, id)) === undefined) {
+      if ((await storedEnvelope(directory, id)) === undefined) {
         return false;
       }
       await trash(path.join(directory, id));

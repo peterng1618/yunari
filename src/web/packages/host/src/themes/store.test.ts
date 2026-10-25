@@ -21,6 +21,15 @@ import {
   ThemeValidationError,
 } from "./store.js";
 
+// A named import from a built-in cannot be spied in place, so the module is
+// wrapped once, here: `createHash` stays the real function and only gains a
+// call count. Every test that reads the count clears it first, and each such
+// test proves the probe moves before trusting a zero.
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return { ...actual, createHash: vi.fn(actual.createHash) };
+});
+
 function envelopeFor(id: string, name: string): FabricThemeEnvelope {
   return {
     schemaVersion: "2.0.0",
@@ -953,6 +962,201 @@ describe("ThemeStore", () => {
     expect((await store.list()).map((entry) => entry.name)).toEqual([
       "nameless",
     ]);
+  });
+
+  /**
+   * The reads an admin route needs, each answering only that question: the
+   * document without a content hash, one declared asset without the others, and
+   * whether anything is stored at all. Every one of them used to be `read`,
+   * which hashed the document and opened every declared asset to answer a
+   * question about one of them.
+   *
+   * Each hashing test first proves the spy sees a `createHash` this module
+   * really makes — a probe that cannot move proves nothing.
+   */
+  describe("scoped reads", () => {
+    const bytesOf = (text: string): Uint8Array =>
+      new TextEncoder().encode(text);
+
+    function twoAssetTheme(id: string): ThemeContent {
+      return {
+        envelope: {
+          ...envelopeFor(id, "Two Assets"),
+          assets: [
+            { id: "badge", kind: "svg", path: "assets/badge.svg" },
+            { id: "photo", kind: "image", path: "assets/photo.png" },
+          ],
+        },
+        assets: {
+          "assets/badge.svg": bytesOf("<svg/>"),
+          "assets/photo.png": bytesOf("png-bytes"),
+        },
+      };
+    }
+
+    it("reads the document without hashing it", async () => {
+      const store = createThemeStore(tmpDir);
+      await store.write("living-room", {
+        envelope: envelopeFor("living-room", "Living Room"),
+        assets: {},
+      });
+
+      const hash = vi.mocked(createHash);
+      hash.mockClear();
+      // The probe: `read` is the caller that still hashes, so this proves
+      // the count sees this module's calls at all.
+      expect((await store.read("living-room"))?.base).toBeDefined();
+      expect(hash).toHaveBeenCalled();
+      hash.mockClear();
+
+      const envelope = await store.readEnvelope("living-room");
+      expect(envelope?.metadata?.name).toBe("Living Room");
+      expect(hash).not.toHaveBeenCalled();
+    });
+
+    it("reads one declared asset, with the kind its declaration names", async () => {
+      const store = createThemeStore(tmpDir);
+      await store.write("living-room", twoAssetTheme("living-room"));
+
+      const readFile = vi.spyOn(fs, "readFile");
+      try {
+        const badge = await store.readAsset("living-room", "assets/badge.svg");
+        expect(Array.from(badge?.bytes ?? [])).toEqual(
+          Array.from(bytesOf("<svg/>")),
+        );
+        expect(badge?.kind).toBe("svg");
+        // Exactly the file asked for, not one read per declared asset.
+        const reads = readFile.mock.calls.filter(([file]) =>
+          String(file).endsWith(`assets${path.sep}badge.svg`),
+        );
+        expect(reads).toHaveLength(1);
+        expect(
+          readFile.mock.calls.some(([file]) =>
+            String(file).endsWith(`assets${path.sep}photo.png`),
+          ),
+        ).toBe(false);
+
+        const photo = await store.readAsset("living-room", "assets/photo.png");
+        expect(Array.from(photo?.bytes ?? [])).toEqual(
+          Array.from(bytesOf("png-bytes")),
+        );
+        expect(photo?.kind).toBe("image");
+      } finally {
+        readFile.mockRestore();
+      }
+    });
+
+    it("refuses an undeclared path, an escaping one, and one over the cap", async () => {
+      const store = createThemeStore(tmpDir);
+      await store.write("living-room", twoAssetTheme("living-room"));
+
+      expect(
+        await store.readAsset("living-room", "assets/undeclared.png"),
+      ).toBeUndefined();
+      // The traversal the declaration never named cannot be asked for either.
+      expect(
+        await store.readAsset("living-room", "../living-room/assets/badge.svg"),
+      ).toBeUndefined();
+
+      // Past the per-asset cap the store already refuses on `read`.
+      const badge = path.join(tmpDir, "living-room", "assets", "badge.svg");
+      await fs.writeFile(badge, Buffer.alloc(80 * 1024 * 1024 + 1));
+      expect(
+        await store.readAsset("living-room", "assets/badge.svg"),
+      ).toBeUndefined();
+      await fs.writeFile(badge, bytesOf("<svg/>"));
+
+      // A link standing where the asset folder belongs, pointing elsewhere:
+      // those bytes are not this theme's file, so there is nothing to answer.
+      const elsewhere = await fs.mkdtemp(
+        path.join(os.tmpdir(), "yunari-elsewhere-"),
+      );
+      try {
+        await fs.writeFile(
+          path.join(elsewhere, "badge.svg"),
+          "<svg>elsewhere</svg>",
+        );
+        const assets = path.join(tmpDir, "living-room", "assets");
+        await fs.rm(assets, { recursive: true });
+        await fs.symlink(elsewhere, assets, "junction");
+        // Readable through the plain path first, so this cannot pass on a file
+        // that merely fails to open.
+        expect(
+          (await fs.readFile(path.join(assets, "badge.svg"))).toString(),
+        ).toBe("<svg>elsewhere</svg>");
+
+        expect(
+          await store.readAsset("living-room", "assets/badge.svg"),
+        ).toBeUndefined();
+      } finally {
+        await fs.rm(elsewhere, { recursive: true, force: true });
+      }
+    });
+
+    it("lists a library of three themes without hashing any of them", async () => {
+      const store = createThemeStore(tmpDir);
+      for (const id of ["theme-a", "theme-b", "theme-c"]) {
+        await store.write(id, {
+          envelope: envelopeFor(id, id),
+          assets: {},
+        });
+      }
+
+      const hash = vi.mocked(createHash);
+      hash.mockClear();
+      // The probe, as above: `read` still hashes.
+      expect((await store.read("theme-a"))?.base).toBeDefined();
+      expect(hash).toHaveBeenCalled();
+      hash.mockClear();
+
+      expect((await store.list()).map((entry) => entry.id)).toEqual([
+        "theme-a",
+        "theme-b",
+        "theme-c",
+      ]);
+      expect(hash).not.toHaveBeenCalled();
+    });
+
+    it("answers whether a theme is there, reading no asset", async () => {
+      const store = createThemeStore(tmpDir);
+      await store.write("living-room", twoAssetTheme("living-room"));
+
+      const readFile = vi.spyOn(fs, "readFile");
+      try {
+        expect(await store.exists("living-room")).toBe(true);
+        // The probe: it did read the document, and read nothing else.
+        expect(readFile).toHaveBeenCalled();
+        expect(
+          readFile.mock.calls.every(([file]) =>
+            String(file).endsWith("theme.json"),
+          ),
+        ).toBe(true);
+      } finally {
+        readFile.mockRestore();
+      }
+
+      expect(await store.exists("not-there")).toBe(false);
+      for (const id of ["", "../escape", "bad id with spaces"]) {
+        expect(await store.exists(id)).toBe(false);
+      }
+    });
+
+    it("still answers the document's hash as the save-conflict base", async () => {
+      const store = createThemeStore(tmpDir);
+      const saved = await store.write("living-room", {
+        envelope: envelopeFor("living-room", "Living Room"),
+        assets: {},
+      });
+
+      const stored = await fs.readFile(
+        path.join(tmpDir, "living-room", "theme.json"),
+      );
+      const read = await store.read("living-room");
+      expect(read?.base).toBe(
+        createHash("sha256").update(stored).digest("hex"),
+      );
+      expect(read?.base).toBe(saved.base);
+    });
   });
 
   /**
