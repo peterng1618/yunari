@@ -488,6 +488,24 @@ describe("version requests", () => {
       .bind(USER_ID)
       .run();
 
+    // A second in-flight reservation for the same author: the compensation must
+    // delete only the failed request's row, not every row this user owns.
+    const KEPT_ID = "kept-reservation";
+    await env.DB.prepare(
+      `INSERT INTO upload (id, user_id, item_id, version, envelope_json, key,
+         reserved_bytes, created_at, finalized_at, bytes)
+       VALUES (?, ?, ?, '1.0.0', '{}', ?, ?, ?, NULL, NULL)`,
+    )
+      .bind(
+        KEPT_ID,
+        USER_ID,
+        ITEM_ID,
+        pendingKey(KEPT_ID),
+        MAX_ARCHIVE_BYTES,
+        new Date().toISOString(),
+      )
+      .run();
+
     // The real binding everywhere except the presign write, whose `run` throws:
     // that is a step after the reservation, so the route must compensate.
     const realPrepare = env.DB.prepare.bind(env.DB);
@@ -526,12 +544,22 @@ describe("version requests", () => {
       ),
     ).rejects.toThrow("presign write failed");
 
-    const reservations = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM upload WHERE user_id = ?",
+    // Exactly the seeded row survives, with its key: a user-scoped delete would
+    // have taken it too, which is what the counter alone could not tell.
+    const rows = await env.DB.prepare(
+      "SELECT id, item_id, key FROM upload WHERE user_id = ? ORDER BY id",
     )
       .bind(USER_ID)
+      .all<{ id: string; item_id: string; key: string }>();
+    expect(rows.results).toEqual([
+      { id: KEPT_ID, item_id: ITEM_ID, key: pendingKey(KEPT_ID) },
+    ]);
+    const failed = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM upload WHERE item_id = ?",
+    )
+      .bind(ID)
       .first<{ n: number }>();
-    expect(reservations?.n).toBe(0);
+    expect(failed?.n).toBe(0);
   });
 
   it("refuses a second PUT of the same unfinalised upload URL", async () => {

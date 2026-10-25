@@ -427,11 +427,13 @@ async function requestVersion(
 
     return Response.json({ version: plan.version, status, uploadUrl });
   } catch (error) {
-    // A failed delete must not replace the original failure.
-    await env.DB.prepare("DELETE FROM upload WHERE id = ?")
-      .bind(uploadId)
-      .run()
-      .catch(() => undefined);
+    try {
+      await env.DB.prepare("DELETE FROM upload WHERE id = ?")
+        .bind(uploadId)
+        .run();
+    } catch {
+      // A failed delete must not replace the original failure.
+    }
     throw error;
   }
 }
@@ -585,11 +587,11 @@ async function putUpload(
 /**
  * Feeds the request body into the length-pinned sink, one chunk at a time.
  *
- * Every failure is this function's own: the sink errors on a body that overruns
- * or stops short, and the store may stop reading before the body ends. Both
- * settle here so the route answers from the put and no rejected promise
- * outlives the response. Every early answer aborts the sink, which lets the
- * put settle.
+ * The pump enforces the pinned length itself: a chunk that would cross it is
+ * never offered to the sink, and a short body aborts rather than closes it. So
+ * the sink only ever sees at most `length` bytes, and the one thing asked of it
+ * is an abort — which lets a store that stopped reading settle here instead of
+ * leaving a rejected promise behind the response.
  *
  * Answers whether the body was at fault, which is what separates a client
  * error from the store's: a throwing reader, more than `length` bytes, or a
