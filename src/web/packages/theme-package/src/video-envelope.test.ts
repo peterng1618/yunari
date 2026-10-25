@@ -388,7 +388,7 @@ describe("videoRefusals", () => {
       metadata: { name: "Aurora", themeLanguage: "en" },
       scene: { version: "7.4.0", objects: [] },
       assets: [
-        { id: "still", kind: "image", path: "assets/still.webm" },
+        { id: "still", kind: "image", path: "assets/still.png" },
         { id: "clip", kind: "video", path: "assets/clip.mp4" },
       ],
     } as FabricThemeEnvelope;
@@ -397,7 +397,7 @@ describe("videoRefusals", () => {
     // this check's business.
     expect(
       themeVideoRefusals(envelope, {
-        "assets/still.webm": webm,
+        "assets/still.png": webm,
         "assets/clip.mp4": long,
       }),
     ).toEqual([

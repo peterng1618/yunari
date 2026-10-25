@@ -1,26 +1,16 @@
 import type { AssetKind } from "./document.js";
 
 /**
- * The one table binding a declared asset kind to the extensions it may carry
- * and the media type each answers.
+ * The media type each registered asset extension answers.
  *
+ * Declared first because the extension table below is typed from its keys, so a
+ * format the host cannot type is a compile error rather than a 415 at runtime.
  * Both halves live here because they decide one question: the package says what
  * an asset is, and the host serves the bytes as that and nothing else. A path
  * and a kind are independent fields an author writes, so the pair — not the
  * extension alone — is what admits a file.
  */
-
-export const ASSET_EXTENSIONS: Readonly<Record<AssetKind, readonly string[]>> =
-  {
-    image: ["png", "jpg", "jpeg", "webp", "avif"],
-    svg: ["svg"],
-    gif: ["gif"],
-    video: ["mp4", "webm"],
-    font: ["woff2"],
-  };
-
-/** The registered media type for each extension the table above admits. */
-const CONTENT_TYPES: Readonly<Record<string, string>> = {
+const CONTENT_TYPES = {
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -31,6 +21,22 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
   mp4: "video/mp4",
   webm: "video/webm",
   woff2: "font/woff2",
+  woff: "font/woff",
+  ttf: "font/ttf",
+  otf: "font/otf",
+} as const;
+
+type AssetExtension = keyof typeof CONTENT_TYPES;
+
+/** The extensions each declared kind may carry. */
+export const ASSET_EXTENSIONS: Readonly<
+  Record<AssetKind, readonly AssetExtension[]>
+> = {
+  image: ["png", "jpg", "jpeg", "webp", "avif"],
+  svg: ["svg"],
+  gif: ["gif"],
+  video: ["mp4", "webm"],
+  font: ["woff2", "woff", "ttf", "otf"],
 };
 
 function extensionsOf(kind: string): readonly string[] | undefined {
@@ -67,5 +73,6 @@ export function themeAssetContentType(asset: {
     return undefined;
   }
 
-  return CONTENT_TYPES[extension];
+  // The table tie makes every entry to `allowed` a key of `CONTENT_TYPES`.
+  return CONTENT_TYPES[extension as AssetExtension];
 }

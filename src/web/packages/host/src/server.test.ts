@@ -945,9 +945,8 @@ describe("Host theme routes", () => {
         );
         // 415, not 200 with a media type the kind never declared.
         expect(res.status).toBe(415);
-        expect(String(res.headers["content-type"] ?? "")).not.toContain(
-          "text/html",
-        );
+        expect(res.headers["content-type"]).toBe("text/plain; charset=utf-8");
+        expect(res.text()).toBe("That asset's kind and path disagree.");
       }
     } finally {
       await lying.close();
