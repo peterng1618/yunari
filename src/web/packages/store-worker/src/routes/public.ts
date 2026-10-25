@@ -11,7 +11,7 @@ import {
 } from "../db/items.js";
 import type { ItemRow, VersionRow } from "../db/types.js";
 import type { Env } from "../env.js";
-import { packageKey, thumbnailKey } from "../storage/keys.js";
+import { thumbnailKey } from "../storage/keys.js";
 import { cancelBody, openObject } from "../storage/objects.js";
 
 const CATALOGUE_PREFIX = "/catalogue/";
@@ -147,7 +147,7 @@ async function packageResponse(
 ): Promise<Response> {
   const row = await versionOf(env.DB, itemId, version);
   if (row === undefined) return notFound();
-  const object = await openObject(env.BUCKET, packageKey(itemId, version));
+  const object = await openObject(env.BUCKET, row.package_key);
   if (object === undefined) return notFound();
   // Counted before the body streams: whether the transfer completes is not
   // observable after the response is handed back. The update's own status

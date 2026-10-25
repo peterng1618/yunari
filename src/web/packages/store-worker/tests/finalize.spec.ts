@@ -4,7 +4,8 @@ import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
 import { beforeAll, describe, expect, it } from "vitest";
 import { insertVersion, markFinalized } from "../src/db/items";
 import { differentBytes, takenDown } from "../src/routes/me";
-import { packageKey, thumbnailKey } from "../src/storage/keys";
+import { pendingKey, thumbnailKey } from "../src/storage/keys";
+import { inspectObject } from "../src/storage/objects";
 import {
   BASE,
   candidate,
@@ -31,6 +32,7 @@ const FIRST_PNG = pngWith(0x01);
 const SECOND_PNG = pngWith(0x02);
 const THUMBNAIL_PNG = base64Of(FIRST_PNG);
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
+const UPLOAD_PREFIX = "/api/me/uploads/";
 
 describe("finalize", () => {
   beforeAll(async () => {
@@ -45,8 +47,8 @@ describe("finalize", () => {
   it("queues an unverified author's upload and 404s a missing object", async () => {
     const headers = await sessionHeaders();
     await reset();
-    const { version } = await requestVersion(headers);
-    await putPackage(packageKey(ITEM_ID, version), PACKAGE_BYTES);
+    const { version, uploadId, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
 
     const response = await finalize(headers, version);
     expect(response.status).toBe(200);
@@ -70,7 +72,7 @@ describe("finalize", () => {
         bytes: number;
         sha256: string;
       }>();
-    expect(row?.package_key).toBe(packageKey(ITEM_ID, version));
+    expect(row?.package_key).toBe(key);
     expect(row?.thumbnail_key).toBe(thumbnailKey(ITEM_ID));
     expect(row?.bytes).toBe(PACKAGE_BYTES.byteLength);
     expect(row?.sha256).toBe(await sha256Hex(PACKAGE_BYTES));
@@ -91,19 +93,55 @@ describe("finalize", () => {
     const thumbnail = await env.BUCKET.get(thumbnailKey(ITEM_ID));
     expect(thumbnail?.httpMetadata?.contentType).toBe("image/png");
 
+    // The reservation is released with the bytes actually stored, and the
+    // object stays where the upload put it.
+    const upload = await uploadRow(uploadId);
+    expect(upload?.key).toBe(key);
+    expect(upload?.finalized_at).not.toBeNull();
+    expect(upload?.bytes).toBe(PACKAGE_BYTES.byteLength);
+    expect(await env.BUCKET.head(key)).not.toBeNull();
+
     // The version row now exists, but a missing object is still a 404.
-    await env.BUCKET.delete(packageKey(ITEM_ID, version));
+    await env.BUCKET.delete(key);
     expect((await finalize(headers, version)).status).toBe(404);
+  });
+
+  it("404s a version whose package was never written and keeps the reservation", async () => {
+    const headers = await sessionHeaders();
+    await reset();
+    const { version, uploadId } = await reserve(headers);
+
+    expect((await finalize(headers, version)).status).toBe(404);
+
+    const upload = await uploadRow(uploadId);
+    expect(upload?.finalized_at).toBeNull();
+    expect(upload?.bytes).toBeNull();
+    expect(await versionsOf(env.DB, ITEM_ID)).toEqual([]);
+  });
+
+  it("hashes a package by streaming it, never buffering it", async () => {
+    const bytes = new TextEncoder().encode("streamed package");
+    const bucket = {
+      get: async () => ({
+        size: bytes.byteLength,
+        body: new Response(bytes).body,
+        arrayBuffer: () => {
+          throw new Error("arrayBuffer must not be called");
+        },
+      }),
+    } as unknown as R2Bucket;
+
+    expect(await inspectObject(bucket, "pending/streamed.zip")).toEqual({
+      bytes: bytes.byteLength,
+      sha256: await sha256Hex(bytes),
+    });
   });
 
   it("refuses an object past MAX_ARCHIVE_BYTES without storing a version", async () => {
     const headers = await sessionHeaders();
     await reset();
-    const { version } = await requestVersion(headers);
-    await putPackage(
-      packageKey(ITEM_ID, version),
-      new Uint8Array(MAX_ARCHIVE_BYTES + 1),
-    );
+    const { version, key } = await reserve(headers);
+    await putPackage(key, new Uint8Array(MAX_ARCHIVE_BYTES + 1));
 
     const response = await finalize(headers, version);
     expect(response.status).toBe(422);
@@ -119,8 +157,8 @@ describe("finalize", () => {
       statusReason: "Not yet.",
     });
     await verifyAuthor(1);
-    const { version } = await requestVersion(headers);
-    await putPackage(packageKey(ITEM_ID, version), PACKAGE_BYTES);
+    const { version, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
 
     const response = await finalize(headers, version);
     expect(response.status).toBe(200);
@@ -144,8 +182,8 @@ describe("finalize", () => {
     const headers = await sessionHeaders();
     await reset();
     await verifyAuthor(1);
-    const { version } = await requestVersion(headers);
-    await putPackage(packageKey(ITEM_ID, version), PACKAGE_BYTES);
+    const { version, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
 
     const first = await finalize(headers, version, base64Of(FIRST_PNG));
     expect(first.status).toBe(200);
@@ -169,11 +207,17 @@ describe("finalize", () => {
     expect(await versionsOf(env.DB, ITEM_ID)).toEqual([version]);
     expect(await publishedAtOf()).toBe(publishedBefore);
     expect(await thumbnailBytes()).toEqual(Array.from(FIRST_PNG));
+    // The retry released nothing a second time: one finalize mark for the row.
+    const marks = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM upload
+       WHERE user_id = ? AND item_id = ? AND version = ?
+         AND finalized_at IS NOT NULL`,
+    )
+      .bind(USER_ID, ITEM_ID, version)
+      .first<{ n: number }>();
+    expect(marks?.n).toBe(1);
 
-    await putPackage(
-      packageKey(ITEM_ID, version),
-      new TextEncoder().encode("different bytes"),
-    );
+    await putPackage(key, new TextEncoder().encode("different bytes"));
     expect((await finalize(headers, version)).status).toBe(409);
   });
 
@@ -181,14 +225,18 @@ describe("finalize", () => {
     const headers = await sessionHeaders();
     await reset();
     await verifyAuthor(1);
-    const { version } = await requestVersion(headers);
-    await putPackage(packageKey(ITEM_ID, version), PACKAGE_BYTES);
+    const { version, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
 
     // The crash the retry has to survive: the version row landed, and the item
     // is still the draft the version request created. A real finalize's instant
     // is later than the item's last move, which is what the retry compares.
     expect(await statusOf(env.DB, ITEM_ID)).toBe("draft");
-    await insertLandedVersion(version, oneSecondAfter(await itemUpdatedAt()));
+    await insertLandedVersion(
+      version,
+      oneSecondAfter(await itemUpdatedAt()),
+      key,
+    );
 
     const response = await finalize(headers, version);
     expect(response.status).toBe(200);
@@ -204,8 +252,8 @@ describe("finalize", () => {
     const headers = await sessionHeaders();
     await reset();
     await verifyAuthor(1);
-    const { version } = await requestVersion(headers);
-    await putPackage(packageKey(ITEM_ID, version), PACKAGE_BYTES);
+    const { version, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
     expect((await finalize(headers, version)).status).toBe(200);
 
     const later = oneSecondAfter(await itemUpdatedAt());
@@ -231,8 +279,8 @@ describe("finalize", () => {
   it("replays a rejected item's version without undoing the rejection", async () => {
     const headers = await sessionHeaders();
     await reset();
-    const { version } = await requestVersion(headers);
-    await putPackage(packageKey(ITEM_ID, version), PACKAGE_BYTES);
+    const { version, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
     expect((await finalize(headers, version)).status).toBe(200);
 
     const later = oneSecondAfter(await itemUpdatedAt());
@@ -263,8 +311,8 @@ describe("finalize", () => {
     const headers = await sessionHeaders();
     await reset();
     await verifyAuthor(1);
-    const { version } = await requestVersion(headers);
-    await putPackage(packageKey(ITEM_ID, version), PACKAGE_BYTES);
+    const { version, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
     expect((await finalize(headers, version)).status).toBe(200);
 
     // The status write and the version row share one instant, so this replay is
@@ -327,7 +375,7 @@ describe("finalize", () => {
       version: "1.0.0",
       envelope_json: "{}",
       facets_json: "{}",
-      package_key: packageKey(ITEM_ID, "1.0.0"),
+      package_key: pendingKey("insert-fixture"),
       thumbnail_key: thumbnailKey(ITEM_ID),
       bytes: PACKAGE_BYTES.byteLength,
       sha256: await sha256Hex(PACKAGE_BYTES),
@@ -343,8 +391,8 @@ describe("finalize", () => {
     const headers = await sessionHeaders();
     await reset();
     await verifyAuthor(1);
-    const first = await requestVersion(headers);
-    await putPackage(packageKey(ITEM_ID, first.version), PACKAGE_BYTES);
+    const first = await reserve(headers);
+    await putPackage(first.key, PACKAGE_BYTES);
     expect((await finalize(headers, first.version)).status).toBe(200);
     expect(await statusOf(env.DB, ITEM_ID)).toBe("published");
 
@@ -356,9 +404,9 @@ describe("finalize", () => {
       .bind(old, old, ITEM_ID)
       .run();
 
-    const next = await requestVersion(headers, nextCandidate("1.1.0"));
+    const next = await reserve(headers, nextCandidate("1.1.0"));
     expect(next.version).toBe("1.1.0");
-    await putPackage(packageKey(ITEM_ID, next.version), PACKAGE_BYTES);
+    await putPackage(next.key, PACKAGE_BYTES);
     const response = await finalize(headers, next.version);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
@@ -375,12 +423,12 @@ describe("finalize", () => {
     await env.DB.prepare("UPDATE item SET published_at = ? WHERE id = ?")
       .bind(pinned, ITEM_ID)
       .run();
-    const third = await requestVersion(
+    const third = await reserve(
       headers,
       nextCandidate("1.2.0", ["minimal", "retro"]),
     );
     expect(third.version).toBe("1.2.0");
-    await putPackage(packageKey(ITEM_ID, third.version), PACKAGE_BYTES);
+    await putPackage(third.key, PACKAGE_BYTES);
     expect((await finalize(headers, third.version)).status).toBe(200);
     expect(await publishedAtOf()).toBe(pinned);
   });
@@ -389,15 +437,15 @@ describe("finalize", () => {
     const headers = await sessionHeaders();
     await reset();
     await verifyAuthor(1);
-    const first = await requestVersion(headers);
-    await putPackage(packageKey(ITEM_ID, first.version), PACKAGE_BYTES);
+    const first = await reserve(headers);
+    await putPackage(first.key, PACKAGE_BYTES);
     expect((await finalize(headers, first.version)).status).toBe(200);
     expect(await indexIds()).toContain(ITEM_ID);
 
     await verifyAuthor(0);
-    const next = await requestVersion(headers, nextCandidate("1.1.0"));
+    const next = await reserve(headers, nextCandidate("1.1.0"));
     expect(next.version).toBe("1.1.0");
-    await putPackage(packageKey(ITEM_ID, next.version), PACKAGE_BYTES);
+    await putPackage(next.key, PACKAGE_BYTES);
     const response = await finalize(headers, next.version);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
@@ -433,8 +481,8 @@ describe("finalize", () => {
   it("refuses a thumbnail that is not a PNG or is over 2 MiB", async () => {
     const headers = await sessionHeaders();
     await reset();
-    const { version } = await requestVersion(headers);
-    await putPackage(packageKey(ITEM_ID, version), PACKAGE_BYTES);
+    const { version, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
 
     const notPng = await finalize(headers, version, base64Of(utf8("GIF89a")));
     expect(notPng.status).toBe(422);
@@ -464,30 +512,53 @@ async function reset(): Promise<void> {
     .run();
   // Each version request now reserves its archive cap in `upload`; without
   // this the file's own cases exhaust the author's 1 GiB before its last test.
+  // The pending objects go with their rows, or the next case sees a stray head.
+  const uploads = await env.DB.prepare(
+    "SELECT key FROM upload WHERE user_id = ?",
+  )
+    .bind(USER_ID)
+    .all<{ key: string }>();
+  const keys = uploads.results.map((row) => row.key);
+  if (keys.length > 0) await env.BUCKET.delete(keys);
   await env.DB.prepare("DELETE FROM upload WHERE user_id = ?")
     .bind(USER_ID)
     .run();
   await env.DB.prepare("DELETE FROM author_profile WHERE user_id = ?")
     .bind(USER_ID)
     .run();
-  const packages = await env.BUCKET.list({ prefix: `packages/${ITEM_ID}/` });
-  const keys = packages.objects.map((object) => object.key);
-  if (keys.length > 0) await env.BUCKET.delete(keys);
   await env.BUCKET.delete(thumbnailKey(ITEM_ID));
 }
 
-/** Requests a version as the session's author and returns its computed version. */
-async function requestVersion(
+/** One reservation minted by a version request, and the key its PUT writes. */
+async function reserve(
   headers: Record<string, string>,
   envelope?: Record<string, unknown>,
-): Promise<{ version: string; status: string }> {
+): Promise<{ version: string; uploadId: string; key: string }> {
   const response = await createVersion(
     headers,
     ITEM_ID,
     envelope === undefined ? {} : { envelope },
   );
   expect(response.status, await response.clone().text()).toBe(200);
-  return (await response.json()) as { version: string; status: string };
+  const { version, uploadUrl } = (await response.json()) as {
+    version: string;
+    uploadUrl: string;
+  };
+  const uploadId = new URL(uploadUrl).pathname.slice(UPLOAD_PREFIX.length);
+  return { version, uploadId, key: pendingKey(uploadId) };
+}
+
+/** The `upload` row a reservation minted, as finalize's release left it. */
+async function uploadRow(id: string): Promise<{
+  readonly key: string;
+  readonly finalized_at: string | null;
+  readonly bytes: number | null;
+} | null> {
+  return await env.DB.prepare(
+    "SELECT key, finalized_at, bytes FROM upload WHERE id = ?",
+  )
+    .bind(id)
+    .first();
 }
 
 /** The same theme with a different tag set, so the ladder mints a minor bump. */
@@ -539,6 +610,7 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 async function insertLandedVersion(
   version: string,
   createdAt: string,
+  key: string,
 ): Promise<void> {
   const presign = await env.DB.prepare(
     `SELECT envelope_json FROM presign_event
@@ -559,7 +631,7 @@ async function insertLandedVersion(
       JSON.stringify(
         facetRecordOf(candidate(ITEM_ID) as unknown as FabricThemeEnvelope),
       ),
-      packageKey(ITEM_ID, version),
+      key,
       thumbnailKey(ITEM_ID),
       PACKAGE_BYTES.byteLength,
       await sha256Hex(PACKAGE_BYTES),

@@ -33,9 +33,10 @@ import {
   presignAllowed,
   UPLOAD_RESERVATION_TTL_MS,
 } from "../db/quota.js";
-import type { ItemRow } from "../db/types.js";
+import type { ItemRow, UploadRow } from "../db/types.js";
+import { markUploadFinalized, uploadsForVersion } from "../db/uploads.js";
 import type { Env } from "../env.js";
-import { packageKey, pendingKey, thumbnailKey } from "../storage/keys.js";
+import { pendingKey, thumbnailKey } from "../storage/keys.js";
 import { inspectObject } from "../storage/objects.js";
 import { planVersion } from "../version/plan.js";
 
@@ -653,9 +654,10 @@ export async function pumpInto(
 
 /**
  * The uploaded object becomes a version only here: the envelope is the one the
- * version request validated, the bytes and hash are read from R2, and the
- * status transition is applied last. A finalize of the same bytes is a no-op so
- * a retried request cannot double-write.
+ * version request validated, the bytes and hash are read from the reservation's
+ * own R2 key, and the status transition is applied last. The reservation is
+ * released with the actual size once the version row is settled. A finalize of
+ * the same bytes is a no-op so a retried request cannot double-write.
  */
 async function finalizeVersion(
   request: Request,
@@ -676,10 +678,14 @@ async function finalizeVersion(
   }
 
   const presign = await presignEventOf(env.DB, session.userId, itemId, version);
-  if (presign === undefined)
-    return new Response(`No upload was requested for version "${version}".`, {
-      status: 409,
-    });
+  if (presign === undefined) return noUploadRequested(version);
+  const uploads = await uploadsForVersion(
+    env.DB,
+    session.userId,
+    itemId,
+    version,
+  );
+  if (uploads.length === 0) return noUploadRequested(version);
 
   const body = await readBody(request);
   if (body === undefined)
@@ -687,16 +693,26 @@ async function finalizeVersion(
   const thumbnail = decodeThumbnail(body["thumbnail"]);
   if (!thumbnail.ok) return unprocessable(thumbnail.message);
 
-  const key = packageKey(itemId, version);
-  // The size is refused from HEAD, before the body is read or stored.
-  const head = await env.BUCKET.head(key);
-  if (head === null) return notFound();
-  if (head.size > MAX_ARCHIVE_BYTES)
+  // Newest first: a second version request after a failed PUT mints a later
+  // row, so the newest row with an object is the one the author wrote. A row
+  // whose PUT never landed has no object and is skipped, not chosen.
+  let stored: UploadRow | undefined;
+  let size = 0;
+  for (const upload of uploads) {
+    const head = await env.BUCKET.head(upload.key);
+    if (head === null) continue;
+    stored = upload;
+    size = head.size;
+    break;
+  }
+  if (stored === undefined) return notFound();
+  // The size is refused from HEAD, before the package is hashed.
+  if (size > MAX_ARCHIVE_BYTES)
     return unprocessable(
       `The uploaded package exceeds the ${MAX_ARCHIVE_BYTES / (1024 * 1024)} MiB limit.`,
     );
 
-  const inspected = await inspectObject(env.BUCKET, key);
+  const inspected = await inspectObject(env.BUCKET, stored.key);
   if (inspected === undefined) return notFound();
 
   const now = new Date().toISOString();
@@ -707,6 +723,12 @@ async function finalizeVersion(
       existing.bytes !== inspected.bytes
     )
       return differentBytes(version);
+
+    // A retry whose first attempt landed the version row but not the release
+    // heals here; a finished replay is a no-op on the predicate. The release
+    // also runs on the equal-instant replay path, where the row is already
+    // finalized and the UPDATE changes nothing.
+    await markUploadFinalized(env.DB, stored.id, inspected.bytes, now);
 
     // A retry whose first attempt was interrupted between the two writes has
     // not moved the item since the version row landed, so it re-applies the
@@ -732,7 +754,7 @@ async function finalizeVersion(
     version,
     envelope_json: presign.envelope_json,
     facets_json: JSON.stringify(facetRecordOf(parseEnvelope(presign))),
-    package_key: key,
+    package_key: stored.key,
     thumbnail_key: thumbnailKey(itemId),
     bytes: inspected.bytes,
     sha256: inspected.sha256,
@@ -750,7 +772,18 @@ async function finalizeVersion(
       return differentBytes(version);
   }
 
+  // The version row lands before the reservation is released, never after: for
+  // a few milliseconds both count against the author, which can only refuse a
+  // concurrent version request conservatively. The reverse would count neither.
+  await markUploadFinalized(env.DB, stored.id, inspected.bytes, now);
   return await settle(env, session, item, version, now);
+}
+
+/** No reservation and a reservation with no row answer the same 409. */
+function noUploadRequested(version: string): Response {
+  return new Response(`No upload was requested for version "${version}".`, {
+    status: 409,
+  });
 }
 
 /**

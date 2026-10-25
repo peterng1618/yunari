@@ -1,8 +1,8 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { packageKey } from "../src/storage/keys";
 import {
   downloads,
+  fixturePackageKey,
   ITEM_ID,
   indexIds,
   PACKAGE_BYTES,
@@ -102,7 +102,7 @@ describe("public reads", () => {
 
   it("does not count a download when the object is missing", async () => {
     await seedPublished({ versions: ["1.0.0"] });
-    await env.BUCKET.delete(packageKey(ITEM_ID, "1.0.0"));
+    await env.BUCKET.delete(fixturePackageKey(ITEM_ID, "1.0.0"));
     for (let attempt = 0; attempt < 2; attempt += 1) {
       expect(
         (await SELF.fetch(`${BASE}/catalogue/${ITEM_ID}/1.0.0.zip`)).status,
@@ -127,7 +127,7 @@ describe("public reads", () => {
     expect(
       (await SELF.fetch(`${BASE}/catalogue/${unknown}/thumbnail.png`)).status,
     ).toBe(404);
-    await putPackage(`packages/${unknown}/1.0.0.zip`, PACKAGE_BYTES);
+    await putPackage(fixturePackageKey(unknown, "1.0.0"), PACKAGE_BYTES);
     expect(
       (await SELF.fetch(`${BASE}/catalogue/${unknown}/1.0.0.zip`)).status,
     ).toBe(404);
