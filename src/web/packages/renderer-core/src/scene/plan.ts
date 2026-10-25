@@ -4,6 +4,7 @@ import type { ChartOptionByFamily } from "../charts/engine-option.js";
 import { buildGaugeOption } from "../charts/gauge.js";
 import {
   buildLineOption,
+  type LineSettings,
   lineHistorySeconds,
   type SeriesInput,
 } from "../charts/line.js";
@@ -544,19 +545,11 @@ export function buildChartPlan(
     }
 
     case "line": {
-      // The line owns how much history it needs, including the one sample its
-      // left edge is drawn from; asking for less starts the line inside the
-      // plot (vg-571).
-      const historySeconds = lineHistorySeconds(
-        content.settings.windowSeconds,
-        context.source.chartPlaybackDelayMs,
+      const series = buildLinePoints(
+        bindings,
+        content.settings,
+        context.source,
       );
-      const series: SeriesInput[] = bindings.map((binding) => ({
-        sensorId: binding.semanticKey,
-        samples: context.source
-          .history(binding.semanticKey, historySeconds)
-          .map((sample) => transformSample(sample, binding)),
-      }));
 
       return {
         kind: "chart",
@@ -640,6 +633,34 @@ function reportUnresolvedChartPaint(
       });
     }
   }
+}
+
+/**
+ * The line branch's history read, transformed per binding.
+ *
+ * A line's option is rebuilt every frame because its window slides with the
+ * clock, but its points only move when a sample does — so a caller holding a
+ * source's revision can cache this and rebuild the option from it.
+ */
+export function buildLinePoints(
+  bindings: readonly Binding[],
+  settings: LineSettings,
+  source: SampleSource,
+): readonly SeriesInput[] {
+  // The line owns how much history it needs, including the one sample its left
+  // edge is drawn from; asking for less starts the line inside the plot
+  // (vg-571).
+  const historySeconds = lineHistorySeconds(
+    settings.windowSeconds,
+    source.chartPlaybackDelayMs,
+  );
+
+  return bindings.map((binding) => ({
+    sensorId: binding.semanticKey,
+    samples: source
+      .history(binding.semanticKey, historySeconds)
+      .map((sample) => transformSample(sample, binding)),
+  }));
 }
 
 /** Apply authored scale/offset only to ok numeric samples. */

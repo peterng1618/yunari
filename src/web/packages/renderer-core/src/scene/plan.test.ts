@@ -10,6 +10,7 @@ import type { Artboard, Binding, Globals, TextRun } from "../theme/document.js";
 import { defaultGaugeSettings, type Sample } from "../types.js";
 import {
   buildChartPlan,
+  buildLinePoints,
   formatNumber,
   formatUnit,
   MISSING_VALUE_TEXT,
@@ -820,6 +821,77 @@ describe("charts", () => {
     if (chart.family === "line") {
       expect(chart.option.series[0]!.data.map((point) => point[1])).toEqual([
         10, 20, 30,
+      ]);
+    }
+  });
+
+  it("builds the line branch's points on its own, in binding order", () => {
+    // The extracted builder is what a caller caches across frames, so what it
+    // returns has to be the line branch's own answer: one series per binding,
+    // in the authored order, each sample already scaled/offset — and the
+    // windowed history, not the whole store.
+    const store = new SampleStore();
+    store.ingest(
+      [
+        [
+          "cpu.load.total",
+          { ...ok(10), timestamp: new Date(NOW - 2000).toISOString() },
+        ],
+        [
+          "fan.ratio",
+          {
+            ...ok(0.25, "", "fan.ratio"),
+            timestamp: new Date(NOW - 2000).toISOString(),
+          },
+        ],
+        [
+          "cpu.load.total",
+          { ...ok(30), timestamp: new Date(NOW - 1000).toISOString() },
+        ],
+        [
+          "fan.ratio",
+          {
+            ...ok(0.5, "", "fan.ratio"),
+            timestamp: new Date(NOW - 1000).toISOString(),
+          },
+        ],
+      ],
+      NOW,
+    );
+    const bindings: Binding[] = [
+      { id: "load", semanticKey: "cpu.load.total", scale: 2 },
+      { id: "ratio", semanticKey: "fan.ratio", offset: 5 },
+    ];
+
+    const points = buildLinePoints(bindings, defaultLineSettings, store);
+
+    expect(points.map((series) => series.sensorId)).toEqual([
+      "cpu.load.total",
+      "fan.ratio",
+    ]);
+    expect(points.map((series) => series.samples.map((s) => s.value))).toEqual([
+      [20, 60],
+      [5.25, 5.5],
+    ]);
+
+    // And the option the plan builds from those same inputs carries them: the
+    // builder is the line branch's implementation, not a second copy of it.
+    const { chart } = chartPlan(
+      { family: "line", settings: defaultLineSettings },
+      bindings,
+      store,
+    );
+
+    if (chart.family === "line") {
+      expect(chart.option.series.map((series) => series.data)).toEqual([
+        [
+          [Date.parse(new Date(NOW - 2000).toISOString()), 20],
+          [Date.parse(new Date(NOW - 1000).toISOString()), 60],
+        ],
+        [
+          [Date.parse(new Date(NOW - 2000).toISOString()), 5.25],
+          [Date.parse(new Date(NOW - 1000).toISOString()), 5.5],
+        ],
       ]);
     }
   });

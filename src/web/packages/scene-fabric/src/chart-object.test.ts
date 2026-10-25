@@ -164,6 +164,41 @@ describe("the defaults Fabric actually applies", () => {
   });
 });
 
+describe("how an option reaches the engine", () => {
+  it("merges the series and flushes before Fabric blits", () => {
+    // `notMerge: true` threw away every component the previous option carried,
+    // so a repaint rebuilt the whole chart. `replaceMerge` on the series alone
+    // keeps the axes, grid and visual map while still dropping a series the
+    // new option no longer has.
+    const calls: unknown[][] = [];
+    const instance = Object.create(YunariChart.prototype) as YunariChart &
+      Record<string, unknown>;
+
+    Object.assign(instance, {
+      width: 10,
+      height: 10,
+      _renderScale: 1,
+      _element: { width: 10, height: 10 },
+      _chart: {
+        setOption: (option: unknown, options: unknown) => {
+          calls.push([option, options]);
+        },
+        resize: () => undefined,
+        getZr: () => ({ flush: () => undefined }),
+      },
+    });
+
+    instance.setOption({ series: [{ type: "line" }] } as never);
+
+    expect(calls).toEqual([
+      [
+        { series: [{ type: "line" }], animation: false },
+        { notMerge: false, replaceMerge: ["series"], lazyUpdate: false },
+      ],
+    ]);
+  });
+});
+
 describe("withoutEngineAnimation", () => {
   it("disables the engine animation loop", () => {
     // Measured: with animation on, one data push fires the invalidation hook

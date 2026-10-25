@@ -236,6 +236,7 @@ export type {
 } from "./scene/plan.js";
 export {
   buildChartPlan,
+  buildLinePoints,
   formatNumber,
   formatUnit,
   MISSING_VALUE_TEXT,

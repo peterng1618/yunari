@@ -7,9 +7,23 @@
 // `swept.length > 0` guard is what turns the missing origin into red rather
 // than into a silent green.
 
-import type { SampleSource } from "@yunari/renderer-core";
+import {
+  chartPaintFieldsFor,
+  defaultGaugeSettings,
+  defaultLineSettings,
+  type SampleSource,
+} from "@yunari/renderer-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PAIRING_STORAGE_KEY, readStoredPairing } from "./host-refind.js";
+
+/**
+ * A partial mock, so the call the player makes is countable without adding a
+ * production-only seam beside it. Every other export is the real one.
+ */
+vi.mock("@yunari/renderer-core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@yunari/renderer-core")>();
+  return { ...actual, buildLinePoints: vi.fn(actual.buildLinePoints) };
+});
 
 /**
  * `vg-190`: a rejection arriving after the scene mounted calls
@@ -312,8 +326,8 @@ describe("the rate the display repaints at", () => {
   /** One frame of the loop's own clock. The clock is monotonic across calls
    *  because the loop's own `lastRefreshMs` is: rewinding it would make every
    *  frame look too early to repaint. */
-  function driveFrame(): void {
-    clock += 1;
+  function driveFrame(stepMs = 1): void {
+    clock += stepMs;
     const due = [...pending.values()];
     pending.clear();
     for (const callback of due) callback(clock);
@@ -338,11 +352,15 @@ describe("the rate the display repaints at", () => {
     throw new Error("the loop repainted fewer than twice in 5000 frames");
   }
 
-  /** How many frame loops the page keeps alive: one re-armed callback per frame
-   *  is one loop, so a `setRate` that restarted the loop instead of re-setting
-   *  it would leave two. */
+  /** How many self-re-arming frame callbacks the page keeps alive. The step is
+   *  inside every interval, so this frame refreshes nothing: a refresh's own
+   *  canvas render is one-shot and has run, and what remains is the loops.
+   *
+   * It is a count to compare, not a constant: the line's own engine keeps an
+   * animation frame of its own, so the answer is "unchanged after `setRate`",
+   * not "exactly one". */
   function refreshLoopsStarted(): number {
-    driveFrame();
+    driveFrame(0);
     return pending.size;
   }
 
@@ -386,7 +404,7 @@ describe("the rate the display repaints at", () => {
             display: { id: "d1", theme: "living-room", chartFps },
           });
         }
-        if (url.endsWith("/document")) return json(mountedEnvelope());
+        if (url.endsWith("/document")) return json(lineEnvelope());
         return json({});
       }),
     });
@@ -432,6 +450,7 @@ describe("the rate the display repaints at", () => {
       "?theme=living-room&display=d1&theme-source=map&session=paired-token",
     );
     await vi.waitFor(() => expect(refreshCadenceMs(repaints)).toBe(1_000));
+    const loopsBefore = refreshLoopsStarted();
 
     chartFps = 30;
     // The follower polls every two seconds, so the wait is for a poll rather
@@ -441,7 +460,7 @@ describe("the rate the display repaints at", () => {
       { timeout: 5_000 },
     );
 
-    expect(refreshLoopsStarted()).toBe(1);
+    expect(refreshLoopsStarted()).toBe(loopsBefore);
   });
 });
 
@@ -1001,6 +1020,65 @@ function mountedEnvelope(): unknown {
   };
 }
 
+/** The defaults with every paint pointed at a palette token: a persisted chart
+ *  references tokens, never a literal colour. */
+function painted(
+  family: "gauge" | "line",
+  settings: object,
+): Record<string, unknown> {
+  const paintedSettings: Record<string, unknown> = { ...settings };
+
+  for (const field of chartPaintFieldsFor(family)) {
+    paintedSettings[field.property] =
+      field.multiple === true
+        ? [{ ref: "palette.ink" }]
+        : { ref: "palette.ink" };
+  }
+
+  return paintedSettings;
+}
+
+/**
+ * A theme whose line chart repaints on every refresh.
+ *
+ * The loop's own cadence is only visible through a repaint now that an idle
+ * display — one whose samples have not changed — deliberately asks for none. A
+ * line is the honest sample of that: its window slides with the clock, so every
+ * refresh rebuilds its option whether or not a sample arrived.
+ */
+function lineEnvelope(): unknown {
+  return {
+    schemaVersion: "2.0.0",
+    fabricVersion: "7.4.0",
+    id: "living-room",
+    artboard: { width: 1920, height: 1080 },
+    metadata: { themeLanguage: "en" },
+    globals: {
+      palette: {
+        none: { name: "None", value: { kind: "solid", color: "transparent" } },
+        ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
+      },
+      typePresets: {},
+    },
+    bindings: { line: [{ id: "l", semanticKey: "cpu.load.total" }] },
+    scene: {
+      version: "7.4.0",
+      objects: [
+        {
+          type: "YunariChart",
+          id: "line",
+          left: 100,
+          top: 100,
+          width: 400,
+          height: 200,
+          family: "line",
+          settings: painted("line", defaultLineSettings),
+        },
+      ],
+    },
+  };
+}
+
 /**
  * The chooser's mount condition, driven through the real `main.ts`.
  *
@@ -1245,4 +1323,310 @@ describe("the language a display sends with its samples", () => {
     // would have reduced it to.
     expect(document.documentElement.lang).not.toBe("de-DE");
   });
+});
+
+/**
+ * The work one refresh frame does, driven through the real `main.ts`.
+ *
+ * Gauges, bars, pies, bound text, bound images and the availability notice only
+ * change when a sample arrives, and `SampleSource.revision` is what says one
+ * did. The line chart is the exception: its window slides with the clock, so its
+ * option is rebuilt every frame while its point list is reused until the
+ * revision (or the authored settings) move.
+ *
+ * `buildLinePoints` is counted through a partial module mock: it is the
+ * player's own import, so it is the only seam that observes the call the player
+ * actually makes.
+ */
+describe("the work one refresh frame does", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    streams.length = 0;
+    frames.length = 0;
+    frameTime = 0;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  const streams: RevisionStreamEventSource[] = [];
+  const frames: FrameRequestCallback[] = [];
+  let frameTime = 0;
+
+  class RevisionStreamEventSource {
+    readonly #listeners = new Map<
+      string,
+      ((event: { readonly data: string }) => void)[]
+    >();
+
+    constructor() {
+      streams.push(this);
+    }
+
+    addEventListener(
+      type: string,
+      listener: (event: { readonly data: string }) => void,
+    ): void {
+      const existing = this.#listeners.get(type) ?? [];
+      existing.push(listener);
+      this.#listeners.set(type, existing);
+    }
+
+    close(): void {}
+
+    emit(type: string, data: string): void {
+      for (const listener of this.#listeners.get(type) ?? []) {
+        listener({ data });
+      }
+    }
+  }
+
+  /** One frame of the loop's own clock. The cadence is 30 a second, so a
+   *  100 ms step is past every interval. */
+  function driveFrame(): void {
+    frameTime += 100;
+    const due = frames.splice(0);
+    for (const callback of due) callback(frameTime);
+  }
+
+  function batch(value: number, timestamp: string): string {
+    return JSON.stringify({
+      version: 1,
+      sentAt: timestamp,
+      samples: [
+        {
+          semanticKey: "cpu.load.total",
+          sample: {
+            sensorId: "cpu.load.total",
+            timestamp,
+            status: "ok",
+            value,
+            unit: "%",
+          },
+        },
+      ],
+    });
+  }
+
+  function liveRevision(): number {
+    const diagnostics = window as unknown as {
+      readonly yunari?: {
+        readonly live: { readonly source: SampleSource };
+      };
+    };
+    return diagnostics.yunari?.live.source.revision ?? -1;
+  }
+
+  /** Mounts a display and returns the spies the frame cases count. The spies are
+   *  taken from the module instances `main.ts` itself imports — `beforeEach`
+   *  reset the registry, so importing first is what makes them the same ones. */
+  async function mount(withLine: boolean) {
+    skeleton();
+    history.replaceState({}, "", "/?theme=revisions");
+    vi.stubGlobal("EventSource", RevisionStreamEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(
+      () => undefined,
+    );
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/document")) return json(revisionsEnvelope(withLine));
+        if (url === "/api/display") return json({ settings: {}, zones: [] });
+        return json({});
+      }),
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const { YunariChart } = await import("@yunari/scene-fabric");
+    const { FabricObject } = await import("fabric/es");
+    const core = await import("@yunari/renderer-core");
+    const setOption = vi.spyOn(YunariChart.prototype, "setOption");
+    const set = vi.spyOn(FabricObject.prototype, "set");
+    const linePoints = vi.mocked(core.buildLinePoints);
+
+    await import("./main.js");
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector("[data-yunari-controls]"),
+        "the display mounted",
+      ).not.toBeNull(),
+    );
+
+    const diagnostics = window as unknown as {
+      readonly yunari: {
+        readonly handle: {
+          readonly canvas: { requestRenderAll: () => void };
+        };
+      };
+    };
+    const requestRenderAll = vi.spyOn(
+      diagnostics.yunari.handle.canvas,
+      "requestRenderAll",
+    );
+
+    // The mount's own first refresh is not what these cases count: each counts
+    // from a revision the display has not drawn yet.
+    setOption.mockClear();
+    set.mockClear();
+    linePoints.mockClear();
+    requestRenderAll.mockClear();
+
+    return { setOption, set, linePoints, requestRenderAll };
+  }
+
+  /** `set` calls that wrote text; the layout passes also set geometry. */
+  function textWrites(set: {
+    readonly mock: { readonly calls: unknown[][] };
+  }): number {
+    return set.mock.calls.filter(
+      ([written]) =>
+        typeof written === "object" &&
+        written !== null &&
+        "text" in (written as Record<string, unknown>),
+    ).length;
+  }
+
+  function setOptionCalls(
+    setOption: { readonly mock: { readonly contexts: unknown[] } },
+    family: "gauge" | "line",
+  ): number {
+    return setOption.mock.contexts.filter(
+      (self) => (self as { readonly family?: string }).family === family,
+    ).length;
+  }
+
+  it("repaints the line every frame and the rest once per revision", async () => {
+    const { setOption, set, linePoints } = await mount(true);
+    streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
+    await vi.waitFor(() => expect(liveRevision()).toBe(1));
+
+    for (let frame = 0; frame < 30; frame += 1) driveFrame();
+
+    expect(setOptionCalls(setOption, "gauge"), "the gauge repainted once").toBe(
+      1,
+    );
+    expect(
+      setOptionCalls(setOption, "line"),
+      "the line repainted every frame",
+    ).toBe(30);
+    expect(textWrites(set), "the bound text repainted once").toBe(1);
+    expect(linePoints.mock.calls.length, "the points were built once").toBe(1);
+
+    // A second accepted ingest is a second revision: every family updates once.
+    streams[0]!.emit("samples", batch(43, "2026-01-01T00:00:11.000Z"));
+    await vi.waitFor(() => expect(liveRevision()).toBe(2));
+    driveFrame();
+
+    expect(setOptionCalls(setOption, "gauge")).toBe(2);
+    expect(setOptionCalls(setOption, "line")).toBe(31);
+    expect(textWrites(set)).toBe(2);
+    expect(linePoints.mock.calls.length).toBe(2);
+  });
+
+  it("asks for no repaint when no sample has arrived", async () => {
+    const { requestRenderAll } = await mount(false);
+
+    for (let frame = 0; frame < 30; frame += 1) driveFrame();
+
+    // The mount's own first refresh is the last repaint this display earned:
+    // nothing it shows has changed since.
+    expect(requestRenderAll).not.toHaveBeenCalled();
+  });
+
+  /** A gauge, a bound reading, and optionally the line that keeps moving. */
+  function revisionsEnvelope(withLine: boolean): unknown {
+    return {
+      schemaVersion: "2.0.0",
+      fabricVersion: "7.4.0",
+      id: "revisions",
+      artboard: { width: 1920, height: 1080 },
+      metadata: { themeLanguage: "en" },
+      globals: {
+        palette: {
+          none: {
+            name: "None",
+            value: { kind: "solid", color: "transparent" },
+          },
+          ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
+        },
+        typePresets: {
+          body: { name: "Body", value: { family: "Inter", size: 24 } },
+        },
+      },
+      bindings: {
+        gauge: [{ id: "g", semanticKey: "cpu.load.total" }],
+        readout: [{ id: "t", semanticKey: "cpu.load.total" }],
+        ...(withLine
+          ? { line: [{ id: "l", semanticKey: "cpu.load.total" }] }
+          : {}),
+      },
+      scene: {
+        version: "7.4.0",
+        objects: [
+          {
+            type: "YunariChart",
+            id: "gauge",
+            left: 100,
+            top: 100,
+            width: 300,
+            height: 300,
+            family: "gauge",
+            settings: painted("gauge", defaultGaugeSettings),
+          },
+          ...(withLine
+            ? [
+                {
+                  type: "YunariChart",
+                  id: "line",
+                  left: 500,
+                  top: 100,
+                  width: 400,
+                  height: 200,
+                  family: "line",
+                  settings: painted("line", defaultLineSettings),
+                },
+              ]
+            : []),
+          {
+            type: "Textbox",
+            id: "readout",
+            left: 100,
+            top: 500,
+            width: 400,
+            height: 80,
+            text: "--",
+            yunariText: {
+              runs: [
+                {
+                  kind: "value",
+                  bindingId: "t",
+                  typePreset: "typePresets.body",
+                  style: { color: { ref: "palette.ink" } },
+                },
+              ],
+              box: { width: 400, height: 80 },
+              overflow: "visible",
+            },
+          },
+        ],
+      },
+    };
+  }
 });

@@ -146,7 +146,12 @@ export class YunariChart extends FabricObject {
 
     this._resizeBackingCanvas();
     this._chart?.setOption(toEngineOption(withoutEngineAnimation(option)), {
-      notMerge: true,
+      // `notMerge: true` discarded every component the previous option carried,
+      // so each repaint rebuilt the chart. Replacing only the series keeps the
+      // axes, grid and visual map while still dropping a series the new option
+      // no longer has.
+      notMerge: false,
+      replaceMerge: ["series"],
       lazyUpdate: false,
     });
     this._requestCanvasRender();

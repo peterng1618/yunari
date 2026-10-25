@@ -1,16 +1,20 @@
 import {
   type Binding,
   buildChartPlan,
+  buildLineOption,
+  buildLinePoints,
   type ChartContent,
   createAssetResolver,
   createLiveSource,
   type FabricPalette,
   type FabricThemeEnvelope,
+  type LineSettings,
   type LiveSourceHandle,
   type PlanIssue,
   SAMPLE_STREAM_PATH,
   type SampleSource,
   type SceneHandle,
+  type SeriesInput,
 } from "@yunari/renderer-core";
 import {
   applyAuthoredText,
@@ -256,47 +260,69 @@ async function startHostedTheme(
   applyAuthoredText(handle.canvas, theme.globals, {
     ...(theme.bindings === undefined ? {} : { bindings: theme.bindings }),
   });
+  // What the last frame drew. Gauges, bars, pies, bound text, bound images and
+  // the availability notice only change when a sample arrives, and an accepted
+  // ingest is the only thing that moves the revision — so a frame between
+  // samples has nothing to repaint. A clock binding still advances, because the
+  // host's clock provider emits `time.now`/`date.today` samples of its own.
+  let lastRevision: number | undefined;
+  /** One point list per line chart, reused until the revision or the settings
+   *  move; a line's option is still rebuilt every frame, because its window
+   *  slides with the clock. */
+  const lineSeries = new Map<string, LineSeriesCache>();
+
   const refresh = (): void => {
-    hydrateCharts(
+    const revision = liveHandle.source.revision;
+    const sampleChanged = revision !== lastRevision;
+    lastRevision = revision;
+    const chartsChanged = hydrateCharts(
       handle.canvas.getObjects(),
       theme.bindings ?? {},
       liveHandle.source,
       theme.globals?.palette,
+      sampleChanged,
+      lineSeries,
     );
-    // An image reading is a URL on this host, resolved through the session the
-    // way every other packaged asset is. The pass refuses anything else and puts
-    // the authored picture back, so a sample can never choose an origin.
-    refreshBoundImages(
-      handle.canvas.getObjects(),
-      theme.bindings ?? {},
-      liveHandle.source,
-      {
-        resolve: (url) => session.withToken(url),
-        onRefused: reportImageRefusal,
-        onLoadError: (nodeId) =>
-          reportRepaintError(
-            `Image "${nodeId}" failed to load and was left as it was.`,
-          ),
-      },
-    );
-    // Revived text carries the authored runs, not the sampled readings: the
-    // saved scene keeps placeholders, so every cadence re-resolves the runs
-    // through the bindings, the way a rebuilt plan would.
-    refreshBoundText(
-      handle.canvas,
-      theme.bindings ?? {},
-      liveHandle.source,
-      theme.globals,
-      units,
-      theme.metadata?.themeLanguage,
-      descriptors,
-    );
-    handle.canvas.requestRenderAll();
-    // Refreshed here because a provider's reason exists only once data has
-    // arrived. The notice owns its own lifetime from there: it removes itself
-    // when nothing is unreadable, and clears itself three seconds after it is
-    // raised without this cadence re-raising it while the gap persists.
-    showAvailabilityNotice(liveHandle.source, keys);
+    if (sampleChanged) {
+      // An image reading is a URL on this host, resolved through the session the
+      // way every other packaged asset is. The pass refuses anything else and puts
+      // the authored picture back, so a sample can never choose an origin.
+      refreshBoundImages(
+        handle.canvas.getObjects(),
+        theme.bindings ?? {},
+        liveHandle.source,
+        {
+          resolve: (url) => session.withToken(url),
+          onRefused: reportImageRefusal,
+          onLoadError: (nodeId) =>
+            reportRepaintError(
+              `Image "${nodeId}" failed to load and was left as it was.`,
+            ),
+        },
+      );
+      // Revived text carries the authored runs, not the sampled readings: the
+      // saved scene keeps placeholders, so every sample re-resolves the runs
+      // through the bindings, the way a rebuilt plan would.
+      refreshBoundText(
+        handle.canvas,
+        theme.bindings ?? {},
+        liveHandle.source,
+        theme.globals,
+        units,
+        theme.metadata?.themeLanguage,
+        descriptors,
+      );
+      // Refreshed here because a provider's reason exists only once data has
+      // arrived. The notice owns its own lifetime from there: it removes itself
+      // when nothing is unreadable, and clears itself three seconds after it is
+      // raised without this cadence re-raising it while the gap persists.
+      showAvailabilityNotice(liveHandle.source, keys);
+    }
+    // A chart asks for its own repaint when its option lands; this is the
+    // sample-driven work that has none of its own.
+    if (sampleChanged || chartsChanged) {
+      handle.canvas.requestRenderAll();
+    }
   };
 
   refresh();
@@ -457,13 +483,31 @@ async function startHostedTheme(
   exposeForDiagnostics(handle, liveHandle);
 }
 
+/** A line chart's points, and the revision/settings they were built from. */
+interface LineSeriesCache {
+  readonly revision: number;
+  readonly settings: LineSettings;
+  readonly series: readonly SeriesInput[];
+}
+
+/**
+ * Repaints the charts whose readings moved, and every line chart's window.
+ *
+ * Returns whether anything was handed to a chart, which is what decides whether
+ * the scene needs a repaint of its own. `sampleChanged` is the source's revision
+ * moving; a line is rebuilt every frame regardless because its window slides
+ * with the clock.
+ */
 function hydrateCharts(
   objects: readonly { get(key: string): unknown }[],
   bindings: Readonly<Record<string, readonly Binding[]>>,
   source: SampleSource,
   palette: FabricPalette | undefined,
-): void {
+  sampleChanged: boolean,
+  lineSeries: Map<string, LineSeriesCache>,
+): boolean {
   const issues: PlanIssue[] = [];
+  let changed = false;
   for (const object of objects) {
     if (object instanceof YunariChart) {
       const id = object.get("id");
@@ -479,19 +523,48 @@ function hydrateCharts(
           family: object.family,
           settings: object.settings,
         } as ChartContent;
-        const plan = buildChartPlan(
-          id,
-          content,
-          bindings[id] ?? [],
-          {
-            source,
-            nowMs: Date.now(),
-            animate: false,
-          },
-          issues,
-          palette,
-        );
-        object.setOption(plan.option);
+        if (content.family === "line") {
+          const cached = lineSeries.get(id);
+          const series =
+            cached !== undefined &&
+            cached.revision === source.revision &&
+            cached.settings === content.settings
+              ? cached.series
+              : buildLinePoints(bindings[id] ?? [], content.settings, source);
+          if (series !== cached?.series) {
+            lineSeries.set(id, {
+              revision: source.revision,
+              settings: content.settings,
+              series,
+            });
+          }
+          object.setOption(
+            buildLineOption(
+              content.settings,
+              series,
+              Date.now(),
+              false,
+              palette,
+              source.chartPlaybackDelayMs,
+            ),
+          );
+          changed = true;
+        } else if (sampleChanged) {
+          const plan = buildChartPlan(
+            id,
+            content,
+            bindings[id] ?? [],
+            {
+              source,
+              nowMs: Date.now(),
+              animate: false,
+            },
+            issues,
+            palette,
+          );
+          object.setOption(plan.option);
+          changed = true;
+        }
       } catch (error) {
         reportRepaintError(
           `Chart "${id}" failed to draw and was left as it was. ${
@@ -504,7 +577,18 @@ function hydrateCharts(
     // walk goes into groups: the starter's cards are groups, and stopping at
     // the canvas would freeze every reading in the composition at load.
     if (object instanceof Group) {
-      hydrateCharts(object.getObjects(), bindings, source, palette);
+      if (
+        hydrateCharts(
+          object.getObjects(),
+          bindings,
+          source,
+          palette,
+          sampleChanged,
+          lineSeries,
+        )
+      ) {
+        changed = true;
+      }
     }
   }
   // One line per distinct cause: this runs on every refresh cadence, and a
@@ -515,6 +599,7 @@ function hydrateCharts(
     reportedChartIssues.add(message);
     reportRepaintError(message);
   }
+  return changed;
 }
 
 const reportedChartIssues = new Set<string>();
