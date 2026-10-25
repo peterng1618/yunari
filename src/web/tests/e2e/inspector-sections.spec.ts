@@ -261,6 +261,48 @@ async function builtOption(page: Page, name: string): Promise<unknown> {
   }, name);
 }
 
+/**
+ * A hash of the chart's own backing canvas.
+ *
+ * The claim is that the picture changed, and no object count can see a picture:
+ * a segmented fill that drew nothing still has the same settings and the same
+ * option shape. Two hashes of the rendered pixels are the browser's own answer.
+ */
+async function chartCanvasHash(page: Page, name: string): Promise<string> {
+  return page.evaluate((wanted) => {
+    type Chart = {
+      get(name: string): unknown;
+      getObjects?(): readonly Chart[];
+      _element?: HTMLCanvasElement;
+    };
+    const roots = (
+      window as unknown as {
+        yunariEditorBridge: {
+          editor: { canvas: { getObjects(): readonly Chart[] } };
+        };
+      }
+    ).yunariEditorBridge.editor.canvas.getObjects();
+    const find = (objects: readonly Chart[]): Chart | undefined => {
+      for (const object of objects) {
+        if (object.get("name") === wanted) return object;
+        const found = find(object.getObjects?.() ?? []);
+        if (found !== undefined) return found;
+      }
+      return undefined;
+    };
+    const canvas = find(roots)?._element;
+    const data = canvas
+      ?.getContext("2d")
+      ?.getImageData(0, 0, canvas.width, canvas.height).data;
+    if (data === undefined) return "";
+    let hash = 0;
+    for (let index = 0; index < data.length; index += 97) {
+      hash = (hash * 31 + (data[index] ?? 0)) | 0;
+    }
+    return String(hash);
+  }, name);
+}
+
 /** The persisted settings the object carries, for the claim that a write
     landed rather than only that a field kept its text. */
 async function chartSettings(page: Page, name: string): Promise<unknown> {
@@ -997,6 +1039,126 @@ test.describe("the per-kind inspector column", () => {
     expect(await chartSettings(page, "line")).toMatchObject({
       animation: { durationMs: 2500, easing: "cubicInOut" },
     });
+  });
+
+  test("draws the segmented fill in bar, gauge and pie, read rendered", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    await page.goto(EDITOR);
+    await page.waitForFunction(() => "yunariEditorBridge" in window);
+    await openBlank(page);
+
+    const families = [
+      { insert: "Bar", name: "bar", x: 40 },
+      { insert: "Gauge", name: "gauge", x: 480 },
+      { insert: "Pie", name: "pie", x: 920 },
+    ] as const;
+
+    for (const family of families) {
+      await addChart(page, {
+        family: family.insert,
+        name: family.name,
+        x: family.x,
+        y: 60,
+        w: 320,
+        h: 280,
+        series: ["cpu.load"],
+      });
+
+      const slider = page.locator(
+        '[data-yunari-chart-setting="segmentDivisor"]',
+      );
+      const well = page.locator(
+        '[data-yunari-chart-setting-well="segmentDivisor"]',
+      );
+      await expect(slider).toBeVisible();
+      // Continuous is where a new chart starts, and where the authored
+      // default is: 100 means one fill, not a hundred slices.
+      await expect(well).toHaveValue("100");
+
+      const picture = async (divisor: number): Promise<string> => {
+        await captureVisualReview(
+          page,
+          testInfo,
+          `editor-chart-segmented-${family.name}-${divisor}`,
+          page.locator(COLUMN),
+        );
+        return chartCanvasHash(page, family.name);
+      };
+
+      const continuous = await picture(100);
+
+      // One track step per list member, in the list's own order:
+      // 100 → 50 → 25 → 20 → 10.
+      for (let step = 0; step < 4; step += 1) {
+        await slider.press("ArrowLeft");
+        if (step === 0) {
+          await expect(well).toHaveValue("50");
+          await expect
+            .poll(() => chartCanvasHash(page, family.name))
+            .not.toBe(continuous);
+          await picture(50);
+        }
+      }
+      await expect(well).toHaveValue("10");
+      const segmented = await picture(10);
+      expect(segmented, `${family.name} drew the same picture`).not.toBe(
+        continuous,
+      );
+
+      const option = (await builtOption(page, family.name)) as {
+        series: {
+          type: string;
+          data: readonly unknown[];
+          progress?: { show: boolean };
+          axisLine?: { lineStyle: { color: readonly unknown[] } };
+        }[];
+      };
+      // The option proves which mechanism each family used; the pixel hashes
+      // above prove it reached the glass.
+      if (family.name === "bar") {
+        expect(option.series[0]?.type).toBe("custom");
+      }
+      if (family.name === "gauge") {
+        expect(option.series[0]?.axisLine?.lineStyle.color).toHaveLength(19);
+      }
+      if (family.name === "pie") {
+        expect(option.series[0]?.data).toHaveLength(20);
+      }
+
+      // 10 → 5 → 4 → 2, then 2 → 1.
+      for (let step = 0; step < 3; step += 1) {
+        await slider.press("ArrowLeft");
+      }
+      await expect(well).toHaveValue("2");
+      expect(await picture(2)).not.toBe(segmented);
+      await slider.press("ArrowLeft");
+      await expect(well).toHaveValue("1");
+      expect(await picture(1)).not.toBe(segmented);
+
+      // Back to continuous: eight steps right is the whole list.
+      for (let step = 0; step < 8; step += 1) {
+        await slider.press("ArrowRight");
+      }
+      await expect(well).toHaveValue("100");
+      const restored = (await builtOption(page, family.name)) as {
+        series: {
+          type: string;
+          data: readonly unknown[];
+          progress?: { show: boolean };
+        }[];
+      };
+      if (family.name === "bar") {
+        expect(restored.series[0]?.type).toBe("bar");
+      }
+      if (family.name === "gauge") {
+        expect(restored.series[0]?.progress?.show).toBe(true);
+      }
+      if (family.name === "pie") {
+        expect(restored.series[0]?.data).toHaveLength(1);
+      }
+    }
   });
 
   test("gives every bounded number in the chart manager the pair, read rendered", async ({

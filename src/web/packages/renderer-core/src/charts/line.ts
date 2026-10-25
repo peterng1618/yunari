@@ -183,30 +183,50 @@ export function toSeriesPoints(
 }
 
 /**
- * The last reading, drawn on to the render clock's edge.
+ * The display's continuity policy for a live line.
  *
- * Between two host ticks the axis clock moves while the newest sample stays
- * where it arrived, so a late batch leaves a blank sliver at the right edge and
- * the next batch fills it — read as the chart correcting itself. Holding the
- * last value across that sliver is the display's own continuity policy, not a
- * measurement: the synthetic point carries the reading that was last reported,
- * at the axis edge, so the line never breaks while the clock waits.
+ * Between batches the axis clock moves while the newest sample stays where it
+ * arrived, so the edge can run past it. Holding the last reading to the edge
+ * keeps the line continuous, and it holds for as long as the stall lasts: a
+ * gap is more jarring than a flat stretch, and the last reading is still the
+ * last thing measured.
  *
- * **Bounded by `maxHoldMs`** — the playback delay, i.e. the same window the
- * clock is allowed to run ahead of a sample. A longer silence is an outage, and
- * an outage must stay visible rather than be painted as a flat line. A trailing
- * `null` is a reported gap and is never bridged either (§83).
+ * **A stall that ends must not revise the stretch it painted.** When the next
+ * batch arrives after the edge has passed the previous sample, the previous
+ * reading is repeated at the new sample's arrival, so the line runs flat to
+ * that instant and then changes there — a step for a reading, a break for a
+ * reported gap. Everything left of the current edge is then exactly what the
+ * previous frame drew. The threshold is the playback delay: the edge can only
+ * have passed the sample when the gap is longer than it.
+ *
+ * A trailing `null` is a reported gap, not a late tick: it is never held
+ * forward (§83), but the flat stretch before it is still preserved. A
+ * zero-delay source cannot hold or step, because its edge never runs ahead of
+ * its data.
  */
-export function heldTail(
+export function liveTail(
   points: readonly SeriesPoint[],
   renderNowMs: number,
-  maxHoldMs: number,
+  delayMs: number,
 ): readonly SeriesPoint[] {
   const last = points.at(-1);
-  if (last === undefined || last[1] === null) return points;
-  const gapMs = renderNowMs - last[0];
-  if (gapMs <= 0 || gapMs > maxHoldMs) return points;
-  return [...points, [renderNowMs, last[1]]];
+  if (last === undefined) return points;
+
+  let tail: readonly SeriesPoint[] = points;
+  const previous = tail.at(-2);
+  if (
+    delayMs > 0 &&
+    previous !== undefined &&
+    previous[1] !== null &&
+    last[0] - previous[0] > delayMs
+  ) {
+    tail = [...tail.slice(0, -1), [last[0], previous[1]], last];
+  }
+
+  if (last[1] === null || delayMs === 0 || renderNowMs <= last[0]) {
+    return tail;
+  }
+  return [...tail, [renderNowMs, last[1]]];
 }
 
 export function buildLineOption(
@@ -218,7 +238,8 @@ export function buildLineOption(
   chartPlaybackDelayMs?: number,
 ): LineOption {
   const windowMs = settings.windowSeconds * 1000;
-  const renderNowMs = nowMs - linePlaybackDelayMs(chartPlaybackDelayMs);
+  const delayMs = linePlaybackDelayMs(chartPlaybackDelayMs);
+  const renderNowMs = nowMs - delayMs;
   const windowStart = renderNowMs - windowMs;
   const sampling =
     settings.sampling && settings.sampling !== "none"
@@ -272,14 +293,19 @@ export function buildLineOption(
     series: series.map((input, index) => ({
       type: "line" as const,
       name: input.label ?? input.sensorId,
-      data: heldTail(
+      data: liveTail(
         toSeriesPoints(input.samples, settings, nowMs, windowStart),
         renderNowMs,
-        linePlaybackDelayMs(chartPlaybackDelayMs),
+        delayMs,
       ),
       showSymbol: settings.showMarkers,
       symbolSize: settings.markerSize,
-      smooth: settings.interpolation === "smooth",
+      // **Linear whenever the edge is delayed.** A smooth segment is drawn
+      // from the points either side of it, so the stretch a stall holds flat
+      // would bend as the edge advances and would bend again when the next
+      // batch arrives — the visible history would move. A delayed line has no
+      // smooth tail it can keep (0116).
+      smooth: settings.interpolation === "smooth" && delayMs === 0,
       step:
         settings.interpolation === "step" ? ("end" as const) : (false as const),
       connectNulls: false as const,

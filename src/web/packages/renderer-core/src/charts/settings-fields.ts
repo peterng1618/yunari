@@ -392,7 +392,7 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       label: "Interpolation",
       kind: "select",
       section: "content",
-      hint: "How samples are joined: straight segments, a smoothed curve, or steps.",
+      hint: "How samples are joined: straight segments, a smoothed curve, or steps. A live line is drawn straight, because a smoothed tail cannot hold still.",
       options: INTERPOLATION,
     },
     {

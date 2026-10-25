@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, type Page, type Request, test } from "@playwright/test";
+import { LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS } from "@yunari/renderer-core";
 import { HOST_PORT } from "./host-theme.js";
 
 /**
@@ -289,7 +290,8 @@ test.describe("the live line chart's edge", () => {
     expect(lines.size).toBeGreaterThan(0);
     for (const framesOfLine of lines.values()) {
       for (const frame of framesOfLine) {
-        const lag = frame.at - frame.axisMax - 1_000;
+        const lag =
+          frame.at - frame.axisMax - LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS;
         expect(lag).toBeGreaterThanOrEqual(-50);
         expect(lag).toBeLessThanOrEqual(1_200);
       }

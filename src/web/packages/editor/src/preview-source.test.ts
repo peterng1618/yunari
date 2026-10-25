@@ -1,3 +1,4 @@
+import { LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import { createPreviewSource } from "./preview-source.js";
 
@@ -6,7 +7,9 @@ describe("createPreviewSource", () => {
     let now = 0;
     const preview = createPreviewSource({ keys: ["cpu.load"], now: () => now });
 
-    expect(preview.source.chartPlaybackDelayMs).toBe(1_000);
+    expect(preview.source.chartPlaybackDelayMs).toBe(
+      LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
+    );
 
     const first = preview.source.latest("cpu.load");
     now += 1_000;
