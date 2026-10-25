@@ -25,13 +25,18 @@ import { lineHistorySeconds } from "./line.js";
  * with clock skew on a LAN device — is returned by `latest` and excluded by
  * `history`. Reading `history` for a gauge was how a bar kept drawing the old
  * value while its newest changed.
+ *
+ * Pass `playbackDelayMs` when the display's cadence overrides the source's
+ * delay, so the signature asks for the history that will actually be drawn.
  */
 export function chartReadingSignature(
   content: ChartContent,
   bindings: readonly Binding[],
   source: SampleSource,
   nowMs: number,
+  playbackDelayMs?: number,
 ): string {
+  const delayMs = playbackDelayMs ?? source.chartPlaybackDelayMs;
   const readings = bindings
     .map((binding) => {
       const sample =
@@ -39,10 +44,7 @@ export function chartReadingSignature(
           ? source
               .history(
                 binding.semanticKey,
-                lineHistorySeconds(
-                  content.settings.windowSeconds,
-                  source.chartPlaybackDelayMs,
-                ),
+                lineHistorySeconds(content.settings.windowSeconds, delayMs),
               )
               .at(-1)
           : source.latest(binding.semanticKey);

@@ -11,17 +11,17 @@ Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](d
 
 - **Queued plan:** `docs/superpowers/plans/2026-10-25-radar-and-polar-bar.md` — next; the chart already holds a theme per display.
 - **Segmented-fill plan landed:** divisor setting, discrete slider, gauge bands, pie spacers and bar custom series.
-- **Live-line policy:** the delay is two host cadences; the line never smooths — Interpolation offers Linear and Step — and a stall holds the last reading to the edge and steps at the next batch.
+- **Live-line policy:** the delay is two host cadences at 30 fps and zero at 1 fps; the line never smooths — Interpolation offers Linear and Step — and a stall holds the last reading to the edge and steps at the next batch.
 - **Owner testing follows the run:** each plan merges locally into `main`; nothing is pushed, and the owner tests after the sequence.
 - **Decision note:** [0116](docs/decisions/0116-chart-motion-is-the-engines-and-the-line-is-a-clock.md) claims the chart mechanism boundaries.
 
 ## Last completed change
 
-- **Smooth removed:** `Interpolation` is `linear | step` and the line always draws `smooth: false`, so no segment depends on the next batch.
-- **Envelope refuses it:** a theme declaring `"smooth"` is rejected as `invalid-enum` rather than loaded and silently straightened.
-- **Both surfaces:** the editor preview draws straight with or without the delay, pinned by `preview-source.test.ts`.
-- **Descriptor:** the Interpolation picker offers Linear and Step, and its hint says how samples are joined.
-- **Docs:** spec A3/A5 and decision 0116 record why smoothing is not an authorable choice.
+- **1 fps drops the delay:** `chartPlaybackDelayFor` returns 0 at rate 1, so the line's edge is `nowMs` and its history asks for the window alone.
+- **One rule, both surfaces:** the player's `hydrateCharts` and the editor's chart manager pass the effective delay to `buildChartPlan` and `chartReadingSignature`.
+- **30 fps unchanged:** the source's 2 s delay and the hold-and-step are as they were; the hold only exists while a delay does.
+- **Tests:** helper, plan-context and signature cases added, each red-proofed by reverting the behaviour.
+- **Docs:** spec A3 and decision 0116 record why a once-a-second redraw carries no delay.
 
 ## Next
 

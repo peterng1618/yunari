@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chartAnimationFor } from "./chart-animation.js";
+import { chartAnimationFor, chartPlaybackDelayFor } from "./chart-animation.js";
 
 describe("chartAnimationFor", () => {
   it.each(["gauge", "bar", "pie"] as const)("animates %s at 30 fps", (family) =>
@@ -12,4 +12,15 @@ describe("chartAnimationFor", () => {
     "zeroes %s at 1 fps",
     (family) => expect(chartAnimationFor(family, 1)).toBe(false),
   );
+});
+
+describe("chartPlaybackDelayFor", () => {
+  it("keeps the source's delay at 30 fps, and no delay when it has none", () => {
+    expect(chartPlaybackDelayFor(30, 2_000)).toBe(2_000);
+    expect(chartPlaybackDelayFor(30, undefined)).toBe(0);
+  });
+
+  it("drops it at 1 fps, where a frame a second leaves no trail to hide", () => {
+    expect(chartPlaybackDelayFor(1, 2_000)).toBe(0);
+  });
 });
