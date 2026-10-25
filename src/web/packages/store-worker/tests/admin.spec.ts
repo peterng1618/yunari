@@ -1,8 +1,9 @@
 import { env, SELF } from "cloudflare:test";
 import type { TestHelpers } from "better-auth/plugins";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createAuth } from "../src/auth";
 import { isOwner } from "../src/auth/owner";
+import { MAX_JSON_BODY } from "../src/routes/body";
 import { BASE, candidate } from "./helpers";
 import { ITEM_ID, seedItem, statusOf } from "./seed";
 
@@ -58,14 +59,8 @@ describe("admin", () => {
   });
 
   it("404s an unverified account whose email is on the owner list", async () => {
-    // First user with this email in the file, so the row can be left verified
-    // for the owner fixtures below: Better Auth's email is unique.
     const unverified = await loginAs(OWNER_ID, OWNER_EMAIL, false);
     expect((await admin(unverified, "queue")).status).toBe(404);
-
-    await env.DB.prepare('UPDATE "user" SET emailVerified = 1 WHERE id = ?')
-      .bind(OWNER_ID)
-      .run();
   });
 
   it("401s without a session and 404s an authenticated non-owner", async () => {
@@ -230,6 +225,34 @@ describe("admin", () => {
     ).toBe(409);
   });
 
+  it("refuses an oversized reason body without parsing it", async () => {
+    const owner = await loginAs(OWNER_ID, OWNER_EMAIL);
+    await seedItem(ITEM_ID, AUTHOR_ID, { status: "pending" });
+
+    const body = JSON.stringify({ reason: "x".repeat(MAX_JSON_BODY) });
+    const parseSpy = vi.spyOn(JSON, "parse");
+    try {
+      const response = await admin(owner, `items/${ITEM_ID}/reject`, body);
+      expect(response.status).toBe(413);
+      expect(parseSpy.mock.calls.some(([text]) => text === body)).toBe(false);
+    } finally {
+      parseSpy.mockRestore();
+    }
+    expect(await statusOf(env.DB, ITEM_ID)).toBe("pending");
+
+    // A reason inside the cap still reaches the status machine.
+    expect(
+      (
+        await admin(
+          owner,
+          `items/${ITEM_ID}/reject`,
+          JSON.stringify({ reason: "Spam" }),
+        )
+      ).status,
+    ).toBe(200);
+    expect(await statusOf(env.DB, ITEM_ID)).toBe("rejected");
+  });
+
   it("removes with a reason and restores, clearing the reason", async () => {
     const owner = await loginAs(OWNER_ID, OWNER_EMAIL);
     const author = await loginAs(AUTHOR_ID, AUTHOR_EMAIL);
@@ -383,7 +406,10 @@ describe("admin", () => {
   });
 });
 
-/** The account is created once; a second call reuses a row the pool kept. */
+/**
+ * The account is created once; a second call reuses the row and applies the
+ * requested verification state, so a later attestation never depends on order.
+ */
 async function loginAs(
   userId: string,
   email: string,
@@ -395,6 +421,10 @@ async function loginAs(
     .first();
   if (existing === null)
     await test.saveUser(test.createUser({ id: userId, email, emailVerified }));
+  else
+    await env.DB.prepare('UPDATE "user" SET emailVerified = ? WHERE id = ?')
+      .bind(emailVerified ? 1 : 0, userId)
+      .run();
   const { headers } = await test.login({ userId });
   return Object.fromEntries(headers.entries());
 }

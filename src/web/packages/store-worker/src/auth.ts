@@ -10,8 +10,11 @@ import type { Env } from "./env.js";
  * The options are widened to `BetterAuthOptions` because the inferred return
  * type otherwise names a zod helper better-auth does not export.
  *
- * `testUtils` is only constructed when the harness sets TEST_MODE on a test
- * origin, so no production binding can turn it on.
+ * `testUtils` is constructed only when `TEST_MODE` is `1` **and** the base URL
+ * is a test origin. The gate reads env values, so a production binding that
+ * set both would still install it; that pair is harmless because a `.test`
+ * base URL cannot complete an OAuth round-trip and `testUtils` registers no
+ * HTTP routes of its own.
  */
 export function createAuth(env: Env): Auth {
   const options: BetterAuthOptions = {

@@ -42,16 +42,15 @@ import type { Env } from "../env.js";
 import { pendingKey, thumbnailKey } from "../storage/keys.js";
 import { inspectObject } from "../storage/objects.js";
 import { planVersion } from "../version/plan.js";
+import { MAX_JSON_BODY, readJsonBody } from "./body.js";
 
 const ITEMS_PREFIX = "/api/me/items/";
 const UPLOADS_PREFIX = "/api/me/uploads/";
 /** The thumbnail is rewritten on every version, so it is kept small. */
-const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
+export const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 /** Base64 padding is why this is not exactly 4/3 of the byte cap. */
 export const MAX_THUMBNAIL_BASE64 =
   Math.ceil((MAX_THUMBNAIL_BYTES * 4) / 3) + 4;
-/** A version request's body is an envelope and a name, nothing else. */
-export const MAX_JSON_BODY = 256 * 1024;
 /** One cap per route: a finalize body carries the base64 thumbnail too. */
 export const MAX_FINALIZE_BODY = MAX_THUMBNAIL_BASE64 + MAX_JSON_BODY;
 /** UTF-8 bytes, not UTF-16 units: a 200-character CJK name is 600 bytes. */
@@ -1015,74 +1014,6 @@ async function isVerified(db: D1Database, userId: string): Promise<boolean> {
     .bind(userId)
     .first<{ verified: number }>();
   return row?.verified === 1;
-}
-
-type BodyResult =
-  | { readonly ok: true; readonly body: Record<string, unknown> }
-  | { readonly ok: false; readonly response: Response };
-
-/**
- * A bounded JSON read. The bytes are counted as they arrive because
- * `content-length` is attacker-controlled and `request.json()` has no bound.
- * Crossing `maxBytes` answers 413 without parsing; a null body or a parse
- * failure keeps the 400.
- */
-async function readJsonBody(
-  request: Request,
-  maxBytes: number,
-): Promise<BodyResult> {
-  const body = request.body;
-  if (body === null) return { ok: false, response: badJson() };
-
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      size += chunk.value.byteLength;
-      if (size > maxBytes) {
-        await reader.cancel().catch(() => undefined);
-        return {
-          ok: false,
-          response: new Response(
-            `The request body exceeds ${Math.floor(maxBytes / 1024)} KiB.`,
-            { status: 413 },
-          ),
-        };
-      }
-      chunks.push(chunk.value);
-    }
-  } catch {
-    return { ok: false, response: badJson() };
-  } finally {
-    try {
-      reader.releaseLock();
-    } catch {
-      // A stream being torn down holds no lock worth reporting.
-    }
-  }
-
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(new TextDecoder().decode(bytes));
-  } catch {
-    return { ok: false, response: badJson() };
-  }
-  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-    ? { ok: true, body: parsed as Record<string, unknown> }
-    : { ok: false, response: badJson() };
-}
-
-function badJson(): Response {
-  return badRequest("A JSON body is required.");
 }
 
 function isNonEmptyString(value: unknown): value is string {

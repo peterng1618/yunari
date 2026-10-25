@@ -3,6 +3,7 @@ import { sessionOf } from "../auth/session.js";
 import { itemById, latestVersion, setStatus } from "../db/items.js";
 import type { ItemRow } from "../db/types.js";
 import type { Env } from "../env.js";
+import { MAX_JSON_BODY, readJsonBody } from "./body.js";
 
 const ADMIN_PREFIX = "/api/admin/";
 const QUEUE = "/api/admin/queue";
@@ -176,15 +177,9 @@ async function itemAction(
 
 /** A verdict sentence: trimmed, non-empty and bounded. */
 async function readReason(request: Request): Promise<string | Response> {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return badRequest("A JSON body with a reason is required.");
-  }
-  if (typeof body !== "object" || body === null || Array.isArray(body))
-    return badRequest("A JSON body with a reason is required.");
-  const value = (body as Record<string, unknown>)["reason"];
+  const read = await readJsonBody(request, MAX_JSON_BODY);
+  if (!read.ok) return read.response;
+  const value = read.body["reason"];
   if (typeof value !== "string" || value.trim().length === 0)
     return badRequest("A reason is required.");
   const reason = value.trim();

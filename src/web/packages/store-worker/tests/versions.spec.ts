@@ -3,6 +3,7 @@ import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
 import { beforeAll, describe, expect, it } from "vitest";
 import { UPLOAD_RESERVATION_TTL_MS } from "../src/db/quota";
 import type { Env } from "../src/env";
+import { MAX_JSON_BODY } from "../src/routes/body";
 import { handleMe, pumpInto } from "../src/routes/me";
 import { pendingKey } from "../src/storage/keys";
 import {
@@ -292,6 +293,38 @@ describe("version requests", () => {
       .bind(NEW_ID)
       .first<{ name: string }>();
     expect(stored).toEqual({ name: "a".repeat(200) });
+  });
+
+  it("accepts a version body of exactly the cap and refuses one byte more", async () => {
+    const headers = await sessionHeaders();
+    await seedItems({ userId: USER_ID, count: 0 });
+    await env.DB.prepare("DELETE FROM presign_event WHERE user_id = ?")
+      .bind(USER_ID)
+      .run();
+    await env.DB.prepare("DELETE FROM upload WHERE user_id = ?")
+      .bind(USER_ID)
+      .run();
+
+    // Trailing JSON whitespace pads the envelope to the byte the cap allows.
+    const json = JSON.stringify({ envelope: candidate(NEW_ID), name: "Mine" });
+    const exact = json + " ".repeat(MAX_JSON_BODY - json.length);
+    expect(exact.length).toBe(MAX_JSON_BODY);
+    const accepted = await SELF.fetch(
+      `${BASE}/api/me/items/${NEW_ID}/versions`,
+      {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json" },
+        body: exact,
+      },
+    );
+    expect(accepted.status, await accepted.clone().text()).toBe(200);
+
+    const over = await SELF.fetch(`${BASE}/api/me/items/${NEW_ID}/versions`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: `${exact} `,
+    });
+    expect(over.status).toBe(413);
   });
 
   it("answers the author's baseline in any state and hides a foreign one", async () => {

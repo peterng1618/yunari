@@ -9,6 +9,7 @@ import {
   differentBytes,
   MAX_FINALIZE_BODY,
   MAX_THUMBNAIL_BASE64,
+  MAX_THUMBNAIL_BYTES,
   takenDown,
 } from "../src/routes/me";
 import { pendingKey, thumbnailKey } from "../src/storage/keys";
@@ -38,7 +39,6 @@ const PNG_SIGNATURE = new Uint8Array([
 const FIRST_PNG = pngWith(0x01);
 const SECOND_PNG = pngWith(0x02);
 const THUMBNAIL_PNG = base64Of(FIRST_PNG);
-const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 const UPLOAD_PREFIX = "/api/me/uploads/";
 
 describe("finalize", () => {
@@ -660,7 +660,14 @@ describe("finalize", () => {
     const atobSpy = vi.spyOn(globalThis, "atob");
     try {
       expect((await finalize(headers, version, over)).status).toBe(413);
-      expect(atobSpy.mock.calls.some(([value]) => value === over)).toBe(false);
+      // The session decode calls `atob` on its own short token, so the
+      // property is that no over-cap string ever reached it.
+      expect(
+        atobSpy.mock.calls.every(
+          ([value]) =>
+            typeof value !== "string" || value.length <= MAX_THUMBNAIL_BASE64,
+        ),
+      ).toBe(true);
     } finally {
       atobSpy.mockRestore();
     }
@@ -674,9 +681,10 @@ describe("finalize", () => {
     const { version, key } = await reserve(headers);
     await putPackage(key, PACKAGE_BYTES);
 
-    // The finalize cap carries the base64 thumbnail, so the wrapper alone puts
-    // this body one byte past MAX_FINALIZE_BODY.
+    // `{"thumbnail":"` plus the closing `"}` is 16 bytes of wrapper, so this
+    // body is exactly MAX_FINALIZE_BODY + 16.
     const body = JSON.stringify({ thumbnail: "A".repeat(MAX_FINALIZE_BODY) });
+    expect(body.length).toBe(MAX_FINALIZE_BODY + 16);
     const parseSpy = vi.spyOn(JSON, "parse");
     try {
       const response = await SELF.fetch(
