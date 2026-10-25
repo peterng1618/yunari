@@ -423,6 +423,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Modify: `src/web/packages/editor/src/new-object-panel.dom.test.ts`
 - Modify: `src/web/packages/editor/src/panes/composition/kind-mark.dom.test.tsx`
 - Modify: `src/web/tests/e2e/inspector-sections.spec.ts`
+- Modify: `src/web/tests/e2e/rebuild-driver.ts`
 
 **Interfaces:**
 - Consumes: `defaultRadarSettings`, `defaultPolarBarSettings`, `CHART_FAMILIES`.
