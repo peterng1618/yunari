@@ -1,7 +1,7 @@
 # Design mockups
 
 **`current/` is the target.** The editor is being rebuilt towards the original
-visual direction as those nineteen files draw it, and they are **checked at
+visual direction as those twenty-five files draw it, and they are **checked at
 every plan gate** — not read once and remembered. The three originals below them
 are the record of the first cut, not the target.
 
@@ -17,25 +17,31 @@ guess between them.
 
 | File | Shows |
 |---|---|
-| [`current/shell.html`](current/shell.html) | The whole shell in its Editor mode: the header with the mode switch, the menubar, the four-slot rail, the Add pane, the stage and its floating clusters, the inspector, the status strip |
+| [`current/shell.html`](current/shell.html) | The whole shell in its Editor mode: the header with the mode switch, the menubar, the five-slot rail, the Add pane, the stage and its floating clusters, the inspector, the status strip |
 | [`current/settings.html`](current/settings.html) | The settings surface on its own, with §7's three tabs and the six-palette grid |
 | [`current/settings-keyboard.html`](current/settings-keyboard.html) | The same modal with §7's Keyboard panel showing: its header bar and return-to-default action, and the reference's own rows with their chord marks and per-row controls |
 | [`current/settings-about.html`](current/settings-about.html) | The same modal with §7's About panel showing: what the editor is, and the version facts this build can read |
 | [`current/controls.html`](current/controls.html) | The inspector column as it renders, in the reference palette: wells, a slider, segmented rows, the read-only treatment, a refusal |
 | [`current/controls-editorial.html`](current/controls-editorial.html) | The same column on the editorial ground — the same file with the token table swapped, so a hard-coded colour cannot hide in it |
+| [`current/type-presets.html`](current/type-presets.html) | The Tokens pane as two library lists — paint tokens and type presets, nothing inline — with the selected preset's name, role, bound face, Unbind and size fields in the inspector |
 | [`current/store-themes.html`](current/store-themes.html) | The shell in its Themes mode, Your themes half: the mode switch in the header, the two halves as tabs beside the search box, the five facet buttons and the sort, a four-column gallery of cells carrying their origin badge, and the numbered pager |
 | [`current/store-browse.html`](current/store-browse.html) | The same mode's Store half with the Sensors facet chosen — two values, so every cell drawn reads both: the **same cell box** as the local half, with its kind, its counts and its dates, Install, Installed and Update, the pager's five-nearest-pages case with its ellipses, and the line that says which kinds this build skipped |
 | [`current/store-facets.html`](current/store-facets.html) | The one new control on its own: a facet button open, drawn on Shape because that is the facet with three groups — orientation, aspect ratio and pixel size, each with its counts, each group's values summing to the catalogue, and `Other` carrying the long tail |
-| [`current/store-detail.html`](current/store-detail.html) | The item's own surface, drawn as the viewer it is: one modal for every kind, 960px wide with a fixed preview stage the theme is contained in, no title bar, and the sensors, the shape and the tags as three pill groups rather than a row per fact |
+| [`current/store-detail.html`](current/store-detail.html) | The item's own surface, drawn as the viewer it is: one modal for every kind, 960px wide with a fixed preview stage the theme is contained in, no title bar, and the sensors, shape and tags as three pill groups plus the actions in a 270px right panel |
 | [`current/host-settings.html`](current/host-settings.html) | The shell in its This PC mode: the displays and the theme each shows, the device groups and their names, the display settings, and one theme's unanswered question |
-| [`current/asset-finder-entry.html`](current/asset-finder-entry.html) | Where the finder opens from: the Add pane's file section beside its drop target, and the File menu with Find assets above Import |
-| [`current/asset-finder-fonts.html`](current/asset-finder-fonts.html) | The finder on Fonts, inset 24px inside the editor: the derived tab row, the trio list and the faces with their specimens, weights and licences |
+| [`current/asset-finder-entry.html`](current/asset-finder-entry.html) | Where the finder opens from: the Assets pane's Find assets control, and the File menu's Find assets and Import file entries |
+| [`current/assets-pane.html`](current/assets-pane.html) | The Assets rail slot and its pane: the two import intents, the finder link, and one row per file grouped by kind with its thumbnail, metadata, in-use state and, when chosen, its Lucide action glyphs |
+| [`current/assets-font-import.html`](current/assets-font-import.html) | The same pane after a local font file is imported: the declared file, the metadata form it cannot answer for itself, and Create type preset |
+| [`current/assets-preview.html`](current/assets-preview.html) | An image or video opened from Preview, almost fullscreen at the finder's own box in the theme viewer's shape: a fixed stage taking every pixel the facts do not, and a 270px right panel of badges, pills and the eligible actions |
+| [`current/asset-finder-fonts.html`](current/asset-finder-fonts.html) | The finder on Fonts in the shared layout: search, source chips, the same result grid, trio and family tiles from two providers, and the selected trio's preview panel with the author's sample text, every role's before→after and Apply to theme |
+| [`current/asset-finder-font-family.html`](current/asset-finder-font-family.html) | The same grid after a font-name search: a trio and the family that matched, with the family's cuts, sample and two outcomes — Add as type preset or Apply to an existing preset — in the preview panel |
 | [`current/asset-finder-icons.html`](current/asset-finder-icons.html) | The finder on Icons with two sources enabled: the chip row with per-source counts, the mixed round-robin grid with a source badge on every tile, Load more, and the import action |
 | [`current/asset-finder-wallpaper-engine.html`](current/asset-finder-wallpaper-engine.html) | The finder on Wallpaper Engine, the one fixed local source: the install it read, the still-at-rest filter, and rows whose action is the outcome — Convert to image, Convert to video, or no conversion for a preset |
 | [`current/asset-finder-scene-export.html`](current/asset-finder-scene-export.html) | The conversion sheet over the finder: the PNG/MP4 choice with the video values to type into Wallpaper Engine, the five steps with Delete the dynamic text left open, the export watcher's two folders, and the credit |
 | [`current/asset-finder-sources.html`](current/asset-finder-sources.html) | The sources panel: one group per category, each source's locality and licence, an enabled one, one needing a key, one disabled, and Wallpaper Engine fixed at Always on |
 | [`current/asset-finder-states.html`](current/asset-finder-states.html) | The finder with nothing to show: a failed source kept as a struck chip and named in a banner, a source needing a key, and the empty grid that offers only the controls that change the answer |
 | [`current/settings-connections.html`](current/settings-connections.html) | The settings modal's fourth panel: stored keys shown as a four-character hint with Verify and Clear, an unconnected source's Save, and a rejection that names the status it saw |
+| [`current/save-cleanup.html`](current/save-cleanup.html) | The save confirmation on Save to library or Save package: the unused files it found, the opt-in removal that is off by default, and the Recycle Bin warning |
 
 ## The originals — the record
 
@@ -70,10 +76,11 @@ Open them in a browser. Each is self-contained — one file, no build, no server
   `ui-copy.ts` or the component that owns the words, so the drawing and the
   editor cannot disagree about what a surface is called. The originals' copy is
   illustrative — it predates the surfaces it draws — and the copy rules are
-  DESIGN.md §9. **The asset finder and Connections drawings are the exception
-  until their plan lands**: no component owns those words yet, so their copy is
-  the spec's wording and moves into `ui-copy.ts` with the implementation, which
-  is what a gate compares the built surface against.
+  DESIGN.md §9. **The asset finder, Assets pane, type-preset, save-cleanup and
+  Connections drawings are the exception until their plans land**: no component
+  owns those words yet, so their copy is the spec's wording and moves into
+  `ui-copy.ts` with the implementation, which is what a gate compares the built
+  surface against.
 
 ## Reviewed reference contract — 2026-10-08
 

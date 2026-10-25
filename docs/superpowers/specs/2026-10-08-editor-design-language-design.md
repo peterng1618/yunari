@@ -1,6 +1,9 @@
 # The editor's design language, and the React rewrite under it
 
-- **Status:** draft
+- **Status:** draft; §5.2, §5.3 and §7.2 are amended by
+  [`2026-10-25-fonts-and-assets-design.md`](2026-10-25-fonts-and-assets-design.md)
+  — the Assets pane returns as a fifth rail slot, Add loses its file section,
+  and type-preset properties move to the inspector.
 - **Supersedes in part:** [`2026-10-03-dashboard-authoring-design.md`](2026-10-03-dashboard-authoring-design.md)
   §4, §8, §9 and the Sequencing table — see §11. Its §N markers are not renumbered.
 - **Normative companion:** [`../../design/design-language.md`](../../design/design-language.md)
