@@ -892,12 +892,16 @@ function chartScalars(
 function scalarPairs(
   family: ChartFamily,
 ): readonly (readonly [string, string])[] {
-  if (family === "pie") return [["innerRadiusPercent", "outerRadiusPercent"]];
   // Both pairs are top-level today; one that gains a `path` must be read through it.
   const properties = new Set(
     CHART_SETTINGS_FIELDS[family].map((descriptor) => descriptor.property),
   );
-  return properties.has("min") && properties.has("max") ? [["min", "max"]] : [];
+  const pairs: (readonly [string, string])[] =
+    properties.has("min") && properties.has("max") ? [["min", "max"]] : [];
+  if (family === "pie" || family === "polarBar") {
+    pairs.push(["innerRadiusPercent", "outerRadiusPercent"]);
+  }
+  return pairs;
 }
 
 /**

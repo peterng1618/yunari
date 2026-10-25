@@ -194,7 +194,7 @@ describe("new object defaults", () => {
     ).toThrow("type preset");
   });
 
-  it.each(["gauge", "line", "bar", "pie"] as const)(
+  it.each(["gauge", "line", "bar", "pie", "radar", "polarBar"] as const)(
     "derives %s settings using only existing palette references",
     (family) => {
       const settings = createNewChartDefaults(globals, family);
@@ -203,6 +203,18 @@ describe("new object defaults", () => {
       expect(JSON.stringify(settings)).not.toContain('"color"');
     },
   );
+
+  it("gives a radar a token-backed stroke and no track", () => {
+    const settings = createNewChartDefaults(globals, "radar");
+    expect(settings.stroke).toEqual({ ref: "palette.ink" });
+    expect("track" in settings).toBe(false);
+  });
+
+  it("gives a polar bar a token-backed fill and surface track", () => {
+    const settings = createNewChartDefaults(globals, "polarBar");
+    expect(settings.fill).toEqual({ ref: "palette.ink" });
+    expect(settings.track).toEqual({ ref: "palette.background" });
+  });
 
   it("refuses chart creation without a non-transparent palette token", () => {
     expect(() => createNewChartDefaults(undefined, "gauge")).toThrow(

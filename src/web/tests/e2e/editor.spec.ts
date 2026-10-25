@@ -1378,7 +1378,10 @@ test.describe("Fabric editor route", () => {
     const charts = page
       .locator('[data-yunari-panel="add"]')
       .getByRole("group", { name: "Chart" });
-    await expect(charts.getByRole("button")).toHaveCount(4);
+    // Six, which is `CHART_FAMILIES` — gauge, line, bar, pie, radar, polar bar —
+    // spelled out here rather than imported, for the reason the shapes count
+    // below is: the count is the claim being made.
+    await expect(charts.getByRole("button")).toHaveCount(6);
     await expect(
       page
         .locator("[data-yunari-add-group]")

@@ -6,6 +6,8 @@ import { ANIMATION_EASINGS, type AnimationSettings } from "./animation.js";
 import { type BarSettings, defaultBarSettings } from "./bar.js";
 import { defaultLineSettings, type LineSettings } from "./line.js";
 import { defaultPieSettings, type PieSettings } from "./pie.js";
+import { defaultPolarBarSettings, type PolarBarSettings } from "./polar-bar.js";
+import { defaultRadarSettings, type RadarSettings } from "./radar.js";
 import { SEGMENT_DIVISORS } from "./segments.js";
 import {
   CHART_PAINT_FIELDS,
@@ -155,6 +157,36 @@ const PIE_COVERAGE: Record<keyof PieSettings, "setting" | "paint"> = {
   animation: "setting",
 };
 
+const RADAR_COVERAGE: Record<keyof RadarSettings, "setting" | "paint"> = {
+  min: "setting",
+  max: "setting",
+  shape: "setting",
+  splitNumber: "setting",
+  lineWidth: "setting",
+  showMarkers: "setting",
+  markerSize: "setting",
+  showAxes: "setting",
+  stroke: "paint",
+  area: "paint",
+  animation: "setting",
+};
+
+const POLAR_COVERAGE: Record<keyof PolarBarSettings, "setting" | "paint"> = {
+  min: "setting",
+  max: "setting",
+  barWidth: "setting",
+  categoryGapPercent: "setting",
+  cornerRadius: "setting",
+  fill: "paint",
+  track: "paint",
+  trackCornerRadius: "setting",
+  showAxes: "setting",
+  animation: "setting",
+  startAngle: "setting",
+  innerRadiusPercent: "setting",
+  outerRadiusPercent: "setting",
+};
+
 const ANIMATION_COVERAGE: Record<keyof AnimationSettings, "setting"> = {
   durationMs: "setting",
   easing: "setting",
@@ -170,6 +202,8 @@ const COVERAGE: Record<
   line: LINE_COVERAGE,
   bar: BAR_COVERAGE,
   pie: PIE_COVERAGE,
+  radar: RADAR_COVERAGE,
+  polarBar: POLAR_COVERAGE,
 };
 
 const DEFAULTS: Record<ChartFamily, object> = {
@@ -177,6 +211,8 @@ const DEFAULTS: Record<ChartFamily, object> = {
   line: defaultLineSettings,
   bar: defaultBarSettings,
   pie: defaultPieSettings,
+  radar: defaultRadarSettings,
+  polarBar: defaultPolarBarSettings,
 };
 
 /**
@@ -270,6 +306,18 @@ describe("the segment divisor", () => {
         settingsFieldsFor(family).find((f) => f.property === "segmentDivisor"),
       ).toMatchObject({ kind: "number", values: SEGMENT_DIVISORS });
     }
+  });
+
+  it("declares both new families' settings", () => {
+    expect(settingsFieldsFor("radar").map((f) => f.property)).toContain(
+      "shape",
+    );
+    expect(settingsFieldsFor("polarBar").map((f) => f.property)).toContain(
+      "innerRadiusPercent",
+    );
+    expect(settingsFieldsFor("polarBar").map((f) => f.property)).not.toContain(
+      "segmentDivisor",
+    );
   });
 });
 
@@ -407,6 +455,30 @@ describe("descriptor order is the likelihood order", () => {
       "total.value",
       ...ANIMATION_PROPERTIES,
     ],
+    radar: [
+      "min",
+      "max",
+      "shape",
+      "splitNumber",
+      "lineWidth",
+      "showMarkers",
+      "markerSize",
+      "showAxes",
+      ...ANIMATION_PROPERTIES,
+    ],
+    polarBar: [
+      "startAngle",
+      "innerRadiusPercent",
+      "outerRadiusPercent",
+      "min",
+      "max",
+      "barWidth",
+      "categoryGapPercent",
+      "cornerRadius",
+      "trackCornerRadius",
+      "showAxes",
+      ...ANIMATION_PROPERTIES,
+    ],
   };
 
   for (const family of CHART_FAMILIES) {
@@ -422,6 +494,8 @@ describe("descriptor order is the likelihood order", () => {
     line: ["stroke", "palette", "area"],
     bar: ["fill", "track"],
     pie: ["remainderFill", "palette"],
+    radar: ["stroke", "area"],
+    polarBar: ["fill", "track"],
   };
 
   for (const family of CHART_FAMILIES) {

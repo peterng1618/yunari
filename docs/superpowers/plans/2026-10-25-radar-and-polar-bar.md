@@ -505,19 +505,19 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: every task above.
 - Produces: a green gate, rendered evidence for both families, and a local `main` merge.
 
-- [ ] **Step 1: Run the family browser case**
+- [x] **Step 1: Run the family browser case**
 
 Run: `cd src/web && npx playwright test tests/e2e/inspector-sections.spec.ts --grep "radar and polar bar" --workers=1`
 
 Expected: PASS. Capture one screenshot per family: radar with four readings, radar missing one reading, polar bar with track and one missing reading. Screenshots are evidence.
 
-- [ ] **Step 2: Run the full gate**
+- [x] **Step 2: Run the full gate**
 
 Run: `cd src/web && npm run gate`
 
 Expected: exit 0. Fix failures in this plan before merging.
 
-- [ ] **Step 3: Update STATUS.md and commit**
+- [x] **Step 3: Update STATUS.md and commit**
 
 Replace the completed-change section with 1–5 bullets: both families, shared radar scale, polar bar reuse, and the deferred segmented polar bar. One item per line.
 
@@ -528,7 +528,7 @@ git commit -m "docs(status): record the chart-family checkpoint
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 4: Merge locally into main and stop**
+- [x] **Step 4: Merge locally into main and stop**
 
 From the checkout that has `main` checked out:
 

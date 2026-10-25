@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { CHART_FAMILIES } from "@yunari/renderer-core";
 import { YUNARI_PAINT_PROPERTY } from "@yunari/scene-fabric";
 import { Ellipse, Line, Path, Polygon, Polyline, Rect } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
@@ -204,6 +205,8 @@ describe("new object panel", () => {
     ["Line", "line"],
     ["Bar", "bar"],
     ["Pie", "pie"],
+    ["Radar", "radar"],
+    ["Polar bar", "polarBar"],
   ] as const)("delegates %s to ChartManager", (label, family) => {
     const addChart = vi.fn();
     const panel = createNewObjectPanel(
@@ -249,14 +252,14 @@ describe("new object panel", () => {
       },
     );
 
-    for (const label of ["Gauge", "Line", "Bar", "Pie"]) {
+    for (const label of ["Gauge", "Line", "Bar", "Pie", "Radar", "Polar bar"]) {
       chartButton(panel.root, label).click();
     }
 
-    // All four, not one: the wrapper is the module's, so a button that opted
+    // All six, not one: the wrapper is the module's, so a button that opted
     // out would be a silent failure the author cannot see.
-    expect(addChart).toHaveBeenCalledTimes(4);
-    expect(editor.errorManager.warn).toHaveBeenCalledTimes(4);
+    expect(addChart).toHaveBeenCalledTimes(6);
+    expect(editor.errorManager.warn).toHaveBeenCalledTimes(6);
     for (const call of editor.errorManager.warn.mock.calls) {
       expect(call[0]).toBe("controls");
       expect(call[1]).toContain("palette token");
@@ -579,7 +582,7 @@ describe("the chooser offers units and primitives", () => {
 
     expect(cards).toHaveLength(CARD_LIBRARY.length);
     expect(shapes).toHaveLength(SHAPE_KINDS.length);
-    expect(charts).toHaveLength(4);
+    expect(charts).toHaveLength(CHART_FAMILIES.length);
     // Text stands on its own outside any fieldset, and is still offered.
     expect(
       [...root.querySelectorAll("button")].map((b) => b.textContent),

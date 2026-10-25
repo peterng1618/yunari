@@ -32,6 +32,8 @@ const chartFamilyLabels = {
   line: "Line",
   bar: "Bar",
   pie: "Pie",
+  radar: "Radar",
+  polarBar: "Polar bar",
 } as const satisfies Record<ChartFamily, string>;
 
 /**
@@ -285,7 +287,9 @@ export const uiCopy = {
         uses for the axis. Named once so the chooser and the refusal agree. */
     runSeries: "Add a series",
     runSeriesFull: (family: string) =>
-      `A ${family} chart draws one reading, so it takes one series.`,
+      family === "radar"
+        ? "A radar chart draws one spoke per series, up to 12."
+        : `A ${family} chart draws one reading, so it takes one series.`,
     removeSeries: (key: string) => `Remove the series reading ${key}`,
     /** Numbered, so three rows do not offer three identical buttons — the same
         ambiguity F1.17 found in the Add pane, where "Line" was two things. */

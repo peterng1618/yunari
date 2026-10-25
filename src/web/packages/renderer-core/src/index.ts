@@ -107,6 +107,24 @@ export {
   computeComposition,
   defaultPieSettings,
 } from "./charts/pie.js";
+export type {
+  PolarBarOption,
+  PolarBarSettings,
+} from "./charts/polar-bar.js";
+export {
+  buildPolarBarOption,
+  defaultPolarBarSettings,
+} from "./charts/polar-bar.js";
+export type {
+  RadarInput,
+  RadarOption,
+  RadarSettings,
+  RadarShape,
+} from "./charts/radar.js";
+export {
+  buildRadarOption,
+  defaultRadarSettings,
+} from "./charts/radar.js";
 export { chartReadingSignature } from "./charts/reading-signature.js";
 export {
   SEGMENT_DIVISORS,

@@ -2,6 +2,8 @@
 
 import {
   defaultPieSettings,
+  defaultPolarBarSettings,
+  defaultRadarSettings,
   type FabricPalette,
   type PieSettings,
   SEGMENT_DIVISORS,
@@ -444,6 +446,35 @@ describe("a chart's series, as a value", () => {
     const series = chartContentView(charts[0] as ChartFieldTarget).series;
     expect(series.refused).toBe(true);
     expect(series.full).toContain("gauge");
+  });
+
+  it("offers a radar twelve spokes and a polar bar unbounded", () => {
+    const withBindings = (
+      family: "radar" | "polarBar",
+      count: number,
+    ): ChartFieldTarget => ({
+      id: family,
+      content:
+        family === "radar"
+          ? { family, settings: defaultRadarSettings }
+          : { family, settings: defaultPolarBarSettings },
+      bindings: Array.from({ length: count }, (_, index) => ({
+        id: `b${index}`,
+        semanticKey: "cpu.load",
+      })),
+    });
+
+    expect(chartContentView(withBindings("radar", 11)).series.refused).toBe(
+      false,
+    );
+    const full = chartContentView(withBindings("radar", 12)).series;
+    expect(full.refused).toBe(true);
+    expect(full.full).toContain("radar");
+
+    // A polar bar draws one category per binding, so it has no cap.
+    expect(chartContentView(withBindings("polarBar", 40)).series.refused).toBe(
+      false,
+    );
   });
 });
 
