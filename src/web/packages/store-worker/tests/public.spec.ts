@@ -130,6 +130,11 @@ describe("public reads", () => {
     expect(second.response.status).toBe(200);
     expect(await second.response.text()).toBe(body);
     expect(second.response.headers.get("etag")).toBe(etag);
+    // The cached copy carries no CORS header of its own; `handlePublic` adds
+    // it on the hit exactly as on a miss.
+    expect(second.response.headers.get("access-control-allow-origin")).toBe(
+      "*",
+    );
 
     const revalidated = await indexThroughHandler({
       "if-none-match": etag ?? "",
@@ -137,6 +142,20 @@ describe("public reads", () => {
     expect(revalidated.queries).toHaveLength(0);
     expect(revalidated.response.status).toBe(304);
     expect(revalidated.response.headers.get("etag")).toBe(etag);
+  });
+
+  it("caches the index under one key whatever the query string", async () => {
+    await seedPublished();
+    const first = await indexThroughHandler({}, "/index.json?nonce=1");
+    expect(first.response.status).toBe(200);
+    expect(first.queries.length).toBeGreaterThan(0);
+    const body = await first.response.text();
+
+    // A fresh nonce must not mint a second cache entry: one canonical key.
+    const second = await indexThroughHandler({}, "/index.json?nonce=2");
+    expect(second.queries).toHaveLength(0);
+    expect(second.response.status).toBe(200);
+    expect(await second.response.text()).toBe(body);
   });
 
   it("answers 304 for a matching index ETag and 404 for unknown ids", async () => {
@@ -165,12 +184,13 @@ describe("public reads", () => {
 /** One `/index.json` through the route itself, so the env can count queries. */
 async function indexThroughHandler(
   headers: Record<string, string> = {},
+  path = "/index.json",
 ): Promise<{
   readonly response: Response;
   readonly queries: readonly string[];
 }> {
   const queries: string[] = [];
-  const request = new Request(`${BASE}/index.json`, { headers });
+  const request = new Request(`${BASE}${path}`, { headers });
   const response = await handlePublic(
     request,
     countingEnv(queries),

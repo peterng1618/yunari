@@ -135,6 +135,19 @@ export interface AuthorListing extends Listing {
 }
 
 /**
+ * The aliased item-and-version columns both listing queries select. `item` and
+ * `item_version` share `created_at`, so each side is prefixed. A new column is
+ * added here once; `JoinedRow` and the mappers above still need it named.
+ */
+const LISTING_COLUMNS = `i.id AS item_id, i.kind, i.author_user_id, i.name,
+         i.status, i.status_reason, i.created_at AS item_created_at,
+         i.updated_at AS item_updated_at, i.published_at, i.unpublished_at,
+         i.removed_at, i.downloads, i.remix_of_id,
+         v.version, v.envelope_json, v.facets_json, v.package_key,
+         v.thumbnail_key, v.bytes, v.sha256,
+         v.created_at AS version_created_at`;
+
+/**
  * Every one of an author's versioned items in one statement, newest first.
  *
  * The latest version is the same selection `publishedListings` makes — greatest
@@ -148,14 +161,7 @@ export async function authorListings(
 ): Promise<readonly AuthorListing[]> {
   const rows = await db
     .prepare(
-      `SELECT
-         i.id AS item_id, i.kind, i.author_user_id, i.name, i.status,
-         i.status_reason, i.created_at AS item_created_at,
-         i.updated_at AS item_updated_at, i.published_at, i.unpublished_at,
-         i.removed_at, i.downloads, i.remix_of_id,
-         v.version, v.envelope_json, v.facets_json, v.package_key,
-         v.thumbnail_key, v.bytes, v.sha256,
-         v.created_at AS version_created_at,
+      `SELECT ${LISTING_COLUMNS},
          (SELECT COUNT(*) FROM favorite f WHERE f.item_id = i.id) AS favorites
        FROM item i
        JOIN item_version v ON v.item_id = i.id
@@ -195,14 +201,7 @@ export async function queueListings(
 ): Promise<readonly QueueListing[]> {
   const rows = await db
     .prepare(
-      `SELECT
-         i.id AS item_id, i.kind, i.author_user_id, i.name, i.status,
-         i.status_reason, i.created_at AS item_created_at,
-         i.updated_at AS item_updated_at, i.published_at, i.unpublished_at,
-         i.removed_at, i.downloads, i.remix_of_id,
-         v.version, v.envelope_json, v.facets_json, v.package_key,
-         v.thumbnail_key, v.bytes, v.sha256,
-         v.created_at AS version_created_at,
+      `SELECT ${LISTING_COLUMNS},
          u.email AS author_email
        FROM item i
        LEFT JOIN item_version v ON v.item_id = i.id

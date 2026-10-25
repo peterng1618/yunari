@@ -5,11 +5,13 @@ import type {
   FacetRecord,
 } from "@yunari/renderer-core";
 import { pendingKey, thumbnailKey } from "../src/storage/keys";
+import { BASE } from "./base";
 
 /** Fixed ids and bytes so a spec can name what it seeded without a second read. */
 export const ITEM_ID = "6041df49-9c61-4d51-a184-716890560bdb";
 export const PACKAGE_BYTES = new TextEncoder().encode("yunari test package");
-const INDEX_URL = "https://store.test/index.json";
+/** The one key `/index.json` is cached under, whatever the request URL. */
+const INDEX_URL = `${BASE}/index.json`;
 
 /**
  * Where a seeded version's bytes live. A real package is never re-keyed after

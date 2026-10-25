@@ -428,6 +428,33 @@ describe("admin", () => {
     ).toBe(true);
   });
 
+  it("keeps a pending item whose author account is gone", async () => {
+    const owner = await loginAs(OWNER_ID, OWNER_EMAIL);
+    await env.DB.prepare(
+      "DELETE FROM item_version WHERE item_id IN (SELECT id FROM item WHERE status = 'pending')",
+    ).run();
+    await env.DB.prepare("DELETE FROM item WHERE status = 'pending'").run();
+    // No `"user"` row exists for this id; a LEFT JOIN keeps the row.
+    await seedItem(ITEM_ID, GHOST_ID, { status: "pending" });
+
+    const response = await admin(owner, "queue");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      entries: [
+        {
+          id: ITEM_ID,
+          name: "Seeded theme",
+          authorUserId: GHOST_ID,
+          authorEmail: null,
+          createdAt: CREATED_AT,
+          updatedAt: CREATED_AT,
+          version: null,
+          status: "pending",
+        },
+      ],
+    });
+  });
+
   it("verifies and unverifies an author, keeping the display name", async () => {
     const owner = await loginAs(OWNER_ID, OWNER_EMAIL);
     await clearProfile(AUTHOR_ID);
