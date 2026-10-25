@@ -15,6 +15,10 @@ import path from "node:path";
  * a copied folder; a copy of the folder on another machine cannot be decrypted.
  * On Windows DPAPI unwraps for the same user on the same machine, so a copied
  * folder is likewise unreadable elsewhere.
+ *
+ * The Linux item is scoped to the resolved directory, not to its canonical
+ * path: a folder reached through a symlink or junction is a second scope, so
+ * address the folder by one path.
  */
 export interface KeyProtector {
   available(): Promise<boolean>;
@@ -25,6 +29,9 @@ export interface KeyProtector {
 
 /** A spawn that never reached the program, as opposed to one that failed. */
 class SpawnFailure extends Error {}
+
+/** The child outlived its deadline and was killed. */
+class ChildTimeout extends Error {}
 
 const WINDOWS_BINARIES = ["powershell", "pwsh"] as const;
 const WINDOWS_ARGS = ["-NoProfile", "-NonInteractive", "-Command"] as const;
@@ -68,7 +75,13 @@ function run(
     let settled = false;
 
     const timer = setTimeout(() => {
-      child.kill();
+      if (settled) return;
+      settled = true;
+      // A child that ignores SIGTERM would never produce `close`, so the
+      // promise is settled here and the child is ended as hard as the platform
+      // allows.
+      child.kill(process.platform === "win32" ? undefined : "SIGKILL");
+      reject(new ChildTimeout(`${command} did not finish in time.`));
     }, CHILD_TIMEOUT_MS);
 
     child.stdout.on("data", (chunk: Buffer) => output.push(chunk));
@@ -96,7 +109,7 @@ function run(
       if (code === 0) {
         resolve(Buffer.concat(output));
       } else if (code === null) {
-        reject(new Error(`${command} did not finish in time.`));
+        reject(new Error(`${command} ended without an exit status.`));
       } else {
         reject(new Error(`${command} exited with status ${code}.`));
       }
@@ -110,29 +123,50 @@ function decode(text: Buffer): Buffer {
   return Buffer.from(text.toString("utf8").trim(), "base64");
 }
 
+/** `ENOENT` means the binary is not there; nothing about the machine changed. */
+function isAbsence(error: unknown): boolean {
+  return (
+    error instanceof SpawnFailure &&
+    (error.cause as NodeJS.ErrnoException | undefined)?.code === "ENOENT"
+  );
+}
+
 /**
- * The probe is cached as a promise, not an answer: two protectors asking at
- * once share one child, so the caller that arrives second cannot cache a
- * `false` the first is about to contradict.
+ * The probe is cached as a promise, not an answer: protectors asking at once
+ * share one child, so a caller cannot cache a `false` the first will
+ * contradict. A transient failure (a timeout, or a spawn error other than
+ * `ENOENT`) clears the cache so the next caller probes again; only a real
+ * absence is cached for the process.
  */
 let binaryProbe: Promise<string | undefined> | undefined;
 
 /** PowerShell 5.1 or 7, whichever this machine has. */
 function windowsBinary(): Promise<string | undefined> {
-  binaryProbe ??= (async () => {
-    for (const candidate of WINDOWS_BINARIES) {
-      try {
-        await run(candidate, [...WINDOWS_ARGS, "exit 0"], Buffer.alloc(0));
-        return candidate;
-      } catch {
-        // Try the next one; none left means the OS facility is unavailable.
-      }
+  if (binaryProbe !== undefined) return binaryProbe;
+
+  const probe = probeWindowsBinaries();
+  binaryProbe = probe;
+  void probe.catch(() => {
+    if (binaryProbe === probe) binaryProbe = undefined;
+  });
+
+  return probe;
+}
+
+async function probeWindowsBinaries(): Promise<string | undefined> {
+  for (const candidate of WINDOWS_BINARIES) {
+    try {
+      await run(candidate, [...WINDOWS_ARGS, "exit 0"], Buffer.alloc(0));
+      return candidate;
+    } catch (error) {
+      // A missing binary is the ordinary "try the next one"; anything else is
+      // transient and must not be cached.
+      if (isAbsence(error)) continue;
+      throw error;
     }
+  }
 
-    return undefined;
-  })();
-
-  return binaryProbe;
+  return undefined;
 }
 
 async function protectWindows(
@@ -176,7 +210,11 @@ export function createOsKeyProtector(directory?: string): KeyProtector {
     try {
       return await run(SECRET_TOOL, ["lookup", ...attributes], Buffer.alloc(0));
     } catch (error) {
-      if (error instanceof SpawnFailure) throw error;
+      // A spawn failure and a timeout keep their own meaning; only a child
+      // that ran and refused becomes the keyring message.
+      if (error instanceof SpawnFailure || error instanceof ChildTimeout) {
+        throw error;
+      }
       throw keyringError("read");
     }
   };
@@ -193,7 +231,9 @@ export function createOsKeyProtector(directory?: string): KeyProtector {
         encoded,
       );
     } catch (error) {
-      if (error instanceof SpawnFailure) throw error;
+      if (error instanceof SpawnFailure || error instanceof ChildTimeout) {
+        throw error;
+      }
       throw keyringError("store");
     }
   };
@@ -217,13 +257,21 @@ export function createOsKeyProtector(directory?: string): KeyProtector {
   };
 
   // One probe per protector, shared with any caller that arrives while it is
-  // still running.
+  // still running. A rejected probe clears the cache: a transient failure must
+  // not make every later write refuse until restart.
   let availability: Promise<boolean> | undefined;
 
   return {
     async available() {
-      availability ??= check();
-      return availability;
+      if (availability !== undefined) return availability;
+
+      const probe = check();
+      availability = probe;
+      void probe.catch(() => {
+        if (availability === probe) availability = undefined;
+      });
+
+      return probe;
     },
 
     async wrap(key) {

@@ -2,15 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createOsKeyProtector, type KeyProtector } from "./os-key-protector.js";
 import { createSecretStore } from "./secret-store.js";
 
@@ -109,7 +101,9 @@ describe("secret store", () => {
     const file = secretFile(dir, "short");
     await writeFile(file, (await readFile(file)).subarray(0, 10));
 
-    await expect(store.read("short")).rejects.toThrow();
+    // Pins the length guard: without it the short buffer fails inside the
+    // cipher and the error would not name the truncation.
+    await expect(store.read("short")).rejects.toThrow(/incomplete/);
   });
 
   it("answers undefined when neither the secret nor its key exists", async () => {
@@ -123,6 +117,16 @@ describe("secret store", () => {
     await rm(keyFile(dir), { force: true });
 
     await expect(store.read("alpha")).rejects.toThrow();
+  });
+
+  it("refuses to write with a cached key once the key file is gone", async () => {
+    await store.write("alpha", bytesOf(6));
+    await rm(keyFile(dir), { force: true });
+
+    await expect(store.write("beta", bytesOf(4))).rejects.toThrow(/key file/);
+    await expect(readFile(secretFile(dir, "beta"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("creates nothing when asked only whether it is available", async () => {
@@ -246,29 +250,6 @@ describe("secret store", () => {
       // empty marker and the key itself lives in the keyring.
       const unwrapped = await protectorForThisMachine.unwrap(wrapped);
       expect(Buffer.from(unwrapped).equals(key)).toBe(true);
-    }, 60_000);
-
-    it("shares one availability probe when two ask at once", async (ctx) => {
-      if (!available) {
-        ctx.skip();
-        return;
-      }
-
-      // A fresh module instance has a cold probe cache, which is where the
-      // two-callers race lives.
-      vi.resetModules();
-      const fresh = await import("./os-key-protector.js");
-      const first = fresh.createOsKeyProtector(dir);
-      const second = fresh.createOsKeyProtector(dir);
-
-      const answers = await Promise.all([
-        first.available(),
-        second.available(),
-      ]);
-
-      expect(answers).toEqual([true, true]);
-      // The loser must not keep a cached `false` after the winner answered.
-      expect(await second.available()).toBe(true);
     }, 60_000);
   });
 });

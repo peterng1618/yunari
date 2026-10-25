@@ -215,6 +215,11 @@ export function createSecretStore(
       });
     },
 
+    /**
+     * Two instances writing the same name at once race at the rename on
+     * Windows; each store owns its own names (Task 7.2), so that case is out
+     * of scope here.
+     */
     async write(name, bytes) {
       await exclusively(async () => {
         if (!NAME.test(name)) {
@@ -225,6 +230,18 @@ export function createSecretStore(
           throw new Error(
             "The OS key protector is unavailable; refusing to store a secret.",
           );
+        }
+
+        // A cached key is only good while the file that produced it is there:
+        // read() would throw for an existing secret, and a write must not
+        // succeed under a key the folder no longer holds.
+        if (cachedKey !== undefined) {
+          const wrapped = await readWrappedKey(keyFile);
+          if (wrapped === undefined) {
+            throw new Error(
+              "The secret key file is missing; refusing to write with a stale key.",
+            );
+          }
         }
 
         const key = await storeKey();
