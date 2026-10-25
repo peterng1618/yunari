@@ -342,8 +342,9 @@ for an explicit loopback test origin.
 **Encrypted at rest.** A new `settings/secret-store.ts` owns one random 32-byte
 data key per app folder. The key is wrapped by the OS — DPAPI `CurrentUser` on
 Windows, `secret-tool` on Linux — and the wrapped key lives in `secret.key`.
-Credentials, the store session, literal secret fields in `sources.json`, and
-the CA private key are encrypted with AES-256-GCM using that key. There is no
+Credentials, the store session and the CA private key are encrypted with
+AES-256-GCM using that key. `sources.json` is not: it holds references into
+`credentials.json`, never a literal secret. There is no
 plaintext fallback: when the OS protector is unavailable, the store refuses to
 save a secret and says why. A legacy plaintext file is encrypted and removed on
 first read. Writes remain atomic and mode 0600 where the OS honours it.

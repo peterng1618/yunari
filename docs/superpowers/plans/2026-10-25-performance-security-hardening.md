@@ -1232,12 +1232,11 @@ git add src/web/packages/host/src/settings/secret-store.ts src/web/packages/host
 git commit -m "feat(host): encrypt secrets with an OS-wrapped key"
 ```
 
-### Task 7.2: Move credentials, store session, sources and the CA key into it
+### Task 7.2: Move credentials, store session and the CA key into it
 
 **Files:**
 - Modify: `src/web/packages/host/src/settings/credentials.ts`
 - Modify: `src/web/packages/host/src/settings/store-session.ts`
-- Modify: `src/web/packages/host/src/settings/sources.ts`
 - Modify: `src/web/packages/host/src/tls/authority.ts`
 - Test: `src/web/packages/host/src/settings/credentials.test.ts`
 - Test: `src/web/packages/host/src/settings/store-session.test.ts`
@@ -1249,7 +1248,7 @@ git commit -m "feat(host): encrypt secrets with an OS-wrapped key"
 
 - [ ] **Step 1: Write failing tests**
 
-A legacy plaintext credentials file is migrated and the plaintext file is gone. A read after restart returns the same credentials. A CA private key round-trips and is never written in PEM plaintext. `sources.json` literal secrets are unreadable without the protector.
+A legacy plaintext credentials file is migrated and the plaintext file is gone. A read after restart returns the same credentials. A CA private key round-trips and is never written in PEM plaintext.
 
 - [ ] **Step 2: Verify they fail**
 
@@ -1266,8 +1265,8 @@ Run: `npx vitest run packages/host/src/settings packages/host/src/tls`
 Expected: PASS.
 
 ```bash
-git add src/web/packages/host/src/settings/credentials.ts src/web/packages/host/src/settings/store-session.ts src/web/packages/host/src/settings/sources.ts src/web/packages/host/src/tls/authority.ts src/web/packages/host/src/settings/*.test.ts src/web/packages/host/src/tls/authority.test.ts
-git commit -m "feat(host): encrypt credentials, store session, sources and CA key"
+git add src/web/packages/host/src/settings/credentials.ts src/web/packages/host/src/settings/store-session.ts src/web/packages/host/src/tls/authority.ts src/web/packages/host/src/settings/*.test.ts src/web/packages/host/src/tls/authority.test.ts
+git commit -m "feat(host): encrypt credentials, store session and CA key"
 ```
 
 ### Task 7.3: Move the display token into an HttpOnly cookie
