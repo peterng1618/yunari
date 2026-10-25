@@ -84,11 +84,15 @@ export function startChartRefresh(
     // cadence from now.
     const due = nextDueMs === undefined || nowMs >= nextDueMs;
     if (nextDueMs === undefined) nextDueMs = nowMs + 1_000 / rate;
-    else if (nowMs >= nextDueMs)
-      // Clamped to `now`, because a stall — a backgrounded tab, a freeze —
-      // leaves whole intervals already behind, and replaying them would
-      // repaint every frame until the loop caught up.
-      nextDueMs = Math.max(nextDueMs + 1_000 / rate, nowMs + 1_000 / rate);
+    else if (nowMs >= nextDueMs) {
+      // A wake late by less than one interval keeps the original cadence, so a
+      // due time falling between two 60 Hz frames does not cost a frame. Only a
+      // stall — whole intervals already behind — re-anchors, because replaying
+      // those would repaint every frame until the loop caught up.
+      const interval = 1_000 / rate;
+      nextDueMs =
+        nowMs - nextDueMs > interval ? nowMs + interval : nextDueMs + interval;
+    }
     // **Scheduled before the refresh, not after.** A refresh that throws would
     // otherwise end the loop, and because every repaint in the scene goes
     // through this one function — charts, bound text, the clock — the whole

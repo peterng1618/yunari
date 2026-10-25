@@ -215,6 +215,21 @@ describe("startChartRefresh", () => {
     scheduler.dispose();
   });
 
+  it("keeps 30 fps when the due time falls between 60 Hz frames", () => {
+    const fake = fakeFrameDriver();
+    const refresh = vi.fn();
+    const scheduler = startChartRefresh(refresh, 30, fake.driver);
+
+    // A real 60 Hz grid, each time computed from the step. Almost every due
+    // time falls between two frames, and re-anchoring on a wake late by a
+    // fraction of a millisecond costs a frame at each boundary: 24 repaints.
+    for (let step = 1; step <= 60; step += 1) fake.run((step * 1_000) / 60);
+
+    expect(refresh.mock.calls.length).toBeGreaterThanOrEqual(29);
+    expect(refresh.mock.calls.length).toBeLessThanOrEqual(31);
+    scheduler.dispose();
+  });
+
   it("arms exactly one wake at a time", () => {
     const fake = fakeFrameDriver();
     const scheduler = startChartRefresh(() => {}, 30, fake.driver);
@@ -310,10 +325,11 @@ describe("startChartRefresh", () => {
     expect(refresh).toHaveBeenCalledTimes(2);
 
     // Two seconds of frames after the gap: the cadence, not one repaint per
-    // frame while the loop catches up.
+    // frame while the loop catches up. The bound is the unbroken cadence's
+    // (60 intervals in two seconds), not a re-anchored slower one's.
     for (let ms = 59_001; ms <= 61_000; ms += 1) fake.run(ms);
-    expect(refresh.mock.calls.length).toBeGreaterThanOrEqual(59);
-    expect(refresh.mock.calls.length).toBeLessThanOrEqual(60);
+    expect(refresh.mock.calls.length).toBeGreaterThanOrEqual(60);
+    expect(refresh.mock.calls.length).toBeLessThanOrEqual(61);
     scheduler.dispose();
   });
 });
