@@ -534,9 +534,9 @@ async function putUpload(
   if (row.finalized_at !== null) {
     return new Response("This upload is already finalized.", { status: 409 });
   }
-  // Cleanup may already have deleted this reservation's object after the hour,
-  // and finalize would refuse it; writing now spends bandwidth on an object
-  // nothing will finalize and the prune could orphan.
+  // Cleanup may already have deleted this reservation's object from the hour
+  // plus its tick, and finalize would refuse it; writing now spends bandwidth
+  // on an object nothing will finalize and the prune could orphan.
   if (Date.parse(row.created_at) <= Date.now() - UPLOAD_RESERVATION_TTL_MS)
     return new Response("This upload expired; request a new version.", {
       status: 409,
@@ -757,10 +757,11 @@ async function finalizeVersion(
     return Response.json({ ok: true, status: item.status, version });
   }
 
-  // Cleanup deletes the object of a reservation older than the same hour, so an
-  // expired one must not become a version naming a key that is about to go. A
-  // replay answered above; only the insert path expires, and its key is then
-  // the one a stored version names, which cleanup's guard already keeps.
+  // Cleanup deletes the object of a reservation older than the hour plus the
+  // cleanup tick, so an expired one must not become a version naming a key that
+  // is about to go. A replay answered above; only the insert path expires, and
+  // its key is then the one a stored version names, which cleanup's guard
+  // already keeps.
   if (
     Date.parse(stored.created_at) <=
     now.getTime() - UPLOAD_RESERVATION_TTL_MS

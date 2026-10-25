@@ -690,6 +690,40 @@ describe("version requests", () => {
     expect(response.status).toBe(409);
   });
 
+  it("answers a finalized reservation aged past the hour as already finalized", async () => {
+    const headers = await sessionHeaders();
+    const finalizedId = "finalized-expired-upload";
+    const old = new Date(
+      Date.now() - UPLOAD_RESERVATION_TTL_MS - 60_000,
+    ).toISOString();
+    await env.DB.prepare(
+      `INSERT INTO upload (id, user_id, item_id, version, envelope_json, key,
+         reserved_bytes, created_at, finalized_at, bytes)
+       VALUES (?, ?, ?, '1.0.0', '{}', ?, ?, ?, ?, 3)`,
+    )
+      .bind(
+        finalizedId,
+        USER_ID,
+        ITEM_ID,
+        pendingKey(finalizedId),
+        MAX_ARCHIVE_BYTES,
+        old,
+        old,
+      )
+      .run();
+
+    // The finalized branch is checked first: a retried PUT belongs there even
+    // when the row is old enough for cleanup to be deleting its object.
+    const response = await SELF.fetch(`${BASE}/api/me/uploads/${finalizedId}`, {
+      method: "PUT",
+      headers: { ...headers, "content-length": "3" },
+      body: new Uint8Array([1, 2, 3]),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.text()).toBe("This upload is already finalized.");
+    expect(await env.BUCKET.head(pendingKey(finalizedId))).toBeNull();
+  });
+
   it("refuses a PUT to an expired reservation and still writes a fresh one", async () => {
     const headers = await sessionHeaders();
     const { id, url } = await reserved(headers);
