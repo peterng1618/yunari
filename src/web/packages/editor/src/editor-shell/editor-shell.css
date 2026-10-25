@@ -1208,7 +1208,7 @@ body,
   background: var(--accent);
 }
 /* The settings gear, pinned to the foot (DESIGN.md §7.2). `margin-top: auto` is the
-   whole of the pin: it takes the slack between the four slots and the gear, so
+   whole of the pin: it takes the slack between the slots and the gear, so
    the gear sits on the rail's bottom edge without a spacer element. It is
    `--muted` rather than a closed slot's `--faint`, because it is a real control
    an author reaches on purpose, not a slot that is merely unchosen. The

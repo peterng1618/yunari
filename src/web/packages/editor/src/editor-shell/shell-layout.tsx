@@ -156,9 +156,12 @@ function ModeSwitch(props: ShellLayoutProps): React.JSX.Element {
  * directly. */
 interface ShellHosts {
   readonly canvas: HTMLElement;
-  /** The Add pane's body: the insert list and, at its foot, the declared-asset
-      library (`§5.2` absorbs the Assets pane into Add). */
+  /** The Add pane's body: the insert list. Its foot still holds the
+      declared-asset library until the Assets pane takes it over. */
   readonly add: HTMLElement;
+  /** The Assets pane: every declared file, its import and placement, and the
+      finder link (DESIGN.md §7.2). */
+  readonly assets: HTMLElement;
   /** The Tokens pane: the theme's paints and type presets. */
   readonly tokens: HTMLElement;
   /** The Document pane: the artboard and the references it resolves. */
@@ -258,6 +261,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
   const hosts: ShellHosts = {
     canvas: element(),
     add: element("yunariPanelHostAdd"),
+    assets: element("yunariPanelHostAssets"),
     tokens: element("yunariPanelHostTokens"),
     document: element("yunariPanelHostDocument"),
     selection: element("yunariPanelHostSelection"),
@@ -525,10 +529,10 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
             >
               <CompositionPane bridge={store.bridge} />
             </Pane>
-            {/* The Add pane's body — the insert list and, at its foot, the
-                declared-asset library — is one host and one React tree. `§5.2`
-                puts the file path in Add, and a fourth slot for it would be a
-                slot DESIGN.md does not name. */}
+            {/* The Add pane's body is one host and one React tree. It still
+                draws the declared-asset library at its foot, but the files now
+                belong to the Assets slot (DESIGN.md §7.2); the library moves
+                there rather than staying a second route to the same list. */}
             <Pane
               id="add"
               title={uiCopy.rail.slots.add}

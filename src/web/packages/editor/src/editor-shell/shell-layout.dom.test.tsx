@@ -233,19 +233,19 @@ it("mounts the OS-resolved palette, menus, rail, inspector and dock hosts", () =
   expect(root.querySelector(".editor-shell-dock")?.closest("#stage")).toBe(
     root.querySelector("#stage"),
   );
-  // Four slots, and no `+`: the insert chooser went with the pane bar, and the
+  // Five slots, and no `+`: the insert chooser went with the pane bar, and the
   // Add pane is the one surface the insertable list is reached from now that
-  // the Insert menu has gone with it. A slot with nothing behind it is the
-  // defect this plan exists to fix, so the count is a claim about the left
-  // column, not a snapshot of how many icons happen to be there. Scoped to
-  // `[data-rail-slot]`: the foot's settings gear is a button on the rail too,
-  // and it is deliberately not a slot.
-  expect(root.querySelectorAll(".editor-shell-rail-slot")).toHaveLength(4);
+  // the Insert menu has gone with it. The Assets slot has landed here ahead of
+  // its pane, which is the one exception to "a slot with nothing behind it is
+  // the defect this plan exists to fix" — it is the next step of the same plan.
+  // Scoped to `[data-rail-slot]`: the foot's settings gear is a button on the
+  // rail too, and it is deliberately not a slot.
+  expect(root.querySelectorAll(".editor-shell-rail-slot")).toHaveLength(5);
   expect(root.querySelector(".editor-shell-rail-settings")).not.toBeNull();
-  // The rail's whole button count, not only its slots: five is the four slots
-  // plus the foot's gear, and a sixth control arriving on the rail where it
+  // The rail's whole button count, not only its slots: six is the five slots
+  // plus the foot's gear, and a seventh control arriving on the rail where it
   // should not fails here rather than hiding behind the slot count.
-  expect(root.querySelectorAll(".editor-shell-rail button")).toHaveLength(5);
+  expect(root.querySelectorAll(".editor-shell-rail button")).toHaveLength(6);
   // The horizontal bar is gone, not merely hidden.
   expect(root.querySelector(".editor-shell-pane-bar")).toBeNull();
   expect(root.textContent).toContain("File");
@@ -269,8 +269,10 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
   const root = document.createElement("div");
   const layout = createShellLayout(root);
 
-  // One pane per rail slot, each wearing a title bar, its own `data-yunari-panel`
-  // name and `hidden` unless its slot is chosen. The Composition pane's DOM name
+  // A pane per slot that has one, each wearing a title bar, its own
+  // `data-yunari-panel` name and `hidden` unless its slot is chosen. The Assets
+  // slot's pane is the next step of this plan and is not mounted yet, so the
+  // four here are the panes that exist. The Composition pane's DOM name
   // is the `layers` the browser specs and the panel CSS already browse by, so
   // the chrome moved around the contract rather than the contract moving; its
   // visible title, like the other three, is the slot's own word.
@@ -525,7 +527,7 @@ it("collapses the panel when the segment for the visible pane is clicked again",
   // worse than one that is merely narrow. The rail keeps saying which pane is
   // chosen — `aria-pressed` outlives the collapse, so reopening restores it —
   // and the column's own state is stated once, on the rail, rather than
-  // repeated on all four slots.
+  // repeated on every slot.
   expect(panel.hidden).toBe(true);
   expect(body.dataset["collapsed"]).toBe("true");
   expect(rail.dataset["collapsed"]).toBe("true");

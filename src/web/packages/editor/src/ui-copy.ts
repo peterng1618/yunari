@@ -86,7 +86,7 @@ const MEGABYTE = new Intl.NumberFormat(undefined, {
 
 export const uiCopy = {
   brand: "Yunari",
-  /** The rail's four slots. A slot's word is both its tooltip and its
+  /** The rail's five slots. A slot's word is both its tooltip and its
    *  accessible name: the slot is icon-only, so it has no text of its own, and
    *  a glyph stored as a translatable string would be announced as a word and
    *  could not inherit a shell colour. One word per slot, from the one owner
@@ -98,6 +98,8 @@ export const uiCopy = {
     slots: {
       composition: "Composition",
       add: "Add",
+      /** Every declared file, its import and placement, and the finder link. */
+      assets: "Assets",
       tokens: "Tokens",
       /** The artboard, background, metadata and reference panels — one pane,
        *  because they are the document's own settings. */

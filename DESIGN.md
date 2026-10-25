@@ -244,12 +244,13 @@ paid on every use.
 <!-- §7.2 -->
 
 A 46px vertical strip of glyph slots at the window's left edge, with the
-settings gear pinned to the foot. **Four slots:**
+settings gear pinned to the foot. **Five slots:**
 
 | Slot | Glyph | Holds |
 |---|---|---|
 | Composition | stack | The scene tree, and the object actions that act on it |
-| Add | plus | Everything insertable, and placing a file |
+| Add | plus | Everything insertable |
+| Assets | folder | Every declared file, its import and placement, and the finder link |
 | Tokens | palette | The theme's paints and type presets — created and edited here |
 | Document | page | Artboard, metadata |
 
