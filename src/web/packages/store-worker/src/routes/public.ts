@@ -77,8 +77,8 @@ async function indexResponse(
   const key = new Request(new URL("/index.json", url.origin));
   const cached = await cache.match(key);
   if (cached !== undefined) {
-    // `cache.match` itself evaluates `If-None-Match` and can answer 304; this
-    // explicit comparison is the fallback for the runtime that does not.
+    // The key carries no request headers, so `match` cannot evaluate
+    // `If-None-Match`; this comparison is the only 304 path.
     if (request.headers.get("if-none-match") === cached.headers.get("etag")) {
       return new Response(null, { status: 304, headers: cached.headers });
     }
