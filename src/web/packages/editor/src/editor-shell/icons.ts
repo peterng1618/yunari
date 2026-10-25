@@ -268,7 +268,7 @@ export const RAIL_GLYPHS: Readonly<Record<RailSlot, LucideIcon>> = {
  * (`SHAPE_GLYPHS`, falling back to this map's generic `Shapes` for a shape whose
  * kind the build does not know); and `chart` answers a different question — the
  * *family* — through `chartFamilyGlyph`, so `chart` here is the kind's generic
- * mark rather than the one four chart rows wear.
+ * mark rather than the one the family rows wear.
  *
  * **`chart` is `ChartNoAxesCombined`, and it used to be `CHART_BAR_GLYPH`**
  * (`vg-489`). A chart whose family this build cannot name falls back here, and

@@ -29,6 +29,9 @@ export type PolarBarSettings = Omit<
 const {
   orientation: _orientation,
   segmentDivisor: _segmentDivisor,
+  // A polar bar's width is an angle, not the cartesian bar's pixel default:
+  // leaving it unset is what lets `categoryGapPercent` size the bar (§E1).
+  barWidth: _barWidth,
   ...barDefaults
 } = defaultBarSettings;
 

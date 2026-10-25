@@ -34,7 +34,7 @@ const CHART_ICONS: Readonly<Record<string, LucideIcon>> = {
 /**
  * The glyph a chart family wears, wherever one is drawn.
  *
- * One owner, because two surfaces draw these four: the layer row's mark and the
+ * One owner, because two surfaces draw each family: the layer row's mark and the
  * Add pane's tile. A family that wore a gauge in the row and a column on the
  * tile would be two answers to one question, and the author would have to learn
  * both.

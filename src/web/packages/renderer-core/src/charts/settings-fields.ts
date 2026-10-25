@@ -40,7 +40,7 @@ import { SEGMENT_DIVISORS } from "./segments.js";
  * `path` names where a field writes when it is not the top-level `property`, and
  * `visibleWhen` asks it only in the state it applies to. Both exist for exactly
  * two settings — `PieSettings.total.value` and the optional `AnimationSettings`
- * block on all four families — which is why ADR-0028 chose a path over a nested
+ * block on every family — which is why ADR-0028 chose a path over a nested
  * descriptor tree. A surface reads and writes them through `settings-path.ts`,
  * so the write path is the renderer's read path.
  *
@@ -300,7 +300,7 @@ const ANIMATION_FIELDS: readonly SettingsFieldDescriptor[] = [
 /**
  * Every scalar setting, per family.
  *
- * Keyed by `ChartFamily` as a `Record`, so a fifth family is a compile error
+ * Keyed by `ChartFamily` as a `Record`, so a new family is a compile error
  * until it gains a row — the same mechanism the capability matrix uses.
  *
  * Array order is the likelihood order: the fields an author reaches for most sit
@@ -770,9 +770,9 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       kind: "number",
       section: "content",
       optional: true,
-      hint: "How thick each bar is around the circle, in pixels; empty sizes it to the category.",
+      hint: "How many degrees wide each bar is; empty lets the category gap size it.",
       min: 0,
-      bound: "drawnBox",
+      max: 360,
     },
     {
       property: "categoryGapPercent",

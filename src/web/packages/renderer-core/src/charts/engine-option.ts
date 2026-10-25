@@ -12,7 +12,7 @@ import type { RadarOption } from "./radar.js";
  *
  * ## Why this file exists rather than a cast at each call site
  *
- * The four `buildXOption` builders emit **Yunari's** typed shapes — narrow,
+ * The `buildXOption` builders emit **Yunari's** typed shapes — narrow,
  * reviewable, unit-tested objects that happen to be structured the way ECharts
  * wants. That is the point of "typed chart settings only": raw engine options
  * never enter the theme format, and a feature never reaches for
@@ -29,7 +29,7 @@ import type { RadarOption } from "./radar.js";
 /**
  * Each family's option type, keyed by `ChartFamily`.
  *
- * A `Record` over the union rather than a hand-written union, so a fifth family
+ * A `Record` over the union rather than a hand-written union, so a new family
  * is a compile error here instead of a silently unhandled case — the same
  * mechanism `charts/settings-fields.ts` uses for its descriptors.
  */
