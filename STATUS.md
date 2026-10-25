@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–14 and 15a complete, 15b (paint rows + paint inspector) next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–14 and 15a–15b complete, Task 16 (local font import) next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,11 +18,11 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 15a landed:** choosing a preset row shows its name, role, face, size, weight, line height and letter spacing in the right column, and the object inspector is suppressed while one is chosen.
-- **Delete and reassignment came back** in that inspector, and deleting the chosen preset clears the token selection instead of leaving a blank suppressed column.
-- **The remote preview path is gone:** `font-preview.ts` and `fontActions.preview` had no caller left; the specimen draws in the preset's bundled family.
-- **The panel is inside the name and copy nets**, with a case that reads nine reachable controls so a silent mount cannot pass.
-- **Evidence:** editor 184 files / 2551 tests, typecheck and biome exit 0, the editor and panel-label specs 73 passed / 73 skipped with the audit at 17.2s.
+- **Task 15b landed:** the paints pane is a list too — a row press selects the paint and its name, kind, value, usage and reassignment moved into the inspector beside the preset section.
+- **One inspector, two sections**, chosen from the selected token's kind, so a paint id can never draw preset fields.
+- **A held token the document no longer declares is dropped** and the object column returns — whether the token went by Delete or by undo.
+- **Paint rows now show their selection** (`aria-pressed` plus the accent border), matching the preset rows.
+- **Evidence:** 2558 editor tests, the affected unit files 117, typecheck/biome/design-tokens exit 0, browser batch 91 passed / 91 skipped / 0 unexpected.
 
 ## Next
 
