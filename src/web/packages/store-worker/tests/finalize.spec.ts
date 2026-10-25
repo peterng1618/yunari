@@ -187,6 +187,46 @@ describe("finalize", () => {
     expect((await uploadRow(newer.uploadId))?.finalized_at).toBeNull();
   });
 
+  it("releases with the stored version's size in the batch itself", async () => {
+    await reset();
+    const version = "1.0.0";
+    const olderKey = pendingKey("batch-older");
+    const newerKey = pendingKey("batch-newer");
+    await seedUpload("batch-older", olderKey, version);
+    await seedUpload("batch-newer", newerKey, version);
+    await putPackage(olderKey, PACKAGE_BYTES);
+
+    // A version row a parallel finalize already landed, naming the older key.
+    const storedBytes = PACKAGE_BYTES.byteLength;
+    await insertLandedVersion(version, "2026-10-01T00:00:00.000Z", olderKey);
+
+    // The candidate names the same key with a different size: a release that
+    // took the caller's figure would write this one onto the stored row.
+    const wrote = await finalizeStoredVersion(
+      env.DB,
+      {
+        item_id: ITEM_ID,
+        version,
+        envelope_json: "{}",
+        facets_json: "{}",
+        package_key: olderKey,
+        thumbnail_key: thumbnailKey(ITEM_ID),
+        bytes: storedBytes + 7,
+        sha256: "0".repeat(64),
+        created_at: "2026-10-01T00:00:01.000Z",
+      },
+      "2026-10-01T00:00:02.000Z",
+    );
+    expect(wrote).toBe(false);
+
+    const older = await uploadRow("batch-older");
+    expect(older?.finalized_at).not.toBeNull();
+    expect(older?.bytes).toBe(storedBytes);
+    const newer = await uploadRow("batch-newer");
+    expect(newer?.finalized_at).toBeNull();
+    expect(newer?.bytes).toBeNull();
+  });
+
   it("hashes a package by streaming it, never buffering it", async () => {
     const bytes = new TextEncoder().encode("streamed package");
     const bucket = {
@@ -640,6 +680,29 @@ async function storedPackageKey(version: string): Promise<string | undefined> {
     .bind(ITEM_ID, version)
     .first<{ package_key: string }>();
   return row?.package_key;
+}
+
+/** One reservation row with no version behind it, for the batch's own case. */
+async function seedUpload(
+  id: string,
+  key: string,
+  version: string,
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO upload (id, user_id, item_id, version, envelope_json, key,
+       reserved_bytes, created_at, finalized_at, bytes)
+     VALUES (?, ?, ?, ?, '{}', ?, ?, ?, NULL, NULL)`,
+  )
+    .bind(
+      id,
+      USER_ID,
+      ITEM_ID,
+      version,
+      key,
+      MAX_ARCHIVE_BYTES,
+      new Date().toISOString(),
+    )
+    .run();
 }
 
 /** The same theme with a different tag set, so the ladder mints a minor bump. */

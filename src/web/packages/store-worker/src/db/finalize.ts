@@ -3,9 +3,12 @@ import type { VersionRow } from "./types.js";
 /**
  * Writes a version row and releases its reservation in one D1 batch, which D1
  * runs as one transaction. Two statements would leave a window in which the
- * version names a key whose upload row is unfinalized: cleanup would delete
- * that object an hour later, leaving a published package that 404s. Answers
- * whether this call inserted the row (a lost `OR IGNORE` race answers false).
+ * version names a key whose upload row is unfinalized; Task 6.4's cleanup
+ * guard (`NOT EXISTS item_version.package_key`) deliberately keeps that
+ * object, so the residual cost is a reservation that never finalizes and
+ * keeps counting against the author until its hour is up. The batch removes
+ * the window rather than relying on that guard. Answers whether this call
+ * inserted the row (a lost `OR IGNORE` race answers false).
  */
 export async function finalizeStoredVersion(
   db: D1Database,
