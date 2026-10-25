@@ -9,9 +9,9 @@ const DETAIL_ROOT = "https://api.fontsource.org/v1/fonts/";
 const CDN = "https://cdn.jsdelivr.net/fontsource/fonts/";
 
 /**
- * Fontsource's list endpoint carries every field a cut needs except the
- * package version; that one comes from `/v1/fonts/:id`. The fixtures mirror
- * that split rather than assuming the list is richer than the live API.
+ * The list endpoint names a match and its metadata; `npmVersion` and the
+ * published pairings come from `/v1/fonts/:id`. The fixtures mirror that split
+ * rather than assuming the list is richer than the live API.
  */
 interface RegistryRow {
   readonly id: string;
@@ -64,10 +64,55 @@ const INTER_CLONE: RegistryRow = {
 
 const LIST = [MANROPE, INTER, INTER_CLONE];
 
+type VariantSubsets = Record<
+  string,
+  { readonly url: { readonly woff2: string } }
+>;
+
+/** The detail's `variants`, built only from the pairings it publishes. */
+function variantsOf(
+  id: string,
+  pairs: readonly (readonly [number, string])[],
+): Record<string, Record<string, VariantSubsets>> {
+  const variants: Record<string, Record<string, VariantSubsets>> = {};
+  for (const [weight, subset] of pairs) {
+    const key = String(weight);
+    const styles = (variants[key] ??= {});
+    const subsets = (styles.normal ??= {});
+    subsets[subset] = {
+      url: {
+        woff2: `${CDN}${id}@latest/${subset}-${weight}-normal.woff2`,
+      },
+    };
+  }
+  return variants;
+}
+
+const MANROPE_DETAIL = {
+  ...MANROPE,
+  npmVersion: "5.3.0",
+  variants: variantsOf("manrope", [
+    [400, "latin"],
+    [400, "latin-ext"],
+    [700, "latin"],
+    [700, "latin-ext"],
+  ]),
+};
+
+const INTER_DETAIL = {
+  ...INTER,
+  npmVersion: "5.2.1",
+  variants: variantsOf("inter", [[400, "latin"]]),
+};
+
 const DETAILS: Record<string, unknown> = {
-  manrope: { ...MANROPE, npmVersion: "5.3.0" },
-  inter: { ...INTER, npmVersion: "5.2.1" },
-  "inter-clone": { ...INTER_CLONE, npmVersion: "1.0.0" },
+  manrope: MANROPE_DETAIL,
+  inter: INTER_DETAIL,
+  "inter-clone": {
+    ...INTER_CLONE,
+    npmVersion: "1.0.0",
+    variants: variantsOf("inter-clone", [[400, "latin"]]),
+  },
 };
 
 function jsonOf(value: unknown): Response {
@@ -189,6 +234,44 @@ describe("googleFontSource", () => {
     expect(outcome.pages[0]?.results).toEqual([]);
   });
 
+  it("keeps a family whose detail read succeeds when another fails", async () => {
+    // The stub has no "inter" detail, so that read answers 404.
+    const { fetcher } = stubFetch({ details: { manrope: MANROPE_DETAIL } });
+
+    const outcome = await searchSources(
+      {
+        query: "",
+        enabled: ["google-fonts"],
+        pages: {},
+        body: "font-picker",
+      },
+      context(fetcher),
+      [googleFontSource],
+    );
+
+    const page = outcome.pages[0];
+    expect(page?.failure).toBeUndefined();
+    expect(page?.results.map((result) => result.name)).toEqual(["Manrope"]);
+  });
+
+  it("emits only variant pairings that publish a woff2", async () => {
+    // The metadata lists two weights × two subsets, but the detail's variants
+    // publish only latin 400; a cartesian product would emit three 404s.
+    const sparse = {
+      ...MANROPE,
+      npmVersion: "5.3.0",
+      variants: variantsOf("manrope", [[400, "latin"]]),
+    };
+    const { fetcher } = stubFetch({ details: { manrope: sparse } });
+
+    const page = await googleFontSource.search("manrope", 1, context(fetcher));
+    const cuts = page.results[0]?.font?.cuts ?? [];
+
+    expect(cuts.map((cut) => `${cut.subset}-${cut.weight}`)).toEqual([
+      "latin-400",
+    ]);
+  });
+
   it("serves a woff2 for a cut through the injected fetch", async () => {
     const { fetcher, calls } = stubFetch();
     const page = await googleFontSource.search("manrope", 1, context(fetcher));
@@ -233,7 +316,14 @@ describe("googleFontSource", () => {
       license: "OFL-1.1",
     }));
     const details: Record<string, unknown> = Object.fromEntries(
-      rows.map((row) => [row.id, { ...row, npmVersion: "1.0.0" }]),
+      rows.map((row) => [
+        row.id,
+        {
+          ...row,
+          npmVersion: "1.0.0",
+          variants: variantsOf(row.id, [[400, "latin"]]),
+        },
+      ]),
     );
     const { fetcher, calls } = stubFetch({
       list: jsonOf(rows),

@@ -20,6 +20,12 @@ const PAGE = 24;
  *  the tail becomes a URL path when the bytes are read. */
 const CUT =
   /^cut:[a-z0-9-]+@[0-9][0-9a-z.+-]*\/[a-z0-9-]+-\d{1,4}-(?:normal|italic)$/;
+/** A subset becomes a path segment in the cut id and the pinned URL. */
+const SUBSET = /^[a-z0-9-]+$/;
+/** The id and version also become cut-id segments; a row outside these cannot
+ *  be addressed back by `bytesOf`, so it is not offered. */
+const FAMILY_ID = /^[a-z0-9-]+$/;
+const NPM_VERSION = /^[0-9][0-9a-z.+-]*$/;
 
 function fold(value: string): string {
   return value.toLowerCase().replace(/[\s-]+/g, "-");
@@ -27,19 +33,6 @@ function fold(value: string): string {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isStringArray(value: unknown): value is readonly string[] {
-  return (
-    Array.isArray(value) && value.every((entry) => typeof entry === "string")
-  );
-}
-
-function isWeightArray(value: unknown): value is readonly number[] {
-  return (
-    Array.isArray(value) &&
-    value.every((entry) => typeof entry === "number" && Number.isFinite(entry))
-  );
 }
 
 /** A registry row, kept to what a match needs. The list is filtered locally as
@@ -68,12 +61,13 @@ function registryFamilies(value: unknown): RegistryFamily[] {
 
 /** `/v1/fonts/:id`, the row that carries `npmVersion` and the published cuts. */
 interface RegistryFont extends RegistryFamily {
-  readonly subsets: readonly string[];
-  readonly weights: readonly number[];
   readonly defSubset: string;
   readonly category: string;
   readonly license: string;
   readonly npmVersion: string;
+  /** `{ weight: { style: { subset: { url: { woff2 } } } } }`; kept raw so a
+   *  malformed pairing is skipped rather than trusted. */
+  readonly variants: unknown;
 }
 
 function registryFont(value: unknown): RegistryFont {
@@ -81,22 +75,12 @@ function registryFont(value: unknown): RegistryFont {
     throw new Error("Fontsource's family entry is not an object.");
   }
 
-  const {
-    id,
-    family,
-    subsets,
-    weights,
-    defSubset,
-    category,
-    license,
-    npmVersion,
-  } = value;
+  const { id, family, defSubset, category, license, npmVersion, variants } =
+    value;
 
   if (
     typeof id !== "string" ||
     typeof family !== "string" ||
-    !isStringArray(subsets) ||
-    !isWeightArray(weights) ||
     typeof defSubset !== "string" ||
     typeof category !== "string" ||
     typeof license !== "string" ||
@@ -108,12 +92,11 @@ function registryFont(value: unknown): RegistryFont {
   return {
     id,
     family,
-    subsets,
-    weights,
     defSubset,
     category,
     license,
     npmVersion,
+    variants,
   };
 }
 
@@ -146,15 +129,33 @@ function urlOf(cutId: string): string {
   return `${CDN}/${cutId.slice("cut:".length)}.woff2`;
 }
 
-/** One cut per published weight × subset. Only the normal style is addressed:
- *  the brief's grid is weight × subset, and an italic sibling would double
- *  every family without a way to ask for it. */
+/** The detail's own `variants`: a pairing listed there is a published file,
+ *  which the weight × subset cartesian product cannot promise. URLs are
+ *  rebuilt from the validated keys and pinned, so an upstream `@latest` (or a
+ *  foreign origin) never reaches the wire. */
 function cutsOf(font: RegistryFont): FontCut[] {
+  if (!FAMILY_ID.test(font.id) || !NPM_VERSION.test(font.npmVersion)) {
+    return [];
+  }
+  if (!isObject(font.variants)) return [];
+
   const cuts: FontCut[] = [];
-  for (const subset of font.subsets) {
-    for (const weight of font.weights) {
+  for (const [weightKey, styles] of Object.entries(font.variants)) {
+    const weight = Number(weightKey);
+    if (!Number.isInteger(weight) || weight <= 0) continue;
+    if (!isObject(styles)) continue;
+
+    const normal = styles.normal;
+    if (!isObject(normal)) continue;
+
+    for (const [subset, face] of Object.entries(normal)) {
+      if (!SUBSET.test(subset)) continue;
+      if (!isObject(face)) continue;
+      const url = isObject(face.url) ? face.url.woff2 : undefined;
+      if (typeof url !== "string" || url === "") continue;
+
       const id = cutIdOf(font, subset, weight, "normal");
-      const url = urlOf(id);
+      const pinned = urlOf(id);
       cuts.push({
         id,
         source: GOOGLE_SOURCE_ID,
@@ -163,9 +164,9 @@ function cutsOf(font: RegistryFont): FontCut[] {
         style: "normal",
         subset,
         format: "woff2",
-        previewUrl: url,
+        previewUrl: pinned,
         licence: font.license,
-        sourceUrl: url,
+        sourceUrl: pinned,
       });
     }
   }
@@ -230,7 +231,7 @@ export const googleFontSource: AssetSource = {
 
     const page = Number.isInteger(asked) && asked >= 1 ? asked : 1;
     const start = (page - 1) * PAGE;
-    const details = await Promise.all(
+    const details = await Promise.allSettled(
       matches
         .slice(start, start + PAGE)
         .map((entry) =>
@@ -239,9 +240,16 @@ export const googleFontSource: AssetSource = {
     );
 
     const results: AssetResult[] = [];
-    for (const detail of details) {
-      const result = resultOf(registryFont(detail));
-      if (result !== undefined) results.push(result);
+    for (const outcome of details) {
+      // One unread or malformed family is one missing row, not a failed page:
+      // the other families this page asked for still reach the grid.
+      if (outcome.status !== "fulfilled") continue;
+      try {
+        const result = resultOf(registryFont(outcome.value));
+        if (result !== undefined) results.push(result);
+      } catch {
+        continue;
+      }
     }
 
     return {
