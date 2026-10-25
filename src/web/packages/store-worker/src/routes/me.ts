@@ -556,7 +556,7 @@ async function putUpload(
   // The pump owns its own rejection handling and never rejects, so nothing is
   // left floating once the response is sent. Its answer separates a body that
   // broke the pinned length from a store that failed to keep it.
-  const pumped = pumpInto(body, sink);
+  const pumped = pumpInto(body, sink, length);
   let stored: R2Object | null;
   try {
     // The conditional put makes this request the first writer, atomically: a
@@ -588,29 +588,57 @@ async function putUpload(
  * Every failure is this function's own: the sink errors on a body that overruns
  * or stops short, and the store may stop reading before the body ends. Both
  * settle here so the route answers from the put and no rejected promise
- * outlives the response.
+ * outlives the response. Every early answer aborts the sink, which lets the
+ * put settle.
  *
- * Answers whether the body was at fault — it overran the pinned length, ended
- * short of it, or its reader threw — so a put failure the pump caused is a
- * client error and any other put failure is the store's.
+ * Answers whether the body was at fault, which is what separates a client
+ * error from the store's: a throwing reader, more than `length` bytes, or a
+ * body that ends short is `true`; a write or close that fails with no more
+ * than `length` bytes offered is `false`.
+ *
+ * Exported for its unit tests; the route is its only caller.
  */
-async function pumpInto(
+export async function pumpInto(
   source: ReadableStream<Uint8Array>,
-  sink: FixedLengthStream,
+  sink: {
+    readonly writable: WritableStream<ArrayBuffer | ArrayBufferView>;
+  },
+  length: number,
 ): Promise<boolean> {
   const reader = source.getReader();
   const writer = sink.writable.getWriter();
+  const answer = async (bodyAtFault: boolean): Promise<boolean> => {
+    await writer.abort().catch(() => undefined);
+    return bodyAtFault;
+  };
+  let produced = 0;
   try {
     for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      await writer.write(value);
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch {
+        return await answer(true);
+      }
+      if (chunk.done) break;
+      produced += chunk.value.byteLength;
+      // The chunk that crosses the pinned length is never offered to the sink.
+      if (produced > length) return await answer(true);
+      try {
+        await writer.write(chunk.value);
+      } catch {
+        // Nothing beyond `length` was offered, so the sink itself failed.
+        return await answer(false);
+      }
     }
-    await writer.close();
+    if (produced < length) return await answer(true);
+    try {
+      await writer.close();
+    } catch {
+      // The body was exactly `length` bytes, so the sink itself failed.
+      return await answer(false);
+    }
     return false;
-  } catch {
-    await writer.abort().catch(() => undefined);
-    return true;
   } finally {
     try {
       reader.releaseLock();

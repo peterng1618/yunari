@@ -2,7 +2,7 @@ import { env, SELF } from "cloudflare:test";
 import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import { handleMe } from "../src/routes/me";
+import { handleMe, pumpInto } from "../src/routes/me";
 import { pendingKey } from "../src/storage/keys";
 import {
   BASE,
@@ -469,6 +469,71 @@ describe("version requests", () => {
     expect(await response?.text()).toBe("The upload could not be stored.");
   });
 
+  it("releases the reservation when a step after it throws", async () => {
+    const headers = await sessionHeaders();
+    const ID = "9f1c2a3b-4d5e-4f60-8a71-2b3c4d5e6f83";
+    await env.DB.prepare("DELETE FROM upload WHERE user_id = ?")
+      .bind(USER_ID)
+      .run();
+    await env.DB.prepare("DELETE FROM presign_event WHERE user_id = ?")
+      .bind(USER_ID)
+      .run();
+    // A new item is required, so the ceiling must not refuse it first.
+    await env.DB.prepare(
+      "DELETE FROM item_version WHERE item_id IN (SELECT id FROM item WHERE author_user_id = ?)",
+    )
+      .bind(USER_ID)
+      .run();
+    await env.DB.prepare("DELETE FROM item WHERE author_user_id = ?")
+      .bind(USER_ID)
+      .run();
+
+    // The real binding everywhere except the presign write, whose `run` throws:
+    // that is a step after the reservation, so the route must compensate.
+    const realPrepare = env.DB.prepare.bind(env.DB);
+    const broken = {
+      ...env,
+      DB: new Proxy(env.DB, {
+        get(target, property) {
+          if (property === "prepare") {
+            return (sql: string) =>
+              sql.includes("INSERT INTO presign_event")
+                ? {
+                    bind: () => ({
+                      run: async () => {
+                        throw new Error("presign write failed");
+                      },
+                    }),
+                  }
+                : realPrepare(sql);
+          }
+          const value = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }),
+    } as unknown as Env;
+
+    const path = `${BASE}/api/me/items/${ID}/versions`;
+    await expect(
+      handleMe(
+        new Request(path, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ envelope: candidate(ID), name: "Mine" }),
+        }),
+        broken,
+        new URL(path),
+      ),
+    ).rejects.toThrow("presign write failed");
+
+    const reservations = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM upload WHERE user_id = ?",
+    )
+      .bind(USER_ID)
+      .first<{ n: number }>();
+    expect(reservations?.n).toBe(0);
+  });
+
   it("refuses a second PUT of the same unfinalised upload URL", async () => {
     const headers = await sessionHeaders();
     const { id, url } = await reserved(headers);
@@ -708,5 +773,53 @@ describe("version requests", () => {
       .bind(USER_ID)
       .first<{ n: number }>();
     expect(reservations?.n).toBe(1);
+  });
+});
+
+describe("pumpInto", () => {
+  const CHUNK = new TextEncoder().encode("abc");
+
+  function sink(failWrite: boolean): {
+    readonly writable: WritableStream<ArrayBuffer | ArrayBufferView>;
+  } {
+    return {
+      writable: new WritableStream<ArrayBuffer | ArrayBufferView>({
+        write() {
+          if (failWrite) throw new Error("store fault");
+        },
+      }),
+    };
+  }
+
+  function body(...chunks: readonly Uint8Array[]): ReadableStream<Uint8Array> {
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+  }
+
+  it("calls a sink failure within the length the store's", async () => {
+    const atFault = await pumpInto(body(CHUNK), sink(true), CHUNK.byteLength);
+    expect(atFault).toBe(false);
+  });
+
+  it("calls a body that overruns its length the body's", async () => {
+    const atFault = await pumpInto(
+      body(CHUNK, CHUNK),
+      sink(false),
+      CHUNK.byteLength,
+    );
+    expect(atFault).toBe(true);
+  });
+
+  it("calls a body that ends short the body's", async () => {
+    const atFault = await pumpInto(
+      body(CHUNK),
+      sink(false),
+      CHUNK.byteLength + 1,
+    );
+    expect(atFault).toBe(true);
   });
 });
