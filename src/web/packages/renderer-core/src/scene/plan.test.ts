@@ -971,7 +971,9 @@ describe("charts", () => {
     );
 
     if (chart.family === "bar") {
-      expect(chart.option.series[0].data.map((d) => d.value)).toEqual([30, 70]);
+      const series = chart.option.series[0];
+      if (series.type !== "bar") throw new Error("expected a bar series");
+      expect(series.data.map((d) => d.value)).toEqual([30, 70]);
     }
   });
 
@@ -1111,7 +1113,9 @@ describe("chart paint references", () => {
     const { chart, issues } = storageBar(true);
 
     if (chart.family === "bar") {
-      expect(chart.option.series[0].data[0]!.itemStyle.color).toBe("#00b8d9");
+      const series = chart.option.series[0];
+      if (series.type !== "bar") throw new Error("expected a bar series");
+      expect(series.data[0]!.itemStyle.color).toBe("#00b8d9");
     }
     expect(issues).toEqual([]);
   });
@@ -1121,7 +1125,9 @@ describe("chart paint references", () => {
     const { chart, issues } = storageBar(false);
 
     if (chart.family === "bar") {
-      expect(chart.option.series[0].data[0]!.value).toBeNull();
+      const series = chart.option.series[0];
+      if (series.type !== "bar") throw new Error("expected a bar series");
+      expect(series.data[0]!.value).toBeNull();
     }
     expect(issues.map((issue) => issue.detail)).toEqual([
       'Chart paint "palette.storage" is not defined in this document.',
