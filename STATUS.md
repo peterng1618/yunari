@@ -19,10 +19,10 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 ## Last completed change
 
 - **Task 16 landed:** a font pick opens an inline metadata form and declares nothing; the file is written at Create type preset or Cancel.
-- **Create type preset** writes one preset through `addTypePresetFromLocalFont` and a credit carrying the `assetId`, after the cap check; Cancel declares the file without either.
+- **Create type preset** writes one preset through `addTypePresetFromLocalFont` and a credit carrying the `assetId`; the cap asks the list's length only for a fresh file, so a declared face's own credit is replaceable at 256; Cancel declares without either.
 - **`importFont` validates bytes through the browser's own `FontFace`** (injectable loader for jsdom) and writes family/weight/style/format/licence/source URL; `amendFont` rewrites them in place.
 - **The filename parser peels style and weight tokens from the end** (`Inter-Bold.ttf` → Inter / 700); the form refuses an empty family or a weight outside 120–900.
-- **Evidence:** 2571 editor tests, focused files 118, typecheck/biome/design-tokens exit 0, `editor.spec.ts` 70 passed / 70 skipped / 0 unexpected; dead-selectors exits 1 with 16 pre-existing findings, none naming a changed file.
+- **Evidence:** 2572 editor tests, focused files 119, typecheck/biome/design-tokens exit 0, `editor.spec.ts` 70 passed / 70 skipped / 0 unexpected; dead-selectors exits 1 with 16 pre-existing findings, none naming a changed file.
 
 ## Next
 

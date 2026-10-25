@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import type { FabricPalette, FabricThemeEnvelope } from "@yunari/renderer-core";
-import { MAX_CREDITS_ENTRIES } from "@yunari/theme-package";
+import {
+  MAX_CREDITS_ENTRIES,
+  type ThemeCreditsEntry,
+} from "@yunari/theme-package";
 import { IText } from "fabric/es";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -2462,9 +2465,13 @@ describe("the local font import", () => {
   });
 
   /** A session whose Assets pane is the real one, over a real manager. */
-  function fontSession(manager: AssetManager): EditorSession {
+  function fontSession(
+    manager: AssetManager,
+    credits?: readonly ThemeCreditsEntry[],
+  ): EditorSession {
     return new EditorSession({
       assetManager: manager,
+      ...(credits === undefined ? {} : { credits }),
       shell: {
         editor: {
           canvas: {
@@ -2677,6 +2684,69 @@ describe("the local font import", () => {
 
     extensions.destroy();
     vi.unstubAllGlobals();
+  });
+
+  it("replaces a declared face's own credit at the cap instead of refusing", async () => {
+    const manager = new AssetManager();
+    const face = fontTrio("minimal")!.faces[0]!;
+    await manager.adoptFont(face, new Uint8Array([1, 2, 3]));
+    // The card's own credit, already at the cap: re-creating its preset
+    // replaces this entry rather than growing the list.
+    const own: ThemeCreditsEntry = {
+      kind: "font",
+      title: face.family,
+      license: face.license.name,
+      changes: "Imported unchanged",
+      source: { url: face.sourceUrl },
+      assetId: face.id,
+    };
+    const credits: ThemeCreditsEntry[] = [
+      own,
+      ...Array.from({ length: MAX_CREDITS_ENTRIES - 1 }, (_, index) => ({
+        kind: "font",
+        title: `legacy-${index}`,
+        license: "unknown",
+        changes: "Imported unchanged",
+      })),
+    ];
+    const extensions = fontSession(manager, credits);
+
+    const open = document.body.querySelector<HTMLButtonElement>(
+      "[data-yunari-font-open]",
+    );
+    if (open === null) throw new Error("no Create type preset control");
+    await act(async () => {
+      open.click();
+      await settle();
+    });
+    const create = document.body.querySelector<HTMLButtonElement>(
+      "[data-yunari-font-create]",
+    );
+    if (create === null) throw new Error("no Create type preset control");
+    await act(async () => {
+      create.click();
+      await settle();
+    });
+
+    await extensions.actionFacade().savePackage();
+    const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
+    const presets =
+      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typePresets ??
+      {};
+    expect(Object.values(presets)).toHaveLength(1);
+    expect(Object.values(presets)[0]).toMatchObject({
+      value: { face: { assetId: face.id } },
+    });
+    const shipped = saved?.[3] as
+      | { readonly entries: readonly ThemeCreditsEntry[] }
+      | undefined;
+    expect(shipped?.entries).toHaveLength(MAX_CREDITS_ENTRIES);
+    expect(
+      shipped?.entries.filter((entry) => entry.assetId === face.id),
+    ).toHaveLength(1);
+    expect(document.body.textContent).not.toContain(uiCopy.assets.creditsFull);
+
+    extensions.destroy();
   });
 });
 

@@ -135,6 +135,9 @@ interface EditorSessionOptions {
   /** The picture the opened package carried, if it carried one. A save that
    *  cannot render one of its own keeps this rather than losing it. */
   readonly thumbnail?: Uint8Array;
+  /** The package's attribution member, when the session opens one: the
+   *  collection every later import is added to. */
+  readonly credits?: readonly ThemeCreditsEntry[];
   readonly panelHosts: EditorPanelHosts;
   readonly libraryClient?: ThemeLibraryClient;
   /** The readings the editor's pickers offer, from the host's sensor wire. A
@@ -804,10 +807,13 @@ export class EditorSession {
    *
    * The cap is checked before anything is declared, because nothing removes a
    * credit and the package writer refuses an over-cap list at the next save.
-   * The question here is the list's length, asked directly: a fresh file has no
-   * id until it is declared, and `canAddCredit`'s duplicate-key arm would let a
-   * legacy pre-assetId credit of the same title mask a full list. Cancel
-   * declares the file and writes neither the preset nor the credit.
+   * A fresh file has no id until it is declared (and `import` never dedupes),
+   * so its question is the list's length, asked directly: `canAddCredit`'s
+   * duplicate-key arm would let a legacy pre-assetId credit of the same title
+   * mask a full list. A declared face's real id lets `canAddCredit` answer,
+   * because re-creating that face's preset replaces its own credit rather than
+   * growing the list. Cancel declares the file and writes neither the preset
+   * nor the credit.
    */
   async #commitFont(
     input: FontCommitInput,
@@ -838,8 +844,11 @@ export class EditorSession {
         : { source: { url: metadata.sourceUrl } }),
       ...("assetId" in source ? { assetId: source.assetId } : {}),
     };
-    if (this.#document.credits().length >= MAX_CREDITS_ENTRIES)
-      return { ok: false, message: uiCopy.assets.creditsFull };
+    const full =
+      "file" in source
+        ? this.#document.credits().length >= MAX_CREDITS_ENTRIES
+        : !this.#document.canAddCredit(credit);
+    if (full) return { ok: false, message: uiCopy.assets.creditsFull };
 
     try {
       const asset =
