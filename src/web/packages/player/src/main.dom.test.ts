@@ -364,6 +364,14 @@ describe("the rate the display repaints at", () => {
     return pending.size;
   }
 
+  /** The refresh loop's own callback: `startChartRefresh` names its ticker
+   *  `tick`, and the callbacks the engine and Fabric schedule are their own. */
+  function refreshLoopsScheduled(): number {
+    return [...pending.values()].filter(
+      (callback) => (callback as { readonly name?: string }).name === "tick",
+    ).length;
+  }
+
   /** Mounts the player and hands back a count of the canvas's repaints. */
   async function mountAt(
     search: string,
@@ -450,6 +458,8 @@ describe("the rate the display repaints at", () => {
       "?theme=living-room&display=d1&theme-source=map&session=paired-token",
     );
     await vi.waitFor(() => expect(refreshCadenceMs(repaints)).toBe(1_000));
+    // The absolute pin: the page runs one refresh loop, not a loop per mount.
+    expect(refreshLoopsScheduled(), "one refresh loop after mount").toBe(1);
     const loopsBefore = refreshLoopsStarted();
 
     chartFps = 30;
@@ -461,6 +471,7 @@ describe("the rate the display repaints at", () => {
     );
 
     expect(refreshLoopsStarted()).toBe(loopsBefore);
+    expect(refreshLoopsScheduled(), "setRate added no loop").toBe(1);
   });
 });
 
@@ -1423,7 +1434,7 @@ describe("the work one refresh frame does", () => {
   /** Mounts a display and returns the spies the frame cases count. The spies are
    *  taken from the module instances `main.ts` itself imports — `beforeEach`
    *  reset the registry, so importing first is what makes them the same ones. */
-  async function mount(withLine: boolean) {
+  async function mount(withLine: boolean, lineKey = "cpu.load.total") {
     skeleton();
     history.replaceState({}, "", "/?theme=revisions");
     vi.stubGlobal("EventSource", RevisionStreamEventSource);
@@ -1447,12 +1458,15 @@ describe("the work one refresh frame does", () => {
       writable: true,
       value: vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url.endsWith("/document")) return json(revisionsEnvelope(withLine));
+        if (url.endsWith("/document"))
+          return json(revisionsEnvelope(withLine, lineKey));
         if (url === "/api/display") return json({ settings: {}, zones: [] });
         return json({});
       }),
     });
-    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const warned = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
 
     const { YunariChart } = await import("@yunari/scene-fabric");
     const { FabricObject } = await import("fabric/es");
@@ -1488,7 +1502,7 @@ describe("the work one refresh frame does", () => {
     linePoints.mockClear();
     requestRenderAll.mockClear();
 
-    return { setOption, set, linePoints, requestRenderAll };
+    return { setOption, set, linePoints, requestRenderAll, warned };
   }
 
   /** `set` calls that wrote text; the layout passes also set geometry. */
@@ -1550,8 +1564,46 @@ describe("the work one refresh frame does", () => {
     expect(requestRenderAll).not.toHaveBeenCalled();
   });
 
-  /** A gauge, a bound reading, and optionally the line that keeps moving. */
-  function revisionsEnvelope(withLine: boolean): unknown {
+  it("repaints the scene for a sample that arrived", async () => {
+    const { requestRenderAll } = await mount(false);
+    streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
+    await vi.waitFor(() => expect(liveRevision()).toBe(1));
+
+    driveFrame();
+
+    expect(requestRenderAll).toHaveBeenCalled();
+  });
+
+  it("reports a line's unmapped key once, not every frame", async () => {
+    // The line branch bypasses `buildChartPlan` every frame, so it has to ask
+    // for the diagnostics itself — and only when a sample moved, leaving the
+    // per-node dedupe to keep a persistent fault to one line.
+    const { warned } = await mount(true, "cpu.load.absent");
+    const unmapped = (): number =>
+      warned.mock.calls.filter(
+        ([message]) =>
+          typeof message === "string" &&
+          message.includes('No sensor is mapped to "cpu.load.absent"'),
+      ).length;
+
+    expect(unmapped(), "the mount reported the unmapped key").toBe(1);
+
+    for (let frame = 0; frame < 30; frame += 1) driveFrame();
+    expect(unmapped(), "idle frames reported nothing new").toBe(1);
+
+    streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
+    await vi.waitFor(() => expect(liveRevision()).toBe(1));
+    driveFrame();
+
+    expect(unmapped(), "the sample change did not repeat it").toBe(1);
+  });
+
+  /** A gauge, a bound reading, and optionally the line that keeps moving.
+   *  `lineKey` is a key nothing maps, for the diagnostics case. */
+  function revisionsEnvelope(
+    withLine: boolean,
+    lineKey = "cpu.load.total",
+  ): unknown {
     return {
       schemaVersion: "2.0.0",
       fabricVersion: "7.4.0",
@@ -1573,9 +1625,7 @@ describe("the work one refresh frame does", () => {
       bindings: {
         gauge: [{ id: "g", semanticKey: "cpu.load.total" }],
         readout: [{ id: "t", semanticKey: "cpu.load.total" }],
-        ...(withLine
-          ? { line: [{ id: "l", semanticKey: "cpu.load.total" }] }
-          : {}),
+        ...(withLine ? { line: [{ id: "l", semanticKey: lineKey }] } : {}),
       },
       scene: {
         version: "7.4.0",

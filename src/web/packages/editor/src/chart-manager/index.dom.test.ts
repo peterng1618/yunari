@@ -1218,4 +1218,40 @@ describe("a chart control's commit", () => {
     await stage.dispose();
     manager.destroy();
   });
+
+  it("replaces the option when a settings edit clears a bound", async () => {
+    // A merge never deletes a key the new option omits, and the line builder
+    // omits `yAxis.min`/`max` when the author clears them. Without a
+    // replacement the axis keeps the old bounds after the author removed them.
+    const bounded = { ...defaultLineSettings, min: 0, max: 100 };
+    const chart = new YunariChart({
+      id: "trends",
+      family: "line",
+      settings: bounded,
+      width: 800,
+      height: 400,
+    });
+    const { manager, stage } = mounted(chart);
+    const engine = (
+      chart as unknown as {
+        _chart: { setOption: (option: unknown, options: unknown) => void };
+      }
+    )._chart;
+    const applied = vi.spyOn(engine, "setOption");
+
+    manager.edits.onSettings("trends", bounded);
+    manager.edits.onSettings("trends", defaultLineSettings);
+
+    const [withBounds, withoutBounds] = applied.mock.calls.slice(-2);
+    // The control: the drawing that carried the bounds really had them, so the
+    // omission below is the author's clear rather than a worse bug.
+    expect(withBounds?.[0]).toMatchObject({ yAxis: { min: 0, max: 100 } });
+    expect(withoutBounds?.[0]).not.toHaveProperty("yAxis.min");
+    expect(withoutBounds?.[0]).not.toHaveProperty("yAxis.max");
+    // And it reached the engine as a replacement, which is what deletes them.
+    expect(withoutBounds?.[1]).toEqual({ notMerge: true, lazyUpdate: false });
+
+    await stage.dispose();
+    manager.destroy();
+  });
 });

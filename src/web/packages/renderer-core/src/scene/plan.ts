@@ -501,6 +501,35 @@ function spaced(unit: string): string {
   return /^[%°]/.test(unit) ? unit : ` ${unit}`;
 }
 
+/**
+ * The diagnostics a chart's authored content earns, whatever its family: a
+ * binding no sensor answers, and a paint naming a global the document lacks.
+ *
+ * Separate from the family switch so a caller that draws a line itself — the
+ * player does, from cached points — still asks for them; skipping the switch
+ * must not skip the report.
+ */
+export function collectChartIssues(
+  nodeId: string,
+  content: ChartContent,
+  bindings: readonly Binding[],
+  source: SampleSource,
+  issues: PlanIssue[],
+  palette?: import("../theme/fabric-envelope.js").FabricPalette,
+): void {
+  // Adapters handle absent samples; report unmapped semantic keys separately.
+  for (const binding of bindings) {
+    if (source.latest(binding.semanticKey) === undefined) {
+      issues.push({
+        code: "unmapped-key",
+        nodeId,
+        detail: `No sensor is mapped to "${binding.semanticKey}".`,
+      });
+    }
+  }
+  reportUnresolvedChartPaint(nodeId, content, palette, issues);
+}
+
 export function buildChartPlan(
   nodeId: string,
   content: ChartContent,
@@ -511,17 +540,14 @@ export function buildChartPlan(
 ): PlanChart {
   const animate = context.animate ?? true;
 
-  // Adapters handle absent samples; report unmapped semantic keys separately.
-  for (const binding of bindings) {
-    if (context.source.latest(binding.semanticKey) === undefined) {
-      issues.push({
-        code: "unmapped-key",
-        nodeId,
-        detail: `No sensor is mapped to "${binding.semanticKey}".`,
-      });
-    }
-  }
-  reportUnresolvedChartPaint(nodeId, content, palette, issues);
+  collectChartIssues(
+    nodeId,
+    content,
+    bindings,
+    context.source,
+    issues,
+    palette,
+  );
 
   switch (content.family) {
     case "gauge": {

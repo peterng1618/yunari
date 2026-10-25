@@ -237,6 +237,7 @@ export type {
 export {
   buildChartPlan,
   buildLinePoints,
+  collectChartIssues,
   formatNumber,
   formatUnit,
   MISSING_VALUE_TEXT,

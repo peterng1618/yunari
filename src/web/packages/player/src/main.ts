@@ -4,6 +4,7 @@ import {
   buildLineOption,
   buildLinePoints,
   type ChartContent,
+  collectChartIssues,
   createAssetResolver,
   createLiveSource,
   type FabricPalette,
@@ -274,7 +275,6 @@ async function startHostedTheme(
   const refresh = (): void => {
     const revision = liveHandle.source.revision;
     const sampleChanged = revision !== lastRevision;
-    lastRevision = revision;
     const chartsChanged = hydrateCharts(
       handle.canvas.getObjects(),
       theme.bindings ?? {},
@@ -323,6 +323,10 @@ async function startHostedTheme(
     if (sampleChanged || chartsChanged) {
       handle.canvas.requestRenderAll();
     }
+    // **After** the passes above, so one that throws leaves the revision
+    // undrawn and the next frame retries it rather than skipping that revision
+    // for good.
+    lastRevision = revision;
   };
 
   refresh();
@@ -524,6 +528,19 @@ function hydrateCharts(
           settings: object.settings,
         } as ChartContent;
         if (content.family === "line") {
+          // The line path skips `buildChartPlan`, so its diagnostics are asked
+          // for here — on a sample change only, leaving the dedupe to keep a
+          // standing fault to one line.
+          if (sampleChanged) {
+            collectChartIssues(
+              id,
+              content,
+              bindings[id] ?? [],
+              source,
+              issues,
+              palette,
+            );
+          }
           const cached = lineSeries.get(id);
           const series =
             cached !== undefined &&

@@ -132,8 +132,19 @@ export class YunariChart extends FabricObject {
     return this._disposed;
   }
 
-  /** Replace the complete option synchronously before Fabric blits it. */
-  public setOption(option: ChartOption | undefined): void {
+  /**
+   * Apply an option before Fabric blits it.
+   *
+   * The default merges: replacing only the series keeps the axes, grid and
+   * visual map while still dropping a series the new option no longer has — the
+   * frame loop's own path. `replace` is for an authored change, because a merge
+   * never deletes a key the new option omits and the builders omit `visualMap`
+   * and `yAxis.min`/`max` when the author removes them.
+   */
+  public setOption(
+    option: ChartOption | undefined,
+    options: { readonly replace?: boolean } = {},
+  ): void {
     if (this._disposed) {
       return;
     }
@@ -145,15 +156,12 @@ export class YunariChart extends FabricObject {
     }
 
     this._resizeBackingCanvas();
-    this._chart?.setOption(toEngineOption(withoutEngineAnimation(option)), {
-      // `notMerge: true` discarded every component the previous option carried,
-      // so each repaint rebuilt the chart. Replacing only the series keeps the
-      // axes, grid and visual map while still dropping a series the new option
-      // no longer has.
-      notMerge: false,
-      replaceMerge: ["series"],
-      lazyUpdate: false,
-    });
+    this._chart?.setOption(
+      toEngineOption(withoutEngineAnimation(option)),
+      options.replace === true
+        ? { notMerge: true, lazyUpdate: false }
+        : { notMerge: false, replaceMerge: ["series"], lazyUpdate: false },
+    );
     this._requestCanvasRender();
   }
 
