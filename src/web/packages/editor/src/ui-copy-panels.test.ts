@@ -3,10 +3,10 @@
  * The copy net over the imperative panels: every word they show comes from
  * `uiCopy`, or is data — a token's name, a locale's, an asset's, a preset's.
  *
- * **What this half reads.** The artboard, palette and type-preset panels are
- * read for their own DOM. The palette's paint kinds and both unit display lists
- * are read from the Base UI popups their triggers open, because a closed
- * control prints the chosen value rather than the words it offers.
+ * **What this half reads.** The artboard, palette, type-preset and token-inspector
+ * panels are read for their own DOM. The palette's paint kinds and both unit
+ * display lists are read from the Base UI popups their triggers open, because a
+ * closed control prints the chosen value rather than the words it offers.
  *
  * **What it deliberately does not read, and why.** A control that prints a
  * *value* is read for the concept and not the reading: a select's trigger shows
@@ -59,7 +59,7 @@ function runEdits(): RunEdits {
 }
 
 /**
- * The three panels say no word the table does not hold.
+ * The mounted panels say no word the table does not hold.
  *
  * A string literal in a panel is invisible to a reviewer reading `ui-copy.ts`
  * and invisible to the pictograph rule in `ui-copy.test.ts`, which only sees
@@ -73,7 +73,7 @@ function runEdits(): RunEdits {
  * an asset's, a preset's — and is deliberately not covered; the paint kinds
  * are copy and are listed by name.
  */
-it("leaves the three panels with no copy of their own", async () => {
+it("leaves the mounted panels with no copy of their own", async () => {
   const root = document.createElement("div");
   document.body.append(root);
 
@@ -149,6 +149,13 @@ it("leaves the three panels with no copy of their own", async () => {
   }).render({ kind: "preset", id: "body" }, tokenPresets, {
     typePresets: tokenPresets,
   });
+  // The fourth mount, non-vacuous with a number: a panel that rendered nothing
+  // would leave the net passing without reading one of its words. Eight is the
+  // labels a free preset renders — name, role, family, weight, size, line
+  // height, letter spacing and reassignment; Delete is a button, read below.
+  expect(
+    root.querySelectorAll("[data-yunari-token-fields] label"),
+  ).toHaveLength(8);
 
   // The palette's paint kinds, which are copy. They live in a Base UI popup that
   // exists only while it is open, so they are read the way an author reads them.
@@ -212,7 +219,7 @@ it("leaves the three panels with no copy of their own", async () => {
     .filter((text) => text !== "" && !/^[\d.v-]+$/.test(text));
   expect(spoken.filter((text) => !owned.has(text))).toEqual([]);
 
-  // This test mounts three panels that nothing unmounts, and the paint-kind list
+  // This test mounts panels that nothing unmounts, and the paint-kind list
   // it opened portals into `document.body`. Left standing, that popup is the next
   // test's `[role="option"]` set — read as four extra unit-display words.
   await act(async () => palettePanel.destroy());

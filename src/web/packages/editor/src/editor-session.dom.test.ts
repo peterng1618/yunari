@@ -2,7 +2,6 @@
 
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { IText } from "fabric/es";
-import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { presetLibrary } from "./preset-library/index.js";
 import { installReadableFile } from "./readable-file.fixture.js";
@@ -1047,7 +1046,7 @@ describe("EditorSession", () => {
     extensions.destroy();
   });
 
-  it("gives the selected token its own column, and gives the object column back", async () => {
+  it("gives the selected token its own column, and gives the object column back", () => {
     // The right column has one owner at a time (spec, Tokens pane). The session
     // owns both halves — the token panel's mounts and the suppression — because
     // it already owns the document the token fields write through; a panel built
@@ -1128,11 +1127,13 @@ describe("EditorSession", () => {
     // preset the document no longer has. The replacement is the other preset.
     tokenSelection.set({ kind: "preset", id: "body" });
     expect(objectColumn?.style.display).toBe("none");
-    await act(async () => {
-      tokenColumn
-        ?.querySelector<HTMLButtonElement>("[data-yunari-token-delete]")
-        ?.click();
-    });
+    // A plain click: the token panel renders through `flushSync`, so the
+    // document write and the suppression it causes land synchronously. Wrapping
+    // it in `act` would need `IS_REACT_ACT_ENVIRONMENT`, which this suite does
+    // not set, and React warns once per run when it is missing.
+    tokenColumn
+      ?.querySelector<HTMLButtonElement>("[data-yunari-token-delete]")
+      ?.click();
     expect(tokenSelection.get()).toBeUndefined();
     expect(objectColumn?.style.display).toBe("");
     expect(tokenColumn?.textContent).toBe("");
