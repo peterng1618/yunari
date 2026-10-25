@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 3; Tasks 1–8 complete, Task 9 next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–9 complete, Task 10 next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,10 +18,11 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 8 landed:** the Assets pane draws kind-grouped cards with In use/Unused badges, thumbnails and named per-kind actions; shell mounts its chrome.
-- **Unwired actions are disabled, not dead:** Preview, Set as background and Create type preset disable while their callback is absent; Task 9 supplies them.
-- **Assets count is deferred with its source:** the manager lives in the session, so the pane mounts without a count and `paneCounts.files` waits for Task 9.
-- **Evidence:** pane 5/5, panes+editor-shell 519 tests, typecheck, biome exit 0.
+- **Task 9 landed:** the declared-asset library lives in the Assets pane; import routes by kind and intent, and a font is refused as a background.
+- **`file-section.tsx` is gone:** video normalization, replace, remove, both refusals and the `changed()` notifier moved to the pane rather than being dropped.
+- **Placed files now land at the canvas centre** through Fabric's `centerObject`, and the pane's count follows every declaration change, including trio and preset-face adoption.
+- **`vg-731` is the one expected red:** no drawing names `yunari-asset-preview` since `775e2f54`, and the parity spec now says so.
+- **Evidence:** editor 185 files / 2582 tests, typecheck and biome exit 0; editor-rail 34 passed, and `packaged images` green.
 
 ## Next
 
