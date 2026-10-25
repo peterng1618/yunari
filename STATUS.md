@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–12 complete, Task 13 next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–13 complete, Task 14 next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,11 +18,11 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 12 landed:** the document owns the five preset actions — apply a trio, add its three presets, add one from a cut, set a role, unbind a face — and the preview panel is wired.
-- **Bytes come from the host** (`/api/assets/bytes`) and every write goes through `setTypes`, so history and the unsaved marker see one entry per action.
-- **Provider cuts mint their own packaged asset id**, hashed so two ids differing only in a separator cannot overwrite each other's bytes, and weight conversion has one owner.
-- **The input walk is green** with two ruled exemptions: the finder search is a filter, the sample line is transient preview text.
-- **Evidence:** 151 tests across the review's suites, typecheck and biome exit 0.
+- **Task 13 landed:** the 379-row facet picker and its specimen cache are gone, and the finder grid windows its rows with roving focus and one tab stop, ported from the picker's own virtualiser.
+- **A dead module went with it:** `font-catalog-query.ts` had no product consumer once the picker died; the grid's row pitch is a JS constant that must track `--font-tile-min-height`.
+- **The design-token ratchet is green again:** the finder's dimensions, glyph sizes and fixed specimen backdrop are tokens, and four micro labels sit on `--text-2xs` rather than 9px.
+- **Filed `vg-732`:** eight surfaces write `var(--space-2)`, which no token defines, so their padding and gap compute to zero.
+- **Evidence:** asset-finder 99 tests, typecheck/biome/design-tokens exit 0, the finder browser spec 17 passed and 17 skipped.
 
 ## Next
 
