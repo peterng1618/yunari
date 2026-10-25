@@ -128,9 +128,16 @@ export function mountFabricScene(
   // the media layer is assigned after it so its `onFrame` can read the handle
   // (R64).
   let media: BackgroundMediaHandle | undefined;
-  /** The host size the last fit was for, so `resize()` can tell a layout change
-   *  from a pixel change. A `ResizeObserver` fires for both. */
-  let fitted: { readonly width: number; readonly height: number } | undefined;
+  /** The host size and pixel ratio the last fit was for, so `resize()` can tell
+   *  a layout change from a pixel change. A `ResizeObserver` fires for both, and
+   *  moving the window between monitors changes the ratio at the same size. */
+  let fitted:
+    | {
+        readonly width: number;
+        readonly height: number;
+        readonly ratio: number;
+      }
+    | undefined;
 
   // Glass is not a plan feature: it is a property on revived Fabric objects, so
   // the owner re-resolves them from the canvas rather than from `update()`.
@@ -194,7 +201,11 @@ export function mountFabricScene(
     // document artboard's `background` may still be a palette reference, which
     // only the plan builder can resolve.
     const geometry = currentArtboard ?? plan.artboard;
-    fitted = { width: host.clientWidth, height: host.clientHeight };
+    fitted = {
+      width: host.clientWidth,
+      height: host.clientHeight,
+      ratio: window.devicePixelRatio,
+    };
     const transform = computeArtboardTransform({
       artboard: { width: geometry.width, height: geometry.height },
       viewport: { width: host.clientWidth, height: host.clientHeight },
@@ -299,10 +310,13 @@ export function mountFabricScene(
       if (disposed) return;
       // The observer fires for layout changes that leave the pixel size alone,
       // and re-fitting those is a canvas resize and a full repaint for nothing.
+      // The ratio is part of the fit: moving between monitors changes the
+      // backing store at the same CSS size.
       if (
         fitted !== undefined &&
         fitted.width === host.clientWidth &&
-        fitted.height === host.clientHeight
+        fitted.height === host.clientHeight &&
+        fitted.ratio === window.devicePixelRatio
       ) {
         return;
       }

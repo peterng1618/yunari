@@ -15,6 +15,7 @@ import {
 } from "@yunari/renderer-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PAIRING_STORAGE_KEY, readStoredPairing } from "./host-refind.js";
+import type { PageNavigation } from "./main.js";
 
 /**
  * A partial mock, so the calls the player makes are countable without adding a
@@ -617,7 +618,7 @@ describe("a display whose page is hidden", () => {
   /** Mounts a line display, whose option is rebuilt on every refresh, so its
    *  repaints are the loop's own cadence. Returns the handle's media calls as
    *  spies: `main.ts` holds the same handle object. */
-  async function mountLine(): Promise<{
+  async function mountLine(envelope: unknown = lineEnvelope()): Promise<{
     readonly pause: ReturnType<typeof vi.spyOn>;
     readonly resume: ReturnType<typeof vi.spyOn>;
     readonly repaints: () => number;
@@ -659,7 +660,7 @@ describe("a display whose page is hidden", () => {
             display: { id: "d1", theme: "living-room", chartFps: 30 },
           });
         }
-        if (url.endsWith("/document")) return json(lineEnvelope());
+        if (url.endsWith("/document")) return json(envelope);
         return json({});
       }),
     });
@@ -733,28 +734,69 @@ describe("a display whose page is hidden", () => {
     expect(repaints(), "and repainted nothing").toBe(before);
   });
 
-  it("reloads for a persisted pageshow and ignores a fresh one", async () => {
-    await mountLine();
-    const { pageNavigation } = await import("./main.js");
-    const reload = vi
-      .spyOn(pageNavigation, "reload")
-      .mockImplementation(() => {});
+  /** A line display with a video backdrop, so the media pause at mount is
+   *  observable: the line keeps the refresh loop repainting, and the video's own
+   *  `pause` is the call the scene's media handle makes. */
+  function videoEnvelope(): unknown {
+    return {
+      ...(lineEnvelope() as Record<string, unknown>),
+      background: { media: { assetId: "bg", bounds: "theme" } },
+      assets: [{ id: "bg", kind: "video", path: "assets/bg.webm" }],
+    };
+  }
 
-    window.dispatchEvent(
+  it("starts paused when the page is already hidden at mount", async () => {
+    // `visibilitychange` fires only on a change, so a display restored or
+    // opened in a background tab never gets one. The prototype spy covers the
+    // mount's own call rather than an event's.
+    const paused = vi
+      .spyOn(HTMLMediaElement.prototype, "pause")
+      .mockImplementation(() => {});
+    setHidden(true);
+
+    const { repaints } = await mountLine(videoEnvelope());
+
+    expect(paused, "the media was paused at mount").toHaveBeenCalledTimes(1);
+    const before = repaints();
+    driveFrames(30);
+    expect(repaints(), "and no refresh wake was armed").toBe(before);
+  });
+
+  it("reloads for a persisted pageshow and ignores a fresh one", async () => {
+    // **A navigation object of this mount's own.** Every mount in this file
+    // leaves a `pageshow` listener on the shared jsdom window, so a spy on a
+    // shared seam could pass from a prior mount's listener. `start` is handed
+    // this object, and only the registration it makes can reach the spy.
+    const target = new EventTarget();
+    const reload = vi.fn();
+    const navigation: PageNavigation = {
+      addEventListener: (type, listener) =>
+        target.addEventListener(type, listener as EventListener),
+      reload,
+    };
+
+    // The harness stubs (`EventSource`, frames, `fetch`) are what a mount
+    // needs; this case drives the mount through `start` rather than the import.
+    await mountLine();
+    const { start } = await import("./main.js");
+    await start(skeleton(), navigation);
+    expect(
+      document.querySelector("[data-yunari-load-failure]"),
+      "the second mount reached its chrome",
+    ).toBeNull();
+
+    target.dispatchEvent(
       new PageTransitionEvent("pageshow", { persisted: false }),
     );
     expect(reload, "a first load reloads nothing").not.toHaveBeenCalled();
 
-    window.dispatchEvent(
+    target.dispatchEvent(
       new PageTransitionEvent("pageshow", { persisted: true }),
     );
-    // Not "once": every mount this jsdom file has made still holds the shared
-    // window's listener, so the count is one per mount. What this pins is that
-    // a persisted pageshow navigates at all and a fresh one does not.
     expect(
       reload,
       "a page restored from the back/forward cache reloads",
-    ).toHaveBeenCalled();
+    ).toHaveBeenCalledTimes(1);
   });
 });
 

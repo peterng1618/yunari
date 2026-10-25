@@ -2,8 +2,27 @@
 
 import type { Background, ScenePlan } from "@yunari/renderer-core";
 import { Group, Rect } from "fabric/es";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { type FabricSceneHandle, mountFabricScene } from "./scene.js";
+
+/** jsdom has no video frame callbacks, and the cases below patch them on the
+ *  prototype. Restored after every case, so one case's patch is never the next
+ *  case's starting state. */
+const videoPrototype = HTMLVideoElement.prototype as unknown as Record<
+  string,
+  unknown
+>;
+const originalFrameCallbacks: Readonly<Record<string, unknown>> = {
+  requestVideoFrameCallback: videoPrototype["requestVideoFrameCallback"],
+  cancelVideoFrameCallback: videoPrototype["cancelVideoFrameCallback"],
+};
+
+afterEach(() => {
+  for (const [name, original] of Object.entries(originalFrameCallbacks)) {
+    if (original === undefined) delete videoPrototype[name];
+    else videoPrototype[name] = original;
+  }
+});
 
 function plan(artboard: Partial<ScenePlan["artboard"]> = {}): ScenePlan {
   return {
@@ -216,6 +235,26 @@ describe("mountFabricScene's resize", () => {
     // scale each request a render of their own, so the fit is one setter call
     // and at least one repaint.
     expect(render, "and repaints").toHaveBeenCalled();
+
+    // The same CSS size on a monitor with another pixel ratio is a different
+    // backing store, so it is a fit: the ratio is part of what was recorded.
+    const ratio = window.devicePixelRatio;
+    Object.defineProperty(window, "devicePixelRatio", {
+      configurable: true,
+      value: ratio * 2,
+    });
+    try {
+      scene.resize();
+      expect(
+        setDimensions,
+        "a changed pixel ratio at the same size fits again",
+      ).toHaveBeenCalledTimes(2);
+    } finally {
+      Object.defineProperty(window, "devicePixelRatio", {
+        configurable: true,
+        value: ratio,
+      });
+    }
 
     scene.dispose();
     element.remove();

@@ -56,30 +56,26 @@ import {
 /** Display-only runtime. The phone renders; hardware acquisition stays on the host. */
 
 /**
- * The one navigation this page performs on its own: a page restored from the
- * back/forward cache is the document `pagehide` already tore down, so only a
- * fresh load recovers it.
+ * The page lifecycle a mount listens to: the reload a page restored from the
+ * back/forward cache needs, because `pagehide` already tore that document down.
  *
- * A seam rather than a bare `window.location.reload()`, because jsdom's
- * `location.reload` is unforgeable and the reload is otherwise untestable. It
- * is held on the global because one jsdom window outlives a test's module
- * registry: every mount in the file shares the listeners and must share the
- * seam they call.
+ * A seam rather than a bare `window`, because one jsdom window outlives a
+ * test's module registry: every mount in a file leaves a `pageshow` listener on
+ * it, so a case asserting "this mount reloads" must hand the mount a navigation
+ * object of its own.
  */
 export interface PageNavigation {
+  addEventListener(
+    type: "pageshow",
+    listener: (event: PageTransitionEvent) => void,
+  ): void;
   reload(): void;
 }
 
-const navigationHost = globalThis as {
-  __yunariPageNavigation?: PageNavigation;
+const windowNavigation: PageNavigation = {
+  addEventListener: (type, listener) => window.addEventListener(type, listener),
+  reload: () => window.location.reload(),
 };
-
-export const pageNavigation: PageNavigation =
-  (navigationHost.__yunariPageNavigation ??= {
-    reload(): void {
-      window.location.reload();
-    },
-  });
 
 const artboardHost = document.querySelector<HTMLElement>("#artboard");
 
@@ -169,7 +165,10 @@ async function rememberPairing(
   }
 }
 
-async function start(host: HTMLElement): Promise<void> {
+export async function start(
+  host: HTMLElement,
+  navigation: PageNavigation = windowNavigation,
+): Promise<void> {
   const parameters = new URLSearchParams(window.location.search);
   const requested = parameters.get("theme");
 
@@ -191,6 +190,7 @@ async function start(host: HTMLElement): Promise<void> {
       host,
       await loadHostedTheme(requested, session.fetch),
       session,
+      navigation,
     );
   } catch (error) {
     showLoadFailure(error);
@@ -228,6 +228,7 @@ async function startHostedTheme(
   host: HTMLElement,
   theme: FabricThemeEnvelope,
   session: DisplaySessionToken,
+  navigation: PageNavigation,
 ): Promise<void> {
   const language = theme.metadata?.themeLanguage;
   declareDocumentLanguage(language);
@@ -489,7 +490,11 @@ async function startHostedTheme(
   // A hidden page repaints up to thirty times a second and keeps decoding a
   // background video nobody can see. `disposed` is the pagehide flag: a page
   // that teardown has torn down must not be revived by a late event.
-  window.addEventListener("visibilitychange", () => {
+  //
+  // **Run once at mount as well as on the event.** `visibilitychange` fires
+  // only on a *change*, so a display restored or opened in a background tab
+  // starts hidden and would otherwise start its loop and its video.
+  const syncVisibility = (): void => {
     if (disposed) return;
     if (document.hidden) {
       chartRefresh.stop();
@@ -498,12 +503,13 @@ async function startHostedTheme(
     }
     handle.resumeMedia();
     chartRefresh.start();
-  });
-  window.addEventListener("pageshow", (event) => {
+  };
+  window.addEventListener("visibilitychange", syncVisibility);
+  navigation.addEventListener("pageshow", (event) => {
     // A page restored from the back/forward cache is the document `pagehide`
     // already tore down — `disposed` is exactly what it left behind — so a
     // fresh load is the only recovery. A first load is already fresh.
-    if (event.persisted) pageNavigation.reload();
+    if (event.persisted) navigation.reload();
   });
   window.addEventListener(
     "pagehide",
@@ -529,6 +535,9 @@ async function startHostedTheme(
     },
     { once: true },
   );
+  // After the listeners, so a page that is already hidden takes the same path
+  // the first `visibilitychange` would have taken.
+  syncVisibility();
   exposeForDiagnostics(handle, liveHandle);
 }
 
