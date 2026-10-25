@@ -1016,6 +1016,56 @@ describe("Fabric theme envelope validation", () => {
     });
   });
 
+  it("accepts a local font with no license or with a name-only license", () => {
+    for (const license of [undefined, { name: "unknown" }]) {
+      const result = validateFabricThemeEnvelope({
+        ...envelope(),
+        assets: [
+          {
+            id: "body-face",
+            kind: "font",
+            path: "assets/faces/body.ttf",
+            family: "Inter",
+            weight: 400,
+            style: "normal",
+            format: "ttf",
+            ...(license === undefined ? {} : { license }),
+          },
+        ],
+      });
+
+      expect(result, JSON.stringify(license)).toMatchObject({ ok: true });
+    }
+  });
+
+  it("refuses a present licence name that is empty", () => {
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      assets: [
+        {
+          id: "body-face",
+          kind: "font",
+          path: "assets/faces/body.woff2",
+          family: "Inter",
+          weight: 400,
+          style: "normal",
+          format: "woff2",
+          license: { name: "" },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "missing-field",
+          path: "/assets/0/license/name",
+        }),
+      ]),
+    });
+  });
+
   it("rejects transitional globals and literal background paint", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),

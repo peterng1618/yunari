@@ -325,5 +325,7 @@ describe("published Fabric theme schema", () => {
     expect(properties["path"]!["pattern"]).toBe(
       `^assets/[A-Za-z0-9._/-]{1,200}\\.(${FONT_ASSET_FORMATS.join("|")})$`,
     );
+    const license = properties["license"] as Record<string, unknown>;
+    expect(license["required"]).toBeUndefined();
   });
 });

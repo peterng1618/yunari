@@ -630,19 +630,36 @@ function validateFontAsset(
     );
   }
   const license = asset["license"];
-  if (
-    license !== undefined &&
-    (!isRecord(license) ||
-      typeof license["name"] !== "string" ||
-      license["name"].trim().length === 0 ||
-      typeof license["url"] !== "string" ||
-      !isHttpUrl(license["url"]))
-  ) {
-    issues.add(
-      "missing-field",
-      `${path}/license`,
-      "A declared font asset licence needs a name and URL.",
-    );
+  if (license !== undefined) {
+    if (!isRecord(license)) {
+      issues.add(
+        "wrong-type",
+        `${path}/license`,
+        "A font asset licence must be an object.",
+      );
+    } else {
+      if (
+        license["name"] !== undefined &&
+        (typeof license["name"] !== "string" ||
+          license["name"].trim().length === 0)
+      ) {
+        issues.add(
+          "missing-field",
+          `${path}/license/name`,
+          "A font asset licence name must be a non-empty string.",
+        );
+      }
+      if (
+        license["url"] !== undefined &&
+        (typeof license["url"] !== "string" || !isHttpUrl(license["url"]))
+      ) {
+        issues.add(
+          "wrong-type",
+          `${path}/license/url`,
+          "A font asset licence URL must be HTTPS.",
+        );
+      }
+    }
   }
 }
 

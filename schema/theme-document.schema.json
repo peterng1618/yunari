@@ -152,7 +152,7 @@
         "family": { "type": "string", "minLength": 1 }, "weight": { "oneOf": [{ "type": "string" }, { "type": "number" }] },
         "style": { "enum": ["normal", "italic"] }, "format": { "enum": ["woff2", "woff", "ttf", "otf"] },
         "sourceUrl": { "type": "string", "format": "uri" },
-        "license": { "type": "object", "additionalProperties": false, "required": ["name", "url"], "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 200 }, "url": { "type": "string", "format": "uri" }, "attribution": { "type": "string", "maxLength": 500 } } }
+        "license": { "type": "object", "additionalProperties": false, "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 200 }, "url": { "type": "string", "format": "uri" }, "attribution": { "type": "string", "maxLength": 500 } } }
       }
     },
     "binding": {
