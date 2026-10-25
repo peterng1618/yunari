@@ -4097,10 +4097,27 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
-        // The assets a display fetches come from the theme's own folder, so a
-        // document with no folder would render with holes. Refusing is honest;
-        // publishing it anyway is not.
-        if (!(await themeStore.exists(id))) {
+        // Every declared asset a display fetches comes from the theme's own
+        // folder, so a theme whose document is readable but whose declared file
+        // is missing or past its bound would render a hole. `exists` reads the
+        // document alone, which is right for the two-second poll and not for
+        // this admin route: publishing verifies the whole theme.
+        let stored: ThemeRecord;
+        try {
+          stored = await themeStore.read(id);
+        } catch (error) {
+          // A document that is present and unreadable is the same 404 an absent
+          // one gets, as it was before the scoped reads (ADR-0043).
+          if (
+            error instanceof ThemeValidationError ||
+            error instanceof ThemeTooLargeError
+          ) {
+            stored = undefined;
+          } else {
+            throw error;
+          }
+        }
+        if (stored === undefined) {
           // 404, the same answer `/api/themes/:id` gives for the same fact.
           sendText(
             response,

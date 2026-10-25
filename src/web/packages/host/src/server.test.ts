@@ -1003,11 +1003,12 @@ describe("Host theme routes", () => {
     const readAsset = vi.fn((id: string, assetPath: string) =>
       store.readAsset(id, assetPath),
     );
+    const readEnvelope = vi.fn((id: string) => store.readEnvelope(id));
     const read = vi.fn((id: string) => store.read(id));
     const hosted = createHostServer({
       registry: new ProviderRegistry([]),
       bundles: { player: dir, editor: dir },
-      themeStore: { ...store, readAsset, read },
+      themeStore: { ...store, readAsset, readEnvelope, read },
     });
 
     try {
@@ -1026,6 +1027,9 @@ describe("Host theme routes", () => {
         "living-room",
         "assets/inter-400.woff2",
       );
+      // The route never reads the envelope at this level: the declared path and
+      // kind come back from `readAsset` itself.
+      expect(readEnvelope).not.toHaveBeenCalled();
       expect(read).not.toHaveBeenCalled();
     } finally {
       await hosted.close();
@@ -7803,6 +7807,57 @@ describe("The publish route", () => {
       expect(
         (await request(hosted.server, "GET", "/api/publish")).json(),
       ).toMatchObject({ id: null });
+    } finally {
+      await hosted.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to publish a theme whose declared asset is missing", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-publish-"));
+    const activeTheme = createActiveThemeStore(dir);
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: createThemeStore(dir),
+      activeTheme,
+    });
+
+    try {
+      const content = createPackageWithAsset("assets/inter-400.woff2", [1, 2]);
+      await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room",
+        themeBody(content),
+      );
+      // The document is still there and still validates; the declared file is
+      // the half that is gone.
+      await fs.rm(path.join(dir, "living-room", "assets", "inter-400.woff2"));
+
+      const refused = await request(
+        hosted.server,
+        "PUT",
+        "/api/publish?id=living-room",
+        themeBody(content),
+      );
+      // The same answer an absent theme gets: a display would fetch the missing
+      // file, and publishing is an admin act, so the whole theme is verified.
+      expect(refused.status).toBe(404);
+      expect(refused.text()).toBe(
+        'No theme "living-room" in this library to publish.',
+      );
+
+      // The poll asks `exists`, which reads the document alone by ruling: the
+      // assignment is still reported even though the theme cannot be published.
+      await activeTheme.write(LOCAL_DISPLAY_ID, "living-room");
+      const polled = await request(hosted.server, "GET", "/api/published");
+      expect(polled.status).toBe(200);
+      expect((polled.json() as { display: unknown }).display).toEqual({
+        id: LOCAL_DISPLAY_ID,
+        theme: "living-room",
+        chartFps: 1,
+      });
     } finally {
       await hosted.close();
       await fs.rm(dir, { recursive: true, force: true });
