@@ -312,7 +312,7 @@ describe("the rate the display repaints at", () => {
   let pending = new Map<number, FrameRequestCallback>();
   let pendingTimers = new Map<
     number,
-    { callback: () => void; dueMs: number }
+    { callback: () => void; dueMs: number; delayMs: number }
   >();
   let nextHandle = 0;
   let nextTimer = 0;
@@ -382,6 +382,27 @@ describe("the rate the display repaints at", () => {
     return pending.size + pendingTimers.size;
   }
 
+  /** The chart loop's own wake: a frame, or at 1 fps a timer for its interval.
+   *  The follower's 2 s publish poll is neither, and counting it read 2. */
+  function chartWakes(): number {
+    // At most one chart interval: 1000 ms at rate 1, and at rate 30 the loop
+    // arms a frame instead of a timer, so no timer is ever a chart wake.
+    let timers = 0;
+    for (const timer of pendingTimers.values()) {
+      if (timer.delayMs <= 1_000) timers += 1;
+    }
+    return pending.size + timers;
+  }
+
+  /** The follower's poll wakes, which `chartWakes` excludes on purpose. */
+  function pollWakes(): number {
+    let polls = 0;
+    for (const timer of pendingTimers.values()) {
+      if (timer.delayMs === 2_000) polls += 1;
+    }
+    return polls;
+  }
+
   /** Mounts the player and hands back a count of the canvas's repaints and of
    *  the follower's polls. `envelope` is the theme served, so a case can mount
    *  a display with no chart on it. */
@@ -425,6 +446,7 @@ describe("the rate the display repaints at", () => {
         pendingTimers.set(nextTimer, {
           callback: handler as () => void,
           dueMs: clock + (delayMs ?? 0),
+          delayMs: delayMs ?? 0,
         });
         return nextTimer;
       },
@@ -522,21 +544,26 @@ describe("the rate the display repaints at", () => {
     );
 
     driveFrame(0);
+    expect(chartWakes(), "one refresh wake after mount").toBe(1);
+    // The poll is a 2 s timer on this same harness, and the pin above excludes
+    // it by interval rather than by name: counted, it would read 2.
     expect(
-      pending.size + pendingTimers.size,
-      "one refresh wake after mount",
+      pollWakes(),
+      "the publish poll, present but not a refresh wake",
     ).toBe(1);
 
     chartFps = 30;
     const before = polls();
-    // The follower polls every two seconds: a poll past the change is what
-    // hands the new rate to the loop that already exists.
+    // The follower chains its wake on a timer, which this harness holds, so the
+    // poll is driven rather than waited for; the wait then lets its answer land
+    // and re-rate the loop that already exists.
+    driveFrame(2_000);
     await vi.waitFor(() => expect(polls()).toBeGreaterThan(before), {
       timeout: 5_000,
     });
 
     driveFrame(0);
-    expect(pending.size + pendingTimers.size, "setRate added no wake").toBe(1);
+    expect(chartWakes(), "setRate added no wake").toBe(1);
   });
 });
 
