@@ -32,6 +32,14 @@ describe("theme asset media type", () => {
     expect(
       themeAssetContentType({ kind: "image", path: "assets/x.js" }),
     ).toBeUndefined();
+    // SVG and GIF have their own kinds; declaring them as an image is a
+    // mismatch, not a broader image type.
+    expect(
+      themeAssetContentType({ kind: "image", path: "assets/x.svg" }),
+    ).toBeUndefined();
+    expect(
+      themeAssetContentType({ kind: "image", path: "assets/x.gif" }),
+    ).toBeUndefined();
     expect(
       themeAssetContentType({ kind: "video", path: "assets/x.png" }),
     ).toBeUndefined();
