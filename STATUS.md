@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 1; Tasks 1–2 complete, Task 3 next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 1; Tasks 1–3 complete, Task 4 next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,9 +18,9 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 2 landed:** `ThemeCreditsEntry` carries an optional `assetId`, preserved through open and save; `creditKey` keeps one credit per asset.
-- **Task 1 landed earlier:** font references accept woff, ttf and otf, plus a local licence with no URL.
-- **Evidence:** focused suites 31 tests green for Task 2; earlier theme suite 258 green; typecheck exits 0.
+- **Task 3 landed:** the assets wire carries font cuts and trios, and `searchSources` asks only the body the request names.
+- **Task 2 landed earlier:** `ThemeCreditsEntry` carries an optional `assetId`, preserved through open and save.
+- **Evidence:** focused suites 19 tests green for Task 3; typecheck exits 0.
 
 ## Next
 
