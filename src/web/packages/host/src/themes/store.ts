@@ -15,6 +15,7 @@ import {
   validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
 import { cssArtboardPaint } from "@yunari/scene-fabric";
+import { readContainedFile } from "./contained-read.js";
 import { moveToTrash } from "./trash.js";
 
 /**
@@ -179,7 +180,7 @@ export class ThemeValidationError extends Error {
 }
 
 /**
- * A stored theme whose `theme.json` is past the size the store will read. Its
+ * A theme whose `theme.json` is past the size the store will read or write. Its
  * own member of the family above rather than a {@link ThemeValidationError}:
  * nothing about the document is invalid — the validator never runs, and the
  * bound is the store's own, not the schema's — so dressing it as one would
@@ -194,7 +195,7 @@ export class ThemeValidationError extends Error {
 export class ThemeTooLargeError extends Error {
   constructor(id: string) {
     super(
-      `"${id}" is stored but larger than the ${size(MAX_THEME_FILE_BYTES)} ` +
+      `"${id}" is larger than the ${size(MAX_THEME_FILE_BYTES)} ` +
         "the store will open.",
     );
     this.name = "ThemeTooLargeError";
@@ -573,7 +574,9 @@ function parseThemeDocument(id: string, bytes: Buffer): unknown {
 }
 
 /**
- * The stored document, or `undefined` when the file is not there. A file that
+ * The stored document, or `undefined` when the file is not there — or when it
+ * resolves outside the theme's own folder, which is the absence it is: a link
+ * standing where `theme.json` belongs is not this theme's document. A file that
  * *is* there and cannot be read throws rather than answering `undefined`: the
  * two facts were indistinguishable to every reader, and only the open path
  * wants them apart (vg-110, vg-409, decisions/0043).
@@ -588,10 +591,8 @@ async function readStored(
   library: string,
   id: string,
 ): Promise<StoredTheme | undefined> {
-  let bytes: Buffer;
-  try {
-    bytes = await fs.readFile(path.join(library, id, THEME_FILE));
-  } catch {
+  const bytes = await readContainedFile(path.join(library, id), THEME_FILE);
+  if (bytes === undefined) {
     return undefined;
   }
   if (bytes.byteLength > MAX_THEME_FILE_BYTES) {
@@ -760,9 +761,15 @@ export function createThemeStore(
         let total = 0;
 
         for (const assetPath of declared) {
-          const bytes = await fs.readFile(
-            path.join(directory, id, ...assetPath.split("/")),
+          // Contained, like the document: a declared path that resolves out of
+          // the theme's folder is not an asset this theme carries.
+          const bytes = await readContainedFile(
+            path.join(directory, id),
+            assetPath,
           );
+          if (bytes === undefined) {
+            return undefined;
+          }
           if (assetSizeRefusal(assetPath, bytes.byteLength) !== undefined) {
             return undefined;
           }
@@ -832,6 +839,14 @@ export function createThemeStore(
       }
       const envelope = checked(id, content, reconstructFrom !== undefined);
       const serialized = JSON.stringify(envelope);
+      // The document bound `readStored` enforces holds on the way in too: a
+      // theme this store would refuse to open must never be written, or the
+      // save reports success and the next open finds nothing. Measured in the
+      // bytes `writeFile` will put on disk, and before the first `mkdir` — the
+      // library's included — so a refusal leaves no folder behind.
+      if (Buffer.byteLength(serialized, "utf8") > MAX_THEME_FILE_BYTES) {
+        throw new ThemeTooLargeError(id);
+      }
       await fs.mkdir(directory, { recursive: true });
       const target = path.join(directory, id);
       const staging = path.join(directory, scratchName("staging", id));

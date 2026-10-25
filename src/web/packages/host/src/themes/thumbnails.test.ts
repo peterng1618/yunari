@@ -1,16 +1,32 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createThemeStore } from "./store.js";
-import { createThumbnailStore } from "./thumbnails.js";
+import { createThumbnailStore, pngDimensions } from "./thumbnails.js";
 
-/** A one-pixel PNG: the signature is what the store validates. */
+/** A real 1×1 PNG: the header's declared size is what the store bounds. */
 const PNG = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02,
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+  0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06,
+  0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44,
+  0x41, 0x54, 0x78, 0xda, 0x63, 0xfc, 0xcf, 0xc0, 0x50, 0x0f, 0x00, 0x04, 0x85,
+  0x01, 0x80, 0x84, 0xa9, 0x8c, 0x21, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+  0x44, 0xae, 0x42, 0x60, 0x82,
 ]);
+
+/** The 1×1 PNG with its header rewritten to declare another size. The store
+ *  bounds what a file claims, so the image data past the header is irrelevant
+ *  to these tests. */
+function pngDeclaring(width: number, height: number): Uint8Array {
+  const bytes = Uint8Array.from(PNG);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  return bytes;
+}
 
 const envelopeFor = (id: string): FabricThemeEnvelope => ({
   schemaVersion: "2.0.0",
@@ -112,6 +128,28 @@ describe("thumbnails", () => {
     huge.set(PNG);
 
     await expect(store.write("living-room", huge)).rejects.toThrow("too large");
+  });
+
+  it("reads the size a PNG header declares", () => {
+    expect(pngDimensions(PNG)).toEqual({ width: 1, height: 1 });
+  });
+
+  it("refuses a picture whose header declares an impossible size", async () => {
+    const store = createThumbnailStore(dir);
+
+    await expect(
+      store.write("living-room", pngDeclaring(100000, 100000)),
+    ).rejects.toThrow("may be at most");
+  });
+
+  it("will not serve a stored picture whose header declares an impossible size", async () => {
+    await mkdir(path.join(dir, "living-room"), { recursive: true });
+    await writeFile(
+      path.join(dir, "living-room", "thumbnail.png"),
+      pngDeclaring(100000, 100000),
+    );
+
+    expect(await createThumbnailStore(dir).read("living-room")).toBeUndefined();
   });
 
   it("refuses an id that could name something outside the library", async () => {

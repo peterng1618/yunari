@@ -805,6 +805,69 @@ describe("ThemeStore", () => {
     );
   });
 
+  it("refuses a save past the size bound before it creates the library", async () => {
+    // The bound `read` enforces has to hold on the write too, or a save reports
+    // success and the next open finds nothing. It is checked before the first
+    // `mkdir` — the library's included — so a refusal leaves no folder at all.
+    const library = path.join(tmpDir, "library");
+    const store = createThemeStore(library);
+    const envelope = envelopeFor("huge", "Huge");
+    const document: FabricThemeEnvelope = {
+      ...envelope,
+      // `description` is free text the validator does not bound, so this is a
+      // valid document that is only too large.
+      metadata: {
+        ...envelope.metadata,
+        description: "x".repeat(33 * 1024 * 1024),
+      },
+    };
+
+    await expect(
+      store.write("huge", { envelope: document, assets: {} }),
+    ).rejects.toThrow(ThemeTooLargeError);
+
+    await expect(fs.stat(library)).rejects.toThrow();
+  });
+
+  it("reads an asset the folder holds, and not one linked out of it", async () => {
+    const store = createThemeStore(tmpDir);
+    const content = withAsset(
+      "living-room",
+      "Living Room",
+      "assets/badge.svg",
+      new TextEncoder().encode("<svg/>"),
+    );
+    await store.write("living-room", content);
+    expect(
+      (await store.read("living-room"))?.assets["assets/badge.svg"],
+    ).toEqual(content.assets["assets/badge.svg"]);
+
+    // A link standing where the asset folder belongs but pointing outside the
+    // theme: those bytes are not this theme's file, so the theme does not read.
+    const elsewhere = await fs.mkdtemp(
+      path.join(os.tmpdir(), "yunari-elsewhere-"),
+    );
+    try {
+      await fs.writeFile(
+        path.join(elsewhere, "badge.svg"),
+        "<svg>elsewhere</svg>",
+      );
+      const assets = path.join(tmpDir, "living-room", "assets");
+      await fs.rm(assets, { recursive: true });
+      await fs.symlink(elsewhere, assets, "junction");
+
+      // Without containment this is a plain readable file: the escape the test
+      // is about, not a directory that happens to fail to open.
+      expect(
+        (await fs.readFile(path.join(assets, "badge.svg"))).toString(),
+      ).toBe("<svg>elsewhere</svg>");
+
+      expect(await store.read("living-room")).toBeUndefined();
+    } finally {
+      await fs.rm(elsewhere, { recursive: true, force: true });
+    }
+  });
+
   it("keeps an invalid theme out of the listing, and answers a save over it", async () => {
     // The listing half is a different decision (ADR-0043): an unreadable
     // document is not a library line, and `list()` skips it exactly as before.
