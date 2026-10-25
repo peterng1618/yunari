@@ -1,6 +1,6 @@
 # Yunari status
 
-Updated: 2026-10-25
+Updated: 2026-10-26
 Branch: `main`
 
 ## Current objective
@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 6; Tasks 1–16 complete, Task 17 (unused assets and opt-in cleanup) next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 6; Tasks 1–17 complete, Task 18 (trash asset bytes on the host) next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,11 +18,10 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 16 landed:** a font pick opens an inline metadata form and declares nothing; the file is written at Create type preset or Cancel.
-- **Create type preset** writes one preset through `addTypePresetFromLocalFont` and a credit carrying the `assetId`; the cap asks the list's length only for a fresh file, so a declared face's own credit is replaceable at 256; Cancel declares without either.
-- **`importFont` validates bytes through the browser's own `FontFace`** (injectable loader for jsdom) and writes family/weight/style/format/licence/source URL; `amendFont` rewrites them in place.
-- **The filename parser peels style and weight tokens from the end** (`Inter-Bold.ttf` → Inter / 700); the form refuses an empty family or a weight outside 120–900.
-- **Evidence:** 2572 editor tests, focused files 119, typecheck/biome/design-tokens exit 0, `editor.spec.ts` 70 passed / 70 skipped / 0 unexpected; dead-selectors exits 1 with 16 pre-existing findings, none naming a changed file.
+- **Task 17 landed:** `asset-manager/unused.ts` is the one reachability owner — an asset survives only through `holdsAsset` or `assetReferencedBy`, never through a credit.
+- **`pruneAssets(ids)`** removes declared ids through `AssetManager.remove` and drops each credit carrying that `assetId`; an unlinked credit stays and an undeclared id cannot delete a credit alone.
+- **`canAddCredit`'s stale claim is gone:** its comment now says a prune frees a slot only with the asset that credit attributes.
+- **Evidence:** focused files 20 passed, `packages/editor/src` 187 files / 2577 tests passed, typecheck/biome/design-tokens exit 0; dead-selectors still exits 1 with the same 16 pre-existing findings, none naming a changed file.
 
 ## Next
 
