@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 1; no task dispatched yet.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 1; Task 1 complete, Task 2 next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,11 +18,9 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Spec and plan written:** `2026-10-25-fonts-and-assets` covers the Assets pane, host font sources, the finder rebuild, preset binding, cleanup and the preview modals, in 22 tasks.
-- **Mockups approved:** five-slot rail, Assets cards, font import form, tokens list, save cleanup, finder grid and both preview viewers.
-- **Preview panels are 270px**; the asset preview opens at the finder's near-fullscreen box, the theme viewer stays 960px.
-- **Actions are a Lucide glyph plus one word**, with destructive actions marked only in `--hot` and boxed like their neighbours.
-- **Superseded in part:** the font-trio draft, the finder's R1 entry point and the design language's §5.2/§5.3/§7.2 now point at the new spec.
+- **Task 1 landed:** font asset references accept woff, ttf and otf, plus a local licence with no URL; decision 0116 claims the mechanism paths.
+- **Validator owner:** the format/extension rule lives in `envelope-semantics.ts`, where the woff2-only rule already was.
+- **Evidence:** the focused theme suite passes 258 tests and `npm run typecheck` exits 0.
 
 ## Next
 
