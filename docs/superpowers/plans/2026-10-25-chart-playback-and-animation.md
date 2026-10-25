@@ -463,29 +463,29 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: every task above.
 - Produces: a green gate, a local `main` merge and a stop for owner testing.
 
-- [ ] **Step 1: Run the line-edge browser case**
+- [x] **Step 1: Run the line-edge browser case**
 
 Run: `cd src/web && npx playwright test tests/e2e/live-chart-edge.spec.ts --workers=1`
 
 Expected: PASS. The case must show the newest point at or right of the delayed edge, never inside it, and the chart rect must not move. If the port is owned by another run, wait or use a separate worktree; do not change `strictPort`.
 
-- [ ] **Step 2: Run the full gate**
+- [x] **Step 2: Run the full gate**
 
 Run: `cd src/web && npm run gate`
 
 Expected: exit 0. If it fails, fix the failure in this plan; do not proceed to the merge.
 
-- [ ] **Step 3: Run the status check**
+- [x] **Step 3: Run the status check**
 
 Run: `cd src/web && npm run status:check`
 
 Expected: exit 0.
 
-- [ ] **Step 4: Replace STATUS.md's completed-change summary**
+- [x] **Step 4: Replace STATUS.md's completed-change summary**
 
 Keep only: current objective (this plan), active work, 1–5 bullets for the last completed change, next steps, blockers. One item per line, never wrapped. Name the plan and the merge checkpoint.
 
-- [ ] **Step 5: Commit the status update**
+- [x] **Step 5: Commit the status update**
 
 ```bash
 git add STATUS.md docs/superpowers/plans/2026-10-25-chart-playback-and-animation.md
@@ -494,7 +494,7 @@ git commit -m "docs(status): record the playback checkpoint
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 6: Merge locally into main and stop**
+- [x] **Step 6: Merge locally into main and stop**
 
 From the checkout that has `main` checked out (find it with `git worktree list`):
 
