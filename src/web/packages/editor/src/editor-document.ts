@@ -18,7 +18,11 @@ import {
 } from "@yunari/theme-package";
 import type { ArtboardPanel } from "./artboard-panel.js";
 import { assetBytes } from "./asset-finder/client.js";
-import type { AssetManager } from "./asset-manager/index.js";
+import type {
+  AssetManager,
+  LocalAssetReference,
+} from "./asset-manager/index.js";
+import { unusedAssets as computeUnusedAssets } from "./asset-manager/unused.js";
 import { insertCard } from "./card-library.js";
 import type { ChartManager } from "./chart-manager/index.js";
 import type { EditorShell } from "./editor-shell.js";
@@ -271,8 +275,9 @@ export class EditorDocument {
   }
 
   /** Whether one more credit can be held: the package writer refuses a list
-   *  past its cap, and nothing removes an entry, so the refusal happens before
-   *  the bytes are declared rather than at the next save. */
+   *  past its cap, so the refusal happens before the bytes are declared rather
+   *  than at the next save. A prune can free a slot, but only by removing the
+   *  asset that credit attributes. */
   canAddCredit(entry: ThemeCreditsEntry): boolean {
     return (
       this.#credits.length < MAX_CREDITS_ENTRIES ||
@@ -470,6 +475,38 @@ export class EditorDocument {
     return Object.values(presets ?? {}).some(
       (preset) => preset.value.face?.assetId === assetId,
     );
+  }
+
+  /** The declarations neither the envelope nor the scene still references. The
+   *  one walk: the helper owns reachability, this owner supplies its inputs. */
+  unusedAssets(): readonly LocalAssetReference[] {
+    return computeUnusedAssets({
+      declarations: this.#assets.declarations,
+      objects: this.#source.shell.editor.canvas.getObjects(),
+      holdsAsset: (assetId) => this.holdsAsset(assetId),
+    });
+  }
+
+  /** Removes the declarations, their bytes, their preview URLs and the credits
+   *  whose `assetId` is in `ids`. A credit with no `assetId` is kept. */
+  pruneAssets(ids: readonly string[]): void {
+    // A stale id must not delete a credit on its own: only an id the manager
+    // still declares reaches the credit removal below.
+    const declared = new Set(
+      this.#assets.declarations.map((asset) => asset.id),
+    );
+    const pruned = ids.filter((id) => declared.has(id));
+    if (pruned.length === 0) return;
+    for (const id of pruned) this.#assets.remove(id);
+    const removed = new Set(pruned);
+    for (let index = this.#credits.length - 1; index >= 0; index -= 1) {
+      const assetId = this.#credits[index]?.assetId;
+      if (assetId !== undefined && removed.has(assetId))
+        this.#credits.splice(index, 1);
+    }
+    // Not a history write: the manager's own Remove is not undoable either,
+    // and this only announces so the unsaved marker and panels re-read.
+    this.announceChange();
   }
 
   /**

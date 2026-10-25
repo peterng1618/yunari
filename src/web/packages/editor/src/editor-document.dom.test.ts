@@ -5,8 +5,12 @@ import type {
   FontTrioInfo,
 } from "@yunari/renderer-core";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
+import type { FabricObject } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
-import { AssetManager } from "./asset-manager/index.js";
+import {
+  AssetManager,
+  type LocalAssetReference,
+} from "./asset-manager/index.js";
 import { EditorDocument } from "./editor-document.js";
 import type { EditorShell } from "./editor-shell.js";
 import type { HistoryGlobalsPort } from "./history-manager/index.js";
@@ -25,7 +29,13 @@ vi.mock("./asset-finder/client.js", () => ({ assetBytes: assetBytesMock }));
  * The shell and the consumers are stubs because nothing here fans out: these
  * two methods own a list and the save path reads it.
  */
-function documentWith(credits?: readonly ThemeCreditsEntry[]): EditorDocument {
+function documentWith(
+  credits?: readonly ThemeCreditsEntry[],
+  seams: {
+    readonly assetManager?: AssetManager;
+    readonly objects?: readonly FabricObject[];
+  } = {},
+): EditorDocument {
   return new EditorDocument({
     source: {
       shell: {
@@ -33,10 +43,11 @@ function documentWith(credits?: readonly ThemeCreditsEntry[]): EditorDocument {
         editor: {
           errorManager: { report: () => {} },
           historyManager: { attachGlobals: () => {} },
+          canvas: { getObjects: () => seams.objects ?? [] },
         },
       } as unknown as EditorShell,
       envelope: createNewFabricTheme() as unknown as FabricThemeEnvelopeInput,
-      assetManager: new AssetManager(),
+      assetManager: seams.assetManager ?? new AssetManager(),
       ...(credits === undefined ? {} : { credits }),
       onNew: async () => {},
       onNewFromStarter: async () => {},
@@ -44,6 +55,22 @@ function documentWith(credits?: readonly ThemeCreditsEntry[]): EditorDocument {
     },
     consumers: {} as never,
   });
+}
+
+/** A manager declaring these assets, with one byte each, without a browser. */
+function managerWith(assets: readonly LocalAssetReference[]): AssetManager {
+  const manager = new AssetManager();
+  manager.load(
+    { assets },
+    Object.fromEntries(
+      assets.map((asset) => [asset.path, new Uint8Array([1])]),
+    ),
+  );
+  return manager;
+}
+
+function imageAsset(id: string): LocalAssetReference {
+  return { id, kind: "image", path: `assets/${id}.png`, sha256: "0" };
 }
 
 const entry = (title: string, url: string): ThemeCreditsEntry => ({
@@ -126,6 +153,41 @@ describe("EditorDocument credits", () => {
     const document = documentWith([seeded]);
 
     expect(document.credits()).toEqual([seeded]);
+  });
+
+  it("prunes bytes, declarations and the linked credit", () => {
+    const asset = imageAsset("photo");
+    const assetManager = managerWith([asset]);
+    const linked: ThemeCreditsEntry = {
+      ...entry("photo", "https://example.test/photo"),
+      assetId: "photo",
+    };
+    const document = documentWith(
+      [linked, entry("house", "https://lucide.dev/icons/house")],
+      { assetManager },
+    );
+    const changed = vi.fn();
+    document.subscribeDocumentChange(changed);
+
+    document.pruneAssets(document.unusedAssets().map((unused) => unused.id));
+
+    expect(assetManager.declarations).toEqual([]);
+    expect(assetManager.assets).toEqual({});
+    expect(document.credits().map((credit) => credit.title)).toEqual(["house"]);
+    expect(changed).toHaveBeenCalled();
+    document.destroy();
+  });
+
+  it("keeps a credit with no assetId", () => {
+    const assetManager = managerWith([imageAsset("photo")]);
+    const unlinked = entry("house", "https://lucide.dev/icons/house");
+    const document = documentWith([unlinked], { assetManager });
+
+    document.pruneAssets(["photo"]);
+
+    expect(assetManager.declarations).toEqual([]);
+    expect(document.credits()).toEqual([unlinked]);
+    document.destroy();
   });
 });
 
