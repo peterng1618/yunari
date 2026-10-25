@@ -4,9 +4,11 @@
  * `@yunari/theme-package`'s and is exercised in its own suite, so the fixtures
  * here are packages written by the format's own writer.
  */
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -37,15 +39,35 @@ const PNG = new Uint8Array([
 
 function packageBytes(input: {
   readonly envelope: FabricThemeEnvelope;
+  readonly assets?: Readonly<Record<string, Uint8Array>>;
   readonly thumbnail?: Uint8Array;
 }): Uint8Array {
   const written = writeThemePackage({
     envelope: input.envelope,
-    assets: {},
+    assets: input.assets ?? {},
     ...(input.thumbnail === undefined ? {} : { thumbnail: input.thumbnail }),
   });
   if (!written.ok) throw new Error(written.message);
   return written.bytes;
+}
+
+/** Committed media, read rather than regenerated — the envelope module's own
+ *  fixtures, so a case here tests the same bytes its declarations describe. */
+const fixture = (name: string): Uint8Array =>
+  new Uint8Array(
+    readFileSync(
+      fileURLToPath(
+        new URL(`../../../theme-package/test-fixtures/${name}`, import.meta.url),
+      ),
+    ),
+  );
+
+/** An envelope declaring one video at the path the cases below store. */
+function videoEnvelope(id: string, name: string): FabricThemeEnvelope {
+  return {
+    ...envelopeFor(id, name),
+    assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
+  };
 }
 
 /**
@@ -232,6 +254,61 @@ describe("importThemePackage", () => {
         "utf8",
       ),
     ).toBe(JSON.stringify({ id: "family-room" }));
+  });
+
+  it("refuses a video with an audio track, and writes nothing", async () => {
+    const imported = await importThemePackage(
+      packageBytes({
+        envelope: videoEnvelope("family-room", "Living Room"),
+        assets: { "assets/clip.mp4": fixture("audio.mp4") },
+      }),
+      { store },
+    );
+
+    // The envelope module's sentence, the same one installTheme shows.
+    expect(imported).toEqual({
+      ok: false,
+      message: "assets/clip.mp4: audio track present; video must be silent",
+    });
+    await expect(
+      fs.stat(path.join(library, "family-room")),
+    ).rejects.toThrow();
+  });
+
+  it("refuses an over-long video, and writes nothing", async () => {
+    const imported = await importThemePackage(
+      packageBytes({
+        envelope: videoEnvelope("family-room", "Living Room"),
+        assets: { "assets/clip.mp4": fixture("long.mp4") },
+      }),
+      { store },
+    );
+
+    expect(imported).toEqual({
+      ok: false,
+      message:
+        "assets/clip.mp4: duration 31500 ms exceeds the 30000 ms maximum",
+    });
+    await expect(
+      fs.stat(path.join(library, "family-room")),
+    ).rejects.toThrow();
+  });
+
+  it("imports a conforming video and stores its bytes", async () => {
+    const video = fixture("conforming.mp4");
+
+    const imported = await importThemePackage(
+      packageBytes({
+        envelope: videoEnvelope("family-room", "Living Room"),
+        assets: { "assets/clip.mp4": video },
+      }),
+      { store },
+    );
+
+    expect(imported).toEqual({ ok: true, id: "family-room" });
+    expect(
+      await fs.readFile(path.join(library, "family-room", "assets/clip.mp4")),
+    ).toEqual(Buffer.from(video));
   });
 });
 

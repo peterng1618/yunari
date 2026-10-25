@@ -1,5 +1,5 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
-import { readThemePackage } from "@yunari/theme-package";
+import { readThemePackage, themeVideoRefusals } from "@yunari/theme-package";
 import { isValidThemeId, ThemeIdTakenError, type ThemeStore } from "./store.js";
 import type { ThumbnailStore } from "./thumbnails.js";
 
@@ -52,6 +52,11 @@ export async function importThemePackage(
 ): Promise<ThemeImportResult> {
   const parsed = readThemePackage(bytes);
   if (!parsed.ok) return { ok: false, message: parsed.message };
+
+  // Before the first write, so a refused video leaves the library exactly as it
+  // was. The message is the envelope module's, matching installTheme.
+  const videoRefusal = themeVideoRefusals(parsed.envelope, parsed.assets)[0];
+  if (videoRefusal !== undefined) return { ok: false, message: videoRefusal };
 
   const landed = await writeUnderFreeId(
     parsed.envelope,
