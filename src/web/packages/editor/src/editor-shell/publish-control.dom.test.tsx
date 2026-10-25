@@ -221,8 +221,12 @@ afterEach(() => {
 
 /** The control as the header mounts it. `createRoot` rather than
  *  `@testing-library/react`, which this workspace does not depend on. The store
- *  asks the host on construction, so the fetch stub is already in place. */
-async function mount(session?: EditorActionFacade): Promise<HTMLDivElement> {
+ *  asks the host on construction, so the fetch stub is already in place. The
+ *  transport is a stub unless a case is about its absence. */
+async function mount(
+  session?: EditorActionFacade,
+  withTransport = true,
+): Promise<HTMLDivElement> {
   const mounted = document.createElement("div");
   host = mounted;
   document.body.append(mounted);
@@ -235,7 +239,7 @@ async function mount(session?: EditorActionFacade): Promise<HTMLDivElement> {
     created.render(
       <PublishControl
         session={session}
-        publish={publishStub}
+        publish={withTransport ? publishStub : undefined}
         hosting={hosting}
         surface={opened}
       />,
@@ -599,6 +603,21 @@ it("reads the current document when publishing turns on after edits", async () =
   await vi.waitFor(() =>
     expect(popupText()).toContain(uiCopy.publish.live("Den")),
   );
+});
+
+it("prints no live name without a transport, even while the host is serving", async () => {
+  // The read gate is the honest one: with no `publish` handle nothing is being
+  // followed, and the name a display would show is nothing. A span gated on
+  // `open` alone would print a name for a document nobody is publishing.
+  hostServing({ lan: true });
+  const container = await mount(
+    sessionShowing({ id: "living-room", name: "Living room" }),
+    false,
+  );
+  await openSurface(container);
+
+  expect(popupText()).not.toContain(uiCopy.publish.live("Living room"));
+  expect(popupText()).not.toContain(uiCopy.publish.unsaved);
 });
 
 it("says what is left to do for a theme the library does not hold", async () => {

@@ -31,6 +31,7 @@ import {
   ownerOf,
   pathTo,
   projectLayers,
+  selectionIds,
 } from "./layer-tree.js";
 
 /** Nothing is open: the default an author meets, and the state a flat scene is
@@ -209,6 +210,46 @@ describe("layer projection", () => {
     expect(rows.filter((row) => row.selected).map((row) => row.id)).toEqual([
       "card-2-60",
     ]);
+  });
+
+  it("does not walk the tree when every selected object carries an id", () => {
+    // The common case: one selected object with its own id, so the row's id is
+    // that id and a second full-tree walk would only make the projection pay
+    // again for the `getObjects()` it saved.
+    const child = new Rect({ width: 10, height: 10 });
+    const group = new Group([child]);
+    group.set("id", "group");
+    const rect = new Rect({ id: "rect", width: 10, height: 10 });
+    const getObjects = vi.spyOn(group, "getObjects");
+
+    const selected = selectionIds([group, rect], [rect]);
+
+    expect([...selected]).toEqual(["rect"]);
+    // A walk would have asked the group for its children to number them.
+    expect(getObjects).not.toHaveBeenCalled();
+    expect(
+      projectLayers({ ...base, root: [group, rect], selected })
+        .filter((row) => row.selected)
+        .map((row) => row.id),
+    ).toEqual(["rect"]);
+  });
+
+  it("numbers an id-less selection by the row walk, not by the selection", () => {
+    // Positional fallback ids are what make the two walks one id scheme: the
+    // selected leaf is the *second* id-less object in paint order, so a
+    // selection walk that numbered only what it was given would mark the
+    // sibling's row instead.
+    const leaf = new Rect({ width: 10, height: 10 });
+    const sibling = new Rect({ width: 10, height: 10 });
+    const group = new Group([leaf, sibling]);
+    group.set("id", "group");
+
+    const selected = selectionIds([group], [leaf]);
+    const rows = projectLayers({ ...opened("group"), root: [group], selected });
+    const marked = rows.filter((row) => row.selected);
+
+    expect(marked.map((row) => row.id)).toEqual(["unidentified#2"]);
+    expect(findById([group], marked[0]!.id)).toBe(leaf);
   });
 
   it("marks only the row its id names, through a shut group and a hidden row", () => {

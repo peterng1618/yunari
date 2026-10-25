@@ -237,7 +237,7 @@ export function PublishControl({
             )}
             {/* Only once the shell has a document to read: a control drawn
                 without one would say "save this theme" about no theme. */}
-            {session === undefined || !open ? null : (
+            {session === undefined || !publishing ? null : (
               <span className="editor-shell-publish-live">
                 {showing === undefined
                   ? uiCopy.publish.unsaved

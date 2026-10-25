@@ -429,8 +429,9 @@ export function projectLayers({
  * The renderer selects objects and the projection is keyed by ids, but an
  * id-less object's fallback id is *positional* — `layerIds` numbers by walk
  * order — so no caller can derive an id from the object alone without repeating
- * the walk. Doing it once here is what lets each row's mark be a set test
- * instead of a scan of the selection.
+ * the walk. A selection that already names every id short-circuits; otherwise
+ * the walk here is what lets each row's mark be a set test instead of a scan of
+ * the selection.
  */
 export function selectionIds(
   root: readonly FabricObject[],
@@ -438,6 +439,20 @@ export function selectionIds(
 ): ReadonlySet<string> {
   const ids = new Set<string>();
   if (objects.length === 0) return ids;
+  // The common case is a selection that already carries its own ids: the row's
+  // id is the object's id, so a second full-tree walk would cost more than the
+  // per-row scan it replaced. Only a positional (id-less) member needs the walk
+  // that numbers it — and one such member makes the whole set need it.
+  const named: string[] = [];
+  for (const object of objects) {
+    const id = (object as { id?: string }).id;
+    if (id === undefined) break;
+    named.push(id);
+  }
+  if (named.length === objects.length) {
+    for (const id of named) ids.add(id);
+    return ids;
+  }
   const wanted = new Set(objects);
   const idOf = layerIds();
   const search = (list: readonly FabricObject[]): void => {
