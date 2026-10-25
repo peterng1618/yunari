@@ -61,7 +61,7 @@ const charts: readonly ChartFieldTarget[] = [
       family: "line",
       settings: {
         lineWidth: 2,
-        interpolation: "smooth",
+        interpolation: "linear",
         stroke: { kind: "solid", color: "#00b8d9" },
         showMarkers: false,
         markerSize: 4,

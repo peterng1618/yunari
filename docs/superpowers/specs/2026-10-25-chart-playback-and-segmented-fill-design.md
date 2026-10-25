@@ -167,8 +167,7 @@ flat stretch and then step, and the line would become a staircase. Two intervals
 keep a normal 1 s gap inside the last segment, where it reads as a slope, and
 reserve the hold-and-step for a real stall. The same two intervals also keep a
 smooth line's reshaped segment off-screen, which is why the one-interval build
-appeared to correct itself at the edge; a delayed line is drawn linearly anyway
-(A5).
+appeared to correct itself at the edge; smoothing is not offered at all (A5).
 
 ### A4. History returns the predecessor
 
@@ -190,10 +189,11 @@ axis minimum, regardless of the host's cadence.
   the previous reading is repeated at the new sample's timestamp and the line
   steps there. The stretch already painted is therefore drawn again unchanged;
   a frame never revises history the reader has seen.
-- A delayed line draws **linearly**. ECharts draws a smooth segment from the
-  points either side of it, so a smoothed tail bends as the edge advances and
-  bends again when the next batch arrives; a smoothed line cannot keep a
-  painted stretch. `step` is exact and stays available.
+- A line is **never smoothed**. ECharts draws a smooth segment from the points
+  either side of it, so a smoothed tail bends as the edge advances and bends
+  again when the next batch arrives; a smoothed line cannot keep a painted
+  stretch. Interpolation therefore offers `linear` and `step` only, and a theme
+  declaring `smooth` is refused rather than loaded and silently straightened.
 - A reported non-`ok` sample is still an explicit `null` gap, never a held
   reading: the sensor said it had no value, which is not a late tick. The
   stretch painted before it is kept and the line breaks at that sample.

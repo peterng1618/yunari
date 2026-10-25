@@ -188,7 +188,7 @@ describe("the axis edge and the newest segment", () => {
     const nextArrivalMs = T0 + 9 * cadenceMs + cadenceMs;
 
     const option = buildLineOption(
-      { ...defaultLineSettings, interpolation: "smooth" },
+      defaultLineSettings,
       [{ sensorId: "cpu.load.total", samples }],
       nextArrivalMs,
       false,
@@ -197,17 +197,13 @@ describe("the axis edge and the newest segment", () => {
     );
     const points = option.series[0]!.data;
 
-    // The segment from the second-newest point is the one the arriving batch
-    // reshapes; the edge must not have reached its start.
+    // The newest segment is the one the arriving batch extends; the edge must
+    // not have reached its start.
     expect(points.at(-2)![0]).toBeGreaterThanOrEqual(option.xAxis.max);
   });
 });
 
 describe("a delayed line", () => {
-  const smooth: LineSettings = {
-    ...defaultLineSettings,
-    interpolation: "smooth",
-  };
   const samples = Array.from({ length: 5 }, (_, index) =>
     at(index, 40 + index),
   );
@@ -231,27 +227,23 @@ describe("a delayed line", () => {
     return null;
   }
 
-  it("draws linearly, because a smoothed tail depends on the next batch", () => {
-    // The engine reshapes a smooth segment from the points either side of it,
-    // so a smoothed tail cannot be held flat and a painted stretch cannot be
-    // promised unchanged. A delayed line is therefore drawn linearly.
-    const delayed = buildLineOption(
-      smooth,
-      [{ sensorId: "cpu.load.total", samples }],
-      T0 + 4000,
-      false,
-      undefined,
-      LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
-    );
-    expect(delayed.series[0]!.smooth).toBe(false);
-
-    // Without a delayed edge there is no tail to preserve, so smoothing stays.
-    const undelayed = buildLineOption(
-      smooth,
-      [{ sensorId: "cpu.load.total", samples }],
-      T0 + 4000,
-    );
-    expect(undelayed.series[0]!.smooth).toBe(true);
+  it("never smooths, because a smooth segment depends on the next batch", () => {
+    // The engine draws a smooth segment from the points either side of it, so a
+    // smoothed tail would move as the edge advances and again when the next
+    // batch arrives. Smoothing is not an authorable choice (0116).
+    for (const interpolation of ["linear", "step"] as const) {
+      for (const delay of [undefined, LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS]) {
+        const option = buildLineOption(
+          { ...defaultLineSettings, interpolation },
+          [{ sensorId: "cpu.load.total", samples }],
+          T0 + 4000,
+          false,
+          undefined,
+          delay,
+        );
+        expect(option.series[0]!.smooth, interpolation).toBe(false);
+      }
+    }
   });
 
   it("draws the same visible stretch when a stall's batch arrives", () => {
@@ -518,18 +510,17 @@ describe("buildLineOption", () => {
     ]);
   });
 
-  it.each<[Interpolation, boolean, "end" | false]>([
-    ["linear", false, false],
-    ["smooth", true, false],
-    ["step", false, "end"],
-  ])("maps %s interpolation", (interpolation, smooth, step) => {
+  it.each<[Interpolation, "end" | false]>([
+    ["linear", false],
+    ["step", "end"],
+  ])("maps %s interpolation", (interpolation, step) => {
     const option = buildLineOption(
       { ...defaultLineSettings, interpolation },
       [{ sensorId: "a", samples: [] }],
       NOW,
     );
 
-    expect(option.series[0]!.smooth).toBe(smooth);
+    expect(option.series[0]!.smooth).toBe(false);
     expect(option.series[0]!.step).toBe(step);
   });
 

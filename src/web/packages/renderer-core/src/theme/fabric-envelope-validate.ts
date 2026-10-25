@@ -791,11 +791,32 @@ function chartScalars(
   issues: ValidationIssue[],
 ): void {
   for (const descriptor of CHART_SETTINGS_FIELDS[family]) {
-    if (descriptor.kind !== "number") continue;
     const field = descriptor.path ?? [descriptor.property];
     const value = valueAt(settings, field);
     if (value === undefined) continue;
     const where = `${path}/settings/${field.join("/")}`;
+
+    // A select's options are the document's bound, not only the picker's: a
+    // removed choice (smoothing, 0116) must be refused rather than loaded and
+    // drawn as something else.
+    if (descriptor.kind === "select") {
+      const allowed = (descriptor.options ?? []).map((option) => option.value);
+      if (
+        allowed.length > 0 &&
+        (typeof value !== "string" || !allowed.includes(value))
+      ) {
+        issues.push(
+          issue(
+            "invalid-enum",
+            where,
+            `${descriptor.property} must be one of ${allowed.join(", ")}.`,
+          ),
+        );
+      }
+      continue;
+    }
+
+    if (descriptor.kind !== "number") continue;
     if (typeof value !== "number" || !Number.isFinite(value)) {
       issues.push(
         issue(

@@ -302,17 +302,17 @@ describe("settings field", () => {
         property: "interpolation",
         kind: "select",
         options: [
-          { value: "linear", label: "Linear" },
-          { value: "smooth", label: "Smooth" },
+          { value: "alpha", label: "Alpha" },
+          { value: "beta", label: "Beta" },
         ],
       },
-      { value: "smooth", onChange: vi.fn() },
+      { value: "beta", onChange: vi.fn() },
     );
     // The descriptor's order is the picker's order; the surface does not sort.
     expect(
       [...select.querySelectorAll("option")].map((option) => option.value),
-    ).toEqual(["linear", "smooth"]);
-    expect(controlOf(select).value).toBe("smooth");
+    ).toEqual(["alpha", "beta"]);
+    expect(controlOf(select).value).toBe("beta");
   });
 
   it("commits an edit, and carries the descriptor's kind into it", () => {

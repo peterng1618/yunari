@@ -11,17 +11,17 @@ Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](d
 
 - **Queued plan:** `docs/superpowers/plans/2026-10-25-radar-and-polar-bar.md` — next; the chart already holds a theme per display.
 - **Segmented-fill plan landed:** divisor setting, discrete slider, gauge bands, pie spacers and bar custom series.
-- **Live-line policy:** the delay is two host cadences and a delayed line draws straight; a stall holds the last reading to the edge and steps at the next batch.
+- **Live-line policy:** the delay is two host cadences; the line never smooths — Interpolation offers Linear and Step — and a stall holds the last reading to the edge and steps at the next batch.
 - **Owner testing follows the run:** each plan merges locally into `main`; nothing is pushed, and the owner tests after the sequence.
 - **Decision note:** [0116](docs/decisions/0116-chart-motion-is-the-engines-and-the-line-is-a-clock.md) claims the chart mechanism boundaries.
 
 ## Last completed change
 
-- **Main merged before the picker branch closes:** chart playback, segmented fill and the extracted `chartReadingSignature` are in, and the palette half of a chart's reading now lives in that shared signature.
-- **Colour and gradient presets are chips:** both libraries draw a small swatch chip with the name as its programmatic label, wrapped in reading order (decision 0117, DESIGN §5).
-- **A gradient stop shows its selection and opens its picker:** the chosen mark takes the accent border; a press that does not travel opens its picker while a drag still adjusts it.
-- **Rotated gradient paint follows its angle:** `gradientLine` flips the y component for the stored `90 - cssDegrees` convention, fixing the canvas plate and the glass backdrop sampling together.
-- **Picker sampling costs less:** one channel change per pointer sample, one dirty reading per document change, and a chart redraw only when a palette token its settings name moves.
+- **Smooth removed:** `Interpolation` is `linear | step` and the line always draws `smooth: false`, so no segment depends on the next batch.
+- **Envelope refuses it:** a theme declaring `"smooth"` is rejected as `invalid-enum` rather than loaded and silently straightened.
+- **Both surfaces:** the editor preview draws straight with or without the delay, pinned by `preview-source.test.ts`.
+- **Descriptor:** the Interpolation picker offers Linear and Step, and its hint says how samples are joined.
+- **Docs:** spec A3/A5 and decision 0116 record why smoothing is not an authorable choice.
 
 ## Next
 
