@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–13 complete, Task 14 next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 4; Tasks 1–14 complete, Task 15 split into 15a (preset inspector) and 15b (paint rows) — 15a next.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,11 +18,11 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 13 landed:** the 379-row facet picker and its specimen cache are gone, and the finder grid windows its rows with roving focus and one tab stop, ported from the picker's own virtualiser.
-- **A dead module went with it:** `font-catalog-query.ts` had no product consumer once the picker died; the grid's row pitch is a JS constant that must track `--font-tile-min-height`.
-- **The design-token ratchet is green again:** the finder's dimensions, glyph sizes and fixed specimen backdrop are tokens, and four micro labels sit on `--text-2xs` rather than 9px.
-- **Filed `vg-732`:** eight surfaces write `var(--space-2)`, which no token defines, so their padding and gap compute to zero.
-- **Evidence:** asset-finder 99 tests, typecheck/biome/design-tokens exit 0, the finder browser spec 17 passed and 17 skipped.
+- **Task 14 landed:** the Tokens pane is a list — preset rows carry a specimen, name, role badge and resolution, and a press selects the token.
+- **Token selection is its own store** in `shell-stores.ts`, exclusive with the canvas in both directions; `set()` clears the canvas first so that clear cannot unselect what it just set.
+- **The preset list no longer edits**, and the four e2e cases that edited it are re-scheduled: Task 15a re-adds three against the inspector and drops the trio-controls capture.
+- **Filed `vg-733`:** a run format's preview is computed at render only, so the editor spec flakes across a minute boundary.
+- **Evidence:** 447 focused tests, typecheck/biome/design-tokens/build exit 0, browser batch 68 passed / 70 skipped with two pre-existing flakes green on re-run.
 
 ## Next
 
