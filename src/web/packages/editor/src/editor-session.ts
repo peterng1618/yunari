@@ -35,7 +35,10 @@ import {
 import { ChartManager } from "./chart-manager/index.js";
 import { EditorDocument } from "./editor-document.js";
 import type { EditorActionFacade } from "./editor-shell/session-facade.js";
-import type { TokenSelectionStore } from "./editor-shell/shell-stores.js";
+import type {
+  TokenRef,
+  TokenSelectionStore,
+} from "./editor-shell/shell-stores.js";
 import { type EditorShell } from "./editor-shell.js";
 import type { FavoritesClient } from "./favorites-client.js";
 import { type CuratedFontFace } from "./font-catalog.js";
@@ -350,7 +353,7 @@ export class EditorSession {
         onSettled: () => options.shell.editor.historyManager.saveState(),
         // A row press hands the token to the inspector; the store owns the
         // canvas clear (ruling 2), so the pane never reaches Fabric.
-        onSelect: (id) => options.tokenSelection?.set({ kind: "paint", id }),
+        tokenSelection: options.tokenSelection,
       },
     );
     this.#palette.render(this.#document.envelope.globals?.palette);
@@ -482,6 +485,14 @@ export class EditorSession {
       },
     );
     const renderTokenInspector = (): void => {
+      const held = options.tokenSelection?.get();
+      // A token the document no longer declares keeps the object column
+      // suppressed over a blank section — the shape an undo of Add leaves, not
+      // only the delete routes. Dropping the ref here re-enters through the
+      // store's subscription with no token and gives the column back.
+      if (held !== undefined && !this.#tokenExists(held)) {
+        options.tokenSelection?.clear();
+      }
       const token = options.tokenSelection?.get();
       this.#selection.setSuppressed(token !== undefined);
       this.#tokenInspector.render(
@@ -1093,6 +1104,22 @@ export class EditorSession {
     const envelope = await this.#document.applyPresetFace(id, face);
     this.#declarationsChanged();
     return envelope;
+  }
+
+  /**
+   * Whether the document still declares the token a ref names.
+   *
+   * Read at render time rather than tracked: the document is the one owner of
+   * its globals, and an undo, a load or a panel write can drop an entry without
+   * either delete route running.
+   */
+  #tokenExists(token: TokenRef): boolean {
+    if (token.kind === "preset") {
+      const presets = (this.#document.envelope.globals?.typePresets ??
+        {}) as TypePresets;
+      return presets[token.id] !== undefined;
+    }
+    return this.#document.envelope.globals?.palette?.[token.id] !== undefined;
   }
 
   /**

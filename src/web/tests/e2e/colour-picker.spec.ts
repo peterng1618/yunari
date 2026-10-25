@@ -280,7 +280,7 @@ test.describe("the colour picker and the gradient track", () => {
     expect(added.stops).toHaveLength(countBefore + 1);
   });
 
-  test("edits a gradient stop's keys without nudging or deleting a scene object", async ({
+  test("keeps a gradient stop's keys out of the window keyboard dispatcher", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -289,56 +289,25 @@ test.describe("the colour picker and the gradient track", () => {
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
-    // Selected through the bridge, so focus starts on the page rather than on a
-    // layer row — the keys below have to be the stop's own.
+
+    // Every key that reaches a `window` bubble listener. The shell's shortcut
+    // dispatcher listens there, so a key the stop handles must never arrive.
+    // The arrivals are the measurement because a token press clears the canvas
+    // selection (the two selections are exclusive): there is no selected object
+    // left for a leaked arrow or Delete to act on, so a scene comparison would
+    // pass whichever way the stop behaved.
+    type KeyRecorder = { yunariStopKeys?: string[] };
     await page.evaluate(() => {
-      (
-        window as unknown as {
-          yunariEditorBridge: { selectLayer(id: string): void };
-        }
-      ).yunariEditorBridge.selectLayer("time-rule");
-    });
-    // The scene object the dispatcher would nudge or delete, read by id rather
-    // than through the selection: a token press clears the canvas selection
-    // (token and canvas selection are exclusive), so the object stops being the
-    // active one the moment the paint's fields open.
-    const sceneObject = (): Promise<{
-      readonly left: number;
-      readonly top: number;
-    }> =>
-      page.evaluate(() => {
-        interface SceneObject {
-          readonly id?: string;
-          readonly left?: number;
-          readonly top?: number;
-          getObjects?(): ReadonlyArray<SceneObject>;
-        }
-        const collect = (
-          objects: ReadonlyArray<SceneObject>,
-        ): ReadonlyArray<SceneObject> =>
-          objects.flatMap((object) => [
-            object,
-            ...(object.getObjects === undefined
-              ? []
-              : collect(object.getObjects())),
-          ]);
-        const object = collect(
-          (
-            window as unknown as {
-              yunariEditorBridge: {
-                editor: {
-                  canvas: { getObjects(): ReadonlyArray<SceneObject> };
-                };
-              };
-            }
-          ).yunariEditorBridge.editor.canvas.getObjects(),
-        ).find((candidate) => candidate.id === "time-rule");
-        if (object?.left === undefined || object.top === undefined) {
-          throw new Error("The test needs the scene's time-rule to exist.");
-        }
-        return { left: object.left, top: object.top };
+      const recorder = window as unknown as KeyRecorder;
+      recorder.yunariStopKeys = [];
+      window.addEventListener("keydown", (event) => {
+        recorder.yunariStopKeys?.push(event.key);
       });
-    const before = await sceneObject();
+    });
+    const keys = (): Promise<string[]> =>
+      page.evaluate(
+        () => (window as unknown as KeyRecorder).yunariStopKeys ?? [],
+      );
 
     await openPane(page, "Tokens");
     await page.locator('[data-yunari-palette-token-row="background"]').click();
@@ -349,6 +318,11 @@ test.describe("the colour picker and the gradient track", () => {
     await stop.click();
     await expect(stop).toBeFocused();
 
+    // A key the stop does not handle proves the recorder is listening; without
+    // it the two refusals below could be an empty recorder.
+    await page.keyboard.press("Shift");
+    expect(await keys(), "the recorder saw a plain key").toContain("Shift");
+
     const offset = Number(
       await page.getByTestId("gradient-offset").inputValue(),
     );
@@ -357,22 +331,18 @@ test.describe("the colour picker and the gradient track", () => {
       "aria-valuenow",
       String(Math.round(offset) + 1),
     );
-    // The dispatcher is a window bubble listener. Before the control stopped
-    // its keys, the same arrow also nudged the selected group by one pixel.
-    expect(await sceneObject(), "the arrow belonged to the stop").toEqual(
-      before,
+    expect(await keys(), "the arrow belonged to the stop").not.toContain(
+      "ArrowRight",
     );
 
     const stops = page.locator('[data-testid^="gradient-stop-"]');
     await expect(stops).toHaveCount(3);
     await page.keyboard.press("Delete");
     await expect(stops, "Delete removed the stop").toHaveCount(2);
-    // And it removed *the stop*, not a scene object the dispatcher would also
-    // have deleted.
     expect(
-      await sceneObject(),
-      "Delete removed the stop, not the object",
-    ).toEqual(before);
+      await keys(),
+      "Delete removed the stop, not an object",
+    ).not.toContain("Delete");
   });
 
   test("applies a gradient preset from the library's fifteen seeds", async ({

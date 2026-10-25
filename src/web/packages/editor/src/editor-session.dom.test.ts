@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { FabricThemeEnvelope } from "@yunari/renderer-core";
+import type { FabricPalette, FabricThemeEnvelope } from "@yunari/renderer-core";
 import { IText } from "fabric/es";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { presetLibrary } from "./preset-library/index.js";
@@ -45,6 +45,12 @@ vi.mock("./theme-library-dialog.js", () => ({
 vi.mock("./artboard-panel.js", () => ({
   createArtboardPanel: () => (panels.last = panel()),
 }));
+/** The palette pane's change port, held for the same reason as the type-preset
+ *  panel's: the panel is a double, so a test drives a globals write the way its
+ *  Add action does. */
+const palettePortMock = vi.hoisted(() => ({
+  change: undefined as ((palette: FabricPalette) => void) | undefined,
+}));
 vi.mock("./palette-manager/index.js", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("./palette-manager/index.js")>();
@@ -52,7 +58,13 @@ vi.mock("./palette-manager/index.js", async (importOriginal) => {
     // Only the panel is doubled. The usage walk stays the real one, because the
     // token inspector's paint section calls it whether or not a pane renders.
     ...actual,
-    createPalettePanel: () => panel(),
+    createPalettePanel: (
+      _host: unknown,
+      change: (palette: FabricPalette) => void,
+    ) => {
+      palettePortMock.change = change;
+      return panel();
+    },
   };
 });
 /** The panel's two ports are held so a test can drive a rename the way the
@@ -1171,6 +1183,31 @@ describe("EditorSession", () => {
     tokenColumn
       ?.querySelector<HTMLButtonElement>("[data-yunari-palette-delete]")
       ?.click();
+    expect(tokenSelection.get()).toBeUndefined();
+    expect(objectColumn?.style.display).toBe("");
+    expect(tokenColumn?.textContent).toBe("");
+
+    // The token can also vanish without either delete route: an undo of Add
+    // restores the globals captured before it, and a load replaces them whole.
+    // A held ref there would keep the object column suppressed over a blank
+    // section, so the render drops the ref when the document no longer declares
+    // the token — once per kind.
+    tokenSelection.set({ kind: "preset", id: "caption" });
+    expect(objectColumn?.style.display).toBe("none");
+    expect(
+      tokenColumn?.querySelector("[data-yunari-token-name]"),
+    ).not.toBeNull();
+    typePresetPortMock.change?.({});
+    expect(tokenSelection.get()).toBeUndefined();
+    expect(objectColumn?.style.display).toBe("");
+    expect(tokenColumn?.textContent).toBe("");
+
+    tokenSelection.set({ kind: "paint", id: "accent" });
+    expect(objectColumn?.style.display).toBe("none");
+    expect(
+      tokenColumn?.querySelector("[data-yunari-palette-name]"),
+    ).not.toBeNull();
+    palettePortMock.change?.({ background: paints.background });
     expect(tokenSelection.get()).toBeUndefined();
     expect(objectColumn?.style.display).toBe("");
     expect(tokenColumn?.textContent).toBe("");

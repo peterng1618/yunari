@@ -2,6 +2,7 @@ import type { FabricPalette } from "@yunari/renderer-core";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+import type { TokenSelectionStore } from "../editor-shell/shell-stores.js";
 import { TokensPane } from "../panes/tokens/tokens-pane.js";
 
 /** An object a token is linked to. The name is what the pane shows; the id is
@@ -24,15 +25,17 @@ export interface PalettePanelOptions {
    */
   readonly usage?: () => Readonly<Record<string, readonly PaletteTokenUse[]>>;
   /**
-   * The settled boundary of a colour edit — the session's history save. Live
-   * changes call the panel's `onChange` repeatedly; this fires once per gesture.
+   * The settled boundary of the one discrete edit the pane still makes: adding
+   * a token. Without the entry a later undo's globals restore silently removes
+   * it.
    */
   readonly onSettled?: (() => void) | undefined;
   /**
-   * The token a row press selects. The panel renders the `TokensPane`, so the
-   * port travels through this factory; without it a row press selects nothing.
+   * The token selection the rows set and state. The panel renders the
+   * `TokensPane`, so the store travels through this factory; a row press sets a
+   * paint ref and the inspector opens.
    */
-  readonly onSelect?: (id: string) => void;
+  readonly tokenSelection?: TokenSelectionStore | undefined;
 }
 
 export interface PalettePanel {
@@ -52,7 +55,7 @@ export interface PalettePanel {
  * The factory keeps its `root`/`render` pair, so `editor-session.ts` keeps its
  * construction site; what changed is the rendering, which is the Tokens pane's
  * React tree. The picker, the gradient editor and the delete row are the token
- * inspector's now, reached through the pane's `onSelect` port.
+ * inspector's now, reached through the token selection the pane's rows set.
  */
 export function createPalettePanel(
   host: HTMLElement,
@@ -76,7 +79,7 @@ export function createPalettePanel(
           palette: palette ?? {},
           usage: options.usage,
           onChange,
-          onSelect: options.onSelect,
+          tokenSelection: options.tokenSelection,
           onSettled: options.onSettled,
         }),
       );

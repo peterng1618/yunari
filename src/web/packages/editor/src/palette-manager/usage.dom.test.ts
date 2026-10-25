@@ -79,9 +79,6 @@ const row = (id: string): HTMLElement =>
     `[data-yunari-palette-token-row="${id}"]`,
   )!;
 
-const users = (): HTMLElement | null =>
-  document.querySelector("[data-yunari-palette-users]");
-
 describe("palette token usage", () => {
   it("names how many objects a token is linked to, per token", () => {
     render();
@@ -100,8 +97,6 @@ describe("palette token usage", () => {
     render();
 
     expect(figure("unused")).toContain("0");
-    // The users list is the inspector's; the pane draws none at all.
-    expect(users()).toBeNull();
   });
 
   it("states an absent reading when the panel is given no scene to read", () => {
@@ -111,6 +106,5 @@ describe("palette token usage", () => {
 
     expect(figure("accent")).toBe(uiCopy.panels.notSet);
     expect(figure("accent")).not.toBe("0");
-    expect(users()).toBeNull();
   });
 });

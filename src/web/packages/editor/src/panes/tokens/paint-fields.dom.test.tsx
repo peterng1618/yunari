@@ -566,7 +566,6 @@ it("carries the colour across a paint-kind switch in both directions", async () 
       value: { kind: "solid", color: MOVED_FROST_PAINT },
     },
   });
-  void host;
 });
 
 it("edits a gradient's angle, its stops and an added stop through its one editor", async () => {

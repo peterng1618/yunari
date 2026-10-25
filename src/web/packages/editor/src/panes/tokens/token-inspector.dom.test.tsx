@@ -438,8 +438,11 @@ describe("the paint section", () => {
   it("rebuilds a paint's field set when the paint kind changes", () => {
     // The measured defect: a field set that survives a kind switch keeps the
     // picker's trigger, and the open popover then measures a detached node. The
-    // key carries the paint kind for exactly this.
-    const paints = paintActions();
+    // key carries the paint kind for exactly this — so the **same** token id is
+    // rendered both times and only its kind moves. A key carrying only the id
+    // keeps the node standing and fails here.
+    let palette = PAINTS;
+    const paints: PaintPort = { ...paintActions(), palette: () => palette };
     const panel = createTokenInspectorPanel(document.body, actions(paints));
     panel.render({ kind: "paint", id: "background" }, PRESETS, {
       typePresets: PRESETS,
@@ -447,7 +450,21 @@ describe("the paint section", () => {
     const before = panel.root.querySelector("[data-yunari-palette-fields]");
     expect(before).not.toBeNull();
 
-    panel.render({ kind: "paint", id: "glow" }, PRESETS, {
+    palette = {
+      ...PAINTS,
+      background: {
+        name: "Background",
+        value: {
+          kind: "gradient",
+          angle: 0,
+          stops: [
+            { offset: 0, color: BACKGROUND_PAINT },
+            { offset: 1, color: BACKGROUND_PAINT },
+          ],
+        },
+      },
+    };
+    panel.render({ kind: "paint", id: "background" }, PRESETS, {
       typePresets: PRESETS,
     });
 

@@ -4,7 +4,8 @@
  * The Tokens pane's paint list: one pressable row per token.
  *
  * **A row is a selector, not a control.** Pressing it selects the token for the
- * inspector, where the fields live; nothing here edits the document. The row
+ * inspector, where the fields live, and the list states the held paint the way
+ * the preset list states its own. Nothing here edits the document. The row
  * keeps the shape it always had — a swatch, the token's name and its usage
  * figure — so the pane stays browsable without opening a field set.
  *
@@ -19,6 +20,10 @@ import type { FabricPalette } from "@yunari/renderer-core";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+import {
+  SelectionStore,
+  TokenSelectionStore,
+} from "../../editor-shell/shell-stores.js";
 import { uiCopy } from "../../ui-copy.js";
 import { PaintList, type PaintListProps } from "./paint-list.js";
 import { PAINT_LIST_PALETTE } from "./paint-list-fixture.js";
@@ -37,7 +42,7 @@ afterEach(async () => {
 function Harness(props: {
   readonly initial: FabricPalette;
   readonly usage: PaintListProps["usage"];
-  readonly onSelect: PaintListProps["onSelect"];
+  readonly tokenSelection: PaintListProps["tokenSelection"];
   readonly onSettled: PaintListProps["onSettled"];
   readonly change: (palette: FabricPalette) => void;
 }): React.JSX.Element {
@@ -46,7 +51,7 @@ function Harness(props: {
     <PaintList
       palette={palette}
       usage={props.usage}
-      onSelect={props.onSelect}
+      tokenSelection={props.tokenSelection}
       onSettled={props.onSettled}
       onChange={(next) => {
         props.change(next);
@@ -60,12 +65,13 @@ async function mount(
   initial: FabricPalette,
   options: {
     readonly usage?: PaintListProps["usage"];
-    readonly onSelect?: PaintListProps["onSelect"];
+    readonly tokenSelection?: PaintListProps["tokenSelection"];
   } = {},
 ): Promise<{
   readonly host: HTMLElement;
   readonly change: ReturnType<typeof vi.fn>;
   readonly settled: ReturnType<typeof vi.fn>;
+  readonly tokenSelection: TokenSelectionStore;
 }> {
   if (root !== undefined) await act(async () => root?.unmount());
   root = undefined;
@@ -74,6 +80,8 @@ async function mount(
   document.body.append(host);
   const change = vi.fn();
   const settled = vi.fn();
+  const tokenSelection =
+    options.tokenSelection ?? new TokenSelectionStore(new SelectionStore());
   const mounted = createRoot(host);
   root = mounted;
   await act(async () => {
@@ -81,13 +89,13 @@ async function mount(
       <Harness
         initial={initial}
         usage={options.usage}
-        onSelect={options.onSelect}
+        tokenSelection={tokenSelection}
         onSettled={settled}
         change={change}
       />,
     );
   });
-  return { host, change, settled };
+  return { host, change, settled, tokenSelection };
 }
 
 async function click(target: Element): Promise<void> {
@@ -135,7 +143,9 @@ it("draws rows with a swatch, a name and a usage figure and no fields", async ()
   );
   // The swatch is the row's own paint sample, decorative to a screen reader.
   const swatch = row?.querySelector<HTMLElement>('span[aria-hidden="true"]');
-  expect(swatch?.getAttribute("style") ?? "").toContain("background");
+  // The colour, not merely a `background` declaration: jsdom serialises the
+  // fixture's `BACKGROUND_PAINT` (`#102030`) to its rgb form.
+  expect(swatch?.style.background).toBe("rgb(16, 32, 48)");
   expect(row?.textContent).toContain("Background");
   expect(usageFigure(host, "background")).toBe("0");
 
@@ -155,20 +165,28 @@ it("draws rows with a swatch, a name and a usage figure and no fields", async ()
   }
 });
 
-it("selects a paint token when a row is pressed", async () => {
-  const select = vi.fn();
-  const { host } = await mount(PAINT_LIST_PALETTE, { onSelect: select });
+it("selects a paint token when a row is pressed, and marks it pressed", async () => {
+  const { host, tokenSelection } = await mount(PAINT_LIST_PALETTE);
 
-  await click(host.querySelector('[data-yunari-palette-token-row="accent"]')!);
+  const accent = host.querySelector<HTMLElement>(
+    '[data-yunari-palette-token-row="accent"]',
+  )!;
+  await click(accent);
 
-  expect(select).toHaveBeenCalledWith("accent");
+  expect(tokenSelection.get()).toEqual({ kind: "paint", id: "accent" });
+  // The row states the token selection, as a preset row does: the pane shows
+  // which paint's fields the inspector is holding.
+  expect(accent.getAttribute("aria-pressed")).toBe("true");
+  expect(
+    host
+      .querySelector('[data-yunari-palette-token-row="background"]')
+      ?.getAttribute("aria-pressed"),
+  ).toBe("false");
 });
 
 it("adds a new paint token and selects it, so the inspector shows its fields", async () => {
-  const select = vi.fn();
-  const { host, change, settled } = await mount(PAINT_LIST_PALETTE, {
-    onSelect: select,
-  });
+  const { host, change, settled, tokenSelection } =
+    await mount(PAINT_LIST_PALETTE);
 
   await click(host.querySelector("[data-yunari-palette-add]")!);
 
@@ -179,7 +197,12 @@ it("adds a new paint token and selects it, so the inspector shows its fields", a
       value: { kind: "solid", color: expect.any(String) },
     },
   });
-  expect(select).toHaveBeenCalledWith("colour");
+  expect(tokenSelection.get()).toEqual({ kind: "paint", id: "colour" });
+  expect(
+    host
+      .querySelector('[data-yunari-palette-token-row="colour"]')
+      ?.getAttribute("aria-pressed"),
+  ).toBe("true");
   // A new token is a discrete globals commit with no gesture to settle behind
   // it, so the pane records the entry itself.
   expect(settled).toHaveBeenCalledOnce();

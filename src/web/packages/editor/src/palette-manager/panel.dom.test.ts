@@ -8,12 +8,16 @@
  * `panes/tokens/paint-fields.dom.test.tsx` and
  * `panes/tokens/token-inspector.dom.test.tsx`, against the components that own
  * them. What is left here is the contract the session holds: `render` paints
- * synchronously, a row press travels out through the selection port, and
- * `destroy` releases what it created.
+ * synchronously, a row press sets the token selection, and `destroy` releases
+ * what it created.
  */
 import type { FabricPalette } from "@yunari/renderer-core";
 import { act } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  SelectionStore,
+  TokenSelectionStore,
+} from "../editor-shell/shell-stores.js";
 import { uiCopy } from "../ui-copy.js";
 import { createPalettePanel } from "./panel.js";
 
@@ -84,10 +88,10 @@ describe("palette panel", () => {
     ).toEqual(["background", "accent"]);
   });
 
-  it("hands a row press to the selection port, so the inspector can open", async () => {
-    const select = vi.fn();
+  it("hands a row press to the token selection, so the inspector can open", async () => {
+    const tokenSelection = new TokenSelectionStore(new SelectionStore());
     const panel = createPalettePanel(document.body, vi.fn(), {
-      onSelect: select,
+      tokenSelection,
     });
     panel.render(palette);
 
@@ -99,15 +103,13 @@ describe("palette panel", () => {
         .dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(select).toHaveBeenCalledWith("accent");
+    expect(tokenSelection.get()).toEqual({ kind: "paint", id: "accent" });
   });
 
   it("adds a token through the change callback and selects it", async () => {
     const change = vi.fn();
-    const select = vi.fn();
-    const panel = createPalettePanel(document.body, change, {
-      onSelect: select,
-    });
+    const tokenSelection = new TokenSelectionStore(new SelectionStore());
+    const panel = createPalettePanel(document.body, change, { tokenSelection });
     panel.render(palette);
 
     await act(async () => {
@@ -123,7 +125,7 @@ describe("palette panel", () => {
         value: { kind: "solid", color: expect.any(String) },
       },
     });
-    expect(select).toHaveBeenCalledWith("colour");
+    expect(tokenSelection.get()).toEqual({ kind: "paint", id: "colour" });
   });
 
   it("re-reads the scene on every render, and states an absent reading", () => {

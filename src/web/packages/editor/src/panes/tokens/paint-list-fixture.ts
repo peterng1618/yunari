@@ -1,6 +1,7 @@
 /**
- * The documents `paint-list.dom.test.tsx` and `paint-fields.dom.test.tsx` drive
- * the Tokens pane and its inspector with.
+ * The documents the Tokens pane and its inspector are driven with:
+ * `paint-list.dom.test.tsx`, `paint-fields.dom.test.tsx` and
+ * `token-inspector.dom.test.tsx`.
  *
  * Every colour here is a *document* value — a paint an author typed into the
  * document's own palette, or one this suite types into the field — rather than

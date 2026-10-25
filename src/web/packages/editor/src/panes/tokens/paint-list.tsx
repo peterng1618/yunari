@@ -1,6 +1,10 @@
 import type { FabricPalette, PalettePaint } from "@yunari/renderer-core";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
 import { gradientCss } from "../../components/ui/gradient-css.js";
+import {
+  type TokenSelectionStore,
+  useTokenSelection,
+} from "../../editor-shell/shell-stores.js";
 import { newTokenPaint } from "../../new-fabric-theme-globals.js";
 import type { PaletteTokenUse } from "../../palette-manager/panel.js";
 import { paletteTokenIds } from "../../palette-manager/token-list.js";
@@ -42,19 +46,24 @@ export interface PaintListProps {
    *  token has no gesture to settle behind it, and without the entry a later
    *  undo's globals restore silently removes it. */
   readonly onSettled?: (() => void) | undefined;
-  /** The token a row press selects for the inspector. Absent when the list is
-   *  mounted with no session behind it; the rows then select nothing. */
-  readonly onSelect?: ((id: string) => void) | undefined;
+  /** The token selection the rows set and state. Absent reads as none: a list
+   *  mounted with no session behind it selects nothing. */
+  readonly tokenSelection: TokenSelectionStore | undefined;
 }
 
 export function PaintList(props: PaintListProps): React.JSX.Element {
-  const { palette, usage, onChange, onSettled, onSelect } = props;
+  const { palette, usage, onChange, onSettled, tokenSelection } = props;
+  const selectedToken = useTokenSelection(tokenSelection);
   // Read once per draw, so the figure beside a token and the set a deletion
   // moves are one walk of one scene.
   const uses = usage?.();
   // The pane's own list, from the module the bridge's count also reads, so the
   // rows drawn and the number in the title bar cannot disagree (§7.3).
   const ids = paletteTokenIds(palette);
+  // A preset ref is not this list's selection: `aria-pressed` would otherwise
+  // mark a paint row whose id happened to match.
+  const selected =
+    selectedToken?.kind === "paint" ? selectedToken.id : undefined;
 
   const add = (): void => {
     const id = nextId(palette);
@@ -67,7 +76,7 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
     });
     // Selected here so the new token's fields open beside the list; a list with
     // no session behind it still adds.
-    onSelect?.(id);
+    tokenSelection?.set({ kind: "paint", id });
     onSettled?.();
   };
 
@@ -82,8 +91,9 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
               <button
                 type="button"
                 data-yunari-palette-token-row={id}
-                onClick={() => onSelect?.(id)}
-                className="flex min-h-[26px] w-full items-center gap-[var(--space-6)] rounded-md border border-edge bg-panel-2 px-[var(--space-6)] text-left text-sm text-text hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                aria-pressed={id === selected}
+                onClick={() => tokenSelection?.set({ kind: "paint", id })}
+                className="flex min-h-[26px] w-full items-center gap-[var(--space-6)] rounded-md border border-edge bg-panel-2 px-[var(--space-6)] text-left text-sm text-text hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent aria-pressed:border-accent"
               >
                 <span
                   aria-hidden={true}

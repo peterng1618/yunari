@@ -181,7 +181,7 @@ function spyDocumentListeners(): {
  */
 const NOT_THE_PANELS = new Set(["selectionchange", "mouseover", "mouseout"]);
 
-describe("a palette panel's React roots", () => {
+describe("the palette panel's and token inspector's React roots", () => {
   it("are all unmounted when the panel is disposed", () => {
     const panel = createPalettePanel(mountHost(), () => {});
 
