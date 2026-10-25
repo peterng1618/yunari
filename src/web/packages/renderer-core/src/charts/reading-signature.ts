@@ -1,5 +1,7 @@
 import type { SampleSource } from "../data/source.js";
 import type { Binding, ChartContent } from "../theme/document.js";
+import type { FabricPalette } from "../theme/fabric-envelope.js";
+import { chartPaintReferences } from "./chart-paint.js";
 import { lineHistorySeconds } from "./line.js";
 
 /**
@@ -26,6 +28,11 @@ import { lineHistorySeconds } from "./line.js";
  * `history`. Reading `history` for a gauge was how a bar kept drawing the old
  * value while its newest changed.
  *
+ * **The palette is an input to the plan, not to the document.** A chart's
+ * settings name the tokens they paint with, so the values of those tokens are
+ * part of what the chart would draw; a token the chart does not name is not.
+ * Without that, a live palette sample forced every chart to redraw.
+ *
  * Pass `playbackDelayMs` when the display's cadence overrides the source's
  * delay, so the signature asks for the history that will actually be drawn.
  */
@@ -34,6 +41,7 @@ export function chartReadingSignature(
   bindings: readonly Binding[],
   source: SampleSource,
   nowMs: number,
+  palette?: FabricPalette,
   playbackDelayMs?: number,
 ): string {
   const delayMs = playbackDelayMs ?? source.chartPlaybackDelayMs;
@@ -53,5 +61,25 @@ export function chartReadingSignature(
       }:${sample?.value ?? sample?.textValue ?? "-"}`;
     })
     .join("|");
-  return content.family === "line" ? `${readings}|now:${nowMs}` : readings;
+  const drawn =
+    content.family === "line" ? `${readings}|now:${nowMs}` : readings;
+  return `${inkSignature(content.settings, palette)}|${drawn}`;
+}
+
+/** The palette values the chart's own settings name, as one comparable string. */
+function inkSignature(
+  settings: unknown,
+  palette: FabricPalette | undefined,
+): string {
+  const refs = chartPaintReferences(settings);
+  if (refs.length === 0) return "";
+  return refs
+    .map((ref) => {
+      const id = ref.startsWith("palette.")
+        ? ref.slice("palette.".length)
+        : undefined;
+      const value = id === undefined ? undefined : palette?.[id]?.value;
+      return `${ref}=${value === undefined ? "-" : JSON.stringify(value)}`;
+    })
+    .join("|");
 }

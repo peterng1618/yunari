@@ -263,9 +263,11 @@ export class ChartManager {
 
   setGlobals(globals: FabricGlobals | undefined): void {
     this.#globals = globals;
-    // A palette decides every chart's ink, so new globals move a chart the
-    // data did not.
-    this.#applyCharts(true);
+    // A palette decides every chart's ink, so the ink is part of a chart's
+    // reading (`chartReadingSignature`). Forcing here redrew all seven Starter
+    // charts — seven ECharts `setOption`s and their animation work — on every
+    // live sample of a colour drag, including tokens no chart names.
+    this.#applyCharts(false);
   }
 
   /**
@@ -520,6 +522,7 @@ export class ChartManager {
               this.#bindings[id] ?? [],
               this.#source,
               nowMs,
+              this.#globals?.palette,
               playbackDelayMs,
             );
           } catch {

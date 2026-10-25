@@ -53,6 +53,31 @@ export function resolveChartPaint(
 export const NO_INK = "transparent";
 export const NO_PAINT: Fill = { kind: "solid", color: NO_INK };
 
+/**
+ * Every token reference an authored settings bag carries, however deep.
+ *
+ * Paint fields are the only place a chart names a token, and their shape differs
+ * by family, so this walk is the one rule that covers all of them without a
+ * second list to keep in step.
+ */
+export function chartPaintReferences(value: unknown): readonly string[] {
+  const refs = new Set<string>();
+  collectReferences(value, refs);
+  return [...refs].sort();
+}
+
+function collectReferences(value: unknown, into: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) collectReferences(entry, into);
+    return;
+  }
+  if (typeof value !== "object" || value === null) return;
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "ref" && typeof entry === "string") into.add(entry);
+    else collectReferences(entry, into);
+  }
+}
+
 /** Reassign token references without touching engine-only resolved fills. */
 export function reassignChartPaintReferences<T>(
   value: T,

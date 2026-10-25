@@ -52,11 +52,45 @@ describe("chartReadingSignature", () => {
     };
 
     chartReadingSignature(chart, bindings, delayed, 1_000);
-    chartReadingSignature(chart, bindings, delayed, 1_000, 0);
+    chartReadingSignature(chart, bindings, delayed, 1_000, undefined, 0);
 
     expect(asked).toEqual([
       defaultLineSettings.windowSeconds + 2,
       defaultLineSettings.windowSeconds,
     ]);
+  });
+
+  it("moves only with the palette tokens the settings name", () => {
+    const chart = {
+      family: "bar",
+      settings: {
+        ...defaultBarSettings,
+        fill: { ref: "palette.accent" },
+      },
+    } as const;
+    const bindings = [{ id: "b", semanticKey: "cpu.load.total" }];
+    const palette = (accent: string) => ({
+      accent: {
+        name: "Accent",
+        value: { kind: "solid" as const, color: accent },
+      },
+      other: {
+        name: "Other",
+        value: { kind: "solid" as const, color: "#123" },
+      },
+    });
+
+    // A token the settings do not name is not an input to the plan.
+    expect(
+      chartReadingSignature(chart, bindings, source, 1_000, palette("#111")),
+    ).toBe(
+      chartReadingSignature(chart, bindings, source, 1_000, palette("#111")),
+    );
+    // The one they do name is.
+    expect(
+      chartReadingSignature(chart, bindings, source, 1_000, palette("#111")),
+    ).not.toBe(
+      chartReadingSignature(chart, bindings, source, 1_000, palette("#222")),
+    );
   });
 });

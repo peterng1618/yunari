@@ -151,6 +151,32 @@ describe("the artboard backdrop", () => {
     expect(right, "and further along it").toBeGreaterThan(left);
   });
 
+  it("paints a rotated gradient in the direction the CSS preview shows", () => {
+    // Stored angle 90 is CSS's `0deg` — first stop at the bottom. The canvas
+    // gradient is the form a glass panel samples, so a mirrored sweep here is a
+    // panel sampling the wrong half of the board (gradient without rotation was
+    // correct, which is how the sign survived).
+    const context = scratch();
+    artboardBackdrop({
+      background: {
+        kind: "gradient",
+        angle: 90,
+        stops: [
+          { offset: 0, color: "#000000" },
+          { offset: 1, color: "#ffffff" },
+        ],
+      },
+      width: 20,
+      height: 20,
+      media: undefined,
+    }).paint(context, REGION, DEVICE);
+
+    const top = pixel(context, 10, 0)[0] ?? 0;
+    const bottom = pixel(context, 10, 19)[0] ?? 0;
+    expect(top, "the last stop is at the top").toBeGreaterThan(200);
+    expect(bottom, "the first stop is at the bottom").toBeLessThan(55);
+  });
+
   it("leaves the colour under a media layer that has no frame yet", () => {
     const context = scratch();
     artboardBackdrop({

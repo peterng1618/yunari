@@ -146,10 +146,18 @@ export class EditorDocument {
   readonly #onBindingsChange: (() => void) | undefined;
   /** Told the document may have moved; see `#writeEnvelope`. */
   readonly #documentChangeListeners = new Set<() => void>();
+  /** One change is one reading of the document. Every subscriber that asks
+   *  `isDirty` would otherwise serialise and validate the whole scene for
+   *  itself — three did, on every live palette sample of a picker drag. */
+  #changeVersion = 0;
+  #dirtyReading:
+    | { readonly version: number; readonly dirty: boolean }
+    | undefined;
   /** A stable reference, so whoever registers it can keep it without binding:
    *  the library manager takes it as a port and the session hands it to every
    *  canvas event that means "the document moved". */
   readonly announceChange = (): void => {
+    this.#changeVersion += 1;
     for (const listener of this.#documentChangeListeners) listener();
   };
 
@@ -219,9 +227,27 @@ export class EditorDocument {
 
   /** Whether the document differs from what was last saved. Pulled, never held:
    *  the comparison already exists for the replace prompt, and a stored flag
-   *  would be one more thing to keep true. */
+   *  would be one more thing to keep true.
+   *
+   * **One reading per change, not per asker.** `#writeEnvelope` announces once
+   * and three surfaces ask — the identity chip, the status line and the publish
+   * control — and each ask serialises and validates the whole scene. During a
+   * live gesture that is that work per pointer move, which made a picker drag
+   * spend most of its frame deciding whether the document was unsaved. The
+   * version is bumped by the announce itself, so a later read of the same
+   * change cannot disagree with the first; anything that does not announce —
+   * a save's `markSaved`, and the canvas events the session forwards — either
+   * announces after or is read by the comparison afresh. */
   isDirty(): boolean {
-    return this.#persistence.isDirty(this.snapshot(), this.#assets.assets);
+    if (this.#dirtyReading?.version === this.#changeVersion) {
+      return this.#dirtyReading.dirty;
+    }
+    const dirty = this.#persistence.isDirty(
+      this.snapshot(),
+      this.#assets.assets,
+    );
+    this.#dirtyReading = { version: this.#changeVersion, dirty };
+    return dirty;
   }
 
   /** The attribution the saved package will carry, in arrival order. */

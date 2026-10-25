@@ -8,7 +8,13 @@ function solidColor(value: unknown): string | undefined {
 }
 
 /** The gradient's axis across a `width`x`height` box, which is the one piece of
- * geometry all three output forms share. */
+ * geometry the Fabric and canvas forms share.
+ *
+ * **The stored angle is `90 - cssDegrees`** (`gradientCss`), so its direction in
+ * the canvas's y-down space is `(cos, -sin)`: 0 is left-to-right and 90 is
+ * bottom-to-top. A positive `sin` mirrored every rotated gradient against the
+ * CSS preview and the gradient track, while a horizontal one agreed — which is
+ * why the sign survived. */
 function gradientLine(
   value: { readonly angle: number },
   width: number,
@@ -16,7 +22,7 @@ function gradientLine(
 ): { x1: number; y1: number; x2: number; y2: number } {
   const radians = (value.angle * Math.PI) / 180;
   const dx = Math.cos(radians);
-  const dy = Math.sin(radians);
+  const dy = -Math.sin(radians);
   const reach = Math.abs((width * dx) / 2) + Math.abs((height * dy) / 2);
   return {
     x1: width / 2 - dx * reach,

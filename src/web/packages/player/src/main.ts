@@ -507,6 +507,7 @@ function hydrateCharts(
           chartBindings,
           source,
           nowMs,
+          palette,
           playbackDelayMs,
         );
         if (drawnReadings.get(object) === reading) continue;

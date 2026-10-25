@@ -376,6 +376,75 @@ it("selects a stop on a press-and-release without moving it", async () => {
   ).not.toHaveBeenCalled();
 });
 
+it("marks the stop the wells edit, and moves the mark with the selection", async () => {
+  const mounted = await mount({
+    stops: [
+      { offset: 0, color: BLACK },
+      { offset: 0.5, color: RED },
+      { offset: 1, color: WHITE },
+    ],
+    angle: 0,
+  });
+  const first = mounted.find("gradient-stop-0");
+  const middle = mounted.find("gradient-stop-1");
+
+  expect(first.getAttribute("data-selected")).toBe("");
+  expect(middle.getAttribute("data-selected")).toBeNull();
+
+  await click(middle);
+  expect(middle.getAttribute("data-selected")).toBe("");
+  expect(first.getAttribute("data-selected")).toBeNull();
+});
+
+it("opens the stop's colour picker on a press that does not travel", async () => {
+  const mounted = await mount({
+    stops: [
+      { offset: 0, color: BLACK },
+      { offset: 0.5, color: RED },
+      { offset: 1, color: WHITE },
+    ],
+    angle: 0,
+  });
+  stubRect(mounted.find("gradient-track"), 200);
+  const middle = mounted.find("gradient-stop-1");
+
+  expect(mounted.query("colour-picker")).toBeNull();
+  await pointer(middle, "pointerdown", 100);
+  await pointer(middle, "pointerup", 100, 0);
+  await flush();
+
+  expect(
+    mounted.query("colour-picker"),
+    "a click on a stop opens the picker that edits it",
+  ).not.toBeNull();
+  // The click is still a selection, not an edit.
+  expect(mounted.change).not.toHaveBeenCalled();
+  expect(mounted.commit).not.toHaveBeenCalled();
+});
+
+it("leaves the picker closed through a drag that moves the stop", async () => {
+  const mounted = await mount({
+    stops: [
+      { offset: 0, color: BLACK },
+      { offset: 1, color: WHITE },
+    ],
+    angle: 0,
+  });
+  stubRect(mounted.find("gradient-track"), 200);
+  const first = mounted.find("gradient-stop-0");
+
+  await pointer(first, "pointerdown", 20);
+  await pointer(first, "pointermove", 80);
+  await pointer(first, "pointerup", 80, 0);
+  await flush();
+
+  expect(
+    mounted.query("colour-picker"),
+    "a drag adjusts the stop and does not open a popover",
+  ).toBeNull();
+  expect(mounted.commit).toHaveBeenCalledOnce();
+});
+
 it("ignores a secondary-button press", async () => {
   const mounted = await mount({
     stops: [
@@ -772,6 +841,23 @@ it("draws a gradient added to the library, and deletes it from its menu", async 
   await press(mounted.find(`gradient-preset-${second.id}`), "Delete");
   await flush();
   expect(mounted.query(`gradient-preset-${second.id}`)).toBeNull();
+});
+
+it("draws a gradient preset as a named chip carrying no printed name", async () => {
+  const preset = presetLibrary.getSnapshot().gradients[0];
+  if (preset === undefined)
+    throw new Error("The preset library has no gradients.");
+  const mounted = await mount({
+    stops: [
+      { offset: 0, color: BLACK },
+      { offset: 1, color: WHITE },
+    ],
+    angle: 0,
+  });
+  const chip = mounted.find(`gradient-preset-${preset.id}`);
+
+  expect(chip.textContent?.trim()).toBe("");
+  expect(chip.getAttribute("aria-label")).toBe(preset.name);
 });
 
 it("draws no preset row for an empty gradient library", async () => {
