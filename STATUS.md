@@ -5,11 +5,11 @@ Branch: `main`
 
 ## Current objective
 
-Drain `docs/product/backlog.jsonl`: the queued [`spec`](docs/superpowers/specs/2026-10-12-the-backlog-drain-design.md) and [`plan`](docs/superpowers/plans/2026-10-12-the-backlog-drain.md) close the rows the reproduction pass proved discharged, take the rulings the register waits on, then do the real work; 244 rows carry `state: "open"`.
+Land the chart playback work: [`spec`](docs/superpowers/specs/2026-10-25-chart-playback-and-segmented-fill-design.md) and [`plan`](docs/superpowers/plans/2026-10-25-chart-playback-and-animation.md) make 30 fps smooth, remove engine labels, and gate unchanged chart options; Plans 2–3 queue behind it.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md` — queued, not started; no task dispatched.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-chart-playback-and-animation.md` — in progress; Plans 2–3 queued behind its local merge checkpoints.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
 - **`vg-724` is open for art only:** naming for Steam, Epic, GOG, itch, Xbox and GDK Store packages landed; catalogue-matched non-Steam titles still report no artwork.
@@ -30,7 +30,7 @@ Drain `docs/product/backlog.jsonl`: the queued [`spec`](docs/superpowers/specs/2
 2. Run the staged Linux tray binary on a Linux desktop session; it was never executed here.
 3. Work `vg-724`'s art half: local art for catalogue-matched non-Steam titles.
 4. Work `vg-727`, `vg-728` and `vg-729`: Linux presence, the renamed Worker test plugin and the jsdom 30 DOM cases.
-5. Start the backlog-drain plan at Phase 0.
+5. Finish Plan 1, merge locally into `main`, then run Plans 2 and 3 without waiting for owner test feedback.
 
 ## Blockers / unverified
 
