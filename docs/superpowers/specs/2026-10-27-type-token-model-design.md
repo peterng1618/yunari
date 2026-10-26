@@ -86,16 +86,19 @@ and no other element changes.
 
 ## The format break
 
-`SUPPORTED_SCHEMA_VERSION` moves from `2.0.0` to `3.0.0`. The reader compares
-majors, so a v2 theme must be refused by version rather than read into a shape
-that no longer matches. There is no converter and no compatibility branch:
-starter themes, the card library, the published `schema/theme-document.
-schema.json` and the e2e theme fixtures are regenerated in the new shape.
+The schema stays at `2.0.0`: the app is unreleased, so the old shape is not a
+version to refuse but a key set to refuse. `typePresets` is no longer a known
+global group and a token admits only `family`/`weight`/`face`, so a theme
+carrying the old records fails validation naming the key. There is no converter
+and no compatibility branch: starter themes, the card library, the published
+`schema/theme-document.schema.json` and the e2e theme fixtures are rewritten in
+the new shape.
 
-The starter theme's twelve presets collapse to five tokens — `[Heading] Segoe
-UI 600`, `[Body] Segoe UI 400`, `[Mono] Consolas 400`, plus unroled `Segoe UI
-300` and `Segoe UI 500` for the clocks and rates that used them — and each
-starter run carries the size, line height and tracking its old preset held.
+The starter theme uses only the three role tokens — `[Heading] Segoe UI 600`,
+`[Body] Segoe UI 400`, `[Mono] Consolas 400` — and each starter run carries the
+size, line height and tracking its old preset held. The 300-weight clock and
+the 500-weight rate move to the nearest role token; their weights are the face
+the token names, not an element property.
 
 ## Non-goals
 
@@ -113,4 +116,4 @@ starter run carries the size, line height and tracking its old preset held.
   that element's size and no sibling's; applying a different token leaves size
   and spacing alone; the token dropdown lists three role tokens first and ends
   with the two action rows; both dropdowns open the import and finder flows.
-- A v2 theme is refused with the version message, not read.
+- A theme carrying `typePresets` is refused naming the key, not read.

@@ -4,7 +4,7 @@
 
 **Goal:** a type token names a face and nothing else; size, line height, spacing and the canvas size of a text object belong to the element; role becomes the token id.
 
-**Architecture:** `globals.typeTokens` replaces `globals.typePresets` at schema major 3. A token is `{family, weight?, face?}`; runs reference `typeTokens.<id>` and carry `fontSize`/`lineHeight`/`letterSpacing` in their existing `style` map, which the renderer already resolves after the token. Defaults come from `renderer-core` so editor and player agree. Declared faces persist their subset and register with `unicodeRange`.
+**Architecture:** `globals.typeTokens` replaces `globals.typePresets` at the existing schema version. A token is `{family, weight?, face?}`; runs reference `typeTokens.<id>` and carry `fontSize`/`lineHeight`/`letterSpacing` in their existing `style` map, which the renderer already resolves after the token. Defaults come from `renderer-core` so editor and player agree. Declared faces persist their subset and register with `unicodeRange`.
 
 **Tech stack:** TypeScript, React 19, Fabric 7.4, Vitest, Playwright, Biome.
 
@@ -12,7 +12,7 @@
 
 ## Global constraints
 
-- `SUPPORTED_SCHEMA_VERSION` = `3.0.0`; a v2 theme is refused by version. No converter, no compatibility branch.
+- The schema version stays `2.0.0` (unreleased app). The old shape is refused by its keys, not by version. No converter, no compatibility branch.
 - Token ids: `heading`, `body`, `mono` always present, non-removable; every other id is unroled and deletable.
 - A token stores no `name`, `size`, `lineHeight`, `letterSpacing` or `trioRole`.
 - Computed name: `[Heading] Manrope 600` / `Manrope 600`, role word capitalised from `uiCopy`, role tokens sort first in `heading, body, mono` order.
@@ -27,7 +27,7 @@
 
 ## Phase 1 — Token shape, validation and resolution
 
-Outcome: a theme speaks `typeTokens`, the validator refuses the old shape by version and by key, and a run's size falls back per role.
+Outcome: a theme speaks `typeTokens`, the validator refuses the old shape by its keys, and a run's size falls back per role.
 
 ### Task 1.1 — `TypeToken` replaces `TypePreset`
 
@@ -40,16 +40,17 @@ Outcome: a theme speaks `typeTokens`, the validator refuses the old shape by ver
 
 **Acceptance:** typecheck passes with no `TypePreset` symbol left; a run without a token is valid.
 
-### Task 1.2 — Validator, keys and schema version
+### Task 1.2 — Validator and keys
 
 **Owners:** `renderer-core/src/theme/fabric-envelope-validate.ts`, `envelope-keys.ts`, `envelope-semantics.ts`, `fabric-envelope.ts`.
 
-- `SUPPORTED_SCHEMA_VERSION` becomes `3.0.0`; the existing major comparison refuses v2 with the version message.
+- `SUPPORTED_SCHEMA_VERSION` stays `2.0.0`.
+- `typePresets` leaves the known global groups, so a theme carrying it is refused naming the key.
 - A `typeTokens` entry admits only `family`, `weight`, `face`; `size`, `lineHeight`, `letterSpacing`, `trioRole` and `name` are refused as unknown keys, each with the field named.
 - A theme whose `typeTokens` lacks any of the three role ids is refused.
 - A run's `style` accepts `fontSize`, `lineHeight`, `letterSpacing` alongside its existing keys; `fontSize` must be finite and > 0.
 
-**Acceptance:** focused tests refuse a v2 envelope, a token with `size`, and a token set missing `mono`; a v3 envelope with the five starter tokens validates.
+**Acceptance:** focused tests refuse a theme with `typePresets`, a token with `size`, and a token set missing `mono`; a theme with the three starter tokens validates.
 
 ### Task 1.3 — Resolution and default size
 
@@ -65,10 +66,10 @@ Outcome: a theme speaks `typeTokens`, the validator refuses the old shape by ver
 
 **Owners:** `schema/theme-document.schema.json`, the schema sync test.
 
-- `schemaVersion` const becomes 3; `typeTokens` replaces `typePresets`; token properties are the three allowed keys; `fontSize`/`lineHeight`/`letterSpacing` appear in a run's style.
+- `schemaVersion` const stays 2; `typeTokens` replaces `typePresets`; token properties are the three allowed keys; `fontSize`/`lineHeight`/`letterSpacing` appear in a run's style.
 - Sync tests compare the schema with the code's own key lists rather than a copy.
 
-**Acceptance:** `npm run design:check` and the schema sync test pass; a v2 JSON is refused by `$schema` inspection.
+**Acceptance:** `npm run design:check` and the schema sync test pass; a JSON carrying `typePresets` fails the schema.
 
 ---
 
@@ -126,19 +127,19 @@ Outcome: every shipped theme is v3 and its runs carry their own size.
 
 **Owners:** `editor/src/new-fabric-theme-globals.ts`.
 
-- Tokens: `heading` (Segoe UI 600), `body` (Segoe UI 400), `mono` (Consolas 400), unroled `segoe-ui-300`, `segoe-ui-500`.
-- Ids are stable slugs; names are computed, so no `name` field is written.
+- Exactly three tokens: `heading` (Segoe UI 600), `body` (Segoe UI 400), `mono` (Consolas 400). No unroled tokens ship.
+- Names are computed, so no `name` field is written.
 
-**Acceptance:** a new theme contains exactly five tokens, the three roles present, and `starterTypePresets` is gone.
+**Acceptance:** a new theme contains exactly three tokens, all role ids, and `starterTypePresets` is gone.
 
 ### Task 3.2 — Starter runs carry their size
 
 **Owners:** `editor/src/new-fabric-theme-objects.ts`, `editor/src/new-object-defaults.ts`.
 
-- Each run writes `typeToken` plus `fontSize`, `lineHeight` and `letterSpacing` from the preset it used to point at.
+- Each run writes `typeToken` plus `fontSize`, `lineHeight` and `letterSpacing` from the preset it used to point at; the 300-weight clock and 500-weight rate move to the nearest role token (heading or body as their role said), keeping their sizes and tracking.
 - New text objects write no size and take `defaultTypeSize`.
 
-**Acceptance:** the starter scene's clock text resolves to 108 / 300-weight token; a newly created text resolves to its role default.
+**Acceptance:** the starter scene's clock text resolves to the heading token at 108; a newly created text resolves to its role default.
 
 ### Task 3.3 — Card library and token mapping
 
@@ -153,10 +154,10 @@ Outcome: every shipped theme is v3 and its runs carry their own size.
 
 **Owners:** `src/web/.e2e-host-app/themes/*/theme.json`, `src/web/tests/e2e/**`, any v2 fixture in tests.
 
-- Every theme JSON is rewritten to `schemaVersion: "3.0.0"` and `typeTokens`; runs gain their style values where the old preset carried them.
-- A test keeps one deliberately v2 theme to prove the refusal message.
+- Every theme JSON is rewritten to `typeTokens`; runs gain their style values where the old preset carried them.
+- One fixture keeps the old `typePresets` shape to prove the key refusal and is never rendered.
 
-**Acceptance:** the full e2e suite passes; the retained v2 fixture shows the version refusal and is not rendered.
+**Acceptance:** the full e2e suite passes; the retained old-shape fixture shows a validation refusal naming `typePresets`.
 
 ---
 
@@ -258,7 +259,7 @@ Outcome: size, line height and spacing are element properties, and the canvas ag
 ### Task 6.2 — Full gate and proof
 
 - `npm run gate`, `npm run typecheck`, `npm run design:check`, `npm run status:check` from `src/web/`.
-- Browser proof: 72 at 1080; resize isolation; token swap keeps size; dropdown order and both action rows; v2 theme refused.
+- Browser proof: 72 at 1080; resize isolation; token swap keeps size; dropdown order and both action rows; a theme carrying `typePresets` refused naming the key.
 - STATUS.md rewritten to the five-bullet shape; anything found but not fixed filed through a commit trailer.
 
 **Acceptance:** every command above exits 0 and its code is recorded; the browser evidence is described in STATUS.md.

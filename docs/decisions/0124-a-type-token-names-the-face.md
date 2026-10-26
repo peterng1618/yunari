@@ -96,7 +96,7 @@ a cut need not be persisted as a choice.
 | Option | Fit | Cost | Risk | Verdict |
 |---|---|---|---|---|
 | Keep size in the shared record (Figma/Penpot/Sketch) | The shape that produced 12 near-identical presets | None now | The one-face-two-sizes case needs a duplicate record forever | Rejected |
-| Split face from size, size on the element (Tokens Studio / Tailwind namespaces) | Matches the model the renderer already resolves | Format break at schema 3 | Two inspectors must write the same run style | **Chosen** |
+| Split face from size, size on the element (Tokens Studio / Tailwind namespaces) | Matches the model the renderer already resolves | Break at the same schema version | Two inspectors must write the same run style | **Chosen** |
 | Keep the record but let the element override size | Cheapest diff | Two owners for one number, defaults diverge between editor and player | Rejected |
 | Cut as a token field | Explicit | A fourth dropdown for glyph coverage | Rejected |
 | Cut resolved by `unicode-range` | Author never sees it | A subset→range table; ordering rules | **Chosen** |
@@ -119,7 +119,7 @@ The token holds the face (`family`, `weight`, `face.assetId`); role is its id
 (`heading`, `body`, `mono`, non-removable); size, line height and tracking live
 on the run's `style`, with a renderer-owned default derived from the artboard
 height so editor and player agree. The persisted key moves to `typeTokens` and
-the schema to major 3, refused rather than converted. Subsets are persisted as
+the key set, refused by validation rather than converted; the schema version stays 2 because the app is unreleased. Subsets are persisted as
 metadata and resolved by `unicodeRange`, never offered as a choice.
 
 Reason: the split is the one the renderer already implements, and it removes
