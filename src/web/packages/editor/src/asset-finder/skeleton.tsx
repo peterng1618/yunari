@@ -4,9 +4,10 @@ import { uiCopy } from "../ui-copy.js";
 /** The finder's shared first-load placeholder.
  *
  * A grid body and a text body wait differently: the grid draws the cards that
- * are coming, the list draws rows. Both announce one sentence to a screen
- * reader, hide the shapes themselves, and take no focus, so a wait never steals
- * a press. */
+ * are coming, the list draws rows. Each region carries `aria-busy` and one
+ * visually hidden loading sentence, with the shapes hidden and nothing
+ * focusable, so a wait never steals a press. There is no live region here, so
+ * the sentence is read when the region is entered, not announced on mount. */
 export function CardGridSkeleton({
   count = 12,
 }: {

@@ -1195,6 +1195,39 @@ describe("AssetFinder's own controls", () => {
     expect(rowIds()).toEqual(["lucide:house"]);
   });
 
+  it("shows the skeleton again when a search follows an empty answer", async () => {
+    searchAssets.mockResolvedValue({ pages: [page("lucide", [])] });
+    await render([lucide]);
+    await settle();
+    expect(document.querySelector("[data-yunari-asset-empty]")).not.toBeNull();
+
+    const pending = deferred<AssetSearchAnswer>();
+    searchAssets.mockReturnValueOnce(pending.promise);
+    await type("house");
+    await act(async () => {
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
+      await Promise.resolve();
+    });
+
+    // The kept answer says "nothing", so it is no answer to keep while the new
+    // question is out: the wait is shown rather than a stale sentence.
+    expect(
+      document.querySelector("[data-yunari-skeleton-grid]"),
+    ).not.toBeNull();
+    expect(document.querySelector("[data-yunari-asset-empty]")).toBeNull();
+
+    await act(async () => {
+      void pending.resolve({
+        pages: [page("lucide", [result("lucide:house")])],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector("[data-yunari-skeleton-grid]")).toBeNull();
+    expect(rowIds()).toEqual(["lucide:house"]);
+  });
+
   it("keeps the results on screen and marks the grid busy while another page loads", async () => {
     searchAssets.mockResolvedValue({
       pages: [page("lucide", [result("lucide:house")], { totalPages: 2 })],

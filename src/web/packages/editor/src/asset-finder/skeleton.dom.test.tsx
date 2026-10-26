@@ -34,7 +34,11 @@ function mount(element: ReactElement): HTMLDivElement {
 }
 
 function focusables(region: HTMLElement): readonly Element[] {
-  return [...region.querySelectorAll("button, input, a, [tabindex]")];
+  return [
+    ...region.querySelectorAll(
+      "button, input, select, textarea, a, summary, [tabindex], [contenteditable]",
+    ),
+  ];
 }
 
 it("draws card-shaped placeholders with one hidden sentence and no focusable element", () => {

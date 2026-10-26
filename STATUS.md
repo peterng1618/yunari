@@ -17,9 +17,9 @@ Execute [`the Wallpaper Engine import rework`](docs/superpowers/plans/2026-10-26
 ## Last completed change
 
 - **Skeletons:** `CardGridSkeleton`/`TextSkeleton` draw pulse placeholders with `aria-busy`, one visually hidden sentence and no focusable element.
-- **Finder:** the source listing and a first search show the grid skeleton; pagination keeps its rows and sets `aria-busy` instead.
+- **Finder:** the source listing, a first search and a search after an empty answer show the grid skeleton; pagination keeps its rows and sets `aria-busy` instead.
 - **Bodies:** the Wallpaper Engine tab waits on the grid skeleton with the guide and `.mpkg` controls reachable; the Fonts body waits on the text skeleton.
-- **Proof:** the focused editor suites (70 tests) pass; typecheck and biome check are clean.
+- **Proof:** the focused editor suites (71 tests) pass; typecheck and biome check are clean.
 
 ## Next
 

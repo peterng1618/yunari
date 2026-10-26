@@ -705,11 +705,12 @@ export function AssetFinder({
                     >
                       {uiCopy.assets.kindSourcesOff}
                     </p>
-                  ) : answer === undefined ? (
-                    // Nothing to keep: the wait is the grid that is coming.
+                  ) : answer === undefined || (empty && searching) ? (
+                    // Nothing to keep, or the kept answer says "nothing" and a
+                    // new question is out: the wait is the grid that is coming.
                     <div
                       data-yunari-asset-loading=""
-                      className="min-h-0 flex-1 overflow-y-auto"
+                      className="min-h-0 flex-1 overflow-y-auto p-[var(--space-16)]"
                     >
                       <CardGridSkeleton />
                     </div>
