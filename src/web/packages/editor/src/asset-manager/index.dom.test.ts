@@ -127,14 +127,14 @@ describe("AssetManager", () => {
     );
   });
 
-  it("refuses a font format the theme cannot declare", async () => {
-    // The package types a font's format as `woff2` and the envelope validator
-    // refuses anything else, so offering `.woff` here promised a file that
-    // could not be saved. Refused at import, before any bytes are kept.
+  it("refuses an extension the theme cannot declare", async () => {
+    // Four font formats are declarable — `woff2`, `woff`, `ttf` and `otf` — and
+    // the picker's accept list is derived from this same table. Anything outside
+    // it is refused at import, before any bytes are kept.
     const manager = new AssetManager();
 
     await expect(
-      manager.import(file(new Uint8Array([0, 1, 2]), "body.woff", "font/woff")),
+      manager.import(file(new Uint8Array([0, 1, 2]), "body.html", "text/html")),
     ).rejects.toThrow("Unsupported asset file type.");
 
     expect(manager.assets).toEqual({});

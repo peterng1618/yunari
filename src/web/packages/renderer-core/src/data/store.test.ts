@@ -133,7 +133,11 @@ describe("SampleStore", () => {
       NOW,
     );
 
-    expect(store.history("a", 0.5).map((sample) => sample.value)).toEqual([3]);
+    // The sample before the window is the line's leading edge, and it is the
+    // one the cap kept: the pair the fast path indexes must survive eviction.
+    expect(store.history("a", 0.5).map((sample) => sample.value)).toEqual([
+      2, 3,
+    ]);
   });
 
   it("keeps an unreadable sample out of history while it is retained", () => {

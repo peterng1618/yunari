@@ -22,19 +22,6 @@ import {
 import type { PageNavigation } from "./main.js";
 
 /**
- * A partial mock, so the calls the player makes are countable without adding a
- * production-only seam beside them. Every other export is the real one.
- */
-vi.mock("@yunari/renderer-core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@yunari/renderer-core")>();
-  return {
-    ...actual,
-    buildLinePoints: vi.fn(actual.buildLinePoints),
-    collectChartIssues: vi.fn(actual.collectChartIssues),
-  };
-});
-
-/**
  * `vg-190`: a rejection arriving after the scene mounted calls
  * `showLoadFailure`, which replaces the whole document and discards a display
  * that was already drawn. Ruled 2026-10-14: the replacement is intended — a
@@ -1751,15 +1738,11 @@ describe("the language a display sends with its samples", () => {
 /**
  * The work one refresh frame does, driven through the real `main.ts`.
  *
- * Gauges, bars, pies, bound text, bound images and the availability notice only
- * change when a sample arrives, and `SampleSource.revision` is what says one
- * did. The line chart is the exception: its window slides with the clock, so its
- * option is rebuilt every frame while its point list is reused until the
- * revision (or the authored settings) move.
- *
- * `buildLinePoints` is counted through a partial module mock: it is the
- * player's own import, so it is the only seam that observes the call the player
- * actually makes.
+ * Bound text, bound images and the availability notice only change when a
+ * sample arrives, and `SampleSource.revision` is what says one did. A value
+ * chart redraws only when its own reading moves; a line is the exception,
+ * because its window slides with the clock and its signature carries the
+ * instant it will be drawn at, so it redraws every frame.
  */
 describe("the work one refresh frame does", () => {
   beforeEach(() => {
@@ -1767,6 +1750,10 @@ describe("the work one refresh frame does", () => {
     streams.length = 0;
     frames.length = 0;
     frameTime = 0;
+    // The frame clock is the display's own: a line's signature carries the
+    // instant it draws at, so the frames this suite drives must move the clock
+    // the player reads, not the wall clock in between iterations.
+    vi.spyOn(Date, "now").mockImplementation(() => frameTime);
   });
 
   afterEach(() => {
@@ -1881,7 +1868,6 @@ describe("the work one refresh frame does", () => {
 
     const { YunariChart } = await import("@yunari/scene-fabric");
     const { FabricObject, StaticCanvas } = await import("fabric/es");
-    const core = await import("@yunari/renderer-core");
     const setOption = vi.spyOn(YunariChart.prototype, "setOption");
     const set = vi.spyOn(FabricObject.prototype, "set");
     // On the prototype, so the mount's own render is counted too: the canvas
@@ -1890,9 +1876,6 @@ describe("the work one refresh frame does", () => {
       StaticCanvas.prototype,
       "requestRenderAll",
     );
-    const linePoints = vi.mocked(core.buildLinePoints);
-    const collectIssues = vi.mocked(core.collectChartIssues);
-
     await import("./main.js");
     await vi.waitFor(() =>
       expect(
@@ -1901,24 +1884,11 @@ describe("the work one refresh frame does", () => {
       ).not.toBeNull(),
     );
 
-    // The mount's own diagnostics call is the baseline that case counts from;
-    // the others count from a revision the display has not drawn yet.
-    const collectAtMount = collectIssues.mock.calls.length;
     setOption.mockClear();
     set.mockClear();
-    linePoints.mockClear();
-    collectIssues.mockClear();
     requestRenderAll.mockClear();
 
-    return {
-      setOption,
-      set,
-      linePoints,
-      collectIssues,
-      requestRenderAll,
-      collectAtMount,
-      warned,
-    };
+    return { setOption, set, requestRenderAll, warned };
   }
 
   /** `set` calls that wrote text; the layout passes also set geometry. */
@@ -1943,7 +1913,7 @@ describe("the work one refresh frame does", () => {
   }
 
   it("repaints the line every frame and the rest once per revision", async () => {
-    const { setOption, set, linePoints } = await mount(revisionsEnvelope(true));
+    const { setOption, set } = await mount(revisionsEnvelope(true));
     streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
     await vi.waitFor(() => expect(liveRevision()).toBe(1));
 
@@ -1957,7 +1927,6 @@ describe("the work one refresh frame does", () => {
       "the line repainted every frame",
     ).toBe(30);
     expect(textWrites(set), "the bound text repainted once").toBe(1);
-    expect(linePoints.mock.calls.length, "the points were built once").toBe(1);
 
     // A second accepted ingest is a second revision: every family updates once.
     streams[0]!.emit("samples", batch(43, "2026-01-01T00:00:11.000Z"));
@@ -1967,7 +1936,6 @@ describe("the work one refresh frame does", () => {
     expect(setOptionCalls(setOption, "gauge")).toBe(2);
     expect(setOptionCalls(setOption, "line")).toBe(31);
     expect(textWrites(set)).toBe(2);
-    expect(linePoints.mock.calls.length).toBe(2);
   });
 
   it("asks for no repaint when no sample has arrived", async () => {
@@ -2007,12 +1975,10 @@ describe("the work one refresh frame does", () => {
   });
 
   it("reports a line's unmapped key once, not every frame", async () => {
-    // The line branch bypasses `buildChartPlan` every frame, so it has to ask
-    // for the diagnostics itself — and only when a sample moved, leaving the
-    // per-node dedupe to keep a persistent fault to one line.
-    const { warned, collectIssues, collectAtMount } = await mount(
-      revisionsEnvelope(true, "cpu.load.absent"),
-    );
+    // A line asks for its diagnostics on every frame, because its reading — and
+    // so its signature — moves with the clock. What keeps the display readable
+    // is the per-node dedupe: the fault is reported once, not once a frame.
+    const { warned } = await mount(revisionsEnvelope(true, "cpu.load.absent"));
     const unmapped = (): number =>
       warned.mock.calls.filter(
         ([message]) =>
@@ -2020,20 +1986,15 @@ describe("the work one refresh frame does", () => {
           message.includes('No sensor is mapped to "cpu.load.absent"'),
       ).length;
 
-    // The dedupe set cannot tell "asked every frame" from "asked on a change",
-    // so the gate is counted at the call: the spy is a pass-through.
-    expect(collectAtMount, "asked once at mount").toBe(1);
     expect(unmapped(), "the mount reported the unmapped key").toBe(1);
 
     for (let frame = 0; frame < 30; frame += 1) driveFrame();
-    expect(collectIssues.mock.calls.length, "idle frames ask nothing").toBe(0);
     expect(unmapped(), "idle frames reported nothing new").toBe(1);
 
     streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
     await vi.waitFor(() => expect(liveRevision()).toBe(1));
     driveFrame();
 
-    expect(collectIssues.mock.calls.length, "the change asked again").toBe(1);
     expect(unmapped(), "the dedupe kept it to one line").toBe(1);
   });
 

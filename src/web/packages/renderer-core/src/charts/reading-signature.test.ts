@@ -13,6 +13,7 @@ const sample: Sample = {
   unit: "%",
 };
 const source: SampleSource = {
+  revision: 0,
   latest: () => sample,
   history: () => [sample],
 };
@@ -63,6 +64,7 @@ describe("chartReadingSignature", () => {
     const bindings = [{ id: "b", semanticKey: "cpu.load.total" }];
     const asked: number[] = [];
     const delayed: SampleSource = {
+      revision: 0,
       chartPlaybackDelayMs: 2_000,
       latest: () => sample,
       history: (_key, seconds) => {

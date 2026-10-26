@@ -323,6 +323,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -1156,7 +1157,7 @@ describe("EditorSession", () => {
     extensions.destroy();
   });
 
-  it("gives the selected token its own column, and gives the object column back", () => {
+  it("gives the selected token its own column, and gives the object column back", async () => {
     // The right column has one owner at a time (spec, Tokens pane). The session
     // owns both halves — the token panel's mounts and the suppression — because
     // it already owns the document the token fields write through; a panel built
@@ -1288,6 +1289,9 @@ describe("EditorSession", () => {
       tokenColumn?.querySelector("[data-yunari-token-name]"),
     ).not.toBeNull();
     typePresetPortMock.change?.({});
+    // The document batches a task's announcements into one flush, so the
+    // re-render that drops the ref arrives on the microtask.
+    await Promise.resolve();
     expect(tokenSelection.get()).toBeUndefined();
     expect(objectColumn?.style.display).toBe("");
     expect(tokenColumn?.textContent).toBe("");
@@ -1298,6 +1302,7 @@ describe("EditorSession", () => {
       tokenColumn?.querySelector("[data-yunari-palette-name]"),
     ).not.toBeNull();
     palettePortMock.change?.({ background: paints.background });
+    await Promise.resolve();
     expect(tokenSelection.get()).toBeUndefined();
     expect(objectColumn?.style.display).toBe("");
     expect(tokenColumn?.textContent).toBe("");

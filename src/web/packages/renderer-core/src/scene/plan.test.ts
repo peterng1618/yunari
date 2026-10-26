@@ -1031,6 +1031,7 @@ describe("charts", () => {
     // axis edge follow it.
     const windows: number[] = [];
     const source = {
+      revision: 0,
       chartPlaybackDelayMs: LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
       latest: () => undefined,
       history: (_key: string, windowSeconds: number) => {

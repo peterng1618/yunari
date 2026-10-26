@@ -55,6 +55,7 @@ describe("createPreviewSource", () => {
     const now = 60_000;
     const preview = createPreviewSource({ keys: ["cpu.load"], now: () => now });
     const undelayed: SampleSource = {
+      revision: 0,
       latest: (key) => preview.source.latest(key),
       history: (key, seconds) => preview.source.history(key, seconds),
     };

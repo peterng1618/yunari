@@ -23,6 +23,16 @@ describe("theme asset media type", () => {
     expect(
       themeAssetContentType({ kind: "font", path: "assets/x.woff2" }),
     ).toBe("font/woff2");
+    // The other three the theme format and the schema admit.
+    expect(themeAssetContentType({ kind: "font", path: "assets/x.woff" })).toBe(
+      "font/woff",
+    );
+    expect(themeAssetContentType({ kind: "font", path: "assets/x.ttf" })).toBe(
+      "font/ttf",
+    );
+    expect(themeAssetContentType({ kind: "font", path: "assets/x.otf" })).toBe(
+      "font/otf",
+    );
   });
 
   it("refuses an extension the kind does not allow", () => {
@@ -60,7 +70,7 @@ describe("theme asset media type", () => {
       svg: ["svg"],
       gif: ["gif"],
       video: ["mp4", "webm"],
-      font: ["woff2"],
+      font: ["woff2", "woff", "ttf", "otf"],
     });
   });
 });
