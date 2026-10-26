@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from "vitest";
+import { artboardBackdrop } from "./artboard-backdrop.js";
 import { mountBackgroundMedia } from "./background-media.js";
 import type { BackdropMedia } from "./glass.js";
 import {
@@ -12,6 +13,75 @@ import {
   StaticCanvas,
   stage,
 } from "./glass-test-stage.js";
+
+/** A backdrop whose media is red on its left half and blue on its right, in the
+ *  media's own upright frame. A hard edge keeps the sampled colour unambiguous
+ *  after the grain overlay. */
+function twoTone(angle: number): BackdropMedia {
+  return {
+    rect: { left: 0, top: 0, width: 200, height: 200 },
+    angle,
+    paint(ctx, region, device) {
+      const left = device.left - region.left;
+      const top = device.top - region.top;
+      ctx.fillStyle = "#ff0000";
+      ctx.fillRect(left, top, device.width / 2, device.height);
+      ctx.fillStyle = "#0000ff";
+      ctx.fillRect(
+        left + device.width / 2,
+        top,
+        device.width / 2,
+        device.height,
+      );
+      return true;
+    },
+  };
+}
+
+/** A hard-edged two-tone artboard paint, left red and right blue. */
+const TWO_TONE_PAINT = {
+  kind: "gradient",
+  angle: 0,
+  stops: [
+    { offset: 0, color: "#ff0000" },
+    { offset: 0.5, color: "#ff0000" },
+    { offset: 0.5, color: "#0000ff" },
+    { offset: 1, color: "#0000ff" },
+  ],
+} as const;
+
+/** A panel over one point of the display's own surface, with no media layer. */
+function platePixel(
+  shape: "rect" | "circle",
+  angle: number,
+  at: { readonly x: number; readonly y: number },
+): readonly [number, number, number, number] {
+  const box =
+    shape === "circle"
+      ? { left: 0, top: 0, width: 200, height: 200, radius: "circle" as const }
+      : { left: 0, top: 0, width: 200, height: 200 };
+  const backdrop = artboardBackdrop({
+    background: TWO_TONE_PAINT,
+    width: 200,
+    height: 200,
+    media: undefined,
+    angle,
+    surface: { shape, box },
+  });
+  const s = stage({ texture: false, backdrop: () => backdrop });
+  s.canvas.add(
+    panel({
+      left: at.x - 20,
+      top: at.y - 20,
+      width: 40,
+      height: 40,
+      fill: "transparent",
+      yunariGlass: { blurRadius: 0 },
+    }),
+  );
+  s.canvas.renderAll();
+  return s.pixel(at.x, at.y);
+}
 
 describe("glass composition", () => {
   it("samples the backdrop, not the panel's own already-painted fill", () => {
@@ -370,28 +440,10 @@ describe("glass composition", () => {
   });
 
   it("samples a rotated backdrop at the rotated position", () => {
-    // Two tones: red on the media's left half, blue on its right. The panel sits
-    // right of the board's centre, so upright it samples blue; turned 180
-    // degrees, the same device pixel comes from the media's left half. A sampler
-    // that ignored the angle would read blue in both arms.
-    const twoTone = (angle: number): BackdropMedia => ({
-      rect: { left: 0, top: 0, width: 200, height: 200 },
-      angle,
-      paint(ctx, region, device) {
-        const left = device.left - region.left;
-        const top = device.top - region.top;
-        ctx.fillStyle = "#ff0000";
-        ctx.fillRect(left, top, device.width / 2, device.height);
-        ctx.fillStyle = "#0000ff";
-        ctx.fillRect(
-          left + device.width / 2,
-          top,
-          device.width / 2,
-          device.height,
-        );
-        return true;
-      },
-    });
+    // The panel sits right of the board's centre, so upright it samples the
+    // media's right (blue) half; turned 180 degrees, the same device pixel comes
+    // from the left (red) half. A sampler that ignored the angle reads blue in
+    // both arms.
     const sample = (angle: number) => {
       const s = stage({ texture: false, backdrop: () => twoTone(angle) });
       s.canvas.add(
@@ -415,6 +467,72 @@ describe("glass composition", () => {
     expect(sample(180)[0], "turned, it samples the left half").toBeGreaterThan(
       200,
     );
+  });
+
+  it("turns a theme-bounded backdrop clockwise at 90 degrees", () => {
+    // 180 degrees cannot tell a mirrored sampler from a correct one. Clockwise
+    // in the y-down surface, the media's left half appears where the screen's
+    // top half was: a panel top-right reads red, a panel bottom-left reads blue.
+    const sample = (
+      angle: number,
+      at: { readonly x: number; readonly y: number },
+    ) => {
+      const s = stage({ texture: false, backdrop: () => twoTone(angle) });
+      s.canvas.add(
+        panel({
+          left: at.x - 20,
+          top: at.y - 20,
+          width: 40,
+          height: 40,
+          fill: "transparent",
+          yunariGlass: { blurRadius: 0 },
+        }),
+      );
+      s.canvas.renderAll();
+      return s.pixel(at.x, at.y);
+    };
+    const topRight = { x: 140, y: 40 };
+    const bottomLeft = { x: 40, y: 140 };
+
+    expect(
+      sample(0, topRight)[2],
+      "upright, top-right is the right half",
+    ).toBeGreaterThan(200);
+    expect(
+      sample(90, topRight)[0],
+      "turned, the left half is on top",
+    ).toBeGreaterThan(200);
+    expect(
+      sample(0, bottomLeft)[0],
+      "upright, bottom-left is the left half",
+    ).toBeGreaterThan(200);
+    expect(
+      sample(90, bottomLeft)[2],
+      "turned, the right half is below",
+    ).toBeGreaterThan(200);
+  });
+
+  it("samples a media-less rect display's host paint, which does not turn", () => {
+    // The surface behind the canvas is the host background: one DOM box the
+    // composition turns *inside*, never with it. The panel is at the host's
+    // left half below the centre. A sampler that turned the board's paint with
+    // the composition reads the gradient's right half there instead.
+    for (const angle of [0, 90]) {
+      const pixel = platePixel("rect", angle, { x: 40, y: 140 });
+      expect(pixel[0], `red at ${angle} degrees`).toBeGreaterThan(200);
+      expect(pixel[2], `not blue at ${angle} degrees`).toBeLessThan(60);
+    }
+  });
+
+  it("samples a media-less circle display's disc paint, which does not turn", () => {
+    // The surface is the disc: the same paint, mapped across the disc box. The
+    // panel is at the host's right half above the centre, inside the disc. A
+    // sampler that turned the board's paint reads the left half (red) there.
+    for (const angle of [0, 45]) {
+      const pixel = platePixel("circle", angle, { x: 140, y: 40 });
+      expect(pixel[2], `blue at ${angle} degrees`).toBeGreaterThan(200);
+      expect(pixel[0], `not red at ${angle} degrees`).toBeLessThan(60);
+    }
   });
 
   it("does not turn a display-bounded backdrop with the composition", () => {

@@ -56,6 +56,73 @@ describe("the artboard backdrop", () => {
     expect(backdrop.rect).toEqual({ left: 0, top: 0, width: 20, height: 20 });
   });
 
+  it("paints a circle display's disc, and black outside it", () => {
+    // The surface a panel sees with no media is the disc: the theme's paint
+    // clipped to the round screen, and black where the screen is not. The
+    // caller composites it under the media, hence `destination-over`.
+    const backdrop = artboardBackdrop({
+      background: "#ff0000",
+      width: 20,
+      height: 20,
+      media: undefined,
+      surface: {
+        shape: "circle",
+        box: { left: 0, top: 0, width: 20, height: 20 },
+      },
+    });
+    const plate = backdrop.plate;
+    if (plate === undefined) throw new Error("the surface painted no plate");
+    expect(plate.screenRect).toEqual({
+      left: 0,
+      top: 0,
+      width: 20,
+      height: 20,
+    });
+
+    const context = scratch();
+    context.globalCompositeOperation = "destination-over";
+    plate.paint(context, REGION, DEVICE);
+
+    expect(pixel(context, 10, 10), "inside the disc").toEqual([255, 0, 0, 255]);
+    // (1, 1) is 12.7px from the centre of a 10px-radius disc.
+    expect(pixel(context, 1, 1), "outside the disc").toEqual([0, 0, 0, 255]);
+  });
+
+  it("maps a rect display's plate across the host box, not the board", () => {
+    // The host's background spans the whole viewport, so a panel in the
+    // letterbox still samples the board's paint — mapped to the host, which is
+    // the box the CSS gradient actually covers.
+    const backdrop = artboardBackdrop({
+      background: {
+        kind: "gradient",
+        angle: 0,
+        stops: [
+          { offset: 0, color: "#000000" },
+          { offset: 1, color: "#ffffff" },
+        ],
+      },
+      width: 20,
+      height: 20,
+      media: undefined,
+      surface: {
+        shape: "rect",
+        // A host box wider than the board: the gradient's far end is here.
+        box: { left: 0, top: 0, width: 40, height: 20 },
+      },
+    });
+    const plate = backdrop.plate;
+    if (plate === undefined) throw new Error("the surface painted no plate");
+    const context = scratch();
+    context.globalCompositeOperation = "destination-over";
+    plate.paint(context, REGION, { left: 0, top: 0, width: 40, height: 20 });
+
+    // 19 of the host's 40 px is just short of the gradient's midpoint; a
+    // board-mapped plate (20 px wide) would be nearly white here.
+    const mid = pixel(context, 19, 10)[0] ?? 0;
+    expect(mid, "half way along the host").toBeGreaterThan(80);
+    expect(mid).toBeLessThan(160);
+  });
+
   it("paints the board's colour when the theme declares no media", () => {
     // The case the canvas used to cover: a colour-only theme has no media layer
     // for a panel to sample, so without this the panel composites over

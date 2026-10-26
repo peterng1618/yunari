@@ -120,6 +120,8 @@ export function stage(options: {
         readonly angle?: number;
         /** A display-bounded media's own box in host pixels. */
         readonly screenRect?: DeviceRect;
+        /** The display's own surface, under the media. */
+        readonly plate?: BackdropMedia["plate"];
         readonly paint: BackdropMedia["paint"];
       }
     | undefined;
@@ -206,6 +208,7 @@ export function stage(options: {
               ...(stub?.screenRect === undefined
                 ? {}
                 : { screenRect: stub.screenRect }),
+              ...(stub?.plate === undefined ? {} : { plate: stub.plate }),
               paint: (ctx, region, device) => {
                 regions.push({ ...region });
                 paints.push({ region: { ...region }, device: { ...device } });

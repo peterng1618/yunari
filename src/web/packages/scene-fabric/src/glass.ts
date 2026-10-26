@@ -51,6 +51,23 @@ export interface ArtboardRect {
  * exact, survives a `toCanvasElement` capture, and cannot disagree with what the
  * caller happened to measure in CSS.
  */
+/** The surface behind the canvas — what a panel sees wherever the media is
+ *  absent or transparent. It is the display's own paint: the host rect for a
+ *  rect display, the disc for a circle, in host CSS pixels. Both are DOM
+ *  surfaces, so **neither turns with the composition**. */
+export interface BackdropPlate {
+  /** The surface's own box, in host CSS pixels. */
+  readonly screenRect: MediaBox;
+  /** Paints it across `region`, behind whatever is already there; `device` is
+   *  `screenRect` in the context's pixels. The caller sets `destination-over`,
+   *  so a kept media frame is never overwritten. */
+  paint(
+    ctx: CanvasRenderingContext2D,
+    region: DeviceRect,
+    device: DeviceRect,
+  ): void;
+}
+
 export interface BackdropMedia {
   /** The media layer's rect, in artboard units. */
   readonly rect: ArtboardRect;
@@ -61,6 +78,9 @@ export interface BackdropMedia {
    *  layer that fills the display: it does not turn with the composition, so its
    *  device rect is this box rather than a mapping of `rect`. */
   readonly screenRect?: MediaBox;
+  /** The display's own surface, painted under the media. Absent when the media
+   *  is the whole backdrop, as in the glass tests' stubs. */
+  readonly plate?: BackdropPlate;
   /** Paints the media over `region` of `ctx`, with `device` its rect in `ctx`'s
    *  own pixels. False when the source has decoded no pixels yet. */
   paint(
@@ -595,12 +615,7 @@ export function createGlass(options: GlassOptions): GlassHandle {
     const device =
       screenRect === undefined
         ? deviceRectOf(media.rect, plane, Math.hypot(plane[0], plane[1]))
-        : {
-            left: screenRect.left * retina,
-            top: screenRect.top * retina,
-            width: screenRect.width * retina,
-            height: screenRect.height * retina,
-          };
+        : screenDevice(screenRect, retina);
     let painted: boolean;
     if (angle === 0) {
       painted = media.paint(context, region, device);
@@ -617,7 +632,19 @@ export function createGlass(options: GlassOptions): GlassHandle {
       painted = media.paint(context, region, device);
       context.restore();
     }
-    if (painted) {
+    // **The plate is a different surface from the media** (0125). A media-less
+    // theme, or a transparent frame, shows the host's background on a rect
+    // display and the disc on a circle — both DOM boxes the composition turns
+    // *inside*, never with. It goes under whatever the media painted, so a kept
+    // frame is not overwritten, and it is never turned.
+    const plate = media.plate;
+    if (plate !== undefined) {
+      context.save();
+      context.globalCompositeOperation = "destination-over";
+      plate.paint(context, region, screenDevice(plate.screenRect, retina));
+      context.restore();
+    }
+    if (painted || plate !== undefined) {
       panel.backdropRegion = region;
       return element;
     }
@@ -705,6 +732,17 @@ function planeMatrix(canvas: StaticCanvas): Matrix {
     view[4] * retina,
     view[5] * retina,
   ];
+}
+
+/** A box stated in host CSS pixels, in the surface's own pixels. Host pixels
+ *  are what the DOM paints, so only the device ratio is missing. */
+function screenDevice(rect: DeviceRect, retina: number): DeviceRect {
+  return {
+    left: rect.left * retina,
+    top: rect.top * retina,
+    width: rect.width * retina,
+    height: rect.height * retina,
+  };
 }
 
 /**

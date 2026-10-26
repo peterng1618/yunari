@@ -5,6 +5,7 @@ import {
   type Background,
   computeArtboardTransform,
   type DisplayPresentation,
+  type DisplayShape,
   type SceneHandle,
   type ScenePlan,
 } from "@yunari/renderer-core";
@@ -19,6 +20,7 @@ import { cssArtboardPaint } from "./artboard-paint.js";
 import {
   type BackgroundMediaHandle,
   type BackgroundMediaSource,
+  type MediaBox,
   mountBackgroundMedia,
 } from "./background-media.js";
 import { createGlass } from "./glass.js";
@@ -173,9 +175,18 @@ export function mountFabricScene(
         width: currentArtboard?.width ?? plan.artboard.width,
         height: currentArtboard?.height ?? plan.artboard.height,
         media: media?.backdrop(),
-        // The paint is the whole backdrop for a media-less theme, so the
-        // composition's angle has to reach the sampler even without a layer.
+        // The media turns with the composition; the display's own surface does
+        // not. Without this the paint a panel sees where the media is absent
+        // would be the turned board rather than the host or the disc.
         angle: presentation.rotation ?? 0,
+        surface: {
+          shape: presentation.shape,
+          box: displayBox(
+            host.clientWidth,
+            host.clientHeight,
+            presentation.shape,
+          ),
+        },
       }),
     ...(options.onGlassError === undefined
       ? {}
@@ -225,20 +236,20 @@ export function mountFabricScene(
   function applyPresentation(paint: string): void {
     const width = host.clientWidth;
     const height = host.clientHeight;
+    const box = displayBox(width, height, presentation.shape);
     if (presentation.shape === "circle") {
       // Outside the disc is outside the screen, so the host is black and the
       // disc itself carries the theme's paint.
       host.style.background = "#000";
-      const diameter = Math.min(width, height);
       const discElement = presentationDisc();
       discElement.style.display = "";
-      discElement.style.left = `${(width - diameter) / 2}px`;
-      discElement.style.top = `${(height - diameter) / 2}px`;
-      discElement.style.width = `${diameter}px`;
-      discElement.style.height = `${diameter}px`;
+      discElement.style.left = `${box.left}px`;
+      discElement.style.top = `${box.top}px`;
+      discElement.style.width = `${box.width}px`;
+      discElement.style.height = `${box.height}px`;
       discElement.style.borderRadius = "50%";
       discElement.style.background = paint;
-      element.style.clipPath = `circle(${diameter / 2}px at ${width / 2}px ${height / 2}px)`;
+      element.style.clipPath = `circle(${box.width / 2}px at ${width / 2}px ${height / 2}px)`;
       return;
     }
     // Rect: the host is the board's paint and its letterbox, exactly as before a
@@ -268,11 +279,6 @@ export function mountFabricScene(
     // document artboard's `background` may still be a palette reference, which
     // only the plan builder can resolve.
     const geometry = currentArtboard ?? plan.artboard;
-    fitted = {
-      width: host.clientWidth,
-      height: host.clientHeight,
-      ratio: window.devicePixelRatio,
-    };
     const transform = computeArtboardTransform({
       artboard: { width: geometry.width, height: geometry.height },
       viewport: { width: host.clientWidth, height: host.clientHeight },
@@ -282,6 +288,14 @@ export function mountFabricScene(
         ? {}
         : { rotation: presentation.rotation }),
     });
+    // **After the transform, not before.** A refused angle throws above, and a
+    // size recorded for a fit that never happened would make the next `resize()`
+    // early-return on a host size this scene has not been fitted to.
+    fitted = {
+      width: host.clientWidth,
+      height: host.clientHeight,
+      ratio: window.devicePixelRatio,
+    };
 
     // The one artboard paint is the board's fill and the bars behind it (§53).
     // It is the **host's**, which puts it behind the media layer, so a
@@ -297,9 +311,6 @@ export function mountFabricScene(
     if (!transform.isDegenerate) {
       // The display box is the disc for a round panel: a display-bounded media
       // layer fills the screen there and is clipped to the disc by `place`.
-      const width = host.clientWidth;
-      const height = host.clientHeight;
-      const diameter = Math.min(width, height);
       media?.setBounds({
         artboard: {
           left: transform.offsetX,
@@ -308,16 +319,11 @@ export function mountFabricScene(
           height: geometry.height * transform.scale,
           angle: transform.rotation,
         },
-        display:
-          presentation.shape === "circle"
-            ? {
-                left: (width - diameter) / 2,
-                top: (height - diameter) / 2,
-                width: diameter,
-                height: diameter,
-                radius: "circle",
-              }
-            : { left: 0, top: 0, width, height },
+        display: displayBox(
+          host.clientWidth,
+          host.clientHeight,
+          presentation.shape,
+        ),
       });
     }
 
@@ -439,6 +445,24 @@ export function mountFabricScene(
     },
   };
 }
+/** The display's own box in host pixels: the host rect for a rect display, the
+ *  centred disc (`min(width, height)`) for a circle. */
+function displayBox(
+  width: number,
+  height: number,
+  shape: DisplayShape,
+): MediaBox {
+  if (shape === "rect") return { left: 0, top: 0, width, height };
+  const diameter = Math.min(width, height);
+  return {
+    left: (width - diameter) / 2,
+    top: (height - diameter) / 2,
+    width: diameter,
+    height: diameter,
+    radius: "circle",
+  };
+}
+
 /** Forward adapter options explicitly so scene-only options cannot leak through later. */
 function withoutHostAndPlan(
   options: FabricSceneOptions,
