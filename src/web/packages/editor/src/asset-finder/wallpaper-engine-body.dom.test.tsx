@@ -147,7 +147,7 @@ function actionOf(rendered: HTMLElement, id: string): HTMLButtonElement | null {
   );
 }
 
-it("renders the host's absence reason, not an empty grid", async () => {
+it("renders the host's absence reason, not an empty grid, and keeps the guide and package import reachable", async () => {
   const rendered = await render({
     ...idle(),
     client: {
@@ -159,6 +159,18 @@ it("renders the host's absence reason, not an empty grid", async () => {
     uiCopy.assets.wallpaperEngine.reason["no-library"],
   );
   expect(cards(rendered)).toHaveLength(0);
+
+  // A `.mpkg` exported on another machine is what an author without a library
+  // needs, so both controls survive the absence branch.
+  expect(
+    rendered.querySelector("[data-yunari-wallpaper-engine-guide]"),
+  ).not.toBeNull();
+  expect(
+    rendered.querySelector("[data-yunari-wallpaper-engine-import-package]"),
+  ).not.toBeNull();
+  expect(
+    rendered.querySelector("[data-yunari-wallpaper-engine-package-input]"),
+  ).not.toBeNull();
 });
 
 it("draws a card per item inside the finder's asset grid", async () => {
@@ -217,10 +229,42 @@ it("sets a video as the background and reports it on the status line", async () 
   expect(actionOf(rendered, "202")?.getAttribute("aria-label")).toBe(
     uiCopy.assets.wallpaperEngine.action.video.done,
   );
+  // Done is final for the modal session: a second press would declare a
+  // duplicate asset and spend another credit slot.
+  expect(actionOf(rendered, "202")?.disabled).toBe(true);
+  expect(onSetBackground).toHaveBeenCalledWith(items[1]);
   expect(
     rendered.querySelector("[data-yunari-wallpaper-engine-status]")
       ?.textContent,
   ).toContain(uiCopy.assets.wallpaperEngine.backgroundSet("Neon city"));
+});
+
+it("holds a refused video background on the card and says it on the status line", async () => {
+  const message = "That video is over the cap.";
+  const rendered = await render({
+    ...idle(),
+    onSetBackground: vi.fn(
+      async (): Promise<ImportOutcome> => ({
+        ok: false,
+        message,
+      }),
+    ),
+  });
+
+  await act(async () => {
+    actionOf(rendered, "202")?.click();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(actionOf(rendered, "202")?.getAttribute("aria-label")).toBe(message);
+  expect(actionOf(rendered, "202")?.disabled).toBe(false);
+  expect(
+    rendered.querySelector("[data-yunari-wallpaper-engine-status]")
+      ?.textContent,
+  ).toContain(message);
 });
 
 it("converts a scene and reports the project on the status line", async () => {

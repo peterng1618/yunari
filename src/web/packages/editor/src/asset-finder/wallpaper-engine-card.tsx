@@ -30,7 +30,9 @@ function actionOf(
     case "running":
       return { icon: SETTING_GLYPH, label: copy.running, disabled: true };
     case "done":
-      return { icon: CONVERTED_GLYPH, label: copy.done, disabled: false };
+      // Final for the modal session: a second press would declare a duplicate
+      // asset and spend another credit slot.
+      return { icon: CONVERTED_GLYPH, label: copy.done, disabled: true };
     case "failed":
       return {
         icon: ACTION_FAILED_GLYPH,

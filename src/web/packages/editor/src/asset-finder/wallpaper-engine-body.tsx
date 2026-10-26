@@ -1,6 +1,9 @@
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
-import { ImportVideoModal } from "../panes/assets/import-video-modal.js";
+import {
+  ImportVideoModal,
+  type VideoImportStep,
+} from "../panes/assets/import-video-modal.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   fetchWallpaperEngine,
@@ -36,7 +39,7 @@ export function WallpaperEngineBody(props: {
   ) => Promise<StartProjectAnswer>;
   readonly onImportPackage: (
     file: File,
-    onStep: (step: "preparing" | "importing") => void,
+    onStep: (step: VideoImportStep) => void,
   ) => Promise<ImportOutcome>;
   readonly client?: WallpaperEngineClientOptions;
 }): React.JSX.Element {
@@ -66,26 +69,88 @@ export function WallpaperEngineBody(props: {
 
   if (answer === undefined) return <></>;
 
+  const copy = uiCopy.assets.wallpaperEngine;
+
+  /** The two controls that need no listing: the workflow guide, and the `.mpkg`
+   *  a scene exported on another machine already produced. Both stay reachable
+   *  when this PC has no library of its own. */
+  const guideAndPackage = (
+    <>
+      <div className="flex flex-wrap items-center gap-[var(--space-8)]">
+        <button
+          type="button"
+          data-yunari-wallpaper-engine-guide=""
+          onClick={() => {
+            setGuideOpen(true);
+          }}
+          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-xs"
+        >
+          {copy.guide}
+        </button>
+        <button
+          type="button"
+          data-yunari-wallpaper-engine-import-package=""
+          onClick={() => {
+            packageInput.current?.click();
+          }}
+          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-xs"
+        >
+          {copy.importPackage}
+        </button>
+        <input
+          ref={packageInput}
+          type="file"
+          accept=".mpkg"
+          data-yunari-wallpaper-engine-package-input=""
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file !== undefined) setPackageFile(file);
+          }}
+        />
+      </div>
+      <WallpaperEngineGuide
+        open={guideOpen}
+        onOpenChange={(next) => {
+          setGuideOpen(next);
+        }}
+      />
+      {packageFile === undefined ? null : (
+        <ImportVideoModal
+          file={packageFile}
+          package
+          onRun={(onStep) => onImportPackage(packageFile, onStep)}
+          onClose={() => {
+            setPackageFile(undefined);
+          }}
+        />
+      )}
+    </>
+  );
+
   if (answer.available === false) {
     return (
-      <p
-        data-yunari-wallpaper-engine-unavailable=""
-        className="text-sm text-muted"
-      >
-        {uiCopy.assets.wallpaperEngine.reason[answer.reason]}
-      </p>
+      <div className="flex flex-col gap-[var(--space-8)]">
+        {guideAndPackage}
+        <p
+          data-yunari-wallpaper-engine-unavailable=""
+          className="text-sm text-muted"
+        >
+          {copy.reason[answer.reason]}
+        </p>
+      </div>
     );
   }
 
   if (answer.items.length === 0) {
     return (
-      <p className="text-sm text-muted">
-        {uiCopy.assets.wallpaperEngine.empty}
-      </p>
+      <div className="flex flex-col gap-[var(--space-8)]">
+        {guideAndPackage}
+        <p className="text-sm text-muted">{copy.empty}</p>
+      </div>
     );
   }
-
-  const copy = uiCopy.assets.wallpaperEngine;
 
   const setCard = (
     item: WallpaperEngineItem,
@@ -177,40 +242,7 @@ export function WallpaperEngineBody(props: {
           </button>
         ))}
       </div>
-      <div className="flex flex-wrap items-center gap-[var(--space-8)]">
-        <button
-          type="button"
-          data-yunari-wallpaper-engine-guide=""
-          onClick={() => {
-            setGuideOpen(true);
-          }}
-          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-xs"
-        >
-          {copy.guide}
-        </button>
-        <button
-          type="button"
-          data-yunari-wallpaper-engine-import-package=""
-          onClick={() => {
-            packageInput.current?.click();
-          }}
-          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-xs"
-        >
-          {copy.importPackage}
-        </button>
-        <input
-          ref={packageInput}
-          type="file"
-          accept=".mpkg"
-          data-yunari-wallpaper-engine-package-input=""
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file !== undefined) setPackageFile(file);
-          }}
-        />
-      </div>
+      {guideAndPackage}
       {shown.length === 0 ? (
         <p
           data-yunari-wallpaper-engine-no-matches=""
@@ -248,22 +280,6 @@ export function WallpaperEngineBody(props: {
       >
         {status}
       </p>
-      <WallpaperEngineGuide
-        open={guideOpen}
-        onOpenChange={(next) => {
-          setGuideOpen(next);
-        }}
-      />
-      {packageFile === undefined ? null : (
-        <ImportVideoModal
-          file={packageFile}
-          package
-          onRun={(onStep) => onImportPackage(packageFile, onStep)}
-          onClose={() => {
-            setPackageFile(undefined);
-          }}
-        />
-      )}
     </div>
   );
 }
