@@ -3192,21 +3192,26 @@ test.describe("a paired display and the theme it is given", () => {
     return url.toString();
   }
 
+  /** The record the host holds for a display, read off its own route. A zero
+   *  angle is omitted from the stored record, so a reader must supply the
+   *  default rather than read an absence as a missing row. */
+  async function displayRecord(request: APIRequestContext, id: string) {
+    const listed = (await (
+      await request.get(`${admin}/api/pairing/sessions`)
+    ).json()) as {
+      readonly displays: readonly {
+        readonly id: string;
+        readonly shape: string;
+        readonly rotation?: number;
+      }[];
+    };
+
+    return listed.displays.find((row) => row.id === id);
+  }
+
   /** The record the host holds for a display, read off its own route. */
   function activeDisplay(request: APIRequestContext, id: string) {
-    return expect.poll(async () => {
-      const listed = (await (
-        await request.get(`${admin}/api/pairing/sessions`)
-      ).json()) as {
-        readonly displays: readonly {
-          readonly id: string;
-          readonly shape: string;
-          readonly rotation: number;
-        }[];
-      };
-
-      return listed.displays.find((row) => row.id === id);
-    });
+    return expect.poll(() => displayRecord(request, id));
   }
 
   /** The artboard's own matrix, the host box it is drawn into, and the angle
@@ -3316,22 +3321,36 @@ test.describe("a paired display and the theme it is given", () => {
       .toBe(1);
   }
 
-  /** The layer mounts before its source decodes; a read before `load` is a read
-   *  of the load-window rect. */
+  /** The layer mounts before its source decodes, and its placement is written
+   *  when the bytes arrive. Waiting on the decode and the placed geometry is the
+   *  event, not a duration. */
   async function settleBackgroundMedia(page: Page): Promise<void> {
     await expect
       .poll(
         () =>
-          page.evaluate(() => {
+          page.evaluate(async () => {
             const image = document.querySelector<HTMLImageElement>(
               "[data-yunari-background-media] img",
             );
-            return image !== null && image.complete && image.naturalWidth > 0;
+            if (image === null || !image.complete || image.naturalWidth === 0) {
+              return false;
+            }
+            // `decode()` settles when the bytes can be painted; a placement
+            // read before it is the load-window rect.
+            await image.decode().catch(() => undefined);
+            const layer = image.closest<HTMLElement>(
+              "[data-yunari-background-media]",
+            );
+            return (
+              layer !== null &&
+              layer.offsetWidth > 0 &&
+              image.offsetWidth > 0 &&
+              image.style.width !== ""
+            );
           }),
         { timeout: 20_000 },
       )
       .toBe(true);
-    await page.waitForTimeout(400);
   }
 
   /** One screenshot, then one pixel per viewport point. The bitmap is denser
@@ -3403,6 +3422,104 @@ test.describe("a paired display and the theme it is given", () => {
       Math.abs(a.r - b.r),
       Math.abs(a.g - b.g),
       Math.abs(a.b - b.b),
+    );
+  }
+
+  /** The glass frame is one animation frame behind the media's decode, so the
+   *  panel's tint is polled rather than awaited for a fixed time. */
+  async function expectPanelTint(
+    page: Page,
+    point: { readonly x: number; readonly y: number },
+    expected: { readonly r: number; readonly g: number; readonly b: number },
+    label: string,
+  ): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          const [pixel] = await sampleScreenPixels(page, [point]);
+          return colourDistance(pixel!, expected);
+        },
+        { timeout: 20_000, message: label },
+      )
+      .toBeLessThan(25);
+  }
+
+  /** The media layer's four corners as the browser paints them: its layout box
+   *  and its computed transform, never `handle.transform()`. A plate whose
+   *  rotation was dropped renders upright even when the camera's matrix says
+   *  otherwise, and its corners leave the disc — which is the reading this
+   *  exposes. */
+  function renderedPlate(page: Page): Promise<{
+    readonly transform: string;
+    readonly angle: number;
+    readonly corners: readonly { readonly x: number; readonly y: number }[];
+  }> {
+    return page.evaluate(() => {
+      const host = document
+        .querySelector<HTMLElement>("#artboard")!
+        .getBoundingClientRect();
+      const layer = document.querySelector<HTMLElement>(
+        "[data-yunari-background-media]",
+      );
+      if (layer === null) throw new Error("no background media layer");
+      const style = getComputedStyle(layer);
+      const matrix =
+        style.transform === "none"
+          ? new DOMMatrixReadOnly()
+          : new DOMMatrixReadOnly(style.transform);
+      const left = Number.parseFloat(layer.style.left || "0");
+      const top = Number.parseFloat(layer.style.top || "0");
+      const width = layer.offsetWidth;
+      const height = layer.offsetHeight;
+      const local = [
+        [0, 0],
+        [width, 0],
+        [width, height],
+        [0, height],
+      ] as const;
+      return {
+        transform: style.transform,
+        angle: (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI,
+        corners: local.map(([x, y]) => ({
+          x: host.left + left + matrix.a * x + matrix.c * y,
+          y: host.top + top + matrix.b * x + matrix.d * y,
+        })),
+      };
+    });
+  }
+
+  /** A rendered box, off the DOM: the disc or any other painted plate. */
+  function renderedBox(
+    page: Page,
+    selector: string,
+  ): Promise<{
+    readonly left: number;
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
+  }> {
+    return page.locator(selector).evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return {
+        left: box.left,
+        top: box.top,
+        width: box.width,
+        height: box.height,
+      };
+    });
+  }
+
+  /** `/editor/` in the Host mode: the surface the display controls live on. */
+  async function openHostSettings(page: Page): Promise<void> {
+    await page.goto(`${admin}/editor/`);
+    const modeSwitch = page.locator(".editor-shell-mode-switch");
+    await expect(modeSwitch).toBeVisible({ timeout: 30_000 });
+    await modeSwitch
+      .getByRole("button", { name: editorCopy.modes.thisPc, exact: true })
+      .click();
+    await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
+      "data-yunari-mode-region",
+      "this-pc",
     );
   }
 
@@ -3885,6 +4002,14 @@ test.describe("a paired display and the theme it is given", () => {
     expect(maxX - minX).toBeCloseTo(450, 0);
     expect(minX).toBeGreaterThan(0);
     expect(maxX).toBeLessThan(reading.viewport.width);
+
+    // The fit letterboxes rather than cropping: the bar beside the board is the
+    // theme's own paint, not a stretched or clamped copy of the media.
+    const [bar] = await sampleScreenPixels(page, [{ x: 25, y: 400 }]);
+    expect(
+      colourDistance(bar!, { r: 16, g: 19, b: 24 }),
+      `the letterbox is not the theme's bar paint: ${JSON.stringify(bar)}`,
+    ).toBeLessThan(25);
   });
 
   test("a circle display puts the artboard corners on the disc at 0 and 45", async ({
@@ -3901,55 +4026,38 @@ test.describe("a paired display and the theme it is given", () => {
       await page.goto(playerUrl(display, { theme: TWO_TONE_THEME_BOUNDS }));
       await waitForDisc(page);
       await waitForRotation(page, rotation);
+      await settleBackgroundMedia(page);
 
-      const corners = await page.evaluate(() => {
-        const handle = (
-          window as unknown as {
-            yunari: {
-              handle: {
-                transform(): {
-                  matrix: readonly [
-                    number,
-                    number,
-                    number,
-                    number,
-                    number,
-                    number,
-                  ];
-                };
-              };
-            };
-          }
-        ).yunari.handle;
-        const [a, b, c, d, e, f] = handle.transform().matrix;
-        const point = (x: number, y: number) => ({
-          x: a * x + c * y + e,
-          y: b * x + d * y + f,
-        });
-        const radius = Math.min(window.innerWidth, window.innerHeight) / 2;
-        const centre = {
-          x: window.innerWidth / 2,
-          y: window.innerHeight / 2,
-        };
-        const authored = [
-          [0, 0],
-          [640, 0],
-          [640, 360],
-          [0, 360],
-        ] as const;
-        return {
-          distances: authored.map(([x, y]) => {
-            const mapped = point(x, y);
-            return Math.hypot(mapped.x - centre.x, mapped.y - centre.y);
-          }),
-          radius,
-        };
-      });
+      // **Two independently rendered drawings**: the disc is the presentation's
+      // own DOM plate, and the board is the media layer's painted rect off its
+      // layout box and computed transform. Neither is read from the camera
+      // matrix, so a scene that reports a rotation it did not render fails.
+      const disc = await renderedBox(page, "[data-yunari-display-disc]");
+      expect(disc.width, "the disc's box is square").toBeCloseTo(
+        disc.height,
+        1,
+      );
+      const plate = await renderedPlate(page);
+      expect(
+        plate.angle,
+        rotation === 0
+          ? "the rendered plate did not stay upright at 0"
+          : "the rendered plate did not turn at 45",
+      ).toBeCloseTo(rotation, 1);
 
-      // The artboard's diagonal is inscribed in the disc, so its corners sit on
-      // the circle at every whole angle — including a non-quarter 45.
-      for (const distance of corners.distances) {
-        expect(distance).toBeCloseTo(corners.radius, 1);
+      const centre = {
+        x: disc.left + disc.width / 2,
+        y: disc.top + disc.height / 2,
+      };
+      const radius = disc.width / 2;
+      for (const corner of plate.corners) {
+        const distance = Math.hypot(corner.x - centre.x, corner.y - centre.y);
+        // 1px: the disc's box and the plate's transform are rounded to layout
+        // and paint pixels, and the plate's antialiased edge adds one more.
+        expect(
+          Math.abs(distance - radius),
+          `a rendered plate corner is ${distance.toFixed(2)}px from the centre, not the disc's ${radius.toFixed(2)}px`,
+        ).toBeLessThanOrEqual(1.5);
       }
     }
   });
@@ -3971,13 +4079,18 @@ test.describe("a paired display and the theme it is given", () => {
       "a theme-bounded layer does not turn with the composition",
     ).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
 
+    // **At 45, not 0.** A display-bounded layer's box is the host, so
+    // `transform: none` at 0 would hold whether or not the layer turns with the
+    // composition; at a non-zero angle only an unturned layer reports none.
     const displayDisplay = await pairDisplay(request, "Display media", {
       shape: "circle",
+      rotation: 45,
     });
     await page.goto(
       playerUrl(displayDisplay, { theme: TWO_TONE_DISPLAY_BOUNDS }),
     );
     await waitForDisc(page);
+    await waitForRotation(page, 45);
     await settleBackgroundMedia(page);
 
     const layer = page.locator("[data-yunari-background-media]");
@@ -4001,23 +4114,28 @@ test.describe("a paired display and the theme it is given", () => {
   }) => {
     test.skip(origin === "", "this machine has no LAN address");
 
-    /** Reads the panel centres in authored coordinates; the matrix maps them to
-     *  the pixels that turn with the composition. */
-    async function panelPixels(
+    /** The panel centres in authored coordinates, mapped to the screen pixels
+     *  that turn with the composition. */
+    async function panelPoints(
       page: Page,
       authored: readonly { readonly x: number; readonly y: number }[],
     ) {
       const reading = await readPresentation(page);
-      return sampleScreenPixels(
-        page,
-        authored.map((point) => clientPoint(reading, point.x, point.y)),
-      );
+      return authored.map((point) => clientPoint(reading, point.x, point.y));
     }
 
+    // Every panel is off the board's horizontal centreline: on that line a
+    // quarter turn of a horizontal offset stays on the source's same half, so a
+    // sampler that dropped the media's angle would read the right colour by
+    // accident. Authored centres are (160, 90) red, (480, 270) blue and
+    // (600, 60) blue near the board's top-right corner.
+    const LEFT = { x: 160, y: 90 } as const;
+    const RIGHT = { x: 480, y: 270 } as const;
+    const CORNER = { x: 600, y: 60 } as const;
+
     // 90 and 270 on a rect display. The panel's screen position turns with the
-    // composition, so a sampler that ignored the media's angle reads the
-    // letterbox instead of the half the panel is over; a sampler that turned
-    // the wrong way reads the other half.
+    // composition, so a sampler that ignored the media's angle reads the wrong
+    // half — or the letterbox — instead of the half the panel is over.
     for (const rotation of [90, 270] as const) {
       const display = await pairDisplay(request, `Glass ${rotation}`, {
         shape: "rect",
@@ -4034,26 +4152,28 @@ test.describe("a paired display and the theme it is given", () => {
           : "matrix(0, -1, 1, 0, 0, 0)",
       );
 
-      const pixels = await panelPixels(page, [
-        { x: 160, y: 180 },
-        { x: 480, y: 180 },
-      ]);
-      expect(
-        colourDistance(pixels[0]!, TINT.red),
-        `the left panel at ${rotation} is not the media's red half: ${JSON.stringify(pixels[0])}`,
-      ).toBeLessThan(25);
+      const [red, blue] = await panelPoints(page, [LEFT, RIGHT]);
+      await expectPanelTint(
+        page,
+        red!,
+        TINT.red,
+        `the left panel at ${rotation} is not the media's red half`,
+      );
+      await expectPanelTint(
+        page,
+        blue!,
+        TINT.blue,
+        `the right panel at ${rotation} is not the media's blue half`,
+      );
+      const pixels = await sampleScreenPixels(page, [red!, blue!]);
       expect(colourDistance(pixels[0]!, TINT.blue)).toBeGreaterThan(80);
-      expect(
-        colourDistance(pixels[1]!, TINT.blue),
-        `the right panel at ${rotation} is not the media's blue half: ${JSON.stringify(pixels[1])}`,
-      ).toBeLessThan(25);
       expect(colourDistance(pixels[1]!, TINT.red)).toBeGreaterThan(80);
     }
 
     // A circle at 45: a non-quarter angle, where the disc's inscribed scale is
-    // not the turned bounding box's. Left and right panels read their authored
-    // halves; the lens panel sits outside the board and inside the disc, so it
-    // reads the plate's paint rather than a media the sampler stretched.
+    // not the turned bounding box's. The three panels read their authored
+    // halves; `CORNER` is inside the board, so the blue it reads is the media's
+    // tint and untinted plate paint cannot pass.
     const circle = await pairDisplay(request, "Glass circle 45", {
       shape: "circle",
       rotation: 45,
@@ -4070,25 +4190,33 @@ test.describe("a paired display and the theme it is given", () => {
       "the media did not turn with a 45 degree circle",
     ).toBe("rotate(45deg)");
 
-    const pixels = await panelPixels(page, [
-      { x: 160, y: 180 },
-      { x: 480, y: 180 },
-      { x: 650, y: 180 },
-    ]);
-    expect(
-      colourDistance(pixels[0]!, TINT.red),
-      `the left panel at 45 is not the media's red half: ${JSON.stringify(pixels[0])}`,
-    ).toBeLessThan(25);
-    expect(
-      colourDistance(pixels[1]!, TINT.blue),
-      `the right panel at 45 is not the media's blue half: ${JSON.stringify(pixels[1])}`,
-    ).toBeLessThan(25);
+    const [red, blue, corner] = await panelPoints(page, [LEFT, RIGHT, CORNER]);
+    await expectPanelTint(
+      page,
+      red!,
+      TINT.red,
+      "the left panel at 45 is not the media's red half",
+    );
+    await expectPanelTint(
+      page,
+      blue!,
+      TINT.blue,
+      "the right panel at 45 is not the media's blue half",
+    );
+    await expectPanelTint(
+      page,
+      corner!,
+      TINT.blue,
+      "the corner panel at 45 is not the media's blue half",
+    );
+    const pixels = await sampleScreenPixels(page, [red!, blue!, corner!]);
+    expect(colourDistance(pixels[0]!, TINT.blue)).toBeGreaterThan(80);
+    expect(colourDistance(pixels[1]!, TINT.red)).toBeGreaterThan(80);
     expect(
       colourDistance(pixels[2]!, TINT.bar),
-      `the lens panel at 45 is not the board's paint: ${JSON.stringify(pixels[2])}`,
-    ).toBeLessThan(25);
+      "the corner panel read the plate, so the sampler stopped at the board's edge",
+    ).toBeGreaterThan(80);
     expect(colourDistance(pixels[2]!, TINT.red)).toBeGreaterThan(80);
-    expect(colourDistance(pixels[2]!, TINT.blue)).toBeGreaterThan(80);
   });
 
   test("a panel straddling a circle display's edge reads the picture inside the disc and black outside", async ({
@@ -4148,11 +4276,13 @@ test.describe("a paired display and the theme it is given", () => {
     // The disc box's own corner, outside the disc and inside the layer's box.
     const outside = { x: disc.left + 10, y: disc.top + 10 };
 
+    await expectPanelTint(
+      page,
+      inside,
+      TINT.blue,
+      "the panel over the disc edge is not the picture's blue",
+    );
     const pixels = await sampleScreenPixels(page, [inside, lens, outside]);
-    expect(
-      colourDistance(pixels[0]!, TINT.blue),
-      `the panel over the disc edge is not the picture's blue: ${JSON.stringify(pixels[0])}`,
-    ).toBeLessThan(25);
     expect(
       colourDistance(pixels[0]!, TINT.black),
       "the panel read black where the display-bounded picture is",
@@ -4216,6 +4346,117 @@ test.describe("a paired display and the theme it is given", () => {
       rotation: 45,
     });
     await expect(row).toHaveAttribute("data-rotation", "45");
+
+    // The write is not the behaviour: the player this display watches has to
+    // answer with the presentation the host now holds.
+    await page.goto(playerUrl(display, { theme: TWO_TONE_THEME_BOUNDS }));
+    await waitForDisc(page);
+    await waitForRotation(page, 45);
+    await settleBackgroundMedia(page);
+    const plate = await renderedPlate(page);
+    expect(
+      plate.angle,
+      "the player did not pick the host's new angle up",
+    ).toBeCloseTo(45, 1);
+  });
+
+  test("choosing a rectangle for a turned circle snaps the angle back to upright", async ({
+    page,
+    request,
+  }) => {
+    test.skip(origin === "", "this machine has no LAN address");
+
+    const display = await pairDisplay(request, "Turned circle", {
+      shape: "circle",
+      rotation: 37,
+    });
+
+    await openHostSettings(page);
+    const row = page.locator(`[data-yunari-host-display="${display.id}"]`);
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await expect(row).toHaveAttribute("data-shape", "circle");
+    await expect(row).toHaveAttribute("data-rotation", "37");
+    await row.click();
+    await page
+      .locator("[data-yunari-host-display-shape]", {
+        hasText: editorCopy.hostSettings.displays.shapeRect,
+      })
+      .click();
+
+    // A rectangle has no turned presentation, so the shape write carries the
+    // angle it snaps to: the row and the store must not disagree about a
+    // rotation the store refuses for that shape. A zero angle is omitted from
+    // the stored record, so the read supplies it.
+    await expect
+      .poll(
+        async () => {
+          const record = await displayRecord(request, display.id);
+          return record === undefined
+            ? "missing"
+            : `${record.shape}:${record.rotation ?? 0}`;
+        },
+        {
+          timeout: 20_000,
+          message:
+            "the store kept the circle's angle through a rectangle write",
+        },
+      )
+      .toBe("rect:0");
+    await expect(row).toHaveAttribute("data-shape", "rect");
+    await expect(row).toHaveAttribute("data-rotation", "0");
+
+    await page.goto(playerUrl(display, { theme: TWO_TONE_THEME_BOUNDS }));
+    await expect
+      .poll(() => page.locator("[data-yunari-display-disc]").count(), {
+        timeout: 20_000,
+      })
+      .toBe(0);
+    await waitForRotation(page, 0);
+  });
+
+  test("this PC plays upright and rectangular, and the Host offers it no shape or rotation", async ({
+    page,
+  }) => {
+    test.skip(origin === "", "this machine has no LAN address");
+
+    // A loopback request resolves as this PC whatever credential it carries.
+    // The unpaired default is not reachable as a page at all — a non-loopback
+    // read without a credential is refused, which the report names — so this
+    // case can only prove the `this-pc` half of acceptance 10.
+    await page.setViewportSize({ width: 600, height: 800 });
+    await page.goto(`${admin}/?theme=${TWO_TONE_THEME_BOUNDS}`);
+    await waitForRotation(page, 0);
+    await settleBackgroundMedia(page);
+    await expect(
+      page.locator("[data-yunari-display-disc]"),
+      "this PC was given a disc",
+    ).toHaveCount(0);
+    await expect(
+      page.locator("[data-yunari-background-media]"),
+      "this PC's media turned",
+    ).toHaveCSS("transform", "none");
+    const clip = await page
+      .locator("#artboard canvas.lower-canvas")
+      .evaluate((node) => getComputedStyle(node).clipPath);
+    expect(clip, "this PC's board is clipped to a shape").toBe("none");
+
+    await openHostSettings(page);
+    const row = page.locator('[data-yunari-host-display="this-pc"]');
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await row.click();
+    await expect(
+      page.getByText(editorCopy.hostSettings.displays.presentationAbsent, {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.locator("[data-yunari-host-display-shape]"),
+      "the Host drew a shape control for this PC",
+    ).toHaveCount(0);
+    await expect(
+      page.locator("#yunari-host-display-rotation"),
+      "the Host drew a rotation control for this PC",
+    ).toHaveCount(0);
   });
 });
 

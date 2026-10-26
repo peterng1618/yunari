@@ -833,11 +833,16 @@ const twoToneDisplayBoundsEnvelope = {
 /**
  * The two-tone source as the theme's background under three glass panels.
  *
- * - `tone-left` and `tone-right` sit over the source's red and blue halves, so
- *   a pixel reports which half the sampler read after the composition turned.
- * - `tone-lens` sits at authored `(650, 180)`, between the artboard's right
- *   edge and the disc: the plate is the paint there, so it reports whether the
- *   sampler stopped at the artboard's own rect.
+ * - `tone-left`, `tone-right` and `tone-corner` sit over the source's red and
+ *   blue halves, so a pixel reports which half the sampler read after the
+ *   composition turned.
+ * - All three are **off the board's horizontal centreline**. On that line a
+ *   sampler that dropped the media's angle still lands on the correct half
+ *   (a quarter turn of a horizontal offset is vertical, and the source splits
+ *   left/right), which would make the case pass for the wrong reason.
+ * - `tone-corner` sits at the board's top-right, so a quarter turn of its
+ *   offset leaves the board and the plate's paint is what a dropped angle
+ *   reads.
  *
  * Zero blur on every panel on purpose: a flat field is what makes the half a
  * screen point maps back to readable.
@@ -890,8 +895,10 @@ const glassTwoToneEnvelope = {
         version: "7.4.0" as const,
         originX: "left" as const,
         originY: "top" as const,
+        // Centre authored (160, 90): upper-left quarter, so a quarter turn of
+        // the offset lands on the blue half rather than the seam.
         left: 100,
-        top: 120,
+        top: 30,
         width: 120,
         height: 120,
         rx: 16,
@@ -910,8 +917,9 @@ const glassTwoToneEnvelope = {
         version: "7.4.0" as const,
         originX: "left" as const,
         originY: "top" as const,
+        // Centre authored (480, 270): lower-right quarter.
         left: 420,
-        top: 120,
+        top: 210,
         width: 120,
         height: 120,
         rx: 16,
@@ -926,22 +934,24 @@ const glassTwoToneEnvelope = {
         yunariGlass: { blurRadius: 0 },
       },
       {
-        // Authored outside the board (x 620…680) and inside the disc, so the
-        // plate rather than the media is what a correct sample reads.
+        // Centre authored (600, 60): inside the board and near its top-right
+        // corner, so a correct sample is the blue media (a tint untinted paint
+        // cannot match) while a dropped angle leaves the board and reads the
+        // plate instead.
         type: "Rect" as const,
         version: "7.4.0" as const,
         originX: "left" as const,
         originY: "top" as const,
-        left: 620,
-        top: 150,
-        width: 60,
-        height: 60,
+        left: 540,
+        top: 0,
+        width: 120,
+        height: 120,
         rx: 8,
         ry: 8,
         fill: "rgba(0, 0, 0, 0.35)",
         stroke: "rgba(255, 255, 255, 0.35)",
         strokeWidth: 2,
-        id: "tone-lens",
+        id: "tone-corner",
         selectable: false,
         evented: false,
         yunariPaint: { fill: "palette.panel", stroke: "palette.edge" },

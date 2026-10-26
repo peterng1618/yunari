@@ -20,7 +20,7 @@ Branch: `main`
 - **Rotated fit:** the artboard transform turns the composition, letterboxes the turned bounding box, and inscribes the board in a circle's disc.
 - **Circle presentation:** the canvas is clipped to the disc, a display-bounded media fills it, and theme-bounded media turns with the composition.
 - **Delivery and Host controls:** the publish poll carries shape and rotation to `updatePresentation`, and the selected display's row edits both against the host's answer.
-- **Evidence:** 12 new browser cases pass on desktop and phone; each case was shown red with its behaviour disabled; `npm run gate` exit 0.
+- **Evidence:** eight new browser cases pass on desktop and phone; each changed case was shown red with its behaviour disabled; `npm run gate` exit 0.
 
 ## Next
 
@@ -31,7 +31,7 @@ Branch: `main`
 
 ## Blockers / unverified
 
-- **Browser reds, all pre-existing:** `host-walkthrough`'s field case, publish-loop's edit-in-`own-host` run and host-player's round-trip reproduce identically at merge-base `a32b7728`.
+- **Browser reds, all pre-existing:** `host-walkthrough`'s field case, publish-loop's edit-in-`own-host` run and host-player's round-trip reproduce identically at merge-base `a32b7728`; host-player's theme-chooser case is `vg-755` (`/api/themes` is loopback-only, so a LAN display's 403 disposes the chooser).
 - **`store-worker/src/auth/return-page.ts` hands a one-time token to any loopback port** — closing it needs a nonce or pinned-port binding, a design decision.
 - **No live GitHub Actions run:** `publish.yml`'s triggers, artifact hand-off and the `npm ls` step are syntax-checked only.
 - **No real phone, Linux or macOS host** was exercised; PWA, keyring and ffmpeg pairs are read or mocked rather than measured.
