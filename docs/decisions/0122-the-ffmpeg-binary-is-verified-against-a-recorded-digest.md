@@ -121,9 +121,17 @@ by the CLI, so there is one copy. No dependency is added.
 ## Decision
 
 Record the decompressed SHA-256 for each platform the host runs on in
-`ffmpeg-static-hashes.json`, keyed by `ffmpeg-static` version. Before spawning,
-the host hashes the resolved executable once per path per process and refuses
+`ffmpeg-static-hashes.json`, keyed by `ffmpeg-static` version. Before every
+spawn, the host hashes the resolved executable and refuses
 with one user-facing sentence on a version mismatch, an unlisted platform or a
 digest mismatch. `node scripts/verify-ffmpeg.mjs` performs the same check from
 the command line and names the expected and actual digest for an operator. An
 unlisted platform is refused, never waved through.
+
+Amended 2026-10-26: the first version cached one answer per executable path for
+the life of the process. That cache re-opened the gap it was added to close: the
+verifier reads the file with `readFileSync` and the spawn re-opens it with
+`execFile`, so a binary replaced between the two ran unhashed for the rest of the
+process. Verification now runs at every spawn; the cost is one read of an ~80 MB
+binary against a re-encode's minutes, and a cache may only return on that ceiling
+being named.

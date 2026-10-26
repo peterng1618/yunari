@@ -2,12 +2,19 @@ import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import { readVideoFacts, videoRefusals } from "@yunari/theme-package";
 import { describe, expect, it, vi } from "vitest";
+import { verifyFfmpeg } from "./ffmpeg-hash.mjs";
 import { ffmpegArgs, normalizeVideo } from "./normalize-video.js";
 
 // The real module resolves to a bundled binary on this machine; the missing-
 // encoder case is a module that gave none, which is what a build without the
 // optional download looks like.
 vi.mock("ffmpeg-static", () => ({ default: null }));
+
+// The shipped path, without the seam: the digest is read from disk on every
+// spawn, so a case that counts the seam cannot see a cache behind it.
+vi.mock("./ffmpeg-hash.mjs", () => ({
+  verifyFfmpeg: vi.fn((): { ok: true } => ({ ok: true })),
+}));
 
 function fixture(name: string): Uint8Array {
   return new Uint8Array(
@@ -221,6 +228,21 @@ describe("normalizeVideo", () => {
     await normalizeVideo(fixture("wide.mp4"), options);
 
     expect(verifyForTest).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("verifies once per spawn, not once per path, on the default path", async () => {
+    // The case above counts the seam, which production never passes; the
+    // shipped defect sat behind it. Here the real verifier is mocked, so a
+    // cache in `verified` leaves the second spawn unhashed and this fails.
+    const run = runWriting(fixture("conforming.mp4"));
+    vi.mocked(verifyFfmpeg).mockClear();
+
+    const options = { ffmpegPath: "ffmpeg-stub", run };
+    await normalizeVideo(fixture("wide.mp4"), options);
+    await normalizeVideo(fixture("wide.mp4"), options);
+
+    expect(verifyFfmpeg).toHaveBeenCalledTimes(2);
     expect(run).toHaveBeenCalledTimes(2);
   });
 
