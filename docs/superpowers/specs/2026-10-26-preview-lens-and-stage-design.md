@@ -205,10 +205,10 @@ lens is active **and** `|lens.aspect − artboardAspect|` exceeds `1e-6`.
 
 `display-lens.ts` becomes the owner. A ratio is
 `{ width, height, shape: "rect" | "circle" }` of positive finite numbers,
-identified by its normalised `"W:H"` text (`19.5:9` keeps its decimal; a ratio
-is normalised by dividing both edges by their greatest common divisor when that
-leaves integers, otherwise by the width). `shape` is `"rect"` everywhere except
-a circle, which is only legal when `width === height`; a circle's id is
+identified by its normalised `"W:H"` text. Two integer edges are divided by
+their greatest common divisor (`32:18` is `16:9`); an edge with a decimal
+(`19.5:9`) is kept as typed after trimming. `shape` is `"rect"` everywhere
+except a circle, which is only legal when `width === height`; a circle's id is
 `"Circle"`, not an aspect name.
 
 Defaults: `16:9`, `19.5:9`, `4:3`, `1:1`, and `Circle`.
