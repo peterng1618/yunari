@@ -634,6 +634,35 @@ describe("the display lens", () => {
     expect(board.top).toBe(200);
   });
 
+  it("withholds the display rect until the host is laid out", () => {
+    const host = document.createElement("div");
+    const size = { width: 0, height: 0 };
+    Object.defineProperties(host, {
+      clientWidth: { get: () => size.width },
+      clientHeight: { get: () => size.height },
+    });
+    const camera = createViewportManager({
+      canvas: new Canvas(document.createElement("canvas")),
+      host,
+      artboard: () => ({ width: 1600, height: 900 }),
+    });
+    cameras.push(camera);
+    camera.showDisplay("16:9");
+
+    // No layout yet, so the identity transform must not be read as a screen:
+    // without the guard the lens box is already positive and the shell draws a
+    // frame one paint early.
+    expect(camera.displayScreenRect()).toBeUndefined();
+
+    size.width = 800;
+    size.height = 600;
+    camera.resize();
+    const rect = camera.displayScreenRect();
+    expect(rect).toBeDefined();
+    expect(rect?.width).toBeGreaterThan(0);
+    expect(rect?.height).toBeGreaterThan(0);
+  });
+
   it("opens on the first landscape lens or Fit", () => {
     setActivePreviewRatios(["9:16"]);
     expect(
