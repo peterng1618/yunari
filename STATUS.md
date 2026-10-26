@@ -20,6 +20,7 @@ Stop the live line's right edge revising a stretch it has already painted, the o
 - **A stall's step survives the batches that follow it:** `liveTail` derives the hold and step from every sample gap instead of the newest pair, so the next batch no longer slopes a flat stretch already painted.
 - **The live line no longer corrects at the edge:** the per-frame probe read 15 revisions per line chart before the change and 0 after, on the editor's real machine sensors.
 - **Red first:** the drawn-value case across the batch after a stall and three `liveTail` expectations failed before the change; the chart suite is 324/324 after it, typecheck exit 0.
+- **Main's font and token work is merged:** lead-subset import, one family card per face set, and a bound preset's weight chosen from the package's faces.
 
 ## Next
 

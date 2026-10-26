@@ -53,11 +53,22 @@ export interface TokenInspectorPanel {
   destroy(): void;
 }
 
+/** One declared face of a family: what a bound preset's weight list offers. */
+export interface FaceChoice {
+  readonly assetId: string;
+  readonly weight: string | number;
+  readonly style: string;
+}
+
 export interface TokenInspectorActions {
   readonly onChange: (presets: TypePresets) => void;
   readonly onDelete: (id: string, replacement: string) => void;
   readonly setRole: (id: string, role: FontTrioRole | null) => void;
   readonly unbindFace: (id: string) => void;
+  /** Every declared face of a family, so a bound preset's weight is a list of
+   *  the weights the package actually holds rather than free text that would
+   *  fall back to the browser font. */
+  readonly facesOf?: (family: string) => readonly FaceChoice[];
   /** The paint half: the palette the ref names, its document writes and its
    *  users walk. Absent when the mount has no palette behind it. */
   readonly paints:
@@ -165,6 +176,19 @@ function PresetFields(props: {
   const put = (next: TypePreset, name = entry.name): void => {
     actions.onChange({ ...presets, [id]: { name, value: next } });
   };
+  // Lightest first: a weight list reads 400, 500, 700, not declaration order.
+  const faces =
+    value.face === undefined
+      ? []
+      : [...(actions.facesOf?.(value.family) ?? [])].sort(
+          (a, b) =>
+            Number(a.weight) - Number(b.weight) ||
+            a.style.localeCompare(b.style),
+        );
+  const selectedFaceId =
+    faces.find((face) => face.assetId === value.face?.assetId)?.assetId ??
+    faces[0]?.assetId ??
+    "";
 
   return (
     <div
@@ -239,10 +263,37 @@ function PresetFields(props: {
         >
           <p className="m-0 text-xs text-muted">{uiCopy.panels.fontBound}</p>
           <ReadOnlyPair label={uiCopy.panels.family} value={value.family} />
-          <ReadOnlyPair
-            label={uiCopy.panels.weight}
-            value={String(value.weight ?? "")}
-          />
+          {/* The face owns the family, but not the weight: the package may hold
+              several, and a weight it does not hold would draw in the browser
+              fallback. Absent a declared face list, the bound weight stays
+              read-only rather than inventing one. */}
+          {faces.length === 0 ? (
+            <ReadOnlyPair
+              label={uiCopy.panels.weight}
+              value={String(value.weight ?? "")}
+            />
+          ) : (
+            <ControlSelect
+              label={uiCopy.panels.weight}
+              data={{ "data-yunari-token-weight": "" }}
+              value={selectedFaceId}
+              options={faces.map((face) => ({
+                id: face.assetId,
+                name: `${face.weight}${face.style === "italic" ? " italic" : ""}`,
+              }))}
+              onChange={(assetId) => {
+                const face = faces.find(
+                  (candidate) => candidate.assetId === assetId,
+                );
+                if (face === undefined) return;
+                put({
+                  ...value,
+                  weight: face.weight,
+                  face: { assetId: face.assetId },
+                });
+              }}
+            />
+          )}
           <button
             type="button"
             data-yunari-token-unbind=""
