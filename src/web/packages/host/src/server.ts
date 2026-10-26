@@ -423,7 +423,7 @@ export const MAX_THEME_UPLOAD_BYTES = 96 * 1024 * 1024;
  *  the normalized output must fit the store's `MAX_ASSET_BYTES` instead. */
 export const MAX_VIDEO_SOURCE_BYTES = 512 * 1024 * 1024;
 /** The one sentence both video import routes answer over the store's per-asset
- *  bound, so an importable video is always saveable. */
+ *  bound. The save route's base64 body is a separate ceiling (vg-753). */
 const VIDEO_OVER_ASSET_BOUND = `That video is larger than the ${
   MAX_ASSET_BYTES / (1024 * 1024)
 } MB one theme asset may carry; re-encode it and try again.`;
