@@ -5,15 +5,17 @@ import type { ChartRefreshRate } from "@yunari/scene-fabric";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createActiveThemeStore } from "./active-theme.js";
 import {
+  DisplaySettingError,
+  normalizePresentation,
+} from "./display-presentation.js";
+import {
   chartFpsFor,
   createDisplayStore,
-  DisplaySettingError,
   type DisplayStore,
   displayIdFrom,
   hashToken,
   normalizeLabel,
   normalizeMonitor,
-  normalizePresentation,
 } from "./displays.js";
 import { createThemeSettingsStore } from "./theme-settings.js";
 

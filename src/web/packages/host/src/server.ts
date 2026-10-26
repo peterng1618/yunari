@@ -91,15 +91,17 @@ import type {
   DisplayStore,
 } from "./settings/displays.js";
 import {
+  DisplaySettingError,
+  normalizePresentation,
+} from "./settings/display-presentation.js";
+import {
   chartFpsFor,
   DEFAULT_DISPLAY,
-  DisplaySettingError,
   LOCAL_DISPLAY_ID,
   MonitorAlreadyHeldError,
   mintedDisplayId,
   normalizeMonitor,
   normalizePatch,
-  normalizePresentation,
 } from "./settings/displays.js";
 import type { FontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
