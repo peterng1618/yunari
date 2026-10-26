@@ -139,6 +139,17 @@ Lucide glyph plus one word so four fit. The asset preview's shape is
 `docs/design/mockups/current/assets-preview.html`; the theme viewer's is
 `store-detail.html`.
 
+## Ruling taken 2026-10-26
+
+**R15 — A provider's specimen loads from the provider; the theme's bytes go
+through the host.** The finder's preview column builds its specimen faces from
+the cut's own pinned, CORS-open `previewUrl`. R11's "bytes through
+`/api/assets/bytes`" governs the bytes a theme adopts, and those still travel
+that way; a specimen is a preview of a font the theme does not hold yet, and it
+loads the way the provider intends. Routing specimens through the host is
+`vg-736`'s — for the machine whose browser cannot reach the CDN, where the
+panel falls back today while Apply still writes the real cut.
+
 ## The model
 
 A **type preset** is `{ family, size, weight?, letterSpacing?, lineHeight?,

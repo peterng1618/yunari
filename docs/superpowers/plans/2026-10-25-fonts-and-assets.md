@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- All provider calls stay in the host. The editor never fetches a font CDN directly; bytes come from `/api/assets/bytes`.
+- All provider calls stay in the host. The editor never fetches the bytes a theme adopts from a font CDN; those come from `/api/assets/bytes`. A provider's *specimen* preview loads from the provider's own pinned URL — the spec's R15 (2026-10-26) records that reading, and `vg-736` is the host-routed path.
 - The catalogue is generated and committed. `npm run fonts:generate` stays manual; the generated module records the Fonttrio revision.
 - Every emitted face is a real format the family ships, `woff2` preferred, with its licence name and source URL when the provider supplies them.
 - Schema changes are widening-only. No migration, no converter, no compatibility glue for a superseded internal shape.
