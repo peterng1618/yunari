@@ -394,7 +394,14 @@ export async function prepareMobilePackage(
       headers: { "content-type": "application/octet-stream" },
       body: file,
     });
-    if (!response.ok) return failed(uiCopy.panels.assetImportFailed);
+    if (!response.ok) {
+      // The host's sentence names the rule the package broke; a transport
+      // refusal with no body keeps the pane's own words.
+      const reason = await response.text().catch(() => "");
+      return failed(
+        reason.trim() === "" ? uiCopy.panels.assetImportFailed : reason.trim(),
+      );
+    }
 
     const body = (await response.json()) as unknown;
     if (typeof body !== "object" || body === null)

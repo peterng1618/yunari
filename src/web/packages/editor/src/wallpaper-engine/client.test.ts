@@ -240,6 +240,9 @@ describe("prepareMobilePackage", () => {
 
     expect(calls[0]?.url).toBe("/api/wallpaper-engine/mpkg");
     expect(calls[0]?.init?.method).toBe("POST");
+    expect(calls[0]?.init?.headers).toEqual({
+      "content-type": "application/octet-stream",
+    });
     expect(calls[0]?.init?.body).toBe(pkg);
     expect(answer.ok).toBe(true);
     if (!answer.ok) return;
@@ -290,8 +293,24 @@ describe("prepareMobilePackage", () => {
     ).toEqual({ ok: false, message: "No video in this package." });
   });
 
+  it("answers the host's own sentence for a non-OK response", async () => {
+    const { fetcher } = stub(
+      () =>
+        new Response("That package is too large to import.", { status: 413 }),
+    );
+
+    expect(
+      await prepareMobilePackage(new File([new Uint8Array([1])], "rain.mpkg"), {
+        fetch: fetcher,
+      }),
+    ).toEqual({
+      ok: false,
+      message: "That package is too large to import.",
+    });
+  });
+
   it("answers a refusal for a response that is not the answer shape", async () => {
-    const { fetcher } = stub(() => new Response("<html>", { status: 500 }));
+    const { fetcher } = stub(() => new Response("", { status: 500 }));
 
     expect(
       await prepareMobilePackage(new File([new Uint8Array([1])], "rain.mpkg"), {
