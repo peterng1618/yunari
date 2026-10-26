@@ -1,5 +1,9 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { type FabricThemeEnvelope, facetRecordOf } from "@yunari/renderer-core";
+import {
+  CATALOGUE_ORIGIN,
+  type FabricThemeEnvelope,
+  facetRecordOf,
+} from "@yunari/renderer-core";
 import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
 import { DARK_GROUND } from "../../packages/editor/src/store-mode/item-fixture.js";
 import type { ThemeOrigin } from "../../packages/editor/src/theme-library-client.js";
@@ -1617,6 +1621,18 @@ test("the store lists a library, opens an item, and comes back to the same page"
   const landscape = await drawn("store-01");
   const portrait = await drawn("store-02");
   await page.setViewportSize(projectViewport);
+  // **The popup's own cap, which the tall read cannot exercise.** At the
+  // project's 720px viewport `90vh` is 648, so the 760 box is capped there —
+  // the drawing's height would otherwise run past the fold and clip the foot.
+  const capped = await drawn("store-01");
+  expect(
+    capped.height,
+    "the modal does not cap itself to 90vh on a short viewport",
+  ).toBe(648);
+  expect(capped.stage, "the stage is not the capped box's content height").toBe(
+    648 - 2,
+  );
+
   const itemReading = `store-item box ${landscape.width}x${landscape.height}px stage landscape ${landscape.stage} portrait ${portrait.stage}; picture ${landscape.picture.width}x${landscape.picture.height} and ${portrait.picture.width}x${portrait.picture.height}; stamp "${landscape.stamp}"`;
   console.log(itemReading);
   testInfo.annotations.push({ type: "store-item", description: itemReading });
@@ -2482,13 +2498,19 @@ async function showOnlineStore(
   await page.route("**/api/themes", (route) =>
     route.fulfill({ json: { themes: ONLINE_LIBRARY } }),
   );
-  // The pictures come from a CDN this case claims nothing about, and the real
-  // catalogue always holds one: a 1×1 PNG stands in, so no cell and no stage
-  // draws the browser's broken-image mark, which would read as a defect in the
-  // surface rather than as a fixture that left the network alone. The pixel is
-  // the panel ground, so the stand-in reads as an empty picture box.
+  // The pictures come from the store's own origin — the one `thumbnail` paths
+  // resolve against (`catalogue-location.ts`) — and the real catalogue always
+  // holds one: a 1×1 PNG stands in, so no cell and no stage draws the browser's
+  // broken-image mark, which would read as a defect in the surface rather than
+  // as a fixture that left the network alone. The pixel is the panel ground, so
+  // the stand-in reads as an empty picture box.
+  const catalogueHostname = new URL(CATALOGUE_ORIGIN).hostname;
   await page.route(
-    (url) => url.hostname === "cdn.jsdelivr.net",
+    // The path matters as well as the host: a host-only matcher is registered
+    // after `**/index.json` and would answer the catalogue itself with a PNG.
+    (url) =>
+      url.hostname === catalogueHostname &&
+      url.pathname.endsWith("/thumbnail.png"),
     (route) =>
       route.fulfill({
         contentType: "image/png",

@@ -212,9 +212,10 @@ The catalogue, the library, `/api/themes/install`, `/api/themes/submit`, both
 `/api/store/items/:id/unpublish|publish` commands are all answered by
 `page.route`, so these sixteen show a routed fixture and not the live origin —
 the real catalogue is empty until phase E and the author's own rows need a
-deployed Worker. Each cell's picture is a 1×1 PNG served by the fixture at the
-panel ground, so the empty picture boxes are the stand-in, not a defect in the
-catalogue's thumbnails or their CDN. The three `store-mine-*` files are written
+deployed Worker. Each item's picture is a 1×1 PNG the case routes at the store's
+own origin (`yunari-store.workers.dev`), painted at the panel ground, so the
+empty picture boxes are the stand-in, not a defect in the catalogue's
+thumbnails. The three `store-mine-*` files are written
 by `src/web/tests/e2e/store-mine.spec.ts`; the rest of the table by
 `editor-rail.spec.ts`.
 
