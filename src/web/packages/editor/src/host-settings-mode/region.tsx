@@ -482,14 +482,15 @@ function HostSettings(props: {
 
   const asked = unanswered(questions?.required ?? [], questions?.answers ?? {});
 
-  /** This PC is the machine and the default is a theme key, not a record: both
-   *  answer `rect`/0 but neither has a record a write could land on. */
-  const editableDisplay =
+  /** A selection with no record to present: this PC is the machine, and the
+   *  default is a theme key rather than a display. Only these say why; an
+   *  empty or failed read has no selection at all and must not borrow the
+   *  sentence, which states a fact about `this-pc`. */
+  const recordlessSelection =
     selectedRow !== undefined &&
-    selectedRow.id !== "this-pc" &&
-    selectedRow.id !== DEFAULT_DISPLAY_KEY
-      ? selectedRow
-      : undefined;
+    (selectedRow.id === "this-pc" || selectedRow.id === DEFAULT_DISPLAY_KEY);
+  const editableDisplay =
+    selectedRow !== undefined && !recordlessSelection ? selectedRow : undefined;
 
   /** **The row is replaced from the host's answer**, never optimistically: the
    *  store decides the pair together, and a snapped angle it refused must not
@@ -565,6 +566,7 @@ function HostSettings(props: {
                       value={display.id}
                       data-yunari-host-display={display.id}
                       data-shape={display.shape}
+                      data-rotation={display.rotation}
                       className="flex items-center gap-[var(--space-12)] rounded-lg border border-edge bg-panel-2 px-[var(--space-10)] py-[var(--space-8)] text-left data-[pressed]:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                     >
                       <span className="min-w-0 flex-1 text-xs text-text">
@@ -606,7 +608,11 @@ function HostSettings(props: {
             name={uiCopy.hostSettings.displays.presentation}
             hint={uiCopy.hostSettings.displays.rotationSnapHint}
           >
-            {editableDisplay === undefined ? (
+            {/* No selection at all — the read is still out, empty, or failed —
+                draws no body: the absence sentence is about `this-pc`, and
+                stating it with no display read would be a claim nobody made. */}
+            {selectedRow === undefined ? null : editableDisplay ===
+              undefined ? (
               <p className="text-xs text-muted">
                 {uiCopy.hostSettings.displays.presentationAbsent}
               </p>
@@ -637,6 +643,10 @@ function HostSettings(props: {
                   label={uiCopy.hostSettings.displays.rotation}
                   data={{ "data-yunari-host-display-rotation": "" }}
                   value={editableDisplay.rotation}
+                  // A degree mark is a unit, not copy (`ui-copy.test.ts` keeps
+                  // pictographs out of the table): the number alone would read
+                  // as a bare count.
+                  suffix="°"
                   {...(editableDisplay.shape === "rect"
                     ? {
                         min: 0,

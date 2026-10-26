@@ -334,6 +334,25 @@ describe("followPublished's presentation report", () => {
     expect(seen).toEqual([]);
   });
 
+  it.each([
+    ["an angle past a circle's range", 400],
+    ["a fractional angle", 90.5],
+    ["a string angle", "90"],
+  ])("refuses %s rather than defaulting it", async (_what, rotation) => {
+    const seen: unknown[] = [];
+    const stop = followPublished(
+      sessionReturning({ display: { shape: "circle", rotation } }),
+      () => {},
+      {
+        intervalMs: 5,
+        onPresentationChange: (next) => seen.push(next),
+      },
+    );
+    await settle(20);
+    stop();
+    expect(seen).toEqual([]);
+  });
+
   it("reports only when the presentation moves", async () => {
     const seen: unknown[] = [];
     const stop = followPublished(

@@ -17,11 +17,11 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Last completed change
 
-- **Player follows the host's glass:** the publish poll reports a validated shape and whole-degree angle only when it moves, and `main.ts` hands it to `updatePresentation`.
-- **Host controls:** a selected paired display gets Rect/Circle and a rotation track (quarter turns for rect, whole degrees for circle); a shape change snaps the angle into one write.
-- **This PC says why:** `this-pc` and the default draw no control; the section states the reason instead.
-- **Rows read the host's answer:** each display row carries its shape, and a write replaces the row from the record rather than optimistically.
-- **Evidence:** 142 cases across the five affected suites pass; the follower's quarter-turn guard, the snap, the controls and the PATCH method were each shown red with the behaviour disabled; typecheck exit 0.
+- **Player follows the host's glass:** the publish poll reports a validated shape and whole-degree angle only when it moves, refusing out-of-range, fractional and string angles; `main.ts` hands it to `updatePresentation`.
+- **Host controls:** a selected paired display gets Rect/Circle and a rotation track (quarter turns for rect, whole degrees for circle) with the degree mark on both.
+- **The row is the host's answer:** a write is never drawn optimistically, and a refused write leaves the row on its previous value.
+- **No borrowed sentence:** `this-pc` and the default say why they have no controls; an empty or failed display read renders no body.
+- **Evidence:** 147 cases across the five affected suites pass; the follower's guards, snap, neutral-row replacement, refusal, degree mark and absence gating were each shown red with the behaviour disabled; typecheck exit 0.
 
 ## Next
 

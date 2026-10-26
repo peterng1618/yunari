@@ -151,6 +151,8 @@ interface Fixture {
   readonly sourceTest?: TestResult;
   /** What a delete answers about a credential it no longer sees referenced. */
   readonly sourceRemoval?: RemovalAnswer;
+  /** The sentence a presentation write fails with, or `undefined`. */
+  readonly refusePresentation?: string;
   /** The sentence a delete fails with, or `undefined` for a landed delete. */
   readonly sourceRemoveFailure?: string;
 }
@@ -273,7 +275,16 @@ function hostSettings(
       },
       updateDisplayPresentation: async (id, next) => {
         wrote.presentation.push({ id, next });
-        return next;
+        if (fixture.refusePresentation !== undefined) {
+          throw new Error(fixture.refusePresentation);
+        }
+        // **Deliberately not the request.** The store decides the pair, so an
+        // optimistic row would stand on a value the answer never carried and
+        // these cases would pass without the replacement being exercised.
+        return {
+          shape: next.shape,
+          rotation: next.shape === "rect" ? 180 : 45,
+        };
       },
     },
   };
@@ -460,18 +471,31 @@ async function chooseShape(
   await act(async () => shapeSegment(container, name).click());
 }
 
+/** The rotation control's value well. */
+function rotationWell(container: HTMLElement): HTMLInputElement {
+  return must(
+    container.querySelector<HTMLInputElement>(
+      "[data-yunari-host-display-rotation-well]",
+    ),
+    "the rotation control's value well",
+  );
+}
+
+/** What the rotation control's well prints, the degree mark included: the value
+ *  alone would read as a bare number and not as an angle. The mark is a sibling
+ *  of the input, so an input's `textContent` alone would miss it. */
+function rotationMark(container: HTMLElement): string {
+  const well = rotationWell(container);
+  return `${well.value}${well.parentElement?.textContent ?? ""}`;
+}
+
 /** Commits a rotation through the control's own value well, the way a typed
  *  number is committed. */
 async function commitRotation(
   container: HTMLElement,
   degrees: number,
 ): Promise<void> {
-  const well = must(
-    container.querySelector<HTMLInputElement>(
-      "[data-yunari-host-display-rotation-well]",
-    ),
-    "the rotation control's value well",
-  );
+  const well = rotationWell(container);
   await type(well, String(degrees));
   await enter(well);
 }
@@ -653,7 +677,12 @@ it("writes a rect display's quarter-turn rotation", async () => {
   expect(wrote.presentation).toEqual([
     { id: "tv", next: { shape: "rect", rotation: 90 } },
   ]);
+  // The row shows the host's answer (180), not the request (90): a write is
+  // never drawn from what was sent.
   expect(displayRow(container, "tv").getAttribute("data-shape")).toBe("rect");
+  expect(displayRow(container, "tv").getAttribute("data-rotation")).toBe("180");
+  // The well prints the angle with its degree mark, and the answer's number.
+  expect(rotationMark(container)).toBe("180°");
 });
 
 /** A circle's free angle is snapped into the rect rule when the shape changes,
@@ -671,11 +700,52 @@ it("snaps a circle angle when the shape becomes rect", async () => {
     ],
   });
   await act(async () => displayRow(container, "round").click());
+  // A circle's angle is shown as degrees too, with the degree mark beside it.
+  expect(rotationMark(container)).toBe("37°");
   await chooseShape(container, "Rect");
 
   expect(wrote.presentation).toEqual([
     { id: "round", next: { shape: "rect", rotation: 0 } },
   ]);
+  expect(
+    displayRow(container, "round").getAttribute("data-rotation"),
+    "the row did not take the answer's snapped angle",
+  ).toBe("180");
+});
+
+/** A refused write leaves the row on the value the host last answered. */
+it("keeps the row's previous presentation when the write is refused", async () => {
+  const refusal = "That angle is not a quarter turn.";
+  const { container, published } = await mountHost({
+    displays: [
+      { id: "tv", label: "TV", theme: null, shape: "rect", rotation: 90 },
+    ],
+    refusePresentation: refusal,
+  });
+  await act(async () => displayRow(container, "tv").click());
+  await commitRotation(container, 0);
+
+  expect(
+    displayRow(container, "tv").getAttribute("data-rotation"),
+    "a refused write moved the row to the value it sent",
+  ).toBe("90");
+  expect(statusLine(published).status).toBe(
+    uiCopy.hostSettings.status.failed(refusal),
+  );
+});
+
+/** No row has been read, so no display is the selection: the absence sentence
+ *  states a fact about `this-pc` and would be a claim nobody made. */
+it("says nothing about presentation while no display has been read", async () => {
+  const empty = await mountHost({ displays: [] });
+  expect(empty.container.textContent).not.toContain(
+    uiCopy.hostSettings.displays.presentationAbsent,
+  );
+
+  const failed = await mountHost({ ...TWO_DISPLAYS, refuseDisplays: true });
+  expect(failed.container.textContent).not.toContain(
+    uiCopy.hostSettings.displays.presentationAbsent,
+  );
 });
 
 /** This PC is the machine, not a paired screen: it has no record to present, so
