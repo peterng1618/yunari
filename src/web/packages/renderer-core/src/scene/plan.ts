@@ -734,7 +734,7 @@ export function buildLinePoints(
   bindings: readonly Binding[],
   settings: LineSettings,
   source: SampleSource,
-  playbackDelayMs: number = source.chartPlaybackDelayMs,
+  playbackDelayMs: number | undefined = source.chartPlaybackDelayMs,
 ): readonly SeriesInput[] {
   // The line owns how much history it needs, including the one sample its left
   // edge is drawn from; asking for less starts the line inside the plot
