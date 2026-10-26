@@ -212,20 +212,29 @@ jobs:
         run: node ../../scripts/audit-policy.mjs
 
       - name: The dependency tree resolves
-        # `npm ls --all` cannot exit 0 on this tree and is not asked to. An
-        # override is by definition a version chosen against the requester's
-        # range, so npm reports every overridden package `invalid`; and a
-        # platform-optional package installs on one platform only, so its
-        # platform-gated parent is absent and npm reports the installed child
-        # `extraneous`. What is never acceptable is a `missing:` line: that is
-        # a dependency the lockfile promises and the install did not provide,
-        # which no override explains.
+        # `npm ls --all` cannot exit 0 on this tree and is not asked to. Every
+        # failure line must be one of three kinds: an override resolved against
+        # the requester's range (npm reports it `invalid`); a platform-optional
+        # package installed where its parents' gates exclude it (`extraneous`);
+        # or npm's own hoist choice where the named range is satisfied
+        # (`invalid`, but the version satisfies). A `missing:` line is never
+        # acceptable — the lockfile promises it and the install did not provide
+        # it — and neither is any npm error code other than ELSPROBLEMS, so a
+        # crash or an unreadable lockfile cannot pass as a tolerated tree.
         run: |
           set -euo pipefail
-          out="$(npm ls --all 2>&1 || true)"
+          status=0
+          out="$(npm ls --all 2>&1)" || status=$?
           if grep -q 'npm error missing:' <<< "$out"; then
             echo "$out" >&2
             exit 1
+          fi
+          if [ "$status" -ne 0 ]; then
+            codes="$(grep -oE '^npm error code [A-Z0-9]+' <<< "$out" | sed 's/^npm error code //' | sort -u || true)"
+            if [ "$codes" != "ELSPROBLEMS" ]; then
+              echo "$out" >&2
+              exit 1
+            fi
           fi
 
   slow-suites:

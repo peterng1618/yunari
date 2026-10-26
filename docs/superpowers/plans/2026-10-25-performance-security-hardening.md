@@ -1432,7 +1432,7 @@ git commit -m "ci(release): least-privilege publish and SHA-pinned actions"
 - Test: `npm run audit:check`, `npm ls --all`
 
 **Interfaces:**
-- Produces: no production advisory outside the allowlist with an honest reason; `npm ls --all` exit 0.
+- Produces: no production advisory outside the allowlist with an honest reason; `npm ls --all` with no `missing:` line, every `invalid`/`extraneous` line an override, a platform-optional package or a hoist choice (a clean `npm ls` code is unachievable — an override is by definition outside the requester's range, so npm reports it `invalid`).
 
 - [ ] **Step 1: Reproduce**
 
@@ -1446,7 +1446,7 @@ Add `"zod": "^4.6.6"` to overrides; re-resolve `sharp`/`undici` to versions the 
 - [ ] **Step 3: Prove**
 
 Run: `npm audit --omit=dev && npm run audit:check && npm ls --all`
-Expected: exit 0 and no unallowlisted production advisory. Update the allowlist with the real reasons; remove the false dev-only zod claim.
+Expected: no unallowlisted production advisory; no `missing:` line, and every `invalid`/`extraneous` line documented by class. Update the allowlist with the real reasons; remove the false dev-only zod claim.
 
 - [ ] **Step 4: Run the suites**
 
