@@ -339,7 +339,7 @@ Expected: PASS; three PNGs.
 Run: `cd src/web && npm run gate`
 Expected: exit 0. A red `packages/host/src/themes/store.test.ts` asset-bounds timeout is the open flake (vg-175/vg-590/vg-661): re-run and record which runs were red and why.
 
-- [ ] **Step 3: Update STATUS.md and commit**
+- [x] **Step 3: Update STATUS.md and commit**
 
 Replace "Last completed change" with 1–5 one-line bullets: spacing as a chart share, cap clearance, fill-mode toggle, defaults unchanged, browser evidence. Set the active plan to this one until the merge.
 
@@ -348,7 +348,7 @@ git add STATUS.md docs/superpowers/plans/2026-10-26-segment-spacing-and-fill-mod
 git commit -m "docs(status): record the segment-spacing checkpoint"
 ```
 
-- [ ] **Step 4: Merge locally into main and stop**
+- [x] **Step 4: Merge locally into main and stop**
 
 ```bash
 git -C D:/git-repos/yunari merge --no-ff peterng1618/improve-charts
