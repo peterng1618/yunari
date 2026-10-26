@@ -309,6 +309,12 @@ function PreviewsTab({
       setReason(uiCopy.settings.previewRatioInvalid);
       return;
     }
+    // The shape control is the only way to choose a disc: `Circle` typed into
+    // the Rect field would store a token the author did not choose there.
+    if (ratio.shape === "circle" && shape === "rect") {
+      setReason(uiCopy.settings.previewRatioInvalid);
+      return;
+    }
     if (
       previewLenses([...tokens, ratio.id]).length ===
       previewLenses(tokens).length
@@ -352,6 +358,7 @@ function PreviewsTab({
         <div className="flex flex-col gap-[var(--space-4)]">
           {tokens.map((token) => {
             const ratio = parsePreviewRatio(token);
+            const ids = previewLenses([token]).map((lens) => lens.id);
             return (
               <div
                 key={token}
@@ -359,12 +366,13 @@ function PreviewsTab({
                 data-yunari-preview-ratio={token}
               >
                 <span className="flex-1 font-mono text-sm">
-                  {previewLenses([token])
-                    .map((lens) => lens.id)
-                    .join(" ")}
+                  {ids.join(" ")}
                 </span>
+                {/* The tab composes a control's own name the way the
+                    Connections rows do: the shared word plus the row's ids,
+                    so two Remove buttons are not the same accessible name. */}
                 <ControlIconButton
-                  label={uiCopy.settings.previewRatioRemove}
+                  label={`${uiCopy.settings.previewRatioRemove} ${ids.join(" ")}`}
                   data={{ "data-yunari-preview-ratio-remove": token }}
                   onClick={() => removeRatio(ratio.id)}
                 >
@@ -421,7 +429,9 @@ function PreviewsTab({
         </button>
       </div>
       {reason === undefined ? null : (
-        <p className="text-sm" data-yunari-preview-ratio-reason="">
+        // §9's refusal, announced the way the Keyboard tab's is: the node is
+        // an alert, so the sentence reaches a screen reader when Add refuses.
+        <p className="text-sm" data-yunari-preview-ratio-reason="" role="alert">
           {reason}
         </p>
       )}

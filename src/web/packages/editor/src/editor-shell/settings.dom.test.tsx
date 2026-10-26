@@ -8,6 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CredentialRow } from "../asset-finder/credentials-client.js";
 import {
+  activePreviewRatioTokens,
   DEFAULT_PREVIEW_RATIO_TOKENS,
   PREVIEW_RATIO_STORAGE_KEY,
   setActivePreviewRatios,
@@ -34,6 +35,7 @@ import {
 } from "./palette.js";
 import { RAIL_SLOTS, Rail, type RailSlot } from "./rail.js";
 import { Settings, type SettingsTab, versionFacts } from "./settings.js";
+import { createShellLayout } from "./shell-layout.js";
 
 // The host's half, mocked so the tab's own wiring is what these cases read.
 // The mock is hoisted above the imports, so the panel and the assertions see
@@ -391,6 +393,15 @@ function reason(tab: HTMLElement): string {
     tab.querySelector<HTMLElement>("[data-yunari-preview-ratio-reason]")
       ?.textContent ?? ""
   );
+}
+
+/** Boots the real shell into `body`, so the catalogue is loaded by the code a
+ *  reload runs rather than by a harness that copies it. */
+function bootShell(): () => void {
+  const root = document.createElement("div");
+  document.body.append(root);
+  const layout = createShellLayout(root);
+  return () => layout.destroy();
 }
 
 /** One row's Remove control. */
@@ -1030,6 +1041,12 @@ describe("Previews", () => {
     await pressAdd(tab);
 
     expect(reason(tab)).toBe(uiCopy.settings.previewRatioDuplicate);
+    // A refusal a screen reader never hears is a refusal not stated (§9).
+    expect(
+      tab
+        .querySelector("[data-yunari-preview-ratio-reason]")
+        ?.getAttribute("role"),
+    ).toBe("alert");
     expect(rows(tab)).toHaveLength(5);
     expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toBeNull();
   });
@@ -1058,6 +1075,41 @@ describe("Previews", () => {
 
     expect(reason(tab)).toBe(uiCopy.settings.previewRatioInvalid);
     expect(rows(tab)).toHaveLength(5);
+  });
+
+  it("refuses the literal Circle in the Rect field", async () => {
+    // The shape control is the only way to choose a disc: a typed `Circle`
+    // under Rect would store a token the author did not choose there.
+    const host = mount();
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    await typeRatio(tab, "Circle");
+    await pressAdd(tab);
+
+    expect(reason(tab)).toBe(uiCopy.settings.previewRatioInvalid);
+    expect(rows(tab)).toHaveLength(5);
+  });
+
+  it("gives every Remove control a name that includes what it removes", async () => {
+    const host = mount();
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    const names = rows(tab).map(
+      (row) =>
+        row
+          .querySelector("[data-yunari-preview-ratio-remove]")
+          ?.getAttribute("aria-label") ?? "",
+    );
+    expect(names).toEqual(
+      rows(tab).map(
+        (row) => `${uiCopy.settings.previewRatioRemove} ${row.textContent}`,
+      ),
+    );
+    expect(new Set(names).size, "no two rows share a name").toBe(
+      rows(tab).length,
+    );
   });
 
   it("removes the last ratio and says Fit remains", async () => {
@@ -1144,6 +1196,62 @@ describe("Previews", () => {
     // And adding it back twice is a duplicate again.
     await pressAdd(tab);
     expect(reason(tab)).toBe(uiCopy.settings.previewRatioDuplicate);
+  });
+
+  it("boots on the authored list a reload reads from storage", () => {
+    // Not a harness copy of the load: `createShellLayout` is the code a reload
+    // runs, and the stored list is what it must frame the camera with.
+    const authored = ["16:9", "4:3", "Circle"];
+    localStorage.setItem(PREVIEW_RATIO_STORAGE_KEY, JSON.stringify(authored));
+
+    const destroy = bootShell();
+    try {
+      expect(activePreviewRatioTokens()).toEqual(authored);
+    } finally {
+      destroy();
+    }
+  });
+
+  it("boots to the defaults where nothing was ever stored", () => {
+    // A stale module list from this session must not outlive a boot: the
+    // absent key is "the defaults", not "whatever was last active".
+    setActivePreviewRatios(["4:3"]);
+
+    const destroy = bootShell();
+    try {
+      expect(activePreviewRatioTokens()).toEqual([
+        ...DEFAULT_PREVIEW_RATIO_TOKENS,
+      ]);
+    } finally {
+      destroy();
+    }
+  });
+
+  it("returns to the defaults through Reset after a reload, and removes the key", async () => {
+    localStorage.setItem(
+      PREVIEW_RATIO_STORAGE_KEY,
+      JSON.stringify(["16:9", "4:3", "Circle"]),
+    );
+    const destroy = bootShell();
+    try {
+      expect(activePreviewRatioTokens()).toEqual(["16:9", "4:3", "Circle"]);
+
+      const gearButton = document.querySelector<HTMLButtonElement>(
+        ".editor-shell-rail-settings",
+      );
+      if (gearButton === null)
+        throw new Error("no settings gear in the shell.");
+      await press(gearButton);
+      const tab = await openPreviews();
+      await pressReset(tab);
+
+      expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toBeNull();
+      expect(activePreviewRatioTokens()).toEqual([
+        ...DEFAULT_PREVIEW_RATIO_TOKENS,
+      ]);
+    } finally {
+      destroy();
+    }
   });
 });
 

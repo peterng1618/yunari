@@ -16,11 +16,11 @@ Land the preview-lens/stage and per-display shape/rotation work: [`spec A`](docs
 
 ## Last completed change
 
-- **Previews settings tab:** a fifth tab between Appearance and Keyboard lists one row per stored ratio with its derived lens ids and a Remove control.
-- **Add and refuse:** Rect/Circle shape, a `W:H` field for Rect, GCD-normalised ids, duplicates checked by derived lens count; refusals come from `uiCopy`.
+- **Previews settings tab:** a fifth tab between Appearance and Keyboard lists one row per stored ratio with its derived lens ids and a Remove control whose name includes them.
+- **Add and refuse:** Rect/Circle shape, a `W:H` field for Rect that refuses a typed `Circle`, GCD-normalised ids, duplicates checked by derived lens count; every refusal is a `role="alert"` from `uiCopy`.
 - **Reset and session:** reset deletes the stored key and sets the defaults explicitly, disabled at defaults; a browser with no store keeps the list for the session.
-- **Boot load:** `createShellLayout` reads `yunari.editor.preview-ratios` once before any editor mounts; ADR-0119 now records that sentence.
-- **Verified:** focused settings DOM 32/32, related catalogue/shell files 114/114, biome exit 0; typecheck still red only in Task 5 menu/chooser surfaces.
+- **Boot load:** `createShellLayout` reads `yunari.editor.preview-ratios` once before any editor mounts, proven by boot tests for a stored list, an absent key and a reset reload; ADR-0119 records that sentence.
+- **Verified:** focused settings DOM 37/37, related catalogue/shell files 119/119, biome exit 0; typecheck still red only in Task 5 menu/chooser surfaces.
 
 ## Next
 
