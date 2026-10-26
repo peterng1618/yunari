@@ -9,10 +9,10 @@ import {
 import { NO_INK, resolveChartPaint } from "./chart-paint.js";
 import { type EngineColor, resolveFlatColor } from "./fill.js";
 import {
-  pieGap,
   SEGMENT_SPACING_PERCENT_DEFAULT,
   segmentCount,
   segmentDivisorOf,
+  segmentSpacingPercentOf,
 } from "./segments.js";
 
 /**
@@ -34,7 +34,7 @@ export interface PieSettings {
   readonly cornerRadius: number;
   /** How many slices each part's fill is cut into; 100 is continuous. */
   readonly segmentDivisor: number;
-  /** Gap between slices, as a share of the chart's smaller drawn edge. */
+  /** Empty space after each piece, as a share of that piece's own angle. */
   readonly segmentSpacingPercent?: number;
   readonly total: PieTotal;
   /** Drawn only for fixed totals, where the remainder is measurable. */
@@ -240,7 +240,12 @@ export function buildPieOption(
         // Preserve authored order; composition order can carry meaning.
         avoidLabelOverlap: false,
         data: segmented
-          ? toSegmentedPieData(data, count, padAngle, pieGap(settings))
+          ? toSegmentedPieData(
+              data,
+              count,
+              padAngle,
+              segmentSpacingPercentOf(settings),
+            )
           : data,
         silent: true,
       },
@@ -259,46 +264,47 @@ export function buildPieOption(
  * rounding, and a value chosen to take the angle each gap should occupy.
  *
  * A piece's share still sums with its siblings to the slice's authored value,
- * so the composition reads exactly as it did. Every spacer takes the **same**
- * angle: the internal ones `gapDegrees`, the boundary ones the authored
- * `padAngle`. The real items are scaled by the one denominator that fits both,
- * which is what preserves the shares rather than renormalising them around the
- * gaps.
+ * so the composition reads exactly as it did. Each internal spacer is the
+ * authored share **of the piece it follows**, so unequal slices leave unequal
+ * gaps; the boundary spacers stay the authored `padAngle`. The real items are
+ * scaled by the one denominator that fits both, which is what preserves the
+ * shares rather than renormalising them around the gaps.
+ *
+ * Values are angles in degrees and the returned items sum to one full turn;
+ * ECharts normalises whatever it is given, so the unit is the same one the pad
+ * is authored in.
  */
 export function toSegmentedPieData(
   items: readonly PieDataItem[],
   count: number,
   padAngle: number,
-  gapDegrees: number,
+  spacingPercent: number,
 ): PieDataItem[] {
   const segments = Math.max(1, Math.floor(count));
   const total = items.reduce((sum, item) => sum + item.value, 0);
   if (items.length === 0 || total <= 0) return [];
 
-  const internal = items.length * (segments - 1);
+  const q = Math.max(0, spacingPercent) / 100;
   // Gaps may not take the ring: at least a tenth of it stays real, whatever the
   // author asked for, because a pie with no slices left is not a pie.
   const boundaryShare = Math.min(
     0.9,
     (items.length * Math.max(0, padAngle)) / 360,
   );
-  const gapShare =
-    internal === 0
-      ? 0
-      : Math.min(
-          Math.max(0, gapDegrees) / 360,
-          (0.9 - boundaryShare) / internal,
-        );
-  const boundary = boundaryShare / items.length;
-  const scale = (1 - boundaryShare - internal * gapShare) / total;
+  const boundary = (boundaryShare * 360) / items.length;
+  const whole = 360 - items.length * boundary;
+  // A slice occupies its pieces plus a gap after every piece but the last:
+  // n · piece + (n - 1) q · piece. The denominator is that multiplier.
+  const unit = whole / (total * (segments + (segments - 1) * q));
 
   const data: PieDataItem[] = [];
   for (const item of items) {
-    const piece = (scale * item.value) / segments;
+    const piece = unit * item.value;
+    const gap = q * piece;
     for (let index = 0; index < segments; index += 1) {
       data.push({ ...item, value: piece });
       if (index < segments - 1) {
-        data.push(spacer(gapShare));
+        data.push(spacer(gap));
       }
     }
     data.push(spacer(boundary));

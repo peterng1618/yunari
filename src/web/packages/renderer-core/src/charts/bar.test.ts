@@ -90,8 +90,6 @@ function collectRects(
         : [across * box.width, (1 - along) * box.height];
     },
     size: () => (horizontal ? [0, box.height / count] : [box.width / count, 0]),
-    getWidth: () => box.width,
-    getHeight: () => box.height,
   };
   const group = series.renderItem({ dataIndex: 0 }, api);
   const shapes = (name: "track" | "fill") =>
@@ -126,16 +124,16 @@ describe("buildBarOption — segmented", () => {
     expect(option.series[0].type).toBe("custom");
     const rendered = collectRects(option, { width: 100, height: 20 });
 
-    // Ten track bands; a 2.5% gap of the 20px smaller edge is half a pixel, so
-    // the visible band is 9.5px and a half-filled one is 4.75px.
+    // Ten 10px bands; the default tenth leaves 10/11px of each band empty, so
+    // the visible band is 9.09px and the half-filled last one is 5px.
     expect(rendered.track).toHaveLength(10);
-    expect(rendered.track[0]!.width).toBeCloseTo(9.5, 5);
+    expect(rendered.track[0]!.width).toBeCloseTo(10 / 1.1, 5);
     expect(rendered.fill).toHaveLength(6);
-    expect(rendered.fill.at(-1)!.width).toBeCloseTo(4.75, 5);
+    expect(rendered.fill.at(-1)!.width).toBeCloseTo(5, 5);
   });
 
-  it("draws the same gap share on a large and a small chart", () => {
-    const gapOf = (box: {
+  it("keeps the gap the same share of its band on a large and a small chart", () => {
+    const shareOf = (box: {
       readonly width: number;
       readonly height: number;
     }) => {
@@ -144,7 +142,7 @@ describe("buildBarOption — segmented", () => {
           {
             ...defaultBarSettings,
             segmentDivisor: 5,
-            segmentSpacingPercent: 2.5,
+            segmentSpacingPercent: 10,
             min: 0,
             max: 100,
             track: { kind: "solid", color: "#222" },
@@ -153,23 +151,24 @@ describe("buildBarOption — segmented", () => {
         ),
         box,
       );
-      return box.width / 20 - rendered.track[0]!.width;
+      const band = box.width / 20;
+      return (band - rendered.track[0]!.width) / band;
     };
 
-    // The gap is 2.5% of the smaller edge: 300px tall and 150px tall halve it
-    // exactly, which a share of the slot could not do.
-    expect(gapOf({ width: 400, height: 300 })).toBeCloseTo(7.5, 5);
-    expect(gapOf({ width: 200, height: 150 })).toBeCloseTo(3.75, 5);
+    // The gap is a share of the band and the band is a share of the chart, so
+    // halving the chart halves the gap rather than leaving it behind.
+    expect(shareOf({ width: 400, height: 300 })).toBeCloseTo(1 / 11, 5);
+    expect(shareOf({ width: 200, height: 150 })).toBeCloseTo(1 / 11, 5);
   });
 
-  it("clamps the spacing to 45% of a band", () => {
+  it("leaves half of every band empty at 100%", () => {
     const box = { width: 400, height: 300 };
     const rendered = collectRects(
       buildBarOption(
         {
           ...defaultBarSettings,
-          segmentDivisor: 1,
-          segmentSpacingPercent: 20,
+          segmentDivisor: 5,
+          segmentSpacingPercent: 100,
           min: 0,
           max: 100,
           track: { kind: "solid", color: "#222" },
@@ -178,10 +177,46 @@ describe("buildBarOption — segmented", () => {
       ),
       box,
     );
-    const band = box.width / 100;
 
-    // 20% of the 300px edge is 60px on a 4px band; the band keeps 55% of itself.
-    expect(band - rendered.track[0]!.width).toBeLessThanOrEqual(0.45 * band);
+    // A 20px band: the empty space equals the painted band.
+    expect(rendered.track[0]!.width).toBeCloseTo(10, 5);
+    // A full reading fills every band, so only its own 10px is painted.
+    expect(rendered.fill).toHaveLength(20);
+    expect(rendered.fill[0]!.width).toBeCloseTo(10, 5);
+  });
+
+  it("fills a band to its painted end before the next one starts", () => {
+    // Four 100px bands with a 20% gap: each paints 83.33px and leaves 16.67px
+    // empty. The fill edge must follow the reading, so a reading inside the
+    // first band fills that band whole and lights nothing after it.
+    const at = (value: number) =>
+      collectRects(
+        buildBarOption(
+          {
+            ...defaultBarSettings,
+            segmentDivisor: 25,
+            segmentSpacingPercent: 20,
+            segmentFill: "partial",
+            min: 0,
+            max: 100,
+            track: { kind: "solid", color: "#222" },
+            fill: { kind: "solid", color: "#0f0" },
+          },
+          [{ sensorId: "a", sample: sample(value) }],
+        ),
+        { width: 400, height: 300 },
+      );
+
+    const inside = at(24);
+    expect(inside.fill).toHaveLength(1);
+    expect(inside.fill[0]!.width).toBeCloseTo(400 / 4 / 1.2, 5);
+
+    // At the band's pitch end the band is complete and the next has not begun;
+    // just past it the next starts from zero, never from a share of the gap.
+    expect(at(25).fill).toHaveLength(1);
+    const next = at(26).fill;
+    expect(next).toHaveLength(2);
+    expect(next[1]!.width).toBeCloseTo(4, 5);
   });
 
   it("lights whole bands only in whole mode", () => {
@@ -239,9 +274,9 @@ describe("buildBarOption — segmented", () => {
 
     const rendered = collectRects(option, { width: 20, height: 100 });
     // The first band sits at the bottom of the box, and the axis grows upward;
-    // its 9.5px visible length leaves the 0.5px gap below it.
-    expect(rendered.track[0]!.y).toBeCloseTo(90.5, 5);
-    expect(rendered.fill.at(-1)!.height).toBeCloseTo(4.75, 5);
+    // its 9.09px visible length leaves the 0.91px gap below it.
+    expect(rendered.track[0]!.y).toBeCloseTo(100 - 10 / 1.1, 5);
+    expect(rendered.fill.at(-1)!.height).toBeCloseTo(5, 5);
   });
 
   it("keeps the continuous series at 100", () => {

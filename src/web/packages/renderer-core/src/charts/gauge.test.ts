@@ -141,8 +141,7 @@ describe("buildGaugeOption", () => {
 
     // 10 bands: each visible band followed by a gap, except the last band's end.
     expect(colors).toHaveLength(19);
-    // The band ends where its gap begins: one share of the drawn edge, not a
-    // fifth of the slot.
+    // The band ends where its gap begins: a share of the band's painted width.
     expect(colors[0]![0]).toBeCloseTo(0.1 - gapDegrees(option, 10, 270) / 270);
     expect(colors[1]).toEqual([0.1, "transparent"]);
     expect(option.series[0].progress.show).toBe(false);
@@ -180,21 +179,23 @@ describe("buildGaugeOption", () => {
     expect(new Set(solid.map(([, color]) => color)).size).toBe(1);
   });
 
-  it("keeps the gap a share of the chart as the count rises", () => {
-    // Five slices and ten on the starter's 270° sweep: the same edge, the same
-    // gap. A share of the slot would have shrunk with the count.
-    const five = gapDegrees(
-      gaugeOption({ segmentDivisor: 20, startAngle: 225, endAngle: -45 }),
-      5,
-      270,
-    );
-    const ten = gapDegrees(
-      gaugeOption({ segmentDivisor: 10, startAngle: 225, endAngle: -45 }),
-      10,
-      270,
-    );
+  it("keeps the empty space a share of the band as the count rises", () => {
+    // Five slices and ten on the starter's 270° sweep. The gap narrows with the
+    // band, which is what keeps the same *relationship* visible at any count.
+    const shareOf = (divisor: number, count: number): number =>
+      gapDegrees(
+        gaugeOption({
+          segmentDivisor: divisor,
+          startAngle: 225,
+          endAngle: -45,
+        }),
+        count,
+        270,
+      ) /
+      (270 / count);
 
-    expect(ten).toBeCloseTo(five, 5);
+    expect(shareOf(20, 5)).toBeCloseTo(1 / 11, 5);
+    expect(shareOf(10, 10)).toBeCloseTo(1 / 11, 5);
   });
 
   it("widens the gap to clear round caps on a small chart", () => {
@@ -231,7 +232,7 @@ describe("buildGaugeOption", () => {
 
   it("leaves square ends on the authored share at any size", () => {
     // No round cap, no clearance: a small chart draws the same angle as a large
-    // one, which is what makes the share a share of the chart.
+    // one, because the share is measured against the band and not the glass.
     const large = gapDegrees(
       gaugeOption(
         {
@@ -264,13 +265,15 @@ describe("buildGaugeOption", () => {
     expect(small).toBeCloseTo(large, 5);
   });
 
-  it("never takes more than 45% of a band", () => {
+  it("takes half of a band at 100% spacing", () => {
+    // A full turn in a hundred bands: 3.6° each, half of it empty.
     const gap = gapDegrees(
-      gaugeOption({ segmentDivisor: 1, thickness: 80 }),
+      gaugeOption({ segmentDivisor: 1, segmentSpacingPercent: 100 }),
       100,
+      360,
     );
 
-    expect(gap).toBeLessThanOrEqual(0.45 * 3.6);
+    expect(gap).toBeCloseTo(1.8, 5);
   });
 
   it("draws touching bands at zero spacing, measured or not", () => {

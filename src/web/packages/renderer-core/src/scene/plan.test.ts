@@ -810,8 +810,8 @@ describe("charts", () => {
       return chart.option.series[0].axisLine.lineStyle.color[0]![0];
     };
 
-    // A 120px chart cannot hide the caps behind the 9.4% share the way an
-    // 800px one does, so its band ends earlier and the gap is wider.
+    // A 120px chart's caps take a larger angle than an 800px one's, so the stop
+    // gap widens to keep the empty space the same share of the painted band.
     expect(firstGapOffset(120)).toBeLessThan(firstGapOffset(800));
   });
 

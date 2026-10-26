@@ -183,6 +183,12 @@ function segmentedBands(
   // guard keeps the proportion finite rather than depending on an early return
   // somewhere above.
   const gap = sweepDegrees === 0 ? 0 : gapDegrees / sweepDegrees;
+
+  // A gap as wide as the band leaves nothing to paint — only possible when the
+  // cap clearance alone fills the band. Continuous track paint is closer to the
+  // truth than a list of zero-width bands, and ECharts needs ascending stops.
+  if (gap >= 1 / count) return undefined;
+
   const bands: ColorSegment[] = [];
 
   for (let index = 0; index < count; index += 1) {

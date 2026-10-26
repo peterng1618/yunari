@@ -844,6 +844,20 @@ function chartScalars(
         ),
       );
     } else if (
+      descriptor.integer === true &&
+      Number.isFinite(value) &&
+      !Number.isInteger(value)
+    ) {
+      // A whole-number field's unit is the document's, exactly as `values` is:
+      // the control authored whole percents and nothing between them.
+      issues.push(
+        issue(
+          "out-of-range",
+          where,
+          `${descriptor.property} must be a whole number.`,
+        ),
+      );
+    } else if (
       descriptor.values !== undefined &&
       !descriptor.values.includes(value)
     ) {

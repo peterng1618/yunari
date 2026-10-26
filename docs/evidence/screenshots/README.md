@@ -134,6 +134,7 @@ result, not merely a mounted editor.
 | Live bindings | Select a bound text run, format its value and pin its zone | `editor-text-reads` / `captures the controls that give a text run its reading` |
 | Layers/arrange | Select a semantic layer and expose its layer/arrange controls | `editor-layer-arrange` / `captures semantic layer controls` |
 | Chart settings | Change family-specific scalar setting | `editor-chart-binding` / `captures selected chart binding controls` |
+| Chart spacing | Set the segment spacing 1–100 and switch fill mode on a gauge | `editor-chart-gauge-spacing-large` / `editor-chart-gauge-spacing-small` / `editor-chart-gauge-spacing-100` / `editor-chart-gauge-fill-partial` — `spaces the segmented gauge by its drawn size and fills whole or partial, read rendered` |
 | Chart creation | Create a chart, read its palette-backed settings, and reopen them | `editor-chart-creation` / `creates a chart with palette-backed settings that save and reopen` |
 | Artboard | Change dimensions or preview fit | `editor-artboard` / `captures changed artboard controls` |
 | Artboard | Change gradient/literal artboard paint | `editor-artboard-gradient` / `renders palette gradients` |

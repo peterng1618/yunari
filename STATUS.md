@@ -5,29 +5,31 @@ Branch: `peterng1618/improve-charts`
 
 ## Current objective
 
-Land [`2026-10-26-segment-spacing-and-fill-mode-design.md`](docs/superpowers/specs/2026-10-26-segment-spacing-and-fill-mode-design.md): segment spacing becomes a share of the chart's drawn size, round caps stop swallowing the gap, and gauge and bar gain a whole/partial fill toggle.
+Land the owner's follow-up to the segment spacing plan: spacing is a whole percent of the painted segment (1–100, 100 leaves a gap as wide as the segment), and a partial bar fill reaches its band's end before the next band starts.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-26-segment-spacing-and-fill-mode.md` — spacing, cap clearance and fill mode for gauge, bar and pie.
+- **No plan is running:** the spacing plan is landed; this branch carries the owner's follow-up, decision [0121](docs/decisions/0121-segment-spacing-is-a-share-of-the-segment.md).
 - **Wallpaper Engine export landed:** `docs/superpowers/plans/2026-10-26-wallpaper-engine-mobile-export.md`; decision [0118](docs/decisions/0118-a-scene-is-exported-by-driving-the-engine-ui.md) claims the UI-driving boundary.
 - **Segmented-fill plan landed:** divisor setting, discrete slider, gauge bands, pie spacers and bar custom series.
 - **Live-line policy:** the delay is two host cadences at 30 fps and zero at 1 fps; the line never smooths — Interpolation offers Linear and Step — and a stall holds the last reading to the edge and steps at the next batch.
-- **Owner testing follows the run:** each plan merges locally into `main`; nothing is pushed, and the owner tests after the sequence.
+- **Owner testing follows the run:** each plan merges locally into `main`; the owner tests after the sequence.
 - **Decision note:** [0116](docs/decisions/0116-chart-motion-is-the-engines-and-the-line-is-a-clock.md) claims the chart mechanism boundaries.
 
 ## Last completed change
 
-- **The gauge's spacing default is the measured reference look:** 9.4% of the drawn edge reproduces the 10.8° gap the owner called right at divisor 20; the first probe had calibrated 2.5 at twenty segments instead of five.
-- **The cap clearance is measured where the caps are:** against the backing canvas (scene box × render scale) and only when the ends are round, so a square-ended gauge at zero spacing still draws touching bands.
-- **A resize redraws a chart:** the drawn edge is now part of the reading signature, so a static gauge no longer keeps the gap of its old size.
-- **The spacing track steps by the tenth it displays,** so a drag can land on the 9.4 default rather than only on whole percents.
+- **Spacing is a share of the segment:** the gap is solved as `(q(b+c)+c)/(1+q)` with the round-cap clearance `c`, so 100% leaves as much space as painted slice and 0% closes exactly on the caps (ADR 0121 supersedes 0120).
+- **The slider is 1–100 whole percents:** the descriptor refuses a fraction, the envelope refuses an out-of-range or fractional value, and all three families default to 10.
+- **A partial bar fill follows the reading:** each band is painted up to the reading, clamped to its own visible length, so the next band starts only after this one is full.
+- **Pie gaps scale with their piece:** each internal spacer is the authored share of the piece it follows, and the ring still sums to a full turn.
+- **Browser evidence on the rebuilt bundle:** large, half-size, 100% and partial captures show the gap staying a tenth of the band, halving with the chart, and widening to 1:1 at 100%.
 
 ## Next
 
-1. Owner test of radar and polar bar in the editor, then phone performance and value-chart transition evidence.
-2. Owner test of one scene export end to end: press the button, save the package, import the video.
-3. Keep every checkpoint local; no push until the owner asks.
+1. Owner test of the spacing follow-up: drag 1–100 and toggle fill mode on a gauge and a bar.
+2. Owner test of radar and polar bar in the editor, then phone performance and value-chart transition evidence.
+3. Owner test of one scene export end to end: press the button, save the package, import the video.
+4. Keep every checkpoint local; no push until the owner asks.
 
 ## Blockers / unverified
 

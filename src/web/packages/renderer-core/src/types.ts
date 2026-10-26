@@ -31,7 +31,7 @@ export function hasPlottableValue(
 import type { AnimationSettings } from "./charts/animation.js";
 import type { ChartPaint } from "./charts/chart-paint.js";
 import {
-  GAUGE_SEGMENT_SPACING_PERCENT_DEFAULT,
+  SEGMENT_SPACING_PERCENT_DEFAULT,
   type SegmentFill,
 } from "./charts/segments.js";
 
@@ -60,7 +60,7 @@ export interface GaugeSettings {
   readonly roundCap: boolean;
   /** How many slices the fill is cut into; 100 is one continuous arc. */
   readonly segmentDivisor: number;
-  /** Gap between slices, as a share of the chart's smaller drawn edge. */
+  /** Empty space between slices, as a share of a slice's painted width. */
   readonly segmentSpacingPercent?: number;
   /** Whether the reading lights a whole slice or stops at its own value. */
   readonly segmentFill?: SegmentFill;
@@ -79,7 +79,7 @@ export const defaultGaugeSettings: GaugeSettings = {
   progress: { kind: "solid", color: "#00b8d9" },
   roundCap: true,
   segmentDivisor: 100,
-  segmentSpacingPercent: GAUGE_SEGMENT_SPACING_PERCENT_DEFAULT,
+  segmentSpacingPercent: SEGMENT_SPACING_PERCENT_DEFAULT,
   segmentFill: "whole",
   gradientSegments: 64,
 };
