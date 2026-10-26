@@ -1,4 +1,6 @@
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
+import { uiCopy } from "../ui-copy.js";
+import { bytesFromBase64 } from "../video-normalizer.js";
 
 /**
  * The finder's Wallpaper Engine body, fetch-only.
@@ -276,15 +278,9 @@ export function creditsEntryOf(item: WallpaperEngineItem): ThemeCreditsEntry {
   };
 }
 
-/** A scene's unpack answer. `launched` false means the project exists but no
- *  editor process started; the caller names the project rather than retrying. */
+/** A scene's unpack answer. The project is written; no editor process starts. */
 export type StartProjectAnswer =
-  | {
-      readonly ok: true;
-      readonly name: string;
-      readonly reused: boolean;
-      readonly launched: boolean;
-    }
+  | { readonly ok: true; readonly name: string; readonly reused: boolean }
   | { readonly ok: false; readonly reason: string };
 
 /** One file Wallpaper Engine wrote into a watched export directory. */
@@ -325,8 +321,8 @@ function exportFileOf(value: unknown): ExportFile | undefined {
   return { name, format: format as ExportFile["format"], modified, size };
 }
 
-/** Unpack the item and launch Wallpaper Engine's editor on it. The write is the
- *  host's; a refusal is an answer, never a throw. */
+/** Unpack the item into a local project. The write is the host's; no editor
+ *  process starts, and a refusal is an answer, never a throw. */
 export async function startProject(
   workshopId: string,
   options?: WallpaperEngineClientOptions,
@@ -351,18 +347,104 @@ export async function startProject(
       const name = stringAt(answer, "name");
       return name === undefined
         ? refused
-        : {
-            ok: true,
-            name,
-            reused: answer.reused === true,
-            launched: answer.launched === true,
-          };
+        : { ok: true, name, reused: answer.reused === true };
     }
 
     const reason = stringAt(answer, "reason");
     return { ok: false, reason: reason ?? "refused" };
   } catch {
     return refused;
+  }
+}
+
+/** The normalizer answers MP4, so a name from a package's title or the picked
+ *  file's stem carries the extension the manager validates. */
+function mp4NameOf(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return `${dot <= 0 ? name : name.slice(0, dot)}.mp4`;
+}
+
+/** A host-prepared package video, ready to declare as an asset. */
+export type PrepareMobilePackageAnswer =
+  | {
+      readonly ok: true;
+      readonly file: File;
+      readonly title?: string;
+      readonly workshopId?: string;
+      readonly reencoded: boolean;
+    }
+  | { readonly ok: false; readonly message: string };
+
+/** The host reads the author's `.mpkg` and normalizes its video; the editor
+ *  never parses the package. The returned `File` is what the asset manager
+ *  declares, named from the package's title when it carries one. */
+export async function prepareMobilePackage(
+  file: File,
+  options?: WallpaperEngineClientOptions,
+): Promise<PrepareMobilePackageAnswer> {
+  const { fetcher, url } = request(options);
+  const failed = (message: string): PrepareMobilePackageAnswer => ({
+    ok: false,
+    message,
+  });
+
+  try {
+    const response = await fetcher(url("/api/wallpaper-engine/mpkg"), {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream" },
+      body: file,
+    });
+    if (!response.ok) return failed(uiCopy.panels.assetImportFailed);
+
+    const body = (await response.json()) as unknown;
+    if (typeof body !== "object" || body === null)
+      return failed(uiCopy.panels.assetImportFailed);
+    const answer = body as Record<string, unknown>;
+
+    if (answer.ok !== true)
+      return failed(
+        stringAt(answer, "message") ?? uiCopy.panels.assetImportFailed,
+      );
+    if (typeof answer.videoBase64 !== "string")
+      return failed(uiCopy.panels.assetImportFailed);
+
+    const title = stringAt(answer, "title");
+    const workshopId = stringAt(answer, "workshopId");
+    return {
+      ok: true,
+      file: new File(
+        [bytesFromBase64(answer.videoBase64) as unknown as BlobPart],
+        title === undefined ? mp4NameOf(file.name) : `${title}.mp4`,
+        { type: "video/mp4" },
+      ),
+      ...(title === undefined ? {} : { title }),
+      ...(workshopId === undefined ? {} : { workshopId }),
+      reencoded: answer.reencoded === true,
+    };
+  } catch {
+    return failed(uiCopy.panels.assetImportFailed);
+  }
+}
+
+/** The Steam persona behind an item's author id. A read that fails — offline,
+ *  refused, or malformed — is absence, never a fabricated name. */
+export async function fetchAuthorName(
+  steamId: string,
+  options?: WallpaperEngineClientOptions,
+): Promise<string | undefined> {
+  const { fetcher, url } = request(options);
+
+  try {
+    const response = await fetcher(
+      url(`/api/wallpaper-engine/author/${encodeURIComponent(steamId)}`),
+    );
+    if (!response.ok) return undefined;
+
+    const body = (await response.json()) as unknown;
+    if (typeof body !== "object" || body === null) return undefined;
+    return stringAt(body as Record<string, unknown>, "name");
+  } catch {
+    return undefined;
   }
 }
 

@@ -1437,10 +1437,10 @@ function stubNormalize(
   return fetchStub;
 }
 
-/** The JSON one normalize press posted. */
+/** The raw body one normalize press posted. */
 function postedBody(fetchStub: ReturnType<typeof vi.fn>): unknown {
   const init = fetchStub.mock.calls[0]?.[1] as RequestInit | undefined;
-  return JSON.parse(String(init?.body));
+  return init?.body;
 }
 
 /** React and floating-ui schedule outside `act`, so a popup is flushed with

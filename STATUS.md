@@ -16,10 +16,9 @@ Execute [`the Wallpaper Engine import rework`](docs/superpowers/plans/2026-10-26
 
 ## Last completed change
 
-- **`.mpkg` imports on the host:** `mobilePackage` reads the video with `project.json`'s title and workshop id; `POST /api/wallpaper-engine/mpkg` normalizes it and accepts a source up to 512 MiB while refusing an output over 96 MB.
-- **Author lookup:** `fetchAuthorName` reads Steam's profile XML with a 5 s timeout and a 17-digit id guard, and the source caches each answer; `GET /api/wallpaper-engine/author/:steamId` is loopback-only.
-- **Normalize takes bytes:** `POST /api/themes/normalize-video` reads a raw binary body at `MAX_VIDEO_SOURCE_BYTES` and keeps its JSON answer shape.
-- **Focused proof:** 392 tests pass across `pkg.test.ts`, `author.test.ts`, `source.test.ts` and `server.test.ts`; host typecheck and biome clean.
+- **Client contract:** `startProject` answers `{ ok, name, reused }`; `prepareMobilePackage` posts a picked `.mpkg` and names the returned video from the package title or the source stem; `fetchAuthorName` reads the author route.
+- **Raw normalize upload:** `requestNormalizedVideo` takes a `File | Uint8Array` and posts its bytes as `application/octet-stream`; the Assets pane and the export sheet still compile until Tasks 4–5 rewrite them.
+- **Focused proof:** 143 tests pass across the client, normalizer, session, Assets-pane, finder-body and export-sheet suites; workspace typecheck and biome clean.
 
 ## Next
 

@@ -228,11 +228,11 @@ describe("ExportSheet", () => {
       calls.find((call) => call.url.includes("/project"))?.init?.method,
     ).toBe("POST");
     expect(rendered.textContent).toContain(
-      uiCopy.assets.wallpaperEngine.scene.launched("Neon loop"),
+      uiCopy.assets.wallpaperEngine.scene.ready("Neon loop"),
     );
   });
 
-  it("says the project is ready when the editor did not launch", async () => {
+  it("says the project is ready rather than claiming an editor started", async () => {
     vi.useFakeTimers();
     const { fetch } = routedFetch({
       project: () =>

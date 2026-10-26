@@ -212,9 +212,7 @@ export function ExportSheet(props: {
         ) : null}
         {opened?.ok === true ? (
           <p data-yunari-export-project="" className="text-xs text-muted">
-            {opened.launched
-              ? copy.launched(opened.name)
-              : copy.ready(opened.name)}
+            {copy.ready(opened.name)}
           </p>
         ) : null}
       </div>

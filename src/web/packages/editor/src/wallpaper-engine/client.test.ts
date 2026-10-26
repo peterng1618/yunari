@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   creditsEntryOf,
+  fetchAuthorName,
   fetchExport,
   fetchItemAsset,
   fetchWallpaperEngine,
   findExports,
+  prepareMobilePackage,
   startProject,
   type WallpaperEngineItem,
 } from "./client.js";
@@ -102,6 +104,27 @@ describe("fetchWallpaperEngine", () => {
       skipped: 0,
     });
   });
+
+  it("keeps every kind the listing can still carry", async () => {
+    const kinds = ["image", "video", "web", "scene"];
+    const { fetcher } = stub(
+      () =>
+        new Response(
+          JSON.stringify({
+            available: true,
+            items: kinds.map((kind) => ({ ...item, kind })),
+            skipped: 0,
+          }),
+          { status: 200 },
+        ),
+    );
+
+    const answer = await fetchWallpaperEngine({ fetch: fetcher });
+
+    expect(answer.available && answer.items.map((row) => row.kind)).toEqual(
+      kinds,
+    );
+  });
 });
 
 describe("fetchItemAsset", () => {
@@ -167,7 +190,6 @@ describe("startProject", () => {
       ok: true,
       name: "Rain on glass",
       reused: false,
-      launched: true,
     });
     expect(calls[0]?.url).toBe("/api/wallpaper-engine/item/201/project");
     expect(calls[0]?.init?.method).toBe("POST");
@@ -194,6 +216,121 @@ describe("startProject", () => {
       ok: false,
       reason: "refused",
     });
+  });
+});
+
+describe("prepareMobilePackage", () => {
+  it("POSTs the package bytes and names the video by the package title", async () => {
+    const { fetcher, calls } = stub(
+      () =>
+        new Response(
+          JSON.stringify({
+            ok: true,
+            videoBase64: btoa("mp4-bytes"),
+            reencoded: true,
+            title: "Rain scene",
+            workshopId: "201",
+          }),
+          { status: 200 },
+        ),
+    );
+    const pkg = new File([new Uint8Array([1, 2, 3])], "export.mpkg");
+
+    const answer = await prepareMobilePackage(pkg, { fetch: fetcher });
+
+    expect(calls[0]?.url).toBe("/api/wallpaper-engine/mpkg");
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect(calls[0]?.init?.body).toBe(pkg);
+    expect(answer.ok).toBe(true);
+    if (!answer.ok) return;
+    expect(answer.title).toBe("Rain scene");
+    expect(answer.workshopId).toBe("201");
+    expect(answer.reencoded).toBe(true);
+    expect(answer.file.name).toBe("Rain scene.mp4");
+    expect(answer.file.type).toBe("video/mp4");
+    expect(new TextDecoder().decode(await answer.file.arrayBuffer())).toBe(
+      "mp4-bytes",
+    );
+  });
+
+  it("names the video by the source's stem when the package carries no title", async () => {
+    const { fetcher } = stub(
+      () =>
+        new Response(
+          JSON.stringify({
+            ok: true,
+            videoBase64: btoa("mp4-bytes"),
+            reencoded: false,
+          }),
+          { status: 200 },
+        ),
+    );
+
+    const answer = await prepareMobilePackage(
+      new File([new Uint8Array([1])], "rain.mpkg"),
+      { fetch: fetcher },
+    );
+
+    expect(answer.ok && answer.file.name).toBe("rain.mp4");
+  });
+
+  it("maps the host's refusal to its sentence", async () => {
+    const { fetcher } = stub(
+      () =>
+        new Response(
+          JSON.stringify({ ok: false, message: "No video in this package." }),
+          { status: 200 },
+        ),
+    );
+
+    expect(
+      await prepareMobilePackage(new File([new Uint8Array([1])], "rain.mpkg"), {
+        fetch: fetcher,
+      }),
+    ).toEqual({ ok: false, message: "No video in this package." });
+  });
+
+  it("answers a refusal for a response that is not the answer shape", async () => {
+    const { fetcher } = stub(() => new Response("<html>", { status: 500 }));
+
+    expect(
+      await prepareMobilePackage(new File([new Uint8Array([1])], "rain.mpkg"), {
+        fetch: fetcher,
+      }),
+    ).toEqual({ ok: false, message: "That file could not be imported." });
+  });
+});
+
+describe("fetchAuthorName", () => {
+  it("reads the author route and answers the name", async () => {
+    const { fetcher, calls } = stub(
+      () => new Response(JSON.stringify({ name: "Ada" }), { status: 200 }),
+    );
+
+    expect(await fetchAuthorName("76561198000000001", { fetch: fetcher })).toBe(
+      "Ada",
+    );
+    expect(calls[0]?.url).toBe(
+      "/api/wallpaper-engine/author/76561198000000001",
+    );
+  });
+
+  it("answers nothing for a non-OK response", async () => {
+    const { fetcher } = stub(() => new Response("", { status: 403 }));
+
+    expect(
+      await fetchAuthorName("76561198000000001", { fetch: fetcher }),
+    ).toBeUndefined();
+  });
+
+  it("answers nothing for a malformed body", async () => {
+    const { fetcher } = stub(
+      () => new Response(JSON.stringify({ name: 7 }), { status: 200 }),
+    );
+
+    expect(
+      await fetchAuthorName("76561198000000001", { fetch: fetcher }),
+    ).toBeUndefined();
   });
 });
 
