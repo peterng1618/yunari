@@ -58,8 +58,8 @@ a publish does.
 `publish.yml` publishes every release **after the first**; the first is a
 one-time local publish by the owner (see npm authentication below). It triggers
 on `release: published` and on `workflow_dispatch`. One publish runs at a time
-(workflow-wide `concurrency: publish`), because the version is only known inside
-the job.
+(workflow-wide `concurrency: publish`), because the version is only known at run
+time and two dispatches can name different refs.
 
 Always dispatch a dry run first. It gates, builds, stages, packs, installs and
 smokes the tarball, and runs `npm publish --dry-run`, but publishes nothing and
@@ -74,7 +74,12 @@ because the asset upload targets it, and must pass `dry_run=false` explicitly â€
 `dry_run` defaults to true and any dispatch that does not say `false` stays a
 dry run. A run started by `release: published` is never a dry run.
 
-What the job does, in order:
+What the two jobs do, in order. The permissions are split with them: `install`
+runs with `contents: read` only, and `publish` runs after it (`needs: install`)
+with `id-token: write` for provenance and `contents: write` for the release
+upload. `publish` installs nothing and builds nothing.
+
+`install`:
 
 1. Checkout at full depth (the gate dates licence rules by commit history),
    Node 24, `npm ci`.
@@ -91,11 +96,18 @@ What the job does, in order:
 7. Install the packed tarball into a fresh directory with no workspace above it,
    require `yunari --version` to equal the tag version, boot the host with
    `--no-browser`, and require `/api/health`, `/editor` and `/` to answer 200.
+
+Step 7's tarball, and a `yunari-X.Y.Z.zip` of the staged directory, upload as
+the workflow artifact `yunari-release-assets`. That artifact is how the built
+tree reaches `publish`, which never rebuilds it.
+
+`publish`:
+
 8. `npm publish` **that tarball** with `--provenance --access public --tag
    <dist-tag>` (`--dry-run` added for a dry run). Publishing the exact file that
    was installed and smoked is the point.
-9. On a real run, attach `yunari-X.Y.Z.tgz` and `yunari-X.Y.Z.zip` (the staged
-   directory, zipped) to the GitHub Release with `gh release upload --clobber`.
+9. On a real run, attach `yunari-X.Y.Z.tgz` and `yunari-X.Y.Z.zip` from the
+   downloaded artifact to the GitHub Release with `gh release upload --clobber`.
 
 ## npm authentication: first release local, later releases OIDC
 
@@ -151,8 +163,8 @@ been run yet.**
 
 5. **From the second release on, the workflow publishes over OIDC** â€” no token
    and no secret. Provenance needs a public repository, `id-token: write`
-   (already granted) and npm >= 11.5.1; the Node 24 the workflow pins resolves an
-   npm newer than that.
+   (granted on the `publish` job only) and npm >= 11.5.1; the Node 24 the
+   workflow pins resolves an npm newer than that.
 
 Keep the tracked workflow token-free: no `NPM_TOKEN`, no `registry-url`. If the
 trusted publisher cannot be configured, the local publish in step 2 is the only
