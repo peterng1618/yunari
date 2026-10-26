@@ -290,6 +290,7 @@ export function FontPreviewPanel({
                 {copy.newPresetSummary(
                   copy.role[role],
                   selectedCut?.family ?? selected.name,
+                  presets[role] !== undefined,
                 )}
               </span>
             </span>

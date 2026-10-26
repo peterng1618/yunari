@@ -1268,8 +1268,16 @@ export const uiCopy = {
         return subset === undefined ? face : `${face} · ${subset}`;
       },
       newPreset: "New type token",
-      newPresetSummary: (role: string, family: string): string =>
-        `${role} — ${family} · adds one`,
+      /** The detail beside the role chooser. It says what the press does to the
+       *  chosen role — the same answer `replacesRole` gives — because one press
+       *  reading "adds one" on the row and "replaces" underneath it is two
+       *  promises about one write. */
+      newPresetSummary: (
+        role: string,
+        family: string,
+        replaces: boolean,
+      ): string =>
+        `${role} — ${family} · ${replaces ? "replaces its face" : "adds one"}`,
       addAsPreset: "Add as type token",
       /** A chosen role is the token's id, so adding to a role the theme already
        *  has rewrites that token's face rather than creating a second id. Said

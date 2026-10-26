@@ -276,7 +276,9 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
       uiCopy.assets.fontPreview.role.heading,
     ),
   );
-  expect(document.body.textContent).toContain("Heading — Manrope · adds one");
+  expect(document.body.textContent).toContain(
+    "Heading — Manrope · replaces its face",
+  );
   act(() => {
     button("[data-yunari-font-add-preset]").click();
   });
@@ -300,6 +302,33 @@ it("draws no role-replacement hint when the theme has no such role", () => {
   mount(panel({ selected: family, presets: roleless, onAddPreset: vi.fn() }));
 
   expect(document.querySelector("[data-yunari-font-role-replaces]")).toBeNull();
+});
+
+it("gates the hint on the chosen role, not on any role existing", () => {
+  // Only `heading` exists here: a condition keyed on "the theme has some role"
+  // would draw the hint under Body too and promise a rewrite that cannot happen.
+  const headingOnly: TypeTokens = { heading: { family: "Yaldevi", weight: 300 } };
+  mount(panel({ selected: family, presets: headingOnly, onAddPreset: vi.fn() }));
+
+  expect(document.querySelector("[data-yunari-font-role-replaces]")).toBeNull();
+  expect(document.body.textContent).toContain("Body — Manrope · adds one");
+
+  const role = document.querySelector<HTMLSelectElement>(
+    "[data-yunari-font-role]",
+  );
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLSelectElement.prototype,
+    "value",
+  )?.set;
+  act(() => {
+    setter?.call(role, "heading");
+    role?.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  expect(document.querySelector("[data-yunari-font-role-replaces]")).not.toBeNull();
+  expect(document.body.textContent).toContain(
+    "Heading — Manrope · replaces its face",
+  );
 });
 
 it("applies the face the family's id names, not the first cut listed", () => {
