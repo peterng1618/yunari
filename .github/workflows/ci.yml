@@ -33,7 +33,7 @@ jobs:
       run:
         working-directory: src/web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # The parity gate dates a licence by the commit the rule it quotes
           # entered (`tests/e2e/mockup-values.test.ts`), and a depth-1 clone
@@ -43,7 +43,7 @@ jobs:
           # refuses a shallow tree loudly rather than manufacturing findings.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           # vitest 5 requires ^22.12 || ^24 || >=26 — pin to an LTS the toolchain
           # actually supports rather than "latest", which can be an odd release.
@@ -141,7 +141,7 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Every declared dependency must appear in THIRD-PARTY-NOTICES.md
         # §157 requires a complete licence inventory; §132/§161 require notices
@@ -193,9 +193,9 @@ jobs:
       run:
         working-directory: src/web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
           cache: npm
@@ -223,9 +223,9 @@ jobs:
       run:
         working-directory: src/web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
           cache: npm

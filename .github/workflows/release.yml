@@ -4,23 +4,26 @@ on:
   push:
     branches: [main]
 
-# `issues: write` labels the release PR, which is how the next run finds it
-# instead of opening a duplicate.
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    # Job-level, not workflow-level: a permission granted here dies with this
+    # job instead of covering every job the workflow ever gains.
+    #
+    # `issues: write` labels the release PR, which is how the next run finds it
+    # instead of opening a duplicate.
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     steps:
-      # googleapis/release-please-action@v5 (node24), checked 2026-10-25 against
+      # googleapis/release-please-action@45996ed1... (v5, node24), checked
+      # 2026-10-25 against
       # https://github.com/googleapis/release-please-action/blob/main/README.md:
       # manifest mode reads release-please-config.json and
       # .release-please-manifest.json, node updates package.json and its
       # package-lock.json, and include-component-in-tag: false tags vX.Y.Z.
-      - uses: googleapis/release-please-action@v5
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
