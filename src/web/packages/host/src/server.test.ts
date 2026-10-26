@@ -4252,6 +4252,19 @@ describe("The pairing routes mint, rotate, rename and remove displays (ruling 12
     );
     expect((await displays.find("office-tv"))?.rotation).toBeUndefined();
 
+    // A full turn is upright on a circle, not a quarter turn on a rectangle.
+    const fullTurn = await request(
+      hosted.server,
+      "PATCH",
+      "/api/displays/office-tv",
+      json({ rotation: 360 }),
+    );
+    expect(fullTurn.status).toBe(400);
+    expect(fullTurn.text()).toBe(
+      "A rectangular display turns in quarter turns, not 360 degrees.",
+    );
+    expect((await displays.find("office-tv"))?.rotation).toBeUndefined();
+
     // The same angle on a round screen is a whole degree and lands.
     const rounded = await request(
       hosted.server,
@@ -4568,6 +4581,25 @@ describe("A local monitor is specified rather than paired", () => {
       shape: "circle",
       rotation: 45,
     });
+  });
+
+  it("refuses a full turn on a rectangular local monitor", async () => {
+    const answer = await request(
+      hosted.server,
+      "POST",
+      "/api/displays",
+      json({
+        label: "Square panel",
+        monitor: { deviceName: "\\\\.\\DISPLAY2" },
+        shape: "rect",
+        rotation: 360,
+      }),
+    );
+    expect(answer.status).toBe(400);
+    expect(answer.text()).toBe(
+      "A rectangular display turns in quarter turns, not 360 degrees.",
+    );
+    expect(await displays.list()).toEqual([]);
   });
 
   it("refuses a body the file's own reader would drop", async () => {
@@ -5140,6 +5172,38 @@ describe("A display with no camera pairs by typing the one-time code", () => {
 
     // The window is intact: a refused body must not cost the owner their code.
     expect((await claim({ code, label: "Tablet" })).status).toBe(200);
+  });
+
+  it("refuses 360 on a rectangular claim, and stores it upright on a circle", async () => {
+    // The wrap is the circle's alone: a rectangle accepts 0/90/180/270 exactly,
+    // so 360 must not slip through as 0.
+    const rectCode = await shown();
+    const refused = await claim({
+      code: rectCode,
+      label: "Tablet",
+      shape: "rect",
+      rotation: 360,
+    });
+    expect(refused.status).toBe(400);
+    expect(refused.text()).toBe(
+      "A rectangular display turns in quarter turns, not 360 degrees.",
+    );
+    expect(await displays.list()).toHaveLength(0);
+
+    const circleCode = await shown();
+    expect(
+      (
+        await claim({
+          code: circleCode,
+          label: "Round",
+          shape: "circle",
+          rotation: 360,
+        })
+      ).status,
+    ).toBe(200);
+    const records = await displays.list();
+    expect(records[0]).toMatchObject({ shape: "circle" });
+    expect(records[0]?.rotation).toBeUndefined();
   });
 
   it("answers shape and rotation in the active map and the poll", async () => {

@@ -263,9 +263,10 @@ function sameHint(first: MonitorHint, second: MonitorHint): boolean {
 }
 
 /**
- * A whole mounting angle: `360` is a full turn and reads as upright, anything
- * outside `0..360` is refused rather than wrapped.
+ * A whole mounting angle, `0..360` with `360` left as the full turn it is.
  *
+ * The wrap to upright belongs to the shape's rule, not here: only a circle
+ * normalises `360` to `0`, and a rectangle accepts `0/90/180/270` exactly.
  * Whole degrees only, because the record stores what a person set and a fraction
  * is a request the control cannot reproduce.
  */
@@ -281,7 +282,7 @@ function wholeDegrees(value: unknown): number {
     );
   }
 
-  return value % 360;
+  return value;
 }
 
 function displayShape(value: unknown): DisplayShape {
@@ -317,13 +318,23 @@ export function normalizePresentation(
 
   if (rotation === undefined) return { shape: resolved };
 
-  const angle = wholeDegrees(rotation);
+  const degrees = wholeDegrees(rotation);
 
-  if (resolved === "rect" && angle % 90 !== 0) {
+  // The rectangle's set is exact, checked before any wrap: 360 is a full turn,
+  // not a quarter, and normalising it to 0 first would silently store upright.
+  if (
+    resolved === "rect" &&
+    degrees !== 0 &&
+    degrees !== 90 &&
+    degrees !== 180 &&
+    degrees !== 270
+  ) {
     throw new DisplaySettingError(
       `A rectangular display turns in quarter turns, not ${String(rotation)} degrees.`,
     );
   }
+
+  const angle = resolved === "circle" ? degrees % 360 : degrees;
 
   return { shape: resolved, ...(angle === 0 ? {} : { rotation: angle }) };
 }

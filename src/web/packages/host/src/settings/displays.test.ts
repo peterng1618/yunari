@@ -545,6 +545,11 @@ describe("createDisplayStore", () => {
     await expect(
       store.create("Tablet", "token", { shape: "rect", rotation: 45 }),
     ).rejects.toBeInstanceOf(DisplaySettingError);
+    // 360 is a full turn and upright on a circle; a rectangle takes 0/90/180/270
+    // exactly, so the wrap is the circle's and not a licence for a rect.
+    await expect(
+      store.create("Tablet", "token", { shape: "rect", rotation: 360 }),
+    ).rejects.toBeInstanceOf(DisplaySettingError);
     expect(await store.list()).toEqual([]);
   });
 

@@ -17,10 +17,10 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Last completed change
 
-- **Task 3 of plan B:** the display record carries `shape` and an omitted-when-zero `rotation`; one `normalizePresentation` refuses what the shape cannot hold.
+- **Task 3 fix:** `360` no longer wraps before the shape rule, so a rect refuses it on claim, local POST and PATCH; only a circle normalises it to upright.
 - **Writes:** claim and local POST validate before spending the pairing code; PATCH answers `DisplaySettingError` as 400 with the store's own sentence.
 - **Reads:** `/api/themes/active` rows and the publish poll answer shape and rotation; `this-pc` and `default` answer `rect`/0.
-- **Evidence:** host focused suite 404/404; each new case shown red with its behaviour disabled; host typecheck exit 0.
+- **Evidence:** host focused suite 406/406; each new case shown red with its behaviour disabled; host typecheck exit 0.
 - **Decision note:** `0124` extended with the host paths and why the rule lives in the store rather than the routes.
 
 ## Next
