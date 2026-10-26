@@ -187,6 +187,16 @@
             return;
           }
 
+          // The fresh credential is the cookie, which this page cannot read;
+          // a record left here is the token from *before* the re-pair, and the
+          // player would offer it as its fallback on the next load. Clearing it
+          // is best-effort: a storage that refuses still has a valid cookie.
+          try {
+            localStorage.removeItem("yunari.display.pairing");
+          } catch {
+            // Quota or a private window; the exchange still succeeded.
+          }
+
           location.replace("/");
         } catch {
           say("The host did not answer.");

@@ -583,8 +583,14 @@ function cookieValue(
 }
 
 /**
- * A request's credential: the header (the host's own tooling, then the player's
- * fetches), the cookie (what a browser carries by itself), or nothing.
+ * A request's credential: the cookie first, then the header, or nothing.
+ *
+ * **The cookie outranks the header because it is the fresher credential.** This
+ * host set it, and only this host can. The header remains for the host's own
+ * tooling and for a player that has no cookie yet, but it can be stale: a page
+ * that stored a token before its display was retired and re-paired keeps
+ * sending the old one, and reading the header first let it outrank the fresh
+ * cookie and refuse the load until someone reloaded by hand.
  *
  * **A query token is deliberately absent.** It is read only by the root route,
  * which exchanges it for the cookie and redirects it out of the address bar.
@@ -592,8 +598,10 @@ function cookieValue(
  */
 function tokenFor(request: http.IncomingMessage): string | undefined {
   const header = request.headers[SESSION_HEADER];
-  const fromHeader = Array.isArray(header) ? header[0] : header;
-  return fromHeader ?? cookieValue(request.headers.cookie, SESSION_COOKIE);
+  return (
+    cookieValue(request.headers.cookie, SESSION_COOKIE) ??
+    (Array.isArray(header) ? header[0] : header)
+  );
 }
 
 /**
@@ -1659,10 +1667,26 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
+      let text: string;
+
+      try {
+        text = await readBody(request);
+      } catch (error) {
+        // The bound's own refusal, not a parse failure: swallowing it would
+        // call an oversized body malformed JSON and hide what happened.
+        refuse(
+          400,
+          error instanceof Error
+            ? error.message
+            : "That request body could not be read.",
+        );
+        return;
+      }
+
       let parsed: unknown;
 
       try {
-        parsed = JSON.parse(await readBody(request));
+        parsed = JSON.parse(text);
       } catch {
         // Fixed, never the parser's words: the message quotes the start of the
         // body, and a caller in the middle of pairing must not be answered the

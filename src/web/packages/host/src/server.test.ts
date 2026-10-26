@@ -2944,6 +2944,9 @@ describe("Host theme routes", () => {
         display: createDisplaySettingsStore(lanDir),
         fontFavorites: createFontFavoritesStore(lanDir),
         displays,
+        // `/api/host` answers a paired display its own token; this describe is
+        // where which display authenticated has to be readable.
+        host: { id: "lan-host", name: "Study PC" },
       });
       await request(
         paired.server,
@@ -3026,6 +3029,31 @@ describe("Host theme routes", () => {
       expect(
         (await streamStatus(paired.server, "/ws?keys=cpu.load")).status,
       ).toBe(403);
+    });
+
+    it("lets the cookie outrank a header left over from before a re-pair", async () => {
+      // A display retired and re-paired at the same origin keeps sending the
+      // token it stored first, while the exchange set a fresh cookie. Reading
+      // the header first refused that load and left the page on its failure
+      // screen until someone reloaded by hand.
+      const stale = await pair("phone");
+      const fresh = await pair("phone");
+
+      const answered = await request(
+        paired.server,
+        "GET",
+        "/api/host",
+        undefined,
+        {
+          remoteAddress: "192.168.1.50",
+          headers: { ...asCookie(fresh), "x-yunari-session": stale },
+        },
+      );
+
+      expect(answered.status).toBe(200);
+      // `/api/host` answers the calling display its own token, so which display
+      // authenticated is what the body names.
+      expect(answered.json()).toMatchObject({ token: fresh });
     });
 
     it("exchanges a live token for an HttpOnly cookie and no token in the URL", async () => {
@@ -3118,6 +3146,23 @@ describe("Host theme routes", () => {
       expect(answer.status).toBe(400);
       expect(answer.text()).toBe("That request body is not valid JSON.");
       expect(answer.text()).not.toContain("kkkkkkkkkk");
+      expect(answer.headers["cache-control"]).toBe("no-store");
+    });
+
+    it("passes through the bound's own refusal for an oversized body", async () => {
+      // Swallowing this into the parse catch reported a body over the limit as
+      // malformed JSON, which hides what actually happened.
+      const answer = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        `{"token":"${"x".repeat(64 * 1024)}"}`,
+        { remoteAddress: "192.168.1.50", headers: JSON_HEADERS },
+      );
+
+      expect(answer.status).toBe(400);
+      expect(answer.text()).toBe("That request body is too large.");
+      expect(answer.headers["set-cookie"]).toBeUndefined();
       expect(answer.headers["cache-control"]).toBe("no-store");
     });
 

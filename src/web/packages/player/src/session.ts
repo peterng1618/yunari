@@ -36,10 +36,22 @@ export function isLoopbackPage(pageUrl: string): boolean {
     return false;
   }
 
-  return (
+  if (
     hostname === "localhost" ||
-    hostname === "[::1]" ||
-    /^127(\.\d{1,3}){3}$/.test(hostname)
+    hostname.endsWith(".localhost") ||
+    hostname === "[::1]"
+  ) {
+    return true;
+  }
+
+  const octets = hostname.split(".");
+
+  // A dotted quad only: each octet is bounded, so `127.0.0.256` is not read as
+  // loopback just because it starts with `127`.
+  return (
+    octets.length === 4 &&
+    octets[0] === "127" &&
+    octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255)
   );
 }
 

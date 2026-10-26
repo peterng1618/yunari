@@ -26,6 +26,7 @@ describe("display session token", () => {
       "http://127.0.0.1:5227/",
       "http://127.0.1.2:5227/",
       "http://localhost:5227/",
+      "http://app.localhost:5227/",
       "http://[::1]:5227/",
     ]) {
       expect(isLoopbackPage(pageUrl), pageUrl).toBe(true);
@@ -35,6 +36,10 @@ describe("display session token", () => {
       "http://192.168.1.10:5227/",
       "http://study-pc.local:5227/",
       "http://yunari.invalid/",
+      // An octet out of range is not loopback. `URL` itself refuses this quad,
+      // so what is pinned is the refusal rather than the bound below it.
+      "http://127.0.0.256:5227/",
+      "http://127.0.0.1.example:5227/",
     ]) {
       expect(isLoopbackPage(pageUrl), pageUrl).toBe(false);
     }

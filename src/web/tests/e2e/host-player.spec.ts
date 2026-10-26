@@ -3391,9 +3391,12 @@ test.describe("a paired display and the theme it is given", () => {
       // This PC's own theme, because the address the display loads at is
       // loopback and the host resolves a loopback request as `this-pc`.
       await assign(request, "this-pc", HOST_CHART_THEME_ID);
-      // The pairing the display would already hold from a LAN load. Seeded
-      // before the first document, and only at the address it knows: the page
-      // that lands on the second address keeps its own origin's storage.
+      // The pairing the display would already hold from a LAN load: its
+      // last-known address is the LAN one, not the loopback address this page
+      // loads at. Seeded before the first document, and only at the address it
+      // knows: the page that lands on the second address keeps its own origin's
+      // storage. The load then rewrites it to where the page actually is, which
+      // is what the poll below observes — the seed alone cannot satisfy it.
       await page.addInitScript(
         (pairing: {
           hostId: string;
@@ -3413,22 +3416,26 @@ test.describe("a paired display and the theme it is given", () => {
           hostName,
           port,
           token: display.token,
-          lastAddress: "127.0.0.1",
+          lastAddress: new URL(origin).hostname,
         },
       );
       await page.goto(known);
       await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible();
 
+      // The load's own write, which the seed cannot satisfy: the page stores
+      // the address it is actually on, and the seed holds the LAN one.
       await expect
         .poll(() =>
           page.evaluate(() => {
             const raw = localStorage.getItem("yunari.display.pairing");
-            return raw === null
-              ? null
-              : (JSON.parse(raw) as { hostId?: unknown }).hostId;
+            const stored =
+              raw === null
+                ? {}
+                : (JSON.parse(raw) as { lastAddress?: unknown });
+            return { stored: stored.lastAddress, here: location.hostname };
           }),
         )
-        .toBe(hostId);
+        .toEqual({ stored: "127.0.0.1", here: "127.0.0.1" });
 
       moved = true;
 
