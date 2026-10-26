@@ -87,7 +87,10 @@ function windows(targets: readonly string[], kind: TrashTarget): TrashRoute {
   );
   const script =
     "Add-Type -AssemblyName Microsoft.VisualBasic; " +
-    `Get-Content -LiteralPath '${listPath.replaceAll("'", "''")}' | ` +
+    // Windows PowerShell 5.1's `Get-Content` reads the ANSI code page unless
+    // told otherwise, so a UTF-8 list read `café.woff2` back as
+    // `cafÃ©.woff2` and deleted a path that does not exist.
+    `Get-Content -Encoding UTF8 -LiteralPath '${listPath.replaceAll("'", "''")}' | ` +
     "ForEach-Object { " +
     `[Microsoft.VisualBasic.FileIO.FileSystem]::${method}($_, ` +
     "[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs, " +
@@ -181,8 +184,12 @@ export function trashPlan(
 
 /** Runs one route, writing its list file first when it carries one. */
 async function runRoute(route: TrashRoute): Promise<void> {
+  // Only a path `trashPlan` made is swept: the seam takes a caller's route, and
+  // `path.dirname("paths.txt")` is `"."`.
   const temporary =
-    route.listPath === undefined ? undefined : path.dirname(route.listPath);
+    route.listPath !== undefined && path.isAbsolute(route.listPath)
+      ? path.dirname(route.listPath)
+      : undefined;
 
   try {
     if (
@@ -190,8 +197,23 @@ async function runRoute(route: TrashRoute): Promise<void> {
       route.listPath !== undefined &&
       route.list !== undefined
     ) {
-      await fs.mkdir(temporary, { recursive: true });
-      await fs.writeFile(route.listPath, `${route.list.join("\n")}\n`, "utf8");
+      try {
+        await fs.mkdir(temporary, { recursive: true });
+        await fs.writeFile(
+          route.listPath,
+          `${route.list.join("\n")}\n`,
+          "utf8",
+        );
+      } catch (error: unknown) {
+        // A list file this host could not write is not a missing command. The
+        // message carries no `code`, so the loop cannot read it as `ENOENT`
+        // and fall through to the next route.
+        throw new Error(
+          `The trash list file could not be written: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
     }
 
     await new Promise<void>((resolve, reject) => {

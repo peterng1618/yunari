@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   runTrashRoutes,
@@ -103,7 +106,7 @@ describe("trashPlan", () => {
     for (const arg of route?.args ?? []) {
       expect(arg.length).toBeLessThan(4_000);
     }
-    expect(script).toContain("Get-Content -LiteralPath");
+    expect(script).toContain("Get-Content -Encoding UTF8 -LiteralPath");
     expect(script).toContain(route?.listPath ?? "\u0000");
     for (const file of files) expect(script).not.toContain(file);
     expect(route?.list).toEqual(files);
@@ -138,6 +141,33 @@ describe("trashPlan", () => {
     ];
 
     await expect(runTrashRoutes(routes, "file")).resolves.toBeUndefined();
+  });
+
+  it("does not read a list-file write failure as a missing command", async () => {
+    // `TMP` naming something unwritable makes the write fail with `ENOENT`;
+    // falling through would answer "This PC has no trash command", which is a
+    // different, wrong sentence. The rewritten error carries no code.
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-list-"));
+    const blocker = path.join(directory, "blocker");
+    await fs.writeFile(blocker, "");
+
+    try {
+      const routes: readonly TrashRoute[] = [
+        {
+          command: "yunari-definitely-not-a-trash-command",
+          args: [],
+          list: ["/a"],
+          listPath: path.join(blocker, "paths.txt"),
+        },
+        { command: process.execPath, args: ["-e", ""] },
+      ];
+
+      await expect(runTrashRoutes(routes, "file")).rejects.toThrow(
+        "trash list file could not be written",
+      );
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("escapes an apostrophe in the path for PowerShell's single-quoted literal", () => {

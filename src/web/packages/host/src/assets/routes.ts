@@ -197,10 +197,12 @@ function stageRefusal(
 }
 
 /** What the host's filesystem treats as one staged name: Windows ignores
- *  trailing dots and spaces, so `foo.` and `foo` are the same file. */
+ *  trailing dots and spaces and compares case-insensitively. macOS is left
+ *  alone — APFS is usually case-insensitive, but a case-sensitive volume accepts
+ *  two genuinely distinct names and refusing one would be wrong. */
 function stagedNameKey(fileName: string): string {
   return process.platform === "win32"
-    ? fileName.replace(/[. ]+$/, "")
+    ? fileName.replace(/[. ]+$/, "").toLowerCase()
     : fileName;
 }
 

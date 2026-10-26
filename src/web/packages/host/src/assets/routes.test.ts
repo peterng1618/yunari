@@ -456,6 +456,39 @@ describe("the asset routes", () => {
       },
     );
 
+    it.runIf(process.platform === "win32")(
+      "treats a case-only difference as the same Windows name",
+      async () => {
+        // NTFS compares case-insensitively, so `A.woff2` and `a.woff2` are one
+        // file; the second write would silently replace the first.
+        const root = await stagingRoot();
+        const trashed: string[][] = [];
+        const base = await start({
+          stagingRoot: root,
+          trash: async (paths) => {
+            trashed.push([...paths]);
+          },
+        });
+
+        try {
+          const response = await fetch(`${base}/api/assets/trash`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: trashBody([
+              { name: "A.woff2", bytes: utf8("a") },
+              { name: "a.woff2", bytes: utf8("b") },
+            ]),
+          });
+
+          expect(response.status).toBe(400);
+          expect(trashed).toEqual([]);
+          expect(await fs.readdir(root)).toEqual([]);
+        } finally {
+          await fs.rm(root, { recursive: true, force: true });
+        }
+      },
+    );
+
     it("answers 400 for a name the platform cannot store", async () => {
       const root = await stagingRoot();
       const trashed: string[][] = [];
