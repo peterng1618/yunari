@@ -16,10 +16,11 @@
  * `aria-controls` the button rule skips, so neither word is owned by anything.
  * That gap is the row's, not this walk's.
  *
- * **What it deliberately does not read, and why.** Two owners of words are
+ * **What it deliberately does not read, and why.** Three owners of words are
  * carved out by name, because the words are theirs and not this table's:
- * `shellPalettes`' stored ids (`isStoredName`) and the shortcut reference's
- * action words (`isShortcutWord`). Paragraphs are not read at all: the
+ * `shellPalettes`' stored ids (`isStoredName`), the preview catalogue's derived
+ * lens ids (`isLensId`) and the shortcut reference's action words
+ * (`isShortcutWord`). Paragraphs are not read at all: the
  * inspector, the picker and the panes print data in paragraphs of their own —
  * a run's binding id, a colour's reading — which is the same carve-out the panel
  * net makes for a select's trigger, and the shell now carries none of its own.
@@ -43,6 +44,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { expect, it } from "vitest";
 import { ColourPicker } from "./components/ui/colour-picker.js";
 import type { ModalSettle } from "./components/ui/modal-host.js";
+import { activePreviewLenses } from "./display-lens.js";
 import type { EditorShellBridge } from "./editor-shell/bridge.js";
 import { CanvasContextMenu } from "./editor-shell/canvas-context-menu.js";
 import type {
@@ -90,7 +92,9 @@ it("leaves the React surfaces with no copy of their own", async () => {
   const { root, shell, destroy } = await mountLandedSurfaces();
   const owned = new Set(copy());
   expect(
-    spokenIn(root).filter((text) => !owned.has(text) && !isStoredName(text)),
+    spokenIn(root).filter(
+      (text) => !owned.has(text) && !isStoredName(text) && !isLensId(text),
+    ),
   ).toEqual([]);
   for (const surface of LANDED_SURFACES) {
     const found = root.querySelector(surface);
@@ -145,7 +149,10 @@ it("reads the opened menus, the Settings tabs and the canvas context menu", asyn
     expect(
       said.filter(
         (text) =>
-          !owned.has(text) && !isShortcutWord(text) && !isStoredName(text),
+          !owned.has(text) &&
+          !isShortcutWord(text) &&
+          !isStoredName(text) &&
+          !isLensId(text),
       ),
       tab,
     ).toEqual([]);
@@ -179,7 +186,9 @@ it("reads the opened menus, the Settings tabs and the canvas context menu", asyn
   const spoken = spokenIn(document.body);
   expect(spoken).not.toEqual([]);
   expect(
-    spoken.filter((text) => !owned.has(text) && !isStoredName(text)),
+    spoken.filter(
+      (text) => !owned.has(text) && !isStoredName(text) && !isLensId(text),
+    ),
   ).toEqual([]);
   await act(async () => menuRoot.unmount());
   document.body.replaceChildren();
@@ -210,7 +219,10 @@ it("reads the shortcut sheet, the publish popover and the two dialogs", async ()
     expect(
       said.filter(
         (text) =>
-          !owned.has(text) && !isStoredName(text) && !isShortcutWord(text),
+          !owned.has(text) &&
+          !isStoredName(text) &&
+          !isLensId(text) &&
+          !isShortcutWord(text),
       ),
       surface.name,
     ).toEqual([]);
@@ -335,7 +347,9 @@ it("reads the store mode's words, which the editor's walk never reached", async 
     const said = saidIn(withOne.region());
     expect(said, "the store mode said nothing at all").not.toEqual([]);
     expect(
-      said.filter((text) => !owned.has(text) && !isItemWord(text)),
+      said.filter(
+        (text) => !owned.has(text) && !isItemWord(text) && !isLensId(text),
+      ),
       "the store region",
     ).toEqual([]);
 
@@ -353,7 +367,9 @@ it("reads the store mode's words, which the editor's walk never reached", async 
       uiCopy.store.item.close,
     );
     expect(
-      modal.filter((text) => !owned.has(text) && !isItemWord(text)),
+      modal.filter(
+        (text) => !owned.has(text) && !isItemWord(text) && !isLensId(text),
+      ),
       "the item's own surface",
     ).toEqual([]);
 
@@ -374,7 +390,9 @@ it("reads the store mode's words, which the editor's walk never reached", async 
       "the Shape popover's group headings are not in the read",
     ).toContain(uiCopy.store.facets.shapeGroups.orientation);
     expect(
-      opened.filter((text) => !owned.has(text) && !isItemWord(text)),
+      opened.filter(
+        (text) => !owned.has(text) && !isItemWord(text) && !isLensId(text),
+      ),
       "the Shape popover",
     ).toEqual([]);
   } finally {
@@ -388,7 +406,9 @@ it("reads the store mode's words, which the editor's walk never reached", async 
     const said = saidIn(withNone.region());
     expect(said, "an empty library said nothing").not.toEqual([]);
     expect(
-      said.filter((text) => !owned.has(text) && !isItemWord(text)),
+      said.filter(
+        (text) => !owned.has(text) && !isItemWord(text) && !isLensId(text),
+      ),
       "the empty library",
     ).toEqual([]);
   } finally {
@@ -599,6 +619,13 @@ const LANDED_SURFACES = [
  *  the data the carve-out above deliberately leaves out of the table. */
 function isStoredName(text: string): boolean {
   return (shellPalettes as readonly string[]).includes(text);
+}
+
+/** A preview is named by the id its stored ratio derives — the author's list,
+ *  not this table's. The display menu and the chooser both print that id, and a
+ *  ratio added in Settings must need no copy change. */
+function isLensId(text: string): boolean {
+  return activePreviewLenses().some((lens) => lens.id === text);
 }
 
 /** A shortcut's action word is the reference table's. `SHORTCUT_LABELS` reuses

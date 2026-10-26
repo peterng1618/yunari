@@ -16,7 +16,6 @@ import {
 } from "@yunari/renderer-core";
 import type { VersionLevel } from "@yunari/theme-package";
 import type { LocalAssetReference } from "./asset-manager/index.js";
-import type { DisplayLensId } from "./display-lens.js";
 import type { AssignableGroup } from "./host-settings-mode/client.js";
 import type { ShortcutPrefix } from "./shortcut-manager/display.js";
 import type { InstallState } from "./store-mode/install-state.js";
@@ -740,15 +739,14 @@ export const uiCopy = {
   },
   /** The chooser `New` opens before the document exists. The first control is
    *  the display a theme is for, and its entries are the display switch's own
-   *  names — one vocabulary, one place it is worded. Behind **Custom** sit the
-   *  artboard panel's own three labels, so only the two words this surface adds
-   *  are here. */
+   *  names — one vocabulary, one place it is worded. The size controls beside it
+   *  are the artboard panel's own labels, so only this surface's words are
+   *  here. */
   newDocument: {
     chooseSize: "Choose an artboard size",
     /** The first question. Named as what it decides — where this theme will be
      *  seen — rather than by the aspect it derives. */
     display: "Display",
-    custom: "Custom size",
     create: "Create",
     cancel: "Cancel",
   },
@@ -1610,18 +1608,6 @@ export const uiCopy = {
     zoomOut: "Zoom out",
     zoomIn: "Zoom in",
     zoomToFit: "Zoom to fit",
-    /** One name per lens, keyed by `DisplayLensId` so a lens cannot be added
-     *  to the vocabulary without a label to offer it by. Each name is the
-     *  aspect it frames — the same word the id is, so a screen nobody has
-     *  heard of is still nameable. */
-    displays: {
-      "16:9": "16:9",
-      "19.5:9": "19.5:9",
-      "4:3": "4:3",
-      "9:16": "9:16",
-      "9:19.5": "9:19.5",
-      "3:4": "3:4",
-    } satisfies Record<DisplayLensId, string>,
   },
   /** Chart family labels, shared by the Add pane, the canvas context menu and
    *  the layer row's role. */

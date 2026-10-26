@@ -2708,7 +2708,11 @@ body,
     repeating-linear-gradient(
       45deg,
       var(--panel) 0 6px,
-      color-mix(in srgb, var(--panel) 78%, var(--bg)) 6px 12px
+      /* Mixed against **transparent**, not `--bg`: under the light palette
+         `--bg` is a gradient, and a gradient is not a colour `color-mix` can
+         take — the whole declaration became invalid and the stage painted
+         nothing. Transparency shows the layer below, whatever form it takes. */
+      color-mix(in srgb, var(--panel) 78%, transparent) 6px 12px
     ),
     var(--stage);
 }

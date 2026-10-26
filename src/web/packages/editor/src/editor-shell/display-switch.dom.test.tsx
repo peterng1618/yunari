@@ -3,7 +3,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ArtboardSize } from "../artboard-presets.js";
-import type { DisplayLensId } from "../display-lens.js";
+import {
+  DEFAULT_PREVIEW_RATIO_TOKENS,
+  setActivePreviewRatios,
+} from "../display-lens.js";
 import { uiCopy } from "../ui-copy.js";
 import type { ViewportManager } from "../viewport-manager/index.js";
 import { ZOOM_STEP } from "../viewport-manager/navigation.js";
@@ -23,10 +26,13 @@ afterEach(async () => {
     const root = mounted.pop();
     if (root !== undefined) await act(async () => root.unmount());
   }
+  // The catalogue is module state: a test that narrows it would otherwise hand
+  // the next test a menu holding one lens.
+  setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS);
 });
 
 function setup(
-  display: DisplayLensId | undefined = "19.5:9",
+  display: string | undefined = "19.5:9",
   artboard: ArtboardSize = { width: 2340, height: 1080 },
 ) {
   const showDisplay = vi.fn();
@@ -53,6 +59,7 @@ function setup(
     artboardScreenRect: () => ({ left: 0, top: 0, width: 0, height: 0 }),
     display: () => display,
     showDisplay,
+    displayShape: () => undefined,
     displayScreenRect: () => undefined,
     isFitted: () => isFitted,
     resize: vi.fn(),
@@ -87,7 +94,7 @@ function setup(
         for (const listener of listeners) listener();
       });
     },
-    setDisplay(value: DisplayLensId | undefined): Promise<void> {
+    setDisplay(value: string | undefined): Promise<void> {
       return act(async () => {
         display = value;
         for (const listener of listeners) listener();
@@ -143,6 +150,8 @@ it("keeps every choice the old control offered reachable, inside one view cluste
     "16:9",
     "19.5:9",
     "4:3",
+    "1:1",
+    "Circle",
     "9:16",
     "9:19.5",
     "3:4",
@@ -266,6 +275,8 @@ it("offers every display and Fit, and each is one click away", async () => {
     "16:9",
     "19.5:9",
     "4:3",
+    "1:1",
+    "Circle",
     "9:16",
     "9:19.5",
     "3:4",
@@ -401,6 +412,36 @@ it.each([
     );
   },
 );
+
+/** The menu is one catalogue, not a second copy of the defaults: a lens added
+ *  by the settings tab is offered, a lens removed is gone, and an empty list
+ *  offers Fit and nothing else — no group heading over no lenses. */
+it("offers the active catalogue, and Fit alone when it is empty", async () => {
+  setActivePreviewRatios(["1:1", "Circle"]);
+  const { render } = setup("1:1");
+  await render();
+
+  expect(menuLabels(), "the active catalogue, Fit first").toEqual([
+    "Fit",
+    "1:1",
+    "Circle",
+  ]);
+  expect(
+    groupLabels(),
+    "one landscape group, with the square and circle in it",
+  ).toEqual(["Landscape"]);
+
+  await act(async () => setActivePreviewRatios([]));
+  expect(menuLabels(), "an empty catalogue leaves Fit").toEqual(["Fit"]);
+  expect(groupLabels(), "and no empty group is headed").toEqual([]);
+});
+
+/** Every radio item's accessible name, in menu order. */
+function menuLabels(): string[] {
+  return [...document.querySelectorAll('[role="menuitemradio"]')].map(
+    (item) => item.getAttribute("aria-label") ?? "",
+  );
+}
 
 /** The menu's group headings, in the order they are painted. */
 function groupLabels(): string[] {

@@ -44,7 +44,7 @@ import { createClipboardManager } from "./clipboard-manager/index.js";
 import { applyEditorControls } from "./controls-manager/index.js";
 import { createCropManager } from "./crop-manager/index.js";
 import { createDeletionManager } from "./deletion-manager/index.js";
-import { resolveLens } from "./display-lens.js";
+import { lensBox, resolveLens } from "./display-lens.js";
 import type { EditorInteraction } from "./editor-interaction.js";
 import { createErrorManager } from "./error-manager/index.js";
 import { createGroupingManager } from "./grouping-manager/index.js";
@@ -651,9 +651,18 @@ export async function mountEditorShell({
       guide.style.height = `${board.height}px`;
       const id = editor.viewport.display();
       const lens = id === undefined ? undefined : resolveLens(id);
-      const boardAspect = currentArtboard.width / currentArtboard.height;
-      guide.hidden =
-        lens === undefined || Math.abs(lens.aspect - boardAspect) <= 1e-6;
+      // **A frame less than one artboard unit from the board is noise.** The
+      // starter is 1672 × 941 — 16:9 to two decimals, not to sixteen — so an
+      // exact aspect comparison drew the guide on the default view. One unit
+      // is the smallest authored distance, and a real mismatch (4:3, 19.5:9,
+      // a circle) is hundreds of units.
+      const box =
+        lens === undefined ? undefined : lensBox(lens, currentArtboard);
+      const coincident =
+        box !== undefined &&
+        Math.abs(box.width - currentArtboard.width) <= 1 &&
+        Math.abs(box.height - currentArtboard.height) <= 1;
+      guide.hidden = lens === undefined || coincident;
     };
     editor.viewport.onChange(placeScreen);
     placeScreen();

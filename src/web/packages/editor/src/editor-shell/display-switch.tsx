@@ -13,8 +13,9 @@ import {
 import { useControlTooltip } from "../components/ui/control-icon-button.js";
 import {
   type DisplayLens,
-  type DisplayLensId,
   displayLensGroups,
+  previewCatalogueKey,
+  subscribeLenses,
 } from "../display-lens.js";
 import { uiCopy } from "../ui-copy.js";
 import type { ViewportManager } from "../viewport-manager/index.js";
@@ -35,7 +36,7 @@ function useZoom(viewport: ViewportManager): number {
   return useSyncExternalStore(subscribe, () => viewport.zoom());
 }
 
-function useDisplay(viewport: ViewportManager): DisplayLensId | undefined {
+function useDisplay(viewport: ViewportManager): string | undefined {
   const subscribe = useCallback(
     (listener: () => void) => viewport.onChange(listener),
     [viewport],
@@ -70,6 +71,14 @@ function useArtboardOrientation(
   return useSyncExternalStore(subscribe, () => artboardOrientation(artboard()));
 }
 
+/** The catalogue is module state the settings tab writes; reading its revision
+ *  subscribes this control, and the groups are then read from the same live
+ *  list. A snapshot of the revision rather than the lenses keeps the identity
+ *  stable, which is what `useSyncExternalStore` requires. */
+function usePreviewCatalogue(): void {
+  useSyncExternalStore(subscribeLenses, previewCatalogueKey);
+}
+
 /** The radio value standing for Fit — the whole stage, with no display in it. */
 const NO_DISPLAY = "";
 
@@ -91,6 +100,7 @@ export function DisplaySwitch({
   const display = useDisplay(viewport);
   const isFitted = useIsFitted(viewport);
   const orientation = useArtboardOrientation(viewport, artboard);
+  usePreviewCatalogue();
   const groups = displayLensGroups(orientation);
   const percent = `${Math.round(zoom * 100)}%`;
 
@@ -149,9 +159,7 @@ export function DisplaySwitch({
               <Menu.RadioGroup
                 value={display ?? (isFitted ? NO_DISPLAY : NEITHER)}
                 onValueChange={(value: string) =>
-                  viewport.showDisplay(
-                    value === NO_DISPLAY ? undefined : (value as DisplayLensId),
-                  )
+                  viewport.showDisplay(value === NO_DISPLAY ? undefined : value)
                 }
               >
                 <Menu.RadioItem
@@ -258,20 +266,21 @@ function ViewButton({
   );
 }
 
-/** One preview, named by the aspect it frames. Extracted so the group's map and
- *  the tick's gutter comment are not read apart from each other. */
+/** One preview, named by the aspect it frames. **The id is the name**: the
+ *  catalogue is the author's, so a lens the vocabulary has never held still has
+ *  a name — the ratio it is — and there is no second table to drift from it. */
 function lensItem(lens: DisplayLens): React.JSX.Element {
   return (
     <Menu.RadioItem
       key={lens.id}
       value={lens.id}
       closeOnClick
-      aria-label={uiCopy.display.displays[lens.id]}
+      aria-label={lens.id}
     >
       <Menu.RadioItemIndicator className="editor-shell-menu-tick" keepMounted>
         {"•"}
       </Menu.RadioItemIndicator>
-      {uiCopy.display.displays[lens.id]}
+      {lens.id}
     </Menu.RadioItem>
   );
 }

@@ -6,10 +6,12 @@
  * The new-theme chooser, measured against the enumeration taken from the
  * imperative dialog before a line of it was rewritten.
  *
- * Every question the dialog asked is still asked — the display first, Custom
- * behind it, the free size for a dimension no preset names — and **no native
- * `select` survives**: the display and the three preset controls are
- * `ControlSelect`, whose list is a Base UI popup rather than the platform's.
+ * **The preview and the size are independent answers now.** The first control
+ * lists Fit and the active catalogue, and picking one changes only the preview;
+ * the ratio, orientation, resolution and free size stay on screen and stay the
+ * one answer to how the document is measured. **No native `select` survives**:
+ * every control is a `ControlSelect` or `ControlPair`, whose list is a Base UI
+ * popup rather than the platform's.
  *
  * The chooser is opened the way the session opens it — `chooseArtboardSize`,
  * which resolves with the answer or nothing for a dismissal — so an answer
@@ -18,6 +20,10 @@
 
 import { act } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  DEFAULT_PREVIEW_RATIO_TOKENS,
+  setActivePreviewRatios,
+} from "./display-lens.js";
 import {
   chooseArtboardSize,
   type NewDocumentAnswer,
@@ -51,6 +57,7 @@ beforeAll(() => {
 afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
+  setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS);
 });
 
 describe("the new-document chooser", () => {
@@ -75,25 +82,27 @@ describe("the new-document chooser", () => {
     }
   });
 
-  it("asks what the theme is for first, and offers Custom beside it", async () => {
-    // The finding the redesign exists for: three "Custom"s as the starting
-    // state asks an author to know a ratio before knowing what the thing is
-    // for. The first control is the question, and every display is on it —
-    // every ratio the presets name, each way up.
+  it("asks what the theme is for first, and offers Fit beside the catalogue", async () => {
+    // The first control is the question, and every display the catalogue holds
+    // is on it — every ratio, each way up — with Fit first because a theme may
+    // be made for no particular screen.
     void open();
 
     expect(await optionIds("display")).toEqual([
+      "",
       "16:9",
       "19.5:9",
       "4:3",
+      "1:1",
+      "Circle",
       "9:16",
       "9:19.5",
       "3:4",
-      "",
     ]);
-    // And Custom is not a corner: it is the last option of the same control,
-    // one click away from the six.
-    expect(await optionName("display", "")).toBe("Custom size");
+    expect(await optionName("display", ""), "Fit is the empty id").toBe("Fit");
+    // The size no longer hides behind a Custom *entry*: the technical controls
+    // are always on screen, so there is no second way to reach them.
+    expect(await optionName("display", "16:9")).toBe("16:9");
   });
 
   /** The headings the six previews are grouped under, in the order offered.
@@ -164,12 +173,9 @@ describe("the new-document chooser", () => {
   });
 
   it("opens a 4:3 document on the 4:3 preview, because there is one now", async () => {
-    // 4:3 used to be a shape the presets named and no lens framed, so this
-    // opened on Custom and answered `display: undefined`.
     const pending = open({ width: 1280, height: 960 });
 
     expect(read("display")).toBe("4:3");
-    expect(customQuestion().hidden).toBe(true);
     expect(read("ratio")).toBe("4:3");
     expect(read("orientation")).toBe("landscape");
 
@@ -183,14 +189,14 @@ describe("the new-document chooser", () => {
   });
 
   it.each([
-    ["19.5:9", { width: 2340, height: 1080 }],
-    ["9:19.5", { width: 1080, height: 2340 }],
-    ["16:9", { width: 1920, height: 1080 }],
-    ["4:3", { width: 1440, height: 1080 }],
-    ["9:16", { width: 1080, height: 1920 }],
-    ["3:4", { width: 1080, height: 1440 }],
+    ["19.5:9", { width: 1920, height: 1080 }],
+    ["9:19.5", { width: 1920, height: 1080 }],
+    ["4:3", { width: 1920, height: 1080 }],
+    ["9:16", { width: 1920, height: 1080 }],
+    ["3:4", { width: 1920, height: 1080 }],
+    ["Circle", { width: 1920, height: 1080 }],
   ] as const)(
-    "a new theme from %s arrives at those dimensions",
+    "picking %s changes the preview and leaves the size alone",
     async (lens, expected) => {
       const pending = open();
 
@@ -201,24 +207,22 @@ describe("the new-document chooser", () => {
     },
   );
 
-  it("keeps the technical question behind Custom, one click away", async () => {
+  it("keeps the technical question on screen, whichever preview is picked", async () => {
     void open();
 
     // A display answers what the theme is *for*; the ratio, orientation and
-    // resolution answer how it is measured.
-    expect(customQuestion().hidden).toBe(true);
+    // resolution answer how it is measured. The second is not a corner of the
+    // first any more — both are always there.
+    expect(customQuestion().hidden).toBe(false);
 
     await chooseIn("display", "");
     expect(customQuestion().hidden).toBe(false);
-    // The control took the answer, rather than only offering Custom and
-    // leaving the author to find it.
-    expect(read("display")).toBe("");
+    expect(read("display"), "the control took Fit").toBe("");
   });
 
-  it("keeps the technical controls naming the display's own shape", async () => {
-    // Custom revealed after a display must not open on controls that deny what
-    // is on screen: the display and the three selects are the same answer
-    // written twice, and `derive` is the one writer of the second.
+  it("leaves the technical controls naming the size, not the preview", async () => {
+    // The preview and the size are independent answers: picking a lens must not
+    // rewrite the size the author already has on screen.
     void open();
 
     await chooseIn("display", "9:19.5");
@@ -227,21 +231,15 @@ describe("the new-document chooser", () => {
       orientation: read("orientation"),
       resolution: read("resolution"),
     }).toEqual({
-      ratio: "19.5:9",
-      orientation: "portrait",
+      ratio: "16:9",
+      orientation: "landscape",
       resolution: "1080p",
     });
-
-    await chooseIn("display", "");
-    expect(customQuestion().hidden).toBe(false);
-    expect(read("ratio")).toBe("19.5:9");
-    expect(read("orientation")).toBe("portrait");
-    expect(size()).toContain("1080 × 2340");
+    expect(size()).toContain("1920 × 1080");
   });
 
   it("offers every size the dropdowns could express before", async () => {
     const pending = open();
-    await chooseIn("display", "");
 
     // The Custom reading is carried on each, disabled — asserted separately, so
     // here only the *choices* are listed.
@@ -269,16 +267,15 @@ describe("the new-document chooser", () => {
     create();
     await expect(pending).resolves.toEqual({
       size: { width: 2160, height: 4680 },
-      display: undefined,
+      display: "16:9",
     });
   });
 
-  it("has Custom accept a size no preset names", async () => {
+  it("accepts a size no preset names", async () => {
     // The chooser has never been able to do this — the three dropdowns only
     // name presets. A 4000 × 4000 theme has to be authorable from the question,
     // not only from the panel afterwards.
     const pending = open();
-    await chooseIn("display", "");
 
     await type("width", "4000");
     await type("height", "4000");
@@ -291,13 +288,12 @@ describe("the new-document chooser", () => {
     create();
     await expect(pending).resolves.toEqual({
       size: { width: 4000, height: 4000 },
-      display: undefined,
+      display: "16:9",
     });
   });
 
   it("refuses a size that is not a dimension, rather than creating one", async () => {
     const pending = open();
-    await chooseIn("display", "");
     await type("height", "2000");
 
     // `Number("")` is 0 and `Number("1600.5")` is 1600.5: a field that coerced
@@ -310,7 +306,7 @@ describe("the new-document chooser", () => {
     create();
     await expect(pending).resolves.toEqual({
       size: { width: 1920, height: 2000 },
-      display: undefined,
+      display: "16:9",
     });
   });
 
@@ -324,7 +320,6 @@ describe("the new-document chooser", () => {
       chooserErrors.push(String(event.message)),
     );
     const pending = open();
-    await chooseIn("display", "");
     await type("width", "3000");
     await type("height", "3000");
 
@@ -351,7 +346,7 @@ describe("the new-document chooser", () => {
     create();
     await expect(pending).resolves.toEqual({
       size: { width: 3000, height: 3000 },
-      display: undefined,
+      display: "16:9",
     });
   });
 
@@ -363,6 +358,34 @@ describe("the new-document chooser", () => {
     for (const marker of ["ratio", "orientation", "resolution"]) {
       expect(await optionDisabled(marker, ""), `${marker}'s Custom`).toBe(true);
     }
+  });
+
+  it("lists the active catalogue, and no Custom entry beside it", async () => {
+    setActivePreviewRatios(["1:1", "Circle"]);
+
+    void open();
+    expect(await optionIds("display")).toEqual(["", "1:1", "Circle"]);
+    expect(
+      await optionName("display", ""),
+      "Fit is the empty id rather than a Custom size",
+    ).toBe("Fit");
+    for (const id of await optionIds("display")) {
+      expect(await optionName("display", id)).not.toBe("Custom size");
+    }
+  });
+
+  it("opens on Fit when the catalogue holds no lens for the shape", async () => {
+    // A user-managed list cannot guarantee every artboard shape a preview, so
+    // the opening lens is optional rather than a throw.
+    setActivePreviewRatios(["1:1"]);
+    const pending = open({ width: 1280, height: 960 });
+
+    expect(read("display")).toBe("");
+    create();
+    await expect(pending).resolves.toEqual({
+      size: { width: 1440, height: 1080 },
+      display: undefined,
+    });
   });
 
   it("cancels to no choice and closes, so a New pressed by accident changes nothing", async () => {
