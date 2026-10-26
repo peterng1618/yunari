@@ -5458,6 +5458,43 @@ describe("Asset finder routes", () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it("mounts the trash route and stages through the injected seam", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-assets-"));
+    const staged: string[] = [];
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      assets: {
+        trash: async (paths) => {
+          staged.push(...paths);
+        },
+      },
+    });
+    try {
+      const res = await request(
+        hosted.server,
+        "POST",
+        "/api/assets/trash",
+        JSON.stringify({
+          files: [
+            {
+              name: "old.woff2",
+              bytes: Buffer.from("woff").toString("base64"),
+            },
+          ],
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.json()).toEqual({ ok: true });
+      expect(staged).toHaveLength(1);
+      expect(staged[0]?.endsWith("old.woff2")).toBe(true);
+    } finally {
+      await hosted.close();
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
 });
 
 /** The published key a group's choice rides under — `system-disk` →

@@ -1,9 +1,20 @@
+import fs from "node:fs/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { lucideSource } from "./icons/lucide.js";
 import { type AssetRouteOptions, handleAssetRoutes } from "./routes.js";
 import type { AssetSource } from "./source.js";
+
+// Small enough that the 413 case is a short body rather than a hundred
+// megabytes of base64. The route reads the store's own constant; this only
+// shrinks the boundary the case probes.
+vi.mock("../themes/store.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../themes/store.js")>()),
+  MAX_ASSET_BYTES: 8,
+}));
 
 async function readBody(request: http.IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
@@ -49,6 +60,23 @@ afterEach(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+function utf8(value: string): Uint8Array {
+  return new TextEncoder().encode(value);
+}
+
+/** The trash route's own body: each file's bytes as base64, as the editor sends
+ *  them. */
+function trashBody(
+  files: readonly { readonly name: string; readonly bytes: Uint8Array }[],
+): string {
+  return JSON.stringify({
+    files: files.map((file) => ({
+      name: file.name,
+      bytes: Buffer.from(file.bytes).toString("base64"),
+    })),
+  });
+}
 
 describe("the asset routes", () => {
   const colourSource: AssetSource = {
@@ -229,5 +257,156 @@ describe("the asset routes", () => {
 
     expect(response.status).toBe(503);
     expect(await response.text()).toContain("not enabled");
+  });
+
+  describe("the trash route", () => {
+    async function stagingRoot(): Promise<string> {
+      return await fs.mkdtemp(path.join(os.tmpdir(), "yunari-trash-test-"));
+    }
+
+    it("trashes a staged copy and removes it from the staging directory", async () => {
+      const root = await stagingRoot();
+      const staged: {
+        readonly paths: readonly string[];
+        readonly text: string;
+      }[] = [];
+      const base = await start({
+        stagingRoot: root,
+        trash: async (paths) => {
+          staged.push({
+            paths,
+            text: await fs.readFile(paths[0] ?? "", "utf8"),
+          });
+        },
+      });
+
+      try {
+        const response = await fetch(`${base}/api/assets/trash`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: trashBody([{ name: "assets/old.woff2", bytes: utf8("woff") }]),
+        });
+
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ ok: true });
+        // The staged name is a basename, and the bytes are the decoded body.
+        expect(path.basename(staged[0]?.paths[0] ?? "")).toBe("old.woff2");
+        expect(staged[0]?.text).toBe("woff");
+        // The staging directory is removed, so the copies are in the trash the
+        // OS moved them to rather than duplicated in temp for good.
+        expect(await fs.readdir(root)).toEqual([]);
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    });
+
+    it("aborts with the host's reason when the trash fails", async () => {
+      const root = await stagingRoot();
+      const base = await start({
+        stagingRoot: root,
+        trash: async () => {
+          throw new Error("gio: Operation not supported");
+        },
+      });
+
+      try {
+        const response = await fetch(`${base}/api/assets/trash`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: trashBody([{ name: "old.woff2", bytes: utf8("woff") }]),
+        });
+
+        expect(response.status).toBe(500);
+        expect(await response.text()).toBe("gio: Operation not supported");
+        // A refused trash still leaves no staged copy behind.
+        expect(await fs.readdir(root)).toEqual([]);
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    });
+
+    it("refuses a file over the per-asset cap before staging anything", async () => {
+      const root = await stagingRoot();
+      const trashed: string[][] = [];
+      const base = await start({
+        stagingRoot: root,
+        trash: async (paths) => {
+          trashed.push([...paths]);
+        },
+      });
+
+      try {
+        const response = await fetch(`${base}/api/assets/trash`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          // One byte past the cap this case mocks.
+          body: trashBody([{ name: "big.woff2", bytes: new Uint8Array(9) }]),
+        });
+
+        expect(response.status).toBe(413);
+        expect(trashed).toEqual([]);
+        expect(await fs.readdir(root)).toEqual([]);
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    });
+
+    it("refuses a body that is not a trash request", async () => {
+      const base = await start({ trash: async () => undefined });
+
+      const notFiles = await fetch(`${base}/api/assets/trash`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ files: "nope" }),
+      });
+      expect(notFiles.status).toBe(400);
+
+      const notJson = await fetch(`${base}/api/assets/trash`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{ not json",
+      });
+      expect(notJson.status).toBe(400);
+    });
+
+    it("refuses a file with no name or a payload that is not base64", async () => {
+      const base = await start({ trash: async () => undefined });
+
+      const named = await fetch(`${base}/api/assets/trash`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ files: [{ name: "", bytes: "AAAA" }] }),
+      });
+      expect(named.status).toBe(400);
+
+      const encoded = await fetch(`${base}/api/assets/trash`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          files: [{ name: "old.woff2", bytes: "not base64!" }],
+        }),
+      });
+      expect(encoded.status).toBe(400);
+    });
+
+    it("keeps the trash on this PC", async () => {
+      const base = await start({ trash: async () => undefined }, false);
+
+      expect((await fetch(`${base}/api/assets/trash`)).status).toBe(403);
+    });
+
+    it("keeps the trash off another page", async () => {
+      const base = await start({ trash: async () => undefined }, true, true);
+
+      expect((await fetch(`${base}/api/assets/trash`)).status).toBe(403);
+    });
+
+    it("owns the trash path on a host that serves no sources", async () => {
+      // A method refusal, not the 503 the sources check answers: the trash
+      // branch comes first, and a host with no finder sources can still trash.
+      const base = await start(undefined);
+
+      expect((await fetch(`${base}/api/assets/trash`)).status).toBe(405);
+    });
   });
 });

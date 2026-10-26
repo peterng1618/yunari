@@ -2523,12 +2523,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
-    // The asset finder's three routes. Mounted whenever the path names one, so
-    // a host that serves no source answers 503 rather than the static 404.
+    // The asset finder's four routes. Mounted whenever the path names one, so
+    // a host that serves no source answers 503 rather than the static 404 —
+    // except the trash, which needs no source.
     if (
       url.pathname === "/api/assets/sources" ||
       url.pathname === "/api/assets/search" ||
-      url.pathname === "/api/assets/bytes"
+      url.pathname === "/api/assets/bytes" ||
+      url.pathname === "/api/assets/trash"
     ) {
       await handleAssetRoutes({
         request,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type TrashRoute, trashPlan } from "./trash.js";
+import { type TrashRoute, type TrashTarget, trashPlan } from "./trash.js";
 
 /**
  * What each platform's trash is reached by, without running any of them. The
@@ -11,8 +11,9 @@ describe("trashPlan", () => {
   const routesOf = (
     platform: NodeJS.Platform,
     at = folder,
+    kind?: TrashTarget,
   ): readonly TrashRoute[] => {
-    const plan = trashPlan(platform, at);
+    const plan = trashPlan(platform, at, kind);
     if (!plan.ok) throw new Error(`${platform} has no trash route`);
     return plan.routes;
   };
@@ -36,6 +37,27 @@ describe("trashPlan", () => {
     expect(statements).toHaveLength(2);
     expect(statements[1]).toContain("DeleteDirectory(");
     expect(statements[1]).toContain(folder);
+  });
+
+  it("builds a file trash route per platform", () => {
+    // The folder route's `DeleteDirectory` is wrong for a file: the VisualBasic
+    // call names the kind it takes, and the other two platforms already take
+    // either. This is the one platform fact a file adds.
+    const [windows] = routesOf("win32", "C:/yunari/inter-400.woff2", "file");
+    const script = windows?.args.at(-1) ?? "";
+    expect(script).toContain("DeleteFile(");
+    expect(script).not.toContain("DeleteDirectory(");
+
+    const [mac] = routesOf("darwin", "/home/ada/inter-400.woff2", "file");
+    expect(mac?.args).toContain(
+      'tell application "Finder" to delete POSIX file "/home/ada/inter-400.woff2"',
+    );
+
+    const linuxRoutes = routesOf("linux", "/home/ada/inter-400.woff2", "file");
+    expect(linuxRoutes.map((route) => route.command)).toEqual([
+      "gio",
+      "trash-put",
+    ]);
   });
 
   it("escapes an apostrophe in the path for PowerShell's single-quoted literal", () => {

@@ -1,9 +1,15 @@
+import fs from "node:fs/promises";
 import type http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import {
   type AssetSourceListing,
   parseAssetSearchRequest,
 } from "@yunari/renderer-core";
+import { MAX_THEME_UPLOAD_BYTES } from "../server.js";
 import type { CredentialStore } from "../settings/credentials.js";
+import { MAX_ASSET_BYTES } from "../themes/store.js";
+import { moveFilesToTrash } from "../themes/trash.js";
 import { searchSources } from "./search.js";
 import type { AssetSource, SourceContext } from "./source.js";
 import { ASSET_SOURCES } from "./sources.js";
@@ -14,6 +20,12 @@ export interface AssetRouteOptions {
   readonly sources?: readonly AssetSource[];
   /** Supplied so a test can search without a network. */
   readonly fetch?: typeof fetch;
+  /** Where a trash request stages its copies. Defaults to `os.tmpdir()`; the
+   *  theme library's own directory is not a staging area. */
+  readonly stagingRoot?: string;
+  /** The platform trash. Defaults to the real one; supplied so a route test
+   *  never moves a copy in its own machine's trash. */
+  readonly trash?: (paths: readonly string[]) => Promise<void>;
 }
 
 export interface AssetRouteInput {
@@ -55,6 +67,177 @@ function text(
   response.end(message);
 }
 
+const TRASH_PATH = "/api/assets/trash";
+/** The only form a file's `bytes` may take. */
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+const NOT_A_TRASH_REQUEST = "That request body is not a trash request.";
+
+interface StagedFile {
+  readonly name: string;
+  readonly bytes: Uint8Array;
+}
+
+type TrashFiles =
+  | { readonly ok: true; readonly files: readonly StagedFile[] }
+  | {
+      readonly ok: false;
+      readonly status: 400 | 413;
+      readonly message: string;
+    };
+
+/**
+ * The files a trash request asked for, decoded and measured, or the refusal to
+ * answer.
+ *
+ * Every name is reduced to a basename: it is the staged copy's own name, never
+ * a path, so an absolute name or one climbing out cannot write anywhere this
+ * host did not make. Both caps are checked here, before the caller writes
+ * anything, so a refused body leaves no staged bytes behind.
+ */
+function trashFiles(body: unknown): TrashFiles {
+  const refuse = (status: 400 | 413, message: string): TrashFiles => ({
+    ok: false,
+    status,
+    message,
+  });
+
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return refuse(400, NOT_A_TRASH_REQUEST);
+  }
+
+  const files = (body as { files?: unknown }).files;
+  if (!Array.isArray(files)) {
+    return refuse(400, NOT_A_TRASH_REQUEST);
+  }
+
+  const staged: StagedFile[] = [];
+  const names = new Set<string>();
+
+  for (const entry of files) {
+    if (typeof entry !== "object" || entry === null) {
+      return refuse(400, NOT_A_TRASH_REQUEST);
+    }
+
+    const { name, bytes } = entry as { name?: unknown; bytes?: unknown };
+    if (typeof name !== "string" || typeof bytes !== "string") {
+      return refuse(400, NOT_A_TRASH_REQUEST);
+    }
+
+    const fileName = path.basename(name);
+    if (
+      fileName === "" ||
+      fileName === "." ||
+      fileName === ".." ||
+      fileName.includes("\0")
+    ) {
+      return refuse(400, `"${name}" is not a file name.`);
+    }
+
+    // Two copies sharing one staged name would overwrite each other, and the
+    // second would be trashed as the first's bytes.
+    if (names.has(fileName)) {
+      return refuse(400, `Two files are both named "${fileName}".`);
+    }
+
+    if (!BASE64.test(bytes) || bytes.length % 4 !== 0) {
+      return refuse(400, `"${fileName}" is not base64.`);
+    }
+
+    const decoded = Buffer.from(bytes, "base64");
+    if (decoded.byteLength > MAX_ASSET_BYTES) {
+      return refuse(
+        413,
+        `"${fileName}" is larger than this host will move to the trash.`,
+      );
+    }
+
+    names.add(fileName);
+    staged.push({ name: fileName, bytes: decoded });
+  }
+
+  return { ok: true, files: staged };
+}
+
+/**
+ * `POST /api/assets/trash`: the author asked for these copies to go to the
+ * platform's trash.
+ *
+ * A refusal is the platform's own sentence and a 500, because a refused trash
+ * is a refusal: nothing here falls back to a permanent delete. The staging
+ * directory is swept either way — a successful trash has already moved the
+ * copies out of it.
+ */
+async function moveStagedFiles(
+  input: AssetRouteInput,
+  assets: AssetRouteOptions | undefined,
+): Promise<void> {
+  const { request, response } = input;
+
+  if (request.method !== "POST") {
+    text(response, 405, "Only POST is supported.");
+    return;
+  }
+
+  let raw: string;
+  try {
+    raw = await input.readBody(request, MAX_THEME_UPLOAD_BYTES);
+  } catch (error: unknown) {
+    // The body's size is its own refusal: a body this host will not read is not
+    // a malformed one it read and rejected.
+    text(response, 413, error instanceof Error ? error.message : String(error));
+    return;
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(raw) as unknown;
+  } catch {
+    text(response, 400, "That request body is not JSON.");
+    return;
+  }
+
+  const parsed = trashFiles(body);
+  if (!parsed.ok) {
+    text(response, parsed.status, parsed.message);
+    return;
+  }
+
+  const root = assets?.stagingRoot ?? os.tmpdir();
+  const trash = assets?.trash ?? moveFilesToTrash;
+  let directory: string | undefined;
+  let refusal: string | undefined;
+
+  try {
+    directory = await fs.mkdtemp(path.join(root, "yunari-trash-"));
+    const paths: string[] = [];
+
+    for (const file of parsed.files) {
+      const target = path.join(directory, file.name);
+      await fs.writeFile(target, file.bytes);
+      paths.push(target);
+    }
+
+    await trash(paths);
+  } catch (error: unknown) {
+    refusal = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (directory !== undefined) {
+      await fs
+        .rm(directory, { recursive: true, force: true })
+        .catch(() => undefined);
+    }
+  }
+
+  // Answered only once the staging directory is swept: a caller that prunes
+  // declarations after a success must not race a cleanup still running.
+  if (refusal === undefined) {
+    json(response, 200, { ok: true });
+    return;
+  }
+
+  text(response, 500, refusal);
+}
+
 function listingOf(source: AssetSource): AssetSourceListing {
   return {
     id: source.id,
@@ -93,7 +276,7 @@ async function credentialReader(
 }
 
 /**
- * The asset finder's three routes.
+ * The asset finder's four routes.
  *
  * Mounted for every `/api/assets` path, whether or not this host serves
  * sources, so a build without them says so rather than falling through to the
@@ -111,7 +294,8 @@ export async function handleAssetRoutes(
   if (
     url.pathname !== sourcesPath &&
     url.pathname !== searchPath &&
-    url.pathname !== bytesPath
+    url.pathname !== bytesPath &&
+    url.pathname !== TRASH_PATH
   ) {
     return false;
   }
@@ -125,6 +309,14 @@ export async function handleAssetRoutes(
 
   if (input.foreignOrigin) {
     text(response, 403, "Asset sources are not available to another page.");
+    return true;
+  }
+
+  // Before the sources check: a host that serves no finder sources can still
+  // move bytes to the trash. Its only dependencies are a staging root and the
+  // platform's trash.
+  if (url.pathname === TRASH_PATH) {
+    await moveStagedFiles(input, assets);
     return true;
   }
 

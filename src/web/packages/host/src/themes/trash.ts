@@ -23,24 +23,31 @@ function appleScriptString(value: string): string {
   return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
+/** What a trash route is asked to take: a theme's folder, or one asset file. */
+export type TrashTarget = "folder" | "file";
+
 /**
  * Windows: the Shell's own recycle path, through the VisualBasic runtime that
  * ships in Windows PowerShell. `SHFileOperation` with `FOF_ALLOWUNDO` is the
  * real API and has no Node binding; this is what the `trash` package's own
  * 28 KB `windows-trash.exe` does. The enum is `RecycleOption` —
  * `RecycleBinOption` does not exist, and naming it fails at run time.
+ *
+ * The VisualBasic call names what it takes — `DeleteDirectory` or `DeleteFile` —
+ * so the kind is a platform fact, not a caller's convenience.
  */
-function windows(folder: string): TrashRoute {
+function windows(target: string, kind: TrashTarget): TrashRoute {
   // Two statements, not five: `Add-Type` and then ONE method call. The
   // separators belong between the statements, never inside the call's
   // argument list — a `;` after the opening paren made PowerShell read the
   // path as its own statement and fail to parse, so the Windows route had
   // never run. It was asserted as a string and never executed.
+  const method = kind === "file" ? "DeleteFile" : "DeleteDirectory";
   const call =
-    "[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(" +
+    `[Microsoft.VisualBasic.FileIO.FileSystem]::${method}(` +
     // A single-quoted PowerShell literal escapes by doubling, which is what
     // a `--themes-dir` holding an apostrophe needs.
-    `'${folder.replaceAll("'", "''")}'` +
+    `'${target.replaceAll("'", "''")}'` +
     ", [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs" +
     ", [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)";
 
@@ -62,26 +69,26 @@ function windows(folder: string): TrashRoute {
  * claim the delete makes. `NSFileManager` gives neither that nor a binary the
  * host is allowed to ship.
  */
-function macos(folder: string): TrashRoute {
+function macos(target: string): TrashRoute {
   return {
     command: "osascript",
     args: [
       "-e",
-      `tell application "Finder" to delete POSIX file ${appleScriptString(folder)}`,
+      `tell application "Finder" to delete POSIX file ${appleScriptString(target)}`,
     ],
   };
 }
 
 /** What each Linux route would run, in the order it would be tried. */
-function linux(folder: string): readonly TrashRoute[] {
+function linux(target: string): readonly TrashRoute[] {
   return [
     // `gio` is GIO's `g_file_trash`, the desktop's own implementation of the
     // freedesktop.org specification. It takes the path positionally.
-    { command: "gio", args: ["trash", folder] },
+    { command: "gio", args: ["trash", target] },
     // `trash-put` from trash-cli, and the only route on a machine with no
     // desktop session. It takes `--`, so a `--themes-dir` beginning with a dash
     // is a path rather than an option.
-    { command: "trash-put", args: ["--", folder] },
+    { command: "trash-put", args: ["--", target] },
   ];
 }
 
@@ -100,21 +107,26 @@ type TrashPlan =
  */
 export function trashPlan(
   platform: NodeJS.Platform,
-  folder: string,
+  target: string,
+  kind: TrashTarget = "folder",
 ): TrashPlan {
   switch (platform) {
     case "win32":
-      return { ok: true, routes: [windows(folder)] };
+      return { ok: true, routes: [windows(target, kind)] };
     case "darwin":
-      return { ok: true, routes: [macos(folder)] };
+      return { ok: true, routes: [macos(target)] };
     case "linux":
-      return { ok: true, routes: linux(folder) };
+      return { ok: true, routes: linux(target) };
     default:
       return {
         ok: false,
         reason:
-          `Moving a theme to the trash is not implemented for ${platform}, so ` +
-          "the theme was left alone rather than deleted permanently.",
+          (kind === "file"
+            ? "Moving an asset to the trash is not implemented for "
+            : "Moving a theme to the trash is not implemented for ") +
+          `${platform}, so the ${
+            kind === "file" ? "files were" : "theme was"
+          } left alone rather than deleted permanently.`,
       };
   }
 }
@@ -139,15 +151,15 @@ function run(command: string, args: readonly string[]): Promise<string> {
 }
 
 /**
- * Moves a folder to the trash, and throws when it cannot.
+ * Moves one target to the trash, and throws when it cannot.
  *
  * There is deliberately no fallback to a permanent delete. A refused delete is
  * recoverable and a missing feature is a small thing; a silent `fs.rm` of the
  * only copy of an author's theme is the defect this exists to prevent, and it
  * would come back on exactly the machines nobody tested.
  */
-export async function moveToTrash(folder: string): Promise<void> {
-  const plan = trashPlan(process.platform, folder);
+async function trashTarget(target: string, kind: TrashTarget): Promise<void> {
+  const plan = trashPlan(process.platform, target, kind);
   if (!plan.ok) {
     throw new Error(plan.reason);
   }
@@ -171,9 +183,23 @@ export async function moveToTrash(folder: string): Promise<void> {
   throw new Error(
     `This PC has no trash command (${plan.routes
       .map((route) => route.command)
-      .join(
-        ", ",
-      )}), so the theme was left alone rather than deleted permanently.`,
+      .join(", ")}), so the ${
+      kind === "file" ? "file was" : "theme was"
+    } left alone rather than deleted permanently.`,
     last === undefined ? undefined : { cause: last },
   );
+}
+
+/** Moves a theme's folder to the trash. */
+export async function moveToTrash(folder: string): Promise<void> {
+  await trashTarget(folder, "folder");
+}
+
+/** Moves files to the trash, one at a time, and throws on the first refusal. */
+export async function moveFilesToTrash(
+  paths: readonly string[],
+): Promise<void> {
+  for (const path of paths) {
+    await trashTarget(path, "file");
+  }
 }

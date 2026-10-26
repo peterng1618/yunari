@@ -236,7 +236,9 @@ type ScratchKind = "staging" | "retired";
  *  for the archive's envelope (95 MiB) so neither format accepts a theme the
  *  other would refuse. */
 const MAX_THEME_FILE_BYTES = 32 * 1024 * 1024;
-const MAX_ASSET_BYTES = 80 * 1024 * 1024;
+/** One asset's ceiling, and the trash route's own per-file cap: the bytes an
+ *  editor sends it are the bytes this store would have accepted. */
+export const MAX_ASSET_BYTES = 80 * 1024 * 1024;
 const MAX_ASSET_COUNT = 128;
 const MAX_TOTAL_ASSET_BYTES = 90 * 1024 * 1024;
 
