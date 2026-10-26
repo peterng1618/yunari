@@ -40,6 +40,9 @@ export const DEFAULT_PREVIEW_RATIO_TOKENS: readonly string[] = [
 
 export const PREVIEW_RATIO_STORAGE_KEY = "yunari.editor.preview-ratios";
 
+/** A plain decimal edge: digits, optionally a fractional part. */
+const DECIMAL_EDGE = /^\d+(?:\.\d+)?$/;
+
 /** A ratio's normalised id, or a refusal. Two integer edges are divided by
  *  their greatest common divisor (`32:18` is `16:9`); an edge with a decimal is
  *  kept as typed, because `19.5:9` is the spelling its author knows and
@@ -51,24 +54,30 @@ export function parsePreviewRatio(input: string): PreviewRatio {
   }
 
   const parts = text.split(":");
-  const [rawWidth, rawHeight] = parts;
-  if (parts.length !== 2 || rawWidth === undefined || rawHeight === undefined) {
+  if (parts.length !== 2) {
+    throw new RangeError(`a preview ratio is W:H, not ${input}`);
+  }
+  const rawWidth = parts[0]?.trim();
+  const rawHeight = parts[1]?.trim();
+  // A plain decimal on each side: `Number` alone would quietly read `0x10`,
+  // `1e2` and `+16` as ratios nobody typed.
+  if (
+    rawWidth === undefined ||
+    rawHeight === undefined ||
+    !DECIMAL_EDGE.test(rawWidth) ||
+    !DECIMAL_EDGE.test(rawHeight)
+  ) {
     throw new RangeError(`a preview ratio is W:H, not ${input}`);
   }
   const width = Number(rawWidth);
   const height = Number(rawHeight);
-  if (
-    !Number.isFinite(width) ||
-    !Number.isFinite(height) ||
-    width <= 0 ||
-    height <= 0
-  ) {
+  if (width <= 0 || height <= 0) {
     throw new RangeError(`preview ratio edges must be positive, not ${input}`);
   }
 
   if (!Number.isInteger(width) || !Number.isInteger(height)) {
     return {
-      id: `${rawWidth.trim()}:${rawHeight.trim()}`,
+      id: `${rawWidth}:${rawHeight}`,
       width,
       height,
       shape: "rect",
@@ -157,22 +166,39 @@ export interface DisplayLens {
   readonly shape: PreviewShape;
 }
 
-/** A ratio derives a landscape lens, and a wide one a portrait twin as well.
- *  A square or a circle is 1:1 and does not duplicate. */
+/** A token at least as wide as it is tall derives a landscape lens, plus a
+ *  portrait twin when it is strictly wider. A taller-than-wide token is already
+ *  a portrait spelling and derives only itself. Derived ids are deduped, first
+ *  occurrence wins, so `16:9` and `9:16` together emit `9:16` once. */
 export function previewLenses(
   tokens: readonly string[],
 ): readonly DisplayLens[] {
   const lenses: DisplayLens[] = [];
+  const seen = new Set<string>();
+  const add = (lens: DisplayLens): void => {
+    if (seen.has(lens.id)) return;
+    seen.add(lens.id);
+    lenses.push(lens);
+  };
   for (const token of tokens) {
     const ratio = parsePreviewRatio(token);
-    lenses.push({
+    if (ratio.width < ratio.height) {
+      add({
+        id: ratio.id,
+        aspect: ratio.width / ratio.height,
+        orientation: "portrait",
+        shape: ratio.shape,
+      });
+      continue;
+    }
+    add({
       id: ratio.id,
       aspect: ratio.width / ratio.height,
       orientation: "landscape",
       shape: ratio.shape,
     });
     if (ratio.width > ratio.height) {
-      lenses.push({
+      add({
         id: `${ratio.height}:${ratio.width}`,
         aspect: ratio.height / ratio.width,
         orientation: "portrait",

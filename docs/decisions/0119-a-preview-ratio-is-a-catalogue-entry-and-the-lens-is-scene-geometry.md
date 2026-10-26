@@ -103,5 +103,5 @@ The specific reason: the stored vocabulary can be closed and validated once on
 read, which is the only way a hand-edited or stale preference cannot frame the
 stage at a ratio nobody chose — and the display box must live in the same space
 as the artwork, or it cannot follow the camera. A preview ratio is camera state
-(DESIGN.md §67), never document content, so nothing here enters the theme
+(`docs/product/requirements.md` §67), never document content, so nothing here enters the theme
 envelope or authored history.

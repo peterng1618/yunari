@@ -51,9 +51,20 @@ describe("a preview ratio is a token in a closed vocabulary", () => {
     });
   });
 
-  it.each(["", "16", "16:0", "-1:9", "a:b", "1:2:3", "NaN:9", "16:9:extra"])(
-    "refuses %s",
-    (input) => expect(() => parsePreviewRatio(input)).toThrow(RangeError),
+  it.each([
+    "",
+    "16",
+    "16:0",
+    "-1:9",
+    "a:b",
+    "1:2:3",
+    "NaN:9",
+    "16:9:extra",
+    "0x10:9",
+    "1e2:9",
+    "+16:9",
+  ])("refuses %s", (input) =>
+    expect(() => parsePreviewRatio(input)).toThrow(RangeError),
   );
 
   it("drops invalid entries and keeps the first duplicate", () => {
@@ -91,6 +102,21 @@ describe("a ratio derives its lenses", () => {
     expect(previewLenses(["1:1", "Circle"]).map((lens) => lens.shape)).toEqual([
       "rect",
       "circle",
+    ]);
+  });
+
+  it("derives a portrait-only lens for a tall token", () => {
+    expect(previewLenses(["9:16"])).toEqual([
+      { id: "9:16", aspect: 9 / 16, orientation: "portrait", shape: "rect" },
+    ]);
+    setActivePreviewRatios(["9:16"]);
+    expect(defaultPreviewLens()).toBeUndefined();
+  });
+
+  it("emits a derived lens id once", () => {
+    expect(previewLenses(["16:9", "9:16"]).map((lens) => lens.id)).toEqual([
+      "16:9",
+      "9:16",
     ]);
   });
 });
