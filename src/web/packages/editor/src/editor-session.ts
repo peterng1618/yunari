@@ -592,6 +592,7 @@ export class EditorSession {
         ? {}
         : { themeLanguage: this.#document.envelope.metadata.themeLanguage }),
       descriptors,
+      artboardHeight: () => options.shell.editor.artboard().height,
     });
     // A pasted image must be a declared asset, not a blob URL: the half-only
     // path saves a document whose image is a handle into this session's memory

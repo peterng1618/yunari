@@ -835,7 +835,7 @@ describe("identity survives a round trip", () => {
     expect(shadow["offsetY"]).toBe(4);
   });
 
-  it("reapplies a persisted text run type preset", () => {
+  it("reapplies a persisted text run type token", () => {
     const text = new Textbox("CPU", { fontFamily: "Old", fontSize: 10 });
     text.set(YUNARI_TEXT_PROPERTY, {
       runs: [{ kind: "literal", text: "CPU", typeToken: "typeTokens.metric" }],
@@ -848,11 +848,12 @@ describe("identity survives a round trip", () => {
       },
     });
 
+    // The token names the face only; the object's authored size is the run's,
+    // so applying the token must not move it.
     expect(text).toMatchObject({
       fontFamily: "Inter",
-      fontSize: 32,
+      fontSize: 10,
       fontWeight: 700,
-      lineHeight: 1.1,
     });
   });
 

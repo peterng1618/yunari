@@ -31,6 +31,8 @@ export class LiveRuntime {
   #themeLanguage: string | undefined;
   /** Read per repaint: the catalogue replaces its list when a refresh lands. */
   #descriptors: (() => readonly SemanticKeyDescriptor[]) | undefined;
+  /** Read per repaint: the artboard can change while the session is open. */
+  #artboardHeight: (() => number) | undefined;
   /** Set by every input a repaint resolves against; cleared by the repaint. */
   #authoredDue = true;
   #lastSampleMs: number | undefined;
@@ -44,6 +46,8 @@ export class LiveRuntime {
     readonly themeLanguage?: string;
     /** The editor catalogue, so a custom descriptor's unitKind converts. */
     readonly descriptors?: () => readonly SemanticKeyDescriptor[];
+    /** The artboard height, read at paint time so a size change follows it. */
+    readonly artboardHeight?: () => number;
     /** Injectable so a test can hold the loop still; wall clock otherwise. */
     readonly now?: () => number;
   }) {
@@ -53,6 +57,7 @@ export class LiveRuntime {
     this.#globals = options.globals;
     this.#themeLanguage = options.themeLanguage;
     this.#descriptors = options.descriptors;
+    this.#artboardHeight = options.artboardHeight;
     this.#now = options.now ?? (() => Date.now());
   }
 
@@ -73,6 +78,9 @@ export class LiveRuntime {
         bindings: this.#bindings,
         transform: toAuthoringSegments,
         only: (candidate) => candidate === object,
+        ...(this.#artboardHeight === undefined
+          ? {}
+          : { artboardHeight: this.#artboardHeight() }),
       });
     } finally {
       // A throw here must not leave Fabric believing the object is not editing,
@@ -176,6 +184,9 @@ export class LiveRuntime {
     // puts the reading back when that edit ends.
     applyAuthoredText(this.#canvas, this.#globals, {
       bindings: this.#bindings,
+      ...(this.#artboardHeight === undefined
+        ? {}
+        : { artboardHeight: this.#artboardHeight() }),
     });
   }
 
@@ -188,6 +199,7 @@ export class LiveRuntime {
       undefined,
       this.#themeLanguage,
       this.#descriptors?.(),
+      this.#artboardHeight?.(),
     );
   }
 }

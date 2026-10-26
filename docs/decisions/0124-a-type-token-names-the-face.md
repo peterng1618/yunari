@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-27
 - **Status:** accepted
-- **Paths:** `src/web/packages/renderer-core/src/theme/`, `src/web/packages/editor/src/editor-session.ts`
+- **Paths:** `src/web/packages/renderer-core/src/theme/type-size.ts`, `src/web/packages/editor/src/editor-session.ts`
 
 Spec: [`docs/superpowers/specs/2026-10-27-type-token-model-design.md`](../superpowers/specs/2026-10-27-type-token-model-design.md).
 Plan: [`docs/superpowers/plans/2026-10-27-type-token-model.md`](../superpowers/plans/2026-10-27-type-token-model.md).

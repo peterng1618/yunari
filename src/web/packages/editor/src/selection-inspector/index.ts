@@ -397,7 +397,9 @@ export function createSelectionInspector(
             "width",
             dimension / scaleOf(object.scaleX),
           );
-          applyAuthoredText(editor.canvas, globals);
+          applyAuthoredText(editor.canvas, globals, {
+            artboardHeight: editor.artboard().height,
+          });
           break;
         }
         // Scale rather than resize: a chart's own width is its raster size.
@@ -417,7 +419,9 @@ export function createSelectionInspector(
             "height",
             dimension / scaleOf(object.scaleY),
           );
-          applyAuthoredText(editor.canvas, globals);
+          applyAuthoredText(editor.canvas, globals, {
+            artboardHeight: editor.artboard().height,
+          });
           break;
         }
         const next = dimension / (object.height <= 0 ? 1 : object.height);
