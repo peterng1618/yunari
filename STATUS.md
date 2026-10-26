@@ -1,41 +1,41 @@
 # Yunari status
 
 Updated: 2026-10-26
-Branch: `peterng1618/fix-font-trio`
+Branch: `main`
 
 ## Current objective
 
-Build the type-and-asset authoring rework: the [`spec`](docs/superpowers/specs/2026-10-25-fonts-and-assets-design.md) and [`plan`](docs/superpowers/plans/archive/2026-10-25-fonts-and-assets.md) add the Assets rail pane, host font sources, the finder preview, explicit preset actions and opt-in cleanup — all landed.
+Land the chart work and the type-and-asset rework: the chart [spec](docs/superpowers/specs/2026-10-25-chart-playback-and-segmented-fill-design.md) and the [fonts and assets spec](docs/superpowers/specs/2026-10-25-fonts-and-assets-design.md) are both merged into `main`, and the owner's tests are the remaining gate.
 
 ## Active work
 
-- **No plan is running:** `2026-10-25-fonts-and-assets` is complete and archived; `superpowers:finishing-a-development-branch` owns the merge and push, which need the owner.
-- **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 259 rows still `open`.
-- **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
-- **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
-- **System tray merged:** [`spec`](docs/superpowers/specs/2026-10-25-systray-design.md) and plan are landed; the rows, clicks and the staged Linux binary still need a live run.
-- **`vg-724` is open for art only:** naming for Steam, Epic, GOG, itch, Xbox and GDK Store packages landed; catalogue-matched non-Steam titles still report no artwork.
+- **Fonts and assets landed:** spec landed, plan [archived](docs/superpowers/plans/archive/2026-10-25-fonts-and-assets.md), and `vg-737`–`vg-745` file the evidence gaps it closed with.
+- **Chart spec complete:** plans 1 (playback), 2 (segmented fill) and 3 (radar and polar bar) are all landed.
+- **Wallpaper Engine export landed:** `docs/superpowers/plans/2026-10-26-wallpaper-engine-mobile-export.md`, decision [0118](docs/decisions/0118-a-scene-is-exported-by-driving-the-engine-ui.md) claims the UI-driving boundary.
+- **No plan is running:** the queue resumes at `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 260 rows still `open`.
+- **Live-line policy:** the delay is two host cadences at 30 fps and zero at 1 fps; the line never smooths — Interpolation offers Linear and Step — and a stall holds the last reading to the edge.
+- **Nothing is pushed:** each plan merged locally into `main`; the owner tests after the sequence.
 
 ## Last completed change
 
+- **Fonts and assets merged into `main`:** two conflicts resolved as unions — the branch's credits cap rides main's `ChartRefreshRate` import, and the icon map keeps both `Radar` and `RefreshCw`.
 - **The fonts-and-assets plan is closed:** the spec now states the two facts the code settled (no `subset` field, no catalogue description) and the plan moved to `archive/`.
 - **Nine ledger carries are filed** as `vg-737`–`vg-745`, each re-verified at HEAD before writing — two carried claims were stale and dropped.
-- **Register and docs:** `npm run backlog:check` exit 0, 745 items across both registers, all valid; spec header cites the archived plan.
-- **Evidence:** `npm run gate` exit 0 on the final tree — unit 414 files / 6074 tests (1 skipped), worker 12 files / 73.
-- **Captures:** three registered store captures recaptured and inspected; the eleven beside the drawings are stale and filed as `vg-745`.
+- **Register and docs:** `npm run backlog:check` exit 0, 746 items across both registers, all valid; the branch's ADR renumbered to `0119` because main had taken `0116`, and `vg-746` files the older collisions (`0100` three times, `0101` twice).
+- **Evidence:** `npm run gate` exit 0 on the merged tree — unit 414 files / 6074 tests (1 skipped), worker 12 files / 73.
 
 ## Next
 
-1. Run `superpowers:finishing-a-development-branch` on `peterng1618/fix-font-trio`: the merge into `develop` and any push are the owner's call.
-2. A live tray run by the owner: inspect the menu's rows, toggle Auto start, open each editor surface, start RTSS, and Exit.
-3. Run the staged Linux tray binary on a Linux desktop session; it was never executed here.
+1. Owner test of radar and polar bar in the editor, then phone performance and value-chart transition evidence.
+2. Owner test of one scene export end to end: press the button, save the package, import the video.
+3. Owner test of the fonts and assets rework: import a face, place a result, and clean up on save.
 4. Work `vg-724`'s art half and `vg-727`, `vg-728`, `vg-729`.
 5. Resume the backlog-drain plan at Phase 0 now that nothing else is running.
 
 ## Blockers / unverified
 
-- **The publish path is unverified end to end:** no workflow dispatch, no trusted-publisher run and no first publish, which stays a one-time local token publish; the release-token choice is open.
-- **No real N−1 migration is exercised:** at `2.0.0` the only older shape is the legacy integer; the dispatcher is a forward obligation.
-- **No live fullscreen game check:** window evidence is unit-tested through injected readings and a fixed foreground seam.
-- **Epic, itch, Xbox and Store readers are fixture-tested only**, and both live Steam reads stay fixture-tested.
+- **Owner tests pending:** the engine's Save click and the folder fallback are unverified live, phone performance is unmeasured, and no live fullscreen game check ran.
+- **Chart evidence is thin:** value-chart transitions are not browser-verified, and polar bar uses one low reading (`cpu.load` 9.28).
+- **The publish path is unverified end to end:** no workflow dispatch, no trusted-publisher run and no first publish, which stays a one-time local token publish.
+- **Readers are fixture-tested only:** Epic, itch, Xbox and Store, both live Steam reads, and no real N−1 migration is exercised.
 - **Two dependency deviations remain:** `ffmpeg-static` installs with scripts but no playback was exercised, and `npm ls` marks the overridden edges `invalid`.

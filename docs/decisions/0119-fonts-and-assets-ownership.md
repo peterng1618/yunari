@@ -1,4 +1,4 @@
-# 0116 — Font and media authoring is host-owned, and one rule owns cleanup
+# 0119 — Font and media authoring is host-owned, and one rule owns cleanup
 
 - **Date:** 2026-10-25
 - **Status:** accepted

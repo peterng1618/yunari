@@ -45,7 +45,7 @@ The spec implies these input classes; each line's test is added to the owning ta
 - Modify: `schema/theme-document.schema.json` (`$defs.fontAssetReference`)
 - Test: `packages/renderer-core/src/theme/fabric-envelope-schema-sync.test.ts`
 - Test: `packages/renderer-core/src/theme/fabric-envelope-validate.test.ts`
-- Create: `docs/decisions/0116-fonts-and-assets-ownership.md`
+- Create: `docs/decisions/0119-fonts-and-assets-ownership.md`
 
 **Interfaces:**
 - Produces: `FontAssetFormat = "woff2" | "woff" | "ttf" | "otf"`;
@@ -54,7 +54,7 @@ The spec implies these input classes; each line's test is added to the owning ta
 
 - [ ] **Step 1: Land the decision note**
 
-Write `docs/decisions/0116-fonts-and-assets-ownership.md` claiming
+Write `docs/decisions/0119-fonts-and-assets-ownership.md` claiming
 `src/web/packages/renderer-core/src/theme/`, `src/web/packages/host/src/server.ts`,
 `src/web/packages/editor/src/editor-shell/shell-layout.tsx`,
 `src/web/packages/editor/src/editor-session.ts`,
@@ -115,7 +115,7 @@ Run the same command. Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add docs/decisions/0116-fonts-and-assets-ownership.md \
+git add docs/decisions/0119-fonts-and-assets-ownership.md \
   packages/renderer-core/src/theme/document.ts \
   packages/renderer-core/src/theme/fabric-envelope-validate.ts \
   packages/renderer-core/src/theme/fabric-envelope-schema-sync.test.ts \
