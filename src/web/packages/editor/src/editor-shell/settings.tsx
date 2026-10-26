@@ -1,7 +1,7 @@
 import { RadioGroup } from "@base-ui/react/radio-group";
 import { Tabs } from "@base-ui/react/tabs";
 import { SUPPORTED_SCHEMA_VERSION } from "@yunari/renderer-core";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   type CredentialResult,
   type CredentialRow,
@@ -11,17 +11,34 @@ import {
   verifyCredential,
 } from "../asset-finder/credentials-client.js";
 import { ControlChoiceRow } from "../components/ui/control-choice-row.js";
+import { ControlIconButton } from "../components/ui/control-icon-button.js";
+import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlToggle } from "../components/ui/control-toggle.js";
 import { Dialog } from "../components/ui/dialog.js";
+import {
+  activePreviewRatioTokens,
+  clearPreviewRatioTokens,
+  DEFAULT_PREVIEW_RATIO_TOKENS,
+  type PreviewRatio,
+  type PreviewShape,
+  parsePreviewRatio,
+  previewCatalogueKey,
+  previewLenses,
+  setActivePreviewRatios,
+  subscribeLenses,
+  writePreviewRatioTokens,
+} from "../display-lens.js";
 import type { ShortcutOverrides } from "../shortcut-manager/bindings.js";
 import type { ProductShortcutId } from "../shortcut-manager/index.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   CONNECTIONS_GLYPH,
+  FIT_GLYPH,
   Glyph,
   INFO_GLYPH,
   KEYBOARD_GLYPH,
   type LucideIcon,
+  MINUS_GLYPH,
   PALETTE_GLYPH,
 } from "./icons.js";
 import {
@@ -39,10 +56,16 @@ import { SettingsKeyboard } from "./settings-keyboard.js";
 /** The settings tabs, in the order the column draws them. One owner of "which
  *  tabs there are": the column and the panels both read it, so a tab cannot
  *  appear with a body and no word, or the reverse. */
-export type SettingsTab = "appearance" | "keyboard" | "connections" | "about";
+export type SettingsTab =
+  | "appearance"
+  | "previews"
+  | "keyboard"
+  | "connections"
+  | "about";
 
 const SETTINGS_TABS: readonly SettingsTab[] = [
   "appearance",
+  "previews",
   "keyboard",
   "connections",
   "about",
@@ -56,6 +79,8 @@ const SETTINGS_TABS: readonly SettingsTab[] = [
  *  word stays beside the glyph, so the tab's accessible name is the label. */
 const SETTINGS_TAB_GLYPHS: Readonly<Record<SettingsTab, LucideIcon>> = {
   appearance: PALETTE_GLYPH,
+  // The display menu's own frame mark: the tab manages what that menu offers.
+  previews: FIT_GLYPH,
   keyboard: KEYBOARD_GLYPH,
   connections: CONNECTIONS_GLYPH,
   about: INFO_GLYPH,
@@ -232,6 +257,180 @@ function AppearanceTab({
         />
       </div>
     </>
+  );
+}
+
+/** §7's Previews tab: the author-managed catalogue the display menu lists.
+ *
+ *  **One row per stored token**, showing the lens ids that token derives — a
+ *  row of `16:9` offers `16:9` and `9:16`, and Remove removes the token, not
+ *  one of the two. The duplicate check is the same rule from the other side: it
+ *  compares the derived lens count, so a typed `9:16` is refused where `16:9`
+ *  already carries it. Deriving the twin rule here instead would be a second
+ *  owner of it, and would drift from `previewLenses`.
+ *
+ *  The tab writes storage and the module's live list together, exactly like the
+ *  Appearance tab: the display menu and the viewport read the module state, and
+ *  a tab that wrote only storage would print a list nothing else had. */
+function PreviewsTab({
+  storage,
+}: {
+  /** `undefined` where the browser refuses local storage; the list then holds
+   *  for the session rather than refusing to be edited. */
+  readonly storage: Storage | undefined;
+}): React.JSX.Element {
+  // The catalogue's revision, so a change from anywhere — this tab, another
+  // window, a later surface — re-renders the list from the one module state.
+  useSyncExternalStore(subscribeLenses, previewCatalogueKey);
+  const tokens = activePreviewRatioTokens();
+  const [shape, setShape] = useState<PreviewShape>("rect");
+  const [draft, setDraft] = useState("");
+  /** Why the last Add did nothing, as §9 words it. `undefined` is "no refusal"
+   *  and renders nothing — never an empty line standing in for one. */
+  const [reason, setReason] = useState<string | undefined>(undefined);
+
+  /** Storage first, then the live list, as the Appearance tab writes its
+   *  choice: a write that failed still leaves the session's list changed. */
+  const commit = (next: readonly string[]): void => {
+    writePreviewRatioTokens(storage, next);
+    setActivePreviewRatios(next);
+  };
+
+  const add = (): void => {
+    let ratio: PreviewRatio;
+    try {
+      // A circle is 1:1 by construction, so its token is the word itself and
+      // the field is not rendered for it.
+      ratio = parsePreviewRatio(shape === "circle" ? "Circle" : draft);
+    } catch (error) {
+      // The parser's only refusal is a `RangeError`; anything else is a defect
+      // and belongs in the console rather than in the row.
+      if (!(error instanceof RangeError)) throw error;
+      setReason(uiCopy.settings.previewRatioInvalid);
+      return;
+    }
+    if (
+      previewLenses([...tokens, ratio.id]).length ===
+      previewLenses(tokens).length
+    ) {
+      setReason(uiCopy.settings.previewRatioDuplicate);
+      return;
+    }
+    setReason(undefined);
+    setDraft("");
+    commit([...tokens, ratio.id]);
+  };
+
+  const removeRatio = (id: string): void => {
+    setReason(undefined);
+    commit(tokens.filter((token) => parsePreviewRatio(token).id !== id));
+  };
+
+  const reset = (): void => {
+    // Removing the key is what returns the list to the defaults; the live list
+    // is set explicitly because the module never re-reads storage.
+    clearPreviewRatioTokens(storage);
+    setReason(undefined);
+    setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS);
+  };
+
+  const atDefaults =
+    tokens.length === DEFAULT_PREVIEW_RATIO_TOKENS.length &&
+    tokens.every(
+      (token, index) => token === DEFAULT_PREVIEW_RATIO_TOKENS[index],
+    );
+
+  return (
+    <div className="flex flex-col gap-[var(--space-8)]" data-yunari-previews="">
+      <h3>{uiCopy.settings.previewRatiosHeading}</h3>
+      <p className="text-sm text-muted">{uiCopy.settings.previewRatiosHint}</p>
+      {tokens.length === 0 ? (
+        <p className="text-sm text-muted">
+          {uiCopy.settings.previewRatiosEmpty}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-[var(--space-4)]">
+          {tokens.map((token) => {
+            const ratio = parsePreviewRatio(token);
+            return (
+              <div
+                key={token}
+                className="flex items-center gap-[var(--space-8)] rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-10)] py-[var(--space-4)]"
+                data-yunari-preview-ratio={token}
+              >
+                <span className="flex-1 font-mono text-sm">
+                  {previewLenses([token])
+                    .map((lens) => lens.id)
+                    .join(" ")}
+                </span>
+                <ControlIconButton
+                  label={uiCopy.settings.previewRatioRemove}
+                  data={{ "data-yunari-preview-ratio-remove": token }}
+                  onClick={() => removeRatio(ratio.id)}
+                >
+                  <Glyph icon={MINUS_GLYPH} size={14} />
+                </ControlIconButton>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <ControlSegmented
+        label={uiCopy.settings.previewRatioShape}
+        value={shape}
+        options={[
+          { id: "rect", name: uiCopy.settings.previewRatioRect },
+          { id: "circle", name: uiCopy.settings.previewRatioCircle },
+        ]}
+        data={{ "data-yunari-preview-ratio-shape": "" }}
+        onChange={(next) => {
+          setShape(next);
+          setReason(undefined);
+        }}
+      />
+      <div className="flex items-center gap-[var(--space-8)]">
+        {shape === "circle" ? null : (
+          <input
+            type="text"
+            aria-label={uiCopy.settings.previewRatioField}
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setReason(undefined);
+            }}
+            data-yunari-preview-ratio-input=""
+            className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-8)] py-[var(--space-6)] font-mono text-sm"
+          />
+        )}
+        <button
+          type="button"
+          onClick={add}
+          data-yunari-preview-ratio-add=""
+          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-4)] text-sm"
+        >
+          {uiCopy.settings.previewRatioAdd}
+        </button>
+        <button
+          type="button"
+          disabled={atDefaults}
+          onClick={reset}
+          data-yunari-preview-ratio-reset=""
+          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-4)] text-sm"
+        >
+          {uiCopy.settings.previewRatioReset}
+        </button>
+      </div>
+      {reason === undefined ? null : (
+        <p className="text-sm" data-yunari-preview-ratio-reason="">
+          {reason}
+        </p>
+      )}
+      {storage === undefined ? (
+        <p className="text-sm text-muted">
+          {uiCopy.settings.previewRatiosSessionOnly}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -552,6 +751,7 @@ export function Settings(props: {
                 onFollowing={onFollowing}
               />
             ) : null}
+            {tab === "previews" ? <PreviewsTab storage={storage} /> : null}
             {tab === "keyboard" ? (
               <SettingsKeyboard
                 storage={storage}

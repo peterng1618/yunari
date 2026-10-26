@@ -8,6 +8,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CredentialRow } from "../asset-finder/credentials-client.js";
 import {
+  DEFAULT_PREVIEW_RATIO_TOKENS,
+  PREVIEW_RATIO_STORAGE_KEY,
+  setActivePreviewRatios,
+} from "../display-lens.js";
+import {
   readShortcutOverrides,
   resolveShortcuts,
   type ShortcutOverrides,
@@ -328,6 +333,75 @@ async function openConnections(): Promise<void> {
   });
 }
 
+/** The Previews tab, opened by the word it prints. */
+async function openPreviews(): Promise<HTMLElement> {
+  await openTab(uiCopy.settings.previews);
+  const found = document.querySelector<HTMLElement>("[data-yunari-previews]");
+  if (found === null) throw new Error("no Previews tab.");
+  return found;
+}
+
+/** The tab's ratio rows, in the order they draw. */
+function rows(tab: HTMLElement): readonly HTMLElement[] {
+  return Array.from(
+    tab.querySelectorAll<HTMLElement>("[data-yunari-preview-ratio]"),
+  );
+}
+
+/** The shape segment, by the word it prints — the control's labels are the
+ *  options and the group's name is separate. */
+async function chooseShape(
+  tab: HTMLElement,
+  shape: "Rect" | "Circle",
+): Promise<void> {
+  const segment = Array.from(
+    tab.querySelectorAll<HTMLElement>('[role="group"] button'),
+  ).find((button) => button.textContent?.trim() === shape);
+  if (segment === undefined) throw new Error(`no ${shape} segment.`);
+  await press(segment);
+}
+
+async function typeRatio(tab: HTMLElement, value: string): Promise<void> {
+  const input = tab.querySelector<HTMLInputElement>(
+    "[data-yunari-preview-ratio-input]",
+  );
+  if (input === null) throw new Error("no ratio field.");
+  await typeInto(input, value);
+}
+
+async function pressAdd(tab: HTMLElement): Promise<void> {
+  const button = tab.querySelector<HTMLButtonElement>(
+    "[data-yunari-preview-ratio-add]",
+  );
+  if (button === null) throw new Error("no Add control.");
+  await press(button);
+}
+
+async function pressReset(tab: HTMLElement): Promise<void> {
+  const button = tab.querySelector<HTMLButtonElement>(
+    "[data-yunari-preview-ratio-reset]",
+  );
+  if (button === null) throw new Error("no Reset control.");
+  await press(button);
+}
+
+/** The reason the last Add did not happen, as the row renders it. */
+function reason(tab: HTMLElement): string {
+  return (
+    tab.querySelector<HTMLElement>("[data-yunari-preview-ratio-reason]")
+      ?.textContent ?? ""
+  );
+}
+
+/** One row's Remove control. */
+async function remove(row: HTMLElement): Promise<void> {
+  const button = row.querySelector<HTMLButtonElement>(
+    "[data-yunari-preview-ratio-remove]",
+  );
+  if (button === null) throw new Error("no Remove control in the row.");
+  await press(button);
+}
+
 /** One credential row, by the id it renders under. */
 function credentialRow(id: string): HTMLElement {
   const found = document.querySelector<HTMLElement>(
@@ -363,6 +437,9 @@ async function typeInto(input: HTMLInputElement, value: string): Promise<void> {
 
 beforeEach(() => {
   localStorage.clear();
+  // The catalogue is module state, and the tab reads it: a case that added a
+  // ratio must not hand its list to the next one.
+  setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS);
   document.documentElement.removeAttribute("data-shell-palette");
   credentials.listCredentials.mockReset();
   credentials.saveCredential.mockReset();
@@ -387,13 +464,14 @@ afterEach(() => {
 });
 
 describe("Settings", () => {
-  it("opens the settings modal from the gear, and offers exactly the four tabs the spec names", async () => {
+  it("opens the settings modal from the gear, and offers exactly the five tabs the spec names", async () => {
     const host = mount();
     await press(gear(host));
 
     expect(role("dialog")).not.toBeNull();
     expect(tabLabels()).toEqual([
       uiCopy.settings.appearance,
+      uiCopy.settings.previews,
       uiCopy.settings.keyboard,
       uiCopy.settings.connections,
       uiCopy.settings.about,
@@ -910,6 +988,162 @@ describe("About", () => {
       document.metadata.version,
     );
     bridge.destroy();
+  });
+});
+
+/** §7's Previews tab. The catalogue is the author's, and the tab is the only
+ *  surface that edits it: the list it prints is the derived lens ids, one row
+ *  per stored token, so a twin is offered by the row that owns it rather than
+ *  becoming a second, independently removable ratio. */
+describe("Previews", () => {
+  it("adds a rect ratio and offers both orientations", async () => {
+    const host = mount();
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    await chooseShape(tab, "Rect");
+    await typeRatio(tab, "21:9");
+    await pressAdd(tab);
+
+    expect(rows(tab).map((row) => row.textContent)).toEqual([
+      "16:9 9:16",
+      "19.5:9 9:19.5",
+      "4:3 3:4",
+      "1:1",
+      "Circle",
+      // `21:9` is normalised by the parser's GCD, so the row prints the ids
+      // the display menu will offer rather than the spelling that was typed.
+      "7:3 3:7",
+    ]);
+    // The stored token is the parser's normalised id, not the typed spelling.
+    expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toBe(
+      JSON.stringify([...DEFAULT_PREVIEW_RATIO_TOKENS, "7:3"]),
+    );
+  });
+
+  it("refuses a duplicate with a worded reason", async () => {
+    const host = mount();
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    await typeRatio(tab, "16:9");
+    await pressAdd(tab);
+
+    expect(reason(tab)).toBe(uiCopy.settings.previewRatioDuplicate);
+    expect(rows(tab)).toHaveLength(5);
+    expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toBeNull();
+  });
+
+  it("refuses a ratio whose derived lens the catalogue already frames", async () => {
+    // `16:9` derives `9:16` beside it, so typing `9:16` would add no lens the
+    // menu can offer. The duplicate test is the derived ids, not the typed id.
+    const host = mount();
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    await typeRatio(tab, "9:16");
+    await pressAdd(tab);
+
+    expect(reason(tab)).toBe(uiCopy.settings.previewRatioDuplicate);
+    expect(rows(tab)).toHaveLength(5);
+  });
+
+  it("refuses input that is not a ratio with a worded reason", async () => {
+    const host = mount();
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    await typeRatio(tab, "wide");
+    await pressAdd(tab);
+
+    expect(reason(tab)).toBe(uiCopy.settings.previewRatioInvalid);
+    expect(rows(tab)).toHaveLength(5);
+  });
+
+  it("removes the last ratio and says Fit remains", async () => {
+    const host = mount();
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    for (const row of rows(tab)) await remove(row);
+
+    expect(rows(tab)).toHaveLength(0);
+    expect(tab.textContent).toContain(uiCopy.settings.previewRatiosEmpty);
+    expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toBe(
+      JSON.stringify([]),
+    );
+  });
+
+  it("resets by removing the key, and is disabled until there is something to reset", async () => {
+    const host = mount();
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    const reset = (): HTMLButtonElement => {
+      const button = tab.querySelector<HTMLButtonElement>(
+        "[data-yunari-preview-ratio-reset]",
+      );
+      if (button === null) throw new Error("no Reset control.");
+      return button;
+    };
+    expect(reset().disabled, "the defaults are already the list").toBe(true);
+
+    await typeRatio(tab, "21:9");
+    await pressAdd(tab);
+    expect(reset().disabled).toBe(false);
+
+    await pressReset(tab);
+
+    expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toBeNull();
+    expect(rows(tab)).toHaveLength(5);
+    expect(reset().disabled).toBe(true);
+  });
+
+  it("keeps the list for the session, and says so, where the browser kept no store", async () => {
+    const host = mountWith(undefined);
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    expect(tab.textContent).toContain(uiCopy.settings.previewRatiosSessionOnly);
+
+    await typeRatio(tab, "21:9");
+    await pressAdd(tab);
+    expect(rows(tab)).toHaveLength(6);
+    expect(rows(tab)[5]?.textContent).toBe("7:3 3:7");
+
+    // Reset is the other storage branch: with no key to remove it must not
+    // throw, and the session list still returns to the defaults.
+    await pressReset(tab);
+    expect(rows(tab)).toHaveLength(5);
+    expect(localStorage.length).toBe(0);
+  });
+
+  it("adds a circle without asking for a ratio", async () => {
+    const host = mount();
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    await chooseShape(tab, "Circle");
+    expect(
+      tab.querySelector("[data-yunari-preview-ratio-input]"),
+      "a circle is 1:1 by construction, so the field is absent",
+    ).toBeNull();
+    // The defaults already carry a circle, so that add is the duplicate case.
+    await pressAdd(tab);
+    expect(reason(tab)).toBe(uiCopy.settings.previewRatioDuplicate);
+
+    const circle = rows(tab).find(
+      (row) => row.getAttribute("data-yunari-preview-ratio") === "Circle",
+    );
+    if (circle === undefined) throw new Error("no Circle row.");
+    await remove(circle);
+    expect(rows(tab)).toHaveLength(4);
+
+    await pressAdd(tab);
+    expect(rows(tab)[4]?.textContent).toBe("Circle");
+    // And adding it back twice is a duplicate again.
+    await pressAdd(tab);
+    expect(reason(tab)).toBe(uiCopy.settings.previewRatioDuplicate);
   });
 });
 

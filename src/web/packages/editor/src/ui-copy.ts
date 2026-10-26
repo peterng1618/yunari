@@ -122,6 +122,8 @@ export const uiCopy = {
   settings: {
     title: "Settings",
     appearance: "Appearance",
+    /** The author-managed preview ratios the display menu lists. */
+    previews: "Previews",
     keyboard: "Keyboard",
     connections: "Connections",
     about: "About",
@@ -165,6 +167,27 @@ export const uiCopy = {
         than leaving to be discovered. */
     followSystemSessionOnly:
       "This browser is not keeping editor settings, so the choice lasts until the editor is reloaded.",
+    /** §7's Previews tab. One row per stored token, showing the lens ids that
+     *  token derives; the add row's shape choice, field and action. */
+    previewRatiosHeading: "Preview ratios",
+    previewRatiosHint:
+      "The display menu offers each ratio below, in both orientations where it has two. Fit is always there.",
+    previewRatioShape: "Shape",
+    previewRatioRect: "Rect",
+    previewRatioCircle: "Circle",
+    previewRatioField: "W:H ratio",
+    previewRatioAdd: "Add",
+    previewRatioRemove: "Remove preview ratio",
+    previewRatioReset: "Reset",
+    /** §9: a refusal states its reason. `duplicate` is the derived lens ids,
+        not the typed text — a row of `16:9` already offers `9:16`. */
+    previewRatioDuplicate: "That ratio is already offered in the display menu.",
+    previewRatioInvalid:
+      "A preview ratio is two positive numbers with a colon, like 16:9.",
+    previewRatiosEmpty:
+      "No preview ratios left. The display menu offers Fit only until you add one.",
+    previewRatiosSessionOnly:
+      "This browser is not keeping editor settings, so the list lasts until the editor is reloaded.",
     /** §7's Keyboard tab: the reference with editing. One word for one act —
      *  the arm button's `aria-label` and its tooltip are this string (§6). */
     keyboardRebind: "Change chord",

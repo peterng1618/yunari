@@ -8,6 +8,10 @@ import { AssetFinder } from "../asset-finder/modal.js";
 import { CARD_LIBRARY } from "../card-library.js";
 import { hitTargetClasses } from "../components/ui/control-well.js";
 import {
+  readPreviewRatioTokens,
+  setActivePreviewRatios,
+} from "../display-lens.js";
+import {
   HostSettingsRegion,
   type HostStatusLine,
 } from "../host-settings-mode/region.js";
@@ -244,6 +248,10 @@ export function readStorage(): Storage | undefined {
 
 export function createShellLayout(root: HTMLElement): ShellLayout {
   const storage = readStorage();
+  // The preview catalogue is read once, here, beside the palette and shortcut
+  // reads: the camera opens on the author's list rather than on the defaults,
+  // and nothing after this re-reads storage — the settings tab writes both.
+  setActivePreviewRatios(readPreviewRatioTokens(storage));
   const initial = resolveShellPalette(
     storage === undefined ? undefined : readShellChoice(storage),
     prefersDarkAppearance(),

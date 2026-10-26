@@ -16,11 +16,11 @@ Land the preview-lens/stage and per-display shape/rotation work: [`spec A`](docs
 
 ## Last completed change
 
-- **Stage and letterbox split:** the stage paints the palette texture over `--stage`; the display screen carries the theme's artboard paint and its circle radius.
-- **Guide frame:** dashed `[data-yunari-theme-guide]` tracks `artboardScreenRect()`, hidden under Fit or when lens and board aspects match.
-- **Media follows the display box:** display-bounded media takes the display box and circular clip, falling back to the artboard before host layout.
-- **Verified:** focused DOM 489/489; biome and design-tokens exit 0; typecheck still red only in Task 4–5 surfaces.
-- **Browser proof owed:** Task 5 owns Playwright for stacking, letterbox colour, guide motion and circle radius.
+- **Previews settings tab:** a fifth tab between Appearance and Keyboard lists one row per stored ratio with its derived lens ids and a Remove control.
+- **Add and refuse:** Rect/Circle shape, a `W:H` field for Rect, GCD-normalised ids, duplicates checked by derived lens count; refusals come from `uiCopy`.
+- **Reset and session:** reset deletes the stored key and sets the defaults explicitly, disabled at defaults; a browser with no store keeps the list for the session.
+- **Boot load:** `createShellLayout` reads `yunari.editor.preview-ratios` once before any editor mounts; ADR-0119 now records that sentence.
+- **Verified:** focused settings DOM 32/32, related catalogue/shell files 114/114, biome exit 0; typecheck still red only in Task 5 menu/chooser surfaces.
 
 ## Next
 

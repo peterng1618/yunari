@@ -5,6 +5,7 @@
 - **Paths:** `src/web/packages/editor/src/display-lens.ts`,
   `src/web/packages/editor/src/viewport-manager/index.ts`,
   `src/web/packages/editor/src/editor-shell.ts`,
+  `src/web/packages/editor/src/editor-shell/shell-layout.tsx`,
   `src/web/packages/editor/src/editor-shell/editor-shell.css`
 
 ## The problem
@@ -98,6 +99,13 @@ persisted under `yunari.editor.preview-ratios` with absence meaning defaults
 `{ id, aspect, orientation, shape }`; `lensBox` returns the display box in
 **artboard units**, not host pixels, so the camera can transform it, and a
 circle lens sizes its disc to the artboard diagonal.
+
+The boot-time load lives in `createShellLayout`: it reads the stored tokens once
+beside the palette and shortcut reads and calls `setActivePreviewRatios` before
+any editor mounts, so the camera and the display menu open on the author's list
+rather than on the defaults until the first change. The settings tab writes
+storage and the same module state together; reset removes the key and sets the
+defaults explicitly, because the module never re-reads storage.
 
 The specific reason: the stored vocabulary can be closed and validated once on
 read, which is the only way a hand-edited or stale preference cannot frame the
