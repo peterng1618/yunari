@@ -585,16 +585,20 @@ describe("glass composition", () => {
       surface: { shape: "circle", box: disc },
     });
     const s = stage({ texture: false, backdrop: () => backdrop });
-    s.canvas.add(
-      panel({
-        left: 130,
-        top: 80,
-        width: 40,
-        height: 40,
-        fill: "transparent",
-        yunariGlass: { blurRadius: 0 },
-      }),
-    );
+    for (const [left, top] of [
+      [130, 80],
+      [128, 33],
+    ] as const)
+      s.canvas.add(
+        panel({
+          left,
+          top,
+          width: 40,
+          height: 40,
+          fill: "transparent",
+          yunariGlass: { blurRadius: 0 },
+        }),
+      );
     s.canvas.renderAll();
 
     // (140, 100) is 40px from the disc's centre: inside. (160, 100) is 60px:
@@ -604,6 +608,16 @@ describe("glass composition", () => {
     expect(inside[0], "inside the disc is the media").toBeGreaterThan(200);
     expect(outside[0], "outside it the DOM is black").toBeLessThan(60);
     expect(outside[1]).toBeLessThan(60);
+    // (148, 58) is inside the disc's bounding square (50..150) but 63.8px from
+    // the centre, so it is outside the disc and the display is black. On the
+    // horizontal axis the disc and the square's edge coincide, where a
+    // rectangular clip would pass; this probe is where an arc and a rect differ.
+    const corner = s.pixel(148, 58);
+    expect(
+      corner[0],
+      "the square's corner is still outside the disc",
+    ).toBeLessThan(60);
+    expect(corner[1]).toBeLessThan(60);
   });
 
   it("maps a theme-bounded device box by its mapped centre under a turned plane", () => {
