@@ -192,7 +192,7 @@
   - Picking an `.mpkg` calls `onImportVideo(file, true, …)` and never `manager.import`.
   - Picking a video calls `onImportVideo(file, false, …)`; picking a PNG still declares it directly.
   - The manual `Normalize video` button and `data-yunari-asset-normalize` selector are gone.
-  - `importPickedVideo(file, { package: true })` calls `/api/wallpaper-engine/mpkg` then the normalized-video route, declares one video asset, sets background media, and writes a credit `{ kind: "wallpaper", title, license: "unknown", changes }` with no source.
+  - `importPickedVideo(file, { package: true })` calls `/api/wallpaper-engine/mpkg` once (the host extracts and normalizes in that call), declares one video asset, sets background media, and writes a credit `{ kind: "wallpaper", title, license: "unknown", changes }` with no source.
   - `importPickedVideo(file, { package: false })` writes no credit.
 
 - [ ] **Step 3: Run the tests to verify they fail**
