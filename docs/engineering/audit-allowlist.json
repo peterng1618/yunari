@@ -2,25 +2,19 @@
   {
     "package": "node-forge",
     "advisory": "GHSA-86w9-cpqp-85rv",
-    "reason": "No patched release exists (affected <=1.4.0). The host generates and signs certificates with node-forge but never calls its verifier; every certificate it issues is verified with node:crypto's X509Certificate.verify() and by the browser that accepts the chain. ADR 0070 records the alternatives weighed.",
-    "reviewed": "2026-10-25"
+    "reason": "No patched release exists (affected <=1.4.0). packages/host/src/tls/authority.ts creates, signs and serialises certificates with node-forge's pki API; it never calls a node-forge verifier. Certificates are validated with node:crypto's X509Certificate.verify() in loadOrCreateAuthority and by the browser that accepts the chain. ADR 0070 records the alternatives weighed.",
+    "reviewed": "2026-10-26"
   },
   {
     "package": "zod",
     "advisory": "GHSA-mrhx-c7xc-m3w5",
-    "reason": "Dev-only: both paths are build/test tooling, not shipped runtime. @google/design.md 0.4.0 is the latest published linter and needs zod v3; @cloudflare/vitest-pool-workers 0.23.0 pins zod exactly inside its Worker toolchain. The override set deliberately covers undici and sharp only.",
-    "reviewed": "2026-10-25"
+    "reason": "The zod override lifts every copy to ^4.6.6 except @google/design.md's, so the only vulnerable copy left is the zod v3 that this dev-only linter requires. The store-worker's production zod resolves to 4.6.7, which is why npm audit --omit=dev reports node-forge alone.",
+    "reviewed": "2026-10-26"
   },
   {
     "package": "@google/design.md",
     "advisory": "zod",
-    "reason": "Dev-only linter at its latest published version (0.4.0); its zod v3 requirement has no patched release that also needs v4.",
-    "reviewed": "2026-10-25"
-  },
-  {
-    "package": "@cloudflare/vitest-pool-workers",
-    "advisory": "zod",
-    "reason": "Dev-only Worker test pool (0.23.0) pins zod exactly inside its toolchain; the latest pool still does, and the override set covers only undici and sharp.",
-    "reviewed": "2026-10-25"
+    "reason": "Dev-only linter at its latest published version (0.4.0); it declares zod ^3.24.0, so the legacy major cannot be lifted without breaking it. The override block scopes this exception by name rather than leaving all of zod at v3.",
+    "reviewed": "2026-10-26"
   }
 ]
