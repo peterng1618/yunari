@@ -102,16 +102,8 @@ export function WallpaperEngineBody(props: {
     });
   };
 
-  /** A refusal is said once on the status line; the card goes back to idle so
-   *  the author can try again (spec R2's failure row). */
-  const clearCard = (item: WallpaperEngineItem): void => {
-    setCards((current) => {
-      const next = new Map(current);
-      next.delete(item.workshopId);
-      return next;
-    });
-  };
-
+  /** A refusal stays on the card as its tooltip and on the status line; the
+   *  card is still pressable, so a retry runs the action again. */
   const setBackground = async (item: WallpaperEngineItem): Promise<void> => {
     setCard(item, "running");
     const outcome = await onSetBackground(item);
@@ -120,7 +112,7 @@ export function WallpaperEngineBody(props: {
       setStatus(copy.backgroundSet(item.title));
       return;
     }
-    clearCard(item);
+    setCard(item, "failed", outcome.message);
     setStatus(outcome.message);
   };
 
@@ -136,8 +128,9 @@ export function WallpaperEngineBody(props: {
       );
       return;
     }
-    clearCard(item);
-    setStatus(copy.projectFailed(project.reason));
+    const failure = copy.projectFailed(project.reason);
+    setCard(item, "failed", failure);
+    setStatus(failure);
   };
 
   const act = (item: WallpaperEngineItem): void => {

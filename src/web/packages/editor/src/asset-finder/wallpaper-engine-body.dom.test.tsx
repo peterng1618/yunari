@@ -253,16 +253,15 @@ it("converts a scene and reports the project on the status line", async () => {
   ).toContain(uiCopy.assets.wallpaperEngine.projectReady("201"));
 });
 
-it("returns a failed convert to idle and names the reason on the status line", async () => {
-  const rendered = await render({
-    ...idle(),
-    onConvert: vi.fn(
-      async (): Promise<StartProjectAnswer> => ({
-        ok: false,
-        reason: "no-install",
-      }),
-    ),
-  });
+it("holds a failed convert on the card, keeps it pressable, and says the reason", async () => {
+  const onConvert = vi.fn(
+    async (): Promise<StartProjectAnswer> => ({
+      ok: false,
+      reason: "no-install",
+    }),
+  );
+  const rendered = await render({ ...idle(), onConvert });
+  const failure = uiCopy.assets.wallpaperEngine.projectFailed("no-install");
 
   await act(async () => {
     actionOf(rendered, "201")?.click();
@@ -272,13 +271,21 @@ it("returns a failed convert to idle and names the reason on the status line", a
     await Promise.resolve();
   });
 
-  expect(actionOf(rendered, "201")?.getAttribute("aria-label")).toBe(
-    uiCopy.assets.wallpaperEngine.action.scene.idle,
-  );
+  expect(actionOf(rendered, "201")?.getAttribute("aria-label")).toBe(failure);
   const status = rendered.querySelector(
     "[data-yunari-wallpaper-engine-status]",
   )?.textContent;
-  expect(status).toContain("no-install");
+  expect(status).toContain(failure);
+
+  // The failure state stays pressable: a retry runs the same action again.
+  await act(async () => {
+    actionOf(rendered, "201")?.click();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(onConvert).toHaveBeenCalledTimes(2);
 });
 
 it("opens the guide with the convert use case and the export steps", async () => {
