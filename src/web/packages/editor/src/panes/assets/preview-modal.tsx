@@ -6,17 +6,15 @@ import {
   assetFileName,
   type LocalAssetReference,
 } from "../../asset-manager/index.js";
-import { Dialog } from "../../components/ui/dialog.js";
+import { ActionBox, Dialog } from "../../components/ui/dialog.js";
 import { type ModalSettle, openModal } from "../../components/ui/modal-host.js";
 import {
   DELETE_ITEM_GLYPH,
-  Glyph,
   KIND_GLYPHS,
   type LucideIcon,
   PLACE_ON_CANVAS_GLYPH,
   REPLACE_ASSET_GLYPH,
 } from "../../editor-shell/icons.js";
-import { destructiveMarker } from "../../object-actions.js";
 import { uiCopy } from "../../ui-copy.js";
 
 /**
@@ -404,23 +402,15 @@ function AssetPreviewModal({
 
           <div className="grid flex-none grid-cols-2 gap-[var(--space-6)] border-t border-edge px-[var(--space-16)] py-[var(--space-12)]">
             {actions.map((action) => (
-              <button
+              <ActionBox
                 key={action.id}
-                type="button"
-                data-yunari-asset-preview-action={action.id}
-                {...(action.id === "remove"
-                  ? destructiveMarker({ destructive: true })
-                  : {})}
+                data={{ "data-yunari-asset-preview-action": action.id }}
+                icon={action.icon}
+                label={action.label}
+                {...(action.primary ? { tone: "accent" as const } : {})}
+                {...(action.id === "remove" ? { destructive: true } : {})}
                 onClick={action.press}
-                className={`flex min-w-0 items-center justify-center gap-[var(--space-6)] rounded-[var(--radius-md)] border bg-panel-2 px-[var(--space-8)] py-[var(--space-6)] text-xs ${
-                  action.primary
-                    ? "border-accent text-accent"
-                    : "border-edge text-text"
-                }`}
-              >
-                <Glyph icon={action.icon} size={12} />
-                <span className="whitespace-nowrap">{action.label}</span>
-              </button>
+              />
             ))}
           </div>
         </div>

@@ -1,6 +1,11 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import type * as React from "react";
-import { CLOSE_GLYPH, Glyph } from "../../editor-shell/icons.js";
+import {
+  CLOSE_GLYPH,
+  Glyph,
+  type LucideIcon,
+} from "../../editor-shell/icons.js";
+import { destructiveMarker } from "../../object-actions.js";
 
 /** The one control treatment a dialog's own buttons share, in tokens.
  *
@@ -16,6 +21,62 @@ import { CLOSE_GLYPH, Glyph } from "../../editor-shell/icons.js";
  */
 export const ACTION_BUTTON =
   "rounded-sm border border-edge bg-panel-2 px-[var(--space-12)] py-[var(--space-6)] text-sm text-text enabled:hover:border-accent enabled:hover:text-accent disabled:text-faint";
+
+/**
+ * One command in a viewer's panel foot: a bordered box holding a 12px glyph and
+ * one word (`store-detail.html`, `assets-preview.html`).
+ *
+ * The store's item panel and the asset preview draw the same foot, so they draw
+ * this one control rather than two copies that drift. `tone` is the only
+ * difference they allow: `accent` for the preview's primary command. A
+ * destructive command carries §4's mark, which the shell paints `--hot` and
+ * refuses to paint on a disabled control. **No tone fills the box** — a filled
+ * one would make a single command the act, and the drawings ration the accent.
+ */
+export function ActionBox(props: {
+  readonly icon: LucideIcon;
+  readonly label: string;
+  readonly data?: Readonly<Record<`data-${string}`, string>>;
+  readonly id?: string;
+  readonly tone?: "plain" | "accent";
+  readonly destructive?: boolean;
+  readonly disabled?: boolean;
+  readonly describedById?: string;
+  readonly onClick: () => void;
+}): React.JSX.Element {
+  const {
+    icon,
+    label,
+    data,
+    id,
+    tone = "plain",
+    destructive,
+    disabled,
+  } = props;
+  return (
+    <button
+      {...data}
+      type="button"
+      {...(id === undefined ? {} : { id })}
+      {...(destructive === true
+        ? destructiveMarker({ destructive: true })
+        : {})}
+      disabled={disabled}
+      {...(props.describedById === undefined
+        ? {}
+        : { "aria-describedby": props.describedById })}
+      onClick={props.onClick}
+      className={`flex min-w-0 items-center justify-center gap-[var(--space-6)] rounded-[var(--radius-md)] border bg-panel-2 px-[var(--space-8)] py-[var(--space-6)] text-xs disabled:text-faint ${
+        tone === "accent"
+          ? "border-accent text-accent"
+          : "border-edge text-text"
+      }`}
+    >
+      <Glyph icon={icon} size={12} />
+      <span className="whitespace-nowrap">{label}</span>
+    </button>
+  );
+}
 
 /** shadcn's Dialog, hand-owned and reduced to what the one sheet needs.
  *

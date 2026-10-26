@@ -970,6 +970,16 @@ export const uiCopy = {
      *  and why `kind` is the seam"). */
     item: {
       close: "Close",
+      /** The four commands' short words, **for this surface only**: the panel
+       *  foot is four boxes a little over 100px wide, and the cell's long words
+       *  (`cell.actions`) do not fit (`store-detail.html`). Keyed by
+       *  `CellAction`, so an action added to the union fails to compile. */
+      actions: {
+        open: "Edit",
+        assign: "Assign",
+        export: "Export",
+        delete: "Delete",
+      } satisfies Record<CellAction, string>,
       /** The credit a remixed item carries. The name is the snapshot the
        *  document recorded, so the sentence is stable whether or not the parent
        *  is still in the index. */

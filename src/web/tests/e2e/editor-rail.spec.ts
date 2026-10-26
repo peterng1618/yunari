@@ -1561,14 +1561,16 @@ test("the store lists a library, opens an item, and comes back to the same page"
    * way and the surface is not left open for the next one.
    *
    * **The boxes are measured because the numbers are design language now**:
-   * `DESIGN.md` fixes the modal at 960 and its stage at 420, and a case that
-   * asserted only that two stages were equal would pass a 100px stage.
+   * `DESIGN.md` fixes the modal at 960 × 760, and the stage is the box's height
+   * less its border, so a case that asserted only that two stages were equal
+   * would pass a 100px stage.
    */
   const drawn = async (
     id: string,
   ): Promise<{
     readonly stage: number;
-    readonly box: number;
+    readonly width: number;
+    readonly height: number;
     readonly stamp: string;
     readonly picture: { readonly width: number; readonly height: number };
   }> => {
@@ -1593,7 +1595,8 @@ test("the store lists a library, opens an item, and comes back to the same page"
     }
     return {
       stage: box.height,
-      box: modal.width,
+      width: modal.width,
+      height: modal.height,
       stamp: stamp.trim(),
       picture: { width: picture.width, height: picture.height },
     };
@@ -1605,19 +1608,26 @@ test("the store lists a library, opens an item, and comes back to the same page"
   // uncropped.
   const landscape = await drawn("store-01");
   const portrait = await drawn("store-02");
-  const itemReading = `store-item box ${landscape.box}px stage landscape ${landscape.stage} portrait ${portrait.stage}; picture ${landscape.picture.width}x${landscape.picture.height} and ${portrait.picture.width}x${portrait.picture.height}; stamp "${landscape.stamp}"`;
+  const itemReading = `store-item box ${landscape.width}x${landscape.height}px stage landscape ${landscape.stage} portrait ${portrait.stage}; picture ${landscape.picture.width}x${landscape.picture.height} and ${portrait.picture.width}x${portrait.picture.height}; stamp "${landscape.stamp}"`;
   console.log(itemReading);
   testInfo.annotations.push({ type: "store-item", description: itemReading });
   expect(
     portrait.stage,
     `the stage follows the item instead of holding one height (${itemReading})`,
   ).toBe(landscape.stage);
+  // The box is 760 high unless the viewport caps it at the same 90vh the popup
+  // asks for, and the stage is the box's content height — the 1px border twice.
+  const viewportHeight = page.viewportSize()?.height ?? 0;
+  expect(
+    landscape.height,
+    `the modal is not the drawing's 760px (${itemReading})`,
+  ).toBe(Math.min(760, Math.round(viewportHeight * 0.9)));
   expect(
     landscape.stage,
-    `the stage is not the 420px DESIGN.md fixes (${itemReading})`,
-  ).toBe(420);
+    `the stage is not the box's own height (${itemReading})`,
+  ).toBe(landscape.height - 2);
   expect(
-    landscape.box,
+    landscape.width,
     `the modal is not the 960px DESIGN.md fixes (${itemReading})`,
   ).toBe(960);
   expect(
@@ -3450,8 +3460,8 @@ test("the store opens a library theme as the document, from the cell and its foo
   ).toBeVisible();
   await expect(
     page.locator("[data-yunari-store-item-action='open']"),
-    "the item's own surface does not print the open action's own word",
-  ).toHaveText(uiCopy.store.cell.actions.open);
+    "the item's own surface does not print the short word the drawing gives the open action",
+  ).toHaveText(uiCopy.store.item.actions.open);
   await page.locator("[data-yunari-store-item-close]").click();
   await expect(modal, "the item's own surface does not close").toBeHidden();
   expect(

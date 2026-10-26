@@ -5,8 +5,9 @@
  * **What this file owns.** The two claims the plan makes about the modal in
  * code — that the stage is one height for every item and the theme is contained
  * in it, and that the facts are pills in groups rather than a row per fact —
- * plus the caption line, the footer's four words, and the two of the four it
- * draws disabled because no phase owns them (R164).
+ * plus the 270px panel they moved into, the stage's size reading, the foot's
+ * four glyph+word boxes, and the two of them it draws disabled because no phase
+ * owns them (R164).
  *
  * **What it deliberately does not measure.** jsdom lays nothing out, so the
  * fixed stage is read off the declaration that fixes it and the picture's ratio
@@ -26,7 +27,7 @@ import { uiCopy } from "../ui-copy.js";
 import type { InstallControl } from "./install-item.js";
 import { DARK_GROUND, type FixtureTheme, fixtureItem } from "./item-fixture.js";
 import { ItemModal } from "./item-modal.js";
-import type { CatalogueFacts, StoreItem } from "./local-source.js";
+import type { CatalogueFacts, CellAction, StoreItem } from "./local-source.js";
 import type { SubmitControl } from "./use-submit.js";
 
 // Base UI's dialog needs three browser APIs jsdom has none of: floating-ui
@@ -224,15 +225,6 @@ function stage(): HTMLElement {
   );
 }
 
-function picture(): HTMLElement {
-  return must(
-    document.body.querySelector<HTMLElement>(
-      "[data-yunari-store-item-picture]",
-    ),
-    "picture",
-  );
-}
-
 /** The modal's own box, which is the width `DESIGN.md` fixes at 960. */
 function box(): HTMLElement {
   return must(
@@ -267,6 +259,13 @@ function dateLine(): string {
   return visibleText(caption());
 }
 
+/** The stage's corner reading, or the absence when the record has no size. */
+function stageCaption(): HTMLElement | null {
+  return document.body.querySelector<HTMLElement>(
+    "[data-yunari-store-item-caption]",
+  );
+}
+
 /** One group's eyebrow and its pills, as the words a reader sees. */
 function group(id: string): {
   readonly name: string | undefined;
@@ -289,52 +288,99 @@ function group(id: string): {
 }
 
 /**
- * The stage is one height whatever is in it, and the theme is contained in that
- * height rather than the stage being sized to the theme.
+ * The box is the drawing's 960 × 760 and the stage takes the box's height
+ * whatever the item is, so the modal does not change size as a person steps
+ * between items.
  *
- * **A stage sized to the item would make the modal change height as a person
- * steps between items**, which is the one thing a viewer must not do. jsdom
- * lays nothing out, so what is read is the pair of declarations that make it
- * true: the stage carries the same fixed height for both items and no ratio of
- * its own, and the ratio is the picture's. That the two really draw the same
- * height is measured in the browser.
+ * **A stage sized to the item would make the modal move**, which is the one
+ * thing a viewer must not do. jsdom lays nothing out, so what is read is the
+ * declarations that make it true: the box carries the height token, and the
+ * stage carries none of its own — it is the flex child that takes what the panel
+ * leaves. That the two really draw the same height, and that the picture keeps
+ * its own ratio inside, is measured in the browser case.
  *
- * **The two numbers are pinned, not the shape of a class.** `DESIGN.md` says
- * the modal is 960px and its stage 420px because the drawing fixes them, and a
- * case that accepted `h-<any>px` would pass a 100px stage — the fix round's own
- * finding. The measured boxes are asserted in the browser case beside this one.
+ * **The numbers are pinned, not the shape of a class.** `DESIGN.md` fixes the
+ * modal at 960 and its height at the drawing's 760 because a case that accepted
+ * `h-<any>` would pass a 100px stage.
  */
-it("contains the theme in a fixed stage rather than sizing to its ratio", async () => {
+it("keeps the 960px box and the stage's one height", async () => {
   await mount(modal(LANDSCAPE));
-  const landscape = {
-    box: box().className,
-    stage: stage().className,
-    ratio: picture().style.aspectRatio,
-  };
+  const landscape = { box: box().className, stage: stage().className };
 
   await mount(modal(PORTRAIT));
-  const portrait = {
-    box: box().className,
-    stage: stage().className,
-    ratio: picture().style.aspectRatio,
-  };
+  const portrait = { box: box().className, stage: stage().className };
 
-  expect(
-    landscape.stage,
-    "the stage is not a fixed height, so it would follow the theme",
-  ).toBe(portrait.stage);
-  expect(
-    landscape.stage,
-    "the stage is not the 420px DESIGN.md fixes",
-  ).toContain("h-[420px]");
   expect(landscape.box, "the modal is not the 960px DESIGN.md fixes").toContain(
     "w-[960px]",
   );
-  expect(landscape.box, "the modal box moves with the item").toBe(portrait.box);
   expect(
-    [landscape.ratio, portrait.ratio],
-    "the picture does not carry the theme's own ratio",
-  ).toEqual(["1920 / 1080", "1080 / 1920"]);
+    landscape.box,
+    "the modal does not take the drawing's 760px height",
+  ).toContain("h-[var(--store-item-height)]");
+  expect(
+    landscape.stage,
+    "the stage sets a height of its own instead of taking the box's",
+  ).not.toMatch(/(?:^|\s)h-/);
+  expect(landscape.stage, "the stage is not the same for both items").toBe(
+    portrait.stage,
+  );
+  expect(landscape.box, "the modal box moves with the item").toBe(portrait.box);
+});
+
+/**
+ * The facts and the commands live in a 270px right panel, not in a band under
+ * the stage: the name, the groups and the actions are all its descendants, and
+ * it is the stage's sibling in the box.
+ */
+it("draws a 270px right panel and no caption band", async () => {
+  await mount(modal(LANDSCAPE));
+
+  const panel = must(
+    document.body.querySelector<HTMLElement>("[data-yunari-store-item-panel]"),
+    "right panel",
+  );
+  // jsdom computes no width; the class carries the drawing's 270px token.
+  expect(panel.className).toContain("w-[var(--store-item-panel-width)]");
+  expect(stage().nextElementSibling, "the panel is not beside the stage").toBe(
+    panel,
+  );
+  for (const selector of [
+    "[data-yunari-store-item-name]",
+    '[data-yunari-store-item-group="reads"]',
+    "[data-yunari-store-item-date]",
+    '[data-yunari-store-item-action="delete"]',
+    "[data-yunari-store-item-close]",
+  ]) {
+    expect(
+      panel.querySelector(selector),
+      `${selector} stayed outside the panel`,
+    ).not.toBeNull();
+  }
+});
+
+/**
+ * The stage's corner prints the size the theme is drawn at and the fit verb —
+ * `1920 × 1080 · fit`, a reading rather than a sentence. A record without a
+ * readable size draws **no caption at all**: `0 × 0` would be a measurement of
+ * nothing, not a reading.
+ */
+it("reads the stage's size and fit, and draws no caption without a size", async () => {
+  await mount(modal(LANDSCAPE));
+  expect(
+    must(stageCaption(), "stage caption").textContent?.trim(),
+    "the stage does not read the theme's own size and the fit verb",
+  ).toBe(
+    `1920 × 1080${uiCopy.store.readingSeparator}${uiCopy.assets.preview.fit}`,
+  );
+
+  const item = fixtureItem(LANDSCAPE);
+  await mount(
+    modalFor({ ...item, facets: { ...item.facets, width: 0, height: 0 } }),
+  );
+  expect(
+    stageCaption(),
+    "an unreadable size drew a caption of its own",
+  ).toBeNull();
 });
 
 /**
@@ -448,35 +494,34 @@ it("draws no Style group for a theme that declares no tags", async () => {
 });
 
 /**
- * The caption is one line — the name, the author, the kind, the version and the
- * change date — and the actions are written in words, in the drawing's own
- * order.
+ * The panel's head names the item and says what it is, and the foot writes its
+ * actions in the drawing's short words, in its own order.
  *
  * The kind is a badge rather than a title bar's word: what a kind is called is
  * `uiCopy.store.cell.kinds`, and a kind this build does not know prints its own
  * identifier rather than a name nobody chose. The version and the date are one
  * reading pair, `1.4.0 · 2026-10-14`, with the separator between them.
  */
-it("names the item on one caption line and writes its actions in words", async () => {
+it("names the item in the panel and writes its actions in the short words", async () => {
   await mount(modal(LANDSCAPE));
 
   expect(
     document.body
       .querySelector("[data-yunari-store-item-name]")
       ?.textContent?.trim(),
-    "the caption does not name the item",
+    "the panel does not name the item",
   ).toBe("Kitchen strip");
   expect(
     document.body
       .querySelector("[data-yunari-store-item-kind]")
       ?.textContent?.trim(),
-    "the caption does not say what kind of thing this is",
+    "the panel does not say what kind of thing this is",
   ).toBe(uiCopy.store.cell.kinds[DASHBOARD_THEME_KIND]);
   expect(
     document.body
       .querySelector("[data-yunari-store-item-date]")
       ?.textContent?.trim(),
-    "the caption does not pair the version with the date",
+    "the panel does not pair the version with the date",
   ).toBe(`1.4.0${uiCopy.store.readingSeparator}2026-10-14`);
 
   const actions = Array.from(
@@ -486,13 +531,60 @@ it("names the item on one caption line and writes its actions in words", async (
   );
   expect(
     actions.map((action) => action.textContent?.trim()),
-    "the actions are not written in the drawing's own order",
+    "the actions are not the drawing's short words in its own order",
   ).toEqual([
-    uiCopy.store.cell.actions.delete,
-    uiCopy.store.cell.actions.export,
-    uiCopy.store.cell.actions.assign,
-    uiCopy.store.cell.actions.open,
+    uiCopy.store.item.actions.delete,
+    uiCopy.store.item.actions.export,
+    uiCopy.store.item.actions.assign,
+    uiCopy.store.item.actions.open,
   ]);
+});
+
+/**
+ * Each action is a box holding a 12px glyph and one word, and **Delete is the
+ * only one marked**: §4's `data-yunari-destructive` is what the shell paints
+ * `--hot`, and no box is filled — an accent fill would make one of four the act.
+ *
+ * jsdom computes no colour, so what is read is the mark rather than the paint:
+ * the shell's own rule (`editor-shell.control-rules.test.ts`) holds the colour,
+ * and this holds that only the destructive command carries it.
+ */
+it("draws four glyph+word actions with Delete only marked in --hot", async () => {
+  await mount(modal(LANDSCAPE));
+
+  const actions = Array.from(
+    document.body.querySelectorAll<HTMLElement>(
+      "[data-yunari-store-item-action]",
+    ),
+  );
+  expect(actions, "the foot is not the four boxes").toHaveLength(4);
+
+  for (const action of actions) {
+    const name = action.getAttribute("data-yunari-store-item-action");
+    expect(
+      action.querySelector("svg"),
+      `${name}: the box draws no glyph`,
+    ).not.toBeNull();
+    expect(
+      action.querySelector("span")?.textContent,
+      `${name}: the box does not hold one word`,
+    ).toBe(uiCopy.store.item.actions[name as CellAction]);
+    expect(
+      action.className,
+      `${name}: the box takes an accent fill`,
+    ).not.toContain("border-accent");
+    expect(action.className, `${name}: the box is not a filled well`).toContain(
+      "bg-panel-2",
+    );
+  }
+
+  const marked = actions
+    .filter((action) => action.hasAttribute("data-yunari-destructive"))
+    .map((action) => action.getAttribute("data-yunari-store-item-action"));
+  expect(
+    marked,
+    "more than Delete carries §4's mark, so more than one word paints --hot",
+  ).toEqual(["delete"]);
 });
 
 /**
@@ -575,7 +667,7 @@ it("draws no version and no separator for a theme that declares none", async () 
 /**
  * **The modal says where the item came from**, which is the one thing a cell's
  * badge cannot (spec, "Provenance": *a cell can say From the store and cannot
- * say from where*). It is one muted line under the band rather than a group of
+ * say from where*). It is one muted line under the pills rather than a group of
  * pills, and it names the catalogue item and the version this copy was installed
  * from — the record's own strings, not the caption's document version.
  *

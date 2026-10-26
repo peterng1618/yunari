@@ -530,6 +530,13 @@ body,
   --asset-preview-panel-width: 270px;
   --asset-preview-header-gutter: 48px;
   --asset-preview-stage: #080a0d;
+  /* The store item's own surface (`store-detail.html`): a 960 x 760 box with a
+     270px facts column. The stage takes every pixel the panel leaves, so the
+     box keeps one height as a person steps between items, and its ground is the
+     viewer's fixed dark rather than the canvas paint. */
+  --store-item-height: 760px;
+  --store-item-panel-width: 270px;
+  --store-item-stage: #080a0d;
   --dialog-min-width: 340px;
   --dialog-max-width: 560px;
   --dialog-max-height: 720px;
