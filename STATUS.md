@@ -5,27 +5,27 @@ Branch: `main`
 
 ## Current objective
 
-Plan B (per-display shape and rotation) is complete on the branch and merges into `main` with main's live-line work; the queued backlog drain is next.
+Plan B is complete, reviewed and gated; the local merge to `main` is this branch's last act, and the queued backlog drain is next.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md` — tasks 1–6 landed; the final branch review, the local merge to `main` and the spec close-out remain.
-- **Backlog drain is next:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, starting at a reproduction pass.
+- **No plan is running:** plan A and plan B are complete, archived, and their specs marked landed; the fast-forward of `main` is this branch's last step.
+- **Backlog drain is next:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, starting at a reproduction pass over the register.
 - **Preview lens landed:** scene-anchored display box, shell stage, theme letterbox, guide frame, circle lens, ratio catalogue and Previews settings tab.
 - **The live line no longer corrects at its right edge:** `liveTail` derives the hold and step from every sample gap, so the batch after a stall no longer slopes a flat stretch already painted.
 - **Audit, chart, spacing and fonts work is on `main`:** revision gating, memoised dirty reading, chart animation and the fonts/assets rework are landed.
 
 ## Last completed change
 
-- **`main` merged into the branch:** main's live-line and fonts work arrives conflicting only in `STATUS.md` and the register.
-- **The register's ids collided again:** main minted `vg-753`/`vg-754`, so plan B's three rows became `vg-756`–`vg-758` with their content unchanged.
-- **Per-display shape and rotation:** a display stores `shape` and whole-degree `rotation` — rect quarter turns, circle 0–359 — and a refused write is a 400 in the store's words.
-- **Turned fit and circle presentation:** the transform rotates then fits, letterboxing the turned bounding box; a circle inscribes the board and the canvas is clipped to the disc.
-- **Delivery and Host controls:** the publish poll carries shape and rotation to `updatePresentation`, and the selected display's row edits both against the host's answer; ten new browser cases cover the branch.
+- **Both plans are archived and both specs marked landed:** the preview lens and per-display shape/rotation; nothing else is active.
+- **The final review is closed:** the plate ruling sits in ADR-0125, the three files past the 800-line stop are split, the snap note has a red-proved test, the PATCH body is asserted, and the browser sample now discriminates a turned canvas.
+- **The register's ids re-collided with main:** main minted `vg-753`/`vg-754`, so plan B's rows became `vg-756`–`vg-758` with their content unchanged.
+- **Per-display shape and rotation ship:** a display stores `shape` and whole-degree `rotation` — rect quarter turns, circle 0–359 — the transform rotates then fits and inscribes a circle, and the Host edits both against its own answer.
+- **Evidence:** `npm run gate` exit 0 on the merge commit (435 files / 6735 passed, 2 skipped; browser 13 files / 130 passed); the fixes since are covered by focused suites plus a final gate.
 
 ## Next
 
-1. Dispatch plan B's final whole-branch review, then fast-forward `main` and close the plan and spec in `.superpowers/sdd/`.
+1. Fast-forward `main` to this branch, then close plan B's SDD workspace.
 2. Resume the backlog-drain plan at Phase 0 after that merge.
 3. Owner test of the live line's right edge, in the editor and on a phone, with machine sensors.
 4. Decide whether the 2 s delay should follow the received cadence: the host drops every other batch under backpressure (`vg-753`).

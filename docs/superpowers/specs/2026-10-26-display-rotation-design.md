@@ -1,7 +1,8 @@
 # Per-display shape and rotation — design
 
 - **Date:** 2026-10-26
-- **Status:** draft
+- **Status:** landed 2026-10-27 — host records, player presentation and the Host's controls ship; plan at
+  [`archive/2026-10-26-display-shape-and-rotation.md`](../plans/archive/2026-10-26-display-shape-and-rotation.md).
 - **Related:** [`2026-10-18-per-display-themes-design.md`](2026-10-18-per-display-themes-design.md),
   [`2026-10-26-preview-lens-and-stage-design.md`](2026-10-26-preview-lens-and-stage-design.md),
   [`docs/architecture/ownership.md`](../../architecture/ownership.md),
