@@ -170,6 +170,12 @@ it("stays open with the host's sentence when the import fails", async () => {
   if (modal === null) throw new Error("the failed modal closed itself");
   expect(modal.textContent).toContain(sentence);
   expect(modal.querySelector("[data-yunari-import-video-progress]")).toBeNull();
+  // The run settled, so no step line survives to contradict the refusal with a
+  // "preparing" sentence the run already left.
+  expect(modal.querySelector("[data-yunari-import-video-step]")).toBeNull();
+  expect(modal.textContent).not.toContain(
+    uiCopy.panels.importVideo.preparingPackage,
+  );
   expect(onClose).not.toHaveBeenCalled();
 });
 

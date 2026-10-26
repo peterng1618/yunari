@@ -84,13 +84,17 @@ export function ImportVideoModal({
         className="flex w-[360px] flex-col gap-[var(--space-8)]"
       >
         <span className="truncate text-xs text-muted">{file.name}</span>
-        <p
-          role="status"
-          data-yunari-import-video-step=""
-          className="text-sm text-text"
-        >
-          {step === "preparing" ? preparing : copy.importing}
-        </p>
+        {/* A settled run has no step: on failure the host sentence below is the
+            only status, so the stale "preparing" line cannot sit beside it. */}
+        {running ? (
+          <p
+            role="status"
+            data-yunari-import-video-step=""
+            className="text-sm text-text"
+          >
+            {step === "preparing" ? preparing : copy.importing}
+          </p>
+        ) : null}
         {running ? (
           <div
             data-yunari-import-video-progress=""
