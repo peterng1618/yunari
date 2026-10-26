@@ -70,9 +70,9 @@ Keep `readPackage`/`memberBytes`/`mobileVideo`; the import route uses them.
 - A fresh unpack writes `project.json` with `title: "[yunari] <title>"`
   (single space, only when not already prefixed). The directory stays the
   workshop id. A reused project keeps its existing descriptor.
-- The card button reads `Convert to local project` → `Converting…` →
-  `Converted`; it is disabled while running, and its success state persists for
-  the modal session.
+- The card's icon button swaps glyph and tooltip: `FolderInput` "Convert to
+  local project" → `LoaderCircle` "Converting…" → `Check` "Converted"; it is
+  disabled while running, and its success state persists for the modal session.
 - The outcome is announced on the modal's status line, naming the project and
   pointing at Wallpaper Engine's **My Projects**. No sub-page and no success
   dialog.
@@ -87,29 +87,43 @@ manager must keep refusing it as a raw asset, and `.mpkg` is intercepted before
 **Flow.** Picking an `.mpkg` or a video opens one modal and runs it
 automatically:
 
-1. `.mpkg` only: upload bytes to the host and extract `wallpaper.mp4`.
-2. Normalize through `/api/themes/normalize-video` (a conforming file returns
-   byte-identical, `reencoded: false`).
-3. Import into the document.
+1. Send the file to the host, which extracts (`.mpkg` only) and normalizes in
+   one call. A conforming video returns byte-identical (`reencoded: false`).
+2. Import into the document.
 
 Images and fonts keep today's direct path; only video-shaped picks use the
 modal.
 
-**Host extraction route.**
-`POST /api/wallpaper-engine/mpkg`, body `{ bytesBase64 }`, loopback +
-same-origin guards, the existing 96 MB large-body limit:
+**Source size vs output size.** The 96 MB ceiling is the **theme envelope on
+what is imported**, not a limit on what the author may pick. A source video or
+package may be larger; the host accepts up to **512 MiB of source**, and the
+normalizer's capped-CRF ladder keeps a 30 s loop under the 96 MB output ceiling.
+The host refuses a normalized output that still exceeds 96 MB rather than
+importing an asset the package writer would refuse.
 
-- `{ ok: true, videoBase64, title?, workshopId? }` where the video is
-  `mobileVideo`, and `title`/`workshopId` come from the package's
-  `project.json` member (`title`; `package.workshopId`);
-- `{ ok: false, message }` for a malformed table, a missing `wallpaper.mp4`, an
-  empty member, or a package that is not a Wallpaper Engine container.
+**Host routes.** Both take the source as a **raw binary body**
+(`application/octet-stream`), under one large-body slot, with loopback +
+same-origin guards:
 
-The route does not require Wallpaper Engine to be installed.
+- `POST /api/wallpaper-engine/mpkg` — reads the package, extracts
+  `wallpaper.mp4` with `mobileVideo`, normalizes it, and answers
+  `{ ok: true, videoBase64, reencoded, title?, workshopId? }` where `title` and
+  `workshopId` come from the package's `project.json` member. It answers
+  `{ ok: false, message }` for a malformed table, a missing/empty video, or a
+  package that is not a Wallpaper Engine container. It needs no Wallpaper
+  Engine install.
+- `POST /api/themes/normalize-video` — the existing route, changed from base64
+  JSON to a raw binary source so the 512 MiB source cap is reachable. It keeps
+  its JSON answer (`{ ok, bytesBase64, reencoded }` / `{ ok: false, message }`).
 
-**Modal states.** `extracting → normalizing → importing → done | failed`. The
-modal names the current step, shows a skeleton/progress block, and on failure
-stays open with the host's own sentence. A dismissed modal imports nothing.
+Both return only the normalized video (≤96 MB), never the extracted source, so
+a large package crosses the wire once.
+
+**Modal states.** `preparing → importing → done | failed`, where *preparing*
+reads "Extracting and preparing the video…" for an `.mpkg` and "Preparing the
+video…" for a video file. The modal shows a skeleton/progress block and, on
+failure, stays open with the host's own sentence. A dismissed modal imports
+nothing.
 
 **Assets pane.** The manual `Normalize video` button, its preview and its
 use-normalized confirmation are removed; the modal replaces them. Picking a
@@ -148,10 +162,18 @@ same modal scoped to `.mpkg`, and on success sets it as the theme's background.
 
 - The body renders a card grid using the finder's geometry
   (`grid-cols-[repeat(auto-fill,minmax(140px,1fr))]`), each card shaped like a
-  font tile: preview box, title, `kind · size`, source line where present, one
-  action.
-- Video cards: **Set as background** → `Setting…` → `Background set`.
-- Scene cards: R2's convert action.
+  font tile: preview box, title, `kind · size`, source line where present, and
+  **one action as a lucide icon button**, not a text button. A card grid has no
+  room for a full sentence beside every tile.
+- The icon button carries the action's full name as its accessible label and
+  hover/focus tooltip (`ControlIconButton`'s existing tooltip):
+  - video: `Wallpaper` icon, "Set as background";
+  - scene: `FolderInput` icon, "Convert to local project".
+- Running, success and failure swap the glyph and the tooltip:
+  `LoaderCircle` + "Setting…"/"Converting…" while running, `Check` +
+  "Background set"/"Converted" on success, `TriangleAlert` + the failure
+  sentence on failure. The button is disabled while running; the success state
+  persists for the modal session.
 - Kind filters are **all / video / scene**. `image` and `web` leave the client
   kind union, copy, branches and tests; `library.ts` already skips web items
   and never classifies an image.
@@ -163,8 +185,7 @@ same modal scoped to `.mpkg`, and on success sets it as the theme's background.
      **Send to Mobile Device** → **Export .mpkg** → **Keep original aspect
      ratio** → **Original** → Save, then use **Import a .mpkg video** here.
 - Every card action reports on the modal's bottom status line (one
-  `role="status"`), and per-card busy/success text, so a slow import is never
-  silent.
+  `role="status"`), so a slow import is never silent.
 
 ### R6 — Loading skeletons
 
@@ -184,7 +205,8 @@ the Fonts body. Pagination keeps existing results on screen with `aria-busy`.
 
 | Concern | Owner | Change |
 |---|---|---|
-| `.mpkg` bytes → video + metadata | `host/src/wallpaper-engine/pkg.ts`, new route in `server.ts` | new extraction route over the existing table walk |
+| `.mpkg` bytes → normalized video + metadata | `host/src/wallpaper-engine/pkg.ts`, new route in `server.ts` | extraction + normalization in one call over the existing table walk |
+| Video source → normalized video | `src/themes/normalize-video.ts`, its route in `server.ts` | raw binary source, 512 MiB cap, unchanged output ceiling |
 | Unpack a scene | `host/src/wallpaper-engine/unpack.ts` | title prefix; no launch |
 | Steam author name | `host/src/wallpaper-engine/source.ts` + `server.ts` | fetch + cache + route |
 | Library listing | `source.ts`, `library.ts` | no export members; kinds unchanged |
@@ -205,7 +227,8 @@ imports a theme asset: the editor owns the document.
 |---|---|
 | Not a `PKGV`/`PKGM` table | modal: the package could not be read |
 | `PKGM` without `wallpaper.mp4` | modal: no video in this package |
-| Upload over 96 MB | modal: package too large to import |
+| Upload over 512 MiB of source | modal: source too large to import |
+| Normalized output still over 96 MB | modal: the video exceeds the theme envelope |
 | Normalizer refuses | modal: the host's own sentence |
 | Asset manager refuses | modal: the manager's sentence |
 | Steam lookup fails | import continues; credit carries `author.steamId` only |
@@ -214,17 +237,19 @@ imports a theme asset: the editor owns the document.
 
 ## Verification
 
-- **Unit (host):** mpkg route guards (405, 403 loopback, 403 foreign origin,
-  413), valid `PKGM`, missing video, malformed table, metadata from
-  `project.json`; author route with injected fetch: name, timeout, refusal,
-  invalid id, cache; `project` returns no `launched`; fresh unpack prefixes the
-  title once; reuse leaves the descriptor alone.
+- **Unit (host):** mpkg route guards (405, 403 loopback, 403 foreign origin),
+  512 MiB source cap, valid `PKGM`, missing video, malformed table, metadata
+  from `project.json`; a source over 96 MiB whose normalized output fits is
+  accepted; a normalized output over 96 MiB is refused; author route with
+  injected fetch: name, timeout, refusal, invalid id, cache; `project` returns
+  no `launched`; fresh unpack prefixes the title once; reuse leaves the
+  descriptor alone.
 - **Unit/DOM (editor):** picker routes `.mpkg` and video to the modal and keeps
   images/fonts direct; modal step order and every failure; `.mpkg` never reaches
   `manager.import`; credits and declaration metadata for grid and `.mpkg`
-  imports; card grid, filters, guide text, button states, status line; skeletons
-  present on first load and absent once data arrives; `aria-busy` during
-  pagination.
+  imports; card grid, icon-only actions with tooltips, filters, guide text,
+  button glyph/tooltip states, status line; skeletons present on first load and
+  absent once data arrives; `aria-busy` during pagination.
 - **Regression:** with the author-name fetch stubbed to fail, the credit still
   lands; with attribution removed, the preview pill test fails.
 - **Browser:** one Playwright pass over the WE tab using the fake source: cards
@@ -245,9 +270,10 @@ imports a theme asset: the editor owns the document.
 
 ## Risks
 
-- **96 MB upload cap:** a large *Original* export is refused. The modal says
-  so; the author can export a smaller preset. If this bites in practice, the
-  next step is a streaming/binary body, not client-side parsing.
+- **512 MiB source cap, buffered:** a source larger than that is refused; the
+  buffered body plus ffmpeg's temp file is the memory cost. The normalized
+  output ceiling is unchanged at 96 MB. If real exports exceed 512 MiB, the next
+  step is streaming the body to a temp file, not raising the cap again.
 - **Steam lookup is the only outbound request this feature adds.** It is
   per-import, cached, timed out, and never blocks the import.
 - **Guide text is static.** Wallpaper Engine can rename a menu item in a future
