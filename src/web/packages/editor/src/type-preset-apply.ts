@@ -11,13 +11,6 @@ export type FontTrioRole = "heading" | "body" | "mono";
 /** The trio's roles, in the order a theme reads them. */
 export const FONT_ROLES: readonly FontTrioRole[] = ["heading", "body", "mono"];
 
-/** The starter scale's size for a role a theme has no token for yet. */
-export const ROLE_SIZES: Readonly<Record<FontTrioRole, number>> = {
-  heading: 46,
-  body: 24,
-  mono: 14,
-};
-
 export const ROLE_NAMES: Readonly<Record<FontTrioRole, string>> = {
   heading: "Heading",
   body: "Body",

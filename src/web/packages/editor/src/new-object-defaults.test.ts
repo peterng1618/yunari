@@ -42,7 +42,7 @@ const globals = {
     ink: { name: "Ink", value: { kind: "solid" as const, color: "#102030" } },
   },
   typeTokens: {
-    body: { family: "Inter", size: 16, weight: 500, lineHeight: 1.2 },
+    body: { family: "Inter", weight: 500 },
   },
 };
 

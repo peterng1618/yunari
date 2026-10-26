@@ -173,124 +173,52 @@ export const solidOf: Readonly<Record<string, string>> = {
   frostInk: "#dbeafe",
 };
 
+/**
+ * The three role tokens a theme always has; their ids are the roles.
+ *
+ * Body first because `createNewTextDefaults` and the chart defaults take the
+ * first token as a new object's, so the order here is the editor's default face.
+ * A token names a face only: the size, leading and tracking a run wears are the
+ * run's own `style` (docs/decisions/0124).
+ */
 export const starterTypeTokens = {
-  // Body first: `createNewTextDefaults` and the chart defaults take the first
-  // preset as a new object's, so the order here is the editor's default face.
-  "20-400": {
-    family: "Segoe UI, sans-serif",
-    size: 20,
-    weight: "400",
-    lineHeight: 1.18,
-    trioRole: "body",
-  },
-  "17-400": {
-    family: "Segoe UI, sans-serif",
-    size: 17,
-    weight: "400",
-    // Measured off the reference's "SYSTEM INSIGHTS": the six glyph advances
-    // across "SYSTEM" run 16px apart at a 12px cap height, which is 0.29 em of
-    // the 17px face once the letter's own advance is taken out.
-    letterSpacing: 6,
-    lineHeight: 1.18,
-    trioRole: "body",
-  },
-  "20-500": {
-    family: "Segoe UI, sans-serif",
-    size: 20,
-    weight: "500",
-    lineHeight: 1.18,
-    trioRole: "body",
-  },
-  "24-400": {
-    family: "Segoe UI, sans-serif",
-    size: 24,
-    weight: "400",
-    lineHeight: 1.18,
-    trioRole: "body",
-  },
-  "24-500": {
-    family: "Segoe UI, sans-serif",
-    size: 24,
-    weight: "500",
-    lineHeight: 1.18,
-    trioRole: "body",
-  },
-  "32-400": {
-    family: "Segoe UI, sans-serif",
-    size: 32,
-    weight: "400",
-    lineHeight: 1.18,
-    trioRole: "body",
-  },
-  "36-500": {
-    family: "Segoe UI, sans-serif",
-    size: 36,
-    weight: "500",
-    // Measured off the reference, not judged by eye: the glyphs of "YUNARI"
-    // stand 26px cap height and the five advances between them average 45px
-    // at a 36px face, which is 0.78 em once each letter's own advance is out.
-    letterSpacing: 28,
-    lineHeight: 1.18,
-    trioRole: "heading",
-  },
-  "44-600": {
-    family: "Segoe UI, sans-serif",
-    size: 44,
-    weight: "600",
-    lineHeight: 1.18,
-    trioRole: "heading",
-  },
-  "46-600": {
-    family: "Segoe UI, sans-serif",
-    size: 46,
-    weight: "600",
-    lineHeight: 1.18,
-    trioRole: "heading",
-  },
-  "60-600": {
-    family: "Segoe UI, sans-serif",
-    size: 60,
-    weight: "600",
-    lineHeight: 1.18,
-    trioRole: "heading",
-  },
-  "90-600": {
-    family: "Segoe UI, sans-serif",
-    size: 90,
-    weight: "600",
-    // Untracked, for the reason the clock below gives.
-    lineHeight: 1.18,
-    trioRole: "heading",
-  },
-  "108-300": {
-    family: "Segoe UI, sans-serif",
-    size: 108,
-    weight: "300",
-    // Untracked, and so is every reading: a numeral's advance is a grid cell,
-    // and opening it up breaks the column it sits in.
-    lineHeight: 1.18,
-    trioRole: "heading",
-  },
-  mono: {
-    family: "Segoe UI, sans-serif",
-    size: 14,
-    weight: "400",
-    lineHeight: 1.18,
-    trioRole: "mono",
-  },
-} as const;
+  body: { family: "Segoe UI, sans-serif", weight: "400" },
+  heading: { family: "Segoe UI, sans-serif", weight: "600" },
+  mono: { family: "Consolas, monospace", weight: "400" },
+} as const satisfies Record<string, TypeToken>;
 
-/** Fabric's `charSpacing` in 1/1000 em, for the presets that track. */
+export type StarterTypeRole = keyof typeof starterTypeTokens;
+
+/** The reference's leading, authored on every run that came from a preset. */
+export const STARTER_LINE_HEIGHT = 1.18;
+
+/**
+ * The role a starter run's size belonged to, read off the scale the old
+ * `size-weight` presets were tagged with: every heading was 36px or larger and
+ * every body token smaller.
+ */
+export function starterRoleForSize(size: number): StarterTypeRole {
+  return size >= 36 ? "heading" : "body";
+}
+
+/**
+ * The reference's tracking, in px at its authored size.
+ *
+ * Measured off the reference, not judged by eye: "SYSTEM" advances 6px at 17px
+ * and "YUNARI" 28px at 36px. Only those two sizes track; a numeral's advance is
+ * a grid cell, so readings and the clock stay untracked.
+ */
+export const starterTracking: Readonly<Record<number, number>> = {
+  17: 6,
+  36: 28,
+};
+
+/** Fabric's `charSpacing` in 1/1000 em, from a run's own px tracking. */
 export function charSpacingPx(
-  presetId: string,
+  letterSpacing: number | undefined,
   fontSize: number,
 ): number | undefined {
-  // `as const` gives each preset its own literal type, and the untracked ones
-  // have no `letterSpacing` key at all, so the lookup is widened to read one.
-  const value = (
-    starterTypeTokens[presetId as keyof typeof starterTypeTokens] as
-      | { readonly letterSpacing?: number }
-      | undefined
-  )?.letterSpacing;
-  return typeof value === "number" ? (value / fontSize) * 1000 : undefined;
+  return letterSpacing === undefined
+    ? undefined
+    : (letterSpacing / fontSize) * 1000;
 }

@@ -2,8 +2,12 @@ import type { WidgetProvenance } from "@yunari/renderer-core";
 import {
   charSpacingPx,
   frost,
+  STARTER_LINE_HEIGHT,
   type StarterPaletteId,
   solidOf,
+  starterRoleForSize,
+  starterTracking,
+  starterTypeTokens,
 } from "./new-fabric-theme-globals.js";
 import type { PathCommand } from "./new-fabric-theme-icons.js";
 
@@ -160,7 +164,7 @@ function toGroupPlane(
   };
 }
 
-/** One run's palette token and type; the size and weight pick the preset. */
+/** One run's palette token and size; the size picks the role token. */
 export interface Run {
   readonly kind: "literal" | "value";
   /** The binding this run reads; literal runs have none. */
@@ -168,10 +172,25 @@ export interface Run {
   readonly text?: string;
   readonly token: StarterPaletteId;
   readonly size: number;
-  readonly weight: string;
   readonly precision?: number;
   /** `"none"` when a later literal run writes the unit instead. */
   readonly unitDisplay?: "none" | "short" | "long";
+}
+
+/**
+ * How a run is worn: size, leading and the measured tracking, authored on the
+ * run rather than on the token it names (docs/decisions/0124).
+ */
+function runStyle(run: Run): Record<string, unknown> {
+  const letterSpacing = starterTracking[run.size];
+  return {
+    color: { ref: `palette.${run.token}` },
+    fontSize: { value: run.size },
+    lineHeight: { value: STARTER_LINE_HEIGHT },
+    ...(letterSpacing === undefined
+      ? {}
+      : { letterSpacing: { value: letterSpacing } }),
+  };
 }
 
 /**
@@ -202,8 +221,8 @@ export function text(
   },
 ): ObjectJson {
   const first = runs[0] as Run;
-  const presetId = `${first.size}-${first.weight}`;
-  const spacing = charSpacingPx(presetId, first.size);
+  const firstToken = starterTypeTokens[starterRoleForSize(first.size)];
+  const spacing = charSpacingPx(starterTracking[first.size], first.size);
   // A reading that outgrows its box is truncated rather than clipped to
   // nothing, so an author can see that it did not fit. A prose label has no
   // reading to truncate and keeps the default clip.
@@ -218,16 +237,16 @@ export function text(
     top,
     width,
     text: plain(runs),
-    fontFamily: "Segoe UI, sans-serif",
+    fontFamily: firstToken.family,
     fontSize: first.size,
     // Alignment lives in the authored content and is written to Fabric on every
     // live refresh, which leaves the *first* paint of a revived document showing
     // the text from the box's left edge. Writing it here as well makes the
     // document correct before the first sample ever arrives.
     ...(options?.align === undefined ? {} : { textAlign: options.align }),
-    fontWeight: first.weight,
+    fontWeight: firstToken.weight,
     fill: solidOf[first.token],
-    lineHeight: 1.18,
+    lineHeight: STARTER_LINE_HEIGHT,
     ...(spacing === undefined ? {} : { charSpacing: spacing }),
     yunariPaint: { fill: `palette.${first.token}` },
     yunariText: {
@@ -252,8 +271,8 @@ export function text(
           ? {
               kind: "literal",
               text: run.text ?? "",
-              typeToken: `typeTokens.${run.size}-${run.weight}`,
-              style: { color: { ref: `palette.${run.token}` } },
+              typeToken: `typeTokens.${starterRoleForSize(run.size)}`,
+              style: runStyle(run),
             }
           : {
               kind: "value",
@@ -264,8 +283,8 @@ export function text(
               ...(run.unitDisplay === undefined
                 ? {}
                 : { unitDisplay: run.unitDisplay }),
-              typeToken: `typeTokens.${run.size}-${run.weight}`,
-              style: { color: { ref: `palette.${run.token}` } },
+              typeToken: `typeTokens.${starterRoleForSize(run.size)}`,
+              style: runStyle(run),
             },
       ),
     },
@@ -294,10 +313,9 @@ export function label(
   value: string,
   size: number,
   token: StarterPaletteId,
-  weight = "400",
 ): ObjectJson {
   return text(id, left, top, width, height, [
-    { kind: "literal", text: value, token, size, weight },
+    { kind: "literal", text: value, token, size },
   ]);
 }
 
@@ -310,11 +328,10 @@ export function valueLabel(
   height: number,
   size: number,
   token: StarterPaletteId,
-  weight: string,
   bindingId: string,
 ): ObjectJson {
   return text(id, left, top, width, height, [
-    { kind: "value", bindingId, token, size, weight },
+    { kind: "value", bindingId, token, size },
   ]);
 }
 

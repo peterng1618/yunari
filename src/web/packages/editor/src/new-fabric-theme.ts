@@ -192,23 +192,13 @@ export function createNewFabricTheme(): FabricThemeEnvelope {
     scene: {
       version: "7.4.0",
       objects: [
-        // The wordmark is tracked by its preset, not by spaces between the
-        // letters: a space is a fixed width the font chooses, and it survives
-        // into the text the author edits and the reading a screen reader gets.
-        // Neither is a card, and making everything a group would be the cage
-        // this document is written to avoid.
-        label("wordmark", 118, 56, 460, 40.68, "YUNARI", 36, "text", "500"),
-        label(
-          "strapline",
-          120,
-          100,
-          460,
-          19.21,
-          "SYSTEM INSIGHTS",
-          17,
-          "dim",
-          "400",
-        ),
+        // The wordmark is tracked by its run's own style, not by spaces between
+        // the letters: a space is a fixed width the font chooses, and it
+        // survives into the text the author edits and the reading a screen
+        // reader gets. Neither is a card, and making everything a group would
+        // be the cage this document is written to avoid.
+        label("wordmark", 118, 56, 460, 40.68, "YUNARI", 36, "text"),
+        label("strapline", 120, 100, 460, 19.21, "SYSTEM INSIGHTS", 17, "dim"),
         clockCard(),
         cpuCard(),
         gpuCard(),
@@ -250,9 +240,9 @@ const BLANK_PALETTE_IDS = [
  * artboard the author chose.
  *
  * Built **from** `createNewFabricTheme` rather than beside it, so the parts a
- * blank document still has — the type presets, the `schemaVersion`, the envelope
+ * blank document still has — the type tokens, the `schemaVersion`, the envelope
  * shape — are one author's decision in one place. A second hand-built envelope
- * would be a second place the schema version and the preset vocabulary are
+ * would be a second place the schema version and the token vocabulary are
  * decided, and the two would drift.
  *
  * The palette is narrowed **by token id**, never by restating a colour. A

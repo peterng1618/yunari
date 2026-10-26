@@ -16,6 +16,7 @@ import {
   MAX_TAGS,
   STABLE_ID_PATTERN,
   TAG_PATTERN,
+  TYPE_TOKEN_ROLES,
 } from "./document.js";
 import { envelopeKeysFor, knownKeysFor } from "./envelope-keys.js";
 import {
@@ -332,21 +333,11 @@ function fontPresetFaces(
         fontAssets.set(asset["id"], asset);
     }
   }
-  const roles = new Set<string>();
   for (const [id, entry] of Object.entries(presets)) {
     const value = isRecord(entry) ? entry : undefined;
     if (value === undefined) continue;
-    if (typeof value["trioRole"] === "string") roles.add(value["trioRole"]);
     const face = isRecord(value["face"]) ? value["face"] : undefined;
     if (face === undefined) {
-      if (requireTrioRoles)
-        issues.push(
-          issue(
-            "missing-field",
-            `/globals/typeTokens/${id}/face`,
-            "New theme type presets need a declared packaged font face.",
-          ),
-        );
       continue;
     }
     const assetId = face["assetId"];
@@ -361,22 +352,22 @@ function fontPresetFaces(
         issue(
           "unresolved-asset-ref",
           `/globals/typeTokens/${id}/face/assetId`,
-          "A type preset face must reference a declared matching font asset.",
+          "A type token face must reference a declared matching font asset.",
         ),
       );
     }
   }
-  if (
-    requireTrioRoles &&
-    !["heading", "body", "mono"].every((role) => roles.has(role))
-  ) {
-    issues.push(
-      issue(
-        "missing-field",
-        "/globals/typeTokens",
-        "New themes need heading, body and mono type-preset roles.",
-      ),
-    );
+  if (requireTrioRoles) {
+    for (const role of TYPE_TOKEN_ROLES) {
+      if (presets[role] !== undefined) continue;
+      issues.push(
+        issue(
+          "missing-field",
+          `/globals/typeTokens/${role}`,
+          `A theme needs a "${role}" type token; a role is a token id.`,
+        ),
+      );
+    }
   }
 }
 
@@ -448,10 +439,31 @@ function sceneTypeReferences(
             unknownKeys(
               style,
               `${path}/yunariText/runs/${index}/style`,
-              ["color"],
+              ["color", "fontSize", "lineHeight", "letterSpacing"],
               "A text run style",
               issues,
             );
+          const fontSize = style?.["fontSize"];
+          if (fontSize !== undefined) {
+            const size = isRecord(fontSize) ? fontSize["value"] : undefined;
+            if (typeof size !== "number" || !Number.isFinite(size)) {
+              issues.push(
+                issue(
+                  "wrong-type",
+                  `${path}/yunariText/runs/${index}/style/fontSize`,
+                  "A text run's fontSize must be a finite number.",
+                ),
+              );
+            } else if (size <= 0) {
+              issues.push(
+                issue(
+                  "out-of-range",
+                  `${path}/yunariText/runs/${index}/style/fontSize`,
+                  "A text run's fontSize must be above 0.",
+                ),
+              );
+            }
+          }
           const color = style?.["color"];
           const colorRef = isRecord(color) ? color["ref"] : undefined;
           if (

@@ -70,11 +70,10 @@ const percent = (
     bindingId,
     token: "text",
     size: valueSize,
-    weight: "600",
     precision: 0,
     unitDisplay: "none",
   },
-  { kind: "literal", text: "%", token: "text", size: unitSize, weight: "600" },
+  { kind: "literal", text: "%", token: "text", size: unitSize },
 ];
 
 /** A reading followed by its own unit, e.g. the reference's "4.8 GHz". */
@@ -88,11 +87,10 @@ const valued = (
     bindingId,
     token,
     size: 20,
-    weight: "400",
     precision: 1,
     unitDisplay: "none",
   },
-  { kind: "literal", text: unit, token, size: 20, weight: "400" },
+  { kind: "literal", text: unit, token, size: 20 },
 ];
 
 export function clockCard(): ObjectJson {
@@ -104,17 +102,7 @@ export function clockCard(): ObjectJson {
       // `hh:mm` with the meridiem on its own object: the reference sets it at a
       // quarter of the digits' size, and one tracking value is measured once per
       // object, so two sizes cannot share a text object anyway.
-      valueLabel(
-        "time",
-        76,
-        214,
-        264,
-        122.04,
-        108,
-        "text",
-        "300",
-        "clock-time",
-      ),
+      valueLabel("time", 76, 214, 264, 122.04, 108, "text", "clock-time"),
       valueLabel(
         "time-period",
         350,
@@ -123,7 +111,6 @@ export function clockCard(): ObjectJson {
         27.12,
         24,
         "text",
-        "500",
         "clock-period",
       ),
       path(
@@ -137,7 +124,7 @@ export function clockCard(): ObjectJson {
         "rule",
         2,
       ),
-      valueLabel("date", 80, 370, 290, 36.16, 32, "text", "400", "clock-date"),
+      valueLabel("date", 80, 370, 290, 36.16, 32, "text", "clock-date"),
     ],
   );
 }
@@ -171,9 +158,7 @@ export function cpuCard(): ObjectJson {
       //
       // The box runs wider than the value above it, left to the card's own
       // inset: a model name is longer than the reading column, and "…RTX 3080…"
-      // and "RTX 3080 Ti" are different cards. The type presets are a fixed set,
-      // so shrinking the face is not the lever — 16 is not a preset this
-      // document may use, and the editor refuses the whole theme without one.
+      // and "RTX 3080 Ti" are different cards.
       text("cpu-card-caption", 433, 358, 262, 50, [
         {
           kind: "value",
@@ -186,7 +171,6 @@ export function cpuCard(): ObjectJson {
           // the 24 px title instead.
           token: "text",
           size: 20,
-          weight: "400",
         },
       ]),
       // `chart` is the one helper that takes Fabric's centre origin, so these
@@ -233,7 +217,6 @@ export function gpuCard(): ObjectJson {
           bindingId: "gpu-card-model",
           token: "text",
           size: 20,
-          weight: "400",
         },
       ]),
       chart("gpu-card-sparkline", 870, 414, 240, 56, "line", {
@@ -251,13 +234,12 @@ export function gpuCard(): ObjectJson {
         valued("gpu-card-clock", " GHz"),
       ),
       text("gpu-card-temp", 892, 452, 110, 22.6, [
-        { kind: "literal", text: "| ", token: "text", size: 20, weight: "400" },
+        { kind: "literal", text: "| ", token: "text", size: 20 },
         {
           kind: "value",
           bindingId: "gpu-card-temp",
           token: "text",
           size: 20,
-          weight: "400",
           precision: 0,
         },
       ]),
@@ -346,7 +328,6 @@ function memoryCard(options: {
             bindingId: `${prefix}-used`,
             token: "text",
             size: 20,
-            weight: "400",
             precision: 1,
             unitDisplay: "none",
           },
@@ -355,14 +336,12 @@ function memoryCard(options: {
             text: " / ",
             token: "text",
             size: 20,
-            weight: "400",
           },
           {
             kind: "value",
             bindingId: `${prefix}-total`,
             token: "text",
             size: 20,
-            weight: "400",
             precision: 0,
             unitDisplay: "none",
           },
@@ -371,7 +350,6 @@ function memoryCard(options: {
             text: " GB",
             token: "text",
             size: 20,
-            weight: "400",
           },
         ],
         { align: "center" },
@@ -417,13 +395,12 @@ export function trendsCard(): ObjectJson {
     ["gpu", "GPU"],
     ["ram", "RAM"],
   ] as const) {
-    legend.push({ kind: "literal", text: "●", token, size: 20, weight: "400" });
+    legend.push({ kind: "literal", text: "●", token, size: 20 });
     legend.push({
       kind: "literal",
       text: ` ${name}${name === "RAM" ? "" : "   "}`,
       token: "text",
       size: 20,
-      weight: "400",
     });
   }
   return cardGroup(
@@ -493,7 +470,6 @@ export function storageCard(): ObjectJson {
             bindingId: "storage-percent",
             token: "text",
             size: 44,
-            weight: "600",
             precision: 0,
           },
         ],
@@ -526,7 +502,6 @@ export function storageCard(): ObjectJson {
           bindingId: "storage-card-volume",
           token: "text",
           size: 20,
-          weight: "500",
         },
       ]),
       path("storage-chevron", 1590, 626, starterIcons.chevron(24), "text", 2),
@@ -553,24 +528,22 @@ export function networkCard(): ObjectJson {
       // inside a label whose width changes with the reading, and a separate Path
       // would not follow it.
       text("network-down", 1355, 702, 135, 22.6, [
-        { kind: "literal", text: "↓ ", token: "down", size: 20, weight: "500" },
+        { kind: "literal", text: "↓ ", token: "down", size: 20 },
         {
           kind: "value",
           bindingId: "network-download-label",
           token: "text",
           size: 20,
-          weight: "500",
           precision: 1,
         },
       ]),
       text("network-up", 1505, 702, 135, 22.6, [
-        { kind: "literal", text: "↑ ", token: "gpu", size: 20, weight: "500" },
+        { kind: "literal", text: "↑ ", token: "gpu", size: 20 },
         {
           kind: "value",
           bindingId: "network-upload-label",
           token: "text",
           size: 20,
-          weight: "500",
           precision: 1,
         },
       ]),

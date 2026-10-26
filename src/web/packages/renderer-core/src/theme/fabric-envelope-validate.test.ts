@@ -1009,6 +1009,69 @@ describe("Fabric theme envelope validation", () => {
     ).toMatchObject({ ok: true });
   });
 
+  it("refuses the old typePresets group and names it", () => {
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      globals: {
+        typePresets: {
+          body: { family: "Inter", size: 16, trioRole: "body" },
+        },
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected typePresets to be refused");
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        path: "/globals/typePresets",
+        message: expect.stringContaining("typePresets"),
+      }),
+    );
+  });
+
+  it.each(["size", "lineHeight", "letterSpacing", "trioRole", "name"])(
+    "refuses a type token carrying %s, naming the key",
+    (key) => {
+      const result = validateFabricThemeEnvelope({
+        ...envelope(),
+        globals: {
+          typeTokens: {
+            body: { family: "Inter", [key]: 16 },
+          },
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error(`expected a ${key} token to be refused`);
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          code: "unknown-field",
+          path: `/globals/typeTokens/body/${key}`,
+          message: expect.stringContaining(`"${key}"`),
+        }),
+      );
+    },
+  );
+
+  it("accepts the three role ids without a trioRole tag", () => {
+    const theme = {
+      ...envelope(),
+      globals: {
+        typeTokens: {
+          heading: { family: "Segoe UI, sans-serif", weight: "600" },
+          body: { family: "Segoe UI, sans-serif", weight: "400" },
+          mono: { family: "Consolas, monospace", weight: "400" },
+        },
+      },
+    };
+
+    expect(validateFabricThemeEnvelope(theme)).toMatchObject({ ok: true });
+    // A role is the id, so the trio is complete without any token carrying a tag.
+    expect(
+      validateFabricThemeEnvelope(theme, { requireTrioRoles: true }),
+    ).toMatchObject({ ok: true });
+  });
+
   it("validates exact declared font faces and shared trio roles", () => {
     expect(
       validateFabricThemeEnvelope(envelopeWithFontRoles(), {
@@ -1049,7 +1112,10 @@ describe("Fabric theme envelope validation", () => {
     ).toMatchObject({
       ok: false,
       issues: expect.arrayContaining([
-        expect.objectContaining({ path: "/globals/typeTokens" }),
+        expect.objectContaining({
+          path: "/globals/typeTokens/mono",
+          message: expect.stringContaining("mono"),
+        }),
       ]),
     });
   });
@@ -1175,7 +1241,7 @@ describe("Fabric theme envelope validation", () => {
     });
   });
 
-  it("rejects local text-run colour and type settings", () => {
+  it("rejects local text-run colour settings", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),
       globals: {
@@ -1204,7 +1270,7 @@ describe("Fabric theme envelope validation", () => {
                   kind: "literal",
                   text: "CPU",
                   typeToken: "typeTokens.body",
-                  style: { color: { value: "#fff" }, fontSize: { value: 16 } },
+                  style: { color: { value: "#fff" } },
                 },
               ],
             },
@@ -1217,15 +1283,72 @@ describe("Fabric theme envelope validation", () => {
       ok: false,
       issues: expect.arrayContaining([
         expect.objectContaining({
-          code: "unknown-field",
-          path: "/scene/objects/0/yunariText/runs/0/style/fontSize",
-        }),
-        expect.objectContaining({
           code: "unresolved-global-ref",
           path: "/scene/objects/0/yunariText/runs/0/style/color",
         }),
       ]),
     });
+  });
+
+  it("accepts a run's authored size and refuses one that is not positive", () => {
+    const withRunStyle = (fontSize: unknown): Record<string, unknown> => ({
+      ...envelope(),
+      bindings: {},
+      globals: {
+        palette: {
+          none: {
+            name: "None",
+            value: { kind: "solid", color: "transparent" },
+          },
+          text: { name: "Text", value: { kind: "solid", color: "#fff" } },
+        },
+        typeTokens: {
+          body: { family: "Inter" },
+        },
+      },
+      scene: {
+        version: "7.4.0",
+        objects: [
+          {
+            type: "Textbox",
+            id: "label",
+            fill: "#fff",
+            yunariPaint: { fill: "palette.text" },
+            yunariText: {
+              runs: [
+                {
+                  kind: "literal",
+                  text: "CPU",
+                  typeToken: "typeTokens.body",
+                  style: {
+                    color: { ref: "palette.text" },
+                    fontSize: { value: fontSize },
+                    lineHeight: { value: 1.18 },
+                    letterSpacing: { value: 6 },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(
+      validateFabricThemeEnvelope(withRunStyle(72)),
+      "an authored size is valid",
+    ).toMatchObject({ ok: true });
+
+    for (const bad of [0, -4, Number.NaN]) {
+      const result = validateFabricThemeEnvelope(withRunStyle(bad));
+      expect(result.ok, `fontSize ${String(bad)}`).toBe(false);
+      if (!result.ok)
+        expect(result.issues).toContainEqual(
+          expect.objectContaining({
+            path: "/scene/objects/0/yunariText/runs/0/style/fontSize",
+          }),
+        );
+    }
   });
 
   it("requires the theme to declare the language its text is written in", () => {

@@ -58,15 +58,9 @@ const KNOWN_KEYS = {
     "format",
   ],
   globalEntry: ["name", "value"],
-  typeToken: [
-    "family",
-    "size",
-    "weight",
-    "letterSpacing",
-    "lineHeight",
-    "face",
-    "trioRole",
-  ],
+  // A token names a face only. Size, leading, tracking and role belong to the
+  // run that wears it (docs/decisions/0124).
+  typeToken: ["family", "weight", "face"],
   fontFaceReference: ["assetId"],
 } as const satisfies Record<string, readonly string[]>;
 

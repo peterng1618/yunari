@@ -155,7 +155,7 @@ describe("globals", () => {
     ).toContain("invalid-id");
   });
 
-  it("accepts a typed preset and refuses a malformed one", () => {
+  it("accepts a typed token and refuses styling keys on it", () => {
     expectValid({
       ...baseEnvelope(),
       globals: {
@@ -174,11 +174,22 @@ describe("globals", () => {
         ...baseEnvelope(),
         globals: {
           typeTokens: {
-            body: { name: "Body", value: { family: "", size: 0 } },
+            body: { family: "Inter", name: "Body", size: 0, trioRole: "body" },
           },
         },
       }),
-    ).toEqual(expect.arrayContaining(["missing-field", "out-of-range"]));
+    ).toEqual(expect.arrayContaining(["unknown-field"]));
+
+    expect(
+      codes({
+        ...baseEnvelope(),
+        globals: {
+          typeTokens: {
+            body: { family: "" },
+          },
+        },
+      }),
+    ).toContain("missing-field");
   });
 });
 
