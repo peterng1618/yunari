@@ -17,11 +17,11 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Last completed change
 
-- **Fonts draw in the session that adopts them:** a face adopted from the finder or imported from disk is registered in `document.fonts` and matching text is remeasured, instead of falling back to a serif until the theme is reopened.
-- **The font finder's tiles are cards:** a specimen box drawing a trio's three faces at heading/body/mono sizes (a family draws its first cut), the result's name, metadata and source mark.
+- **A family is drawn and applied by its lead face:** `leadCutOf` reads the cut id the result row carries, not `cuts[0]`, which for a Google family is often a non-Latin subset — the serif fallback Water Brush and Waterfall showed.
+- **A cut's subset is named when weight and style repeat:** three 400 cuts read `400 · vietnamese`, `400 · latin-ext`, `400 · latin` instead of three identical `400` chips.
+- **A face adopted mid-session is registered:** `watchDeclaredFontFaces` adds it to `document.fonts` and remeasures matching text; tiles are cards drawing a trio at 20 / 15 / 12 px.
 - **A face is named by family and weight** wherever files are listed — Assets card, preview modal, background list, save cleanup — not by its packaged `google-fonts-cut-…` id.
-- **Browser proof:** cards render three specimen rows at 20 / 15 / 12 px in the result's own families, and applying a trio mid-session leaves three `loaded` FontFaces (`Inter:700`, `Poppins:400`, `Fira Code:400`) in `document.fonts`.
-- **Gate and merge:** `npm run gate` exit 0 — 435 files / 6663 passed, 2 skipped; worker 13 / 130. Both commits merged locally into `main` (`9e3871c7`, `c41ecdb7`); nothing is pushed.
+- **Proof:** finder suite 10 files / 108 passed, `npm run typecheck` exit 0; real-glyph rendering of an adopted CDN face is still unverified here (the sandbox cannot reach the CDN).
 
 ## Next
 
