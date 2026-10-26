@@ -2460,6 +2460,158 @@ describe("the Wallpaper Engine import transaction", () => {
     extensions.destroy();
   });
 
+  /**
+   * **One host call, because the host extracts and normalizes together.** The
+   * package's title is what the credit carries; the video has no source, no
+   * author and no workshop id, because the file carries none.
+   */
+  it("imports a picked .mpkg through the one host call and credits its title", async () => {
+    const video = new Uint8Array([1, 2, 3]);
+    const requests: { readonly url: string; readonly body: unknown }[] = [];
+    const manager = new AssetManager();
+    const importSpy = vi.spyOn(manager, "import");
+    const setBackgroundMedia = vi.fn();
+    const extensions = wallpaperSession(manager, setBackgroundMedia);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({ url: String(input), body: init?.body });
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            videoBase64: base64Of(video),
+            reencoded: false,
+            title: "Night street",
+            workshopId: "202",
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const picked = new File([new Uint8Array([9, 9])], "night.mpkg", {
+      type: "application/octet-stream",
+    });
+    const steps: string[] = [];
+    expect(
+      await extensions.importPickedVideo(picked, {
+        package: true,
+        onStep: (step) => steps.push(step),
+      }),
+    ).toEqual({ ok: true });
+
+    // The host's single call, never the separate normalize route.
+    expect(requests.map((request) => request.url)).toEqual([
+      "/api/wallpaper-engine/mpkg",
+    ]);
+    expect(requests[0]?.body).toBe(picked);
+    expect(steps).toEqual(["preparing", "importing"]);
+
+    expect(importSpy).toHaveBeenCalledTimes(1);
+    const imported = importSpy.mock.calls[0]?.[0];
+    if (imported === undefined) throw new Error("the manager imported nothing");
+    expect(imported.name).toBe("Night street.mp4");
+    expect(new Uint8Array(await imported.arrayBuffer())).toEqual(video);
+    expect(setBackgroundMedia).toHaveBeenCalled();
+
+    await extensions.actionFacade().savePackage();
+    // A package declares no source and no author: the file carries neither.
+    expect(saveMock).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      expect.objectContaining({
+        entries: [
+          {
+            kind: "wallpaper",
+            title: "Night street",
+            license: "unknown",
+            changes: "Copied unchanged",
+          },
+        ],
+      }),
+    );
+    extensions.destroy();
+  });
+
+  it("imports a picked video through the normalizer and writes no credit", async () => {
+    const normalized = new Uint8Array([4, 5, 6]);
+    const requests: string[] = [];
+    const manager = new AssetManager();
+    const importSpy = vi.spyOn(manager, "import");
+    const setBackgroundMedia = vi.fn();
+    const extensions = wallpaperSession(manager, setBackgroundMedia);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        requests.push(String(input));
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            bytesBase64: base64Of(normalized),
+            reencoded: true,
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    const picked = new File([new Uint8Array([1])], "clip.mov", {
+      type: "video/quicktime",
+    });
+    expect(
+      await extensions.importPickedVideo(picked, { package: false }),
+    ).toEqual({ ok: true });
+
+    expect(requests).toEqual(["/api/themes/normalize-video"]);
+    const imported = importSpy.mock.calls[0]?.[0];
+    if (imported === undefined) throw new Error("the manager imported nothing");
+    expect(imported.name).toBe("clip.mp4");
+    expect(new Uint8Array(await imported.arrayBuffer())).toEqual(normalized);
+    expect(setBackgroundMedia).toHaveBeenCalled();
+
+    await extensions.actionFacade().savePackage();
+    // A video carries no attribution: no credit member reaches the writer.
+    expect(saveMock).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      undefined,
+    );
+    extensions.destroy();
+  });
+
+  it("returns the host's package sentence and declares nothing", async () => {
+    const sentence = "No video in this package.";
+    const manager = new AssetManager();
+    const importSpy = vi.spyOn(manager, "import");
+    const setBackgroundMedia = vi.fn();
+    const extensions = wallpaperSession(manager, setBackgroundMedia);
+    setBackgroundMedia.mockClear();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ ok: false, message: sentence }), {
+            status: 200,
+          }),
+      ),
+    );
+
+    const picked = new File([new Uint8Array([9])], "night.mpkg", {
+      type: "application/octet-stream",
+    });
+    expect(
+      await extensions.importPickedVideo(picked, { package: true }),
+    ).toEqual({ ok: false, message: sentence });
+    expect(importSpy).not.toHaveBeenCalled();
+    expect(setBackgroundMedia).not.toHaveBeenCalled();
+    extensions.destroy();
+  });
+
   const sceneItem = {
     ...videoItem,
     workshopId: "303",

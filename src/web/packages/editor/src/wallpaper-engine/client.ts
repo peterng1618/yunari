@@ -358,8 +358,9 @@ export async function startProject(
 }
 
 /** The normalizer answers MP4, so a name from a package's title or the picked
- *  file's stem carries the extension the manager validates. */
-function mp4NameOf(name: string): string {
+ *  file's stem carries the extension the manager validates. Shared with the
+ *  session's video import, which names its declared file the same way. */
+export function mp4NameOf(name: string): string {
   const dot = name.lastIndexOf(".");
   return `${dot <= 0 ? name : name.slice(0, dot)}.mp4`;
 }

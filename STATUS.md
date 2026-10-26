@@ -16,9 +16,10 @@ Execute [`the Wallpaper Engine import rework`](docs/superpowers/plans/2026-10-26
 
 ## Last completed change
 
-- **Client contract:** `startProject` answers `{ ok, name, reused }`; `prepareMobilePackage` posts a picked `.mpkg` and names the returned video from the package title or the source stem; `fetchAuthorName` reads the author route.
-- **Raw normalize upload:** `requestNormalizedVideo` takes a `File | Uint8Array` and posts its bytes as `application/octet-stream`; the Assets pane and the export sheet still compile until Tasks 4–5 rewrite them.
-- **Focused proof:** 143 tests pass across the client, normalizer, session, Assets-pane, finder-body and export-sheet suites; workspace typecheck and biome clean.
+- **Import modal:** a picked `.mpkg` or video opens one modal, runs the host once, declares the video and sets it as background; a refusal stays open with the host's sentence.
+- **Assets pane:** both pickers accept `.mpkg`, video-shaped picks route to the session instead of the manager, and the manual Normalize control is gone.
+- **Session:** `importPickedVideo` shares one `declareVideo` transaction with the Wallpaper Engine imports; a package credit carries its title, licence `unknown`, and no source.
+- **Proof:** 91 focused tests and the full editor suite (2746) pass; the `assets-preview` browser spec's 4 cases pass.
 
 ## Next
 

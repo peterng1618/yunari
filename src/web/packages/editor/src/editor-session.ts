@@ -69,6 +69,7 @@ import {
   createAssetsPane,
   type FontCommitInput,
 } from "./panes/assets/assets-pane.js";
+import type { VideoImportStep } from "./panes/assets/import-video-modal.js";
 import type { PresetSelection } from "./panes/tokens/preset-list.js";
 import {
   createTokenInspectorPanel,
@@ -93,6 +94,8 @@ import { requestNormalizedVideo } from "./video-normalizer.js";
 import {
   creditsEntryOf,
   fetchItemAsset,
+  mp4NameOf,
+  prepareMobilePackage,
   type WallpaperEngineItem,
 } from "./wallpaper-engine/client.js";
 import type { WallpaperExportOutcome } from "./wallpaper-engine/export-sheet.js";
@@ -550,6 +553,8 @@ export class EditorSession {
       onChanged: () => this.#declarationsChanged(),
       onFindAssets: () => options.onFindAssets?.(),
       onFontCommit: (input) => this.#commitFont(input),
+      onImportVideo: (file, isPackage, onStep) =>
+        this.importPickedVideo(file, { package: isPackage, onStep }),
       onBackground: (asset) => {
         const background = this.#document.envelope.background;
         this.#document.setBackground({
@@ -778,14 +783,78 @@ export class EditorSession {
     file: File,
     changes: string,
   ): Promise<WallpaperExportOutcome> {
-    const credit: ThemeCreditsEntry = { ...creditsEntryOf(item), changes };
-    if (!this.#document.canAddCredit(credit)) {
+    return this.#declareVideo(file, {
+      credit: { ...creditsEntryOf(item), changes },
+    });
+  }
+
+  /**
+   * One picked `.mpkg` or video: the host prepares the bytes, then the same
+   * declaration every video import makes.
+   *
+   * A package is extracted and normalized in the host's single call, so no
+   * second normalize request is made; its title is the credit's. A video file
+   * is normalized alone and carries no attribution — the file has none.
+   */
+  async importPickedVideo(
+    file: File,
+    options: {
+      readonly package: boolean;
+      readonly onStep?: (step: VideoImportStep) => void;
+    },
+  ): Promise<ImportOutcome> {
+    options.onStep?.("preparing");
+    let prepared: File;
+    let credit: ThemeCreditsEntry | undefined;
+
+    if (options.package) {
+      const answer = await prepareMobilePackage(file);
+      if (!answer.ok) return { ok: false, message: answer.message };
+      prepared = answer.file;
+      credit = {
+        kind: "wallpaper",
+        title: answer.title ?? mp4NameOf(file.name),
+        license: "unknown",
+        changes: answer.reencoded
+          ? "Re-encoded to the publish envelope"
+          : "Copied unchanged",
+      };
+    } else {
+      const normalized = await requestNormalizedVideo(file);
+      if (!normalized.ok) return { ok: false, message: normalized.message };
+      prepared = new File(
+        [normalized.bytes as unknown as BlobPart],
+        mp4NameOf(file.name),
+        { type: "video/mp4" },
+      );
+    }
+
+    options.onStep?.("importing");
+    const outcome = await this.#declareVideo(
+      prepared,
+      credit === undefined ? {} : { credit },
+    );
+    return outcome.ok ? { ok: true } : outcome;
+  }
+
+  /**
+   * The one video transaction: the manager's caps and reference model, the
+   * credit when the import has one, and the background consequence every video
+   * import makes. The credit is written first, the same order `importAsset`
+   * uses — an import that places nothing still carries its attribution.
+   */
+  async #declareVideo(
+    file: File,
+    options: { readonly credit?: ThemeCreditsEntry },
+  ): Promise<WallpaperExportOutcome> {
+    const credit = options.credit;
+    if (credit !== undefined && !this.#document.canAddCredit(credit)) {
       return { ok: false, message: uiCopy.assets.creditsFull };
     }
 
     try {
       const reference = await this.#assets.import(file);
-      this.#document.addCredit(credit);
+      if (credit !== undefined) this.#document.addCredit(credit);
       const background = this.#document.envelope.background;
       this.#document.setBackground({
         ...background,
@@ -1298,11 +1367,4 @@ function messageOf(error: unknown): string {
  *  served the export as octet-stream. */
 function isVideoFile(file: File): boolean {
   return file.type.startsWith("video/") || /\.mp4$/i.test(file.name);
-}
-
-/** The normalizer answers MP4, so the manager's extension check sees what the
- *  bytes are even when the wallpaper's own file was another container. */
-function mp4NameOf(name: string): string {
-  const dot = name.lastIndexOf(".");
-  return `${dot <= 0 ? name : name.slice(0, dot)}.mp4`;
 }

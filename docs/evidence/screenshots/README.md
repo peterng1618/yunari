@@ -161,7 +161,6 @@ result, not merely a mounted editor.
 | Assets | Search Icons across two sources and read the mixed grid | `editor-finder-icons` / `captures the finder's mixed icon grid` |
 | Assets | Read a source's failure beside the other source's rows | `editor-finder-failure` / `captures the finder's failed source` |
 | Assets | Read the Connections tab's provider row | `editor-finder-connections` / `captures the Connections tab's provider row` |
-| Assets | Normalize a declared video and read the host's refusal beside it | `editor-video-normalize` / `normalizes a declared video without replacing its master` |
 | Assets | Browse this PC's Wallpaper Engine library and read each kind's own action | `editor-finder-wallpaper-engine` / `captures the finder on Wallpaper Engine` |
 | Assets | Open a still scene and read the PNG settings and the text step | `editor-finder-scene-still` / `captures a still scene's export sheet` |
 | Assets | Open an animated scene and read the five-second MP4 settings | `editor-finder-scene-animated` / `captures an animated scene's export sheet` |

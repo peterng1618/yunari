@@ -81,6 +81,11 @@ const OTHER_IMAGE: LocalAssetReference = {
   kind: "image",
   path: "assets/photo.jpg",
 };
+const VIDEO: LocalAssetReference = {
+  id: "clip",
+  kind: "video",
+  path: "assets/clip.mp4",
+};
 const FONT: LocalAssetReference = {
   id: "body",
   kind: "font",
@@ -358,10 +363,13 @@ const SVG_FILE = file("mark.svg", "image/svg+xml", "<svg/>");
 const FONT_FILE = file("body.woff2", "font/woff2", "woff2");
 const OTHER_FONT_FILE = file("Roboto-Light.ttf", "font/ttf", "ttf");
 const VIDEO_FILE = file("clip.mp4", "video/mp4", "mp4");
+const PACKAGE_FILE = file("night.mpkg", "application/octet-stream", "PKGM0014");
 
 interface Harness {
   readonly host: HTMLElement;
   readonly manager: AssetManager;
+  readonly importSpy: Mock;
+  readonly importVideo: Mock;
   readonly placeImage: Mock;
   readonly replace: Mock;
   readonly hydrate: Mock;
@@ -395,9 +403,9 @@ async function mountWithManager(
     .spyOn(manager, "placeImage")
     .mockResolvedValue(undefined);
   const realImport = manager.import.bind(manager);
-  vi.spyOn(manager, "import").mockImplementation((chosen) =>
-    track(realImport(chosen)),
-  );
+  const importSpy = vi
+    .spyOn(manager, "import")
+    .mockImplementation((chosen) => track(realImport(chosen)));
   const realReplace = manager.replace.bind(manager);
   const replace = vi
     .spyOn(manager, "replace")
@@ -411,6 +419,9 @@ async function mountWithManager(
   const changed = vi.fn();
   const onFindAssets = vi.fn();
   const onBackground = vi.fn();
+  /** The session's video route: the pane hands the pick over and declares
+   *  nothing itself. */
+  const importVideo = vi.fn(async () => ({ ok: true as const }));
   /** The canvas's own events, kept so a case can fire the ones Fabric fires. */
   const handlers = new Map<string, Set<() => void>>();
   const fire = (event: string): void => {
@@ -455,6 +466,7 @@ async function mountWithManager(
         onChanged={changed}
         onFindAssets={onFindAssets}
         onFontCommit={fontCommit}
+        onImportVideo={importVideo}
         {...(options.subscribeDocumentChange === undefined
           ? {}
           : { subscribeDocumentChange: options.subscribeDocumentChange })}
@@ -466,6 +478,8 @@ async function mountWithManager(
   return {
     host,
     manager,
+    importSpy,
+    importVideo,
     placeImage,
     replace,
     hydrate,
@@ -617,7 +631,8 @@ describe("the Assets pane's import", () => {
   });
 
   it("places an imported image through the canvas, as one history entry", async () => {
-    const { host, manager, placeImage, saveState } = await mountWithManager();
+    const { host, manager, importVideo, placeImage, saveState } =
+      await mountWithManager();
 
     await importFile(host, IMAGE_FILE);
 
@@ -628,43 +643,42 @@ describe("the Assets pane's import", () => {
       kind: "image",
     });
     expect(saveState).toHaveBeenCalledTimes(1);
+    // A picture keeps the direct path: only a video-shaped pick opens the modal.
+    expect(importVideo).not.toHaveBeenCalled();
     expect(alert(host).textContent).toBe(uiCopy.panels.assetPlaced);
   });
 
-  it("sets an imported video as background media, and places nothing", async () => {
-    const { host, manager, placeImage, onBackground, changed } =
-      await mountWithManager();
+  it("hands a picked video to the video import instead of declaring it", async () => {
+    const { host, importSpy, importVideo } = await mountWithManager();
 
     await importFile(host, VIDEO_FILE);
 
-    expect(manager.declarations.map((asset) => asset.kind)).toEqual(["video"]);
-    expect(placeImage).not.toHaveBeenCalled();
-    expect(onBackground).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "clip", kind: "video" }),
-    );
-    expect(alert(host).textContent).toBe(uiCopy.panels.assetBackgroundSet);
-    expect(changed).toHaveBeenCalled();
+    expect(importVideo).toHaveBeenCalledTimes(1);
+    expect(importVideo.mock.calls[0]?.[0]).toBe(VIDEO_FILE);
+    expect(importVideo.mock.calls[0]?.[1]).toBe(false);
+    expect(importVideo.mock.calls[0]?.[2]).toEqual(expect.any(Function));
+    expect(importSpy).not.toHaveBeenCalled();
   });
 
-  it("says declared, not background, where no callback can set one", async () => {
-    const { host, onBackground } = await mountWithManager(
-      () => false,
-      [],
-      false,
-    );
+  it("hands a picked .mpkg to the video import, flagged as a package", async () => {
+    const { host, importSpy, importVideo } = await mountWithManager();
+
+    await importFile(host, PACKAGE_FILE);
+
+    expect(importVideo).toHaveBeenCalledTimes(1);
+    expect(importVideo.mock.calls[0]?.[0]).toBe(PACKAGE_FILE);
+    expect(importVideo.mock.calls[0]?.[1]).toBe(true);
+    expect(importSpy).not.toHaveBeenCalled();
+  });
+
+  it("disables Import as background where no callback can set one", async () => {
+    const { host } = await mountWithManager(() => false, [], false);
     // The same disabled treatment the cards' unwired actions get: a control
     // that offers a write the pane cannot perform stays off.
     const control = host.querySelector<HTMLButtonElement>(
       "[data-yunari-asset-import-background]",
     )!;
     expect(control.disabled).toBe(true);
-
-    // A video's automatic route is the background, and with no callback there
-    // is no background: the sentence must name what actually happened.
-    await importFile(host, VIDEO_FILE);
-
-    expect(onBackground).not.toHaveBeenCalled();
-    expect(alert(host).textContent).toBe(uiCopy.panels.assetDeclaredOnly);
   });
 
   it("opens the font details form on a pick and declares nothing yet", async () => {
@@ -1122,351 +1136,22 @@ describe("the behaviours the file section carried", () => {
 });
 
 /**
- * **Only a video, and only one action.** Normalizing brings the file inside
- * the publish envelope and keeps the whole frame: cropping is the background
- * layer's job at render time (0095), so there is no second mode. An image, an
- * SVG or a font has no video envelope to normalize, so no control may appear
- * for it.
+ * **The manual normalize control is gone.** Normalization is the modal's
+ * business now: a pick runs the host once and declares what it answers with,
+ * so the pane draws no button, no held copy and no confirmation for it.
  */
-describe("normalizing a declared video", () => {
-  it("offers the normalize control only for a declared video", async () => {
-    stubFontParser();
-    const { host } = await mountWithManager();
-
-    await importFile(host, IMAGE_FILE);
-    await selectCard(host, "logo.png");
-    expect(normalizeControl(host)).toBeNull();
-
-    await declareFont(host);
-    await selectCard(host, "body");
-    expect(normalizeControl(host)).toBeNull();
-
-    await importFile(host, VIDEO_FILE);
+describe("the removed manual normalize control", () => {
+  it("draws none for a declared video", async () => {
+    const { host } = mount([VIDEO]);
     await selectCard(host, "clip.mp4");
-    expect(normalizeControl(host)).not.toBeNull();
-    expect(normalizeControl(host)?.textContent).toBe(
-      uiCopy.panels.normalizeVideo,
-    );
-  });
 
-  /**
-   * **A refusal is the host's own sentence, and nothing was written.** The host
-   * knows which envelope rule the video broke; a sentence composed here would
-   * hide it, and a master swapped for a refused result would be a silent loss.
-   */
-  it("shows the host's refusal beside the control and leaves the master alone", async () => {
-    const sentence = "That video is not an H.264 MP4.";
-    const fetchStub = stubNormalize(() =>
-      normalizeAnswer({ ok: false, message: sentence }),
-    );
-    const { host, manager, saveState } = await mountWithManager();
-
-    await importFile(host, VIDEO_FILE);
-    await selectCard(host, "clip.mp4");
-    const afterImport = saveState.mock.calls.length;
-    await press(host, "[data-yunari-asset-normalize]");
-
-    expect(alert(host).textContent).toBe(sentence);
-    expect(bytesOf(manager.assets["assets/clip.mp4"])).toEqual(
-      bytesOf(new TextEncoder().encode("mp4")),
-    );
-    expect(useControl(host)).toBeNull();
-    expect(saveState.mock.calls.length).toBe(afterImport);
-    // No `fit` is sent, so the host keeps the source's own shape.
-    expect(postedBody(fetchStub)).not.toHaveProperty("fit");
-  });
-
-  /**
-   * **The master is never replaced silently.** The run's result is held, and the
-   * bytes move only on the second press — an author who normalizes to inspect
-   * the result must not find the original already gone.
-   */
-  it("holds the normalized copy until the author presses Use the normalized copy", async () => {
-    const normalized = new TextEncoder().encode("mp4-normalized");
-    stubNormalize(() => normalizeAnswer({ ok: true, bytes: normalized }));
-    const { host, manager, hydrate, saveState } = await mountWithManager();
-
-    await importFile(host, VIDEO_FILE);
-    await selectCard(host, "clip.mp4");
-    const afterImport = saveState.mock.calls.length;
-    await press(host, "[data-yunari-asset-normalize]");
-
-    // Held, not applied: the master still carries the file the author imported.
-    expect(bytesOf(manager.assets["assets/clip.mp4"])).toEqual(
-      bytesOf(new TextEncoder().encode("mp4")),
-    );
-    expect(useControl(host)?.textContent).toBe(
-      uiCopy.panels.useNormalizedVideo,
-    );
-    expect(saveState.mock.calls.length).toBe(afterImport);
-
-    await press(host, "[data-yunari-asset-use-normalized]");
-
-    // The second press is the one that writes, and it keeps the declaration.
-    expect(bytesOf(manager.assets["assets/clip.mp4"])).toEqual(
-      bytesOf(normalized),
-    );
-    expect(manager.declarations.map((asset) => [asset.id, asset.path])).toEqual(
-      [["clip", "assets/clip.mp4"]],
-    );
-    expect(hydrate).toHaveBeenCalledTimes(1);
-    expect(saveState.mock.calls.length - afterImport).toBe(1);
-    expect(useControl(host)).toBeNull();
-  });
-
-  it("previews the held copy before the press that writes it", async () => {
-    const normalized = new TextEncoder().encode("mp4-normalized");
-    stubNormalize(() => normalizeAnswer({ ok: true, bytes: normalized }));
-    const { host, manager } = await mountWithManager();
-
-    await importFile(host, VIDEO_FILE);
-    await selectCard(host, "clip.mp4");
-    await press(host, "[data-yunari-asset-normalize]");
-
-    // Spec rule 4: the author inspects the normalized asset, not the master.
-    const preview = host.querySelector<HTMLVideoElement>(
-      "[data-yunari-asset-normalized-preview]",
-    );
-    expect(preview).not.toBeNull();
-    expect(preview?.getAttribute("src")).toMatch(/^blob:/);
-    expect(preview?.controls).toBe(true);
-    // Previewing wrote nothing.
-    expect(bytesOf(manager.assets["assets/clip.mp4"])).toEqual(
-      bytesOf(new TextEncoder().encode("mp4")),
-    );
-  });
-
-  /** A held copy belongs to the press that produced it: a refused second press
-   *  must not leave the previous mode's result armed for the write. */
-  it("clears a held copy when a later normalize press is refused", async () => {
-    const sentence = "That video is not an H.264 MP4.";
-    const fetchStub = vi.fn<typeof fetch>();
-    fetchStub.mockResolvedValueOnce(
-      normalizeAnswer({
-        ok: true,
-        bytes: new TextEncoder().encode("mp4-normalized"),
-      }),
-    );
-    fetchStub.mockResolvedValueOnce(
-      normalizeAnswer({ ok: false, message: sentence }),
-    );
-    vi.stubGlobal("fetch", fetchStub);
-    const { host, manager, saveState } = await mountWithManager();
-
-    await importFile(host, VIDEO_FILE);
-    await selectCard(host, "clip.mp4");
-    await press(host, "[data-yunari-asset-normalize]");
-    expect(useControl(host)).not.toBeNull();
-    const afterImport = saveState.mock.calls.length;
-
-    await press(host, "[data-yunari-asset-normalize]");
-
-    expect(alert(host).textContent).toBe(sentence);
-    expect(useControl(host)).toBeNull();
-    expect(bytesOf(manager.assets["assets/clip.mp4"])).toEqual(
-      bytesOf(new TextEncoder().encode("mp4")),
-    );
-    expect(saveState.mock.calls.length).toBe(afterImport);
-  });
-
-  /** The early return before the host is called is still a press that starts a
-   *  run: the previous copy must not stay armed for the write. */
-  it("clears a held copy when a press finds the declared bytes gone", async () => {
-    stubNormalize(() =>
-      normalizeAnswer({
-        ok: true,
-        bytes: new TextEncoder().encode("mp4-normalized"),
-      }),
-    );
-    const { host, manager } = await mountWithManager();
-
-    await importFile(host, VIDEO_FILE);
-    await selectCard(host, "clip.mp4");
-    await press(host, "[data-yunari-asset-normalize]");
-    expect(useControl(host)).not.toBeNull();
-
-    vi.spyOn(manager, "assets", "get").mockReturnValue({});
-    await press(host, "[data-yunari-asset-normalize]");
-
-    expect(useControl(host)).toBeNull();
-  });
-
-  it("drops a removal while the held copy is being written", async () => {
-    stubNormalize(() =>
-      normalizeAnswer({
-        ok: true,
-        bytes: new TextEncoder().encode("mp4-normalized"),
-      }),
-    );
-    const { host, manager, remove } = await mountWithManager();
-
-    await importFile(host, VIDEO_FILE);
-    await selectCard(host, "clip.mp4");
-    await press(host, "[data-yunari-asset-normalize]");
-
-    // The write is held open, which is the window a removal would splice a
-    // stale index through (`replaceBytes` splices after an await).
-    const declared = manager.declarations[0];
-    if (declared === undefined) throw new Error("no declaration");
-    let finish: () => void = () => {};
-    const write = new Promise<LocalAssetReference>((resolve) => {
-      finish = () => resolve(declared);
-    });
-    vi.spyOn(manager, "replaceBytes").mockReturnValue(write);
-    await act(async () => {
-      useControl(host)!.click();
-      await flush();
-    });
-
-    await act(async () => removeControl(host).click());
-    expect(remove).not.toHaveBeenCalled();
-
-    await act(async () => {
-      finish();
-      await flush();
-    });
-    expect(manager.declarations.map((asset) => asset.id)).toEqual(["clip"]);
-  });
-
-  it("names a failed write of the held copy apart from an import failure", async () => {
-    stubNormalize(() =>
-      normalizeAnswer({
-        ok: true,
-        bytes: new TextEncoder().encode("mp4-normalized"),
-      }),
-    );
-    const { host, manager, saveState, error } = await mountWithManager();
-
-    await importFile(host, VIDEO_FILE);
-    await selectCard(host, "clip.mp4");
-    await press(host, "[data-yunari-asset-normalize]");
-    const afterImport = saveState.mock.calls.length;
-    vi.spyOn(manager, "replaceBytes").mockRejectedValue(new Error("disk full"));
-
-    await press(host, "[data-yunari-asset-use-normalized]");
-
-    expect(alert(host).textContent).toBe(uiCopy.panels.useNormalizedFailed);
-    expect(error).toHaveBeenCalledWith(
-      "image",
-      uiCopy.panels.useNormalizedFailed,
-      expect.any(Error),
-    );
-    expect(saveState.mock.calls.length).toBe(afterImport);
-  });
-
-  /** The press asks for no crop: the host's `contain` path keeps the source's
-   *  own shape, so the published file still has the pixels a pan can move. */
-  it("asks the host for the whole frame, not a crop", async () => {
-    const fetchStub = stubNormalize(() =>
-      normalizeAnswer({
-        ok: false,
-        message: "refused to keep the case simple",
-      }),
-    );
-    const { host } = await mountWithManager();
-
-    await importFile(host, VIDEO_FILE);
-    await selectCard(host, "clip.mp4");
-    await press(host, "[data-yunari-asset-normalize]");
-
-    expect(postedBody(fetchStub)).not.toHaveProperty("fit");
-    expect(postedBody(fetchStub)).not.toHaveProperty("aspect");
-  });
-
-  /** The author sees the wait, because a re-encode of a large video outlives the
-   *  press that started it. */
-  it("says it is normalizing while the host has not answered", async () => {
-    let answer: (response: Response) => void = () => {};
-    const pending = new Promise<Response>((resolve) => {
-      answer = resolve;
-    });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => pending),
-    );
-    const { host } = await mountWithManager();
-
-    await importFile(host, VIDEO_FILE);
-    await selectCard(host, "clip.mp4");
-    await act(async () => {
-      normalizeControl(host)!.click();
-    });
-
-    expect(normalizeControl(host)?.textContent).toBe(
-      uiCopy.panels.normalizingVideo,
-    );
-
-    await act(async () => {
-      answer(normalizeAnswer({ ok: false, message: "done" }));
-      await pending;
-      await drain();
-    });
+    expect(host.querySelector("[data-yunari-asset-normalize]")).toBeNull();
+    expect(host.querySelector("[data-yunari-asset-use-normalized]")).toBeNull();
   });
 });
 
-/** An asset's bytes as plain numbers. The jsdom `File` shim and the manager's
- *  own arrays come from different realms, so two identical contents are not
- *  deep-equal by constructor. */
-const bytesOf = (bytes: Uint8Array | undefined): number[] =>
-  bytes === undefined ? [] : [...bytes];
-
-/** A normalize answer in the host's own shape. */
-function normalizeAnswer(
-  answer: { ok: true; bytes: Uint8Array } | { ok: false; message: string },
-): Response {
-  return new Response(
-    JSON.stringify(
-      answer.ok
-        ? {
-            ok: true,
-            bytesBase64: btoa(String.fromCharCode(...answer.bytes)),
-            reencoded: true,
-          }
-        : { ok: false, message: answer.message },
-    ),
-    { status: 200, headers: { "content-type": "application/json" } },
-  );
-}
-
-/** Answers the host route from `answer`, and records the body it was posted. */
-function stubNormalize(
-  answer: () => Response,
-): ReturnType<typeof vi.fn<typeof fetch>> {
-  const fetchStub = vi.fn<typeof fetch>(async () => answer());
-  vi.stubGlobal("fetch", fetchStub);
-  return fetchStub;
-}
-
-/** The raw body one normalize press posted. */
-function postedBody(fetchStub: ReturnType<typeof vi.fn>): unknown {
-  const init = fetchStub.mock.calls[0]?.[1] as RequestInit | undefined;
-  return init?.body;
-}
-
-/** React and floating-ui schedule outside `act`, so a popup is flushed with
- *  macrotasks rather than one — `paint-list.dom.test.tsx`'s rule. */
-async function flush(): Promise<void> {
-  for (let round = 0; round < 3; round += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-}
-
-const normalizeControl = (host: HTMLElement): HTMLButtonElement | null =>
-  host.querySelector<HTMLButtonElement>("[data-yunari-asset-normalize]");
-const useControl = (host: HTMLElement): HTMLButtonElement | null =>
-  host.querySelector<HTMLButtonElement>("[data-yunari-asset-use-normalized]");
-
-/** Presses a control and waits out the submission it starts. */
-async function press(host: HTMLElement, selector: string): Promise<void> {
-  const target = host.querySelector<HTMLButtonElement>(selector);
-  if (target === null) throw new Error(`no control ${selector}`);
-  await act(async () => {
-    target.click();
-    await drain();
-  });
-}
-
-/** The file types both pickers offer — derived from the manager's own exported
- *  list, so an extension added to `TYPES` and not offered here, or offered here
- *  and not readable there, is red. */
-const ACCEPT = ASSET_FILE_EXTENSIONS.map((ext) => `.${ext}`).join(",");
+/** The file types both pickers offer: the manager's own exported list plus the
+ *  `.mpkg` the pane intercepts before the manager sees it — derived here so an
+ *  extension added to `TYPES` and not offered, or offered and not readable, is
+ *  red. */
+const ACCEPT = `${ASSET_FILE_EXTENSIONS.map((ext) => `.${ext}`).join(",")},.mpkg`;

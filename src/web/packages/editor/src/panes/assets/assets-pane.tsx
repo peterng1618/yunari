@@ -2,6 +2,7 @@ import type { FontAssetReference } from "@yunari/renderer-core";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+import type { ImportOutcome } from "../../asset-finder/actions.js";
 import {
   ASSET_FILE_EXTENSIONS,
   type AssetManager,
@@ -22,13 +23,16 @@ import {
 } from "../../editor-shell/icons.js";
 import type { FontTrioRole } from "../../type-preset-apply.js";
 import { uiCopy } from "../../ui-copy.js";
-import { requestNormalizedVideo } from "../../video-normalizer.js";
 import { AssetCard } from "./asset-card.js";
 import {
   type FontMetadata,
   FontMetadataForm,
   fontMetadataFromFilename,
 } from "./font-metadata-form.js";
+import {
+  ImportVideoModal,
+  type VideoImportStep,
+} from "./import-video-modal.js";
 import { isPreviewable, openAssetPreview } from "./preview-modal.js";
 
 /**
@@ -67,6 +71,15 @@ interface AssetsPaneProps {
   /** Writes the asset as the artboard's background media — envelope state the
    *  pane cannot reach itself. */
   readonly onBackground?: (asset: LocalAssetReference) => void;
+  /** The one route a picked `.mpkg` or video takes. The session prepares the
+   *  bytes and declares them; the pane only opens the modal. Optional so a pane
+   *  mounted without a document still draws, and a video-shaped pick then
+   *  refuses rather than declaring a container the manager must not hold. */
+  readonly onImportVideo?: (
+    file: File,
+    isPackage: boolean,
+    onStep: (step: VideoImportStep) => void,
+  ) => Promise<ImportOutcome>;
   /** The one font commit: declares or amends the face, then writes the preset
    *  and the credit. The cap check and the document writes are the caller's,
    *  because neither can be reached from the pane. Required: a face cannot be
@@ -129,9 +142,17 @@ const SECTIONS: readonly { readonly id: SectionId; readonly label: string }[] =
     { id: "videos", label: uiCopy.assets.category.video },
   ];
 
-const ASSET_FILE_ACCEPT = ASSET_FILE_EXTENSIONS.map((ext) => `.${ext}`).join(
-  ",",
-);
+const ASSET_FILE_ACCEPT = `${ASSET_FILE_EXTENSIONS.map((ext) => `.${ext}`).join(",")},.mpkg`;
+
+/** The package is intercepted before the manager sees it: a `.mpkg` is a
+ *  container the host reads, never a declared asset. */
+function isPackageFile(file: File): boolean {
+  return file.name.toLowerCase().endsWith(".mpkg");
+}
+
+function isVideoFile(file: File): boolean {
+  return mimeOf(file.name)?.startsWith("video/") === true;
+}
 
 export function AssetsPane({
   manager,
@@ -142,6 +163,7 @@ export function AssetsPane({
   onFindAssets,
   onBackground,
   onFontCommit,
+  onImportVideo,
 }: AssetsPaneProps): React.JSX.Element {
   const importInput = useRef<HTMLInputElement>(null);
   const replaceInput = useRef<HTMLInputElement>(null);
@@ -152,12 +174,11 @@ export function AssetsPane({
     () => manager.declarations[0]?.id,
   );
   const [message, setMessage] = useState("");
-  /** The host's normalized copy, held until the author presses to write it.
-   *  Keyed by the asset, so choosing another card cannot draw the wrong one. */
-  const [held, setHeld] = useState<
-    { readonly assetId: string; readonly bytes: Uint8Array } | undefined
+  /** The pick the modal is running: a video or package the host prepares before
+   *  anything is declared. */
+  const [videoImport, setVideoImport] = useState<
+    { readonly file: File; readonly package: boolean } | undefined
   >();
-  const [normalizing, setNormalizing] = useState(false);
   /** The font whose metadata form is open. A pick opens one before anything is
    *  declared; Create type preset on a card opens the same form for its face. */
   const [font, setFont] = useState<FontDraft | undefined>();
@@ -217,14 +238,14 @@ export function AssetsPane({
   };
 
   /**
-   * Declares the picked file and takes the one automatic placement its kind
-   * makes unambiguous: a picture is placed, a video becomes the artboard's
-   * background media, and a font opens its metadata form — nothing is declared
-   * at the pick, so a file the author walks away from leaves no declaration.
+   * Takes the one automatic placement a file's kind makes unambiguous: a
+   * picture is placed, a font opens its metadata form, and a video or package
+   * waits on the import modal — nothing is declared at the pick, so a file the
+   * author walks away from leaves no declaration.
    *
-   * `background` is the author overriding that choice: an image or a video is
-   * forced into background media, and a font is refused before the manager
-   * declares it, so no control leaves a file the author asked not to import.
+   * `background` is the author overriding that choice: an image is forced into
+   * background media, and a font is refused before the manager declares it, so
+   * no control leaves a file the author asked not to import.
    */
   const importFile = async (
     file: File,
@@ -239,6 +260,18 @@ export function AssetsPane({
       setMessage("");
       return;
     }
+    // A package or a video crosses the host before anything is declared, so both
+    // open the one modal rather than reaching the manager with a container it
+    // must refuse (a `.mpkg`) or bytes the publish envelope cannot take.
+    if (isPackageFile(file) || isVideoFile(file)) {
+      if (onImportVideo === undefined) {
+        refuse(new Error("No video import route is wired."));
+        return;
+      }
+      setVideoImport({ file, package: isPackageFile(file) });
+      setMessage("");
+      return;
+    }
     let asset: LocalAssetReference;
     try {
       asset = await manager.import(file);
@@ -248,7 +281,7 @@ export function AssetsPane({
       refuse(error);
       return;
     }
-    if (intent === "background" || asset.kind === "video") {
+    if (intent === "background") {
       // The sentence names what actually ran: a pane mounted without the
       // callback declared the file and set no background.
       if (onBackground === undefined) {
@@ -278,6 +311,21 @@ export function AssetsPane({
     // The selection stays where it was: an author pointing at one asset must
     // not find the list moved because they added a file.
     onChanged?.();
+  };
+
+  /** The modal's run: the session owns the host call and the declaration, and a
+   *  success is the background write a picked video makes. */
+  const runVideoImport = async (
+    file: File,
+    isVideoPackage: boolean,
+    onStep: (step: VideoImportStep) => void,
+  ): Promise<ImportOutcome> => {
+    if (onImportVideo === undefined) {
+      return { ok: false, message: uiCopy.panels.assetImportFailed };
+    }
+    const outcome = await onImportVideo(file, isVideoPackage, onStep);
+    if (outcome.ok) setMessage(uiCopy.panels.assetBackgroundSet);
+    return outcome;
   };
 
   /** Opens the same form for a face the package already declares. */
@@ -374,7 +422,6 @@ export function AssetsPane({
       return;
     }
     setMessage("");
-    setHeld(undefined);
     editor.historyManager.saveState();
     editor.canvas.requestRenderAll();
     onChanged?.();
@@ -415,76 +462,12 @@ export function AssetsPane({
     if (manager.remove(asset.id)) {
       setMessage("");
       setChosenId(undefined);
-      setHeld(undefined);
       onChanged?.();
       return;
     }
     // The declaration was not there to remove — a row drawn from a list the
     // manager has already moved would otherwise press onto nothing.
     setMessage(uiCopy.panels.assetRemoveFailed);
-  };
-
-  /**
-   * Sends the chosen video to the host and holds the copy it answers with.
-   *
-   * Nothing is written here: the master is the file the author imported, and a
-   * re-encode shown to them for approval must not quietly become the document.
-   * `useNormalized` is the press that writes it. The host's own sentence is the
-   * refusal, because it names which envelope rule the video broke.
-   */
-  const normalizeVideo = async (): Promise<void> => {
-    const asset = chosen;
-    if (asset === undefined || asset.kind !== "video") return;
-    // A held copy belongs to the press that produced it: a second press, even
-    // one the host refuses, must never leave the previous result armed.
-    setHeld(undefined);
-    setMessage("");
-    const bytes = manager.assets[asset.path];
-    if (bytes === undefined) {
-      refuse(new Error(`Missing declared asset bytes for ${asset.id}.`));
-      return;
-    }
-    setNormalizing(true);
-    try {
-      // No crop is asked for: the host keeps the whole frame, and the
-      // background layer crops at render time (0095).
-      const outcome = await requestNormalizedVideo(bytes);
-      if (!outcome.ok) {
-        setMessage(outcome.message);
-        return;
-      }
-      setHeld({ assetId: asset.id, bytes: outcome.bytes });
-      setMessage("");
-    } finally {
-      setNormalizing(false);
-    }
-  };
-
-  /** The second press: the held copy becomes the master's bytes, in place. */
-  const useNormalized = async (): Promise<void> => {
-    const pending = held;
-    if (pending === undefined || pending.assetId !== chosen?.id) return;
-    try {
-      await manager.replaceBytes(pending.assetId, pending.bytes);
-      // Rehydration carries the new bytes to whatever renders this id — the
-      // artboard's background media included.
-      await manager.hydrate(editor.canvas);
-    } catch (error) {
-      // Writing the held copy is a byte swap, not an import; the import
-      // sentence would name the wrong failure (N6).
-      setMessage(uiCopy.panels.useNormalizedFailed);
-      editor.errorManager.error(
-        "image",
-        uiCopy.panels.useNormalizedFailed,
-        error,
-      );
-      return;
-    }
-    setHeld(undefined);
-    setMessage("");
-    editor.historyManager.saveState();
-    editor.canvas.requestRenderAll();
-    onChanged?.();
   };
 
   /**
@@ -611,10 +594,6 @@ export function AssetsPane({
     return <>{actions}</>;
   };
 
-  const video = chosen?.kind === "video" ? chosen : undefined;
-  const pending = held?.assetId === video?.id ? held : undefined;
-  const pendingPreviewUrl = useHeldVideoUrl(pending?.bytes);
-
   return (
     <section>
       <div className="mb-[var(--space-8)] flex gap-[var(--space-6)]">
@@ -685,9 +664,7 @@ export function AssetsPane({
                       {...(previewUrl === undefined ? {} : { previewUrl })}
                       onChoose={() => {
                         setChosenId(asset.id);
-                        // A held copy belongs to the asset it was produced for,
-                        // and an open form to the card it was opened on.
-                        setHeld(undefined);
+                        // An open form belongs to the card it was opened on.
                         setFont(undefined);
                         setMessage("");
                       }}
@@ -713,41 +690,15 @@ export function AssetsPane({
           </section>
         );
       })}
-      {/* Only a video has an envelope to fit, and the envelope keeps its whole
-          frame: cropping belongs to the background layer, where the author can
-          pan it back. Neither control exists for a file that is not a video. */}
-      {video !== undefined && (
-        <div className="yunari-field-row">
-          <button
-            type="button"
-            data-yunari-asset-normalize=""
-            disabled={normalizing}
-            onClick={() => void submit(() => normalizeVideo())}
-          >
-            {normalizing
-              ? uiCopy.panels.normalizingVideo
-              : uiCopy.panels.normalizeVideo}
-          </button>
-          {pending !== undefined && pendingPreviewUrl !== undefined && (
-            // Spec rule 4: the author previews the normalized asset, not the
-            // master, before the press that writes it.
-            <video
-              className="yunari-asset-preview"
-              data-yunari-asset-normalized-preview=""
-              controls
-              src={pendingPreviewUrl}
-            />
-          )}
-          {pending !== undefined && (
-            <button
-              type="button"
-              data-yunari-asset-use-normalized=""
-              onClick={() => void submit(useNormalized)}
-            >
-              {uiCopy.panels.useNormalizedVideo}
-            </button>
-          )}
-        </div>
+      {videoImport !== undefined && (
+        <ImportVideoModal
+          file={videoImport.file}
+          package={videoImport.package}
+          onRun={(onStep) =>
+            runVideoImport(videoImport.file, videoImport.package, onStep)
+          }
+          onClose={() => setVideoImport(undefined)}
+        />
       )}
       <p role="alert">{message}</p>
       <input
@@ -803,24 +754,6 @@ export function createAssetsPane(
   };
 }
 
-/** A blob URL for the held copy, so it can be previewed before it is written.
- *  Revoked when the copy changes or the pane unmounts. */
-function useHeldVideoUrl(bytes: Uint8Array | undefined): string | undefined {
-  const [url, setUrl] = useState<string | undefined>(undefined);
-  useEffect(() => {
-    if (bytes === undefined) {
-      setUrl(undefined);
-      return;
-    }
-    const next = URL.createObjectURL(
-      new Blob([bytes as unknown as BlobPart], { type: "video/mp4" }),
-    );
-    setUrl(next);
-    return () => URL.revokeObjectURL(next);
-  }, [bytes]);
-  return url;
-}
-
 /**
  * What the pane says an import did, decided by the kind.
  *
@@ -834,8 +767,8 @@ function importMessage(asset: LocalAssetReference): string {
     case "svg":
       return uiCopy.panels.assetPlaced;
     case "video":
-      // Reached only where no background callback ran; the background sentence
-      // is written on that path instead.
+      // A video is the modal's now, which names its own outcome; the arm stays
+      // so the switch remains total over the manager's kinds.
       return uiCopy.panels.assetDeclaredOnly;
     case "font":
       return uiCopy.panels.assetDeclaredFont;

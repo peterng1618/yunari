@@ -1799,17 +1799,17 @@ export const uiCopy = {
     assetReferenced: "That asset is in use and cannot be removed.",
     /** Shown when the declaration the row drew is gone from the manager. */
     assetRemoveFailed: "That file could not be removed.",
-    /** Bringing a declared video into the publish envelope keeps the whole
-        frame: cropping is the background layer's job at render time, where it is
-        reversible and has the pixels to pan with. The host answers with a held
-        copy; `useNormalizedVideo` is the second press that writes it over the
-        master, so the author is never moved off the file they imported unasked. */
-    normalizeVideo: "Normalize video",
-    normalizingVideo: "Normalizing…",
-    useNormalizedVideo: "Use the normalized copy",
-    /** Shown when writing the held normalized copy over the master failed. A
-        byte swap is not an import, so it names its own failure (N6). */
-    useNormalizedFailed: "That video could not be updated.",
+    /** The one modal a picked `.mpkg` or video runs automatically. The two
+        preparing sentences are different sentences because the work is
+        different: a package is read and extracted before its video is
+        normalized, a video file is only normalized. */
+    importVideo: {
+      title: "Import video",
+      close: "Close",
+      preparingPackage: "Extracting and preparing the video…",
+      preparingVideo: "Preparing the video…",
+      importing: "Importing the video…",
+    },
     /** Shown when a normalize press produced no answer the pane can read — a
         host refusal arrives in its own words and is never replaced by this. */
     videoNormalizeFailed: "That video could not be normalized.",
