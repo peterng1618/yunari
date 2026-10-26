@@ -14,6 +14,7 @@ import { afterEach, expect, it } from "vitest";
 // src/web/tests/scripts → ../../../.. = repo root.
 import {
   RUNTIME_DEPENDENCIES,
+  runtimeDependencies,
   stagePackage,
 } from "../../../../scripts/stage-npm-package.mjs";
 
@@ -28,8 +29,8 @@ const REPO = path.resolve(import.meta.dirname, "../../../..");
 const SCRIPT = path.join(REPO, "scripts/stage-npm-package.mjs");
 const VERSION = "9.9.9";
 const DEPENDENCIES = {
-  "node-forge": "^1.4.0",
-  fflate: "^0.8.3",
+  "node-forge": "1.4.0",
+  fflate: "0.8.3",
 };
 
 const temps: string[] = [];
@@ -148,6 +149,21 @@ it("writes the source manifest's version and the release manifest fields", () =>
   expect(staged.license).toBe("MIT");
   expect(staged.engines).toEqual({ node: ">=22" });
   expect(staged.dependencies).toEqual(DEPENDENCIES);
+});
+
+it("pins each staged dependency to the lockfile's resolved version", () => {
+  const tree = fakeTree();
+  const lockfile = path.join(tree.source, "src/web/package-lock.json");
+  const dependencies = runtimeDependencies(lockfile);
+
+  expect(dependencies).toEqual(
+    Object.fromEntries(
+      RUNTIME_DEPENDENCIES.map((name, index) => [name, `1.0.${index}`]),
+    ),
+  );
+  for (const declared of Object.values(dependencies)) {
+    expect(declared).not.toMatch(/^[\^~]/);
+  }
 });
 
 it("resolves the staged bin target to ../dist/main.js", () => {

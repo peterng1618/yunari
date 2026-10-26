@@ -182,8 +182,9 @@ export function stagePackage({ source, out, version, expectVersion, dependencies
   return { ok: true, version, files, bytes };
 }
 
-/** Ranges from the lockfile's resolved versions, so the declaration matches the
- *  tree the bundles were built from rather than a hand-kept copy. */
+/** Exact versions from the lockfile's resolved entries, so the staged manifest
+ *  names the tree the bundles were built from. A range would let a consumer
+ *  install a version this repository never tested. */
 export function runtimeDependencies(lockfile) {
   const lock = JSON.parse(readFileSync(lockfile, "utf8"));
   const declared = {};
@@ -192,7 +193,7 @@ export function runtimeDependencies(lockfile) {
     if (resolved === undefined) {
       throw new Error(`${name} has no resolved version in ${lockfile}`);
     }
-    declared[name] = `^${resolved}`;
+    declared[name] = resolved;
   }
   return declared;
 }
