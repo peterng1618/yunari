@@ -92,6 +92,7 @@ Outcome: a declared face remembers its subset, registration selects by `unicode-
 
 - A table maps the Google subset names we import (`latin`, `latin-ext`, `vietnamese`, `cyrillic`, `cyrillic-ext`, `greek`, `greek-ext`, …) to their `unicode-range` strings.
 - `loadFontAssets` passes `unicodeRange` in the `FontFace` descriptors when the declaration has a subset the table knows; an unknown subset registers without one.
+- **Ordering is load-bearing** (ADR 0124, rung 3): a face without a range covers everything and shadows the ranged faces of the same family, and manually added faces are matched in insertion order. Register ranged faces first and the rangeless one last, and never register more than one rangeless face per family.
 - The registration key already includes the path, so two subsets of one family coexist.
 
 **Acceptance:** a test registers a family twice (latin + vietnamese) and shows two faces, each with its range; an unknown subset yields a face with no `unicodeRange`.
