@@ -18,10 +18,9 @@ Land [`2026-10-26-segment-spacing-and-fill-mode-design.md`](docs/superpowers/spe
 
 ## Last completed change
 
-- **Spacing and fill are authored settings:** gauge, bar and pie carry `segmentSpacingPercent`, gauge and bar carry `segmentFill`, and each family's defaults object owns the values.
-- **One descriptor table decides both:** the fill question appears only when the divisor is not 100, through a new `notEquals` visibility rule.
-- **The spacing track reads as a share:** one decimal and a `%` suffix, owned by the descriptor rather than hard-coded in the panel.
-- **Decision [0119](docs/decisions/0119-segment-spacing-is-a-share-of-the-chart.md) claims the mechanism boundary** for spacing and cap clearance.
+- **Gauge gaps are a share of the drawn edge:** the spacing angle is size-free, the cap clearance widens it on a small chart, and either is capped at 45% of a band.
+- **The plan carries the drawn size:** `ChartPlanContext.drawnEdge` reaches the gauge from both the editor and the player.
+- **Partial fill stops at the reading:** the whole mode keeps the slice-end rule it has always drawn.
 
 ## Next
 

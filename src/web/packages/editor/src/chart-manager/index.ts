@@ -594,6 +594,9 @@ export class ChartManager {
             this.#refreshRate(),
             this.#source.chartPlaybackDelayMs,
           ),
+          // The same read the inspector's pixel bounds use: a gauge's cap
+          // clearance is a pixel measure, so an angle needs the drawn radius.
+          ...drawnEdgeOf(chart),
         },
         [],
         this.#globals?.palette,

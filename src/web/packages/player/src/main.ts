@@ -472,6 +472,25 @@ async function startHostedTheme(
   exposeForDiagnostics(handle, liveHandle);
 }
 
+/**
+ * The smaller edge of a chart's drawn box, when it measures one.
+ *
+ * The gauge's cap clearance is a pixel measure, and an angle needs the radius;
+ * absent means the object measures nothing and the adapter skips the term
+ * rather than guessing a size.
+ */
+function drawnEdgeOf(
+  chart: YunariChart,
+): { readonly drawnEdge: number } | Record<string, never> {
+  const smaller = Math.min(
+    chart.width * chart.scaleX,
+    chart.height * chart.scaleY,
+  );
+  return Number.isFinite(smaller) && smaller > 0
+    ? { drawnEdge: Math.floor(smaller) }
+    : {};
+}
+
 function hydrateCharts(
   objects: readonly { get(key: string): unknown }[],
   bindings: Readonly<Record<string, readonly Binding[]>>,
@@ -520,6 +539,7 @@ function hydrateCharts(
             nowMs,
             animate: chartAnimationFor(content.family, rate),
             playbackDelayMs,
+            ...drawnEdgeOf(object),
           },
           issues,
           palette,

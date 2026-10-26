@@ -12,6 +12,8 @@
  * their own copy of it.
  */
 
+import type { GaugeSettings } from "../types.js";
+
 /** Every divisor an author can choose, ascending, ending at continuous. */
 export const SEGMENT_DIVISORS: readonly [1, 2, 4, 5, 10, 20, 25, 50, 100] = [
   1, 2, 4, 5, 10, 20, 25, 50, 100,
@@ -56,6 +58,37 @@ export function segmentFillOf(
   fallback: SegmentFill,
 ): SegmentFill {
   return settings.segmentFill ?? fallback;
+}
+
+/**
+ * The empty arc an angular band leaves, in degrees.
+ *
+ * **The spacing term carries no `drawnEdge`.** A gap that is a share of the
+ * edge against a radius of half the edge is the same angle at every size, so
+ * cancelling the two is what makes the gap look identical on a large chart and a
+ * small one. The clearance term is the other half: a round cap extends each band
+ * end by `thickness / 2` pixels, and whether that is visible depends on how many
+ * pixels the ring has — so a smaller chart gets a wider angle, and a chart whose
+ * size is unknown skips the term rather than guessing one.
+ *
+ * Clamped to 45% of a band: past that the gap stops reading as a gap and starts
+ * eating the band, and no author choice should be able to do that.
+ */
+export function gaugeGap(
+  settings: GaugeSettings,
+  sweepDegrees: number,
+  count: number,
+  drawnEdge: number | undefined,
+): number {
+  const bandSweep = Math.abs(sweepDegrees) / Math.max(1, count);
+  const spacing =
+    ((2 * segmentSpacingPercentOf(settings)) / 100) * (180 / Math.PI);
+  const clearance =
+    drawnEdge === undefined
+      ? 0
+      : (settings.thickness / Math.max(1, drawnEdge / 2)) * (180 / Math.PI);
+
+  return Math.min(Math.max(spacing, clearance), 0.45 * bandSweep);
 }
 
 /**
