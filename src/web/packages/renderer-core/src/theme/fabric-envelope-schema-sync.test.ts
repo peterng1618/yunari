@@ -10,6 +10,7 @@ import {
   MIN_BACKGROUND_OFFSET,
   TAG_PATTERN,
 } from "./document.js";
+import { envelopeKeysFor, knownKeysFor } from "./envelope-keys.js";
 import { SUPPORTED_SCHEMA_VERSION } from "./fabric-envelope.js";
 import { GLASS_TYPES, MAX_GLASS_BLUR_RADIUS } from "./glass.js";
 import { MAX_OBJECT_NAME_LENGTH } from "./object-name.js";
@@ -84,18 +85,29 @@ describe("published Fabric theme schema", () => {
       string,
       Record<string, unknown>
     >;
-    const preset = document.$defs["typeToken"]!;
+    const token = document.$defs["typeToken"]!;
+    const tokenProperties = token["properties"] as Record<string, unknown>;
     const artboard = document.$defs["artboard"]!["properties"] as Record<
       string,
       Record<string, unknown>
     >;
 
-    expect(Object.keys(globals)).toEqual(["palette", "typeTokens"]);
-    expect(globals["typeTokens"]).toEqual({ $ref: "#/$defs/typeTokenGroup" });
-    expect(preset["required"]).toEqual(["family", "size", "face"]);
-    expect(preset["properties"]).toMatchObject({
-      face: { $ref: "#/$defs/fontFaceReference" },
-      trioRole: { enum: ["heading", "body", "mono"] },
+    expect(Object.keys(globals)).toEqual([...envelopeKeysFor("globals")]);
+    expect(globals["typeTokens"]).toMatchObject({
+      $ref: "#/$defs/typeTokenGroup",
+    });
+    expect(document.$defs["typeTokenGroup"]!["additionalProperties"]).toEqual({
+      $ref: "#/$defs/typeToken",
+    });
+    // A token names a face only. The key set is read from the decider, not
+    // copied, so narrowing one side without the other fails here.
+    expect(Object.keys(tokenProperties).sort()).toEqual(
+      [...knownKeysFor("typeToken")].sort(),
+    );
+    expect(token["required"]).toEqual(["family"]);
+    expect(token["additionalProperties"]).toBe(false);
+    expect(tokenProperties["face"]).toEqual({
+      $ref: "#/$defs/fontFaceReference",
     });
     expect(artboard["background"]).toBeUndefined();
     expect(artboard["backgroundMedia"]).toBeUndefined();
@@ -115,6 +127,34 @@ describe("published Fabric theme schema", () => {
     });
     expect(document.$defs["styleValue"]).toBeUndefined();
     expect(document.$defs["globalGroup"]).toBeUndefined();
+  });
+
+  it("refuses the old typePresets bag and names the key", () => {
+    // `globals` is closed and publishes no `typePresets`, so a document still
+    // carrying the old bag fails on that key. There is no schema evaluator in
+    // this repo (docs/decisions/0023), so the refusal is read off the schema's
+    // own key set the way every other pin in this file reads it.
+    const document = schema();
+    const globals = document.$defs["globals"]!;
+    const published = globals["properties"] as Record<string, unknown>;
+
+    expect(globals["additionalProperties"]).toBe(false);
+    expect(
+      Object.keys({ typePresets: {} }).filter((key) => !(key in published)),
+    ).toEqual(["typePresets"]);
+    expect(document.$defs["typePreset"]).toBeUndefined();
+    expect(document.$defs["typePresetGroup"]).toBeUndefined();
+  });
+
+  it("admits a run's authored size, leading and tracking through opaque fabric JSON", () => {
+    // A run lives inside Fabric JSON, which the schema validates as opaque
+    // (docs/decisions/0023). `fabricObject` keeps only the keys Yunari reads
+    // and admits the rest as JSON, which is what lets a run's own `fontSize`,
+    // `lineHeight` and `letterSpacing` through rather than a second text model
+    // here drifting from the validator.
+    expect(schema().$defs["fabricObject"]!["additionalProperties"]).toEqual({
+      $ref: "#/$defs/jsonValue",
+    });
   });
 
   it("publishes the artboard's own fit under a name that says what it fits", () => {

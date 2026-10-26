@@ -72,10 +72,9 @@ const KNOWN_KEY_SHAPES: Partial<Record<KnownKeyShape, readonly string[][]>> = {
     ["$defs", "nonFontAssetReference"],
     ["$defs", "fontAssetReference"],
   ],
-  globalEntry: [
-    ["$defs", "paletteGroup", "additionalProperties"],
-    ["$defs", "typeTokenGroup", "additionalProperties"],
-  ],
+  // Only the palette's entries are `{name, value}` wrappers now; a type token
+  // is the entry itself, so its key set is compared through `typeToken` above.
+  globalEntry: [["$defs", "paletteGroup", "additionalProperties"]],
 };
 
 const ENVELOPE_BAGS: Record<EnvelopeKeyBag, readonly string[][]> = {
