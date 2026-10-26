@@ -105,6 +105,23 @@ function managerWith(assets: readonly LocalAssetReference[]): AssetManager {
   return manager;
 }
 
+/** A declaration the release's export check accepts. */
+const RELEASABLE_IMAGE: LocalAssetReference = {
+  id: "photo",
+  kind: "image",
+  path: "assets/photo.png",
+  sha256: "a".repeat(64),
+};
+
+/** The starter without its background and its own declarations: the release
+ *  export check reads reachability, and a case about the cleanup question must
+ *  not fail on the starter's assets. */
+function bareEnvelope(): FabricThemeEnvelopeInput {
+  const starter = createNewFabricTheme() as unknown as Record<string, unknown>;
+  const { background: _background, assets: _assets, ...bare } = starter;
+  return bare as unknown as FabricThemeEnvelopeInput;
+}
+
 function imageAsset(id: string): LocalAssetReference {
   return { id, kind: "image", path: `assets/${id}.png`, sha256: "0" };
 }
@@ -424,21 +441,7 @@ describe("EditorDocument save cleanup", () => {
   it("does not announce a release whose cleanup was cancelled", async () => {
     // A valid declaration, so the release's own export check passes and the
     // cancelled cleanup is the only thing that stops the write.
-    const valid: LocalAssetReference = {
-      id: "photo",
-      kind: "image",
-      path: "assets/photo.png",
-      sha256: "a".repeat(64),
-    };
-    const assetManager = managerWith([valid]);
-    // The starter's background and its own declarations are dropped: the
-    // release's export check reads reachability, and this case is about the
-    // cleanup question rather than the starter.
-    const starter = createNewFabricTheme() as unknown as Record<
-      string,
-      unknown
-    >;
-    const { background: _background, assets: _assets, ...bare } = starter;
+    const assetManager = managerWith([RELEASABLE_IMAGE]);
     const onSaved = vi.fn();
     const onError = vi.fn();
     cleanupMock.mockResolvedValue("cancel");
@@ -448,7 +451,7 @@ describe("EditorDocument save cleanup", () => {
     vi.spyOn(window, "prompt").mockReturnValue("patch");
     const document = documentWith(undefined, {
       assetManager,
-      envelope: bare as unknown as FabricThemeEnvelopeInput,
+      envelope: bareEnvelope(),
       onSaved,
       onError,
     });
@@ -462,6 +465,39 @@ describe("EditorDocument save cleanup", () => {
     expect(save).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
     expect(document.isDirty()).toBe(true);
+    document.destroy();
+  });
+
+  it("announces a release that was actually written", async () => {
+    const assetManager = managerWith([RELEASABLE_IMAGE]);
+    const onSaved = vi.fn();
+    cleanupMock.mockResolvedValue("keep");
+    // A save writes its snapshot back, which is what clears the dirty state; the
+    // real method is what the guard re-reads.
+    const markSaved = vi.spyOn(PersistenceManager.prototype, "markSaved");
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockImplementation(async (theme, assets) => {
+        // The instance the document called is the one whose saved baseline
+        // moves, which is the state `release()` re-reads.
+        const instance = save.mock.contexts.at(-1) as
+          | PersistenceManager
+          | undefined;
+        instance?.markSaved(theme, assets);
+      });
+    vi.spyOn(window, "prompt").mockReturnValue("patch");
+    const document = documentWith(undefined, {
+      assetManager,
+      envelope: bareEnvelope(),
+      onSaved,
+    });
+
+    await document.release();
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(markSaved).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledWith("Released 0.1.0");
+    expect(document.isDirty()).toBe(false);
     document.destroy();
   });
 

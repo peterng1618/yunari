@@ -161,8 +161,9 @@ describe("the save cleanup sheet", () => {
       "blob:studio",
     );
     expect(rows[2]?.querySelector("svg")).not.toBeNull();
-    // No name was given, so no line is drawn for one.
-    expect(opened().textContent).not.toContain("System dashboard");
+    // No name was given, so no subtitle line is drawn for one: a rendered
+    // `undefined · <title>` would contain the separator and fail here.
+    expect(opened().textContent).not.toContain(` · ${TITLE}`);
   });
 
   it("defaults the checkbox off", () => {
