@@ -21,11 +21,15 @@
  * key that is read as a scalar, and a bare list item where a mapping key is
  * expected. A workflow that needs a refused shape upgrades the reader then.
  *
- * The tag guard in `publish.yml` is compared, not parsed: the first `install`
- * step's `run` must equal `node scripts/assert-publish-ref.mjs` once comments
- * and blank lines are dropped. The decision itself is a tested function in
+ * The tag guard in `publish.yml` is compared, not parsed: `install`'s first
+ * step is the checkout, because the guard is a repository script and the file
+ * is not on the runner before it; its second step runs only
+ * `node scripts/assert-publish-ref.mjs` and declares nothing but `name` and
+ * `run`. The decision itself is a tested function in
  * `scripts/assert-publish-ref.mjs`, so a negation, continuation or heredoc
- * changes the text and is refused.
+ * changes the text and is refused, and a sibling key (`if:`, an `env:`
+ * overriding `DRY_RUN`, `shell:`, `working-directory:`) is refused even when
+ * the command still reads the same.
  *
  * Exit: 0 clean, 1 rule violation (one line per violation), 2 unreadable input
  * or an unread shape.
@@ -264,6 +268,7 @@ function applyStepKey(tokens, index, step, token, uses) {
   const key = token.key;
   if (key === undefined) refuse(token, "step key is not read");
   if (!STEP_KEYS.has(key)) refuse(token, `step key "${key}" is not read`);
+  step.keys.add(key);
   if (key === "with" || key === "env") {
     if (token.value !== "" || token.block !== undefined) {
       refuseFlow(token, `step ${key}`);
@@ -308,6 +313,7 @@ function parseSteps(tokens, start, job, uses) {
       name: undefined,
       with: new Map(),
       env: new Map(),
+      keys: new Set(),
     };
     let next;
     if (item.key !== undefined) {
@@ -474,12 +480,17 @@ function describePermissions(job) {
 const GUARD_COMMAND = "node scripts/assert-publish-ref.mjs";
 
 /**
- * The first step must be exactly the one command; anything else — a negation,
- * a `;` chain, a continuation, a heredoc — changes the text and is refused.
+ * The guard step must run exactly the one command and declare nothing beside
+ * `name` and `run`: a sibling key can stop it refusing while its `run` reads
+ * unchanged. A comment-only `run: |` is still reachable, so it is named.
  */
-function guardProblem(run) {
-  if (run === undefined) return "has no run: command";
-  const lines = run
+function guardProblem(step) {
+  if (step === undefined || step.run === undefined) return "has no run: command";
+  const extra = [...step.keys].filter((key) => key !== "name" && key !== "run");
+  if (extra.length > 0) {
+    return `may only declare "name" and "run" (found ${extra.map((key) => `"${key}"`).join(", ")})`;
+  }
+  const lines = step.run
     .split("\n")
     .map((line) => stripTrailingComment(line).trim())
     .filter((line) => line !== "");
@@ -540,12 +551,19 @@ function checkPublish(publish) {
     }
   }
 
-  // Rule 4: the non-dry manual dispatch off a tag is refused before any work,
-  // in install's first step, so `needs: install` covers publish too.
+  // Rule 4: the checkout is first — the guard is a repository script, so the
+  // file must exist before it runs — and the non-dry manual dispatch off a tag
+  // is refused in install's second step, before any other work, so
+  // `needs: install` covers publish too.
   if (install !== undefined) {
-    const problem = guardProblem(install.steps[0]?.run);
+    if (install.steps[0]?.uses?.startsWith("actions/checkout@") !== true) {
+      violations.push(
+        "install job's first step must be actions/checkout: the guard is a repository script that has to be checked out before it can run",
+      );
+    }
+    const problem = guardProblem(install.steps[1]);
     if (problem !== undefined) {
-      violations.push(`install job's first step ${problem}`);
+      violations.push(`install job's second step ${problem}`);
     }
   }
 

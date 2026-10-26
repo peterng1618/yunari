@@ -17,7 +17,16 @@ import { checkWorkflows } from "../../../../scripts/check-workflows.mjs";
 
 const SHA = "11d5960a326750d5838078e36cf38b85af677262";
 const RELEASE_SHA = "45996ed1f6d02564a971a2fa1b5860e934307cf7";
+const SETUP_SHA = "49933ea5288caeca8642d1e84afbd3f7d6820020";
 
+const CHECKOUT = `      - uses: actions/checkout@${SHA} # v4
+        with:
+          persist-credentials: false
+`;
+const SETUP_NODE = `      - uses: actions/setup-node@${SETUP_SHA} # v4
+        with:
+          node-version: "24"
+`;
 const GUARD = `      - name: Refuse a non-dry dispatch off a tag
         run: node scripts/assert-publish-ref.mjs
 `;
@@ -32,10 +41,7 @@ jobs:
     permissions:
       contents: read
     steps:
-${GUARD}      - uses: actions/checkout@${SHA} # v4
-        with:
-          persist-credentials: false
-  publish:
+${CHECKOUT}${GUARD}${SETUP_NODE}  publish:
     needs: install
     runs-on: ubuntu-latest
     permissions:
@@ -348,17 +354,32 @@ it("refuses the guard called from a ; chain", () => {
   );
 });
 
-it("refuses the guard moved to second place", () => {
+it("refuses the guard not directly after the checkout", () => {
   withFixture(
     (files) => {
       files["publish.yml"] = files["publish.yml"].replace(
-        `${GUARD}      - uses: actions/checkout@${SHA} # v4\n        with:\n          persist-credentials: false\n`,
-        `      - uses: actions/checkout@${SHA} # v4\n        with:\n          persist-credentials: false\n${GUARD}`,
+        `${CHECKOUT}${GUARD}${SETUP_NODE}`,
+        `${CHECKOUT}${SETUP_NODE}${GUARD}`,
       );
     },
     ({ exitCode, lines }) => {
       expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("has no run: command");
+      expect(lines.join("\n")).toContain("second step has no run: command");
+    },
+  );
+});
+
+it("refuses the guard before the checkout", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        `${CHECKOUT}${GUARD}`,
+        `${GUARD}${CHECKOUT}`,
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain("first step must be actions/checkout");
     },
   );
 });
@@ -370,10 +391,57 @@ it("refuses a deleted guard", () => {
     },
     ({ exitCode, lines }) => {
       expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("has no run: command");
+      expect(lines.join("\n")).toContain("second step has no run: command");
     },
   );
 });
+
+it("refuses a comment-only guard run", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        GUARD,
+        GUARD.replace(
+          "        run: node scripts/assert-publish-ref.mjs",
+          "        run: |\n          # nothing to run",
+        ),
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain("second step is comment-only");
+    },
+  );
+});
+
+/** The clean guard step with `extra` declared before its `run`. */
+function guardWith(extra: string): string {
+  return GUARD.replace("        run:", `${extra}        run:`);
+}
+
+for (const [key, extra] of [
+  ["if", "        if: false\n"],
+  ["shell", "        shell: bash\n"],
+  ["working-directory", "        working-directory: src/web\n"],
+  ["env", '        env:\n          DRY_RUN: "true"\n'],
+] as const) {
+  it(`refuses a ${key}: on the guard step`, () => {
+    withFixture(
+      (files) => {
+        files["publish.yml"] = files["publish.yml"].replace(
+          GUARD,
+          guardWith(extra),
+        );
+      },
+      ({ exitCode, lines }) => {
+        expect(exitCode).toBe(1);
+        const out = lines.join("\n");
+        expect(out).toContain('may only declare "name" and "run"');
+        expect(out).toContain(`"${key}"`);
+      },
+    );
+  });
+}
 
 it("names permissions: read-all as a scalar and the required shape", () => {
   withFixture(

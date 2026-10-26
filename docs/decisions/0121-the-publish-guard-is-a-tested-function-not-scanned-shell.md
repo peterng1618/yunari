@@ -73,20 +73,27 @@ command line.
 
 ## Rung 6 — probe
 
-Before this note, `check-workflows.mjs` was 765 lines and `guardProblem` had
-been rewritten twice; each review round produced a passing-tree evasion
-(unction-wrapped guard, `exit 0` first, negation, continuation, heredoc).
-After moving the predicate out, the six environment combinations are asserted
-in `src/web/tests/scripts/assert-publish-ref.test.ts` (refuse: non-dry
-dispatch off a tag, including absent `DRY_RUN` and `refs/tags/1.2.3`; pass:
-dry run, release event, `refs/tags/v*`), and the checker's rule is string
-equality against `node scripts/assert-publish-ref.mjs`.
+No probe was run before this decision. What was established then: the scanner in
+`check-workflows.mjs` had produced a passing-tree evasion in each review round
+(unction-wrapped guard, `exit 0` first, negation, continuation, heredoc), and
+the predicate it tried to decide takes three strings. The argument for
+extracting it was that such a predicate can be enumerated exhaustively where
+bash reachability cannot — a prediction at the time, not a measurement.
+
+The measurement came afterwards, and is the outcome below: the six environment
+combinations are asserted in `src/web/tests/scripts/assert-publish-ref.test.ts`,
+and the shell mutations are refused by text equality against
+`node scripts/assert-publish-ref.mjs` rather than by a scanner that had to grow
+to see each one.
 
 ## Decision
 
 Create `scripts/assert-publish-ref.mjs` with the pure
-`publishRefProblem({ eventName, dryRun, ref })`, keep `publish.yml`'s first
-install step as the single line `node scripts/assert-publish-ref.mjs`, and make
-the checker require exactly that line. The specific reason: the property
-"this can only refuse a non-dry dispatch off a tag" is then earned by a tested
-function and by text equality, not by the checker's understanding of bash.
+`publishRefProblem({ eventName, dryRun, ref })`, run it in `publish.yml` as
+`install`'s second step — immediately after the checkout, because the guard is
+a repository script and the file has to exist first — as the single line
+`node scripts/assert-publish-ref.mjs` with no other step key, and make the
+checker require exactly that line, that key set and that position. The specific
+reason: the property "this can only refuse a non-dry dispatch off a tag" is then
+earned by a tested function and by text equality, not by the checker's
+understanding of bash.

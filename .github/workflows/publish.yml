@@ -15,8 +15,8 @@ name: Publish
 # `false` stays a dry run, so neither a publish nor an asset upload can happen
 # by omission; a real manual run needs the GitHub Release for that tag to exist
 # already (`gh release upload` targets it). A non-dry manual dispatch off a tag
-# is refused in `install`'s first step, and `publish` inherits that refusal
-# through `needs`.
+# is refused in `install`'s second step, immediately after the checkout, and
+# `publish` inherits that refusal through `needs`.
 #
 # Jobs. `install` builds and proves the tarball with read-only contents;
 # `publish` only downloads it, and holds the two permissions the publish path
@@ -79,18 +79,20 @@ jobs:
       ASSETS: ${{ runner.temp }}/yunari-assets
       SMOKE: ${{ runner.temp }}/yunari-smoke
     steps:
-      # First, so a non-dry manual dispatch off a tag spends nothing. `publish`
-      # inherits the refusal through `needs`, which is why there is no copy
-      # there. The decision is a tested function, not shell the checker parses.
-      - name: Refuse a non-dry dispatch off a tag
-        run: node scripts/assert-publish-ref.mjs
-
       # The gate dates licence rules by commit history, so a shallow clone
       # would make every rule read as written by its own citing commit.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      # The checkout has to come first: the guard is a repository script, so
+      # before it there is no file to run. It still costs one checkout and no
+      # install, gate or build, so a refused dispatch fails in seconds. `publish`
+      # inherits the refusal through `needs`, which is why there is no copy
+      # there. The decision is a tested function, not shell the checker parses.
+      - name: Refuse a non-dry dispatch off a tag
+        run: node scripts/assert-publish-ref.mjs
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:

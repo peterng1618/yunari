@@ -9,7 +9,9 @@
  * silently.
  *
  * `DRY_RUN` is the workflow's own fail-closed serialisation: an absent value
- * is not `"true"`, so a missing variable refuses rather than publishes.
+ * is not `"true"`, so a missing variable refuses rather than publishes. A
+ * missing or empty `GITHUB_EVENT_NAME` or `GITHUB_REF` also refuses: the
+ * answer depends on both, so an unset local run must not read as a pass.
  *
  * Its cases live in `src/web/tests/scripts/assert-publish-ref.test.ts`.
  */
@@ -22,9 +24,17 @@ import { pathToFileURL } from "node:url";
  * when the combination may proceed.
  */
 export function publishRefProblem({ eventName, dryRun, ref }) {
+  if (
+    typeof eventName !== "string" ||
+    eventName === "" ||
+    typeof ref !== "string" ||
+    ref === ""
+  ) {
+    return "the guard needs GITHUB_EVENT_NAME and GITHUB_REF";
+  }
   if (eventName !== "workflow_dispatch") return undefined;
   if (dryRun === "true") return undefined;
-  if (typeof ref === "string" && ref.startsWith("refs/tags/v")) return undefined;
+  if (ref.startsWith("refs/tags/v")) return undefined;
   return `a non-dry workflow_dispatch must run on a refs/tags/v* ref (got ${ref})`;
 }
 
