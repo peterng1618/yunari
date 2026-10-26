@@ -162,7 +162,16 @@ export interface SettingsFieldDescriptor {
       };
   readonly min?: number;
   readonly max?: number;
+  /** How far one step of a bounded number moves, for the surface that draws a
+   *  native field; absent means one. */
   readonly step?: number;
+  /**
+   * The field accepts whole numbers only. A share that means "how wide the gap
+   * is" is not finer than a percent in the author's terms, and the envelope
+   * refuses a fraction the way it refuses an out-of-bounds value — the same
+   * rule `values` states for a discrete field.
+   */
+  readonly integer?: true;
   /**
    * What this field's ceiling is read from, when it is not a number.
    *
@@ -393,13 +402,10 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       kind: "number",
       section: "content",
       optional: true,
-      hint: "How much of the chart's smaller edge is left empty between slices.",
-      min: 0,
-      max: 20,
-      decimals: 1,
-      // A tenth: the default is 9.4, and a track that steps by 1 cannot
-      // land on the value the same descriptor displays.
-      step: 0.1,
+      hint: "How wide the empty space is, as a share of a slice; 100 leaves as much space as painted slice.",
+      min: 1,
+      max: 100,
+      integer: true,
       suffix: "%",
     },
     {
@@ -602,13 +608,10 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       kind: "number",
       section: "content",
       optional: true,
-      hint: "How much of the chart's smaller edge is left empty between slices.",
-      min: 0,
-      max: 20,
-      decimals: 1,
-      // A tenth: the default is 9.4, and a track that steps by 1 cannot
-      // land on the value the same descriptor displays.
-      step: 0.1,
+      hint: "How wide the empty space is, as a share of a slice; 100 leaves as much space as painted slice.",
+      min: 1,
+      max: 100,
+      integer: true,
       suffix: "%",
     },
     {
@@ -709,13 +712,10 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       kind: "number",
       section: "content",
       optional: true,
-      hint: "How much of the chart's smaller edge is left empty between slices.",
-      min: 0,
-      max: 20,
-      decimals: 1,
-      // A tenth: the default is 9.4, and a track that steps by 1 cannot
-      // land on the value the same descriptor displays.
-      step: 0.1,
+      hint: "How wide the empty space is, as a share of a slice; 100 leaves as much space as painted slice.",
+      min: 1,
+      max: 100,
+      integer: true,
       suffix: "%",
     },
     {

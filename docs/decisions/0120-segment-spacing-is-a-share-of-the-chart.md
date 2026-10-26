@@ -1,7 +1,8 @@
 # 0120 — Segment spacing is a share of the chart, cleared by the caps
 
 - **Date:** 2026-10-26
-- **Status:** accepted
+- **Status:** superseded by [0121](0121-segment-spacing-is-a-share-of-the-segment.md)
+  — the gap is a share of the segment's painted width, not of the chart edge.
 - **Paths:** `src/web/packages/renderer-core/src/charts/segments.ts`
   `src/web/packages/renderer-core/src/charts/gauge.ts`
   `src/web/packages/renderer-core/src/charts/bar.ts`

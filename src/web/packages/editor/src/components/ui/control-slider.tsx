@@ -53,14 +53,6 @@ export function ControlSlider(
      *  every other number field does, and the track already steps by 1. */
     readonly integer?: boolean;
     /**
-     * The drag's step, when the value's own range is finer than one. A 0–1
-     * fraction is a bounded number like any other (`vg-493`), and the control
-     * set's default step of 1 would leave it holding only its two ends. Read
-     * back off the range input by the wheel, so the gesture and the drag cannot
-     * step differently.
-     */
-    readonly step?: number;
-    /**
      * The only commits this setting accepts, when it is discrete.
      *
      * The track still runs over whole steps, but **over list indices**, not over
@@ -113,7 +105,6 @@ export function ControlSlider(
     min,
     max,
     integer,
-    step,
     values,
     decimals,
     suffix,
@@ -302,7 +293,7 @@ export function ControlSlider(
         value={trackShown}
         min={trackMin}
         max={trackMax}
-        step={values === undefined ? step : 1}
+        {...(values === undefined ? {} : { step: 1 })}
         disabled={disabled}
         aria-disabled={refused === undefined ? undefined : true}
         onPointerDown={() => {

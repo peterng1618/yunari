@@ -9,7 +9,6 @@ import {
   type PieSliceInput,
   toSegmentedPieData,
 } from "./pie.js";
-import { pieGap } from "./segments.js";
 
 function sample(value: number, sensorId = "ram.used"): Sample {
   return {
@@ -204,45 +203,61 @@ describe("toSegmentedPieData", () => {
     ).toBeCloseTo(3);
   });
 
-  it("spaces sub-slices by the chart share at the authored radius", () => {
-    // The edge cancels exactly as it does on the gauge: a share of the edge
-    // against a radius of half the edge is an angle, and the outer radius
-    // shrinks the drawn radius, so the angle grows.
-    expect(
-      pieGap({ ...defaultPieSettings, outerRadiusPercent: 100 }),
-    ).toBeCloseTo(((2 * 2.5) / 100) * (180 / Math.PI), 5);
-    expect(
-      pieGap({ ...defaultPieSettings, outerRadiusPercent: 50 }),
-    ).toBeCloseTo(((2 * 2.5) / 50) * (180 / Math.PI), 5);
-  });
-
-  it("draws every internal gap at the target angle, unequal slices included", () => {
+  it("draws each internal gap as the authored share of its own piece", () => {
     const items = toSegmentedPieData(
       [item("a", 70, "#0f0"), item("b", 20, "#00f"), item("c", 10, "#f00")],
       4,
       0,
-      3.6,
+      10,
     );
-    const total = items.reduce((sum, entry) => sum + entry.value, 0);
-    const spacers = items.filter((entry) => entry.name === "");
 
-    // Three slices × four pieces: nine internal gaps and three boundary gaps
-    // the authored `padAngle` of 0 leaves at zero.
-    expect(spacers).toHaveLength(12);
-    const internal = spacers.filter((entry) => entry.value > 0);
-    expect(internal).toHaveLength(9);
-    for (const spacer of internal) {
-      expect((spacer.value / total) * 360).toBeCloseTo(3.6, 5);
+    // Nine internal gaps, one after every piece but each slice's last. Each is
+    // a tenth of the piece it follows, so a larger slice leaves a larger gap.
+    const gaps: { readonly gap: PieDataItem; readonly piece: PieDataItem }[] =
+      [];
+    for (let index = 0; index < items.length - 1; index += 1) {
+      const piece = items[index]!;
+      const after = items[index + 1]!;
+      if (piece.name !== "" && after.name === "" && after.value > 0) {
+        gaps.push({ gap: after, piece });
+      }
     }
+
+    expect(gaps).toHaveLength(9);
+    for (const { gap, piece } of gaps) {
+      expect(gap.value / piece.value).toBeCloseTo(0.1, 10);
+    }
+    expect(gaps[0]!.gap.value).toBeGreaterThan(gaps.at(-1)!.gap.value);
+  });
+
+  it("keeps the ring whole once the gaps are placed", () => {
+    const items = toSegmentedPieData(
+      [item("a", 70, "#0f0"), item("b", 20, "#00f"), item("c", 10, "#f00")],
+      4,
+      2,
+      10,
+    );
+
+    // The spacers take angles from the ring, never add to it: the pieces plus
+    // every gap still describe one full turn.
+    expect(items.reduce((sum, entry) => sum + entry.value, 0)).toBeCloseTo(
+      360,
+      10,
+    );
+    // The authored boundary gap is still the pad, not the piece share.
+    const boundaries = items.filter(
+      (entry) => entry.name === "" && entry.value === 2,
+    );
+    expect(boundaries).toHaveLength(3);
   });
 
   it("keeps composition shares exact when the spacing changes", () => {
-    const shares = (gapDegrees: number) => {
+    const shares = (spacingPercent: number) => {
       const data = toSegmentedPieData(
         [item("a", 70, "#0f0"), item("b", 20, "#00f"), item("c", 10, "#f00")],
         5,
         1,
-        gapDegrees,
+        spacingPercent,
       );
       const total = data
         .filter((entry) => entry.name !== "")
@@ -256,7 +271,7 @@ describe("toSegmentedPieData", () => {
     };
 
     const tight = shares(1);
-    const wide = shares(6);
+    const wide = shares(60);
     for (const [index, share] of tight.entries()) {
       expect(wide[index]).toBeCloseTo(share, 10);
     }

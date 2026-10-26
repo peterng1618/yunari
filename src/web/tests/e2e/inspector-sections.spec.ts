@@ -280,25 +280,86 @@ async function sceneClient(
 }
 
 /**
- * The empty arc the gauge's first band leaves, in degrees.
+ * The gauge's drawn spacing, split into what is seen and what is not.
  *
  * Read from the built option rather than measured in pixels: the claim is that
- * the angle follows the chart's drawn size, and the option is where the
- * adapter's own arithmetic lands.
+ * the relationship between the empty space and the painted band follows the
+ * authored share, and the option is where the adapter's arithmetic lands. The
+ * clearance is the cap overhang across one gap, derived from the option's own
+ * thickness and round ends against the backing edge the editor passed in.
  */
-async function gaugeGapDegrees(page: Page, name: string): Promise<number> {
+async function gaugeSpacingState(
+  page: Page,
+  name: string,
+): Promise<{
+  readonly empty: number;
+  readonly painted: number;
+}> {
   const option = (await builtOption(page, name)) as {
     series: {
       startAngle?: number;
       endAngle?: number;
-      axisLine?: { lineStyle: { color: readonly [number, string][] } };
+      axisLine?: {
+        roundCap?: boolean;
+        lineStyle: { width?: number; color: readonly [number, string][] };
+      };
     }[];
   };
   const series = option.series[0];
   const colors = series?.axisLine?.lineStyle.color ?? [];
   const sweep = Math.abs((series?.endAngle ?? 0) - (series?.startAngle ?? 0));
   const count = (colors.length + 1) / 2;
-  return (1 / count - (colors[0]?.[0] ?? 0)) * sweep;
+  const band = sweep / count;
+  const stopGap = (1 / count - (colors[0]?.[0] ?? 0)) * sweep;
+  const edge = await chartBackingEdge(page, name);
+  const clearance =
+    series?.axisLine?.roundCap === false
+      ? 0
+      : ((series?.axisLine?.lineStyle.width ?? 0) / Math.max(1, edge / 2)) *
+        (180 / Math.PI);
+  return {
+    empty: stopGap - clearance,
+    painted: band - stopGap + clearance,
+  };
+}
+
+/**
+ * The smaller edge of the canvas ECharts draws the chart into, in backing
+ * pixels — the number the editor hands the gauge adapter.
+ */
+async function chartBackingEdge(page: Page, name: string): Promise<number> {
+  return page.evaluate((wanted) => {
+    type Chart = {
+      get(name: string): unknown;
+      getObjects?(): readonly Chart[];
+      width: number;
+      height: number;
+      scaleX: number;
+      scaleY: number;
+      renderScale: number;
+    };
+    const roots = (
+      window as unknown as {
+        yunariEditorBridge: {
+          editor: { canvas: { getObjects(): readonly Chart[] } };
+        };
+      }
+    ).yunariEditorBridge.editor.canvas.getObjects();
+    const find = (objects: readonly Chart[]): Chart | undefined => {
+      for (const object of objects) {
+        if (object.get("name") === wanted) return object;
+        const found = find(object.getObjects?.() ?? []);
+        if (found !== undefined) return found;
+      }
+      return undefined;
+    };
+    const chart = find(roots);
+    if (chart === undefined) return 0;
+    return Math.floor(
+      Math.min(chart.width * chart.scaleX, chart.height * chart.scaleY) *
+        chart.renderScale,
+    );
+  }, name);
 }
 
 async function gaugeColorCount(page: Page, name: string): Promise<number> {
@@ -1395,16 +1456,16 @@ test.describe("the per-kind inspector column", () => {
       name: "spacing",
       x: 40,
       y: 60,
-      // Large enough that the 9.4% share, not the cap clearance, sets the gap:
-      // the backing radius of an 840px edge is over 600px, so 18px caps subtend
-      // under 2° against a 10.8° share.
+      // Large enough that the backing edge is unambiguous, so the derived cap
+      // clearance is small against the band and the authored share is what the
+      // picture shows.
       w: 1120,
       h: 840,
       series: ["cpu.load"],
     });
-    // The fake reading is low against a 0–100 scale, and an all-track ring is
-    // nearly the artboard's own colour: a 0–20 scale puts the reading in the
-    // middle of the ring, where both fills are visible.
+    // A 0–20 scale keeps the fake load reading near the top of the ring, so the
+    // caps, bands and gaps are all visible in the captures. The colour counts
+    // below do not depend on the reading; the fill-toggle case re-scales it.
     await typeIntoControl(
       page,
       page.locator('[data-yunari-chart-setting="max"]'),
@@ -1426,10 +1487,14 @@ test.describe("the per-kind inspector column", () => {
       .poll(() => chartCanvasInk(page, "spacing"))
       .toBeGreaterThan(0.01);
 
-    const share = ((2 * 9.4) / 100) * (180 / Math.PI);
+    // The default tenth: the empty space is a tenth of the painted band, caps
+    // included, which is the relationship the slider sets.
     await expect
-      .poll(() => gaugeGapDegrees(page, "spacing"))
-      .toBeCloseTo(share, 1);
+      .poll(async () => {
+        const state = await gaugeSpacingState(page, "spacing");
+        return state.empty / state.painted;
+      })
+      .toBeCloseTo(0.1, 2);
     await selectLayer(page, "spacing");
     await captureVisualReview(
       page,
@@ -1458,19 +1523,56 @@ test.describe("the per-kind inspector column", () => {
     await page.mouse.move(to.x, to.y, { steps: 12 });
     await page.mouse.up();
 
-    // The share is the same angle at any size, so the gap is the same fraction
-    // of the smaller chart instead of collapsing: what halves with the chart is
-    // its pixel length, and the caps stay a twentieth of it. The clearance is
-    // the floor below this, and the unit case measures it on a chart small
-    // enough for 18px caps to exceed the share.
+    // The same relationship on half the chart: the gap is a share of the band,
+    // not of the edge, so it halves with the band instead of disappearing. The
+    // stop gap itself grows slightly — the caps are pixels and now cover more
+    // of the smaller ring — which is exactly what the clearance term removes.
     await expect
-      .poll(() => gaugeGapDegrees(page, "spacing"))
-      .toBeCloseTo(share, 1);
+      .poll(async () => {
+        const state = await gaugeSpacingState(page, "spacing");
+        return state.empty / state.painted;
+      })
+      .toBeCloseTo(0.1, 2);
     await captureVisualReview(
       page,
       testInfo,
       "editor-chart-gauge-spacing-small",
       canvas,
+    );
+
+    // At the top of the slider the owner's definition is literal: the empty
+    // space is as wide as the painted band, with the rounded corners included.
+    await typeIntoControl(
+      page,
+      page.locator('[data-yunari-chart-setting-well="segmentSpacingPercent"]'),
+      100,
+    );
+    await expect
+      .poll(async () => {
+        const state = await gaugeSpacingState(page, "spacing");
+        return state.empty / state.painted;
+      })
+      .toBeCloseTo(1, 2);
+    await captureVisualReview(
+      page,
+      testInfo,
+      "editor-chart-gauge-spacing-100",
+      canvas,
+    );
+
+    // Back to the default spacing, and a 0–100 scale so the reading moves
+    // through the ring: a partial fill's own boundary exists only while the
+    // reading sits inside a painted band, and at 100% spacing it would usually
+    // sit in a gap where neither mode paints anything.
+    await typeIntoControl(
+      page,
+      page.locator('[data-yunari-chart-setting-well="segmentSpacingPercent"]'),
+      10,
+    );
+    await typeIntoControl(
+      page,
+      page.locator('[data-yunari-chart-setting="max"]'),
+      100,
     );
 
     // The fill toggle is a question about a segmented chart, and it changes the
@@ -1486,9 +1588,11 @@ test.describe("the per-kind inspector column", () => {
     ).toBe("Partial segment");
     // A partial fill adds the reading's own boundary inside its band, so the
     // colour list is no longer one band and one gap per slice. The reading is
-    // live, so the option is awaited rather than read once.
+    // live and the boundary exists only while it sits inside a painted band —
+    // gaps cover a ninth of the ring — so the wait is longer than a single
+    // draw and the claim is the colour list, not a sampled frame.
     await expect
-      .poll(() => gaugeColorCount(page, "spacing"))
+      .poll(() => gaugeColorCount(page, "spacing"), { timeout: 15_000 })
       .toBeGreaterThan(9);
     await expect.poll(() => chartCanvasHash(page, "spacing")).not.toBe(whole);
     await captureVisualReview(

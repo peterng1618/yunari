@@ -55,7 +55,7 @@ export interface BarSettings {
   readonly trackCornerRadius?: number;
   /** How many slices the fill is cut into; 100 is one continuous bar. */
   readonly segmentDivisor: number;
-  /** Gap between slices, as a share of the chart's smaller drawn edge. */
+  /** Empty space between slices, as a share of a slice's painted length. */
   readonly segmentSpacingPercent?: number;
   /** Whether the reading lights a whole slice or stops at its own value. */
   readonly segmentFill?: SegmentFill;
@@ -153,9 +153,6 @@ export interface BarRenderParams {
 export interface BarRenderApi {
   coord(point: readonly [number, number]): readonly [number, number];
   size(size: readonly [number, number]): readonly [number, number];
-  /** The drawn box, which is what a gap is a share of. */
-  getWidth(): number;
-  getHeight(): number;
 }
 
 export interface BarRect {
@@ -288,10 +285,10 @@ function barAxes(settings: BarSettings, inputs: readonly BarInput[]): BarAxes {
  *
  * **Bands are geometry, not data.** The reading still decides how far the fill
  * reaches; the bands only decide where the cuts fall. The gap is a share of the
- * chart's smaller edge, read off the render API's own box, so it measures the
- * same on a large bar and a small one. In `partial` mode the band holding the
- * reading is shortened proportionally, so the reading's own fraction survives
- * the cuts; in `whole` mode a band lights only once the reading completes it.
+ * band itself, so it measures the same on a large bar and a small one. In
+ * `partial` mode the fill edge follows the reading: the band holding it is
+ * painted up to the reading and no further; in `whole` mode a band lights only
+ * once the reading has painted it to its own end.
  */
 export function buildSegmentedBarOption(
   settings: BarSettings,
@@ -360,11 +357,7 @@ function segmentedRenderItem(
     const sign = horizontal ? Math.sign(maxX - minX) : Math.sign(maxY - minY);
     const span = horizontal ? Math.abs(maxX - minX) : Math.abs(maxY - minY);
     const band = span / count;
-    const gapPx = barGapPx(
-      Math.min(api.getWidth(), api.getHeight()),
-      band,
-      segmentSpacingPercentOf(settings),
-    );
+    const gapPx = barGapPx(band, segmentSpacingPercentOf(settings));
     const visible = band - gapPx;
     const thickness =
       settings.barWidth ??
@@ -425,15 +418,20 @@ function segmentedRenderItem(
       }
     }
     if (fill !== undefined && reading !== null && position > 0) {
+      // The reading's own distance along the track. A band is painted up to
+      // that edge, clamped to the band's visible length — counting the gap as
+      // fill would make the edge lag the reading and the next band start before
+      // this one reached its end.
+      const reach = position * span;
       for (let bandIndex = 0; bandIndex < count; bandIndex += 1) {
-        const raw = Math.min(Math.max(position * count - bandIndex, 0), 1);
-        const fraction = whole ? (raw >= 1 ? 1 : 0) : raw;
-        if (fraction === 0) continue;
+        const length = Math.min(Math.max(reach - bandIndex * band, 0), visible);
+        if (length <= 0) continue;
+        if (whole && length < visible) continue;
         children.push(
           rect(
             "fill",
             bandIndex * band,
-            visible * fraction,
+            whole ? visible : length,
             bandColor(fill, (bandIndex + 0.5) / count, position),
             settings.cornerRadius,
           ),

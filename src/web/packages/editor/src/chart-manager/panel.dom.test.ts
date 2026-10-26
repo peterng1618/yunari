@@ -213,19 +213,20 @@ describe("a chart's bounded settings, as the owner hands them over", () => {
       min: -360,
       max: 360,
     });
-    // A chart share is authored, so an unauthored gauge shows the renderer's own
-    // 9.4% rather than a zero-track, and the well says it is a percentage. The
-    // track steps by the tenth the descriptor displays, so a drag can land on
-    // the default it shows.
-    expect(rowOf(charts[0]!, "segmentSpacingPercent")).toMatchObject({
+    // A segment share is authored, so an unauthored gauge shows the renderer's
+    // own 10% rather than a zero-track, and the well says it is a percentage.
+    // Whole percents only: the track and the well both refuse a fraction.
+    const spacing = rowOf(charts[0]!, "segmentSpacingPercent");
+    expect(spacing).toMatchObject({
       control: "slider",
-      value: 9.4,
-      min: 0,
-      max: 20,
-      decimals: 1,
-      step: 0.1,
+      value: 10,
+      min: 1,
+      max: 100,
+      integer: true,
       suffix: "%",
     });
+    expect(spacing).not.toHaveProperty("decimals");
+    expect(spacing).not.toHaveProperty("step");
     // A slice gap's ceiling is a full turn, which is the unit's own bound.
     expect(rowOf(charts[3]!, "padAngle")).toMatchObject({
       control: "slider",

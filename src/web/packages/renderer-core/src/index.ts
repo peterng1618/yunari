@@ -131,9 +131,7 @@ export {
 export { chartReadingSignature } from "./charts/reading-signature.js";
 export {
   barGapPx,
-  GAUGE_SEGMENT_SPACING_PERCENT_DEFAULT,
   gaugeGap,
-  pieGap,
   SEGMENT_DIVISORS,
   SEGMENT_SPACING_PERCENT_DEFAULT,
   type SegmentFill,

@@ -548,13 +548,19 @@ describe("the two settings one level down", () => {
     });
   });
 
-  it("declares the spacing as a share of the chart and the fill as a mode", () => {
-    const spacing = settingsFieldsFor("gauge").find(
-      (field) => field.property === "segmentSpacingPercent",
-    );
-    expect(spacing?.kind).toBe("number");
-    expect(spacing?.min).toBe(0);
-    expect(spacing?.max).toBe(20);
+  it("declares the spacing as an integer share of the segment", () => {
+    for (const family of ["gauge", "bar", "pie"] as const) {
+      const spacing = settingsFieldsFor(family).find(
+        (field) => field.property === "segmentSpacingPercent",
+      );
+      expect(spacing?.kind).toBe("number");
+      // 1–100 whole percents: at 100 the empty space equals the segment.
+      expect(spacing?.min).toBe(1);
+      expect(spacing?.max).toBe(100);
+      expect(spacing?.integer).toBe(true);
+      expect(spacing?.decimals).toBeUndefined();
+      expect(spacing?.step).toBeUndefined();
+    }
 
     const fill = settingsFieldsFor("bar").find(
       (field) => field.property === "segmentFill",

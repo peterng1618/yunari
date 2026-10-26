@@ -787,18 +787,27 @@ describe("Fabric theme envelope validation", () => {
     );
   });
 
-  it("refuses a spacing outside its share and a fill mode it does not offer", () => {
-    const spacing = issuesOf(
-      validateFabricThemeEnvelope(
-        chartEnvelope("gauge", { segmentSpacingPercent: 30 }),
+  it("refuses a spacing outside 1–100 and a fill mode it does not offer", () => {
+    for (const value of [0, 101, 10.5]) {
+      const spacing = issuesOf(
+        validateFabricThemeEnvelope(
+          chartEnvelope("gauge", { segmentSpacingPercent: value }),
+        ),
+      );
+      expect(spacing).toContainEqual(
+        expect.objectContaining({
+          code: "out-of-range",
+          path: "/scene/objects/0/settings/segmentSpacingPercent",
+        }),
+      );
+    }
+    expect(
+      issuesOf(
+        validateFabricThemeEnvelope(
+          chartEnvelope("gauge", { segmentSpacingPercent: 30 }),
+        ),
       ),
-    );
-    expect(spacing).toContainEqual(
-      expect.objectContaining({
-        code: "out-of-range",
-        path: "/scene/objects/0/settings/segmentSpacingPercent",
-      }),
-    );
+    ).toEqual([]);
 
     const fill = issuesOf(
       validateFabricThemeEnvelope(
