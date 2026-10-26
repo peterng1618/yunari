@@ -5981,6 +5981,16 @@ describe("The pages a consumer lands on", () => {
     expect(html).not.toContain("First card found (default)");
     expect(html).toContain("Automatic (the first card this PC reports)");
   });
+
+  it("serves a pair page that asks for the screen shape and rotation", async () => {
+    const page = await request(hosted.server, "GET", "/pair");
+    const html = page.text();
+
+    expect(page.status).toBe(200);
+    expect(html).toContain('id="shape"');
+    expect(html).toContain('id="rotation"');
+    expect(html).toContain("shape: shape.value");
+  });
 });
 
 /** A JSON request body, which the routes parse the same way a browser sends one. */

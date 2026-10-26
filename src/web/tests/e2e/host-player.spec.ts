@@ -3176,6 +3176,109 @@ test.describe("a paired display and the theme it is given", () => {
     });
   }
 
+  /** Whatever a pairing case left behind, removed by the id the record carries. */
+  async function removePaired(
+    request: APIRequestContext,
+    label: string,
+  ): Promise<void> {
+    const listed = (await (
+      await request.get(`${admin}/api/pairing/sessions`)
+    ).json()) as {
+      readonly displays: readonly {
+        readonly id: string;
+        readonly label: string;
+      }[];
+    };
+
+    for (const row of listed.displays) {
+      if (row.label === label) {
+        await request.delete(`${admin}/api/displays/${row.id}`);
+      }
+    }
+  }
+
+  /** The code this host is showing, read over the admin path. */
+  async function pairingCode(request: APIRequestContext): Promise<string> {
+    return (
+      (await (await request.get(`${admin}/api/pairing/code`)).json()) as {
+        readonly code: string;
+      }
+    ).code;
+  }
+
+  /** The record a pairing case stored, off the route rather than the page. */
+  function storedDisplay(request: APIRequestContext, label: string) {
+    return expect.poll(async () => {
+      const listed = (await (
+        await request.get(`${admin}/api/pairing/sessions`)
+      ).json()) as { readonly displays: readonly { label: string }[] };
+
+      return listed.displays.find((row) => row.label === label);
+    });
+  }
+
+  test("pairs a display as a circle at 45 degrees", async ({
+    page,
+    request,
+  }) => {
+    test.skip(origin === "", "this machine has no LAN address");
+
+    const code = await pairingCode(request);
+
+    try {
+      // The page a device with no credential opens, at the address a display
+      // reaches the host on — the claim is the one route it may call.
+      await page.goto(`${origin}/pair`);
+      await page.fill("#code", code);
+      await page.fill("#name", "Round panel");
+      await page.selectOption("#shape", "circle");
+      await page.fill("#rotation", "45");
+      await page.click('button[type="submit"]');
+
+      // The claim is answered asynchronously, so the record is read back from
+      // the host's own route rather than from the page's report of itself.
+      await storedDisplay(request, "Round panel").toMatchObject({
+        shape: "circle",
+        rotation: 45,
+      });
+    } finally {
+      await removePaired(request, "Round panel");
+    }
+  });
+
+  test("snaps a free angle to a quarter turn when pairing a rectangle", async ({
+    page,
+    request,
+  }) => {
+    test.skip(origin === "", "this machine has no LAN address");
+
+    const code = await pairingCode(request);
+
+    try {
+      await page.goto(`${origin}/pair`);
+      await page.fill("#code", code);
+      await page.fill("#name", "Square panel");
+      await page.selectOption("#shape", "circle");
+      await page.fill("#rotation", "45");
+
+      // The destructive half, named on screen: the field moves to the quarter
+      // the host will store, and the note keeps the angle that was typed.
+      await page.selectOption("#shape", "rect");
+      await expect(page.locator("#rotation")).toHaveValue("90");
+      await expect(page.locator("#rotation-note")).toBeVisible();
+      await expect(page.locator("#rotation-note")).toContainText("45");
+      await expect(page.locator("#rotation-note")).toContainText("90");
+
+      await page.click('button[type="submit"]');
+      await storedDisplay(request, "Square panel").toMatchObject({
+        shape: "rect",
+        rotation: 90,
+      });
+    } finally {
+      await removePaired(request, "Square panel");
+    }
+  });
+
   test("a reassignment lands on a display that is already showing", async ({
     page,
     request,
