@@ -4,7 +4,10 @@ import {
   SelectionStore,
   TokenSelectionStore,
 } from "../editor-shell/shell-stores.js";
-import { newTypeToken } from "../new-fabric-theme-globals.js";
+import {
+  newTypeToken,
+  starterTypeTokens,
+} from "../new-fabric-theme-globals.js";
 import { resolveTypeToken } from "../selection-inspector/appearance.js";
 import { uiCopy } from "../ui-copy.js";
 import { createTypeTokenPanel } from "./panel.js";
@@ -15,8 +18,8 @@ import { createTypeTokenPanel } from "./panel.js";
 afterEach(() => document.body.replaceChildren());
 
 const presets = {
-  body: { family: "Inter", size: 16 },
-  caption: { family: "Inter", size: 12 },
+  body: { family: "Inter" },
+  caption: { family: "Inter" },
 };
 
 describe("type token panel", () => {
@@ -66,6 +69,25 @@ describe("type token panel", () => {
     expect(change).toHaveBeenCalledTimes(1);
     expect(change).toHaveBeenCalledWith({
       ...presets,
+      type: newTypeToken,
+    });
+  });
+
+  it("adds on a fresh theme whose roles carry the starter faces", () => {
+    // The seed must not be a face a starter role already carries, or the
+    // duplicate rule makes Add a no-op on every new theme. Tied to the starter
+    // tokens rather than to a copy of their values, so changing either one is
+    // caught here.
+    const change = vi.fn();
+    const panel = createTypeTokenPanel(document.body, change);
+    panel.render(starterTypeTokens);
+
+    panel.root
+      .querySelector<HTMLButtonElement>("[data-yunari-type-preset-add]")
+      ?.click();
+
+    expect(change).toHaveBeenCalledWith({
+      ...starterTypeTokens,
       type: newTypeToken,
     });
   });

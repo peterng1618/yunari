@@ -52,6 +52,7 @@ export function orderedTokens(
     .sort((left, right) =>
       tokenName(left.id, left.token).localeCompare(
         tokenName(right.id, right.token),
+        "en",
       ),
     );
   return [...roles, ...rest];
@@ -69,10 +70,12 @@ export function tokenIdOfFace(
   family: string,
   weight: string | number | undefined,
 ): string | undefined {
-  const wanted = `${family.trim()}|${normalisedWeight(weight)}`;
+  const wantedFamily = family.trim();
+  const wantedWeight = normalisedWeight(weight);
   return Object.entries(tokens).find(
     ([, token]) =>
-      `${token.family.trim()}|${normalisedWeight(token.weight)}` === wanted,
+      token.family.trim() === wantedFamily &&
+      normalisedWeight(token.weight) === wantedWeight,
   )?.[0];
 }
 

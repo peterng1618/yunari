@@ -1271,6 +1271,11 @@ export const uiCopy = {
       newPresetSummary: (role: string, family: string): string =>
         `${role} — ${family} · adds one`,
       addAsPreset: "Add as type token",
+      /** A chosen role is the token's id, so adding to a role the theme already
+       *  has rewrites that token's face rather than creating a second id. Said
+       *  beside the Add button when that is what the press will do. */
+      replacesRole: (role: string): string =>
+        `Replaces the ${role} token's face.`,
       applyToSelected: "Apply to selected token",
       trioNote:
         "Apply rewrites every role token and adds any role the theme does not have. Add 3 tokens leaves the theme as it is.",

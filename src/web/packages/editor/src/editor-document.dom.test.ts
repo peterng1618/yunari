@@ -971,6 +971,7 @@ describe("EditorDocument preset actions", () => {
       custom: { family: "Georgia" },
     };
     const { document } = presetDocument(existing);
+    assetBytesMock.mockClear();
     assetBytesMock.mockResolvedValue({
       bytes: new Uint8Array([1]),
       filename: "face.woff2",
@@ -994,6 +995,29 @@ describe("EditorDocument preset actions", () => {
       weight: 400,
       face: { assetId: fontAssetId(trio.roles.mono!) },
     });
+    // Only the missing roles' cuts are adopted; reading the heading's bytes
+    // would leave an unreferenced declaration behind.
+    expect(assetBytesMock).toHaveBeenCalledTimes(2);
+    document.destroy();
+  });
+
+  it("add three declares nothing when the theme already has all three roles", async () => {
+    const existing: TypeTokens = {
+      heading: { family: "Segoe UI" },
+      body: { family: "Segoe UI" },
+      mono: { family: "Consolas" },
+    };
+    const { document, saveState } = presetDocument(existing);
+    assetBytesMock.mockClear();
+    saveState.mockClear();
+
+    await document.addTypeTokensFromTrio(trio);
+
+    // The copy promises Add 3 leaves the theme as it is: no face is adopted (so
+    // the cleanup sheet cannot flag one), and no history entry is written.
+    expect(presetsOf(document)).toEqual(existing);
+    expect(assetBytesMock).not.toHaveBeenCalled();
+    expect(saveState).not.toHaveBeenCalled();
     document.destroy();
   });
 

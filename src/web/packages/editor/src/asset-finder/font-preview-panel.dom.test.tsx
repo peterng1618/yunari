@@ -253,6 +253,11 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
     "[data-yunari-font-role]",
   );
   expect(role?.value).toBe("body");
+  // The starter token it would rewrite is named: the press replaces a face
+  // rather than adding a second token.
+  expect(document.body.textContent).toContain(
+    uiCopy.assets.fontPreview.replacesRole(uiCopy.assets.fontPreview.role.body),
+  );
 
   act(() => {
     chips[1]?.click();
@@ -266,6 +271,11 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
     role?.dispatchEvent(new Event("change", { bubbles: true }));
   });
   expect(role?.value).toBe("heading");
+  expect(document.body.textContent).toContain(
+    uiCopy.assets.fontPreview.replacesRole(
+      uiCopy.assets.fontPreview.role.heading,
+    ),
+  );
   expect(document.body.textContent).toContain("Heading — Manrope · adds one");
   act(() => {
     button("[data-yunari-font-add-preset]").click();
@@ -282,6 +292,14 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
     family.font.cuts[1],
   ]);
   expect(chips[1]?.getAttribute("aria-pressed")).toBe("true");
+});
+
+it("draws no role-replacement hint when the theme has no such role", () => {
+  // Nothing is replaced: the press creates the role, which is the other honest
+  // answer and must not be dressed as a rewrite.
+  mount(panel({ selected: family, presets: roleless, onAddPreset: vi.fn() }));
+
+  expect(document.querySelector("[data-yunari-font-role-replaces]")).toBeNull();
 });
 
 it("applies the face the family's id names, not the first cut listed", () => {

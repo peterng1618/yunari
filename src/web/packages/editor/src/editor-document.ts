@@ -1011,17 +1011,23 @@ export class EditorDocument {
 
   /** The three role tokens a trio names, created beside whatever the theme
    *  already has rather than rewriting it. A role already present keeps its
-   *  authored face: the role is the token's id, so there is no second id to
-   *  create. */
+   *  authored face and its cuts are not adopted: creating the role is the only
+   *  reason to read those bytes, and the copy promises Add 3 leaves an existing
+   *  theme unchanged. */
   async addTypeTokensFromTrio(trio: FontTrioInfo): Promise<void> {
-    const entries = this.#trioCuts(trio);
+    const presets = this.#typeTokens();
+    const entries = this.#trioCuts(trio).filter(
+      ({ role }) => presets[role] === undefined,
+    );
+    // Nothing missing is nothing to write: an empty add must not record a
+    // history entry for a theme it did not change.
+    if (entries.length === 0) return;
     await this.#adoptCuts(entries);
-    let presets = this.#typeTokens();
+    let next = presets;
     for (const { cut, role } of entries) {
-      if (presets[role] !== undefined) continue;
-      presets = { ...presets, [role]: rolePreset(cut) };
+      next = { ...next, [role]: rolePreset(cut) };
     }
-    this.setTypes(presets);
+    this.setTypes(next);
   }
 
   /** One token from one cut. A chosen role rewrites that role's token — the

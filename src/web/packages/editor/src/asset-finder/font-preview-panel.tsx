@@ -312,6 +312,18 @@ export function FontPreviewPanel({
             </label>
           </div>
 
+          {/* A chosen role is the token's id, so adding to a role the theme
+              already has replaces that token's face. Said where the Add button
+              is, because the promise and the write must not disagree. */}
+          {presets[role] === undefined ? null : (
+            <p
+              data-yunari-font-role-replaces=""
+              className="m-0 text-[10px] text-faint"
+            >
+              {copy.replacesRole(copy.role[role])}
+            </p>
+          )}
+
           <div className="flex items-center gap-[var(--space-6)]">
             {onAddPreset === undefined || selectedCut === undefined ? null : (
               <button

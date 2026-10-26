@@ -27,6 +27,12 @@ describe("tokenName", () => {
       "Manrope",
     );
   });
+
+  it("prints a string weight and a numeric weight alike", () => {
+    expect(tokenName("caption", { family: "Manrope", weight: "600" })).toBe(
+      tokenName("caption", { family: "Manrope", weight: 600 }),
+    );
+  });
 });
 
 describe("orderedTokens", () => {
@@ -67,13 +73,28 @@ describe("orderedTokens", () => {
 });
 
 describe("tokenIdOfFace", () => {
-  const tokens = {
-    body: { family: "Inter", weight: "400" },
-    caption: { family: "Manrope", weight: 600 },
-  };
-
   it("matches a stored string weight against a numeric one", () => {
-    expect(tokenIdOfFace(tokens, "Manrope", 600)).toBe("caption");
-    expect(tokenIdOfFace(tokens, "Segoe UI", 600)).toBeUndefined();
+    expect(
+      tokenIdOfFace({ body: { family: "Inter", weight: "400" } }, "Inter", 400),
+    ).toBe("body");
+    expect(
+      tokenIdOfFace({ body: { family: "Inter", weight: 400 } }, "Inter", "400"),
+    ).toBe("body");
+  });
+
+  it("normalises whitespace on both the stored and the offered weight", () => {
+    expect(
+      tokenIdOfFace(
+        { body: { family: " Inter ", weight: " 400 " } },
+        "Inter",
+        400,
+      ),
+    ).toBe("body");
+  });
+
+  it("answers undefined when no token carries the face", () => {
+    expect(
+      tokenIdOfFace({ body: { family: "Inter", weight: 400 } }, "Segoe UI", 600),
+    ).toBeUndefined();
   });
 });
