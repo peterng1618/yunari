@@ -7,7 +7,11 @@ import { uiCopy } from "../ui-copy.js";
 import { Group } from "./section-group.js";
 
 /** The pair a presentation write carries: the store decides them together,
- *  because the shape is what decides the rule the angle has to satisfy. */
+ *  because the shape is what decides the rule the angle has to satisfy.
+ *
+ *  Narrower than renderer-core's `DisplayPresentation`, whose `rotation` is
+ *  optional because a scene may have no record: every answer the host gives
+ *  here carries a number. */
 export interface DisplayPresentation {
   readonly shape: DisplayShape;
   readonly rotation: number;
@@ -26,8 +30,8 @@ function snapQuarterTurn(rotation: number): number {
  * **The words speak for the chosen display**, so the controls edit only the
  * record the rows above selected. This PC is the machine rather than a record —
  * the host adds its row rather than finding it — so it says why instead of
- * drawing controls that could not write. The default has no row at all: it is a
- * theme key, never a display.
+ * drawing controls that could not write. The host lists no `default` row: it is
+ * a theme key, so there is nothing here to present.
  *
  * The row is replaced from the host's answer, never optimistically: the store
  * decides the pair together, and a snapped angle it refused must not stand on
