@@ -6,7 +6,11 @@ import {
   openShell,
   PALETTES,
 } from "./shell-palette.js";
-import { openEditor, shellColours } from "./shell-palette-readers.js";
+import {
+  openEditor,
+  shellColours,
+  stagePaint,
+} from "./shell-palette-readers.js";
 import { themeToken, typeStep } from "./shell-tokens.js";
 import { isDesktopSurface } from "./surface.js";
 
@@ -42,6 +46,15 @@ test.describe("shell palettes", () => {
         if (colour === "" || colour === empty) {
           unresolved.push(`${palette}/${surface} = ${colour || "(absent)"}`);
         }
+      }
+
+      // The stage's ground is the palette's `--stage`: a colour in five
+      // palettes, and a gradient under `light`, where the colour is transparent
+      // and the image layers are what paints. Both halves are read, because a
+      // stage that paints neither is the unresolved case this sweep is for.
+      const stage = await stagePaint(page);
+      if (stage.colour === empty && stage.image === "none") {
+        unresolved.push(`${palette}/stage = nothing painted`);
       }
     }
 

@@ -96,9 +96,10 @@ export interface EditorShell {
   refreshGlass(): void;
   setArtboard(artboard: Artboard): void;
   /**
-   * The background layer moves. Its colour repaints the host and the plate, its
-   * media re-places (or remounts, when the asset changed) — the scene itself is
-   * untouched, because the layer is a DOM sibling rather than a scene object.
+   * The background layer moves. Its colour repaints the letterbox and the
+   * plate, its media re-places (or remounts, when the asset changed) — the scene
+   * itself is untouched, because the layer is a DOM sibling rather than a scene
+   * object.
    */
   setBackground(background: Background | undefined): void;
   setBackgroundMedia(
@@ -243,9 +244,9 @@ function applyArtboardPaint(
   const paintKey = `${artboardPaintKey(paint)}:${artboard.width}x${artboard.height}`;
   // **With background media declared there is no plate at all (0080).** The
   // plate is on the canvas, which sits above the media layer, so it covers the
-  // media exactly as the player's canvas fill did; the host's background, set
-  // below, is the board's colour instead — and it is behind the layer, which is
-  // the order the reader needs.
+  // media exactly as the player's canvas fill did; the display's letterbox,
+  // painted from the same resolved colour, is the board's colour instead — and
+  // it is behind the layer, which is the order the reader needs.
   const wantsPlate = documentBackground?.media === undefined;
   if (!wantsPlate) {
     memo.background = undefined;
@@ -641,17 +642,18 @@ export async function mountEditorShell({
 
       // The guide marks the artboard's real bounds when the lens and the board
       // disagree; when they agree the two frames would coincide, so it is noise.
-      const id = editor.viewport.display();
-      const lens = id === undefined ? undefined : resolveLens(id);
-      const boardAspect = currentArtboard.width / currentArtboard.height;
-      guide.hidden =
-        lens === undefined || Math.abs(lens.aspect - boardAspect) <= 1e-6;
-      if (guide.hidden) return;
+      // Geometry is written before the visibility check, so a hidden guide is
+      // never left holding a stale frame for the next reveal.
       const board = editor.viewport.artboardScreenRect();
       guide.style.left = `${board.left}px`;
       guide.style.top = `${board.top}px`;
       guide.style.width = `${board.width}px`;
       guide.style.height = `${board.height}px`;
+      const id = editor.viewport.display();
+      const lens = id === undefined ? undefined : resolveLens(id);
+      const boardAspect = currentArtboard.width / currentArtboard.height;
+      guide.hidden =
+        lens === undefined || Math.abs(lens.aspect - boardAspect) <= 1e-6;
     };
     editor.viewport.onChange(placeScreen);
     placeScreen();

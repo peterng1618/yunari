@@ -16,10 +16,11 @@ Land the preview-lens/stage and per-display shape/rotation work: [`spec A`](docs
 
 ## Last completed change
 
-- **Fonts and assets closed:** plan archived, spec settled, nine ledger carries filed as `vg-737`–`vg-745`.
-- **Register valid:** 745 items across both files; `npm run backlog:check` exit 0.
-- **Gate green on the final tree:** unit 414 files / 6074 tests, worker 12 files / 73.
-- **Captures:** three registered store captures recaptured; eleven stale ones filed as `vg-745`.
+- **Stage and letterbox split:** the stage paints the palette texture over `--stage`; the display screen carries the theme's artboard paint and its circle radius.
+- **Guide frame:** dashed `[data-yunari-theme-guide]` tracks `artboardScreenRect()`, hidden under Fit or when lens and board aspects match.
+- **Media follows the display box:** display-bounded media takes the display box and circular clip, falling back to the artboard before host layout.
+- **Verified:** focused DOM 86/86 and 450/450; biome and design-tokens exit 0; typecheck still red only in Task 4–5 surfaces.
+- **Browser proof owed:** Task 5 owns Playwright for stacking, letterbox colour, guide motion and circle radius.
 
 ## Next
 

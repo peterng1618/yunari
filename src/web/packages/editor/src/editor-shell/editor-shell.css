@@ -2689,6 +2689,12 @@ body,
   min-height: 0;
   position: relative;
   overflow: hidden;
+  isolation: isolate;
+  /* The stage is its own stacking context so the letterbox and the media layer
+     can be ordered by `z-index` rather than by tree order: a media remount
+     re-prepends its layer, and the screen must stay beneath it either way.
+     `isolation` creates the context without the side effects of a `z-index`
+     on a flush region of the shell. */
   /* No border: the pane's `border-right` and the inspector's `border-left`
      already draw the two hairlines beside it (see the §3 elevation-0 block),
      so a border here would be the same hairline drawn twice. No radius either:
@@ -2937,12 +2943,14 @@ body,
    claim it makes is where the screen's edges are, and anything more would be
    the lens deciding what the author can see.
 
-   `z-index: 0` lifts it over the stage texture and no further: the media layer
-   and the canvas paint after it, so the letterbox shows exactly where neither
-   covers it. The background is the theme's paint, set by the shell's paint
-   pass. */
+   `z-index: -1` puts it above the stage's own background (its texture) and
+   below every in-flow and auto-z-index descendant of the stage's stacking
+   context — the media layer and the canvas included. That ordering is a fact of
+   painting, not of tree order, so a media remount that re-prepends its layer
+   cannot cover the letterbox. The background is the theme's paint, set by the
+   shell's paint pass. */
 [data-yunari-display-screen] {
-  z-index: 0;
+  z-index: -1;
   border: 1px solid var(--yunari-subdued);
   box-sizing: border-box;
 }

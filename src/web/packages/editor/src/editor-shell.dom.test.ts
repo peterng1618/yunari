@@ -694,6 +694,104 @@ describe("the background layer", () => {
     shell.destroy();
   });
 
+  it("holds the guide on the artboard's bounds through a zoom and under Fit", async () => {
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const shell = await mount({
+      host,
+      artboard: { width: 1600, height: 900 },
+    });
+    const guide = host.querySelector<HTMLElement>("[data-yunari-theme-guide]");
+    /** The guide's written geometry, against the camera's own reading: one
+     *  source, so a guide drawn anywhere else fails. */
+    const guideMatches = (expected: {
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+    }): void => {
+      expect([
+        guide?.style.left,
+        guide?.style.top,
+        guide?.style.width,
+        guide?.style.height,
+      ]).toEqual([
+        `${expected.left}px`,
+        `${expected.top}px`,
+        `${expected.width}px`,
+        `${expected.height}px`,
+      ]);
+    };
+
+    shell.viewport.showDisplay("1:1");
+    guideMatches(shell.viewport.artboardScreenRect());
+
+    shell.viewport.zoomBy(2);
+    guideMatches(shell.viewport.artboardScreenRect());
+    // Written even while hidden, so the next reveal is not a stale frame.
+    shell.viewport.showDisplay(undefined);
+    expect(guide?.hidden).toBe(true);
+    guideMatches(shell.viewport.artboardScreenRect());
+    shell.destroy();
+  });
+
+  it("rounds the screen only under a circle lens", async () => {
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const shell = await mount({ host, artboard: ARTBOARD });
+    const screen = host.querySelector<HTMLElement>(
+      "[data-yunari-display-screen]",
+    );
+
+    shell.viewport.showDisplay("16:9");
+    expect(screen?.style.borderRadius).toBe("");
+    shell.viewport.showDisplay("Circle");
+    expect(screen?.style.borderRadius).toBe("50%");
+    shell.viewport.showDisplay("16:9");
+    expect(screen?.style.borderRadius).toBe("");
+    shell.destroy();
+  });
+
+  it("rounds a display-bounded media layer only under a circle lens", async () => {
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const assets = [
+      { id: "hero", kind: "image" as const, path: "assets/hero.png" },
+    ];
+    const shell = await mount({
+      host,
+      artboard: ARTBOARD,
+      envelope: envelopeWith(
+        {
+          color: { ref: "palette.ink" },
+          media: { assetId: "hero", bounds: "display" },
+        },
+        assets,
+      ),
+      resolveAsset: () => ({ url: "blob:hero" }),
+    });
+    const layer = host.querySelector<HTMLElement>(
+      "[data-yunari-background-media]",
+    );
+
+    shell.viewport.showDisplay("16:9");
+    expect(layer?.style.borderRadius).toBe("");
+    shell.viewport.showDisplay("Circle");
+    expect(layer?.style.borderRadius).toBe("50%");
+    shell.viewport.showDisplay("16:9");
+    expect(layer?.style.borderRadius).toBe("");
+    shell.destroy();
+  });
+
   it("paints the letterbox, not the stage host, and sizes the media layer", async () => {
     const host = document.createElement("div");
     Object.defineProperties(host, {
