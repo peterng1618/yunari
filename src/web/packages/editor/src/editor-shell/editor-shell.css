@@ -542,8 +542,9 @@ body,
   --dialog-min-width: 340px;
   --dialog-max-width: 560px;
   --dialog-max-height: 720px;
-  /* The two Wallpaper Engine dialogs size themselves inside that box: the guide
-     holds two short sections, the import modal one progress block. */
+  /* The Wallpaper Engine guide, and the import modal it shares with the Assets
+     pane, size themselves inside that box: the guide holds two short sections,
+     the import modal one progress block. */
   --guide-dialog-width: 420px;
   --import-dialog-width: 360px;
   --settings-tabs-width: 150px;

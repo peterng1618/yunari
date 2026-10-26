@@ -510,9 +510,12 @@ license   "unknown"
 changes   the normalizer's reported profile, or "Copied unchanged"
 ```
 
-No author display name is written, because none is available offline (§1.4). The
-credits UI renders the workshop URL as the attribution link; a display name is a
-future addition that needs a Steam Web API key, and is out of scope here.
+The host's cache holds no author display name (§1.4), but the editor looks one
+up whenever the item carries a `steamId`: `GET /api/wallpaper-engine/author/<steamId>`
+fetches the public Steam community XML — no API key — and the name is written on
+the credit when it resolves. A refusal or timeout omits `author.name`, so a
+missing name is absence rather than a guessed value. The credits UI renders the
+workshop URL as the attribution link.
 
 ## 8. Scene themes: convert, export by hand, import
 
@@ -688,7 +691,7 @@ are tens of lines each against formats already decoded here.
 | Item directory unreadable | item omitted from the list, counted in a `skipped` figure the host reports |
 | Preset item | never listed (§1.2) |
 | Cache row missing for a directory | listed, with attribution absent |
-| `scene.pkg` missing or unreadable | listed as `scene`, `stillAtRest` absent — an unclassified scene is exported as unchanged video, never guessed still |
+| `scene.pkg` missing or unreadable | listed as `scene`, `stillAtRest` absent — never guessed still; it converts like any other scene (§8) |
 | `project` route finds the directory already there | not a failure: `ok: true, reused: true`; nothing is written and the card reports it already existed |
 | `scene.pkg` table runs past the file's end, or a member write fails | the directory this run created is removed and the route answers `unreadable`; an existing directory is never touched |
 | `myprojects` not writable | `ok: false, reason: "refused"`; the card returns to idle and the status line says why |
@@ -755,9 +758,10 @@ the file's end, and to reuse — not rewrite — a directory that already exists
    author saves the `.mpkg` wherever they choose and imports it through the
    modal (§8, step 5).
 3. **The one scene package of 225 that has no `scene.json` member.** The
-   container read fine; the member is absent. It stays unclassified and routes to
-   the video export (§11), which costs only a longer export. One item is a
-   bounded gap, not a measured zero.
+   container read fine; the member is absent. It stays unclassified, so the
+   still test never guesses; the author converts it like any other scene and
+   exports the `.mpkg` by hand, then imports that through the modal (§8). One
+   item is a bounded gap, not a measured zero.
 
 ## 15. Acceptance
 

@@ -16,10 +16,10 @@ Execute [`the Wallpaper Engine import rework`](docs/superpowers/plans/2026-10-26
 
 ## Last completed change
 
-- **Spec:** 2026-10-21 §8 rewritten as convert → author export → `.mpkg` import; its driving claims withdrawn against decision 0124.
-- **Decision:** 0118 marked superseded by 0124; the mobile-export plan moved to `plans/archive/`.
-- **Evidence:** `editor-finder-wallpaper-engine` recaptured as a card grid with one icon action per kind; the two export-sheet rows deleted.
-- **Proof:** the recapture passed; `npm run gate` exited 0 and `status:check` passes from this commit.
+- **Author:** spec §7.3 drops the "needs a Steam API key" claim; the shipped lookup writes the persona name when it resolves, and failure is absence.
+- **Export:** spec §14 and §11 now say the author exports a converted project to `.mpkg`, and `.mpkg`/video files enter through the modal.
+- **Tokens:** the import modal is named as shared with the Assets pane, not a second Wallpaper Engine dialog.
+- **Proof:** `docs:check` and `status:check` pass from this commit.
 
 ## Next
 
