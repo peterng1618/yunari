@@ -183,6 +183,36 @@ it("drops Place and draws a player for a video", async () => {
   ).toContain("border-accent");
 });
 
+it("reports a command to the pane and closes", async () => {
+  // The modal writes nothing itself: Remove is the pane's closure, and the
+  // surface settles so the caller can release what it minted.
+  let removed = 0;
+  let closed = 0;
+  const modal = await open(IMAGE, {
+    onRemove: async () => {
+      removed += 1;
+    },
+    onClose: () => {
+      closed += 1;
+    },
+  });
+
+  const remove = modal.querySelector<HTMLButtonElement>(
+    "[data-yunari-asset-preview-action='remove']",
+  );
+  expect(remove).not.toBeNull();
+  await act(async () => {
+    remove?.click();
+    await flush();
+  });
+
+  expect(removed).toBe(1);
+  expect(closed).toBe(1);
+  expect(
+    document.querySelector("[data-yunari-asset-preview-modal]"),
+  ).toBeNull();
+});
+
 it("keeps every action label on one line at the fixed panel width", async () => {
   const modal = await open(IMAGE);
 
