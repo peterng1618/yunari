@@ -18,9 +18,10 @@ Land [`2026-10-26-segment-spacing-and-fill-mode-design.md`](docs/superpowers/spe
 
 ## Last completed change
 
-- **Pie gaps are a target angle:** the share converts at the authored outer radius, and every internal spacer draws that same angle.
-- **Composition shares survive the gaps:** one denominator scales the real pieces, so a wider spacing changes the gap and nothing else.
-- **`SEGMENT_GAP_RATIO` is gone:** no adapter reads a share of a slot any more, so the constant and its test left with the rule.
+- **Spacing is a share of the chart, not of the slot:** gauge, bar and pie all measure the gap against the smaller drawn edge, with the gauge's cap clearance widening it on a small chart and a 45% band clamp.
+- **Fill mode is authorable:** gauge and bar switch between whole and partial segments; partial stops the fill at the reading, and the defaults keep the look from before the change.
+- **Browser evidence:** the gauge at five bands keeps its gaps at half size, and switching to partial moves the fill edge; three captures under `C:/tmp/yunari-segment-spacing`.
+- **Gate green on the third run:** the first was red on biome formatting, the second on the known `store.test.ts` asset-bounds timeout (72/72 when run alone), the third passed.
 
 ## Next
 

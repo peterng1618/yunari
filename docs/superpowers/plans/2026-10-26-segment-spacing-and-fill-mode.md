@@ -323,7 +323,7 @@ git commit -m "feat(charts): space pie slices by the drawn size"
 - Consumes: every task above.
 - Produces: a browser case proving the gap survives a smaller chart and the fill toggle moves pixels; a green gate; a local `main` merge.
 
-- [ ] **Step 1: Extend the segmented-fill browser case**
+- [x] **Step 1: Extend the segmented-fill browser case**
 
 In the existing `segmentDivisor` case, after the divisor reaches `20`:
 
@@ -334,7 +334,7 @@ In the existing `segmentDivisor` case, after the divisor reaches `20`:
 Run: `cd src/web && YUNARI_CAPTURE=1 YUNARI_CAPTURE_DIR="C:/tmp/yunari-segment-spacing" npx playwright test tests/e2e/inspector-sections.spec.ts --grep "segment" --workers=1`
 Expected: PASS; three PNGs.
 
-- [ ] **Step 2: Run the full gate**
+- [x] **Step 2: Run the full gate**
 
 Run: `cd src/web && npm run gate`
 Expected: exit 0. A red `packages/host/src/themes/store.test.ts` asset-bounds timeout is the open flake (vg-175/vg-590/vg-661): re-run and record which runs were red and why.
