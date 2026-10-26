@@ -24,7 +24,9 @@ inside a preview ratio:
 3. **A mismatched lens shows no guide.** When the lens aspect differs from the
    artboard's, nothing marks the theme's real extent, and with a theme-coloured
    letterbox the artboard's edge can share the letterbox's colour.
-4. **No 1:1 preview.**
+4. **No 1:1 or circular preview.** The list has no square and no round display,
+   so a theme for a square panel or a round one is only ever previewed in a
+   rectangular lens.
 5. **Preview ratios are fixed.** The six previews are derived from the artboard
    presets, so an author cannot add, remove or reset them.
 
@@ -39,7 +41,8 @@ stays the shell's stage.
   covered by the virtual display.
 - **Virtual display** — the box a chosen preview ratio stands for: a rect in
   **artboard units**, contained on one axis and centred, whose aspect is the
-  ratio. The camera transforms it like any scene geometry.
+  ratio. The camera transforms it like any scene geometry. A **circle** lens is
+  the same box with a circular clip: a round screen, always 1:1.
 - **Letterbox** — the part of the virtual display outside the artboard. Painted
   with the theme's background colour, as the player's letterbox is.
 - **Guide frame** — an outline at the artboard's real bounds, shown under a lens
@@ -122,13 +125,28 @@ fallback would resurrect exactly the pinned layer this design removes.
 ### Background media
 
 `bounds: "display"` media is placed by the layer's existing path —
-`media.setBounds({ artboard, display })` from `placeMedia` — with the transformed
-display rect. No change to `mountBackgroundMedia` is required; the box it
-receives is the scene-anchored one. `bounds: "theme"` is unchanged.
+`media.setBounds({ artboard, display, shape })` from `placeMedia` — with the
+transformed display rect and the lens's shape. No other change to
+`mountBackgroundMedia` is required; the box it receives is the scene-anchored
+one. `bounds: "theme"` is unchanged, and is never circular: the artboard is the
+theme, not the display.
 
 The glass sampler's `backdrop()` already maps the rect it actually painted from
 `bounds` and keeps working; when `display` is undefined under Fit, the
 display-bounded case falls back to the artboard rect, matching the layer.
+
+### A circle lens
+
+A circle lens is the same scene-anchored box with a circular display:
+
+- the display-screen element takes `border-radius: 50%`, so the letterbox fill
+  is a disc;
+- a display-bounded media layer takes the same radius and clips its media to the
+  disc (`setBounds`'s `shape`);
+- the artboard and the guide frame stay rectangular — a 16:9 theme in a circle
+  lens is a landscape card letterboxed inside a disc, which is what a round
+  screen shows;
+- everything outside the disc is the shell stage, as for a rectangular lens.
 
 ## The stage and the letterbox
 
@@ -174,28 +192,32 @@ lens is active **and** `|lens.aspect − artboardAspect|` exceeds `1e-6`.
 
 ### Data
 
-`display-lens.ts` becomes the owner. A ratio is `{ width, height }` of positive
-finite numbers, identified by its normalised `"W:H"` text (`19.5:9` keeps its
-decimal; a ratio is normalised by dividing both edges by their greatest common
-divisor when that leaves integers, otherwise by the width).
+`display-lens.ts` becomes the owner. A ratio is
+`{ width, height, shape: "rect" | "circle" }` of positive finite numbers,
+identified by its normalised `"W:H"` text (`19.5:9` keeps its decimal; a ratio
+is normalised by dividing both edges by their greatest common divisor when that
+leaves integers, otherwise by the width). `shape` is `"rect"` everywhere except
+a circle, which is only legal when `width === height`; a circle's id is
+`"Circle"`, not an aspect name.
 
-Defaults: `16:9`, `19.5:9`, `4:3`, `1:1`.
+Defaults: `16:9`, `19.5:9`, `4:3`, `1:1`, and `Circle`.
 
 A ratio derives:
 
-- a **landscape** lens `{ id: "W:H", aspect: W/H, orientation: "landscape" }`
-  when `W ≥ H` (a square files here, per `artboardOrientation`'s "a square is
-  not taller, so it reads landscape");
-- a **portrait** lens `{ id: "H:W", aspect: H/W, orientation: "portrait" }` when
-  `W > H` (a square does not duplicate).
+- a **landscape** lens `{ id: "W:H", aspect: W/H, orientation: "landscape",
+  shape }` when `W ≥ H` (a square or circle files here, per
+  `artboardOrientation`'s "a square is not taller, so it reads landscape");
+- a **portrait** lens `{ id: "H:W", aspect: H/W, orientation: "portrait",
+  shape }` when `W > H` (a square or circle does not duplicate).
 
 `DisplayLensId` becomes `string`. `uiCopy.display.displays` is deleted; a lens's
 label is its id, which is the same rule the current table states ("each name is
-the aspect it frames").
+the aspect it frames"), and `"Circle"` is already the name of what it frames.
 
 ### Storage
 
-- Key `yunari.editor.preview-ratios`, a JSON array of `"W:H"` strings.
+- Key `yunari.editor.preview-ratios`, a JSON array of strings: `"W:H"` for a
+  rectangular ratio and `"Circle"` for the round 1:1 preview.
 - Written by the settings tab; read once by the shell before the editor mounts.
 - Absent key means "defaults". An unreadable, unparsable or invalid array falls
   back to defaults; individual invalid entries are dropped, duplicates are
@@ -228,11 +250,13 @@ the display menu and the settings tab all read one catalogue through
 A fifth tab, `previews`, between `appearance` and `keyboard`:
 
 - A list of the current ratios, one row per ratio, each with a Remove control
-  and its two derived preview labels (e.g. `16:9` and `9:16`; a square shows
-  one).
-- An Add row: one text field accepting `W:H` (decimals allowed) and an Add
-  action. Input that is not `positive:positive`, or that duplicates an existing
-  ratio, is refused with a worded reason from `uiCopy`; nothing is guessed.
+  and its derived preview labels (e.g. `16:9` and `9:16`; a square or circle
+  shows one).
+- An Add row: a shape choice (**Rect** / **Circle**), a text field accepting
+  `W:H` (decimals allowed) and an Add action. The field is hidden for Circle,
+  which is always 1:1. Input that is not `positive:positive`, or that duplicates
+  an existing ratio, is refused with a worded reason from `uiCopy`; nothing is
+  guessed.
 - A Reset action, disabled while the list already equals the defaults, removing
   the stored key.
 - Removing the last ratio is allowed; the tab says the display menu will offer
@@ -256,6 +280,9 @@ A fifth tab, `previews`, between `appearance` and `keyboard`:
 - A ratio of zero, a negative edge, a non-finite number, a missing colon or a
   third part is refused by the parser; the settings field reports why.
 - A ratio whose two edges are equal is square: one lens, no portrait twin.
+- A circle is 1:1 by construction: it is stored as the `Circle` token, never as
+  an aspect, so it cannot be authored non-square. The stored list is a closed
+  vocabulary of `W:H` tokens plus `Circle`; anything else is dropped on read.
 - A lens id not in the catalogue never reaches the viewport: the menu can only
   offer catalogue ids, and storage-driven changes clear a vanished lens.
 - A theme-coloured letterbox and a theme-coloured artboard are distinguished by
@@ -269,6 +296,9 @@ A fifth tab, `previews`, between `appearance` and `keyboard`:
   remains reachable through the size fields and Custom size.
 - The player is unchanged: its letterbox is still the theme's colour and its
   display is the host's rect.
+- **No rotation of the virtual display.** The author's screen is always upright;
+  a per-display rotation is a playback setting owned by the host and the player,
+  not a property of the editor's lens.
 - No new persisted theme field, no schema change, no migration.
 
 ## Acceptance
@@ -284,10 +314,13 @@ A fifth tab, `previews`, between `appearance` and `keyboard`:
 4. Under a lens whose aspect differs from the artboard's, the guide frame is
    visible at the artboard's bounds and moves with it; it is absent under Fit
    and when the aspects match.
-5. `1:1` appears in the display menu by default and frames the artboard in a
-   square virtual display.
+5. `1:1` and `Circle` both appear in the display menu by default; `1:1` frames
+   the artboard in a square virtual display, and `Circle` frames the same box
+   with a circular display — a display-bounded background is clipped to the
+   disc, and the stage outside the disc is still the shell's.
 6. Settings → Previews adds `21:9`, offers `21:9` and `9:21` in the display
-   menu, removes them again and resets to `16:9`, `19.5:9`, `4:3`, `1:1`.
+   menu, removes them again and resets to `16:9`, `19.5:9`, `4:3`, `1:1`,
+   `Circle`.
 7. Reloading keeps an authored list; reset after reload restores defaults.
 8. An invalid entry is refused with a visible reason and does not enter the
    list; removing every ratio leaves Fit as the only menu entry, and the editor
