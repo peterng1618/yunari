@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 
 import { Canvas, Point } from "fabric/es";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_PREVIEW_RATIO_TOKENS,
   setActivePreviewRatios,
 } from "../display-lens.js";
-import { createViewportManager, MAX_ZOOM, MIN_ZOOM } from "./index.js";
+import {
+  createViewportManager,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  type ViewportManager,
+} from "./index.js";
 
 // jsdom cannot drawImage an undecoded img inside Fabric's render pass; a proxy
 // over a real context forwards everything, no-ops only drawImage, and swallows
@@ -40,6 +45,16 @@ const resetPreviewRatios = (): void => {
 
 beforeEach(resetPreviewRatios);
 
+/** Cameras the helpers built, destroyed after each test: a live camera stays
+ *  subscribed to the catalogue, so one left behind is re-fitted by a later
+ *  test's `setActivePreviewRatios` — work nobody asked for, on a camera the
+ *  test no longer reads. */
+const cameras: ViewportManager[] = [];
+
+afterEach(() => {
+  for (const camera of cameras.splice(0)) camera.destroy();
+});
+
 /** A camera on a host and an artboard of the test's own choosing, for the
  *  scene-anchored screen, whose numbers are not `setup`'s 1000x800 / 1280x720. */
 function createCamera(options: {
@@ -52,11 +67,13 @@ function createCamera(options: {
     clientWidth: { get: () => options.width },
     clientHeight: { get: () => options.height },
   });
-  return createViewportManager({
+  const camera = createViewportManager({
     canvas: new Canvas(document.createElement("canvas")),
     host,
     artboard: () => options.artboard,
   });
+  cameras.push(camera);
+  return camera;
 }
 
 function setup(options: { lens?: string; fitted?: boolean } = {}) {
@@ -74,6 +91,7 @@ function setup(options: { lens?: string; fitted?: boolean } = {}) {
     host,
     artboard: () => ({ width: 1280, height: 720 }),
   });
+  cameras.push(camera);
   // The camera opens on a display, so a test that means "the whole stage" has
   // to say Fit rather than inherit whatever the product ships. Left implicit,
   // the numbers below would be describing the lens and a reader could not tell
