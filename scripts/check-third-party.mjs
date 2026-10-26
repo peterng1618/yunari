@@ -9,7 +9,9 @@
  * and rejects a row no declaration consumes. Scope stays direct dependencies;
  * the closure is the release rule in `docs/engineering/dependencies.md`.
  *
- * `node scripts/check-third-party.mjs [--self-test]`
+ * `node scripts/check-third-party.mjs`
+ *
+ * Its cases live in `src/web/tests/scripts/check-third-party.test.ts`.
  *
  * Exit: 0 clean, 1 drift (one line per drift), 2 unreadable input or an
  * incomplete install.
@@ -18,8 +20,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-
-import { selfTest } from "./check-third-party-self-test.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
 
@@ -42,7 +42,7 @@ function tableCells(line) {
 }
 
 /** The rows of every table whose header names Package, Version and Licence. */
-export function parseNotices(markdown) {
+function parseNotices(markdown) {
   const lines = markdown.split(/\r?\n/);
   const rows = [];
   for (let i = 0; i < lines.length; i += 1) {
@@ -66,7 +66,7 @@ export function parseNotices(markdown) {
 }
 
 /** Every direct dependency of every `src/web` workspace, `@yunari/` excluded. */
-export function directDependencies(web) {
+function directDependencies(web) {
   const root = readJson(join(web, "package.json"));
   const workspaces = ["", ...(root.workspaces ?? [])];
   const dependencies = [];
@@ -85,7 +85,7 @@ export function directDependencies(web) {
 /** The lockfile key a declaration resolves to: its workspace's own copy first,
  *  then the hoisted one — npm's lookup order. The staged manifest reads only
  *  the hoisted copy, so a nested dependency is checked here but not staged. */
-export function resolveDependency(packages, workspace, name) {
+function resolveDependency(packages, workspace, name) {
   const own = `${workspace === "" ? "" : `${workspace}/`}node_modules/${name}`;
   if (packages[own] !== undefined) return own;
   const hoisted = `node_modules/${name}`;
@@ -93,7 +93,7 @@ export function resolveDependency(packages, workspace, name) {
 }
 
 /** Parentheses and case are the only differences the notices need to tolerate. */
-export function normaliseLicence(value) {
+function normaliseLicence(value) {
   return value
     .replace(/[()]/g, " ")
     .replace(/\s+/g, " ")
@@ -125,7 +125,7 @@ const LICENCE_TITLES = new Map([
  * The title with only its decoration and aliases removed, lower-cased. Nothing
  * is matched partially: the result is looked up in the exact table above.
  */
-export function normaliseTitle(line) {
+function normaliseTitle(line) {
   return line
     .trim()
     .replace(/^[#*_\s]+/, "")
@@ -143,7 +143,7 @@ export function normaliseTitle(line) {
 }
 
 /** The licence a title line names, or `undefined` when the table cannot map it. */
-export function titleLicence(line) {
+function titleLicence(line) {
   return LICENCE_TITLES.get(normaliseTitle(line));
 }
 
@@ -262,7 +262,7 @@ function installedFacts(dir) {
 
 /**
  * Every check the gate runs, against the tree rooted at `root`. Returns the
- * exit code and the lines to print, so the self-test can assert on both without
+ * exit code and the lines to print, so its tests can assert on both without
  * the process exiting.
  */
 export function checkTree(root) {
@@ -395,7 +395,7 @@ export function checkTree(root) {
 }
 
 /** Runs the check against the repository this script lives in. */
-export function main() {
+function main() {
   const { exitCode, lines } = checkTree(ROOT);
   const stream = exitCode === 0 ? process.stdout : process.stderr;
   for (const line of lines) stream.write(`${line}\n`);
@@ -406,5 +406,5 @@ if (
   process.argv[1] !== undefined &&
   pathToFileURL(resolve(process.argv[1])).href === import.meta.url
 ) {
-  process.exit(process.argv.includes("--self-test") ? selfTest() : main());
+  process.exit(main());
 }
