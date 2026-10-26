@@ -1606,8 +1606,17 @@ test("the store lists a library, opens an item, and comes back to the same page"
   // at its own ratio inside that height: a viewer must not have the box move as
   // a person steps between items, and a portrait board must still be seen
   // uncropped.
+  //
+  // **The popup caps itself at `90vh`, and the project's 720px viewport caps the
+  // box at 648** — a height any declaration at or above 648 would satisfy, so
+  // the drawing's 760 would never be exercised. Read the geometry at a viewport
+  // tall enough for the box, then restore the project's own size for the rest of
+  // the case (the page is this test's own, but later steps read the layout too).
+  const projectViewport = page.viewportSize() ?? { width: 1280, height: 720 };
+  await page.setViewportSize({ width: projectViewport.width, height: 1000 });
   const landscape = await drawn("store-01");
   const portrait = await drawn("store-02");
+  await page.setViewportSize(projectViewport);
   const itemReading = `store-item box ${landscape.width}x${landscape.height}px stage landscape ${landscape.stage} portrait ${portrait.stage}; picture ${landscape.picture.width}x${landscape.picture.height} and ${portrait.picture.width}x${portrait.picture.height}; stamp "${landscape.stamp}"`;
   console.log(itemReading);
   testInfo.annotations.push({ type: "store-item", description: itemReading });
@@ -1615,17 +1624,18 @@ test("the store lists a library, opens an item, and comes back to the same page"
     portrait.stage,
     `the stage follows the item instead of holding one height (${itemReading})`,
   ).toBe(landscape.stage);
-  // The box is 760 high unless the viewport caps it at the same 90vh the popup
-  // asks for, and the stage is the box's content height — the 1px border twice.
-  const viewportHeight = page.viewportSize()?.height ?? 0;
+  // The drawing's own numbers, read where the box can reach them; the stage is
+  // the box's content height — the 1px border twice.
   expect(
     landscape.height,
     `the modal is not the drawing's 760px (${itemReading})`,
-  ).toBe(Math.min(760, Math.round(viewportHeight * 0.9)));
+  ).toBe(760);
+  // 760 less the popup's 1px border twice; written as the subtraction so the
+  // test does not mint a second design-language number for a derived height.
   expect(
     landscape.stage,
-    `the stage is not the box's own height (${itemReading})`,
-  ).toBe(landscape.height - 2);
+    `the stage is not the box's own content height (${itemReading})`,
+  ).toBe(760 - 2);
   expect(
     landscape.width,
     `the modal is not the 960px DESIGN.md fixes (${itemReading})`,

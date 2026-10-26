@@ -364,7 +364,7 @@ it("draws a 270px right panel and no caption band", async () => {
  * readable size draws **no caption at all**: `0 × 0` would be a measurement of
  * nothing, not a reading.
  */
-it("reads the stage's size and fit, and draws no caption without a size", async () => {
+it("reads the stage's size and fit, and survives a record without one", async () => {
   await mount(modal(LANDSCAPE));
   expect(
     must(stageCaption(), "stage caption").textContent?.trim(),
@@ -381,6 +381,23 @@ it("reads the stage's size and fit, and draws no caption without a size", async 
     stageCaption(),
     "an unreadable size drew a caption of its own",
   ).toBeNull();
+  // The same guard reaches the picture: a `calc` over 0 is invalid at
+  // computed-value time and collapses it, so an unsized record takes the stage's
+  // own box instead and keeps no ratio of its own.
+  const picture = must(
+    document.body.querySelector<HTMLElement>(
+      "[data-yunari-store-item-picture]",
+    ),
+    "picture",
+  );
+  expect(
+    picture.style.width,
+    "a 0 × 0 record left a ratio style on the picture",
+  ).toBe("");
+  expect(
+    picture.className,
+    "an unsized picture does not take the stage's own box",
+  ).toContain("size-full");
 });
 
 /**
@@ -542,18 +559,20 @@ it("names the item in the panel and writes its actions in the short words", asyn
 
 /**
  * Each action is a box holding a 12px glyph and one word, and **Delete is the
- * only one marked**: §4's `data-yunari-destructive` is what the shell paints
- * `--hot`, and no box is filled — an accent fill would make one of four the act.
+ * only one carrying §4's destructive marker**. The mark is the attribute the
+ * shell's rule paints `--hot`; no box is filled — an accent fill would make one
+ * of four the act.
  *
- * jsdom computes no colour, so what is read is the mark rather than the paint:
- * the shell's own rule (`editor-shell.control-rules.test.ts`) holds the colour,
- * and this holds that only the destructive command carries it.
+ * **Delete is disabled by R164 today, so §4 paints it `--faint`, not `--hot`.**
+ * jsdom computes no colour, so this case reads the mark and the disabled state
+ * rather than the paint; `editor-shell.control-rules.test.ts` holds that the
+ * shell declines to paint a disabled mark.
  */
-it("draws four glyph+word actions with Delete only marked in --hot", async () => {
+it("gives Delete the destructive marker and its R164 reason", async () => {
   await mount(modal(LANDSCAPE));
 
   const actions = Array.from(
-    document.body.querySelectorAll<HTMLElement>(
+    document.body.querySelectorAll<HTMLButtonElement>(
       "[data-yunari-store-item-action]",
     ),
   );
@@ -583,8 +602,29 @@ it("draws four glyph+word actions with Delete only marked in --hot", async () =>
     .map((action) => action.getAttribute("data-yunari-store-item-action"));
   expect(
     marked,
-    "more than Delete carries §4's mark, so more than one word paints --hot",
+    "more than Delete carries §4's mark, so more than one word would paint --hot",
   ).toEqual(["delete"]);
+
+  const deleteBox = must(
+    actions.find(
+      (action) =>
+        action.getAttribute("data-yunari-store-item-action") === "delete",
+    ) ?? null,
+    "delete box",
+  );
+  expect(
+    deleteBox.disabled,
+    "R164 no longer disables Delete, so the shell would paint it --hot",
+  ).toBe(true);
+  const describedBy = deleteBox.getAttribute("aria-describedby") ?? "";
+  expect(describedBy, "Delete no longer states its R164 reason").not.toBe("");
+  expect(
+    must(
+      document.body.querySelector<HTMLElement>(`#${describedBy}`),
+      "Delete's reason",
+    ).textContent,
+    "Delete's reason is not the copy table's",
+  ).toBe(uiCopy.store.cell.unavailable);
 });
 
 /**
@@ -744,6 +784,18 @@ it("joins the catalogue's counts to the caption's right-hand end", async () => {
     dateLine(),
     "an online item does not draw the catalogue's two counts beside its version and date",
   ).toBe(["1.4.0", "2026-10-14", "1,204", "38"].join(separator));
+
+  // A fixed-width stamp is cut mid-digit by the popup's `overflow-hidden`; it
+  // must shrink and ellipsise instead, and its end is what gives way first.
+  const stampClass = caption().className;
+  expect(
+    stampClass,
+    "the stamp cannot shrink inside the panel, so a long count is cut by the popup",
+  ).toContain("min-w-0");
+  expect(
+    stampClass,
+    "the stamp cannot ellipsise, so a long count is cut mid-digit",
+  ).toContain("truncate");
 
   // The figure is visible and its noun is read — see `uiCopy.store.counts` —
   // so the composed reading is figure, one space, noun.

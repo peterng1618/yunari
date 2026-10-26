@@ -295,10 +295,13 @@ function PanelHeader(props: {
             : `@${item.author}`}
         </span>
         <span className="flex-1" />
+        {/* The stamp gives way before the row does: `min-w-0 truncate` lets it
+            shrink inside the 238px content width, and because the counts sit
+            last the ellipsis takes them before the version and date. */}
         {stamp.length === 0 ? null : (
           <span
             data-yunari-store-item-date=""
-            className="flex-none font-mono text-2xs text-faint"
+            className="min-w-0 truncate font-mono text-2xs text-faint"
           >
             {stamp.map((part, index) => (
               <Fragment key={part.key}>
@@ -675,6 +678,10 @@ export function ItemModal(props: {
           : `${item.statusReason} ${uiCopy.store.status.removedPermanent}`
         : undefined;
   const reading = stageReading(item);
+  // A 0 × 0 record has no ratio to draw: the same guard the caption reads is
+  // repeated here, so the picture takes the stage's box rather than a `calc`
+  // that is invalid at computed-value time and collapses it.
+  const sized = item.facets.width > 0 && item.facets.height > 0;
 
   return (
     <DialogPrimitive.Root
@@ -707,10 +714,16 @@ export function ItemModal(props: {
                 being stretched. */}
             <span
               data-yunari-store-item-picture=""
-              className="overflow-hidden rounded-[var(--radius-md)]"
+              className={`overflow-hidden rounded-[var(--radius-md)]${
+                sized ? "" : " size-full"
+              }`}
               style={{
-                width: `min(100cqw, calc(100cqh * ${item.facets.width} / ${item.facets.height}))`,
-                height: `min(100cqh, calc(100cqw * ${item.facets.height} / ${item.facets.width}))`,
+                ...(sized
+                  ? {
+                      width: `min(100cqw, calc(100cqh * ${item.facets.width} / ${item.facets.height}))`,
+                      height: `min(100cqh, calc(100cqw * ${item.facets.height} / ${item.facets.width}))`,
+                    }
+                  : {}),
                 ...(item.ground === undefined
                   ? {}
                   : { background: item.ground }),
