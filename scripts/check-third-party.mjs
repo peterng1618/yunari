@@ -124,20 +124,33 @@ const LICENCE_TITLES = new Map([
   ["bsd 2-clause", "BSD-2-Clause"],
   ["bsd-2-clause", "BSD-2-Clause"],
   ["simplified bsd", "BSD-2-Clause"],
+  ["bsd 3-clause new or revised", "BSD-3-Clause"],
 ]);
+
+/**
+ * The title with only its decoration and aliases removed, lower-cased. Nothing
+ * is matched partially: the result is looked up in the exact table above.
+ */
+export function normaliseTitle(line) {
+  return line
+    .trim()
+    .replace(/^[#*_\s]+/, "")
+    .replace(/[#*_\s]+$/, "")
+    .replace(/\s*\([^)]*\)\s*$/, "")
+    .replace(/^The\s+/i, "")
+    .replace(/["“”]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/,\s*(?=version\b)/i, " ")
+    .replace(/\s+licen[cs]e\s*[.:;!?]?\s*$/i, "")
+    .replace(/[.:;!?,]+$/, "")
+    .trim()
+    .toLowerCase();
+}
 
 /** The licence a title line names, or `undefined` when the table cannot map it. */
 export function titleLicence(line) {
-  const title = line
-    .trim()
-    .replace(/^[#>*_\s"'`([{]+/, "")
-    .replace(/^The\s+/i, "")
-    .replace(/\s+licen[cs]e\s*[.:;!?]?\s*$/i, "")
-    .replace(/[)"'`*_.:,;!?\]]+$/, "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-  return LICENCE_TITLES.get(title);
+  return LICENCE_TITLES.get(normaliseTitle(line));
 }
 
 /** Non-empty lines of a LICENSE file, trimmed, in order. */
@@ -176,8 +189,26 @@ function installedFacts(dir) {
   }
 
   let licence;
+  let namedFile;
+  let problem;
   if (typeof manifest.license === "string" && manifest.license.trim() !== "") {
-    licence = manifest.license;
+    const declared = manifest.license.trim();
+    // npm stores `SEE LICENSE IN <file>` in the licence field; the file's own
+    // title is the evidence, and the name must stay inside the package.
+    const seeIn = /^SEE LICEN[CS]E IN (.+)$/i.exec(declared);
+    if (seeIn === null) {
+      licence = declared;
+    } else {
+      namedFile = seeIn[1].trim();
+      if (
+        namedFile === "" ||
+        namedFile.includes("..") ||
+        /[\\/]/.test(namedFile)
+      ) {
+        problem = `its license field names "${namedFile}", which is not a file inside the package`;
+        namedFile = undefined;
+      }
+    }
   } else if (Array.isArray(manifest.licenses)) {
     const types = manifest.licenses
       .map((entry) => (typeof entry === "string" ? entry : entry?.type))
@@ -185,13 +216,17 @@ function installedFacts(dir) {
     if (types.length > 0) licence = types.join(" OR ");
   }
 
-  let problem;
-  if (licence === undefined) {
-    const file = ["LICENSE", "LICENSE.txt", "LICENSE.md"]
-      .map((name) => join(dir, name))
-      .find(existsSync);
+  if (licence === undefined && problem === undefined) {
+    const names =
+      namedFile === undefined
+        ? ["LICENSE", "LICENSE.txt", "LICENSE.md"]
+        : [namedFile];
+    const file = names.map((name) => join(dir, name)).find(existsSync);
     if (file === undefined) {
-      problem = "no declared licence field and no LICENSE file";
+      problem =
+        namedFile === undefined
+          ? "no declared licence field and no LICENSE file"
+          : `its license field names "${namedFile}", but the package has no such file`;
     } else {
       const text = readFileSync(file, "utf8");
       const title = nonEmptyLines(text)[0] ?? "";
@@ -570,6 +605,63 @@ function selfTest() {
       "maps the LICENSE title to its licence",
       () =>
         withFixture(undefined, ({ exitCode }) => exitCode === 0),
+    ],
+    [
+      "accepts a title with a parenthesised alias",
+      () =>
+        withFixture(
+          ({ files, web, root }) => {
+            files.set(
+              join(web, "node_modules/gamma/LICENSE"),
+              "The MIT License (MIT)\n\nPermission is hereby granted, free of charge.\n",
+            );
+            files.set(
+              join(root, "THIRD-PARTY-NOTICES.md"),
+              NOTICES_CLEAN.replace(
+                "| `gamma` | 3.0.0 | BSD-3-Clause |",
+                "| `gamma` | 3.0.0 | MIT |",
+              ),
+            );
+          },
+          ({ exitCode }) => exitCode === 0,
+        ),
+    ],
+    [
+      "accepts the OSI BSD title with quoted words",
+      () =>
+        withFixture(
+          ({ files, web }) =>
+            files.set(
+              join(web, "node_modules/gamma/LICENSE"),
+              'BSD 3-Clause "New" or "Revised" License\n\nRedistribution and use is permitted.\n',
+            ),
+          ({ exitCode }) => exitCode === 0,
+        ),
+    ],
+    [
+      "reads the file named by SEE LICENSE IN",
+      () =>
+        withFixture(
+          ({ files, web, root }) => {
+            files.set(join(web, "node_modules/gamma/package.json"), {
+              name: "gamma",
+              version: "3.0.0",
+              license: "SEE LICENSE IN LICENSE",
+            });
+            files.set(
+              join(web, "node_modules/gamma/LICENSE"),
+              "MIT License\n\nPermission is hereby granted, free of charge.\n",
+            );
+            files.set(
+              join(root, "THIRD-PARTY-NOTICES.md"),
+              NOTICES_CLEAN.replace(
+                "| `gamma` | 3.0.0 | BSD-3-Clause |",
+                "| `gamma` | 3.0.0 | MIT |",
+              ),
+            );
+          },
+          ({ exitCode }) => exitCode === 0,
+        ),
     ],
   ];
 
