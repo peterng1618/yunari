@@ -61,7 +61,9 @@ export async function shellColours(
  * The stage's paint, read as both halves: a flat `--stage` colour in five
  * palettes, and a texture over `--stage`'s gradient under `light`, whose
  * `background-color` is transparent and whose image layers are the ground. A
- * surface that paints neither has `colour` transparent and `image` `none`.
+ * surface that paints neither has `colour` transparent and `image` `none`. A
+ * missing stage element reads `{ colour: "", image: "" }`, and the token sweep
+ * treats that empty colour as unresolved rather than as "nothing to check".
  */
 export async function stagePaint(
   page: Page,

@@ -51,10 +51,16 @@ test.describe("shell palettes", () => {
       // The stage's ground is the palette's `--stage`: a colour in five
       // palettes, and a gradient under `light`, where the colour is transparent
       // and the image layers are what paints. Both halves are read, because a
-      // stage that paints neither is the unresolved case this sweep is for.
+      // stage that paints neither is the unresolved case this sweep is for. An
+      // empty colour is the reader's missing-element answer and fails too.
       const stage = await stagePaint(page);
-      if (stage.colour === empty && stage.image === "none") {
-        unresolved.push(`${palette}/stage = nothing painted`);
+      if (
+        stage.colour === "" ||
+        (stage.colour === empty && stage.image === "none")
+      ) {
+        unresolved.push(
+          `${palette}/stage = ${stage.colour === "" ? "(absent)" : "nothing painted"}`,
+        );
       }
     }
 

@@ -19,7 +19,7 @@ Land the preview-lens/stage and per-display shape/rotation work: [`spec A`](docs
 - **Stage and letterbox split:** the stage paints the palette texture over `--stage`; the display screen carries the theme's artboard paint and its circle radius.
 - **Guide frame:** dashed `[data-yunari-theme-guide]` tracks `artboardScreenRect()`, hidden under Fit or when lens and board aspects match.
 - **Media follows the display box:** display-bounded media takes the display box and circular clip, falling back to the artboard before host layout.
-- **Verified:** focused DOM 86/86 and 450/450; biome and design-tokens exit 0; typecheck still red only in Task 4–5 surfaces.
+- **Verified:** focused DOM 489/489; biome and design-tokens exit 0; typecheck still red only in Task 4–5 surfaces.
 - **Browser proof owed:** Task 5 owns Playwright for stacking, letterbox colour, guide motion and circle radius.
 
 ## Next
