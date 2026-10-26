@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, React 19 + Base UI, Tailwind, Fabric, Vitest + jsdom, Playwright, Node host routes, Fontsource/Fonttrio provider data.
 
-**Spec:** [`2026-10-25-fonts-and-assets-design.md`](../specs/2026-10-25-fonts-and-assets-design.md) — the plan argues from it; executors read both.
+**Spec:** [`2026-10-25-fonts-and-assets-design.md`](../../specs/2026-10-25-fonts-and-assets-design.md) — the plan argues from it; executors read both.
 
 ## Global Constraints
 

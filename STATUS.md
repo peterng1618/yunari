@@ -5,12 +5,12 @@ Branch: `peterng1618/fix-font-trio`
 
 ## Current objective
 
-Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/specs/2026-10-25-fonts-and-assets-design.md) and [`plan`](docs/superpowers/plans/2026-10-25-fonts-and-assets.md) add the Assets rail pane, host font sources, the finder preview, explicit preset actions and opt-in cleanup.
+Build the type-and-asset authoring rework: the [`spec`](docs/superpowers/specs/2026-10-25-fonts-and-assets-design.md) and [`plan`](docs/superpowers/plans/archive/2026-10-25-fonts-and-assets.md) add the Assets rail pane, host font sources, the finder preview, explicit preset actions and opt-in cleanup — all landed.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — Tasks 1–22 complete; the branch review and plan close remain.
-- **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
+- **No plan is running:** `2026-10-25-fonts-and-assets` is complete and archived; `superpowers:finishing-a-development-branch` owns the merge and push, which need the owner.
+- **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 259 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
 - **System tray merged:** [`spec`](docs/superpowers/specs/2026-10-25-systray-design.md) and plan are landed; the rows, clicks and the staged Linux binary still need a live run.
@@ -18,19 +18,19 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Tasks 20–21 landed:** the asset preview draws the Finder's box and the store viewer 960×760, both with a 270px panel and one shared `ActionBox`.
-- **The item modal's state badge moved off the name's row** — two badges took "Withdrawn theme" down to "Withd…" in the 238px header.
-- **Evidence:** `npm run gate` exit 0 — unit 414 files / 6067 tests (1 skipped), worker 12 / 73; three registered captures recaptured and inspected, and the preview gained a browser case.
-- **Gate repairs:** the curated font source formatted, the mockup row follows the redrawn shell drawing, and the preview assertion stopped spelling a px literal.
-- **Rows:** `vg-735` filed (a finder credit carries no `assetId`), `vg-734` closed.
+- **The fonts-and-assets plan is closed:** the spec now states the two facts the code settled (no `subset` field, no catalogue description) and the plan moved to `archive/`.
+- **Nine ledger carries are filed** as `vg-737`–`vg-745`, each re-verified at HEAD before writing — two carried claims were stale and dropped.
+- **Register and docs:** `npm run backlog:check` exit 0, 745 items across both registers, all valid; spec header cites the archived plan.
+- **Evidence:** `npm run gate` exit 0 on the final tree — unit 414 files / 6074 tests (1 skipped), worker 12 files / 73.
+- **Captures:** three registered store captures recaptured and inspected; the eleven beside the drawings are stale and filed as `vg-745`.
 
 ## Next
 
-1. Run the whole-branch review, then close the fonts-and-assets plan and archive it.
+1. Run `superpowers:finishing-a-development-branch` on `peterng1618/fix-font-trio`: the merge into `develop` and any push are the owner's call.
 2. A live tray run by the owner: inspect the menu's rows, toggle Auto start, open each editor surface, start RTSS, and Exit.
 3. Run the staged Linux tray binary on a Linux desktop session; it was never executed here.
 4. Work `vg-724`'s art half and `vg-727`, `vg-728`, `vg-729`.
-5. Resume the backlog-drain plan at Phase 0 when the active plan closes.
+5. Resume the backlog-drain plan at Phase 0 now that nothing else is running.
 
 ## Blockers / unverified
 

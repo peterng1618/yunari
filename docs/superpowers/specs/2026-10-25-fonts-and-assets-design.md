@@ -1,7 +1,7 @@
 # Fonts and assets — the type library, the Assets pane, and import
 
 - **Date:** 2026-10-25
-- **Status:** draft for review. Plan: [`2026-10-25-fonts-and-assets.md`](../plans/2026-10-25-fonts-and-assets.md).
+- **Status:** implemented. Plan: [`archive/2026-10-25-fonts-and-assets.md`](../plans/archive/2026-10-25-fonts-and-assets.md).
 - **Supersedes in part:**
   - [`2026-09-27-font-trio-catalog-design.md`](2026-09-27-font-trio-catalog-design.md) —
     the generated catalogue, pinned faces, bound presets and Unbind stand; its
