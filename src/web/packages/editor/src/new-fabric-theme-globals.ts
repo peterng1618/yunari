@@ -1,7 +1,7 @@
 import type { FabricPalette, TypeToken } from "@yunari/renderer-core";
 
 /**
- * The starter theme's palette, type presets and the two lookups the scene
+ * The starter theme's palette, type tokens and the two lookups the scene
  * helpers need from them.
  *
  * Its own module because `new-fabric-theme.ts` outgrew `AGENTS.md`'s 800-line
@@ -43,15 +43,18 @@ export const frost = "#0815234d";
 export const newTokenPaint = "#ffffff";
 
 /**
- * The type a preset added from the Tokens pane is seeded with.
+ * The face a type token added from the Tokens pane is seeded with.
  *
  * Authored data rather than a design decision — the author's next edit replaces
- * it — so it sits with the starter presets' own family, and the surface that
- * seeds it carries no authored value of its own.
+ * it — so it sits with the starter tokens' own family, and the surface that
+ * seeds it carries no authored value of its own. The weight is deliberately one
+ * no starter role carries: two tokens with the same family and weight compute
+ * one name, so an add that duplicated the body token would always be refused
+ * and the Add control would do nothing on a fresh theme.
  */
-export const newPresetType: TypeToken = {
+export const newTypeToken: TypeToken = {
   family: "Segoe UI, sans-serif",
-  weight: "400",
+  weight: "300",
 };
 
 /**

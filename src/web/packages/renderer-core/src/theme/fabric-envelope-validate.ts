@@ -377,7 +377,7 @@ function fontPresetFaces(
   }
 }
 
-/** Fabric text font properties are resolved cache; runs own their type-preset references. */
+/** Fabric text font properties are resolved cache; runs own their type-token references. */
 function sceneTypeReferences(
   scene: unknown,
   globals: unknown,
@@ -423,7 +423,7 @@ function sceneTypeReferences(
               issue(
                 "unresolved-global-ref",
                 `${path}/yunariText/runs/${index}/typeToken`,
-                "Text runs must reference an existing type preset.",
+                "Text runs must reference an existing type token.",
               ),
             );
           }
@@ -557,7 +557,7 @@ function textBox(
   }
 }
 
-/** v2 removes legacy global groups; palette and type presets own authored style. */
+/** v2 removes legacy global groups; palette and type tokens own authored style. */
 function v2Globals(value: unknown, issues: ValidationIssue[]): void {
   if (value === undefined) return;
   if (!isRecord(value)) {

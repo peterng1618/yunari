@@ -13,7 +13,7 @@ export interface SaveCleanupFile {
   readonly name: string;
   readonly kind: LocalAssetReference["kind"];
   readonly sizeBytes: number;
-  /** Why nothing holds it: "not on the canvas", "no type preset refers to it",
+  /** Why nothing holds it: "not on the canvas", "no type token refers to it",
    *  "not the background". One sentence per kind, from one owner. */
   readonly reason: string;
   /** The manager's own blob URL, so a picture wears the same thumbnail here as

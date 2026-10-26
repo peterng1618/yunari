@@ -55,7 +55,7 @@ export function fontWeight(cut: FontCut): number {
 }
 
 /** The token a role is created at: the family and weight the caller names.
- *  The role is the token's id, minted by `freePresetId`. */
+ *  The role is the token's own id. */
 export function presetForRole(family: string, weight: number): TypeToken {
   return { family, weight };
 }
@@ -103,20 +103,27 @@ export function applyFontTrio(
   for (const role of FONT_ROLES) {
     const cut = trio.roles[role];
     if (cut === undefined || present.has(role)) continue;
-    created[freePresetId(role, rewritten, created)] = rolePreset(cut);
+    // The role is the id, and `present` has just shown it is free: a suffixed
+    // id would be an unroled token whose computed name reads as a role.
+    created[role] = rolePreset(cut);
   }
 
   return { ...rewritten, ...created };
 }
 
-/** A role id, suffixed when a preset already holds it — an untagged preset at
- *  `mono` is authored content, and creating the role must not overwrite it. */
+/**
+ * The first free id an unroled token takes: `type`, `type-2`, …
+ *
+ * A role id is never minted here. A role is the token's id, so `heading-2`
+ * would be an unroled token whose computed name reads as a second heading;
+ * callers adding a role use the role id itself, and a caller adding an unroled
+ * token always goes through this.
+ */
 export function freePresetId(
-  role: FontTrioRole,
   ...taken: readonly Record<string, unknown>[]
 ): string {
   for (let index = 1; ; index += 1) {
-    const id = index === 1 ? role : `${role}-${index}`;
+    const id = index === 1 ? "type" : `type-${index}`;
     if (taken.every((record) => record[id] === undefined)) return id;
   }
 }

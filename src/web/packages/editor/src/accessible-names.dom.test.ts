@@ -240,7 +240,7 @@ describe("editor panels", () => {
       "INPUT[type=][aria-hidden]", // Ratio
       "INPUT[type=][aria-hidden]", // Orientation
       "INPUT[type=][aria-hidden]", // Resolution
-      // The selected preset's token inspector, mounted after the palette pane:
+      // The selected type token's inspector, mounted after the palette pane:
       // its reassignment chooser, a `ControlSelect`'s value carrier. The
       // palette's own chooser is gone with the field set it browsed, so the
       // Tokens pane contributes none of these any more.
@@ -269,7 +269,7 @@ describe("editor panels", () => {
       // The run editor's five: four `ControlSelect`s and one `ControlSwatch`,
       // which is `SelectControl` with an adornment — each a Base UI select's
       // value carrier.
-      "INPUT[type=][aria-hidden]", // Type preset (run)
+      "INPUT[type=][aria-hidden]", // Type token (run)
       "INPUT[type=][aria-hidden]", // Colour (ControlSwatch)
       "INPUT[type=][aria-hidden]", // Reads
       "INPUT[type=][aria-hidden]", // Unit display
@@ -370,9 +370,9 @@ describe("editor panels", () => {
   it("mounts the token inspector, so the fields it adds are audited", () => {
     // An entry in `mountPanels` that renders nothing is the same vacuity the
     // file's header warns about, so this reads the controls back rather than
-    // trusting the mount: a free token renders family, weight, the reassignment
-    // select and Delete. This is the token section; `mountPanels` mounts the
-    // paint section as a second inspector, after it.
+    // trusting the mount: an unroled token renders family, weight, the
+    // reassignment select and Delete. This is the token section; `mountPanels`
+    // mounts the paint section as a second inspector, after it.
     const { root } = mountPanels();
     const inspector = root.querySelector("[data-yunari-token-inspector]");
     expect(inspector).not.toBeNull();
@@ -457,18 +457,19 @@ function mountPanels(): { root: HTMLElement } {
     caption: { family: "Inter" },
   });
 
-  // The selected token's own column. A free preset, because the editable
-  // family and weight are the controls its bound form replaces with Unbind; the
-  // face branch's one button is named by its own text either way.
+  // The selected token's own column. An unroled token, because its editable
+  // family and weight are the controls a bound form replaces with Unbind, and
+  // the role rows draw no reassignment-and-delete pair.
   const tokenPresets = {
     body: { family: "Inter" },
+    caption: { family: "Inter" },
   };
   createTokenInspectorPanel(root, {
     onChange: () => undefined,
     onDelete: () => undefined,
     unbindFace: () => undefined,
     paints: undefined,
-  }).render({ kind: "preset", id: "body" }, tokenPresets, {
+  }).render({ kind: "preset", id: "caption" }, tokenPresets, {
     typeTokens: tokenPresets,
   });
 

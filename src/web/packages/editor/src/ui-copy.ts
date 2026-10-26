@@ -303,7 +303,7 @@ export const uiCopy = {
     notSet: "not set",
     unresolved: "no longer resolves",
     runs: "Runs",
-    runPreset: "Type preset",
+    runToken: "Type token",
     /** What one run says, for a run that is prose. Distinct from the Add pane's
         "Text" button, which inserts an object rather than naming a field. */
     runText: "Run text",
@@ -1180,7 +1180,7 @@ export const uiCopy = {
       local: "Wallpaper Engine",
     } satisfies Record<ListingCategory, string>,
     action: {
-      font: "Apply to preset",
+      font: "Apply to token",
       icon: "Place on canvas",
       image: "Set as background",
       video: "Set as background",
@@ -1238,7 +1238,7 @@ export const uiCopy = {
       roleLabel: "Role",
       role: { heading: "Heading", body: "Body", mono: "Mono" },
       roleCount: (count: number): string =>
-        `${count} ${count === 1 ? "preset" : "presets"}`,
+        `${count} ${count === 1 ? "token" : "tokens"}`,
       scopeCount: (role: string, count: number): string => `${role} × ${count}`,
       willBeCreated: "will be created",
       /** `Yaldevi · 300 → Manrope 700`: the token's own family and weight
@@ -1253,9 +1253,9 @@ export const uiCopy = {
           ? `${name} → ${family} ${newWeight}`
           : `${name} · ${weight} → ${family} ${newWeight}`,
       rolelessReason:
-        "No preset carries a role, so Apply to theme has nothing to rewrite.",
+        "No token carries a role, so Apply to theme has nothing to rewrite.",
       applyToTheme: "Apply to theme",
-      addThreePresets: "Add 3 presets",
+      addThreePresets: "Add 3 tokens",
       cuts: "Cuts",
       /** `400 · latin`: the subset is named only when it is what tells two cuts
        *  apart, since weight and style alone can repeat across subsets. */
@@ -1267,13 +1267,13 @@ export const uiCopy = {
         const face = italic ? `${weight} italic` : String(weight);
         return subset === undefined ? face : `${face} · ${subset}`;
       },
-      newPreset: "New type preset",
+      newPreset: "New type token",
       newPresetSummary: (role: string, family: string): string =>
         `${role} — ${family} · adds one`,
-      addAsPreset: "Add as type preset",
-      applyToSelected: "Apply to selected preset",
+      addAsPreset: "Add as type token",
+      applyToSelected: "Apply to selected token",
       trioNote:
-        "Apply rewrites every role preset and adds any role the theme does not have. Add 3 presets leaves the theme as it is.",
+        "Apply rewrites every role token and adds any role the theme does not have. Add 3 tokens leaves the theme as it is.",
       familyNote:
         "Cuts are fetched when you add or apply one. A family you only look at costs nothing.",
     },
@@ -1298,14 +1298,14 @@ export const uiCopy = {
       /** The caption's verb, without a measurement this build could not read. */
       fit: "fit",
       statusUnused:
-        "A local file. No object, background or type preset refers to it.",
+        "A local file. No object, background or type token refers to it.",
       statusUsed:
-        "The artboard's background, an object on the canvas, or a type preset refers to it.",
+        "The artboard's background, an object on the canvas, or a type token refers to it.",
       usedByNothing: "Used by nothing",
       /** The drawing says `Used by N objects`; the manager's reachability
        *  answer is a boolean, so the line names the routes rather than a count
        *  nobody measured. */
-      usedBySome: "Used by the artboard background, an object or a type preset",
+      usedBySome: "Used by the artboard background, an object or a type token",
       recycleNote: "Remove goes to the Recycle Bin on save",
       /** The two commands the card's words do not fit: its Replace and Remove
        *  are reused, and these are the one-word forms the 2×2 foot draws. */
@@ -1424,9 +1424,9 @@ export const uiCopy = {
       image: "not on the canvas",
       svg: "not on the canvas",
       video: "not the background",
-      font: "no type preset refers to it",
+      font: "no type token refers to it",
     } satisfies Record<LocalAssetReference["kind"], string>,
-    note: "Nothing on the canvas, the background, or a type preset refers to these files. Their attribution goes with them.",
+    note: "Nothing on the canvas, the background, or a type token refers to these files. Their attribution goes with them.",
     removeAfterSave: (count: number): string =>
       `Remove these ${count} ${count === 1 ? "file" : "files"} after saving`,
     warning:
@@ -1773,7 +1773,7 @@ export const uiCopy = {
       preview: "Preview",
       replace: "Replace",
       remove: "Remove",
-      createTypeToken: "Create type preset",
+      createTypeToken: "Create type token",
     },
     /** The inline form a chosen font expands to: the facts the file cannot
      *  answer for itself, and the one write that binds it to a preset. */
@@ -1857,7 +1857,7 @@ export const uiCopy = {
     /** Each pane's own chooser, named by what it lists rather than by the pane
      * it sits in — the section heading already says Palette or Type presets. */
     colourToken: "Colour token",
-    typeToken: "Type preset",
+    typeToken: "Type token",
     /** What the Tokens pane says the *selection* is set in, as against what its
      *  chooser is browsing. The five cases must each read their own way: a
      *  default that looks like an answer is `vg-094`, a dangling reference is a
@@ -1867,8 +1867,8 @@ export const uiCopy = {
     selectionSetTo: (name: string) => `The selection is set to ${name}.`,
     selectionUnresolved: (ref: string) =>
       `The selection is set to ${ref}, which no longer resolves.`,
-    selectionChildrenTypes: "The selection's type presets are its children's.",
-    selectionNoType: "The selection carries no type preset.",
+    selectionChildrenTypes: "The selection's type tokens are its children's.",
+    selectionNoType: "The selection carries no type token.",
     selectionEmpty: "Nothing selected.",
     paint: "Paint",
     addColour: "Add colour",
@@ -1876,7 +1876,7 @@ export const uiCopy = {
     removeStop: "Remove stop",
     deleteColour: "Delete colour",
     reassign: "Reassign to",
-    typeTokens: "Type presets",
+    typeTokens: "Type tokens",
     addType: "Add type",
     deleteType: "Delete type",
     previewFont: "Preview font",

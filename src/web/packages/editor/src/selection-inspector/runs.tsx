@@ -108,11 +108,11 @@ function paletteOptions(globals: FabricGlobals | undefined): readonly {
 }
 
 /**
- * The type presets a run may reference, each under its stored reference and the
- * name its author gave it.
+ * The type tokens a run may reference, each under its stored reference and its
+ * computed name.
  *
  * The name, not the id, because every other reference picker in the editor names
- * what it offers — printing `24-400` here put thirteen presets in the inspector
+ * what it offers — printing `24-400` here put thirteen tokens in the inspector
  * under one vocabulary and the same thirteen, one field lower, under another.
  */
 function presetOptions(
@@ -508,7 +508,7 @@ function RunRow(props: {
       ) : null}
 
       <ControlSelect
-        label={uiCopy.inspectorFields.runPreset}
+        label={uiCopy.inspectorFields.runToken}
         data={{ "data-yunari-run-preset": String(index) }}
         value={row.typeToken}
         options={view.presets}

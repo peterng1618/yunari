@@ -53,24 +53,21 @@ const PAINT_CONTROLS = [
   '[data-testid="gradient-angle"]',
 ];
 
-/** The selected preset's controls, in the token inspector. The pane is a list
- *  now: one pressable row per preset and the add action. The chooser and the
+/** The selected token's controls, in the token inspector. The pane is a list
+ *  now: one pressable row per token and the add action. The chooser and the
  *  field set that went with it are the token inspector's, so they are measured
- *  there — after a preset row press replaces the paint section. */
+ *  there — after a token row press replaces the paint section. The computed
+ *  name is a reading rather than a control, so it is not audited here. */
 const PRESET_CONTROLS = [
   "[data-yunari-type-preset-row]",
   "[data-yunari-type-preset-add]",
-  // `unbind` renders only for a preset bound to a packaged face, and the starter
-  // preset the audit selects is free, so that selector is audited when a
-  // scenario binds one.
-  "[data-yunari-token-name]",
-  "[data-yunari-token-role]",
+  // `unbind` renders only for a token bound to a packaged face, and the added
+  // token is free, so that selector is audited when a scenario binds one.
   "[data-yunari-token-family]",
   "[data-yunari-token-weight]",
-  "[data-yunari-token-size]",
-  "[data-yunari-token-line-height]",
-  "[data-yunari-token-letter-spacing]",
   "[data-yunari-token-unbind]",
+  // The delete pair renders only for an unroled token, so the audit selects
+  // the token the add mints rather than one of the three roles.
   "[data-yunari-token-replacement]",
   "[data-yunari-token-delete]",
 ];
@@ -201,10 +198,11 @@ test.describe("the settings panels name every control", () => {
     // accessibility tree and measuring it there would report a name it does
     // not announce. Tokens is open from the setup, with a paint token selected.
     await audit(PAINT_CONTROLS);
-    // One inspector renders one section, so the preset half is measured after
-    // pressing a preset row, which replaces the paint section. `body` is one of
-    // the starter theme's three role tokens.
-    const presetRow = page.locator('[data-yunari-type-preset-row="body"]');
+    // One inspector renders one section, so the token half is measured after
+    // pressing a token row, which replaces the paint section. The add mints an
+    // unroled token, which draws the delete pair the role rows do not.
+    await page.locator("[data-yunari-type-preset-add]").click();
+    const presetRow = page.locator('[data-yunari-type-preset-row="type"]');
     await expect(presetRow).toBeVisible();
     await presetRow.click();
     await audit(PRESET_CONTROLS);

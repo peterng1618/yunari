@@ -3,6 +3,7 @@ import type {
   FabricPalette,
   TypeToken,
 } from "@yunari/renderer-core";
+import { isTypeTokenRole } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useState } from "react";
 import { flushSync } from "react-dom";
@@ -13,6 +14,7 @@ import { plainButtonClasses } from "../../components/ui/control-well.js";
 import type { TokenRef } from "../../editor-shell/shell-stores.js";
 import type { PaletteTokenUse } from "../../palette-manager/panel.js";
 import type { TypeTokens } from "../../type-preset-manager/panel.js";
+import { orderedTokens, tokenName } from "../../type-token-manager/name.js";
 import { uiCopy } from "../../ui-copy.js";
 import { PaintFields } from "./paint-fields.js";
 
@@ -30,9 +32,15 @@ import { PaintFields } from "./paint-fields.js";
  * token is set and this section draws nothing when none is, so the two never
  * claim the column at once.
  *
- * **The specimen never loads bytes.** `Aa` is set in the preset's own family;
+ * **The specimen never loads bytes.** `Aa` is set in the token's own family;
  * packaged faces are already in `document.fonts`, and a remote face was
  * `font-preview.ts`'s job, which is gone (ruling 5).
+ *
+ * **A role token is not removable.** Its id is the role, and the validator
+ * requires all three in every theme, so the reassignment-and-delete row is
+ * drawn only for an unroled token. The name is computed and read-only; the
+ * editable name, role select and the old size/leading/tracking fields are gone
+ * with the stored fields (ruling 0124).
  *
  * **Usage is not here yet.** The spec lists a preset's usage, but no counter
  * exists and the reference walk is Task 17's — this file does not invent one.
@@ -152,7 +160,7 @@ function TokenInspector(props: {
     /* Keyed by the preset: every field edits this one record, so switching
        tokens rebuilds the field set rather than reconciling the next preset
        onto the previous one's half-typed draft. */
-    <PresetFields
+    <TokenFields
       key={tokenRef.id}
       id={tokenRef.id}
       entry={entry}
@@ -162,7 +170,7 @@ function TokenInspector(props: {
   );
 }
 
-function PresetFields(props: {
+function TokenFields(props: {
   readonly id: string;
   readonly entry: TypeToken;
   readonly presets: TypeTokens;
@@ -191,6 +199,13 @@ function PresetFields(props: {
       <h2 className="text-xs font-semibold tracking-[0.11em] text-muted uppercase">
         {uiCopy.panels.typeToken}
       </h2>
+      {/* Computed, never stored: a role reads `[Heading] Segoe UI 600`, an
+          unroled token `Manrope 600`. The field is a reading, not a well. */}
+      <ReadOnlyPair
+        label={uiCopy.inspectorFields.name}
+        value={tokenName(id, value)}
+        valueData={{ "data-yunari-token-name": "" }}
+      />
       <span
         data-yunari-token-specimen=""
         aria-hidden="true"
@@ -272,7 +287,9 @@ function PresetFields(props: {
           </button>
         </div>
       )}
-      <Deletion id={id} presets={presets} actions={actions} />
+      {isTypeTokenRole(id) ? null : (
+        <Deletion id={id} presets={presets} actions={actions} />
+      )}
     </div>
   );
 }
@@ -280,21 +297,27 @@ function PresetFields(props: {
 function ReadOnlyPair(props: {
   readonly label: string;
   readonly value: string;
+  /** A hook for the reading itself, where a surface names it. */
+  readonly valueData?: Readonly<Record<`data-${string}`, string>>;
 }): React.JSX.Element {
   return (
     <div className="flex items-baseline gap-[var(--space-8)]">
       <span className="text-xs text-muted">{props.label}</span>
-      <span className="ml-auto font-mono text-xs text-text">{props.value}</span>
+      <span
+        {...props.valueData}
+        className="ml-auto font-mono text-xs text-text"
+      >
+        {props.value}
+      </span>
     </div>
   );
 }
 
 /**
- * The reassignment-on-delete row: the preset this one's references move to, and
+ * The reassignment-on-delete row: the token this one's references move to, and
  * the deletion itself. The delete is refused when there is nothing to move them
- * to, because deleting the last preset would strand every reference to it.
- * Ported from `preset-list.tsx`'s `DeletionControls` (`7fd5d9b7`), which Task 14
- * removed with the field set.
+ * to, because deleting the last unroled token would strand every reference to
+ * it. Drawn for an unroled token only: a role id is required by the validator.
  */
 function Deletion(props: {
   readonly id: string;
@@ -303,11 +326,11 @@ function Deletion(props: {
 }): React.JSX.Element {
   const { id, presets, actions } = props;
   const [picked, setPicked] = useState<string | undefined>(undefined);
-  const options = Object.entries(presets)
-    .filter(([candidate]) => candidate !== id)
-    .map(([candidate, token]) => ({
+  const options = orderedTokens({ typeTokens: presets })
+    .filter((candidate) => candidate.id !== id)
+    .map(({ id: candidate, token }) => ({
       id: candidate,
-      name: `${candidate} ${token.family}${token.weight === undefined ? "" : ` ${token.weight}`}`,
+      name: tokenName(candidate, token),
     }));
   const replacement =
     picked !== undefined && picked !== id && presets[picked] !== undefined

@@ -281,7 +281,7 @@ test("captures the shell with the Add pane open and nothing selected", async ({
  *   `ControlSelect`, a range is a `ControlSlider`), and a native control
  *   reappearing is exactly what a screenshot would still show as "a pane".
  *   The only hit left under `panes/` is the prose that says so
- *   (`tokens/preset-list.tsx:29`).
+ *   (`tokens/token-list.tsx`) — that prose mentions the elements rather than
  *
  * A `--grep` that matches nothing exits 0 with zero tests, so the run's own
  * summary — "1 test", this file — is the proof it ran at all, not the exit code.

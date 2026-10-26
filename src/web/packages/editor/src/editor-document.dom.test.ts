@@ -965,7 +965,7 @@ describe("EditorDocument preset actions", () => {
     document.destroy();
   });
 
-  it("add three creates the three role tokens without touching existing", async () => {
+  it("add three creates the missing role tokens and leaves an existing role alone", async () => {
     const existing: TypeTokens = {
       heading: { family: "Segoe UI" },
       custom: { family: "Georgia" },
@@ -979,13 +979,11 @@ describe("EditorDocument preset actions", () => {
     await document.addTypeTokensFromTrio(trio);
 
     const written = presetsOf(document);
+    // A role is the token's id: the heading already exists, so there is no
+    // second id to mint and no `heading-2` unroled token.
     expect(written.heading).toEqual(existing.heading);
+    expect(written["heading-2"]).toBeUndefined();
     expect(written.custom).toEqual(existing.custom);
-    expect(written["heading-2"]).toEqual({
-      family: "Manrope",
-      weight: 700,
-      face: { assetId: fontAssetId(trio.roles.heading!) },
-    });
     expect(written.body).toEqual({
       family: "Inter",
       weight: 400,
@@ -1021,7 +1019,7 @@ describe("EditorDocument preset actions", () => {
     document.destroy();
   });
 
-  it("a cut with no role takes the Body id and no role tag", async () => {
+  it("a cut with no role takes a free unroled id", async () => {
     const { document } = presetDocument({});
     assetBytesMock.mockResolvedValue({
       bytes: new Uint8Array([1]),
@@ -1033,9 +1031,34 @@ describe("EditorDocument preset actions", () => {
       null,
     );
 
-    expect(id).toBe("body");
-    const value = presetsOf(document).body;
+    // No role chosen means no role id: `body` is the Body token, and minting a
+    // second `body-2` would read as a second role.
+    expect(id).toBe("type");
+    const value = presetsOf(document).type;
     expect(value).toMatchObject({ family: "Inter", weight: 400 });
+    document.destroy();
+  });
+
+  it("points at an existing face instead of adding a duplicate token", async () => {
+    const authored: TypeTokens = {
+      body: { family: "Inter", weight: 400 },
+    };
+    const { document, saveState } = presetDocument(authored);
+    saveState.mockClear();
+    assetBytesMock.mockClear();
+
+    const id = await document.addTypeTokenFromCut(
+      cutFor("body", "Inter", 400),
+      null,
+    );
+
+    // Two tokens with the same family and weight would compute one name, so
+    // the add is refused and the existing token is the answer. Nothing is
+    // written and no bytes are adopted.
+    expect(id).toBe("body");
+    expect(presetsOf(document)).toEqual(authored);
+    expect(saveState).not.toHaveBeenCalled();
+    expect(assetBytesMock).not.toHaveBeenCalled();
     document.destroy();
   });
 

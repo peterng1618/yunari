@@ -1033,17 +1033,17 @@ describe("EditorSession", () => {
     hydrate.mockRestore();
   });
 
-  it("reaches every globals consumer when a type preset is renamed, so the inspector follows", () => {
+  it("reaches every globals consumer when a type token's face changes, so the inspector follows", () => {
     // vg-232. The receivers were listed inline once per setter and the lists
     // disagreed: `setTypes` told three, never the inspector. The inspector
-    // reads a preset's name out of `context.globals`, and `setGlobals` is the
-    // only thing that updates it, so a rename left the surface printing the old
-    // name until an unrelated `object:modified` re-rendered it. This reads the
-    // surface the author reads rather than counting the calls.
+    // reads a token's computed name out of `context.globals`, and `setGlobals`
+    // is the only thing that updates it, so a face edit left the surface
+    // printing the old name until an unrelated `object:modified` re-rendered
+    // it. This reads the surface the author reads rather than counting calls.
     //
     // **It read the Spends line until 2026-10-15.** Item 17 removed that
-    // section, so the surface is the run editor's own preset control — which
-    // names its presets out of the same `context.globals`, through the same
+    // section, so the surface is the run editor's own token control — which
+    // names its tokens out of the same `context.globals`, through the same
     // `selection.setGlobals` this row's fix introduced. The claim is unchanged;
     // only the element that prints it moved.
     const text = new IText("Hi", { left: 0, top: 0 });
@@ -1082,14 +1082,16 @@ describe("EditorSession", () => {
       setGlobals: vi.fn(),
       refreshGlass: vi.fn(),
     };
-    const presets = (_name: string) => ({
-      body: { family: "Inter", weight: "600" },
+    // The family is the only part of the computed name that moves: a token has
+    // no stored name to rename, and the id is the role.
+    const presets = (family: string) => ({
+      body: { family, weight: "600" },
     });
     const extensions = new EditorSession({
       assetManager: new AssetManager(),
       shell: shell as never,
       source: {} as never,
-      envelope: { ...envelope, globals: { typeTokens: presets("Body") } },
+      envelope: { ...envelope, globals: { typeTokens: presets("Inter") } },
       panelHosts: {
         add: document.body,
         assets: document.body,
@@ -1107,12 +1109,12 @@ describe("EditorSession", () => {
         .querySelector('[data-yunari-run-preset="0"] [data-yunari-value]')
         ?.textContent?.trim() ?? "";
 
-    expect(printed()).toBe("Body");
+    expect(printed()).toBe("Inter 600");
 
-    // The panel's own field writes the whole map, which is what a rename is.
-    typeTokenPortMock.change?.(presets("Body Renamed"));
+    // The panel's own field writes the whole map, which is what a face edit is.
+    typeTokenPortMock.change?.(presets("Manrope"));
 
-    expect(printed()).toBe("Body Renamed");
+    expect(printed()).toBe("Manrope 600");
     extensions.destroy();
   });
 
@@ -1206,10 +1208,11 @@ describe("EditorSession", () => {
     expect(objectColumn?.style.display).toBe("");
     expect(tokenColumn?.textContent).toBe("");
 
-    // Deleting the preset the token names clears the token too: the column must
-    // show the object selection again rather than staying suppressed over a
-    // preset the document no longer has. The replacement is the other preset.
-    tokenSelection.set({ kind: "preset", id: "body" });
+    // Deleting the token the selection names clears the token too: the column
+    // must show the object selection again rather than staying suppressed over
+    // a token the document no longer has. The replacement is the other token,
+    // and the deleted one is unroled because a role cannot be deleted.
+    tokenSelection.set({ kind: "preset", id: "caption" });
     expect(objectColumn?.style.display).toBe("none");
     // A plain click: the token panel renders through `flushSync`, so the
     // document write and the suppression it causes land synchronously. Wrapping
@@ -1242,7 +1245,7 @@ describe("EditorSession", () => {
     // A held ref there would keep the object column suppressed over a blank
     // section, so the render drops the ref when the document no longer declares
     // the token — once per kind.
-    tokenSelection.set({ kind: "preset", id: "caption" });
+    tokenSelection.set({ kind: "preset", id: "body" });
     expect(objectColumn?.style.display).toBe("none");
     expect(
       tokenColumn?.querySelector("[data-yunari-token-family]"),

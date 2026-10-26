@@ -72,6 +72,7 @@ import {
   type TypeTokenPanel,
   type TypeTokens,
 } from "./type-preset-manager/index.js";
+import { tokenIdOfFace } from "./type-token-manager/name.js";
 import { uiCopy } from "./ui-copy.js";
 
 /** Whether a save may go on. `message` is a host refusal the author must
@@ -1009,22 +1010,23 @@ export class EditorDocument {
   }
 
   /** The three role tokens a trio names, created beside whatever the theme
-   *  already has rather than rewriting it. */
+   *  already has rather than rewriting it. A role already present keeps its
+   *  authored face: the role is the token's id, so there is no second id to
+   *  create. */
   async addTypeTokensFromTrio(trio: FontTrioInfo): Promise<void> {
     const entries = this.#trioCuts(trio);
     await this.#adoptCuts(entries);
     let presets = this.#typeTokens();
     for (const { cut, role } of entries) {
-      presets = {
-        ...presets,
-        [freePresetId(role, presets)]: rolePreset(cut),
-      };
+      if (presets[role] !== undefined) continue;
+      presets = { ...presets, [role]: rolePreset(cut) };
     }
     this.setTypes(presets);
   }
 
-  /** One token from one cut, named role-first. `null` means the author chose
-   *  no role: the id still follows Body. */
+  /** One token from one cut. A chosen role rewrites that role's token — the
+   *  role is the id. With no role chosen the token is unroled, and a face the
+   *  theme already carries is pointed at rather than duplicated. */
   async addTypeTokenFromCut(
     cut: FontCut,
     role: FontTrioRole | null,
@@ -1032,14 +1034,22 @@ export class EditorDocument {
      *  — so the token's weight field has a face to draw. */
     family: readonly FontCut[] = [],
   ): Promise<string> {
+    const presets = this.#typeTokens();
+    if (role === null) {
+      const existing = tokenIdOfFace(presets, cut.family, fontWeight(cut));
+      if (existing !== undefined) return existing;
+    }
     await this.#adoptCuts([
       { cut, role: role ?? "body" },
       ...family
         .filter((other) => other.id !== cut.id)
         .map((other) => ({ cut: other, role: role ?? "body" })),
     ]);
-    const presets = this.#typeTokens();
-    const id = freePresetId(role ?? "body", presets);
+    if (role !== null) {
+      this.setTypes({ ...presets, [role]: rolePreset(cut) });
+      return role;
+    }
+    const id = freePresetId(presets);
     this.setTypes({ ...presets, [id]: rolePreset(cut) });
     return id;
   }
@@ -1060,7 +1070,16 @@ export class EditorDocument {
       throw new Error(`"${asset.family}" has no usable font weight.`);
     const entry = presetForRole(asset.family, weight);
     const presets = this.#typeTokens();
-    const id = freePresetId(role ?? "body", presets);
+    if (role !== null) {
+      this.setTypes({
+        ...presets,
+        [role]: { ...entry, face: { assetId: asset.id } },
+      });
+      return role;
+    }
+    const existing = tokenIdOfFace(presets, asset.family, weight);
+    if (existing !== undefined) return existing;
+    const id = freePresetId(presets);
     this.setTypes({
       ...presets,
       [id]: { ...entry, face: { assetId: asset.id } },
@@ -1077,7 +1096,7 @@ export class EditorDocument {
   ): Promise<void> {
     const presets = this.#typeTokens();
     const preset = presets[id];
-    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
+    if (preset === undefined) throw new Error(`Unknown type token "${id}".`);
     const role = isTypeTokenRole(id) ? id : "body";
     await this.#adoptCuts([
       { cut, role },
@@ -1103,7 +1122,7 @@ export class EditorDocument {
   unbindPresetFace(id: string): void {
     const presets = this.#typeTokens();
     const preset = presets[id];
-    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
+    if (preset === undefined) throw new Error(`Unknown type token "${id}".`);
     if (preset.face === undefined) return;
     const { face: _face, ...value } = preset;
     this.setTypes({ ...presets, [id]: value });
@@ -1117,7 +1136,7 @@ export class EditorDocument {
       | TypeTokens
       | undefined;
     const preset = presets?.[id];
-    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
+    if (preset === undefined) throw new Error(`Unknown type token "${id}".`);
     const bytes = await this.#downloadFace(face);
     await this.#assets.adoptFont(face, bytes);
     this.setTypes({

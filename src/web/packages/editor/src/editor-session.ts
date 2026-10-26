@@ -69,11 +69,11 @@ import {
   createAssetsPane,
   type FontCommitInput,
 } from "./panes/assets/assets-pane.js";
-import type { PresetSelection } from "./panes/tokens/preset-list.js";
 import {
   createTokenInspectorPanel,
   type TokenInspectorPanel,
 } from "./panes/tokens/token-inspector.js";
+import type { PresetSelection } from "./panes/tokens/token-list.js";
 import { weightChoices } from "./panes/tokens/weight-choices.js";
 import {
   createSelectionInspector,

@@ -2283,22 +2283,34 @@ test.describe("Fabric editor route", () => {
     expect(tracked - untracked).toBeGreaterThan(8);
   });
 
-  test("reassigns text type presets before deleting one", async ({
+  test("reassigns text type tokens before deleting an unroled one", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
     await openPane(page, "Tokens");
-    await page.locator('[data-yunari-type-preset-row="body"]').click();
+    // A role token is not deletable and the validator requires all three, so
+    // the case creates the unroled token it will delete. The add's seeded face
+    // is one no starter role carries.
+    await page.locator("[data-yunari-type-preset-add]").click();
+    const added = page.locator('[data-yunari-type-preset-row="type"]');
+    await expect(added).toHaveCount(1);
+
+    // Give a run a reference to it, so the reassignment has something to move.
+    await selectLayer(page, "CPU");
+    await chooseIn(page, '[data-yunari-run-preset="0"]', "typeTokens.type");
+
+    await openPane(page, "Tokens");
+    await added.click();
     await chooseIn(page, "[data-yunari-token-replacement]", "heading");
     await page.locator("[data-yunari-token-delete]").scrollIntoViewIfNeeded();
     await captureVisualReview(page, testInfo, "editor-type-reassignment");
     await page.locator("[data-yunari-token-delete]").click();
-    // The row is the preset's own row in the list, so a deletion takes the
+    // The row is the token's own row in the list, so a deletion takes the
     // whole row with it.
     await expect(
-      page.locator('[data-yunari-type-preset-row="body"]'),
+      page.locator('[data-yunari-type-preset-row="type"]'),
     ).toHaveCount(0);
 
     const envelope = (await saveEnvelope(page)) as {
@@ -2310,7 +2322,11 @@ test.describe("Fabric editor route", () => {
         }>;
       };
     };
-    expect(envelope.globals.typeTokens["body"]).toBeUndefined();
+    expect(envelope.globals.typeTokens["type"]).toBeUndefined();
+    // The three roles survive: they are the ids the theme must always carry.
+    for (const role of ["heading", "body", "mono"]) {
+      expect(envelope.globals.typeTokens[role]).toBeDefined();
+    }
     expect(
       (
         sceneObject(envelope, "cpu-card-title")?.["yunariText"] as

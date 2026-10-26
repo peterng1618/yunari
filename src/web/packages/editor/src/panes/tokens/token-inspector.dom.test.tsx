@@ -166,27 +166,62 @@ async function chooseIn(
 }
 
 describe("token inspector", () => {
-  it("shows name, role, size, weight, line height and letter spacing for a preset", () => {
+  it("shows the computed name and only the face fields", () => {
     const write = actions();
     const panel = createTokenInspectorPanel(document.body, write);
     panel.render({ kind: "preset", id: "body" }, PRESETS, {
       typeTokens: PRESETS,
     });
 
-    expect(field(panel.root, "[data-yunari-token-name]").value).toBe("Body");
+    // The name is a reading, not a field: `[Body] Inter 600` is computed from
+    // the id and the face, so there is nothing to type over.
     expect(
-      panel.root
-        .querySelector("[data-yunari-token-role] [data-yunari-value]")
-        ?.getAttribute("data-yunari-value"),
-    ).toBe("body");
-    expect(field(panel.root, "[data-yunari-token-size]").value).toBe("16");
+      panel.root.querySelector("[data-yunari-token-name]")?.textContent,
+    ).toBe("[Body] Inter 600");
+    expect(
+      panel.root.querySelector("input[data-yunari-token-name]"),
+    ).toBeNull();
+
+    // The removed fields stay removed: a name, a role tag and the old
+    // size/leading/tracking rows would each write a theme the validator refuses.
+    for (const selector of [
+      "[data-yunari-token-role]",
+      "[data-yunari-token-size]",
+      "[data-yunari-token-line-height]",
+      "[data-yunari-token-letter-spacing]",
+    ]) {
+      expect(panel.root.querySelector(selector), selector).toBeNull();
+    }
+
+    expect(field(panel.root, "[data-yunari-token-family]").value).toBe("Inter");
     expect(field(panel.root, "[data-yunari-token-weight]").value).toBe("600");
-    expect(field(panel.root, "[data-yunari-token-line-height]").value).toBe(
-      "1.4",
-    );
-    expect(field(panel.root, "[data-yunari-token-letter-spacing]").value).toBe(
-      "0.5",
-    );
+    panel.destroy();
+  });
+
+  it("computes an unroled token's name from its face", () => {
+    const panel = createTokenInspectorPanel(document.body, actions());
+    panel.render({ kind: "preset", id: "caption" }, PRESETS, {
+      typeTokens: PRESETS,
+    });
+
+    expect(
+      panel.root.querySelector("[data-yunari-token-name]")?.textContent,
+    ).toBe("Inter");
+    panel.destroy();
+  });
+
+  it("draws no delete or reassign control for a role token", () => {
+    // A role is the id and the validator requires all three, so the role's
+    // token is not removable.
+    const panel = createTokenInspectorPanel(document.body, actions());
+    panel.render({ kind: "preset", id: "body" }, PRESETS, {
+      typeTokens: PRESETS,
+    });
+
+    expect(panel.root.querySelector("[data-yunari-token-delete]")).toBeNull();
+    expect(
+      panel.root.querySelector("[data-yunari-token-replacement]"),
+    ).toBeNull();
     panel.destroy();
   });
 
@@ -344,24 +379,22 @@ describe("token inspector", () => {
     await edit(weight, "600");
     expect(write.onChange).toHaveBeenCalledWith({
       ...freed,
-      bound: {
-        name: "Bound",
-        value: { family: "Manrope", size: 24, weight: "600" },
-      },
+      bound: { family: "Manrope", weight: "600" },
     });
     panel.destroy();
   });
 
-  it("reassigns other presets before deleting one", async () => {
+  it("reassigns other tokens before deleting an unroled one", async () => {
     const write = actions();
     const panel = createTokenInspectorPanel(document.body, write);
-    panel.render({ kind: "preset", id: "body" }, PRESETS, {
+    panel.render({ kind: "preset", id: "caption" }, PRESETS, {
       typeTokens: PRESETS,
     });
 
-    // The replacement names the remaining presets only — the preset being
-    // deleted is not a place its references can go — and defaults to the first,
-    // which is the choice Delete commits.
+    // The replacement names the remaining tokens in role-first order — the
+    // token being deleted is not a place its references can go — and defaults
+    // to the first, which is the choice Delete commits. `body` is a role, and
+    // roles sort first.
     const replacement = panel.root.querySelector(
       "[data-yunari-token-replacement]",
     ) as HTMLElement;
@@ -369,13 +402,13 @@ describe("token inspector", () => {
       replacement
         .querySelector("[data-yunari-value]")
         ?.getAttribute("data-yunari-value"),
-    ).toBe("bound");
+    ).toBe("body");
 
     const remove = panel.root.querySelector(
       "[data-yunari-token-delete]",
     ) as HTMLButtonElement;
     await click(remove);
-    expect(write.onDelete).toHaveBeenCalledWith("body", "bound");
+    expect(write.onDelete).toHaveBeenCalledWith("caption", "body");
     panel.destroy();
   });
 

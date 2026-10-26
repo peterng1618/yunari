@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { newPresetType } from "../new-fabric-theme-globals.js";
+import {
+  SelectionStore,
+  TokenSelectionStore,
+} from "../editor-shell/shell-stores.js";
+import { newTypeToken } from "../new-fabric-theme-globals.js";
 import { resolveTypeToken } from "../selection-inspector/appearance.js";
 import { uiCopy } from "../ui-copy.js";
 import { createTypeTokenPanel } from "./panel.js";
@@ -15,7 +19,7 @@ const presets = {
   caption: { family: "Inter", size: 12 },
 };
 
-describe("type preset panel", () => {
+describe("type token panel", () => {
   it("builds its own section, whose heading names the panel", () => {
     const panel = createTypeTokenPanel(document.body, vi.fn());
     panel.render(presets);
@@ -47,7 +51,7 @@ describe("type preset panel", () => {
     expect(panel.root.querySelector("[data-yunari-type-preset]")).toBeNull();
   });
 
-  it("adds a preset under the first free id through the panel's own onChange", () => {
+  it("adds a token under the first free id through the panel's own onChange", () => {
     // The panel is the only production builder of the seeded record now, so the
     // add is driven through the panel rather than through a harness that copies
     // it: this asserts what `EditorDocument.setTypes` actually receives.
@@ -62,8 +66,33 @@ describe("type preset panel", () => {
     expect(change).toHaveBeenCalledTimes(1);
     expect(change).toHaveBeenCalledWith({
       ...presets,
-      type: newPresetType,
+      type: newTypeToken,
     });
+  });
+
+  it("refuses a duplicate family and weight and points at the existing token", () => {
+    // Two tokens with the same family and weight would compute the same name,
+    // so the add is refused rather than minting a second one. `body` carries
+    // the seed's own face here.
+    const change = vi.fn();
+    const tokenSelection = new TokenSelectionStore(new SelectionStore());
+    const duplicate = { ...presets, body: newTypeToken };
+    const panel = createTypeTokenPanel(
+      document.body,
+      change,
+      undefined,
+      undefined,
+      undefined,
+      tokenSelection,
+    );
+    panel.render(duplicate);
+
+    panel.root
+      .querySelector<HTMLButtonElement>("[data-yunari-type-preset-add]")
+      ?.click();
+
+    expect(change).not.toHaveBeenCalled();
+    expect(tokenSelection.get()).toEqual({ kind: "preset", id: "body" });
   });
 
   it("unmounts its React tree and removes the section on disposal", () => {

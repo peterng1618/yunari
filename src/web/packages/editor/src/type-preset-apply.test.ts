@@ -1,6 +1,10 @@
 import type { FontCut, FontTrioInfo } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
-import { applyFontTrio, fontAssetId } from "./type-preset-apply.js";
+import {
+  applyFontTrio,
+  fontAssetId,
+  freePresetId,
+} from "./type-preset-apply.js";
 import type { TypeTokens } from "./type-preset-manager/index.js";
 
 function cut(
@@ -117,6 +121,20 @@ describe("applyFontTrio", () => {
     expect(Object.hasOwn(result, "__proto__")).toBe(true);
     expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
     expect(result["__proto__"]).toEqual({ family: "Georgia", weight: "400" });
+  });
+});
+
+describe("freePresetId", () => {
+  it("mints an unroled id, never a role suffix", () => {
+    // A role is the token's id, so `heading-2` would be an unroled token whose
+    // computed name reads as a second heading.
+    expect(freePresetId({ heading: {}, body: {}, mono: {} })).toBe("type");
+  });
+
+  it("skips ids an authored token already holds", () => {
+    expect(freePresetId({ type: {}, heading: {} }, { "type-2": {} })).toBe(
+      "type-3",
+    );
   });
 });
 
