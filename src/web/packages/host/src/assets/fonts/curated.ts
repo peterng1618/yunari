@@ -95,9 +95,9 @@ export const curatedFontSource: AssetSource = {
         trio.faces.some((face) => matches(face.family)),
     ).map(resultOfTrio);
 
-    const families = FAMILIES.filter((family) =>
-      matches(family.name),
-    ).map(resultOfFamily);
+    const families = FAMILIES.filter((family) => matches(family.name)).map(
+      resultOfFamily,
+    );
 
     // Trios first: a pairing is the authored decision, a single family the
     // fallback. One page: the catalogue is small enough to answer at once.
@@ -123,6 +123,7 @@ export const curatedFontSource: AssetSource = {
 /** A family row is addressed by its lead cut; a trio row by its heading cut. */
 function faceOfResultId(resultId: string): CuratedFace | undefined {
   if (resultId.startsWith("cut:")) return faceById(resultId.slice(4));
-  if (resultId.startsWith("trio:")) return trioById(resultId.slice(5))?.faces[0];
+  if (resultId.startsWith("trio:"))
+    return trioById(resultId.slice(5))?.faces[0];
   return undefined;
 }

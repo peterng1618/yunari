@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SourceContext } from "../source.js";
 import { ASSET_SOURCES } from "../sources.js";
-import { curatedFontSource } from "./curated.js";
-import { CURATED_SOURCE_ID, faceById, toFontCut } from "./curated-data.js";
 import {
   CURATED_FACES,
   CURATED_SOURCE_REVISION,
   CURATED_TRIOS,
 } from "./curated.generated.js";
+import { curatedFontSource } from "./curated.js";
+import { CURATED_SOURCE_ID, faceById, toFontCut } from "./curated-data.js";
 
 const PINNED =
   /^https:\/\/cdn\.jsdelivr\.net\/fontsource\/fonts\/[a-z0-9-]+@\d+\.\d+\.\d+\/latin-\d+-normal\.woff2$/;
@@ -171,9 +171,9 @@ describe("curated font catalogue", () => {
     // does not publish, and 20 of those families ship no 700 at all. Anton is
     // one of them, so every trio that wants it as a heading is clamped onto
     // the 400 cut.
-    expect(
-      CURATED_TRIOS.filter((trio) => trio.faces[0].clamped),
-    ).toHaveLength(49);
+    expect(CURATED_TRIOS.filter((trio) => trio.faces[0].clamped)).toHaveLength(
+      49,
+    );
     for (const trio of CURATED_TRIOS) {
       if (trio.faces[0].fontId !== "anton") continue;
       expect(trio.faces[0]).toMatchObject({ weight: 400, clamped: true });
@@ -228,7 +228,9 @@ describe("curatedFontSource", () => {
     const fetcher = refusingFetch();
     const page = await curatedFontSource.search("Inter", 1, context(fetcher));
 
-    const trio = page.results.find((entry) => entry.id === "trio:inter-poppins");
+    const trio = page.results.find(
+      (entry) => entry.id === "trio:inter-poppins",
+    );
     expect(trio?.font?.trio?.roles.heading?.family).toBe("Inter");
     expect(trio?.font?.cuts).toHaveLength(3);
     // Search reads the catalogue only, so browsing never spends a CDN call.
@@ -344,9 +346,9 @@ describe("curatedFontSource", () => {
     expect(await curatedFontSource.bytesOf("cut:nope", context(fetcher))).toBe(
       undefined,
     );
-    expect(
-      await curatedFontSource.bytesOf("trio:nope", context(fetcher)),
-    ).toBe(undefined);
+    expect(await curatedFontSource.bytesOf("trio:nope", context(fetcher))).toBe(
+      undefined,
+    );
     expect(fetcher).not.toHaveBeenCalled();
   });
 
