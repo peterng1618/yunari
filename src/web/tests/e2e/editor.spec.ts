@@ -1183,11 +1183,10 @@ test.describe("Fabric editor route", () => {
       yunariText: {
         runs: [
           {
-            // The largest body-role preset, which is what the editor's new-text
-            // defaults pick — not the first entry, and not a caption too small
-            // to inspect comfortably. At the reference's artboard that is the
-            // 32px date face.
-            typeToken: "typeTokens.32-400",
+            // The body role, which is what the editor's new-text defaults
+            // pick — not the first entry, and not a caption too small to
+            // inspect comfortably. Its size comes from the role default.
+            typeToken: "typeTokens.body",
             style: { color: { ref: "palette.text" } },
           },
         ],
@@ -2219,9 +2218,9 @@ test.describe("Fabric editor route", () => {
     await page.goto(EDITOR);
     // The type-token library is a list now; a row press hands the token to
     // the token inspector, which is the field set's new home (spec, Tokens
-    // pane). `36-500` is the starter theme's "Wordmark".
+    // pane). `heading` is the starter theme's wordmark face.
     await openPane(page, "Tokens");
-    await page.locator('[data-yunari-type-preset-row="36-500"]').click();
+    await page.locator('[data-yunari-type-preset-row="heading"]').click();
     const family = page.locator("[data-yunari-token-family]");
     await family.fill("Georgia, serif");
     await family.press("Tab");
@@ -2234,15 +2233,15 @@ test.describe("Fabric editor route", () => {
     await openThemeFromStore(page, storedThemeOfPackage(saved.bytes));
     // Reopening a package remounts the shell, so the pane is shut again.
     await openPane(page, "Tokens");
-    await page.locator('[data-yunari-type-preset-row="36-500"]').click();
+    await page.locator('[data-yunari-type-preset-row="heading"]').click();
     const reopened = (await saveEnvelope(page)) as {
       globals: {
         typeTokens: {
-          "36-500": { family: string; weight: string | number };
+          heading: { family: string; weight: string | number };
         };
       };
     };
-    expect(reopened.globals.typeTokens["36-500"]).toMatchObject({
+    expect(reopened.globals.typeTokens["heading"]).toMatchObject({
       family: "Georgia, serif",
       weight: "600",
     });
@@ -2266,7 +2265,7 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     await openPane(page, "Tokens");
-    await page.locator('[data-yunari-type-preset-row="36-500"]').click();
+    await page.locator('[data-yunari-type-preset-row="heading"]').click();
     const tracking = page.locator("[data-yunari-token-letter-spacing]");
 
     await tracking.fill("0");
@@ -2291,15 +2290,15 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     await openPane(page, "Tokens");
-    await page.locator('[data-yunari-type-preset-row="20-400"]').click();
-    await chooseIn(page, "[data-yunari-token-replacement]", "24-400");
+    await page.locator('[data-yunari-type-preset-row="body"]').click();
+    await chooseIn(page, "[data-yunari-token-replacement]", "heading");
     await page.locator("[data-yunari-token-delete]").scrollIntoViewIfNeeded();
     await captureVisualReview(page, testInfo, "editor-type-reassignment");
     await page.locator("[data-yunari-token-delete]").click();
     // The row is the preset's own row in the list, so a deletion takes the
     // whole row with it.
     await expect(
-      page.locator('[data-yunari-type-preset-row="20-400"]'),
+      page.locator('[data-yunari-type-preset-row="body"]'),
     ).toHaveCount(0);
 
     const envelope = (await saveEnvelope(page)) as {
@@ -2311,14 +2310,14 @@ test.describe("Fabric editor route", () => {
         }>;
       };
     };
-    expect(envelope.globals.typeTokens["20-400"]).toBeUndefined();
+    expect(envelope.globals.typeTokens["body"]).toBeUndefined();
     expect(
       (
         sceneObject(envelope, "cpu-card-title")?.["yunariText"] as
           | { runs: ReadonlyArray<{ typeToken?: string }> }
           | undefined
       )?.runs[0]?.typeToken,
-    ).toBe("typeTokens.24-400");
+    ).toBe("typeTokens.heading");
   });
 
   test("captures dirty document replacement confirmation for visual review", async ({

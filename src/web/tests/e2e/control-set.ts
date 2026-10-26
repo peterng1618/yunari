@@ -133,7 +133,7 @@ export async function optionPairs(
  *
  * **By value, because the label is document data.** A picker's options are the
  * theme's own tokens and presets, named by their author (`palette.text` prints
- * `Text`, `typeTokens.24-400` prints `Card title`); matching on those words
+ * `Text`, `typeTokens.heading` prints `Heading`); matching on those words
  * would copy the document's glossary into the suite, and the `Text` / `Muted
  * text` pair is a substring collision besides. `control-select.tsx` puts
  * `data-yunari-option` on each `Select.Item` for exactly this, so the string a

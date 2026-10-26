@@ -890,7 +890,9 @@ test.describe("the reference composition, authored", () => {
       globals: {
         ...GLASS_ENVELOPE.globals,
         typeTokens: {
-          "40-400": { family: "Segoe UI, sans-serif", weight: "400" },
+          heading: { family: "Segoe UI, sans-serif", weight: "600" },
+          body: { family: "Segoe UI, sans-serif", weight: "400" },
+          mono: { family: "ui-monospace, monospace", weight: "400" },
         },
       },
       scene: {
@@ -919,8 +921,11 @@ test.describe("the reference composition, authored", () => {
                 {
                   kind: "value",
                   bindingId: "not-declared",
-                  typeToken: "typeTokens.40-400",
-                  style: { color: { ref: "palette.edge" } },
+                  typeToken: "typeTokens.body",
+                  style: {
+                    color: { ref: "palette.edge" },
+                    fontSize: { value: 40 },
+                  },
                 },
               ],
             },
@@ -1124,7 +1129,9 @@ const FIXTURE_WITH_MEDIA = {
   globals: {
     ...GLASS_ENVELOPE.globals,
     typeTokens: {
-      "20-400": { family: "Segoe UI, sans-serif", weight: "400" },
+      heading: { family: "Segoe UI, sans-serif", weight: "600" },
+      body: { family: "Segoe UI, sans-serif", weight: "400" },
+      mono: { family: "ui-monospace, monospace", weight: "400" },
     },
   },
   assets: [
@@ -1174,8 +1181,11 @@ const FIXTURE_WITH_MEDIA = {
             {
               kind: "literal",
               text: "FROST",
-              typeToken: "typeTokens.20-400",
-              style: { color: { ref: "palette.edge" } },
+              typeToken: "typeTokens.body",
+              style: {
+                color: { ref: "palette.edge" },
+                fontSize: { value: 40 },
+              },
             },
           ],
         },

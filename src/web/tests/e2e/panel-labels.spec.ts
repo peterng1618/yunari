@@ -202,9 +202,9 @@ test.describe("the settings panels name every control", () => {
     // not announce. Tokens is open from the setup, with a paint token selected.
     await audit(PAINT_CONTROLS);
     // One inspector renders one section, so the preset half is measured after
-    // pressing a preset row, which replaces the paint section. `20-500` is the
-    // starter theme's "Rate".
-    const presetRow = page.locator('[data-yunari-type-preset-row="20-500"]');
+    // pressing a preset row, which replaces the paint section. `body` is one of
+    // the starter theme's three role tokens.
+    const presetRow = page.locator('[data-yunari-type-preset-row="body"]');
     await expect(presetRow).toBeVisible();
     await presetRow.click();
     await audit(PRESET_CONTROLS);

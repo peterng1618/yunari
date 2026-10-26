@@ -112,7 +112,7 @@ async function reading(
     y: box.y,
     w: box.w,
     h: box.h,
-    preset: "typeTokens.60-600",
+    preset: "typeTokens.heading",
     colour: "palette.text",
   });
   await selectLayer(page, name);
@@ -128,7 +128,7 @@ async function reading(
   await choose(page, '[data-yunari-run-source="0"]', key);
   await page.locator("[data-yunari-run-add]").click();
   await fill(page, '[data-yunari-run-text="1"]', "%");
-  await choose(page, '[data-yunari-run-preset="1"]', "typeTokens.32-400");
+  await choose(page, '[data-yunari-run-preset="1"]', "typeTokens.body");
   await choose(page, '[data-yunari-run-colour="1"]', "palette.dim");
 }
 
@@ -152,7 +152,7 @@ export async function buildWordmarkAndClock(page: Page): Promise<void> {
     y: 62,
     w: 320,
     h: 46,
-    preset: "typeTokens.46-600",
+    preset: "typeTokens.heading",
     colour: "palette.text",
   });
 
@@ -177,7 +177,7 @@ export async function buildWordmarkAndClock(page: Page): Promise<void> {
     y: 112,
     w: 520,
     h: 20,
-    preset: "typeTokens.17-400",
+    preset: "typeTokens.body",
     colour: "palette.text",
   });
 
@@ -211,7 +211,7 @@ export async function buildWordmarkAndClock(page: Page): Promise<void> {
     y: 244,
     w: 300,
     h: 140,
-    preset: "typeTokens.108-300",
+    preset: "typeTokens.heading",
     colour: "palette.text",
   });
   await selectLayer(page, "time");
@@ -221,7 +221,7 @@ export async function buildWordmarkAndClock(page: Page): Promise<void> {
   // PM beside it, as its own run — the reason F2.1 was blocking.
   await page.locator("[data-yunari-run-add]").click();
   await fill(page, '[data-yunari-run-text="1"]', "PM");
-  await choose(page, '[data-yunari-run-preset="1"]', "typeTokens.24-400");
+  await choose(page, '[data-yunari-run-preset="1"]', "typeTokens.body");
   await choose(page, '[data-yunari-run-colour="1"]', "palette.dim");
 
   // The rule under it. A `Path` takes its data as SVG commands, which is the
@@ -248,7 +248,7 @@ export async function buildWordmarkAndClock(page: Page): Promise<void> {
     y: 372,
     w: 306,
     h: 34,
-    preset: "typeTokens.24-400",
+    preset: "typeTokens.body",
     colour: "palette.dim",
   });
   await selectLayer(page, "date");
@@ -286,7 +286,7 @@ export async function buildCpuCard(page: Page): Promise<void> {
     y: 222,
     w: 120,
     h: 22,
-    preset: "typeTokens.24-400",
+    preset: "typeTokens.body",
     colour: "palette.dim",
   });
 
@@ -295,12 +295,12 @@ export async function buildCpuCard(page: Page): Promise<void> {
   await insertTextBox(page, { x: 448, y: 262, w: 220, h: 60 });
   await setName(page, "cpu-card-value");
   await fill(page, '[data-yunari-run-text="0"]', "32");
-  await choose(page, '[data-yunari-run-preset="0"]', "typeTokens.60-600");
+  await choose(page, '[data-yunari-run-preset="0"]', "typeTokens.heading");
   await choose(page, '[data-yunari-run-colour="0"]', "palette.text");
   await choose(page, '[data-yunari-run-source="0"]', "cpu.load");
   await page.locator("[data-yunari-run-add]").click();
   await fill(page, '[data-yunari-run-text="1"]', "%");
-  await choose(page, '[data-yunari-run-preset="1"]', "typeTokens.32-400");
+  await choose(page, '[data-yunari-run-preset="1"]', "typeTokens.body");
   await choose(page, '[data-yunari-run-colour="1"]', "palette.dim");
   await page.waitForTimeout(200);
 
@@ -346,7 +346,7 @@ export async function buildGpuCard(page: Page): Promise<void> {
     y: 222,
     w: 120,
     h: 22,
-    preset: "typeTokens.24-400",
+    preset: "typeTokens.body",
     colour: "palette.dim",
   });
   await reading(
@@ -367,7 +367,7 @@ export async function buildGpuCard(page: Page): Promise<void> {
     y: 344,
     w: 240,
     h: 24,
-    preset: "typeTokens.20-400",
+    preset: "typeTokens.body",
     colour: "palette.dim",
   });
   await addChart(page, {
@@ -410,7 +410,7 @@ export async function buildMemoryRings(page: Page): Promise<void> {
     y: 222,
     w: 120,
     h: 22,
-    preset: "typeTokens.24-400",
+    preset: "typeTokens.body",
     colour: "palette.dim",
   });
   await addChart(page, {
@@ -444,7 +444,7 @@ export async function buildMemoryRings(page: Page): Promise<void> {
     y: 400,
     w: 220,
     h: 24,
-    preset: "typeTokens.20-400",
+    preset: "typeTokens.body",
     colour: "palette.dim",
   });
 
@@ -473,7 +473,7 @@ export async function buildMemoryRings(page: Page): Promise<void> {
     y: 222,
     w: 120,
     h: 22,
-    preset: "typeTokens.24-400",
+    preset: "typeTokens.body",
     colour: "palette.dim",
   });
   await addChart(page, {
@@ -504,7 +504,7 @@ export async function buildMemoryRings(page: Page): Promise<void> {
     y: 400,
     w: 220,
     h: 24,
-    preset: "typeTokens.20-400",
+    preset: "typeTokens.body",
     colour: "palette.dim",
   });
 }
@@ -535,7 +535,7 @@ export async function buildTrends(page: Page): Promise<void> {
     y: 534,
     w: 320,
     h: 26,
-    preset: "typeTokens.24-400",
+    preset: "typeTokens.body",
     colour: "palette.text",
   });
   // Three series, three sensors, three tokens — the shape the chart panel
@@ -579,7 +579,7 @@ export async function buildStorage(page: Page): Promise<void> {
     y: 534,
     w: 180,
     h: 26,
-    preset: "typeTokens.24-400",
+    preset: "typeTokens.body",
     colour: "palette.text",
   });
   await addText(page, {
@@ -589,13 +589,13 @@ export async function buildStorage(page: Page): Promise<void> {
     y: 528,
     w: 120,
     h: 38,
-    preset: "typeTokens.36-500",
+    preset: "typeTokens.heading",
     colour: "palette.text",
   });
   await selectLayer(page, "storage-card-value");
   await page.locator("[data-yunari-run-add]").click();
   await fill(page, '[data-yunari-run-text="1"]', "%");
-  await choose(page, '[data-yunari-run-preset="1"]', "typeTokens.24-400");
+  await choose(page, '[data-yunari-run-preset="1"]', "typeTokens.body");
   await choose(page, '[data-yunari-run-colour="1"]', "palette.dim");
   await addChart(page, {
     family: "Bar",
@@ -615,7 +615,7 @@ export async function buildStorage(page: Page): Promise<void> {
     y: 624,
     w: 260,
     h: 24,
-    preset: "typeTokens.20-400",
+    preset: "typeTokens.body",
     colour: "palette.dim",
   });
 }
@@ -639,7 +639,7 @@ export async function buildNetwork(page: Page): Promise<void> {
     y: 708,
     w: 180,
     h: 26,
-    preset: "typeTokens.24-400",
+    preset: "typeTokens.body",
     colour: "palette.text",
   });
   await addText(page, {
@@ -649,7 +649,7 @@ export async function buildNetwork(page: Page): Promise<void> {
     y: 710,
     w: 160,
     h: 22,
-    preset: "typeTokens.20-400",
+    preset: "typeTokens.body",
     colour: "palette.text",
   });
   await addText(page, {
@@ -659,7 +659,7 @@ export async function buildNetwork(page: Page): Promise<void> {
     y: 710,
     w: 160,
     h: 22,
-    preset: "typeTokens.20-400",
+    preset: "typeTokens.body",
     colour: "palette.dim",
   });
   await addChart(page, {

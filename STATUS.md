@@ -17,10 +17,9 @@ The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design
 
 ## Last completed change
 
-- **The published schema describes the new shape:** `typeTokens` with `family`/`weight`/`face`, `typePresets` gone, and a run's style admits size, leading and tracking; a document carrying `typePresets` fails it.
-- **A run with no size takes its role's default:** heading 72 / body 16 / mono 14 at a 1080 artboard, unroled takes body, never below 1.
-- **The role default reaches every repaint,** including the textbox release gesture, pinned by a test that goes red when the artboard height is dropped.
-- **Proof:** theme suites 285/285, `typecheck` exit 0, `design:check` exit 0; the full suite is 4 failed files / 7 tests, every one owned by Task 4.1 or 5.4.
+- **Every e2e theme is written in the new shape:** the seeded host library carries heading/body/mono and each run's old size in its own style, and no tracked spec names a `size-weight` token id.
+- **A retained old-shape fixture proves the refusal:** `tests/e2e/fixtures/e2e-old-shape/theme.json` is never seeded, and the new test asserts `typePresets` is named in the issue.
+- **Proof:** 8/8 rebuild tests (after the inventory count became the three-role contract), the display proof passed, `typecheck` exit 0; the unit suite is the same 4 files / 7 tests owned by Task 4.1 and 5.4.
 
 ## Next
 
@@ -32,6 +31,5 @@ The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design
 
 - **Four test files are red on purpose,** owned by Task 4.1 (renamed-token fixture, runs tracking, token inspector) and Task 5.4 (new-object defaults).
 - **`new-object-defaults.ts` still reads `size`/`trioRole` off tokens,** so the body-token preference is dead until Task 5.4.
-- **`card-token-mapping.ts` `trioRoleOf` reads a removed field,** so role matching falls to the first candidate until Task 3.3.
-- **The token inspector still offers size, leading and tracking fields** the validator now refuses; Task 4.1–4.3 replace them.
+- **The token inspector no longer renders size, leading or tracking,** but its dom test still expects them — owned by Task 4.1.
 - **The full unit suite was not a green gate at this boundary** — 7 failures, all mapped above; no e2e run yet.

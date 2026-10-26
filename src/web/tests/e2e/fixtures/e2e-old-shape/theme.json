@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "2.0.0",
+  "fabricVersion": "7.4.0",
+  "id": "e2e-old-shape",
+  "metadata": {
+    "name": "Retained old-shape fixture — never rendered",
+    "themeLanguage": "en"
+  },
+  "artboard": { "width": 640, "height": 360, "contentFit": "contain" },
+  "background": { "color": { "ref": "palette.bar" } },
+  "globals": {
+    "palette": {
+      "none": {
+        "name": "None",
+        "value": { "kind": "solid", "color": "transparent" }
+      },
+      "bar": { "name": "Bar", "value": { "kind": "solid", "color": "#101318" } }
+    },
+    "typePresets": {
+      "24-400": {
+        "name": "Card title",
+        "value": {
+          "family": "system-ui, sans-serif",
+          "size": 24,
+          "weight": "400"
+        }
+      }
+    }
+  },
+  "assets": [],
+  "scene": { "version": "7.4.0", "objects": [] }
+}

@@ -98,8 +98,11 @@ const textNode = (index: number) => ({
       {
         kind: "value" as const,
         bindingId: `bound-${TEXT_NODES[index]!}`,
-        typeToken: "typeTokens.20-400",
-        style: { color: { ref: "palette.ink" as const } },
+        typeToken: "typeTokens.body",
+        style: {
+          color: { ref: "palette.ink" as const },
+          fontSize: { value: 20 },
+        },
       },
     ],
   },
@@ -122,11 +125,9 @@ const envelope = {
       ink: { name: "Ink", value: { kind: "solid" as const, color: "#e8ecf3" } },
     },
     typeTokens: {
-      "20-400": {
-        family: "system-ui, sans-serif",
-
-        weight: "400",
-      },
+      heading: { family: "system-ui, sans-serif", weight: "600" },
+      body: { family: "system-ui, sans-serif", weight: "400" },
+      mono: { family: "ui-monospace, monospace", weight: "400" },
     },
   },
   assets: [

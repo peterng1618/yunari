@@ -35,10 +35,9 @@ function paint(): Record<string, unknown> {
       },
     },
     typeTokens: {
-      body: {
-        name: "Body",
-        value: { family: "Segoe UI, sans-serif", size: 32 },
-      },
+      heading: { family: "Segoe UI, sans-serif", weight: "600" },
+      body: { family: "Segoe UI, sans-serif", weight: "400" },
+      mono: { family: "ui-monospace, monospace", weight: "400" },
     },
   };
 }
@@ -87,7 +86,10 @@ function source(
             kind: "literal",
             text: "TEXT",
             typeToken: "typeTokens.body",
-            style: { color: { ref: "palette.accent" } },
+            style: {
+              color: { ref: "palette.accent" },
+              fontSize: { value: 32 },
+            },
           },
         ],
       },
