@@ -1,4 +1,8 @@
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 /**
  * Moving a theme to the operating system's trash, which is the recovery the
@@ -16,6 +20,11 @@ import { execFile } from "node:child_process";
 export interface TrashRoute {
   readonly command: string;
   readonly args: readonly string[];
+  /** Paths the runner writes to `listPath` before running: the arguments
+   *  reference the file rather than carrying them (Windows' command line is
+   *  bounded). Omitted when the arguments carry the paths themselves. */
+  readonly list?: readonly string[];
+  readonly listPath?: string;
 }
 
 /** AppleScript string literals escape a backslash before the quote. */
@@ -34,10 +43,17 @@ export type TrashTarget = "folder" | "file";
  * `RecycleBinOption` does not exist, and naming it fails at run time.
  *
  * The VisualBasic call names what it takes — `DeleteDirectory` or `DeleteFile` —
- * so the kind is a platform fact, not a caller's convenience. Every target is
- * one `DeleteFile` statement in the same script, so a refusal is one process's
- * answer for the whole list.
+ * so the kind is a platform fact, not a caller's convenience.
+ *
+ * A short list is one statement per target in one script. A long one cannot be:
+ * Windows refuses a command line over 32,767 characters, and the store's own
+ * 128-asset cap measured 35,185 inline. Past the budget the paths travel one
+ * per line in a file the runner writes, and PowerShell reads that instead.
  */
+/** Well below the 32,767-character limit, with room for the executable and the
+ *  rest of the argument list. */
+const MAX_INLINE_WINDOWS_CHARS = 8_000;
+
 function windows(targets: readonly string[], kind: TrashTarget): TrashRoute {
   // `Add-Type` and then one call per target. The separators belong between the
   // statements, never inside a call's argument list — a `;` after the opening
@@ -45,24 +61,43 @@ function windows(targets: readonly string[], kind: TrashTarget): TrashRoute {
   // so the Windows route had never run. It was asserted as a string and never
   // executed.
   const method = kind === "file" ? "DeleteFile" : "DeleteDirectory";
-  const calls = targets.map(
-    (target) =>
-      `[Microsoft.VisualBasic.FileIO.FileSystem]::${method}(` +
-      // A single-quoted PowerShell literal escapes by doubling, which is what
-      // a `--themes-dir` holding an apostrophe needs.
-      `'${target.replaceAll("'", "''")}'` +
-      ", [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs" +
-      ", [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)",
+  const call = (target: string) =>
+    `[Microsoft.VisualBasic.FileIO.FileSystem]::${method}(` +
+    // A single-quoted PowerShell literal escapes by doubling, which is what
+    // a `--themes-dir` holding an apostrophe needs.
+    `'${target.replaceAll("'", "''")}'` +
+    ", [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs" +
+    ", [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)";
+
+  const inline = `Add-Type -AssemblyName Microsoft.VisualBasic; ${targets
+    .map(call)
+    .join("; ")}`;
+
+  if (inline.length <= MAX_INLINE_WINDOWS_CHARS) {
+    return {
+      command: "powershell.exe",
+      args: ["-NoProfile", "-NonInteractive", "-Command", inline],
+    };
+  }
+
+  const listPath = path.join(
+    os.tmpdir(),
+    `yunari-trash-${randomUUID()}`,
+    "paths.txt",
   );
+  const script =
+    "Add-Type -AssemblyName Microsoft.VisualBasic; " +
+    `Get-Content -LiteralPath '${listPath.replaceAll("'", "''")}' | ` +
+    "ForEach-Object { " +
+    `[Microsoft.VisualBasic.FileIO.FileSystem]::${method}($_, ` +
+    "[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs, " +
+    "[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin) }";
 
   return {
     command: "powershell.exe",
-    args: [
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      `Add-Type -AssemblyName Microsoft.VisualBasic; ${calls.join("; ")}`,
-    ],
+    args: ["-NoProfile", "-NonInteractive", "-Command", script],
+    list: targets,
+    listPath,
   };
 }
 
@@ -109,11 +144,12 @@ type TrashPlan =
  * The routes this platform's own trash is reached by, in the order they would
  * be tried, or the reason there are none.
  *
- * Takes one target or a list; a list is one route per platform, because a
- * refusal part-way through a list must not leave the earlier targets already
- * moved. Linux answers with several routes, because "is `gio` installed" is not
- * a question this process can answer without running it, and a machine with no
- * desktop session has `trash-put` instead.
+ * Takes one target or a list; a list is one route per platform, which is fewer
+ * processes and one refusal sentence — not atomicity (a partial move is
+ * reported as a failure and the caller prunes nothing). Linux answers with
+ * several routes, because "is `gio` installed" is not a question this process
+ * can answer without running it, and a machine with no desktop session has
+ * `trash-put` instead.
  */
 export function trashPlan(
   platform: NodeJS.Platform,
@@ -143,23 +179,94 @@ export function trashPlan(
   }
 }
 
-/** A trash operation, run as a child process, resolving with its stderr. */
-function run(command: string, args: readonly string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      command,
-      args,
-      // A host that has no window of its own must not flash one.
-      { windowsHide: true, timeout: 30_000 },
-      (error, _stdout, stderr) => {
-        if (error) {
-          reject(new Error(stderr.trim() || error.message));
-          return;
-        }
-        resolve(stderr);
-      },
-    );
-  });
+/** Runs one route, writing its list file first when it carries one. */
+async function runRoute(route: TrashRoute): Promise<void> {
+  const temporary =
+    route.listPath === undefined ? undefined : path.dirname(route.listPath);
+
+  try {
+    if (
+      temporary !== undefined &&
+      route.listPath !== undefined &&
+      route.list !== undefined
+    ) {
+      await fs.mkdir(temporary, { recursive: true });
+      await fs.writeFile(route.listPath, `${route.list.join("\n")}\n`, "utf8");
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        route.command,
+        [...route.args],
+        // A host that has no window of its own must not flash one.
+        { windowsHide: true, timeout: 30_000 },
+        (error, _stdout, stderr) => {
+          if (error) {
+            // The code is the whole reason the Linux fallthrough works: `gio`
+            // missing is `ENOENT`, and a plain Error would make every refusal
+            // look like a platform refusal.
+            reject(
+              Object.assign(new Error(stderr.trim() || error.message), {
+                cause: error,
+                code: (error as NodeJS.ErrnoException).code,
+              }),
+            );
+            return;
+          }
+          resolve();
+        },
+      );
+    });
+  } finally {
+    if (temporary !== undefined) {
+      await fs
+        .rm(temporary, { recursive: true, force: true })
+        .catch(() => undefined);
+    }
+  }
+}
+
+type TrashRunner = (route: TrashRoute) => Promise<void>;
+
+/**
+ * Runs a plan's routes in order, falling through only when a command is not
+ * installed.
+ *
+ * Exported so a test can inject a runner: "is `gio` installed" is not a fact a
+ * test can arrange on the machine it runs on, and a dropped error code here
+ * silently disabled the Linux `trash-put` fallback.
+ */
+export async function runTrashRoutes(
+  routes: readonly TrashRoute[],
+  kind: TrashTarget,
+  execute: TrashRunner = runRoute,
+): Promise<void> {
+  let last: string | undefined;
+  for (const route of routes) {
+    try {
+      await execute(route);
+      return;
+    } catch (error: unknown) {
+      // Only a command that is not installed is worth trying the next route
+      // for. Anything else is the platform refusing, and its reason is the one
+      // the author needs.
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+      last = `${route.command}: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+    }
+  }
+
+  throw new Error(
+    `This PC has no trash command (${routes
+      .map((route) => route.command)
+      .join(", ")}), so the ${
+      kind === "file" ? "file was" : "theme was"
+    } left alone rather than deleted permanently.`,
+    last === undefined ? undefined : { cause: last },
+  );
 }
 
 /**
@@ -170,8 +277,11 @@ function run(command: string, args: readonly string[]): Promise<string> {
  * only copy of an author's theme is the defect this exists to prevent, and it
  * would come back on exactly the machines nobody tested.
  *
- * The whole list is one invocation per platform route: a refusal on the Nth
- * target must not leave the first N-1 already moved to the trash.
+ * The whole list goes to one route invocation, which is about fewer processes
+ * and one refusal sentence, not atomicity: a multi-statement script and
+ * Finder's list can both stop part-way. That is acceptable because the staged
+ * copies are disposable and the editor still holds the bytes — a partial move
+ * is reported as a failure, and the caller prunes nothing.
  */
 async function trashTargets(
   targets: readonly string[],
@@ -184,30 +294,7 @@ async function trashTargets(
     throw new Error(plan.reason);
   }
 
-  let last: string | undefined;
-  for (const { command, args } of plan.routes) {
-    try {
-      await run(command, args);
-      return;
-    } catch (error: unknown) {
-      // Only a command that is not installed is worth trying the next route
-      // for. Anything else is the platform refusing, and its reason is the one
-      // the author needs.
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw error;
-      }
-      last = `${command}: ${error instanceof Error ? error.message : String(error)}`;
-    }
-  }
-
-  throw new Error(
-    `This PC has no trash command (${plan.routes
-      .map((route) => route.command)
-      .join(", ")}), so the ${
-      kind === "file" ? "file was" : "theme was"
-    } left alone rather than deleted permanently.`,
-    last === undefined ? undefined : { cause: last },
-  );
+  await runTrashRoutes(plan.routes, kind);
 }
 
 /** Moves a theme's folder to the trash. */

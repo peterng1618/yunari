@@ -5,7 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { lucideSource } from "./icons/lucide.js";
-import { type AssetRouteOptions, handleAssetRoutes } from "./routes.js";
+import {
+  type AssetRouteOptions,
+  handleAssetRoutes,
+  isNameRefusal,
+} from "./routes.js";
 import type { AssetSource } from "./source.js";
 
 // Small enough that the 413 case is a short body rather than a hundred
@@ -419,6 +423,39 @@ describe("the asset routes", () => {
       }
     });
 
+    it.runIf(process.platform === "win32")(
+      "treats a trailing dot as the same Windows name",
+      async () => {
+        // Windows ignores a trailing dot, so `foo.` and `foo` are one file; two
+        // staged copies would overwrite each other before the trash.
+        const root = await stagingRoot();
+        const trashed: string[][] = [];
+        const base = await start({
+          stagingRoot: root,
+          trash: async (paths) => {
+            trashed.push([...paths]);
+          },
+        });
+
+        try {
+          const response = await fetch(`${base}/api/assets/trash`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: trashBody([
+              { name: "foo.", bytes: utf8("a") },
+              { name: "foo", bytes: utf8("b") },
+            ]),
+          });
+
+          expect(response.status).toBe(400);
+          expect(trashed).toEqual([]);
+          expect(await fs.readdir(root)).toEqual([]);
+        } finally {
+          await fs.rm(root, { recursive: true, force: true });
+        }
+      },
+    );
+
     it("answers 400 for a name the platform cannot store", async () => {
       const root = await stagingRoot();
       const trashed: string[][] = [];
@@ -431,8 +468,8 @@ describe("the asset routes", () => {
 
       try {
         // Past every platform's single-component filename limit, so the write
-        // itself refuses it (`ENAMETOOLONG`) rather than the host compiling a
-        // platform rule of its own.
+        // itself refuses it (`ENAMETOOLONG` on POSIX, `ENOENT` on Windows)
+        // rather than the host compiling a platform rule of its own.
         const response = await fetch(`${base}/api/assets/trash`, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -467,5 +504,21 @@ describe("the asset routes", () => {
 
       expect((await fetch(`${base}/api/assets/trash`)).status).toBe(405);
     });
+  });
+});
+
+describe("isNameRefusal", () => {
+  it("blames the caller only for a name the filesystem refused", () => {
+    expect(isNameRefusal("EINVAL", "linux")).toBe(true);
+    expect(isNameRefusal("ENAMETOOLONG", "linux")).toBe(true);
+    // An ACL or an immutable directory is this host's refusal, not the body's.
+    expect(isNameRefusal("EPERM", "linux")).toBe(false);
+    expect(isNameRefusal("EPERM", "win32")).toBe(false);
+    // Windows reports an over-long name as ENOENT; on POSIX the same code means
+    // the staging directory this request made has gone.
+    expect(isNameRefusal("ENOENT", "win32")).toBe(true);
+    expect(isNameRefusal("ENOENT", "linux")).toBe(false);
+    expect(isNameRefusal("ENOENT", "darwin")).toBe(false);
+    expect(isNameRefusal(undefined, "win32")).toBe(false);
   });
 });

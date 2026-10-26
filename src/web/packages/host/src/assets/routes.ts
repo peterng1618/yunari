@@ -133,8 +133,10 @@ function trashFiles(body: unknown): TrashFiles {
     }
 
     // Two copies sharing one staged name would overwrite each other, and the
-    // second would be trashed as the first's bytes.
-    if (names.has(fileName)) {
+    // second would be trashed as the first's bytes. The key is the name the
+    // filesystem would make, not the raw string.
+    const key = stagedNameKey(fileName);
+    if (names.has(key)) {
       return refuse(400, `Two files are both named "${fileName}".`);
     }
 
@@ -150,7 +152,7 @@ function trashFiles(body: unknown): TrashFiles {
       );
     }
 
-    names.add(fileName);
+    names.add(key);
     staged.push({ name: fileName, bytes: decoded });
   }
 
@@ -161,27 +163,45 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** A write only the name itself can refuse. Windows reports an over-long or
- *  unrepresentable path as `ENOENT` rather than `ENAMETOOLONG`; the staging
- *  directory was made by this request, so its absence here is the name. */
-const NAME_REFUSALS = new Set(["EINVAL", "ENAMETOOLONG", "EPERM", "ENOENT"]);
-
 /**
- * Why staging one file failed: the caller's 400 when the host platform's own
- * naming rules refused it — a colon or a device name on Windows, a trailing
- * dot, a name past the filesystem's limit — and this host's 500 otherwise.
+ * Whether a failed write is the caller's name rather than this host's fault.
+ *
+ * `EINVAL` and `ENAMETOOLONG` name a string past what the filesystem accepts.
+ * Windows reports an over-long or unrepresentable path as `ENOENT`, so that
+ * code is a name refusal there; on POSIX the same code from a write inside a
+ * directory this request just made means the directory vanished, which is this
+ * host's fault. `EPERM` is never a name: an ACL or an immutable directory is
+ * this host's refusal, and blaming the body would hide it.
  */
+export function isNameRefusal(
+  code: string | undefined,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return (
+    code === "EINVAL" ||
+    code === "ENAMETOOLONG" ||
+    (code === "ENOENT" && platform === "win32")
+  );
+}
+
 function stageRefusal(
   name: string,
   error: unknown,
 ): { readonly status: 400 | 500; readonly message: string } {
-  const code = (error as NodeJS.ErrnoException).code ?? "";
-  return NAME_REFUSALS.has(code)
+  return isNameRefusal((error as NodeJS.ErrnoException).code)
     ? {
         status: 400,
         message: `"${name}" cannot be stored on this PC: ${messageOf(error)}`,
       }
     : { status: 500, message: messageOf(error) };
+}
+
+/** What the host's filesystem treats as one staged name: Windows ignores
+ *  trailing dots and spaces, so `foo.` and `foo` are the same file. */
+function stagedNameKey(fileName: string): string {
+  return process.platform === "win32"
+    ? fileName.replace(/[. ]+$/, "")
+    : fileName;
 }
 
 /**
@@ -191,8 +211,10 @@ function stageRefusal(
  * A refusal is the platform's own sentence and a 500, because a refused trash
  * is a refusal: nothing here falls back to a permanent delete. The staging
  * directory is swept either way — a successful trash has already moved the
- * copies out of it. The whole list goes to one trash invocation, so a refusal
- * cannot leave the earlier files already moved.
+ * copies out of it. The whole list goes to one trash invocation: fewer
+ * processes and one refusal sentence, not atomicity. A partial move is
+ * reported as a failure, the caller prunes nothing, and the editor still holds
+ * the bytes.
  */
 async function moveStagedFiles(
   input: AssetRouteInput,
