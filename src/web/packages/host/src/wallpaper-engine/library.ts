@@ -211,6 +211,11 @@ export async function scanLibrary(
         skipped += 1;
         continue;
       }
+      // A web wallpaper is a page, not a file Yunari can put in a theme, so it
+      // is hidden rather than listed as an item that would refuse on import.
+      if (item.type === "web") {
+        continue;
+      }
       items.push(item);
     }
   }

@@ -4,7 +4,7 @@ import path from "node:path";
 
 import type { LibraryItem } from "./library.js";
 import type { WallpaperEngineInstall } from "./locate.js";
-import { memberBytes, readScenePackage } from "./pkg.js";
+import { memberBytes, readPackage } from "./pkg.js";
 import { insideOf } from "./resolve.js";
 
 /**
@@ -85,13 +85,45 @@ function descriptorOf(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
+/**
+ * Copies the descriptor's own preview beside it. The thumbnail is the workshop's
+ * preview file, not a package member, so without this copy a local project shows
+ * no thumbnail in the engine's own list.
+ */
+async function copyPreview(
+  item: LibraryItem,
+  directory: string,
+  descriptor: Record<string, unknown>,
+): Promise<void> {
+  const preview = descriptor.preview;
+  if (
+    typeof preview !== "string" ||
+    item.preview === undefined ||
+    !insideOf(item.directory, item.preview)
+  ) {
+    return;
+  }
+
+  const target = memberTarget(directory, preview);
+  if (target === undefined) {
+    return;
+  }
+  const bytes = await fs.readFile(item.preview).catch(() => undefined);
+  if (bytes === undefined) {
+    return;
+  }
+
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, bytes);
+}
+
 /** Every member, then the descriptor; throws on anything that makes the project
  *  incomplete, and the caller removes the directory it created. */
 async function writeProject(
   item: LibraryItem,
   directory: string,
 ): Promise<void> {
-  const pkg = readScenePackage(await fs.readFile(item.payload));
+  const pkg = readPackage(await fs.readFile(item.payload));
   if (pkg === undefined || !pkg.members.has(SCENE_MEMBER)) {
     throw new Error("unreadable scene package");
   }
@@ -132,6 +164,8 @@ async function writeProject(
     JSON.stringify({ ...descriptor, file: SCENE_MEMBER }, null, 2),
     "utf8",
   );
+
+  await copyPreview(item, directory, descriptor);
 }
 
 /**
@@ -156,6 +190,15 @@ export async function unpackScene(
     await fs.mkdir(directory);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      // A project unpacked before the preview was copied still shows no
+      // thumbnail; filling that in is the one write reuse performs.
+      const existing = await fs
+        .readFile(path.join(directory, "project.json"), "utf8")
+        .then((text) => descriptorOf(JSON.parse(text)))
+        .catch(() => undefined);
+      if (existing !== undefined) {
+        await copyPreview(item, directory, existing).catch(() => undefined);
+      }
       return { ok: true, name, reused: true };
     }
     return { ok: false, reason: "refused" };
@@ -173,21 +216,30 @@ export async function unpackScene(
   return { ok: true, name, reused: false };
 }
 
+/** Wallpaper Engine's Steam app id. */
+const STEAM_APP = "steam://run/431960";
+
 /**
- * Starts the editor on an unpacked project and settles when the process has
- * spawned (`true`) or failed to (`false`). It never waits for the editor to
- * run, sends it nothing and polls nothing (R1). No stdin, and no arguments
- * after the launch.
+ * Starts Wallpaper Engine's own UI through Steam, which is the only start it
+ * accepts: a direct `wallpaperui.exe -project` launch is refused as an improper
+ * start. The unpacked project is in `projects/myprojects`, where that UI lists
+ * it, so nothing needs to be passed.
  */
-export function launchEditor(
-  install: WallpaperEngineInstall,
-  projectDirectory: string,
+export function launchEditor(): Promise<boolean> {
+  return startDetached("explorer.exe", [STEAM_APP]);
+}
+
+/** Settles when the process spawned (`true`) or failed to (`false`); it never
+ *  waits for the program to run. */
+export function startDetached(
+  command: string,
+  args: readonly string[],
 ): Promise<boolean> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
 
     try {
-      child = spawn(install.editor, ["-project", projectDirectory], {
+      child = spawn(command, [...args], {
         detached: true,
         stdio: "ignore",
       });

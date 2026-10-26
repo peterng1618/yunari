@@ -4,9 +4,9 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "./library.js";
 import type { WallpaperEngineInstall } from "./locate.js";
-import { memberBytes, readScenePackage } from "./pkg.js";
+import { memberBytes, readPackage } from "./pkg.js";
 import { createWallpaperEngineSource } from "./source.js";
-import { launchEditor, unpackScene } from "./unpack.js";
+import { startDetached, unpackScene } from "./unpack.js";
 
 const encoder = new TextEncoder();
 
@@ -118,7 +118,7 @@ describe("unpacking a scene theme", () => {
     expect(result).toEqual({ ok: true, name: "201", reused: false });
 
     const target = path.join(install.myProjects, "201");
-    const pkg = readScenePackage(await fs.readFile(item.payload));
+    const pkg = readPackage(await fs.readFile(item.payload));
     if (pkg === undefined) throw new Error("fixture package did not parse");
 
     for (const [name] of members) {
@@ -149,6 +149,43 @@ describe("unpacking a scene theme", () => {
     expect(second).toEqual({ ok: true, name: "201", reused: true });
     expect((await fs.stat(file)).mtimeMs).toBe(before.mtimeMs);
     expect(Buffer.compare(await fs.readFile(file), bytesBefore)).toBe(0);
+  });
+
+  it("copies the workshop's own preview so the project has a thumbnail", async () => {
+    item = {
+      ...item,
+      preview: path.join(item.directory, "preview.jpg"),
+    };
+    await fs.writeFile(item.preview as string, "jpeg-bytes");
+
+    await unpackScene(install, item);
+
+    expect(
+      await fs.readFile(
+        path.join(install.myProjects, "201", "preview.jpg"),
+        "utf8",
+      ),
+    ).toBe("jpeg-bytes");
+  });
+
+  it("fills in a missing preview in a project an earlier run unpacked", async () => {
+    const target = path.join(install.myProjects, "201");
+    await fs.mkdir(target);
+    await fs.writeFile(
+      path.join(target, "project.json"),
+      JSON.stringify({ ...descriptor, file: "scene.json" }),
+    );
+    item = {
+      ...item,
+      preview: path.join(item.directory, "preview.jpg"),
+    };
+    await fs.writeFile(item.preview as string, "jpeg-bytes");
+
+    expect(await unpackScene(install, item)).toMatchObject({ reused: true });
+
+    expect(await fs.readFile(path.join(target, "preview.jpg"), "utf8")).toBe(
+      "jpeg-bytes",
+    );
   });
 
   it("never writes into a directory this run did not create", async () => {
@@ -252,10 +289,7 @@ describe("unpacking a scene theme", () => {
       reused: false,
       launched: true,
     });
-    expect(launch).toHaveBeenCalledWith(
-      install,
-      path.join(install.myProjects, "201"),
-    );
+    expect(launch).toHaveBeenCalledWith();
 
     const second = await source.project("201");
 
@@ -295,41 +329,22 @@ describe("unpacking a scene theme", () => {
   });
 });
 
-describe("launching the editor", () => {
-  function installWith(editor: string): WallpaperEngineInstall {
-    return {
-      root: "C:\\wallpaper_engine",
-      libraries: [],
-      myProjects: "C:\\wallpaper_engine\\projects\\myprojects",
-      editor,
-    };
-  }
-
+describe("starting a program for the author", () => {
   it("answers false for a spawn that throws synchronously", async () => {
     // An empty command is the one spawn failure Node raises synchronously, so
     // it is the case the wrapper has to keep out of the request.
-    await expect(
-      launchEditor(
-        installWith(""),
-        "C:\\wallpaper_engine\\projects\\myprojects\\201",
-      ),
-    ).resolves.toBe(false);
+    await expect(startDetached("", [])).resolves.toBe(false);
   });
 
-  it("answers false for a binary that does not exist", async () => {
-    // The `error` event, not a synchronous throw: `launched` is only true when
+  it("answers false for a program that does not exist", async () => {
+    // The `error` event, not a synchronous throw: the answer is only true when
     // the process actually spawned.
     const missing = path.join(
       os.tmpdir(),
-      "yunari-no-such-editor",
-      "wallpaperui.exe",
+      "yunari-no-such-program",
+      "nothing.exe",
     );
 
-    await expect(
-      launchEditor(
-        installWith(missing),
-        "C:\\wallpaper_engine\\projects\\myprojects\\201",
-      ),
-    ).resolves.toBe(false);
+    await expect(startDetached(missing, [])).resolves.toBe(false);
   });
 });

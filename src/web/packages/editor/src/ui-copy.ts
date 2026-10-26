@@ -1221,34 +1221,29 @@ export const uiCopy = {
       webUnsupported:
         "A web wallpaper is a page, not a file Yunari can put in a theme.",
       empty: "This library holds no wallpapers Yunari can read.",
-      /** A scene's export sheet. The text step is an instruction, not a tip,
-       *  and the project notice is said once because it is a consequence of
-       *  the unpack the author only needs to hear before choosing to unpack. */
+      /** A scene's export sheet: one route, the engine's own mobile export, and
+       *  the two choices Yunari makes for the author. */
       scene: {
         title: (title: string): string => `Export “${title}”`,
         back: "Back to the library",
-        deleteText:
-          "Delete the clock and any other dynamic text in Wallpaper Engine's editor before exporting.",
-        exportStep: "Export from Wallpaper Engine with these settings:",
+        mobileStep:
+          "Yunari asks Wallpaper Engine for a mobile export of this scene, then turns the package into a video. It keeps the crop at “Keep original aspect ratio” and the preset at “Original”.",
+        /** §4.1: a clock baked into the scene is a wrong time looping forever,
+         *  and Yunari draws its own either way. Said before the export, because
+         *  it is the author's edit to make in the engine's own editor. */
+        textStep:
+          "A clock or other dynamic text in this scene is rendered into the video. Delete it in Wallpaper Engine's editor first if it should not be there.",
+        mobile: "Export with Wallpaper Engine",
+        mobileRunning: "Asking Wallpaper Engine…",
+        mobileSave:
+          "Wallpaper Engine's Save dialog is open. Save the package in Documents, the folder it opens in, and the video appears here by itself.",
+        /** The one refusal the author can act on, and only by hand. */
+        mobileAgreement:
+          "The wallpaper's creator has not accepted the Steam Workshop subscriber agreement, so Wallpaper Engine will not export it. Open the project in Wallpaper Engine and export it there instead.",
+        mobileRefused: (reason: string): string =>
+          `Wallpaper Engine could not export this scene: ${reason}`,
         projectNotice:
           "The unpack leaves a project in Wallpaper Engine's own project list.",
-        /** §8 step 7: the dialog's default location is not something Yunari
-         *  controls, so the sheet names the route back when it misses. */
-        elsewhere:
-          "If the export saved somewhere else, use Add, then File, to bring it in.",
-        formatField: "Format",
-        resolutionField: "Resolution",
-        frameRateField: "Frame rate",
-        clipField: "Clip length",
-        blendField: "Blend",
-        formatName: {
-          png: "PNG",
-          mp4: "MP4",
-        } satisfies Record<"png" | "mp4", string>,
-        resolution: (width: number, height: number): string =>
-          `${width} × ${height}`,
-        perSecond: (fps: number): string => `${fps} fps`,
-        seconds: (seconds: number): string => `${seconds} s`,
         opening: "Opening…",
         launched: (name: string): string =>
           `Wallpaper Engine was started. Open the project “${name}” from its own project list if it is not already selected.`,
@@ -1259,7 +1254,7 @@ export const uiCopy = {
         offer: (name: string): string =>
           `Wallpaper Engine wrote ${name}. Import it as the background?`,
         /** The credits entry's `changes` for a file this sheet imported. */
-        changes: "Exported from Wallpaper Engine's scene editor",
+        changes: "Pre-rendered by Wallpaper Engine's mobile export",
       },
     },
   },

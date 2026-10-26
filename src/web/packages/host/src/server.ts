@@ -2994,6 +2994,44 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
+    // The engine's own mobile export: unpack the item, then press its Send to
+    // Mobile Device → Export .mpkg controls and leave the Save dialog to the
+    // author (docs/decisions/0118). Same guards as the project route below.
+    const wallpaperEngineMobileExport = url.pathname.match(
+      /^\/api\/wallpaper-engine\/item\/([^/]+)\/mobile-export$/,
+    );
+    if (wallpaperEngineMobileExport) {
+      if (request.method !== "POST") {
+        sendText(response, 405, "Only POST is supported.");
+        return;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Exporting is available on this PC only.");
+        return;
+      }
+      if (isForeignOrigin(request)) {
+        sendText(response, 403, "Exporting is not available to another page.");
+        return;
+      }
+
+      let workshopId: string;
+      try {
+        workshopId = decodeURIComponent(wallpaperEngineMobileExport[1] ?? "");
+      } catch {
+        sendText(response, 404, "No such wallpaper.");
+        return;
+      }
+
+      sendJson(
+        response,
+        200,
+        wallpaperEngine === undefined
+          ? { ok: false, reason: "no-install" }
+          : await wallpaperEngine.mobileExport(workshopId),
+      );
+      return;
+    }
+
     // The files the export step watches, never a walk of the profile.
     if (url.pathname === "/api/wallpaper-engine/exports") {
       if (request.method !== "GET") {

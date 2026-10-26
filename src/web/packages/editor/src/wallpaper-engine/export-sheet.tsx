@@ -6,7 +6,9 @@ import {
   type ExportFile,
   fetchExport,
   findExports,
+  type StartMobileExportAnswer,
   type StartProjectAnswer,
+  startMobileExport,
   startProject,
   type WallpaperEngineClientOptions,
   type WallpaperEngineItem,
@@ -18,39 +20,11 @@ export type WallpaperExportOutcome =
   | { readonly ok: true; readonly assetId: string }
   | { readonly ok: false; readonly message: string };
 
-/** What the author should export for this scene. Only a scene the listing
- *  classed as still-at-rest is offered as a PNG; an unclassified one is never
- *  guessed still, because a moving scene exported as one frame loses the work. */
-export function exportSettingsOf(item: WallpaperEngineItem):
-  | { readonly format: "png"; readonly width: 1920; readonly height: 1080 }
-  | {
-      readonly format: "mp4";
-      readonly width: 1920;
-      readonly height: 1080;
-      readonly fps: 30;
-      readonly durationSeconds: 5;
-      readonly blendSeconds: 1;
-    } {
-  return item.stillAtRest === true
-    ? { format: "png", width: 1920, height: 1080 }
-    : {
-        format: "mp4",
-        width: 1920,
-        height: 1080,
-        fps: 30,
-        durationSeconds: 5,
-        blendSeconds: 1,
-      };
-}
-
-/** The newest offered file whose format the settings ask for. */
-function newestOf(
-  files: readonly ExportFile[],
-  format: ExportFile["format"],
-): ExportFile | undefined {
+/** The newest offered file: the mobile export writes one video, and the sheet
+ *  never has to choose a format. */
+function newestOf(files: readonly ExportFile[]): ExportFile | undefined {
   let newest: ExportFile | undefined;
   for (const file of files) {
-    if (file.format !== format) continue;
     if (newest === undefined || file.modified > newest.modified) newest = file;
   }
   return newest;
@@ -70,11 +44,13 @@ export function ExportSheet(props: {
   readonly client?: WallpaperEngineClientOptions;
 }): React.JSX.Element {
   const { item, onImportFile, onImported, onDone, client } = props;
-  const settings = exportSettingsOf(item);
-  const format = settings.format;
   const copy = uiCopy.assets.wallpaperEngine.scene;
   const [since] = useState(() => Date.now());
   const [offer, setOffer] = useState<ExportFile | undefined>();
+  const [exported, setExported] = useState<
+    StartMobileExportAnswer | undefined
+  >();
+  const [exporting, setExporting] = useState(false);
   const [opened, setOpened] = useState<StartProjectAnswer | undefined>();
   const [opening, setOpening] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -88,7 +64,7 @@ export function ExportSheet(props: {
     const poll = async (): Promise<void> => {
       const files = await findExports(since, client);
       if (!live) return;
-      const newest = newestOf(files, format);
+      const newest = newestOf(files);
       if (newest === undefined) return;
       setOffer((current) => (current?.name === newest.name ? current : newest));
     };
@@ -102,12 +78,18 @@ export function ExportSheet(props: {
       live = false;
       clearInterval(timer);
     };
-  }, [since, format, client, watcherStopped]);
+  }, [since, client, watcherStopped]);
 
   const open = async (): Promise<void> => {
     setOpening(true);
     setOpened(await startProject(item.workshopId, client));
     setOpening(false);
+  };
+
+  const exportForMobile = async (): Promise<void> => {
+    setExporting(true);
+    setExported(await startMobileExport(item.workshopId, client));
+    setExporting(false);
   };
 
   const importOffer = async (file: ExportFile): Promise<void> => {
@@ -149,72 +131,40 @@ export function ExportSheet(props: {
         </button>
       </div>
 
-      <ol className="flex list-decimal flex-col gap-[var(--space-8)] pl-[var(--space-16)] text-xs text-muted">
-        {item.hasText === true ? (
-          <li data-yunari-export-text-step="">{copy.deleteText}</li>
-        ) : null}
-        <li data-yunari-export-format-step="">
-          {copy.exportStep}
-          <dl
-            data-yunari-export-format={format}
-            className="mt-[var(--space-4)] grid grid-cols-[auto_1fr] gap-x-[var(--space-10)] gap-y-[var(--space-2)]"
-          >
-            <dt>{copy.formatField}</dt>
-            <dd data-yunari-export-format-name="">{copy.formatName[format]}</dd>
-            <dt>{copy.resolutionField}</dt>
-            <dd data-yunari-export-resolution="">
-              {copy.resolution(settings.width, settings.height)}
-            </dd>
-            {settings.format === "mp4" ? (
-              <>
-                <dt>{copy.frameRateField}</dt>
-                <dd data-yunari-export-fps="">
-                  {copy.perSecond(settings.fps)}
-                </dd>
-                <dt>{copy.clipField}</dt>
-                <dd data-yunari-export-duration="">
-                  {copy.seconds(settings.durationSeconds)}
-                </dd>
-                <dt>{copy.blendField}</dt>
-                <dd data-yunari-export-blend="">
-                  {copy.seconds(settings.blendSeconds)}
-                </dd>
-              </>
-            ) : null}
-          </dl>
-        </li>
-        <li data-yunari-export-project-notice="">{copy.projectNotice}</li>
-      </ol>
-
-      <p data-yunari-export-elsewhere="" className="text-xs text-muted">
-        {copy.elsewhere}
+      <p data-yunari-export-mobile-step="" className="text-xs text-muted">
+        {copy.mobileStep}
       </p>
 
-      <div className="flex flex-col gap-[var(--space-6)]">
-        <button
-          type="button"
-          data-yunari-export-open=""
-          disabled={opening}
-          onClick={() => {
-            void open();
-          }}
-          className="self-start rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-sm"
-        >
-          {opening ? copy.opening : uiCopy.assets.wallpaperEngine.openScene}
-        </button>
-        {opened?.ok === false ? (
-          <p data-yunari-export-refusal="" className="text-xs text-muted">
-            {copy.refused(opened.reason)}
-          </p>
-        ) : null}
-        {opened?.ok === true ? (
-          <p data-yunari-export-project="" className="text-xs text-muted">
-            {opened.launched
-              ? copy.launched(opened.name)
-              : copy.ready(opened.name)}
-          </p>
-        ) : null}
-      </div>
+      {item.hasText === true ? (
+        <p data-yunari-export-text-step="" className="text-xs text-muted">
+          {copy.textStep}
+        </p>
+      ) : null}
+
+      <button
+        type="button"
+        data-yunari-export-mobile=""
+        disabled={exporting}
+        onClick={() => {
+          void exportForMobile();
+        }}
+        className="self-start rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-sm"
+      >
+        {exporting ? copy.mobileRunning : copy.mobile}
+      </button>
+
+      {exported?.ok === false ? (
+        <p data-yunari-export-mobile-refusal="" className="text-xs text-muted">
+          {exported.reason === "agreement"
+            ? copy.mobileAgreement
+            : copy.mobileRefused(exported.reason)}
+        </p>
+      ) : null}
+      {exported?.ok === true ? (
+        <p data-yunari-export-mobile-save="" className="text-xs text-muted">
+          {copy.mobileSave}
+        </p>
+      ) : null}
 
       {offer === undefined ? null : (
         <div
@@ -241,6 +191,33 @@ export function ExportSheet(props: {
           {refusal}
         </p>
       )}
+
+      <div className="flex flex-col gap-[var(--space-6)]">
+        <p className="text-xs text-muted">{copy.projectNotice}</p>
+        <button
+          type="button"
+          data-yunari-export-open=""
+          disabled={opening}
+          onClick={() => {
+            void open();
+          }}
+          className="self-start rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-sm"
+        >
+          {opening ? copy.opening : uiCopy.assets.wallpaperEngine.openScene}
+        </button>
+        {opened?.ok === false ? (
+          <p data-yunari-export-refusal="" className="text-xs text-muted">
+            {copy.refused(opened.reason)}
+          </p>
+        ) : null}
+        {opened?.ok === true ? (
+          <p data-yunari-export-project="" className="text-xs text-muted">
+            {opened.launched
+              ? copy.launched(opened.name)
+              : copy.ready(opened.name)}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
