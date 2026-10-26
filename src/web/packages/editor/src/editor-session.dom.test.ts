@@ -2433,6 +2433,164 @@ describe("the Wallpaper Engine import transaction", () => {
     extensions.destroy();
   });
 
+  it("carries the resolved author, the licence and the workshop source", async () => {
+    const bytes = new Uint8Array([7, 8, 9]);
+    const requests: string[] = [];
+    const workshopUrl =
+      "https://steamcommunity.com/sharedfiles/filedetails/?id=202";
+    const steamId = "76561198000000001";
+    const manager = new AssetManager();
+    const extensions = wallpaperSession(manager, vi.fn());
+    const item = {
+      ...videoItem,
+      attribution: { steamId, workshopUrl },
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.includes("/asset"))
+          return new Response(new Uint8Array([1, 2, 3]), {
+            status: 200,
+            headers: {
+              "content-type": "video/mp4",
+              "x-yunari-filename": "Neon city.mp4",
+            },
+          });
+        if (url.startsWith("/api/wallpaper-engine/author/"))
+          return new Response(JSON.stringify({ name: "Ada" }), { status: 200 });
+        return new Response(
+          JSON.stringify({ ok: true, bytesBase64: base64Of(bytes) }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    expect(await extensions.importWallpaperItem(item)).toEqual({ ok: true });
+
+    expect(requests).toContain(`/api/wallpaper-engine/author/${steamId}`);
+    // The declaration is what the preview modal reads; without it the video's
+    // attribution pills say "None recorded".
+    expect(manager.declarations[0]).toMatchObject({
+      kind: "video",
+      license: { name: "unknown" },
+      sourceUrl: workshopUrl,
+    });
+
+    await extensions.actionFacade().savePackage();
+    expect(saveMock).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      expect.objectContaining({
+        entries: [
+          expect.objectContaining({
+            kind: "wallpaper",
+            author: { steamId, name: "Ada" },
+            source: { workshopId: "202", url: workshopUrl },
+          }),
+        ],
+      }),
+    );
+    extensions.destroy();
+  });
+
+  it("keeps the Steam id and the profile URL when the author lookup fails", async () => {
+    const bytes = new Uint8Array([7, 8, 9]);
+    const steamId = "76561198000000001";
+    const profileUrl = `https://steamcommunity.com/profiles/${steamId}`;
+    const manager = new AssetManager();
+    const extensions = wallpaperSession(manager, vi.fn());
+    const item = { ...videoItem, attribution: { steamId } };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/asset"))
+          return new Response(new Uint8Array([1, 2, 3]), {
+            status: 200,
+            headers: {
+              "content-type": "video/mp4",
+              "x-yunari-filename": "Neon city.mp4",
+            },
+          });
+        if (url.startsWith("/api/wallpaper-engine/author/"))
+          return new Response("", { status: 500 });
+        return new Response(
+          JSON.stringify({ ok: true, bytesBase64: base64Of(bytes) }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    // A refused lookup never fails the import.
+    expect(await extensions.importWallpaperItem(item)).toEqual({ ok: true });
+    expect(manager.declarations[0]).toMatchObject({
+      license: { name: "unknown" },
+      sourceUrl: profileUrl,
+    });
+
+    await extensions.actionFacade().savePackage();
+    const write = saveMock.mock.calls.at(-1) as
+      | [
+          unknown,
+          unknown,
+          Uint8Array | undefined,
+          (
+            | { readonly entries: readonly { readonly author?: unknown }[] }
+            | undefined
+          ),
+        ]
+      | undefined;
+    expect(write?.[3]?.entries[0]?.author).toEqual({ steamId });
+    extensions.destroy();
+  });
+
+  it("does not ask for an author when the item has no Steam id", async () => {
+    const requests: string[] = [];
+    const manager = new AssetManager();
+    const extensions = wallpaperSession(manager, vi.fn());
+    const item = {
+      ...videoItem,
+      attribution: {
+        workshopUrl:
+          "https://steamcommunity.com/sharedfiles/filedetails/?id=202",
+      },
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.includes("/asset"))
+          return new Response(new Uint8Array([1, 2, 3]), {
+            status: 200,
+            headers: {
+              "content-type": "video/mp4",
+              "x-yunari-filename": "Neon city.mp4",
+            },
+          });
+        return new Response(
+          JSON.stringify({ ok: true, bytesBase64: base64Of(new Uint8Array()) }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    expect(await extensions.importWallpaperItem(item)).toEqual({ ok: true });
+    expect(
+      requests.some((url) => url.startsWith("/api/wallpaper-engine/author/")),
+    ).toBe(false);
+    expect(manager.declarations[0]).toMatchObject({
+      sourceUrl: "https://steamcommunity.com/sharedfiles/filedetails/?id=202",
+    });
+    extensions.destroy();
+  });
+
   /**
    * **One host call, because the host extracts and normalizes together.** The
    * package's title is what the credit carries; the video has no source, no
@@ -2487,6 +2645,12 @@ describe("the Wallpaper Engine import transaction", () => {
     expect(imported.name).toBe("Night street.mp4");
     expect(new Uint8Array(await imported.arrayBuffer())).toEqual(video);
     expect(setBackgroundMedia).toHaveBeenCalled();
+    // A package declares its unknown licence and no source: the file carries
+    // neither a workshop id nor an author.
+    expect(manager.declarations[0]).toMatchObject({
+      license: { name: "unknown" },
+    });
+    expect(manager.declarations[0]?.sourceUrl).toBeUndefined();
 
     await extensions.actionFacade().savePackage();
     // A package declares no source and no author: the file carries neither.

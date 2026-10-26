@@ -29,7 +29,11 @@ import {
   placeIcon,
 } from "./asset-finder/icon-shape.js";
 import { WallpaperEngineBody } from "./asset-finder/wallpaper-engine-body.js";
-import { type AssetManager, mimeOf } from "./asset-manager/index.js";
+import {
+  type AssetImportMetadata,
+  type AssetManager,
+  mimeOf,
+} from "./asset-manager/index.js";
 import {
   type CanvasNudge,
   createCanvasNudge,
@@ -93,6 +97,7 @@ import { uiCopy } from "./ui-copy.js";
 import { requestNormalizedVideo } from "./video-normalizer.js";
 import {
   creditsEntryOf,
+  fetchAuthorName,
   fetchItemAsset,
   mp4NameOf,
   prepareMobilePackage,
@@ -743,12 +748,30 @@ export class EditorSession {
     // authority.
     const normalized = await normalizeWallpaperVideo(file);
     if (!normalized.ok) return { ok: false, message: normalized.message };
+
+    const attribution = item.attribution;
+    const steamId = attribution?.steamId;
+    // The persona name is the import's only outbound lookup. It runs only when
+    // the item names an author, and its failure is absence, never a failed
+    // import.
+    const authorName =
+      steamId === undefined ? undefined : await fetchAuthorName(steamId);
+    const sourceUrl =
+      attribution?.workshopUrl ??
+      (steamId === undefined
+        ? undefined
+        : `https://steamcommunity.com/profiles/${encodeURIComponent(steamId)}`);
+
     return this.#declareVideo(normalized.file, {
       credit: {
-        ...creditsEntryOf(item),
+        ...creditsEntryOf(item, authorName),
         changes: normalized.reencoded
           ? "Re-encoded to the publish envelope"
           : "Copied unchanged",
+      },
+      metadata: {
+        license: { name: "unknown" },
+        ...(sourceUrl === undefined ? {} : { sourceUrl }),
       },
     });
   }
@@ -771,6 +794,7 @@ export class EditorSession {
     options.onStep?.("preparing");
     let prepared: File;
     let credit: ThemeCreditsEntry | undefined;
+    let metadata: AssetImportMetadata | undefined;
 
     if (options.package) {
       const answer = await prepareMobilePackage(file);
@@ -784,6 +808,9 @@ export class EditorSession {
           ? "Re-encoded to the publish envelope"
           : "Copied unchanged",
       };
+      // A package carries no workshop id and no author, so its declaration
+      // records the licence it cannot know and no source.
+      metadata = { license: { name: "unknown" } };
     } else {
       const normalized = await requestNormalizedVideo(file);
       if (!normalized.ok) return { ok: false, message: normalized.message };
@@ -795,10 +822,10 @@ export class EditorSession {
     }
 
     options.onStep?.("importing");
-    const outcome = await this.#declareVideo(
-      prepared,
-      credit === undefined ? {} : { credit },
-    );
+    const outcome = await this.#declareVideo(prepared, {
+      ...(credit === undefined ? {} : { credit }),
+      ...(metadata === undefined ? {} : { metadata }),
+    });
     return outcome.ok ? { ok: true } : outcome;
   }
 
@@ -810,7 +837,10 @@ export class EditorSession {
    */
   async #declareVideo(
     file: File,
-    options: { readonly credit?: ThemeCreditsEntry },
+    options: {
+      readonly credit?: ThemeCreditsEntry;
+      readonly metadata?: AssetImportMetadata;
+    },
   ): Promise<ImportOutcome> {
     const credit = options.credit;
     if (credit !== undefined && !this.#document.canAddCredit(credit)) {
@@ -818,7 +848,7 @@ export class EditorSession {
     }
 
     try {
-      const reference = await this.#assets.import(file);
+      const reference = await this.#assets.import(file, options.metadata);
       if (credit !== undefined) this.#document.addCredit(credit);
       const background = this.#document.envelope.background;
       this.#document.setBackground({

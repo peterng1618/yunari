@@ -188,6 +188,20 @@ it("drops Place and draws a player for a video", async () => {
   ).toBe(true);
 });
 
+it("reads a Wallpaper Engine video's licence and source, never None recorded", async () => {
+  const workshopUrl =
+    "https://steamcommunity.com/sharedfiles/filedetails/?id=202";
+  const modal = await open({
+    ...VIDEO,
+    license: { name: "unknown" },
+    sourceUrl: workshopUrl,
+  });
+
+  expect(modal.textContent).toContain("unknown");
+  expect(modal.textContent).toContain(workshopUrl);
+  expect(modal.textContent).not.toContain(uiCopy.assets.preview.noneRecorded);
+});
+
 it("draws Place as an image's one primary command", async () => {
   const modal = await open(IMAGE);
 

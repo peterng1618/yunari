@@ -258,15 +258,25 @@ export async function fetchItemPreview(
 
 /** The attribution an imported item carries. Wallpaper Engine themes declare no
  *  licence, so the entry says it does not know rather than borrowing one. */
-export function creditsEntryOf(item: WallpaperEngineItem): ThemeCreditsEntry {
+export function creditsEntryOf(
+  item: WallpaperEngineItem,
+  authorName?: string,
+): ThemeCreditsEntry {
   const attribution = item.attribution;
   const workshopUrl = attribution?.workshopUrl;
   const steamId = attribution?.steamId;
+  const author =
+    steamId === undefined && authorName === undefined
+      ? undefined
+      : {
+          ...(steamId === undefined ? {} : { steamId }),
+          ...(authorName === undefined ? {} : { name: authorName }),
+        };
 
   return {
     kind: "wallpaper",
     title: item.title,
-    ...(steamId === undefined ? {} : { author: { steamId } }),
+    ...(author === undefined ? {} : { author }),
     // The id is known whenever the item is, so it is recorded even when no
     // workshop URL was cached; only the link itself is allowed to go missing.
     source: {

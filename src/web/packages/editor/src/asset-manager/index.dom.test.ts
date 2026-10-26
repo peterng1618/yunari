@@ -110,6 +110,35 @@ describe("AssetManager", () => {
     expect(createObjectURL).toHaveBeenCalledOnce();
   });
 
+  it("writes the import's metadata on the declaration, and a package keeps it", async () => {
+    const manager = new AssetManager();
+    const sourceUrl =
+      "https://steamcommunity.com/sharedfiles/filedetails/?id=202";
+
+    const asset = await manager.import(
+      file(new Uint8Array([0, 1, 2]), "night.mp4", "video/mp4"),
+      { sourceUrl, license: { name: "unknown" } },
+    );
+
+    expect(asset).toMatchObject({
+      kind: "video",
+      sourceUrl,
+      license: { name: "unknown" },
+    });
+
+    // The envelope travels as JSON inside the package, so the same JSON trip is
+    // what a reopened theme reads back.
+    const reopened = new AssetManager();
+    reopened.load(
+      JSON.parse(JSON.stringify({ assets: manager.declarations })),
+      manager.assets,
+    );
+    expect(reopened.declarations[0]).toMatchObject({
+      sourceUrl,
+      license: { name: "unknown" },
+    });
+  });
+
   it("copies a declared WOFF2 face into package storage", async () => {
     const manager = new AssetManager();
 
