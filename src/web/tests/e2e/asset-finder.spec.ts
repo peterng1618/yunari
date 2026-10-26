@@ -5,6 +5,7 @@ import type {
   AssetSearchAnswer,
   AssetSearchRequest,
   AssetSourceListing,
+  FontCut,
 } from "@yunari/renderer-core";
 import { captureVisualReview } from "./editor-canvas.js";
 import { placeText, readScene } from "./rebuild-driver.js";
@@ -20,7 +21,9 @@ import { isDesktopSurface } from "./surface.js";
  * asserted here against those fixtures.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+// A worktree whose preview server another session already owns on 4174 cannot
+// rebuild it, so a run can point at its own bundle instead.
+const EDITOR = process.env["YUNARI_EDITOR_URL"] ?? "http://127.0.0.1:4174/";
 
 const lucide: AssetSourceListing = {
   id: "lucide",
@@ -124,6 +127,47 @@ const fontResult: AssetResult = {
     ],
   },
 };
+
+/** One provider cut, in the shape the host serves it. The specimen URLs are
+ *  unroutable on purpose: the card asserts the family names, sizes and order it
+ *  sets, not what the CDN would have drawn. */
+const fontCut = (family: string, weight: number): FontCut => ({
+  id: `cut:${family.toLowerCase().replace(/\s+/g, "-")}-${weight}`,
+  source: "curated-fonts",
+  family,
+  weight,
+  style: "normal",
+  subset: "latin",
+  format: "woff2",
+  previewUrl: `https://cdn.example/${family}.woff2`,
+  licence: "OFL-1.1",
+  sourceUrl: `https://cdn.example/${family}.woff2`,
+});
+
+const interTrio: AssetResult = ((): AssetResult => {
+  const heading = fontCut("Inter", 700);
+  const body = fontCut("Poppins", 400);
+  const mono = fontCut("Fira Code", 400);
+  const name = "Inter — Inter + Poppins + Fira Code";
+  return {
+    id: "curated-fonts:trio:inter-poppins",
+    name,
+    kind: "font",
+    preview: "",
+    subtitle: "A description.",
+    licence: "OFL-1.1",
+    sourceUrl: heading.sourceUrl ?? "",
+    font: {
+      cuts: [heading, body, mono],
+      trio: {
+        id: "inter-poppins",
+        name,
+        description: "A description.",
+        roles: { heading, body, mono },
+      },
+    },
+  };
+})();
 
 const answered = (
   source: string,
@@ -417,6 +461,40 @@ test("the font field opens the finder on Fonts", async ({ page }, testInfo) => {
   // The font finder asks once there is a term; the grid is what it draws.
   await page.locator("[data-yunari-font-search]").fill("inter");
   await expect(page.locator("[data-yunari-font-grid]")).toBeVisible();
+});
+
+test("draws a font card's specimen rows in the result's own faces", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await stubAssets(page, {
+    sources: [curatedFonts],
+    answer: () => ({
+      pages: [answered("curated-fonts", [interTrio, fontResult])],
+    }),
+  });
+  await openFinder(page);
+  await page.locator('[data-yunari-asset-tab="font"]').click();
+  await page.locator("[data-yunari-font-search]").fill("inter");
+  await expect(page.locator("[data-yunari-font-grid]")).toBeVisible();
+
+  const trioRows = page.locator(
+    `[data-yunari-font-tile="${interTrio.id}"] [data-yunari-font-specimen] > span`,
+  );
+  await expect(trioRows).toHaveText(["Inter", "Poppins", "Fira Code"]);
+  // Heading, body and mono are drawn at descending sizes, which is what makes
+  // the thumbnail read as the hierarchy the trio itself makes.
+  const sizes = await trioRows.evaluateAll((rows) =>
+    rows.map((row) => Number.parseFloat(getComputedStyle(row).fontSize)),
+  );
+  expect(sizes[0]!).toBeGreaterThan(sizes[1]!);
+  expect(sizes[1]!).toBeGreaterThan(sizes[2]!);
+
+  const familyRows = page.locator(
+    `[data-yunari-font-tile="${fontResult.id}"] [data-yunari-font-specimen] > span`,
+  );
+  await expect(familyRows).toHaveText(["Inter"]);
 });
 
 test("captures the finder on Fonts", async ({ page }, testInfo) => {

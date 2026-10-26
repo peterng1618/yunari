@@ -17,11 +17,11 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Last completed change
 
-- **Plan A merged into `main`:** 26 commits; the display is a scene-anchored lens frame painted by the shell stage over the theme's own letterbox.
-- **One catalogue in both pickers:** the display menu and the new-document chooser list the active ratios by id, with Fit alone when the list is empty.
-- **Browser proof:** stage texture, letterbox layer order, guide geometry through zoom/pan/Fit, circle clipping and media remounts.
-- **Merge conflicts:** `STATUS.md` and the backlog register only; the preview-lens ADR was renumbered to 0123 because three notes already held 0119.
-- **Gate on the merged tree:** `npm run gate` exit 0 — 434 files / 6658 passed, 2 skipped; Worker 13 / 130.
+- **Fonts draw in the session that adopts them:** a face adopted from the finder or imported from disk is registered in `document.fonts` and matching text is remeasured, instead of falling back to a serif until the theme is reopened.
+- **The font finder's tiles are cards:** a specimen box drawing a trio's three faces at heading/body/mono sizes (a family draws its first cut), the result's name, metadata and source mark.
+- **A face is named by family and weight** wherever files are listed — Assets card, preview modal, background list, save cleanup — not by its packaged `google-fonts-cut-…` id.
+- **Browser proof:** cards render three specimen rows at 20 / 15 / 12 px in the result's own families, and applying a trio mid-session leaves three `loaded` FontFaces (`Inter:700`, `Poppins:400`, `Fira Code:400`) in `document.fonts`.
+- **Gate and merge:** `npm run gate` exit 0 — 435 files / 6663 passed, 2 skipped; worker 13 / 130. Both commits merged locally into `main` (`9e3871c7`, `c41ecdb7`); nothing is pushed.
 
 ## Next
 
