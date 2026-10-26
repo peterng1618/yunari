@@ -144,9 +144,11 @@ describe("trashPlan", () => {
   });
 
   it("does not read a list-file write failure as a missing command", async () => {
-    // `TMP` naming something unwritable makes the write fail with `ENOENT`;
-    // falling through would answer "This PC has no trash command", which is a
-    // different, wrong sentence. The rewritten error carries no code.
+    // The write fails because its parent is a file — `EEXIST` on this box,
+    // `ENOENT` where the parent is absent instead. What matters is that the
+    // rewrapped error carries no code, so the route loop cannot read it as a
+    // missing command and answer "This PC has no trash command": that is a
+    // different, wrong sentence.
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-list-"));
     const blocker = path.join(directory, "blocker");
     await fs.writeFile(blocker, "");
@@ -162,9 +164,15 @@ describe("trashPlan", () => {
         { command: process.execPath, args: ["-e", ""] },
       ];
 
-      await expect(runTrashRoutes(routes, "file")).rejects.toThrow(
+      const failure = await runTrashRoutes(routes, "file").then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).toContain(
         "trash list file could not be written",
       );
+      expect((failure as NodeJS.ErrnoException).code).toBeUndefined();
     } finally {
       await fs.rm(directory, { recursive: true, force: true });
     }
