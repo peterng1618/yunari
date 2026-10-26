@@ -1351,7 +1351,10 @@ git commit -m "feat(host): publish the CA fingerprint for out-of-band trust"
 - Modify: `THIRD-PARTY-NOTICES.md`
 - Modify: `src/web/package.json`
 - Test: `src/web/tests/scripts/stage-npm-package.test.ts`
-- Test: `scripts/check-third-party.mjs` self-test
+- Test: `src/web/tests/scripts/check-third-party.test.ts` — the checker's
+  fixture-tree cases live here, beside `audit-policy.test.ts`, not in a
+  `--self-test` mode: the checker's own tests are VCS fixtures over a real
+  filesystem path, and an in-file mode made the script 785 lines.
 
 **Interfaces:**
 - Produces: `runtimeDependencies()` writes exact versions; `check-third-party.mjs` compares installed names/versions/licences to `THIRD-PARTY-NOTICES.md` and exits non-zero on drift.
@@ -1367,7 +1370,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement**
 
-Emit exact versions, generate/check notices, and add `third-party:check` to `package.json` and the gate plus `gates:self-test`.
+Emit exact versions, check notices, and add `third-party:check` to `package.json` and the gate; the checker's cases run under vitest.
 
 - [ ] **Step 4: Run and commit**
 
