@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 /**
  * Takes a scene to Wallpaper Engine's own `.mpkg` export (decision 0118).
@@ -102,7 +105,27 @@ public static class YunariWeClick {
   }
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr pid);
+  [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint attach, uint attachTo, bool join);
+  [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+
+  // A click lands on whatever owns the foreground, and SetForegroundWindow is
+  // ignored unless the caller already owns it, so the two input queues are
+  // joined for the call and released after it.
+  public static void Force(IntPtr hWnd) {
+    IntPtr foreground = GetForegroundWindow();
+    uint thread = GetWindowThreadProcessId(foreground, IntPtr.Zero);
+    uint mine = GetCurrentThreadId();
+    AttachThreadInput(mine, thread, true);
+    ShowWindow(hWnd, 9);
+    BringWindowToTop(hWnd);
+    SetForegroundWindow(hWnd);
+    AttachThreadInput(mine, thread, false);
+  }
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowW(string cls, string title);
   public delegate bool EnumProc(IntPtr h, IntPtr lp);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr lp);
@@ -147,8 +170,15 @@ ${CLICK_HELPER}
 "@
 
 $root = [System.Windows.Automation.AutomationElement]::RootElement
+$windowHandle = [IntPtr]::Zero
+$restoreWindow = $false
 
 function Emit-Result([string]$status, [string]$reason) {
+  # The desktop is left as it was found: a window this script maximised is
+  # un-maximised on every exit, including the failures.
+  if ($restoreWindow -and $windowHandle -ne [IntPtr]::Zero) {
+    [YunariWeClick]::ShowWindow($windowHandle, 9) | Out-Null
+  }
   if ($status -eq 'ok') {
     Write-Output 'YUNARI_WE:{"ok":true}'
   } else {
@@ -234,42 +264,6 @@ function Click-Contains([string]$needle, [string]$type) {
   return $true
 }
 
-# The filter panel draws a checked box as one private-use glyph and an
-# unchecked one as another; each row carries the state glyph left of its label.
-function Test-Source-Checked([string]$label) {
-  $labelEl = Find-TextExact $label
-  if ($null -eq $labelEl) { return $false }
-  $labelRect = $labelEl.Current.BoundingRectangle
-  foreach ($el in (Get-All)) {
-    if ($el.Current.ControlType.ProgrammaticName -ne 'ControlType.Text') { continue }
-    $r = $el.Current.BoundingRectangle
-    if ([math]::Abs($r.Y - $labelRect.Y) -gt 12) { continue }
-    if ($r.X -lt ($labelRect.X - 40) -or $r.X -ge ($labelRect.X - 5)) { continue }
-    if ($el.Current.Name -eq [string][char]0xF14A) { return $true }
-  }
-  return $false
-}
-
-# A workshop item and the local project unpacked from it can carry the same
-# title, and exporting the workshop one raises the subscriber-agreement modal.
-# "My Wallpapers" is this PC's projects/myprojects, the one we wrote.
-function Set-Local-Source() {
-  if ($null -eq (Find-TextExact 'My Wallpapers')) {
-    if (-not (Click-Contains 'Filter results' 'Hyperlink')) { return }
-    Start-Sleep -Milliseconds 900
-  }
-  if ($null -eq (Find-TextExact 'My Wallpapers')) { return }
-  foreach ($label in @('Official', 'Workshop')) {
-    if ((Test-Source-Checked $label) -and (Click-Contains $label 'Text')) {
-      Start-Sleep -Milliseconds 700
-    }
-  }
-  if (-not (Test-Source-Checked 'My Wallpapers')) {
-    [void](Click-Contains 'My Wallpapers' 'Text')
-    Start-Sleep -Milliseconds 700
-  }
-}
-
 function Close-Save-As() {
   # A dialog left by an earlier run still swallows every later click, and it is
   # closed through its own handle because a coordinate click would land on
@@ -283,48 +277,64 @@ function Close-Save-As() {
 }
 
 # The detail panel repeats the selected item's title on the right; grid tiles are
-# left of it. Taking the top-left match selects and then targets the same tile.
-function Find-Tile([string]$title) {
+# left of it, and taking the topmost match follows the grid's own order.
+function Find-Tiles([string]$title) {
   $limitX = 100000.0
   $win = Find-Window 'Wallpaper UI'
   if ($null -ne $win) {
     $w = $win.Current.BoundingRectangle
     $limitX = $w.X + ($w.Width * 0.75)
   }
-  $best = $null
+  $found = New-Object System.Collections.ArrayList
   foreach ($el in (Get-All)) {
     if ($el.Current.ControlType.ProgrammaticName -ne 'ControlType.Text') { continue }
     if ($el.Current.Name -ne $title) { continue }
     $r = $el.Current.BoundingRectangle
     if ($r.Width -le 16 -or $r.Width -gt 400 -or $r.Height -lt 8) { continue }
     if ($r.X -gt $limitX -or $r.Y -lt 150) { continue }
-    if ($null -eq $best -or $r.Y -lt $best.Current.BoundingRectangle.Y) { $best = $el }
+    [void]$found.Add($el)
   }
-  return $best
+  return @($found | Sort-Object { $_.Current.BoundingRectangle.Y })
+}
+
+# Only a project on this PC carries the authoring note; a workshop item with the
+# same title does not. Selecting is what fills the detail panel, so the note is
+# read after each candidate is clicked.
+function Test-LocalSelection() {
+  return $null -ne (Find-Contains 'Open this wallpaper in the editor' 'Text')
 }
 
 # A project unpacked moments ago is scanned in by the engine, and a full grid
-# holds more tiles than fit, so the search waits and then scrolls.
-function Search-Tile([string]$title) {
-  $found = $null
-  $deadline = (Get-Date).AddSeconds(30)
-  while ($null -eq $found -and (Get-Date) -lt $deadline) {
-    $found = Find-Tile $title
-    if ($null -eq $found) { Start-Sleep -Milliseconds 500 }
+# holds more tiles than fit, so the search waits and then scrolls. The Source
+# filter is never touched: it is the author's own state, persisted in the
+# engine's config, and an export must leave the library looking as it did.
+function Select-Local-Tile([string]$title) {
+  $deadline = (Get-Date).AddSeconds(40)
+  $scrolled = 0
+  while ((Get-Date) -lt $deadline) {
+    $tiles = Find-Tiles $title
+    if ($tiles.Count -eq 0) {
+      if ($scrolled -lt 15) {
+        $win = Find-Window 'Wallpaper UI'
+        if ($null -ne $win) {
+          $r = $win.Current.BoundingRectangle
+          [YunariWeClick]::SetCursorPos([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)) | Out-Null
+        }
+        [YunariWeClick]::Wheel(-480)
+        $scrolled++
+      }
+      Start-Sleep -Milliseconds 500
+      continue
+    }
+    foreach ($candidate in $tiles) {
+      $r = $candidate.Current.BoundingRectangle
+      [YunariWeClick]::Left([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
+      Start-Sleep -Milliseconds 700
+      if (Test-LocalSelection) { return $candidate }
+    }
+    return $null
   }
-  if ($null -ne $found) { return $found }
-
-  $scrollWin = Find-Window 'Wallpaper UI'
-  if ($null -ne $scrollWin) {
-    $r = $scrollWin.Current.BoundingRectangle
-    [YunariWeClick]::SetCursorPos([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)) | Out-Null
-  }
-  for ($i = 0; $i -lt 15 -and $null -eq $found; $i++) {
-    [YunariWeClick]::Wheel(-480)
-    Start-Sleep -Milliseconds 350
-    $found = Find-Tile $title
-  }
-  return $found
+  return $null
 }
 
 $win = Find-MainWindow
@@ -341,24 +351,28 @@ if ($null -eq $win) {
 }
 if ($null -eq $win) { Emit-Result 'fail' 'no-window' }
 
-[YunariWeClick]::SetForegroundWindow([IntPtr]$win.Current.NativeWindowHandle) | Out-Null
+# A click lands on the foreground window, so the engine is made foreground even
+# when the author's browser owns it. Then it is maximised: the engine's web layer
+# keeps its old layout until it is resized, and a stale layout reports tile
+# coordinates that no longer match what is drawn, so every click would miss.
+$windowHandle = [IntPtr]$win.Current.NativeWindowHandle
+[YunariWeClick]::Force($windowHandle)
 Start-Sleep -Milliseconds 600
+if (-not [YunariWeClick]::IsZoomed($windowHandle)) {
+  $restoreWindow = $true
+  [YunariWeClick]::ShowWindow($windowHandle, 3) | Out-Null
+  Start-Sleep -Milliseconds 1200
+}
 
 Close-Save-As
 if ($null -ne (Find-Contains 'Exporting' 'Text')) {
   [void](Click-Contains 'Cancel' 'Hyperlink')
   Start-Sleep -Milliseconds 800
 }
-[YunariWeClick]::SetForegroundWindow([IntPtr]$win.Current.NativeWindowHandle) | Out-Null
+[YunariWeClick]::Force($windowHandle)
 Start-Sleep -Milliseconds 400
 
-# Filter to this PC's own projects before searching: a workshop item can carry
-# the same title, and exporting that one raises the agreement modal instead.
-Set-Local-Source
-Start-Sleep -Milliseconds 900
-
-# A project unpacked moments ago is scanned in by the engine; give it a moment.
-$tile = Search-Tile $Title
+$tile = Select-Local-Tile $Title
 
 # A project the author has filed in a folder is not in the root grid, and that
 # folder is the one this project family is filed under.
@@ -368,7 +382,7 @@ if ($null -eq $tile) {
     $fr = $folder.Current.BoundingRectangle
     [YunariWeClick]::DoubleLeft([int]($fr.X + $fr.Width / 2), [int]($fr.Y + $fr.Height / 2))
     Start-Sleep -Milliseconds 900
-    $tile = Search-Tile $Title
+    $tile = Select-Local-Tile $Title
   }
 }
 if ($null -eq $tile) { Emit-Result 'fail' 'no-tile' }
@@ -389,7 +403,20 @@ $ty = [int]($target.Y + $target.Height / 2)
 [YunariWeClick]::Left($tx, $ty)
 Start-Sleep -Milliseconds 500
 [YunariWeClick]::Right($tx, $ty)
-Start-Sleep -Milliseconds 700
+Start-Sleep -Milliseconds 900
+
+# A virtualised tile can report a rect that no longer matches where it is drawn,
+# and then the menu never opens. The label's own point is the retry before the
+# run is called refused.
+if ($null -eq (Find-Contains 'Send to Mobile Device' '')) {
+  $lr = $tile.Current.BoundingRectangle
+  $lx = [int]($lr.X + $lr.Width / 2)
+  $ly = [int]($lr.Y + $lr.Height / 2)
+  [YunariWeClick]::Left($lx, $ly)
+  Start-Sleep -Milliseconds 500
+  [YunariWeClick]::Right($lx, $ly)
+  Start-Sleep -Milliseconds 900
+}
 
 if (-not (Click-Contains 'Send to Mobile Device' '')) { Emit-Result 'fail' 'refused' }
 Start-Sleep -Milliseconds 700
@@ -472,38 +499,56 @@ function resultOf(
   }
 }
 
-/** `powershell.exe`, with the script as UTF-16LE base64 so no caller title,
- *  quote or backslash is ever re-parsed by a shell. */
-const runPowerShell: PowerShellRunner = (script, timeoutMs) =>
-  new Promise((resolve) => {
-    const encoded = Buffer.from(script, "utf16le").toString("base64");
-    let stdout = "";
-    let timedOut = false;
-    const child = spawn(
-      "powershell.exe",
-      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded],
-      { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
-    );
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill();
-    }, timeoutMs);
+/**
+ * Runs one script through `powershell.exe -File`.
+ *
+ * Not `-EncodedCommand`: the script is ~14 KB, which is ~38 KB once UTF-16LE and
+ * base64, and Windows refuses a command line over 32,767 characters — the spawn
+ * failed at once and every export answered `failed`. A file has no such ceiling,
+ * and writes the script verbatim so no caller title is re-parsed by a shell. The
+ * file carries a UTF-8 BOM because Windows PowerShell 5.1 reads a BOM-less file
+ * as ANSI, which turns a non-Latin title into mojibake.
+ */
+const runPowerShell: PowerShellRunner = async (script, timeoutMs) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-we-"));
+  const file = path.join(directory, "export.ps1");
 
-    child.stdout?.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
+  try {
+    await fs.writeFile(file, `﻿${script}`, "utf8");
+    return await new Promise((resolve) => {
+      let stdout = "";
+      let timedOut = false;
+      const child = spawn(
+        "powershell.exe",
+        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file],
+        { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
+      );
+      const timer = setTimeout(() => {
+        timedOut = true;
+        child.kill();
+      }, timeoutMs);
+
+      child.stdout?.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString("utf8");
+      });
+      // stderr is drained so the child never blocks on a full pipe; its text is
+      // not part of the answer.
+      child.stderr?.on("data", () => undefined);
+      child.once("error", () => {
+        clearTimeout(timer);
+        resolve({ timedOut, code: -1, stdout });
+      });
+      child.once("close", (code) => {
+        clearTimeout(timer);
+        resolve({ timedOut, code: code ?? -1, stdout });
+      });
     });
-    // stderr is drained so the child never blocks on a full pipe; its text is
-    // not part of the answer.
-    child.stderr?.on("data", () => undefined);
-    child.once("error", () => {
-      clearTimeout(timer);
-      resolve({ timedOut, code: -1, stdout });
-    });
-    child.once("close", (code) => {
-      clearTimeout(timer);
-      resolve({ timedOut, code: code ?? -1, stdout });
-    });
-  });
+  } finally {
+    await fs
+      .rm(directory, { recursive: true, force: true })
+      .catch(() => undefined);
+  }
+};
 
 /**
  * Opens the engine's export dialog for an unpacked project and confirms the

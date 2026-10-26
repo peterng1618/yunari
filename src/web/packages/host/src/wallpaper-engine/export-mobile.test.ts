@@ -157,6 +157,28 @@ describe("mobile export", () => {
     },
   );
 
+  // The Source filter is persisted in the engine's own config, so a run that
+  // changed it would leave the author's library filtered after the export, and
+  // the author would have to notice and undo it.
+  it("never touches the engine's Source filter", async () => {
+    let script = "";
+
+    await requestMobileExport({
+      title: "四月",
+      runner: async (written) => {
+        script = written;
+        return {
+          timedOut: false,
+          code: 0,
+          stdout: 'YUNARI_WE:{"ok":false,"reason":"refused"}',
+        };
+      },
+    });
+
+    expect(script).not.toContain("My Wallpapers");
+    expect(script).not.toContain("Set-Local-Source");
+  });
+
   it("quotes a title containing a single quote", async () => {
     let script = "";
 

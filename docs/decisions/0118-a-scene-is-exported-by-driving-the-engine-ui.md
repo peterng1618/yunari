@@ -120,6 +120,32 @@ Measured on Wallpaper Engine 2.8.42 (2026-10-26), this PC:
   `yunari-background` holds by its absolute `scene.json` path. The export route
   and folder membership are mutually exclusive in 2.8.42 unless the folder itself
   is visible in the filtered grid, and it was not.
+- **The grid's Source filter is the author's own persisted state**, written to
+  the engine's `config.json` (`filterinfo.installed.sourcetags`). Its rows do not
+  answer synthetic `mouse_event` clicks at all — measured on both the label and
+  the checkbox glyph, with the engine holding the foreground — so the earlier
+  build's `Set-Local-Source` was a no-op, not the cause of a filtered grid. It is
+  removed: the script never touches the filter, and a refused tile is reported as
+  `no-tile` instead of being made visible by changing the author's library.
+- The header search box is not a selection lever: `ValuePattern.SetValue` is
+  silently ignored in both directions, `SendKeys` after `SetFocus` does enter
+  text, and the grid does not narrow for it.
+- **A click lands on the foreground window.** `SetForegroundWindow` is refused
+  while another process owns the foreground (measured with a browser holding it),
+  and every later click then went to that process. Joining the two input queues
+  with `AttachThreadInput` around `BringWindowToTop` + `SetForegroundWindow` takes
+  the foreground back.
+- **The web layer keeps its old layout until it is resized.** A window 1,118 px
+  wide reported the detail panel at x=2,117, left over from a larger layout, so
+  the tile rects UIA reported were not where the tiles were drawn and the clicks
+  missed. Maximising forces the reflow; the tile clicked at its re-reported point
+  selected the intended scene. A window the author already maximised is left
+  alone, and one this script maximised is restored on every exit.
+- Selecting a tile is what fills the detail panel, and a project on this PC gets
+  an authoring note there ("Open this wallpaper in the editor to edit or delete
+  it.") that a workshop item does not. That note is how the local project is told
+  apart from a workshop item sharing its title, now that the filter is untouched.
+  Hovering does not fill the panel, so the check follows a click.
 - The engine starts **minimized to the tray** when Steam launches it, and a window
   that is not showing is absent from UI Automation's desktop children — the same
   window is still a Win32 top-level window (class `WPEUI`, title `Wallpaper UI`).
@@ -151,6 +177,12 @@ the engine's own mobile export modal, sets "Keep original aspect ratio" and
 "Original", confirms it, and leaves the native Save dialog open. The automation
 never patches, injects, or launches the editor with `-project`; it starts the main
 UI and presses the same controls a person would.
+
+The author's library is left as it was found. The grid's Source filter is never
+changed (Rung 6), the window is taken to the foreground and maximised only because
+a click needs the first and the layout needs the second, and a restored state is
+restored on every exit, including the failures. A scene the grid cannot show is
+reported as `no-tile` with the filter named, not made visible by editing it.
 
 Saving is the author's click, deliberately: the Save dialog's controls are not
 reachable from the host's child process (Rung 3), and a filename typed into it is

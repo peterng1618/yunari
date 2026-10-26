@@ -18,10 +18,10 @@ Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](d
 
 ## Last completed change
 
-- **The engine starts to the tray:** Steam's launch leaves the window hidden, and UI Automation does not list a hidden window, so every such export answered `no-window`.
-- **Restore before driving:** the script finds the window through Win32 (`WPEUI` / `Wallpaper UI`), restores it with `SW_RESTORE`, then hands it back to UI Automation.
-- **A null class is not "any class":** PowerShell passes `$null` as an empty string, so a class-less `FindWindowW` matched nothing; the class is named, with a largest-window title walk as the fallback.
-- **Verified by reproduction:** window hidden, UI Automation confirmed blind to it, and the export for `Tokyo` still reached the Save dialog.
+- **The export leaves the author's library alone:** the grid's Source filter is persisted in the engine's own config and is never touched; its rows ignore synthetic clicks, so the old `Set-Local-Source` was a no-op and is gone.
+- **A click needs the foreground and the current layout:** the engine is taken to the foreground through `AttachThreadInput` and maximised to force the web layer to reflow, then restored on every exit, failures included.
+- **The local project is picked by its authoring note:** a workshop item that shares the title has none, and `no-tile` now names the Source filter.
+- **Verified live:** `Tokyo` reached the engine's Save dialog through the real runner, and the config's `sourcetags` were identical before and after.
 
 ## Next
 
@@ -32,7 +32,7 @@ Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](d
 ## Blockers / unverified
 
 - **The Save click is unverified end to end:** the harvest is unit-tested against a Documents fixture, not against a package the engine wrote after a real Save.
-- **A filed project cannot be exported:** a project inside a Wallpaper Engine folder is absent from the filtered grid in 2.8.42, so the route answers `no-tile` for it.
+- **The folder fallback is unverified live:** a project filed into a Wallpaper Engine folder is absent from the root grid, and the route that enters `yunari-background` first has not run against a filed project.
 - **Phone performance is unmeasured:** thirty applications per second across several charts is unproven on the phone that reported the defect.
 - **Value-chart engine transitions are not browser-verified:** the gate proves the option flag and signature, not motion across frames.
 - **Polar bar evidence uses one low reading:** `cpu.load` is 9.28 on a 0–100 scale, so the sector sits at the inner radius (26.7% of the canvas); legibility at realistic 40–80% readings is unverified.

@@ -1245,7 +1245,9 @@ export const uiCopy = {
         mobileAgreement:
           "The wallpaper's creator has not accepted the Steam Workshop subscriber agreement, so Wallpaper Engine will not export it. Open the project in Wallpaper Engine and export it there instead.",
         mobileRefused: (reason: string): string =>
-          `Wallpaper Engine could not export this scene: ${reason}`,
+          reason === "no-tile"
+            ? "Wallpaper Engine could not find this scene's project in its grid. Make sure “My Wallpapers” is checked in the grid's Source filter, then try again."
+            : `Wallpaper Engine could not export this scene: ${reason}`,
         projectNotice:
           "The unpack leaves a project in Wallpaper Engine's own project list.",
         opening: "Opening…",
