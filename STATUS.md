@@ -19,9 +19,9 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 ## Last completed change
 
 - **Task 17 landed:** `asset-manager/unused.ts` is the one reachability owner — an asset survives only through `holdsAsset` or `assetReferencedBy`, never through a credit.
-- **`pruneAssets(ids)`** removes declared ids through `AssetManager.remove` and drops each credit carrying that `assetId`; an unlinked credit stays and an undeclared id cannot delete a credit alone.
+- **`pruneAssets(ids)`** re-reads reachability instead of trusting the caller's list, then removes each declared id through `AssetManager.remove` and drops its linked credit; an unlinked credit stays.
 - **`canAddCredit`'s stale claim is gone:** its comment now says a prune frees a slot only with the asset that credit attributes.
-- **Evidence:** focused files 20 passed, `packages/editor/src` 187 files / 2577 tests passed, typecheck/biome/design-tokens exit 0; dead-selectors still exits 1 with the same 16 pre-existing findings, none naming a changed file.
+- **Evidence:** focused files 21 passed, `packages/editor/src` 187 files / 2581 tests passed, `tsc -p packages/editor`/biome/design-tokens exit 0; dead-selectors still exits 1 with the same 16 pre-existing findings, none naming a changed file.
 
 ## Next
 
