@@ -31,7 +31,7 @@ export function hasPlottableValue(
 import type { AnimationSettings } from "./charts/animation.js";
 import type { ChartPaint } from "./charts/chart-paint.js";
 import {
-  SEGMENT_SPACING_PERCENT_DEFAULT,
+  GAUGE_SEGMENT_SPACING_PERCENT_DEFAULT,
   type SegmentFill,
 } from "./charts/segments.js";
 
@@ -79,7 +79,7 @@ export const defaultGaugeSettings: GaugeSettings = {
   progress: { kind: "solid", color: "#00b8d9" },
   roundCap: true,
   segmentDivisor: 100,
-  segmentSpacingPercent: SEGMENT_SPACING_PERCENT_DEFAULT,
+  segmentSpacingPercent: GAUGE_SEGMENT_SPACING_PERCENT_DEFAULT,
   segmentFill: "whole",
   gradientSegments: 64,
 };

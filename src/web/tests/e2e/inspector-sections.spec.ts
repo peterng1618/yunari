@@ -1395,8 +1395,9 @@ test.describe("the per-kind inspector column", () => {
       name: "spacing",
       x: 40,
       y: 60,
-      // Large enough that the 2.5% share, not the cap clearance, sets the gap:
-      // the default 18px thickness needs a radius past 360px to hide behind it.
+      // Large enough that the 9.4% share, not the cap clearance, sets the gap:
+      // the backing radius of an 840px edge is over 600px, so 18px caps subtend
+      // under 2° against a 10.8° share.
       w: 1120,
       h: 840,
       series: ["cpu.load"],
@@ -1425,7 +1426,7 @@ test.describe("the per-kind inspector column", () => {
       .poll(() => chartCanvasInk(page, "spacing"))
       .toBeGreaterThan(0.01);
 
-    const share = ((2 * 2.5) / 100) * (180 / Math.PI);
+    const share = ((2 * 9.4) / 100) * (180 / Math.PI);
     await expect
       .poll(() => gaugeGapDegrees(page, "spacing"))
       .toBeCloseTo(share, 1);
@@ -1457,11 +1458,14 @@ test.describe("the per-kind inspector column", () => {
     await page.mouse.move(to.x, to.y, { steps: 12 });
     await page.mouse.up();
 
-    // The share is the same angle at any size; the clearance is not, so the
-    // smaller chart widens the gap rather than losing it.
+    // The share is the same angle at any size, so the gap is the same fraction
+    // of the smaller chart instead of collapsing: what halves with the chart is
+    // its pixel length, and the caps stay a twentieth of it. The clearance is
+    // the floor below this, and the unit case measures it on a chart small
+    // enough for 18px caps to exceed the share.
     await expect
       .poll(() => gaugeGapDegrees(page, "spacing"))
-      .toBeGreaterThan(share);
+      .toBeCloseTo(share, 1);
     await captureVisualReview(
       page,
       testInfo,

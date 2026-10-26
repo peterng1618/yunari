@@ -29,6 +29,17 @@ export const SEGMENT_DIVISORS: readonly [1, 2, 4, 5, 10, 20, 25, 50, 100] = [
  */
 export const SEGMENT_SPACING_PERCENT_DEFAULT = 2.5;
 
+/**
+ * The gauge's own default, measured from the look the defect was reported at.
+ *
+ * The starter's RAM gauge at divisor `20` — five bands on a 270° sweep — drew a
+ * gap of 20% of a 54° band, i.e. 10.8°. Ten point eight degrees at a radius of
+ * half the edge is **9.4%** of the edge, so that is the share a document with no
+ * spacing authored gets: the count the owner called right reads as it did, and
+ * every other count gets the same gap in place of a shrinking one.
+ */
+export const GAUGE_SEGMENT_SPACING_PERCENT_DEFAULT = 9.4;
+
 /** The authored spacing, or the family's own when the document carries none. */
 export function segmentSpacingPercentOf(settings: {
   readonly segmentSpacingPercent?: number;
@@ -57,13 +68,24 @@ export function segmentFillOf(
 /**
  * The empty arc an angular band leaves, in degrees.
  *
- * **The spacing term carries no `drawnEdge`.** A gap that is a share of the
+ * **The spacing term carries no `drawnEdgePx`.** A gap that is a share of the
  * edge against a radius of half the edge is the same angle at every size, so
  * cancelling the two is what makes the gap look identical on a large chart and a
  * small one. The clearance term is the other half: a round cap extends each band
- * end by `thickness / 2` pixels, and whether that is visible depends on how many
- * pixels the ring has — so a smaller chart gets a wider angle, and a chart whose
- * size is unknown skips the term rather than guessing one.
+ * end by `thickness / 2` pixels, twice that across a gap, and whether that is
+ * visible depends on how many pixels the ring has — so a smaller chart gets a
+ * wider angle, and a chart whose size is unknown skips the term rather than
+ * guessing one.
+ *
+ * **The edge is the backing edge, not the scene edge.** ECharts draws into a
+ * canvas of `width × renderScale`, and the option's `thickness` is in those
+ * pixels, so the radius the caps are measured against is the backing radius.
+ * Measuring a backing-pixel thickness against a scene radius made the clearance
+ * wrong by the render scale — too wide on a 2× canvas, too narrow below 1×, which
+ * is the shrink it was meant to prevent.
+ *
+ * A square end needs no clearance at all, so the term is the author's rounded
+ * ends and not a floor every document pays for.
  *
  * Clamped to 45% of a band: past that the gap stops reading as a gap and starts
  * eating the band, and no author choice should be able to do that.
@@ -71,19 +93,24 @@ export function segmentFillOf(
 export function gaugeGap(
   settings: {
     readonly thickness: number;
+    readonly roundCap?: boolean;
     readonly segmentSpacingPercent?: number;
   },
   sweepDegrees: number,
   count: number,
-  drawnEdge: number | undefined,
+  drawnEdgePx: number | undefined,
 ): number {
   const bandSweep = Math.abs(sweepDegrees) / Math.max(1, count);
   const spacing =
-    ((2 * segmentSpacingPercentOf(settings)) / 100) * (180 / Math.PI);
+    ((2 *
+      (settings.segmentSpacingPercent ??
+        GAUGE_SEGMENT_SPACING_PERCENT_DEFAULT)) /
+      100) *
+    (180 / Math.PI);
   const clearance =
-    drawnEdge === undefined
+    drawnEdgePx === undefined || settings.roundCap === false
       ? 0
-      : (settings.thickness / Math.max(1, drawnEdge / 2)) * (180 / Math.PI);
+      : (settings.thickness / Math.max(1, drawnEdgePx / 2)) * (180 / Math.PI);
 
   return Math.min(Math.max(spacing, clearance), 0.45 * bandSweep);
 }

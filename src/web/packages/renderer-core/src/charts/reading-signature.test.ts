@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SampleSource } from "../data/source.js";
-import type { Sample } from "../types.js";
+import { defaultGaugeSettings, type Sample } from "../types.js";
 import { defaultBarSettings } from "./bar.js";
 import { defaultLineSettings } from "./line.js";
 import { chartReadingSignature } from "./reading-signature.js";
@@ -34,6 +34,26 @@ describe("chartReadingSignature", () => {
     expect(chartReadingSignature(chart, bindings, source, 1_000)).not.toBe(
       chartReadingSignature(chart, bindings, source, 1_500),
     );
+  });
+
+  it("moves with the drawn box, so a resize redraws a static chart", () => {
+    // The gap is measured against the drawn size, so geometry is part of what
+    // the option holds. Without it a gauge with no binding keeps the gap it was
+    // built with until something else moves.
+    const chart = { family: "gauge", settings: defaultGaugeSettings } as const;
+    const at = (drawnEdgePx: number) =>
+      chartReadingSignature(
+        chart,
+        [],
+        source,
+        1_000,
+        undefined,
+        undefined,
+        drawnEdgePx,
+      );
+
+    expect(at(800)).not.toBe(at(400));
+    expect(at(800)).toBe(at(800));
   });
 
   it("asks for the history its delay needs, and less when the delay is dropped", () => {

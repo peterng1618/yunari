@@ -35,6 +35,12 @@ import { lineHistorySeconds } from "./line.js";
  *
  * Pass `playbackDelayMs` when the display's cadence overrides the source's
  * delay, so the signature asks for the history that will actually be drawn.
+ *
+ * **The drawn box is an input, because a gauge's gap is measured against it.**
+ * A chart's option now depends on the canvas it is drawn into — the cap
+ * clearance is a share of its radius — so a resize that leaves the reading still
+ * changes the picture. Without it here, a chart with no binding kept the gap it
+ * was built with until something else moved.
  */
 export function chartReadingSignature(
   content: ChartContent,
@@ -43,6 +49,7 @@ export function chartReadingSignature(
   nowMs: number,
   palette?: FabricPalette,
   playbackDelayMs?: number,
+  drawnEdgePx?: number,
 ): string {
   const delayMs = playbackDelayMs ?? source.chartPlaybackDelayMs;
   const readings = bindings
@@ -63,7 +70,8 @@ export function chartReadingSignature(
     .join("|");
   const drawn =
     content.family === "line" ? `${readings}|now:${nowMs}` : readings;
-  return `${inkSignature(content.settings, palette)}|${drawn}`;
+  const edge = drawnEdgePx === undefined ? "-" : String(drawnEdgePx);
+  return `${inkSignature(content.settings, palette)}|${drawn}|edge:${edge}`;
 }
 
 /** The palette values the chart's own settings name, as one comparable string. */

@@ -53,14 +53,16 @@ Defaults live in `defaultGaugeSettings`, `defaultBarSettings` and
 
 | family | `segmentSpacingPercent` | `segmentFill` |
 |---|---|---|
-| gauge | `2.5` | `"whole"` |
+| gauge | `9.4` | `"whole"` |
 | bar | `2.5` | `"partial"` |
 | pie | `2.5` | — (`"whole"` by construction) |
 
-`2.5` is chosen by the SSR probe in the plan: at divisor `20` on the reference
-chart size it must read as the current gap does. The plan records the measured
-pixel gap at that size and at half size; if `2.5` does not reproduce the
-reference look the plan sets the measured value instead.
+The gauge's `9.4` is the SSR probe in the plan: at divisor `20` on the reference
+chart size the slot-relative gap that looked right is `0.2 × 54° = 10.8°`, and
+10.8° at a radius of half the drawn edge is a 9.4% share. The plan records the
+measured pixel gap at that size and at half size. Bar and pie keep `2.5`: the
+probe is the reference gauge's, and a 9.4 bar gap would be clamped to 45% of a
+slot at almost every count.
 
 `settings-fields.ts` gains one descriptor per family:
 
@@ -83,19 +85,23 @@ setting does.
 
 ## B7. Gauge geometry
 
-Settings in hand, with `edge` the chart's smaller drawn edge in pixels,
-`radius = edge / 2` (the gauge draws at `radius: "100%"`), and `bandSweep` the
-authored sweep divided by the segment count:
+Settings in hand, with `edge` the chart's smaller drawn edge and `radius` the
+**backing canvas's** half edge — `edge × renderScale / 2`, because ECharts draws
+at `radius: "100%"` of a canvas of that size and the option's `thickness` is in
+those same pixels — and `bandSweep` the authored sweep divided by the segment
+count:
 
 ```
 spacingAngle = 2 * segmentSpacingPercent / 100        // radians, radius cancels
-capClearance = thickness / radius                     // radians
+capClearance = roundCap ? thickness / radius : 0      // radians
 gapAngle     = min(max(spacingAngle, capClearance), 0.45 * bandSweep)
 ```
 
 The radius cancels for the spacing term because the spacing is a share of
 `edge` and the radius is half of it; the clearance term keeps the `edge`
-dependency that makes the caps scale. `gapAngle` is subtracted from each band
+dependency that makes the caps scale. A square end is a butt edge and needs no
+clearance, so the term is the author's rounded ends rather than a floor every
+document pays for. `gapAngle` is subtracted from each band
 end as today, with the gap belonging to the slice it follows.
 
 `partial` mode adds the reading's own position as a colour-band boundary, so

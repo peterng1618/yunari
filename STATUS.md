@@ -18,10 +18,10 @@ Land [`2026-10-26-segment-spacing-and-fill-mode-design.md`](docs/superpowers/spe
 
 ## Last completed change
 
-- **Spacing is a share of the chart, not of the slot:** gauge, bar and pie all measure the gap against the smaller drawn edge, with the gauge's cap clearance widening it on a small chart and a 45% band clamp.
-- **Fill mode is authorable:** gauge and bar switch between whole and partial segments; partial stops the fill at the reading, and the defaults keep the look from before the change.
-- **Browser evidence:** the gauge at five bands keeps its gaps at half size, and switching to partial moves the fill edge; three captures under `C:/tmp/yunari-segment-spacing`.
-- **Gate green on the third run:** the first was red on biome formatting, the second on the known `store.test.ts` asset-bounds timeout (72/72 when run alone), the third passed.
+- **The gauge's spacing default is the measured reference look:** 9.4% of the drawn edge reproduces the 10.8° gap the owner called right at divisor 20; the first probe had calibrated 2.5 at twenty segments instead of five.
+- **The cap clearance is measured where the caps are:** against the backing canvas (scene box × render scale) and only when the ends are round, so a square-ended gauge at zero spacing still draws touching bands.
+- **A resize redraws a chart:** the drawn edge is now part of the reading signature, so a static gauge no longer keeps the gap of its old size.
+- **The spacing track steps by the tenth it displays,** so a drag can land on the 9.4 default rather than only on whole percents.
 
 ## Next
 

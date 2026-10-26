@@ -147,6 +147,26 @@ function drawnEdgeOf(
     : {};
 }
 
+/**
+ * The smaller edge of the canvas ECharts draws into, in backing pixels.
+ *
+ * The scene box at its own scale times the object's render scale: a gauge's cap
+ * clearance is a pixel measure against that canvas, and the option's thickness
+ * is in the same pixels, so the two cannot be mixed. Absent when the object
+ * measures nothing, and the adapter then skips the clearance rather than
+ * guessing a size.
+ */
+function drawnEdgePxOf(
+  chart: YunariChart,
+): { readonly drawnEdgePx: number } | Record<string, never> {
+  const smaller =
+    Math.min(chart.width * chart.scaleX, chart.height * chart.scaleY) *
+    chart.renderScale;
+  return Number.isFinite(smaller) && smaller > 0
+    ? { drawnEdgePx: Math.floor(smaller) }
+    : {};
+}
+
 /** Yunari-owned chart semantics layered on the editor's generic canvas mechanics. */
 export class ChartManager {
   readonly #editor: EditorInteraction;
@@ -536,6 +556,7 @@ export class ChartManager {
               nowMs,
               this.#globals?.palette,
               playbackDelayMs,
+              drawnEdgePxOf(object).drawnEdgePx,
             );
           } catch {
             reading = undefined;
@@ -594,9 +615,9 @@ export class ChartManager {
             this.#refreshRate(),
             this.#source.chartPlaybackDelayMs,
           ),
-          // The same read the inspector's pixel bounds use: a gauge's cap
-          // clearance is a pixel measure, so an angle needs the drawn radius.
-          ...drawnEdgeOf(chart),
+          // The canvas the caps are measured against: the backing edge, which
+          // is the scene box times the chart's render scale.
+          ...drawnEdgePxOf(chart),
         },
         [],
         this.#globals?.palette,
