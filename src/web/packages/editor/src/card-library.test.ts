@@ -61,6 +61,22 @@ function isRecord(value: unknown): value is ObjectJson {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Every run on every text object in a card, as the document stores them. */
+function runsOf(card: ObjectJson): readonly ObjectJson[] {
+  const runs: ObjectJson[] = [];
+  const visit = (object: ObjectJson): void => {
+    const text = object["yunariText"];
+    const authored =
+      isRecord(text) && Array.isArray(text["runs"]) ? text["runs"] : [];
+    for (const run of authored) {
+      if (isRecord(run)) runs.push(run);
+    }
+    for (const child of partsOf(object)) visit(child);
+  };
+  visit(card);
+  return runs;
+}
+
 function stage(): Canvas {
   const element = document.createElement("canvas");
   element.width = 1672;
@@ -594,6 +610,75 @@ describe("a theme whose vocabulary is not the starter's", () => {
     });
 
     expect(editor.errorManager.warn).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A theme older than the role ids still has a face, and a run must name one:
+   * the validator refuses a run whose `typeToken` does not resolve, so there is
+   * no literal home for it. The card lands on the theme's own token and says
+   * so; only the face moves, because the run's size, leading and tracking are
+   * its own `style`.
+   */
+  it("maps a type reference to the theme's token and keeps the card's own size", () => {
+    const copied = instantiateCard({
+      unit: unit(CPU_CARD),
+      globals: FOREIGN,
+      existingIds: [],
+      origin: { left: 0, top: 0 },
+    });
+
+    for (const run of runsOf(copied.card)) {
+      expect(run["typeToken"]).toBe("typeTokens.label");
+    }
+    const value = runsOf(copied.card).find((run) => run["kind"] === "value");
+    expect(value?.["style"]).toMatchObject({ fontSize: { value: 90 } });
+    expect(copied.substitutions).toContainEqual({
+      from: "typeTokens.heading",
+      to: "typeTokens.label",
+    });
+  });
+
+  it("refuses a type reference the theme has no token for, and names it", async () => {
+    // A run must reference a token the document declares, so a theme with no
+    // type token cannot express the card at all. Dropping the reference would
+    // leave a document that looks right and refuses to save.
+    await expect(
+      insertCard(editorStub(stage()) as never, CPU_CARD, {
+        globals: { palette: STARTER_GLOBALS.palette } as FabricGlobals,
+        onBindings: vi.fn(),
+      }),
+    ).rejects.toThrow(/typeTokens\.body/);
+  });
+});
+
+/**
+ * The type vocabulary a theme always has is the role ids, and a card names one
+ * of those — never the `size-weight` id the old presets were called by.
+ */
+describe("the type tokens a shipped card names", () => {
+  it("is a role the theme always carries, for every card", () => {
+    const refs: string[] = [];
+    for (const entry of CARD_LIBRARY) {
+      const copied = instantiateCard({
+        unit: entry,
+        globals: STARTER_GLOBALS,
+        existingIds: [],
+        origin: { left: 0, top: 0 },
+      });
+      expect(copied.issues, `${entry.id} does not insert`).toEqual([]);
+      for (const run of runsOf(copied.card)) {
+        refs.push(String(run["typeToken"]));
+      }
+    }
+
+    expect(refs.length).toBeGreaterThan(0);
+    for (const ref of refs) {
+      expect([
+        "typeTokens.heading",
+        "typeTokens.body",
+        "typeTokens.mono",
+      ]).toContain(ref);
+    }
   });
 });
 

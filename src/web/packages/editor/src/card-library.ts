@@ -580,21 +580,9 @@ function mapGlobals(
           substitutions.push({
             from: resolved.substitutedFor,
             to: resolved.ref,
-            reason: "role",
           });
         }
         return resolved.ref;
-      }
-      if (resolved.literal) {
-        substitutions.push({
-          from: value,
-          to: "the card's own type, written onto the object",
-          reason: "literal",
-        });
-        // The run keeps the object-level `fontFamily`/`fontSize`/`fontWeight`
-        // the card already authored; a key whose value is `undefined` is what
-        // dropping it means, and `copyObject`'s spread drops it for us.
-        return undefined;
       }
       unmappable.push(value);
       return value;
@@ -602,9 +590,7 @@ function mapGlobals(
     if (Array.isArray(value)) return value.map(resolve);
     if (!isRecord(value)) return value;
     return Object.fromEntries(
-      Object.entries(value)
-        .map(([key, entry]) => [key, resolve(entry)] as const)
-        .filter(([, entry]) => entry !== undefined),
+      Object.entries(value).map(([key, entry]) => [key, resolve(entry)]),
     );
   };
   return {
