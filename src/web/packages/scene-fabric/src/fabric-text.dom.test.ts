@@ -7,6 +7,7 @@ import type {
   PlanTextSegment,
   TextContent,
 } from "@yunari/renderer-core";
+import { emptySampleSource } from "@yunari/renderer-core";
 import { Canvas, IText, Rect, Textbox } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import {
@@ -456,6 +457,113 @@ describe("what one text pass costs", () => {
       ),
     ).toBe(1);
     expect(object.width).toBeGreaterThan(0);
+    await canvas.dispose();
+  });
+});
+
+describe("a run's resolved type reaches the object", () => {
+  const globals = {
+    typeTokens: {
+      heading: { family: "Inter" },
+      body: { family: "Inter" },
+    },
+  };
+
+  function staged(
+    runs: readonly Readonly<Record<string, unknown>>[],
+    fontSize = 10,
+  ): { canvas: Canvas; object: Textbox } {
+    const object = new Textbox("CPU", { width: 300, fontSize });
+    object.set("id", "label");
+    object.set(YUNARI_TEXT_PROPERTY, { runs });
+    const canvas = new Canvas(document.createElement("canvas"));
+    canvas.add(object);
+    return { canvas, object };
+  }
+
+  it("paints the role default for a run that authored no size", async () => {
+    const { canvas, object } = staged([
+      { kind: "literal", text: "CPU", typeToken: "typeTokens.heading" },
+    ]);
+
+    applyAuthoredText(canvas, globals, {
+      bindings: {},
+      artboardHeight: 1080,
+    });
+
+    expect(object.fontSize).toBe(72);
+    await canvas.dispose();
+  });
+
+  it("keeps an authored size over the role default", async () => {
+    const { canvas, object } = staged([
+      {
+        kind: "literal",
+        text: "CPU",
+        typeToken: "typeTokens.heading",
+        style: { fontSize: { value: 40 } },
+      },
+    ]);
+
+    applyAuthoredText(canvas, globals, {
+      bindings: {},
+      artboardHeight: 1080,
+    });
+
+    expect(object.fontSize).toBe(40);
+    await canvas.dispose();
+  });
+
+  it("paints the role default through the sample pass too", async () => {
+    const { canvas, object } = staged([
+      { kind: "literal", text: "CPU", typeToken: "typeTokens.heading" },
+    ]);
+
+    refreshBoundText(
+      canvas,
+      { label: [] },
+      emptySampleSource,
+      globals,
+      undefined,
+      undefined,
+      undefined,
+      2160,
+    );
+
+    expect(object.fontSize).toBe(144);
+    await canvas.dispose();
+  });
+
+  it("clears tracking when the run stops authoring it", async () => {
+    const { canvas, object } = staged([
+      {
+        kind: "literal",
+        text: "CPU",
+        typeToken: "typeTokens.body",
+        style: {
+          fontSize: { value: 32 },
+          letterSpacing: { value: 0.8 },
+        },
+      },
+    ]);
+    applyAuthoredText(canvas, globals, { bindings: {} });
+    expect(object.charSpacing).toBeCloseTo(25, 6);
+
+    // Deleting the key is how the author clears the field; the object must
+    // follow rather than keep the last ratio.
+    object.set(YUNARI_TEXT_PROPERTY, {
+      runs: [
+        {
+          kind: "literal",
+          text: "CPU",
+          typeToken: "typeTokens.body",
+          style: { fontSize: { value: 32 } },
+        },
+      ],
+    });
+    applyAuthoredText(canvas, globals, { bindings: {} });
+
+    expect(object.charSpacing).toBe(0);
     await canvas.dispose();
   });
 });

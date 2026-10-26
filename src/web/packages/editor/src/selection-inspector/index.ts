@@ -722,7 +722,9 @@ export function createSelectionInspector(
       render();
       return false;
     }
-    applyAuthoredText(editor.canvas, globals);
+    applyAuthoredText(editor.canvas, globals, {
+      artboardHeight: editor.artboard().height,
+    });
     commit();
     render();
     return true;

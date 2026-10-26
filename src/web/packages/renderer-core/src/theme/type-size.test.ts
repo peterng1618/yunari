@@ -26,4 +26,11 @@ describe("defaultTypeSize", () => {
     expect(defaultTypeSize("body", -100)).toBe(1);
     expect(defaultTypeSize("heading", 1)).toBe(1);
   });
+
+  it("refuses an unmeasured artboard rather than coercing it", () => {
+    // `NaN` propagates through `Math.round` and a non-finite height has no
+    // ratio to speak of, so both take the floor.
+    expect(defaultTypeSize("heading", Number.NaN)).toBe(1);
+    expect(defaultTypeSize("body", Number.POSITIVE_INFINITY)).toBe(1);
+  });
 });

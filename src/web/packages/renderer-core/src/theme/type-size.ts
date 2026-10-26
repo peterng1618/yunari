@@ -15,6 +15,9 @@ const TYPE_SIZE_RATIOS = {
 
 /** The size a run takes when it authors none, rounded, never below 1. */
 export function defaultTypeSize(id: string, artboardHeight: number): number {
+  // An unmeasured artboard is refused rather than coerced: `NaN` would become
+  // `NaN` and `Infinity` an unsized glyph. The floor is the only honest answer.
+  if (!Number.isFinite(artboardHeight)) return 1;
   const ratio = isTypeTokenRole(id)
     ? TYPE_SIZE_RATIOS[id]
     : TYPE_SIZE_RATIOS.body;

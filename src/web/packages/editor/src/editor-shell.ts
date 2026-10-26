@@ -304,7 +304,7 @@ function createNativeEditor(input: {
   readonly resolveSceneAsset?: (assetId: string) => string | undefined;
 }): EditorInteraction {
   const { container, host } = input;
-  applyEditorControls();
+  applyEditorControls(() => input.artboard().height);
   const element = document.createElement("canvas");
   container.append(element);
   // The canvas takes the host's size, not the artboard's: it is a viewport onto

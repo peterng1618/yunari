@@ -3,13 +3,14 @@ import { Group, type StaticCanvas } from "fabric/es";
 import { YUNARI_TEXT_PROPERTY } from "./fabric-text.js";
 
 /**
- * Reapply the first authored run's type preset to its Fabric text-object cache.
+ * Reapply the first authored run's type token face to its Fabric text-object.
  *
- * This is the v2 path's owner of object-level type: a v2 document stores a
- * preset *reference* per run and Fabric's own resolved text properties on the
- * object, and the display revives the object without resolving anything. A
- * preset field that never reaches the object here is authored, editable and
- * invisible everywhere except the editor.
+ * This is the v2 path's owner of the object-level *face*: a v2 document stores
+ * a token *reference* per run and Fabric's own resolved text properties on the
+ * object, and the display revives the object without resolving anything. Size,
+ * leading and tracking are the run's own style and are painted by
+ * `applyAuthoredText`/`refreshBoundText`; a face that never reaches the object
+ * here is authored, editable and invisible everywhere except the editor.
  */
 export function applyObjectTypeTokens(
   canvas: StaticCanvas,
