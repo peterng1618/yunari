@@ -200,14 +200,24 @@ not watch the grid change shape. It is fixed by the drawing
 from, and the grid is `repeat(auto-fill, minmax(272px, 1fr))`: the column count
 follows the width, so no breakpoint is invented for it.
 
-**The store's item modal is 960px wide and its stage is 420px tall.** Both are the
-drawing's (`docs/design/mockups/current/store-detail.html`). The width is not the
-settings modal's: 560 is a text sheet's box and this one's subject is a picture —
-960 against 560, with the stage flush to the box's edges rather than inset by the
-sheet's padding. **The stage is one height for every item** and the theme is
+**The store's item modal is 960 × 760, and its facts sit in a 270px right
+panel.** Both numbers are the drawing's
+(`docs/design/mockups/current/store-detail.html`). The width is not the settings
+modal's: 560 is a text sheet's box and this one's subject is a picture — 960
+against 560, with the stage flush to the box's edges rather than inset by the
+sheet's padding. **The stage is one height for every item**: the box's height
+less its border, with the panel beside it rather than below, and the theme
 contained in it at its own ratio, letterboxed against a ground darker than the
-modal's own surface; a stage sized to the item would make the modal change height
-as a person steps between items, which is the one thing a viewer must not do.
+modal's own surface. A stage sized to the item would make the modal change
+height as a person steps between items, which is the one thing a viewer must
+not do. **A short viewport caps the box at 90vh**, so the foot stays on screen
+on a laptop.
+
+**The asset preview is the Finder's box, with the same 270px panel.** Its
+ceiling is `min(1132px, 100vw − 48px) × min(852px, 100vh − 48px)` from
+`assets-preview.html`, because its subject is the file at the size it will be
+used. The panel's width is the store viewer's, so the facts sit where a person
+already looks and only the stage changes between the two surfaces.
 
 ### The header
 

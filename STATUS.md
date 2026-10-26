@@ -1,7 +1,7 @@
 # Yunari status
 
 Updated: 2026-10-26
-Branch: `main`
+Branch: `peterng1618/fix-font-trio`
 
 ## Current objective
 
@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 7; Tasks 1–19 complete, Task 20 (asset preview modal) in flight.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — Tasks 1–22 complete; the branch review and plan close remain.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,14 +18,15 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 18 landed:** `POST /api/assets/trash` stages the bytes under a temp root and moves them to the OS trash in one process per platform; the body limit derives from the store's total cap.
-- **Task 19 landed:** both saves and the replacement save ask one owner — nothing unused saves unchanged, the checkbox is off by default, and only a successful trash prunes.
-- **A cancelled cleanup saves nothing and a cancelled release announces nothing**; the dialog carries the card's own marks and the document's name.
-- **Evidence:** editor 188 files / 2601 tests, host 23 files / 600, typecheck/biome/design-tokens exit 0; `vg-734` filed and closed for the dead Linux trash fallthrough.
+- **Tasks 20–21 landed:** the asset preview draws the Finder's box and the store viewer 960×760, both with a 270px panel and one shared `ActionBox`.
+- **The item modal's state badge moved off the name's row** — two badges took "Withdrawn theme" down to "Withd…" in the 238px header.
+- **Evidence:** `npm run gate` exit 0 — unit 414 files / 6067 tests (1 skipped), worker 12 / 73; three registered captures recaptured and inspected, and the preview gained a browser case.
+- **Gate repairs:** the curated font source formatted, the mockup row follows the redrawn shell drawing, and the preview assertion stopped spelling a px literal.
+- **Rows:** `vg-735` filed (a finder credit carries no `assetId`), `vg-734` closed.
 
 ## Next
 
-1. Execute the fonts-and-assets plan, Phase 1 through Phase 7, one task per dispatch.
+1. Run the whole-branch review, then close the fonts-and-assets plan and archive it.
 2. A live tray run by the owner: inspect the menu's rows, toggle Auto start, open each editor surface, start RTSS, and Exit.
 3. Run the staged Linux tray binary on a Linux desktop session; it was never executed here.
 4. Work `vg-724`'s art half and `vg-727`, `vg-728`, `vg-729`.
