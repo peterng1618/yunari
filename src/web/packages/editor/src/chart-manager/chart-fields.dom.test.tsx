@@ -434,9 +434,12 @@ describe("a setting one level down", () => {
     );
     expect(track.type).toBe("range");
     expect([track.min, track.max]).toEqual(["0", "20"]);
-    // A bare `2.5` beside a bar width that means degrees would read as the same
+    // The drag moves by the tenth the well shows, so it can land on the gauge's
+    // own 9.4 default rather than only on whole percents.
+    expect(track.step).toBe("0.1");
+    // A bare `9.4` beside a bar width that means degrees would read as the same
     // unit, so both routes say what the number is a share of.
-    expect(track.getAttribute("aria-valuetext")).toBe("2.5%");
+    expect(track.getAttribute("aria-valuetext")).toBe("9.4%");
 
     const well = pick<HTMLInputElement>(
       stage.host,
@@ -444,7 +447,7 @@ describe("a setting one level down", () => {
     );
     // The field stays a number so it can be typed into; the suffix sits beside
     // it rather than inside the draft it has to parse back.
-    expect(well.value).toBe("2.5");
+    expect(well.value).toBe("9.4");
     expect(well.parentElement?.textContent).toContain("%");
   });
 

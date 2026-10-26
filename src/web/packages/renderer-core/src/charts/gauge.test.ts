@@ -18,7 +18,7 @@ const TRACK = "#222222";
 /** A full-turn gauge with flat paints, so a gap is a number and a colour. */
 function gaugeOption(
   over: Partial<GaugeSettings>,
-  drawnEdge?: number,
+  drawnEdgePx?: number,
   value = 50,
 ) {
   return buildGaugeOption(
@@ -36,7 +36,7 @@ function gaugeOption(
     sample(value),
     true,
     undefined,
-    drawnEdge,
+    drawnEdgePx,
   );
 }
 
@@ -181,27 +181,87 @@ describe("buildGaugeOption", () => {
   });
 
   it("keeps the gap a share of the chart as the count rises", () => {
-    // Five slices and fifty: the same edge, the same gap. A share of the slot
-    // would have shrunk tenfold with the count.
-    const five = gapDegrees(gaugeOption({ segmentDivisor: 20 }), 5);
-    const fifty = gapDegrees(gaugeOption({ segmentDivisor: 2 }), 50);
+    // Five slices and ten on the starter's 270° sweep: the same edge, the same
+    // gap. A share of the slot would have shrunk with the count.
+    const five = gapDegrees(
+      gaugeOption({ segmentDivisor: 20, startAngle: 225, endAngle: -45 }),
+      5,
+      270,
+    );
+    const ten = gapDegrees(
+      gaugeOption({ segmentDivisor: 10, startAngle: 225, endAngle: -45 }),
+      10,
+      270,
+    );
 
-    expect(fifty).toBeCloseTo(five, 5);
+    expect(ten).toBeCloseTo(five, 5);
   });
 
   it("widens the gap to clear round caps on a small chart", () => {
     // A cap extends each band end by half the thickness, so the gap has to be
-    // measured against the radius rather than the chart's raw size.
+    // measured against the radius rather than the chart's raw size. Spacing is
+    // zero, so the clearance alone is what is being read.
     const large = gapDegrees(
-      gaugeOption({ segmentDivisor: 5, thickness: 12 }, 800),
+      gaugeOption(
+        {
+          segmentDivisor: 5,
+          thickness: 12,
+          roundCap: true,
+          segmentSpacingPercent: 0,
+        },
+        800,
+      ),
       20,
     );
     const small = gapDegrees(
-      gaugeOption({ segmentDivisor: 5, thickness: 12 }, 200),
+      gaugeOption(
+        {
+          segmentDivisor: 5,
+          thickness: 12,
+          roundCap: true,
+          segmentSpacingPercent: 0,
+        },
+        200,
+      ),
       20,
     );
 
     expect(small).toBeGreaterThan(large);
+  });
+
+  it("leaves square ends on the authored share at any size", () => {
+    // No round cap, no clearance: a small chart draws the same angle as a large
+    // one, which is what makes the share a share of the chart.
+    const large = gapDegrees(
+      gaugeOption(
+        {
+          segmentDivisor: 10,
+          startAngle: 225,
+          endAngle: -45,
+          thickness: 12,
+          roundCap: false,
+        },
+        800,
+      ),
+      10,
+      270,
+    );
+    const small = gapDegrees(
+      gaugeOption(
+        {
+          segmentDivisor: 10,
+          startAngle: 225,
+          endAngle: -45,
+          thickness: 12,
+          roundCap: false,
+        },
+        200,
+      ),
+      10,
+      270,
+    );
+
+    expect(small).toBeCloseTo(large, 5);
   });
 
   it("never takes more than 45% of a band", () => {
@@ -213,12 +273,17 @@ describe("buildGaugeOption", () => {
     expect(gap).toBeLessThanOrEqual(0.45 * 3.6);
   });
 
-  it("draws touching bands at zero spacing when no chart size is known", () => {
-    const bands = colorBands(
-      gaugeOption({ segmentDivisor: 20, segmentSpacingPercent: 0 }, undefined),
-    );
+  it("draws touching bands at zero spacing, measured or not", () => {
+    for (const edge of [undefined, 400]) {
+      const bands = colorBands(
+        gaugeOption(
+          { segmentDivisor: 20, segmentSpacingPercent: 0, roundCap: false },
+          edge,
+        ),
+      );
 
-    expect(bands.some(([, color]) => color === "transparent")).toBe(false);
+      expect(bands.some(([, color]) => color === "transparent")).toBe(false);
+    }
   });
 
   it("stops a partial fill at the reading", () => {
@@ -244,7 +309,7 @@ describe("buildGaugeOption", () => {
       gaugeOption(
         { segmentDivisor: 25, segmentFill: "whole", min: 0, max: 100 },
         undefined,
-        24,
+        20,
       ),
     );
 

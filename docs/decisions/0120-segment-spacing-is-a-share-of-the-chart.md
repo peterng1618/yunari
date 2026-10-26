@@ -65,19 +65,31 @@ Found: no solution of this shape to import, and nothing to compare against.
 
 ## Rung 6 — probe
 
-Arithmetic over the current formula, not a rendering sample: at a 360 px edge,
-a 270° sweep, 20 segments and `thickness` 12, the old gap is
-`0.2 × 13.5° × π/180 × 180 px = 8.5 px`, which is 2.36% of the edge — so a
-`2.5%` share reproduces the reference look. The clearance at the same size is
-`12 / 180 rad = 3.8°`, below the spacing; at a 200 px edge it is `12 / 100 rad =
-6.9°`, above it, which is the observed shrink. The plan measures the rendered
-result in the browser case.
+Arithmetic over the current formula, not a rendering sample. The look the defect
+was reported at is the starter RAM gauge at divisor `20` — **five** bands on its
+270° sweep: the slot-relative gap that looked right was `0.2 × 54° = 10.8°`. At a
+radius of half the drawn edge that is a **9.4%** share of the edge
+(`2 × 9.4 / 100 rad = 10.8°`), so a document with no spacing authored redraws that
+count unchanged, and every higher count gets the same gap instead of a shrinking
+one. The first probe measured the gap at twenty *segments* (divisor five) and
+proposed 2.5, which is the tighter count's look, not the reported one.
+
+The clearance is `thickness / radius`, and the radius is the **backing** canvas's:
+ECharts draws into `edge × renderScale` and the option's thickness is in those
+pixels, so a scene-unit radius made the term wrong by the render scale. On the
+starter's 218-unit ring at 2× that is `20 / 218 rad = 5.3°`, below the 10.8° share;
+at a quarter of the size it is 21°, above it, which is the observed shrink. The
+clearance applies only to round ends: a square end is a butt edge and needs none.
+
+Bar and pie keep a `2.5` share. The probe is the reference gauge's, and a 9.4 bar
+gap would be clamped to 45% of a slot at almost every count. The plan measures the
+rendered result in the browser case.
 
 ## Decision
 
 Spacing is `segmentSpacingPercent`, a share of the chart's **smaller drawn
 edge** — a constant angle for a ring, because the radius is half the edge — and
-the effective gap is `max(spacing, thickness / radius)` clamped to 45% of a
-slot. One unit, one owner (`segments.ts`), and the caps are cleared rather than
-disabled, because the author's rounded ends are a style choice the gap must
-respect.
+the effective gap is `max(spacing, thickness / backing radius)` for round ends,
+clamped to 45% of a slot. One unit, one owner (`segments.ts`), and the caps are
+cleared rather than disabled, because the author's rounded ends are a style
+choice the gap must respect.

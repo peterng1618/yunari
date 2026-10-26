@@ -67,7 +67,7 @@ export function buildGaugeOption(
   sample: Sample | undefined,
   animate = true,
   palette?: FabricPalette,
-  drawnEdge?: number,
+  drawnEdgePx?: number,
 ): GaugeOption {
   const plottable = hasPlottableValue(sample);
   const track = resolveChartPaint(settings.track, palette);
@@ -94,7 +94,7 @@ export function buildGaugeOption(
     track,
     progress,
     segmentFillOf(settings, "whole"),
-    gaugeGap(settings, sweepDegrees, count, drawnEdge),
+    gaugeGap(settings, sweepDegrees, count, drawnEdgePx),
     sweepDegrees,
   );
 

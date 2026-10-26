@@ -397,6 +397,9 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       min: 0,
       max: 20,
       decimals: 1,
+      // A tenth: the default is 9.4, and a track that steps by 1 cannot
+      // land on the value the same descriptor displays.
+      step: 0.1,
       suffix: "%",
     },
     {
@@ -603,6 +606,9 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       min: 0,
       max: 20,
       decimals: 1,
+      // A tenth: the default is 9.4, and a track that steps by 1 cannot
+      // land on the value the same descriptor displays.
+      step: 0.1,
       suffix: "%",
     },
     {
@@ -707,6 +713,9 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       min: 0,
       max: 20,
       decimals: 1,
+      // A tenth: the default is 9.4, and a track that steps by 1 cannot
+      // land on the value the same descriptor displays.
+      step: 0.1,
       suffix: "%",
     },
     {

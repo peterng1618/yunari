@@ -473,21 +473,21 @@ async function startHostedTheme(
 }
 
 /**
- * The smaller edge of a chart's drawn box, when it measures one.
+ * The smaller edge of the canvas ECharts draws into, in backing pixels.
  *
- * The gauge's cap clearance is a pixel measure, and an angle needs the radius;
- * absent means the object measures nothing and the adapter skips the term
- * rather than guessing a size.
+ * The scene box at its own scale times the object's render scale. The gauge's
+ * cap clearance is a pixel measure against that canvas and its thickness is in
+ * the same pixels; absent means the object measures nothing and the adapter
+ * skips the term rather than guessing a size.
  */
-function drawnEdgeOf(
+function drawnEdgePxOf(
   chart: YunariChart,
-): { readonly drawnEdge: number } | Record<string, never> {
-  const smaller = Math.min(
-    chart.width * chart.scaleX,
-    chart.height * chart.scaleY,
-  );
+): { readonly drawnEdgePx: number } | Record<string, never> {
+  const smaller =
+    Math.min(chart.width * chart.scaleX, chart.height * chart.scaleY) *
+    chart.renderScale;
   return Number.isFinite(smaller) && smaller > 0
-    ? { drawnEdge: Math.floor(smaller) }
+    ? { drawnEdgePx: Math.floor(smaller) }
     : {};
 }
 
@@ -521,6 +521,7 @@ function hydrateCharts(
           settings: object.settings,
         } as ChartContent;
         const chartBindings = bindings[id] ?? [];
+        const geometry = drawnEdgePxOf(object);
         const reading = chartReadingSignature(
           content,
           chartBindings,
@@ -528,6 +529,7 @@ function hydrateCharts(
           nowMs,
           palette,
           playbackDelayMs,
+          geometry.drawnEdgePx,
         );
         if (drawnReadings.get(object) === reading) continue;
         const plan = buildChartPlan(
@@ -539,7 +541,7 @@ function hydrateCharts(
             nowMs,
             animate: chartAnimationFor(content.family, rate),
             playbackDelayMs,
-            ...drawnEdgeOf(object),
+            ...geometry,
           },
           issues,
           palette,

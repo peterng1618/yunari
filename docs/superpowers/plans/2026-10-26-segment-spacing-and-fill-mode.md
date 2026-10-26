@@ -21,10 +21,10 @@
 
 ## Review Focus
 
-- A gauge at half the drawn size keeps its gap: the cap-clearance term must win over the spacing term there.
-- `segmentSpacingPercent: 0` draws bands touching without consuming a neighbour's slot.
+- A gauge keeps its gap at half the drawn size: the angle is the same share, and the cap clearance — measured on the backing canvas — wins once the caps exceed it.
+- `segmentSpacingPercent: 0` draws bands touching without consuming a neighbour's slot, whether the ends are round or square.
 - A gauge with `segmentFill: "partial"` stops its fill at the reading; a bar with `"whole"` lights only whole bands.
-- A document carrying neither new key draws exactly as it does today.
+- A document carrying neither new key draws the reference count (divisor `20`) exactly as it does today, and every other count keeps that gap instead of shrinking.
 - A pie's slice shares stay exact when the spacing changes.
 
 ---
@@ -43,9 +43,9 @@
 - Test: `src/web/packages/renderer-core/src/charts/segments.test.ts`, `settings-fields.test.ts`, `src/web/packages/renderer-core/src/theme/fabric-envelope-validate.test.ts`, `gauge.test.ts`, `bar.test.ts`, `pie.test.ts`, `src/web/packages/editor/src/chart-manager/panel.dom.test.ts`, `chart-fields.dom.test.tsx`
 
 **Interfaces:**
-- Produces: `SEGMENT_SPACING_PERCENT_DEFAULT = 2.5`; `segmentSpacingPercentOf(settings: { readonly segmentSpacingPercent?: number }): number`; `segmentFillOf(settings: { readonly segmentFill?: "whole" | "partial" }, fallback: "whole" | "partial"): "whole" | "partial"`.
+- Produces: `SEGMENT_SPACING_PERCENT_DEFAULT = 2.5` (bar and pie) and `GAUGE_SEGMENT_SPACING_PERCENT_DEFAULT = 9.4` (the measured reference look); `segmentSpacingPercentOf(settings: { readonly segmentSpacingPercent?: number }): number`; `segmentFillOf(settings: { readonly segmentFill?: "whole" | "partial" }, fallback: "whole" | "partial"): "whole" | "partial"`.
 - Produces: `GaugeSettings.segmentSpacingPercent?: number`, `GaugeSettings.segmentFill?: "whole" | "partial"`; the same two optional keys on `BarSettings`; `PieSettings.segmentSpacingPercent?: number`.
-- Produces: each `default*Settings` carries `segmentSpacingPercent: 2.5`; gauge carries `segmentFill: "whole"`, bar `"partial"`.
+- Produces: `defaultGaugeSettings` carries `segmentSpacingPercent: 9.4`, bar and pie `2.5`; gauge carries `segmentFill: "whole"`, bar `"partial"`.
 - Produces: `ChartSettingView` gains `readonly decimals?: number` and `readonly suffix?: string`, rendered by `chart-fields.tsx`'s slider well and `aria-valuetext`.
 
 - [ ] **Step 1: Write the decision note**
@@ -71,7 +71,7 @@ it("reads an absent fill mode as the family's own", () => {
 
 In `settings-fields.test.ts`, extend the coverage maps and expected authored orders with `segmentSpacingPercent` for all three families and `segmentFill` for gauge and bar; assert the spacing descriptor is `{ kind: "number", min: 0, max: 20 }` and the fill descriptor is a select with the two options and `visibleWhen` matching `segmentDivisor !== 100`.
 
-In `panel.dom.test.ts` and `chart-fields.dom.test.tsx`, assert a bare gauge's spacing row is `{ control: "slider", value: 2.5, min: 0, max: 20 }`, and that its well reads `2.5%` with `aria-valuetext` `2.5%`.
+In `panel.dom.test.ts` and `chart-fields.dom.test.tsx`, assert a bare gauge's spacing row is `{ control: "slider", value: 9.4, min: 0, max: 20, step: 0.1 }`, and that its well reads `9.4%` with `aria-valuetext` `9.4%`.
 
 In `fabric-envelope-validate.test.ts`, assert the envelope refuses `segmentSpacingPercent: 30` at `path: "/scene/objects/0/settings/segmentSpacingPercent"` and refuses `segmentFill: "half"` at its select path, accepting `"partial"`.
 
@@ -158,7 +158,7 @@ it("quantises a whole fill to the band the reading reaches", () => {
 
 `gapDegrees` and `colorBands` are file-local readers over `option.series[0].axisLine.lineStyle.color`.
 
-In `plan.test.ts`, assert `buildChartPlan` passes `drawnEdge` from the context: a gauge plan built with `drawnEdge: 200` has a larger gap offset than the same plan with `drawnEdge: 800`.
+In `plan.test.ts`, assert `buildChartPlan` passes `drawnEdgePx` from the context: a gauge plan built with `drawnEdgePx: 120` has a larger gap offset than the same plan with `drawnEdgePx: 800`.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -327,7 +327,7 @@ git commit -m "feat(charts): space pie slices by the drawn size"
 
 In the existing `segmentDivisor` case, after the divisor reaches `20`:
 
-- assert the built option's gap offsets rather than pixel counts: `builtOption` for the gauge at the authored size, then again after resizing the chart to half its width, and assert the half-size option's gap in degrees is larger (cap clearance won) while the large one is the 2.5% share.
+- assert the built option's gap offsets rather than pixel counts: `builtOption` for the gauge at the authored size, then again after resizing the chart to half its width, and assert both are the 9.4% share — the share is the same angle at any size, so the pixel gap halves with the chart instead of collapsing. The clearance floor is a unit case, at a size where 18px caps exceed the share.
 - capture `editor-chart-gauge-spacing-large` and `editor-chart-gauge-spacing-small` (canvas scope, as the radar case does).
 - toggle Fill from `Whole segment` to `Partial segment`, and assert the canvas hash changes; capture `editor-chart-gauge-fill-partial`.
 

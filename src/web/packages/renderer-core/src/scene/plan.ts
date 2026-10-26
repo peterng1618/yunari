@@ -185,14 +185,17 @@ export type ChartPlanContext = Pick<
    */
   readonly playbackDelayMs?: number;
   /**
-   * The smaller edge of the chart's own drawn box, when the caller knows it.
+   * The smaller edge of the canvas ECharts draws into, in backing pixels, when
+   * the caller knows it.
    *
    * A gap measured in pixels — the clearance a round cap needs — cannot become
    * an angle without the radius, and the adapters draw at `radius: "100%"` of
-   * this box. Absent means the caller has not measured it, and an adapter skips
-   * the term rather than guessing a size.
+   * the backing canvas, which is the scene box times the chart's render scale.
+   * The option's thickness is in those same backing pixels, so the scale cannot
+   * be dropped here. Absent means the caller has not measured it, and an adapter
+   * skips the term rather than guessing a size.
    */
-  readonly drawnEdge?: number;
+  readonly drawnEdgePx?: number;
 };
 
 /**
@@ -562,7 +565,7 @@ export function buildChartPlan(
           applyTransform(sample, binding),
           animate,
           palette,
-          context.drawnEdge,
+          context.drawnEdgePx,
         ),
       };
     }

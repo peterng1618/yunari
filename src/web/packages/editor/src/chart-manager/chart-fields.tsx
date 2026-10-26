@@ -106,6 +106,8 @@ export type ChartSettingView =
       readonly values?: readonly number[];
       /** `descriptor.decimals`: display precision, not the stored value's. */
       readonly decimals?: number;
+      /** `descriptor.step`: the drag's step, when the range is finer than 1. */
+      readonly step?: number;
       /** `descriptor.suffix`: what the number is a share of, written beside it. */
       readonly suffix?: string;
       /** `descriptor.optional`: the well's empty draft is a removal, which is
@@ -404,6 +406,7 @@ function ChartSettingRow(props: {
           min={row.min}
           max={row.max}
           {...(row.values === undefined ? {} : { values: row.values })}
+          {...(row.step === undefined ? {} : { step: row.step })}
           {...(row.decimals === undefined ? {} : { decimals: row.decimals })}
           {...(row.suffix === undefined ? {} : { suffix: row.suffix })}
           onCommit={(value) => write(row.path, value)}
