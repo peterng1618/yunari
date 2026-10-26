@@ -38,18 +38,16 @@ export const ARTBOARD_ORIENTATIONS: ReadonlyArray<ArtboardOrientation> = [
 ];
 
 /**
- * The shape a new document opens at, and the one the stage opens looking at.
+ * The shape a new document opens at.
  *
- * **One owner for both answers.** A document and the lens that frames it are
- * different questions, but "what shape does this product assume" is one, and it
- * was two constants that disagreed: a 16:9 landscape document and a 19.5:9
- * lens. The catalogue's opening lens reads its shape from here rather than
- * holding a second number, so a lens that stopped being this shape is visible
- * here instead of only to whoever measures the stage.
+ * **Not the lens's owner.** The stage's opening lens is resolved at mount from
+ * the active catalogue — its own first landscape entry — so removing 16:9 from
+ * the catalogue opens the stage on a different lens while a new document still
+ * opens at this shape. The two are the same shape today only because 16:9 is
+ * the catalogue's first landscape default.
  *
  * The ratio and resolution a new document opens at, and the orientation it is
- * held. The 16:9 lens is this shape by construction, which is why
- * `lensMatching` finds it for a blank document without being told.
+ * held.
  */
 export const DEFAULT_ARTBOARD_PRESET = {
   ratio: "16:9",

@@ -7,8 +7,10 @@ import { openPane } from "./editor-rail.js";
  * The stage: framing, the display screen, the media layer and the pixels the
  * browser actually paints.
  *
- * Shared by `editor-display.spec.ts`, which stays tests. Everything here is a
- * measurement, so a claim about the display can be read in one place.
+ * Shared by `editor-display.spec.ts`, which stays tests. It holds both the
+ * actions those tests drive (choosing a lens, importing a picture, opening
+ * settings, creating a theme) and the measurements they read back, so a claim
+ * about the display is written once.
  */
 
 /** The editor preview every editor spec in this suite drives, named outright.
