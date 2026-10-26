@@ -389,8 +389,10 @@ export function createViewportManager({
       // panned the host centre is not on the screen, and stepping +/− would
       // walk the camera off the display a step at a time. Under Fit there is no
       // screen, so the host box is the one to centre on. A board with no area
-      // derives an empty lens box at the origin, so pivoting there would zoom
-      // about the canvas corner; an empty box is no screen to centre on either.
+      // derives an empty lens box whose on-screen centre is the artboard's
+      // translated origin, so pivoting there would zoom about that point
+      // instead of the framing box's centre; an empty box is no screen to
+      // centre on either.
       const screen = displayScreenRect();
       const box =
         screen !== undefined && screen.width > 0 && screen.height > 0
