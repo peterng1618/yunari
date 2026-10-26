@@ -349,6 +349,9 @@ export interface FontAssetReference extends AssetReference {
   readonly weight: string | number;
   readonly style: "normal" | "italic";
   readonly format: FontAssetFormat;
+  /** The published subset this file came from, so registration can attach the
+   *  right `unicode-range`. Absent on a locally imported font. */
+  readonly subset?: string;
   readonly sourceUrl?: string;
   readonly license?: AssetLicense;
 }

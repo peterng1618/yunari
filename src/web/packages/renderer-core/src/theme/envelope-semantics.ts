@@ -495,6 +495,15 @@ function validateAssets(issues: Issues, value: unknown): Set<string> {
     validateAssetPath(issues, asset["kind"], asset["path"], `${path}/path`);
 
     if (asset["kind"] === "font") validateFontAsset(issues, asset, path);
+    else if ("subset" in asset) {
+      // The key list is shared by every kind, so the font-only key needs its
+      // own refusal here rather than reaching the unknown-key check.
+      issues.add(
+        "unknown-field",
+        `${path}/subset`,
+        'An asset reference has no "subset" property.',
+      );
+    }
 
     if (
       asset["sha256"] !== undefined &&
@@ -614,6 +623,17 @@ function validateFontAsset(
       "invalid-asset-path",
       `${path}/path`,
       "A font asset path's extension must equal its format.",
+    );
+  }
+  if (
+    asset["subset"] !== undefined &&
+    (typeof asset["subset"] !== "string" ||
+      asset["subset"].trim().length === 0)
+  ) {
+    issues.add(
+      "wrong-type",
+      `${path}/subset`,
+      "A font asset subset must be a non-empty string.",
     );
   }
   if (

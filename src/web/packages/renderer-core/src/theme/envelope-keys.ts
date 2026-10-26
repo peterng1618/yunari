@@ -56,6 +56,9 @@ const KNOWN_KEYS = {
     "weight",
     "style",
     "format",
+    // Font-only, refused on other kinds by the validator: the cut a packaged
+    // face came from.
+    "subset",
   ],
   globalEntry: ["name", "value"],
   // A token names a face only. Size, leading, tracking and role belong to the

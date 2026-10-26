@@ -148,6 +148,7 @@
         "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "family": { "type": "string", "minLength": 1 }, "weight": { "oneOf": [{ "type": "string" }, { "type": "number" }] },
         "style": { "enum": ["normal", "italic"] }, "format": { "enum": ["woff2", "woff", "ttf", "otf"] },
+        "subset": { "type": "string", "minLength": 1 },
         "sourceUrl": { "type": "string", "format": "uri" },
         "license": { "type": "object", "additionalProperties": false, "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 200 }, "url": { "type": "string", "format": "uri" }, "attribution": { "type": "string", "maxLength": 500 } } }
       }

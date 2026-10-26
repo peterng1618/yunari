@@ -1164,6 +1164,76 @@ describe("Fabric theme envelope validation", () => {
     },
   );
 
+  it("accepts the published subset on a font and refuses it on any other kind", () => {
+    const accepted = validateFabricThemeEnvelope({
+      ...envelope(),
+      assets: [
+        {
+          id: "body-face",
+          kind: "font",
+          path: "assets/faces/body.woff2",
+          family: "Inter",
+          weight: 400,
+          style: "normal",
+          format: "woff2",
+          subset: "latin",
+        },
+      ],
+    });
+
+    expect(accepted).toMatchObject({ ok: true });
+
+    const refused = validateFabricThemeEnvelope({
+      ...envelope(),
+      assets: [
+        {
+          id: "logo",
+          kind: "image",
+          path: "assets/logo.png",
+          subset: "latin",
+        },
+      ],
+    });
+
+    expect(refused).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "unknown-field",
+          path: "/assets/0/subset",
+        }),
+      ]),
+    });
+
+    // On a font the key is admitted, but the schema publishes a non-empty
+    // string, so the validator refuses anything else rather than drifting.
+    const wrongType = validateFabricThemeEnvelope({
+      ...envelope(),
+      assets: [
+        {
+          id: "body-face",
+          kind: "font",
+          path: "assets/faces/body.woff2",
+          family: "Inter",
+          weight: 400,
+          style: "normal",
+          format: "woff2",
+          subset: 3,
+        },
+      ],
+    });
+
+    expect(wrongType).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "wrong-type",
+          path: "/assets/0/subset",
+        }),
+      ]),
+    });
+  });
+
   it("refuses a format that disagrees with the path extension", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),
