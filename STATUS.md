@@ -1,11 +1,11 @@
 # Yunari status
 
-Updated: 2026-10-26
-Branch: `main`
+Updated: 2026-10-27
+Branch: `peterng1618/improve-charts`
 
 ## Current objective
 
-The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md) (per-display shape and rotation, [`spec B`](docs/superpowers/specs/2026-10-26-display-rotation-design.md)) is the next plan, and the queued backlog drain follows it.
+Stop the live line's right edge revising a stretch it has already painted, the owner's report from 2026-10-27; plan B and the backlog drain stay queued behind it.
 
 ## Active work
 
@@ -17,18 +17,18 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Last completed change
 
-- **A family is drawn and applied by its lead face:** `leadCutOf` reads the cut id behind the row's `<source>:` prefix, not `cuts[0]` — the non-Latin subset that rendered as a serif.
-- **A cut's subset is named when weight and style repeat** (`400 · latin`), and the chips use the panel's own face, not the specimen's.
-- **An import brings the lead subset's weights:** Apply / Add as preset adopts every weight and style of the family's lead subset, and the Assets pane draws one card per family listing them; an already-declared face is never re-downloaded.
-- **A bound preset's weight is a list of the faces the package holds,** not free text that would fall back to the browser font; an unbound preset keeps its editable family and weight.
-- **Proof:** editor/document/assets suites pass, `npm run typecheck` exit 0; a browser run presses the latin cut, requests `latin-400` and `latin-700` (not `vietnamese`), and the bound preset's weight opens as a list of exactly `400` and `700`.
+- **A stall's step survives the batches that follow it:** `liveTail` derives the hold and step from every sample gap instead of the newest pair, so the next batch no longer slopes a flat stretch already painted.
+- **The live line no longer corrects at the edge:** the per-frame probe read 15 revisions per line chart before the change and 0 after, on the editor's real machine sensors.
+- **Red first:** the drawn-value case across the batch after a stall and three `liveTail` expectations failed before the change; the chart suite is 324/324 after it, typecheck exit 0.
+- **Main's font and token work is merged:** lead-subset import, one family card per face set, and a bound preset's weight chosen from the package's faces.
 
 ## Next
 
-1. Execute plan B with subagent-driven development; local merge to `main` on completion.
-2. Resume the backlog-drain plan at Phase 0 after that merge.
-3. Triage the pre-existing browser reds recorded below.
-4. Owner tests remain: segment spacing and fill, radar and polar bar, scene export, fonts and assets rework.
+1. Owner test of the live line's right edge, in the editor and on a phone, with machine sensors.
+2. Decide whether the 2 s delay should follow the received cadence: the editor receives a batch every ~2 s because the host drops every other one under backpressure (`vg-753`).
+3. Execute plan B with subagent-driven development; local merge to `main` on completion.
+4. Resume the backlog-drain plan at Phase 0 after that merge.
+5. Triage the pre-existing browser reds recorded below.
 
 ## Blockers / unverified
 
