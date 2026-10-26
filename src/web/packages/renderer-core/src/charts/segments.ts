@@ -92,6 +92,22 @@ export function gaugeGap(
 }
 
 /**
+ * The empty length a cartesian band leaves, in pixels.
+ *
+ * A bar draws in pixel space, so the share of the chart's smaller edge is
+ * already the gap — no angle and no radius. The 45% clamp is the same one the
+ * gauge applies: past it the gap stops reading as a gap.
+ */
+export function barGapPx(
+  edgePx: number,
+  bandPx: number,
+  spacingPercent: number,
+): number {
+  const share = (Math.max(0, spacingPercent) / 100) * Math.max(0, edgePx);
+  return Math.min(share, 0.45 * bandPx);
+}
+
+/**
  * How many slices a full measure is cut into.
  *
  * A divisor the list does not carry draws continuously: it cannot come from a

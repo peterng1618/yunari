@@ -18,9 +18,9 @@ Land [`2026-10-26-segment-spacing-and-fill-mode-design.md`](docs/superpowers/spe
 
 ## Last completed change
 
-- **Gauge gaps are a share of the drawn edge:** the spacing angle is size-free, the cap clearance widens it on a small chart, and either is capped at 45% of a band.
-- **The plan carries the drawn size:** `ChartPlanContext.drawnEdge` reaches the gauge from both the editor and the player.
-- **Partial fill stops at the reading:** the whole mode keeps the slice-end rule it has always drawn.
+- **Bar bands measure the gap off the render API's own box:** a share of the smaller edge, clamped to 45% of a band.
+- **Whole mode lights a band only once the reading completes it;** partial keeps the reading's own fraction, so the two modes are visibly different at the same value.
+- **The segmented renderer's API surface gained `getWidth`/`getHeight`,** which is where the chart's drawn size reaches pixel-space geometry.
 
 ## Next
 

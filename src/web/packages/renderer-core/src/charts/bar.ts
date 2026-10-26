@@ -17,11 +17,13 @@ import {
 } from "./fill.js";
 import { type CartesianGrid, cartesianGrid } from "./grid.js";
 import {
-  SEGMENT_GAP_RATIO,
+  barGapPx,
   SEGMENT_SPACING_PERCENT_DEFAULT,
   type SegmentFill,
   segmentCount,
   segmentDivisorOf,
+  segmentFillOf,
+  segmentSpacingPercentOf,
 } from "./segments.js";
 
 /**
@@ -151,6 +153,9 @@ export interface BarRenderParams {
 export interface BarRenderApi {
   coord(point: readonly [number, number]): readonly [number, number];
   size(size: readonly [number, number]): readonly [number, number];
+  /** The drawn box, which is what a gap is a share of. */
+  getWidth(): number;
+  getHeight(): number;
 }
 
 export interface BarRect {
@@ -282,9 +287,11 @@ function barAxes(settings: BarSettings, inputs: readonly BarInput[]): BarAxes {
  * per category and a segmented fill needs one per band.
  *
  * **Bands are geometry, not data.** The reading still decides how far the fill
- * reaches; the bands only decide where the cuts fall. A partial band is
- * shortened proportionally, so the reading's own fraction survives the cuts
- * rather than snapping to a slice boundary.
+ * reaches; the bands only decide where the cuts fall. The gap is a share of the
+ * chart's smaller edge, read off the render API's own box, so it measures the
+ * same on a large bar and a small one. In `partial` mode the band holding the
+ * reading is shortened proportionally, so the reading's own fraction survives
+ * the cuts; in `whole` mode a band lights only once the reading completes it.
  */
 export function buildSegmentedBarOption(
   settings: BarSettings,
@@ -334,7 +341,7 @@ function segmentedRenderItem(
   readings: readonly (number | null)[],
 ): BarRenderItem {
   const horizontal = settings.orientation === "horizontal";
-  const gap = SEGMENT_GAP_RATIO;
+  const whole = segmentFillOf(settings, "partial") === "whole";
   const track =
     settings.track === undefined
       ? undefined
@@ -353,7 +360,12 @@ function segmentedRenderItem(
     const sign = horizontal ? Math.sign(maxX - minX) : Math.sign(maxY - minY);
     const span = horizontal ? Math.abs(maxX - minX) : Math.abs(maxY - minY);
     const band = span / count;
-    const visible = band * (1 - gap);
+    const gapPx = barGapPx(
+      Math.min(api.getWidth(), api.getHeight()),
+      band,
+      segmentSpacingPercentOf(settings),
+    );
+    const visible = band - gapPx;
     const thickness =
       settings.barWidth ??
       (horizontal ? api.size([0, 1])[1] : api.size([1, 0])[0]) *
@@ -414,7 +426,8 @@ function segmentedRenderItem(
     }
     if (fill !== undefined && reading !== null && position > 0) {
       for (let bandIndex = 0; bandIndex < count; bandIndex += 1) {
-        const fraction = Math.min(Math.max(position * count - bandIndex, 0), 1);
+        const raw = Math.min(Math.max(position * count - bandIndex, 0), 1);
+        const fraction = whole ? (raw >= 1 ? 1 : 0) : raw;
         if (fraction === 0) continue;
         children.push(
           rect(
