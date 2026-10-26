@@ -29,6 +29,7 @@ import {
   FontMetadataForm,
   fontMetadataFromFilename,
 } from "./font-metadata-form.js";
+import { isPreviewable, openAssetPreview } from "./preview-modal.js";
 
 /**
  * The Assets pane's body: every declared file as a card, grouped by kind.
@@ -59,8 +60,6 @@ interface AssetsPaneProps {
   readonly onChanged?: () => void;
   /** Opens the finder. Optional so the pane draws without a shell. */
   readonly onFindAssets?: () => void;
-  /** Opens the asset preview. */
-  readonly onPreview?: (asset: LocalAssetReference) => void;
   /** Writes the asset as the artboard's background media — envelope state the
    *  pane cannot reach itself. */
   readonly onBackground?: (asset: LocalAssetReference) => void;
@@ -136,7 +135,6 @@ export function AssetsPane({
   isReferenced,
   onChanged,
   onFindAssets,
-  onPreview,
   onBackground,
   onFontCommit,
 }: AssetsPaneProps): React.JSX.Element {
@@ -464,19 +462,72 @@ export function AssetsPane({
     onChanged?.();
   };
 
+  /**
+   * Opens the asset's own surface, with the pane's closures so its commands run
+   * through `submit()` exactly as the card's do.
+   *
+   * A video has no URL from the manager — `previewUrl` answers `undefined` for
+   * one — so the pane mints the stage's blob URL and releases it when the modal
+   * reports it has closed. Nothing is written: the URL is a reading of the
+   * declared bytes.
+   */
+  const openPreview = (asset: LocalAssetReference): void => {
+    if (!isPreviewable(asset)) return;
+    const bytes = manager.assets[asset.path];
+    let videoUrl: string | undefined;
+    if (asset.kind === "video" && bytes !== undefined) {
+      const type = mimeOf(asset.path);
+      videoUrl = URL.createObjectURL(
+        new Blob([bytes as unknown as BlobPart], {
+          ...(type === undefined ? {} : { type }),
+        }),
+      );
+    }
+    setChosenId(asset.id);
+    void openAssetPreview({
+      asset,
+      previewUrl:
+        asset.kind === "video" ? videoUrl : manager.previewUrl(asset.id),
+      inUse: referenced(asset.id),
+      // The session's credits are not the pane's to read; the declaration's own
+      // licence and source are the attribution this surface can show.
+      credit: undefined,
+      sizeBytes: bytes?.byteLength,
+      onRemove: () => submit(() => remove(asset)),
+      onReplace: () => {
+        setChosenId(asset.id);
+        replaceInput.current?.click();
+      },
+      onBackground:
+        onBackground === undefined
+          ? undefined
+          : () => void submit(async () => onBackground(asset)),
+      onPlace:
+        asset.kind === "video"
+          ? undefined
+          : () => void submit(() => place(asset)),
+      onClose: () => {
+        if (videoUrl !== undefined) URL.revokeObjectURL(videoUrl);
+      },
+    });
+  };
+
   /** The actions a chosen card draws. The two canvas writes are absent where
-   *  the kind cannot perform them; Create type preset is a face's own. */
+   *  the kind cannot perform them; Create type preset is a face's own. Preview
+   *  is absent for a face too: the finder owns a font's specimen. */
   const actionsFor = (asset: LocalAssetReference): React.JSX.Element => {
-    const actions: React.JSX.Element[] = [
-      <ControlIconButton
-        key="preview"
-        label={uiCopy.panels.assetCard.preview}
-        disabled={onPreview === undefined}
-        onClick={() => onPreview?.(asset)}
-      >
-        <Glyph icon={VISIBLE_GLYPH} size={13} />
-      </ControlIconButton>,
-    ];
+    const actions: React.JSX.Element[] = [];
+    if (isPreviewable(asset)) {
+      actions.push(
+        <ControlIconButton
+          key="preview"
+          label={uiCopy.panels.assetCard.preview}
+          onClick={() => openPreview(asset)}
+        >
+          <Glyph icon={VISIBLE_GLYPH} size={13} />
+        </ControlIconButton>,
+      );
+    }
     if (asset.kind === "image" || asset.kind === "svg") {
       actions.push(
         <ControlIconButton

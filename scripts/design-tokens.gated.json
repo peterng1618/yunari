@@ -1,6 +1,6 @@
 {
   "remainderCeiling": 2,
-  "designLanguagePx": [2, 3, 11, 14, 26, 28, 30, 32, 36, 40, 46, 74, 140, 158, 180, 246, 272, 276, 420, 960],
+  "designLanguagePx": [2, 3, 11, 14, 26, 28, 30, 32, 36, 40, 46, 74, 140, 158, 180, 246, 270, 272, 276, 420, 960],
   "gated": [
     "src/web/packages/editor/src/asset-finder/font-grid.tsx",
     "src/web/packages/editor/src/asset-finder/font-preview-panel.tsx",
@@ -32,6 +32,7 @@
     "src/web/packages/editor/src/editor-shell/pane.tsx",
     "src/web/packages/editor/src/editor-shell/layer-panel.tsx",
     "src/web/packages/editor/src/panes/assets/asset-card.tsx",
+    "src/web/packages/editor/src/panes/assets/preview-modal.tsx",
     "src/web/packages/editor/src/panes/composition/composition-pane.tsx",
     "src/web/packages/editor/src/panes/composition/row-affordances.tsx",
     "src/web/packages/editor/src/panes/composition/kind-mark.tsx",

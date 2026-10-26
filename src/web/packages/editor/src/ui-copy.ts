@@ -85,6 +85,12 @@ const MEGABYTE = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 1,
 });
 
+/** One byte count as a reading, shared by the two surfaces that print one. */
+const fileSize = (bytes: number): string =>
+  bytes < 1024 * 1024
+    ? KILOBYTE.format(bytes / 1024)
+    : MEGABYTE.format(bytes / (1024 * 1024));
+
 export const uiCopy = {
   brand: "Yunari",
   /** The rail's five slots. A slot's word is both its tooltip and its
@@ -1233,6 +1239,36 @@ export const uiCopy = {
     /** An image's second action: the theme's background is one thing an author
      *  wants, a picture on the canvas is another, and both are one press. */
     placeOnCanvas: "Place on canvas",
+    /** The asset preview (`assets-preview.html`), opened from a card's Preview.
+     *  One surface for an image, an SVG and a video; a font has no preview here
+     *  because the finder owns a face's specimen. Its kind and In use words are
+     *  the card's own, so the two surfaces cannot disagree. */
+    preview: {
+      close: "Close",
+      file: "File",
+      shape: "Shape",
+      attribution: "Attribution",
+      /** Where the declaration came from: the Assets pane declares local files
+       *  only, so this is the one origin the surface can name. */
+      localFile: "Local file",
+      noneRecorded: "None recorded",
+      /** The caption's verb, without a measurement this build could not read. */
+      fit: "fit",
+      statusUnused:
+        "A local file. Nothing on the canvas and no type preset refers to it.",
+      statusUsed: "Something on the canvas or a type preset refers to it.",
+      usedByNothing: "Used by nothing",
+      /** The drawing says `Used by N objects`; the manager's reachability
+       *  answer is a boolean, so the line names the routes rather than a count
+       *  nobody measured. */
+      usedBySome: "Used by an object or a type preset",
+      recycleNote: "Remove goes to the Recycle Bin on save",
+      /** The two commands the card's words do not fit: its Replace and Remove
+       *  are reused, and these are the one-word forms the 2×2 foot draws. */
+      background: "Background",
+      place: "Place",
+      size: fileSize,
+    },
     pager: {
       pages: "Pages",
       previous: "Previous page",
@@ -1270,10 +1306,7 @@ export const uiCopy = {
         web: "Web",
         scene: "Scene",
       } satisfies Record<"image" | "video" | "web" | "scene", string>,
-      size: (bytes: number): string =>
-        bytes < 1024 * 1024
-          ? KILOBYTE.format(bytes / 1024)
-          : MEGABYTE.format(bytes / (1024 * 1024)),
+      size: fileSize,
       import: "Set as background",
       openScene: "Open in Wallpaper Engine",
       search: "Search titles",

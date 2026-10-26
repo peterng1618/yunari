@@ -277,19 +277,49 @@ describe("the Assets pane", () => {
     ).toBe("blob:logo-preview");
   });
 
-  it("reaches the manager from an action, and marks an unwired one disabled", async () => {
+  it("reaches the manager from an action", async () => {
     const { host, manager } = mount([IMAGE]);
 
     const remove = actionOf(host, "logo.png", uiCopy.panels.assetCard.remove);
     if (remove === null) throw new Error("the chosen card drew no Remove");
     await act(async () => remove.click());
     expect(manager.remove).toHaveBeenCalledWith(IMAGE.id);
+  });
 
-    // No `onPreview` was handed in, so the control says so rather than pressing
-    // onto nothing. Task 20 supplies it from the session.
+  it("opens the preview from a picture's card, and offers none for a font", async () => {
+    const { host } = mount([IMAGE, FONT], {
+      previewUrl: (assetId) =>
+        assetId === IMAGE.id ? "blob:logo-preview" : undefined,
+    });
+
+    await selectCard(host, "logo.png");
+    const preview = actionOf(host, "logo.png", uiCopy.panels.assetCard.preview);
+    expect(preview?.disabled).toBe(false);
+    await act(async () => {
+      preview?.click();
+      await drain();
+    });
+
+    // The pane owns the surface: pressing Preview opened it rather than
+    // reporting to a second owner.
     expect(
-      actionOf(host, "logo.png", uiCopy.panels.assetCard.preview)?.disabled,
-    ).toBe(true);
+      document.querySelector("[data-yunari-asset-preview-modal]"),
+    ).not.toBeNull();
+    await act(async () => {
+      document
+        .querySelector<HTMLButtonElement>(".editor-shell-dialog-close")
+        ?.click();
+      await drain();
+    });
+    expect(
+      document.querySelector("[data-yunari-asset-preview-modal]"),
+    ).toBeNull();
+
+    // A face has no preview here: the finder owns its specimen.
+    await selectCard(host, "body.woff2");
+    expect(
+      actionOf(host, "body.woff2", uiCopy.panels.assetCard.preview),
+    ).toBeNull();
   });
 });
 

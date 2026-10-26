@@ -545,8 +545,6 @@ export class EditorSession {
       onChanged: () => this.#declarationsChanged(),
       onFindAssets: () => options.onFindAssets?.(),
       onFontCommit: (input) => this.#commitFont(input),
-      // Preview is Task 20; the pane disables an action whose callback is
-      // absent, so leaving it unwired is the deliberate state.
       onBackground: (asset) => {
         const background = this.#document.envelope.background;
         this.#document.setBackground({
