@@ -55,6 +55,10 @@ interface AssetsPaneProps {
   readonly editor: EditorInteraction;
   /** The envelope-side references no object carries. */
   readonly isReferenced?: (assetId: string) => boolean;
+  /** Told the document moved, so a reference this pane cannot see — a deleted
+   *  object, a cleared background — redraws the cards. Optional, like the
+   *  others, so the pane mounts where there is no document to follow. */
+  readonly subscribeDocumentChange?: (listener: () => void) => () => void;
   /** Told the declarations moved, so the document's own panels re-resolve: the
    *  artboard's background media, its bytes, and the pane's title count. */
   readonly onChanged?: () => void;
@@ -133,6 +137,7 @@ export function AssetsPane({
   manager,
   editor,
   isReferenced,
+  subscribeDocumentChange,
   onChanged,
   onFindAssets,
   onBackground,
@@ -163,13 +168,33 @@ export function AssetsPane({
   // which is why the manager tells it rather than the local actions alone.
   const [, render] = useReducer((count: number) => count + 1, 0);
   useEffect(() => manager.subscribe(render), [manager, render]);
+  // Hidden panes are never unmounted, so reachability is re-read on the two
+  // things that move it without touching a declaration: a document write (an
+  // undo, a cleared background) and the canvas itself. Reading once at mount is
+  // what left a deleted object's asset reading In use forever.
+  useEffect(
+    () => subscribeDocumentChange?.(render),
+    [subscribeDocumentChange, render],
+  );
+  useEffect(() => {
+    const canvas = editor.canvas;
+    if (typeof canvas.on !== "function") return;
+    canvas.on("object:added", render);
+    canvas.on("object:removed", render);
+    return () => {
+      canvas.off("object:added", render);
+      canvas.off("object:removed", render);
+    };
+  }, [editor, render]);
 
   const declarations = manager.declarations;
   const chosen =
     declarations.find((asset) => asset.id === chosenId) ?? declarations[0];
-  const objects = editor.canvas.getObjects();
+  // Read live at every call: a render's object list is a snapshot, and Remove
+  // is decided by what the scene and the document hold at the press.
   const referenced = (assetId: string): boolean =>
-    assetReferencedBy(objects, assetId) || isReferenced?.(assetId) === true;
+    assetReferencedBy(editor.canvas.getObjects(), assetId) ||
+    isReferenced?.(assetId) === true;
 
   // One submission at a time: the pickers are cleared after every use, so a
   // re-fire of the same file is caught here rather than importing twice.

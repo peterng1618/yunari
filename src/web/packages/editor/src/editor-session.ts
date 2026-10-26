@@ -542,6 +542,8 @@ export class EditorSession {
       manager: this.#assets,
       editor: options.shell.editor,
       isReferenced: (assetId) => this.#document.holdsAsset(assetId),
+      subscribeDocumentChange: (listener) =>
+        this.#document.subscribeDocumentChange(listener),
       onChanged: () => this.#declarationsChanged(),
       onFindAssets: () => options.onFindAssets?.(),
       onFontCommit: (input) => this.#commitFont(input),

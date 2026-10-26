@@ -15,5 +15,5 @@ export interface FontMetadata {
 
 /** The weight range a declared face accepts, shared by the form and the
  *  manager so neither can widen it alone. */
-export const FONT_WEIGHT_MIN = 120;
+export const FONT_WEIGHT_MIN = 100;
 export const FONT_WEIGHT_MAX = 900;

@@ -369,6 +369,9 @@ interface Harness {
   readonly onFindAssets: Mock;
   readonly onBackground: Mock;
   readonly fontCommit: Mock;
+  /** Fires a canvas event at the handlers the pane registered, so a case can
+   *  move the scene the way Fabric does. */
+  readonly fire: (event: string) => void;
 }
 
 /** The file section over a real `AssetManager`, on an editor stub that answers
@@ -377,6 +380,9 @@ async function mountWithManager(
   isReferenced: (assetId: string) => boolean = () => false,
   objects: readonly unknown[] = [],
   withBackground = true,
+  options: {
+    readonly subscribeDocumentChange?: (listener: () => void) => () => void;
+  } = {},
 ): Promise<Harness> {
   const host = document.createElement("div");
   document.body.append(host);
@@ -402,6 +408,11 @@ async function mountWithManager(
   const changed = vi.fn();
   const onFindAssets = vi.fn();
   const onBackground = vi.fn();
+  /** The canvas's own events, kept so a case can fire the ones Fabric fires. */
+  const handlers = new Map<string, Set<() => void>>();
+  const fire = (event: string): void => {
+    for (const handler of handlers.get(event) ?? []) handler();
+  };
   /** The session's own declaration, minus the document: a Cancel declares and
    *  a Create reports success, so a case can read what the pane asked for. */
   const fontCommit = vi.fn<FontCommit>(async (input: FontCommitInput) => {
@@ -413,8 +424,18 @@ async function mountWithManager(
   });
   const editor = {
     canvas: {
-      getObjects: () => objects,
+      // A fresh array per read: a caller that kept one render's answer must not
+      // see a later object through it.
+      getObjects: () => [...objects],
       requestRenderAll: vi.fn(),
+      on: (event: string, handler: () => void) => {
+        const set = handlers.get(event) ?? new Set<() => void>();
+        set.add(handler);
+        handlers.set(event, set);
+      },
+      off: (event: string, handler: () => void) => {
+        handlers.get(event)?.delete(handler);
+      },
     },
     historyManager: { attachGlobals: () => {}, saveState },
     errorManager: { error, warn: vi.fn() },
@@ -431,6 +452,9 @@ async function mountWithManager(
         onChanged={changed}
         onFindAssets={onFindAssets}
         onFontCommit={fontCommit}
+        {...(options.subscribeDocumentChange === undefined
+          ? {}
+          : { subscribeDocumentChange: options.subscribeDocumentChange })}
         {...(withBackground ? { onBackground } : {})}
       />,
     );
@@ -449,6 +473,7 @@ async function mountWithManager(
     onFindAssets,
     onBackground,
     fontCommit,
+    fire,
   };
 }
 
@@ -865,6 +890,71 @@ describe("the behaviours the file section carried", () => {
 
     expect(remove).not.toHaveBeenCalled();
     expect(alert(host).textContent).toBe(uiCopy.panels.assetReferenced);
+  });
+
+  it("flips a deleted object's asset to Unused, and removes it on a press", async () => {
+    // The pane is mounted once and hidden, never unmounted, so a reachability
+    // read taken at mount would still say In use after the object is gone.
+    const image = new FabricImage(document.createElement("img"), {
+      id: "image-1",
+    });
+    setObjectAssetReference(image, { assetId: "logo", kind: "image" });
+    const objects: unknown[] = [image];
+    const { host, remove, fire } = await mountWithManager(() => false, objects);
+
+    await importFile(host, IMAGE_FILE);
+    expect(badgeOf(host, "logo.png")).toBe(uiCopy.panels.assetCard.inUse);
+
+    await act(async () => {
+      objects.pop();
+      fire("object:removed");
+    });
+
+    expect(badgeOf(host, "logo.png")).toBe(uiCopy.panels.assetCard.unused);
+    await act(async () => removeControl(host).click());
+
+    expect(remove).toHaveBeenCalledWith(IMAGE.id);
+  });
+
+  it("refuses a press made after an object re-references the asset", async () => {
+    // No event is fired: the scene moved and the render did not. The press
+    // must read the canvas itself rather than a render's object list.
+    const image = new FabricImage(document.createElement("img"), {
+      id: "image-1",
+    });
+    setObjectAssetReference(image, { assetId: "logo", kind: "image" });
+    const objects: unknown[] = [];
+    const { host, remove } = await mountWithManager(() => false, objects);
+
+    await importFile(host, IMAGE_FILE);
+    expect(badgeOf(host, "logo.png")).toBe(uiCopy.panels.assetCard.unused);
+
+    objects.push(image);
+    await act(async () => removeControl(host).click());
+
+    expect(remove).not.toHaveBeenCalled();
+    expect(alert(host).textContent).toBe(uiCopy.panels.assetReferenced);
+  });
+
+  it("re-reads reachability when the document announces a change", async () => {
+    // A cleared background or an undone preset edit moves the envelope half of
+    // reachability without touching a declaration, and the pane must follow it.
+    let holds = true;
+    let notify: () => void = () => {};
+    const { host } = await mountWithManager(() => holds, [], true, {
+      subscribeDocumentChange: (listener) => {
+        notify = listener;
+        return () => {};
+      },
+    });
+
+    await importFile(host, IMAGE_FILE);
+    expect(badgeOf(host, "logo.png")).toBe(uiCopy.panels.assetCard.inUse);
+
+    holds = false;
+    await act(async () => notify());
+
+    expect(badgeOf(host, "logo.png")).toBe(uiCopy.panels.assetCard.unused);
   });
 
   it("removes an unreferenced asset, and the list follows the declarations", async () => {

@@ -178,7 +178,32 @@ describe("the font metadata form", () => {
     ).toBe("normal");
   });
 
-  it("refuses an empty family and a weight outside 120–900", async () => {
+  it("prefills a thin cut at 100 and accepts it", async () => {
+    // The parser maps `thin`/`100` to 100, so a floor above it pre-fills a
+    // weight the form then refuses.
+    const thin = fontMetadataFromFilename("Inter-Thin.woff2");
+    expect(thin.weight).toBe(100);
+    const onCommit = vi.fn();
+    await mount(
+      <FontMetadataForm
+        filename="Inter-Thin.woff2"
+        initial={thin}
+        busy={false}
+        onCommit={onCommit}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(field("[data-yunari-font-weight]").value).toBe("100");
+    await click(host!.querySelector("[data-yunari-font-create]")!);
+
+    expect(onCommit).toHaveBeenCalledWith(
+      { family: "Inter", weight: 100, style: "normal", licence: "unknown" },
+      null,
+    );
+  });
+
+  it("refuses an empty family and a weight outside 100–900", async () => {
     const { onCommit } = await renderForm();
 
     await draft(field("[data-yunari-font-family]"), "");
