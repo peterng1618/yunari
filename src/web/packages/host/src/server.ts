@@ -3236,7 +3236,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // query token cannot pass — the cookie is the credential from here on.
     // A token no display holds sets no cookie and falls through, so the caller
     // is served exactly what it was before this route existed.
-    if (url.pathname === "/" && !url.searchParams.has("data")) {
+    //
+    // It runs whether or not the link named `data`: a display URL the library
+    // resolved carries `data=live`, and gating on its absence left exactly
+    // those links with a token and no cookie — a 403 from the LAN guard below
+    // that no reload could fix.
+    if (url.pathname === "/") {
       const offered = url.searchParams.get("session");
 
       if (offered !== null) {

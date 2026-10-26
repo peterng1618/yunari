@@ -9306,6 +9306,24 @@ describe("The root page resolves the display that asked", () => {
       LAN,
     );
     expect(themed.headers.location).toBe("/?theme=studio");
+
+    // A display URL the library resolved carries `data=live`. The exchange
+    // must still run: without it, the LAN guard refuses the display's own
+    // link with the token it was just given, and no reload clears it.
+    const resolved = await request(
+      hosted.server,
+      "GET",
+      `/?theme=studio&data=live&theme-source=link&session=${encodeURIComponent(token)}`,
+      undefined,
+      LAN,
+    );
+    expect(resolved.status).toBe(302);
+    expect(resolved.headers.location).toBe(
+      "/?theme=studio&data=live&theme-source=link",
+    );
+    expect(String(resolved.headers["set-cookie"])).toContain(
+      "yunari_session=",
+    );
   });
 
   it("serves a loopback page with no cookie for a root ?session= no display holds", async () => {
