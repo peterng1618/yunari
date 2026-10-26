@@ -16,7 +16,11 @@ import {
   createSecretStore,
   type SecretStore,
 } from "../settings/secret-store.js";
-import { createSecureOrigin, serialNumber } from "./authority.js";
+import {
+  certificateFingerprintSha256,
+  createSecureOrigin,
+  serialNumber,
+} from "./authority.js";
 
 /**
  * The chain is checked by **Node's own X.509 verifier**, never by the library
@@ -116,6 +120,25 @@ describe("the host's own certificate authority", () => {
     // one it had to warn about. `verify` is that question, asked of the root.
     expect(leaf.verify(authority.publicKey)).toBe(true);
     expect(authority.verify(authority.publicKey)).toBe(true);
+  });
+
+  it("fingerprints the DER of the root it hands out", async () => {
+    const origin = await open();
+
+    // What a person compares out of band: the DER is what a client installs, so
+    // the hash is of the certificate rather than of this PEM spelling. Lowercase
+    // and unseparated, because a phone screen and a terminal have to agree.
+    const fingerprint = certificateFingerprintSha256(origin.certificate);
+    expect(fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    expect(fingerprint).toBe(certificateFingerprintSha256(origin.certificate));
+    expect(fingerprint).not.toContain("BEGIN");
+    expect(fingerprint).not.toContain("CERTIFICATE");
+
+    // One directory mints one root, so a second certificate has to be a
+    // different one — otherwise this would pass on a constant.
+    expect(
+      certificateFingerprintSha256(legacyAuthority().certificate),
+    ).not.toBe(fingerprint);
   });
 
   it("presents the leaf and the root, in that order", async () => {

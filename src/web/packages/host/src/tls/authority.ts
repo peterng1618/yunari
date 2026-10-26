@@ -1,4 +1,5 @@
 import {
+  createHash,
   createPublicKey,
   generateKeyPairSync,
   randomBytes,
@@ -51,6 +52,10 @@ export interface SecureOrigin {
   readonly certificate: string;
   /** Where the root lives, so the console can name a file rather than a shape. */
   readonly certificatePath: string;
+  /** The SHA-256 of `certificate`'s DER, lowercase hex. Computed here, once,
+   *  because it is printed at startup and published with the served root: two
+   *  people compare those two, so they must come from one reading. */
+  readonly fingerprint: string;
   /** The leaf's private key, PEM. In memory only, never written. */
   readonly key: string;
   /** The leaf, PEM, covering every name it was asked for. */
@@ -91,9 +96,23 @@ export async function createSecureOrigin(
   return {
     certificate,
     certificatePath,
+    fingerprint: certificateFingerprintSha256(certificate),
     chain: leaf.leaf + certificate,
     ...leaf,
   };
+}
+
+/**
+ * The SHA-256 of the certificate's DER, lowercase hex — 64 characters a person
+ * can read out and compare on a phone before trusting the root.
+ *
+ * Of the DER rather than of the PEM text: whitespace and line wrapping are a
+ * spelling of the same certificate, and a client stores the DER.
+ */
+export function certificateFingerprintSha256(pem: string): string {
+  return createHash("sha256")
+    .update(new X509Certificate(pem).raw)
+    .digest("hex");
 }
 
 /**

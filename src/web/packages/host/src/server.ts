@@ -344,8 +344,15 @@ export interface HostServerOptions {
    *  origin rather than any route that decides it. See `docs/decisions/0070`. */
   readonly tls?: { readonly key: string; readonly cert: string };
   /** The root a display installs, served at `CA_CERTIFICATE_PATH`. Omitted when
-   *  the host has none to offer, and the route then says so. */
-  readonly caCertificate?: string;
+   *  the host has none to offer, and the route then says so. The fingerprint
+   *  travels with the bytes rather than being hashed here: the launcher prints
+   *  one value, and a route that computed its own could publish another. */
+  readonly caCertificate?: {
+    /** The root, PEM — the route's body. */
+    readonly pem: string;
+    /** SHA-256 of that root's DER, lowercase hex. */
+    readonly fingerprint: string;
+  };
   /** Which host this app folder is (§ "Finding the host after its address
    *  changes"), answered by `GET /api/host`. Omitted when this host has no
    *  identity: the route is then not registered at all, because an id minted to
@@ -947,10 +954,17 @@ function sendHtml(
  *  it is served as one. The media type is what makes a phone offer to install
  *  it rather than render it as text, and it is the type the operating systems
  *  themselves use for a `.crt`. */
-function sendCertificate(response: http.ServerResponse, body: string): void {
+function sendCertificate(
+  response: http.ServerResponse,
+  body: string,
+  fingerprint: string,
+): void {
   response.writeHead(200, {
     "content-type": "application/x-x509-ca-cert",
     "content-disposition": 'attachment; filename="yunari-ca.crt"',
+    // Beside the bytes rather than inside them, so a device can compare the
+    // fingerprint it was told before it installs what it was sent.
+    "x-yunari-ca-sha256": fingerprint,
   });
   response.end(body);
 }
@@ -1541,7 +1555,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
-      sendCertificate(response, caCertificate);
+      sendCertificate(response, caCertificate.pem, caCertificate.fingerprint);
       return;
     }
 

@@ -85,6 +85,43 @@ function defaultLhmExecutable(): string {
   return path.join(here, "..", "vendor", "lhm", "LibreHardwareMonitor.exe");
 }
 
+/**
+ * The certificate step, printed in the same block as the addresses: the file,
+ * the fingerprint a person compares before installing it, and the two addresses
+ * the step spans.
+ *
+ * **Two addresses, because they are two different steps and one of them is a
+ * trap.** The root is fetched over plain http: the route answers before every
+ * gate and on both protocols on this same port, so the owner never has to
+ * bypass the certificate warning in order to install the certificate that
+ * removes it. `https://` is the origin to reload afterwards, and both lines say
+ * which is which.
+ *
+ * Exported for its own case: the printer takes the fingerprint rather than
+ * hashing the certificate again, because the value here and the one the
+ * certificate route publishes are what a person compares.
+ */
+export function certificateStepLines(input: {
+  readonly certificatePath: string;
+  readonly fingerprint: string;
+  readonly address: string;
+  readonly port: number;
+}): string {
+  return (
+    `  Certificate  ${input.certificatePath}` +
+    `\n  Fingerprint  SHA-256: ${input.fingerprint}` +
+    `\n  This host serves https on the same port, and a display holds the` +
+    `\n  screen awake and installs as an app only there. Install this root` +
+    `\n  once per device, this PC included — and compare the SHA-256 above` +
+    `\n  with the one the device shows before you do:` +
+    `\n    Fetch the root over http, so no warning is in the way:` +
+    `\n      http://${input.address}:${input.port}${CA_CERTIFICATE_PATH}` +
+    `\n    Then open the display at:` +
+    `\n      https://${input.address}:${input.port}` +
+    "\n  A device without it shows a certificate warning, not a broken display."
+  );
+}
+
 export async function run(argv: readonly string[]): Promise<number> {
   const normalized = await normalizeVideoCommand(argv);
   if (normalized !== undefined) return normalized;
@@ -349,8 +386,11 @@ export async function run(argv: readonly string[]): Promise<number> {
     // a leaf is disposable, which is what makes a moved address free.
     tls: { key: origin.key, cert: origin.chain },
     // And the root itself, for the device that has to trust it before it can
-    // read anything else.
-    caCertificate: origin.certificate,
+    // read anything else — with the same fingerprint the startup output prints.
+    caCertificate: {
+      pem: origin.certificate,
+      fingerprint: origin.fingerprint,
+    },
     // Who this host is, so a display that has lost its address can ask.
     host: hostRecord,
     // The host's own windows on its local monitors (§ "The host's own monitors").
@@ -512,26 +552,17 @@ export async function run(argv: readonly string[]): Promise<number> {
   // than once: adding a second display is the common case and it is the same
   // step. The path is named as well as the URL because a browser on this PC
   // would meet the warning it is being asked to remove, while an installer can
-  // read the file directly.
-  //
-  // **Two addresses, because they are two different steps and one of them is a
-  // trap.** The root is fetched over plain http: the route answers before every
-  // gate and on both protocols on this same port, so the owner never has to
-  // bypass the certificate warning in order to install the certificate that
-  // removes it. `https://` is the origin to reload afterwards, and both lines
-  // say which is which.
+  // read the file directly. The fingerprint is the value the certificate route
+  // publishes, printed once from the same reading.
   console.log(
     style(
       "2",
-      `  Certificate  ${origin.certificatePath}` +
-        `\n  This host serves https on the same port, and a display holds the` +
-        `\n  screen awake and installs as an app only there. Install this root` +
-        `\n  once per device, this PC included:` +
-        `\n    Fetch the root over http, so no warning is in the way:` +
-        `\n      http://${lan ?? displayHost}:${bound}${CA_CERTIFICATE_PATH}` +
-        `\n    Then open the display at:` +
-        `\n      https://${lan ?? displayHost}:${bound}` +
-        "\n  A device without it shows a certificate warning, not a broken display.",
+      certificateStepLines({
+        certificatePath: origin.certificatePath,
+        fingerprint: origin.fingerprint,
+        address: lan ?? displayHost,
+        port: bound,
+      }),
     ),
   );
 

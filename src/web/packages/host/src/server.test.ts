@@ -28,6 +28,7 @@ import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
 import { type ListenableServer, listenWithFallback } from "./cli/net.js";
+import { certificateStepLines } from "./main.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { MAX_BOX_ART_BYTES } from "./providers/game/box-art.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
@@ -97,7 +98,10 @@ import {
 import { createThumbnailStore } from "./themes/thumbnails.js";
 import { TrashRefusal } from "./themes/trash.js";
 import { encodeThemeContent } from "./themes/wire.js";
-import { createSecureOrigin } from "./tls/authority.js";
+import {
+  certificateFingerprintSha256,
+  createSecureOrigin,
+} from "./tls/authority.js";
 import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
 
 /**
@@ -9484,7 +9488,14 @@ describe("The host's secure origin", () => {
       registry: new ProviderRegistry([]),
       bundles: { player: tmpDir, editor: tmpDir },
       tls: { key: origin.key, cert: origin.chain },
-      ...(withRoot ? { caCertificate: origin.certificate } : {}),
+      ...(withRoot
+        ? {
+            caCertificate: {
+              pem: origin.certificate,
+              fingerprint: origin.fingerprint,
+            },
+          }
+        : {}),
     });
   }
 
@@ -9505,7 +9516,14 @@ describe("The host's secure origin", () => {
     return createHostServer({
       registry: new ProviderRegistry([]),
       bundles: { player: tmpDir, editor: tmpDir },
-      ...(withRoot ? { caCertificate: origin.certificate } : {}),
+      ...(withRoot
+        ? {
+            caCertificate: {
+              pem: origin.certificate,
+              fingerprint: origin.fingerprint,
+            },
+          }
+        : {}),
     });
   }
 
@@ -9834,6 +9852,32 @@ describe("The host's secure origin", () => {
       expect(answer.status).toBe(200);
       expect(answer.headers["content-type"]).toBe("application/x-x509-ca-cert");
       expect(answer.text()).toBe(origin.certificate);
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("publishes the root's fingerprint, and the startup output carries the same one", async () => {
+    const hosted = plainHost();
+
+    try {
+      const answer = await request(hosted.server, "GET", CA_CERTIFICATE_PATH);
+      // Of the bytes the route actually served, not of a value the test chose:
+      // a header holding something else would pass a comparison with itself.
+      const fingerprint = certificateFingerprintSha256(answer.text());
+
+      expect(answer.headers["x-yunari-ca-sha256"]).toBe(fingerprint);
+      expect(answer.headers["content-type"]).toBe("application/x-x509-ca-cert");
+      // The line the launcher prints, from the function it prints it with: the
+      // comparison is between this and the fingerprint a device shows.
+      expect(
+        certificateStepLines({
+          certificatePath: origin.certificatePath,
+          fingerprint: origin.fingerprint,
+          address: "192.168.1.50",
+          port: 5227,
+        }),
+      ).toContain(`SHA-256: ${fingerprint}`);
     } finally {
       await hosted.close();
     }
