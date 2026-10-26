@@ -168,29 +168,33 @@ describe("packaged font assets", () => {
   });
 
   it("registers an unknown subset without a unicode range", async () => {
-    const unknown = subsetAsset("klingon");
-    const face = { load: vi.fn().mockResolvedValue(undefined) };
-    const fonts = { add: vi.fn(), delete: vi.fn() };
-    const createFontFace = vi.fn(
-      (
-        _family: string,
-        _source: ArrayBuffer,
-        _descriptors: FontFaceDescriptors,
-      ) => face,
-    );
+    // A prototype key is the case a plain lookup gets wrong: `"constructor"`
+    // reaches an inherited function and would be handed to FontFace as a range.
+    for (const subset of ["klingon", "constructor", "__proto__", "toString"]) {
+      const unknown = subsetAsset(subset);
+      const face = { load: vi.fn().mockResolvedValue(undefined) };
+      const fonts = { add: vi.fn(), delete: vi.fn() };
+      const createFontFace = vi.fn(
+        (
+          _family: string,
+          _source: ArrayBuffer,
+          _descriptors: FontFaceDescriptors,
+        ) => face,
+      );
 
-    await loadFontAssets({
-      assets: [unknown],
-      bytes: { [unknown.path]: new Uint8Array([1]) },
-      fonts,
-      createFontFace,
-      onError: vi.fn(),
-    });
+      await loadFontAssets({
+        assets: [unknown],
+        bytes: { [unknown.path]: new Uint8Array([1]) },
+        fonts,
+        createFontFace,
+        onError: vi.fn(),
+      });
 
-    expect(fonts.add).toHaveBeenCalledWith(face);
-    const descriptors = createFontFace.mock.calls[0]?.[2];
-    expect(descriptors).toEqual({ weight: "400", style: "normal" });
-    expect(descriptors).not.toHaveProperty("unicodeRange");
+      expect(fonts.add).toHaveBeenCalledWith(face);
+      const descriptors = createFontFace.mock.calls[0]?.[2];
+      expect(descriptors).toEqual({ weight: "400", style: "normal" });
+      expect(descriptors).not.toHaveProperty("unicodeRange");
+    }
   });
 
   it("registers ranged faces before a rangeless face of the same family", async () => {

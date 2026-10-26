@@ -22,7 +22,11 @@ export const SUBSET_UNICODE_RANGES: Readonly<Record<string, string>> = {
 };
 
 /** The range a declared subset covers, or `undefined` when the table does not
- *  know it. */
+ *  know it. `Object.hasOwn` because a subset is author-supplied: `"constructor"`
+ *  would otherwise reach the inherited function and be treated as a range. */
 export function unicodeRangeForSubset(subset: unknown): string | undefined {
-  return typeof subset === "string" ? SUBSET_UNICODE_RANGES[subset] : undefined;
+  return typeof subset === "string" &&
+    Object.hasOwn(SUBSET_UNICODE_RANGES, subset)
+    ? SUBSET_UNICODE_RANGES[subset]
+    : undefined;
 }
