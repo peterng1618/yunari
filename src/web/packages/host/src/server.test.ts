@@ -9321,9 +9321,7 @@ describe("The root page resolves the display that asked", () => {
     expect(resolved.headers.location).toBe(
       "/?theme=studio&data=live&theme-source=link",
     );
-    expect(String(resolved.headers["set-cookie"])).toContain(
-      "yunari_session=",
-    );
+    expect(String(resolved.headers["set-cookie"])).toContain("yunari_session=");
   });
 
   it("serves a loopback page with no cookie for a root ?session= no display holds", async () => {
