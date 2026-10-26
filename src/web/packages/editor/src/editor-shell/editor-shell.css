@@ -88,12 +88,15 @@ body,
    would outrank the dark base and a dark-reporting OS would paint this block's
    editorial paper in the pre-attribute frame.
 
-   Five tokens, down from fifteen (`vg-552`). The ten that went —
+   Four tokens, down from fifteen (`vg-552`). The eleven that went —
    `--yunari-text`, `-panel-bg`, `-panel-border`, `-control-border`,
-   `-input-bg`, `-muted`, `-selection-bg`, `-accent`, `-accent-dim` and `-guide`
-   — each named a job the React control set now holds through §4's roles, so
-   every one was a declaration no rule read: the knob that lies `--shell-flat`
-   was (`vg-312`). The five that stay each have a reader, and the literals among
+   `-input-bg`, `-muted`, `-selection-bg`, `-accent`, `-accent-dim` and
+   `-guide` — each named a job the React control set now holds through §4's
+   roles, so every one was a declaration no rule read: the knob that lies
+   `--shell-flat` was (`vg-312`). `--yunari-canvas-bg` went with the stage's
+   own background: the stage paints `--stage`, and nothing else read the
+   literal.
+   The four that stay each have a reader, and the literals among
    them stay literals because no shell token is that colour. `--yunari-subdued` sits
    between the shell's muted and its surface, and `--yunari-control-bg` cannot
    alias `--shell-backdrop`: that holds this same colour under editorial and
@@ -101,7 +104,6 @@ body,
    it painted the wrong surface onto every button. A palette that needs a
    different control surface declares one below. */
 :root {
-  --yunari-canvas-bg: #26241f;
   --yunari-control-bg: #f5f1e8;
   --yunari-subdued: #8a8272;
   /* `vg-479`: both were literals, so a dark shell painted `#c9c2b1` against its
@@ -2692,7 +2694,17 @@ body,
      so a border here would be the same hairline drawn twice. No radius either:
      it is a flush region of the shell, square like the other three (plan 7
      Task 3). */
-  background: var(--yunari-canvas-bg);
+  /* The stage belongs to the shell, not the theme: `--stage` is the palette's
+     own ground and the mockup's texture sits over it. The final layer stays
+     `--stage`, so five palettes keep a flat colour there and `light` keeps the
+     gradient it declares. */
+  background:
+    repeating-linear-gradient(
+      45deg,
+      var(--panel) 0 6px,
+      color-mix(in srgb, var(--panel) 78%, var(--bg)) 6px 12px
+    ),
+    var(--stage);
 }
 /* §7.5's two top corners in one row, so §7.7's "clusters cannot collide" is a
    layout fact rather than a number reserved against the other cluster's width:
@@ -2923,9 +2935,27 @@ body,
 
    An outline only. It must not cover the artboard or dim the pasteboard: the
    claim it makes is where the screen's edges are, and anything more would be
-   the lens deciding what the author can see. */
+   the lens deciding what the author can see.
+
+   `z-index: 0` lifts it over the stage texture and no further: the media layer
+   and the canvas paint after it, so the letterbox shows exactly where neither
+   covers it. The background is the theme's paint, set by the shell's paint
+   pass. */
 [data-yunari-display-screen] {
+  z-index: 0;
   border: 1px solid var(--yunari-subdued);
+  box-sizing: border-box;
+}
+/* The theme's real extent under a lens whose aspect differs from the board's.
+   Dashed and faint because it is a reading rather than a boundary, and it never
+   takes a pointer event: the author's pan and selection reach the canvas
+   through it. It sits above the artwork and below the clusters. */
+[data-yunari-theme-guide] {
+  position: absolute;
+  z-index: 2;
+  border: 1px dashed var(--yunari-subdued);
+  opacity: 0.6;
+  pointer-events: none;
   box-sizing: border-box;
 }
 .editor-shell-inspector {

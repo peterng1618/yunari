@@ -395,10 +395,10 @@ describe("the stage's artboard paint", () => {
   it("drops the plate once the board declares background media", async () => {
     // 0080. The plate is a `Rect` on the canvas, and the canvas sits above the
     // media layer, so a plate covers the media exactly as the player's canvas
-    // fill did. The host's background — which the shell sets either way — is
-    // behind the layer instead, so it is the board's colour and the letterbox
-    // both. Both arms asserted, because a plate reappearing here is the defect
-    // returning in silence.
+    // fill did. The letterbox — which the shell paints from the board's own
+    // resolved colour — is behind the layer instead, so it is the board's colour
+    // and the letterbox both. Both arms asserted, because a plate reappearing
+    // here is the defect returning in silence.
     const color = { ref: "palette.ink" as const };
 
     const plainHost = stageHost();
@@ -411,7 +411,12 @@ describe("the stage's artboard paint", () => {
       plain.editor.canvas.backgroundImage,
       "with no media, the plate is the board's paint",
     ).toBeInstanceOf(Rect);
-    expect(plainHost.style.background).toBe("rgb(17, 34, 51)");
+    expect(plainHost.style.background, "the stage is the shell's").toBe("");
+    expect(
+      plainHost.querySelector<HTMLElement>("[data-yunari-display-screen]")
+        ?.style.background,
+      "and the letterbox carries the board's colour",
+    ).toBe("rgb(17, 34, 51)");
     plain.destroy();
     plainHost.remove();
 
@@ -438,8 +443,9 @@ describe("the stage's artboard paint", () => {
       "and the layer it would have covered is mounted",
     ).not.toBeNull();
     expect(
-      mediaHost.style.background,
-      "while the host still carries the board's colour",
+      mediaHost.querySelector<HTMLElement>("[data-yunari-display-screen]")
+        ?.style.background,
+      "while the letterbox still carries the board's colour",
     ).toBe("rgb(17, 34, 51)");
     withMedia.destroy();
     mediaHost.remove();

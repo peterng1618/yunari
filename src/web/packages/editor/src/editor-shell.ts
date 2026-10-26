@@ -44,6 +44,7 @@ import { createClipboardManager } from "./clipboard-manager/index.js";
 import { applyEditorControls } from "./controls-manager/index.js";
 import { createCropManager } from "./crop-manager/index.js";
 import { createDeletionManager } from "./deletion-manager/index.js";
+import { resolveLens } from "./display-lens.js";
 import type { EditorInteraction } from "./editor-interaction.js";
 import { createErrorManager } from "./error-manager/index.js";
 import { createGroupingManager } from "./grouping-manager/index.js";
@@ -226,7 +227,6 @@ function artboardClip(artboard: Artboard): Rect {
 
 function applyArtboardPaint(
   editor: EditorInteraction,
-  host: HTMLElement,
   artboard: Artboard,
   documentBackground: Background | undefined,
   globals: Globals | undefined,
@@ -274,7 +274,6 @@ function applyArtboardPaint(
   // A revived envelope from before the camera carried the artboard paint here;
   // left set it would cover the pasteboard again.
   editor.canvas.backgroundColor = "";
-  host.style.background = cssArtboardPaint(paint) ?? "#000";
   applyObjectPalettePaints(editor.canvas, globals, {
     // A document may ask for paint the product will not draw — a filled arc, say.
     // Said through the shell's own warning channel, beside the glass and media
@@ -497,15 +496,21 @@ export async function mountEditorShell({
     // under the media (0080) and re-resolving it there would be a second owner
     // of the paint. Every paint pass goes through here so it cannot go stale.
     let artboardPaint: unknown;
+    /** The display's screen, painted from the board's own paint. Declared before
+     *  the paint pass so the letterbox and the plate cannot drift apart, and
+     *  created below once the container is in place. */
+    let screen: HTMLElement | undefined;
     const paintArtboard = (): void => {
       artboardPaint = applyArtboardPaint(
         editor,
-        host,
         currentArtboard,
         currentBackground,
         globals,
         paintMemo,
       );
+      if (screen !== undefined) {
+        screen.style.background = cssArtboardPaint(artboardPaint) ?? "#000";
+      }
     };
     // No observer here: `createViewportManager` registers one on the host at
     // construction and owns the refit decision, reading the box the camera was
@@ -582,24 +587,35 @@ export async function mountEditorShell({
     let media = mountMedia();
     // The media layer is a DOM sibling of the canvas rather than a Fabric
     // object, so it has to be repositioned by hand whenever the camera moves.
+    // A display box exists only once the host has laid the camera out and a
+    // lens is active; until then a display-bounded layer falls back to the
+    // artboard rather than to a guessed host size.
     const placeMedia = (): void => {
+      const artboard = editor.viewport.artboardScreenRect();
+      const display = editor.viewport.displayScreenRect();
+      if (display === undefined) {
+        media?.setBounds({ artboard });
+        return;
+      }
       media?.setBounds({
-        artboard: editor.viewport.artboardScreenRect(),
-        display: editor.viewport.displayScreenRect() ?? {
-          left: 0,
-          top: 0,
-          width: container.clientWidth,
-          height: container.clientHeight,
-        },
+        artboard,
+        display:
+          editor.viewport.displayShape() === "circle"
+            ? { ...display, radius: "circle" }
+            : display,
       });
     };
     editor.viewport.onChange(placeMedia);
     placeMedia();
 
-    const screen = document.createElement("div");
+    screen = document.createElement("div");
     screen.dataset["yunariDisplayScreen"] = "";
     screen.style.cssText = "position:absolute;pointer-events:none;";
     container.prepend(screen);
+    const guide = document.createElement("div");
+    guide.dataset["yunariThemeGuide"] = "";
+    guide.hidden = true;
+    container.append(guide);
     // Also a DOM sibling rather than a Fabric object, and for the same reason
     // as the media layer above: a Fabric frame would be a scene object, so it
     // would change what `canvas.getObjects()` means and what `serialiseScene`
@@ -611,11 +627,31 @@ export async function mountEditorShell({
     const placeScreen = (): void => {
       const rect = editor.viewport.displayScreenRect();
       screen.hidden = rect === undefined;
-      if (rect === undefined) return;
-      screen.style.left = `${rect.left}px`;
-      screen.style.top = `${rect.top}px`;
-      screen.style.width = `${rect.width}px`;
-      screen.style.height = `${rect.height}px`;
+      screen.style.borderRadius =
+        editor.viewport.displayShape() === "circle" ? "50%" : "";
+      // Repainted here as well as in `paintArtboard`, because the screen did not
+      // exist when the first paint pass ran.
+      screen.style.background = cssArtboardPaint(artboardPaint) ?? "#000";
+      if (rect !== undefined) {
+        screen.style.left = `${rect.left}px`;
+        screen.style.top = `${rect.top}px`;
+        screen.style.width = `${rect.width}px`;
+        screen.style.height = `${rect.height}px`;
+      }
+
+      // The guide marks the artboard's real bounds when the lens and the board
+      // disagree; when they agree the two frames would coincide, so it is noise.
+      const id = editor.viewport.display();
+      const lens = id === undefined ? undefined : resolveLens(id);
+      const boardAspect = currentArtboard.width / currentArtboard.height;
+      guide.hidden =
+        lens === undefined || Math.abs(lens.aspect - boardAspect) <= 1e-6;
+      if (guide.hidden) return;
+      const board = editor.viewport.artboardScreenRect();
+      guide.style.left = `${board.left}px`;
+      guide.style.top = `${board.top}px`;
+      guide.style.width = `${board.width}px`;
+      guide.style.height = `${board.height}px`;
     };
     editor.viewport.onChange(placeScreen);
     placeScreen();

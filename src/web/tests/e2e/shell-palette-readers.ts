@@ -46,9 +46,23 @@ export async function shellColours(
   page: Page,
 ): Promise<Record<string, string>> {
   return page.evaluate(() => {
+    // The paint a surface shows, not only its background colour: a palette
+    // ground may be a gradient (`--stage` under `light`, and the stage texture
+    // every palette now carries), whose colour resolves to transparent. A
+    // surface that paints nothing is still the empty string or transparent.
     const read = (selector: string): string => {
       const node = document.querySelector(selector);
-      return node === null ? "" : getComputedStyle(node).backgroundColor;
+      if (node === null) return "";
+      const style = getComputedStyle(node);
+      if (
+        style.backgroundColor !== "" &&
+        style.backgroundColor !== "rgba(0, 0, 0, 0)"
+      ) {
+        return style.backgroundColor;
+      }
+      return style.backgroundImage === "none"
+        ? style.backgroundColor
+        : style.backgroundImage;
     };
     return {
       header: read(".editor-shell-header"),

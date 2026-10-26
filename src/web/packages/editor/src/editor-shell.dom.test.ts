@@ -640,7 +640,61 @@ function legacyTextEnvelope(): NonNullable<
 }
 
 describe("the background layer", () => {
-  it("paints the background colour on the host and sizes the media layer", async () => {
+  it("paints the stage from the palette, not the theme", async () => {
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const shell = await mount({
+      host,
+      artboard: ARTBOARD,
+    });
+    shell.setBackground({ color: { value: "#ff0000" } });
+
+    expect(host.style.background).toBe("");
+    shell.destroy();
+  });
+
+  it("paints the display letterbox with the theme colour", async () => {
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const shell = await mount({
+      host,
+      artboard: ARTBOARD,
+    });
+    shell.setBackground({ color: { value: "#ff0000" } });
+
+    const screen = host.querySelector<HTMLElement>(
+      "[data-yunari-display-screen]",
+    );
+    expect(screen?.style.background).toBe("rgb(255, 0, 0)");
+    shell.destroy();
+  });
+
+  it("shows the guide when the lens and the artboard aspects differ", async () => {
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const shell = await mount({
+      host,
+      artboard: { width: 1600, height: 900 },
+    });
+    const guide = host.querySelector<HTMLElement>("[data-yunari-theme-guide]");
+
+    shell.viewport.showDisplay("1:1");
+    expect(guide?.hidden).toBe(false);
+    shell.viewport.showDisplay(undefined);
+    expect(guide?.hidden).toBe(true);
+    shell.destroy();
+  });
+
+  it("paints the letterbox, not the stage host, and sizes the media layer", async () => {
     const host = document.createElement("div");
     Object.defineProperties(host, {
       clientWidth: { value: 400 },
@@ -662,7 +716,11 @@ describe("the background layer", () => {
       resolveAsset: () => ({ url: "blob:loop" }),
     });
 
-    expect(host.style.background).toBe("rgb(17, 34, 51)");
+    expect(host.style.background).toBe("");
+    const screen = host.querySelector<HTMLElement>(
+      "[data-yunari-display-screen]",
+    );
+    expect(screen?.style.background).toBe("rgb(17, 34, 51)");
     expect(host.querySelector("[data-yunari-background-media]")).toBeTruthy();
     shell.destroy();
   });
@@ -675,6 +733,9 @@ describe("the background layer", () => {
     });
     const shell = await mount({ host, artboard: ARTBOARD });
     const before = host.querySelector("canvas");
+    const screen = host.querySelector<HTMLElement>(
+      "[data-yunari-display-screen]",
+    );
     expect(
       before,
       "the scene mounted before the background moved",
@@ -683,7 +744,8 @@ describe("the background layer", () => {
     shell.setBackground({ color: { value: "#445566" } });
 
     expect(host.querySelector("canvas")).toBe(before);
-    expect(host.style.background).toBe("rgb(68, 85, 102)");
+    expect(host.style.background).toBe("");
+    expect(screen?.style.background).toBe("rgb(68, 85, 102)");
     shell.destroy();
   });
 

@@ -28,18 +28,22 @@ export interface BackgroundMediaOptions {
   readonly onFrame?: () => void;
 }
 
-/** A box in host pixels: where a media layer sits and how large it is. */
+/** A box in host pixels: where a media layer sits and how large it is. A
+ *  `circle` display clips the layer to a disc. */
 export interface MediaBox {
   readonly left: number;
   readonly top: number;
   readonly width: number;
   readonly height: number;
+  readonly radius?: "circle";
 }
 
-/** The two boxes a media layer can be sized to. */
+/** The two boxes a media layer can be sized to. `display` is absent until the
+ *  host has laid the camera out, or under Fit; a display-bounded layer then
+ *  falls back to the artboard rather than leaving a stale box. */
 export interface MediaBounds {
   readonly artboard: MediaBox;
-  readonly display: MediaBox;
+  readonly display?: MediaBox;
 }
 
 export interface PlacementInput {
@@ -172,7 +176,9 @@ export function mountBackgroundMedia(
   const place = (): void => {
     const media = background?.media;
     const box =
-      media?.bounds === "display" ? bounds?.display : bounds?.artboard;
+      media?.bounds === "display"
+        ? (bounds?.display ?? bounds?.artboard)
+        : bounds?.artboard;
     if (box === undefined) return;
     layer.style.left = `${box.left}px`;
     layer.style.top = `${box.top}px`;
@@ -180,6 +186,7 @@ export function mountBackgroundMedia(
     layer.style.bottom = "";
     layer.style.width = `${box.width}px`;
     layer.style.height = `${box.height}px`;
+    layer.style.borderRadius = box.radius === "circle" ? "50%" : "";
     const child = element;
     if (child === undefined || media === undefined) return;
     const rect = placement({
@@ -294,16 +301,20 @@ export function mountBackgroundMedia(
       // sampler is told the rect actually painted, not the board's own.
       const scale =
         bounds === undefined ? 0 : bounds.artboard.width / artboardSize.width;
+      // Falls back with `place`: a display-bounded layer with no display box is
+      // drawn on the artboard, so the sampled rect has to be that box too.
+      const display =
+        background?.media?.bounds === "display" ? bounds?.display : undefined;
       const rect =
-        background?.media?.bounds === "display" &&
         bounds !== undefined &&
+        display !== undefined &&
         scale > 0 &&
         Number.isFinite(scale)
           ? {
-              left: (bounds.display.left - bounds.artboard.left) / scale,
-              top: (bounds.display.top - bounds.artboard.top) / scale,
-              width: bounds.display.width / scale,
-              height: bounds.display.height / scale,
+              left: (display.left - bounds.artboard.left) / scale,
+              top: (display.top - bounds.artboard.top) / scale,
+              width: display.width / scale,
+              height: display.height / scale,
             }
           : {
               left: 0,

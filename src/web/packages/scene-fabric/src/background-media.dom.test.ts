@@ -350,6 +350,49 @@ describe("background media", () => {
     handle.destroy();
   });
 
+  it("falls back to the artboard when there is no display box", () => {
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: { media: { assetId: "hero", bounds: "display" } },
+      artboard: ARTBOARD,
+      assets: [HERO],
+      resolveAsset: () => ({ url: "blob:hero" }),
+    });
+    const layer = host.querySelector<HTMLElement>(
+      "[data-yunari-background-media]",
+    );
+
+    handle.setBounds({
+      artboard: { left: 10, top: 20, width: 100, height: 50 },
+    });
+
+    expect(layer?.style.width).toBe("100px");
+    handle.destroy();
+  });
+
+  it("rounds a circular display box", () => {
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: { media: { assetId: "hero", bounds: "display" } },
+      artboard: ARTBOARD,
+      assets: [HERO],
+      resolveAsset: () => ({ url: "blob:hero" }),
+    });
+    const layer = host.querySelector<HTMLElement>(
+      "[data-yunari-background-media]",
+    );
+
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 100, height: 50 },
+      display: { left: 0, top: 0, width: 50, height: 50, radius: "circle" },
+    });
+
+    expect(layer?.style.borderRadius).toBe("50%");
+    handle.destroy();
+  });
+
   it("reports an unresolvable declared background instead of dropping it", () => {
     const host = document.createElement("div");
     const errors: string[] = [];
