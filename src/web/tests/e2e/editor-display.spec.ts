@@ -82,7 +82,7 @@ test.describe("the stage looks through a display", () => {
     // The starter is 1672 × 941 — 1.7768, which is 16:9. The default used to be
     // a 19.5:9 lens on the stated grounds that this was its shape; it is not,
     // and the mismatch cost ~287 px of a 1600 px stage on bars. The lens is now
-    // read out of the default artboard shape rather than typed beside it.
+    // the active catalogue's first landscape entry, which is 16:9 by default.
     expect(
       m.display,
       "the default display is the one the starter is drawn in",
