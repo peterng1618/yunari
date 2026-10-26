@@ -162,8 +162,10 @@ its faces become assets and presets only through an explicit action.
 An **import** writes, in one operation:
 
 1. bytes into the package through `AssetManager`;
-2. an asset declaration carrying family, weight, style, format, subset, source
-   URL and licence (local files may lack the URL and licence);
+2. an asset declaration carrying family, weight, style, format, source URL and
+   licence (local files may lack the URL and licence). The subset a provider
+   served is not recorded: `FontAssetReference` has no field for it, and picking
+   a subset is not a decision this import makes;
 3. the preset(s) the author chose;
 4. a credit carrying `assetId` (new optional field on `ThemeCreditsEntry`).
 
@@ -226,7 +228,8 @@ An **import** writes, in one operation:
   the same box geometry as the others. A video replaces the still with a player
   and drops Place; Background is its primary.
 - **Theme viewer** (`store-detail.html`): the existing `store-mode/item-modal`
-  gains the same right panel at 270px — name, kind, author, version; description;
+  gains the same right panel at 270px — name, kind, author and the version ·
+  date · counts stamp (the catalogue carries no description, so none is drawn);
   Reads, Shape, Style pill groups; provenance line; foot **Delete**, **Export**,
   **Assign**, **Edit** as glyph plus word. The box stays 960px and the stage
   keeps its one height for every item; the caption band is removed.
