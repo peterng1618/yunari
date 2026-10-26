@@ -22,7 +22,7 @@ export function WallpaperEngineGuide(props: {
     >
       <div
         data-yunari-wallpaper-engine-guide-dialog=""
-        className="flex w-[420px] max-w-full flex-col gap-[var(--space-12)]"
+        className="flex w-[var(--guide-dialog-width)] max-w-full flex-col gap-[var(--space-12)]"
       >
         {[sections.convert, sections.export].map((section) => (
           <section

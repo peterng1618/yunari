@@ -81,7 +81,7 @@ export function ImportVideoModal({
     >
       <div
         data-yunari-import-video-modal=""
-        className="flex w-[360px] flex-col gap-[var(--space-8)]"
+        className="flex w-[var(--import-dialog-width)] flex-col gap-[var(--space-8)]"
       >
         <span className="truncate text-xs text-muted">{file.name}</span>
         {/* A settled run has no step: on failure the host sentence below is the

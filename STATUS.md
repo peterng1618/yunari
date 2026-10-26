@@ -9,21 +9,21 @@ Execute [`the Wallpaper Engine import rework`](docs/superpowers/plans/2026-10-26
 
 ## Active work
 
-- **One plan runs:** the import rework is active in its Orca worktree; plan B is queued behind it, and no other plan runs.
-- **Plan shape:** eight tasks — host removal and routes, editor client, import modal, card grid, credits, skeletons, docs and gate.
+- **All eight tasks are complete:** docs record the shipped route and the capture is refreshed; the plan awaits a local merge to `main`.
+- **One plan runs:** the import rework remains active in its Orca worktree until that merge; plan B is queued behind it.
 - **Plan B waits:** per-display shape and rotation stays queued.
 - **Backlog drain stays queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, after plan B.
 
 ## Last completed change
 
-- **Skeletons:** `CardGridSkeleton`/`TextSkeleton` draw pulse placeholders with `aria-busy`, one visually hidden sentence and no focusable element.
-- **Finder:** the source listing, a first search and a search after an empty answer show the grid skeleton; pagination keeps its rows and sets `aria-busy` instead.
-- **Bodies:** the Wallpaper Engine tab waits on the grid skeleton with the guide and `.mpkg` controls reachable; the Fonts body waits on the text skeleton.
-- **Proof:** the focused editor suites (71 tests) pass; typecheck and biome check are clean.
+- **Spec:** 2026-10-21 §8 rewritten as convert → author export → `.mpkg` import; its driving claims withdrawn against decision 0124.
+- **Decision:** 0118 marked superseded by 0124; the mobile-export plan moved to `plans/archive/`.
+- **Evidence:** `editor-finder-wallpaper-engine` recaptured as a card grid with one icon action per kind; the two export-sheet rows deleted.
+- **Proof:** the recapture passed; `npm run gate` exited 0 and `status:check` passes from this commit.
 
 ## Next
 
-1. Execute the import-rework plan task by task; local merge to `main` on completion.
+1. Locally merge the import rework to `main`.
 2. Execute plan B after that merge.
 3. Resume the backlog-drain plan at Phase 0.
 4. Owner tests remain: segment spacing and fill, radar and polar bar, scene export, fonts and assets rework.
