@@ -8,6 +8,9 @@ export interface ArtboardBackdropOptions {
   readonly height: number;
   /** The artboard's media layer, when the theme declares one. */
   readonly media: BackdropMedia | undefined;
+  /** Whole degrees clockwise the composition is turned, for a media-less theme
+   *  whose paint still has to sample rotated. A media layer's own angle wins. */
+  readonly angle?: number;
 }
 
 /**
@@ -36,17 +39,28 @@ export function artboardBackdrop(
     width: options.width,
     height: options.height,
   };
+  // A display-bounded layer's own box is not the board: it fills the host and
+  // must not turn with the composition, so its device rect is carried through.
+  const screenRect = media?.screenRect;
 
   return {
     // The board's own rect, so the `device` the sampler passes is the board in
     // the context's pixels — which is the box the paint's gradient is mapped to.
     rect: board,
+    angle: media?.angle ?? options.angle ?? 0,
+    ...(screenRect === undefined ? {} : { screenRect }),
     paint(ctx, region, device) {
       // The media first and the paint **underneath** it, so a frame the media
       // could not paint is left where it was (0079): clearing to the colour
       // first would throw away the one frame the reader would otherwise keep.
       if (media !== undefined)
-        media.paint(ctx, region, mediaDevice(device, board, media.rect));
+        media.paint(
+          ctx,
+          region,
+          screenRect === undefined
+            ? mediaDevice(device, board, media.rect)
+            : device,
+        );
       ctx.save();
       ctx.globalCompositeOperation = "destination-over";
       fillArtboardPaint(ctx, region, device, background);

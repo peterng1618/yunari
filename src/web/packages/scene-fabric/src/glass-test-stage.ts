@@ -114,7 +114,14 @@ export function stage(options: {
    *  rather than the media gives only a paint, and the stage synthesises the
    *  rect from `backdropRect`/`artboard`. */
   readonly backdrop?: () =>
-    | { readonly rect?: ArtboardRect; readonly paint: BackdropMedia["paint"] }
+    | {
+        readonly rect?: ArtboardRect;
+        /** Whole degrees the composition is turned, as `BackdropMedia` carries it. */
+        readonly angle?: number;
+        /** A display-bounded media's own box in host pixels. */
+        readonly screenRect?: DeviceRect;
+        readonly paint: BackdropMedia["paint"];
+      }
     | undefined;
 }): Stage {
   const size = options.size ?? 200;
@@ -195,6 +202,10 @@ export function stage(options: {
             return {
               rect: stub?.rect ??
                 options.backdropRect ?? { left: 0, top: 0, ...artboard },
+              ...(stub?.angle === undefined ? {} : { angle: stub.angle }),
+              ...(stub?.screenRect === undefined
+                ? {}
+                : { screenRect: stub.screenRect }),
               paint: (ctx, region, device) => {
                 regions.push({ ...region });
                 paints.push({ region: { ...region }, device: { ...device } });

@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 
-import type { Background, ScenePlan } from "@yunari/renderer-core";
+import type {
+  Background,
+  DisplayPresentation,
+  ScenePlan,
+} from "@yunari/renderer-core";
 import { Group, Rect } from "fabric/es";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type FabricSceneHandle, mountFabricScene } from "./scene.js";
@@ -201,6 +205,66 @@ describe("mountFabricScene's artboard paint", () => {
     ).toBe("rgb(16, 18, 22)");
     withMedia.dispose();
     mediaHost.remove();
+  });
+});
+
+describe("mountFabricScene's display presentation", () => {
+  /** The scene as its host mounted it: the handle is the record, and `host` is
+   *  where the disc and the canvas live. */
+  function mountPresented(presentation?: DisplayPresentation) {
+    const element = host();
+    const scene = mountFabricScene({
+      host: element,
+      plan: plan(),
+      ...(presentation === undefined ? {} : { presentation }),
+    });
+    return { element, scene };
+  }
+
+  it("applies a 90 degree rect presentation to the canvas", () => {
+    const { element, scene } = mountPresented({
+      shape: "rect",
+      rotation: 90,
+    });
+    const vpt = scene.canvas.viewportTransform;
+    expect(vpt[0]).toBeCloseTo(0, 9);
+    expect(vpt[3]).toBeCloseTo(0, 9);
+    expect(Math.abs(vpt[1])).toBeCloseTo(Math.abs(vpt[2]), 9);
+
+    scene.dispose();
+    element.remove();
+  });
+
+  it("clips a circle presentation to the disc", () => {
+    const { element, scene } = mountPresented({ shape: "circle" });
+    expect(element.style.background).toBe("rgb(0, 0, 0)");
+    expect(scene.artboard.style.clipPath).toContain("circle(");
+    expect(element.querySelector("[data-yunari-display-disc]")).not.toBeNull();
+
+    scene.dispose();
+    element.remove();
+  });
+
+  it("moves the presentation in place", () => {
+    const { element, scene } = mountPresented();
+    scene.updatePresentation({ shape: "circle", rotation: 45 });
+    expect(scene.transform().rotation).toBe(45);
+    expect(element.querySelector("[data-yunari-display-disc]")).not.toBeNull();
+
+    scene.dispose();
+    element.remove();
+  });
+
+  it("stays upright and rectangular with no presentation", () => {
+    // The record's absence is today's behaviour exactly: no disc, no clip, and
+    // the transform reports the angle a reader assumes.
+    const { element, scene } = mountPresented();
+    expect(scene.transform().rotation).toBe(0);
+    expect(scene.artboard.style.clipPath).toBe("");
+    expect(element.querySelector("[data-yunari-display-disc]")).toBeNull();
+
+    scene.dispose();
+    element.remove();
   });
 });
 

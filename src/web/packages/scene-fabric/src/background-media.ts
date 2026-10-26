@@ -33,13 +33,15 @@ export interface BackgroundMediaOptions {
 }
 
 /** A box in host pixels: where a media layer sits and how large it is. A
- *  `circle` display clips the layer to a disc. */
+ *  `circle` display clips the layer to a disc; an `angle` turns a layer that
+ *  belongs to the composition about the box's top-left corner. */
 export interface MediaBox {
   readonly left: number;
   readonly top: number;
   readonly width: number;
   readonly height: number;
   readonly radius?: "circle";
+  readonly angle?: number;
 }
 
 /** The two boxes a media layer can be sized to. `display` is absent until the
@@ -211,6 +213,15 @@ export function mountBackgroundMedia(
     layer.style.width = `${box.width}px`;
     layer.style.height = `${box.height}px`;
     layer.style.borderRadius = box.radius === "circle" ? "50%" : "";
+    // The box is placed at the artboard's own origin, which is the corner the
+    // canvas matrix maps it from; rotating about the element's default centre
+    // would move a turned board off the composition.
+    layer.style.transformOrigin =
+      box.angle === undefined || box.angle === 0 ? "" : "0 0";
+    layer.style.transform =
+      box.angle === undefined || box.angle === 0
+        ? ""
+        : `rotate(${box.angle}deg)`;
     const child = element;
     if (child === undefined || media === undefined) return;
     const rect = placement({
@@ -369,8 +380,15 @@ export function mountBackgroundMedia(
               width: artboardSize.width,
               height: artboardSize.height,
             };
+      // A theme-bounded layer turns with the composition, so the sampler needs
+      // the angle. A display-bounded layer fills the host box and must not turn,
+      // so it reports that box in host pixels instead; `rect` stays in artboard
+      // units for the placement the paint does.
+      const angle = display === undefined ? bounds?.artboard.angle : undefined;
       return {
         rect,
+        ...(angle === undefined ? {} : { angle }),
+        ...(display === undefined ? {} : { screenRect: display }),
         paint(ctx, region, device) {
           const source = intrinsic(mounted);
           // Sizing and drawing have different preconditions: metadata sizes the

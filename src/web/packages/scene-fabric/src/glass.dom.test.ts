@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import { mountBackgroundMedia } from "./background-media.js";
+import type { BackdropMedia } from "./glass.js";
 import {
   bars,
   Group,
@@ -365,6 +366,77 @@ describe("glass composition", () => {
       top: 40,
       width: 1200,
       height: 500,
+    });
+  });
+
+  it("samples a rotated backdrop at the rotated position", () => {
+    // Two tones: red on the media's left half, blue on its right. The panel sits
+    // right of the board's centre, so upright it samples blue; turned 180
+    // degrees, the same device pixel comes from the media's left half. A sampler
+    // that ignored the angle would read blue in both arms.
+    const twoTone = (angle: number): BackdropMedia => ({
+      rect: { left: 0, top: 0, width: 200, height: 200 },
+      angle,
+      paint(ctx, region, device) {
+        const left = device.left - region.left;
+        const top = device.top - region.top;
+        ctx.fillStyle = "#ff0000";
+        ctx.fillRect(left, top, device.width / 2, device.height);
+        ctx.fillStyle = "#0000ff";
+        ctx.fillRect(
+          left + device.width / 2,
+          top,
+          device.width / 2,
+          device.height,
+        );
+        return true;
+      },
+    });
+    const sample = (angle: number) => {
+      const s = stage({ texture: false, backdrop: () => twoTone(angle) });
+      s.canvas.add(
+        panel({
+          left: 120,
+          top: 100,
+          width: 40,
+          height: 40,
+          fill: "transparent",
+          yunariGlass: { blurRadius: 0 },
+        }),
+      );
+      s.canvas.renderAll();
+      return s.pixel(140, 120);
+    };
+
+    expect(
+      sample(0)[2],
+      "upright, the panel is over the right half",
+    ).toBeGreaterThan(200);
+    expect(sample(180)[0], "turned, it samples the left half").toBeGreaterThan(
+      200,
+    );
+  });
+
+  it("does not turn a display-bounded backdrop with the composition", () => {
+    // A display-bounded layer fills the host and stays upright, so its device
+    // rect is the screen box itself. Through a 90-degree plane the board's own
+    // rect maps to a box at (-100, 100), which is not where this layer is.
+    const s = stage({
+      size: 200,
+      backdrop: () => ({
+        screenRect: { left: 0, top: 0, width: 200, height: 200 },
+        paint: () => true,
+      }),
+    });
+    s.canvas.setViewportTransform([0, 1, -1, 0, 100, 100]);
+    s.canvas.add(panel());
+    s.canvas.renderAll();
+
+    expect(s.paints[0]?.device).toEqual({
+      left: 0,
+      top: 0,
+      width: 200,
+      height: 200,
     });
   });
 

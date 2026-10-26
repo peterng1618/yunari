@@ -9,7 +9,7 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md` — task 1 (transform rotation and inscribed circle) is implemented; later tasks remain.
+- **Active plan:** `docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md` — tasks 1–2 (transform, then scene presentation) are implemented; later tasks remain.
 - **Preview lens landed:** scene-anchored display box, shell stage, theme letterbox, guide frame, circle lens, ratio catalogue and Previews settings tab.
 - **Display presentation in plan B:** per-record shape and rotation, rotated/inscribed playback, pair-page choice, Host controls.
 - **Audit, chart, spacing and fonts work is on `main`:** revision gating, memoised dirty reading, chart animation and the fonts/assets rework are landed.
@@ -17,10 +17,11 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Last completed change
 
-- **Task 1 of plan B:** `computeArtboardTransform` accepts `shape`/`rotation`, returns `rotation` and a 2×3 `matrix`; rotation 0 keeps today's fields exactly.
-- **Refusals:** rect takes quarter turns only, circle whole degrees 0–359; fractions, negatives and non-finite angles throw `RangeError`; a circle reports `contentFit: "contain"`.
-- **Evidence:** 50/50 artboard tests green; each new assertion shown red with its behaviour disabled; typecheck exit 0.
-- **Decision note:** `docs/decisions/0124-a-display-carries-its-shape-and-the-transform-carries-a-matrix.md`.
+- **Task 2 of plan B:** the scene presents a display shape and angle; rect stays upright, a circle is clipped to its disc with `clip-path`.
+- **Media:** a theme-bounded layer turns with the artboard from its own origin; a display-bounded one fills the host box and never turns.
+- **Glass:** the sampler turns its scratch about the mapped rect centre; a display-bounded backdrop reports `screenRect` and is exempt.
+- **Evidence:** 30 scene-fabric files green (417 tests), focused trio 80/80; each new case shown red with its behaviour disabled; typecheck exit 0.
+- **Decision note:** `docs/decisions/0125-a-presentation-is-a-clip-a-mirrored-matrix-and-a-turned-sample.md`.
 
 ## Next
 

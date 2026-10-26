@@ -4,6 +4,7 @@ import {
   type AssetReference,
   type Background,
   computeArtboardTransform,
+  type DisplayPresentation,
   type SceneHandle,
   type ScenePlan,
 } from "@yunari/renderer-core";
@@ -59,6 +60,9 @@ export interface FabricSceneOptions
   /** Reports a glass panel this renderer cannot composite, such as a browser
    * without `ctx.filter` or a cross-origin asset that taints the surface. */
   readonly onGlassError?: (message: string) => void;
+  /** The display's shape and mounting angle. Absent is a rectangular, upright
+   * display, which is the scene's behaviour before a record was known. */
+  readonly presentation?: DisplayPresentation;
 }
 
 export interface FabricSceneHandle extends SceneHandle {
@@ -81,6 +85,15 @@ export interface FabricSceneHandle extends SceneHandle {
    * the authored bag, and the layer re-places rather than restarts a video.
    */
   updateBackground(background: Background | undefined): void;
+  /**
+   * The display's shape or mounting angle changes. A presentation change is a
+   * geometry change: the viewport, the disc and the media bounds are re-derived
+   * from it together, so the composition and its background cannot disagree.
+   *
+   * An angle the shape cannot hold is refused by `computeArtboardTransform`, and
+   * the previous presentation is kept rather than half-applied.
+   */
+  updatePresentation(next: DisplayPresentation): void;
   /**
    * Stops the background video decoding and following frames while the page is
    * not visible. A media-less scene has nothing to pause.
@@ -122,6 +135,12 @@ export function mountFabricScene(
     ...withoutHostAndPlan(options),
   });
   let currentArtboard = options.artboard;
+  let presentation: DisplayPresentation = options.presentation ?? {
+    shape: "rect",
+  };
+  /** The disc's own DOM element, created on the first circle presentation and
+   *  reused after: it is the disc's paint, behind the media layer. */
+  let disc: HTMLDivElement | undefined;
   let disposed = false;
   // **Each reaches the other through a closure, and neither can be passed by
   // value.** The handle is built first with a `backdrop` that reads this, and
@@ -154,6 +173,9 @@ export function mountFabricScene(
         width: currentArtboard?.width ?? plan.artboard.width,
         height: currentArtboard?.height ?? plan.artboard.height,
         media: media?.backdrop(),
+        // The paint is the whole backdrop for a media-less theme, so the
+        // composition's angle has to reach the sampler even without a layer.
+        angle: presentation.rotation ?? 0,
       }),
     ...(options.onGlassError === undefined
       ? {}
@@ -194,6 +216,51 @@ export function mountFabricScene(
 
   let currentTransform = fit();
 
+  /**
+   * The display's shape as DOM: the disc's own paint, and the clip that makes
+   * the canvas show it. A Fabric canvas is a rectangle whose painted content is
+   * the composition, so `border-radius` would round the element and leave the
+   * plate's corners inside it; the disc has to be the clip.
+   */
+  function applyPresentation(paint: string): void {
+    const width = host.clientWidth;
+    const height = host.clientHeight;
+    if (presentation.shape === "circle") {
+      // Outside the disc is outside the screen, so the host is black and the
+      // disc itself carries the theme's paint.
+      host.style.background = "#000";
+      const diameter = Math.min(width, height);
+      const discElement = presentationDisc();
+      discElement.style.display = "";
+      discElement.style.left = `${(width - diameter) / 2}px`;
+      discElement.style.top = `${(height - diameter) / 2}px`;
+      discElement.style.width = `${diameter}px`;
+      discElement.style.height = `${diameter}px`;
+      discElement.style.borderRadius = "50%";
+      discElement.style.background = paint;
+      element.style.clipPath = `circle(${diameter / 2}px at ${width / 2}px ${height / 2}px)`;
+      return;
+    }
+    // Rect: the host is the board's paint and its letterbox, exactly as before a
+    // record existed, and the disc is not part of the composition.
+    host.style.background = paint;
+    element.style.clipPath = "";
+    if (disc !== undefined) disc.style.display = "none";
+  }
+
+  function presentationDisc(): HTMLDivElement {
+    if (disc !== undefined) return disc;
+    const made = document.createElement("div");
+    made.dataset["yunariDisplayDisc"] = "";
+    made.style.position = "absolute";
+    made.style.pointerEvents = "none";
+    disc = made;
+    // First child, so the media layer — a sibling below the canvas — paints over
+    // the disc's colour rather than being covered by it.
+    host.prepend(made);
+    return made;
+  }
+
   function fit(): ArtboardTransform {
     // The document's artboard when there is one, because it is the only source
     // that moves: `ScenePlan` cannot carry a document-level change, and
@@ -210,35 +277,49 @@ export function mountFabricScene(
       artboard: { width: geometry.width, height: geometry.height },
       viewport: { width: host.clientWidth, height: host.clientHeight },
       contentFit: geometry.contentFit ?? "contain",
+      shape: presentation.shape,
+      ...(presentation.rotation === undefined
+        ? {}
+        : { rotation: presentation.rotation }),
     });
 
     // The one artboard paint is the board's fill and the bars behind it (§53).
     // It is the **host's**, which puts it behind the media layer, so a
     // `"theme"`-fitted layer covers the board and the host's colour is what the
     // reader sees in the letterbox (0080).
-    host.style.background =
-      cssArtboardPaint(plan.artboard.background) ?? "#000";
+    applyPresentation(cssArtboardPaint(plan.artboard.background) ?? "#000");
     // **The canvas paints nothing at all.** It sits above the media layer, so a
     // fill on it hides the media completely; what a glass panel samples instead
     // is the backdrop, which carries the paint (0080). Cleared rather than left
     // alone, because a revived document can bring a fill of its own.
     canvas.backgroundColor = "";
     element.style.visibility = transform.isDegenerate ? "hidden" : "visible";
-    if (!transform.isDegenerate)
+    if (!transform.isDegenerate) {
+      // The display box is the disc for a round panel: a display-bounded media
+      // layer fills the screen there and is clipped to the disc by `place`.
+      const width = host.clientWidth;
+      const height = host.clientHeight;
+      const diameter = Math.min(width, height);
       media?.setBounds({
         artboard: {
           left: transform.offsetX,
           top: transform.offsetY,
           width: geometry.width * transform.scale,
           height: geometry.height * transform.scale,
+          angle: transform.rotation,
         },
-        display: {
-          left: 0,
-          top: 0,
-          width: host.clientWidth,
-          height: host.clientHeight,
-        },
+        display:
+          presentation.shape === "circle"
+            ? {
+                left: (width - diameter) / 2,
+                top: (height - diameter) / 2,
+                width: diameter,
+                height: diameter,
+                radius: "circle",
+              }
+            : { left: 0, top: 0, width, height },
       });
+    }
 
     if (transform.isDegenerate) {
       return transform;
@@ -249,14 +330,7 @@ export function mountFabricScene(
       height: Math.max(1, host.clientHeight),
     });
 
-    canvas.setViewportTransform([
-      transform.scale,
-      0,
-      0,
-      transform.scale,
-      transform.offsetX,
-      transform.offsetY,
-    ]);
+    canvas.setViewportTransform([...transform.matrix]);
 
     adapter.setRenderScale(
       clampRenderScale(transform.scale * canvas.getRetinaScaling(), 1, 1),
@@ -301,6 +375,21 @@ export function mountFabricScene(
       // Same asset re-places the mounted element; a different one remounts,
       // because a remount is what restarts a video (Task 5's handle).
       media?.setBackground(background);
+      canvas.requestRenderAll();
+    },
+
+    updatePresentation(next: DisplayPresentation): void {
+      if (disposed) return;
+      const previous = presentation;
+      presentation = next;
+      try {
+        currentTransform = fit();
+      } catch (error) {
+        // A refused angle must not leave the scene claiming the shape it could
+        // not present; `computeArtboardTransform` throws before any DOM write.
+        presentation = previous;
+        throw error;
+      }
       canvas.requestRenderAll();
     },
 
