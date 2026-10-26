@@ -1,10 +1,12 @@
 import { type Canvas, Point } from "fabric/es";
 import {
-  DEFAULT_DISPLAY_LENS,
-  type DisplayLensId,
-  displayLens,
+  defaultPreviewLens,
+  lensBox,
+  type PreviewShape,
+  resolveLens,
   type ScreenRect,
   screenRect,
+  subscribeLenses,
 } from "../display-lens.js";
 import { clampPan } from "./pan-bounds.js";
 
@@ -63,9 +65,11 @@ export interface ViewportManager {
    * viewport transform and nothing else. A device does not resize, reshape or
    * record anything about the artboard.
    */
-  display(): DisplayLensId | undefined;
+  display(): string | undefined;
   /** Aims the camera at that display, or at the whole stage for `undefined`. */
-  showDisplay(id: DisplayLensId | undefined): void;
+  showDisplay(id: string | undefined): void;
+  /** The display's shape, or `undefined` under Fit. */
+  displayShape(): PreviewShape | undefined;
   /**
    * Whether the camera is where a fit of what it looks through would have put
    * it, right now.
@@ -82,8 +86,10 @@ export interface ViewportManager {
    * for page coordinates. */
   artboardScreenRect(): ScreenRect;
   /** The display's own screen in canvas coordinates — the window the stage
-   * looks through, and where its frame is drawn. `undefined` under Fit,
-   * because there is no screen to draw. */
+   * looks through, and where its frame is drawn. Anchored to the scene rather
+   * than the host: it is `lensBox` under the camera's transform, so it moves
+   * with a pan and grows with a zoom. `undefined` under Fit, because there is
+   * no screen to draw. */
   displayScreenRect(): ScreenRect | undefined;
   /** Re-measure after the host element changed size. A camera that was showing
    * the whole artboard is re-fitted to the new box; one the author has zoomed or
@@ -122,12 +128,13 @@ export function createViewportManager({
   /**
    * The display the stage looks through, or `undefined` for Fit.
    *
-   * Starts on the default rather than on Fit, because the starter is drawn in
-   * the shape the default lens is and opening on Fit would letterbox the
-   * reference composition on the very first paint. Read through the lens rather
-   * than mirrored into React: it is camera state, like the zoom.
+   * Starts on the catalogue's default landscape lens rather than on Fit,
+   * because the starter is drawn in the shape that lens is and opening on Fit
+   * would letterbox the reference composition on the very first paint. Read
+   * through the lens rather than mirrored into React: it is camera state, like
+   * the zoom.
    */
-  let lens: DisplayLensId | undefined = DEFAULT_DISPLAY_LENS;
+  let lens: string | undefined = defaultPreviewLens()?.id;
 
   /** An unlaid-out host measures 0; writing that would collapse the canvas. */
   const viewportSize = (): Viewport | undefined => {
@@ -169,17 +176,20 @@ export function createViewportManager({
 
   /**
    * The box the camera frames the artboard inside: the display's screen, or
-   * the whole host under Fit.
+   * the whole host under Fit. Host-space, because a fit is measured against the
+   * window it is viewed in.
    *
    * A display is a *window onto* the stage rather than a replacement for it,
    * which is why it is measured against the host: the author still gets the
    * whole canvas to work in, and the screen is the part of it the camera
    * presents through. Its origin is carried because a fit centres the artboard
    * in *this* box, and that is what makes a wide display letterbox a square
-   * artboard rather than scale it to the corners.
+   * artboard rather than scale it to the corners. A circle lens frames a
+   * square, since its disc's bounding square is the one the diagonal must fit.
    */
   const framingBox = (viewport: Viewport): ScreenRect => {
-    if (lens === undefined) {
+    const active = lens === undefined ? undefined : resolveLens(lens);
+    if (active === undefined) {
       return {
         left: 0,
         top: 0,
@@ -187,13 +197,28 @@ export function createViewportManager({
         height: viewport.height,
       };
     }
-    return screenRect(viewport, displayLens(lens).aspect);
+    return screenRect(viewport, active.shape === "circle" ? 1 : active.aspect);
   };
 
+  /**
+   * The display's screen in canvas coordinates, anchored to the scene: the
+   * lens's box in artboard units under the camera's transform. A pan slides it
+   * and a zoom scales it, which is what keeps the frame on the artwork rather
+   * than pinned to the window. At a fit it equals the host-space screen the
+   * camera framed, because a fit is the transform that puts it there.
+   */
   const displayScreenRect = (): ScreenRect | undefined => {
-    const viewport = viewportSize();
-    if (viewport === undefined || lens === undefined) return undefined;
-    return screenRect(viewport, displayLens(lens).aspect);
+    if (lens === undefined) return undefined;
+    const active = resolveLens(lens);
+    if (active === undefined) return undefined;
+    const box = lensBox(active, artboard());
+    const vpt = canvas.viewportTransform;
+    return {
+      left: vpt[4] + box.left * vpt[0],
+      top: vpt[5] + box.top * vpt[3],
+      width: box.width * vpt[0],
+      height: box.height * vpt[3],
+    };
   };
 
   /** Writes the canonical transform back, clamped and ordered. */
@@ -231,7 +256,14 @@ export function createViewportManager({
     // perfectly finite number, so a board with no frameable area slips past the
     // guard below and the camera fits to a board that cannot be framed.
     if (!isFrameable(board)) return zoom();
-    const scale = Math.min(box.width / board.width, box.height / board.height);
+    // A circle inscribes the artboard's diagonal: the corners lie on the disc,
+    // so the fit is the diagonal against the square's edge, not the board's own
+    // contain scale.
+    const active = lens === undefined ? undefined : resolveLens(lens);
+    const scale =
+      active?.shape === "circle"
+        ? box.width / Math.hypot(board.width, board.height)
+        : Math.min(box.width / board.width, box.height / board.height);
     if (!Number.isFinite(scale) || scale <= 0) return zoom();
     return Math.min(Math.max(scale, MIN_ZOOM), MAX_ZOOM);
   };
@@ -290,6 +322,17 @@ export function createViewportManager({
     notify();
   };
 
+  /**
+   * A catalogue edit can remove the lens this camera is looking through — a
+   * preview deleted from the menu. Holding a stale id would draw a screen at a
+   * ratio nobody chose, so the camera falls back to Fit and re-frames.
+   */
+  const unsubscribeLenses = subscribeLenses(() => {
+    if (lens === undefined || resolveLens(lens) !== undefined) return;
+    lens = undefined;
+    zoomToFit();
+  });
+
   function resize(): void {
     const viewport = viewportSize();
     if (viewport === undefined) return;
@@ -340,10 +383,11 @@ export function createViewportManager({
     zoomBy(factor) {
       const viewport = viewportSize();
       if (viewport === undefined) return;
-      // About the framing box's centre, not the host's: under a lens the host
-      // centre is not on the screen, and stepping +/− would walk the camera off
-      // the display a step at a time.
-      const box = framingBox(viewport);
+      // About the screen's centre, not the host's: under a lens that has been
+      // panned the host centre is not on the screen, and stepping +/− would
+      // walk the camera off the display a step at a time. Under Fit there is no
+      // screen, so the host box is the one to centre on.
+      const box = displayScreenRect() ?? framingBox(viewport);
       zoomToPoint(
         new Point(box.left + box.width / 2, box.top + box.height / 2),
         zoom() * factor,
@@ -387,12 +431,15 @@ export function createViewportManager({
       return viewport !== undefined && isFittedIn(viewport);
     },
     display: () => lens,
+    displayShape: () =>
+      lens === undefined ? undefined : resolveLens(lens)?.shape,
     showDisplay(id) {
       // Re-frames even when the display is unchanged. Choosing the display an
       // author has zoomed away from is how they get back to the whole
       // composition, so an early return here would make the control look
-      // broken on exactly the press it exists for.
-      lens = id;
+      // broken on exactly the press it exists for. An id the catalogue no
+      // longer carries is Fit rather than a lens nobody can see.
+      lens = id === undefined ? undefined : resolveLens(id)?.id;
       zoomToFit();
     },
     resize,
@@ -404,6 +451,7 @@ export function createViewportManager({
     },
     destroy() {
       observer?.disconnect();
+      unsubscribeLenses();
       listeners.clear();
     },
   };

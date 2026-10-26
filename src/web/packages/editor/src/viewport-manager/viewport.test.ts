@@ -2,7 +2,10 @@
 
 import { Canvas, Point } from "fabric/es";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DisplayLensId } from "../display-lens.js";
+import {
+  DEFAULT_PREVIEW_RATIO_TOKENS,
+  setActivePreviewRatios,
+} from "../display-lens.js";
 import { createViewportManager, MAX_ZOOM, MIN_ZOOM } from "./index.js";
 
 // jsdom cannot drawImage an undecoded img inside Fabric's render pass; a proxy
@@ -28,7 +31,35 @@ beforeEach(() => {
   }
 });
 
-function setup(options: { lens?: DisplayLensId; fitted?: boolean } = {}) {
+/** The catalogue is module state shared by every camera in this file, so each
+ *  test starts from the shipped list rather than from whatever the last one
+ *  left behind. */
+const resetPreviewRatios = (): void => {
+  setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS);
+};
+
+beforeEach(resetPreviewRatios);
+
+/** A camera on a host and an artboard of the test's own choosing, for the
+ *  scene-anchored screen, whose numbers are not `setup`'s 1000x800 / 1280x720. */
+function createCamera(options: {
+  readonly width: number;
+  readonly height: number;
+  readonly artboard: { readonly width: number; readonly height: number };
+}) {
+  const host = document.createElement("div");
+  Object.defineProperties(host, {
+    clientWidth: { get: () => options.width },
+    clientHeight: { get: () => options.height },
+  });
+  return createViewportManager({
+    canvas: new Canvas(document.createElement("canvas")),
+    host,
+    artboard: () => options.artboard,
+  });
+}
+
+function setup(options: { lens?: string; fitted?: boolean } = {}) {
   const host = document.createElement("div");
   // Read through a live holder rather than a fixed `value`, so a test can
   // resize the host the way a window does.
@@ -482,5 +513,74 @@ describe("the display lens", () => {
       const scale = board.width / 1280;
       expect(board.height / scale).toBeCloseTo(720, 6);
     }
+  });
+
+  it("moves the display box with the camera after a zoom", () => {
+    const camera = createCamera({
+      width: 800,
+      height: 600,
+      artboard: { width: 1600, height: 900 },
+    });
+    camera.showDisplay("16:9");
+    const fitted = camera.displayScreenRect();
+    camera.zoomBy(1.5);
+    const zoomed = camera.displayScreenRect();
+    expect(zoomed?.left).not.toBeCloseTo(fitted?.left ?? 0, 6);
+    expect(zoomed?.width).toBeCloseTo((fitted?.width ?? 0) * 1.5, 6);
+  });
+
+  it("moves the display box by the pan delta", () => {
+    const camera = createCamera({
+      width: 800,
+      height: 600,
+      artboard: { width: 1600, height: 900 },
+    });
+    camera.showDisplay("16:9");
+    camera.zoomBy(2);
+    const before = camera.displayScreenRect();
+    camera.panBy(40, -25);
+    const after = camera.displayScreenRect();
+    expect(after?.left).toBeCloseTo((before?.left ?? 0) + 40, 6);
+    expect(after?.top).toBeCloseTo((before?.top ?? 0) - 25, 6);
+  });
+
+  it("inscribes the artboard diagonal in a circle lens", () => {
+    const camera = createCamera({
+      width: 800,
+      height: 600,
+      artboard: { width: 1600, height: 900 },
+    });
+    camera.showDisplay("Circle");
+    const board = camera.artboardScreenRect();
+    const screen = camera.displayScreenRect();
+    expect(screen?.width).toBeCloseTo(Math.min(800, 600), 6);
+    expect(Math.hypot(board.width, board.height)).toBeCloseTo(
+      screen?.width ?? 0,
+      6,
+    );
+  });
+
+  it("clears a lens removed from the catalogue", () => {
+    const camera = createCamera({
+      width: 800,
+      height: 600,
+      artboard: { width: 1600, height: 900 },
+    });
+    camera.showDisplay("16:9");
+    setActivePreviewRatios(["4:3"]);
+    expect(camera.display()).toBeUndefined();
+    resetPreviewRatios();
+  });
+
+  it("opens on the first landscape lens or Fit", () => {
+    setActivePreviewRatios(["9:16"]);
+    expect(
+      createCamera({
+        width: 800,
+        height: 600,
+        artboard: { width: 1600, height: 900 },
+      }).display(),
+    ).toBeUndefined();
+    resetPreviewRatios();
   });
 });
