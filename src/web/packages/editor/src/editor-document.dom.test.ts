@@ -1117,6 +1117,72 @@ describe("EditorDocument preset actions", () => {
     document.destroy();
   });
 
+  it("one apply declares every weight and subset of the family, once", async () => {
+    const authored: TypeTokens = {
+      metric: { family: "Segoe UI", weight: "500" },
+    };
+    const { document } = presetDocument(authored);
+    const family = [400, 700, 900].flatMap((weight) =>
+      ["latin", "vietnamese"].map((subset) => ({
+        ...cutFor("body", "Manrope", weight),
+        id: `cut:manrope-${subset}-${weight}`,
+        subset,
+      })),
+    );
+    assetBytesMock.mockResolvedValue({
+      bytes: new Uint8Array([7]),
+      filename: "manrope.woff2",
+    });
+
+    await document.applyCutToPreset("metric", family[0]!, family);
+
+    // Three weights × two subsets: every face the family published, each read
+    // once, so the weight field and the Vietnamese subset both resolve.
+    expect(assetBytesMock).toHaveBeenCalledTimes(6);
+    expect(assetBytesMock.mock.calls.map((call) => call[1])).toEqual(
+      family.map((entry) => entry.id),
+    );
+    expect((document.snapshot().assets ?? []).map((asset) => asset.id)).toEqual(
+      family.map((entry) => fontAssetId(entry)),
+    );
+
+    // The declarations are the only dedupe: a second apply from the same
+    // family asks the host for nothing.
+    assetBytesMock.mockClear();
+    await document.applyCutToPreset("metric", family[3]!, family);
+    expect(assetBytesMock).not.toHaveBeenCalled();
+    document.destroy();
+  });
+
+  it("a family read the host drops declares nothing", async () => {
+    const authored: TypeTokens = {
+      metric: { family: "Segoe UI", weight: "500" },
+    };
+    const { document, onError } = presetDocument(authored);
+    const before = document.snapshot();
+    const family = [400, 700].map((weight) => ({
+      ...cutFor("body", "Manrope", weight),
+      id: `cut:manrope-latin-${weight}`,
+    }));
+    // The first read succeeds and the second is the one the host drops: no
+    // adoption may survive that, even though the first bytes already arrived.
+    assetBytesMock
+      .mockResolvedValueOnce({
+        bytes: new Uint8Array([7]),
+        filename: "a.woff2",
+      })
+      .mockResolvedValueOnce(undefined);
+
+    await document.runFontAction(() =>
+      document.applyCutToPreset("metric", family[0]!, family),
+    );
+
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining("Manrope"));
+    expect(presetsOf(document)).toEqual(authored);
+    expect(document.snapshot().assets).toEqual(before.assets);
+    document.destroy();
+  });
+
   it("unbinding leaves family and weight editable", async () => {
     const { document } = presetDocument({
       heading: {

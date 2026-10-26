@@ -2,13 +2,14 @@
 import type { AssetResult, FontCut, FontTrioInfo } from "@yunari/renderer-core";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   FontPreviewPanel,
   type FontResult,
   type FontRole,
+  familyCutsOf,
 } from "./font-preview-panel.js";
 
 (
@@ -336,9 +337,9 @@ it("names the subset when cuts share a weight, rather than drawing three 400s", 
   }
 });
 
-it("brings the lead subset's weights, not another subset's faces", () => {
-  // Applying a Latin face must give the preset every Latin weight; a
-  // Vietnamese cut is a different face and is not imported unasked.
+it("brings every subset's faces with the chosen cut", () => {
+  // A family lists every weight × subset: the lead subset's weights alone left
+  // a Vietnamese glyph with no file, so one apply brings the whole family.
   const latin400 = cut("Manrope", 400);
   const latin700 = cut("Manrope", 700);
   const vietnamese = {
@@ -359,9 +360,47 @@ it("brings the lead subset's weights, not another subset's faces", () => {
   });
 
   expect(onApplyToSelected).toHaveBeenCalledWith(latin400, [
+    vietnamese,
     latin400,
     latin700,
   ]);
+});
+
+describe("familyCutsOf", () => {
+  const lead = cut("Manrope", 400);
+  const bold = cut("Manrope", 700);
+  const vietnamese = {
+    ...cut("Manrope", 400),
+    id: "cut:manrope-vietnamese",
+    subset: "vietnamese",
+  };
+  const selected = (cuts: readonly FontCut[]): FontResult => ({
+    ...family,
+    id: `google-fonts:${lead.id}`,
+    font: { cuts: [...cuts] },
+  });
+
+  it("returns every cut when the chosen face is the lead's", () => {
+    expect(familyCutsOf(selected([lead, bold, vietnamese]), lead)).toEqual([
+      lead,
+      bold,
+      vietnamese,
+    ]);
+  });
+
+  it("returns every cut when the chosen face is another subset's", () => {
+    expect(
+      familyCutsOf(selected([lead, bold, vietnamese]), vietnamese),
+    ).toEqual([lead, bold, vietnamese]);
+  });
+
+  it("appends the chosen face when the result's own list omits it", () => {
+    expect(familyCutsOf(selected([lead, bold]), vietnamese)).toEqual([
+      lead,
+      bold,
+      vietnamese,
+    ]);
+  });
 });
 
 it("releases every face it added when the panel unmounts", () => {

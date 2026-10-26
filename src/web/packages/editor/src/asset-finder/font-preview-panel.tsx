@@ -63,20 +63,16 @@ export function leadCutOf(selected: {
   return cuts.find((cut) => cut.id === entryId) ?? cuts[0];
 }
 
-/** The faces an import brings with the chosen cut: every weight and style of
- *  the family's lead subset, so the preset's weight field has a face to draw at
- *  each weight, plus the chosen cut when the author picked another subset. */
+/** The faces an import brings with the chosen cut: every published cut of the
+ *  family — all weights, subsets and styles — so the preset's weight field has
+ *  a face at each weight and a Vietnamese glyph has a file to resolve to. The
+ *  chosen cut is included even when the result's own list omits it. */
 export function familyCutsOf(
   selected: FontResult,
   chosen: FontCut,
 ): readonly FontCut[] {
-  const lead = leadCutOf(selected) ?? chosen;
-  const sameSubset = selected.font.cuts.filter(
-    (cut) => cut.family === lead.family && cut.subset === lead.subset,
-  );
-  return sameSubset.some((cut) => cut.id === chosen.id)
-    ? sameSubset
-    : [...sameSubset, chosen];
+  const cuts = selected.font.cuts.filter((cut) => cut.family === chosen.family);
+  return cuts.some((cut) => cut.id === chosen.id) ? cuts : [...cuts, chosen];
 }
 
 export function faceStyle(cut: FontCut | undefined): React.CSSProperties {
