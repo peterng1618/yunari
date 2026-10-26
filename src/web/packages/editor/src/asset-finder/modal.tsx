@@ -21,6 +21,7 @@ import { type AssetPlacement } from "./actions.js";
 import { type ClientOptions, listSources, searchAssets } from "./client.js";
 import { interleave } from "./interleave.js";
 import { AssetRow } from "./row.js";
+import { CardGridSkeleton } from "./skeleton.js";
 
 /** How long a keystroke settles before it is the query. */
 export const SEARCH_DEBOUNCE_MS = 200;
@@ -232,6 +233,9 @@ export function AssetFinder({
   const announced = useRef(false);
   const [message, setMessage] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  /** A question is out and its answer has not landed. With results already on
+   *  screen this marks the grid busy; without any it shows the skeleton. */
+  const [searching, setSearching] = useState(false);
   const ticket = useRef(0);
 
   /** A category a body owns: no listing names it, and no source is searched. */
@@ -339,11 +343,13 @@ export function AssetFinder({
       visibleSources.length === 0 ||
       enabledSources.length === 0
     ) {
+      setSearching(false);
       setAnswer(undefined);
       setFailures([]);
       return;
     }
 
+    setSearching(true);
     const enabled = enabledSources.map((source) => source.id);
     const issued = ticket.current;
     const timer = setTimeout(() => {
@@ -356,6 +362,7 @@ export function AssetFinder({
         client,
       ).then((next) => {
         if (issued !== ticket.current) return;
+        setSearching(false);
         setAnswer(next);
         setFailures(next.pages.filter((page) => page.failure !== undefined));
         // A page past the end is the answer's own: land on the last page it
@@ -461,6 +468,14 @@ export function AssetFinder({
         >
           {uiCopy.assets.hostUnavailable}
         </p>
+      ) : null}
+      {listing === "loading" ? (
+        <div
+          data-yunari-asset-listing-skeleton=""
+          className="min-h-0 flex-1 overflow-y-auto p-[var(--space-16)]"
+        >
+          <CardGridSkeleton />
+        </div>
       ) : null}
       {active === undefined ? null : (
         <Tabs.Root
@@ -690,6 +705,14 @@ export function AssetFinder({
                     >
                       {uiCopy.assets.kindSourcesOff}
                     </p>
+                  ) : answer === undefined ? (
+                    // Nothing to keep: the wait is the grid that is coming.
+                    <div
+                      data-yunari-asset-loading=""
+                      className="min-h-0 flex-1 overflow-y-auto"
+                    >
+                      <CardGridSkeleton />
+                    </div>
                   ) : empty ? (
                     <p
                       className="flex flex-col items-start gap-[var(--space-8)] text-sm text-muted"
@@ -712,6 +735,7 @@ export function AssetFinder({
                     <div
                       className="grid min-h-0 flex-1 content-start grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-[var(--space-8)] overflow-y-auto"
                       data-yunari-asset-grid=""
+                      aria-busy={searching ? "true" : undefined}
                     >
                       {rows.map(({ page, result }) => (
                         <AssetRow

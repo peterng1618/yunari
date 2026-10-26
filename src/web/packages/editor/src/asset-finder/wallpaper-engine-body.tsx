@@ -13,6 +13,7 @@ import {
   type WallpaperEngineItem,
 } from "../wallpaper-engine/client.js";
 import type { ImportOutcome } from "./actions.js";
+import { CardGridSkeleton } from "./skeleton.js";
 import {
   WallpaperEngineCard,
   type WallpaperEngineCardState,
@@ -66,8 +67,6 @@ export function WallpaperEngineBody(props: {
       live = false;
     };
   }, [client]);
-
-  if (answer === undefined) return <></>;
 
   const copy = uiCopy.assets.wallpaperEngine;
 
@@ -128,6 +127,17 @@ export function WallpaperEngineBody(props: {
       )}
     </>
   );
+
+  if (answer === undefined) {
+    // The wait is the grid that is coming; the guide and the `.mpkg` import
+    // need no library, so they stay reachable while the host answers.
+    return (
+      <div className="flex flex-col gap-[var(--space-8)]">
+        {guideAndPackage}
+        <CardGridSkeleton />
+      </div>
+    );
+  }
 
   if (answer.available === false) {
     return (

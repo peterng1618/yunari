@@ -16,10 +16,10 @@ Execute [`the Wallpaper Engine import rework`](docs/superpowers/plans/2026-10-26
 
 ## Last completed change
 
-- **Attribution:** `AssetManager.import` takes optional `{ sourceUrl, license }`, writes it on the declaration, and a package round-trip keeps it.
-- **Grid imports:** the Steam author lookup fills `author.name` when it answers; the credit keeps the id and the declaration carries licence `unknown` plus the workshop or profile URL.
-- **Package imports:** `.mpkg` declarations record `license: { name: "unknown" }` and no source; a failed author lookup never blocks the import.
-- **Proof:** the focused editor suites (89 + 22 tests) pass, and typecheck and biome check are clean.
+- **Skeletons:** `CardGridSkeleton`/`TextSkeleton` draw pulse placeholders with `aria-busy`, one visually hidden sentence and no focusable element.
+- **Finder:** the source listing and a first search show the grid skeleton; pagination keeps its rows and sets `aria-busy` instead.
+- **Bodies:** the Wallpaper Engine tab waits on the grid skeleton with the guide and `.mpkg` controls reachable; the Fonts body waits on the text skeleton.
+- **Proof:** the focused editor suites (70 tests) pass; typecheck and biome check are clean.
 
 ## Next
 

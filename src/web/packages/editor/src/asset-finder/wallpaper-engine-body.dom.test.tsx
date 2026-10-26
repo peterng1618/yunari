@@ -173,6 +173,35 @@ it("renders the host's absence reason, not an empty grid, and keeps the guide an
   ).not.toBeNull();
 });
 
+it("draws the grid skeleton until the library answers, keeping the guide and package controls", async () => {
+  const pending = deferred<Response>();
+  const rendered = await render({
+    ...idle(),
+    client: {
+      fetch: (async () => pending.promise) as unknown as typeof fetch,
+    },
+  });
+
+  expect(rendered.querySelector("[data-yunari-skeleton-grid]")).not.toBeNull();
+  expect(cards(rendered)).toHaveLength(0);
+  // The `.mpkg` and the guide need no library, so they are drawn beside the wait.
+  expect(
+    rendered.querySelector("[data-yunari-wallpaper-engine-guide]"),
+  ).not.toBeNull();
+  expect(
+    rendered.querySelector("[data-yunari-wallpaper-engine-import-package]"),
+  ).not.toBeNull();
+
+  await act(async () => {
+    pending.resolve(new Response(JSON.stringify(available), { status: 200 }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(rendered.querySelector("[data-yunari-skeleton-grid]")).toBeNull();
+  expect(cardIds(rendered)).toEqual(["201", "202", "203", "204"]);
+});
+
 it("draws a card per item inside the finder's asset grid", async () => {
   const rendered = await render(idle());
 

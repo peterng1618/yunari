@@ -1200,6 +1200,9 @@ export const uiCopy = {
       "Every source for this kind is switched off. Turn one on above.",
     clearQuery: "Clear query",
     noSource: "No source serves this category.",
+    /** The shared skeleton's one spoken line; its shapes are hidden, so this is
+     *  all a screen reader hears while a body is still loading. */
+    skeletonLoading: "Loading assets…",
     sourceFailed: (label: string, message: string): string =>
       `${label} failed: ${message}`,
     needsCredential: (label: string): string =>
@@ -1216,7 +1219,6 @@ export const uiCopy = {
     fontSort: { name: "A–Z", provider: "Provider" },
     fontSourcesLabel: "Font sources",
     fontEmptyQuery: "Type a font name to find a trio or a family.",
-    fontSearching: "Searching fonts…",
     fontTrioMeta: (families: number): string =>
       `${families} ${families === 1 ? "family" : "families"}`,
     fontFamilyMeta: (cuts: number): string =>
