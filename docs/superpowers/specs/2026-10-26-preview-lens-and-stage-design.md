@@ -135,11 +135,12 @@ fallback would resurrect exactly the pinned layer this design removes.
 ### Background media
 
 `bounds: "display"` media is placed by the layer's existing path —
-`media.setBounds({ artboard, display, shape })` from `placeMedia` — with the
-transformed display rect and the lens's shape. No other change to
-`mountBackgroundMedia` is required; the box it receives is the scene-anchored
-one. `bounds: "theme"` is unchanged, and is never circular: the artboard is the
-theme, not the display.
+`media.setBounds({ artboard, display })` from `placeMedia` — with the
+transformed display rect, whose `MediaBox.radius` is `"circle"` under a circle
+lens. `display` is optional: omitting it is the artboard fallback. No other
+change to `mountBackgroundMedia` is required; the box it receives is the
+scene-anchored one. `bounds: "theme"` is unchanged, and is never circular: the
+artboard is the theme, not the display.
 
 The glass sampler's `backdrop()` already maps the rect it actually painted from
 `bounds` and keeps working; when `display` is undefined under Fit, the
@@ -152,7 +153,7 @@ A circle lens is the same scene-anchored box with a circular display:
 - the display-screen element takes `border-radius: 50%`, so the letterbox fill
   is a disc;
 - a display-bounded media layer takes the same radius and clips its media to the
-  disc (`setBounds`'s `shape`);
+  disc (`MediaBox.radius: "circle"`);
 - the artboard and the guide frame stay rectangular, and the artboard is scaled
   so its four corners lie on the disc — a 16:9 theme in a circle lens is a
   landscape card whose corners touch the circle, with the theme's colour
@@ -169,9 +170,12 @@ element. `.editor-shell-stage` paints `--stage` plus the mockup's texture
 background:
   repeating-linear-gradient(45deg,
     var(--panel) 0 6px,
-    color-mix(in srgb, var(--panel) 78%, var(--bg)) 6px 12px),
+    color-mix(in srgb, var(--panel) 78%, transparent) 6px 12px),
   var(--stage);
 ```
+
+The stripe mixes against `transparent` rather than `--bg`: `--bg` is a gradient
+under `light`, and `color-mix` cannot take an image as an operand.
 
 `--stage` stays the final layer, so every palette keeps its own ground (a
 colour for the dark and tinted palettes, a gradient under `light`) and the
@@ -285,9 +289,9 @@ A fifth tab, `previews`, between `appearance` and `keyboard`:
 
 - The display menu reads the active catalogue for both orientation groups, plus
   Fit. A group with no lens is omitted rather than headed and empty.
-- The new-document chooser's preview dropdown lists the same catalogue plus Fit
-  and **Custom size**. It no longer rewrites the artboard size: picking a lens
-  changes the preview only. The size stays the technical controls' answer.
+- The new-document chooser's preview dropdown lists the same catalogue plus Fit.
+  It no longer rewrites the artboard size: picking a lens changes the preview
+  only. The size stays the technical controls' answer.
 - The chooser opens on a lens whose aspect matches the opening shape's aspect
   and whose orientation matches the shape's orientation, if the catalogue has
   one; otherwise Fit.

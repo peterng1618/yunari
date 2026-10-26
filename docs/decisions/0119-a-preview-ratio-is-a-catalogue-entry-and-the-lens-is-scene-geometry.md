@@ -6,7 +6,8 @@
   `src/web/packages/editor/src/viewport-manager/index.ts`,
   `src/web/packages/editor/src/editor-shell.ts`,
   `src/web/packages/editor/src/editor-shell/shell-layout.tsx`,
-  `src/web/packages/editor/src/editor-shell/editor-shell.css`
+  `src/web/packages/editor/src/editor-shell/editor-shell.css`,
+  `src/web/packages/scene-fabric/src/background-media.ts`
 
 ## The problem
 
@@ -113,3 +114,11 @@ stage at a ratio nobody chose — and the display box must live in the same spac
 as the artwork, or it cannot follow the camera. A preview ratio is camera state
 (`docs/product/requirements.md` §67), never document content, so nothing here enters the theme
 envelope or authored history.
+
+`background-media.ts` is in scope for exactly two reasons, both on the existing
+`setBounds` path rather than a new one: `MediaBounds.display` becomes optional,
+so the layer falls back to the artboard box under Fit instead of holding a
+host-pixel box, and `MediaBox.radius: "circle"` clips a display-bounded layer to
+the disc. `bounds: "theme"` never takes a radius — the artboard is the theme, the
+disc is the display — and the glass sampler keeps mapping the rect it painted,
+so the clip decision does not reach it.
