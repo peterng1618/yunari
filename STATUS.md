@@ -16,9 +16,8 @@ Execute [`the Wallpaper Engine import rework`](docs/superpowers/plans/2026-10-26
 
 ## Last completed change
 
-- **Author:** spec §7.3 drops the "needs a Steam API key" claim; the shipped lookup writes the persona name when it resolves, and failure is absence.
-- **Export:** spec §14 and §11 now say the author exports a converted project to `.mpkg`, and `.mpkg`/video files enter through the modal.
-- **Tokens:** the import modal is named as shared with the Assets pane, not a second Wallpaper Engine dialog.
+- **Gaps:** spec §11 and §14 state the truthful outcomes — no payload file is dropped before listing, and a package without `scene.json` refuses conversion as `unreadable`.
+- **Comment:** the token comment names the finder as the sharer of the import modal with the Assets pane.
 - **Proof:** `docs:check` and `status:check` pass from this commit.
 
 ## Next
