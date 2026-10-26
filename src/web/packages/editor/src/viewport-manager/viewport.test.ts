@@ -561,14 +561,20 @@ describe("the display lens", () => {
   });
 
   it("clears a lens removed from the catalogue", () => {
+    // A square board, so Fit (0.6) and the 16:9 lens (0.45) are different
+    // scales. With a 16:9 board the two coincidentally agree, and a callback
+    // that cleared the lens without re-fitting would pass unnoticed.
     const camera = createCamera({
       width: 800,
       height: 600,
-      artboard: { width: 1600, height: 900 },
+      artboard: { width: 1000, height: 1000 },
     });
     camera.showDisplay("16:9");
+    expect(camera.zoom()).toBeCloseTo(0.45, 6);
     setActivePreviewRatios(["4:3"]);
     expect(camera.display()).toBeUndefined();
+    expect(camera.displayScreenRect()).toBeUndefined();
+    expect(camera.zoom(), "and it re-fitted to Fit").toBeCloseTo(0.6, 6);
     resetPreviewRatios();
   });
 
