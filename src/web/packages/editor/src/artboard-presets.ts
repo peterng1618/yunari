@@ -38,13 +38,14 @@ export const ARTBOARD_ORIENTATIONS: ReadonlyArray<ArtboardOrientation> = [
 ];
 
 /**
- * The shape a new document opens at.
+ * The shape a new document opens at when it has no prior shape to inherit.
  *
  * **Not the lens's owner.** The stage's opening lens is resolved at mount from
- * the active catalogue — its own first landscape entry — so removing 16:9 from
- * the catalogue opens the stage on a different lens while a new document still
- * opens at this shape. The two are the same shape today only because 16:9 is
- * the catalogue's first landscape default.
+ * the active catalogue — its own first landscape entry — so a fresh mount after
+ * 16:9 is removed from the catalogue opens the stage on a different lens while
+ * a new document with no prior shape still opens at this one. (Removing the
+ * live lens clears to Fit instead.) The two are the same shape today only
+ * because 16:9 is the catalogue's first landscape default.
  *
  * The ratio and resolution a new document opens at, and the orientation it is
  * held.
