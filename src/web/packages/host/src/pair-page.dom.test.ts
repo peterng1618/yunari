@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PAIRING_STORAGE_KEY } from "../../player/src/host-refind.js";
 
 /**
  * `/pair.html`'s exchange, and what it leaves behind in storage.
@@ -33,7 +34,11 @@ const BODY_HTML = PAGE.slice(
 
 const SCRIPT = PAGE.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? "";
 
-const PAIRING_KEY = "yunari.display.pairing";
+/** The key the page clears, read out of its own script. The page has no build
+ *  step, so it cannot import the player's constant; this is the contract
+ *  between the two, and a rename on either side fails the case below rather
+ *  than silently turning the clear into a no-op. */
+const PAGE_KEY = SCRIPT.match(/localStorage\.removeItem\("([^"]+)"\)/)?.[1];
 
 const AsyncFunction = Object.getPrototypeOf(
   async (): Promise<void> => undefined,
@@ -79,9 +84,13 @@ afterEach(() => {
 });
 
 describe("pairing a display", () => {
+  it("clears the key the player owns", () => {
+    expect(PAGE_KEY).toBe(PAIRING_STORAGE_KEY);
+  });
+
   it("clears the token the pairing before it left in storage", async () => {
     localStorage.setItem(
-      PAIRING_KEY,
+      PAIRING_STORAGE_KEY,
       JSON.stringify({
         hostId: "h1",
         hostName: "study-pc",
@@ -93,6 +102,6 @@ describe("pairing a display", () => {
 
     await pair();
 
-    expect(localStorage.getItem(PAIRING_KEY)).toBeNull();
+    expect(localStorage.getItem(PAIRING_STORAGE_KEY)).toBeNull();
   });
 });

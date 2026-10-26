@@ -3056,6 +3056,26 @@ describe("Host theme routes", () => {
       expect(answered.json()).toMatchObject({ token: fresh });
     });
 
+    it("treats an empty cookie as absent, so a valid header still authenticates", async () => {
+      // `yunari_session=` is a value this host never writes, but reading it as
+      // present would shadow the header behind it and refuse a valid display.
+      const token = await pair("phone");
+
+      const answered = await request(
+        paired.server,
+        "GET",
+        "/api/host",
+        undefined,
+        {
+          remoteAddress: "192.168.1.50",
+          headers: { cookie: "yunari_session=", "x-yunari-session": token },
+        },
+      );
+
+      expect(answered.status).toBe(200);
+      expect(answered.json()).toMatchObject({ token });
+    });
+
     it("exchanges a live token for an HttpOnly cookie and no token in the URL", async () => {
       const token = await pair();
       const lan = { remoteAddress: "192.168.1.50" };

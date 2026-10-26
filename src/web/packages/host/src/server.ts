@@ -598,10 +598,13 @@ function cookieValue(
  */
 function tokenFor(request: http.IncomingMessage): string | undefined {
   const header = request.headers[SESSION_HEADER];
-  return (
-    cookieValue(request.headers.cookie, SESSION_COOKIE) ??
-    (Array.isArray(header) ? header[0] : header)
-  );
+  const fromCookie = cookieValue(request.headers.cookie, SESSION_COOKIE);
+  const cookie = fromCookie === "" ? undefined : fromCookie;
+
+  // `yunari_session=` is an empty value, not a credential. This host never
+  // writes one, but `??` alone would treat it as present and shadow a valid
+  // header behind it.
+  return cookie ?? (Array.isArray(header) ? header[0] : header);
 }
 
 /**

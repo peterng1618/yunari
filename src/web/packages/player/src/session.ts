@@ -26,6 +26,16 @@ export interface DisplaySessionToken {
  * without a credential and resolves as this PC, so it has no own-theme write
  * to offer; any other origin is a paired display, because the host refuses a
  * LAN page that is not one.
+ *
+ * The octet bound below is unreachable through `URL`: an out-of-range quad
+ * (`127.0.0.256`) throws before the pattern runs, so the bound states what the
+ * predicate means rather than guarding a live path.
+ *
+ * **`*.localhost` diverges from `server.ts:isLoopbackName`, deliberately.** The
+ * host's check does not treat a dotted name as this machine, and this one does.
+ * The player's answer only decides whether the theme chooser is offered: a name
+ * the host refuses never serves the page at all, so no control here can be one
+ * the host would then reject.
  */
 export function isLoopbackPage(pageUrl: string): boolean {
   let hostname: string;
