@@ -60,10 +60,14 @@ npm's tarball integrity covers only the package's JavaScript.
 both `node scripts/verify-ffmpeg.mjs` (in the gate as `npm run ffmpeg:check`)
 and the host's spawn gate refuse bytes the file does not describe. Each digest
 was computed from the downloaded `b6.1.1` release asset and agrees with that
-release's published asset `digest`; `win32-arm64` is absent because upstream
-publishes no asset for it and the package's own platform table does not list
-it, so that pair is refused rather than skipped. Updating the package is a
-visible edit to this file (decision 0122).
+release's published asset `digest`. Four pairs are unlisted and therefore
+refused rather than skipped: `linux-ia32` and `linux-arm` have release assets
+but no recorded digest, `win32-ia32` has both an asset and a package-table
+entry, and `win32-arm64` has neither, because upstream publishes no asset for
+it and the package's own platform table does not list it. A 32-bit or ARM
+user sees the verifier's "no recorded SHA-256" refusal; adding the pair means
+hashing its decompressed release asset into this file. Updating the package is
+a visible edit to this file (decision 0122).
 
 `node-forge` 1.4.0 was added on 2026-10-18 with `docs/decisions/0070`. Its
 licence is dual, `(BSD-3-Clause OR GPL-2.0)`, verified from the installed

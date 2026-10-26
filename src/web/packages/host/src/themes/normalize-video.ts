@@ -44,28 +44,17 @@ const HASH_REFUSAL =
   "The bundled ffmpeg does not match the hash recorded for this platform, " +
   "so the video was not re-encoded.";
 
-/** The executable does not change under a running host, so one answer per path
- *  is enough and the digest is read once. */
-const verificationCache = new Map<string, boolean>();
-
 type Run = (
   args: readonly string[],
 ) => Promise<{ code: number; stderr: string }>;
 
 /**
- * Test seam: the cases that spawn a fake executable supply one, so a fixture
- * does not need a digest recorded for it.
+ * Test seam for `verifyFfmpeg`, named so production code cannot mistake it for
+ * an option: the cases that spawn a fake executable supply one, so a fixture
+ * does not need a digest recorded for it. The only caller outside tests is the
+ * default. The shape is the verifier's own, so there is one definition.
  */
-export type Verify = (input: {
-  readonly binaryPath: string;
-  readonly version: string;
-  readonly platform: string;
-  readonly arch: string;
-  readonly hashes: {
-    readonly version: string;
-    readonly sha256: Readonly<Record<string, string>>;
-  };
-}) => { readonly ok: true } | { readonly ok: false; readonly message: string };
+export type Verify = typeof verifyFfmpeg;
 
 export type NormalizeResult =
   | {
@@ -88,7 +77,7 @@ export async function normalizeVideo(
     readonly aspect?: NormalizeAspect;
     readonly ffmpegPath?: string;
     readonly run?: Run;
-    readonly verify?: Verify;
+    readonly verifyForTest?: Verify;
   } = {},
 ): Promise<NormalizeResult> {
   const facts = readVideoFacts(bytes);
@@ -132,7 +121,7 @@ export async function normalizeVideo(
     };
   // The bytes this host is about to execute come from an install-time download
   // that npm's tarball integrity does not cover; nothing else checks them.
-  if (!verified(executable, options.verify))
+  if (!verified(executable, options.verifyForTest))
     return { ok: false, message: HASH_REFUSAL };
   const run = options.run ?? encoderRun(executable);
 
@@ -342,23 +331,19 @@ function evenAtMost(value: number): number {
   return Math.max(2, Math.floor(value / 2) * 2);
 }
 
-/** The spawn gate. A supplied `verify` bypasses the cache so two cases using
- *  the same stub path cannot inherit each other's answer. */
+/** The spawn gate. Verification runs at every spawn rather than once per path:
+ *  `readFileSync` then `execFile` reopen the path, so a cache would let a
+ *  binary replaced after the first check run unhashed for the rest of the
+ *  process. Reading the binary costs milliseconds against a re-encode's
+ *  minutes; a cache added here must be documented as that ceiling. */
 function verified(executable: string, verify: Verify | undefined): boolean {
-  const check = (): boolean =>
-    (verify ?? verifyFfmpeg)({
-      binaryPath: executable,
-      version: FFMPEG_STATIC_VERSION,
-      platform: process.platform,
-      arch: process.arch,
-      hashes: ffmpegHashes,
-    }).ok;
-  if (verify !== undefined) return check();
-  const cached = verificationCache.get(executable);
-  if (cached !== undefined) return cached;
-  const accepted = check();
-  verificationCache.set(executable, accepted);
-  return accepted;
+  return (verify ?? verifyFfmpeg)({
+    binaryPath: executable,
+    version: FFMPEG_STATIC_VERSION,
+    platform: process.platform,
+    arch: process.arch,
+    hashes: ffmpegHashes,
+  }).ok;
 }
 
 function encoderRun(executable: string): Run {

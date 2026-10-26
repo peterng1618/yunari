@@ -11,10 +11,12 @@
  *
  * `node scripts/verify-ffmpeg.mjs`
  *
- * Its cases live in `src/web/tests/scripts/verify-ffmpeg.test.ts`.
+ * Its cases live in `src/web/tests/scripts/verify-ffmpeg.test.ts`, which is why
+ * it takes no arguments: an argument it does not define is an error rather than
+ * being ignored, so a CI step cannot read green while asking for something else.
  *
  * Exit: 0 verified, 1 version/platform/digest refusal, 2 `ffmpeg-static` or its
- * binary is unavailable.
+ * binary is unavailable, or an unknown argument.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -62,7 +64,13 @@ function recordedHashes() {
   }
 }
 
-function main() {
+function main(argv) {
+  if (argv.length > 0) {
+    console.error(
+      `ffmpeg: unknown argument ${argv.join(" ")}; this check takes none.`,
+    );
+    return 2;
+  }
   const { binaryPath, version, failure } = installed();
   if (failure !== undefined) {
     console.error(`ffmpeg: ${failure}`);
@@ -108,5 +116,5 @@ if (
   process.argv[1] !== undefined &&
   pathToFileURL(resolve(process.argv[1])).href === import.meta.url
 ) {
-  process.exit(main());
+  process.exit(main(process.argv.slice(2)));
 }

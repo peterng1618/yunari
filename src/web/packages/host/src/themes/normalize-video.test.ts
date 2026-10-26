@@ -61,7 +61,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
-      verify: acceptHash,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(true);
@@ -84,7 +84,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("audio.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
-      verify: acceptHash,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(true);
@@ -102,7 +102,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("nofaststart.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
-      verify: acceptHash,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(true);
@@ -120,7 +120,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
-      verify: acceptHash,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(false);
@@ -143,7 +143,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
-      verify: acceptHash,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(false);
@@ -163,7 +163,7 @@ describe("normalizeVideo", () => {
       aspect: { width: 16, height: 9 },
       ffmpegPath: "ffmpeg-stub",
       run,
-      verify: acceptHash,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(true);
@@ -201,7 +201,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run: async () => ({ code: 1, stderr: "ENCODER INTERNAL DETAIL" }),
-      verify: acceptHash,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(false);
@@ -210,13 +210,27 @@ describe("normalizeVideo", () => {
     expect(result.message).not.toContain("ENCODER INTERNAL DETAIL");
   });
 
+  it("verifies once per spawn, not once per path", async () => {
+    // The digests are read immediately before each spawn because the binary can
+    // be replaced between them; a per-path cache would accept the second.
+    const run = runWriting(fixture("conforming.mp4"));
+    const verifyForTest = vi.fn(acceptHash);
+
+    const options = { ffmpegPath: "ffmpeg-stub", run, verifyForTest };
+    await normalizeVideo(fixture("wide.mp4"), options);
+    await normalizeVideo(fixture("wide.mp4"), options);
+
+    expect(verifyForTest).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
   it("refuses a binary whose hash does not match, without spawning it", async () => {
     const run = vi.fn(async () => ({ code: 0, stderr: "" }));
 
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
-      verify: () => ({
+      verifyForTest: () => ({
         ok: false,
         message: "ffmpeg-static 5.3.0 win32-x64: expected aa, got bb.",
       }),
