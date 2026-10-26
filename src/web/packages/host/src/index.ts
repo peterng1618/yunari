@@ -78,5 +78,5 @@ export {
   type StoreSessionStore,
 } from "./settings/store-session.js";
 export { createSecureOrigin, type SecureOrigin } from "./tls/authority.js";
-export { KeepLatestSlot } from "./transport/keep-latest.js";
+export { FrameQueue } from "./transport/frame-queue.js";
 export { SseConnection } from "./transport/sse.js";

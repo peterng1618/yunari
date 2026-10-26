@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS } from "../data/live-source.js";
 import type { Sample, SensorStatus } from "../types.js";
 import {
   buildLineOption,
@@ -7,8 +6,6 @@ import {
   type Interpolation,
   type LinearGradientColor,
   type LineSettings,
-  lineHistorySeconds,
-  liveTail,
   type SeriesInput,
   type SeriesPoint,
   toEngineColor,
@@ -42,347 +39,179 @@ function bad(
   };
 }
 
-describe("liveTail — the last reading fills the edge", () => {
-  it("holds the last reading to the render clock", () => {
-    expect(
-      liveTail(
-        [
-          [T0, 40],
-          [T0 + 1000, 55],
-        ],
-        T0 + 1400,
-        1000,
-      ),
-    ).toEqual([
-      [T0, 40],
-      [T0 + 1000, 55],
-      [T0 + 1400, 55],
-    ]);
-  });
+/** The drawn value at `xMs`, reading the series as a polyline. */
+function drawnValueAt(
+  data: readonly SeriesPoint[],
+  xMs: number,
+): number | null {
+  for (let index = 1; index < data.length; index += 1) {
+    const from = data[index - 1]!;
+    const to = data[index]!;
+    if (from[1] === null || to[1] === null) continue;
+    if (from[0] <= xMs && xMs <= to[0]) {
+      const span = to[0] - from[0];
+      return span === 0
+        ? to[1]
+        : from[1] + ((to[1] - from[1]) * (xMs - from[0])) / span;
+    }
+  }
+  return null;
+}
 
-  it("keeps holding through a stall of any length", () => {
-    // The owner's rule: a stall is painted with the last reading, however long
-    // it lasts. An outage is a reported gap, not a quiet tick.
-    expect(liveTail([[T0, 40]], T0 + 30_000, 2000)).toEqual([
-      [T0, 40],
-      [T0 + 30_000, 40],
-    ]);
-  });
-
-  it("leaves a reported gap alone", () => {
-    const points = [
-      [T0, 40],
-      [T0 + 1000, null],
-    ] as const;
-
-    expect(liveTail(points, T0 + 1400, 1000)).toEqual(points);
-  });
-
-  it("keeps the flat stretch a stall painted when the batch arrives", () => {
-    // Both gaps are longer than the 2 s delay, so the edge had passed the
-    // sample before each of them and both stretches were painted flat. Each
-    // arriving sample repeats the previous reading at its own timestamp and
-    // steps there.
-    expect(
-      liveTail(
-        [
-          [T0, 40],
-          [T0 + 4000, 44],
-          [T0 + 7000, 60],
-        ],
-        T0 + 5000,
-        2000,
-      ),
-    ).toEqual([
-      [T0, 40],
-      [T0 + 4000, 40],
-      [T0 + 4000, 44],
-      [T0 + 7000, 44],
-      [T0 + 7000, 60],
-    ]);
-  });
-
-  it("keeps the flat stretch when a stall ends in a reported gap", () => {
-    // The sensor answered with no value. The stretch already painted is still
-    // preserved; the line simply breaks at the sample that said so.
-    expect(
-      liveTail(
-        [
-          [T0, 40],
-          [T0 + 4000, 44],
-          [T0 + 7000, null],
-        ],
-        T0 + 5000,
-        2000,
-      ),
-    ).toEqual([
-      [T0, 40],
-      [T0 + 4000, 40],
-      [T0 + 4000, 44],
-      [T0 + 7000, 44],
-      [T0 + 7000, null],
-    ]);
-  });
-
-  it("keeps a stall's step when a later batch extends the line", () => {
-    // The step at 4000 was painted when the 3 s stall ended. The next batch
-    // extends the line to 5000, and re-deciding only the newest pair would
-    // drop that step and reshape pixels the reader has already seen.
-    expect(
-      liveTail(
-        [
-          [T0, 40],
-          [T0 + 1000, 41],
-          [T0 + 4000, 50],
-          [T0 + 5000, 51],
-        ],
-        T0 + 5001,
-        2000,
-      ),
-    ).toEqual([
-      [T0, 40],
-      [T0 + 1000, 41],
-      [T0 + 4000, 41],
-      [T0 + 4000, 50],
-      [T0 + 5000, 51],
-      [T0 + 5001, 51],
-    ]);
-  });
-
-  it("does not step when the edge never passed the previous sample", () => {
-    // Both gaps are shorter than the delay, so the edge was still between the
-    // samples and nothing was painted flat to revise.
-    expect(
-      liveTail(
-        [
-          [T0, 40],
-          [T0 + 1500, 44],
-          [T0 + 3000, 60],
-        ],
-        T0 + 2500,
-        2000,
-      ),
-    ).toEqual([
-      [T0, 40],
-      [T0 + 1500, 44],
-      [T0 + 3000, 60],
-    ]);
-  });
-
-  it("does not step onto a reported gap", () => {
-    expect(
-      liveTail(
-        [
-          [T0, 40],
-          [T0 + 1000, null],
-          [T0 + 5000, 60],
-        ],
-        T0 + 3000,
-        2000,
-      ),
-    ).toEqual([
-      [T0, 40],
-      [T0 + 1000, null],
-      [T0 + 5000, 60],
-    ]);
-  });
-
-  it("holds nothing when the source has no delay", () => {
-    // Without a delayed edge the axis ends at the newest sample; there is no
-    // sliver to fill and no stretch to preserve.
-    const points = [
-      [T0, 40],
-      [T0 + 9000, 60],
-    ] as const;
-
-    expect(liveTail(points, T0 + 9000, 0)).toEqual(points);
-  });
-});
-
-describe("the axis edge and the newest segment", () => {
-  /**
-   * With one cadence of delay the edge reaches the newest sample exactly when
-   * the next batch is due, so every ordinary (never-early) tick would paint a
-   * flat stretch and then step. Two intervals must keep the edge at or before
-   * the start of the segment that a new batch extends.
-   */
-  it("keeps the newest segment ahead of the edge when the next batch is due", () => {
-    const cadenceMs = 1_000; // §122: the host's sampling baseline
-    const samples = Array.from({ length: 10 }, (_, index) =>
-      at(index, 40 + index),
-    );
-    // The earliest instant the next batch can arrive: host gaps are never
-    // shorter than the cadence, because the host's timer never fires early.
-    const nextArrivalMs = T0 + 9 * cadenceMs + cadenceMs;
-
+describe("the axis is placed by the data (0124)", () => {
+  it("ends the axis at the newest plottable reading", () => {
+    // The wall clock is five seconds past the newest batch; the axis must end
+    // on the reading, not on the clock, or the right edge is blank.
     const option = buildLineOption(
       defaultLineSettings,
-      [{ sensorId: "cpu.load.total", samples }],
-      nextArrivalMs,
-      false,
-      undefined,
-      LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
+      [{ sensorId: "a", samples: [at(59, 10), at(60, 20)] }],
+      NOW + 5_000,
     );
-    const points = option.series[0]!.data;
 
-    // The newest segment is the one the arriving batch extends; the edge must
-    // not have reached its start.
-    expect(points.at(-2)![0]).toBeGreaterThanOrEqual(option.xAxis.max);
-  });
-});
-
-describe("a delayed line", () => {
-  const samples = Array.from({ length: 5 }, (_, index) =>
-    at(index, 40 + index),
-  );
-
-  /** The drawn value at `xMs`, reading the series as a polyline. */
-  function drawnValueAt(
-    data: readonly SeriesPoint[],
-    xMs: number,
-  ): number | null {
-    for (let index = 1; index < data.length; index += 1) {
-      const from = data[index - 1]!;
-      const to = data[index]!;
-      if (from[1] === null || to[1] === null) continue;
-      if (from[0] <= xMs && xMs <= to[0]) {
-        const span = to[0] - from[0];
-        return span === 0
-          ? to[1]
-          : from[1] + ((to[1] - from[1]) * (xMs - from[0])) / span;
-      }
-    }
-    return null;
-  }
-
-  it("never smooths, because a smooth segment depends on the next batch", () => {
-    // The engine draws a smooth segment from the points either side of it, so a
-    // smoothed tail would move as the edge advances and again when the next
-    // batch arrives. Smoothing is not an authorable choice (0116).
-    for (const interpolation of ["linear", "step"] as const) {
-      for (const delay of [undefined, LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS]) {
-        const option = buildLineOption(
-          { ...defaultLineSettings, interpolation },
-          [{ sensorId: "cpu.load.total", samples }],
-          T0 + 4000,
-          false,
-          undefined,
-          delay,
-        );
-        expect(option.series[0]!.smooth, interpolation).toBe(false);
-      }
-    }
+    expect(option.xAxis.max).toBe(NOW);
+    expect(option.xAxis.min).toBe(NOW - 60_000);
+    expect(option.series[0]!.data.at(-1)).toEqual([NOW, 20]);
   });
 
-  it("draws the same visible stretch when a stall's batch arrives", () => {
+  it("falls back to the render clock only when nothing is plottable", () => {
+    const option = buildLineOption(defaultLineSettings, [], NOW);
+
+    expect(option.xAxis.max).toBe(NOW);
+    expect(option.xAxis.min).toBe(NOW - 60_000);
+  });
+
+  it("draws the same picture whatever the wall clock says", () => {
+    // Nothing in the option may depend on the frame's instant: two redraws of
+    // the same samples are the same picture.
+    const build = (nowMs: number) =>
+      buildLineOption(
+        defaultLineSettings,
+        [{ sensorId: "a", samples: [at(0, 1), at(10, 2)] }],
+        nowMs,
+      );
+
+    const early = build(NOW);
+    const late = build(NOW + 30_000);
+
+    expect(late.xAxis).toEqual(early.xAxis);
+    expect(late.series[0]!.data).toEqual(early.series[0]!.data);
+  });
+
+  it("keeps the axis on the data when the newest reading is a gap", () => {
+    // A missing reading is skipped, so it cannot place the edge either.
+    const option = buildLineOption(
+      defaultLineSettings,
+      [{ sensorId: "a", samples: [at(50, 10), bad(60, "missing")] }],
+      NOW + 60_000,
+    );
+
+    expect(option.xAxis.max).toBe(T0 + 50_000);
+    expect(option.series[0]!.data).toEqual([[T0 + 50_000, 10]]);
+  });
+
+  it("ends a shared axis at the newest series", () => {
+    const option = buildLineOption(
+      defaultLineSettings,
+      [
+        { sensorId: "newer", samples: [at(50, 10), at(60, 20)] },
+        { sensorId: "older", samples: [at(40, 30), at(50, 40)] },
+      ],
+      NOW,
+    );
+
+    expect(option.xAxis.max).toBe(NOW);
+    // The slower series stops where its own data does; it is never held
+    // forward to the shared edge.
+    expect(option.series[1]!.data.at(-1)).toEqual([T0 + 50_000, 40]);
+  });
+
+  it("draws an arriving segment without moving what was painted", () => {
     const before = buildLineOption(
       defaultLineSettings,
-      [{ sensorId: "cpu.load.total", samples }],
-      T0 + 6999,
-      false,
-      undefined,
-      LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
+      [
+        {
+          sensorId: "a",
+          samples: Array.from({ length: 8 }, (_, index) =>
+            at(index, 40 + index),
+          ),
+        },
+      ],
+      T0 + 8_000,
     );
     const after = buildLineOption(
       defaultLineSettings,
       [
         {
-          sensorId: "cpu.load.total",
-          samples: [...samples, at(7, 60)],
+          sensorId: "a",
+          samples: Array.from({ length: 9 }, (_, index) =>
+            at(index, 40 + index),
+          ),
         },
       ],
-      T0 + 7000,
-      false,
-      undefined,
-      LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
+      T0 + 9_000,
     );
 
-    const beforeData = before.series[0]!.data;
-    const afterData = after.series[0]!.data;
-    // Every x the reader could already see — the flat stretch the stall
-    // painted — has to read the same once the batch lands.
-    for (let xMs = T0 + 4000; xMs <= before.xAxis.max; xMs += 100) {
-      expect(
-        drawnValueAt(afterData, xMs),
-        `x=${xMs - T0} ms after the last batch before the stall`,
-      ).toBe(drawnValueAt(beforeData, xMs));
+    for (let xMs = before.xAxis.min; xMs <= before.xAxis.max; xMs += 100) {
+      expect(drawnValueAt(after.series[0]!.data, xMs)).toBe(
+        drawnValueAt(before.series[0]!.data, xMs),
+      );
     }
   });
 
-  it("draws the same visible stretch after the batch that follows a stall", () => {
-    // The step a stall paints must survive the next batch too. Re-deciding the
-    // newest pair alone dropped it one batch late and sloped the flat stretch
-    // the edge had already drawn.
-    const stall = buildLineOption(
-      defaultLineSettings,
-      [{ sensorId: "cpu.load.total", samples: [...samples, at(7, 60)] }],
-      T0 + 7000,
-      false,
-      undefined,
-      LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
-    );
-    const next = buildLineOption(
-      defaultLineSettings,
-      [
-        {
-          sensorId: "cpu.load.total",
-          samples: [...samples, at(7, 60), at(8, 61)],
-        },
-      ],
-      T0 + 8000,
-      false,
-      undefined,
-      LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
+  it("never smooths, because a smooth segment depends on its neighbours", () => {
+    // ECharts draws a smooth segment from the points either side of it, so the
+    // stretch already painted would bend when the next batch arrives.
+    const samples = Array.from({ length: 5 }, (_, index) =>
+      at(index, 40 + index),
     );
 
-    const stallData = stall.series[0]!.data;
-    const nextData = next.series[0]!.data;
-    for (let xMs = T0 + 4000; xMs <= stall.xAxis.max; xMs += 100) {
-      expect(
-        drawnValueAt(nextData, xMs),
-        `x=${xMs - T0} ms after the batch that ended the stall`,
-      ).toBe(drawnValueAt(stallData, xMs));
+    for (const interpolation of ["linear", "step"] as const) {
+      const option = buildLineOption(
+        { ...defaultLineSettings, interpolation },
+        [{ sensorId: "a", samples }],
+        T0 + 4_000,
+      );
+      expect(option.series[0]!.smooth, interpolation).toBe(false);
     }
   });
 });
 
-describe("toSeriesPoints — the gap rule (§83)", () => {
+describe("toSeriesPoints — the line-only gap rule (§83, 0124)", () => {
   it.each(["missing", "error", "unavailable", "stale"] as const)(
-    "emits an explicit null for a %s sample rather than omitting it",
+    "skips a %s reading and joins the readings either side",
     (status) => {
       const points = toSeriesPoints(
         [at(10, 40), bad(20, status), at(30, 60)],
         defaultLineSettings,
-        NOW,
+        T0 + 30_000,
       );
 
-      // Three points, the middle one null. Omitting it would leave two points
-      // and the line would join 40 -> 60 straight across the outage.
-      expect(points).toHaveLength(3);
-      expect(points[1]![1]).toBeNull();
-      expect(points.map((p) => p[1])).toEqual([40, null, 60]);
+      // No break and no zero: the two measured readings are joined.
+      expect(points).toEqual([
+        [T0 + 10_000, 40],
+        [T0 + 30_000, 60],
+      ]);
     },
   );
 
-  it("never emits zero in place of a missing value", () => {
+  it("never draws a skipped reading as zero", () => {
     const points = toSeriesPoints(
-      [bad(10, "missing")],
+      [bad(10, "missing"), at(20, 50)],
       defaultLineSettings,
-      NOW,
+      T0 + 20_000,
     );
 
-    expect(points[0]![1]).toBeNull();
-    expect(points[0]![1]).not.toBe(0);
+    expect(points.map((p) => p[1])).toEqual([50]);
   });
 
-  it("keeps a leading and trailing gap", () => {
+  it("drops a leading and trailing gap", () => {
     const points = toSeriesPoints(
       [bad(5, "missing"), at(10, 50), bad(15, "error")],
       defaultLineSettings,
-      NOW,
+      T0 + 15_000,
     );
 
-    expect(points.map((p) => p[1])).toEqual([null, 50, null]);
+    expect(points).toEqual([[T0 + 10_000, 50]]);
   });
 });
 
@@ -489,55 +318,33 @@ describe("toSeriesPoints — windowing and bounds", () => {
 });
 
 describe("buildLineOption", () => {
-  it("pins connectNulls to false so gaps are never bridged", () => {
+  it("carries no null point, so there is no gap to bridge", () => {
     const option = buildLineOption(
       defaultLineSettings,
-      [{ sensorId: "a", samples: [] }],
+      [{ sensorId: "a", samples: [at(10, 1), bad(20, "missing"), at(30, 2)] }],
       NOW,
     );
 
     expect(option.series[0]!.connectNulls).toBe(false);
+    expect(option.series[0]!.data).toEqual([
+      [T0 + 10_000, 1],
+      [T0 + 30_000, 2],
+    ]);
   });
 
-  it("scrolls the x axis after the configured window fills", () => {
+  it("places the configured window behind the newest reading", () => {
     const settings: LineSettings = {
       ...defaultLineSettings,
       windowSeconds: 30,
     };
     const option = buildLineOption(
       settings,
-      [{ sensorId: "a", samples: [at(10, 1)] }],
+      [{ sensorId: "a", samples: [at(50, 1)] }],
       NOW,
     );
 
-    // Without pinning, a chart with one point would collapse its axis onto it.
-    expect(option.xAxis.max).toBe(NOW);
-    expect(option.xAxis.min).toBe(NOW - 30_000);
-  });
-
-  it("does not alter the timeline for legacy player-start inputs", () => {
-    const settings: LineSettings = {
-      ...defaultLineSettings,
-      windowSeconds: 30,
-    };
-    const option = (
-      buildLineOption as (
-        ...args: readonly unknown[]
-      ) => ReturnType<typeof buildLineOption>
-    )(
-      settings,
-      [{ sensorId: "a", samples: [at(40, 1), at(50, 2)] }],
-      NOW,
-      true,
-      undefined,
-      NOW,
-    );
-
-    expect(option.xAxis).toMatchObject({ min: NOW - 30_000, max: NOW });
-    expect(option.series[0]!.data).toEqual([
-      [T0 + 40_000, 1],
-      [T0 + 50_000, 2],
-    ]);
+    expect(option.xAxis.max).toBe(T0 + 50_000);
+    expect(option.xAxis.min).toBe(T0 + 20_000);
   });
 
   it("renders the newest measurement without a synthetic tail", () => {
@@ -549,29 +356,21 @@ describe("buildLineOption", () => {
       undefined,
     );
 
+    expect(option.xAxis.max).toBe(NOW);
     expect(option.series[0]!.data).toEqual([
       [T0 + 59_000, 10],
       [NOW, 20],
     ]);
   });
 
-  it("ends the axis at the delayed render clock and keeps later samples", () => {
+  it("does not carry an overscan gutter", () => {
     const option = buildLineOption(
       defaultLineSettings,
       [{ sensorId: "a", samples: [at(59, 10), at(60, 20)] }],
       NOW,
-      true,
-      undefined,
-      1_000,
     );
 
-    expect(option.xAxis.max).toBe(NOW - 1_000);
-    expect(option.xAxis.min).toBe(NOW - 1_000 - 60_000);
     expect("renderOverscanRightMs" in option).toBe(false);
-    expect(option.series[0]!.data).toEqual([
-      [T0 + 59_000, 10],
-      [NOW, 20],
-    ]);
   });
 
   it.each<[Interpolation, "end" | false]>([
@@ -647,10 +446,6 @@ describe("buildLineOption", () => {
     const option = buildLineOption(defaultLineSettings, [], NOW);
     expect(option.xAxis.axisLabel.show).toBe(false);
     expect(option.yAxis.axisLabel.show).toBe(false);
-  });
-
-  it("asks for the window plus one playback delay", () => {
-    expect(lineHistorySeconds(60, 1_000)).toBe(61);
   });
 
   it("omits axis bounds when unset rather than sending undefined", () => {

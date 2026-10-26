@@ -1,9 +1,26 @@
 import type { ServerResponse } from "node:http";
-import { KeepLatestSlot } from "./keep-latest.js";
+import { FrameQueue } from "./frame-queue.js";
 
-/** One display connection. Backpressure keeps only the newest pending snapshot. */
+/**
+ * How far behind a connection may fall before its oldest frames are dropped.
+ *
+ * 120 frames is two minutes at the host's 1 s cadence — longer than any chart
+ * window the display draws, and far longer than a chart's 5 minute store. It
+ * bounds a wedged client's memory at a few hundred kilobytes while keeping
+ * every ordinary stall recoverable.
+ */
+export const SSE_FRAME_QUEUE_LIMIT = 120;
+
+/**
+ * One display connection.
+ *
+ * Each frame is a batch of measurements, so backpressure queues rather than
+ * replaces them: losing a frame loses that tick's readings from the display's
+ * history for good (0124). The queue is bounded, so a client that never drains
+ * cannot grow the host without limit.
+ */
 export class SseConnection {
-  private readonly slot = new KeepLatestSlot<string>();
+  private readonly queue = new FrameQueue<string>(SSE_FRAME_QUEUE_LIMIT);
   private waitingForDrain = false;
   private closed = false;
 
@@ -29,15 +46,16 @@ export class SseConnection {
     response.write(": connected\n\n");
   }
 
-  /** Sends a frame the batch already built once, or leaves it as the newest
-   *  pending frame. The connection does not format: one payload shared by many
-   *  connections is framed once, where it is produced. */
+  /** Sends a frame the batch already built once, or queues it behind the
+   *  frames a backed-up socket has not taken yet. The connection does not
+   *  format: one payload shared by many connections is framed once, where it is
+   *  produced. */
   offer(frame: string): void {
     if (this.closed) {
       return;
     }
 
-    this.slot.offer(frame);
+    this.queue.offer(frame);
     this.flush();
   }
 
@@ -46,28 +64,32 @@ export class SseConnection {
       return;
     }
 
-    const frame = this.slot.take();
+    // Drain everything the socket will take. Writing one frame and returning
+    // would leave a queue delivered at one frame per offer — a slow client
+    // would then lag a further cadence per batch and never catch up.
+    for (;;) {
+      const frame = this.queue.take();
 
-    if (frame === undefined) {
+      if (frame === undefined) {
+        return;
+      }
+
+      if (this.response.write(frame)) {
+        continue;
+      }
+
+      this.waitingForDrain = true;
+      this.response.once("drain", () => {
+        this.waitingForDrain = false;
+        this.flush();
+      });
       return;
     }
-
-    const flushed = this.response.write(frame);
-
-    if (flushed) {
-      return;
-    }
-
-    this.waitingForDrain = true;
-    this.response.once("drain", () => {
-      this.waitingForDrain = false;
-      this.flush();
-    });
   }
 
   /** Frames displaced before delivery. */
   get droppedCount(): number {
-    return this.slot.droppedCount;
+    return this.queue.droppedCount;
   }
 
   close(): void {

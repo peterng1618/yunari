@@ -963,10 +963,11 @@ describe("a chart whose reading has not moved", () => {
   });
 });
 
-describe("a line chart's trailing window", () => {
+describe("a line chart's data clock", () => {
   /**
-   * A manager over one chart bound to one sensor whose sample never changes, so
-   * the clock is the only thing that moves between two refreshes.
+   * A manager over one chart bound to one sensor. With one reading the clock is
+   * the only thing that could move between two refreshes; with two, the second
+   * is a new reading.
    */
   function harness(family: "line" | "gauge") {
     const at = new Date(Date.UTC(2026, 8, 15, 12, 0, 0)).toISOString();
@@ -992,6 +993,7 @@ describe("a line chart's trailing window", () => {
             family: "gauge",
             settings: defaultGaugeSettings,
           });
+    const readings: Sample[] = [sample];
     const objects = [chart];
     const canvas = {
       on: vi.fn(),
@@ -1010,46 +1012,65 @@ describe("a line chart's trailing window", () => {
         errorManager: { warn: vi.fn(), error: vi.fn() },
       } as unknown as EditorInteraction,
       scene: {} as SceneAdapter,
-      // Whatever the clock says, this source answers with the same sample.
-      source: { revision: 0, latest: () => sample, history: () => [sample] },
+      // The readings arrive only when a test adds one; the clock alone can
+      // never change what this source answers.
+      source: {
+        revision: 0,
+        latest: () => readings.at(-1),
+        history: () => readings,
+      },
       bindings: { cpu: [{ id: "cpu-read", semanticKey: "cpu.load" }] },
     });
     const setOption = vi.spyOn(chart, "setOption");
     setOption.mockClear();
-    return { manager, setOption };
+    return {
+      manager,
+      setOption,
+      add: (next: Sample) => readings.push(next),
+    };
   }
 
   const pinned = Date.UTC(2026, 8, 15, 12, 0, 0);
 
-  it("is redrawn as the clock advances, though its newest sample has not moved", () => {
-    // **The claim under test.** The chart refresh the author picks is the
-    // *drawing* rate; polling stays at one sample a second under either choice,
-    // and the frames between two samples are the same window interpolated. A
-    // line's picture is that window: `buildLineOption` places it from `nowMs`
-    // (`xAxis.min`/`max`) and draws the series one playback delay past the
-    // visible right edge. vg-107 gated the redraw on the newest sample alone,
-    // so a trends chart drew at its data's cadence — 1 fps against a 30 fps
-    // selection, which is the refresh that never happened.
+  it("is not redrawn while its newest reading is unchanged", () => {
+    // **The claim under test.** A line is placed by its data (0124): the axis
+    // ends at the newest reading, so no clock advance changes the picture. The
+    // old wall-clock placement redrew every frame; that is what made the right
+    // edge revise itself.
     const clock = vi.spyOn(Date, "now").mockReturnValue(pinned);
     try {
       const { manager, setOption } = harness("line");
-      // The same instant, the same sample: the window moved for nobody.
+      // The same instant, the same sample.
       manager.refresh();
       expect(setOption).not.toHaveBeenCalled();
 
-      // One frame later at 30 fps, with the reading untouched.
       clock.mockReturnValue(pinned + 33);
       manager.refresh();
-      expect(setOption).toHaveBeenCalledTimes(1);
+      expect(setOption).not.toHaveBeenCalled();
 
-      // And again, because the window only ever advances.
       clock.mockReturnValue(pinned + 66);
       manager.refresh();
-      expect(setOption).toHaveBeenCalledTimes(2);
+      expect(setOption).not.toHaveBeenCalled();
       manager.destroy();
     } finally {
       clock.mockRestore();
     }
+  });
+
+  it("is redrawn when its newest reading moves", () => {
+    const moved: Sample = {
+      sensorId: "cpu.load",
+      timestamp: new Date(pinned + 1_000).toISOString(),
+      status: "ok",
+      value: 43,
+    };
+    const { manager, setOption, add } = harness("line");
+
+    add(moved);
+    manager.refresh();
+
+    expect(setOption).toHaveBeenCalledTimes(1);
+    manager.destroy();
   });
 
   it("is not, for a gauge whose sample has not moved", () => {

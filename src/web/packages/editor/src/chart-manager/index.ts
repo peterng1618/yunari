@@ -15,7 +15,6 @@ import {
 import {
   type ChartRefreshRate,
   chartAnimationFor,
-  chartPlaybackDelayFor,
   type SceneAdapter,
   YunariChart,
 } from "@yunari/scene-fabric";
@@ -529,16 +528,10 @@ export class ChartManager {
    */
   #applyCharts(force: boolean): void {
     let drawn = false;
-    // **One clock reading per pass.** A line's drawn picture is placed from the
-    // clock (`buildLineOption`'s `xAxis.min`/`max`), so the instant that decides
-    // whether a chart is drawn and the instant the plan draws it with have to be
-    // the same one: read twice, a chart that moved between the two reads is
-    // skipped for a window it never drew.
+    // One clock reading per pass, shared by the signature and the draw. A line
+    // no longer uses it for placement (0124); it is the empty-chart fallback,
+    // and value charts read their latest sample instead.
     const nowMs = Date.now();
-    const playbackDelayMs = chartPlaybackDelayFor(
-      this.#refreshRate(),
-      this.#source.chartPlaybackDelayMs,
-    );
     const visit = (objects: readonly object[]): void => {
       for (const object of objects) {
         if (object instanceof YunariChart) {
@@ -556,9 +549,7 @@ export class ChartManager {
               content,
               this.#bindings[id] ?? [],
               this.#source,
-              nowMs,
               this.#globals?.palette,
-              playbackDelayMs,
               drawnEdgePxOf(object).drawnEdgePx,
             );
           } catch {
@@ -628,10 +619,6 @@ export class ChartManager {
           source: this.#source,
           nowMs: options.nowMs ?? Date.now(),
           animate: chartAnimationFor(chart.family, this.#refreshRate()),
-          playbackDelayMs: chartPlaybackDelayFor(
-            this.#refreshRate(),
-            this.#source.chartPlaybackDelayMs,
-          ),
           // The canvas the caps are measured against: the backing edge, which
           // is the scene box times the chart's render scale.
           ...drawnEdgePxOf(chart),

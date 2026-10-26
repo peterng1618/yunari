@@ -12,6 +12,11 @@ const sample: Sample = {
   value: 42,
   unit: "%",
 };
+const newer: Sample = {
+  ...sample,
+  timestamp: "2026-01-01T00:00:02.000Z",
+  value: 43,
+};
 const source: SampleSource = {
   revision: 0,
   latest: () => sample,
@@ -23,17 +28,27 @@ describe("chartReadingSignature", () => {
     const chart = { family: "bar", settings: defaultBarSettings } as const;
     const bindings = [{ id: "b", semanticKey: "cpu.load.total" }];
 
-    expect(chartReadingSignature(chart, bindings, source, 1_000)).toBe(
-      chartReadingSignature(chart, bindings, source, 1_500),
+    expect(chartReadingSignature(chart, bindings, source)).toBe(
+      chartReadingSignature(chart, bindings, source),
     );
   });
 
-  it("moves a line with the render clock", () => {
+  it("moves a line only when its newest reading moves", () => {
+    // The line is drawn from its data clock, so no wall clock can move what is
+    // drawn; the newest reading is the whole trigger (0124).
     const chart = { family: "line", settings: defaultLineSettings } as const;
     const bindings = [{ id: "b", semanticKey: "cpu.load.total" }];
+    const moved: SampleSource = {
+      revision: 1,
+      latest: () => newer,
+      history: () => [sample, newer],
+    };
 
-    expect(chartReadingSignature(chart, bindings, source, 1_000)).not.toBe(
-      chartReadingSignature(chart, bindings, source, 1_500),
+    expect(chartReadingSignature(chart, bindings, source)).not.toBe(
+      chartReadingSignature(chart, bindings, moved),
+    );
+    expect(chartReadingSignature(chart, bindings, source)).toBe(
+      chartReadingSignature(chart, bindings, source),
     );
   });
 
@@ -43,29 +58,18 @@ describe("chartReadingSignature", () => {
     // built with until something else moves.
     const chart = { family: "gauge", settings: defaultGaugeSettings } as const;
     const at = (drawnEdgePx: number) =>
-      chartReadingSignature(
-        chart,
-        [],
-        source,
-        1_000,
-        undefined,
-        undefined,
-        drawnEdgePx,
-      );
+      chartReadingSignature(chart, [], source, undefined, drawnEdgePx);
 
     expect(at(800)).not.toBe(at(400));
     expect(at(800)).toBe(at(800));
   });
 
-  it("asks for the history its delay needs, and less when the delay is dropped", () => {
-    // The signature must read what the chart would draw: a 1 fps caller drops
-    // the delay, so the plan asks for the window alone and so must this.
+  it("asks for exactly the chart's window", () => {
     const chart = { family: "line", settings: defaultLineSettings } as const;
     const bindings = [{ id: "b", semanticKey: "cpu.load.total" }];
     const asked: number[] = [];
-    const delayed: SampleSource = {
+    const recording: SampleSource = {
       revision: 0,
-      chartPlaybackDelayMs: 2_000,
       latest: () => sample,
       history: (_key, seconds) => {
         asked.push(seconds);
@@ -73,13 +77,9 @@ describe("chartReadingSignature", () => {
       },
     };
 
-    chartReadingSignature(chart, bindings, delayed, 1_000);
-    chartReadingSignature(chart, bindings, delayed, 1_000, undefined, 0);
+    chartReadingSignature(chart, bindings, recording);
 
-    expect(asked).toEqual([
-      defaultLineSettings.windowSeconds + 2,
-      defaultLineSettings.windowSeconds,
-    ]);
+    expect(asked).toEqual([defaultLineSettings.windowSeconds]);
   });
 
   it("moves only with the palette tokens the settings name", () => {
@@ -104,15 +104,11 @@ describe("chartReadingSignature", () => {
 
     // A token the settings do not name is not an input to the plan.
     expect(
-      chartReadingSignature(chart, bindings, source, 1_000, palette("#111")),
-    ).toBe(
-      chartReadingSignature(chart, bindings, source, 1_000, palette("#111")),
-    );
+      chartReadingSignature(chart, bindings, source, palette("#111")),
+    ).toBe(chartReadingSignature(chart, bindings, source, palette("#111")));
     // The one they do name is.
     expect(
-      chartReadingSignature(chart, bindings, source, 1_000, palette("#111")),
-    ).not.toBe(
-      chartReadingSignature(chart, bindings, source, 1_000, palette("#222")),
-    );
+      chartReadingSignature(chart, bindings, source, palette("#111")),
+    ).not.toBe(chartReadingSignature(chart, bindings, source, palette("#222")));
   });
 });
