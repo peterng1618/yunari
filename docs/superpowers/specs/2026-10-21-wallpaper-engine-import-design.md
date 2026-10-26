@@ -691,7 +691,7 @@ are tens of lines each against formats already decoded here.
 | Item directory unreadable | item omitted from the list, counted in a `skipped` figure the host reports |
 | Preset item | never listed (§1.2) |
 | Cache row missing for a directory | listed, with attribution absent |
-| `scene.pkg` missing or unreadable | a scene with no payload file is dropped before listing, so no card exists; a package without a `scene.json` member refuses conversion as `unreadable`, removing the directory this run created |
+| `scene.pkg` missing, or the package has no `scene.json` | a scene with no payload file is dropped before listing, so no card exists; a package without a `scene.json` member refuses conversion as `unreadable`, removing the directory this run created |
 | `project` route finds the directory already there | not a failure: `ok: true, reused: true`; nothing is written and the card reports it already existed |
 | `scene.pkg` table runs past the file's end, or a member write fails | the directory this run created is removed and the route answers `unreadable`; an existing directory is never touched |
 | `myprojects` not writable | `ok: false, reason: "refused"`; the card returns to idle and the status line says why |
@@ -700,7 +700,10 @@ are tens of lines each against formats already decoded here.
 | Web item | never listed: a page is not a file Yunari can put in a theme |
 | `.mpkg` is not a Wallpaper Engine container, or holds no video | the import modal stays open with the host's own sentence |
 
-No failure is silent. Every refusal names the item and the reason, in the editor.
+No failure that reaches a card or the modal is silent: every such refusal names
+the item and the reason, in the editor. A scene dropped before listing is counted
+in the library's `skipped` total instead, because it has no card to carry a
+sentence.
 
 ## 12. What this does not decide
 

@@ -16,8 +16,7 @@ Execute [`the Wallpaper Engine import rework`](docs/superpowers/plans/2026-10-26
 
 ## Last completed change
 
-- **Gaps:** spec §11 and §14 state the truthful outcomes — no payload file is dropped before listing, and a package without `scene.json` refuses conversion as `unreadable`.
-- **Comment:** the token comment names the finder as the sharer of the import modal with the Assets pane.
+- **Gaps:** spec §11's row names both shapes, and a scene dropped before listing is counted in the library's `skipped` total rather than named in the editor.
 - **Proof:** `docs:check` and `status:check` pass from this commit.
 
 ## Next
