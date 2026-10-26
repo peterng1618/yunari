@@ -672,6 +672,11 @@ it("writes a rect display's quarter-turn rotation", async () => {
     ],
   });
   await act(async () => displayRow(container, "tv").click());
+  // The snap note belongs to the controls it describes: an editable display
+  // reads it, a recordless selection does not (see the this-pc case).
+  expect(container.textContent).toContain(
+    uiCopy.hostSettings.displays.rotationSnapHint,
+  );
   await commitRotation(container, 90);
 
   expect(wrote.presentation).toEqual([
@@ -768,6 +773,10 @@ it("draws no presentation controls for this-pc", async () => {
   expect(container.textContent).toContain(
     uiCopy.hostSettings.displays.presentationAbsent,
   );
+  expect(
+    container.textContent,
+    "a display with no controls still reads the snap note",
+  ).not.toContain(uiCopy.hostSettings.displays.rotationSnapHint);
 });
 
 /**
