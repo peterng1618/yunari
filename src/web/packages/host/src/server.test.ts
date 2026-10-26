@@ -28,7 +28,6 @@ import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
 import { type ListenableServer, listenWithFallback } from "./cli/net.js";
-import { certificateStepLines } from "./main.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { MAX_BOX_ART_BYTES } from "./providers/game/box-art.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
@@ -9488,14 +9487,7 @@ describe("The host's secure origin", () => {
       registry: new ProviderRegistry([]),
       bundles: { player: tmpDir, editor: tmpDir },
       tls: { key: origin.key, cert: origin.chain },
-      ...(withRoot
-        ? {
-            caCertificate: {
-              pem: origin.certificate,
-              fingerprint: origin.fingerprint,
-            },
-          }
-        : {}),
+      ...(withRoot ? { caCertificate: origin.certificate } : {}),
     });
   }
 
@@ -9516,14 +9508,7 @@ describe("The host's secure origin", () => {
     return createHostServer({
       registry: new ProviderRegistry([]),
       bundles: { player: tmpDir, editor: tmpDir },
-      ...(withRoot
-        ? {
-            caCertificate: {
-              pem: origin.certificate,
-              fingerprint: origin.fingerprint,
-            },
-          }
-        : {}),
+      ...(withRoot ? { caCertificate: origin.certificate } : {}),
     });
   }
 
@@ -9868,16 +9853,14 @@ describe("The host's secure origin", () => {
 
       expect(answer.headers["x-yunari-ca-sha256"]).toBe(fingerprint);
       expect(answer.headers["content-type"]).toBe("application/x-x509-ca-cert");
-      // The line the launcher prints, from the function it prints it with: the
-      // comparison is between this and the fingerprint a device shows.
-      expect(
-        certificateStepLines({
-          certificatePath: origin.certificatePath,
-          fingerprint: origin.fingerprint,
-          address: "192.168.1.50",
-          port: 5227,
-        }),
-      ).toContain(`SHA-256: ${fingerprint}`);
+      expect(answer.headers["content-disposition"]).toBe(
+        'attachment; filename="yunari-ca.crt"',
+      );
+      // The startup lines the launcher prints, from the origin it loaded: the
+      // comparison a person makes is between them and the certificate.
+      expect(origin.certificateLines.join("\n")).toContain(
+        `SHA-256: ${fingerprint}`,
+      );
     } finally {
       await hosted.close();
     }

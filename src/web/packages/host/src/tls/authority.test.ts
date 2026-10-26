@@ -1,4 +1,4 @@
-import { generateKeyPairSync, X509Certificate } from "node:crypto";
+import { createHash, generateKeyPairSync, X509Certificate } from "node:crypto";
 import {
   mkdtemp,
   readdir,
@@ -124,21 +124,56 @@ describe("the host's own certificate authority", () => {
 
   it("fingerprints the DER of the root it hands out", async () => {
     const origin = await open();
+    const pem = origin.certificate;
+    const fingerprint = certificateFingerprintSha256(pem);
+    const der = createHash("sha256").update(new X509Certificate(pem).raw);
+    const text = createHash("sha256").update(pem);
 
     // What a person compares out of band: the DER is what a client installs, so
     // the hash is of the certificate rather than of this PEM spelling. Lowercase
     // and unseparated, because a phone screen and a terminal have to agree.
-    const fingerprint = certificateFingerprintSha256(origin.certificate);
+    expect(fingerprint).toBe(der.digest("hex"));
     expect(fingerprint).toMatch(/^[0-9a-f]{64}$/);
-    expect(fingerprint).toBe(certificateFingerprintSha256(origin.certificate));
-    expect(fingerprint).not.toContain("BEGIN");
-    expect(fingerprint).not.toContain("CERTIFICATE");
+    // Hashing the PEM text would keep the shape check green while publishing a
+    // value no certificate viewer shows, so the two are separated here.
+    expect(fingerprint).not.toBe(text.digest("hex"));
+    expect(fingerprint).toBe(certificateFingerprintSha256(pem));
 
     // One directory mints one root, so a second certificate has to be a
     // different one — otherwise this would pass on a constant.
     expect(
       certificateFingerprintSha256(legacyAuthority().certificate),
     ).not.toBe(fingerprint);
+
+    // The startup lines are built here, from these bytes: the launcher has no
+    // certificate to pass, so it cannot print a line belonging to another one.
+    expect(origin.certificateLines.join("\n")).toContain(
+      `SHA-256: ${fingerprint}`,
+    );
+    expect(origin.certificateLines.join("\n")).not.toContain(
+      certificateFingerprintSha256(origin.chain),
+    );
+  });
+
+  it("follows the bytes of a root regenerated after a corrupt certificate", async () => {
+    const first = await open();
+    await writeFile(
+      path.join(directory, "ca.crt"),
+      "not a certificate",
+      "utf8",
+    );
+
+    // An unreadable root is a root this machine does not have: it regenerates,
+    // and the printed value has to be the new bytes rather than the old value.
+    const second = await open();
+    expect(certificateFingerprintSha256(second.certificate)).not.toBe(
+      certificateFingerprintSha256(first.certificate),
+    );
+    expect(certificateFingerprintSha256(second.certificate)).toBe(
+      createHash("sha256")
+        .update(new X509Certificate(second.certificate).raw)
+        .digest("hex"),
+    );
   });
 
   it("presents the leaf and the root, in that order", async () => {

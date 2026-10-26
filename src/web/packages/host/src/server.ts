@@ -144,6 +144,7 @@ import {
   decodeThemeSave,
   encodeThemeContent,
 } from "./themes/wire.js";
+import { certificateFingerprintSha256 } from "./tls/authority.js";
 import { SseConnection } from "./transport/sse.js";
 import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
 
@@ -344,15 +345,10 @@ export interface HostServerOptions {
    *  origin rather than any route that decides it. See `docs/decisions/0070`. */
   readonly tls?: { readonly key: string; readonly cert: string };
   /** The root a display installs, served at `CA_CERTIFICATE_PATH`. Omitted when
-   *  the host has none to offer, and the route then says so. The fingerprint
-   *  travels with the bytes rather than being hashed here: the launcher prints
-   *  one value, and a route that computed its own could publish another. */
-  readonly caCertificate?: {
-    /** The root, PEM — the route's body. */
-    readonly pem: string;
-    /** SHA-256 of that root's DER, lowercase hex. */
-    readonly fingerprint: string;
-  };
+   *  the host has none to offer, and the route then says so. Only the PEM is
+   *  taken: the header's fingerprint is computed from these bytes, so the pair
+   *  a caller cannot get wrong is the pair it never supplies. */
+  readonly caCertificate?: string;
   /** Which host this app folder is (§ "Finding the host after its address
    *  changes"), answered by `GET /api/host`. Omitted when this host has no
    *  identity: the route is then not registered at all, because an id minted to
@@ -1292,6 +1288,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const themeOrigins = options.themeOrigins;
   const published = options.published ?? createPublishedStore();
   const caCertificate = options.caCertificate;
+  /** Hashed from the bytes being served, once per server: a value passed
+   *  alongside them could describe a different certificate. */
+  const caFingerprint =
+    caCertificate === undefined
+      ? undefined
+      : certificateFingerprintSha256(caCertificate);
   const hostRecord = options.host;
   const storeOrigin = resolveStoreOrigin(
     options.storeOrigin ?? process.env.YUNARI_STORE_ORIGIN,
@@ -1550,12 +1552,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // reading this is being asked to trust the host, which is the step that has
     // to come first.
     if (url.pathname === CA_CERTIFICATE_PATH && request.method === "GET") {
-      if (caCertificate === undefined) {
+      if (caCertificate === undefined || caFingerprint === undefined) {
         sendText(response, 404, "This host serves no certificate of its own.");
         return;
       }
 
-      sendCertificate(response, caCertificate.pem, caCertificate.fingerprint);
+      sendCertificate(response, caCertificate, caFingerprint);
       return;
     }
 

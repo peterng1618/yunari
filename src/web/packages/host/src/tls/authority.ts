@@ -52,10 +52,10 @@ export interface SecureOrigin {
   readonly certificate: string;
   /** Where the root lives, so the console can name a file rather than a shape. */
   readonly certificatePath: string;
-  /** The SHA-256 of `certificate`'s DER, lowercase hex. Computed here, once,
-   *  because it is printed at startup and published with the served root: two
-   *  people compare those two, so they must come from one reading. */
-  readonly fingerprint: string;
+  /** The startup lines publishing `certificate`'s fingerprint, built here from
+   *  those bytes: the launcher prints them without an argument to get wrong, so
+   *  it cannot print the one that belongs to another certificate. */
+  readonly certificateLines: readonly string[];
   /** The leaf's private key, PEM. In memory only, never written. */
   readonly key: string;
   /** The leaf, PEM, covering every name it was asked for. */
@@ -96,7 +96,7 @@ export async function createSecureOrigin(
   return {
     certificate,
     certificatePath,
-    fingerprint: certificateFingerprintSha256(certificate),
+    certificateLines: certificateStepLines(certificate),
     chain: leaf.leaf + certificate,
     ...leaf,
   };
@@ -107,12 +107,30 @@ export async function createSecureOrigin(
  * can read out and compare on a phone before trusting the root.
  *
  * Of the DER rather than of the PEM text: whitespace and line wrapping are a
- * spelling of the same certificate, and a client stores the DER.
+ * spelling of the same certificate, and a client stores the DER. Anything that
+ * is not a certificate throws — `X509Certificate` parses and refuses it — which
+ * is the check, rather than a second one here.
  */
 export function certificateFingerprintSha256(pem: string): string {
   return createHash("sha256")
     .update(new X509Certificate(pem).raw)
     .digest("hex");
+}
+
+/**
+ * The startup lines that publish the root's fingerprint, for the PEM the host
+ * loaded: printed in the same block as the address, so the value a person
+ * compares is read off the certificate being served rather than carried beside
+ * it where it could drift.
+ */
+export function certificateStepLines(pem: string): readonly string[] {
+  const fingerprint = certificateFingerprintSha256(pem);
+
+  return [
+    `  Fingerprint  SHA-256: ${fingerprint}`,
+    `  Compare it with the certificate's own fingerprint before installing it;`,
+    `  they have to match, or these are not the same certificate.`,
+  ];
 }
 
 /**
