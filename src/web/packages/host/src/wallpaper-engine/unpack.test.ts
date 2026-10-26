@@ -1,12 +1,12 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { LibraryItem } from "./library.js";
 import type { WallpaperEngineInstall } from "./locate.js";
 import { memberBytes, readPackage } from "./pkg.js";
 import { createWallpaperEngineSource } from "./source.js";
-import { startDetached, unpackScene } from "./unpack.js";
+import { unpackScene } from "./unpack.js";
 
 const encoder = new TextEncoder();
 
@@ -133,7 +133,24 @@ describe("unpacking a scene theme", () => {
       await fs.readFile(path.join(target, "project.json"), "utf8"),
     );
     expect(written.file).toBe("scene.json");
-    expect(written.title).toBe("Still Scene");
+    expect(written.title).toBe("[yunari] Still Scene");
+  });
+
+  it("prefixes a fresh project's title once", async () => {
+    await fs.writeFile(
+      path.join(item.directory, "project.json"),
+      JSON.stringify({ ...descriptor, title: "Cache Scene" }),
+    );
+
+    await unpackScene(install, item);
+
+    const written = JSON.parse(
+      await fs.readFile(
+        path.join(install.myProjects, "201", "project.json"),
+        "utf8",
+      ),
+    );
+    expect(written.title).toBe("[yunari] Cache Scene");
   });
 
   it("answers reused for an existing directory and rewrites nothing", async () => {
@@ -149,6 +166,22 @@ describe("unpacking a scene theme", () => {
     expect(second).toEqual({ ok: true, name: "201", reused: true });
     expect((await fs.stat(file)).mtimeMs).toBe(before.mtimeMs);
     expect(Buffer.compare(await fs.readFile(file), bytesBefore)).toBe(0);
+  });
+
+  it("leaves a hand-edited title alone when the same item is unpacked again", async () => {
+    await unpackScene(install, item);
+    const file = path.join(install.myProjects, "201", "project.json");
+    const edited = JSON.parse(await fs.readFile(file, "utf8"));
+    await fs.writeFile(
+      file,
+      JSON.stringify({ ...edited, title: "My Title" }),
+      "utf8",
+    );
+
+    expect(await unpackScene(install, item)).toMatchObject({ reused: true });
+
+    const written = JSON.parse(await fs.readFile(file, "utf8"));
+    expect(written.title).toBe("My Title");
   });
 
   it("copies the workshop's own preview so the project has a thumbnail", async () => {
@@ -274,77 +307,25 @@ describe("unpacking a scene theme", () => {
     expect(await fs.readdir(install.myProjects)).toEqual([]);
   });
 
-  it("unpacks and launches through the source, once per call", async () => {
-    const launch = vi.fn(async () => true);
+  it("refuses an id the library does not hold", async () => {
     const source = createWallpaperEngineSource({
       locate: async () => install,
-      launch,
-    });
-
-    const first = await source.project("201");
-
-    expect(first).toEqual({
-      ok: true,
-      name: "201",
-      reused: false,
-      launched: true,
-    });
-    expect(launch).toHaveBeenCalledWith();
-
-    const second = await source.project("201");
-
-    expect(second).toEqual({
-      ok: true,
-      name: "201",
-      reused: true,
-      launched: true,
-    });
-    expect(launch).toHaveBeenCalledTimes(2);
-  });
-
-  it("refuses an id the library does not hold, and launches nothing", async () => {
-    const launch = vi.fn(async () => true);
-    const source = createWallpaperEngineSource({
-      locate: async () => install,
-      launch,
     });
 
     expect(await source.project("999")).toEqual({
       ok: false,
       reason: "refused",
     });
-    expect(launch).not.toHaveBeenCalled();
   });
 
   it("answers no-install when there is no install", async () => {
     const source = createWallpaperEngineSource({
       locate: async () => undefined,
-      launch: async () => true,
     });
 
     expect(await source.project("201")).toEqual({
       ok: false,
       reason: "no-install",
     });
-  });
-});
-
-describe("starting a program for the author", () => {
-  it("answers false for a spawn that throws synchronously", async () => {
-    // An empty command is the one spawn failure Node raises synchronously, so
-    // it is the case the wrapper has to keep out of the request.
-    await expect(startDetached("", [])).resolves.toBe(false);
-  });
-
-  it("answers false for a program that does not exist", async () => {
-    // The `error` event, not a synchronous throw: the answer is only true when
-    // the process actually spawned.
-    const missing = path.join(
-      os.tmpdir(),
-      "yunari-no-such-program",
-      "nothing.exe",
-    );
-
-    await expect(startDetached(missing, [])).resolves.toBe(false);
   });
 });

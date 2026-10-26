@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -21,25 +20,7 @@ export type UnpackResult =
       readonly reason: "no-install" | "unreadable" | "refused";
     };
 
-/** `project()` adds whether the editor process actually spawned. */
-export type ProjectResult =
-  | {
-      readonly ok: true;
-      readonly name: string;
-      readonly reused: boolean;
-      readonly launched: boolean;
-    }
-  | {
-      readonly ok: false;
-      readonly reason: "no-install" | "unreadable" | "refused";
-    };
-
-export interface ExportFile {
-  readonly name: string;
-  readonly format: "png" | "mp4";
-  readonly modified: number;
-  readonly size: number;
-}
+export type ProjectResult = UnpackResult;
 
 /** A workshop id names one directory and nothing else; anything else is refused
  *  before a path exists. */
@@ -51,6 +32,10 @@ const DRIVE = /^[A-Za-z]:/;
 /** The member the editor opens, and the one whose presence makes the rewritten
  *  descriptor honest. */
 const SCENE_MEMBER = "scene.json";
+
+/** Marks a project as this host's conversion, so the engine's own list tells it
+ *  apart from the workshop item it came from. */
+const TITLE_PREFIX = "[yunari] ";
 
 /**
  * Where a member may be written, or `undefined` for a name that is not a safe
@@ -158,10 +143,21 @@ async function writeProject(
   }
 
   // The one packed-only field: a subscribed project says `scene.pkg`, while a
-  // source project — the shape the editor opens — says `scene.json`.
+  // source project — the shape the editor opens — says `scene.json`. A title
+  // already carrying the prefix is left alone, so a re-unpack cannot double it.
+  const title = descriptor.title;
+  const titled =
+    typeof title === "string" && title !== ""
+      ? {
+          ...descriptor,
+          title: title.startsWith(TITLE_PREFIX) ? title : TITLE_PREFIX + title,
+          file: SCENE_MEMBER,
+        }
+      : { ...descriptor, file: SCENE_MEMBER };
+
   await fs.writeFile(
     path.join(directory, "project.json"),
-    JSON.stringify({ ...descriptor, file: SCENE_MEMBER }, null, 2),
+    JSON.stringify(titled, null, 2),
     "utf8",
   );
 
@@ -214,49 +210,4 @@ export async function unpackScene(
   }
 
   return { ok: true, name, reused: false };
-}
-
-/** Wallpaper Engine's Steam app id. */
-const STEAM_APP = "steam://run/431960";
-
-/**
- * Starts Wallpaper Engine's own UI through Steam, which is the only start it
- * accepts: a direct `wallpaperui.exe -project` launch is refused as an improper
- * start. The unpacked project is in `projects/myprojects`, where that UI lists
- * it, so nothing needs to be passed.
- */
-export function launchEditor(): Promise<boolean> {
-  return startDetached("explorer.exe", [STEAM_APP]);
-}
-
-/** Settles when the process spawned (`true`) or failed to (`false`); it never
- *  waits for the program to run. */
-export function startDetached(
-  command: string,
-  args: readonly string[],
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    let child: ReturnType<typeof spawn>;
-
-    try {
-      child = spawn(command, [...args], {
-        detached: true,
-        stdio: "ignore",
-      });
-    } catch {
-      // A synchronous throw (an invalid command) never spawned anything.
-      resolve(false);
-      return;
-    }
-
-    child.once("spawn", () => {
-      child.unref();
-      resolve(true);
-    });
-    // `ENOENT` arrives here rather than throwing, and an unhandled `error`
-    // event would take the host down — so it is the answer, not a crash.
-    child.once("error", () => {
-      resolve(false);
-    });
-  });
 }

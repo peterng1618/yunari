@@ -10037,7 +10037,6 @@ describe("Host Wallpaper Engine routes", () => {
     ok: true as const,
     name: "201",
     reused: false,
-    launched: true,
   };
 
   function fakeSource(): WallpaperEngineSource {
@@ -10058,27 +10057,6 @@ describe("Host Wallpaper Engine routes", () => {
           workshopId === "201"
             ? unpacked
             : { ok: false as const, reason: "refused" as const },
-        ),
-      mobileExport: (workshopId) =>
-        Promise.resolve(
-          workshopId === "201"
-            ? { ok: true as const }
-            : { ok: false as const, reason: "refused" as const },
-        ),
-      exportsSince: (since) =>
-        Promise.resolve([
-          {
-            name: `shot-${since}.png`,
-            format: "png" as const,
-            modified: since + 1,
-            size: 9,
-          },
-        ]),
-      exportBytes: (name) =>
-        Promise.resolve(
-          name === "shot.png"
-            ? { bytes: encoder.encode("png"), contentType: "image/png" }
-            : undefined,
         ),
     };
   }
@@ -10135,8 +10113,6 @@ describe("Host Wallpaper Engine routes", () => {
         "/api/wallpaper-engine",
         "/api/wallpaper-engine/item/201/preview",
         "/api/wallpaper-engine/item/201/asset",
-        "/api/wallpaper-engine/exports?since=1700000000000",
-        "/api/wallpaper-engine/export?name=shot.png",
       ]) {
         const answer = await request(hosted.server, "GET", route, undefined, {
           remoteAddress: "192.168.1.50",
@@ -10274,130 +10250,22 @@ describe("Host Wallpaper Engine routes", () => {
     }
   });
 
-  it("starts the mobile export on POST /mobile-export and refuses that path on GET", async () => {
+  it("answers the removed export routes as unknown paths", async () => {
+    // The engine is never driven (docs/decisions/0124): no route starts it, and
+    // no route serves what it would have written.
     const hosted = host(fakeSource());
 
     try {
-      const answer = await request(
-        hosted.server,
-        "POST",
-        "/api/wallpaper-engine/item/201/mobile-export",
-      );
-      expect(answer.status).toBe(200);
-      expect(answer.json()).toEqual({ ok: true });
-
-      expect(
-        (
-          await request(
-            hosted.server,
-            "GET",
-            "/api/wallpaper-engine/item/201/mobile-export",
-          )
-        ).status,
-      ).toBe(405);
-
-      expect(
-        (
-          await request(
-            hosted.server,
-            "POST",
-            "/api/wallpaper-engine/item/999/mobile-export",
-          )
-        ).json(),
-      ).toEqual({ ok: false, reason: "refused" });
-    } finally {
-      await hosted.close();
-    }
-  });
-
-  it("answers no-install on POST /mobile-export when the host has no source", async () => {
-    const hosted = host();
-
-    try {
-      const answer = await request(
-        hosted.server,
-        "POST",
-        "/api/wallpaper-engine/item/201/mobile-export",
-      );
-      expect(answer.json()).toEqual({ ok: false, reason: "no-install" });
-    } finally {
-      await hosted.close();
-    }
-  });
-
-  it("requires an integer since on the exports listing", async () => {
-    const hosted = host(fakeSource());
-
-    try {
-      const answer = await request(
-        hosted.server,
-        "GET",
-        "/api/wallpaper-engine/exports?since=1700000000000",
-      );
-      expect(answer.status).toBe(200);
-      expect(answer.json()).toEqual({
-        files: [
-          {
-            name: "shot-1700000000000.png",
-            format: "png",
-            modified: 1700000000001,
-            size: 9,
-          },
-        ],
-      });
-
-      // A missing since would offer every old file on the machine, so absence
-      // is a refusal rather than a default epoch.
-      for (const query of [
-        "",
-        "?since=",
-        "?since=abc",
-        "?since=1.5",
-        "?since=-1",
-        "?since=1e3",
-      ]) {
-        const refused = await request(
-          hosted.server,
-          "GET",
-          `/api/wallpaper-engine/exports${query}`,
-        );
-        expect(refused.status, query).toBe(400);
-      }
-    } finally {
-      await hosted.close();
-    }
-  });
-
-  it("serves an export by name and 404s every other name", async () => {
-    const hosted = host(fakeSource());
-
-    try {
-      const answer = await request(
-        hosted.server,
-        "GET",
-        "/api/wallpaper-engine/export?name=shot.png",
-      );
-      expect(answer.status).toBe(200);
-      expect(answer.headers["content-type"]).toBe("image/png");
-      expect(answer.headers["cache-control"]).toBe("no-store");
-      expect(answer.body.toString()).toBe("png");
-
-      // The query is decoded first, so `x%2e%2e/y.png` is the traversal the
-      // source has to refuse, not one it never sees.
-      for (const query of [
-        "",
-        "?name=",
-        "?name=../project.json",
-        "?name=a%2Fb.png",
-        "?name=x%2e%2e%2Fy.png",
-        "?name=x.jpg",
-      ]) {
-        const refused = await request(
-          hosted.server,
-          "GET",
-          `/api/wallpaper-engine/export${query}`,
-        );
-        expect(refused.status, query).toBe(404);
+      // A GET that names no route is the static 404; a POST reaching the tail
+      // is refused as a method the tail does not serve. Neither answers a
+      // route's own status any more.
+      for (const [method, route, status] of [
+        ["POST", "/api/wallpaper-engine/item/201/mobile-export", 405],
+        ["GET", "/api/wallpaper-engine/exports?since=1700000000000", 404],
+        ["GET", "/api/wallpaper-engine/export?name=shot.png", 404],
+      ] as const) {
+        const answer = await request(hosted.server, method, route);
+        expect(answer.status, `${method} ${route}`).toBe(status);
       }
     } finally {
       await hosted.close();

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WallpaperEngineInstall } from "./locate.js";
 import { createWallpaperEngineSource } from "./source.js";
 
@@ -10,7 +10,6 @@ const encoder = new TextEncoder();
 /** The same hand-built container `classify.test.ts` uses. */
 function buildPackage(
   members: readonly (readonly [string, string])[],
-  magic = "PKGV0001",
 ): Uint8Array {
   const entries = members.map(
     ([name, body]) => [encoder.encode(name), encoder.encode(body)] as const,
@@ -25,7 +24,7 @@ function buildPackage(
   const view = new DataView(out.buffer);
 
   view.setUint32(0, 8, true);
-  out.set(encoder.encode(magic), 4);
+  out.set(encoder.encode("PKGV0001"), 4);
   view.setUint32(12, entries.length, true);
 
   let cursor = 16;
@@ -248,228 +247,16 @@ describe("the Wallpaper Engine source", () => {
     expect(await source.bytesOf("302", "preview")).toBeUndefined();
   });
 
-  it("refuses an item the library does not hold without running anything", async () => {
-    await fixture();
-    let asked = 0;
-    const source = createWallpaperEngineSource({
-      locate,
-      requestExport: async () => {
-        asked += 1;
-        return { ok: true };
-      },
-    });
-
-    expect(await source.mobileExport("999")).toEqual({
-      ok: false,
-      reason: "refused",
-    });
-    expect(asked).toBe(0);
-  });
-
-  it("asks the engine for the title its descriptor carries", async () => {
+  it("unpacks a project without starting anything", async () => {
     await fixture();
     await fs.mkdir(install.myProjects, { recursive: true });
-    const titles: string[] = [];
-    const source = createWallpaperEngineSource({
-      locate,
-      // A refusal, so nothing is saved and no harvest starts.
-      requestExport: async (request) => {
-        titles.push(request.title);
-        return { ok: false, reason: "refused" };
-      },
-    });
+    const launch = vi.fn(async () => true);
+    const source = createWallpaperEngineSource({ locate, launch });
 
-    expect(await source.mobileExport("201")).toEqual({
-      ok: false,
-      reason: "refused",
-    });
-    // Not the cache's title and not the directory name: the project the engine
-    // reads is the one this unpack wrote.
-    expect(titles).toEqual(["Still Scene"]);
-  });
+    const result = await source.project("201");
 
-  it("leaves the saved package's video where the export watcher finds it", async () => {
-    await fixture();
-    await fs.mkdir(install.myProjects, { recursive: true });
-    const documents = path.join(tmp, "Documents");
-    await fs.mkdir(documents, { recursive: true });
-    const source = createWallpaperEngineSource({
-      locate,
-      documentsDirectory: documents,
-      requestExport: async () => ({ ok: true }),
-    });
-
-    const since = Date.now();
-    expect(await source.mobileExport("201")).toEqual({ ok: true });
-
-    // The author's Save click, which is what finishes the engine's export.
-    await fs.writeFile(
-      path.join(documents, "Still Scene.mpkg"),
-      buildPackage(
-        [
-          ["project.json", "{}"],
-          ["wallpaper.mp4", "video-bytes"],
-        ],
-        "PKGM0014",
-      ),
-    );
-
-    let files = await source.exportsSince(since);
-    for (let poll = 0; poll < 40 && files.length === 0; poll += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      files = await source.exportsSince(since);
-    }
-
-    expect(files).toHaveLength(1);
-    const name = files[0]?.name ?? "";
-    expect(name).toMatch(/^yunari-201-\d+\.mp4$/);
-
-    const served = await source.exportBytes(name);
-    expect(served?.contentType).toBe("video/mp4");
-    expect(new TextDecoder().decode(served?.bytes)).toBe("video-bytes");
-  });
-});
-
-describe("the Wallpaper Engine export scope", () => {
-  let tmp: string;
-  let install: WallpaperEngineInstall;
-  let videos: string;
-
-  beforeEach(async () => {
-    tmp = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-we-exports-"));
-    const root = path.join(tmp, "wallpaper_engine");
-    install = {
-      root,
-      libraries: [path.join(tmp, "library")],
-      myProjects: path.join(root, "projects", "myprojects"),
-      editor: path.join(root, "bin", "wallpaperui.exe"),
-    };
-    videos = path.join(tmp, "Videos");
-    await fs.mkdir(path.join(root, "projects", "temp"), { recursive: true });
-    await fs.mkdir(install.myProjects, { recursive: true });
-    await fs.mkdir(videos, { recursive: true });
-  });
-
-  afterEach(async () => {
-    await fs.rm(tmp, { recursive: true, force: true });
-  });
-
-  async function writeExport(
-    directory: string,
-    name: string,
-    when: Date,
-    body = name,
-  ): Promise<string> {
-    const file = path.join(directory, name);
-    await fs.writeFile(file, body);
-    await fs.utimes(file, when, when);
-    return file;
-  }
-
-  function source(): ReturnType<typeof createWallpaperEngineSource> {
-    return createWallpaperEngineSource({
-      locate: async () => install,
-      videosDirectory: videos,
-    });
-  }
-
-  it("lists only recent png and mp4 files, newest first, across the three directories", async () => {
-    const old = new Date("2020-01-01T00:00:00Z");
-    const middle = new Date("2021-01-01T00:00:00Z");
-    const recent = new Date("2022-01-01T00:00:00Z");
-
-    await writeExport(
-      path.join(install.root, "projects", "temp"),
-      "middle.png",
-      middle,
-    );
-    await writeExport(install.myProjects, "recent.mp4", recent);
-    await writeExport(videos, "old.png", old);
-    await writeExport(videos, "notes.txt", recent);
-    await writeExport(videos, "clip.mkv", recent);
-
-    const files = await source().exportsSince(
-      new Date("2020-06-01T00:00:00Z").getTime(),
-    );
-
-    expect(files.map((file) => file.name)).toEqual([
-      "recent.mp4",
-      "middle.png",
-    ]);
-    expect(files[0]?.format).toBe("mp4");
-    expect(files[0]?.size).toBe(Buffer.byteLength("recent.mp4"));
-    expect(files[0]?.modified).toBeGreaterThan(middle.getTime());
-    expect(files[1]?.format).toBe("png");
-  });
-
-  it("reads no Videos folder that does not exist", async () => {
-    const answer = await createWallpaperEngineSource({
-      locate: async () => install,
-      videosDirectory: path.join(tmp, "no-videos"),
-    }).exportsSince(0);
-
-    expect(answer).toEqual([]);
-  });
-
-  it("serves the bytes of a real export in scope", async () => {
-    await writeExport(
-      path.join(install.root, "projects", "temp"),
-      "shot.png",
-      new Date(),
-    );
-
-    const answer = await source().exportBytes("shot.png");
-
-    expect(answer?.contentType).toBe("image/png");
-    expect(Buffer.from(answer?.bytes ?? []).toString()).toBe("shot.png");
-  });
-
-  it("answers one name once, by its newest copy", async () => {
-    await writeExport(
-      path.join(install.root, "projects", "temp"),
-      "same.png",
-      new Date("2021-01-01T00:00:00Z"),
-      "older",
-    );
-    await writeExport(
-      videos,
-      "same.png",
-      new Date("2022-01-01T00:00:00Z"),
-      "newer",
-    );
-
-    const files = await source().exportsSince(0);
-
-    expect(files).toHaveLength(1);
-    expect(files[0]?.modified).toBeGreaterThan(
-      new Date("2021-06-01T00:00:00Z").getTime(),
-    );
-
-    // The listing offered one row, so the bytes have to be that row's file —
-    // not whichever scoped directory happened to be read first.
-    const answer = await source().exportBytes("same.png");
-    expect(Buffer.from(answer?.bytes ?? []).toString()).toBe("newer");
-  });
-
-  it("refuses every name that is not a bare png or mp4", async () => {
-    await writeExport(videos, "shot.png", new Date());
-    const from = source();
-
-    // The last traversal case is the decoded form of `x%2e%2e/y.png`, which is
-    // what the route asks with after `URLSearchParams` has decoded it.
-    const decoded = new URLSearchParams("name=x%2e%2e/y.png").get("name");
-
-    for (const name of [
-      "../project.json",
-      "a/b.png",
-      decoded ?? "",
-      "x.png.exe",
-      "x.jpg",
-      "",
-    ]) {
-      expect(await from.exportBytes(name)).toBeUndefined();
-    }
-
-    expect(await from.exportBytes("shot.png")).toBeDefined();
+    expect(result).toEqual({ ok: true, name: "201", reused: false });
+    expect(result).not.toHaveProperty("launched");
+    expect(launch).not.toHaveBeenCalled();
   });
 });

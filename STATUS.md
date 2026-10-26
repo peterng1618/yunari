@@ -16,11 +16,10 @@ Execute [`the Wallpaper Engine import rework`](docs/superpowers/plans/2026-10-26
 
 ## Last completed change
 
-- **Fonts draw in the session that adopts them:** a face adopted from the finder or imported from disk is registered in `document.fonts` and matching text is remeasured, instead of falling back to a serif until the theme is reopened.
-- **The font finder's tiles are cards:** a specimen box drawing a trio's three faces at heading/body/mono sizes (a family draws its first cut), the result's name, metadata and source mark.
-- **A face is named by family and weight** wherever files are listed — Assets card, preview modal, background list, save cleanup — not by its packaged `google-fonts-cut-…` id.
-- **Browser proof:** cards render three specimen rows at 20 / 15 / 12 px in the result's own families, and applying a trio mid-session leaves three `loaded` FontFaces (`Inter:700`, `Poppins:400`, `Fira Code:400`) in `document.fonts`.
-- **Gate and merge:** `npm run gate` exit 0 — 435 files / 6663 passed, 2 skipped; worker 13 / 130. Both commits merged locally into `main` (`9e3871c7`, `c41ecdb7`); nothing is pushed.
+- **The engine is converted to, not driven:** decision 0124 removes the UI-automation export, its three routes and the export watcher; nothing on the host starts Wallpaper Engine.
+- **Unpack-only conversion:** a fresh project's descriptor is titled `[yunari] <title>` (never doubled), and a reused project keeps a hand-edited title.
+- **`WallpaperEngineSource` is listing, bytes and project:** `project()` answers `{ ok, name, reused }` with no `launched`, and the injected `launch` is never called.
+- **Focused proof:** 376 tests pass across `unpack.test.ts`, `source.test.ts` and `server.test.ts`; host typecheck and biome clean.
 
 ## Next
 
