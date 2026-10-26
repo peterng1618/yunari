@@ -92,9 +92,10 @@ test("opens the preview at the Finder's box and gives an image one primary verb"
   console.log(reading);
   testInfo.annotations.push({ type: "asset-preview", description: reading });
 
-  expect(box.width, `the box is not the drawing's 1132px (${reading})`).toBe(
-    1132,
-  );
+  expect(
+    box.width,
+    `the box is not the width the drawing fixes (${reading})`,
+  ).toBe(1132);
   expect(box.height, `the box is not the inset-24 cap (${reading})`).toBe(
     expectedHeight,
   );
