@@ -58,6 +58,7 @@ describe("LiveRuntime", () => {
       canvas,
       bindings: { "cpu-label": [{ id: "load", semanticKey: "cpu.load" }] },
       source: {
+        revision: 0,
         latest: () => undefined,
         history: () => [],
       },
@@ -98,10 +99,11 @@ describe("LiveRuntime", () => {
     const runtime = new LiveRuntime({
       canvas,
       bindings: { "cpu-label": [{ id: "load", semanticKey: "cpu.load" }] },
-      source: { latest: () => undefined, history: () => [] },
+      source: { revision: 0, latest: () => undefined, history: () => [] },
     });
 
     runtime.setSource({
+      revision: 0,
       latest: (key) =>
         key === "cpu.load"
           ? {
@@ -162,6 +164,7 @@ describe("LiveRuntime tick", () => {
       canvas,
       ...(options.bindings === undefined ? {} : { bindings: options.bindings }),
       source: {
+        revision: 0,
         latest: (key) => {
           reads += 1;
           return key === "cpu.load"
@@ -256,6 +259,7 @@ describe("LiveRuntime tick", () => {
       canvas,
       bindings: { "cpu-label": [{ id: "load", semanticKey: "cpu.load" }] },
       source: {
+        revision: 0,
         latest: (key) =>
           key === "cpu.load"
             ? {

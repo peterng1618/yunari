@@ -87,52 +87,127 @@ function isLinkLocalV4(value: number): boolean {
   return value >= 0xa9fe0000 && value <= 0xa9feffff;
 }
 
-/** `::ffff:169.254.169.254` canonicalises to `::ffff:a9fe:a9fe`, so the mapped
- *  IPv4 has to be decoded from either spelling before the range test. */
-function mappedIpv4(address: string): number | undefined {
-  const match =
-    /^::ffff:(?:(\d{1,3}(?:\.\d{1,3}){3})|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/.exec(
-      address,
-    );
-  if (match === null) return undefined;
-  if (match[1] !== undefined) return asIpv4(match[1]);
-
-  const high = Number.parseInt(match[2] ?? "", 16);
-  const low = Number.parseInt(match[3] ?? "", 16);
-  return high * 0x10000 + low;
+function bareAddress(address: string): string {
+  return address.replace(/^\[/, "").replace(/\]$/, "").split("%")[0] ?? "";
 }
 
-/** An IPv4 encoded in a translation prefix, or undefined. NAT64's well-known
- *  prefix `64:ff9b::/96` carries it in the low 32 bits; 6to4's `2002::/16`
- *  carries it in bits 16..47. Canonical URLs always print both compressed. */
-function translatedIpv4(address: string): number | undefined {
-  const nat64 = /^64:ff9b::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(address);
-  const sixToFour =
-    nat64 ?? /^2002:([0-9a-f]{1,4}):([0-9a-f]{1,4})(?::|$)/.exec(address);
-  if (sixToFour === null) return undefined;
+/** Eight 16-bit groups, expanding `::` and a trailing dotted quad, or
+ *  undefined when the text is not IPv6. */
+function ipv6Groups(address: string): number[] | undefined {
+  let text = address;
 
-  const high = Number.parseInt(sixToFour[1] ?? "", 16);
-  const low = Number.parseInt(sixToFour[2] ?? "", 16);
-  return high * 0x10000 + low;
+  const dotted = /^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/.exec(text);
+  if (dotted !== null) {
+    const v4 = asIpv4(dotted[2] ?? "");
+    if (v4 === undefined) return undefined;
+    const high = Math.floor(v4 / 0x10000).toString(16);
+    const low = (v4 % 0x10000).toString(16);
+    text = `${dotted[1]}${high}:${low}`;
+  }
+
+  const halves = text.split("::");
+  if (halves.length > 2) return undefined;
+
+  const parse = (part: string): number[] | undefined => {
+    const groups: number[] = [];
+    if (part === "") return groups;
+    for (const group of part.split(":")) {
+      if (!/^[0-9a-f]{1,4}$/i.test(group)) return undefined;
+      groups.push(Number.parseInt(group, 16));
+    }
+    return groups;
+  };
+
+  const head = parse(halves[0] ?? "");
+  const tail = halves.length === 2 ? parse(halves[1] ?? "") : [];
+  if (head === undefined || tail === undefined) return undefined;
+  if (halves.length === 1) return head.length === 8 ? head : undefined;
+
+  const missing = 8 - head.length - tail.length;
+  if (missing < 1) return undefined;
+  return [...head, ...Array.from({ length: missing }, () => 0), ...tail];
 }
 
-/** IPv4 `169.254.0.0/16` and IPv6 `fe80::/10`: metadata and link-local only.
- *  Loopback and the private LAN ranges are deliberate: the user typed the URL. */
-function isBlockedAddress(address: string): boolean {
-  const bare = address.replace(/^\[/, "").replace(/\]$/, "").split("%")[0];
-  if (bare === undefined) return true;
-  const lower = bare.toLowerCase();
+/** The IPv4 an address carries inside a mapped (`::ffff:a.b.c.d`), translated
+ *  (`::ffff:0:a.b.c.d`), NAT64 (`64:ff9b::/96` and `64:ff9b:1::/96`), 6to4
+ *  (`2002::/16`) or Teredo (`2001::/32`) form. Teredo hides the client in the
+ *  last 32 bits XORed with all ones, so it is decoded before any range test. */
+function embeddedIpv4(groups: readonly number[]): number | undefined {
+  const group = (index: number): number => groups[index] ?? 0;
+  const low = group(6) * 0x10000 + group(7);
+  const zeros = (until: number): boolean => {
+    for (let index = 0; index < until; index += 1) {
+      if (group(index) !== 0) return false;
+    }
+    return true;
+  };
 
+  if (zeros(5) && group(5) === 0xffff) return low;
+  if (zeros(4) && group(4) === 0xffff && group(5) === 0) return low;
+
+  if (group(0) === 0x64 && group(1) === 0xff9b) {
+    const wellKnown =
+      group(2) === 0 && group(3) === 0 && group(4) === 0 && group(5) === 0;
+    const localUse =
+      group(2) === 1 && group(3) === 0 && group(4) === 0 && group(5) === 0;
+    if (wellKnown || localUse) return low;
+  }
+
+  if (group(0) === 0x2002) return group(1) * 0x10000 + group(2);
+  if (group(0) === 0x2001 && group(1) === 0) return 0xffffffff - low;
+
+  // Ceiling: IPv4-compatible `::a.b.c.d` is not decoded; not enumerated, not routable today.
+
+  return undefined;
+}
+
+/** RFC 1918, loopback, CGNAT (`100.64.0.0/10`) and `0.0.0.0/8`. Link-local is
+ *  not here: it is refused on every hop, including the first. */
+function isPrivateV4(value: number): boolean {
+  const top = Math.floor(value / 0x1000000);
+  return (
+    top === 0 ||
+    top === 10 ||
+    top === 127 ||
+    (value >= 0x64400000 && value <= 0x647fffff) ||
+    (value >= 0xac100000 && value <= 0xac1fffff) ||
+    (value >= 0xc0a80000 && value <= 0xc0a8ffff)
+  );
+}
+
+function isPrivateAddress(address: string): boolean {
+  const lower = bareAddress(address).toLowerCase();
+  const v4 = asIpv4(lower);
+  if (v4 !== undefined) return isPrivateV4(v4);
+
+  const groups = ipv6Groups(lower);
+  if (groups === undefined) return false;
+
+  const embedded = embeddedIpv4(groups);
+  if (embedded !== undefined) return isPrivateV4(embedded);
+
+  const first = groups[0] ?? 0;
+  if (groups.every((group) => group === 0)) return true;
+  if (groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1) {
+    return true;
+  }
+  return (first & 0xfe00) === 0xfc00;
+}
+
+/** IPv4 `169.254.0.0/16` and IPv6 `fe80::/10`: metadata and link-local, refused
+ *  on every hop. Private ranges depend on who typed the URL. */
+export function isBlockedAddress(address: string): boolean {
+  const lower = bareAddress(address).toLowerCase();
   const v4 = asIpv4(lower);
   if (v4 !== undefined) return isLinkLocalV4(v4);
 
-  const mapped = mappedIpv4(lower);
-  if (mapped !== undefined) return isLinkLocalV4(mapped);
+  const groups = ipv6Groups(lower);
+  if (groups === undefined) return false;
 
-  const translated = translatedIpv4(lower);
-  if (translated !== undefined) return isLinkLocalV4(translated);
+  const embedded = embeddedIpv4(groups);
+  if (embedded !== undefined) return isLinkLocalV4(embedded);
 
-  return /^fe[89ab][0-9a-f]:/.test(lower);
+  return ((groups[0] ?? 0) & 0xffc0) === 0xfe80;
 }
 
 function isIpLiteral(host: string): boolean {
@@ -140,32 +215,100 @@ function isIpLiteral(host: string): boolean {
   return asIpv4(bare) !== undefined || bare.includes(":");
 }
 
-async function refusalReason(destination: URL): Promise<string | undefined> {
+export interface ResolvedAddress {
+  readonly address: string;
+  readonly family: number;
+}
+
+/** Carries the policy's answer for one hop to the connection that fetch makes
+ *  for it, so no shared state decides which address a request dials. */
+export const PINNED_ADDRESSES: unique symbol = Symbol("pinnedAddresses");
+
+export type PinnedRequestInit = RequestInit & {
+  readonly [PINNED_ADDRESSES]?: readonly ResolvedAddress[];
+};
+
+/** Refused on every hop, whatever the source's own `allowPrivate` says. */
+export const BLOCKED_ADDRESS_REASON =
+  "the source resolves to a link-local or metadata address";
+
+/** The policy's one resolution. A test injects it so a second resolution at
+ *  connect time would show up as a second call. */
+export type HostLookup = (host: string) => Promise<readonly ResolvedAddress[]>;
+
+export const dnsLookup: HostLookup = async (host) => {
+  const entries = await lookup(host, { all: true, verbatim: true });
+  return entries.map((entry) => ({
+    address: entry.address,
+    family: entry.family,
+  }));
+};
+
+type Resolved =
+  | { readonly ok: true; readonly addresses: readonly ResolvedAddress[] }
+  | { readonly ok: false; readonly reason: string };
+
+async function resolveDestination(
+  destination: URL,
+  resolve: HostLookup,
+): Promise<Resolved> {
   if (destination.protocol !== "http:" && destination.protocol !== "https:") {
-    return "the source URL must be http or https";
+    return { ok: false, reason: "the source URL must be http or https" };
   }
 
   const host = destination.hostname;
-  const addresses: string[] = [];
 
   if (isIpLiteral(host)) {
-    addresses.push(host.replace(/^\[/, "").replace(/\]$/, ""));
-  } else {
-    try {
-      const resolved = await lookup(host, { all: true, verbatim: true });
-      for (const entry of resolved) addresses.push(entry.address);
-    } catch {
-      return "the source host could not be resolved";
-    }
-    if (addresses.length === 0) return "the source host has no address";
+    const bare = host.replace(/^\[/, "").replace(/\]$/, "");
+    return {
+      ok: true,
+      addresses: [{ address: bare, family: bare.includes(":") ? 6 : 4 }],
+    };
   }
 
-  for (const address of addresses) {
-    if (isBlockedAddress(address)) {
-      return "the source resolves to a link-local or metadata address";
-    }
+  let resolved: readonly ResolvedAddress[];
+  try {
+    resolved = await resolve(host);
+  } catch {
+    return { ok: false, reason: "the source host could not be resolved" };
+  }
+  if (resolved.length === 0) {
+    return { ok: false, reason: "the source host has no address" };
+  }
+
+  return { ok: true, addresses: resolved };
+}
+
+function refusalOf(
+  addresses: readonly string[],
+  allowPrivate: boolean,
+): string | undefined {
+  if (addresses.some(isBlockedAddress)) {
+    return BLOCKED_ADDRESS_REASON;
+  }
+  if (!allowPrivate && addresses.some(isPrivateAddress)) {
+    return "the source resolves to a private or loopback address";
   }
   return undefined;
+}
+
+type CheckedDestination =
+  | { readonly ok: true; readonly addresses: readonly ResolvedAddress[] }
+  | { readonly ok: false; readonly reason: string };
+
+async function checkDestination(
+  destination: URL,
+  options: { readonly allowPrivate: boolean },
+  resolve: HostLookup,
+): Promise<CheckedDestination> {
+  const resolved = await resolveDestination(destination, resolve);
+  if (!resolved.ok) return resolved;
+
+  const refused = refusalOf(
+    resolved.addresses.map((entry) => entry.address),
+    options.allowPrivate,
+  );
+  return refused === undefined ? resolved : { ok: false, reason: refused };
 }
 
 interface BuiltRequest {
@@ -303,6 +446,7 @@ async function run(
   source: CustomSource,
   credential: string | undefined,
   fetchImpl: typeof fetch,
+  resolve: HostLookup,
   nowMs: () => number,
   fail: Fail,
 ): Promise<FetchOutcome> {
@@ -321,22 +465,46 @@ async function run(
   const signal = AbortSignal.timeout(source.timeoutMs);
   let sameOrigin = true;
   let redirects = 0;
+  let allowPrivate = false;
+  let firstHop = true;
+  let pinned: readonly ResolvedAddress[] = [];
 
   for (;;) {
-    const refused = await refusalReason(destination);
-    if (refused !== undefined) return fail(refused);
+    if (firstHop) {
+      // The user typed the first URL, so its private ranges are allowed; a
+      // redirect may only reach them when that first URL already did.
+      const resolved = await resolveDestination(destination, resolve);
+      if (!resolved.ok) return fail(resolved.reason);
+      const addresses = resolved.addresses.map((entry) => entry.address);
+      allowPrivate = addresses.every(isPrivateAddress);
+      const refused = refusalOf(addresses, true);
+      if (refused !== undefined) return fail(refused);
+      pinned = resolved.addresses;
+      firstHop = false;
+    } else {
+      const checked = await checkDestination(
+        destination,
+        { allowPrivate },
+        resolve,
+      );
+      if (!checked.ok) return fail(checked.reason);
+      pinned = checked.addresses;
+    }
     if (signal.aborted) return fail(TIMEOUT_REASON);
 
     const built = buildRequest(source, destination, credential, sameOrigin);
     if (!responseOf(built)) return fail(built.reason);
 
+    const init: PinnedRequestInit = {
+      headers: built.headers,
+      signal,
+      redirect: "manual",
+      [PINNED_ADDRESSES]: pinned,
+    };
+
     let response: Response;
     try {
-      response = await fetchImpl(built.url, {
-        headers: built.headers,
-        signal,
-        redirect: "manual",
-      });
+      response = await fetchImpl(built.url, init);
     } catch (error) {
       return fail(signal.aborted ? TIMEOUT_REASON : messageOf(error));
     }
@@ -425,6 +593,7 @@ export async function fetchSource(
   credential: string | undefined,
   fetchImpl: typeof fetch,
   nowMs: () => number,
+  resolve: HostLookup = dnsLookup,
 ): Promise<FetchOutcome> {
   const fail: Fail = (reason, status) => {
     const clean = reasonOf(reason, credential);
@@ -436,7 +605,7 @@ export async function fetchSource(
   return withSourceLock(source.id, async () => {
     await acquireSlot();
     try {
-      return await run(source, credential, fetchImpl, nowMs, fail);
+      return await run(source, credential, fetchImpl, resolve, nowMs, fail);
     } catch (error) {
       return fail(messageOf(error));
     } finally {

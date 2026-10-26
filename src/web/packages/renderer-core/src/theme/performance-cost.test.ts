@@ -12,7 +12,7 @@ const GLASS_PANEL = {
 };
 
 const VIDEO_ASSET = { id: "loop", kind: "video", path: "assets/loop.webm" };
-const IMAGE_ASSET = { id: "loop", kind: "image", path: "assets/loop.webm" };
+const IMAGE_ASSET = { id: "loop", kind: "image", path: "assets/loop.png" };
 
 /** A theme whose background is `asset`, drawing `objects` over it. */
 function backgroundTheme(

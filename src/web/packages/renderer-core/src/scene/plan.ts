@@ -4,6 +4,7 @@ import type { ChartOptionByFamily } from "../charts/engine-option.js";
 import { buildGaugeOption } from "../charts/gauge.js";
 import {
   buildLineOption,
+  type LineSettings,
   lineHistorySeconds,
   type SeriesInput,
 } from "../charts/line.js";
@@ -184,6 +185,18 @@ export type ChartPlanContext = Pick<
    * no trail to hide and every delayed reading would only be late.
    */
   readonly playbackDelayMs?: number;
+  /**
+   * The smaller edge of the canvas ECharts draws into, in backing pixels, when
+   * the caller knows it.
+   *
+   * A gap measured in pixels — the clearance a round cap needs — cannot become
+   * an angle without the radius, and the adapters draw at `radius: "100%"` of
+   * the backing canvas, which is the scene box times the chart's render scale.
+   * The option's thickness is in those same backing pixels, so the scale cannot
+   * be dropped here. Absent means the caller has not measured it, and an adapter
+   * skips the term rather than guessing a size.
+   */
+  readonly drawnEdgePx?: number;
 };
 
 /**
@@ -512,6 +525,35 @@ function spaced(unit: string): string {
   return /^[%°]/.test(unit) ? unit : ` ${unit}`;
 }
 
+/**
+ * The diagnostics a chart's authored content earns, whatever its family: a
+ * binding no sensor answers, and a paint naming a global the document lacks.
+ *
+ * Separate from the family switch so a caller that draws a line itself — the
+ * player does, from cached points — still asks for them; skipping the switch
+ * must not skip the report.
+ */
+export function collectChartIssues(
+  nodeId: string,
+  content: ChartContent,
+  bindings: readonly Binding[],
+  source: SampleSource,
+  issues: PlanIssue[],
+  palette?: import("../theme/fabric-envelope.js").FabricPalette,
+): void {
+  // Adapters handle absent samples; report unmapped semantic keys separately.
+  for (const binding of bindings) {
+    if (source.latest(binding.semanticKey) === undefined) {
+      issues.push({
+        code: "unmapped-key",
+        nodeId,
+        detail: `No sensor is mapped to "${binding.semanticKey}".`,
+      });
+    }
+  }
+  reportUnresolvedChartPaint(nodeId, content, palette, issues);
+}
+
 export function buildChartPlan(
   nodeId: string,
   content: ChartContent,
@@ -524,17 +566,14 @@ export function buildChartPlan(
   const playbackDelayMs =
     context.playbackDelayMs ?? context.source.chartPlaybackDelayMs;
 
-  // Adapters handle absent samples; report unmapped semantic keys separately.
-  for (const binding of bindings) {
-    if (context.source.latest(binding.semanticKey) === undefined) {
-      issues.push({
-        code: "unmapped-key",
-        nodeId,
-        detail: `No sensor is mapped to "${binding.semanticKey}".`,
-      });
-    }
-  }
-  reportUnresolvedChartPaint(nodeId, content, palette, issues);
+  collectChartIssues(
+    nodeId,
+    content,
+    bindings,
+    context.source,
+    issues,
+    palette,
+  );
 
   switch (content.family) {
     case "gauge": {
@@ -553,24 +592,18 @@ export function buildChartPlan(
           applyTransform(sample, binding),
           animate,
           palette,
+          context.drawnEdgePx,
         ),
       };
     }
 
     case "line": {
-      // The line owns how much history it needs, including the one sample its
-      // left edge is drawn from; asking for less starts the line inside the
-      // plot (vg-571).
-      const historySeconds = lineHistorySeconds(
-        content.settings.windowSeconds,
+      const series = buildLinePoints(
+        bindings,
+        content.settings,
+        context.source,
         playbackDelayMs,
       );
-      const series: SeriesInput[] = bindings.map((binding) => ({
-        sensorId: binding.semanticKey,
-        samples: context.source
-          .history(binding.semanticKey, historySeconds)
-          .map((sample) => transformSample(sample, binding)),
-      }));
 
       return {
         kind: "chart",
@@ -688,6 +721,37 @@ function reportUnresolvedChartPaint(
       });
     }
   }
+}
+
+/**
+ * The line branch's history read, transformed per binding.
+ *
+ * A line's option is rebuilt every frame because its window slides with the
+ * clock, but its points only move when a sample does — so a caller holding a
+ * source's revision can cache this and rebuild the option from it.
+ */
+export function buildLinePoints(
+  bindings: readonly Binding[],
+  settings: LineSettings,
+  source: SampleSource,
+  playbackDelayMs: number | undefined = source.chartPlaybackDelayMs,
+): readonly SeriesInput[] {
+  // The line owns how much history it needs, including the one sample its left
+  // edge is drawn from; asking for less starts the line inside the plot
+  // (vg-571). The caller's delay is the one the option is drawn with, so a
+  // display whose cadence overrides the source's asks for the same window the
+  // axis will show.
+  const historySeconds = lineHistorySeconds(
+    settings.windowSeconds,
+    playbackDelayMs,
+  );
+
+  return bindings.map((binding) => ({
+    sensorId: binding.semanticKey,
+    samples: source
+      .history(binding.semanticKey, historySeconds)
+      .map((sample) => transformSample(sample, binding)),
+  }));
 }
 
 /** Apply authored scale/offset only to ok numeric samples. */

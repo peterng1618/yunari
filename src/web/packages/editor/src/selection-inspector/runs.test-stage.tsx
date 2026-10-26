@@ -127,6 +127,7 @@ export function mountRunEditor(options: {
 
   const arrived = options.arrived ?? [];
   const sampleSource = (): SampleSource => ({
+    revision: 0,
     latest: (key: string) =>
       arrived.includes(key)
         ? {

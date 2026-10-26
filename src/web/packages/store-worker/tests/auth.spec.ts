@@ -1,7 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import type { TestHelpers } from "better-auth/plugins";
-import { beforeAll, describe, expect, it } from "vitest";
-import { createAuth } from "../src/auth";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { createAuth, isTestOrigin } from "../src/auth";
 
 const BASE = "https://store.test";
 const LOOPBACK = encodeURIComponent("http://127.0.0.1:5173");
@@ -68,6 +68,46 @@ describe("auth", () => {
         })
       ).status,
     ).toBe(403);
+  });
+
+  it("compares a same-length migrate token in constant time", async () => {
+    // The DOM lib shadows the workers-types `SubtleCrypto` that declares it.
+    const subtle = crypto.subtle as unknown as {
+      timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean;
+    };
+    const spy = vi.spyOn(subtle, "timingSafeEqual");
+    try {
+      // Same length as `test-migrate`, one byte different: two different
+      // lengths are answered without a comparison, so only this proves one ran.
+      const response = await SELF.fetch(`${BASE}/migrate`, {
+        method: "POST",
+        headers: { "x-migrate-token": "test-migratX" },
+      });
+      expect(response.status).toBe(403);
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("keeps test helpers off outside a test origin", async () => {
+    expect(isTestOrigin(BASE)).toBe(true);
+    expect(isTestOrigin("http://127.0.0.1:5173")).toBe(true);
+    expect(isTestOrigin("http://localhost:8787")).toBe(true);
+    expect(isTestOrigin("https://store.example.com")).toBe(false);
+    expect(isTestOrigin("http://example.test")).toBe(false);
+    expect(isTestOrigin("not a url")).toBe(false);
+
+    const harness = (await createAuth(env).$context) as unknown as {
+      test?: TestHelpers;
+    };
+    expect(harness.test).toBeDefined();
+
+    const production = (await createAuth({
+      ...env,
+      BETTER_AUTH_URL: "https://store.example.com",
+    }).$context) as unknown as { test?: TestHelpers };
+    expect(production.test).toBeUndefined();
   });
 
   it("starts a social sign-in at the provider", async () => {

@@ -177,6 +177,7 @@ describe("toSegmentedPieData", () => {
       [item("cpu", 50, "#0f0"), item("gpu", 50, "#00f")],
       2,
       0,
+      0,
     );
 
     expect(items.filter((entry) => entry.name === "cpu")).toHaveLength(2);
@@ -190,6 +191,7 @@ describe("toSegmentedPieData", () => {
       [item("a", 75, "#0f0"), item("b", 25, "#00f")],
       4,
       2,
+      2,
     );
     const real = items.filter((entry) => entry.name !== "");
     const a = real.filter((entry) => entry.name === "a");
@@ -199,6 +201,80 @@ describe("toSegmentedPieData", () => {
       a.reduce((sum, entry) => sum + entry.value, 0) /
         b.reduce((sum, entry) => sum + entry.value, 0),
     ).toBeCloseTo(3);
+  });
+
+  it("draws each internal gap as the authored share of its own piece", () => {
+    const items = toSegmentedPieData(
+      [item("a", 70, "#0f0"), item("b", 20, "#00f"), item("c", 10, "#f00")],
+      4,
+      0,
+      10,
+    );
+
+    // Nine internal gaps, one after every piece but each slice's last. Each is
+    // a tenth of the piece it follows, so a larger slice leaves a larger gap.
+    const gaps: { readonly gap: PieDataItem; readonly piece: PieDataItem }[] =
+      [];
+    for (let index = 0; index < items.length - 1; index += 1) {
+      const piece = items[index]!;
+      const after = items[index + 1]!;
+      if (piece.name !== "" && after.name === "" && after.value > 0) {
+        gaps.push({ gap: after, piece });
+      }
+    }
+
+    expect(gaps).toHaveLength(9);
+    for (const { gap, piece } of gaps) {
+      expect(gap.value / piece.value).toBeCloseTo(0.1, 10);
+    }
+    expect(gaps[0]!.gap.value).toBeGreaterThan(gaps.at(-1)!.gap.value);
+  });
+
+  it("keeps the ring whole once the gaps are placed", () => {
+    const items = toSegmentedPieData(
+      [item("a", 70, "#0f0"), item("b", 20, "#00f"), item("c", 10, "#f00")],
+      4,
+      2,
+      10,
+    );
+
+    // The spacers take angles from the ring, never add to it: the pieces plus
+    // every gap still describe one full turn.
+    expect(items.reduce((sum, entry) => sum + entry.value, 0)).toBeCloseTo(
+      360,
+      10,
+    );
+    // The authored boundary gap is still the pad, not the piece share.
+    const boundaries = items.filter(
+      (entry) => entry.name === "" && entry.value === 2,
+    );
+    expect(boundaries).toHaveLength(3);
+  });
+
+  it("keeps composition shares exact when the spacing changes", () => {
+    const shares = (spacingPercent: number) => {
+      const data = toSegmentedPieData(
+        [item("a", 70, "#0f0"), item("b", 20, "#00f"), item("c", 10, "#f00")],
+        5,
+        1,
+        spacingPercent,
+      );
+      const total = data
+        .filter((entry) => entry.name !== "")
+        .reduce((sum, entry) => sum + entry.value, 0);
+      return ["a", "b", "c"].map(
+        (name) =>
+          data
+            .filter((entry) => entry.name === name)
+            .reduce((sum, entry) => sum + entry.value, 0) / total,
+      );
+    };
+
+    const tight = shares(1);
+    const wide = shares(60);
+    for (const [index, share] of tight.entries()) {
+      expect(wide[index]).toBeCloseTo(share, 10);
+    }
   });
 
   it("leaves the continuous data at 100", () => {

@@ -63,6 +63,9 @@ export function createLiveSource(options: LiveSourceOptions): LiveSourceHandle {
   let closed = false;
   const source: SampleSource = {
     chartPlaybackDelayMs: LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
+    get revision() {
+      return store.revision;
+    },
     latest(semanticKey) {
       return store.latest(semanticKey);
     },

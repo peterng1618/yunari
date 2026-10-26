@@ -421,6 +421,7 @@ describe("alignment acts inside the authored box", () => {
     const object = reading({ align: "center", overflow: "ellipsis" });
     const canvas = canvasOf(object);
     const source = (value: number) => ({
+      revision: 0,
       latest: (key: string) =>
         key === "ram.used.percent"
           ? {
@@ -636,6 +637,7 @@ describe("the canvas's own idea of the box", () => {
       canvas,
       { "ram-value": [{ id: "m", semanticKey: "ram.used.percent" }] },
       {
+        revision: 0,
         latest: () => ({
           sensorId: "ram.used.percent",
           timestamp: "2026-10-01T00:00:00.000Z",

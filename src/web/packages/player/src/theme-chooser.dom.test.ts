@@ -113,6 +113,27 @@ describe("choosing a theme for this display", () => {
     chooser.dispose();
   });
 
+  it("offers a chooser on a cookie-paired page, whose token cannot be read", async () => {
+    // The player passes `paired` for a page whose credential is the same-origin
+    // HttpOnly cookie: the token is deliberately unreadable, but the display is
+    // paired and its own-theme write is allowed.
+    const fetcher = vi.fn<Fetcher>(async () => json({ themes: THEMES }));
+
+    const chooser = createThemeChooser({
+      session: unpaired(fetcher),
+      paired: true,
+      side: "bottom",
+      current: "living-room",
+      onChosen: () => undefined,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(document.querySelector(CHOOSER)).not.toBeNull();
+    expect(fetcher).toHaveBeenCalled();
+    chooser.dispose();
+  });
+
   it("reports the host's refusal in the host's own words", async () => {
     const refusal = "This display is not paired with the host.";
     const fetcher = vi.fn<Fetcher>(async (_input, init) => {

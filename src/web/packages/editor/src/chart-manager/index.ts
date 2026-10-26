@@ -147,6 +147,26 @@ function drawnEdgeOf(
     : {};
 }
 
+/**
+ * The smaller edge of the canvas ECharts draws into, in backing pixels.
+ *
+ * The scene box at its own scale times the object's render scale: a gauge's cap
+ * clearance is a pixel measure against that canvas, and the option's thickness
+ * is in the same pixels, so the two cannot be mixed. Absent when the object
+ * measures nothing, and the adapter then skips the clearance rather than
+ * guessing a size.
+ */
+function drawnEdgePxOf(
+  chart: YunariChart,
+): { readonly drawnEdgePx: number } | Record<string, never> {
+  const smaller =
+    Math.min(chart.width * chart.scaleX, chart.height * chart.scaleY) *
+    chart.renderScale;
+  return Number.isFinite(smaller) && smaller > 0
+    ? { drawnEdgePx: Math.floor(smaller) }
+    : {};
+}
+
 /** Yunari-owned chart semantics layered on the editor's generic canvas mechanics. */
 export class ChartManager {
   readonly #editor: EditorInteraction;
@@ -341,7 +361,8 @@ export class ChartManager {
         if (settings !== object.settings) {
           object.set("settings", settings);
           const id = object.get("id");
-          if (typeof id === "string") this.#applyChart(id, object);
+          if (typeof id === "string")
+            this.#applyChart(id, object, { replace: true });
         }
       }
       if (object instanceof Group) object.getObjects().forEach(visit);
@@ -393,7 +414,7 @@ export class ChartManager {
 
     if (chart instanceof YunariChart) {
       chart.set("settings", settings);
-      this.#applyChart(id, chart);
+      this.#applyChart(id, chart, { replace: true });
       this.#editor.canvas.requestRenderAll();
     }
     this.#announce(chart);
@@ -444,7 +465,9 @@ export class ChartManager {
           bindings.length,
         ),
       );
-      this.#applyChart(id, chart);
+      // A binding changed the settings too: the series paint is derived from
+      // the bindings, so this is an authored change and must replace.
+      this.#applyChart(id, chart, { replace: true });
     }
     this.#editor.canvas.requestRenderAll();
     onBindingsChange?.(id, bindings);
@@ -536,6 +559,7 @@ export class ChartManager {
               nowMs,
               this.#globals?.palette,
               playbackDelayMs,
+              drawnEdgePxOf(object).drawnEdgePx,
             );
           } catch {
             reading = undefined;
@@ -545,7 +569,10 @@ export class ChartManager {
             reading === undefined ||
             this.#drawnReading.get(id) !== reading
           ) {
-            this.#applyChart(id, object, reading, nowMs);
+            this.#applyChart(id, object, {
+              ...(reading === undefined ? {} : { reading }),
+              nowMs,
+            });
             drawn = true;
           }
         } else if (object instanceof Group) {
@@ -572,11 +599,22 @@ export class ChartManager {
     return find(this.#editor.canvas.getObjects());
   }
 
+  /**
+   * Draw one chart.
+   *
+   * `replace` is for an authored change rather than a reading: the option
+   * builders omit `visualMap` and `yAxis.min`/`max` when the author removes
+   * them, and a merge would leave the old ones on the engine. The refresh
+   * loop's own path merges, which is what keeps it cheap.
+   */
   #applyChart(
     id: string,
     chart: YunariChart,
-    reading?: string,
-    nowMs = Date.now(),
+    options: {
+      readonly reading?: string;
+      readonly nowMs?: number;
+      readonly replace?: boolean;
+    } = {},
   ): void {
     // **Per chart, and reported, not swallowed.** `refresh()` runs beside the
     // text repaint in one callback, so a chart that throws would take every
@@ -588,21 +626,25 @@ export class ChartManager {
         this.#bindings[id] ?? [],
         {
           source: this.#source,
-          nowMs,
+          nowMs: options.nowMs ?? Date.now(),
           animate: chartAnimationFor(chart.family, this.#refreshRate()),
           playbackDelayMs: chartPlaybackDelayFor(
             this.#refreshRate(),
             this.#source.chartPlaybackDelayMs,
           ),
+          // The canvas the caps are measured against: the backing edge, which
+          // is the scene box times the chart's render scale.
+          ...drawnEdgePxOf(chart),
         },
         [],
         this.#globals?.palette,
       );
-      chart.setOption(plan.option);
+      chart.setOption(plan.option, { replace: options.replace === true });
       // Recorded only once it drew, and only for a caller that read a reading:
       // a chart whose option threw is retried on the next pass rather than left
       // blank until its data happens to move.
-      if (reading !== undefined) this.#drawnReading.set(id, reading);
+      if (options.reading !== undefined)
+        this.#drawnReading.set(id, options.reading);
     } catch (error) {
       this.#editor.errorManager.warn(
         "controls",

@@ -4,6 +4,8 @@ import type { Env } from "../env.js";
 export interface Session {
   readonly userId: string;
   readonly email: string;
+  /** Better Auth's `"user".emailVerified`; owner checks require it. */
+  readonly emailVerified: boolean;
 }
 
 /**
@@ -18,5 +20,9 @@ export async function sessionOf(
     headers: request.headers,
   });
   if (found === null) return undefined;
-  return { userId: found.user.id, email: found.user.email };
+  return {
+    userId: found.user.id,
+    email: found.user.email,
+    emailVerified: found.user.emailVerified === true,
+  };
 }

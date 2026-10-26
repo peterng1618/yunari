@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   runTrashRoutes,
+  TrashRefusal,
   type TrashRoute,
   type TrashTarget,
   trashPlan,
@@ -218,5 +219,21 @@ describe("trashPlan", () => {
     // The message is the author's: it has to say the theme is still there.
     expect(plan.reason).toContain("aix");
     expect(plan.reason).toContain("left alone");
+  });
+});
+
+/**
+ * What a refused move raises. The class is the contract `server.ts` reads: its
+ * words carry the folder path, so only a typed refusal keeps them off the wire
+ * (fix round 3).
+ */
+describe("runTrashRoutes", () => {
+  it("refuses with a TrashRefusal, not a plain Error", async () => {
+    // No route at all is the exhausted plan, reached without a child process
+    // on any platform.
+    const refused = runTrashRoutes([], "folder");
+
+    await expect(refused).rejects.toBeInstanceOf(TrashRefusal);
+    await expect(refused).rejects.toThrow(/no trash command/);
   });
 });

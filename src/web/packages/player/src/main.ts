@@ -43,7 +43,11 @@ import { showLoadFailure } from "./load-failure.js";
 import { followPublished, reResolveUrl } from "./publish-follower.js";
 import { loadDisplayCatalogue } from "./sensor-catalogue.js";
 import { registerServiceWorker } from "./service-worker.js";
-import { type DisplaySessionToken, displaySession } from "./session.js";
+import {
+  type DisplaySessionToken,
+  displaySession,
+  isLoopbackPage,
+} from "./session.js";
 import { createThemeChooser } from "./theme-chooser.js";
 import {
   loadDisplayPreferences,
@@ -53,6 +57,28 @@ import {
 } from "./theme-loader.js";
 
 /** Display-only runtime. The phone renders; hardware acquisition stays on the host. */
+
+/**
+ * The page lifecycle a mount listens to: the reload a page restored from the
+ * back/forward cache needs, because `pagehide` already tore that document down.
+ *
+ * A seam rather than a bare `window`, because one jsdom window outlives a
+ * test's module registry: every mount in a file leaves a `pageshow` listener on
+ * it, so a case asserting "this mount reloads" must hand the mount a navigation
+ * object of its own.
+ */
+export interface PageNavigation {
+  addEventListener(
+    type: "pageshow",
+    listener: (event: PageTransitionEvent) => void,
+  ): void;
+  reload(): void;
+}
+
+const windowNavigation: PageNavigation = {
+  addEventListener: (type, listener) => window.addEventListener(type, listener),
+  reload: () => window.location.reload(),
+};
 
 const artboardHost = document.querySelector<HTMLElement>("#artboard");
 
@@ -91,18 +117,22 @@ const REFIND_COOLDOWN_MS = 60_000;
  * there is no second place that could write an identity the URL does not carry
  * (R72).
  *
- * `/api/host` is unauthenticated and cross-origin readable, and this call is
- * same-origin, so it carries no credential — the identity is public and the
- * token is not. A loopback display has no token and an address that never
- * moves, so it keeps nothing.
+ * **The token comes from the host when the credential is a cookie.**
+ * `GET /api/host` answers a paired display its own token; the cookie is
+ * `HttpOnly` and the URL no longer carries one, so this is the only way a
+ * newly paired display can hold a readable credential. It is still stored
+ * because a re-find after an address change reaches a *different origin*,
+ * where this host's cookie is never sent — storage is the only thing that
+ * crosses that boundary. A loopback or unpaired caller is answered none, and
+ * an old link's URL token still wins as the fallback. The route authenticates
+ * a caller that presents a credential and answers only that display's token;
+ * a sweep's credential-less probe gets the identity alone.
  */
 async function rememberPairing(
   session: DisplaySessionToken,
   store: Storage | undefined,
 ): Promise<void> {
-  const token = session.token;
-
-  if (store === undefined || token === undefined) {
+  if (store === undefined) {
     return;
   }
 
@@ -117,6 +147,7 @@ async function rememberPairing(
       readonly id?: unknown;
       readonly name?: unknown;
       readonly port?: unknown;
+      readonly token?: unknown;
     };
 
     if (
@@ -124,6 +155,15 @@ async function rememberPairing(
       typeof body.name !== "string" ||
       typeof body.port !== "number"
     ) {
+      return;
+    }
+
+    const token =
+      typeof body.token === "string" && body.token.length > 0
+        ? body.token
+        : session.token;
+
+    if (token === undefined) {
       return;
     }
 
@@ -142,7 +182,10 @@ async function rememberPairing(
   }
 }
 
-async function start(host: HTMLElement): Promise<void> {
+export async function start(
+  host: HTMLElement,
+  navigation: PageNavigation = windowNavigation,
+): Promise<void> {
   const parameters = new URLSearchParams(window.location.search);
   const requested = parameters.get("theme");
 
@@ -164,6 +207,7 @@ async function start(host: HTMLElement): Promise<void> {
       host,
       await loadHostedTheme(requested, session.fetch),
       session,
+      navigation,
     );
   } catch (error) {
     showLoadFailure(error);
@@ -201,6 +245,7 @@ async function startHostedTheme(
   host: HTMLElement,
   theme: FabricThemeEnvelope,
   session: DisplaySessionToken,
+  navigation: PageNavigation,
 ): Promise<void> {
   const language = theme.metadata?.themeLanguage;
   declareDocumentLanguage(language);
@@ -260,6 +305,12 @@ async function startHostedTheme(
   applyAuthoredText(handle.canvas, theme.globals, {
     ...(theme.bindings === undefined ? {} : { bindings: theme.bindings }),
   });
+  // What the last frame drew. Bound text, bound images and the availability
+  // notice only change when a sample arrives, and an accepted ingest is the
+  // only thing that moves the revision — so a frame between samples has
+  // nothing of that work to redo. A clock binding still advances, because the
+  // host's clock provider emits `time.now`/`date.today` samples of its own.
+  let lastRevision: number | undefined;
   // The reading each chart last drew with. Unchanged readings skip `setOption`
   // so an engine transition can finish instead of restarting every frame.
   const drawnReadings = new WeakMap<object, string>();
@@ -267,7 +318,9 @@ async function startHostedTheme(
   // paired default and is re-rated in place.
   let chartRate: ChartRefreshRate = 30;
   const refresh = (): void => {
-    hydrateCharts(
+    const revision = liveHandle.source.revision;
+    const sampleChanged = revision !== lastRevision;
+    const chartsChanged = hydrateCharts(
       handle.canvas.getObjects(),
       theme.bindings ?? {},
       liveHandle.source,
@@ -275,40 +328,50 @@ async function startHostedTheme(
       chartRate,
       drawnReadings,
     );
-    // An image reading is a URL on this host, resolved through the session the
-    // way every other packaged asset is. The pass refuses anything else and puts
-    // the authored picture back, so a sample can never choose an origin.
-    refreshBoundImages(
-      handle.canvas.getObjects(),
-      theme.bindings ?? {},
-      liveHandle.source,
-      {
-        resolve: (url) => session.withToken(url),
-        onRefused: reportImageRefusal,
-        onLoadError: (nodeId) =>
-          reportRepaintError(
-            `Image "${nodeId}" failed to load and was left as it was.`,
-          ),
-      },
-    );
-    // Revived text carries the authored runs, not the sampled readings: the
-    // saved scene keeps placeholders, so every cadence re-resolves the runs
-    // through the bindings, the way a rebuilt plan would.
-    refreshBoundText(
-      handle.canvas,
-      theme.bindings ?? {},
-      liveHandle.source,
-      theme.globals,
-      units,
-      theme.metadata?.themeLanguage,
-      descriptors,
-    );
-    handle.canvas.requestRenderAll();
-    // Refreshed here because a provider's reason exists only once data has
-    // arrived. The notice owns its own lifetime from there: it removes itself
-    // when nothing is unreadable, and clears itself three seconds after it is
-    // raised without this cadence re-raising it while the gap persists.
-    showAvailabilityNotice(liveHandle.source, keys);
+    if (sampleChanged) {
+      // An image reading is a URL on this host, resolved through the session the
+      // way every other packaged asset is. The pass refuses anything else and puts
+      // the authored picture back, so a sample can never choose an origin.
+      refreshBoundImages(
+        handle.canvas.getObjects(),
+        theme.bindings ?? {},
+        liveHandle.source,
+        {
+          resolve: (url) => session.withToken(url),
+          onRefused: reportImageRefusal,
+          onLoadError: (nodeId) =>
+            reportRepaintError(
+              `Image "${nodeId}" failed to load and was left as it was.`,
+            ),
+        },
+      );
+      // Revived text carries the authored runs, not the sampled readings: the
+      // saved scene keeps placeholders, so every sample re-resolves the runs
+      // through the bindings, the way a rebuilt plan would.
+      refreshBoundText(
+        handle.canvas,
+        theme.bindings ?? {},
+        liveHandle.source,
+        theme.globals,
+        units,
+        theme.metadata?.themeLanguage,
+        descriptors,
+      );
+      // Refreshed here because a provider's reason exists only once data has
+      // arrived. The notice owns its own lifetime from there: it removes itself
+      // when nothing is unreadable, and clears itself three seconds after it is
+      // raised without this cadence re-raising it while the gap persists.
+      showAvailabilityNotice(liveHandle.source, keys);
+    }
+    // A chart asks for its own repaint when its option lands; this is the
+    // sample-driven work that has none of its own.
+    if (sampleChanged || chartsChanged) {
+      handle.canvas.requestRenderAll();
+    }
+    // **After** the passes above, so one that throws leaves the revision
+    // undrawn and the next frame retries it rather than skipping that revision
+    // for good.
+    lastRevision = revision;
   };
 
   refresh();
@@ -338,10 +401,11 @@ async function startHostedTheme(
   let lastRefindAt: number | undefined;
   let disposed = false;
 
-  /** Deliberately not `session.fetch`: `/api/host` is unauthenticated and
-   *  cross-origin readable, so it needs no credential, and a probe carrying
-   *  this display's token would offer it to every address that answers — the
-   *  opposite of what the stored id is for (R63). */
+  /** Deliberately not `session.fetch`: a probe sends no credential, and
+   *  `/api/host` answers an unpaired caller the identity alone. A probe
+   *  carrying this display's token would offer it to every address that
+   *  answers — and the route now reads a presented credential back — which is
+   *  the opposite of what the stored id is for (R63). */
   const probe: HostProbe = async (origin) => {
     if (disposed) {
       return undefined;
@@ -412,10 +476,21 @@ async function startHostedTheme(
   // it through the same navigation an assignment takes. A link's id is the
   // person's instruction and a published page's is what it shows; `reResolveUrl`
   // keeps both, so a chooser there would change nothing.
+  //
+  // **The token may exist only as a cookie.** After pairing it lives in an
+  // HttpOnly cookie and the URL carries none, so `session.token === undefined`
+  // no longer means "no credential": a non-loopback page is a paired display
+  // (the host refuses an unpaired LAN page), and the chooser's own fetch uses
+  // the cookie. Loopback stays without one — it is this PC, which has no
+  // own-theme write to make.
+  const pairedPage =
+    session.token !== undefined || !isLoopbackPage(window.location.href);
   const chooser =
+    pairedPage &&
     new URL(window.location.href).searchParams.get("theme-source") === "map"
       ? createThemeChooser({
           session,
+          paired: pairedPage,
           side: "bottom",
           current: theme.id,
           onChosen: () => reResolve(),
@@ -445,6 +520,30 @@ async function startHostedTheme(
   });
   const observer = new ResizeObserver(() => handle.resize());
   observer.observe(host);
+  // A hidden page repaints up to thirty times a second and keeps decoding a
+  // background video nobody can see. `disposed` is the pagehide flag: a page
+  // that teardown has torn down must not be revived by a late event.
+  //
+  // **Run once at mount as well as on the event.** `visibilitychange` fires
+  // only on a *change*, so a display restored or opened in a background tab
+  // starts hidden and would otherwise start its loop and its video.
+  const syncVisibility = (): void => {
+    if (disposed) return;
+    if (document.hidden) {
+      chartRefresh.stop();
+      handle.pauseMedia();
+      return;
+    }
+    handle.resumeMedia();
+    chartRefresh.start();
+  };
+  window.addEventListener("visibilitychange", syncVisibility);
+  navigation.addEventListener("pageshow", (event) => {
+    // A page restored from the back/forward cache is the document `pagehide`
+    // already tore down — `disposed` is exactly what it left behind — so a
+    // fresh load is the only recovery. A first load is already fresh.
+    if (event.persisted) navigation.reload();
+  });
   window.addEventListener(
     "pagehide",
     () => {
@@ -469,9 +568,37 @@ async function startHostedTheme(
     },
     { once: true },
   );
+  // After the listeners, so a page that is already hidden takes the same path
+  // the first `visibilitychange` would have taken.
+  syncVisibility();
   exposeForDiagnostics(handle, liveHandle);
 }
 
+/**
+ * The smaller edge of the canvas ECharts draws into, in backing pixels.
+ *
+ * The scene box at its own scale times the object's render scale. The gauge's
+ * cap clearance is a pixel measure against that canvas and its thickness is in
+ * the same pixels; absent means the object measures nothing and the adapter
+ * skips the term rather than guessing a size.
+ */
+function drawnEdgePxOf(
+  chart: YunariChart,
+): { readonly drawnEdgePx: number } | Record<string, never> {
+  const smaller =
+    Math.min(chart.width * chart.scaleX, chart.height * chart.scaleY) *
+    chart.renderScale;
+  return Number.isFinite(smaller) && smaller > 0
+    ? { drawnEdgePx: Math.floor(smaller) }
+    : {};
+}
+
+/**
+ * Repaints the charts whose readings moved.
+ *
+ * Returns whether anything was handed to a chart, which is what decides whether
+ * the scene needs a repaint of its own.
+ */
 function hydrateCharts(
   objects: readonly { get(key: string): unknown }[],
   bindings: Readonly<Record<string, readonly Binding[]>>,
@@ -479,8 +606,9 @@ function hydrateCharts(
   palette: FabricPalette | undefined,
   rate: ChartRefreshRate,
   drawnReadings: WeakMap<object, string>,
-): void {
+): boolean {
   const issues: PlanIssue[] = [];
+  let changed = false;
   const nowMs = Date.now();
   const playbackDelayMs = chartPlaybackDelayFor(
     rate,
@@ -502,6 +630,7 @@ function hydrateCharts(
           settings: object.settings,
         } as ChartContent;
         const chartBindings = bindings[id] ?? [];
+        const geometry = drawnEdgePxOf(object);
         const reading = chartReadingSignature(
           content,
           chartBindings,
@@ -509,6 +638,7 @@ function hydrateCharts(
           nowMs,
           palette,
           playbackDelayMs,
+          geometry.drawnEdgePx,
         );
         if (drawnReadings.get(object) === reading) continue;
         const plan = buildChartPlan(
@@ -520,12 +650,14 @@ function hydrateCharts(
             nowMs,
             animate: chartAnimationFor(content.family, rate),
             playbackDelayMs,
+            ...geometry,
           },
           issues,
           palette,
         );
         object.setOption(plan.option);
         drawnReadings.set(object, reading);
+        changed = true;
       } catch (error) {
         reportRepaintError(
           `Chart "${id}" failed to draw and was left as it was. ${
@@ -538,14 +670,18 @@ function hydrateCharts(
     // walk goes into groups: the starter's cards are groups, and stopping at
     // the canvas would freeze every reading in the composition at load.
     if (object instanceof Group) {
-      hydrateCharts(
-        object.getObjects(),
-        bindings,
-        source,
-        palette,
-        rate,
-        drawnReadings,
-      );
+      if (
+        hydrateCharts(
+          object.getObjects(),
+          bindings,
+          source,
+          palette,
+          rate,
+          drawnReadings,
+        )
+      ) {
+        changed = true;
+      }
     }
   }
   // One line per distinct cause: this runs on every refresh cadence, and a
@@ -556,6 +692,7 @@ function hydrateCharts(
     reportedChartIssues.add(message);
     reportRepaintError(message);
   }
+  return changed;
 }
 
 const reportedChartIssues = new Set<string>();

@@ -14,7 +14,15 @@ name: Publish
 # `dry_run` defaults to true and any dispatch that does not explicitly pass
 # `false` stays a dry run, so neither a publish nor an asset upload can happen
 # by omission; a real manual run needs the GitHub Release for that tag to exist
-# already (`gh release upload` targets it).
+# already (`gh release upload` targets it). A non-dry manual dispatch off a tag
+# is refused in `install`'s second step, immediately after the checkout, and
+# `publish` inherits that refusal through `needs`.
+#
+# Jobs. `install` builds and proves the tarball with read-only contents;
+# `publish` only downloads it, and holds the two permissions the publish path
+# needs: `id-token: write` for provenance and `contents: write` for the release
+# upload. The staged tree is built once, in `install`, and travels as an
+# artifact.
 #
 # npm authentication. Trusted publishing is configured on an EXISTING package's
 # npmjs.com settings, so it cannot be set up before `yunari` exists — and this
@@ -41,9 +49,13 @@ on:
         type: boolean
         default: true
 
-permissions:
-  contents: write
-  id-token: write
+# Fail closed: only an explicit `false` from a dispatch publishes. Loose
+# equality cannot tell `false` from a missing input (both coerce to 0), so
+# compare the serialised value: release -> false, dispatch true -> true,
+# dispatch false -> false, dispatch absent -> null -> dry run. Workflow level so
+# both jobs read the same decision.
+env:
+  DRY_RUN: "${{ github.event_name == 'workflow_dispatch' && toJSON(inputs.dry_run) != 'false' ? 'true' : 'false' }}"
 
 concurrency:
   # One publish at a time, whatever the ref: the version is only known inside
@@ -53,26 +65,36 @@ concurrency:
   group: publish
 
 jobs:
-  publish:
+  install:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Contents only: this job never writes to the repository or the registry.
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dist_tag: ${{ steps.version.outputs.dist_tag }}
     env:
       STAGE: ${{ runner.temp }}/yunari-package
       ASSETS: ${{ runner.temp }}/yunari-assets
       SMOKE: ${{ runner.temp }}/yunari-smoke
-      # Fail closed: only an explicit `false` from a dispatch publishes. Loose
-      # equality cannot tell `false` from a missing input (both coerce to 0), so
-      # compare the serialised value: release -> false, dispatch true -> true,
-      # dispatch false -> false, dispatch absent -> null -> dry run.
-      DRY_RUN: "${{ github.event_name == 'workflow_dispatch' && toJSON(inputs.dry_run) != 'false' ? 'true' : 'false' }}"
     steps:
       # The gate dates licence rules by commit history, so a shallow clone
       # would make every rule read as written by its own citing commit.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      # The checkout has to come first: the guard is a repository script, so
+      # before it there is no file to run. It still costs one checkout and no
+      # install, gate or build, so a refused dispatch fails in seconds. `publish`
+      # inherits the refusal through `needs`, which is why there is no copy
+      # there. The decision is a tested function, not shell the checker parses.
+      - name: Refuse a non-dry dispatch off a tag
+        run: node scripts/assert-publish-ref.mjs
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           # vitest 5 requires ^22.12 || ^24 || >=26; Node 24 is the LTS the
           # existing CI job pins.
@@ -97,6 +119,7 @@ jobs:
           npm run build -w @yunari/host
 
       - name: Resolve version and dist-tag
+        id: version
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
@@ -107,6 +130,8 @@ jobs:
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
           echo "DIST_TAG=$dist_tag" >> "$GITHUB_ENV"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
 
       - name: Stage the package outside the repository
         run: |
@@ -204,6 +229,43 @@ jobs:
           # that omits them answers 404 here rather than in a user's theme.
           check /api/weather/icon/clear-day.svg
 
+      # The zip is a release asset like the tarball, so it is made from the same
+      # staged tree rather than rebuilt in the publish job.
+      - name: Zip the staged tree
+        run: |
+          set -euo pipefail
+          (cd "$STAGE" && zip -q -r "$ASSETS/yunari-${VERSION}.zip" .)
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: yunari-release-assets
+          path: ${{ runner.temp }}/yunari-assets
+          if-no-files-found: error
+
+  publish:
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # Provenance signs with the OIDC token; the release upload writes assets.
+      contents: write
+      id-token: write
+    env:
+      ASSETS: ${{ runner.temp }}/yunari-assets
+      VERSION: ${{ needs.install.outputs.version }}
+      DIST_TAG: ${{ needs.install.outputs.dist_tag }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: yunari-release-assets
+          path: ${{ runner.temp }}/yunari-assets
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          # Provenance needs npm >= 11.5.1, and the runner's bundled npm may be
+          # older. No cache or install: this job builds nothing.
+          node-version: "24"
+
       - name: Publish the packed tarball to npm
         run: |
           set -euo pipefail
@@ -217,9 +279,10 @@ jobs:
         if: env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          # No checkout in this job; `gh` takes the repository from here.
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          (cd "$STAGE" && zip -q -r "$ASSETS/yunari-${VERSION}.zip" .)
           gh release upload "$GITHUB_REF_NAME" \
             "$ASSETS/yunari-${VERSION}.tgz" \
             "$ASSETS/yunari-${VERSION}.zip" \

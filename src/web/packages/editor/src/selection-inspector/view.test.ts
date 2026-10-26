@@ -222,7 +222,7 @@ describe("projectSelection", () => {
     for (const [expected, object] of cases) {
       const row = projectLayers({
         root: [object],
-        selected: [],
+        selected: new Set(),
         expanded: new Set(),
       })[0];
       expect(row?.name, `layer row names ${expected}`).toBe(expected);

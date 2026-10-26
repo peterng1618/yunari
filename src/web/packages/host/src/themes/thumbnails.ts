@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { readContainedFile } from "./contained-read.js";
 import { isValidThemeId } from "./store.js";
 
 /**
@@ -19,6 +20,15 @@ const FILE = "thumbnail.png";
 /** A screenshot of a dashboard; anything larger is not one. */
 const MAX_BYTES = 2 * 1024 * 1024;
 
+/** The largest declared size the library will hand a browser. A picture is
+ *  drawn at gallery-cell size, so both bounds are far above anything a capture
+ *  produces; what they refuse is a header claiming a surface a decoder would
+ *  then try to allocate. The pixel cap is implied by the edge cap (4096² is
+ *  exactly 16 777 216) while the edge stays at 4096; both are stated because
+ *  the bound is about a surface and each unit is one an author can picture. */
+export const MAX_THUMBNAIL_EDGE = 4096;
+export const MAX_THUMBNAIL_PIXELS = 16_777_216;
+
 /** PNG magic: the only format the library renders. */
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -33,6 +43,62 @@ function isPng(bytes: Uint8Array): boolean {
     bytes.byteLength > PNG_SIGNATURE.length &&
     PNG_SIGNATURE.every((byte, index) => bytes[index] === byte)
   );
+}
+
+/**
+ * The pixel size the PNG's header declares, or `undefined` when the bytes carry
+ * no readable one.
+ *
+ * The header is the only place the size is known before decoding, and decoding
+ * is what a bound exists to refuse: a crafted IHDR can claim a surface far
+ * larger than the file. Offsets are fixed by the format — signature (8), the
+ * IHDR chunk's length (4) and type (4), then width and height — and the CRC is
+ * not checked here because the browser's decoder is the one that has to accept
+ * the image; this only decides whether to hand it over.
+ */
+export function pngDimensions(
+  bytes: Uint8Array,
+): { width: number; height: number } | undefined {
+  if (!isPng(bytes) || bytes.byteLength < 24) {
+    return undefined;
+  }
+  // "IHDR" at the first chunk.
+  if (
+    bytes[12] !== 0x49 ||
+    bytes[13] !== 0x48 ||
+    bytes[14] !== 0x44 ||
+    bytes[15] !== 0x52
+  ) {
+    return undefined;
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
+/** Why a picture's declared size is past what the library will render, or
+ *  `undefined` when it is not. */
+function pixelRefusal(bytes: Uint8Array): string | undefined {
+  const size = pngDimensions(bytes);
+  if (size === undefined) {
+    return "A thumbnail must be a PNG with a readable header.";
+  }
+  const { width, height } = size;
+  if (width === 0 || height === 0) {
+    return "A thumbnail must declare a pixel size.";
+  }
+  // The edge bound is checked first, so the product below is at most 4096² and
+  // cannot lose precision the way a uint32 pair multiplied raw would.
+  if (
+    width > MAX_THUMBNAIL_EDGE ||
+    height > MAX_THUMBNAIL_EDGE ||
+    width * height > MAX_THUMBNAIL_PIXELS
+  ) {
+    return (
+      `That thumbnail declares ${width}×${height}; a thumbnail may be at ` +
+      `most ${MAX_THUMBNAIL_EDGE} pixels on a side.`
+    );
+  }
+  return undefined;
 }
 
 /** A name a theme folder's own listing cannot mistake for anything, matching
@@ -54,15 +120,24 @@ export function createThumbnailStore(library: string): ThumbnailStore {
         return undefined;
       }
 
-      try {
-        const bytes = await fs.readFile(filePath(id));
+      // Contained, like every other file this host reads out of a theme
+      // folder: a picture linked in from outside is not this theme's. Absent is
+      // ordinary — an older package, or a capture that failed — and the helper
+      // answers `undefined` for it rather than throwing. The write bound is the
+      // read bound too, refused before the file is buffered.
+      const bytes = await readContainedFile(
+        library,
+        `${id}/${FILE}`,
+        MAX_BYTES,
+      );
 
-        // A file someone else wrote must not be served as an image.
-        return isPng(bytes) ? new Uint8Array(bytes) : undefined;
-      } catch {
-        // Absent is ordinary: an older package, or a capture that failed.
-        return undefined;
-      }
+      // A file someone else wrote must not be served as an image — nor one
+      // whose header declares a surface the library will not draw.
+      return bytes !== undefined &&
+        isPng(bytes) &&
+        pixelRefusal(bytes) === undefined
+        ? new Uint8Array(bytes)
+        : undefined;
     },
 
     async write(id, bytes) {
@@ -76,6 +151,14 @@ export function createThumbnailStore(library: string): ThumbnailStore {
 
       if (!isPng(bytes)) {
         throw new Error("A thumbnail must be a PNG.");
+      }
+
+      // A picture the library would refuse to serve is not stored in the first
+      // place, so a capture that produced one leaves the previous picture
+      // readable instead of replacing it with a file nothing will draw.
+      const tooLarge = pixelRefusal(bytes);
+      if (tooLarge !== undefined) {
+        throw new Error(tooLarge);
       }
 
       // Staged beside its target and renamed, the way the theme store writes a

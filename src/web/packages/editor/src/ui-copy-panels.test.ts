@@ -371,7 +371,11 @@ async function runUnitDisplayOptions(root: HTMLElement): Promise<string[]> {
     globals: undefined,
     locale: undefined,
     nodeBindings: () => bindings,
-    sampleSource: () => ({ latest: () => undefined, history: () => [] }),
+    sampleSource: () => ({
+      revision: 0,
+      latest: () => undefined,
+      history: () => [],
+    }),
     wraps: true,
     swatchValue: () => undefined,
   });

@@ -11,7 +11,7 @@ import {
 } from "../db/items.js";
 import type { ItemRow, VersionRow } from "../db/types.js";
 import type { Env } from "../env.js";
-import { packageKey, thumbnailKey } from "../storage/keys.js";
+import { thumbnailKey } from "../storage/keys.js";
 import { cancelBody, openObject } from "../storage/objects.js";
 
 const CATALOGUE_PREFIX = "/catalogue/";
@@ -68,6 +68,28 @@ async function indexResponse(
   env: Env,
   url: URL,
 ): Promise<Response> {
+  // The Cache API answers the 60-second window the response's own header
+  // declares, so a repeat request costs no D1 work at all. The key drops the
+  // query string: `?nonce=<random>` must not mint an entry per request.
+  // The DOM lib's `CacheStorage` shadows workers-types', which alone declares
+  // `default`; the same cast the store's `timingSafeEqual` call needs.
+  const cache = (caches as unknown as { readonly default: Cache }).default;
+  const key = new Request(new URL("/index.json", url.origin));
+  const cached = await cache.match(key);
+  if (cached !== undefined) {
+    // The key carries no request headers, so `match` cannot evaluate
+    // `If-None-Match`; this comparison is the only 304 path.
+    if (request.headers.get("if-none-match") === cached.headers.get("etag")) {
+      return new Response(null, { status: 304, headers: cached.headers });
+    }
+    // A cached response's headers are immutable, and `handlePublic` sets CORS
+    // on every answer, so the hit is copied into a fresh response.
+    return new Response(cached.body, {
+      status: cached.status,
+      headers: cached.headers,
+    });
+  }
+
   const listings = await publishedListings(env.DB);
   // One count query for the whole listing, not one per entry.
   const counts = await countsByItem(
@@ -96,7 +118,11 @@ async function indexResponse(
   if (request.headers.get("if-none-match") === etag) {
     return new Response(null, { status: 304, headers });
   }
-  return new Response(body, { headers });
+  const response = new Response(body, { headers });
+  // The stored copy is the body only; `handlePublic` adds the CORS header on
+  // the way out, hit or miss, so it is never cached with it.
+  await cache.put(key, response.clone());
+  return response;
 }
 
 async function itemResponse(
@@ -147,7 +173,7 @@ async function packageResponse(
 ): Promise<Response> {
   const row = await versionOf(env.DB, itemId, version);
   if (row === undefined) return notFound();
-  const object = await openObject(env.BUCKET, packageKey(itemId, version));
+  const object = await openObject(env.BUCKET, row.package_key);
   if (object === undefined) return notFound();
   // Counted before the body streams: whether the transfer completes is not
   // observable after the response is handed back. The update's own status

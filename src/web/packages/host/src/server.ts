@@ -5,10 +5,14 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  CATALOGUE_ORIGIN,
   createBatch,
+  formatSseEvent,
   knownTimeZones,
   readFabricThemeEnvelope,
+  SAMPLE_EVENT,
   SAMPLE_STREAM_PATH,
+  themeAssetContentType,
 } from "@yunari/renderer-core";
 import type { ChartRefreshRate } from "@yunari/scene-fabric";
 import { type AssetRouteOptions, handleAssetRoutes } from "./assets/routes.js";
@@ -53,6 +57,7 @@ import {
 import {
   contentTypeFor,
   needsTrailingSlash,
+  realStaticPath,
   resolveStaticPath,
 } from "./serve/static-path.js";
 import { newToken } from "./session/pairing.js";
@@ -133,11 +138,13 @@ import {
 } from "./themes/store.js";
 import { SHIPPED_TEMPLATES } from "./themes/templates.js";
 import type { ThumbnailStore } from "./themes/thumbnails.js";
+import { TrashRefusal } from "./themes/trash.js";
 import {
   type DecodedThemeSave,
   decodeThemeSave,
   encodeThemeContent,
 } from "./themes/wire.js";
+import { certificateFingerprintSha256, type RootPem } from "./tls/authority.js";
 import { SseConnection } from "./transport/sse.js";
 import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
 
@@ -145,6 +152,10 @@ import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
 
 /** Non-loopback displays present this header; loopback never needs to. */
 const SESSION_HEADER = "x-yunari-session";
+
+/** The cookie a paired display keeps instead of a token in its URL. Never
+ *  readable by a script: the display only has to carry it. */
+const SESSION_COOKIE = "yunari_session";
 
 /** One refusal for every way a code can fail — unknown, expired, spent or
  *  simply wrong. A caller that could tell them apart could search the space. */
@@ -190,6 +201,9 @@ const SOURCE_ID = /^[a-z0-9_-]{1,32}$/;
 function issueKey(issue: SourceIssue): string {
   return `${issue.sourceId}\u0000${issue.reason}`;
 }
+
+/** This PC's device settings, as the store hands them to a tick. */
+type StoredDeviceSettings = Awaited<ReturnType<DeviceSettingsStore["read"]>>;
 
 export interface BundleRoots {
   readonly player: string;
@@ -331,8 +345,11 @@ export interface HostServerOptions {
    *  origin rather than any route that decides it. See `docs/decisions/0070`. */
   readonly tls?: { readonly key: string; readonly cert: string };
   /** The root a display installs, served at `CA_CERTIFICATE_PATH`. Omitted when
-   *  the host has none to offer, and the route then says so. */
-  readonly caCertificate?: string;
+   *  the host has none to offer, and the route then says so. Only the PEM is
+   *  taken: the header's fingerprint is computed from these bytes, so the pair
+   *  a caller cannot get wrong is the pair it never supplies. `RootPem` rather
+   *  than a string, so a chain or a leaf is a compile error here. */
+  readonly caCertificate?: RootPem;
   /** Which host this app folder is (§ "Finding the host after its address
    *  changes"), answered by `GET /api/host`. Omitted when this host has no
    *  identity: the route is then not registered at all, because an id minted to
@@ -382,6 +399,13 @@ export interface HostServer {
 
 export const DEFAULT_SAMPLE_INTERVAL_MS = 1000;
 
+/** What one stream request may ask for, and how many streams may be open: the
+ *  ceiling a request can reach rather than a budget the player works within. */
+export const MAX_STREAM_KEYS = 64;
+export const MAX_STREAM_KEY_BYTES = 128;
+export const MAX_STREAM_CONNECTIONS = 64;
+export const MAX_STREAM_CONNECTIONS_PER_DISPLAY = 8;
+
 /** The committed Meteocons bytes. A request names a file here only when that
  *  exact slug is in the provider's allow-list; no request path reaches the
  *  filesystem. */
@@ -396,6 +420,40 @@ const WEATHER_ICON_DIR = path.join(
 export const MAX_THEME_UPLOAD_BYTES = 96 * 1024 * 1024;
 /** A dashboard screenshot; the store enforces the same bound. */
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
+
+/** The one sentence a caller gets while another theme-sized body is arriving. */
+const LARGE_BODY_BUSY = "Another large upload is still in progress.";
+
+/** Refusal a full gate raises, so a route can tell it from a body over the cap. */
+class LargeBodyBusyError extends Error {}
+
+/**
+ * One slot for theme-sized bodies, by default.
+ *
+ * A body is buffered whole before it is parsed, and two 96 MB imports in flight
+ * at once is a memory cost an idle host should not be asked to pay. The second
+ * caller is refused rather than queued: the browser retries a 429, whereas a
+ * queued request would hold its socket for as long as the first one took.
+ */
+export function createLargeBodyGate(maxConcurrent = 1): {
+  run<T>(work: () => Promise<T>): Promise<T>;
+} {
+  let inFlight = 0;
+
+  return {
+    async run<T>(work: () => Promise<T>): Promise<T> {
+      if (inFlight >= maxConcurrent) throw new LargeBodyBusyError();
+
+      inFlight += 1;
+
+      try {
+        return await work();
+      } finally {
+        inFlight -= 1;
+      }
+    },
+  };
+}
 
 /** Recognizes loopback forms Node may report. */
 export function isLoopbackRemote(address: string | undefined): boolean {
@@ -422,6 +480,54 @@ export function isLoopbackName(name: string | undefined): boolean {
   if (name === undefined) return false;
   return (
     name === "localhost" || name === "[::1]" || /^127(\.\d{1,3}){3}$/.test(name)
+  );
+}
+
+/**
+ * The store origin a host may talk to.
+ *
+ * The session token is sent here, so a mis-set variable must not be able to
+ * point it at another host: only the compiled catalogue origin, or a loopback
+ * address for a Worker under test, survives. Anything else is answered as if
+ * the variable were unset.
+ */
+export function resolveStoreOrigin(
+  raw: string | undefined,
+): string | undefined {
+  if (raw === undefined) return undefined;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return undefined;
+  }
+  if (url.origin === CATALOGUE_ORIGIN) return url.origin;
+  if (url.protocol === "http:" && isLoopbackName(url.hostname))
+    return url.origin;
+  return undefined;
+}
+
+/**
+ * Whether a loopback request asks an admin route it has not proved it may
+ * reach.
+ *
+ * A browser lured to another name can resolve that name to 127.0.0.1, so the
+ * peer is loopback while the request is not this machine's page. `Host` and
+ * `Origin` are what such a page cannot forge, so the existing same-origin rule
+ * answers once here rather than route by route, which missed some (ADR-0116).
+ * A non-loopback peer is untouched.
+ *
+ * `/api/host` is the one exemption, because a re-find sweep is cross-origin.
+ */
+export function refusesLoopbackApi(
+  request: http.IncomingMessage,
+  url: URL,
+): boolean {
+  return (
+    url.pathname.startsWith("/api/") &&
+    url.pathname !== "/api/host" &&
+    isLoopbackRemote(request.socket.remoteAddress) &&
+    isForeignOrigin(request)
   );
 }
 
@@ -455,12 +561,74 @@ export function isForeignOrigin(request: http.IncomingMessage): boolean {
   }
 }
 
-/** A request's credential, from a header (fetch) or query (EventSource cannot
- *  set request headers, so the stream carries it in the URL). */
-function tokenFor(request: http.IncomingMessage, url: URL): string | undefined {
+/** One named value from a request's cookie header, or nothing. */
+function cookieValue(
+  cookie: string | undefined,
+  name: string,
+): string | undefined {
+  if (cookie === undefined) return undefined;
+
+  for (const part of cookie.split(";")) {
+    const [key, ...rest] = part.trim().split("=");
+
+    if (key !== name) continue;
+
+    try {
+      return decodeURIComponent(rest.join("="));
+    } catch {
+      // A malformed escape is a caller's typo, not a reason to fail the request.
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * A request's credential: the cookie first, then the header, or nothing.
+ *
+ * **The cookie outranks the header because it is the fresher credential.** This
+ * host set it, and only this host can. The header remains for the host's own
+ * tooling and for a player that has no cookie yet, but it can be stale: a page
+ * that stored a token before its display was retired and re-paired keeps
+ * sending the old one, and reading the header first let it outrank the fresh
+ * cookie and refuse the load until someone reloaded by hand.
+ *
+ * **A query token is deliberately absent.** It is read only by the root route,
+ * which exchanges it for the cookie and redirects it out of the address bar.
+ * Refusing it everywhere else keeps a credential out of logs and history.
+ */
+function tokenFor(request: http.IncomingMessage): string | undefined {
   const header = request.headers[SESSION_HEADER];
-  const fromHeader = Array.isArray(header) ? header[0] : header;
-  return fromHeader ?? url.searchParams.get("session") ?? undefined;
+  const fromCookie = cookieValue(request.headers.cookie, SESSION_COOKIE);
+  const cookie = fromCookie === "" ? undefined : fromCookie;
+
+  // `yunari_session=` is an empty value, not a credential. This host never
+  // writes one, but `??` alone would treat it as present and shadow a valid
+  // header behind it.
+  return cookie ?? (Array.isArray(header) ? header[0] : header);
+}
+
+/**
+ * The `Set-Cookie` value that makes a display's token a credential the browser
+ * carries for it.
+ *
+ * **`Max-Age` is load-bearing.** A display is a fixed appliance, and without a
+ * lifetime the cookie dies with the browser process: the stored token
+ * authenticates `fetch` only, while a document navigation and an `EventSource`
+ * cannot set a header, so after a reboot the display's own page would be
+ * refused and never load — re-pairing it after every restart is the worse
+ * failure. 400 days is the longest lifetime a browser honours. A cookie that
+ * outlives its pairing is still refused by the normal `401`/`403` display
+ * check, which sends the owner back to pairing.
+ *
+ * `Secure` only over TLS: on plain http the browser would drop the cookie and
+ * the display would never pair.
+ */
+function sessionCookie(token: string, request: http.IncomingMessage): string {
+  const secure = (request.socket as { encrypted?: boolean }).encrypted === true;
+
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Max-Age=34560000; HttpOnly; SameSite=Strict; Path=/${secure ? "; Secure" : ""}`;
 }
 
 /** A display as a surface may see it. */
@@ -476,12 +644,11 @@ function peerOf(record: DisplayRecord): HostingPeer {
  * **Loopback answers `undefined` on purpose.** It is trusted admin and never
  * paired, and the reserved `this-pc` has no record to return (spec § "One map"):
  * the *key* is minted where a key is needed, not fabricated here with a
- * `createdAt` nobody wrote. A `?session=` value matching no display is
- * `undefined` too, and the caller refuses it as it refuses a missing credential.
+ * `createdAt` nobody wrote. A credential matching no display is `undefined`
+ * too, and the caller refuses it as it refuses a missing credential.
  */
 export async function displayFor(
   request: http.IncomingMessage,
-  url: URL,
   displays: DisplayStore | undefined,
 ): Promise<DisplayRecord | undefined> {
   if (
@@ -491,7 +658,7 @@ export async function displayFor(
     return undefined;
   }
 
-  const token = tokenFor(request, url);
+  const token = tokenFor(request);
 
   if (token === undefined) {
     return undefined;
@@ -555,7 +722,7 @@ export async function displayKeyFor(
     return LOCAL_DISPLAY_ID;
   }
 
-  return (await displayFor(request, url, displays))?.id ?? DEFAULT_DISPLAY;
+  return (await displayFor(request, displays))?.id ?? DEFAULT_DISPLAY;
 }
 
 /** A BCP-47-shaped tag, bounded: enough for `de`, `de-DE`, `zh-Hant-TW`. */
@@ -782,10 +949,17 @@ function sendHtml(
  *  it is served as one. The media type is what makes a phone offer to install
  *  it rather than render it as text, and it is the type the operating systems
  *  themselves use for a `.crt`. */
-function sendCertificate(response: http.ServerResponse, body: string): void {
+function sendCertificate(
+  response: http.ServerResponse,
+  body: string,
+  fingerprint: string,
+): void {
   response.writeHead(200, {
     "content-type": "application/x-x509-ca-cert",
     "content-disposition": 'attachment; filename="yunari-ca.crt"',
+    // Beside the bytes rather than inside them, so a device can compare the
+    // fingerprint it was told before it installs what it was sent.
+    "x-yunari-ca-sha256": fingerprint,
   });
   response.end(body);
 }
@@ -797,6 +971,22 @@ function sendText(
 ): void {
   response.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
   response.end(body);
+}
+
+/**
+ * Whether an error is this machine's rather than the caller's, as far as an
+ * errno can say.
+ *
+ * A filesystem refusal carries an errno `code`, and its message names an
+ * absolute path; a store's validation message does not. **Errno is not the only
+ * platform shape**: the trash wraps a failed child process in a `TrashRefusal`,
+ * which has no code to check for, so its route tests that class too.
+ */
+function isPlatformError(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    error instanceof Error &&
+    typeof (error as NodeJS.ErrnoException).code === "string"
+  );
 }
 
 /** A route module's answer, written as the node response this server speaks. */
@@ -815,13 +1005,32 @@ async function writeWebResponse(
 }
 
 /**
+ * Whether the request already holds this representation. `*` covers "any", and
+ * `W/` is the weak form a cache may send for a strong validator.
+ */
+function matchesEtag(request: http.IncomingMessage, etag: string): boolean {
+  const header = request.headers["if-none-match"];
+
+  if (header === undefined) return false;
+
+  return header
+    .split(",")
+    .map((value) => value.trim())
+    .some((value) => value === "*" || value === etag || value === `W/${etag}`);
+}
+
+/**
  * Serves a bundle file. An extension-less path is a client route and may fall
  * back to `index.html` — but only where the bundle actually has client routes.
  * The editor does; the player is one document, and answering every unmatched
  * path with it hands an operator a live display for a typo, which is harder to
  * notice than a 404 and impossible to debug from the page.
+ *
+ * The request is taken because a bundle file is cacheable: the ETag is the
+ * `stat`, and `If-None-Match` answers 304 with the type and no body.
  */
 async function serveStatic(
+  request: http.IncomingMessage,
   response: http.ServerResponse,
   root: string,
   urlPath: string,
@@ -835,9 +1044,21 @@ async function serveStatic(
     return;
   }
 
+  // The URL a resolved candidate would have been requested by, so the same
+  // containment rules decide every candidate rather than only the first.
+  const urlOf = (candidate: string): string =>
+    `/${path.relative(path.resolve(root), candidate).split(path.sep).join("/")}`;
+
+  const relative = path.relative(path.resolve(root), resolved);
+  const namesDotfile = relative
+    .split(path.sep)
+    .some((part) => part.startsWith("."));
+
   const candidates = [resolved];
 
-  if (clientRoutes && path.extname(resolved) === "") {
+  // A dotfile never falls back to the document: `/.env` has no extension, and
+  // index.html is not the answer to a path no build writes.
+  if (clientRoutes && !namesDotfile && path.extname(resolved) === "") {
     candidates.push(
       path.join(resolved, "index.html"),
       path.join(root, "index.html"),
@@ -845,20 +1066,47 @@ async function serveStatic(
   }
 
   for (const candidate of candidates) {
-    try {
-      const body = await fs.readFile(candidate);
+    const real = await realStaticPath(root, urlOf(candidate));
 
-      response.writeHead(200, {
-        "content-type": contentTypeFor(candidate),
-        // Entry HTML must not retain references to an old build.
-        "cache-control":
-          path.extname(candidate) === ".html" ? "no-store" : "no-cache",
-      });
-      response.end(body);
-      return;
+    if (real === undefined) continue;
+
+    let info: Awaited<ReturnType<typeof fs.stat>>;
+
+    try {
+      info = await fs.stat(real);
     } catch {
       continue;
     }
+
+    // A link the realpath would have followed is already refused; a directory
+    // is not a body, and `fs.readFile` on one is a platform-dependent error.
+    if (!info.isFile()) continue;
+
+    const headers = {
+      "content-type": contentTypeFor(candidate),
+      // Entry HTML must not retain references to an old build.
+      "cache-control":
+        path.extname(candidate) === ".html" ? "no-store" : "no-cache",
+      etag: `"${info.size.toString(16)}-${Math.trunc(info.mtimeMs).toString(16)}"`,
+    };
+
+    if (matchesEtag(request, headers.etag)) {
+      response.writeHead(304, headers);
+      response.end();
+      return;
+    }
+
+    let body: Buffer;
+
+    try {
+      body = await fs.readFile(real);
+    } catch {
+      continue;
+    }
+
+    response.writeHead(200, headers);
+    response.end(body);
+    return;
   }
 
   // The hint is only true when the bundle itself is missing its entry; a file
@@ -876,6 +1124,15 @@ async function serveStatic(
  *  begins with. */
 const TLS_HANDSHAKE_BYTE = 0x16;
 
+/** How long an accepted socket may stay silent before this port destroys it:
+ *  long enough for a phone to start a handshake, short enough that a client
+ *  holding a connection slot without saying anything gives it back. */
+const HANDSHAKE_TIMEOUT_MS = 5_000;
+
+/** Sockets this port holds at once. Below the operating system's own accept
+ *  backlog, so a flood is refused here rather than exhausting file handles. */
+const MAX_SOCKET_CONNECTIONS = 256;
+
 /**
  * One port, two protocols.
  *
@@ -892,7 +1149,7 @@ const TLS_HANDSHAKE_BYTE = 0x16;
  * reaches the secure origin by typing `https` in front of the address until
  * then. Recorded in `docs/decisions/0070`.
  */
-function createPortListener(
+export function createPortListener(
   plain: http.Server,
   secure: https.Server,
 ): ListenableServer {
@@ -924,6 +1181,11 @@ function createPortListener(
     handed.set(name, socket);
     socket.once("close", () => handed.delete(name));
 
+    // Nothing bounds a socket that has said nothing: neither inner server has
+    // seen it, so neither one's own timeout applies. Cleared at handover below,
+    // before any byte this connection does send can be called idle.
+    socket.setTimeout(HANDSHAKE_TIMEOUT_MS, () => socket.destroy());
+
     socket.once("readable", () => {
       const first = socket.read(1) as Buffer | null;
 
@@ -932,6 +1194,10 @@ function createPortListener(
         return;
       }
 
+      // The socket is no longer this port's to time: from here it is a request
+      // the inner server's own timeouts govern.
+      socket.setTimeout(0);
+
       // Put the byte back before handing the socket over: the inner server
       // parses it as though it had accepted the connection itself.
       socket.unshift(first);
@@ -939,6 +1205,10 @@ function createPortListener(
       owner.emit("connection", socket);
     });
   });
+
+  /** A silence this port will not keep: enough for a client to start a
+   *  handshake, short enough that a caller holding a slot says why. */
+  listener.maxConnections = MAX_SOCKET_CONNECTIONS;
 
   // **The pruning the binding asks for is this port's, not an inner server's.**
   // A server handed sockets by `emit("connection")` never builds the connection
@@ -1017,12 +1287,22 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const themeOrigins = options.themeOrigins;
   const published = options.published ?? createPublishedStore();
   const caCertificate = options.caCertificate;
+  /** Hashed from the bytes being served, once per server: a value passed
+   *  alongside them could describe a different certificate. */
+  const caFingerprint =
+    caCertificate === undefined
+      ? undefined
+      : certificateFingerprintSha256(caCertificate);
   const hostRecord = options.host;
-  const storeOrigin = options.storeOrigin ?? process.env.YUNARI_STORE_ORIGIN;
+  const storeOrigin = resolveStoreOrigin(
+    options.storeOrigin ?? process.env.YUNARI_STORE_ORIGIN,
+  );
   const storeSession = options.storeSession;
   /** The store sign-in states this server minted, so another instance in the
    *  same process cannot redeem them. */
   const storeSignInStates = createPendingStates();
+  /** Theme-sized bodies, one at a time; see `createLargeBodyGate`. */
+  const largeBody = createLargeBodyGate();
 
   /**
    * The move a PUT asked for, run once that PUT's answer is on the wire. Its
@@ -1051,14 +1331,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
    * Assignments in the shape providers consume; unset groups mean defaults.
    *
    * Resolved for one display, because both inputs are per display: which theme
-   * it holds, and the answers it gave for that theme. Nothing is held between
-   * ticks — a consumer who reassigns a device is served it on that display's
-   * next sample.
+   * it holds, and the answers it gave for that theme. `stored` is the tick's
+   * one read of the settings: they are this PC's, not the display's. Nothing
+   * is held between ticks — a consumer who reassigns a device is served it on
+   * that display's next sample.
    */
-  async function currentAssignment(display: string): Promise<DeviceAssignment> {
-    const stored =
-      devices === undefined ? EMPTY_DEVICE_SETTINGS : await devices.read();
-
+  async function currentAssignment(
+    display: string,
+    stored: StoredDeviceSettings,
+  ): Promise<DeviceAssignment> {
     // The theme this display holds, else the default's — the same fallback
     // `assignedThemeFor` makes, and what keeps a theme chosen through
     // `/api/themes/active` (which still writes `default`, ruling 38) applying
@@ -1133,38 +1414,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
   }
 
   /** Loopback is trusted admin; anything else must present a live credential. */
-  async function allowed(
-    request: http.IncomingMessage,
-    url: URL,
-  ): Promise<boolean> {
+  async function allowed(request: http.IncomingMessage): Promise<boolean> {
     if (isLoopbackRemote(request.socket.remoteAddress)) {
       return true;
     }
 
-    return (await displayFor(request, url, displays)) !== undefined;
-  }
-
-  /**
-   * The stored theme, with a document that exists but cannot be served —
-   * one that does not validate, and one past the size bound — answered as the
-   * same absence one that is not there is. Every read that is not the open route
-   * wants this: a display, an asset lookup, the active-theme resolution and
-   * every existence check can serve neither, and a corrupt or oversized theme
-   * must not turn a listing or a page into a 500. The open route reads the
-   * store directly so it can tell the three apart (decisions/0043, 0084).
-   */
-  async function readThemeOrAbsent(id: string): Promise<ThemeRecord> {
-    try {
-      return await themeStore.read(id);
-    } catch (error) {
-      if (
-        error instanceof ThemeValidationError ||
-        error instanceof ThemeTooLargeError
-      ) {
-        return undefined;
-      }
-      throw error;
-    }
+    return (await displayFor(request, displays)) !== undefined;
   }
 
   /**
@@ -1251,7 +1506,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
     request: http.IncomingMessage,
     response: http.ServerResponse,
   ): void => {
-    handle(request, response).catch(() => {
+    handle(request, response).catch((error: unknown) => {
+      // The reason names this machine's own files, and this route answers LAN
+      // callers too: the console keeps it, the body does not.
+      console.error(error);
+
       // A response already on the wire cannot be replaced; ending the connection
       // is all that is left.
       if (response.headersSent || response.writableEnded) {
@@ -1281,16 +1540,23 @@ export function createHostServer(options: HostServerOptions): HostServer {
   ): Promise<void> {
     const url = new URL(request.url ?? "/", "http://host.invalid");
 
+    // One same-origin decision ahead of every route branch: the route-by-route
+    // checks left routes reachable by a page that rebound a name to loopback.
+    if (refusesLoopbackApi(request, url)) {
+      sendText(response, 403, "That request is from another origin.");
+      return;
+    }
+
     // Before every gate below, and before pairing in particular: a device
     // reading this is being asked to trust the host, which is the step that has
     // to come first.
     if (url.pathname === CA_CERTIFICATE_PATH && request.method === "GET") {
-      if (caCertificate === undefined) {
+      if (caCertificate === undefined || caFingerprint === undefined) {
         sendText(response, 404, "This host serves no certificate of its own.");
         return;
       }
 
-      sendCertificate(response, caCertificate);
+      sendCertificate(response, caCertificate, caFingerprint);
       return;
     }
 
@@ -1310,6 +1576,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       await serveStatic(
+        request,
         response,
         bundles.admin,
         "/pair.html",
@@ -1335,11 +1602,18 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // **The one route an unpaired client may read**, and the reason a display
     // that has lost its host's address can find it again: a re-find sweep asks
     // every host on the network who it is and keeps the one whose id it stored.
-    // So it answers before every gate below — the display guard in particular —
-    // and its body is fixed by that promise: the identity, the port, and nothing
-    // else this host holds. The name is one character from `/api/hosting`, the
-    // LAN on/off setting, deliberately and not by accident (R24). A host with no
-    // identity is not registered at all, for the reason the `host` option gives.
+    // So it answers before every gate below — the display guard in particular.
+    // The name is one character from `/api/hosting`, the LAN on/off setting,
+    // deliberately and not by accident (R24). A host with no identity is not
+    // registered at all, for the reason the `host` option gives.
+    //
+    // **A paired display also reads its own token here.** That is what keeps a
+    // re-find working after the cookie change: the cookie is HttpOnly and the
+    // URL carries no token, so a newly paired display has no readable
+    // credential — and a re-find reaches a *different origin*, where this
+    // host's cookie is never sent. Storage is the only thing that crosses that
+    // boundary, and the token is exactly what the display held before. Loopback
+    // and unpaired callers are answered no token, because they hold none.
     if (
       hostRecord !== undefined &&
       url.pathname === "/api/host" &&
@@ -1352,7 +1626,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // edit away from making every route in this file cross-origin readable,
       // and this route is meant to be the single deliberate exception (R25).
       // No `Access-Control-Allow-Credentials`: a sweep sends no credential, and
-      // a wildcard origin with credentials is refused by browsers anyway.
+      // a wildcard origin with credentials is refused by browsers anyway — so a
+      // foreign page can never present this display's cookie to read the token.
       response.setHeader("Access-Control-Allow-Origin", "*");
 
       // The port comes from the socket, never from an option or the binding: a
@@ -1361,12 +1636,112 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // honest absence `/api/hosting` reports.
       const address = server.address();
 
+      // Resolving the display authenticates the presented credential; the
+      // request is then answered its own token and never another's. The touch
+      // inside `displayFor` is a welcome sighting: this call is a load.
+      const record = await displayFor(request, displays);
+      const token = record === undefined ? undefined : tokenFor(request);
+
       sendJson(response, 200, {
         id: hostRecord.id,
         name: hostRecord.name,
         port:
           typeof address === "object" && address !== null ? address.port : null,
+        ...(token === undefined ? {} : { token }),
       });
+      return;
+    }
+
+    // The one-time exchange a display makes after claiming a token, so the
+    // credential leaves the address bar and becomes a cookie the browser sends
+    // by itself. **Not behind the pairing block's loopback gate**: the pairing
+    // page runs on the display, which is off this PC, and the request is
+    // same-origin there — so it needs no CORS surface and no credential of its
+    // own, only the token it just minted.
+    //
+    // **The JSON media type is the origin guard.** Any page can POST here with
+    // a `text/plain` body and no preflight, which would let it set this
+    // origin's session cookie. Requiring `application/json` forces a preflight
+    // this host never answers, and every refusal here is `no-store` so a
+    // crediting answer never survives in a cache.
+    if (url.pathname === "/api/session" && request.method === "POST") {
+      const refuse = (status: number, message: string): void => {
+        response.setHeader("cache-control", "no-store");
+        sendText(response, status, message);
+      };
+
+      if (displays === undefined) {
+        refuse(404, "Pairing is not enabled on this host.");
+        return;
+      }
+
+      const mediaType = request.headers["content-type"]
+        ?.split(";")[0]
+        ?.trim()
+        .toLowerCase();
+
+      if (mediaType !== "application/json") {
+        refuse(415, "That request must be JSON.");
+        return;
+      }
+
+      let text: string;
+
+      try {
+        text = await readBody(request);
+      } catch (error) {
+        // The bound's own refusal, not a parse failure: swallowing it would
+        // call an oversized body malformed JSON and hide what happened.
+        refuse(
+          400,
+          error instanceof Error
+            ? error.message
+            : "That request body could not be read.",
+        );
+        return;
+      }
+
+      let parsed: unknown;
+
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        // Fixed, never the parser's words: the message quotes the start of the
+        // body, and a caller in the middle of pairing must not be answered the
+        // first bytes of its own token.
+        refuse(400, "That request body is not valid JSON.");
+        return;
+      }
+
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        refuse(400, "That is not a session request.");
+        return;
+      }
+
+      const offered = (parsed as { readonly token?: unknown }).token;
+
+      if (typeof offered !== "string" || offered === "") {
+        refuse(400, "A token is required.");
+        return;
+      }
+
+      // The store owns what a live token is; a token it does not hold is
+      // answered as the credential it is — refused, with no cookie set.
+      if ((await displays.authenticate(offered)) === undefined) {
+        refuse(401, "That token is not one this host issued.");
+        return;
+      }
+
+      response.writeHead(302, {
+        location: "/",
+        "set-cookie": sessionCookie(offered, request),
+        "cache-control": "no-store",
+      });
+      response.end();
       return;
     }
 
@@ -1620,6 +1995,20 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
+        // The label's own rule, asked before the write: a name the store would
+        // refuse is the caller's to fix, and the catch below keeps only the
+        // store's failures, whose words name this machine's files.
+        try {
+          mintedDisplayId(body.label);
+        } catch (error) {
+          sendText(
+            response,
+            400,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+
         let display: DisplayRecord;
 
         try {
@@ -1629,11 +2018,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
           // with what this host holds, not a body the store would not read —
           // and it is a conflict rather than a success, because two records for
           // one screen would put two windows on it.
-          sendText(
-            response,
-            error instanceof MonitorAlreadyHeldError ? 409 : 400,
-            error instanceof Error ? error.message : String(error),
-          );
+          if (error instanceof MonitorAlreadyHeldError) {
+            sendText(response, 409, error.message);
+            return;
+          }
+
+          // Anything else came from the store's own file: the detail goes to
+          // this host's console, and the caller is told only that it failed.
+          console.error(error);
+          sendText(response, 500, "The host could not add that display.");
           return;
         }
 
@@ -1757,7 +2150,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     if (url.pathname === SAMPLE_STREAM_PATH) {
-      if (!(await allowed(request, url))) {
+      if (!(await allowed(request))) {
         sendText(response, 403, "This display is not paired with the host.");
         return;
       }
@@ -1800,6 +2193,17 @@ export function createHostServer(options: HostServerOptions): HostServer {
           const saved = await devices.write(body);
           sendJson(response, 200, { ok: true, assigned: saved });
         } catch (error: unknown) {
+          // The store's own file failures name this machine's paths; the
+          // detail goes to the host's console, not to the caller.
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(
+              response,
+              400,
+              "The device assignments could not be saved.",
+            );
+            return;
+          }
           sendText(
             response,
             400,
@@ -1830,7 +2234,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       if (request.method === "GET") {
         if (
           !isLoopbackRemote(request.socket.remoteAddress) &&
-          !(await allowed(request, url))
+          !(await allowed(request))
         ) {
           sendText(response, 403, "This display is not paired with the host.");
           return;
@@ -1873,6 +2277,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
           options.onDisplayChange?.(saved);
           sendJson(response, 200, { ok: true, settings: saved });
         } catch (error: unknown) {
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(response, 400, "The display settings could not be saved.");
+            return;
+          }
           sendText(
             response,
             400,
@@ -1961,6 +2370,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
               attribution: { text: backend.attribution, url: backend.termsUrl },
             });
           } catch (error: unknown) {
+            if (isPlatformError(error)) {
+              console.error(error);
+              sendText(
+                response,
+                400,
+                "The weather settings could not be saved.",
+              );
+              return;
+            }
             sendText(
               response,
               400,
@@ -2034,7 +2452,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     if (url.pathname === "/api/published") {
       if (
         !isLoopbackRemote(request.socket.remoteAddress) &&
-        !(await allowed(request, url))
+        !(await allowed(request))
       ) {
         sendText(response, 403, "This display is not paired with the host.");
         return;
@@ -2052,12 +2470,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // host answers none rather than one the follower would act on — and pays
       // no listing for an answer it discards.
       if (!url.searchParams.has("theme")) {
-        const available = await themeStore.list();
-
         theme =
-          (await assignedThemeFor(display, async (id) =>
-            available.some((entry) => entry.id === id),
-          )) ?? null;
+          (await assignedThemeFor(display, (id) => themeStore.exists(id))) ??
+          null;
       }
 
       sendJson(response, 200, {
@@ -2085,7 +2500,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       if (request.method === "GET") {
         if (
           !isLoopbackRemote(request.socket.remoteAddress) &&
-          !(await allowed(request, url))
+          !(await allowed(request))
         ) {
           sendText(response, 403, "This display is not paired with the host.");
           return;
@@ -2112,6 +2527,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
           const favorites = await fontFavorites.write(body);
           sendJson(response, 200, { favorites });
         } catch (error: unknown) {
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(response, 400, "The font favourites could not be saved.");
+            return;
+          }
           sendText(
             response,
             400,
@@ -2567,7 +2987,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       if (
         !isLoopbackRemote(request.socket.remoteAddress) &&
-        (await displayFor(request, url, displays)) === undefined
+        (await displayFor(request, displays)) === undefined
       ) {
         sendText(response, 403, "This display is not paired with the host.");
         return;
@@ -2614,7 +3034,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       if (
         !isLoopbackRemote(request.socket.remoteAddress) &&
-        (await displayFor(request, url, displays)) === undefined
+        (await displayFor(request, displays)) === undefined
       ) {
         sendText(response, 403, "This display is not paired with the host.");
         return;
@@ -2672,7 +3092,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       if (
         !isLoopbackRemote(request.socket.remoteAddress) &&
-        (await displayFor(request, url, displays)) === undefined
+        (await displayFor(request, displays)) === undefined
       ) {
         sendText(response, 403, "This display is not paired with the host.");
         return;
@@ -2715,6 +3135,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     if (url.pathname === "/api/health") {
+      // A display's liveness probe needs a heartbeat, not this machine's device
+      // count, sensor keys and pairing state. Detail stays on loopback.
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendJson(response, 200, { ok: true });
+        return;
+      }
+
       let weatherProblem: string | undefined;
 
       if (weather !== undefined) {
@@ -2722,8 +3149,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // watch, and a rewritten valid file has to clear it.
         await weather.read();
         const problem = weather.problem();
-        // `/api/health` answers anyone on the network, and a read error's own
-        // message carries the path it failed on — the person's home directory.
+        // The detail is a browser's to read even on loopback, and a read
+        // error's own message carries the path it failed on — the person's
+        // home directory.
         weatherProblem =
           problem === undefined ? undefined : redactForBrowser(problem);
       }
@@ -2831,15 +3259,51 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
+    // **The one route that still reads a query token**, and only to retire it.
+    // An old pairing link or a re-find target carries `?session=`; the root
+    // exchanges it for the cookie and redirects it out of the address bar. It
+    // sits ahead of the display guard below because that guard is what the
+    // query token cannot pass — the cookie is the credential from here on.
+    // A token no display holds sets no cookie and falls through, so the caller
+    // is served exactly what it was before this route existed.
+    //
+    // It runs whether or not the link named `data`: a display URL the library
+    // resolved carries `data=live`, and gating on its absence left exactly
+    // those links with a token and no cookie — a 403 from the LAN guard below
+    // that no reload could fix.
+    if (url.pathname === "/") {
+      const offered = url.searchParams.get("session");
+
+      if (offered !== null) {
+        const record = await displays?.authenticate(offered);
+
+        if (record !== undefined) {
+          // The next request carries the cookie instead, so the display's own
+          // `lastSeenAt` is paid there rather than twice here. Everything else
+          // the link named — a theme, a local display — rides along; only the
+          // token leaves the address bar.
+          url.searchParams.delete("session");
+          const query = url.searchParams.toString();
+          response.writeHead(302, {
+            location: query === "" ? "/" : `/?${query}`,
+            "set-cookie": sessionCookie(offered, request),
+            "cache-control": "no-store",
+          });
+          response.end();
+          return;
+        }
+      }
+    }
+
     // **The bundle is not dashboard content**, and it comes before this guard
-    // because a credential cannot reach it. A credential rides in the query
-    // string — `fetch` and `EventSource` carry one and `<script src>` cannot — so
-    // a paired phone was served the document and then refused its own scripts
-    // with a blank page. The bundle is the same bytes any loopback visitor
-    // already has: no reading, no theme, no device in it. Everything this guard
-    // exists to protect stays behind it — `/api/themes/**`, the sample stream,
-    // `/api/display` — and `/editor` keeps its own loopback guard.
-    // See `docs/decisions/0019`.
+    // because the browser fetches some of it itself: the favicon probe, the
+    // install's manifest and its worker script. A credential rides in the
+    // cookie now, but those requests are not the display's own and a paired
+    // phone refused them was served the document with a blank page. The bundle
+    // is the same bytes any loopback visitor already has: no reading, no theme,
+    // no device in it. Everything this guard exists to protect stays behind it —
+    // `/api/themes/**`, the sample stream, `/api/display` — and `/editor` keeps
+    // its own loopback guard. See `docs/decisions/0019`.
     const isBundleAsset =
       url.pathname.startsWith("/assets/") ||
       // The browser probes this unprompted and without a token, and the repo
@@ -2859,7 +3323,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     if (
       !isBundleAsset &&
       !isLoopbackRemote(request.socket.remoteAddress) &&
-      !(await allowed(request, url))
+      !(await allowed(request))
     ) {
       sendText(response, 403, "This display is not paired with the host.");
       return;
@@ -2868,6 +3332,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
     if (url.pathname === "/api/themes") {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+      // The library index is this PC's own surface. A display names one theme
+      // it was given through its document, asset and answers routes, so nothing
+      // the player does needs the list (S12, the same argument that gated the
+      // unused route beside it).
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Themes are available on this PC only.");
         return;
       }
       // Templates travel beside the stored themes and are kept out of them: a
@@ -2908,6 +3380,17 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
+      // The library names files on this PC. A paired display reads dashboards,
+      // not this, so it stays admin like `/api/hosting`.
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Wallpaper Engine is available on this PC only.",
+        );
+        return;
+      }
+
       sendJson(
         response,
         200,
@@ -2924,6 +3407,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
     if (wallpaperEngineMatch) {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Wallpaper Engine is available on this PC only.",
+        );
         return;
       }
 
@@ -3040,6 +3531,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
         sendText(response, 405, "Only GET is supported.");
         return;
       }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Wallpaper Engine is available on this PC only.",
+        );
+        return;
+      }
 
       const asked = url.searchParams.get("since");
       // A missing or non-integer `since` would offer every old media file on
@@ -3068,6 +3567,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
     if (url.pathname === "/api/wallpaper-engine/export") {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Wallpaper Engine is available on this PC only.",
+        );
         return;
       }
 
@@ -3174,7 +3681,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
           key = named;
         } else {
-          const record = await displayFor(request, url, displays);
+          const record = await displayFor(request, displays);
 
           if (record === undefined) {
             sendText(
@@ -3235,26 +3742,31 @@ export function createHostServer(options: HostServerOptions): HostServer {
         sendText(response, 400, "Invalid theme asset path.");
         return;
       }
-      const record = isValidThemeId(id)
-        ? await readThemeOrAbsent(id)
-        : undefined;
-      const declared = record?.envelope.assets?.find(
-        (asset) => asset.path === assetPath,
-      );
-      const bytes =
-        declared === undefined ? undefined : record?.assets[declared.path];
-      if (declared === undefined || bytes === undefined) {
+      const found = await themeStore.readAsset(id, assetPath);
+      if (found === undefined) {
         sendText(response, 404, "Theme asset not found.");
         return;
       }
+      const contentType = themeAssetContentType({
+        kind: found.kind,
+        path: assetPath,
+      });
+      if (contentType === undefined) {
+        // The declared kind is the authority on what these bytes are. A path it
+        // does not admit is a package the host cannot serve the way it says,
+        // so nothing is served rather than a type the path chose.
+        sendText(response, 415, "That asset's kind and path disagree.");
+        return;
+      }
       response.writeHead(200, {
-        // A browser will not decode an `<img>` or a `<video>` whose response is
-        // not a media type, and never sniffs SVG, so octet-stream here is a
-        // packaged image no display can show.
-        "content-type": contentTypeFor(declared.path),
+        "content-type": contentType,
+        // The kind decided the media type; the browser must not redecide it by
+        // sniffing, and the bytes stay inert even if they are a document.
+        "x-content-type-options": "nosniff",
+        "content-security-policy": "sandbox; default-src 'none'",
         "cache-control": "no-store",
       });
-      response.end(Buffer.from(bytes));
+      response.end(Buffer.from(found.bytes));
       return;
     }
 
@@ -3291,10 +3803,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       if (request.method === "GET") {
-        const record = await readThemeOrAbsent(rawId);
+        const envelope = await themeStore.readEnvelope(rawId);
         sendJson(response, 200, {
           answers: await themeSettings.read(named, rawId),
-          required: requiredDeviceGroups(record?.envelope),
+          required: requiredDeviceGroups(envelope),
         });
         return;
       }
@@ -3305,6 +3817,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
           const saved = await themeSettings.write(named, rawId, body);
           sendJson(response, 200, { ok: true, answers: saved });
         } catch (error) {
+          // A body the parser or the store's rules refused is the caller's; a
+          // failed write names this machine's file and says so only here.
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(response, 500, "The theme's answers could not be saved.");
+            return;
+          }
           sendText(
             response,
             400,
@@ -3378,6 +3897,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
           await store.write(rawId, new Uint8Array(Buffer.concat(chunks)));
           sendJson(response, 200, { ok: true });
         } catch (error) {
+          // A PNG the store would not read is the caller's; a write it could
+          // not perform is this machine's, and its path stays off the wire.
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(response, 500, "That thumbnail could not be saved.");
+            return;
+          }
           sendText(
             response,
             400,
@@ -3411,11 +3937,23 @@ export function createHostServer(options: HostServerOptions): HostServer {
         sendText(response, 403, "Theme modification is loopback only.");
         return;
       }
+      // The central guard already refuses this; kept beside the sibling
+      // modification routes as defence in depth.
+      if (isForeignOrigin(request)) {
+        sendText(response, 403, "That request is from another origin.");
+        return;
+      }
 
       let body: Uint8Array;
       try {
-        body = await readBytes(request, MAX_THEME_UPLOAD_BYTES);
-      } catch {
+        body = await largeBody.run(() =>
+          readBytes(request, MAX_THEME_UPLOAD_BYTES),
+        );
+      } catch (error) {
+        if (error instanceof LargeBodyBusyError) {
+          sendText(response, 429, LARGE_BODY_BUSY);
+          return;
+        }
         sendText(response, 413, "That package is too large to import.");
         return;
       }
@@ -3455,8 +3993,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       let raw: string;
       try {
-        raw = await readBody(request, MAX_THEME_UPLOAD_BYTES);
-      } catch {
+        raw = await largeBody.run(() =>
+          readBody(request, MAX_THEME_UPLOAD_BYTES),
+        );
+      } catch (error) {
+        if (error instanceof LargeBodyBusyError) {
+          sendText(response, 429, LARGE_BODY_BUSY);
+          return;
+        }
         sendText(response, 413, "That video is too large to normalize.");
         return;
       }
@@ -3633,12 +4177,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // A display's view of the document: a theme that does not validate is
       // one it cannot serve, which is the same answer as a theme that is not
       // there — not the 422 the editor's own open gets (ADR-0043).
-      const record = await readThemeOrAbsent(rawId);
-      if (record === undefined) {
+      const envelope = await themeStore.readEnvelope(rawId);
+      if (envelope === undefined) {
         sendText(response, 404, "Theme not found.");
         return;
       }
-      sendJson(response, 200, record.envelope);
+      sendJson(response, 200, envelope);
       return;
     }
 
@@ -3646,6 +4190,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
     if (themeMatch) {
       const rawId = decodeURIComponent(themeMatch[1] ?? "");
       if (request.method === "GET") {
+        // The whole-theme read carries every asset as base64, which is the
+        // editor's shape, not a reading a display needs: a display uses the
+        // document, asset and answers routes.
+        if (!isLoopbackRemote(request.socket.remoteAddress)) {
+          sendText(response, 403, "Themes are available on this PC only.");
+          return;
+        }
         if (!isValidThemeId(rawId)) {
           sendText(response, 400, "Invalid theme id.");
           return;
@@ -3705,8 +4256,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
         let body: string;
         try {
-          body = await readBody(request, MAX_THEME_UPLOAD_BYTES);
-        } catch {
+          body = await largeBody.run(() =>
+            readBody(request, MAX_THEME_UPLOAD_BYTES),
+          );
+        } catch (error) {
+          if (error instanceof LargeBodyBusyError) {
+            sendText(response, 429, LARGE_BODY_BUSY);
+            return;
+          }
           sendText(response, 413, "That theme is too large to save.");
           return;
         }
@@ -3744,6 +4301,21 @@ export function createHostServer(options: HostServerOptions): HostServer {
             sendText(response, 413, error.message);
             return;
           }
+          // The document itself past the store's write bound: the same 413 the
+          // GET of such a stored theme answers, and for the same reason — the
+          // document is well-formed and the author has to make it smaller.
+          if (error instanceof ThemeTooLargeError) {
+            sendText(response, 413, error.message);
+            return;
+          }
+          // A theme the store's own rules refused is the caller's, with the
+          // store's words; a write the filesystem refused is this machine's,
+          // and its message names a path the browser must not read.
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(response, 500, "That theme could not be saved.");
+            return;
+          }
           sendText(
             response,
             400,
@@ -3765,35 +4337,52 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
+        // The store moves the folder to the OS trash (docs/decisions/0021) and
+        // answers false for anything it would not have listed, so a 404 here
+        // means the same "no such theme" an open would have said.
+        let removed: boolean;
+
         try {
-          // The store moves the folder to the OS trash (docs/decisions/0021) and
-          // answers false for anything it would not have listed, so a 404 here
-          // means the same "no such theme" an open would have said.
-          const removed = await themeStore.remove(rawId);
-          // The origin goes only with a removal that happened, because it is a
-          // fact about a copy that is on disk. Unguarded, like the display
-          // route's `themeSettings?.removeDisplay(id)`: a sweep that throws
-          // reaches this handler's catch and answers 500 for a request whose
-          // folder is already in the trash — a real fault the caller should
-          // hear about, not one to swallow.
-          if (removed) await themeOrigins?.removeTheme(rawId);
-          sendJson(
-            response,
-            removed ? 200 : 404,
-            removed
-              ? { ok: true }
-              : { error: `No theme "${rawId}" in this library.` },
-          );
+          removed = await themeStore.remove(rawId);
         } catch (error) {
-          // A trash that refused is not a malformed request: nothing was
-          // removed, the theme is exactly where it was, and the author's copy
-          // is intact. The reason is the platform's own, so it travels as is.
+          // A save in flight answers the store's own retry sentence: plain
+          // text, no path, and the caller is the one who can act on it. A
+          // platform refusal — an errno, or the trash's own wrapper around a
+          // child process's stderr — names the folder, so it goes to the
+          // console and the caller is told only that the removal did not happen.
+          if (error instanceof TrashRefusal || isPlatformError(error)) {
+            console.error(error);
+            sendText(response, 500, "That theme could not be removed.");
+            return;
+          }
           sendText(
             response,
             500,
             error instanceof Error ? error.message : String(error),
           );
+          return;
         }
+
+        // The origin goes only with a removal that happened, because it is a
+        // fact about a copy that is on disk. **Its failure cannot undo the
+        // removal**: the folder is already in the trash, so answering a failure
+        // here would report a removal that did happen as one that did not. The
+        // stale origin is logged and the removal stands.
+        if (removed) {
+          try {
+            await themeOrigins?.removeTheme(rawId);
+          } catch (error) {
+            console.error(error);
+          }
+        }
+
+        sendJson(
+          response,
+          removed ? 200 : 404,
+          removed
+            ? { ok: true }
+            : { error: `No theme "${rawId}" in this library.` },
+        );
         return;
       }
 
@@ -3812,11 +4401,23 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       if (request.method === "PUT") {
+        let raw: string;
+        try {
+          raw = await largeBody.run(() =>
+            readBody(request, MAX_THEME_UPLOAD_BYTES),
+          );
+        } catch (error) {
+          if (error instanceof LargeBodyBusyError) {
+            sendText(response, 429, LARGE_BODY_BUSY);
+            return;
+          }
+          sendText(response, 413, "That theme is too large to publish.");
+          return;
+        }
+
         let decoded: DecodedThemeSave;
         try {
-          decoded = decodeThemeSave(
-            await readBody(request, MAX_THEME_UPLOAD_BYTES),
-          );
+          decoded = decodeThemeSave(raw);
         } catch (error) {
           sendText(
             response,
@@ -3835,10 +4436,27 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
-        // The assets a display fetches come from the theme's own folder, so a
-        // document with no folder would render with holes. Refusing is honest;
-        // publishing it anyway is not.
-        if ((await readThemeOrAbsent(id)) === undefined) {
+        // Every declared asset a display fetches comes from the theme's own
+        // folder, so a theme whose document is readable but whose declared file
+        // is missing or past its bound would render a hole. `exists` reads the
+        // document alone, which is right for the two-second poll and not for
+        // this admin route: publishing verifies the whole theme.
+        let stored: ThemeRecord;
+        try {
+          stored = await themeStore.read(id);
+        } catch (error) {
+          // A document that is present and unreadable is the same 404 an absent
+          // one gets, as it was before the scoped reads (ADR-0043).
+          if (
+            error instanceof ThemeValidationError ||
+            error instanceof ThemeTooLargeError
+          ) {
+            stored = undefined;
+          } else {
+            throw error;
+          }
+        }
+        if (stored === undefined) {
           // 404, the same answer `/api/themes/:id` gives for the same fact.
           sendText(
             response,
@@ -3924,6 +4542,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       await serveStatic(
+        request,
         response,
         bundles.admin,
         url.pathname === "/settings"
@@ -3953,6 +4572,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       await serveStatic(
+        request,
         response,
         bundles.editor,
         url.pathname.slice("/editor".length) || "/",
@@ -4001,6 +4621,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
           // thumbnail; a second list here would be the copy without one.
           if (bundles.admin !== undefined) {
             await serveStatic(
+              request,
               response,
               bundles.admin,
               "/library.html",
@@ -4032,6 +4653,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     await serveStatic(
+      request,
       response,
       bundles.player,
       url.pathname,
@@ -4054,6 +4676,27 @@ export function createHostServer(options: HostServerOptions): HostServer {
       .map((key) => key.trim())
       .filter((key) => key.length > 0);
 
+    // **Bounds before the connection exists**, because a stream is held for as
+    // long as its client keeps it: an oversized request refused only after the
+    // headers were written would be a held connection that answers 400.
+    if (keys.length > MAX_STREAM_KEYS) {
+      sendText(
+        response,
+        400,
+        `A stream may ask for ${MAX_STREAM_KEYS} keys at most.`,
+      );
+      return;
+    }
+
+    if (keys.some((key) => Buffer.byteLength(key) > MAX_STREAM_KEY_BYTES)) {
+      sendText(
+        response,
+        400,
+        `A stream key may be ${MAX_STREAM_KEY_BYTES} bytes at most.`,
+      );
+      return;
+    }
+
     // Resolving the display reads the store, and a client that leaves during
     // that read has already emitted the `close` the listeners below would have
     // removed this connection on. So the event is kept until there is a
@@ -4068,20 +4711,40 @@ export function createHostServer(options: HostServerOptions): HostServer {
     request.on("error", noteGone);
 
     const display = await displayKeyFor(request, url, displays);
+
+    request.off("close", noteGone);
+    request.off("error", noteGone);
+
+    // The caps are counted after the display is known, because one of them is
+    // per display: a single display cannot take every slot, and the total is
+    // what a flood of distinct displays would otherwise spend.
+    const held = [...connections].filter(
+      (connection) => connection.display === display,
+    ).length;
+
+    if (
+      connections.size >= MAX_STREAM_CONNECTIONS ||
+      held >= MAX_STREAM_CONNECTIONS_PER_DISPLAY
+    ) {
+      sendText(
+        response,
+        429,
+        "This host is already streaming to as many displays as it will.",
+      );
+      return;
+    }
+
+    if (gone) {
+      response.end();
+      return;
+    }
+
     const connection = new SseConnection(
       response,
       keys,
       display,
       streamLanguage(url),
     );
-
-    request.off("close", noteGone);
-    request.off("error", noteGone);
-
-    if (gone) {
-      connection.close();
-      return;
-    }
 
     connections.add(connection);
 
@@ -4102,10 +4765,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
    * connections it holds, and two displays holding the same devices share one
    * poll: a poll is this PC's work, and the devices are what it reads.
    */
-  async function tick(): Promise<void> {
+  async function sampleOnce(): Promise<void> {
     if (connections.size === 0) {
       return;
     }
+
+    // This PC's settings, read once for every display in the tick: which GPU
+    // answers is this machine's question, not a screen's.
+    const stored =
+      devices === undefined ? EMPTY_DEVICE_SETTINGS : await devices.read();
 
     const byDisplay = new Map<string, SseConnection[]>();
 
@@ -4135,7 +4803,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         semanticKeys: unionOfKeys(
           held.map((connection) => connection.semanticKeys),
         ),
-        assignment: await currentAssignment(display),
+        assignment: await currentAssignment(display, stored),
         ...(language === undefined ? {} : { language }),
       });
     }
@@ -4173,12 +4841,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
       const payload = JSON.stringify(
         createBatch([...cycle.entries, ...gaps], at),
       );
+      // Framed once for the group: every connection that shares this batch
+      // receives the same bytes rather than formatting its own copy.
+      const frame = formatSseEvent(SAMPLE_EVENT, payload);
 
       for (const key of cycle.unmapped) unmapped.add(key);
 
       for (const display of group.displays) {
         for (const connection of byDisplay.get(display) ?? []) {
-          connection.offer(payload);
+          connection.offer(frame);
         }
       }
     }
@@ -4189,7 +4860,28 @@ export function createHostServer(options: HostServerOptions): HostServer {
     lastUnmapped = [...unmapped].sort();
   }
 
+  /**
+   * A tick in flight makes the interval skip its next fire, so a provider that
+   * stalls cannot stack a second sample batch on the first.
+   */
+  let ticking = false;
+
+  async function tick(): Promise<void> {
+    ticking = true;
+
+    try {
+      await sampleOnce();
+    } finally {
+      // A rejected sample must not wedge the loop behind a flag nothing clears.
+      ticking = false;
+    }
+  }
+
   const timer = setInterval(() => {
+    if (ticking) {
+      return;
+    }
+
     void tick().catch(() => {
       // Provider failures are isolated; keep future cycles running.
     });
@@ -4204,6 +4896,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
     },
     close(): Promise<void> {
       clearInterval(timer);
+      // A tick in flight across `close()` would otherwise leave the flag set
+      // for the life of this closure.
+      ticking = false;
 
       for (const connection of connections) {
         connection.close();

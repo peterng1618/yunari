@@ -119,6 +119,7 @@ export function followPublished(
   // the revision comparison below reloads a display when the publish moves.
   const followsMap = page.searchParams.get("theme-source") === "map";
   let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   let last: number | undefined;
   let lastTheme: string | null | undefined;
 
@@ -192,14 +193,20 @@ export function followPublished(
       // told — every tick, because the caller is the one that knows what acting
       // on it costs.
       options.onUnreachable?.();
+    } finally {
+      // Armed by the settle, not on a fixed schedule: an interval keeps firing
+      // while a slow host still owes the last answer, stacking polls, and it
+      // keeps firing once a refusal has stopped anything from using them.
+      if (!stopped) {
+        timer = setTimeout(() => void tick(), intervalMs);
+      }
     }
   };
 
   void tick();
-  const timer = setInterval(() => void tick(), intervalMs);
 
   return () => {
     stopped = true;
-    clearInterval(timer);
+    clearTimeout(timer);
   };
 }

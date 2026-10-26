@@ -4,6 +4,7 @@ import {
   spawn,
 } from "node:child_process";
 import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
 import fs from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
@@ -13,12 +14,15 @@ import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import {
+  CATALOGUE_ORIGIN,
   cataloguePackageUrl,
   createAssetResolver,
   DASHBOARD_THEME_KIND,
   decodeBatch,
   type FabricThemeEnvelope,
+  formatSseEvent,
   SAMPLE_STREAM_PATH,
+  type SampleEntry,
 } from "@yunari/renderer-core";
 import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,10 +40,16 @@ import { createDisplayLauncher } from "./serve/display-launcher.js";
 import {
   CA_CERTIFICATE_PATH,
   createHostServer,
+  createPortListener,
   displayKeyFor,
   type HostingState,
   type HostServerOptions,
+  MAX_STREAM_CONNECTIONS,
+  MAX_STREAM_CONNECTIONS_PER_DISPLAY,
+  MAX_STREAM_KEY_BYTES,
+  MAX_STREAM_KEYS,
   MAX_THEME_UPLOAD_BYTES,
+  resolveStoreOrigin,
   type SourceRouteOptions,
 } from "./server.js";
 import { newToken } from "./session/pairing.js";
@@ -53,18 +63,22 @@ import {
 import {
   ASSIGNABLE_GROUPS,
   createDeviceSettingsStore,
+  type DeviceSettingsStore,
 } from "./settings/devices.js";
 import { createDisplaySettingsStore } from "./settings/display.js";
 import {
   createDisplayStore,
   DEFAULT_DISPLAY,
   type DisplayRecord,
+  type DisplayStore,
   hashToken,
   LOCAL_DISPLAY_ID,
 } from "./settings/displays.js";
 import { createFontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
 import type { Monitor } from "./settings/monitors.js";
+import type { KeyProtector } from "./settings/os-key-protector.js";
+import { createSecretStore } from "./settings/secret-store.js";
 import { createSourceStore, type SourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
@@ -75,11 +89,45 @@ import {
   normalizeWeatherSettings,
   type WeatherSettingsStore,
 } from "./settings/weather.js";
-import { createThemeStore, type ThemeContent } from "./themes/store.js";
+import {
+  createThemeStore,
+  type ThemeContent,
+  ThemeTooLargeError,
+} from "./themes/store.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
+import { TrashRefusal } from "./themes/trash.js";
 import { encodeThemeContent } from "./themes/wire.js";
-import { createSecureOrigin } from "./tls/authority.js";
+import {
+  certificateFingerprintSha256,
+  createSecureOrigin,
+} from "./tls/authority.js";
 import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
+
+/**
+ * The encrypted stores below use a reversible protector, so this suite never
+ * depends on DPAPI or a Linux keyring being present.
+ */
+const fakeKeyProtector: KeyProtector = {
+  available: async () => true,
+  wrap: async (key) => Uint8Array.from(key, (byte) => byte ^ 0x5a),
+  unwrap: async (wrapped) => Uint8Array.from(wrapped, (byte) => byte ^ 0x5a),
+};
+
+const secretsIn = (directory: string) =>
+  createSecretStore(directory, fakeKeyProtector);
+
+/**
+ * A partial mock, so one batch's formatting is countable without a
+ * production-only seam: every other export is the real one, and the formatter
+ * still produces the bytes the connection tests expect.
+ */
+vi.mock("@yunari/renderer-core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@yunari/renderer-core")>();
+  return {
+    ...actual,
+    formatSseEvent: vi.fn(actual.formatSseEvent),
+  };
+});
 
 /** The library is a folder, so a save is the document and its bytes (ADR-0017),
  *  plus what the client says the save is based on. */
@@ -215,12 +263,27 @@ function createPackageWithAsset(
   return { envelope, assets };
 }
 
+/** The cookie a paired display carries, in the shape `POST /api/session` sets
+ *  it and a browser sends it back. */
+const asCookie = (token: string): Record<string, string> => ({
+  cookie: `yunari_session=${encodeURIComponent(token)}`,
+});
+
+/** The media type `POST /api/session` requires, because it is the preflight
+ *  trigger that makes a cross-site `text/plain` POST impossible. */
+const JSON_HEADERS = { "content-type": "application/json" };
+
 function request(
   server: ListenableServer,
   method: string,
   urlPath: string,
   body?: Uint8Array | string,
-  options?: { remoteAddress?: string; headers?: Record<string, string> },
+  options?: {
+    remoteAddress?: string;
+    headers?: Record<string, string>;
+    /** Set for the fake socket `sessionCookie` reads `Secure` from. */
+    encrypted?: boolean;
+  },
 ): Promise<{
   status: number;
   headers: Record<string, string | string[] | undefined>;
@@ -250,9 +313,13 @@ function request(
         typeof body === "string" ? Buffer.byteLength(body) : body.byteLength,
       );
     }
-    (req as { socket: { remoteAddress: string } }).socket = {
-      remoteAddress: options?.remoteAddress ?? "127.0.0.1",
-    };
+    (req as { socket: { remoteAddress: string; encrypted?: boolean } }).socket =
+      {
+        remoteAddress: options?.remoteAddress ?? "127.0.0.1",
+        ...(options?.encrypted === undefined
+          ? {}
+          : { encrypted: options.encrypted }),
+      };
 
     const chunks: Buffer[] = [];
     let statusCode = 200;
@@ -309,11 +376,127 @@ function request(
   });
 }
 
+/**
+ * Holds a real Windows share lock on `file`: readers are allowed, deletion is
+ * refused. A Node handle cannot express this (every Node open shares delete),
+ * and only Windows refuses to unlink a file another handle holds, so callers
+ * skip on other platforms rather than mocking the removal. The same helper
+ * lives beside the settings stores it exercises.
+ */
+async function holdForReading(file: string): Promise<() => Promise<void>> {
+  const literal = file.replace(/'/g, "''");
+  const script =
+    `$f=[IO.File]::Open('${literal}','Open','Read','Read');` +
+    "[Console]::Out.WriteLine('held');[Console]::In.ReadLine()|Out-Null;" +
+    "$f.Dispose()";
+
+  const child = spawn(
+    "powershell",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    { stdio: ["pipe", "pipe", "ignore"], windowsHide: true },
+  );
+
+  await new Promise<void>((resolve, reject) => {
+    child.stdout.once("data", () => resolve());
+    child.once("error", reject);
+    child.once("exit", (code) =>
+      reject(new Error(`the lock process exited with ${String(code)}`)),
+    );
+  });
+
+  return () =>
+    new Promise<void>((resolve) => {
+      child.once("exit", () => resolve());
+      child.stdin.end("release\n");
+    });
+}
+
+/**
+ * A request whose body has begun but not finished, so the route reading it is
+ * still in flight. `started` resolves once the body has been asked for, which is
+ * after the route has claimed whatever gate it reads through.
+ */
+function pendingRequest(
+  server: ListenableServer,
+  method: string,
+  urlPath: string,
+): {
+  readonly started: Promise<void>;
+  readonly answered: Promise<{ status: number; text: string }>;
+  release(): void;
+} {
+  let begun: () => void = () => undefined;
+  const started = new Promise<void>((resolve) => {
+    begun = resolve;
+  });
+  let pushed = false;
+  let end: () => void = () => undefined;
+
+  const req = new Readable({
+    read() {
+      // One chunk, then silence: another push on every `_read` would feed the
+      // route an endless body and never hold anything still.
+      if (!pushed) {
+        pushed = true;
+        end = () => this.push(null);
+        this.push(Buffer.from([0]));
+        begun();
+      }
+    },
+  }) as unknown as http.IncomingMessage;
+
+  req.method = method;
+  req.url = urlPath;
+  req.headers = { host: "127.0.0.1:5173" };
+  (req as { socket: { remoteAddress: string } }).socket = {
+    remoteAddress: "127.0.0.1",
+  };
+
+  const chunks: Buffer[] = [];
+  let statusCode = 200;
+  let finish: (value: { status: number; text: string }) => void = () =>
+    undefined;
+  const answered = new Promise<{ status: number; text: string }>((resolve) => {
+    finish = resolve;
+  });
+
+  const res = new Writable({
+    write(chunk, _encoding, callback) {
+      chunks.push(Buffer.from(chunk));
+      callback();
+    },
+  }) as unknown as http.ServerResponse;
+
+  res.writeHead = ((status: number) => {
+    statusCode = status;
+    return res;
+  }) as unknown as typeof res.writeHead;
+
+  res.end = ((data?: unknown) => {
+    if (data) chunks.push(Buffer.from(data as string | Uint8Array));
+    finish({
+      status: statusCode,
+      text: Buffer.concat(chunks).toString("utf8"),
+    });
+    res.emit("finish");
+    return res;
+  }) as unknown as typeof res.end;
+
+  server.emit("request", req, res);
+
+  return {
+    started,
+    answered,
+    release: () => end(),
+  };
+}
+
 /** Resolves as soon as headers are written, for a stream that stays open. */
 function streamStatus(
   server: ListenableServer,
   urlPath: string,
   remoteAddress = "192.168.1.50",
+  headers: Record<string, string> = {},
 ): Promise<{ status: number; headers: Record<string, unknown> }> {
   return new Promise((resolve) => {
     const req = new Readable({
@@ -323,7 +506,7 @@ function streamStatus(
     }) as unknown as http.IncomingMessage;
     req.method = "GET";
     req.url = urlPath;
-    req.headers = {};
+    req.headers = headers;
     (req as { socket: { remoteAddress: string } }).socket = { remoteAddress };
 
     const res = new Writable({
@@ -396,6 +579,7 @@ function sampleStream(
   remoteAddress = "127.0.0.1",
   /** Called as each write lands, which is the moment a tick reached this stream. */
   onFrame: () => void = () => undefined,
+  headers: Record<string, string> = {},
 ): {
   readonly frames: () => string;
   /** Whether the host has ended this stream. */
@@ -411,7 +595,7 @@ function sampleStream(
   }) as unknown as http.IncomingMessage;
   req.method = "GET";
   req.url = urlPath;
-  req.headers = {};
+  req.headers = headers;
   (req as { socket: { remoteAddress: string } }).socket = { remoteAddress };
 
   const res = new Writable({
@@ -432,6 +616,14 @@ function sampleStream(
   };
 }
 
+/** A tick, a socket connect or a child process can outlast the 1 s default on
+ *  a box running the whole gate; the assertion is what is being proved, not
+ *  how quickly it held. */
+const waitFor = (
+  assertion: () => unknown,
+  options: { timeout?: number } = {},
+): Promise<unknown> => vi.waitFor(assertion, { timeout: 15_000, ...options });
+
 /** The newest frame's payload, or "" before the first tick reached it. */
 function lastFrame(frames: string): string {
   const data = frames.split("\n").filter((line) => line.startsWith("data: "));
@@ -443,7 +635,7 @@ function lastFrame(frames: string): string {
 async function servedCard(stream: {
   frames: () => string;
 }): Promise<string | undefined> {
-  await vi.waitFor(() => expect(lastFrame(stream.frames())).not.toBe(""));
+  await waitFor(() => expect(lastFrame(stream.frames())).not.toBe(""));
 
   const decoded = decodeBatch(lastFrame(stream.frames()));
 
@@ -454,6 +646,43 @@ async function servedCard(stream: {
   return decoded.batch.samples.find((entry) => entry.semanticKey === "gpu.temp")
     ?.sample.textValue;
 }
+
+/** The card a display's own frame names, once it names the expected one. A
+ *  frame can carry a placeholder before the tick that resolves the assignment
+ *  reaches the display, so the newest frame is not proof by itself. */
+async function servedCardEventually(
+  stream: { frames: () => string },
+  expected: string,
+): Promise<void> {
+  await waitFor(async () => expect(await servedCard(stream)).toBe(expected));
+}
+
+describe("The store origin a host will talk to", () => {
+  it("accepts the compiled catalogue origin and nothing else on the internet", () => {
+    expect(resolveStoreOrigin(CATALOGUE_ORIGIN)).toBe(CATALOGUE_ORIGIN);
+    expect(resolveStoreOrigin("http://evil.example")).toBeUndefined();
+    expect(resolveStoreOrigin("https://evil.example")).toBeUndefined();
+    expect(
+      resolveStoreOrigin("http://yunari-store.workers.dev"),
+    ).toBeUndefined();
+  });
+
+  it("accepts a loopback address as a test origin", () => {
+    expect(resolveStoreOrigin("http://127.0.0.1:8787")).toBe(
+      "http://127.0.0.1:8787",
+    );
+    expect(resolveStoreOrigin("http://localhost:8787")).toBe(
+      "http://localhost:8787",
+    );
+    expect(resolveStoreOrigin("http://192.168.1.10:8787")).toBeUndefined();
+  });
+
+  it("keeps an absent value absent", () => {
+    expect(resolveStoreOrigin(undefined)).toBeUndefined();
+    expect(resolveStoreOrigin("")).toBeUndefined();
+    expect(resolveStoreOrigin("not a url")).toBeUndefined();
+  });
+});
 
 describe("Host theme routes", () => {
   let tmpDir: string;
@@ -620,6 +849,38 @@ describe("Host theme routes", () => {
     expect(list.themes.map((entry) => entry.id)).not.toContain("oversized");
   });
 
+  it("answers a save past the size bound with 413, not a blamed request", async () => {
+    // The write cap is new, so this refusal is reachable from a save for the
+    // first time: the document is well-formed and the author has to make it
+    // smaller, which is the same 413 the GET of such a stored theme answers.
+    // A stub store rejects exactly the error the cap raises, so the route's
+    // mapping is what is under test rather than the store producing a 32 MB
+    // document per run.
+    const refusing = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      themeStore: {
+        ...createThemeStore(path.join(tmpDir, "stub")),
+        write: () => Promise.reject(new ThemeTooLargeError("living-room")),
+      },
+    });
+
+    try {
+      const refused = await request(
+        refusing.server,
+        "PUT",
+        "/api/themes/living-room",
+        themeBody(validEmptyAssetTheme),
+      );
+
+      expect(refused.status).toBe(413);
+      // The author is told the bound, which is the half a bare status lacks.
+      expect(refused.text()).toContain("33,554,432 bytes");
+    } finally {
+      await refusing.close();
+    }
+  });
+
   it("refuses a save built from a document the stored theme has moved past", async () => {
     // Two tabs open the same theme; the first one saves an edit.
     const opened = await request(
@@ -684,7 +945,7 @@ describe("Host theme routes", () => {
         assets: [
           {
             id: "badge",
-            kind: "image",
+            kind: "svg",
             path: "assets/badge.svg",
             sha256: createHash("sha256").update(bytes).digest("hex"),
           } as never,
@@ -862,6 +1123,92 @@ describe("Host theme routes", () => {
     expect([...asset.body]).toEqual([1, 2]);
     // A browser decodes an image only if the response says it is one.
     expect(asset.headers["content-type"]).toBe("font/woff2");
+    // Nothing this route answers is a document: the declared kind decided the
+    // media type, so the browser must not redecide it by sniffing.
+    expect(asset.headers["x-content-type-options"]).toBe("nosniff");
+    expect(asset.headers["content-security-policy"]).toBe(
+      "sandbox; default-src 'none'",
+    );
+  });
+
+  it("serves one declared asset by reading that asset alone", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-asset-read-"));
+    const store = createThemeStore(dir);
+    await store.write(
+      "living-room",
+      createPackageWithAsset("assets/inter-400.woff2", [1, 2]),
+    );
+    const readAsset = vi.fn((id: string, assetPath: string) =>
+      store.readAsset(id, assetPath),
+    );
+    const readEnvelope = vi.fn((id: string) => store.readEnvelope(id));
+    const read = vi.fn((id: string) => store.read(id));
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: { ...store, readAsset, readEnvelope, read },
+    });
+
+    try {
+      const asset = await request(
+        hosted.server,
+        "GET",
+        "/api/themes/living-room/assets/inter-400.woff2",
+      );
+      expect(asset.status).toBe(200);
+      expect([...asset.body]).toEqual([1, 2]);
+      expect(asset.headers["content-type"]).toBe("font/woff2");
+      // Exactly one file, named exactly as the document declares it — not the
+      // whole theme read back to pick one asset out of it.
+      expect(readAsset).toHaveBeenCalledTimes(1);
+      expect(readAsset).toHaveBeenCalledWith(
+        "living-room",
+        "assets/inter-400.woff2",
+      );
+      // The route never reads the envelope at this level: the declared path and
+      // kind come back from `readAsset` itself.
+      expect(readEnvelope).not.toHaveBeenCalled();
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("serves the theme document without reading a single asset", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-doc-read-"));
+    const store = createThemeStore(dir);
+    await store.write(
+      "living-room",
+      createPackageWithAsset("assets/inter-400.woff2", [1, 2]),
+    );
+    const readEnvelope = vi.fn((id: string) => store.readEnvelope(id));
+    const readAsset = vi.fn((id: string, assetPath: string) =>
+      store.readAsset(id, assetPath),
+    );
+    const read = vi.fn((id: string) => store.read(id));
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: { ...store, readEnvelope, readAsset, read },
+    });
+
+    try {
+      const doc = await request(
+        hosted.server,
+        "GET",
+        "/api/themes/living-room/document",
+      );
+      expect(doc.status).toBe(200);
+      expect((doc.json() as FabricThemeEnvelope).id).toBe("living-room");
+      expect(readEnvelope).toHaveBeenCalledTimes(1);
+      expect(readEnvelope).toHaveBeenCalledWith("living-room");
+      expect(readAsset).not.toHaveBeenCalled();
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("refuses undeclared and traversal-like asset paths", async () => {
@@ -879,6 +1226,10 @@ describe("Host theme routes", () => {
     await expect(
       status("/api/themes/living-room/assets/assets/missing.woff2"),
     ).resolves.toBe(404);
+    // A path under a theme the library does not hold is the same 404.
+    await expect(
+      status("/api/themes/absent/assets/assets/missing.woff2"),
+    ).resolves.toBe(404);
     // `..` cannot walk out of the package: the lookup is by declared path, so a
     // traversal decodes to something the theme does not declare.
     await expect(
@@ -891,6 +1242,56 @@ describe("Host theme routes", () => {
     await expect(
       status("/api/themes/living-room/assets/assets/.%2Fsecret"),
     ).resolves.toBe(404);
+  });
+
+  it("refuses an asset whose declared kind contradicts its extension", async () => {
+    // Import refuses this package, so the route is reached the only way a
+    // library written before that refusal can reach it: a stored record whose
+    // declaration the current validator would reject. Validation is not
+    // weakened to make this a round trip.
+    const dir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "yunari-host-mime-test-"),
+    );
+    const store = createThemeStore(dir);
+    await store.write(
+      "living-room",
+      createPackageWithAsset("assets/inter-400.woff2", [1, 2]),
+    );
+
+    let declaredPath = "";
+    const themeStore = {
+      ...store,
+      // The route takes the MIME from the kind this read answers, so a lying
+      // declaration is expressed here rather than in the folder — where the
+      // current validator would have refused it.
+      readAsset: async (_id: string, assetPath: string) =>
+        assetPath === declaredPath
+          ? { bytes: new Uint8Array([1]), kind: "image" as const }
+          : undefined,
+    };
+    const lying = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore,
+    });
+
+    try {
+      for (const assetPath of ["assets/x.html", "assets/x.js"]) {
+        declaredPath = assetPath;
+        const res = await request(
+          lying.server,
+          "GET",
+          `/api/themes/living-room/${assetPath}`,
+        );
+        // 415, not 200 with a media type the kind never declared.
+        expect(res.status).toBe(415);
+        expect(res.headers["content-type"]).toBe("text/plain; charset=utf-8");
+        expect(res.text()).toBe("That asset's kind and path disagree.");
+      }
+    } finally {
+      await lying.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("forbids PUT from non-loopback addresses (§7)", async () => {
@@ -1200,10 +1601,46 @@ describe("Host theme routes", () => {
     ]);
   });
 
+  it("refuses a second theme import while one is still arriving", async () => {
+    const first = pendingRequest(hosted.server, "POST", "/api/themes/import");
+    await first.started;
+
+    // The first body is still being read, so the one slot for a theme-sized
+    // body is held: the second caller is refused rather than queued behind it.
+    const second = await request(
+      hosted.server,
+      "POST",
+      "/api/themes/import",
+      packageBytes(validEmptyAssetTheme),
+    );
+    expect(second.status).toBe(429);
+    expect(second.text()).toBe("Another large upload is still in progress.");
+
+    // The unreadable one-byte body the first sent is its own refusal, not a 429.
+    first.release();
+    expect((await first.answered).status).toBe(400);
+
+    // The slot came back: the next import lands rather than inheriting a busy
+    // gate from a request that failed.
+    const third = await request(
+      hosted.server,
+      "POST",
+      "/api/themes/import",
+      packageBytes(validEmptyAssetTheme),
+    );
+    expect(third.status).toBe(200);
+    expect(third.json()).toEqual({ ok: true, id: "living-room" });
+  });
+
   it("imports a package's picture, and refuses one the reader will not read", async () => {
-    // A PNG, which is the only picture the library renders.
+    // A real 1×1 PNG: the thumbnail store bounds the size its header declares.
     const png = new Uint8Array([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01, 0x02,
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+      0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0xfc, 0xcf, 0xc0, 0x50,
+      0x0f, 0x00, 0x04, 0x85, 0x01, 0x80, 0x84, 0xa9, 0x8c, 0x21, 0x00, 0x00,
+      0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
     ]);
     const withPicture = await request(
       hosted.server,
@@ -1605,7 +2042,9 @@ describe("Host theme routes", () => {
   });
 
   describe("The store session routes", () => {
-    const ORIGIN = "https://store.example";
+    // A loopback test origin: the only non-catalogue address `resolveStoreOrigin`
+    // admits, and the fake Worker below intercepts every call anyway.
+    const ORIGIN = "http://127.0.0.1:8787";
     // A slash is URL-encoded on the wire, so every case that redeems this token
     // also exercises the decode.
     const SESSION_TOKEN = "session/token.value";
@@ -1667,7 +2106,7 @@ describe("Host theme routes", () => {
 
     beforeEach(async () => {
       settings = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-store-ui-"));
-      store = createStoreSessionStore(settings);
+      store = createStoreSessionStore(settings, secretsIn(settings));
       calls = [];
       verify = () =>
         json({}, { "set-auth-token": encodeURIComponent(SESSION_TOKEN) });
@@ -2035,17 +2474,22 @@ describe("Host theme routes", () => {
   });
 
   describe("The submit route", () => {
-    const ORIGIN = "https://store.example";
+    const ORIGIN = "http://127.0.0.1:8787";
     // A slash is URL-encoded on the wire, so the token path is exercised too.
     const SESSION_TOKEN = "session/token.value";
     // New documents get UUID ids; these fixtures mirror that.
     const THEME_ID = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
     const BARE_ID = "0a1b2c3d-4e5f-4a6b-8c9d-0e1f2a3b4c5d";
-    const UPLOAD_URL = `https://r2.example/packages/${THEME_ID}/1.0.0.zip`;
-    // The store's own check: a picture is any file that starts with a PNG's
-    // eight magic bytes, and a submission refuses a theme without one.
+    const UPLOAD_URL = `${ORIGIN}/api/me/uploads/5c2e9a10-3b4d-4e6f-8a90-1b2c3d4e5f60`;
+    // The store's own check: a picture is a PNG, and a submission refuses a
+    // theme without one. The header's declared size has to be within bounds.
     const PNG = new Uint8Array([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+      0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0xfc, 0xcf, 0xc0, 0x50,
+      0x0f, 0x00, 0x04, 0x85, 0x01, 0x80, 0x84, 0xa9, 0x8c, 0x21, 0x00, 0x00,
+      0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
     ]);
 
     let library: string;
@@ -2071,7 +2515,7 @@ describe("Host theme routes", () => {
       settings = await fs.mkdtemp(
         path.join(os.tmpdir(), "yunari-submit-settings-ui-"),
       );
-      session = createStoreSessionStore(settings);
+      session = createStoreSessionStore(settings, secretsIn(settings));
       calls = [];
       storedBaseline = undefined;
       storedVersion = "1.0.0";
@@ -2171,19 +2615,19 @@ describe("Host theme routes", () => {
       });
 
       // The four calls, in the order the store's own protocol requires: the
-      // baseline, the version request, the presigned PUT, the finalize.
+      // baseline, the version request, the proxied upload, the finalize.
       expect(calls.map((call) => [call.method, call.url])).toEqual([
         ["GET", `${ORIGIN}/api/me/items/${THEME_ID}/baseline`],
         ["POST", `${ORIGIN}/api/me/items/${THEME_ID}/versions`],
         ["PUT", UPLOAD_URL],
         ["POST", `${ORIGIN}/api/me/items/${THEME_ID}/versions/1.0.0/finalize`],
       ]);
-      // The session token travels on every authenticated call and on no other:
-      // the presigned PUT is the one call that must not carry it.
+      // The session token travels on all four: the upload is the Worker's own
+      // authenticated route, not a presigned R2 address.
       expect(calls.map((call) => call.authorization)).toEqual([
         `Bearer ${SESSION_TOKEN}`,
         `Bearer ${SESSION_TOKEN}`,
-        null,
+        `Bearer ${SESSION_TOKEN}`,
         `Bearer ${SESSION_TOKEN}`,
       ]);
       expect(res.text()).not.toContain(SESSION_TOKEN);
@@ -2267,9 +2711,9 @@ describe("Host theme routes", () => {
       }
     });
 
-    it("keeps the session when the presigned PUT answers 401", async () => {
+    it("spends the session when the upload route answers 401", async () => {
       await signedIn();
-      const expiredSignature = createHostServer({
+      const refused = createHostServer({
         registry: new ProviderRegistry([]),
         bundles: { player: library, editor: library },
         themeStore: createThemeStore(library),
@@ -2283,24 +2727,25 @@ describe("Host theme routes", () => {
           if (url === `${ORIGIN}/api/me/items/${THEME_ID}/versions`)
             return json(plan);
           if (url === UPLOAD_URL)
-            return new Response("Signature expired", { status: 401 });
+            return new Response("Unauthorized", { status: 401 });
           return new Response("unknown", { status: 404 });
         },
       });
 
       try {
         const res = await request(
-          expiredSignature.server,
+          refused.server,
           "POST",
           "/api/themes/submit",
           submitBody(),
         );
 
         expect(res.status).toBe(401);
-        // R2's refusal is not the session's: the author is still signed in.
-        expect(await session.read()).toBeDefined();
+        // The upload route authenticates with the session, so its 401 is the
+        // session's refusal: the next press asks for a sign-in.
+        expect(await session.read()).toBeUndefined();
       } finally {
-        await expiredSignature.close();
+        await refused.close();
       }
     });
 
@@ -2471,7 +2916,7 @@ describe("Host theme routes", () => {
       }
     });
 
-    it("answers 503 when the host has no store address", async () => {
+    it("answers 503 when the host has no usable store address", async () => {
       await signedIn();
       const saved = process.env.YUNARI_STORE_ORIGIN;
       delete process.env.YUNARI_STORE_ORIGIN;
@@ -2482,17 +2927,32 @@ describe("Host theme routes", () => {
         thumbnails: createThumbnailStore(library),
         storeSession: session,
       });
+      // A refused address reaches no request: the routes answer as if unset.
+      const refused = createHostServer({
+        registry: new ProviderRegistry([]),
+        bundles: { player: library, editor: library },
+        themeStore: createThemeStore(library),
+        thumbnails: createThumbnailStore(library),
+        storeOrigin: "https://evil.example",
+        storeSession: session,
+        fetch: async () => {
+          throw new Error("a refused origin must not be contacted");
+        },
+      });
 
       try {
-        const res = await request(
-          unaddressed.server,
-          "POST",
-          "/api/themes/submit",
-          submitBody(),
-        );
-        expect(res.status).toBe(503);
+        for (const host of [unaddressed, refused]) {
+          const res = await request(
+            host.server,
+            "POST",
+            "/api/themes/submit",
+            submitBody(),
+          );
+          expect(res.status).toBe(503);
+        }
       } finally {
         await unaddressed.close();
+        await refused.close();
         if (saved !== undefined) process.env.YUNARI_STORE_ORIGIN = saved;
       }
     });
@@ -2532,6 +2992,9 @@ describe("Host theme routes", () => {
         display: createDisplaySettingsStore(lanDir),
         fontFavorites: createFontFavoritesStore(lanDir),
         displays,
+        // `/api/host` answers a paired display its own token; this describe is
+        // where which display authenticated has to be readable.
+        host: { id: "lan-host", name: "Study PC" },
       });
       await request(
         paired.server,
@@ -2566,33 +3029,279 @@ describe("Host theme routes", () => {
       ).toBe(403);
     });
 
-    it("accepts a LAN display holding a live credential, by header or query", async () => {
+    it("accepts a LAN display holding a live credential, by header or cookie", async () => {
       const token = await pair();
       const lan = { remoteAddress: "192.168.1.50" };
 
+      // The document is what a display shows, and it stays readable with a
+      // live credential in either carrier.
       expect(
         (
-          await request(paired.server, "GET", "/api/themes", undefined, {
-            ...lan,
-            headers: { "x-yunari-session": token },
-          })
+          await request(
+            paired.server,
+            "GET",
+            "/api/themes/living-room/document",
+            undefined,
+            { ...lan, headers: { "x-yunari-session": token } },
+          )
         ).status,
       ).toBe(200);
 
-      // The stream is gated by the same check, so a query credential is accepted
-      // (EventSource cannot set headers) and a missing one is refused. The
-      // accepted stream is never awaited: it stays open by design.
+      expect(
+        (
+          await request(
+            paired.server,
+            "GET",
+            "/api/themes/living-room/document",
+            undefined,
+            { ...lan, headers: asCookie(token) },
+          )
+        ).status,
+      ).toBe(200);
+
+      // The library index and the whole-theme read (every asset base64) are
+      // this PC's editor surfaces: a paired display is refused both even with
+      // a live credential.
+      for (const path of ["/api/themes", "/api/themes/living-room"]) {
+        expect(
+          (
+            await request(paired.server, "GET", path, undefined, {
+              ...lan,
+              headers: asCookie(token),
+            })
+          ).status,
+          path,
+        ).toBe(403);
+      }
+
+      // The stream is gated by the same check. A cookie is what an EventSource
+      // carries by itself, so it opens; a query credential is refused, because
+      // that is the form this change exists to remove. The accepted stream is
+      // never awaited: it stays open by design.
+      expect(
+        (
+          await streamStatus(
+            paired.server,
+            "/ws?keys=cpu.load",
+            lan.remoteAddress,
+            asCookie(token),
+          )
+        ).status,
+      ).toBe(200);
       expect(
         (
           await streamStatus(
             paired.server,
             `/ws?keys=cpu.load&session=${encodeURIComponent(token)}`,
+            lan.remoteAddress,
           )
         ).status,
-      ).toBe(200);
+      ).toBe(403);
       expect(
         (await streamStatus(paired.server, "/ws?keys=cpu.load")).status,
       ).toBe(403);
+    });
+
+    it("keeps the theme index and a whole theme to this PC", async () => {
+      // The loopback caller is the editor, which opens, lists and saves; the
+      // two surfaces are still read freely here.
+      expect((await request(paired.server, "GET", "/api/themes")).status).toBe(
+        200,
+      );
+      expect(
+        (await request(paired.server, "GET", "/api/themes/living-room")).status,
+      ).toBe(200);
+    });
+
+    it("lets the cookie outrank a header left over from before a re-pair", async () => {
+      // A display retired and re-paired at the same origin keeps sending the
+      // token it stored first, while the exchange set a fresh cookie. Reading
+      // the header first refused that load and left the page on its failure
+      // screen until someone reloaded by hand.
+      const stale = await pair("phone");
+      const fresh = await pair("phone");
+
+      const answered = await request(
+        paired.server,
+        "GET",
+        "/api/host",
+        undefined,
+        {
+          remoteAddress: "192.168.1.50",
+          headers: { ...asCookie(fresh), "x-yunari-session": stale },
+        },
+      );
+
+      expect(answered.status).toBe(200);
+      // `/api/host` answers the calling display its own token, so which display
+      // authenticated is what the body names.
+      expect(answered.json()).toMatchObject({ token: fresh });
+    });
+
+    it("treats an empty cookie as absent, so a valid header still authenticates", async () => {
+      // `yunari_session=` is a value this host never writes, but reading it as
+      // present would shadow the header behind it and refuse a valid display.
+      const token = await pair("phone");
+
+      const answered = await request(
+        paired.server,
+        "GET",
+        "/api/host",
+        undefined,
+        {
+          remoteAddress: "192.168.1.50",
+          headers: { cookie: "yunari_session=", "x-yunari-session": token },
+        },
+      );
+
+      expect(answered.status).toBe(200);
+      expect(answered.json()).toMatchObject({ token });
+    });
+
+    it("exchanges a live token for an HttpOnly cookie and no token in the URL", async () => {
+      const token = await pair();
+      const lan = { remoteAddress: "192.168.1.50" };
+
+      const answer = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        JSON.stringify({ token }),
+        { ...lan, headers: JSON_HEADERS },
+      );
+
+      expect(answer.status).toBe(302);
+      expect(answer.headers.location).toBe("/");
+      const cookie = String(answer.headers["set-cookie"]);
+      expect(cookie).toContain(`yunari_session=${encodeURIComponent(token)}`);
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("SameSite=Strict");
+      expect(cookie).toContain("Path=/");
+      // A display is a fixed appliance: without a lifetime the cookie dies with
+      // the browser and the page cannot authenticate after a reboot.
+      expect(cookie).toContain("Max-Age=34560000");
+      expect(cookie).not.toContain("Secure");
+      expect(JSON.stringify(answer.body)).not.toContain(token);
+
+      // The stored-and-reopened flow: the browser keeps the cookie and a later
+      // request with no header authenticates. The unit harness plays the
+      // browser's jar here rather than a second cookie store.
+      const reopened = await request(
+        paired.server,
+        "GET",
+        "/api/published",
+        undefined,
+        { ...lan, headers: asCookie(token) },
+      );
+      expect(reopened.status).toBe(200);
+    });
+
+    it("adds Secure only on a TLS connection", async () => {
+      const token = await pair();
+      const lan = { remoteAddress: "192.168.1.50" };
+
+      const tls = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        JSON.stringify({ token }),
+        { ...lan, headers: JSON_HEADERS, encrypted: true },
+      );
+
+      expect(tls.status).toBe(302);
+      expect(String(tls.headers["set-cookie"])).toContain("; Secure");
+    });
+
+    it("refuses a non-JSON body, which a cross-site page could send without a preflight", async () => {
+      const token = await pair();
+
+      const plain = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        JSON.stringify({ token }),
+        {
+          remoteAddress: "192.168.1.50",
+          headers: { "content-type": "text/plain" },
+        },
+      );
+
+      expect(plain.status).toBe(415);
+      expect(plain.headers["set-cookie"]).toBeUndefined();
+      expect(plain.headers["cache-control"]).toBe("no-store");
+    });
+
+    it("answers a fixed message for a malformed JSON body", async () => {
+      const token = `kkkkkkkkkk${newToken()}`;
+
+      const answer = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        token,
+        {
+          remoteAddress: "192.168.1.50",
+          headers: JSON_HEADERS,
+        },
+      );
+
+      expect(answer.status).toBe(400);
+      expect(answer.text()).toBe("That request body is not valid JSON.");
+      expect(answer.text()).not.toContain("kkkkkkkkkk");
+      expect(answer.headers["cache-control"]).toBe("no-store");
+    });
+
+    it("passes through the bound's own refusal for an oversized body", async () => {
+      // Swallowing this into the parse catch reported a body over the limit as
+      // malformed JSON, which hides what actually happened.
+      const answer = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        `{"token":"${"x".repeat(64 * 1024)}"}`,
+        { remoteAddress: "192.168.1.50", headers: JSON_HEADERS },
+      );
+
+      expect(answer.status).toBe(400);
+      expect(answer.text()).toBe("That request body is too large.");
+      expect(answer.headers["set-cookie"]).toBeUndefined();
+      expect(answer.headers["cache-control"]).toBe("no-store");
+    });
+
+    it("answers 401 and sets no cookie for a token no display holds", async () => {
+      const answer = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        JSON.stringify({ token: newToken() }),
+        { remoteAddress: "192.168.1.50", headers: JSON_HEADERS },
+      );
+
+      expect(answer.status).toBe(401);
+      expect(answer.headers["set-cookie"]).toBeUndefined();
+    });
+
+    it("refuses a query credential on the poll and accepts the cookie", async () => {
+      const token = await pair();
+      const lan = { remoteAddress: "192.168.1.50" };
+
+      const query = await request(
+        paired.server,
+        "GET",
+        `/api/published?session=${encodeURIComponent(token)}`,
+        undefined,
+        lan,
+      );
+      expect(query.status).toBe(403);
+
+      const cookie = await request(
+        paired.server,
+        "GET",
+        "/api/published",
+        undefined,
+        { ...lan, headers: asCookie(token) },
+      );
+      expect(cookie.status).toBe(200);
     });
 
     it("lets a paired display read this PC's preferences, not change them", async () => {
@@ -2910,6 +3619,68 @@ describe("Host theme routes", () => {
       }
     });
 
+    it("answers a paired display its own token, and only to it", async () => {
+      build({ host: record, displays });
+
+      const kitchen = newToken();
+      const hallway = newToken();
+      await displays.create("Kitchen phone", kitchen);
+      await displays.create("Hallway phone", hallway);
+
+      // The cookie is HttpOnly and the URL carries no token, so this answer is
+      // what lets a newly paired display store a re-find credential.
+      const answered = await request(
+        hosted.server,
+        "GET",
+        "/api/host",
+        undefined,
+        {
+          remoteAddress: "192.168.1.50",
+          headers: asCookie(kitchen),
+        },
+      );
+
+      expect(answered.json()).toMatchObject({ token: kitchen });
+      // A different display's credential, and its hash, are not in the answer.
+      expect(answered.text()).not.toContain(hallway);
+      expect(answered.text()).not.toContain(hashToken(hallway));
+    });
+
+    it("answers no token to a loopback caller, even one carrying a header", async () => {
+      build({ host: record, displays });
+
+      const token = newToken();
+      await displays.create("Kitchen phone", token);
+
+      const answered = await request(
+        hosted.server,
+        "GET",
+        "/api/host",
+        undefined,
+        { headers: { "x-yunari-session": token } },
+      );
+
+      expect(answered.json()).not.toHaveProperty("token");
+    });
+
+    it("answers no token for a credential no display holds", async () => {
+      build({ host: record, displays });
+
+      const answered = await request(
+        hosted.server,
+        "GET",
+        "/api/host",
+        undefined,
+        {
+          remoteAddress: "192.168.1.50",
+          headers: asCookie(newToken()),
+        },
+      );
+
+      expect(answered.status).toBe(200);
+      expect(answered.json()).not.toHaveProperty("token");
+    });
+
     it("answers the port it is actually listening on, not one it was given", async () => {
       // Two sources could be mistaken for the port — the binding's state and the
       // port the host was asked to take — so both are made to differ from the
@@ -3166,21 +3937,18 @@ describe("A display's credential outlives the host that minted it", () => {
     await first.close();
 
     // A second host, over the same settings directory and nothing else: the
-    // credential is the whole of what the phone has.
+    // credential is the whole of what the phone has. The document is the
+    // display's own read; the library index is loopback-only now.
     const second = await launch();
     const withToken = await request(
       second.server,
       "GET",
-      "/api/themes",
+      "/api/themes/living-room/document",
       undefined,
       { ...LAN, headers: { "x-yunari-session": token } },
     );
     expect(withToken.status).toBe(200);
-    expect(
-      (withToken.json() as { themes: readonly { id: string }[] }).themes.map(
-        (theme) => theme.id,
-      ),
-    ).toEqual(["living-room"]);
+    expect((withToken.json() as { id: string }).id).toBe("living-room");
   });
 
   it("refuses a token that no display holds", async () => {
@@ -3755,6 +4523,49 @@ describe("A local monitor is specified rather than paired", () => {
     // Written only if the next read would find it: a record the file drops is a
     // display that disappears, which is `vg-616`'s class of bug.
     expect(await listed()).toEqual([]);
+  });
+
+  it("answers a display-store failure with a fixed sentence and no path", async () => {
+    const failing = host({
+      displays: {
+        ...displays,
+        createLocal: () =>
+          Promise.reject(
+            new Error(
+              `EACCES: permission denied, open '${dir}\\displays.json'`,
+            ),
+          ),
+      },
+    });
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    try {
+      const refused = await request(
+        failing.server,
+        "POST",
+        "/api/displays",
+        json({
+          label: "Left screen",
+          monitor: { deviceName: "\\\\.\\DISPLAY2" },
+        }),
+      );
+
+      expect(refused.status).toBe(500);
+      expect(refused.text()).toBe("The host could not add that display.");
+      // The reason named this machine's file; only the console keeps it.
+      expect(refused.text()).not.toContain(dir);
+      expect(logged).toHaveBeenCalled();
+
+      // The listener is still there for the next request.
+      expect((await request(failing.server, "GET", "/api/health")).status).toBe(
+        200,
+      );
+    } finally {
+      logged.mockRestore();
+      await failing.close();
+    }
   });
 
   it("answers what is attached, for the owner to pick from", async () => {
@@ -4399,6 +5210,171 @@ describe("A display with no camera pairs by typing the one-time code", () => {
     // The page is the exchange's only client: nothing else it does reads the
     // host, so it is the one document an unpaired device may have.
     expect(answer.text()).toContain("/api/pairing/claim");
+  });
+});
+
+describe("A loopback admin request must prove it is same-origin (§0116)", () => {
+  let dir: string;
+  let hosted: ReturnType<typeof createHostServer>;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-loopback-origin-"));
+    hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: createThemeStore(dir),
+      displays: createDisplayStore(dir),
+      pairingCodes: createPairingCodeStore({ wait: async () => {} }),
+      host: { id: "3f9a1c0b7d2e4a68", name: "Study PC" },
+    });
+  });
+
+  afterEach(async () => {
+    await hosted.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("refuses a rebound Host on a loopback admin route", async () => {
+    const answer = await request(
+      hosted.server,
+      "GET",
+      "/api/pairing/code",
+      undefined,
+      {
+        remoteAddress: "127.0.0.1",
+        headers: { host: "evil.example:5227" },
+      },
+    );
+    expect(answer.status).toBe(403);
+    expect(answer.text()).toBe("That request is from another origin.");
+  });
+
+  it("refuses another page's Origin even when the Host says localhost", async () => {
+    const answer = await request(
+      hosted.server,
+      "GET",
+      "/api/pairing/code",
+      undefined,
+      {
+        remoteAddress: "127.0.0.1",
+        headers: { host: "localhost:5227", origin: "https://evil.example" },
+      },
+    );
+    expect(answer.status).toBe(403);
+    expect(answer.text()).toBe("That request is from another origin.");
+  });
+
+  it("still serves localhost, 127.0.0.1 and [::1]", async () => {
+    for (const host of ["localhost:5227", "127.0.0.1:5227", "[::1]:5227"]) {
+      expect(
+        (
+          await request(hosted.server, "GET", "/api/pairing/code", undefined, {
+            remoteAddress: "127.0.0.1",
+            headers: { host },
+          })
+        ).status,
+        host,
+      ).toBe(200);
+    }
+  });
+
+  it("leaves the cross-origin /api/host discovery route alone", async () => {
+    expect(
+      (
+        await request(hosted.server, "GET", "/api/host", undefined, {
+          remoteAddress: "127.0.0.1",
+          headers: { host: "evil.example:5227" },
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  it("does not apply to a non-loopback peer", async () => {
+    const shown = await request(hosted.server, "GET", "/api/pairing/code");
+    const { code } = shown.json() as { code: string };
+
+    const claimed = await request(
+      hosted.server,
+      "POST",
+      "/api/pairing/claim",
+      JSON.stringify({ code, label: "Kitchen tablet" }),
+      {
+        remoteAddress: "192.168.1.50",
+        headers: { host: "192.168.1.50:5227" },
+      },
+    );
+
+    // `isForeignOrigin` is true here, because the Host is not a loopback name;
+    // the 200 is the loopback-peer condition doing its work, not the route
+    // answering anyway.
+    expect(claimed.status).toBe(200);
+  });
+});
+
+describe("Import and health keep their detail on this PC", () => {
+  let dir: string;
+  let hosted: ReturnType<typeof createHostServer>;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-loopback-surface-"));
+    hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: createThemeStore(dir),
+    });
+  });
+
+  afterEach(async () => {
+    await hosted.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("refuses theme import from another origin even on loopback", async () => {
+    // The central guard answers this one; the branch check is defence in depth.
+    const answer = await request(
+      hosted.server,
+      "POST",
+      "/api/themes/import",
+      undefined,
+      {
+        headers: { host: "127.0.0.1:5173", origin: "https://evil.example" },
+      },
+    );
+    expect(answer.status).toBe(403);
+  });
+
+  it("refuses pairing from another origin even on loopback", async () => {
+    // Already the central guard's case, pinned so a refactor cannot lose it.
+    const answer = await request(
+      hosted.server,
+      "POST",
+      "/api/pairing/sessions",
+      undefined,
+      {
+        headers: { host: "127.0.0.1:5173", origin: "https://evil.example" },
+      },
+    );
+    expect(answer.status).toBe(403);
+  });
+
+  it("answers a LAN peer's health with only ok", async () => {
+    const answer = await request(
+      hosted.server,
+      "GET",
+      "/api/health",
+      undefined,
+      {
+        remoteAddress: "192.168.1.50",
+        headers: { host: "192.168.1.50:5173" },
+      },
+    );
+    expect(answer.status).toBe(200);
+    expect(answer.json()).toEqual({ ok: true });
+  });
+
+  it("keeps the health detail for a loopback peer", async () => {
+    const answer = await request(hosted.server, "GET", "/api/health");
+    expect(answer.json()).toMatchObject({ displays: 0, polling: [] });
   });
 });
 
@@ -5069,7 +6045,7 @@ describe("Credential routes", () => {
     createHostServer({
       registry: new ProviderRegistry([]),
       bundles: { player: tmpDir, editor: tmpDir },
-      credentials: createCredentialStore(tmpDir),
+      credentials: createCredentialStore(tmpDir, secretsIn(tmpDir)),
       knownCredentials: known,
       ...extra,
     });
@@ -5126,7 +6102,9 @@ describe("Credential routes", () => {
     );
 
     expect(put.status).toBe(403);
-    expect(put.text()).toBe("Credentials are not available to another page.");
+    // The same-origin guard ahead of dispatch answers first (ADR-0116); the
+    // route keeps its own refusal behind it.
+    expect(put.text()).toBe("That request is from another origin.");
     const read = await rows();
     expect(read).toEqual([
       expect.objectContaining({ id: "demo", set: false }),
@@ -5522,7 +6500,7 @@ describe("A theme's own device answers", () => {
 
   /** Waits for a tick to serve this PC the assignment the case expects. */
   async function serves(expected: DeviceAssignment): Promise<void> {
-    await vi.waitFor(() => expect(echo.assignments.at(-1)).toEqual(expected));
+    await waitFor(() => expect(echo.assignments.at(-1)).toEqual(expected));
   }
 
   beforeEach(async () => {
@@ -5762,7 +6740,7 @@ describe("A theme's own device answers", () => {
     );
     await request(hosted.server, "PUT", "/api/devices", json({ assigned }));
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const served = echo.assignments.at(-1) as
         | Readonly<Record<string, unknown>>
         | undefined;
@@ -5811,8 +6789,10 @@ describe("The assignment a display is served", () => {
       here: sampleStream(hosted.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`),
       there: sampleStream(
         hosted.server,
-        `${SAMPLE_STREAM_PATH}?keys=gpu.temp&session=${encodeURIComponent(token)}`,
+        `${SAMPLE_STREAM_PATH}?keys=gpu.temp`,
         LAN.remoteAddress,
+        undefined,
+        asCookie(token),
       ),
     };
   }
@@ -5852,8 +6832,8 @@ describe("The assignment a display is served", () => {
 
     const { here, there } = streams(await paired());
 
-    expect(await servedCard(here)).toBe("gpu-0");
-    expect(await servedCard(there)).toBe("gpu-1");
+    await servedCardEventually(here, "gpu-0");
+    await servedCardEventually(there, "gpu-1");
   });
 
   it("falls back to the global device settings where a display answered nothing", async () => {
@@ -5861,8 +6841,8 @@ describe("The assignment a display is served", () => {
 
     const { here, there } = streams(await paired());
 
-    expect(await servedCard(here)).toBe("gpu-9");
-    expect(await servedCard(there)).toBe("gpu-9");
+    await servedCardEventually(here, "gpu-9");
+    await servedCardEventually(there, "gpu-9");
   });
 
   it("does not leak a deleted display's answers to another display", async () => {
@@ -5887,7 +6867,7 @@ describe("The assignment a display is served", () => {
       await activeTheme.read("kitchen-tablet", async () => true),
     ).toBeUndefined();
     // And the display still here is served exactly what it was.
-    expect(await servedCard(here)).toBe("gpu-0");
+    await servedCardEventually(here, "gpu-0");
   });
 
   it("serves the answer the default display holds for the theme being shown", async () => {
@@ -5899,8 +6879,8 @@ describe("The assignment a display is served", () => {
 
     const { here, there } = streams(await paired());
 
-    expect(await servedCard(here)).toBe("gpu-7");
-    expect(await servedCard(there)).toBe("gpu-7");
+    await servedCardEventually(here, "gpu-7");
+    await servedCardEventually(there, "gpu-7");
   });
 
   it("samples once per distinct assignment, not once per connection", async () => {
@@ -5931,20 +6911,22 @@ describe("The assignment a display is served", () => {
     );
     const three = sampleStream(
       hosted.server,
-      `${SAMPLE_STREAM_PATH}?keys=gpu.temp&session=${encodeURIComponent(token)}`,
+      `${SAMPLE_STREAM_PATH}?keys=gpu.temp`,
       LAN.remoteAddress,
+      undefined,
+      asCookie(token),
     );
 
     // Every display served before any gap is read: a tick that has not yet seen
     // the third connection polls one group instead of two, and its gap is the
     // ramp-up rather than the property. Counting starts once all three are in.
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(one.frames().length).toBeGreaterThan(0);
       expect(two.frames().length).toBeGreaterThan(0);
       expect(three.frames().length).toBeGreaterThan(0);
     });
     polls.length = 0;
-    await vi.waitFor(() => expect(polls.length).toBeGreaterThanOrEqual(6));
+    await waitFor(() => expect(polls.length).toBeGreaterThanOrEqual(6));
     const perTick = polls
       .slice(1)
       .map((count, index) => count - (polls[index] ?? count));
@@ -5955,9 +6937,9 @@ describe("The assignment a display is served", () => {
     expect(perTick.slice(-3)).toEqual([2, 2, 2]);
 
     // And each connection is offered the payload its own assignment produced.
-    expect(await servedCard(one)).toBe("gpu-0");
-    expect(await servedCard(two)).toBe("gpu-0");
-    expect(await servedCard(three)).toBe("gpu-1");
+    await servedCardEventually(one, "gpu-0");
+    await servedCardEventually(two, "gpu-0");
+    await servedCardEventually(three, "gpu-1");
   });
 
   it("passes a connection's declared language into that display's ask", async () => {
@@ -5966,14 +6948,14 @@ describe("The assignment a display is served", () => {
       `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=de-DE`,
     );
 
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(echo.contexts.at(-1)).toMatchObject({ language: "de-DE" }),
     );
   });
 
   it("lets the newest connection's language speak for the display", async () => {
     sampleStream(hosted.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=en`);
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(echo.contexts.at(-1)).toMatchObject({ language: "en" }),
     );
 
@@ -5982,7 +6964,7 @@ describe("The assignment a display is served", () => {
       `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=de-DE`,
     );
 
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(echo.contexts.at(-1)).toMatchObject({ language: "de-DE" }),
     );
   });
@@ -6000,7 +6982,7 @@ describe("The assignment a display is served", () => {
       `${SAMPLE_STREAM_PATH}?keys=gpu.temp&lang=${tag}`,
     );
 
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(echo.contexts.at(-1)).toMatchObject({ language: tag }),
     );
   });
@@ -6021,7 +7003,7 @@ describe("The assignment a display is served", () => {
       expect(answer.status).toBe(200);
     }
 
-    await vi.waitFor(() => expect(echo.contexts.length).toBeGreaterThan(0));
+    await waitFor(() => expect(echo.contexts.length).toBeGreaterThan(0));
     expect(echo.contexts.at(-1)).not.toHaveProperty("language");
   });
 });
@@ -6108,7 +7090,7 @@ describe("A display's language in the served payload", () => {
       `${SAMPLE_STREAM_PATH}?keys=${keys}&display=${wall.id}&lang=en`,
     );
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(servedSample(german, "weather.condition")?.textValue).toBe(
         "Bedeckt",
       );
@@ -6120,6 +7102,275 @@ describe("A display's language in the served payload", () => {
     // The words differ; the measurement does not.
     expect(servedSample(german, "weather.temp")?.value).toBe(11.3);
     expect(servedSample(english, "weather.temp")?.value).toBe(11.3);
+  });
+});
+
+/**
+ * A provider whose every `sample` stays open until the case settles it, so a
+ * tick can be held in flight across the interval that would start the next.
+ */
+function gatedProvider(): {
+  readonly provider: SensorProvider;
+  readonly samples: () => number;
+  readonly release: () => void;
+  readonly fail: (reason: Error) => void;
+} {
+  let calls = 0;
+  const held: Array<{
+    readonly resolve: (entries: readonly SampleEntry[]) => void;
+    readonly reject: (reason: Error) => void;
+  }> = [];
+
+  return {
+    provider: {
+      id: "gated",
+      label: "gated",
+      describe: () =>
+        Promise.resolve([
+          {
+            sensorId: "gated:gpu.temp",
+            semanticKey: "gpu.temp",
+            label: "GPU",
+            tier: "baseline" as const,
+          },
+        ]),
+      sample(): Promise<readonly SampleEntry[]> {
+        calls += 1;
+
+        return new Promise((resolve, reject) => {
+          held.push({ resolve, reject });
+        });
+      },
+      health: () => ({ available: true }),
+    },
+    samples: () => calls,
+    release: () => {
+      for (const one of held.splice(0)) one.resolve([]);
+    },
+    fail: (reason) => {
+      for (const one of held.splice(0)) one.reject(reason);
+    },
+  };
+}
+
+/**
+ * A tick is this PC's work, not the connections': a slow one must not let the
+ * next interval pile a second batch on top, and the device settings it resolves
+ * are the same for every display, so a tick reads them once.
+ */
+describe("One tick at a time", () => {
+  let dir: string;
+  let hosted: ReturnType<typeof createHostServer> | undefined;
+
+  const sleep = (ms: number): Promise<void> =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+  /** A device store that counts every read a tick makes. */
+  function countingDevices(): {
+    readonly store: DeviceSettingsStore;
+    readonly reads: () => number;
+  } {
+    const store = createDeviceSettingsStore(dir);
+    let read = 0;
+
+    return {
+      store: {
+        ...store,
+        async read() {
+          read += 1;
+          return store.read();
+        },
+      },
+      reads: () => read,
+    };
+  }
+
+  function start(
+    gated: ReturnType<typeof gatedProvider>,
+    options: {
+      readonly devices?: DeviceSettingsStore;
+      readonly displays?: DisplayStore;
+      /** Real cadence, unless a case drives the clock itself. */
+      readonly intervalMs?: number;
+    } = {},
+  ): ReturnType<typeof createHostServer> {
+    hosted = createHostServer({
+      registry: new ProviderRegistry([gated.provider]),
+      bundles: { player: dir, editor: dir },
+      ...(options.devices === undefined ? {} : { devices: options.devices }),
+      ...(options.displays === undefined ? {} : { displays: options.displays }),
+      sampleIntervalMs: options.intervalMs ?? 10,
+    });
+
+    return hosted;
+  }
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-single-tick-"));
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await hosted?.close();
+    hosted = undefined;
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("drops the fires that land while one tick is in flight, rather than queueing them", async () => {
+    vi.useFakeTimers();
+    const gated = gatedProvider();
+    const host = start(gated, { intervalMs: 200 });
+
+    sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
+    // Let the stream's connection be added before the clock moves.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The first fire starts the tick, which the provider holds open.
+    await vi.advanceTimersByTimeAsync(200);
+    expect(gated.samples()).toBe(1);
+
+    // Three more fires with the tick still in flight: each is dropped.
+    await vi.advanceTimersByTimeAsync(600);
+    expect(gated.samples()).toBe(1);
+
+    // Settling the held tick must not replay the dropped fires. A queue would
+    // start the next sample in this same microtask chain; a drop waits for the
+    // next fire, which the clock has not reached yet.
+    gated.release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(gated.samples()).toBe(1);
+
+    // One interval later there is a fire, and it samples once more.
+    await vi.advanceTimersByTimeAsync(200);
+    expect(gated.samples()).toBe(2);
+    gated.release();
+  });
+
+  it("samples again on the interval after the stalled tick settles", async () => {
+    vi.useFakeTimers();
+    const gated = gatedProvider();
+    const host = start(gated, { intervalMs: 200 });
+
+    sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
+    await vi.advanceTimersByTimeAsync(0);
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(gated.samples()).toBe(1);
+
+    gated.release();
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(gated.samples()).toBe(2);
+    gated.release();
+  });
+
+  it("formats one frame per batch, however many connections share it", async () => {
+    vi.useFakeTimers();
+    const gated = gatedProvider();
+    const host = start(gated, { intervalMs: 200 });
+
+    // Both connections are the local display asking the same keys, so a tick
+    // builds one batch for the two of them.
+    const first = sampleStream(
+      host.server,
+      `${SAMPLE_STREAM_PATH}?keys=gpu.temp`,
+    );
+    const second = sampleStream(
+      host.server,
+      `${SAMPLE_STREAM_PATH}?keys=gpu.temp`,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    const format = vi.mocked(formatSseEvent);
+    format.mockClear();
+
+    await vi.advanceTimersByTimeAsync(200);
+    gated.release();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(format).toHaveBeenCalledTimes(1);
+    // The same frame text reached both, byte for byte.
+    expect(first.frames()).toContain("event: samples");
+    expect(second.frames()).toBe(first.frames());
+
+    // The next tick is a new batch, and formats again.
+    await vi.advanceTimersByTimeAsync(200);
+    gated.release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(format).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads devices once per tick however many displays ask", async () => {
+    const counted = countingDevices();
+    const gated = gatedProvider();
+    const displays = createDisplayStore(dir);
+    const tokens: string[] = [];
+
+    for (const name of ["Kitchen", "Hall", "Attic"]) {
+      const token = newToken();
+      await displays.create(name, token);
+      tokens.push(token);
+    }
+
+    const host = start(gated, { devices: counted.store, displays });
+
+    sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
+    for (const token of tokens) {
+      sampleStream(
+        host.server,
+        `${SAMPLE_STREAM_PATH}?keys=gpu.temp`,
+        "192.168.1.50",
+        undefined,
+        asCookie(token),
+      );
+    }
+
+    // The tick has resolved all four displays by the time it samples.
+    await waitFor(() => expect(gated.samples()).toBeGreaterThanOrEqual(1));
+
+    expect(counted.reads()).toBe(1);
+    gated.release();
+  });
+
+  it("reads devices zero times when no display is connected", async () => {
+    const counted = countingDevices();
+    start(gatedProvider(), { devices: counted.store });
+
+    await sleep(50);
+
+    expect(counted.reads()).toBe(0);
+  });
+
+  it("releases the guard when a tick's sample rejects", async () => {
+    const gated = gatedProvider();
+    const host = start(gated);
+
+    sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
+
+    await waitFor(() => expect(gated.samples()).toBe(1));
+    gated.fail(new Error("provider stalled"));
+
+    // The rejection ended that tick; the next interval must sample again
+    // rather than leave the loop wedged behind a flag nothing cleared.
+    await waitFor(() => expect(gated.samples()).toBeGreaterThanOrEqual(2));
+    gated.release();
+  });
+
+  it("samples no more once closed", async () => {
+    const gated = gatedProvider();
+    const host = start(gated);
+
+    sampleStream(host.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`);
+    await waitFor(() => expect(gated.samples()).toBe(1));
+
+    gated.release();
+    await host.close();
+    hosted = undefined;
+
+    const before = gated.samples();
+    await sleep(50);
+
+    expect(gated.samples()).toBe(before);
   });
 });
 
@@ -6185,12 +7436,177 @@ it("does not keep a connection whose client left while its display was resolved"
 
     // Ended is what proves the guard ran — nothing else closes a connection
     // that was never added.
-    await vi.waitFor(() => expect(stream.ended()).toBe(true));
+    await waitFor(() => expect(stream.ended()).toBe(true));
     expect(hosted.connectionCount).toBe(0);
   } finally {
     await hosted.close();
     await fs.rm(dir, { recursive: true, force: true });
   }
+});
+
+describe("The sample stream is bounded", () => {
+  let dir: string;
+  let displays: ReturnType<typeof createDisplayStore>;
+  let hosted: ReturnType<typeof createHostServer>;
+
+  /** Pairs a display and answers the credential its stream has to carry. */
+  async function pair(label: string): Promise<string> {
+    const token = newToken();
+    await displays.create(label, token);
+    return token;
+  }
+
+  const STREAM = `${SAMPLE_STREAM_PATH}?keys=cpu.load`;
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-stream-cap-"));
+    displays = createDisplayStore(dir);
+    hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      displays,
+    });
+  });
+
+  afterEach(async () => {
+    await hosted.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("refuses a request that asks for more keys than a stream may carry", async () => {
+    const keys = Array.from(
+      { length: MAX_STREAM_KEYS + 1 },
+      (_, index) => `k${index}`,
+    ).join(",");
+
+    const answer = await request(
+      hosted.server,
+      "GET",
+      `${SAMPLE_STREAM_PATH}?keys=${keys}`,
+    );
+
+    expect(answer.status).toBe(400);
+    // Refused before a connection existed, which is the point: a stream held
+    // by a request that has already been told no is a stream nobody closes.
+    expect(hosted.connectionCount).toBe(0);
+  });
+
+  it("refuses a key longer than a stream key may be", async () => {
+    const key = "k".repeat(MAX_STREAM_KEY_BYTES + 1);
+
+    const answer = await request(
+      hosted.server,
+      "GET",
+      `${SAMPLE_STREAM_PATH}?keys=${key}`,
+    );
+
+    expect(answer.status).toBe(400);
+    expect(hosted.connectionCount).toBe(0);
+  });
+
+  it("refuses the connection past the total it will stream to", async () => {
+    // Every display but the last is filled to its own cap, so the refusal can
+    // only be the total: the sixty-fifth names a display holding none.
+    const tokens: string[] = [];
+    for (
+      let display = 0;
+      display < MAX_STREAM_CONNECTIONS / MAX_STREAM_CONNECTIONS_PER_DISPLAY;
+      display += 1
+    ) {
+      tokens.push(await pair(`display-${display}`));
+    }
+    const ninth = await pair("display-9");
+
+    for (const [index, token] of tokens.entries()) {
+      for (
+        let connection = 0;
+        connection < MAX_STREAM_CONNECTIONS_PER_DISPLAY;
+        connection += 1
+      ) {
+        // Each display is a LAN client, so its credential is what resolves it;
+        // a loopback stream would resolve to this PC and share one slot count.
+        sampleStream(
+          hosted.server,
+          STREAM,
+          "192.168.1.50",
+          undefined,
+          asCookie(token),
+        );
+      }
+      // Sixty-four sockets open against a loaded box; the 1 s default expires
+      // a few connects short and reports a cap failure that is not one.
+      await waitFor(
+        () =>
+          expect(hosted.connectionCount).toBe(
+            (index + 1) * MAX_STREAM_CONNECTIONS_PER_DISPLAY,
+          ),
+        { timeout: 15_000 },
+      );
+    }
+
+    expect(hosted.connectionCount).toBe(MAX_STREAM_CONNECTIONS);
+    expect(
+      (
+        await streamStatus(
+          hosted.server,
+          STREAM,
+          "192.168.1.50",
+          asCookie(ninth),
+        )
+      ).status,
+    ).toBe(429);
+  });
+
+  it("refuses one display's ninth stream while another display may still open one", async () => {
+    const busy = await pair("busy");
+    const other = await pair("other");
+
+    for (
+      let connection = 0;
+      connection < MAX_STREAM_CONNECTIONS_PER_DISPLAY;
+      connection += 1
+    ) {
+      // A LAN client, so the credential resolves the display these are counted
+      // against rather than resolving every one to this PC.
+      sampleStream(
+        hosted.server,
+        STREAM,
+        "192.168.1.50",
+        undefined,
+        asCookie(busy),
+      );
+    }
+    await waitFor(
+      () =>
+        expect(hosted.connectionCount).toBe(MAX_STREAM_CONNECTIONS_PER_DISPLAY),
+      { timeout: 15_000 },
+    );
+
+    expect(
+      (
+        await streamStatus(
+          hosted.server,
+          STREAM,
+          "192.168.1.50",
+          asCookie(busy),
+        )
+      ).status,
+    ).toBe(429);
+
+    // The per-display cap is separate from the total: one display cannot take
+    // every slot, and refusing it must not refuse anyone else.
+    expect(
+      (
+        await streamStatus(
+          hosted.server,
+          STREAM,
+          "192.168.1.50",
+          asCookie(other),
+        )
+      ).status,
+    ).toBe(200);
+    expect(hosted.connectionCount).toBe(MAX_STREAM_CONNECTIONS_PER_DISPLAY + 1);
+  });
 });
 
 describe("A bundle 404 names the cause it can prove", () => {
@@ -6284,6 +7700,357 @@ describe("A path the player does not declare is not the player", () => {
       // Both answers are the honest 404, not a build hint that is not true.
       const miss = await request(hosted.server, "GET", "/play");
       expect(miss.text()).toBe("Not found.");
+    } finally {
+      await hosted.close();
+    }
+  });
+});
+
+describe("A bundle is build output: no links, and cacheable files", () => {
+  const dirs: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(
+      dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    );
+  });
+
+  async function bundle(): Promise<{
+    readonly dir: string;
+    readonly hosted: ReturnType<typeof createHostServer>;
+  }> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-static-"));
+    dirs.push(dir);
+    await fs.mkdir(path.join(dir, "assets"));
+    await fs.writeFile(
+      path.join(dir, "assets", "app.js"),
+      "export const answer = 42;",
+    );
+    await fs.writeFile(path.join(dir, "index.html"), "<!doctype html><title>x");
+
+    return {
+      dir,
+      hosted: createHostServer({
+        registry: new ProviderRegistry([]),
+        bundles: { player: dir, editor: dir },
+      }),
+    };
+  }
+
+  it("serves a regular file and refuses a link, even one pointing inside", async () => {
+    const { dir, hosted } = await bundle();
+
+    try {
+      expect(
+        (await request(hosted.server, "GET", "/assets/app.js")).status,
+      ).toBe(200);
+
+      // A build writes files, not links: the target is inside the root and the
+      // link is still refused, because the realpath cannot be trusted to say
+      // what a later swap would point at.
+      await fs.symlink(
+        path.join(dir, "assets", "app.js"),
+        path.join(dir, "assets", "linked.js"),
+      );
+      expect(
+        (await request(hosted.server, "GET", "/assets/linked.js")).status,
+      ).toBe(404);
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("refuses a dotfile instead of falling back to the document", async () => {
+    const { dir, hosted } = await bundle();
+    await fs.writeFile(path.join(dir, ".env"), "SECRET=1");
+
+    try {
+      // `/.env` has no extension, which is the fallback's shape; the dotfile
+      // rule has to win, or the entry document would answer it.
+      expect((await request(hosted.server, "GET", "/.env")).status).toBe(404);
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers an etag, and 304 with no body for a matching If-None-Match", async () => {
+    const { hosted } = await bundle();
+
+    try {
+      const first = await request(hosted.server, "GET", "/assets/app.js");
+      expect(first.status).toBe(200);
+      const etag = first.headers.etag;
+      expect(typeof etag).toBe("string");
+      expect(first.text()).toContain("answer = 42");
+
+      const again = await request(
+        hosted.server,
+        "GET",
+        "/assets/app.js",
+        undefined,
+        { headers: { "if-none-match": String(etag) } },
+      );
+
+      expect(again.status).toBe(304);
+      expect(again.body).toHaveLength(0);
+      // The type stays, because the browser reuses the stored representation.
+      expect(again.headers["content-type"]).toBe(
+        "text/javascript; charset=utf-8",
+      );
+    } finally {
+      await hosted.close();
+    }
+  });
+});
+
+describe("An admin write keeps the platform's words off the wire", () => {
+  const dirs: string[] = [];
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await Promise.all(
+      dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    );
+  });
+
+  /** A write the filesystem refused: the one shape whose message carries an
+   *  absolute path this machine owns and the browser must not read. */
+  function refusedWrite(): () => Promise<never> {
+    return () => {
+      const refused = new Error(
+        "EPERM: operation not permitted, open 'C:\\secret\\theme'",
+      ) as NodeJS.ErrnoException;
+      // What `fs` sets and what tells a platform failure from a store's rule.
+      refused.code = "EPERM";
+      return Promise.reject(refused);
+    };
+  }
+
+  async function host(
+    overrides: Partial<HostServerOptions>,
+  ): Promise<ReturnType<typeof createHostServer>> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-admin-write-"));
+    dirs.push(dir);
+
+    return createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: createThemeStore(dir),
+      thumbnails: createThumbnailStore(dir),
+      themeSettings: createThemeSettingsStore(dir),
+      ...overrides,
+    });
+  }
+
+  /** The answer body, with the detail asserted to have gone to the console. */
+  async function refusedBody(
+    answer: { readonly status: number; text(): string },
+    sentence: string,
+  ): Promise<void> {
+    expect(answer.status).toBe(500);
+    expect(answer.text()).toBe(sentence);
+    expect(answer.text()).not.toContain("C:\\secret");
+    expect(console.error).toHaveBeenCalled();
+  }
+
+  it("answers a fixed sentence for a failed theme-settings write", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      themeSettings: {
+        ...createThemeSettingsStore(os.tmpdir()),
+        write: refusedWrite(),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room/answers",
+        "{}",
+      );
+      await refusedBody(answer, "The theme's answers could not be saved.");
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers a fixed sentence for a failed thumbnail write", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      thumbnails: {
+        ...createThumbnailStore(os.tmpdir()),
+        write: refusedWrite(),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room/thumbnail",
+        new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+      );
+      await refusedBody(answer, "That thumbnail could not be saved.");
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers a fixed sentence for a failed theme save, and keeps a decode refusal at 400", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      themeStore: {
+        ...createThemeStore(os.tmpdir()),
+        write: refusedWrite(),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room",
+        themeBody(createValidPackage("living-room")),
+      );
+      await refusedBody(answer, "That theme could not be saved.");
+      expect(logged).toHaveBeenCalled();
+
+      // A body the decoder refuses is the caller's, and stays a 400.
+      const malformed = await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room",
+        "not json",
+      );
+      expect(malformed.status).toBe(400);
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers a fixed sentence for a failed theme removal", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      themeStore: {
+        ...createThemeStore(os.tmpdir()),
+        remove: refusedWrite(),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "DELETE",
+        "/api/themes/living-room",
+      );
+      await refusedBody(answer, "That theme could not be removed.");
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("reports a completed removal as success when the origins sweep fails", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      themeStore: {
+        ...createThemeStore(os.tmpdir()),
+        remove: () => Promise.resolve(true),
+      },
+      themeOrigins: {
+        ...createThemeOriginsStore(os.tmpdir()),
+        removeTheme: refusedWrite(),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "DELETE",
+        "/api/themes/living-room",
+      );
+
+      // The folder is already in the trash: a sweep that failed afterwards
+      // cannot turn a removal that happened into one that did not.
+      expect(answer.status).toBe(200);
+      expect(answer.json()).toEqual({ ok: true });
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers a fixed sentence when the trash refuses with a path-bearing message", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      themeStore: {
+        ...createThemeStore(os.tmpdir()),
+        // What `moveToTrash` really raises: a plain message from the child
+        // process, no errno code, and the folder inside it.
+        remove: () =>
+          Promise.reject(
+            new TrashRefusal(
+              "Command failed: powershell.exe -NoProfile 'C:\\secret\\theme'",
+            ),
+          ),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "DELETE",
+        "/api/themes/living-room",
+      );
+
+      await refusedBody(answer, "That theme could not be removed.");
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("keeps the store's own retry sentence when a removal is refused as busy", async () => {
+    const hosted = await host({
+      themeStore: {
+        ...createThemeStore(os.tmpdir()),
+        // The store's refusal while a save owns the folder: plain text, no
+        // errno code and no path, so it is the caller's to act on.
+        remove: () =>
+          Promise.reject(
+            new Error(
+              '"living-room" is being saved right now; try again in a moment.',
+            ),
+          ),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "DELETE",
+        "/api/themes/living-room",
+      );
+
+      expect(answer.status).toBe(500);
+      expect(answer.text()).toBe(
+        '"living-room" is being saved right now; try again in a moment.',
+      );
     } finally {
       await hosted.close();
     }
@@ -6502,7 +8269,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     });
 
     // And the move does happen, once that answer has finished.
-    await vi.waitFor(() => expect(remembered).toBe(true));
+    await waitFor(() => expect(remembered).toBe(true));
     expect(lan).toBe(true);
   });
 
@@ -6561,7 +8328,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     expect(answered.status).toBe(200);
     expect(answered.json()).toMatchObject({ lan: false, refusal: null });
 
-    await vi.waitFor(() => expect(refusal).not.toBeNull());
+    await waitFor(() => expect(refusal).not.toBeNull());
     const after = await request(hosted.server, "GET", "/api/hosting");
 
     // Read from the route that follows, which is where the editor shows it.
@@ -6852,6 +8619,57 @@ describe("The publish route", () => {
       expect(
         (await request(hosted.server, "GET", "/api/publish")).json(),
       ).toMatchObject({ id: null });
+    } finally {
+      await hosted.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to publish a theme whose declared asset is missing", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-publish-"));
+    const activeTheme = createActiveThemeStore(dir);
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: createThemeStore(dir),
+      activeTheme,
+    });
+
+    try {
+      const content = createPackageWithAsset("assets/inter-400.woff2", [1, 2]);
+      await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room",
+        themeBody(content),
+      );
+      // The document is still there and still validates; the declared file is
+      // the half that is gone.
+      await fs.rm(path.join(dir, "living-room", "assets", "inter-400.woff2"));
+
+      const refused = await request(
+        hosted.server,
+        "PUT",
+        "/api/publish?id=living-room",
+        themeBody(content),
+      );
+      // The same answer an absent theme gets: a display would fetch the missing
+      // file, and publishing is an admin act, so the whole theme is verified.
+      expect(refused.status).toBe(404);
+      expect(refused.text()).toBe(
+        'No theme "living-room" in this library to publish.',
+      );
+
+      // The poll asks `exists`, which reads the document alone by ruling: the
+      // assignment is still reported even though the theme cannot be published.
+      await activeTheme.write(LOCAL_DISPLAY_ID, "living-room");
+      const polled = await request(hosted.server, "GET", "/api/published");
+      expect(polled.status).toBe(200);
+      expect((polled.json() as { display: unknown }).display).toEqual({
+        id: LOCAL_DISPLAY_ID,
+        theme: "living-room",
+        chartFps: 1,
+      });
     } finally {
       await hosted.close();
       await fs.rm(dir, { recursive: true, force: true });
@@ -7306,21 +9124,75 @@ describe("The published overlay", () => {
     }
   });
 
-  it("does not list the library for a poll that named a theme", async () => {
+  it("asks the library about the assigned id alone, and never lists it", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-published-"));
     const store = createThemeStore(dir);
+    const exists = vi.fn((id: string) => store.exists(id));
     const list = vi.fn(() => store.list());
+    const read = vi.fn((id: string) => store.read(id));
+    const activeTheme = createActiveThemeStore(dir);
     const displays = createDisplayStore(dir);
     const hosted = createHostServer({
       registry: new ProviderRegistry([]),
       bundles: { player: dir, editor: dir },
-      themeStore: { ...store, list },
+      themeStore: { ...store, exists, list, read },
+      activeTheme,
+      displays,
+    });
+
+    try {
+      await store.write("living-room", createValidPackage());
+      await store.write("studio", createValidPackage("studio", "Studio"));
+      const token = newToken();
+      await displays.create("Kitchen tablet", token);
+      await activeTheme.write("kitchen-tablet", "studio");
+
+      const answer = await request(
+        hosted.server,
+        "GET",
+        "/api/published",
+        undefined,
+        {
+          remoteAddress: "192.168.1.50",
+          headers: { "x-yunari-session": token },
+        },
+      );
+      expect(answer.status).toBe(200);
+      expect((answer.json() as { display: unknown }).display).toEqual({
+        id: "kitchen-tablet",
+        theme: "studio",
+        chartFps: 30,
+      });
+      // One `theme.json` for the id the display is assigned — not a directory
+      // read plus one document per theme, on a poll that runs every two seconds.
+      expect(exists).toHaveBeenCalledWith("studio");
+      expect(list).not.toHaveBeenCalled();
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not list or probe the library for a poll that named a theme", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-published-"));
+    const store = createThemeStore(dir);
+    const list = vi.fn(() => store.list());
+    const exists = vi.fn((id: string) => store.exists(id));
+    const activeTheme = createActiveThemeStore(dir);
+    const displays = createDisplayStore(dir);
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: { ...store, list, exists },
+      activeTheme,
       displays,
     });
 
     try {
       const token = newToken();
       await displays.create("Kitchen tablet", token);
+      await activeTheme.write("kitchen-tablet", "living-room");
       const asked = {
         remoteAddress: "192.168.1.50",
         headers: { "x-yunari-session": token },
@@ -7335,10 +9207,11 @@ describe("The published overlay", () => {
       );
       expect(linked.status).toBe(200);
 
-      // The listing is only what the map's answer is read against, and a link
-      // is answered none: a directory read plus one `theme.json` per theme, on
-      // every poll of every link page, is a cost with nothing in it.
+      // A link is answered none: a directory read, one `theme.json` per theme,
+      // or even one existence probe, on every poll of every link page, is a
+      // cost with nothing in it.
       expect(list).not.toHaveBeenCalled();
+      expect(exists).not.toHaveBeenCalled();
 
       // The same display without one is answered its assignment, so the skip
       // above is the link rather than a route that never resolves.
@@ -7350,7 +9223,8 @@ describe("The published overlay", () => {
         asked,
       );
       expect(assigned.status).toBe(200);
-      expect(list).toHaveBeenCalledTimes(1);
+      expect(list).not.toHaveBeenCalled();
+      expect(exists).toHaveBeenCalledTimes(1);
     } finally {
       await hosted.close();
       await fs.rm(dir, { recursive: true, force: true });
@@ -7431,7 +9305,7 @@ describe("The root page resolves the display that asked", () => {
    *  caller's own parameters ride along, so the theme is picked out of them. */
   async function root(
     urlPath = "/",
-    options?: { remoteAddress?: string },
+    options?: { remoteAddress?: string; headers?: Record<string, string> },
   ): Promise<string | undefined> {
     const answer = await request(
       hosted.server,
@@ -7476,7 +9350,7 @@ describe("The root page resolves the display that asked", () => {
     await activeTheme.write("kitchen-tablet", "studio");
 
     expect(await root()).toBe("living-room");
-    expect(await root(`/?session=${encodeURIComponent(token)}`, LAN)).toBe(
+    expect(await root("/", { ...LAN, headers: asCookie(token) })).toBe(
       "studio",
     );
   });
@@ -7488,7 +9362,7 @@ describe("The root page resolves the display that asked", () => {
     // Paired, so it is served; never assigned a theme of its own.
     const token = await pair();
 
-    expect(await root(`/?session=${encodeURIComponent(token)}`, LAN)).toBe(
+    expect(await root("/", { ...LAN, headers: asCookie(token) })).toBe(
       "living-room",
     );
   });
@@ -7500,9 +9374,68 @@ describe("The root page resolves the display that asked", () => {
 
     const token = await pair();
 
-    expect(await root(`/?session=${encodeURIComponent(token)}`, LAN)).toBe(
+    expect(await root("/", { ...LAN, headers: asCookie(token) })).toBe(
       "living-room",
     );
+  });
+
+  it("exchanges a root ?session= for the cookie and redirects it away", async () => {
+    await library();
+    const token = await pair();
+
+    // A pairing link or a re-find target still carries the token; the root
+    // route is the one place that reads it, and it does not write it back out.
+    const answer = await request(
+      hosted.server,
+      "GET",
+      `/?session=${encodeURIComponent(token)}`,
+      undefined,
+      LAN,
+    );
+
+    expect(answer.status).toBe(302);
+    expect(answer.headers.location).toBe("/");
+    const cookie = String(answer.headers["set-cookie"]);
+    expect(cookie).toContain(`yunari_session=${encodeURIComponent(token)}`);
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("SameSite=Strict");
+
+    // A link that named a theme keeps it: only the token is dropped.
+    const themed = await request(
+      hosted.server,
+      "GET",
+      `/?theme=studio&session=${encodeURIComponent(token)}`,
+      undefined,
+      LAN,
+    );
+    expect(themed.headers.location).toBe("/?theme=studio");
+
+    // A display URL the library resolved carries `data=live`. The exchange
+    // must still run: without it, the LAN guard refuses the display's own
+    // link with the token it was just given, and no reload clears it.
+    const resolved = await request(
+      hosted.server,
+      "GET",
+      `/?theme=studio&data=live&theme-source=link&session=${encodeURIComponent(token)}`,
+      undefined,
+      LAN,
+    );
+    expect(resolved.status).toBe(302);
+    expect(resolved.headers.location).toBe(
+      "/?theme=studio&data=live&theme-source=link",
+    );
+    expect(String(resolved.headers["set-cookie"])).toContain("yunari_session=");
+  });
+
+  it("serves a loopback page with no cookie for a root ?session= no display holds", async () => {
+    // No themes, so the page is the first-run document rather than a redirect:
+    // the refusal is the absence of a cookie, not a status the caller can use
+    // to probe which tokens exist. Loopback because an unpaired LAN caller is
+    // refused earlier, by the display guard this route sits ahead of.
+    const answer = await request(hosted.server, "GET", "/?session=bogus");
+
+    expect(answer.status).toBe(200);
+    expect(answer.headers["set-cookie"]).toBeUndefined();
   });
 
   it("lets an explicit ?theme= outrank the assignment", async () => {
@@ -7580,10 +9513,10 @@ describe("The root page resolves the display that asked", () => {
     await activeTheme.write("kitchen-tablet", "living-room");
 
     expect(
-      await root(
-        `/?display=left-screen&session=${encodeURIComponent(token)}`,
-        LAN,
-      ),
+      await root("/?display=left-screen", {
+        ...LAN,
+        headers: asCookie(token),
+      }),
     ).toBe("living-room");
   });
 
@@ -7604,8 +9537,11 @@ describe("The root page resolves the display that asked", () => {
       deviceName: "\\\\.\\DISPLAY2",
     });
 
-    const message = (remoteAddress: string): http.IncomingMessage =>
-      ({ socket: { remoteAddress }, headers: {} }) as http.IncomingMessage;
+    const message = (
+      remoteAddress: string,
+      headers: Record<string, string> = {},
+    ): http.IncomingMessage =>
+      ({ socket: { remoteAddress }, headers }) as http.IncomingMessage;
 
     expect(
       await displayKeyFor(
@@ -7625,8 +9561,8 @@ describe("The root page resolves the display that asked", () => {
 
     expect(
       await displayKeyFor(
-        message("192.168.1.50"),
-        new URL(`http://host/?session=${encodeURIComponent(token)}`),
+        message("192.168.1.50", asCookie(token)),
+        new URL("http://host/"),
         displays,
       ),
     ).toBe("kitchen-tablet");
@@ -7662,7 +9598,11 @@ describe("The host's secure origin", () => {
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-origin-"));
-    origin = await createSecureOrigin(tmpDir, ["localhost", "127.0.0.1"]);
+    origin = await createSecureOrigin(
+      tmpDir,
+      ["localhost", "127.0.0.1"],
+      secretsIn(tmpDir),
+    );
   });
 
   afterEach(async () => {
@@ -7917,6 +9857,77 @@ describe("The host's secure origin", () => {
     }
   });
 
+  it("destroys a socket that is slow to say what it is", () => {
+    // **The case that fails without the pre-handshake timeout.** A socket this
+    // port accepted has sent nothing, so neither inner server has seen it and
+    // neither one's timeout applies: a client that connects and stays silent
+    // holds its slot until the process ends. Scripted rather than dialled, so
+    // the first byte is the case's to decide and the five seconds are read back
+    // rather than waited out.
+    const plain = new EventEmitter() as unknown as http.Server;
+    const secure = new EventEmitter() as unknown as https.Server;
+    const listener = createPortListener(plain, secure);
+
+    function accepted(first: Buffer | null): {
+      readonly waits: number[];
+      readonly fireTimeout: () => void;
+      readonly say: () => void;
+      readonly destroyed: () => boolean;
+    } {
+      const waits: number[] = [];
+      let timedOut: (() => void) | undefined;
+      let readable: () => void = () => undefined;
+      let destroyed = false;
+
+      const socket = {
+        remoteAddress: "10.0.0.9",
+        remotePort: 40_001,
+        localAddress: "10.0.0.1",
+        localPort: 5227,
+        on: () => socket,
+        once: (event: string, listener: () => void) => {
+          if (event === "readable") readable = listener;
+          return socket;
+        },
+        setTimeout: (ms: number, fire: () => void) => {
+          waits.push(ms);
+          timedOut = fire;
+          return socket;
+        },
+        read: () => first,
+        unshift: () => undefined,
+        destroy: () => {
+          destroyed = true;
+          return socket;
+        },
+      } as unknown as Socket;
+
+      listener.emit("connection", socket);
+
+      return {
+        waits,
+        fireTimeout: () => timedOut?.(),
+        say: () => readable(),
+        destroyed: () => destroyed,
+      };
+    }
+
+    expect(listener.maxConnections).toBe(256);
+
+    const silent = accepted(null);
+    expect(silent.waits).toEqual([5_000]);
+    expect(silent.destroyed()).toBe(false);
+    silent.fireTimeout();
+    expect(silent.destroyed()).toBe(true);
+
+    // And the wait ends at the first byte: a stream that is quiet between
+    // batches is not a stream this port destroys.
+    const talking = accepted(Buffer.from("GET / HTTP/1.1\r\n", "utf8"));
+    talking.say();
+    expect(talking.waits).toEqual([5_000, 0]);
+    expect(talking.destroyed()).toBe(false);
+  });
+
   it("is plain http when the caller brings no certificate, which is why the launcher always does", async () => {
     // The case that fails when the change is disabled: the same client, the
     // same route, no certificate — and the handshake does not complete. It is
@@ -7955,6 +9966,31 @@ describe("The host's secure origin", () => {
       expect(answer.status).toBe(200);
       expect(answer.headers["content-type"]).toBe("application/x-x509-ca-cert");
       expect(answer.text()).toBe(origin.certificate);
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("publishes the root's fingerprint, and the startup output carries the same one", async () => {
+    const hosted = plainHost();
+
+    try {
+      const answer = await request(hosted.server, "GET", CA_CERTIFICATE_PATH);
+      // The body is the origin's root (checked by the case above), and the
+      // header has to be the fingerprint of exactly those bytes.
+      expect(answer.text()).toBe(origin.certificate);
+      const fingerprint = certificateFingerprintSha256(origin.certificate);
+
+      expect(answer.headers["x-yunari-ca-sha256"]).toBe(fingerprint);
+      expect(answer.headers["content-type"]).toBe("application/x-x509-ca-cert");
+      expect(answer.headers["content-disposition"]).toBe(
+        'attachment; filename="yunari-ca.crt"',
+      );
+      // The startup lines the launcher prints, from the origin it loaded: the
+      // comparison a person makes is between them and the certificate.
+      expect(origin.certificateLines.join("\n")).toContain(
+        `SHA-256: ${fingerprint}`,
+      );
     } finally {
       await hosted.close();
     }
@@ -8075,6 +10111,42 @@ describe("Host Wallpaper Engine routes", () => {
       );
       expect(answer.status).toBe(200);
       expect(answer.json()).toEqual(listingAnswer);
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("refuses every read from a paired LAN display", async () => {
+    // A paired display passes the dashboard guard, so only these routes
+    // themselves can keep this PC's Wallpaper Engine library off the LAN.
+    const displays = createDisplayStore(tmpDir);
+    const token = newToken();
+    await displays.create("phone", token);
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      themeStore: createThemeStore(tmpDir),
+      displays,
+      wallpaperEngine: fakeSource(),
+    });
+
+    try {
+      for (const route of [
+        "/api/wallpaper-engine",
+        "/api/wallpaper-engine/item/201/preview",
+        "/api/wallpaper-engine/item/201/asset",
+        "/api/wallpaper-engine/exports?since=1700000000000",
+        "/api/wallpaper-engine/export?name=shot.png",
+      ]) {
+        const answer = await request(hosted.server, "GET", route, undefined, {
+          remoteAddress: "192.168.1.50",
+          headers: {
+            host: "192.168.1.50:5173",
+            "x-yunari-session": token,
+          },
+        });
+        expect(answer.status, route).toBe(403);
+      }
     } finally {
       await hosted.close();
     }
@@ -8423,6 +10495,33 @@ describe("Weather settings routes", () => {
         )
       ).status,
     ).toBe(403);
+  });
+
+  it("answers a locked weather file with a fixed message, not the path", async () => {
+    if (process.platform !== "win32") return;
+
+    const { server, weather } = await launch();
+    await weather.write(BERLIN);
+    const release = await holdForReading(
+      path.join(settingsDir, "weather.json"),
+    );
+
+    try {
+      const refused = await request(
+        server,
+        "PUT",
+        "/api/weather/settings",
+        JSON.stringify(BERLIN),
+      );
+
+      // A failed rename names this machine's temporary and target paths; a
+      // browser gets the failure and no filesystem detail (S25).
+      expect(refused.status).toBe(400);
+      expect(refused.text()).toBe("The weather settings could not be saved.");
+      expect(refused.text()).not.toMatch(/[\\/]/);
+    } finally {
+      await release();
+    }
   });
 
   it("answers the selected backend's attribution with its settings", async () => {
@@ -9277,7 +11376,7 @@ describe("Custom source routes", () => {
       readonly provider?: SourceRouteOptions["provider"];
     } = {},
   ): Promise<void> {
-    credentials = createCredentialStore(tmpDir);
+    credentials = createCredentialStore(tmpDir, secretsIn(tmpDir));
     sources = createSourceStore(tmpDir);
 
     const provider = new CustomSourceProvider({
@@ -9756,11 +11855,10 @@ describe("Custom source routes", () => {
       unreferencedCredential: "srckey",
     });
 
-    // The secret is still on disk and still listed as an orphan, so it can be
-    // cleared rather than stranded.
-    expect(
-      await fs.readFile(path.join(tmpDir, "credentials.json"), "utf8"),
-    ).toContain("sk-live-9f2c");
+    // The secret is still stored and still listed as an orphan, so it can be
+    // cleared rather than stranded. Read through the store: the bytes on disk
+    // are ciphertext now, and the file name is the secret store's.
+    expect(await credentials.valueOf("srckey")).toBe("sk-live-9f2c");
     expect(await rows()).toContainEqual(
       expect.objectContaining({
         id: "srckey",
@@ -9774,9 +11872,7 @@ describe("Custom source routes", () => {
       (await request(hosted.server, "DELETE", "/api/credentials/srckey"))
         .status,
     ).toBe(200);
-    expect(
-      await fs.readFile(path.join(tmpDir, "credentials.json"), "utf8"),
-    ).not.toContain("srckey");
+    expect(await credentials.valueOf("srckey")).toBeUndefined();
   });
 
   it("reports no unreferenced credential while a sibling still names it", async () => {
@@ -9977,7 +12073,7 @@ describe("Custom source routes", () => {
     );
 
     const testing = request(hosted.server, "POST", "/api/sources/fixture/test");
-    await vi.waitFor(() => expect(called).toBe(true));
+    await waitFor(() => expect(called).toBe(true));
 
     // A write reloads the provider, which retires the runtime the test is
     // still holding; its answer belongs to a source that has been replaced.

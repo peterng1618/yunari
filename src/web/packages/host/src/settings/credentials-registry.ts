@@ -8,7 +8,7 @@ import type { CustomSource } from "./sources.js";
  * The credentials this host knows how to store.
  *
  * A key for an id this table does not name is refused, so a request cannot
- * fill `credentials.json` with arbitrary entries.
+ * fill the encrypted credential store with arbitrary entries.
  */
 export type CredentialKind = "bearer" | "cookie" | "query";
 

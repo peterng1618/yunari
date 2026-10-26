@@ -349,7 +349,8 @@ export async function run(argv: readonly string[]): Promise<number> {
     // a leaf is disposable, which is what makes a moved address free.
     tls: { key: origin.key, cert: origin.chain },
     // And the root itself, for the device that has to trust it before it can
-    // read anything else.
+    // read anything else; the fingerprint is computed from these bytes where
+    // each is used.
     caCertificate: origin.certificate,
     // Who this host is, so a display that has lost its address can ask.
     host: hostRecord,
@@ -523,15 +524,21 @@ export async function run(argv: readonly string[]): Promise<number> {
   console.log(
     style(
       "2",
-      `  Certificate  ${origin.certificatePath}` +
-        `\n  This host serves https on the same port, and a display holds the` +
-        `\n  screen awake and installs as an app only there. Install this root` +
-        `\n  once per device, this PC included:` +
-        `\n    Fetch the root over http, so no warning is in the way:` +
-        `\n      http://${lan ?? displayHost}:${bound}${CA_CERTIFICATE_PATH}` +
-        `\n    Then open the display at:` +
-        `\n      https://${lan ?? displayHost}:${bound}` +
-        "\n  A device without it shows a certificate warning, not a broken display.",
+      [
+        `  Certificate  ${origin.certificatePath}`,
+        // Built by the authority from the PEM the route hands out, and printed
+        // here with no certificate to choose: the printed fingerprint and the
+        // served header are one reading of the same bytes.
+        ...origin.certificateLines,
+        `  This host serves https on the same port, and a display holds the`,
+        `  screen awake and installs as an app only there. Install this root`,
+        `  once per device, this PC included:`,
+        `    Fetch the root over http, so no warning is in the way:`,
+        `      http://${lan ?? displayHost}:${bound}${CA_CERTIFICATE_PATH}`,
+        `    Then open the display at:`,
+        `      https://${lan ?? displayHost}:${bound}`,
+        "  A device without it shows a certificate warning, not a broken display.",
+      ].join("\n"),
     ),
   );
 

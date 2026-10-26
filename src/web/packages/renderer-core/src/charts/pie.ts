@@ -9,9 +9,10 @@ import {
 import { NO_INK, resolveChartPaint } from "./chart-paint.js";
 import { type EngineColor, resolveFlatColor } from "./fill.js";
 import {
-  SEGMENT_GAP_RATIO,
+  SEGMENT_SPACING_PERCENT_DEFAULT,
   segmentCount,
   segmentDivisorOf,
+  segmentSpacingPercentOf,
 } from "./segments.js";
 
 /**
@@ -33,6 +34,8 @@ export interface PieSettings {
   readonly cornerRadius: number;
   /** How many slices each part's fill is cut into; 100 is continuous. */
   readonly segmentDivisor: number;
+  /** Empty space after each piece, as a share of that piece's own angle. */
+  readonly segmentSpacingPercent?: number;
   readonly total: PieTotal;
   /** Drawn only for fixed totals, where the remainder is measurable. */
   readonly remainderFill?: ChartPaint;
@@ -47,6 +50,7 @@ export const defaultPieSettings: PieSettings = {
   padAngle: 2,
   cornerRadius: 4,
   segmentDivisor: 100,
+  segmentSpacingPercent: SEGMENT_SPACING_PERCENT_DEFAULT,
   total: { kind: "sum" },
   palette: [
     { kind: "solid", color: "#00b8d9" },
@@ -235,7 +239,14 @@ export function buildPieOption(
         labelLine: { show: false },
         // Preserve authored order; composition order can carry meaning.
         avoidLabelOverlap: false,
-        data: segmented ? toSegmentedPieData(data, count, padAngle) : data,
+        data: segmented
+          ? toSegmentedPieData(
+              data,
+              count,
+              padAngle,
+              segmentSpacingPercentOf(settings),
+            )
+          : data,
         silent: true,
       },
     ],
@@ -252,33 +263,48 @@ export function buildPieOption(
  * series pad is therefore zero here and the gaps are items: `NO_INK`, no
  * rounding, and a value chosen to take the angle each gap should occupy.
  *
- * A piece's value is inflated by `k` so the visible pieces still fill the share
- * the slice had; the internal gaps take `SEGMENT_GAP_RATIO` of a piece, and the
- * boundary gap takes the value that draws the authored `padAngle` once the
- * inflated total and the spacers' own values are accounted for.
+ * A piece's share still sums with its siblings to the slice's authored value,
+ * so the composition reads exactly as it did. Each internal spacer is the
+ * authored share **of the piece it follows**, so unequal slices leave unequal
+ * gaps; the boundary spacers stay the authored `padAngle`. The real items are
+ * scaled by the one denominator that fits both, which is what preserves the
+ * shares rather than renormalising them around the gaps.
+ *
+ * Values are angles in degrees and the returned items sum to one full turn;
+ * ECharts normalises whatever it is given, so the unit is the same one the pad
+ * is authored in.
  */
 export function toSegmentedPieData(
   items: readonly PieDataItem[],
   count: number,
   padAngle: number,
+  spacingPercent: number,
 ): PieDataItem[] {
   const segments = Math.max(1, Math.floor(count));
   const total = items.reduce((sum, item) => sum + item.value, 0);
-  const internalShare = (SEGMENT_GAP_RATIO * (segments - 1)) / segments;
-  const inflation = 1 + internalShare;
-  const denominator = 1 - (items.length * padAngle) / 360;
-  const boundary =
-    denominator > 0
-      ? ((inflation * total) / denominator) * (padAngle / 360)
-      : 0;
+  if (items.length === 0 || total <= 0) return [];
+
+  const q = Math.max(0, spacingPercent) / 100;
+  // Gaps may not take the ring: at least a tenth of it stays real, whatever the
+  // author asked for, because a pie with no slices left is not a pie.
+  const boundaryShare = Math.min(
+    0.9,
+    (items.length * Math.max(0, padAngle)) / 360,
+  );
+  const boundary = (boundaryShare * 360) / items.length;
+  const whole = 360 - items.length * boundary;
+  // A slice occupies its pieces plus a gap after every piece but the last:
+  // n · piece + (n - 1) q · piece. The denominator is that multiplier.
+  const unit = whole / (total * (segments + (segments - 1) * q));
 
   const data: PieDataItem[] = [];
   for (const item of items) {
-    const piece = (inflation * item.value) / segments;
+    const piece = unit * item.value;
+    const gap = q * piece;
     for (let index = 0; index < segments; index += 1) {
       data.push({ ...item, value: piece });
       if (index < segments - 1) {
-        data.push(spacer(SEGMENT_GAP_RATIO * piece));
+        data.push(spacer(gap));
       }
     }
     data.push(spacer(boundary));

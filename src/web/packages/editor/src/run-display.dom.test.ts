@@ -33,6 +33,7 @@ const BINDINGS = {
 
 function sample(value: number) {
   return {
+    revision: 0,
     latest: (key: string) =>
       key === "ram.used.percent"
         ? {

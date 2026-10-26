@@ -30,6 +30,10 @@ export function hasPlottableValue(
 // GaugeSettings remains here historically; animation imports do not form a runtime cycle.
 import type { AnimationSettings } from "./charts/animation.js";
 import type { ChartPaint } from "./charts/chart-paint.js";
+import {
+  SEGMENT_SPACING_PERCENT_DEFAULT,
+  type SegmentFill,
+} from "./charts/segments.js";
 
 export interface GradientStop {
   readonly offset: number;
@@ -56,6 +60,10 @@ export interface GaugeSettings {
   readonly roundCap: boolean;
   /** How many slices the fill is cut into; 100 is one continuous arc. */
   readonly segmentDivisor: number;
+  /** Empty space between slices, as a share of a slice's painted width. */
+  readonly segmentSpacingPercent?: number;
+  /** Whether the reading lights a whole slice or stops at its own value. */
+  readonly segmentFill?: SegmentFill;
   /** Segment count for approximating angular gradients on the ring. */
   readonly gradientSegments?: number;
   readonly animation?: AnimationSettings;
@@ -71,5 +79,7 @@ export const defaultGaugeSettings: GaugeSettings = {
   progress: { kind: "solid", color: "#00b8d9" },
   roundCap: true,
   segmentDivisor: 100,
+  segmentSpacingPercent: SEGMENT_SPACING_PERCENT_DEFAULT,
+  segmentFill: "whole",
   gradientSegments: 64,
 };

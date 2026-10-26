@@ -4,9 +4,11 @@
  * `@yunari/theme-package`'s and is exercised in its own suite, so the fixtures
  * here are packages written by the format's own writer.
  */
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -25,22 +27,50 @@ function envelopeFor(id: string, name: string): FabricThemeEnvelope {
   };
 }
 
-/** A PNG, as the reader and the thumbnail store both require. */
+/** A real 1×1 PNG, as the reader and the thumbnail store both require. */
 const PNG = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02, 0x03,
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+  0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06,
+  0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44,
+  0x41, 0x54, 0x78, 0xda, 0x63, 0xfc, 0xcf, 0xc0, 0x50, 0x0f, 0x00, 0x04, 0x85,
+  0x01, 0x80, 0x84, 0xa9, 0x8c, 0x21, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+  0x44, 0xae, 0x42, 0x60, 0x82,
 ]);
 
 function packageBytes(input: {
   readonly envelope: FabricThemeEnvelope;
+  readonly assets?: Readonly<Record<string, Uint8Array>>;
   readonly thumbnail?: Uint8Array;
 }): Uint8Array {
   const written = writeThemePackage({
     envelope: input.envelope,
-    assets: {},
+    assets: input.assets ?? {},
     ...(input.thumbnail === undefined ? {} : { thumbnail: input.thumbnail }),
   });
   if (!written.ok) throw new Error(written.message);
   return written.bytes;
+}
+
+/** Committed media, read rather than regenerated — the envelope module's own
+ *  fixtures, so a case here tests the same bytes its declarations describe. */
+const fixture = (name: string): Uint8Array =>
+  new Uint8Array(
+    readFileSync(
+      fileURLToPath(
+        new URL(
+          `../../../theme-package/test-fixtures/${name}`,
+          import.meta.url,
+        ),
+      ),
+    ),
+  );
+
+/** An envelope declaring one video at the path the cases below store. */
+function videoEnvelope(id: string, name: string): FabricThemeEnvelope {
+  return {
+    ...envelopeFor(id, name),
+    assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
+  };
 }
 
 /**
@@ -227,6 +257,57 @@ describe("importThemePackage", () => {
         "utf8",
       ),
     ).toBe(JSON.stringify({ id: "family-room" }));
+  });
+
+  it("refuses a video with an audio track, and writes nothing", async () => {
+    const imported = await importThemePackage(
+      packageBytes({
+        envelope: videoEnvelope("family-room", "Living Room"),
+        assets: { "assets/clip.mp4": fixture("audio.mp4") },
+      }),
+      { store },
+    );
+
+    // The envelope module's sentence, the same one installTheme shows.
+    expect(imported).toEqual({
+      ok: false,
+      message: "assets/clip.mp4: audio track present; video must be silent",
+    });
+    await expect(fs.stat(path.join(library, "family-room"))).rejects.toThrow();
+  });
+
+  it("refuses an over-long video, and writes nothing", async () => {
+    const imported = await importThemePackage(
+      packageBytes({
+        envelope: videoEnvelope("family-room", "Living Room"),
+        assets: { "assets/clip.mp4": fixture("long.mp4") },
+      }),
+      { store },
+    );
+
+    expect(imported).toEqual({
+      ok: false,
+      message:
+        "assets/clip.mp4: duration 31500 ms exceeds the 30000 ms maximum",
+    });
+    await expect(fs.stat(path.join(library, "family-room"))).rejects.toThrow();
+  });
+
+  it("imports a conforming video and stores its bytes", async () => {
+    const video = fixture("conforming.mp4");
+
+    const imported = await importThemePackage(
+      packageBytes({
+        envelope: videoEnvelope("family-room", "Living Room"),
+        assets: { "assets/clip.mp4": video },
+      }),
+      { store },
+    );
+
+    expect(imported).toEqual({ ok: true, id: "family-room" });
+    expect(
+      await fs.readFile(path.join(library, "family-room", "assets/clip.mp4")),
+    ).toEqual(Buffer.from(video));
   });
 });
 

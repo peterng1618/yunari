@@ -1,0 +1,18 @@
+{
+  // The security rule's own program. `ffmpeg-hash.mjs` runs under plain `node`
+  // in the root CLI, so it cannot be TypeScript; this program is what checks
+  // it. A separate program rather than `checkJs` in tsconfig.json because that
+  // one also pulls in `public/theme-list.js` through the DOM tests; the check
+  // is owned by this configuration, not by a `// @ts-check` line the rule's
+  // own file could drop. A prepended `// @ts-nocheck` still disables it — a
+  // visible, reviewable suppression.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true,
+    // The file imports `node:crypto` and `node:fs` only.
+    "types": ["node"]
+  },
+  "include": ["src/themes/ffmpeg-hash.mjs"]
+}

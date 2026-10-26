@@ -3303,14 +3303,17 @@ test.describe("a paired display and the theme it is given", () => {
     // block.
     //
     // **What this case is, and is not.** The display it loads is `this-pc`: a
-    // loopback request resolves as this PC whatever credential its URL carries,
-    // so the token here is what `rememberPairing` needs to write an identity and
-    // not a credential the host ever checks. What is proven is the ladder and
-    // the hop; the credential-authorised path — a paired display resolving as
-    // its own record — is not what runs here. The second address answering at
-    // all rests on the source address of a connection to `127.0.0.2` being
-    // loopback too, which is why the host serves it as `this-pc` and not as the
-    // display the token names.
+    // loopback request resolves as this PC whatever credential it presents. The
+    // cookie change removed the token from the URL and `/api/host` answers a
+    // loopback caller no token, so a loopback page can no longer *learn* the
+    // pairing a re-find needs. The stored record is therefore seeded — the
+    // state a display already has after its first load through the LAN — and
+    // the ladder matches and hops on it. What is proven is the ladder and the
+    // hop; the credential-authorised path — a paired display resolving as its
+    // own record — is not what runs here. The second address answering at all
+    // rests on the source address of a connection to `127.0.0.2` being loopback
+    // too, which is why the host serves it as `this-pc` and not as the display
+    // the token names.
     const known = `http://127.0.0.1:${port}`;
     const elsewhereAddress = new URL(secondAddress).hostname;
     /**
@@ -3337,10 +3340,10 @@ test.describe("a paired display and the theme it is given", () => {
     /**
      * The complement of the count above, and the reason it means anything: a
      * request to the second address made by a page that is **no longer at the
-     * address it knew**. The page that lands there writes its own pairing on
-     * every load, so this request is real and arrives at the same handler; the
-     * assertion on it is what shows the count above excludes it rather than
-     * happening not to have seen it.
+     * address it knew**. The page that lands there asks `/api/host` on every
+     * load (`rememberPairing`), so this request is real and arrives at the same
+     * handler; the assertion on it is what shows the count above excludes it
+     * rather than happening not to have seen it.
      */
     let answeredAfterHop = 0;
     /**
@@ -3388,14 +3391,51 @@ test.describe("a paired display and the theme it is given", () => {
       // This PC's own theme, because the address the display loads at is
       // loopback and the host resolves a loopback request as `this-pc`.
       await assign(request, "this-pc", HOST_CHART_THEME_ID);
-      await page.goto(`${known}/?session=${display.token}`);
+      // The pairing the display would already hold from a LAN load: its
+      // last-known address is the LAN one, not the loopback address this page
+      // loads at. Seeded before the first document, and only at the address it
+      // knows: the page that lands on the second address keeps its own origin's
+      // storage. The load then rewrites it to where the page actually is, which
+      // is what the poll below observes — the seed alone cannot satisfy it.
+      await page.addInitScript(
+        (pairing: {
+          hostId: string;
+          hostName: string;
+          port: number;
+          token: string;
+          lastAddress: string;
+        }) => {
+          if (location.hostname !== "127.0.0.1") return;
+          localStorage.setItem(
+            "yunari.display.pairing",
+            JSON.stringify(pairing),
+          );
+        },
+        {
+          hostId,
+          hostName,
+          port,
+          token: display.token,
+          lastAddress: new URL(origin).hostname,
+        },
+      );
+      await page.goto(known);
       await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible();
 
+      // The load's own write, which the seed cannot satisfy: the page stores
+      // the address it is actually on, and the seed holds the LAN one.
       await expect
         .poll(() =>
-          page.evaluate(() => localStorage.getItem("yunari.display.pairing")),
+          page.evaluate(() => {
+            const raw = localStorage.getItem("yunari.display.pairing");
+            const stored =
+              raw === null
+                ? {}
+                : (JSON.parse(raw) as { lastAddress?: unknown });
+            return { stored: stored.lastAddress, here: location.hostname };
+          }),
         )
-        .not.toBeNull();
+        .toEqual({ stored: "127.0.0.1", here: "127.0.0.1" });
 
       moved = true;
 

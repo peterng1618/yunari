@@ -48,6 +48,181 @@ export async function publishedListings(
   });
 }
 
+/**
+ * The columns the joined listing queries select. `item` and `item_version`
+ * share `created_at` (and, on the join, `id`), so each side is aliased by the
+ * name of the table it came from. The left join makes the version nullable.
+ */
+interface JoinedRow {
+  readonly item_id: string;
+  readonly kind: string;
+  readonly author_user_id: string;
+  readonly name: string;
+  readonly status: CatalogueStatus;
+  readonly status_reason: string | null;
+  readonly item_created_at: string;
+  readonly item_updated_at: string;
+  readonly published_at: string | null;
+  readonly unpublished_at: string | null;
+  readonly removed_at: string | null;
+  readonly downloads: number;
+  readonly remix_of_id: string | null;
+  readonly version: string | null;
+  readonly envelope_json: string | null;
+  readonly facets_json: string | null;
+  readonly package_key: string | null;
+  readonly thumbnail_key: string | null;
+  readonly bytes: number | null;
+  readonly sha256: string | null;
+  readonly version_created_at: string | null;
+}
+
+/** The latest version's row, or `null` when a left join found none. */
+function versionOfRow(row: JoinedRow): VersionRow | null {
+  if (
+    row.version === null ||
+    row.envelope_json === null ||
+    row.facets_json === null ||
+    row.package_key === null ||
+    row.thumbnail_key === null ||
+    row.bytes === null ||
+    row.sha256 === null ||
+    row.version_created_at === null
+  )
+    return null;
+  return {
+    item_id: row.item_id,
+    version: row.version,
+    envelope_json: row.envelope_json,
+    facets_json: row.facets_json,
+    package_key: row.package_key,
+    thumbnail_key: row.thumbnail_key,
+    bytes: row.bytes,
+    sha256: row.sha256,
+    created_at: row.version_created_at,
+  };
+}
+
+function itemOf(row: JoinedRow): ItemRow {
+  return {
+    id: row.item_id,
+    kind: row.kind,
+    author_user_id: row.author_user_id,
+    name: row.name,
+    status: row.status,
+    status_reason: row.status_reason,
+    created_at: row.item_created_at,
+    updated_at: row.item_updated_at,
+    published_at: row.published_at,
+    unpublished_at: row.unpublished_at,
+    removed_at: row.removed_at,
+    downloads: row.downloads,
+    remix_of_id: row.remix_of_id,
+  };
+}
+
+/** An inner-joined row that must carry a version; a null is a broken query. */
+function listingOf(row: JoinedRow): Listing {
+  const version = versionOfRow(row);
+  if (version === null)
+    throw new Error("A joined listing row carries no version.");
+  return { item: itemOf(row), version };
+}
+
+/** One author's listing row: the item, its latest version and its count. */
+export interface AuthorListing extends Listing {
+  readonly favorites: number;
+}
+
+/**
+ * The aliased item-and-version columns both listing queries select. `item` and
+ * `item_version` share `created_at`, so each side is prefixed. A new column is
+ * added here once; `JoinedRow` and the mappers above still need it named.
+ */
+const LISTING_COLUMNS = `i.id AS item_id, i.kind, i.author_user_id, i.name,
+         i.status, i.status_reason, i.created_at AS item_created_at,
+         i.updated_at AS item_updated_at, i.published_at, i.unpublished_at,
+         i.removed_at, i.downloads, i.remix_of_id,
+         v.version, v.envelope_json, v.facets_json, v.package_key,
+         v.thumbnail_key, v.bytes, v.sha256,
+         v.created_at AS version_created_at`;
+
+/**
+ * Every one of an author's versioned items in one statement, newest first.
+ *
+ * The latest version is the same selection `publishedListings` makes — greatest
+ * `created_at`, `rowid` the tiebreak — and the favourite count is correlated
+ * rather than a second round trip, so the listing costs one statement whatever
+ * its length.
+ */
+export async function authorListings(
+  db: D1Database,
+  userId: string,
+): Promise<readonly AuthorListing[]> {
+  const rows = await db
+    .prepare(
+      `SELECT ${LISTING_COLUMNS},
+         (SELECT COUNT(*) FROM favorite f WHERE f.item_id = i.id) AS favorites
+       FROM item i
+       JOIN item_version v ON v.item_id = i.id
+         AND v.rowid = (
+           SELECT v2.rowid FROM item_version v2
+           WHERE v2.item_id = i.id
+           ORDER BY v2.created_at DESC, v2.rowid DESC
+           LIMIT 1
+         )
+       WHERE i.author_user_id = ?
+         AND EXISTS (SELECT 1 FROM item_version ev WHERE ev.item_id = i.id)
+       ORDER BY i.updated_at DESC, i.id ASC`,
+    )
+    .bind(userId)
+    .all<JoinedRow & { readonly favorites: number }>();
+  return rows.results.map((row) => ({
+    ...listingOf(row),
+    favorites: row.favorites,
+  }));
+}
+
+/** One pending item, its latest version (if any) and its author's email. */
+export interface QueueListing {
+  readonly item: ItemRow;
+  readonly version: VersionRow | null;
+  readonly authorEmail: string | null;
+}
+
+/**
+ * The owner's pending queue in one statement, oldest first. The version is a
+ * left join because a pending item may predate its first finalize, and the
+ * email is the same join `queueEntryOf` used to make per item. The table name
+ * stays quoted: `user` is a keyword in SQLite.
+ */
+export async function queueListings(
+  db: D1Database,
+): Promise<readonly QueueListing[]> {
+  const rows = await db
+    .prepare(
+      `SELECT ${LISTING_COLUMNS},
+         u.email AS author_email
+       FROM item i
+       LEFT JOIN item_version v ON v.item_id = i.id
+         AND v.rowid = (
+           SELECT v2.rowid FROM item_version v2
+           WHERE v2.item_id = i.id
+           ORDER BY v2.created_at DESC, v2.rowid DESC
+           LIMIT 1
+         )
+       LEFT JOIN "user" u ON u.id = i.author_user_id
+       WHERE i.status = 'pending'
+       ORDER BY i.created_at, i.id`,
+    )
+    .all<JoinedRow & { readonly author_email: string | null }>();
+  return rows.results.map((row) => ({
+    item: itemOf(row),
+    version: versionOfRow(row),
+    authorEmail: row.author_email,
+  }));
+}
+
 export async function itemById(
   db: D1Database,
   itemId: string,
@@ -106,37 +281,6 @@ export async function presignEventOf(
       .bind(userId, itemId, version)
       .first<PresignRow>()) ?? undefined
   );
-}
-
-/**
- * A version row is written once, at finalize. `OR IGNORE` because two
- * overlapping finalizes of one version both reach here; the row that won is
- * compared by the caller rather than a second insert failing on the key.
- * Answers whether this call wrote the row.
- */
-export async function insertVersion(
-  db: D1Database,
-  row: VersionRow,
-): Promise<boolean> {
-  const result = await db
-    .prepare(
-      `INSERT OR IGNORE INTO item_version (item_id, version, envelope_json,
-         facets_json, package_key, thumbnail_key, bytes, sha256, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
-      row.item_id,
-      row.version,
-      row.envelope_json,
-      row.facets_json,
-      row.package_key,
-      row.thumbnail_key,
-      row.bytes,
-      row.sha256,
-      row.created_at,
-    )
-    .run();
-  return result.meta.changes > 0;
 }
 
 /**

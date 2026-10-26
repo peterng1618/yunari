@@ -10,8 +10,7 @@ import type {
  * Every method returns the Worker's payload and **throws** `StoreClientError`
  * on a non-2xx — the one exception is `baseline`, whose 404 is a first
  * submission rather than a failure and answers `undefined`. The token goes in
- * the `Authorization` header and nowhere else; the presigned PUT is the one
- * call that must not carry it.
+ * the `Authorization` header on every call, the upload route included.
  */
 
 export class StoreClientError extends Error {
@@ -57,7 +56,7 @@ export interface StoreClient {
     id: string,
     input: { readonly envelope: FabricThemeEnvelope; readonly name: string },
   ): Promise<VersionPlan>;
-  /** PUT the package to the presigned address, with no auth header. */
+  /** PUT the package through the Worker's authenticated upload route. */
   upload(url: string, bytes: Uint8Array): Promise<void>;
   finalize(
     id: string,
@@ -161,8 +160,14 @@ export function createStoreClient(options: {
       try {
         // A view over the package's own buffer, which `fetch` accepts as a body
         // at runtime; the cast is the lib's narrower `BodyInit`, not a copy.
+        // The Worker refuses an upload with no `content-length`, and `fetch`
+        // does not derive one from the typed array.
         response = await doFetch(url, {
           method: "PUT",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-length": String(bytes.byteLength),
+          },
           body: bytes as unknown as BodyInit,
         });
       } catch {

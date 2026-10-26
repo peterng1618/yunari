@@ -35,3 +35,21 @@ export interface VersionRow {
   readonly sha256: string;
   readonly created_at: string;
 }
+
+/**
+ * The `upload` table's columns: a proxied upload's reservation. `finalized_at`
+ * and `bytes` are set together, so they are nullable together.
+ */
+export interface UploadRow {
+  readonly id: string;
+  readonly user_id: string;
+  readonly item_id: string;
+  readonly version: string;
+  readonly envelope_json: string;
+  /** Where the pending object lives; finalize copies it into `package_key`. */
+  readonly key: string;
+  readonly reserved_bytes: number;
+  readonly created_at: string;
+  readonly finalized_at: string | null;
+  readonly bytes: number | null;
+}

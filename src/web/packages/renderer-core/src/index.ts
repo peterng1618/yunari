@@ -130,10 +130,15 @@ export {
 } from "./charts/radar.js";
 export { chartReadingSignature } from "./charts/reading-signature.js";
 export {
+  barGapPx,
+  gaugeGap,
   SEGMENT_DIVISORS,
-  SEGMENT_GAP_RATIO,
+  SEGMENT_SPACING_PERCENT_DEFAULT,
+  type SegmentFill,
   segmentCount,
   segmentDivisorOf,
+  segmentFillOf,
+  segmentSpacingPercentOf,
 } from "./charts/segments.js";
 export {
   carriedPaintFor,
@@ -264,6 +269,8 @@ export type {
 } from "./scene/plan.js";
 export {
   buildChartPlan,
+  buildLinePoints,
+  collectChartIssues,
   formatNumber,
   formatUnit,
   MISSING_VALUE_TEXT,
@@ -272,6 +279,10 @@ export {
   resolveTextSegments,
 } from "./scene/plan.js";
 export type { SceneHandle } from "./scene/scene-handle.js";
+export {
+  ASSET_EXTENSIONS,
+  themeAssetContentType,
+} from "./theme/asset-media-type.js";
 export type { AssetResolver, AssetResolverOptions } from "./theme/assets.js";
 export {
   createAssetResolver,
@@ -319,6 +330,7 @@ export {
 } from "./theme/catalogue-location.js";
 export type {
   Artboard,
+  AssetKind,
   AssetLicense,
   AssetReference,
   Background,

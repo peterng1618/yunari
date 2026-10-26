@@ -204,19 +204,43 @@ export class EditorDocument {
   readonly #onBindingsChange: (() => void) | undefined;
   /** Told the document may have moved; see `#writeEnvelope`. */
   readonly #documentChangeListeners = new Set<() => void>();
-  /** One change is one reading of the document. Every subscriber that asks
-   *  `isDirty` would otherwise serialise and validate the whole scene for
-   *  itself — three did, on every live palette sample of a picker drag. */
-  #changeVersion = 0;
-  #dirtyReading:
-    | { readonly version: number; readonly dirty: boolean }
+  /** Whether a listener flush is already queued. Set before scheduling, so the
+   *  dozens of announcements a paste or a revive makes in one task collapse
+   *  into one recompute rather than one per Fabric event. */
+  #announceScheduled = false;
+  /** Bumped by every announcement — synchronously, so a reader that asks right
+   *  after the change never sees the previous answer. It is also the reading's
+   *  key: every asker of the same change shares one serialise-and-validate
+   *  rather than each doing its own, which three surfaces did per pointer move
+   *  of a palette picker drag. */
+  #revision = 0;
+  /** The last dirty answer and what it was computed from. A save moves the
+   *  baseline without bumping the revision, so it clears this outright; the
+   *  manager's mutation count is the other half of the key because an import or
+   *  a removal writes the asset map without announcing anything. */
+  #dirty:
+    | {
+        readonly revision: number;
+        readonly assets: number;
+        readonly value: boolean;
+      }
     | undefined;
   /** A stable reference, so whoever registers it can keep it without binding:
    *  the library manager takes it as a port and the session hands it to every
    *  canvas event that means "the document moved". */
   readonly announceChange = (): void => {
-    this.#changeVersion += 1;
-    for (const listener of this.#documentChangeListeners) listener();
+    this.#revision += 1;
+    if (this.#announceScheduled) return;
+    this.#announceScheduled = true;
+    queueMicrotask(() => {
+      // Cleared before the listeners run: an announcement made during the
+      // flush is a second batch, so it schedules one more pass rather than
+      // being folded into the pass that is already reading stale state.
+      this.#announceScheduled = false;
+      // A copy, so a listener added or removed during the flush does not
+      // change who this batch reaches.
+      for (const listener of [...this.#documentChangeListeners]) listener();
+    });
   };
 
   constructor(options: EditorDocumentOptions) {
@@ -244,7 +268,12 @@ export class EditorDocument {
       snapshot: () => this.snapshot(),
       assets: this.#assets,
       picture: () => this.picture(),
-      markSaved: (theme, assets) => this.#persistence.markSaved(theme, assets),
+      // The baseline, not the document: a save in the same task has bumped no
+      // revision, so the memo would answer for the old one.
+      markSaved: (theme, assets) => {
+        this.#persistence.markSaved(theme, assets);
+        this.#dirty = undefined;
+      },
       announceChange: this.announceChange,
       errors: source.shell.editor.errorManager,
       confirmReplacement: () => this.confirmReplacement(),
@@ -283,34 +312,38 @@ export class EditorDocument {
       // Always the manager's list, empty included: spreading the envelope would
       // otherwise supply the declarations of the package this document opened
       // from, so removing the last asset would resurrect it here — a document
-      // declaring bytes it no longer holds.
+      // declaring bytes it no longer holds, and reading clean because the
+      // baseline carried the same fake.
       assets: this.#assets.declarations,
     });
   }
 
   /** Whether the document differs from what was last saved. Pulled, never held:
    *  the comparison already exists for the replace prompt, and a stored flag
-   *  would be one more thing to keep true.
-   *
-   * **One reading per change, not per asker.** `#writeEnvelope` announces once
-   * and three surfaces ask — the identity chip, the status line and the publish
-   * control — and each ask serialises and validates the whole scene. During a
-   * live gesture that is that work per pointer move, which made a picker drag
-   * spend most of its frame deciding whether the document was unsaved. The
-   * version is bumped by the announce itself, so a later read of the same
-   * change cannot disagree with the first; anything that does not announce —
-   * a save's `markSaved`, and the canvas events the session forwards — either
-   * announces after or is read by the comparison afresh. */
+   *  would be one more thing to keep true. Two JSON passes over the document and
+   *  its assets are what the timer, the identity chip and the publish control
+   *  used to pay per read — each doing its own on every live palette sample of
+   *  a picker drag — so one answer is kept per change, until the revision or an
+   *  asset mutation moves. */
   isDirty(): boolean {
-    if (this.#dirtyReading?.version === this.#changeVersion) {
-      return this.#dirtyReading.dirty;
+    const memo = this.#dirty;
+    if (
+      memo !== undefined &&
+      memo.revision === this.#revision &&
+      memo.assets === this.#assets.mutationCount
+    ) {
+      return memo.value;
     }
-    const dirty = this.#persistence.isDirty(
+    const value = this.#persistence.isDirty(
       this.snapshot(),
       this.#assets.assets,
     );
-    this.#dirtyReading = { version: this.#changeVersion, dirty };
-    return dirty;
+    this.#dirty = {
+      revision: this.#revision,
+      assets: this.#assets.mutationCount,
+      value,
+    };
+    return value;
   }
 
   /** The attribution the saved package will carry, in arrival order. */
@@ -378,6 +411,9 @@ export class EditorDocument {
         await this.picture(),
         this.#creditsPackage(),
       );
+      // The baseline moved while the revision did not: keep the memo from
+      // answering with the pre-save document for the rest of this task.
+      this.#dirty = undefined;
       this.announceChange();
       options.onSaved("Theme package saved");
     } catch (error) {
@@ -459,6 +495,7 @@ export class EditorDocument {
           undefined,
           this.#creditsPackage(),
         );
+        this.#dirty = undefined;
         this.#source.onSaved("Theme package saved");
       }
     }

@@ -1,5 +1,4 @@
 import type { ServerResponse } from "node:http";
-import { formatSseEvent, SAMPLE_EVENT } from "@yunari/renderer-core";
 import { KeepLatestSlot } from "./keep-latest.js";
 
 /** One display connection. Backpressure keeps only the newest pending snapshot. */
@@ -30,13 +29,15 @@ export class SseConnection {
     response.write(": connected\n\n");
   }
 
-  /** Sends a framed batch now or leaves it as the newest pending frame. */
-  offer(payload: string): void {
+  /** Sends a frame the batch already built once, or leaves it as the newest
+   *  pending frame. The connection does not format: one payload shared by many
+   *  connections is framed once, where it is produced. */
+  offer(frame: string): void {
     if (this.closed) {
       return;
     }
 
-    this.slot.offer(formatSseEvent(SAMPLE_EVENT, payload));
+    this.slot.offer(frame);
     this.flush();
   }
 

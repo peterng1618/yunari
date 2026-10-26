@@ -159,3 +159,62 @@ describe("the defaults Fabric actually applies", () => {
     expect(YunariChart.ownDefaults.objectCaching).toBe(false);
   });
 });
+
+describe("how an option reaches the engine", () => {
+  /** A prototype-backed instance with a recording engine behind it. */
+  function recording(): {
+    readonly instance: YunariChart;
+    readonly calls: unknown[][];
+  } {
+    const calls: unknown[][] = [];
+    const instance = Object.create(YunariChart.prototype) as YunariChart &
+      Record<string, unknown>;
+
+    Object.assign(instance, {
+      width: 10,
+      height: 10,
+      _renderScale: 1,
+      _element: { width: 10, height: 10 },
+      _chart: {
+        setOption: (option: unknown, options: unknown) => {
+          calls.push([option, options]);
+        },
+        resize: () => undefined,
+        getZr: () => ({ flush: () => undefined }),
+      },
+    });
+
+    return { instance, calls };
+  }
+
+  it("merges the series and flushes before Fabric blits", () => {
+    // `notMerge: true` threw away every component the previous option carried,
+    // so a repaint rebuilt the whole chart. `replaceMerge` on the series alone
+    // keeps the axes, grid and visual map while still dropping a series the
+    // new option no longer has.
+    const { instance, calls } = recording();
+
+    instance.setOption({ series: [{ type: "line" }] } as never);
+
+    expect(calls).toEqual([
+      [
+        { series: [{ type: "line" }] },
+        { notMerge: false, replaceMerge: ["series"], lazyUpdate: false },
+      ],
+    ]);
+  });
+
+  it("replaces the whole option when the caller asks for it", () => {
+    // A merge never deletes a key the new option omits, and the line builders
+    // omit `visualMap` and `yAxis.min`/`max` when the author removes the
+    // threshold or clears the bound. An editor settings edit is therefore a
+    // replacement; the player's merge stays the default.
+    const { instance, calls } = recording();
+
+    instance.setOption({ series: [] } as never, { replace: true });
+
+    expect(calls).toEqual([
+      [{ series: [] }, { notMerge: true, lazyUpdate: false }],
+    ]);
+  });
+});

@@ -2,8 +2,27 @@
 
 import type { Background, ScenePlan } from "@yunari/renderer-core";
 import { Group, Rect } from "fabric/es";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { type FabricSceneHandle, mountFabricScene } from "./scene.js";
+
+/** jsdom has no video frame callbacks, and the cases below patch them on the
+ *  prototype. Restored after every case, so one case's patch is never the next
+ *  case's starting state. */
+const videoPrototype = HTMLVideoElement.prototype as unknown as Record<
+  string,
+  unknown
+>;
+const originalFrameCallbacks: Readonly<Record<string, unknown>> = {
+  requestVideoFrameCallback: videoPrototype["requestVideoFrameCallback"],
+  cancelVideoFrameCallback: videoPrototype["cancelVideoFrameCallback"],
+};
+
+afterEach(() => {
+  for (const [name, original] of Object.entries(originalFrameCallbacks)) {
+    if (original === undefined) delete videoPrototype[name];
+    else videoPrototype[name] = original;
+  }
+});
 
 function plan(artboard: Partial<ScenePlan["artboard"]> = {}): ScenePlan {
   return {
@@ -21,10 +40,29 @@ function plan(artboard: Partial<ScenePlan["artboard"]> = {}): ScenePlan {
 
 function host(): HTMLElement {
   const element = document.createElement("div");
-  Object.defineProperty(element, "clientWidth", { value: 400 });
-  Object.defineProperty(element, "clientHeight", { value: 300 });
+  Object.defineProperty(element, "clientWidth", {
+    configurable: true,
+    value: 400,
+  });
+  Object.defineProperty(element, "clientHeight", {
+    configurable: true,
+    value: 300,
+  });
   document.body.append(element);
   return element;
+}
+
+/** The host's measurable size, which is all `resize()` reads to decide whether
+ *  it has anything to do. */
+function resizeHost(element: HTMLElement, width: number, height: number): void {
+  Object.defineProperty(element, "clientWidth", {
+    configurable: true,
+    value: width,
+  });
+  Object.defineProperty(element, "clientHeight", {
+    configurable: true,
+    value: height,
+  });
 }
 
 /** A background bag naming one media, which is all the scene reads of it. */
@@ -166,6 +204,69 @@ describe("mountFabricScene's artboard paint", () => {
   });
 });
 
+describe("mountFabricScene's resize", () => {
+  it("re-fits only when the host's pixel size changes", () => {
+    // A `ResizeObserver` fires for layout changes that leave the pixel size
+    // alone — a transform, a scrollbar, a sibling moving — and re-fitting the
+    // artboard for those is a canvas resize and a full repaint for nothing.
+    const element = host();
+    const scene = mountFabricScene({
+      host: element,
+      plan: plan(),
+      artboard: { width: 400, height: 300 },
+    });
+    const setDimensions = vi.spyOn(scene.canvas, "setDimensions");
+    const render = vi.spyOn(scene.canvas, "requestRenderAll");
+
+    scene.resize();
+    scene.resize();
+
+    expect(
+      setDimensions,
+      "an unchanged host size resizes nothing",
+    ).not.toHaveBeenCalled();
+    expect(render, "and asks for no repaint").not.toHaveBeenCalled();
+
+    resizeHost(element, 800, 600);
+    scene.resize();
+
+    expect(setDimensions, "a changed size fits once").toHaveBeenCalledTimes(1);
+    // Not pinned to one: Fabric's dimension setter and the adapter's render
+    // scale each request a render of their own, so the fit is one setter call
+    // and at least one repaint.
+    expect(render, "and repaints").toHaveBeenCalled();
+
+    // The same CSS size on a monitor with another pixel ratio is a different
+    // backing store, so it is a fit: the ratio is part of what was recorded.
+    const ratioDescriptor = Object.getOwnPropertyDescriptor(
+      window,
+      "devicePixelRatio",
+    );
+    Object.defineProperty(window, "devicePixelRatio", {
+      configurable: true,
+      value: (window.devicePixelRatio ?? 1) * 2,
+    });
+    try {
+      scene.resize();
+      expect(
+        setDimensions,
+        "a changed pixel ratio at the same size fits again",
+      ).toHaveBeenCalledTimes(2);
+    } finally {
+      // The original is jsdom's accessor; restoring the value as a data
+      // property would leave the file with a different `window`.
+      if (ratioDescriptor === undefined) {
+        delete (window as { devicePixelRatio?: number }).devicePixelRatio;
+      } else {
+        Object.defineProperty(window, "devicePixelRatio", ratioDescriptor);
+      }
+    }
+
+    scene.dispose();
+    element.remove();
+  });
+});
+
 describe("mountFabricScene's video repaint", () => {
   /** A video background, with or without a glass panel over it.
    *
@@ -176,6 +277,7 @@ describe("mountFabricScene's video repaint", () => {
   function mountVideo(options: { readonly glass: boolean }): {
     readonly scene: FabricSceneHandle;
     readonly frames: readonly (() => void)[];
+    readonly panel: Rect | undefined;
   } {
     const element = host();
     const frames: (() => void)[] = [];
@@ -198,25 +300,25 @@ describe("mountFabricScene's video repaint", () => {
       resolveAsset: () => ({ url: "blob:loop" }),
     });
 
+    let panel: Rect | undefined;
     if (options.glass) {
-      scene.canvas.add(
-        new Rect({
-          left: 40,
-          top: 40,
-          width: 60,
-          height: 40,
-          originX: "left",
-          originY: "top",
-          fill: "rgba(255, 255, 255, 0.2)",
-          yunariGlass: { blurRadius: 8 },
-        }),
-      );
+      panel = new Rect({
+        left: 40,
+        top: 40,
+        width: 60,
+        height: 40,
+        originX: "left",
+        originY: "top",
+        fill: "rgba(255, 255, 255, 0.2)",
+        yunariGlass: { blurRadius: 8 },
+      });
+      scene.canvas.add(panel);
       // The panel's scratch surface is allocated during a render, which is why
       // the gate cannot be a decision taken at mount.
       scene.canvas.renderAll();
     }
 
-    return { scene, frames };
+    return { scene, frames, panel };
   }
 
   /** The repaints one decoded frame asks for. A frame callback re-arms itself,
@@ -239,31 +341,55 @@ describe("mountFabricScene's video repaint", () => {
     return repaints;
   }
 
-  it("asks for no repaint per decoded frame when nothing samples the backdrop", () => {
-    // The video is still followed — that is `background-media.ts`'s own
-    // decision, unchanged — and every frame it delivers asks for nothing,
-    // because a canvas repaint per decoded frame is what a video background
-    // used to cost with no reader at all.
+  it("schedules no video frame callbacks when nothing samples the backdrop", () => {
+    // Following the video costs a callback per decoded frame even when nothing
+    // reads it, and a hidden or unread backdrop is the case this gate exists
+    // for. The mount's render is the first opportunity to know the count, so
+    // the layer starts armed and the sync stops it.
     const { scene, frames } = mountVideo({ glass: false });
 
-    expect(frames, "the video is being followed").toHaveLength(1);
     expect(
-      repaintsOnFrame(scene, frames),
-      "a decoded frame nothing samples asks for no repaint",
-    ).toBe(0);
+      frames,
+      "nothing samples the backdrop, so no frame is followed",
+    ).toHaveLength(0);
 
     scene.dispose();
   });
 
-  it("still repaints per frame when a glass panel samples the backdrop", () => {
+  it("follows frames while a glass panel samples the backdrop", () => {
     // A frozen frame behind a blur is the bug the loop exists to prevent, so
     // the gate is exactly "is anything reading the backdrop".
     const { scene, frames } = mountVideo({ glass: true });
 
+    expect(frames, "the panel is sampling a moving backdrop").toHaveLength(1);
     expect(
       repaintsOnFrame(scene, frames),
-      "the panel is sampling a moving backdrop",
+      "a followed frame repaints the panel",
     ).toBe(1);
+
+    scene.dispose();
+  });
+
+  it("stops re-arming when the last glass surface goes away", () => {
+    const { scene, frames, panel } = mountVideo({ glass: true });
+    expect(frames, "the panel's frames are followed").toHaveLength(1);
+
+    scene.canvas.remove(panel!);
+    scene.canvas.renderAll();
+    const before = frames.length;
+    // A callback already in flight when the panel left must not re-arm the
+    // chain: that is the leak a queued callback becomes once nothing reads it.
+    for (const frame of [...frames]) frame();
+    expect(frames.length, "no callback was re-armed at zero surfaces").toBe(
+      before,
+    );
+
+    // And a panel that comes back is what arms it again.
+    scene.canvas.add(panel!);
+    scene.canvas.renderAll();
+    expect(frames.length, "the returned surface re-arms the chain").toBe(
+      before + 1,
+    );
 
     scene.dispose();
   });
@@ -298,6 +424,21 @@ describe("mountFabricScene disposal", () => {
         assets: [{ id: "loop", kind: "video", path: "assets/loop.webm" }],
         resolveAsset: () => ({ url: "blob:loop" }),
       });
+      // A panel is what makes the video worth following now, and this case is
+      // about what teardown releases, so it needs a live callback to cancel.
+      scene.canvas.add(
+        new Rect({
+          left: 40,
+          top: 40,
+          width: 60,
+          height: 40,
+          originX: "left",
+          originY: "top",
+          fill: "rgba(255, 255, 255, 0.2)",
+          yunariGlass: { blurRadius: 8 },
+        }),
+      );
+      scene.canvas.renderAll();
       scene.updateArtboard({ width: 400, height: 300 });
 
       expect(

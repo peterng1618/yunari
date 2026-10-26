@@ -2,12 +2,19 @@ import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import { readVideoFacts, videoRefusals } from "@yunari/theme-package";
 import { describe, expect, it, vi } from "vitest";
+import { verifyFfmpeg } from "./ffmpeg-hash.mjs";
 import { ffmpegArgs, normalizeVideo } from "./normalize-video.js";
 
 // The real module resolves to a bundled binary on this machine; the missing-
 // encoder case is a module that gave none, which is what a build without the
 // optional download looks like.
 vi.mock("ffmpeg-static", () => ({ default: null }));
+
+// The shipped path, without the seam: the digest is read from disk on every
+// spawn, so a case that counts the seam cannot see a cache behind it.
+vi.mock("./ffmpeg-hash.mjs", () => ({
+  verifyFfmpeg: vi.fn((): { ok: true } => ({ ok: true })),
+}));
 
 function fixture(name: string): Uint8Array {
   return new Uint8Array(
@@ -25,6 +32,9 @@ function runWriting(output: Uint8Array) {
     return { code: 0, stderr: "" };
   });
 }
+
+/** The spawn gate's seam: a fake encoder has no digest recorded for it. */
+const acceptHash = (): { ok: true } => ({ ok: true });
 
 describe("normalizeVideo", () => {
   it("returns the same bytes object for a conforming input", async () => {
@@ -58,6 +68,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(true);
@@ -80,6 +91,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("audio.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(true);
@@ -97,6 +109,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("nofaststart.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(true);
@@ -114,6 +127,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(false);
@@ -136,6 +150,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(false);
@@ -155,6 +170,7 @@ describe("normalizeVideo", () => {
       aspect: { width: 16, height: 9 },
       ffmpegPath: "ffmpeg-stub",
       run,
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(true);
@@ -192,12 +208,63 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run: async () => ({ code: 1, stderr: "ENCODER INTERNAL DETAIL" }),
+      verifyForTest: acceptHash,
     });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.message).toContain("code 1");
     expect(result.message).not.toContain("ENCODER INTERNAL DETAIL");
+  });
+
+  it("verifies once per spawn, not once per path", async () => {
+    // The digests are read immediately before each spawn because the binary can
+    // be replaced between them; a per-path cache would accept the second.
+    const run = runWriting(fixture("conforming.mp4"));
+    const verifyForTest = vi.fn(acceptHash);
+
+    const options = { ffmpegPath: "ffmpeg-stub", run, verifyForTest };
+    await normalizeVideo(fixture("wide.mp4"), options);
+    await normalizeVideo(fixture("wide.mp4"), options);
+
+    expect(verifyForTest).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("verifies once per spawn, not once per path, on the default path", async () => {
+    // The case above counts the seam, which production never passes; the
+    // shipped defect sat behind it. Here the real verifier is mocked, so a
+    // cache in `verified` leaves the second spawn unhashed and this fails.
+    const run = runWriting(fixture("conforming.mp4"));
+    vi.mocked(verifyFfmpeg).mockClear();
+
+    const options = { ffmpegPath: "ffmpeg-stub", run };
+    await normalizeVideo(fixture("wide.mp4"), options);
+    await normalizeVideo(fixture("wide.mp4"), options);
+
+    expect(verifyFfmpeg).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses a binary whose hash does not match, without spawning it", async () => {
+    const run = vi.fn(async () => ({ code: 0, stderr: "" }));
+
+    const result = await normalizeVideo(fixture("wide.mp4"), {
+      ffmpegPath: "ffmpeg-stub",
+      run,
+      verifyForTest: () => ({
+        ok: false,
+        message: "ffmpeg-static 5.3.0 win32-x64: expected aa, got bb.",
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.message).toBe(
+      "The bundled ffmpeg does not match the hash recorded for this platform, " +
+        "so the video was not re-encoded.",
+    );
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("names the missing encoder when the module supplied none", async () => {

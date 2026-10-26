@@ -231,7 +231,7 @@ describe("EditorDocument credits", () => {
     expect(document.credits()).toEqual([seeded]);
   });
 
-  it("prunes bytes, declarations and the linked credit", () => {
+  it("prunes bytes, declarations and the linked credit", async () => {
     const asset = imageAsset("photo");
     const assetManager = managerWith([asset]);
     const linked: ThemeCreditsEntry = {
@@ -250,7 +250,10 @@ describe("EditorDocument credits", () => {
     expect(assetManager.declarations).toEqual([]);
     expect(assetManager.assets).toEqual({});
     expect(document.credits().map((credit) => credit.title)).toEqual(["house"]);
-    expect(changed).toHaveBeenCalled();
+    // One prune is one whole announcement: a batch of them in one task reaches
+    // its listeners once, on the flush.
+    await Promise.resolve();
+    expect(changed).toHaveBeenCalledTimes(1);
     document.destroy();
   });
 

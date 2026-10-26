@@ -1,4 +1,4 @@
-# 0119 — A preview ratio is a catalogue entry, and the lens is scene geometry
+# 0123 — A preview ratio is a catalogue entry, and the lens is scene geometry
 
 - **Date:** 2026-10-26
 - **Status:** accepted

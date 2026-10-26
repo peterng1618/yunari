@@ -9,6 +9,8 @@ import type { Sample } from "../types.js";
  * builder only ever sees this.
  */
 export interface SampleSource {
+  /** Increments once per accepted ingest; a reader uses it to skip unchanged data. */
+  readonly revision: number;
   /** Intentional chart viewport lag; retained samples remain unmodified. */
   readonly chartPlaybackDelayMs?: number;
   /** The newest sample for a semantic key, or undefined when nothing is mapped. */
@@ -22,6 +24,7 @@ export interface SampleSource {
 
 /** A source that maps nothing. Unmapped keys report; they never invent. */
 export const emptySampleSource: SampleSource = {
+  revision: 0,
   latest: () => undefined,
   history: () => [],
 };

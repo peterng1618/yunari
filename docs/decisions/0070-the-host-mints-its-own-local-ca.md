@@ -206,7 +206,9 @@ is permissive and needs no source obligation. `THIRD-PARTY-NOTICES.md` and
 
 The shape of what is issued, and why:
 
-- **One CA per machine**, kept at `<settingsDir>/tls/ca.crt` and `ca.key`. It is
+- **One CA per machine**, the certificate at `<settingsDir>/tls/ca.crt` with its
+  private key in the settings secret store as the `ca-key` secret
+  (`<settingsDir>/tls/ca-key.bin`, encrypted under the OS-wrapped key). It is
   the thing a device installs, so it must outlive restarts — a CA regenerated on
   every start would mean re-installing on every device every time, which is the
   self-signed certificate's cost under another name.

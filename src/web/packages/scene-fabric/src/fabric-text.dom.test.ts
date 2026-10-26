@@ -450,7 +450,7 @@ describe("what one text pass costs", () => {
         refreshBoundText(
           canvas,
           { label: [{ id: "load", semanticKey: "cpu.load" }] },
-          { latest: () => undefined, history: () => [] },
+          { revision: 0, latest: () => undefined, history: () => [] },
           undefined,
         ),
       ),

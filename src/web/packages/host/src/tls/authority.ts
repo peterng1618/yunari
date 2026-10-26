@@ -1,13 +1,18 @@
 import {
+  createHash,
   createPublicKey,
   generateKeyPairSync,
   randomBytes,
   X509Certificate,
 } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
 import forge from "node-forge";
+import {
+  createSecretStore,
+  type SecretStore,
+} from "../settings/secret-store.js";
 
 /**
  * The certificates a secure origin needs: one root this machine keeps, and a
@@ -35,18 +40,37 @@ const CA_DAYS = 3_650;
 const CLOCK_SKEW_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 const CA_CERT_FILE = "ca.crt";
-const CA_KEY_FILE = "ca.key";
+/** The root's private key, kept encrypted; only the certificate is in the clear. */
+const CA_KEY_SECRET = "ca-key";
+/** The pre-encryption key file, migrated and removed on the first read whose
+ *  removal succeeds; a failed removal is retried by the next read. */
+const LEGACY_CA_KEY_FILE = "ca.key";
 const CA_COMMON_NAME = "Yunari Local CA";
-/** The private key is a secret. Where the platform honours a mode this keeps it
- *  to its owner; on Windows the mode is ignored and the file inherits the
- *  profile directory's ACL, which is already this user's alone. */
-const KEY_MODE = 0o600;
+
+/**
+ * A root certificate, as PEM. Its own type because a leaf or a chain is also a
+ * string: the fingerprint of a chain is the first certificate's, the leaf's, so
+ * a plain string lets the served header describe one certificate while the
+ * startup block prints another. Minted only here, where the authority reads the
+ * certificate; runtime shape stays a string, so no call site casts.
+ */
+export type RootPem = string & { readonly __rootCertificate: unique symbol };
+
+/** The one conversion to `RootPem`, for the certificate this authority loaded
+ *  or minted. Not exported: nothing else can claim the brand. */
+function rootPem(pem: string): RootPem {
+  return pem as RootPem;
+}
 
 export interface SecureOrigin {
   /** The root, PEM — what a display installs to trust this host. */
-  readonly certificate: string;
+  readonly certificate: RootPem;
   /** Where the root lives, so the console can name a file rather than a shape. */
   readonly certificatePath: string;
+  /** The startup lines publishing `certificate`'s fingerprint, built here from
+   *  those bytes: the launcher prints them without an argument to get wrong, so
+   *  it cannot print the one that belongs to another certificate. */
+  readonly certificateLines: readonly string[];
   /** The leaf's private key, PEM. In memory only, never written. */
   readonly key: string;
   /** The leaf, PEM, covering every name it was asked for. */
@@ -76,17 +100,52 @@ export interface SecureOrigin {
 export async function createSecureOrigin(
   directory: string,
   names: readonly string[],
+  secrets: SecretStore = createSecretStore(directory),
 ): Promise<SecureOrigin> {
-  const { certificate, key, certificatePath } =
-    await loadOrCreateAuthority(directory);
+  const { certificate, key, certificatePath } = await loadOrCreateAuthority(
+    directory,
+    secrets,
+  );
   const leaf = issueLeaf(certificate, key, names);
 
   return {
     certificate,
     certificatePath,
+    certificateLines: certificateStepLines(certificate),
     chain: leaf.leaf + certificate,
     ...leaf,
   };
+}
+
+/**
+ * The SHA-256 of the certificate's DER, lowercase hex — 64 characters a person
+ * can read out and compare on a phone before trusting the root.
+ *
+ * Of the DER rather than of the PEM text: whitespace and line wrapping are a
+ * spelling of the same certificate, and a client stores the DER. Anything that
+ * is not a certificate throws — `X509Certificate` parses and refuses it — which
+ * is the check, rather than a second one here.
+ */
+export function certificateFingerprintSha256(pem: RootPem): string {
+  return createHash("sha256")
+    .update(new X509Certificate(pem).raw)
+    .digest("hex");
+}
+
+/**
+ * The startup lines that publish the root's fingerprint, for the PEM the host
+ * loaded: printed in the same block as the address, so the value a person
+ * compares is read off the certificate being served rather than carried beside
+ * it where it could drift.
+ */
+export function certificateStepLines(pem: RootPem): readonly string[] {
+  const fingerprint = certificateFingerprintSha256(pem);
+
+  return [
+    `  Fingerprint  SHA-256: ${fingerprint}`,
+    `  Compare it with the certificate's own fingerprint before installing it;`,
+    `  they have to match, or these are not the same certificate.`,
+  ];
 }
 
 /**
@@ -127,33 +186,91 @@ function newKeyPair(): {
   };
 }
 
-async function loadOrCreateAuthority(directory: string): Promise<{
-  readonly certificate: string;
+/**
+ * The root's private key, migrating a legacy `ca.key` and retiring it on the
+ * first read whose removal succeeds; a failed removal is retried next read.
+ *
+ * `undefined` means there is no key to use, which is an ordinary first run. A
+ * present encrypted key that cannot be read throws: that is not the same fact
+ * as having none, and treating it as one would mint a new root and invalidate
+ * every display's install.
+ */
+async function readAuthorityKey(
+  directory: string,
+  secrets: SecretStore,
+): Promise<string | undefined> {
+  const legacyFile = path.join(directory, LEGACY_CA_KEY_FILE);
+  const stored = await secrets.read(CA_KEY_SECRET);
+  if (stored !== undefined) {
+    // The encrypted copy is the source of truth. A plaintext an earlier
+    // removal failed to delete is retired here; a failure now is retried on
+    // the next read rather than failing this one.
+    await rm(legacyFile, { force: true }).catch(() => undefined);
+    return Buffer.from(stored.toString("utf8"), "base64").toString("utf8");
+  }
+
+  let legacy: string;
+  try {
+    legacy = await readFile(legacyFile, "utf8");
+  } catch {
+    return undefined;
+  }
+
+  // Base64 of the PEM text: the stored bytes never read as a private key.
+  await secrets.write(
+    CA_KEY_SECRET,
+    Buffer.from(Buffer.from(legacy, "utf8").toString("base64"), "utf8"),
+  );
+  // Only after the encrypted copy succeeded; a failed write leaves the
+  // plaintext for a later run to migrate. A failed removal is retried by the
+  // next read rather than failing this one.
+  await rm(legacyFile, { force: true }).catch(() => undefined);
+  return legacy;
+}
+
+async function loadOrCreateAuthority(
+  directory: string,
+  secrets: SecretStore,
+): Promise<{
+  readonly certificate: RootPem;
   readonly key: string;
   readonly certificatePath: string;
 }> {
   const certificatePath = path.join(directory, CA_CERT_FILE);
-  const keyPath = path.join(directory, CA_KEY_FILE);
 
+  // Outside the pair check below: a key that exists but cannot be decrypted is
+  // a throw, never "no key", so it must not land in a regeneration branch.
+  const key = await readAuthorityKey(directory, secrets);
+
+  let existingCertificate: string | undefined;
   try {
-    const [certificate, key] = await Promise.all([
-      readFile(certificatePath, "utf8"),
-      readFile(keyPath, "utf8"),
-    ]);
-
-    // **Present but not a pair is the one half-state a read cannot see.** The
-    // key is written first and the certificate second, so a crash between the
-    // two leaves a new key beside the old certificate; every leaf signed with
-    // that key would then fail to chain to the root the devices installed, and
-    // the owner would get a certificate warning with nothing to explain it.
-    // One verification costs nothing and is the only way to tell.
-    if (new X509Certificate(certificate).verify(createPublicKey(key))) {
-      return { certificate, key, certificatePath };
-    }
+    existingCertificate = await readFile(certificatePath, "utf8");
   } catch {
-    // Absent, unreadable, or not a matching pair. A root this machine cannot
-    // use is a root it does not have: generating a new one costs every display
-    // one re-install, and refusing to start costs the owner their host.
+    existingCertificate = undefined;
+  }
+
+  if (existingCertificate !== undefined && key !== undefined) {
+    try {
+      // **Present but not a pair is the one half-state a read cannot see.** The
+      // key is written first and the certificate second, so a crash between the
+      // two leaves a new key beside the old certificate; every leaf signed with
+      // that key would then fail to chain to the root the devices installed, and
+      // the owner would get a certificate warning with nothing to explain it.
+      // One verification costs nothing and is the only way to tell.
+      if (
+        new X509Certificate(existingCertificate).verify(createPublicKey(key))
+      ) {
+        return {
+          certificate: rootPem(existingCertificate),
+          key,
+          certificatePath,
+        };
+      }
+    } catch {
+      // Absent, unreadable, or not a matching pair. A root this machine cannot
+      // use is a root it does not have: generating a new one costs every display
+      // one re-install, and refusing to start costs the owner their host.
+    }
   }
 
   const { pki, md } = forge;
@@ -179,15 +296,23 @@ async function loadOrCreateAuthority(directory: string): Promise<{
   const certificate = pki.certificateToPem(root);
 
   await mkdir(directory, { recursive: true });
-  // The key first: a certificate written without its key is the one half-state
-  // that would look usable and is not.
-  await writeFile(keyPath, keys.privateKey, {
-    encoding: "utf8",
-    mode: KEY_MODE,
-  });
+  // The key first, and readable, before the certificate: a certificate written
+  // without its key is the one half-state that would look usable and is not.
+  const encodedKey = Buffer.from(keys.privateKey, "utf8").toString("base64");
+  await secrets.write(CA_KEY_SECRET, Buffer.from(encodedKey, "utf8"));
+
+  const persisted = await secrets.read(CA_KEY_SECRET);
+  if (persisted === undefined || persisted.toString("utf8") !== encodedKey) {
+    throw new Error("The CA private key could not be read back after writing.");
+  }
+
   await writeFile(certificatePath, certificate, "utf8");
 
-  return { certificate, key: keys.privateKey, certificatePath };
+  return {
+    certificate: rootPem(certificate),
+    key: keys.privateKey,
+    certificatePath,
+  };
 }
 
 function issueLeaf(

@@ -77,16 +77,19 @@ export function serve(handler: (call: Call) => Response | Promise<Response>): {
 }
 
 /** A first-in-first-out socket the test closes by hand. */
-export function listen(handler: RequestListener): Promise<{
+export function listen(
+  handler: RequestListener,
+  host = "127.0.0.1",
+): Promise<{
   origin: string;
   close: () => Promise<void>;
 }> {
   const server = createServer(handler);
   return new Promise((resolve) =>
-    server.listen(0, "127.0.0.1", () => {
+    server.listen(0, host, () => {
       const { port } = server.address() as AddressInfo;
       resolve({
-        origin: `http://127.0.0.1:${port}`,
+        origin: `http://${host}:${port}`,
         close: () => {
           server.closeAllConnections();
           return new Promise<void>((done, reject) => {

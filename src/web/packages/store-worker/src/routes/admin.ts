@@ -1,8 +1,9 @@
 import { isOwner } from "../auth/owner.js";
 import { sessionOf } from "../auth/session.js";
-import { itemById, latestVersion, setStatus } from "../db/items.js";
-import type { ItemRow } from "../db/types.js";
+import type { QueueListing } from "../db/items.js";
+import { itemById, queueListings, setStatus } from "../db/items.js";
 import type { Env } from "../env.js";
+import { MAX_JSON_BODY, readJsonBody } from "./body.js";
 
 const ADMIN_PREFIX = "/api/admin/";
 const QUEUE = "/api/admin/queue";
@@ -101,26 +102,18 @@ async function dispatch(
 }
 
 async function queue(env: Env): Promise<Response> {
-  const items = await env.DB.prepare(
-    "SELECT * FROM item WHERE status = 'pending' ORDER BY created_at, id",
-  ).all<ItemRow>();
-
-  const entries: QueueEntry[] = [];
-  for (const item of items.results) entries.push(await queueEntryOf(env, item));
-  return Response.json({ entries });
+  // One statement: the item, its latest version and its author's email.
+  const rows = await queueListings(env.DB);
+  return Response.json({ entries: rows.map(queueEntryOf) });
 }
 
-async function queueEntryOf(env: Env, item: ItemRow): Promise<QueueEntry> {
-  const version = await latestVersion(env.DB, item.id);
-  // The table name is quoted: `user` is a keyword in SQLite.
-  const author = await env.DB.prepare('SELECT email FROM "user" WHERE id = ?')
-    .bind(item.author_user_id)
-    .first<{ email: string }>();
+function queueEntryOf(row: QueueListing): QueueEntry {
+  const { item, version, authorEmail } = row;
   return {
     id: item.id,
     name: item.name,
     authorUserId: item.author_user_id,
-    authorEmail: author?.email ?? null,
+    authorEmail,
     createdAt: item.created_at,
     updatedAt: item.updated_at,
     version: version?.version ?? null,
@@ -176,15 +169,9 @@ async function itemAction(
 
 /** A verdict sentence: trimmed, non-empty and bounded. */
 async function readReason(request: Request): Promise<string | Response> {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return badRequest("A JSON body with a reason is required.");
-  }
-  if (typeof body !== "object" || body === null || Array.isArray(body))
-    return badRequest("A JSON body with a reason is required.");
-  const value = (body as Record<string, unknown>)["reason"];
+  const read = await readJsonBody(request, MAX_JSON_BODY);
+  if (!read.ok) return read.response;
+  const value = read.body["reason"];
   if (typeof value !== "string" || value.trim().length === 0)
     return badRequest("A reason is required.");
   const reason = value.trim();

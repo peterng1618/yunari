@@ -7,6 +7,7 @@
       "src/web/**/*.tsx",
       "src/web/**/*.json",
       "src/web/**/*.css",
+      "src/web/packages/host/src/themes/ffmpeg-hash.mjs",
       "!src/web/packages/host/src/assets/icons/*.generated.ts"
     ]
   },

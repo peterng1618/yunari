@@ -1,8 +1,11 @@
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   contentTypeFor,
   needsTrailingSlash,
+  realStaticPath,
   resolveStaticPath,
 } from "./static-path.js";
 
@@ -93,6 +96,56 @@ describe("resolveStaticPath", () => {
     // Without stripping them, path.resolve would read this as an absolute
     // path and leave the root behind entirely.
     expect(resolved).toBe(path.join(ROOT, "main.js"));
+  });
+});
+
+describe("realStaticPath", () => {
+  const dirs: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(
+      dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    );
+  });
+
+  async function root(): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-real-static-"));
+    dirs.push(dir);
+    await fs.mkdir(path.join(dir, "assets"));
+    await fs.writeFile(path.join(dir, "assets", "app.js"), "export {};");
+    return dir;
+  }
+
+  it("answers the real path of a file a build wrote", async () => {
+    const dir = await root();
+
+    expect(await realStaticPath(dir, "/assets/app.js")).toBe(
+      await fs.realpath(path.join(dir, "assets", "app.js")),
+    );
+  });
+
+  it("refuses a link even when it points inside the root", async () => {
+    const dir = await root();
+    await fs.symlink(
+      path.join(dir, "assets", "app.js"),
+      path.join(dir, "assets", "linked.js"),
+    );
+
+    expect(await realStaticPath(dir, "/assets/linked.js")).toBeUndefined();
+  });
+
+  it("refuses a path that names a dotfile", async () => {
+    const dir = await root();
+    await fs.writeFile(path.join(dir, ".env"), "SECRET=1");
+
+    expect(await realStaticPath(dir, "/.env")).toBeUndefined();
+  });
+
+  it("refuses a file that is not there, and a path that escapes", async () => {
+    const dir = await root();
+
+    expect(await realStaticPath(dir, "/assets/missing.js")).toBeUndefined();
+    expect(await realStaticPath(dir, "/../secrets.txt")).toBeUndefined();
   });
 });
 

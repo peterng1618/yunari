@@ -7,9 +7,19 @@
 // `swept.length > 0` guard is what turns the missing origin into red rather
 // than into a silent green.
 
-import type { SampleSource } from "@yunari/renderer-core";
+import {
+  chartPaintFieldsFor,
+  defaultGaugeSettings,
+  defaultLineSettings,
+  type SampleSource,
+} from "@yunari/renderer-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PAIRING_STORAGE_KEY, readStoredPairing } from "./host-refind.js";
+import {
+  PAIRING_STORAGE_KEY,
+  readStoredPairing,
+  refindTarget,
+} from "./host-refind.js";
+import type { PageNavigation } from "./main.js";
 
 /**
  * `vg-190`: a rejection arriving after the scene mounted calls
@@ -159,7 +169,12 @@ describe("the player's re-find", () => {
 
   /** Mounts a paired display whose host has moved: every poll fails, so every
    *  tick reports it and the ladder runs. */
-  async function mountWithTheHostGone(): Promise<{ readonly asked: Asked[] }> {
+  async function mountWithTheHostGone(
+    options: {
+      readonly pageUrl?: string;
+      readonly host?: Record<string, unknown>;
+    } = {},
+  ): Promise<{ readonly asked: Asked[] }> {
     // The display this case mounts gets no frames: a minute of fake time is
     // ~1900 repaints at the chart loop's rate, and every one of them is work
     // this case is not about. `window`'s own pair, because the chart loop binds
@@ -174,7 +189,8 @@ describe("the player's re-find", () => {
     history.replaceState(
       {},
       "",
-      "/?theme=living-room&display=d1&theme-source=map&session=paired-token",
+      options.pageUrl ??
+        "/?theme=living-room&display=d1&theme-source=map&session=paired-token",
     );
     vi.stubGlobal("EventSource", SilentEventSource);
     vi.stubGlobal(
@@ -196,7 +212,9 @@ describe("the player's re-find", () => {
         asked.push({ url, init });
 
         if (url === "/api/host") {
-          return json({ id: "h1", name: "study-pc", port: 5227 });
+          return json(
+            options.host ?? { id: "h1", name: "study-pc", port: 5227 },
+          );
         }
         // The host has moved: every poll fails, so every tick reports it.
         if (url.startsWith("/api/published")) {
@@ -273,6 +291,29 @@ describe("the player's re-find", () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it("learns its token from the host and keeps it for a re-find", async () => {
+    // A newly paired display: the cookie is HttpOnly and the URL carries no
+    // session, so `GET /api/host` is the only place it can read its own token.
+    await mountWithTheHostGone({
+      pageUrl: "/?theme=living-room&display=d1&theme-source=map",
+      host: {
+        id: "h1",
+        name: "study-pc",
+        port: 5227,
+        token: "paired-token",
+      },
+    });
+
+    const pairing = readStoredPairing(window.localStorage);
+    expect(pairing?.token).toBe("paired-token");
+
+    // A re-find lands on another origin, where this host's cookie is never
+    // sent: the stored token is the only thing that crosses that boundary.
+    expect(refindTarget("http://192.168.1.44:5227", pairing?.token)).toBe(
+      "http://192.168.1.44:5227/?session=paired-token",
+    );
+  });
 });
 
 /**
@@ -292,14 +333,21 @@ describe("the player's re-find", () => {
 describe("the rate the display repaints at", () => {
   let chartFps: unknown = 1;
   let pending = new Map<number, FrameRequestCallback>();
+  let pendingTimers = new Map<
+    number,
+    { callback: () => void; dueMs: number; delayMs: number }
+  >();
   let nextHandle = 0;
+  let nextTimer = 0;
   let clock = 0;
 
   beforeEach(() => {
     vi.resetModules();
     chartFps = 1;
     pending = new Map();
+    pendingTimers = new Map();
     nextHandle = 0;
+    nextTimer = 0;
     clock = 0;
   });
 
@@ -309,11 +357,16 @@ describe("the rate the display repaints at", () => {
     vi.resetModules();
   });
 
-  /** One frame of the loop's own clock. The clock is monotonic across calls
-   *  because the loop's own `lastRefreshMs` is: rewinding it would make every
-   *  frame look too early to repaint. */
-  function driveFrame(): void {
-    clock += 1;
+  /** One wake of the loop's own clock, whichever kind is pending: at 1 fps the
+   *  loop sleeps on a timer and requests no frame until it is due. The clock is
+   *  monotonic across calls because the loop's schedule is. */
+  function driveFrame(stepMs = 1): void {
+    clock += stepMs;
+    for (const [id, timer] of pendingTimers) {
+      if (timer.dueMs > clock) continue;
+      pendingTimers.delete(id);
+      timer.callback();
+    }
     const due = [...pending.values()];
     pending.clear();
     for (const callback of due) callback(clock);
@@ -338,18 +391,52 @@ describe("the rate the display repaints at", () => {
     throw new Error("the loop repainted fewer than twice in 5000 frames");
   }
 
-  /** How many frame loops the page keeps alive: one re-armed callback per frame
-   *  is one loop, so a `setRate` that restarted the loop instead of re-setting
-   *  it would leave two. */
+  /** How many self-re-arming wakes the page keeps alive — frames and timers
+   *  together, because at 1 fps the chart loop's wake is a timer while the
+   *  line's own engine keeps an animation frame. The step is inside every
+   *  interval, so this wake refreshes nothing: a refresh's own canvas render is
+   *  one-shot and has run, and what remains is the loops.
+   *
+   * It is a count to compare, not a constant: the line's own engine keeps a
+   * frame of its own, so the answer is "unchanged after `setRate`", not
+   * "exactly one". */
   function refreshLoopsStarted(): number {
-    driveFrame();
-    return pending.size;
+    driveFrame(0);
+    return pending.size + pendingTimers.size;
   }
 
-  /** Mounts the player and hands back a count of the canvas's repaints. */
+  /** The chart loop's own wake: a frame, or at 1 fps a timer for its interval.
+   *  The follower's 2 s publish poll is neither, and counting it read 2. */
+  function chartWakes(): number {
+    // At most one chart interval: 1000 ms at rate 1, and at rate 30 the loop
+    // arms a frame instead of a timer, so no timer is ever a chart wake.
+    let timers = 0;
+    for (const timer of pendingTimers.values()) {
+      if (timer.delayMs <= 1_000) timers += 1;
+    }
+    return pending.size + timers;
+  }
+
+  /** The follower's poll wakes, which `chartWakes` excludes on purpose. */
+  function pollWakes(): number {
+    let polls = 0;
+    for (const timer of pendingTimers.values()) {
+      if (timer.delayMs === 2_000) polls += 1;
+    }
+    return polls;
+  }
+
+  /** Mounts the player and hands back a count of the canvas's repaints and of
+   *  the follower's polls. `envelope` is the theme served, so a case can mount
+   *  a display with no chart on it. */
   async function mountAt(
     search: string,
-  ): Promise<{ readonly repaints: () => number }> {
+    envelope: unknown = lineEnvelope(),
+  ): Promise<{
+    readonly repaints: () => number;
+    readonly polls: () => number;
+  }> {
+    let polled = 0;
     skeleton();
     history.replaceState({}, "", `/${search}`);
     vi.stubGlobal("EventSource", SilentEventSource);
@@ -372,12 +459,31 @@ describe("the rate the display repaints at", () => {
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation((handle) => {
       pending.delete(handle);
     });
+    // The chart loop binds `window`'s timers as well as its frames, and at
+    // 1 fps its wake is a timer: without this the loop's schedule lives on real
+    // time and the clock below never reaches it. `vi.waitFor` uses vitest's own
+    // safe timers, so the poll and mount waits are unaffected.
+    vi.spyOn(window, "setTimeout").mockImplementation(
+      (handler: TimerHandler, delayMs?: number): number => {
+        nextTimer += 1;
+        pendingTimers.set(nextTimer, {
+          callback: handler as () => void,
+          dueMs: clock + (delayMs ?? 0),
+          delayMs: delayMs ?? 0,
+        });
+        return nextTimer;
+      },
+    );
+    vi.spyOn(window, "clearTimeout").mockImplementation((id?: number) => {
+      if (id !== undefined) pendingTimers.delete(id);
+    });
     Object.defineProperty(window, "fetch", {
       configurable: true,
       writable: true,
       value: vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
         if (url.startsWith("/api/published")) {
+          polled += 1;
           // A revision and a theme that never move, so the rate is the only
           // thing the host answers differently between one poll and the next.
           return json({
@@ -386,7 +492,7 @@ describe("the rate the display repaints at", () => {
             display: { id: "d1", theme: "living-room", chartFps },
           });
         }
-        if (url.endsWith("/document")) return json(mountedEnvelope());
+        if (url.endsWith("/document")) return json(envelope);
         return json({});
       }),
     });
@@ -416,7 +522,10 @@ describe("the rate the display repaints at", () => {
       "requestRenderAll",
     );
 
-    return { repaints: () => render.mock.calls.length };
+    return {
+      repaints: () => render.mock.calls.length,
+      polls: () => polled,
+    };
   }
 
   it("runs at the rate the host answered, not the 30 it used to hardcode", async () => {
@@ -432,6 +541,7 @@ describe("the rate the display repaints at", () => {
       "?theme=living-room&display=d1&theme-source=map&session=paired-token",
     );
     await vi.waitFor(() => expect(refreshCadenceMs(repaints)).toBe(1_000));
+    const loopsBefore = refreshLoopsStarted();
 
     chartFps = 30;
     // The follower polls every two seconds, so the wait is for a poll rather
@@ -441,7 +551,274 @@ describe("the rate the display repaints at", () => {
       { timeout: 5_000 },
     );
 
-    expect(refreshLoopsStarted()).toBe(1);
+    // Relative here because a line's engine keeps a frame of its own; the
+    // absolute pin is the chart-free case below.
+    expect(refreshLoopsStarted()).toBe(loopsBefore);
+  });
+
+  it("keeps exactly one refresh frame, after mount and after setRate", async () => {
+    // **Chart-free**, so the engine's animation frame is absent and the count
+    // is the page's own callbacks — no callback's name is consulted. The first
+    // 0 ms step consumes the one-shot canvas render the mount's refresh
+    // scheduled; the interval has not passed, so nothing else is armed.
+    const { polls } = await mountAt(
+      "?theme=living-room&display=d1&theme-source=map&session=paired-token",
+      textOnlyEnvelope(),
+    );
+
+    driveFrame(0);
+    expect(chartWakes(), "one refresh wake after mount").toBe(1);
+    // The poll is a 2 s timer on this same harness, and the pin above excludes
+    // it by interval rather than by name: counted, it would read 2.
+    expect(
+      pollWakes(),
+      "the publish poll, present but not a refresh wake",
+    ).toBe(1);
+
+    chartFps = 30;
+    const before = polls();
+    // The follower chains its wake on a timer, which this harness holds, so the
+    // poll is driven rather than waited for. The wait proves only that the
+    // request went out — `polls()` moves synchronously in the fetch mock — not
+    // that the answer re-rated the loop; the pin below holds either way.
+    driveFrame(2_000);
+    await vi.waitFor(() => expect(polls()).toBeGreaterThan(before), {
+      timeout: 5_000,
+    });
+
+    driveFrame(0);
+    expect(chartWakes(), "setRate added no wake").toBe(1);
+  });
+});
+
+/**
+ * A display whose page is hidden.
+ *
+ * A display repaints up to thirty times a second and keeps a background video
+ * decoding whether or not anyone can see it, which is battery spent on a page
+ * the browser is not showing. jsdom cannot hide a page, so `document.hidden` is
+ * overridden and the event dispatched by hand; the browser check in the task
+ * report says which half of that was real.
+ */
+describe("a display whose page is hidden", () => {
+  let frames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 0;
+  let frameTime = 0;
+
+  beforeEach(() => {
+    vi.resetModules();
+    frames = new Map();
+    nextFrame = 0;
+    frameTime = 0;
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(document, "hidden");
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  /** What the browser would report, and the event it would dispatch for it. */
+  function setHidden(hidden: boolean): void {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => hidden,
+    });
+  }
+
+  /** The loop's own clock: a frame is due time, and the refresh runs on it. */
+  function driveFrames(count: number): void {
+    for (let step = 0; step < count; step += 1) {
+      frameTime += 16;
+      const due = [...frames.values()];
+      frames.clear();
+      for (const callback of due) callback(frameTime);
+    }
+  }
+
+  /** Mounts a line display, whose option is rebuilt on every refresh, so its
+   *  repaints are the loop's own cadence. Returns the handle's media calls as
+   *  spies: `main.ts` holds the same handle object. */
+  async function mountLine(envelope: unknown = lineEnvelope()): Promise<{
+    readonly pause: ReturnType<typeof vi.spyOn>;
+    readonly resume: ReturnType<typeof vi.spyOn>;
+    readonly repaints: () => number;
+  }> {
+    skeleton();
+    history.replaceState(
+      {},
+      "",
+      "/?theme=living-room&display=d1&theme-source=map&session=paired-token",
+    );
+    vi.stubGlobal("EventSource", SilentEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      nextFrame += 1;
+      frames.set(nextFrame, callback);
+      return nextFrame;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((handle) => {
+      frames.delete(handle);
+    });
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("/api/published")) {
+          // 30, so the loop's wake is a frame rather than a timer and the
+          // driver below is its whole clock.
+          return json({
+            id: null,
+            revision: 0,
+            display: { id: "d1", theme: "living-room", chartFps: 30 },
+          });
+        }
+        if (url.endsWith("/document")) return json(envelope);
+        return json({});
+      }),
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await import("./main.js");
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector("[data-yunari-controls]"),
+        "the display mounted",
+      ).not.toBeNull(),
+    );
+
+    const diagnostics = window as unknown as {
+      readonly yunari: {
+        readonly handle: {
+          readonly canvas: { requestRenderAll: () => void };
+          pauseMedia: () => void;
+          resumeMedia: () => void;
+        };
+      };
+    };
+    const { handle } = diagnostics.yunari;
+    const pause = vi.spyOn(handle, "pauseMedia");
+    const resume = vi.spyOn(handle, "resumeMedia");
+    const render = vi.spyOn(handle.canvas, "requestRenderAll");
+
+    return {
+      pause,
+      resume,
+      repaints: () => render.mock.calls.length,
+    };
+  }
+
+  it("stops the loop and pauses media while hidden, and restores both", async () => {
+    const { pause, resume, repaints } = await mountLine();
+    driveFrames(10);
+    expect(repaints(), "the loop is repainting while visible").toBeGreaterThan(
+      0,
+    );
+    const before = repaints();
+
+    setHidden(true);
+    window.dispatchEvent(new Event("visibilitychange"));
+
+    expect(pause, "the media was paused").toHaveBeenCalledTimes(1);
+    // The line's own engine keeps a frame of its own, so the loop's wake cannot
+    // be singled out of the pending map; what proves it stopped is that driving
+    // the driver repaints nothing.
+    driveFrames(30);
+    expect(repaints(), "nothing repainted while hidden").toBe(before);
+
+    setHidden(false);
+    window.dispatchEvent(new Event("visibilitychange"));
+
+    expect(resume, "the media was resumed").toHaveBeenCalledTimes(1);
+    driveFrames(10);
+    expect(repaints(), "the loop restarted").toBeGreaterThan(before);
+  });
+
+  it("does not revive a loop a pagehide has disposed", async () => {
+    const { resume, repaints } = await mountLine();
+    window.dispatchEvent(new Event("pagehide"));
+    const before = repaints();
+
+    setHidden(false);
+    window.dispatchEvent(new Event("visibilitychange"));
+    driveFrames(10);
+
+    expect(resume, "a torn-down page resumed nothing").not.toHaveBeenCalled();
+    expect(repaints(), "and repainted nothing").toBe(before);
+  });
+
+  /** A line display with a video backdrop, so the media pause at mount is
+   *  observable: the line keeps the refresh loop repainting, and the video's own
+   *  `pause` is the call the scene's media handle makes. */
+  function videoEnvelope(): unknown {
+    return {
+      ...(lineEnvelope() as Record<string, unknown>),
+      background: { media: { assetId: "bg", bounds: "theme" } },
+      assets: [{ id: "bg", kind: "video", path: "assets/bg.webm" }],
+    };
+  }
+
+  it("starts paused when the page is already hidden at mount", async () => {
+    // `visibilitychange` fires only on a change, so a display restored or
+    // opened in a background tab never gets one. The prototype spy covers the
+    // mount's own call rather than an event's.
+    const paused = vi
+      .spyOn(HTMLMediaElement.prototype, "pause")
+      .mockImplementation(() => {});
+    setHidden(true);
+
+    const { repaints } = await mountLine(videoEnvelope());
+
+    expect(paused, "the media was paused at mount").toHaveBeenCalledTimes(1);
+    const before = repaints();
+    driveFrames(30);
+    expect(repaints(), "and no refresh wake was armed").toBe(before);
+  });
+
+  it("reloads for a persisted pageshow and ignores a fresh one", async () => {
+    // **A navigation object of this mount's own.** Every mount in this file
+    // leaves a `pageshow` listener on the shared jsdom window, so a spy on a
+    // shared seam could pass from a prior mount's listener. `start` is handed
+    // this object, and only the registration it makes can reach the spy.
+    const target = new EventTarget();
+    const reload = vi.fn();
+    const navigation: PageNavigation = {
+      addEventListener: (type, listener) =>
+        target.addEventListener(type, listener as EventListener),
+      reload,
+    };
+
+    // The harness stubs (`EventSource`, frames, `fetch`) are what a mount
+    // needs; this case drives the mount through `start` rather than the import.
+    await mountLine();
+    const { start } = await import("./main.js");
+    await start(skeleton(), navigation);
+    expect(
+      document.querySelector("[data-yunari-load-failure]"),
+      "the second mount reached its chrome",
+    ).toBeNull();
+
+    target.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: false }),
+    );
+    expect(reload, "a first load reloads nothing").not.toHaveBeenCalled();
+
+    target.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    );
+    expect(
+      reload,
+      "a page restored from the back/forward cache reloads",
+    ).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1001,6 +1378,117 @@ function mountedEnvelope(): unknown {
   };
 }
 
+/** The defaults with every paint pointed at a palette token: a persisted chart
+ *  references tokens, never a literal colour. */
+function painted(
+  family: "gauge" | "line",
+  settings: object,
+): Record<string, unknown> {
+  const paintedSettings: Record<string, unknown> = { ...settings };
+
+  for (const field of chartPaintFieldsFor(family)) {
+    paintedSettings[field.property] =
+      field.multiple === true
+        ? [{ ref: "palette.ink" }]
+        : { ref: "palette.ink" };
+  }
+
+  return paintedSettings;
+}
+
+/**
+ * A theme whose line chart repaints on every refresh.
+ *
+ * The loop's own cadence is only visible through a repaint now that an idle
+ * display — one whose samples have not changed — deliberately asks for none. A
+ * line is the honest sample of that: its window slides with the clock, so every
+ * refresh rebuilds its option whether or not a sample arrived.
+ */
+function lineEnvelope(): unknown {
+  return {
+    schemaVersion: "2.0.0",
+    fabricVersion: "7.4.0",
+    id: "living-room",
+    artboard: { width: 1920, height: 1080 },
+    metadata: { themeLanguage: "en" },
+    globals: {
+      palette: {
+        none: { name: "None", value: { kind: "solid", color: "transparent" } },
+        ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
+      },
+      typePresets: {},
+    },
+    bindings: { line: [{ id: "l", semanticKey: "cpu.load.total" }] },
+    scene: {
+      version: "7.4.0",
+      objects: [
+        {
+          type: "YunariChart",
+          id: "line",
+          left: 100,
+          top: 100,
+          width: 400,
+          height: 200,
+          family: "line",
+          settings: painted("line", defaultLineSettings),
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * A theme whose only repaintable work is bound text: no chart, so the only
+ * canvas render a refresh can ask for is the refresh branch's own.
+ */
+function textOnlyEnvelope(): unknown {
+  return {
+    schemaVersion: "2.0.0",
+    fabricVersion: "7.4.0",
+    id: "text-only",
+    artboard: { width: 1920, height: 1080 },
+    metadata: { themeLanguage: "en" },
+    globals: {
+      palette: {
+        none: { name: "None", value: { kind: "solid", color: "transparent" } },
+        ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
+      },
+      typePresets: {
+        body: { name: "Body", value: { family: "Inter", size: 24 } },
+      },
+    },
+    bindings: {
+      readout: [{ id: "t", semanticKey: "cpu.load.total" }],
+    },
+    scene: {
+      version: "7.4.0",
+      objects: [
+        {
+          type: "Textbox",
+          id: "readout",
+          left: 100,
+          top: 100,
+          width: 400,
+          height: 80,
+          text: "--",
+          yunariText: {
+            runs: [
+              {
+                kind: "value",
+                bindingId: "t",
+                typePreset: "typePresets.body",
+                style: { color: { ref: "palette.ink" } },
+              },
+            ],
+            box: { width: 400, height: 80 },
+            overflow: "visible",
+          },
+        },
+      ],
+    },
+  };
+}
+
 /**
  * The chooser's mount condition, driven through the real `main.ts`.
  *
@@ -1245,4 +1733,399 @@ describe("the language a display sends with its samples", () => {
     // would have reduced it to.
     expect(document.documentElement.lang).not.toBe("de-DE");
   });
+});
+
+/**
+ * The work one refresh frame does, driven through the real `main.ts`.
+ *
+ * Bound text, bound images and the availability notice only change when a
+ * sample arrives, and `SampleSource.revision` is what says one did. A value
+ * chart redraws only when its own reading moves; a line is the exception,
+ * because its window slides with the clock and its signature carries the
+ * instant it will be drawn at, so it redraws every frame.
+ */
+describe("the work one refresh frame does", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    streams.length = 0;
+    frames.length = 0;
+    frameTime = 0;
+    // The frame clock is the display's own: a line's signature carries the
+    // instant it draws at, so the frames this suite drives must move the clock
+    // the player reads, not the wall clock in between iterations.
+    vi.spyOn(Date, "now").mockImplementation(() => frameTime);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  const streams: RevisionStreamEventSource[] = [];
+  const frames: FrameRequestCallback[] = [];
+  let frameTime = 0;
+
+  class RevisionStreamEventSource {
+    readonly #listeners = new Map<
+      string,
+      ((event: { readonly data: string }) => void)[]
+    >();
+
+    constructor() {
+      streams.push(this);
+    }
+
+    addEventListener(
+      type: string,
+      listener: (event: { readonly data: string }) => void,
+    ): void {
+      const existing = this.#listeners.get(type) ?? [];
+      existing.push(listener);
+      this.#listeners.set(type, existing);
+    }
+
+    close(): void {}
+
+    emit(type: string, data: string): void {
+      for (const listener of this.#listeners.get(type) ?? []) {
+        listener({ data });
+      }
+    }
+  }
+
+  /** One frame of the loop's own clock. The cadence is 30 a second, so a
+   *  100 ms step is past every interval. */
+  function driveFrame(): void {
+    frameTime += 100;
+    const due = frames.splice(0);
+    for (const callback of due) callback(frameTime);
+  }
+
+  function batch(value: number, timestamp: string): string {
+    return JSON.stringify({
+      version: 1,
+      sentAt: timestamp,
+      samples: [
+        {
+          semanticKey: "cpu.load.total",
+          sample: {
+            sensorId: "cpu.load.total",
+            timestamp,
+            status: "ok",
+            value,
+            unit: "%",
+          },
+        },
+      ],
+    });
+  }
+
+  function liveRevision(): number {
+    const diagnostics = window as unknown as {
+      readonly yunari?: {
+        readonly live: { readonly source: SampleSource };
+      };
+    };
+    return diagnostics.yunari?.live.source.revision ?? -1;
+  }
+
+  /** Mounts a display and returns the spies the frame cases count. The spies are
+   *  taken from the module instances `main.ts` itself imports — `beforeEach`
+   *  reset the registry, so importing first is what makes them the same ones. */
+  async function mount(envelope: unknown) {
+    skeleton();
+    history.replaceState({}, "", "/?theme=revisions");
+    vi.stubGlobal("EventSource", RevisionStreamEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(
+      () => undefined,
+    );
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/document")) return json(envelope);
+        if (url === "/api/display") return json({ settings: {}, zones: [] });
+        return json({});
+      }),
+    });
+    const warned = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+
+    const { YunariChart } = await import("@yunari/scene-fabric");
+    const { FabricObject, StaticCanvas } = await import("fabric/es");
+    const setOption = vi.spyOn(YunariChart.prototype, "setOption");
+    const set = vi.spyOn(FabricObject.prototype, "set");
+    // On the prototype, so the mount's own render is counted too: the canvas
+    // does not exist until `main.ts` mounts it.
+    const requestRenderAll = vi.spyOn(
+      StaticCanvas.prototype,
+      "requestRenderAll",
+    );
+    await import("./main.js");
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector("[data-yunari-controls]"),
+        "the display mounted",
+      ).not.toBeNull(),
+    );
+
+    setOption.mockClear();
+    set.mockClear();
+    requestRenderAll.mockClear();
+
+    return { setOption, set, requestRenderAll, warned };
+  }
+
+  /** `set` calls that wrote text; the layout passes also set geometry. */
+  function textWrites(set: {
+    readonly mock: { readonly calls: unknown[][] };
+  }): number {
+    return set.mock.calls.filter(
+      ([written]) =>
+        typeof written === "object" &&
+        written !== null &&
+        "text" in (written as Record<string, unknown>),
+    ).length;
+  }
+
+  function setOptionCalls(
+    setOption: { readonly mock: { readonly contexts: unknown[] } },
+    family: "gauge" | "line",
+  ): number {
+    return setOption.mock.contexts.filter(
+      (self) => (self as { readonly family?: string }).family === family,
+    ).length;
+  }
+
+  it("repaints the line every frame and the rest once per revision", async () => {
+    const { setOption, set } = await mount(revisionsEnvelope(true));
+    streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
+    await vi.waitFor(() => expect(liveRevision()).toBe(1));
+
+    for (let frame = 0; frame < 30; frame += 1) driveFrame();
+
+    expect(setOptionCalls(setOption, "gauge"), "the gauge repainted once").toBe(
+      1,
+    );
+    expect(
+      setOptionCalls(setOption, "line"),
+      "the line repainted every frame",
+    ).toBe(30);
+    expect(textWrites(set), "the bound text repainted once").toBe(1);
+
+    // A second accepted ingest is a second revision: every family updates once.
+    streams[0]!.emit("samples", batch(43, "2026-01-01T00:00:11.000Z"));
+    await vi.waitFor(() => expect(liveRevision()).toBe(2));
+    driveFrame();
+
+    expect(setOptionCalls(setOption, "gauge")).toBe(2);
+    expect(setOptionCalls(setOption, "line")).toBe(31);
+    expect(textWrites(set)).toBe(2);
+  });
+
+  it("asks for no repaint when no sample has arrived", async () => {
+    const { requestRenderAll } = await mount(revisionsEnvelope(false));
+
+    for (let frame = 0; frame < 30; frame += 1) driveFrame();
+
+    // The mount's own first refresh is the last repaint this display earned:
+    // nothing it shows has changed since.
+    expect(requestRenderAll).not.toHaveBeenCalled();
+  });
+
+  it("repaints the scene for a sample that arrived", async () => {
+    // **Text only**, so no chart's own `setOption` can request the render: a
+    // canvas render on these frames can only come from the refresh branch and
+    // the binding pass. `refreshBoundText` asks for one render of its own, so
+    // the sample's frame is two calls with the branch and one without it — the
+    // pin fails if the branch is deleted. The mount's own total is not pinned:
+    // mounting the scene asks for renders of its own, which have nothing to do
+    // with this gate.
+    const { requestRenderAll } = await mount(textOnlyEnvelope());
+
+    for (let frame = 0; frame < 30; frame += 1) driveFrame();
+    expect(
+      requestRenderAll,
+      "idle frames repainted nothing",
+    ).not.toHaveBeenCalled();
+
+    streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
+    await vi.waitFor(() => expect(liveRevision()).toBe(1));
+    driveFrame();
+
+    expect(
+      requestRenderAll,
+      "the binding pass and the refresh branch",
+    ).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports a line's unmapped key once, not every frame", async () => {
+    // A line asks for its diagnostics on every frame, because its reading — and
+    // so its signature — moves with the clock. What keeps the display readable
+    // is the per-node dedupe: the fault is reported once, not once a frame.
+    const { warned } = await mount(revisionsEnvelope(true, "cpu.load.absent"));
+    const unmapped = (): number =>
+      warned.mock.calls.filter(
+        ([message]) =>
+          typeof message === "string" &&
+          message.includes('No sensor is mapped to "cpu.load.absent"'),
+      ).length;
+
+    expect(unmapped(), "the mount reported the unmapped key").toBe(1);
+
+    for (let frame = 0; frame < 30; frame += 1) driveFrame();
+    expect(unmapped(), "idle frames reported nothing new").toBe(1);
+
+    streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
+    await vi.waitFor(() => expect(liveRevision()).toBe(1));
+    driveFrame();
+
+    expect(unmapped(), "the dedupe kept it to one line").toBe(1);
+  });
+
+  it("reports a line's paint that names no global", async () => {
+    // The other half of the diagnostics: the line body's own paint resolution,
+    // which also lives in `collectChartIssues` and used to be reported by
+    // `buildChartPlan` for every family.
+    //
+    // **The fault is put on the revived chart, not on the served document.** A
+    // hosted document cannot carry a dangling paint — `readFabricThemeEnvelope`
+    // refuses it ("Chart paint must reference an existing palette token",
+    // measured) — so a served fixture would test the loader, not this report.
+    // A chart whose settings arrive unresolved is the case the report exists
+    // for, and the next sample is what asks the line for its diagnostics.
+    const { warned } = await mount(revisionsEnvelope(true));
+    const canvas = (
+      window as unknown as {
+        readonly yunari: {
+          readonly handle: {
+            readonly canvas: {
+              getObjects: () => readonly {
+                readonly family?: unknown;
+                readonly settings?: unknown;
+                set(key: string, value: unknown): void;
+              }[];
+            };
+          };
+        };
+      }
+    ).yunari.handle.canvas;
+    const line = canvas
+      .getObjects()
+      .find((object) => object.family === "line")!;
+
+    line.set("settings", {
+      ...(line.settings as Record<string, unknown>),
+      stroke: { ref: "palette.missing" },
+    });
+
+    streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
+    await vi.waitFor(() => expect(liveRevision()).toBe(1));
+    driveFrame();
+
+    expect(
+      warned.mock.calls.filter(
+        ([message]) =>
+          typeof message === "string" &&
+          message.includes('Chart paint "palette.missing" is not defined'),
+      ).length,
+    ).toBe(1);
+  });
+
+  /** A gauge, a bound reading, and optionally the line that keeps moving.
+   *  `lineKey` is a key nothing maps, for the diagnostics case. */
+  function revisionsEnvelope(
+    withLine: boolean,
+    lineKey = "cpu.load.total",
+  ): unknown {
+    return {
+      schemaVersion: "2.0.0",
+      fabricVersion: "7.4.0",
+      id: "revisions",
+      artboard: { width: 1920, height: 1080 },
+      metadata: { themeLanguage: "en" },
+      globals: {
+        palette: {
+          none: {
+            name: "None",
+            value: { kind: "solid", color: "transparent" },
+          },
+          ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
+        },
+        typePresets: {
+          body: { name: "Body", value: { family: "Inter", size: 24 } },
+        },
+      },
+      bindings: {
+        gauge: [{ id: "g", semanticKey: "cpu.load.total" }],
+        readout: [{ id: "t", semanticKey: "cpu.load.total" }],
+        ...(withLine ? { line: [{ id: "l", semanticKey: lineKey }] } : {}),
+      },
+      scene: {
+        version: "7.4.0",
+        objects: [
+          {
+            type: "YunariChart",
+            id: "gauge",
+            left: 100,
+            top: 100,
+            width: 300,
+            height: 300,
+            family: "gauge",
+            settings: painted("gauge", defaultGaugeSettings),
+          },
+          ...(withLine
+            ? [
+                {
+                  type: "YunariChart",
+                  id: "line",
+                  left: 500,
+                  top: 100,
+                  width: 400,
+                  height: 200,
+                  family: "line",
+                  settings: painted("line", defaultLineSettings),
+                },
+              ]
+            : []),
+          {
+            type: "Textbox",
+            id: "readout",
+            left: 100,
+            top: 500,
+            width: 400,
+            height: 80,
+            text: "--",
+            yunariText: {
+              runs: [
+                {
+                  kind: "value",
+                  bindingId: "t",
+                  typePreset: "typePresets.body",
+                  style: { color: { ref: "palette.ink" } },
+                },
+              ],
+              box: { width: 400, height: 80 },
+              overflow: "visible",
+            },
+          },
+        ],
+      },
+    };
+  }
 });

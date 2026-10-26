@@ -44,6 +44,33 @@ describe("AssetManager", () => {
     expect(manager.assets["assets/logo-2.png"]).toEqual(PNG);
   });
 
+  it("counts every change to the bytes or the declarations", async () => {
+    const manager = new AssetManager();
+    expect(manager.mutationCount).toBe(0);
+
+    const logo = await manager.import(file(PNG, "logo.png", "image/png"));
+    expect(manager.mutationCount).toBe(1);
+
+    await manager.replace(logo.id, file(PNG, "logo.png", "image/png"));
+    expect(manager.mutationCount).toBe(2);
+
+    await manager.replaceBytes(logo.id, new Uint8Array([1, 2]));
+    expect(manager.mutationCount).toBe(3);
+
+    const face = fontTrio("minimal")!.faces[0]!;
+    await manager.adoptFont(face, new Uint8Array([0, 1, 2]));
+    expect(manager.mutationCount).toBe(4);
+
+    expect(manager.remove(logo.id)).toBe(true);
+    expect(manager.mutationCount).toBe(5);
+    // A refused removal changed nothing, so it must not move the counter.
+    expect(manager.remove(logo.id)).toBe(false);
+    expect(manager.mutationCount).toBe(5);
+
+    manager.load({ assets: [] }, {});
+    expect(manager.mutationCount).toBe(6);
+  });
+
   it("leaves package bytes unchanged for unsafe or mismatched files", async () => {
     const manager = new AssetManager();
     const unsafe = file(
@@ -98,6 +125,20 @@ describe("AssetManager", () => {
     expect(manager.assets["assets/metric.woff2"]).toEqual(
       new Uint8Array([0, 1, 2]),
     );
+  });
+
+  it("refuses an extension the theme cannot declare", async () => {
+    // Four font formats are declarable — `woff2`, `woff`, `ttf` and `otf` — and
+    // the picker's accept list is derived from this same table. Anything outside
+    // it is refused at import, before any bytes are kept.
+    const manager = new AssetManager();
+
+    await expect(
+      manager.import(file(new Uint8Array([0, 1, 2]), "body.html", "text/html")),
+    ).rejects.toThrow("Unsupported asset file type.");
+
+    expect(manager.assets).toEqual({});
+    expect(manager.declarations).toEqual([]);
   });
 
   it("adopts a curated face with its declared package metadata", async () => {
@@ -234,6 +275,29 @@ describe("AssetManager", () => {
     expect(manager.previewUrl("never-declared")).toBeUndefined();
     // Readable, so the miss is a wrong answer rather than a crash.
     expect(manager.previewUrl("logo")).not.toBe("blob:probe");
+  });
+
+  it("answers an avif preview and a miss for an extension it cannot type", () => {
+    // `avif` is in the shared media-type table, so the host serves it and the
+    // editor must be able to show it; an extension the table does not type is
+    // the miss `previewUrl` promises, not an exception out of a revival.
+    const manager = new AssetManager();
+    manager.load(
+      {
+        assets: [
+          { id: "photo", kind: "image", path: "assets/photo.avif" },
+          { id: "mystery", kind: "image", path: "assets/mystery.tiff" },
+        ],
+      },
+      {
+        "assets/photo.avif": new Uint8Array([1]),
+        "assets/mystery.tiff": new Uint8Array([2]),
+      },
+    );
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:photo");
+
+    expect(manager.previewUrl("photo")).toBe("blob:photo");
+    expect(manager.previewUrl("mystery")).toBeUndefined();
   });
 
   it("hydrates an asset-referenced Fabric image from declared package bytes", async () => {

@@ -4,6 +4,8 @@ import {
   readFile,
   rename,
   rm,
+  stat,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -213,6 +215,77 @@ describe("weather settings", () => {
 
     expect(await store.read()).toEqual(DEFAULT_WEATHER_SETTINGS);
     expect(store.problem()).toMatch(/latitude/);
+  });
+
+  it("answers a repeat read of an unchanged file from one file read", async () => {
+    const store = createWeatherSettingsStore(dir);
+    await store.write({ ...PLACED });
+
+    expect(await store.read()).toEqual(PLACED);
+    const filesRead = vi.mocked(readFile).mock.calls.length;
+    expect(await store.read()).toEqual(PLACED);
+    // A poll is the store's main reader, so the file is parsed once, not per
+    // display per tick.
+    expect(vi.mocked(readFile).mock.calls.length).toBe(filesRead);
+  });
+
+  it("sees a file another process created after a read found none", async () => {
+    const store = createWeatherSettingsStore(dir);
+    expect(await store.read()).toEqual(DEFAULT_WEATHER_SETTINGS);
+
+    // Restored from a backup or written by another tool: not this store's
+    // write, so the next read must find it rather than trust a memo.
+    await writeFile(
+      path.join(dir, "weather.json"),
+      JSON.stringify(PLACED),
+      "utf8",
+    );
+
+    expect(await store.read()).toEqual(PLACED);
+    expect(store.problem()).toBeUndefined();
+  });
+
+  it("re-reads a file someone else changed", async () => {
+    const store = createWeatherSettingsStore(dir);
+    await store.write({ ...PLACED });
+    expect(await store.read()).toEqual(PLACED);
+
+    // A longer label, so the size alone would catch it even if the two writes
+    // landed in the same millisecond.
+    const changed = { ...PLACED, label: "Hamburg, Hamburg, DE" };
+    await writeFile(
+      path.join(dir, "weather.json"),
+      JSON.stringify(changed),
+      "utf8",
+    );
+
+    expect(await store.read()).toEqual(changed);
+  });
+
+  it("serves what a write stored even when the file's identity did not change", async () => {
+    const store = createWeatherSettingsStore(dir);
+    await store.write({ ...PLACED });
+    const file = path.join(dir, "weather.json");
+    // A whole-second timestamp, so `utimes` restores it exactly below.
+    const stamped = new Date(1_700_000_000_000);
+    await utimes(file, stamped, stamped);
+
+    expect(await store.read()).toEqual(PLACED);
+    const before = await stat(file);
+
+    const rewritten = { ...PLACED, latitude: 52.53 };
+    await store.write(rewritten);
+    await utimes(file, stamped, stamped);
+
+    // Same mtime and length as the record the last read cached: only clearing
+    // the record on write makes this read see the new coordinate.
+    const after = await stat(file);
+    expect(after.mtimeMs).toBe(before.mtimeMs);
+    expect(after.size).toBe(before.size);
+
+    const filesRead = vi.mocked(readFile).mock.calls.length;
+    expect(await store.read()).toEqual(rewritten);
+    expect(vi.mocked(readFile).mock.calls.length).toBe(filesRead + 1);
   });
 });
 

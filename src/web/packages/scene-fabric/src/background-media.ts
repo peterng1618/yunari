@@ -26,6 +26,10 @@ export interface BackgroundMediaOptions {
    *  following frames by omitting it. Nothing subscribes unless a video is the
    *  media, so an image background starts no loop at all. */
   readonly onFrame?: () => void;
+  /** Glass surfaces that already need frames when the layer mounts. The scene
+   *  passes its own count, which is zero until a render allocates one; a direct
+   *  mount defaults to following, because its `onFrame` subscriber asked. */
+  readonly glassSurfaces?: number;
 }
 
 /** A box in host pixels: where a media layer sits and how large it is. A
@@ -139,6 +143,15 @@ export interface BackgroundMediaHandle {
     readonly height: number;
   }): void;
   setBounds(bounds: MediaBounds): void;
+  /** How many glass surfaces need this layer's frames. At zero the video's
+   *  frame callback is cancelled instead of re-arming itself, because a frame
+   *  nothing samples is decoding spent on no reader. */
+  setGlassSurfaces(count: number): void;
+  /** Stops decoding and the frame callback: the page is not visible. */
+  pause(): void;
+  /** Resumes decoding and re-arms the frame callback when a surface still
+   *  samples the layer. */
+  resume(): void;
   /** Pixel access for the glass sampler, or undefined with nothing to sample.
    *  The media is a DOM sibling below the canvas, so a glass panel cannot read
    *  it out of the canvas it is painting. */
@@ -165,9 +178,20 @@ export function mountBackgroundMedia(
   let element: HTMLImageElement | HTMLVideoElement | undefined;
   let mountedAssetId: string | undefined;
   let disposeSource: (() => void) | undefined;
-  let stopFrames: (() => void) | undefined;
+  let frames: FrameFollower | undefined;
   let stopDecoded: (() => void) | undefined;
   let stopIntrinsic: (() => void) | undefined;
+  // Both gates are the layer's own: a panel appears or leaves, and the page is
+  // shown or hidden. The frame chain is re-armed only when both allow it.
+  let glassSurfaces = options.glassSurfaces ?? 1;
+  let paused = false;
+
+  const wanted = (): boolean => glassSurfaces > 0 && !paused;
+
+  const syncFrames = (): void => {
+    if (wanted()) frames?.arm();
+    else frames?.stop();
+  };
 
   /**
    * The layer is the clip: one of the two bounds boxes. The child is placed
@@ -206,8 +230,8 @@ export function mountBackgroundMedia(
   const stop = (): void => {
     disposeSource?.();
     disposeSource = undefined;
-    stopFrames?.();
-    stopFrames = undefined;
+    frames?.destroy();
+    frames = undefined;
     stopDecoded?.();
     stopDecoded = undefined;
     stopIntrinsic?.();
@@ -257,12 +281,15 @@ export function mountBackgroundMedia(
       child.muted = true;
       child.loop = true;
       child.playsInline = true;
+      // A remount while the page is hidden must not start decoding again.
+      if (paused) child.pause();
     }
     disposeSource = source.dispose;
     element = child;
     mountedAssetId = asset.id;
     layer.append(child);
-    stopFrames = followFrames(child, onFrame);
+    frames = followFrames(child, onFrame, wanted);
+    syncFrames();
     // Re-place before the decode repaint: the glass sample the repaint takes
     // must read the placed rect, not the pre-load fallback.
     stopIntrinsic = notifyOnIntrinsic(child, place);
@@ -292,6 +319,26 @@ export function mountBackgroundMedia(
     setBounds(next) {
       bounds = next;
       place();
+    },
+    setGlassSurfaces(count) {
+      glassSurfaces = count;
+      syncFrames();
+    },
+    pause() {
+      paused = true;
+      if (element instanceof HTMLVideoElement) element.pause();
+      syncFrames();
+    },
+    resume() {
+      paused = false;
+      if (element instanceof HTMLVideoElement) {
+        // Already-playing video rejects here; a display that could not resume
+        // is still a display whose later frames are followed. A non-browser
+        // host (jsdom) returns nothing from `play`, hence the optional call.
+        const playing: Promise<void> | undefined = element.play();
+        void playing?.catch(() => undefined);
+      }
+      syncFrames();
     },
     backdrop(): BackdropMedia | undefined {
       const mounted = element;
@@ -375,27 +422,56 @@ export function mountBackgroundMedia(
   };
 }
 
+/** The video's frame chain, armed and stopped by its owner rather than itself. */
+interface FrameFollower {
+  /** Schedules the next callback, unless one is pending or none is wanted. */
+  arm(): void;
+  /** Cancels the pending callback; one already delivered is then ignored. */
+  stop(): void;
+  /** Ends the chain for good. */
+  destroy(): void;
+}
+
 /**
  * Fabric cannot see a `<video>` that is a DOM sibling rather than an object, so
  * nothing repaints and the glass keeps a still frame of a moving background.
  * Repainting on the video's own cadence is the fix; on its own it is a loop.
+ *
+ * **Nothing arms it at mount.** A frame costs a decode and a repaint, so the
+ * chain runs only while `wanted()` — a surface samples the backdrop and the
+ * page is visible — and stops instead of re-arming when that turns false.
  */
 function followFrames(
   element: HTMLImageElement | HTMLVideoElement,
   onFrame: (() => void) | undefined,
-): (() => void) | undefined {
+  wanted: () => boolean,
+): FrameFollower | undefined {
   if (!(element instanceof HTMLVideoElement) || onFrame === undefined) return;
   if (typeof element.requestVideoFrameCallback !== "function") return;
   let live = true;
+  let pending: number | undefined;
   const step = (): void => {
-    if (!live) return;
+    pending = undefined;
+    if (!live || !wanted()) return;
     onFrame();
+    arm();
+  };
+  const arm = (): void => {
+    if (!live || pending !== undefined || !wanted()) return;
     pending = element.requestVideoFrameCallback(step);
   };
-  let pending = element.requestVideoFrameCallback(step);
-  return () => {
-    live = false;
+  const stop = (): void => {
+    if (pending === undefined) return;
     element.cancelVideoFrameCallback(pending);
+    pending = undefined;
+  };
+  return {
+    arm,
+    stop,
+    destroy() {
+      live = false;
+      stop();
+    },
   };
 }
 

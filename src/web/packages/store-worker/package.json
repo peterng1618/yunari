@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "license": "MIT",
-  "description": "Cloudflare Worker: theme catalogue, auth, presigned uploads and R2 delivery.",
+  "description": "Cloudflare Worker: theme catalogue, auth, proxied uploads and R2 delivery.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
@@ -19,7 +19,6 @@
   "dependencies": {
     "@yunari/renderer-core": "*",
     "@yunari/theme-package": "*",
-    "aws4fetch": "1.0.20",
     "better-auth": "1.7.12"
   },
   "devDependencies": {

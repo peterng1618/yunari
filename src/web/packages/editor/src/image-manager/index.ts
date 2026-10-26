@@ -70,6 +70,72 @@ export function boundedImageElement(
   return canvas;
 }
 
+/**
+ * Decodes a blob and bounds its pixels.
+ *
+ * `createImageBitmap` decodes and downsizes off the main thread, so an import
+ * no longer holds a full-size `<img>` or pays a full-size `drawImage` on the
+ * paint path. The element path stays as the fallback: a browser without the
+ * API, or a format the bitmap decoder refuses.
+ */
+export async function decodeAndScale(
+  blob: Blob,
+  url: string,
+  maxEdge: number = MAX_IMPORT_IMAGE_EDGE,
+): Promise<HTMLCanvasElement | HTMLImageElement> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      return await boundedBitmapCanvas(blob, maxEdge);
+    } catch {
+      // Fall through: the element path reports a decode failure with the
+      // message import has always used.
+    }
+  }
+  return boundedImageElement(await decode(url), maxEdge);
+}
+
+/** The bounded bitmap drawn into a detached canvas, the element Fabric renders. */
+async function boundedBitmapCanvas(
+  blob: Blob,
+  maxEdge: number,
+): Promise<HTMLCanvasElement> {
+  // The resize pair has to name the bounded size, and only a decode knows the
+  // source's size — so the probe establishes it and is released before the
+  // resized decode, which is the one that stays small.
+  const probe = await createImageBitmap(blob);
+  let bounded: { readonly width: number; readonly height: number };
+  try {
+    // The size call is inside the try so a refusal there still closes the
+    // probe before the error reaches the element-path retry.
+    bounded = boundedImportSize(probe.width, probe.height, maxEdge);
+    if (bounded.width === probe.width && bounded.height === probe.height) {
+      return drawnIntoCanvas(probe);
+    }
+  } finally {
+    probe.close();
+  }
+  const resized = await createImageBitmap(blob, {
+    resizeWidth: bounded.width,
+    resizeHeight: bounded.height,
+    resizeQuality: "high",
+  });
+  try {
+    return drawnIntoCanvas(resized);
+  } finally {
+    resized.close();
+  }
+}
+
+function drawnIntoCanvas(bitmap: ImageBitmap): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const context = canvas.getContext("2d");
+  if (context === null) throw new Error("A 2D canvas context is unavailable.");
+  context.drawImage(bitmap, 0, 0);
+  return canvas;
+}
+
 async function decode(url: string): Promise<HTMLImageElement> {
   const element = document.createElement("img");
   element.alt = "";
@@ -107,9 +173,9 @@ export function createImageManager(
   return {
     async importImage(options) {
       const url = URL.createObjectURL(options.source);
-      let decoded: HTMLImageElement;
+      let decoded: HTMLCanvasElement | HTMLImageElement;
       try {
-        decoded = await decode(url);
+        decoded = await decodeAndScale(options.source, url);
       } catch (error) {
         // Nothing decoded and no history entry will ever name this URL, so this
         // is the one case where revoking immediately is right.
@@ -117,7 +183,12 @@ export function createImageManager(
         throw error;
       }
       live.add(url);
-      const image = new FabricImage(boundedImageElement(decoded));
+      // Fabric serialises a canvas element as a data URL of its pixels. An
+      // imported image is named by the object URL `live` holds, and a history
+      // entry must not carry a second copy of every import, so the canvas
+      // reports that URL as its source.
+      if (decoded instanceof HTMLCanvasElement) decoded.toDataURL = () => url;
+      const image = new FabricImage(decoded);
       image.set({
         id: `image-${crypto.randomUUID()}`,
         name: newObjectName("image"),

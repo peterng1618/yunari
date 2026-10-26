@@ -754,4 +754,44 @@ describe("the expensive discovery reads", () => {
     expect(sampleOf(entries, "disk.total")?.value).toBeCloseTo(4500, 0);
     expect(provider.health()).toMatchObject({ available: true });
   });
+
+  it("keeps a drive's name when only the volume walk fails", async () => {
+    const machine = fakeMachine();
+    const failingVolumes = new LibrarySensorProvider({
+      ...machine,
+      fsSize: async () => {
+        throw new Error("wmi said no");
+      },
+    });
+
+    const entries = await failingVolumes.sample(
+      ["disk.used.percent", "disk.name"],
+      0,
+      { assignment: { systemDisk: "lexar-500gb-ssd" } },
+    );
+
+    expect(sampleOf(entries, "disk.used.percent")).toMatchObject({
+      status: "missing",
+    });
+    // The name is the drive index's answer, and that read succeeded.
+    expect(textOf(entries, "disk.name")).toBe("Lexar 500GB SSD");
+    expect(sampleOf(entries, "disk.name")).toMatchObject({ status: "ok" });
+  });
+
+  it("drops a drive's name when the index fails", async () => {
+    const machine = fakeMachine();
+    const failingIndex = new LibrarySensorProvider({
+      ...machine,
+      diskLayout: async () => {
+        throw new Error("wmi said no");
+      },
+    });
+
+    const entries = await failingIndex.sample(["disk.name"], 0, {
+      assignment: { systemDisk: "lexar-500gb-ssd" },
+    });
+
+    expect(sampleOf(entries, "disk.name")).toMatchObject({ status: "missing" });
+    expect(textOf(entries, "disk.name")).toBeUndefined();
+  });
 });

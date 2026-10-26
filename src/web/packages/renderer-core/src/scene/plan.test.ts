@@ -12,6 +12,7 @@ import type { Artboard, Binding, Globals, TextRun } from "../theme/document.js";
 import { defaultGaugeSettings, type Sample } from "../types.js";
 import {
   buildChartPlan,
+  buildLinePoints,
   formatNumber,
   formatUnit,
   MISSING_VALUE_TEXT,
@@ -793,6 +794,28 @@ describe("charts", () => {
     }
   });
 
+  it("reads the chart's drawn edge into a gauge's gaps", () => {
+    const firstGapOffset = (drawnEdgePx: number) => {
+      const issues: PlanIssue[] = [];
+      const chart = buildChartPlan(
+        "c",
+        {
+          family: "gauge",
+          settings: { ...defaultGaugeSettings, segmentDivisor: 10 },
+        },
+        [],
+        { source: emptySampleSource, nowMs: NOW, animate: false, drawnEdgePx },
+        issues,
+      );
+      if (chart.family !== "gauge") throw new Error("not a gauge");
+      return chart.option.series[0].axisLine.lineStyle.color[0]![0];
+    };
+
+    // A 120px chart's caps take a larger angle than an 800px one's, so the stop
+    // gap widens to keep the empty space the same share of the painted band.
+    expect(firstGapOffset(120)).toBeLessThan(firstGapOffset(800));
+  });
+
   it("plans a radar from the bound latest readings", () => {
     const { chart } = chartPlan(
       { family: "radar", settings: defaultRadarSettings },
@@ -860,6 +883,77 @@ describe("charts", () => {
     }
   });
 
+  it("builds the line branch's points on its own, in binding order", () => {
+    // The extracted builder is what a caller caches across frames, so what it
+    // returns has to be the line branch's own answer: one series per binding,
+    // in the authored order, each sample already scaled/offset — and the
+    // windowed history, not the whole store.
+    const store = new SampleStore();
+    store.ingest(
+      [
+        [
+          "cpu.load.total",
+          { ...ok(10), timestamp: new Date(NOW - 2000).toISOString() },
+        ],
+        [
+          "fan.ratio",
+          {
+            ...ok(0.25, "", "fan.ratio"),
+            timestamp: new Date(NOW - 2000).toISOString(),
+          },
+        ],
+        [
+          "cpu.load.total",
+          { ...ok(30), timestamp: new Date(NOW - 1000).toISOString() },
+        ],
+        [
+          "fan.ratio",
+          {
+            ...ok(0.5, "", "fan.ratio"),
+            timestamp: new Date(NOW - 1000).toISOString(),
+          },
+        ],
+      ],
+      NOW,
+    );
+    const bindings: Binding[] = [
+      { id: "load", semanticKey: "cpu.load.total", scale: 2 },
+      { id: "ratio", semanticKey: "fan.ratio", offset: 5 },
+    ];
+
+    const points = buildLinePoints(bindings, defaultLineSettings, store);
+
+    expect(points.map((series) => series.sensorId)).toEqual([
+      "cpu.load.total",
+      "fan.ratio",
+    ]);
+    expect(points.map((series) => series.samples.map((s) => s.value))).toEqual([
+      [20, 60],
+      [5.25, 5.5],
+    ]);
+
+    // And the option the plan builds from those same inputs carries them: the
+    // builder is the line branch's implementation, not a second copy of it.
+    const { chart } = chartPlan(
+      { family: "line", settings: defaultLineSettings },
+      bindings,
+      store,
+    );
+
+    if (chart.family === "line") {
+      expect(chart.option.series.map((series) => series.data)).toEqual([
+        [
+          [Date.parse(new Date(NOW - 2000).toISOString()), 20],
+          [Date.parse(new Date(NOW - 1000).toISOString()), 60],
+        ],
+        [
+          [Date.parse(new Date(NOW - 2000).toISOString()), 5.25],
+          [Date.parse(new Date(NOW - 1000).toISOString()), 5.5],
+        ],
+      ]);
+    }
+  });
+
   it("keeps the next live segment outside the line viewport", () => {
     const store = new SampleStore();
     store.ingest(
@@ -909,6 +1003,7 @@ describe("charts", () => {
   it("requests the delayed line viewport's left-edge predecessor", () => {
     const windows: number[] = [];
     const source = {
+      revision: 0,
       chartPlaybackDelayMs: 1_000,
       latest: () => undefined,
       history: (_key: string, windowSeconds: number) => {
@@ -936,6 +1031,7 @@ describe("charts", () => {
     // axis edge follow it.
     const windows: number[] = [];
     const source = {
+      revision: 0,
       chartPlaybackDelayMs: LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
       latest: () => undefined,
       history: (_key: string, windowSeconds: number) => {
@@ -992,6 +1088,7 @@ describe("charts", () => {
         );
       }
       const source = {
+        revision: store.revision,
         chartPlaybackDelayMs: LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
         latest: (key: string) => store.latest(key),
         history: (key: string, windowSeconds: number) =>

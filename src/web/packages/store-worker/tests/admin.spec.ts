@@ -1,9 +1,11 @@
 import { env, SELF } from "cloudflare:test";
 import type { TestHelpers } from "better-auth/plugins";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createAuth } from "../src/auth";
 import { isOwner } from "../src/auth/owner";
-import { BASE, candidate } from "./helpers";
+import { handleAdmin } from "../src/routes/admin";
+import { MAX_JSON_BODY } from "../src/routes/body";
+import { BASE, candidate, countingEnv, listingStatements } from "./helpers";
 import { ITEM_ID, seedItem, statusOf } from "./seed";
 
 const OWNER_ID = "user-admin-owner";
@@ -29,7 +31,11 @@ describe("admin", () => {
   });
 
   it("matches owner emails case-insensitively over a comma-separated secret", () => {
-    const session = { userId: "u", email: "Owner@Example.com" };
+    const session = {
+      userId: "u",
+      email: "Owner@Example.com",
+      emailVerified: true,
+    };
     expect(isOwner(session, "owner@example.com")).toBe(true);
     expect(isOwner(session, " someone@example.com , OWNER@EXAMPLE.COM ")).toBe(
       true,
@@ -39,10 +45,23 @@ describe("admin", () => {
     // An empty secret matches nobody, not everybody.
     expect(isOwner(session, "")).toBe(false);
     expect(isOwner(session, " , ")).toBe(false);
+    // An unverified address is not a claim to the allow-list entry.
+    expect(
+      isOwner({ ...session, emailVerified: false }, "owner@example.com"),
+    ).toBe(false);
     // Neither does a session with no email: comparing blanks would let a
     // whitespace-only secret admit the session.
-    expect(isOwner({ userId: "u", email: "" }, " , ")).toBe(false);
-    expect(isOwner({ userId: "u", email: "   " }, "")).toBe(false);
+    expect(
+      isOwner({ userId: "u", email: "", emailVerified: true }, " , "),
+    ).toBe(false);
+    expect(
+      isOwner({ userId: "u", email: "   ", emailVerified: true }, ""),
+    ).toBe(false);
+  });
+
+  it("404s an unverified account whose email is on the owner list", async () => {
+    const unverified = await loginAs(OWNER_ID, OWNER_EMAIL, false);
+    expect((await admin(unverified, "queue")).status).toBe(404);
   });
 
   it("401s without a session and 404s an authenticated non-owner", async () => {
@@ -207,6 +226,52 @@ describe("admin", () => {
     ).toBe(409);
   });
 
+  it("refuses an oversized reason body without parsing it", async () => {
+    const owner = await loginAs(OWNER_ID, OWNER_EMAIL);
+    await seedItem(ITEM_ID, AUTHOR_ID, { status: "pending" });
+
+    const body = JSON.stringify({ reason: "x".repeat(MAX_JSON_BODY) });
+    const parseSpy = vi.spyOn(JSON, "parse");
+    try {
+      const response = await admin(owner, `items/${ITEM_ID}/reject`, body);
+      expect(response.status).toBe(413);
+      expect(parseSpy.mock.calls.some(([text]) => text === body)).toBe(false);
+    } finally {
+      parseSpy.mockRestore();
+    }
+    expect(await statusOf(env.DB, ITEM_ID)).toBe("pending");
+
+    // A reason inside the cap still reaches the status machine.
+    expect(
+      (
+        await admin(
+          owner,
+          `items/${ITEM_ID}/reject`,
+          JSON.stringify({ reason: "Spam" }),
+        )
+      ).status,
+    ).toBe(200);
+    expect(await statusOf(env.DB, ITEM_ID)).toBe("rejected");
+  });
+
+  it("hides an admin route from a non-owner before reading its body", async () => {
+    const author = await loginAs(AUTHOR_ID, AUTHOR_EMAIL);
+    await seedItem(ITEM_ID, AUTHOR_ID, { status: "pending" });
+
+    // The session and owner gate run first: an oversized body that would be
+    // 413 for an owner answers 404 here, and no body is read at all.
+    const body = JSON.stringify({ reason: "x".repeat(MAX_JSON_BODY) });
+    const parseSpy = vi.spyOn(JSON, "parse");
+    try {
+      const response = await admin(author, `items/${ITEM_ID}/reject`, body);
+      expect(response.status).toBe(404);
+      expect(parseSpy.mock.calls.some(([text]) => text === body)).toBe(false);
+    } finally {
+      parseSpy.mockRestore();
+    }
+    expect(await statusOf(env.DB, ITEM_ID)).toBe("pending");
+  });
+
   it("removes with a reason and restores, clearing the reason", async () => {
     const owner = await loginAs(OWNER_ID, OWNER_EMAIL);
     const author = await loginAs(AUTHOR_ID, AUTHOR_EMAIL);
@@ -313,6 +378,83 @@ describe("admin", () => {
     );
   });
 
+  it("reads a 50-item queue in one statement, oldest first with emails", async () => {
+    const owner = await loginAs(OWNER_ID, OWNER_EMAIL);
+    await loginAs(AUTHOR_ID, AUTHOR_EMAIL);
+    // Rows another case left pending are not this case's queue.
+    await env.DB.prepare(
+      "DELETE FROM item_version WHERE item_id IN (SELECT id FROM item WHERE status = 'pending')",
+    ).run();
+    await env.DB.prepare("DELETE FROM item WHERE status = 'pending'").run();
+
+    const ids = Array.from(
+      { length: 50 },
+      (_, index) =>
+        `32000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
+    );
+    const instant = (index: number): string =>
+      new Date(Date.UTC(2026, 9, 1, 0, 0, index)).toISOString();
+    for (const [index, id] of ids.entries()) {
+      await seedItem(id, AUTHOR_ID, { status: "pending" });
+      await env.DB.prepare(
+        "UPDATE item SET created_at = ?, updated_at = ? WHERE id = ?",
+      )
+        .bind(instant(index), instant(index), id)
+        .run();
+    }
+
+    const queries: string[] = [];
+    const path = `${BASE}/api/admin/queue`;
+    const response = await handleAdmin(
+      new Request(path, { headers: owner }),
+      countingEnv(queries),
+      new URL(path),
+    );
+    if (response === undefined)
+      throw new Error("The queue route did not answer.");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      readonly entries: readonly {
+        readonly id: string;
+        readonly authorEmail: string | null;
+      }[];
+    };
+
+    // One statement: the item, its latest version and the author ride it.
+    expect(listingStatements(queries)).toHaveLength(1);
+    expect(body.entries.map((entry) => entry.id)).toEqual(ids);
+    expect(
+      body.entries.every((entry) => entry.authorEmail === AUTHOR_EMAIL),
+    ).toBe(true);
+  });
+
+  it("keeps a pending item whose author account is gone", async () => {
+    const owner = await loginAs(OWNER_ID, OWNER_EMAIL);
+    await env.DB.prepare(
+      "DELETE FROM item_version WHERE item_id IN (SELECT id FROM item WHERE status = 'pending')",
+    ).run();
+    await env.DB.prepare("DELETE FROM item WHERE status = 'pending'").run();
+    // No `"user"` row exists for this id; a LEFT JOIN keeps the row.
+    await seedItem(ITEM_ID, GHOST_ID, { status: "pending" });
+
+    const response = await admin(owner, "queue");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      entries: [
+        {
+          id: ITEM_ID,
+          name: "Seeded theme",
+          authorUserId: GHOST_ID,
+          authorEmail: null,
+          createdAt: CREATED_AT,
+          updatedAt: CREATED_AT,
+          version: null,
+          status: "pending",
+        },
+      ],
+    });
+  });
+
   it("verifies and unverifies an author, keeping the display name", async () => {
     const owner = await loginAs(OWNER_ID, OWNER_EMAIL);
     await clearProfile(AUTHOR_ID);
@@ -360,17 +502,25 @@ describe("admin", () => {
   });
 });
 
-/** The account is created once; a second call reuses a row the pool kept. */
+/**
+ * The account is created once; a second call reuses the row and applies the
+ * requested verification state, so a later attestation never depends on order.
+ */
 async function loginAs(
   userId: string,
   email: string,
+  emailVerified = true,
 ): Promise<Record<string, string>> {
   const test = await testHelpers();
   const existing = await env.DB.prepare('SELECT id FROM "user" WHERE id = ?')
     .bind(userId)
     .first();
   if (existing === null)
-    await test.saveUser(test.createUser({ id: userId, email }));
+    await test.saveUser(test.createUser({ id: userId, email, emailVerified }));
+  else
+    await env.DB.prepare('UPDATE "user" SET emailVerified = ? WHERE id = ?')
+      .bind(emailVerified ? 1 : 0, userId)
+      .run();
   const { headers } = await test.login({ userId });
   return Object.fromEntries(headers.entries());
 }

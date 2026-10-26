@@ -4,6 +4,7 @@ import {
   FONT_ASSET_FORMATS,
   type FontAssetFormat,
   type FontAssetReference,
+  themeAssetContentType,
 } from "@yunari/renderer-core";
 import {
   objectAssetReference,
@@ -24,34 +25,55 @@ import {
   type FontMetadata,
 } from "./font-metadata.js";
 
-const TYPES = {
-  png: { mime: "image/png", kind: "image" },
-  jpg: { mime: "image/jpeg", kind: "image" },
-  jpeg: { mime: "image/jpeg", kind: "image" },
-  webp: { mime: "image/webp", kind: "image" },
-  svg: { mime: "image/svg+xml", kind: "svg" },
-  mp4: { mime: "video/mp4", kind: "video" },
-  webm: { mime: "video/webm", kind: "video" },
-  woff2: { mime: "font/woff2", kind: "font" },
-  woff: { mime: "font/woff", kind: "font" },
-  ttf: { mime: "font/ttf", kind: "font" },
-  otf: { mime: "font/otf", kind: "font" },
+/** The kinds this editor packages. A `gif` is a valid envelope kind but the
+ *  editor has no image object for it, so it is deliberately not offered. */
+const KIND_OF = {
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  webp: "image",
+  avif: "image",
+  svg: "svg",
+  mp4: "video",
+  webm: "video",
+  woff2: "font",
+  woff: "font",
+  ttf: "font",
+  otf: "font",
 } as const;
 
-type AssetExtension = keyof typeof TYPES;
+type AssetExtension = keyof typeof KIND_OF;
+type AssetKind = (typeof KIND_OF)[AssetExtension];
 
 /**
- * The extensions `TYPES` can read, in declaration order.
+ * What this editor knows about one extension: its kind, which is the editor's
+ * own policy, and its media type, which is the shared table's. The host serves
+ * by that same table, so an extension the table does not type cannot be a file
+ * the editor offers.
+ */
+function typeOf(extension: AssetExtension): {
+  readonly mime: string;
+  readonly kind: AssetKind;
+} {
+  const kind = KIND_OF[extension];
+  const mime = themeAssetContentType({ kind, path: `asset.${extension}` });
+  if (mime === undefined) {
+    throw new Error(`The theme format does not type .${extension}.`);
+  }
+  return { mime, kind };
+}
+
+/**
+ * The extensions this editor can read, in declaration order.
  *
  * Exported so a file chooser can filter on the *same* list the manager
  * validates: a second copy drifts silently in the widening direction, where the
  * manager would accept a file the chooser never offers.
  */
 export const ASSET_FILE_EXTENSIONS = Object.keys(
-  TYPES,
+  KIND_OF,
 ) as readonly AssetExtension[];
 
-type AssetKind = (typeof TYPES)[AssetExtension]["kind"];
 export type LocalAssetReference =
   | (AssetReference & { readonly kind: AssetKind })
   | FontAssetReference;
@@ -66,6 +88,10 @@ export class AssetManager {
   #assets: Record<string, Uint8Array> = {};
   #declarations: LocalAssetReference[] = [];
   #previewUrls = new Map<string, string>();
+  /** How many times the byte map or the declaration list has changed. A reader
+   *  that memoises a decision over both watches this rather than the values:
+   *  `load` can change either while reusing declaration references. */
+  #mutationCount = 0;
   #changeListeners = new Set<() => void>();
 
   /** Told after every declaration mutation. The pane used to redraw only from
@@ -77,7 +103,10 @@ export class AssetManager {
     };
   }
 
-  #changed(): void {
+  /** Every mutation site goes through here: one counter for the memo key and
+   *  one notification for the panes, so neither can be forgotten alone. */
+  #mutated(): void {
+    this.#mutationCount += 1;
     for (const listener of this.#changeListeners) listener();
   }
 
@@ -87,6 +116,11 @@ export class AssetManager {
 
   get declarations(): readonly LocalAssetReference[] {
     return this.#declarations;
+  }
+
+  /** Bumped by every path that writes the byte map or the declaration list. */
+  get mutationCount(): number {
+    return this.#mutationCount;
   }
 
   /**
@@ -134,7 +168,7 @@ export class AssetManager {
     const extension = extensionOf(file.name);
     if (extension === undefined)
       throw new Error("Unsupported asset file type.");
-    const type = TYPES[extension];
+    const type = typeOf(extension);
     if (file.type !== type.mime)
       throw new Error("File MIME type does not match its extension.");
 
@@ -158,7 +192,7 @@ export class AssetManager {
         ),
       );
     }
-    this.#changed();
+    this.#mutated();
     return reference;
   }
 
@@ -185,7 +219,7 @@ export class AssetManager {
     if (existing >= 0) this.#declarations.splice(existing, 1, reference);
     else this.#declarations.push(reference);
     this.#assets[path] = new Uint8Array(bytes);
-    this.#changed();
+    this.#mutated();
     return reference;
   }
 
@@ -253,7 +287,7 @@ export class AssetManager {
         : { sourceUrl: checked.sourceUrl }),
     };
     this.#declarations.splice(index, 1, next);
-    this.#changed();
+    this.#mutated();
     return next;
   }
 
@@ -263,7 +297,7 @@ export class AssetManager {
     const [asset] = this.#declarations.splice(index, 1);
     if (asset !== undefined) delete this.#assets[asset.path];
     this.#revoke(assetId);
-    this.#changed();
+    this.#mutated();
     return true;
   }
 
@@ -285,7 +319,7 @@ export class AssetManager {
     const extension = extensionOf(file.name);
     if (extension === undefined)
       throw new Error("Unsupported asset file type.");
-    const type = TYPES[extension];
+    const type = typeOf(extension);
     if (file.type !== type.mime)
       throw new Error("File MIME type does not match its extension.");
     // A different extension would leave the declared path claiming bytes of a
@@ -304,7 +338,8 @@ export class AssetManager {
         ),
       );
     }
-    this.#changed();
+    // One replace is one mutation: `replaceBytes` has already counted the
+    // declaration and byte change, and the preview URL is not part of either.
     return next;
   }
 
@@ -334,7 +369,7 @@ export class AssetManager {
     // The preview URL is a blob of the old bytes; keeping it would leave the
     // pane showing the picture the author just replaced.
     this.#revoke(assetId);
-    this.#changed();
+    this.#mutated();
     return next;
   }
 
@@ -356,7 +391,7 @@ export class AssetManager {
         new Uint8Array(bytes),
       ]),
     );
-    this.#changed();
+    this.#mutated();
   }
 
   async hydrate(canvas: StaticCanvas): Promise<void> {
@@ -371,7 +406,9 @@ export class AssetManager {
       );
       if (asset === undefined || this.#assets[asset.path] === undefined)
         continue;
-      const hydrated = await FabricImage.fromURL(this.#preview(asset));
+      const preview = this.#preview(asset);
+      if (preview === undefined) continue;
+      const hydrated = await FabricImage.fromURL(preview);
       const element = hydrated.getElement();
       object.setElement(
         element instanceof HTMLImageElement
@@ -393,11 +430,7 @@ export class AssetManager {
     const asset = this.#declarations.find(
       (candidate) => candidate.id === assetId,
     );
-    return asset === undefined ||
-      asset.kind === "video" ||
-      this.#assets[asset.path] === undefined
-      ? undefined
-      : this.#preview(asset);
+    return asset === undefined ? undefined : this.#preview(asset);
   }
 
   backgroundSource(
@@ -410,7 +443,7 @@ export class AssetManager {
       return undefined;
     const bytes = this.#assets[asset.path];
     const extension = extensionOf(asset.path);
-    const type = extension === undefined ? undefined : TYPES[extension];
+    const type = extension === undefined ? undefined : typeOf(extension);
     if (bytes === undefined || type === undefined || type.kind !== asset.kind)
       return undefined;
     const preview = asset.kind === "svg" ? sanitisedSvg(bytes) : bytes;
@@ -425,16 +458,15 @@ export class AssetManager {
     this.#previewUrls.clear();
   }
 
-  #preview(asset: LocalAssetReference): string {
+  #preview(asset: LocalAssetReference): string | undefined {
     const existing = this.#previewUrls.get(asset.id);
     if (existing !== undefined) return existing;
     const bytes = this.#assets[asset.path];
-    if (bytes === undefined)
-      throw new Error(`Missing declared asset bytes for ${asset.id}.`);
+    if (bytes === undefined) return undefined;
     const extension = extensionOf(asset.path);
-    const type = extension === undefined ? undefined : TYPES[extension];
+    const type = extension === undefined ? undefined : typeOf(extension);
     if (type === undefined || type.kind !== asset.kind || type.kind === "video")
-      throw new Error(`Unsupported declared asset ${asset.id}.`);
+      return undefined;
     const preview = extension === "svg" ? sanitisedSvg(bytes) : bytes;
     const url = URL.createObjectURL(
       new Blob([preview as unknown as BlobPart], { type: type.mime }),
@@ -522,7 +554,7 @@ function fontMetadataOrThrow(metadata: FontMetadata): FontMetadata {
 
 function extensionOf(name: string): AssetExtension | undefined {
   const extension = name.toLowerCase().split(".").pop();
-  return extension !== undefined && extension in TYPES
+  return extension !== undefined && extension in KIND_OF
     ? (extension as AssetExtension)
     : undefined;
 }
@@ -532,7 +564,7 @@ function extensionOf(name: string): AssetExtension | undefined {
  *  manager's own check would refuse. */
 export function mimeOf(filename: string): string | undefined {
   const extension = extensionOf(filename);
-  return extension === undefined ? undefined : TYPES[extension].mime;
+  return extension === undefined ? undefined : typeOf(extension).mime;
 }
 
 function sanitisedSvg(bytes: Uint8Array): Uint8Array {

@@ -81,6 +81,13 @@ export interface FabricSceneHandle extends SceneHandle {
    * the authored bag, and the layer re-places rather than restarts a video.
    */
   updateBackground(background: Background | undefined): void;
+  /**
+   * Stops the background video decoding and following frames while the page is
+   * not visible. A media-less scene has nothing to pause.
+   */
+  pauseMedia(): void;
+  /** Resumes the media pause: decoding, and frames if a glass panel samples it. */
+  resumeMedia(): void;
 }
 
 export function mountFabricScene(
@@ -121,6 +128,16 @@ export function mountFabricScene(
   // the media layer is assigned after it so its `onFrame` can read the handle
   // (R64).
   let media: BackgroundMediaHandle | undefined;
+  /** The host size and pixel ratio the last fit was for, so `resize()` can tell
+   *  a layout change from a pixel change. A `ResizeObserver` fires for both, and
+   *  moving the window between monitors changes the ratio at the same size. */
+  let fitted:
+    | {
+        readonly width: number;
+        readonly height: number;
+        readonly ratio: number;
+      }
+    | undefined;
 
   // Glass is not a plan feature: it is a property on revived Fabric objects, so
   // the owner re-resolves them from the canvas rather than from `update()`.
@@ -150,13 +167,14 @@ export function mountFabricScene(
       artboard: currentArtboard,
       assets: options.assets,
       resolveAsset: options.resolveAsset,
+      // Nothing has rendered, so no panel has a surface yet. Passing the count
+      // rather than syncing after the mount keeps a panel that arrives later
+      // from costing one frame callback before it exists.
+      glassSurfaces: glass.liveSurfaces(),
       // The video is not a Fabric object, so nothing else would repaint — but
-      // only a glass panel reads the backdrop, so a video nothing blurs must
-      // not repaint the whole canvas per decoded frame. Asked per frame rather
-      // than decided here: a panel's surface is allocated *during a render*, and
-      // the player revives its objects after the mount, so a decision taken at
-      // mount time would be taken before any panel exists. The mount's own
-      // render below stays unconditional, or this gate would stall at zero.
+      // only a glass panel reads the backdrop. The media layer already gates
+      // *arming* (see `syncGlassSurfaces`); this is the per-frame half, for a
+      // callback already queued when the last panel left.
       onFrame: () => {
         if (glass.liveSurfaces() > 0) canvas.requestRenderAll();
       },
@@ -165,6 +183,14 @@ export function mountFabricScene(
         : { onMediaError: options.onMediaError }),
     });
   }
+
+  /** A panel's scratch surface is allocated during a render, so the render is
+   *  where the count changes. The mount's own render is the first opportunity,
+   *  which is why this is not a decision taken at mount time. */
+  const syncGlassSurfaces = (): void => {
+    media?.setGlassSurfaces(glass.liveSurfaces());
+  };
+  canvas.on("after:render", syncGlassSurfaces);
 
   let currentTransform = fit();
 
@@ -175,6 +201,11 @@ export function mountFabricScene(
     // document artboard's `background` may still be a palette reference, which
     // only the plan builder can resolve.
     const geometry = currentArtboard ?? plan.artboard;
+    fitted = {
+      width: host.clientWidth,
+      height: host.clientHeight,
+      ratio: window.devicePixelRatio,
+    };
     const transform = computeArtboardTransform({
       artboard: { width: geometry.width, height: geometry.height },
       viewport: { width: host.clientWidth, height: host.clientHeight },
@@ -277,8 +308,30 @@ export function mountFabricScene(
       // A `ResizeObserver` and an `orientationchange` handler both outlive a
       // teardown, and the player's `pagehide` is not the only way a mount ends.
       if (disposed) return;
+      // The observer fires for layout changes that leave the pixel size alone,
+      // and re-fitting those is a canvas resize and a full repaint for nothing.
+      // The ratio is part of the fit: moving between monitors changes the
+      // backing store at the same CSS size.
+      if (
+        fitted !== undefined &&
+        fitted.width === host.clientWidth &&
+        fitted.height === host.clientHeight &&
+        fitted.ratio === window.devicePixelRatio
+      ) {
+        return;
+      }
       currentTransform = fit();
       canvas.requestRenderAll();
+    },
+
+    pauseMedia(): void {
+      if (disposed) return;
+      media?.pause();
+    },
+
+    resumeMedia(): void {
+      if (disposed) return;
+      media?.resume();
     },
 
     dispose(): void {
@@ -290,6 +343,7 @@ export function mountFabricScene(
       // Before the media: the glass sampler reads the media layer.
       glass.dispose();
       media?.destroy();
+      canvas.off("after:render", syncGlassSurfaces);
       // `destroy()` also disposes remaining Fabric objects.
       void canvas.destroy();
       host.textContent = "";

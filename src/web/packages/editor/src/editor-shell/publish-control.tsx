@@ -83,8 +83,22 @@ export function PublishControl({
     undefined,
   );
 
+  // Publishing follows the LAN, because that is the whole of §145's opt-in: a
+  // host serving loopback has nothing to publish to, and turning the LAN off
+  // takes the document back.
+  const known = state.kind === "known" ? state : undefined;
+  const open = known?.answer.lan === true;
+  // Both the opt-in and a transport, because either missing means no display is
+  // being served — and the document read below is a serialisation and a library
+  // lookup, so a batch that changes nothing on screen must not pay it.
+  const publishing = open && publish !== undefined;
+
   useEffect(() => {
     if (session === undefined) return;
+    if (!publishing) {
+      setShowing(undefined);
+      return;
+    }
 
     const read = (): void => {
       const document = session.publishableDocument();
@@ -99,15 +113,11 @@ export function PublishControl({
             },
       );
     };
+    // Once when publishing turns on, so the name is the document open *now*
+    // rather than the one that was open when the surface mounted.
     read();
     return session.subscribeDocumentChange(read);
-  }, [session]);
-
-  // Publishing follows the LAN, because that is the whole of §145's opt-in: a
-  // host serving loopback has nothing to publish to, and turning the LAN off
-  // takes the document back.
-  const known = state.kind === "known" ? state : undefined;
-  const open = known?.answer.lan === true;
+  }, [session, publishing]);
 
   useEffect(() => {
     if (!open || publish === undefined) return;
@@ -227,7 +237,7 @@ export function PublishControl({
             )}
             {/* Only once the shell has a document to read: a control drawn
                 without one would say "save this theme" about no theme. */}
-            {session === undefined || !open ? null : (
+            {session === undefined || !publishing ? null : (
               <span className="editor-shell-publish-live">
                 {showing === undefined
                   ? uiCopy.publish.unsaved

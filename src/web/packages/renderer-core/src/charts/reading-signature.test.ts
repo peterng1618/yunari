@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SampleSource } from "../data/source.js";
-import type { Sample } from "../types.js";
+import { defaultGaugeSettings, type Sample } from "../types.js";
 import { defaultBarSettings } from "./bar.js";
 import { defaultLineSettings } from "./line.js";
 import { chartReadingSignature } from "./reading-signature.js";
@@ -13,6 +13,7 @@ const sample: Sample = {
   unit: "%",
 };
 const source: SampleSource = {
+  revision: 0,
   latest: () => sample,
   history: () => [sample],
 };
@@ -36,6 +37,26 @@ describe("chartReadingSignature", () => {
     );
   });
 
+  it("moves with the drawn box, so a resize redraws a static chart", () => {
+    // The gap is measured against the drawn size, so geometry is part of what
+    // the option holds. Without it a gauge with no binding keeps the gap it was
+    // built with until something else moves.
+    const chart = { family: "gauge", settings: defaultGaugeSettings } as const;
+    const at = (drawnEdgePx: number) =>
+      chartReadingSignature(
+        chart,
+        [],
+        source,
+        1_000,
+        undefined,
+        undefined,
+        drawnEdgePx,
+      );
+
+    expect(at(800)).not.toBe(at(400));
+    expect(at(800)).toBe(at(800));
+  });
+
   it("asks for the history its delay needs, and less when the delay is dropped", () => {
     // The signature must read what the chart would draw: a 1 fps caller drops
     // the delay, so the plan asks for the window alone and so must this.
@@ -43,6 +64,7 @@ describe("chartReadingSignature", () => {
     const bindings = [{ id: "b", semanticKey: "cpu.load.total" }];
     const asked: number[] = [];
     const delayed: SampleSource = {
+      revision: 0,
       chartPlaybackDelayMs: 2_000,
       latest: () => sample,
       history: (_key, seconds) => {

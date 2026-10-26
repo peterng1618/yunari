@@ -5,37 +5,46 @@ inventory, not a release-grade transitive audit. Provenance:
 [`docs/engineering/dependencies.md`](docs/engineering/dependencies.md).
 
 **Scope: direct dependencies only — the packages a workspace `package.json`
-declares in `dependencies` or `devDependencies`, `@yunari/` workspace packages
-excluded — never the installed closure.** A package reached only through another
+declares in `dependencies`, `devDependencies` or `optionalDependencies`,
+`@yunari/` workspace packages excluded — never the installed closure.
+`peerDependencies` are not an inventory: a peer states a requirement on a
+package this project does not itself install or ship, so it is not a direct
+dependency.** A package reached only through another
 package's own dependencies has no entry here, and its absence is not a missing
 notice; the closure is enumerated at release time, by the release rule in
-[`docs/engineering/dependencies.md`](docs/engineering/dependencies.md). **The
-form varies by section, not by package**: a table for the runtime/editor
-dependencies and a paragraph for the build/test ones, so an entry is a row only
-where its section is one.
+[`docs/engineering/dependencies.md`](docs/engineering/dependencies.md). Every
+direct dependency is a row in one of the two tables below, with the version the
+lockfile resolves and the licence its installed `package.json` declares — or,
+where that manifest declares none, the licence named by its `LICENSE` title;
+`npm run third-party:check` (`scripts/check-third-party.mjs`) compares every
+row against both and names each drift. A platform-optional package is installed
+only on the platform it serves: its row and lockfile version are required
+everywhere, its licence is compared where it is installed, and the check says
+in its output when it could not read one here. The prose sections that follow
+are provenance, not notice rows.
 
 ## Runtime/editor
 
-| Dependency | Licence | Use |
-|---|---|---|
-| Apache ECharts 6.1.0 | Apache-2.0 | charts |
-| Fabric.js 7.4.0 | MIT | scene graph |
-| fflate 0.8.3 | MIT | theme ZIP packages |
-| ffmpeg-static 5.3.0 | GPL-3.0-or-later | host: re-encodes theme video; source offered at <https://github.com/eugeneware/ffmpeg-static> |
-| react 19.3.0 | MIT | editor shell chrome |
-| react-dom 19.3.0 | MIT | editor shell chrome |
-| @base-ui/react 1.8.0 | MIT | editor shell primitives |
-| lucide-react 1.48.0 | ISC AND MIT (Feather-derived subset) | editor action-bar icons |
-| Lineicons 1.3.2 | MIT | development-only: generates the asset finder's Lineicons manifest; no runtime import |
-| systeminformation 5.33.13 | MIT | host hardware metrics (no dependencies of its own) |
-| node-forge 1.4.0 | BSD-3-Clause (of `BSD-3-Clause OR GPL-2.0`) | host: encodes and signs the local CA and leaf that give a display a secure origin (no dependencies of its own) |
-| qr 0.7.2 | MIT OR Apache-2.0 | QR symbol for the display link (no dependencies of its own) |
-| class-variance-authority 0.7.1 | Apache-2.0 | editor component variants |
-| clsx 2.1.1 | MIT | editor class-name joins |
-| tailwind-merge 3.7.0 | MIT | editor class-name overrides |
-| better-auth 1.7.12 | MIT | store worker: OAuth sign-in, sessions and its own `user`/`session`/`account` tables |
-| aws4fetch 1.0.20 | MIT | store worker: SigV4-signs R2 presigned upload URLs |
-| culori 4.0.2 | MIT | colour parsing and conversion (no dependencies of its own) |
+| Package | Version | Licence | Use |
+|---|---|---|---|
+| `echarts` | 6.1.0 | Apache-2.0 | charts |
+| `fabric` | 7.4.0 | MIT | scene graph |
+| `fflate` | 0.8.3 | MIT | theme ZIP packages |
+| `ffmpeg-static` | 5.3.0 | GPL-3.0-or-later | host: re-encodes theme video; source offered at <https://github.com/eugeneware/ffmpeg-static> |
+| `react` | 19.3.1 | MIT | editor shell chrome |
+| `react-dom` | 19.3.1 | MIT | editor shell chrome |
+| `@base-ui/react` | 1.9.0 | MIT | editor shell primitives |
+| `lucide-react` | 1.61.0 | ISC | editor action-bar icons; four Feather-derived icons are also MIT, see Runtime icons |
+| `lineicons` | 1.3.2 | MIT | development-only: generates the asset finder's Lineicons manifest; no runtime import |
+| `systeminformation` | 5.33.16 | MIT | host hardware metrics (no dependencies of its own) |
+| `node-forge` | 1.4.0 | BSD-3-Clause OR GPL-2.0 | host: encodes and signs the local CA and leaf that give a display a secure origin; BSD-3-Clause is the one taken (no dependencies of its own) |
+| `undici` | 7.30.1 | MIT | host: pins the DNS address checked by a custom source's policy to the connection that fetches it (decision 0116) |
+| `qr` | 0.7.2 | MIT OR Apache-2.0 | QR symbol for the display link (no dependencies of its own) |
+| `class-variance-authority` | 0.7.1 | Apache-2.0 | editor component variants |
+| `clsx` | 2.1.1 | MIT | editor class-name joins |
+| `tailwind-merge` | 3.7.0 | MIT | editor class-name overrides |
+| `better-auth` | 1.7.12 | MIT | store worker: OAuth sign-in, sessions and its own `user`/`session`/`account` tables |
+| `culori` | 4.0.2 | MIT | colour parsing and conversion (no dependencies of its own) |
 
 Preserve applicable Apache-2.0 and MIT licence/NOTICE obligations.
 
@@ -104,16 +113,35 @@ Provenance: `docs/engineering/dependencies.md`.
 
 ## Build/test
 
-Declared development dependencies: @biomejs/biome 2.5.14 (MIT OR Apache-2.0),
-TypeScript 7.0.2 (Apache-2.0), Vite 8.3.0 (MIT), Vitest 5.0.0 (MIT),
-@playwright/test 1.63.0 (Apache-2.0), jsdom 26.1.0 (MIT), canvas 3.2.3 (MIT),
-@types/node 22.10.2 (MIT), @types/node-forge 1.3.11 (MIT), @types/react 19.3.x (MIT), @types/react-dom
-19.3.x (MIT), tailwindcss 4.3.3 (MIT, editor dev styling), @tailwindcss/vite
-4.3.3 (MIT, editor dev), jsqr 1.4.0 (Apache-2.0), @google/design.md 0.4.0
-(Apache-2.0, lints `DESIGN.md` in the design gate), @playwright/mcp 0.0.83
-(Apache-2.0, the Playwright MCP server used as an agent tool), @cloudflare/vitest-pool-workers 0.23.0 (MIT, Workers test pool), @cloudflare/workers-types 5.20261022.1 (MIT OR Apache-2.0, Worker runtime types), wrangler 4.152.0 (MIT OR Apache-2.0, Worker build/deploy), tsx 4.23.15 (MIT,
-runs scripts that import workspace TypeScript), and a nested vitest 4.1.12 (MIT) under `packages/store-worker` — the pool peers on `^4.1.0` while the workspace runs 5.0.0. Native `canvas`
-may carry linked-library obligations.
+Declared development dependencies, plus a second row where a workspace installs
+its own nested copy of a name already listed above.
+
+| Package | Version | Licence | Use |
+|---|---|---|---|
+| `@biomejs/biome` | 2.5.14 | MIT OR Apache-2.0 | format/lint |
+| `@cloudflare/vitest-pool-workers` | 0.23.0 | MIT | Workers test pool |
+| `@cloudflare/workers-types` | 5.20261022.1 | MIT OR Apache-2.0 | Worker runtime types |
+| `@google/design.md` | 0.4.0 | Apache-2.0 | lints `DESIGN.md` in the design gate |
+| `@playwright/mcp` | 0.0.83 | Apache-2.0 | the Playwright MCP server used as an agent tool |
+| `@playwright/test` | 1.63.0 | Apache-2.0 | browser tests |
+| `@tailwindcss/oxide-linux-x64-gnu` | 4.3.3 | MIT | editor dev: Tailwind's native binding for the Linux CI runner (optional; installed there only) |
+| `@tailwindcss/oxide-win32-x64-msvc` | 4.3.3 | MIT | editor dev: Tailwind's native binding for Windows (optional; installed there only) |
+| `@tailwindcss/vite` | 4.3.3 | MIT | editor dev |
+| `@types/culori` | 4.0.1 | MIT | types for culori 4, which ships none |
+| `@types/node` | 22.20.5 | MIT | types |
+| `@types/node-forge` | 1.3.11 | MIT | types for `node-forge` |
+| `@types/react` | 19.3.0 | MIT | types |
+| `@types/react-dom` | 19.3.0 | MIT | types |
+| `canvas` | 3.2.3 | MIT | native raster test dependency; may carry linked-library obligations |
+| `jsdom` | 26.1.0 | MIT | DOM tests |
+| `jsqr` | 1.4.0 | Apache-2.0 | decodes the QR round-trip |
+| `tailwindcss` | 4.3.3 | MIT | editor dev styling |
+| `tsx` | 4.23.15 | MIT | runs scripts that import workspace TypeScript |
+| `typescript` | 7.0.2 | Apache-2.0 | build |
+| `vite` | 8.3.5 | MIT | build/dev |
+| `vitest` | 5.0.5 | MIT | tests |
+| `vitest` | 4.1.12 | MIT | nested under `packages/store-worker` — the pool peers on `^4.1.0` while the workspace runs 5.0.5 |
+| `wrangler` | 4.152.0 | MIT OR Apache-2.0 | Worker build/deploy |
 
 Four entries were added on 2026-10-13 — `class-variance-authority`, `clsx` and
 `tailwind-merge` to the runtime/editor table and `@playwright/mcp` to this
@@ -179,7 +207,7 @@ to label which source each result came from.
 
 ## Runtime icons
 
-`lucide-react` 1.48.0 supplies the editor's action-bar icons, imported per-icon
+`lucide-react` 1.61.0 supplies the editor's action-bar icons, imported per-icon
 by name so the bundler keeps only the ones the registry uses. Its per-icon
 geometry is also where the default theme's card icons come from: the starter reads the same
 modules and converts them to canvas path data at author time, so no second icon set

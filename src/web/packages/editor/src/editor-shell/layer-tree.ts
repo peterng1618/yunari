@@ -357,7 +357,10 @@ export function projectLayers({
   bindings,
 }: {
   readonly root: readonly FabricObject[];
-  readonly selected: readonly FabricObject[];
+  /** The ids of the selected objects, built by `selectionIds` from the objects
+   *  the caller holds. A set rather than the objects, so one row's mark is a
+   *  membership test rather than a scan of the selection. */
+  readonly selected: ReadonlySet<string>;
   readonly expanded: ReadonlySet<string>;
   /** The document's semantic bindings, keyed by the same Fabric object ids the
    * rows carry. Envelope state rather than Fabric state, so it arrives as an
@@ -383,7 +386,9 @@ export function projectLayers({
       const kind = kindOf(object);
       const path = [...ancestors, object];
       const isGroup = object instanceof Group;
-      const hasChildren = isGroup && object.getObjects().length > 0;
+      // Asked once per group: `hasChildren` and the descent read the same list.
+      const children = isGroup ? object.getObjects() : undefined;
+      const hasChildren = children !== undefined && children.length > 0;
       const collapsed = hasChildren && !expanded.has(id);
       if (!hidden) {
         const own = bound[id] ?? [];
@@ -400,7 +405,7 @@ export function projectLayers({
           collapsed,
           visible: path.every((entry) => entry.visible),
           locked: path.some((entry) => isLocked(entry)),
-          selected: selected.includes(object),
+          selected: selected.has(id),
         });
       }
       // Descend into a shut group as well, emitting nothing for what is under
@@ -409,12 +414,59 @@ export function projectLayers({
       // document rather than the visible part of it. Stopping at a shut group
       // would hand the same fallback id to two different objects, so a rename
       // or a hide would land on whichever one the panel happened to mean.
-      if (isGroup)
-        walk(object.getObjects(), depth + 1, path, id, hidden || collapsed);
+      if (children !== undefined)
+        walk(children, depth + 1, path, id, hidden || collapsed);
     }
   };
   walk(root, 0, [], undefined, false);
   return rows;
+}
+
+/**
+ * The row ids of the objects a Fabric selection holds, resolved by the same
+ * paint-order walk the projection uses.
+ *
+ * The renderer selects objects and the projection is keyed by ids, but an
+ * id-less object's fallback id is *positional* — `layerIds` numbers by walk
+ * order — so no caller can derive an id from the object alone without repeating
+ * the walk. A selection that already names every id short-circuits; otherwise
+ * the walk here is what lets each row's mark be a set test instead of a scan of
+ * the selection.
+ */
+export function selectionIds(
+  root: readonly FabricObject[],
+  objects: readonly FabricObject[],
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  if (objects.length === 0) return ids;
+  // The common case is a selection that already carries its own ids: the row's
+  // id is the object's id, so a second full-tree walk would cost more than the
+  // per-row scan it replaced. Only a positional (id-less) member needs the walk
+  // that numbers it — and one such member makes the whole set need it.
+  const named: string[] = [];
+  for (const object of objects) {
+    const id = (object as { id?: string }).id;
+    if (id === undefined) break;
+    named.push(id);
+  }
+  if (named.length === objects.length) {
+    for (const id of named) ids.add(id);
+    return ids;
+  }
+  const wanted = new Set(objects);
+  const idOf = layerIds();
+  const search = (list: readonly FabricObject[]): void => {
+    // Every listed object is numbered, selected or not, or the positional
+    // fallback ids would disagree with `findById`.
+    for (const object of [...list].reverse()) {
+      if (!isListed(object)) continue;
+      const id = idOf(object);
+      if (wanted.has(object)) ids.add(id);
+      if (object instanceof Group) search(object.getObjects());
+    }
+  };
+  search(root);
+  return ids;
 }
 
 /** The object a row id names, in the same paint-order walk `projectLayers`

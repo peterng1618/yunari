@@ -1,10 +1,11 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { favoriteCount } from "../src/db/favorites";
-import { packageKey, thumbnailKey } from "../src/storage/keys";
+import { thumbnailKey } from "../src/storage/keys";
 import { BASE, sessionHeaders, USER_ID } from "./helpers";
 import {
   downloads,
+  fixturePackageKey,
   ITEM_ID,
   indexIds,
   seedPublished,
@@ -52,7 +53,9 @@ describe("unpublish and republish", () => {
     expect(await favoriteCount(env.DB, ITEM_ID)).toBe(2);
     expect(await versionsOf(env.DB, ITEM_ID)).toEqual(["1.0.0", "1.0.1"]);
     for (const version of ["1.0.0", "1.0.1"])
-      expect(await env.BUCKET.get(packageKey(ITEM_ID, version))).not.toBeNull();
+      expect(
+        await env.BUCKET.get(fixturePackageKey(ITEM_ID, version)),
+      ).not.toBeNull();
     expect(await env.BUCKET.get(thumbnailKey(ITEM_ID))).not.toBeNull();
 
     const republished = await publish(headers, ITEM_ID);

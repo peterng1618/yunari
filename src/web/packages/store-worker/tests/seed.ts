@@ -4,11 +4,23 @@ import type {
   CatalogueStatus,
   FacetRecord,
 } from "@yunari/renderer-core";
-import { packageKey, thumbnailKey } from "../src/storage/keys";
+import { pendingKey, thumbnailKey } from "../src/storage/keys";
+import { BASE } from "./base";
 
 /** Fixed ids and bytes so a spec can name what it seeded without a second read. */
 export const ITEM_ID = "6041df49-9c61-4d51-a184-716890560bdb";
 export const PACKAGE_BYTES = new TextEncoder().encode("yunari test package");
+/** The one key `/index.json` is cached under, whatever the request URL. */
+const INDEX_URL = `${BASE}/index.json`;
+
+/**
+ * Where a seeded version's bytes live. A real package is never re-keyed after
+ * the upload, so the only key a fixture may use is the pending shape — a
+ * `packages/<id>/<version>.zip` fixture would test a key no writer writes.
+ */
+export function fixturePackageKey(itemId: string, version: string): string {
+  return pendingKey(`seed-${itemId}-${version}`);
+}
 
 const CREATED_AT = "2026-10-01T00:00:00.000Z";
 const FACETS: FacetRecord = {
@@ -80,14 +92,14 @@ export async function seedPublished(options: SeedOptions = {}): Promise<void> {
         version,
         ENVELOPE_JSON,
         JSON.stringify(FACETS),
-        packageKey(ITEM_ID, version),
+        fixturePackageKey(ITEM_ID, version),
         thumbnailKey(ITEM_ID),
         PACKAGE_BYTES.byteLength,
         "0".repeat(64),
         versionInstant(index),
       )
       .run();
-    await putPackage(packageKey(ITEM_ID, version), PACKAGE_BYTES);
+    await putPackage(fixturePackageKey(ITEM_ID, version), PACKAGE_BYTES);
   }
 
   await env.BUCKET.put(thumbnailKey(ITEM_ID), PNG_BYTES);
@@ -187,7 +199,7 @@ export async function seedStatus(options: {
       options.id,
       ENVELOPE_JSON,
       JSON.stringify(FACETS),
-      packageKey(options.id, "1.0.0"),
+      fixturePackageKey(options.id, "1.0.0"),
       thumbnailKey(options.id),
       PACKAGE_BYTES.byteLength,
       "0".repeat(64),
@@ -296,9 +308,22 @@ export async function statusOf(
 
 /** The listing's ids as the editor receives them, not as D1 stores them. */
 export async function indexIds(): Promise<readonly string[]> {
-  const response = await SELF.fetch("https://store.test/index.json");
+  await clearIndexCache();
+  const response = await SELF.fetch(INDEX_URL);
   const index = (await response.json()) as CatalogueIndex;
   return index.entries.map((entry) => entry.id);
+}
+
+/**
+ * Drops the stored `/index.json`. The route caches it for 60 seconds and the
+ * pool keeps the cache between tests in one file, so a spec that changes what
+ * the index lists must clear it before reading.
+ */
+export async function clearIndexCache(): Promise<void> {
+  // The DOM lib's `CacheStorage` shadows workers-types', which declares
+  // `default`; this is the same cast `public.ts` needs.
+  const cache = (caches as unknown as { readonly default: Cache }).default;
+  await cache.delete(new Request(INDEX_URL));
 }
 
 /** Later versions are inserted later, so `created_at` orders the ladder. */

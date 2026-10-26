@@ -1,18 +1,17 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
+import { createSecretStore, type SecretStore } from "./secret-store.js";
 
 /**
  * The store session the host holds after signing in through the Worker's
- * social flow, beside the other settings as `store-session.json`.
+ * social flow, beside the other settings as `store-session.bin`.
  *
- * Plaintext at mode `0600`, which is the honest shape for a local host: it has
- * nowhere to keep an encryption key that a local attacker with this user's
- * access could not also read, so encrypting it would add a second file to
- * protect beside the one that matters. The mode is the real control where the
- * platform honours it; on Windows the file inherits the profile directory's
- * ACL, which is already this user's alone. The token is never logged, never
- * sent to the browser, and goes only to the file and the `Authorization`
- * header.
+ * The bytes are encrypted under a key the OS facility wraps: a copy of the file
+ * taken to another account or machine, or swept into a backup, no longer yields
+ * the token. That is the difference from the mode-0600 plaintext file this
+ * replaced, where the file was the secret and its permissions the only control.
+ * The token is never logged, never sent to the browser, and goes only to the
+ * store and the `Authorization` header.
  */
 
 export interface StoreSession {
@@ -33,11 +32,20 @@ export interface StoreSessionStore {
   clear(): Promise<void>;
 }
 
-const FILE = "store-session.json";
+const SECRET = "store-session";
+/**
+ * The pre-encryption file. With no encrypted session yet, a validating file is
+ * migrated and then removed, and a removal that fails is retried on a later
+ * read. When an encrypted session already exists the file is never migrated: a
+ * validating one is only removed (also retried on a later read), and one that
+ * does not validate is kept for its owner. A successful sign-in removes it in
+ * either case, because a stale or unreadable token file must not outlive the
+ * session that replaced it.
+ */
+const LEGACY_FILE = "store-session.json";
 /** The superseded GitHub device-flow token; deleted the first time a store
  *  session is written, since nothing reads it any more. */
 const LEGACY_GITHUB_TOKEN = "github-token.json";
-const MODE = 0o600;
 
 /**
  * Four usable strings, or nothing.
@@ -68,41 +76,74 @@ function asSession(value: unknown): StoreSession | undefined {
   return { token, userId, email, obtainedAt };
 }
 
-async function readSession(file: string): Promise<StoreSession | undefined> {
+function decode(bytes: Buffer): StoreSession | undefined {
   try {
-    return asSession(JSON.parse(await readFile(file, "utf8")));
+    return asSession(JSON.parse(bytes.toString("utf8")));
   } catch {
-    // No file, or one that is not JSON: there is no session to use.
     return undefined;
   }
 }
 
-export function createStoreSessionStore(directory: string): StoreSessionStore {
-  const file = path.join(directory, FILE);
+function encode(session: StoreSession): Buffer {
+  return Buffer.from(`${JSON.stringify(session, null, 2)}\n`, "utf8");
+}
 
-  // Written beside the target and renamed over it, so a crash mid-write loses
-  // the write rather than leaving a truncated token. On Windows a rename over a
-  // file another handle holds open fails with EPERM instead of waiting, so
-  // reads and writes queue rather than overlap — the pattern the other settings
-  // stores already use.
-  const temporary = `${file}.tmp`;
+/**
+ * The legacy file's session, or nothing when it is absent, unreadable or not
+ * four usable strings. Content this reader cannot use is left in place.
+ */
+async function readLegacy(file: string): Promise<StoreSession | undefined> {
+  let text: string;
+  try {
+    text = await readFile(file, "utf8");
+  } catch {
+    return undefined;
+  }
 
-  const save = async (session: StoreSession): Promise<void> => {
-    await mkdir(directory, { recursive: true });
-    // A failed rename leaves the plaintext token in the temporary file; it is
-    // cleared here and on `clear` rather than waiting for a later write.
-    await rm(temporary, { force: true });
-    // The mode applies when the temporary file is created, and that file is
-    // ours alone; the rename carries it to the target.
-    await writeFile(temporary, `${JSON.stringify(session, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: MODE,
-    });
-    await rename(temporary, file);
-    // The old device-flow token has no migration: a successful store sign-in is
-    // the moment its plaintext `public_repo` grant stops being needed. A missing
-    // file is the ordinary case, so its absence is not an error.
-    await rm(path.join(directory, LEGACY_GITHUB_TOKEN), { force: true });
+  try {
+    return asSession(JSON.parse(text));
+  } catch {
+    return undefined;
+  }
+}
+
+export function createStoreSessionStore(
+  directory: string,
+  secrets: SecretStore = createSecretStore(directory),
+): StoreSessionStore {
+  const legacyFile = path.join(directory, LEGACY_FILE);
+
+  /**
+   * The session: the encrypted copy, retiring a legacy file beside it.
+   *
+   * The stored session is authoritative whenever it holds one — a session has
+   * no repair semantics, and promoting a stale leftover would roll a newer
+   * sign-in back to a previous, possibly revoked, token. A legacy file found
+   * beside it is removed once it validates; a removal that fails is retried
+   * next read. Only when there is no stored copy is the legacy file migrated,
+   * write first and removal second, so a write that throws (unavailable
+   * protector, missing key) leaves the plaintext for a later run. A present
+   * `.bin` that cannot be read throws from the secret store rather than
+   * answering "no session".
+   */
+  const readAll = async (): Promise<StoreSession | undefined> => {
+    const stored = await secrets.read(SECRET);
+    if (stored !== undefined) {
+      // Never promoted: a valid leftover is retired, a malformed one waits for
+      // a sign-in to supersede it.
+      if ((await readLegacy(legacyFile)) !== undefined) {
+        await rm(legacyFile, { force: true }).catch(() => undefined);
+      }
+      return decode(stored);
+    }
+
+    const legacy = await readLegacy(legacyFile);
+    if (legacy === undefined) return undefined;
+
+    await secrets.write(SECRET, encode(legacy));
+    // The same retry rule as above; the encrypted write already succeeded.
+    await rm(legacyFile, { force: true }).catch(() => undefined);
+    return legacy;
   };
 
   let running: Promise<unknown> = Promise.resolve();
@@ -116,7 +157,7 @@ export function createStoreSessionStore(directory: string): StoreSessionStore {
   };
 
   return {
-    read: () => exclusively(() => readSession(file)),
+    read: () => exclusively(readAll),
 
     async write(session) {
       await exclusively(async () => {
@@ -127,16 +168,29 @@ export function createStoreSessionStore(directory: string): StoreSessionStore {
           );
         }
 
-        await save(valid);
+        await secrets.write(SECRET, encode(valid));
+
+        // Only after the ciphertext landed. A removal that fails is retried by
+        // a later read and does not fail this write: the session is saved. The
+        // pre-encryption file and a failed rename's temporary are plaintext
+        // tokens, and the old device-flow token has no migration — a successful
+        // store sign-in is the moment its plaintext `public_repo` grant stops
+        // being needed.
+        await rm(legacyFile, { force: true }).catch(() => undefined);
+        await rm(`${legacyFile}.tmp`, { force: true }).catch(() => undefined);
+        await rm(path.join(directory, LEGACY_GITHUB_TOKEN), {
+          force: true,
+        }).catch(() => undefined);
       });
     },
 
     async clear() {
       await exclusively(async () => {
-        // Both halves: a rename that failed earlier left the token in the
-        // temporary file, and signing out has to mean it is gone.
-        await rm(temporary, { force: true });
-        await rm(file, { force: true });
+        // Both halves: a failed write leaves a temporary beside the target, and
+        // signing out has to mean the token is gone.
+        await secrets.remove(SECRET);
+        await rm(legacyFile, { force: true });
+        await rm(`${legacyFile}.tmp`, { force: true });
       });
     },
   };

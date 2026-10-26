@@ -4,7 +4,9 @@ import {
   defaultBarSettings,
   defaultGaugeSettings,
   defaultLineSettings,
+  type FabricGlobals,
   type GaugeSettings,
+  type LineSettings,
   type Sample,
   SampleStore,
 } from "@yunari/renderer-core";
@@ -1009,7 +1011,7 @@ describe("a line chart's trailing window", () => {
       } as unknown as EditorInteraction,
       scene: {} as SceneAdapter,
       // Whatever the clock says, this source answers with the same sample.
-      source: { latest: () => sample, history: () => [sample] },
+      source: { revision: 0, latest: () => sample, history: () => [sample] },
       bindings: { cpu: [{ id: "cpu-read", semanticKey: "cpu.load" }] },
     });
     const setOption = vi.spyOn(chart, "setOption");
@@ -1156,8 +1158,9 @@ describe("a chart's series paint", () => {
 });
 
 describe("a chart control's commit", () => {
-  /** A manager whose fields are mounted over whichever chart is current. */
-  function mounted(initial: YunariChart) {
+  /** A manager whose fields are mounted over whichever chart is current.
+   *  `globals` is what the chart's paint resolves against. */
+  function mounted(initial: YunariChart, globals?: FabricGlobals) {
     let current = initial;
     const objects = [initial];
     const canvas = {
@@ -1179,6 +1182,7 @@ describe("a chart control's commit", () => {
       } as never,
       scene: {} as never,
       source: { latest: () => undefined, history: () => [] } as never,
+      ...(globals === undefined ? {} : { globals }),
     });
     const stage = mountFields(manager, () => current);
     return {
@@ -1285,6 +1289,99 @@ describe("a chart control's commit", () => {
         (row) => row.key === "animation.durationMs",
       ),
     ).toMatchObject({ value: 2400, path: ["animation", "durationMs"] });
+
+    await stage.dispose();
+    manager.destroy();
+  });
+
+  it("replaces the option when a settings edit clears a bound", async () => {
+    // A merge never deletes a key the new option omits, and the line builder
+    // omits `yAxis.min`/`max` when the author clears them. Without a
+    // replacement the axis keeps the old bounds after the author removed them.
+    const bounded = { ...defaultLineSettings, min: 0, max: 100 };
+    const chart = new YunariChart({
+      id: "trends",
+      family: "line",
+      settings: bounded,
+      width: 800,
+      height: 400,
+    });
+    const { manager, stage } = mounted(chart);
+    const engine = (
+      chart as unknown as {
+        _chart: { setOption: (option: unknown, options: unknown) => void };
+      }
+    )._chart;
+    const applied = vi.spyOn(engine, "setOption");
+
+    manager.edits.onSettings("trends", bounded);
+    manager.edits.onSettings("trends", defaultLineSettings);
+
+    const [withBounds, withoutBounds] = applied.mock.calls.slice(-2);
+    // The control: the drawing that carried the bounds really had them, so the
+    // omission below is the author's clear rather than a worse bug.
+    expect(withBounds?.[0]).toMatchObject({ yAxis: { min: 0, max: 100 } });
+    expect(withoutBounds?.[0]).not.toHaveProperty("yAxis.min");
+    expect(withoutBounds?.[0]).not.toHaveProperty("yAxis.max");
+    // And it reached the engine as a replacement, which is what deletes them.
+    expect(withoutBounds?.[1]).toEqual({ notMerge: true, lazyUpdate: false });
+
+    await stage.dispose();
+    manager.destroy();
+  });
+
+  it("replaces the option when a settings edit removes a threshold", async () => {
+    // The other conditionally omitted key: a threshold stroke draws a
+    // `visualMap`, and a solid stroke omits it. A merge would leave the old
+    // bands colouring the line after the author changed the paint.
+    const thresholds: LineSettings = {
+      ...defaultLineSettings,
+      min: 0,
+      max: 100,
+      stroke: {
+        kind: "thresholds",
+        bands: [
+          { offset: 0, ref: "palette.cold" },
+          { offset: 0.5, ref: "palette.warm" },
+        ],
+      },
+    };
+    const solid: LineSettings = {
+      ...defaultLineSettings,
+      min: 0,
+      max: 100,
+      stroke: { ref: "palette.warm" },
+    };
+    const chart = new YunariChart({
+      id: "trends",
+      family: "line",
+      settings: thresholds,
+      width: 800,
+      height: 400,
+    });
+    const { manager, stage } = mounted(chart, {
+      palette: {
+        none: { name: "None", value: { kind: "solid", color: "transparent" } },
+        cold: { name: "Cold", value: { kind: "solid", color: "#3388ff" } },
+        warm: { name: "Warm", value: { kind: "solid", color: "#ff8833" } },
+      },
+    });
+    const engine = (
+      chart as unknown as {
+        _chart: { setOption: (option: unknown, options: unknown) => void };
+      }
+    )._chart;
+    const applied = vi.spyOn(engine, "setOption");
+
+    manager.edits.onSettings("trends", thresholds);
+    manager.edits.onSettings("trends", solid);
+
+    const [withBands, withoutBands] = applied.mock.calls.slice(-2);
+    // The control: the threshold drawing really carried a `visualMap`, so its
+    // absence below is the author's paint change rather than a worse bug.
+    expect(withBands?.[0]).toHaveProperty("visualMap");
+    expect(withoutBands?.[0]).not.toHaveProperty("visualMap");
+    expect(withoutBands?.[1]).toEqual({ notMerge: true, lazyUpdate: false });
 
     await stage.dispose();
     manager.destroy();

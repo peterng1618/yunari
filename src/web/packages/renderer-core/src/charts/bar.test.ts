@@ -107,7 +107,7 @@ function barSeries(option: BarOption): ContinuousBarSeries {
 }
 
 describe("buildBarOption — segmented", () => {
-  it("draws N bands with a 20% gap and a partial final band", () => {
+  it("draws N bands with the authored gap and a partial final band", () => {
     const option = buildBarOption(
       {
         ...defaultBarSettings,
@@ -124,10 +124,129 @@ describe("buildBarOption — segmented", () => {
     expect(option.series[0].type).toBe("custom");
     const rendered = collectRects(option, { width: 100, height: 20 });
 
-    // Ten track bands, five full fills, one half-filled band: 8px visible × 50%.
+    // Ten 10px bands; the default tenth leaves 10/11px of each band empty, so
+    // the visible band is 9.09px and the half-filled last one is 5px.
     expect(rendered.track).toHaveLength(10);
+    expect(rendered.track[0]!.width).toBeCloseTo(10 / 1.1, 5);
     expect(rendered.fill).toHaveLength(6);
-    expect(rendered.fill.at(-1)!.width).toBeCloseTo(4, 5);
+    expect(rendered.fill.at(-1)!.width).toBeCloseTo(5, 5);
+  });
+
+  it("keeps the gap the same share of its band on a large and a small chart", () => {
+    const shareOf = (box: {
+      readonly width: number;
+      readonly height: number;
+    }) => {
+      const rendered = collectRects(
+        buildBarOption(
+          {
+            ...defaultBarSettings,
+            segmentDivisor: 5,
+            segmentSpacingPercent: 10,
+            min: 0,
+            max: 100,
+            track: { kind: "solid", color: "#222" },
+          },
+          [{ sensorId: "a", sample: sample(100) }],
+        ),
+        box,
+      );
+      const band = box.width / 20;
+      return (band - rendered.track[0]!.width) / band;
+    };
+
+    // The gap is a share of the band and the band is a share of the chart, so
+    // halving the chart halves the gap rather than leaving it behind.
+    expect(shareOf({ width: 400, height: 300 })).toBeCloseTo(1 / 11, 5);
+    expect(shareOf({ width: 200, height: 150 })).toBeCloseTo(1 / 11, 5);
+  });
+
+  it("leaves half of every band empty at 100%", () => {
+    const box = { width: 400, height: 300 };
+    const rendered = collectRects(
+      buildBarOption(
+        {
+          ...defaultBarSettings,
+          segmentDivisor: 5,
+          segmentSpacingPercent: 100,
+          min: 0,
+          max: 100,
+          track: { kind: "solid", color: "#222" },
+        },
+        [{ sensorId: "a", sample: sample(100) }],
+      ),
+      box,
+    );
+
+    // A 20px band: the empty space equals the painted band.
+    expect(rendered.track[0]!.width).toBeCloseTo(10, 5);
+    // A full reading fills every band, so only its own 10px is painted.
+    expect(rendered.fill).toHaveLength(20);
+    expect(rendered.fill[0]!.width).toBeCloseTo(10, 5);
+  });
+
+  it("fills a band to its painted end before the next one starts", () => {
+    // Four 100px bands with a 20% gap: each paints 83.33px and leaves 16.67px
+    // empty. The fill edge must follow the reading, so a reading inside the
+    // first band fills that band whole and lights nothing after it.
+    const at = (value: number) =>
+      collectRects(
+        buildBarOption(
+          {
+            ...defaultBarSettings,
+            segmentDivisor: 25,
+            segmentSpacingPercent: 20,
+            segmentFill: "partial",
+            min: 0,
+            max: 100,
+            track: { kind: "solid", color: "#222" },
+            fill: { kind: "solid", color: "#0f0" },
+          },
+          [{ sensorId: "a", sample: sample(value) }],
+        ),
+        { width: 400, height: 300 },
+      );
+
+    const inside = at(24);
+    expect(inside.fill).toHaveLength(1);
+    expect(inside.fill[0]!.width).toBeCloseTo(400 / 4 / 1.2, 5);
+
+    // At the band's pitch end the band is complete and the next has not begun;
+    // just past it the next starts from zero, never from a share of the gap.
+    expect(at(25).fill).toHaveLength(1);
+    const next = at(26).fill;
+    expect(next).toHaveLength(2);
+    expect(next[1]!.width).toBeCloseTo(4, 5);
+  });
+
+  it("lights whole bands only in whole mode", () => {
+    const option = (segmentFill: "whole" | "partial") =>
+      buildBarOption(
+        {
+          ...defaultBarSettings,
+          segmentDivisor: 25,
+          segmentSpacingPercent: 0,
+          segmentFill,
+          min: 0,
+          max: 100,
+          track: { kind: "solid", color: "#222" },
+          fill: { kind: "solid", color: "#0f0" },
+        },
+        [{ sensorId: "a", sample: sample(24) }],
+        true,
+      );
+
+    // A 24% reading is inside the first quarter but has not completed it, so
+    // whole mode draws nothing and partial draws the reading's own 96%.
+    expect(
+      collectRects(option("whole"), { width: 400, height: 300 }).fill,
+    ).toHaveLength(0);
+    const partial = collectRects(option("partial"), {
+      width: 400,
+      height: 300,
+    });
+    expect(partial.fill).toHaveLength(1);
+    expect(partial.fill[0]!.width).toBeCloseTo(96, 5);
   });
 
   it("draws no fill for a missing sample but keeps the track", () => {
@@ -154,9 +273,10 @@ describe("buildBarOption — segmented", () => {
     );
 
     const rendered = collectRects(option, { width: 20, height: 100 });
-    // The first band sits at the bottom of the box, and the axis grows upward.
-    expect(rendered.track[0]!.y).toBeCloseTo(92, 5);
-    expect(rendered.fill.at(-1)!.height).toBeCloseTo(4, 5);
+    // The first band sits at the bottom of the box, and the axis grows upward;
+    // its 9.09px visible length leaves the 0.91px gap below it.
+    expect(rendered.track[0]!.y).toBeCloseTo(100 - 10 / 1.1, 5);
+    expect(rendered.fill.at(-1)!.height).toBeCloseTo(5, 5);
   });
 
   it("keeps the continuous series at 100", () => {

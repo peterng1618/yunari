@@ -43,7 +43,7 @@ it("hides both programs on a non-Windows host", async () => {
   expect(await apps.rtssState()).toEqual({ installed: false, running: false });
 });
 
-it("probes process presence once per 30 s while the HTTP probe runs every poll", async () => {
+it("probes process presence and the web server once per 30 s", async () => {
   let clock = 0;
   const listProcesses = vi.fn(async () => false);
   const fetchImpl = vi.fn(async () => ({ ok: false }));
@@ -58,14 +58,69 @@ it("probes process presence once per 30 s while the HTTP probe runs every poll",
 
   await apps.lhmState();
   await apps.lhmState();
-  // The second poll inside the TTL spawns no `tasklist`; the cheap HTTP probe
-  // still runs, so a started web server is seen within one poll.
+  // Both halves of the state share the window: a poll inside it reads what the
+  // previous one paid for, rather than downloading LHM's data again.
   expect(listProcesses).toHaveBeenCalledTimes(1);
-  expect(fetchImpl).toHaveBeenCalledTimes(2);
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+  clock = 29_999;
+  await apps.lhmState();
+  expect(listProcesses).toHaveBeenCalledTimes(1);
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
 
   clock = 30_000;
   await apps.lhmState();
   expect(listProcesses).toHaveBeenCalledTimes(2);
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+});
+
+it("asks LHM for one byte and cancels the body it does not read", async () => {
+  const cancel = vi.fn(async () => undefined);
+  const fetchImpl = vi.fn(async () => ({ ok: true, body: { cancel } }));
+  const apps = createExternalApps({
+    platform: "win32",
+    lhmUrl: "http://127.0.0.1:8085",
+    exists: () => false,
+    listProcesses: async () => false,
+    fetchImpl,
+  });
+
+  expect(await apps.lhmState()).toEqual({ installed: true, running: true });
+  expect(fetchImpl).toHaveBeenCalledWith(
+    "http://127.0.0.1:8085/data.json",
+    expect.objectContaining({ headers: { Range: "bytes=0-0" } }),
+  );
+  // Reachability is the whole question; the reply is never buffered.
+  expect(cancel).toHaveBeenCalledTimes(1);
+});
+
+it("answers an explicit start or stop with a fresh probe, not the cache", async () => {
+  const fetchImpl = vi.fn(async () => ({ ok: false }));
+  const apps = createExternalApps({
+    platform: "win32",
+    lhmUrl: "http://127.0.0.1:8085",
+    lhmDefaultExecutable: "C:\\app\\lhm.exe",
+    exists: () => true,
+    listProcesses: async () => false,
+    fetchImpl,
+    launchLhm: async () => ({ started: true, stop: () => undefined }),
+    now: () => 0,
+  });
+
+  await apps.lhmState();
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+  // Start clears the cache before asking, and again once the launch settles:
+  // the menu refreshed after it must see the server the launch started.
+  await apps.startLhm();
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+  await apps.lhmState();
+  expect(fetchImpl).toHaveBeenCalledTimes(3);
+
+  // Exit must not leave "the web server answered" behind for the next poll.
+  apps.stopOwnedLhm();
+  await apps.lhmState();
+  expect(fetchImpl).toHaveBeenCalledTimes(4);
 });
 
 it("reports both programs absent when no path or process answers", async () => {

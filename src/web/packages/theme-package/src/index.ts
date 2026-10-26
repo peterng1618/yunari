@@ -5,12 +5,18 @@ import {
 } from "@yunari/renderer-core";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import {
+  readZipDeclaration,
+  ZIP_MAX_CENTRAL_DIRECTORY_BYTES,
+  ZIP_MAX_ENTRIES,
+} from "./archive-preflight";
+import {
   CREDITS,
   MAX_CREDITS_ENTRIES,
   readThemeCredits,
   type ThemeCredits,
 } from "./credits";
 
+export * from "./archive-preflight";
 export * from "./credits";
 export * from "./version-ladder";
 export * from "./video-envelope";
@@ -30,7 +36,6 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 /** Exported so a downloader can stop at the same cap *while reading*: the
  *  reader only ever sees bytes that are already in memory. */
 export const MAX_ARCHIVE_BYTES = 95 * 1024 * 1024;
-const MAX_ENTRIES = 128;
 const MAX_ENTRY_BYTES = 80 * 1024 * 1024;
 const MAX_EXPANDED_BYTES = 180 * 1024 * 1024;
 
@@ -141,6 +146,18 @@ export function writeThemePackage(input: {
 export function readThemePackage(bytes: Uint8Array): ThemePackageResult {
   if (bytes.byteLength > MAX_ARCHIVE_BYTES)
     return fail("That package is too large to open.");
+  // Extraction allocates per declared entry, so a crafted end record is refused
+  // before it can be walked. The filter below still counts what it is given:
+  // the declaration is what extraction trusts, not what the directory holds.
+  const declaration = readZipDeclaration(bytes);
+  if (declaration !== undefined) {
+    if (declaration.entries > ZIP_MAX_ENTRIES)
+      return fail(
+        `That package declares more than ${ZIP_MAX_ENTRIES} archive entries.`,
+      );
+    if (declaration.centralDirectoryBytes > ZIP_MAX_CENTRAL_DIRECTORY_BYTES)
+      return fail("That package declares an oversized archive directory.");
+  }
   try {
     const names = new Set<string>();
     let entries = 0;
@@ -157,7 +174,7 @@ export function readThemePackage(bytes: Uint8Array): ThemePackageResult {
           file.name === CREDITS ||
           /^assets\/[A-Za-z0-9._/-]{1,200}$/.test(file.name);
         if (
-          entries > MAX_ENTRIES ||
+          entries > ZIP_MAX_ENTRIES ||
           expanded > MAX_EXPANDED_BYTES ||
           file.originalSize > MAX_ENTRY_BYTES ||
           (file.compression !== 0 && file.compression !== 8) ||

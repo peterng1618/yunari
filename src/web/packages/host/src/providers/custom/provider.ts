@@ -13,6 +13,7 @@ import type {
 } from "../provider.js";
 import { redactForBrowser } from "../provider.js";
 import { fetchSource } from "./fetch-source.js";
+import { createPinnedFetch } from "./pinned-fetch.js";
 import { resolvePointer } from "./pointer.js";
 
 /**
@@ -248,7 +249,7 @@ export class CustomSourceProvider implements SensorProvider {
   constructor(options: CustomSourceProviderOptions) {
     this.#store = options.sources;
     this.#credentials = options.credentials;
-    this.#fetcher = options.fetcher ?? fetch;
+    this.#fetcher = options.fetcher ?? createPinnedFetch();
     this.#now = options.now ?? (() => Date.now());
   }
 

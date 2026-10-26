@@ -21,8 +21,15 @@ export interface ActionResult {
 interface FetchLike {
   (
     url: string,
-    init?: { readonly signal: AbortSignal },
-  ): Promise<{ readonly ok: boolean }>;
+    init?: {
+      readonly signal: AbortSignal;
+      readonly headers?: Record<string, string>;
+    },
+  ): Promise<{
+    readonly ok: boolean;
+    /** Cancelled rather than read: whether the port answers is the question. */
+    readonly body?: { cancel(): Promise<void> } | null;
+  }>;
 }
 
 /** The slice of a spawned child this module uses. */
@@ -220,13 +227,28 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
     return probeProcess(image);
   };
 
+  /** The last reachability answer and when it was taken. An explicit Start or
+   *  Exit clears it, so an action is never answered from a cache. */
+  let webCache: { readonly at: number; readonly ok: boolean } | undefined;
+
   const webServerAnswers = async (): Promise<boolean> => {
+    if (webCache !== undefined && now() - webCache.at < PROCESS_CACHE_MS) {
+      return webCache.ok;
+    }
+
     try {
       const response = await fetchImpl(`${lhmUrl}/data.json`, {
         signal: AbortSignal.timeout(1000),
+        // One byte, and the body is cancelled unread: the host learns the port
+        // answers without downloading LHM's full sensor list every poll.
+        headers: { Range: "bytes=0-0" },
       });
+      void response.body?.cancel().catch(() => undefined);
+      webCache = { at: now(), ok: response.ok };
       return response.ok;
     } catch {
+      // A probe that never answered is not an answer; the next poll retries it,
+      // as `probeProcess` does.
       return false;
     }
   };
@@ -262,6 +284,10 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
       return { ok: true, message: `${LHM_NAME} is already starting.` };
     }
 
+    // An explicit action is never answered from a cache, for either half of the
+    // state: Start means "find out now, then act".
+    webCache = undefined;
+
     // Covers the probes as well as the launch: Exit can arrive while either is
     // in flight, and the launch's stop has to be called once it resolves.
     startingLhm = true;
@@ -295,6 +321,9 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
         fetcher: (url) => fetchImpl(url, { signal: AbortSignal.timeout(1000) }),
       });
       launched = true;
+      // The pre-launch probe answered about the state before this launch; the
+      // menu refreshed after it must ask again.
+      webCache = undefined;
 
       // The launcher returns a live stop even with `started: false`: it spawned
       // a process that never answered. Keep it either way; a later launch
@@ -399,6 +428,7 @@ export function createExternalApps(options: ExternalAppsOptions): ExternalApps {
     ownedStop = undefined;
     stop?.();
     processCache.delete(LHM_IMAGE);
+    webCache = undefined;
     if (startingLhm) stopWhenSettled = true;
   };
 

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import type { Stats } from "node:fs";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
@@ -163,16 +164,34 @@ export function createWeatherSettingsStore(
    *  write: `/api/health` asks the store rather than parsing the file itself. */
   let problem: string | undefined;
 
+  /** The last parsed settings, with the identity they were parsed from. Every
+   *  poll reads settings, and the file changes only when a person saves, so a
+   *  matching stat skips the parse; the stat itself is cheap and is always
+   *  taken, because a file created or deleted by anything else must be seen.
+   *  `write()` clears this rather than predicting the stat its own rename
+   *  will produce. */
+  let cached:
+    | {
+        readonly mtimeMs: number;
+        readonly size: number;
+        readonly settings: WeatherSettings;
+        readonly problem: string | undefined;
+      }
+    | undefined;
+
   return {
     problem: () => problem,
 
     async read(): Promise<WeatherSettings> {
-      let stored: string;
+      let info: Stats;
 
       try {
-        stored = await readFile(file, "utf8");
+        info = await stat(file);
       } catch (error: unknown) {
         // No file is no choice yet, which is the defaults and not a problem.
+        // A read that found one caches nothing more: a file restored, created
+        // or replaced by another program must be seen on the next read.
+        cached = undefined;
         problem =
           (error as NodeJS.ErrnoException).code === "ENOENT"
             ? undefined
@@ -180,14 +199,50 @@ export function createWeatherSettingsStore(
         return DEFAULT_WEATHER_SETTINGS;
       }
 
+      if (
+        cached !== undefined &&
+        cached.mtimeMs === info.mtimeMs &&
+        cached.size === info.size
+      ) {
+        problem = cached.problem;
+        return cached.settings;
+      }
+
+      let stored: string;
+
+      try {
+        stored = await readFile(file, "utf8");
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          cached = undefined;
+          problem = undefined;
+        } else {
+          cached = undefined;
+          problem = reasonOf(error);
+        }
+
+        return DEFAULT_WEATHER_SETTINGS;
+      }
+
+      const identity = { mtimeMs: info.mtimeMs, size: info.size };
+
       try {
         const settings = normalizeWeatherSettings(JSON.parse(stored));
         problem = undefined;
+        cached = { ...identity, settings, problem: undefined };
         return settings;
       } catch (error: unknown) {
         // Unparsable, or a field this build refuses: the defaults can still be
-        // polled, and the reason is what a person reads in `/api/health`.
-        problem = reasonOf(error);
+        // polled, and the reason is what a person reads in `/api/health`. The
+        // refusal is cached with its stat: the same bytes deserve the same
+        // answer until the file changes.
+        const reason = reasonOf(error);
+        problem = reason;
+        cached = {
+          ...identity,
+          settings: DEFAULT_WEATHER_SETTINGS,
+          problem: reason,
+        };
         return DEFAULT_WEATHER_SETTINGS;
       }
     },
@@ -214,6 +269,7 @@ export function createWeatherSettingsStore(
       );
       await rename(temporary, file);
       problem = undefined;
+      cached = undefined;
       return normalized;
     },
   };
