@@ -120,7 +120,7 @@ its own nested copy of a name already listed above.
 | `@playwright/test` | 1.63.0 | Apache-2.0 | browser tests |
 | `@tailwindcss/vite` | 4.3.3 | MIT | editor dev |
 | `@types/culori` | 4.0.1 | MIT | types for culori 4, which ships none |
-| `@types/node` | 22.10.2 | MIT | types |
+| `@types/node` | 22.20.5 | MIT | types |
 | `@types/node-forge` | 1.3.11 | MIT | types for `node-forge` |
 | `@types/react` | 19.3.0 | MIT | types |
 | `@types/react-dom` | 19.3.0 | MIT | types |

@@ -8,10 +8,9 @@
     // `.mjs`; allowJs infers its exports. checkJs stays off — the script is not
     // this program's source to check.
     "allowJs": true,
-    // The host workspace's Node 22 declarations, hoisted to the root install
-    // (see docs/engineering/dependencies.md); named here rather than pulling
-    // Node globals into every browser program.
-    "types": ["./node_modules/@types/node"]
+    // Installed by the host workspace only (see docs/engineering/dependencies.md);
+    // named here rather than pulling Node globals into every browser program.
+    "types": ["./packages/host/node_modules/@types/node"]
   },
   "include": ["tests/e2e/**/*.ts"]
 }

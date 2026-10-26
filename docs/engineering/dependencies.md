@@ -29,7 +29,7 @@ declares. The closure half is this file's own **Release rule** below.
 | `@playwright/test` | 1.63.0 | Apache-2.0 | browser tests |
 | `jsdom` | 26.1.0 | MIT | DOM tests |
 | `canvas` | 3.2.3 | MIT | native raster test dependency |
-| `@types/node` | 22.10.2 | MIT | types |
+| `@types/node` | 22.20.5 | MIT | types |
 | `@types/node-forge` | 1.3.11 | MIT | types for `node-forge` |
 | `node-forge` | 1.4.0 | BSD-3-Clause (of `BSD-3-Clause OR GPL-2.0`) | host: issues the local CA and leaf a display's secure origin needs |
 | `undici` | 7.30.1 | MIT | host: pins the address a custom source's policy checked to the connection that fetches it; already present transitively, now declared directly |
@@ -118,21 +118,33 @@ requesters keep their upstream pins in the lock's dependency records:
 the override, so `npm ls` marks the resolved `undici`, `sharp` and `zod`
 `invalid`.
 
-`npm ls --all` therefore still exits 1 (`ELSPROBLEMS`), for three reasons and
-none of them a broken install:
+`npm ls --all` is **not required to exit 0 and does not**. An override is by
+definition a version chosen against the requester's range, so npm marks every
+overridden package `invalid`; a platform-optional package installs on one
+platform only, so npm marks the installed child of a skipped parent
+`extraneous`. The invariant CI enforces (`ci.yml`, "The dependency tree
+resolves") is narrower and checkable: **no `missing:` line** — no dependency the
+lockfile promises and the install failed to provide. Every remaining `invalid`
+and `extraneous` line on this tree is accounted for:
 
-- The `invalid` markers above. They are the override-versus-pin comparison, and
-  the suites in the table are the proof that the resolved versions run.
-- `@types/node` 22.10.2, hoisted from the workspaces' declarations, is below
-  vite's peer `^20.19.0 || >=22.12.0`. The install has one copy, so the marker
-  is a peer-range mismatch rather than a missing type package.
-- `@img/sharp-wasm32` 0.35.5, its `@emnapi/runtime` and a `tslib` copy are
-  `extraneous`: npm installs the grandchild of sharp's platform-skipped
-  optional packages (`@img/sharp-freebsd-wasm32`,
-  `@img/sharp-webcontainers-wasm32`) on a host that does not install those
-  parents. `npm prune` and a clean reinstall do not remove them; removing the
-  `sharp` override would, by reverting to 0.35.2 and reintroducing
-  GHSA-g89c-p67h-r497 and CVE-2026-96889.
+- `invalid`: `undici` 7.30.1, `sharp` 0.35.5 and `zod` 4.6.7. The requesters
+  keep their upstream pins (`miniflare` asks undici 7.29.0/7.29.1 and sharp
+  0.35.2; `@cloudflare/vitest-pool-workers` asks zod 4.4.3), and npm 11.6.2
+  compares the resolved version against those pins rather than the override.
+  The suites in the table above are the proof the resolved versions run.
+- `extraneous`: `@img/sharp-wasm32` 0.35.5, its `@emnapi/runtime` and a `tslib`
+  copy. sharp's optional parents `@img/sharp-freebsd-wasm32` (`os: [freebsd]`)
+  and `@img/sharp-webcontainers-wasm32` (`cpu: [wasm32]`) are skipped on this
+  host, but their dependency `@img/sharp-wasm32` carries no `os`/`cpu` gate, so
+  npm installs it and its two descendants anyway. `npm prune` followed by
+  `npm install` does not remove them; removing the `sharp` override would, by
+  reverting to 0.35.2 and reintroducing GHSA-g89c-p67h-r497 and
+  CVE-2026-96889. The sharp packages are a devDependency lattice, so nothing in
+  the shipped host loads them.
+
+Before task 8.3 the tree had the one line this invariant forbids:
+`@emnapi/runtime` was `missing` under the installed `@img/sharp-wasm32`. The
+fresh resolution supplied it; no `missing:` line remains.
 
 Forward risk: a later dependency change can restore a nested pinned copy —
 `npm dedupe` did exactly that — so the resolved copies are not an invariant to
@@ -149,11 +161,19 @@ with `rm -rf node_modules packages/*/node_modules package-lock.json && npm
 install`, then reconcile with `npm install`. A resolution regenerated while a
 `node_modules` tree is present records only that host's platform packages and
 drops the others, so the removal is not optional. The 2026-10-26 resolution
-re-hoisted `@types/node` (22.10.2 now at the root; `tsconfig.e2e.json` names
-it there), moved `playwright` to a different depth with the same version set,
-and took the direct dependencies `react`/`react-dom` 19.3.1, `@base-ui/react`
-1.9.0, `lucide-react` 1.61.0 and `systeminformation` 5.33.16; their
-`THIRD-PARTY-NOTICES.md` and table rows moved with them.
+moved `playwright` to a different depth with the same version set and took the
+direct dependencies `react`/`react-dom` 19.3.1, `@base-ui/react` 1.9.0,
+`lucide-react` 1.61.0, `systeminformation` 5.33.16 and `@types/node` 22.20.5;
+their `THIRD-PARTY-NOTICES.md` and table rows moved with them.
+
+`@types/node` is the one resolution change that was a regression rather than
+drift. The host pinned `22.10.2` exactly while vite's peer range is `^20.19.0 ||
+>=22.12.0`; before the reinstall a nested copy satisfied the host and a
+hoisted `26.6.5` satisfied vite, and after it one copy could not serve both.
+The host now declares `^22.12.0`, which resolves to a nested
+`packages/host/node_modules/@types/node` 22.20.5 while the `*` requesters still
+hoist 26.6.5, so `npm ls @types/node` exits 0 and `tsconfig.e2e.json` keeps
+naming the host's nested path.
 
 ### Accepted findings that remain
 

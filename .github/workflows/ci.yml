@@ -211,6 +211,23 @@ jobs:
         # whenever findings exist.
         run: node ../../scripts/audit-policy.mjs
 
+      - name: The dependency tree resolves
+        # `npm ls --all` cannot exit 0 on this tree and is not asked to. An
+        # override is by definition a version chosen against the requester's
+        # range, so npm reports every overridden package `invalid`; and a
+        # platform-optional package installs on one platform only, so its
+        # platform-gated parent is absent and npm reports the installed child
+        # `extraneous`. What is never acceptable is a `missing:` line: that is
+        # a dependency the lockfile promises and the install did not provide,
+        # which no override explains.
+        run: |
+          set -euo pipefail
+          out="$(npm ls --all 2>&1 || true)"
+          if grep -q 'npm error missing:' <<< "$out"; then
+            echo "$out" >&2
+            exit 1
+          fi
+
   slow-suites:
     name: Rebuild and display suites (nightly, or on demand)
     # vg-282, ruled 2026-10-12: WIRE BOTH SUITES, BUT NOT ON EVERY PUSH.
