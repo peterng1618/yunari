@@ -5,31 +5,32 @@ Branch: `peterng1618/fix-font-trio` (worktree `fix-font-trio`)
 
 ## Current objective
 
-The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design.md) is the active plan: a token names a face — family, weight, declared face — while size, line height and tracking belong to the element. Phase 1 is complete; Phase 2 (faces and subsets) is next.
+The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design.md) is the active plan: a token names a face — family, weight, declared face — while size, line height and tracking belong to the element. Phases 1–3 are complete; Phase 4 (the token inspector) is next.
 
 ## Active work
 
 - **Active plan:** `docs/superpowers/plans/2026-10-27-type-token-model.md` — ledger at `.superpowers/sdd/2026-10-27-type-token-model/progress.md`.
-- **Phase 1 complete:** the shape, the keys, the starter theme, the role default and the published schema all speak `typeTokens`.
+- **Phases 1–3 complete:** the shape and validation, the role default, subsets registered by `unicode-range`, the whole family on one apply, cards on role tokens, and every e2e fixture generator rewritten.
 - **Task 1.2 absorbed Tasks 3.1 and 3.2:** the strict rules and the starter rewrite had to land together, or the app would refuse its own new theme.
-- **Phase 2 now:** persist the face's subset, register faces by `unicode-range`, and let one apply bring the whole family.
-- **Queued after that:** cards and fixtures, the token inspector, the element inspector and canvas resize.
+- **Phase 4 now:** computed names and role-first order, the family and weight dropdowns, and one import surface for the two action rows.
 
 ## Last completed change
 
-- **Every e2e theme is written in the new shape:** the seeded host library carries heading/body/mono and each run's old size in its own style, and no tracked spec names a `size-weight` token id.
-- **A retained old-shape fixture proves the refusal:** `tests/e2e/fixtures/e2e-old-shape/theme.json` is never seeded, and the new test asserts `typePresets` is named in the issue.
-- **Proof:** rebuild 9/9 and display 1/1 after rebuilding bundles, fixtures 15/15, `typecheck` exit 0; the unit suite is the same 4 files / 7 tests owned by Task 4.1 and 5.4.
+- **Every e2e theme generator writes the new shape:** `host-theme.ts` and `rebuild-composition.ts` seed heading/body/mono with each run's own style, and no tracked spec names a `size-weight` token id.
+- **The retained old-shape fixture proves the refusal:** `tests/e2e/fixtures/e2e-old-shape/theme.json` is never seeded, and the fixture test asserts `typePresets` is named in the issue.
+- **The fixture test now requires the three roles,** and five envelopes that carried an empty token bag now carry them.
+- **Proof:** fixtures 15/15 with a red-proof that removing `mono` fails 13/15, rebuild 9/9, display 1/1, `typecheck` exit 0, `backlog-check` exit 0 (757 rows).
+- **Not verified:** the seeded `.e2e-host-app` themes are written at seed time and were not regenerated here; the main Playwright suite did not run (port 4174 owned elsewhere, and `vg-756` records the npm scripts resolving the wrong Playwright).
 
 ## Next
 
-1. Phase 2 — `subset` on the declaration, `unicode-range` registration, one apply per family.
-2. Phases 3–5 — cards and fixtures, the token inspector, the element inspector and canvas resize.
-3. Local merge to `main` once the token inspector no longer writes removed fields (Task 4.1), so the branch is testable rather than save-blocking.
+1. Task 4.1 — computed names, role-first order, non-removable roles, the copy sweep; then 4.2–4.4.
+2. Local merge to `main` after 4.1, once the token inspector no longer writes fields the validator refuses.
+3. Phase 5 — element size/leading/tracking rows and canvas resize, which restore the authored sizes the rebuilt composition lost.
 
 ## Blockers / unverified
 
-- **Four test files are red on purpose,** owned by Task 4.1 (renamed-token fixture, runs tracking, token inspector) and Task 5.4 (new-object defaults).
-- **`new-object-defaults.ts` still reads `size`/`trioRole` off tokens,** so the body-token preference is dead until Task 5.4.
-- **The token inspector no longer renders size, leading or tracking,** but its dom test still expects them — owned by Task 4.1.
-- **The main Playwright suite is unrun here:** port 4174 is owned by another worktree, and the npm e2e scripts resolve playwright 1.64.0-alpha over `@playwright/test` 1.63.0 (`vg-756`).
+- **Four unit files are red on purpose:** `editor-session.dom.test.ts`, `new-object-defaults.test.ts`, `selection-inspector/runs.dom.test.ts`, `panes/tokens/token-inspector.dom.test.tsx` — Tasks 4.1 and 5.4.
+- **The rebuilt composition falls back to role defaults** (28 runs, none with `style.fontSize`) until Task 5.2 adds the size row; the authored 46/17/108 return then.
+- **`new-object-defaults.ts` still reads `size`/`trioRole` off tokens** until Task 5.4.
+- **`editor.spec.ts` deletes the role token `body`** in its reassign case; Task 4.1 must rewrite it around an unroled token.
