@@ -25,6 +25,7 @@ function setup() {
     display: () => undefined,
     showDisplay: vi.fn(),
     displayScreenRect: () => undefined,
+    displayShape: () => undefined,
     isFitted: () => false,
     resize: vi.fn(),
     // Declared by Task 1's ViewportManager; navigation does not call it, but the
