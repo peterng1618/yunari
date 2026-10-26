@@ -585,9 +585,9 @@ function sampleStream(
  *  a box running the whole gate; the assertion is what is being proved, not
  *  how quickly it held. */
 const waitFor = (
-  assertion: () => void,
+  assertion: () => unknown,
   options: { timeout?: number } = {},
-): Promise<void> => vi.waitFor(assertion, { timeout: 15_000, ...options });
+): Promise<unknown> => vi.waitFor(assertion, { timeout: 15_000, ...options });
 
 /** The newest frame's payload, or "" before the first tick reached it. */
 function lastFrame(frames: string): string {
@@ -610,6 +610,16 @@ async function servedCard(stream: {
 
   return decoded.batch.samples.find((entry) => entry.semanticKey === "gpu.temp")
     ?.sample.textValue;
+}
+
+/** The card a display's own frame names, once it names the expected one. A
+ *  frame can carry a placeholder before the tick that resolves the assignment
+ *  reaches the display, so the newest frame is not proof by itself. */
+async function servedCardEventually(
+  stream: { frames: () => string },
+  expected: string,
+): Promise<void> {
+  await waitFor(async () => expect(await servedCard(stream)).toBe(expected));
 }
 
 describe("The store origin a host will talk to", () => {
@@ -6719,8 +6729,8 @@ describe("The assignment a display is served", () => {
 
     const { here, there } = streams(await paired());
 
-    expect(await servedCard(here)).toBe("gpu-0");
-    expect(await servedCard(there)).toBe("gpu-1");
+    await servedCardEventually(here, "gpu-0");
+    await servedCardEventually(there, "gpu-1");
   });
 
   it("falls back to the global device settings where a display answered nothing", async () => {
@@ -6728,8 +6738,8 @@ describe("The assignment a display is served", () => {
 
     const { here, there } = streams(await paired());
 
-    expect(await servedCard(here)).toBe("gpu-9");
-    expect(await servedCard(there)).toBe("gpu-9");
+    await servedCardEventually(here, "gpu-9");
+    await servedCardEventually(there, "gpu-9");
   });
 
   it("does not leak a deleted display's answers to another display", async () => {
@@ -6754,7 +6764,7 @@ describe("The assignment a display is served", () => {
       await activeTheme.read("kitchen-tablet", async () => true),
     ).toBeUndefined();
     // And the display still here is served exactly what it was.
-    expect(await servedCard(here)).toBe("gpu-0");
+    await servedCardEventually(here, "gpu-0");
   });
 
   it("serves the answer the default display holds for the theme being shown", async () => {
@@ -6766,8 +6776,8 @@ describe("The assignment a display is served", () => {
 
     const { here, there } = streams(await paired());
 
-    expect(await servedCard(here)).toBe("gpu-7");
-    expect(await servedCard(there)).toBe("gpu-7");
+    await servedCardEventually(here, "gpu-7");
+    await servedCardEventually(there, "gpu-7");
   });
 
   it("samples once per distinct assignment, not once per connection", async () => {
@@ -6824,9 +6834,9 @@ describe("The assignment a display is served", () => {
     expect(perTick.slice(-3)).toEqual([2, 2, 2]);
 
     // And each connection is offered the payload its own assignment produced.
-    expect(await servedCard(one)).toBe("gpu-0");
-    expect(await servedCard(two)).toBe("gpu-0");
-    expect(await servedCard(three)).toBe("gpu-1");
+    await servedCardEventually(one, "gpu-0");
+    await servedCardEventually(two, "gpu-0");
+    await servedCardEventually(three, "gpu-1");
   });
 
   it("passes a connection's declared language into that display's ask", async () => {
