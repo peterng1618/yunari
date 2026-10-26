@@ -103,7 +103,7 @@ Found:
 | Keep the release checklist | No code | Zero | Rots between releases; the audit already found four drifts | Rejected |
 | `npm audit` alone | Built in | Already run | Covers advisories, not ranges, notices or action pins | Rejected |
 | `license-checker` full report | Proven | New dependency; large output; transitive noise | Not the direct-dependency contract the notices file states | Rejected |
-| Small `check-third-party.mjs` over `npm ls --json` | Exact direct versions and licences; no dependency | One script and a self-test | Must parse the workspace tree correctly | Chosen |
+| Small `check-third-party.mjs` over the workspace manifests and the lockfile | Exact direct versions and licences; no dependency | One script, its cases beside `audit-policy.test.ts` | Must parse the workspace tree correctly | Chosen |
 | Hash-pin every workflow action by hand | Strong | A manual update per action | Drift returns when an action is bumped | Rejected |
 | SHA pinning plus a workflow checker | Strong and checked | One script | A `uses:` in a composite action is outside its scan | Chosen |
 | Trust `ffmpeg-static`'s HTTPS download | No work | Zero | A compromised release or MITM executes a binary | Rejected |
@@ -128,11 +128,18 @@ wrong ffmpeg hash is refused.
 ## Rung 7 — build
 
 `stage-npm-package.mjs` and the new check scripts run in Node, not in a bundle.
-`check-third-party.mjs` reads `npm ls --json` and the notices file, so it runs
-after `npm install` and before a release. `check-workflows.mjs` parses the
-workflow YAML as text, avoiding a YAML dependency. The ffmpeg manifest is
-committed JSON; the verifier runs before the host executes the binary. All
-checks are added to `gates:self-test` and, where cheap, to `npm run gate`.
+`check-third-party.mjs` reads the workspace manifests, the lockfile and the
+installed packages, so it runs after `npm install` and before a release.
+`check-workflows.mjs` parses the workflow YAML as text, avoiding a YAML
+dependency. The ffmpeg manifest is committed JSON; the verifier runs before the
+host executes the binary. Every check is added to `npm run gate`, and a check
+whose proof needs a fixture tree keeps it under `src/web/tests/scripts/` beside
+`audit-policy.test.ts` rather than in a `--self-test` path.
+
+Amended 2026-10-26: the three checks were first written with an in-file
+`--self-test`; `check-third-party.mjs` reached 785 lines, so its cases moved to
+vitest. A script with no fixture tree still carries a `--self-test` in
+`gates:self-test`.
 
 ## Decision
 
