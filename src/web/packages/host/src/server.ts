@@ -598,13 +598,24 @@ function tokenFor(request: http.IncomingMessage): string | undefined {
 
 /**
  * The `Set-Cookie` value that makes a display's token a credential the browser
- * carries for it. `Secure` only over TLS: on plain http the browser would drop
- * the cookie and the display would never pair.
+ * carries for it.
+ *
+ * **`Max-Age` is load-bearing.** A display is a fixed appliance, and without a
+ * lifetime the cookie dies with the browser process: the stored token
+ * authenticates `fetch` only, while a document navigation and an `EventSource`
+ * cannot set a header, so after a reboot the display's own page would be
+ * refused and never load — re-pairing it after every restart is the worse
+ * failure. 400 days is the longest lifetime a browser honours. A cookie that
+ * outlives its pairing is still refused by the normal `401`/`403` display
+ * check, which sends the owner back to pairing.
+ *
+ * `Secure` only over TLS: on plain http the browser would drop the cookie and
+ * the display would never pair.
  */
 function sessionCookie(token: string, request: http.IncomingMessage): string {
   const secure = (request.socket as { encrypted?: boolean }).encrypted === true;
 
-  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/${secure ? "; Secure" : ""}`;
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Max-Age=34560000; HttpOnly; SameSite=Strict; Path=/${secure ? "; Secure" : ""}`;
 }
 
 /** A display as a surface may see it. */
@@ -1621,42 +1632,65 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // page runs on the display, which is off this PC, and the request is
     // same-origin there — so it needs no CORS surface and no credential of its
     // own, only the token it just minted.
+    //
+    // **The JSON media type is the origin guard.** Any page can POST here with
+    // a `text/plain` body and no preflight, which would let it set this
+    // origin's session cookie. Requiring `application/json` forces a preflight
+    // this host never answers, and every refusal here is `no-store` so a
+    // crediting answer never survives in a cache.
     if (url.pathname === "/api/session" && request.method === "POST") {
+      const refuse = (status: number, message: string): void => {
+        response.setHeader("cache-control", "no-store");
+        sendText(response, status, message);
+      };
+
       if (displays === undefined) {
-        sendText(response, 404, "Pairing is not enabled on this host.");
+        refuse(404, "Pairing is not enabled on this host.");
         return;
       }
 
-      let offered: unknown;
+      const mediaType = request.headers["content-type"]
+        ?.split(";")[0]
+        ?.trim()
+        .toLowerCase();
+
+      if (mediaType !== "application/json") {
+        refuse(415, "That request must be JSON.");
+        return;
+      }
+
+      let parsed: unknown;
 
       try {
-        const parsed: unknown = JSON.parse(await readBody(request));
-        if (
-          typeof parsed !== "object" ||
-          parsed === null ||
-          Array.isArray(parsed)
-        ) {
-          throw new Error("That is not a session request.");
-        }
-        offered = (parsed as { readonly token?: unknown }).token;
-      } catch (error) {
-        sendText(
-          response,
-          400,
-          error instanceof Error ? error.message : String(error),
-        );
+        parsed = JSON.parse(await readBody(request));
+      } catch {
+        // Fixed, never the parser's words: the message quotes the start of the
+        // body, and a caller in the middle of pairing must not be answered the
+        // first bytes of its own token.
+        refuse(400, "That request body is not valid JSON.");
         return;
       }
 
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        refuse(400, "That is not a session request.");
+        return;
+      }
+
+      const offered = (parsed as { readonly token?: unknown }).token;
+
       if (typeof offered !== "string" || offered === "") {
-        sendText(response, 400, "A token is required.");
+        refuse(400, "A token is required.");
         return;
       }
 
       // The store owns what a live token is; a token it does not hold is
       // answered as the credential it is — refused, with no cookie set.
       if ((await displays.authenticate(offered)) === undefined) {
-        sendText(response, 401, "That token is not one this host issued.");
+        refuse(401, "That token is not one this host issued.");
         return;
       }
 

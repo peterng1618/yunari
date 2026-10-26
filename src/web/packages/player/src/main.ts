@@ -44,7 +44,11 @@ import { showLoadFailure } from "./load-failure.js";
 import { followPublished, reResolveUrl } from "./publish-follower.js";
 import { loadDisplayCatalogue } from "./sensor-catalogue.js";
 import { registerServiceWorker } from "./service-worker.js";
-import { type DisplaySessionToken, displaySession } from "./session.js";
+import {
+  type DisplaySessionToken,
+  displaySession,
+  isLoopbackPage,
+} from "./session.js";
 import { createThemeChooser } from "./theme-chooser.js";
 import {
   loadDisplayPreferences,
@@ -121,9 +125,9 @@ const REFIND_COOLDOWN_MS = 60_000;
  * because a re-find after an address change reaches a *different origin*,
  * where this host's cookie is never sent — storage is the only thing that
  * crosses that boundary. A loopback or unpaired caller is answered none, and
- * an old link's URL token still wins as the fallback. `/api/host` is
- * unauthenticated for an unpaired caller and cross-origin readable; a sweep's
- * probe sends no credential and therefore learns no token.
+ * an old link's URL token still wins as the fallback. The route authenticates
+ * a caller that presents a credential and answers only that display's token;
+ * a sweep's credential-less probe gets the identity alone.
  */
 async function rememberPairing(
   session: DisplaySessionToken,
@@ -397,10 +401,11 @@ async function startHostedTheme(
   let lastRefindAt: number | undefined;
   let disposed = false;
 
-  /** Deliberately not `session.fetch`: `/api/host` is unauthenticated and
-   *  cross-origin readable, so it needs no credential, and a probe carrying
-   *  this display's token would offer it to every address that answers — the
-   *  opposite of what the stored id is for (R63). */
+  /** Deliberately not `session.fetch`: a probe sends no credential, and
+   *  `/api/host` answers an unpaired caller the identity alone. A probe
+   *  carrying this display's token would offer it to every address that
+   *  answers — and the route now reads a presented credential back — which is
+   *  the opposite of what the stored id is for (R63). */
   const probe: HostProbe = async (origin) => {
     if (disposed) {
       return undefined;
@@ -471,10 +476,21 @@ async function startHostedTheme(
   // it through the same navigation an assignment takes. A link's id is the
   // person's instruction and a published page's is what it shows; `reResolveUrl`
   // keeps both, so a chooser there would change nothing.
+  //
+  // **The token may exist only as a cookie.** After pairing it lives in an
+  // HttpOnly cookie and the URL carries none, so `session.token === undefined`
+  // no longer means "no credential": a non-loopback page is a paired display
+  // (the host refuses an unpaired LAN page), and the chooser's own fetch uses
+  // the cookie. Loopback stays without one — it is this PC, which has no
+  // own-theme write to make.
+  const pairedPage =
+    session.token !== undefined || !isLoopbackPage(window.location.href);
   const chooser =
+    pairedPage &&
     new URL(window.location.href).searchParams.get("theme-source") === "map"
       ? createThemeChooser({
           session,
+          paired: pairedPage,
           side: "bottom",
           current: theme.id,
           onChosen: () => reResolve(),

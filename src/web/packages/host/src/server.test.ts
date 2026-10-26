@@ -266,12 +266,21 @@ const asCookie = (token: string): Record<string, string> => ({
   cookie: `yunari_session=${encodeURIComponent(token)}`,
 });
 
+/** The media type `POST /api/session` requires, because it is the preflight
+ *  trigger that makes a cross-site `text/plain` POST impossible. */
+const JSON_HEADERS = { "content-type": "application/json" };
+
 function request(
   server: ListenableServer,
   method: string,
   urlPath: string,
   body?: Uint8Array | string,
-  options?: { remoteAddress?: string; headers?: Record<string, string> },
+  options?: {
+    remoteAddress?: string;
+    headers?: Record<string, string>;
+    /** Set for the fake socket `sessionCookie` reads `Secure` from. */
+    encrypted?: boolean;
+  },
 ): Promise<{
   status: number;
   headers: Record<string, string | string[] | undefined>;
@@ -301,9 +310,13 @@ function request(
         typeof body === "string" ? Buffer.byteLength(body) : body.byteLength,
       );
     }
-    (req as { socket: { remoteAddress: string } }).socket = {
-      remoteAddress: options?.remoteAddress ?? "127.0.0.1",
-    };
+    (req as { socket: { remoteAddress: string; encrypted?: boolean } }).socket =
+      {
+        remoteAddress: options?.remoteAddress ?? "127.0.0.1",
+        ...(options?.encrypted === undefined
+          ? {}
+          : { encrypted: options.encrypted }),
+      };
 
     const chunks: Buffer[] = [];
     let statusCode = 200;
@@ -3024,7 +3037,7 @@ describe("Host theme routes", () => {
         "POST",
         "/api/session",
         JSON.stringify({ token }),
-        lan,
+        { ...lan, headers: JSON_HEADERS },
       );
 
       expect(answer.status).toBe(302);
@@ -3034,7 +3047,78 @@ describe("Host theme routes", () => {
       expect(cookie).toContain("HttpOnly");
       expect(cookie).toContain("SameSite=Strict");
       expect(cookie).toContain("Path=/");
+      // A display is a fixed appliance: without a lifetime the cookie dies with
+      // the browser and the page cannot authenticate after a reboot.
+      expect(cookie).toContain("Max-Age=34560000");
+      expect(cookie).not.toContain("Secure");
       expect(JSON.stringify(answer.body)).not.toContain(token);
+
+      // The stored-and-reopened flow: the browser keeps the cookie and a later
+      // request with no header authenticates. The unit harness plays the
+      // browser's jar here rather than a second cookie store.
+      const reopened = await request(
+        paired.server,
+        "GET",
+        "/api/published",
+        undefined,
+        { ...lan, headers: asCookie(token) },
+      );
+      expect(reopened.status).toBe(200);
+    });
+
+    it("adds Secure only on a TLS connection", async () => {
+      const token = await pair();
+      const lan = { remoteAddress: "192.168.1.50" };
+
+      const tls = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        JSON.stringify({ token }),
+        { ...lan, headers: JSON_HEADERS, encrypted: true },
+      );
+
+      expect(tls.status).toBe(302);
+      expect(String(tls.headers["set-cookie"])).toContain("; Secure");
+    });
+
+    it("refuses a non-JSON body, which a cross-site page could send without a preflight", async () => {
+      const token = await pair();
+
+      const plain = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        JSON.stringify({ token }),
+        {
+          remoteAddress: "192.168.1.50",
+          headers: { "content-type": "text/plain" },
+        },
+      );
+
+      expect(plain.status).toBe(415);
+      expect(plain.headers["set-cookie"]).toBeUndefined();
+      expect(plain.headers["cache-control"]).toBe("no-store");
+    });
+
+    it("answers a fixed message for a malformed JSON body", async () => {
+      const token = `kkkkkkkkkk${newToken()}`;
+
+      const answer = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        token,
+        {
+          remoteAddress: "192.168.1.50",
+          headers: JSON_HEADERS,
+        },
+      );
+
+      expect(answer.status).toBe(400);
+      expect(answer.text()).toBe("That request body is not valid JSON.");
+      expect(answer.text()).not.toContain("kkkkkkkkkk");
+      expect(answer.headers["cache-control"]).toBe("no-store");
     });
 
     it("answers 401 and sets no cookie for a token no display holds", async () => {
@@ -3043,7 +3127,7 @@ describe("Host theme routes", () => {
         "POST",
         "/api/session",
         JSON.stringify({ token: newToken() }),
-        { remoteAddress: "192.168.1.50" },
+        { remoteAddress: "192.168.1.50", headers: JSON_HEADERS },
       );
 
       expect(answer.status).toBe(401);
@@ -3429,6 +3513,24 @@ describe("Host theme routes", () => {
         { headers: { "x-yunari-session": token } },
       );
 
+      expect(answered.json()).not.toHaveProperty("token");
+    });
+
+    it("answers no token for a credential no display holds", async () => {
+      build({ host: record, displays });
+
+      const answered = await request(
+        hosted.server,
+        "GET",
+        "/api/host",
+        undefined,
+        {
+          remoteAddress: "192.168.1.50",
+          headers: asCookie(newToken()),
+        },
+      );
+
+      expect(answered.status).toBe(200);
       expect(answered.json()).not.toHaveProperty("token");
     });
 
@@ -9128,10 +9230,11 @@ describe("The root page resolves the display that asked", () => {
     expect(themed.headers.location).toBe("/?theme=studio");
   });
 
-  it("serves the page with no cookie for a root ?session= no display holds", async () => {
+  it("serves a loopback page with no cookie for a root ?session= no display holds", async () => {
     // No themes, so the page is the first-run document rather than a redirect:
     // the refusal is the absence of a cookie, not a status the caller can use
-    // to probe which tokens exist.
+    // to probe which tokens exist. Loopback because an unpaired LAN caller is
+    // refused earlier, by the display guard this route sits ahead of.
     const answer = await request(hosted.server, "GET", "/?session=bogus");
 
     expect(answer.status).toBe(200);

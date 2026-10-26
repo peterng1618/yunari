@@ -22,6 +22,28 @@ export interface DisplaySessionToken {
 }
 
 /**
+ * Whether a display page is this machine's own. A loopback page is trusted
+ * without a credential and resolves as this PC, so it has no own-theme write
+ * to offer; any other origin is a paired display, because the host refuses a
+ * LAN page that is not one.
+ */
+export function isLoopbackPage(pageUrl: string): boolean {
+  let hostname: string;
+
+  try {
+    hostname = new URL(pageUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+
+  return (
+    hostname === "localhost" ||
+    hostname === "[::1]" ||
+    /^127(\.\d{1,3}){3}$/.test(hostname)
+  );
+}
+
+/**
  * **Reads storage, never writes it.** `rememberPairing` is the single writer,
  * because the identity comes from `GET /api/host` and nowhere else: nothing in
  * the repo emits `host=`, `name=` or `port=`, so a record written here could

@@ -9,9 +9,11 @@ import { uiCopy } from "./ui-copy.js";
  * act from the screen instead of the admin page. **The credential is the
  * authority**: a paired session writes `{ id }` and nothing else, because the
  * display is the one its token names, and a body carrying a `display` key
- * would be a client naming someone else's screen. A session-less reader gets
- * no control at all — being shown one that could only refuse is worse than
- * being shown none.
+ * would be a client naming someone else's screen. A reader with no credential
+ * in any form gets no control at all — being shown one that could only refuse
+ * is worse than being shown none. The token is not always readable: after
+ * pairing it lives in an HttpOnly cookie, so the mount owner says
+ * `paired: true` for a page whose token the URL and storage do not carry.
  *
  * The chooser is a strip in a chrome band rather than a floating control: it
  * is persistent and takes its room from the artboard the way `chrome.ts`
@@ -40,6 +42,10 @@ export interface ThemeChooserOptions {
   /** The host's own words for a refusal. Absent means the reader is not told,
    *  which a caller that cannot show a notice may choose. */
   readonly onError?: (message: string) => void;
+  /** Whether this display holds a credential in any form. Defaults to a
+   *  readable token; a cookie-paired page passes `true`, because its token is
+   *  HttpOnly and the player is the one that knows the page is paired. */
+  readonly paired?: boolean;
 }
 
 const STRIP_ID = "yunari-theme-chooser";
@@ -119,7 +125,7 @@ export function createThemeChooser(input: ThemeChooserOptions): {
 } {
   // Nothing is asked of the host either: a list this reader cannot act on is a
   // request the display should not make.
-  if (input.session.token === undefined) {
+  if (!(input.paired ?? input.session.token !== undefined)) {
     return { dispose: () => {} };
   }
 

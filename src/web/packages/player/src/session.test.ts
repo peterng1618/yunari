@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { PAIRING_STORAGE_KEY, storePairing } from "./host-refind.js";
-import { displaySession } from "./session.js";
+import { displaySession, isLoopbackPage } from "./session.js";
 
 /** The browser's own `Storage`, without a browser. */
 function memoryStorage(): Storage {
@@ -19,6 +19,27 @@ function memoryStorage(): Storage {
 }
 
 describe("display session token", () => {
+  it("recognises this machine's own pages", () => {
+    // The chooser must not be offered to a local monitor, which has no
+    // own-theme write; a LAN page is a paired display by construction.
+    for (const pageUrl of [
+      "http://127.0.0.1:5227/",
+      "http://127.0.1.2:5227/",
+      "http://localhost:5227/",
+      "http://[::1]:5227/",
+    ]) {
+      expect(isLoopbackPage(pageUrl), pageUrl).toBe(true);
+    }
+
+    for (const pageUrl of [
+      "http://192.168.1.10:5227/",
+      "http://study-pc.local:5227/",
+      "http://yunari.invalid/",
+    ]) {
+      expect(isLoopbackPage(pageUrl), pageUrl).toBe(false);
+    }
+  });
+
   it("keeps the page it was built from, so a poll can read it", () => {
     // The follower builds its own poll out of the page a display is on — which
     // display it is and where its theme came from — and it is handed the token,

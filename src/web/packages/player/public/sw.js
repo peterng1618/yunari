@@ -4,8 +4,8 @@
  * Served at the host's root, so its scope is `/` with no
  * `Service-Worker-Allowed` header (docs/decisions/0071). The host refuses an
  * unpaired reader everything else, which is why this path is on the
- * bundle-asset allowlist: the browser fetches this file itself and cannot
- * carry the session.
+ * bundle-asset allowlist: the browser fetches this file itself, before a
+ * document exists to carry the session cookie, so it cannot be gated on one.
  *
  * **`/api/**` is never cached.** The theme document, its packaged assets and
  * the sample stream are the live data the host owns, and an offline display
@@ -28,12 +28,12 @@ const SHELL_FILES = ["/manifest.webmanifest", "/favicon.svg"];
 /**
  * The document's cache key, and deliberately **not** the URL that asked for it.
  *
- * The display's URL carries `?session=<token>`, and keying the entry by that
- * URL writes the display's credential to disk — into a store that outlives
- * clearing history and that the host cannot reach to clear when the display is
- * revoked. The document is the same bytes whatever the query asked for (the
- * theme is read from the query at runtime, and the HTML names neither), so it
- * is stored once under what it *is*, and read back by that same key.
+ * The document is the same bytes whatever the query asked for (the theme is
+ * read from the query at runtime, and the HTML names neither), and a request
+ * can still arrive carrying `?session=<token>` from an old link or a re-find
+ * target, so it is stored once under what it *is* and read back by that same
+ * key. A credential must never become a cache key: it would outlive clearing
+ * history and the host could not reach it when the display is revoked.
  */
 const SHELL_DOCUMENT = "/";
 
@@ -92,14 +92,15 @@ self.addEventListener("fetch", (event) => {
       fetch(request)
         .then((response) => {
           // Under `SHELL_DOCUMENT` and not under `request`: the request's URL
-          // is the display's own, credential included.
+          // is the display's own and may name a theme, an old session token or
+          // nothing at all.
           if (response.ok) void remember(SHELL_DOCUMENT, response.clone());
           return response;
         })
         .catch(async () => {
           // The key it was stored under, not the URL that asked for it: the
-          // display's own query carries a theme and a session, and the
-          // document is the same bytes either way.
+          // display's own query carries a theme and, from an old link, a
+          // session token; the document is the same bytes either way.
           const cached = await caches.match(SHELL_DOCUMENT);
           return cached ?? Response.error();
         }),
