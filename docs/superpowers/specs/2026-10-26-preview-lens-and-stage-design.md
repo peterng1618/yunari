@@ -334,8 +334,9 @@ A fifth tab, `previews`, between `appearance` and `keyboard`:
    whose four artboard corners lie on the circle (measured from the rendered
    rects) — a display-bounded background is clipped to the disc, and the stage
    outside the disc is still the shell's.
-6. Settings → Previews adds `21:9`, offers `21:9` and `9:21` in the display
-   menu, removes them again and resets to `16:9`, `19.5:9`, `4:3`, `1:1`,
+6. Settings → Previews adds `21:9`, which enters the list reduced to `7:3`
+   (the integer-pair rule above), offers `7:3` and `3:7` in the display menu,
+   removes them again and resets to `16:9`, `19.5:9`, `4:3`, `1:1`,
    `Circle`.
 7. Reloading keeps an authored list; reset after reload restores defaults.
 8. An invalid entry is refused with a visible reason and does not enter the

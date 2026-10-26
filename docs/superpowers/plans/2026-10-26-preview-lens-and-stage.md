@@ -387,7 +387,7 @@ it("adds a rect ratio and offers both orientations", async () => {
   await typeRatio(tab, "21:9");
   await pressAdd(tab);
   expect(rows(tab).map((row) => row.textContent)).toEqual([
-    "16:9 9:16", "19.5:9 9:19.5", "4:3 3:4", "1:1", "Circle", "21:9 9:21",
+    "16:9 9:16", "19.5:9 9:19.5", "4:3 3:4", "1:1", "Circle", "7:3 3:7",
   ]);
 });
 
@@ -517,9 +517,8 @@ test("settings add, remove and reset ratios", async ({ page }) => {
   await openEditor(page);
   await openSettings(page, "Previews");
   await addRatio(page, "21:9");
-  await expect(displayMenuItems(page)).toContainText(["21:9", "9:21"]);
-  await removeRatio(page, "21:9");
-  await removeRatio(page, "9:21");
+  await expect(displayMenuItems(page)).toContainText(["7:3", "3:7"]);
+  await removeRatio(page, "7:3");
   await resetRatios(page);
   await expect(displayMenuItems(page)).toContainText(["16:9", "9:16", "19.5:9", "9:19.5", "4:3", "3:4", "1:1", "Circle"]);
 });
