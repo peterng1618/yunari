@@ -34,8 +34,21 @@ export interface LiveSourceHandle {
   close(): void;
 }
 
-/** Keep complete live segments one cadence ahead of the visible chart edge. */
-export const LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS = 1_000;
+/**
+ * Two sampling intervals, not one.
+ *
+ * **The edge must lag the newest sample by two host cadences.** Host gaps are
+ * never shorter than the cadence (a timer never fires early), so at one interval
+ * the edge reaches the newest sample exactly when the next batch is due: every
+ * ordinary tick would paint a flat stretch and then step, and the line would
+ * become a staircase. Two intervals keep a normal gap inside the last segment,
+ * where it reads as a slope, and leave the hold-and-step for a real stall.
+ *
+ * **The delay is what the source offers, not what every display uses.** A chart
+ * that redraws once a second has a cadence of its own and drops it
+ * (`chartPlaybackDelayFor` in `scene-fabric`).
+ */
+export const LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS = 2_000;
 
 /** Protocol refusal closes permanently; ordinary EventSource errors keep retrying. */
 export function createLiveSource(options: LiveSourceOptions): LiveSourceHandle {

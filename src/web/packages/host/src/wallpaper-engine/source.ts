@@ -4,8 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import { contentTypeFor } from "../serve/static-path.js";
 import { readSceneFacts, type SceneFacts } from "./classify.js";
+import {
+  type MobileExportFailure,
+  requestMobileExport,
+} from "./export-mobile.js";
 import { type LibraryItem, scanLibrary } from "./library.js";
 import { locateInstall, type WallpaperEngineInstall } from "./locate.js";
+import { mobileVideo } from "./pkg.js";
 import { insideOf, resolvePayload } from "./resolve.js";
 import {
   type ExportFile,
@@ -36,6 +41,20 @@ export type WallpaperEngineAnswer =
   | WallpaperEngineListing
   | { readonly available: false; readonly reason: UnavailableReason };
 
+/** Why a project route stopped before anything ran. */
+export type ProjectFailure = "no-install" | "refused" | "unreadable";
+
+/**
+ * `ok` means the engine reached its own Save dialog and the author was asked to
+ * save; the saved package arrives afterwards through `exportsSince`.
+ */
+export type MobileExportOutcome =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly reason: ProjectFailure | MobileExportFailure;
+    };
+
 export interface WallpaperEngineSource {
   readonly listing: () => Promise<WallpaperEngineAnswer>;
   readonly bytesOf: (
@@ -45,6 +64,7 @@ export interface WallpaperEngineSource {
     { readonly bytes: Uint8Array; readonly contentType: string } | undefined
   >;
   readonly project: (workshopId: string) => Promise<ProjectResult>;
+  readonly mobileExport: (workshopId: string) => Promise<MobileExportOutcome>;
   readonly exportsSince: (since: number) => Promise<readonly ExportFile[]>;
   readonly exportBytes: (
     name: string,
@@ -97,21 +117,32 @@ function formatOf(name: string): ExportFile["format"] | undefined {
       : undefined;
 }
 
+/** How long the author's Save click is given to land after the dialog opens. */
+const HARVEST_MS = 5 * 60_000;
+
+const HARVEST_POLL_MS = 1_000;
+
 export function createWallpaperEngineSource(
   options: {
     readonly locate?: typeof locateInstall;
     readonly classify?: typeof readSceneFacts;
     readonly launch?: typeof launchEditor;
+    readonly requestExport?: typeof requestMobileExport;
     /** The Windows Videos folder. Supplied so a test reads a fixture rather
      *  than this PC's profile. */
     readonly videosDirectory?: string;
+    /** Where the engine's Save dialog opens by default. Same reason. */
+    readonly documentsDirectory?: string;
   } = {},
 ): WallpaperEngineSource {
   const locate = options.locate ?? locateInstall;
   const classify = options.classify ?? readSceneFacts;
   const launch = options.launch ?? launchEditor;
+  const requestExport = options.requestExport ?? requestMobileExport;
   const videosDirectory =
     options.videosDirectory ?? path.join(os.homedir(), "Videos");
+  const documentsDirectory =
+    options.documentsDirectory ?? path.join(os.homedir(), "Documents");
   // The real locator answers `undefined` on every non-Windows platform, which
   // is a different answer from "not installed". An injected locator is a
   // fixture, so the platform it runs on says nothing about the library.
@@ -261,8 +292,162 @@ export function createWallpaperEngineSource(
       return unpacked;
     }
 
-    const directory = path.join(install.myProjects, unpacked.name);
-    return { ...unpacked, launched: await launch(install, directory) };
+    // The project directory is not passed: the UI lists everything in
+    // `projects/myprojects`, and launching it with `-project` is refused.
+    return { ...unpacked, launched: await launch() };
+  }
+
+  /** The title the engine lists an unpacked project under: the descriptor's
+   *  own, which is the workshop title — the directory is the id. */
+  async function projectTitle(
+    directory: string,
+    fallback: string,
+  ): Promise<string> {
+    try {
+      const parsed: unknown = JSON.parse(
+        await fs.readFile(path.join(directory, "project.json"), "utf8"),
+      );
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        !Array.isArray(parsed)
+      ) {
+        const title = (parsed as Record<string, unknown>).title;
+        if (typeof title === "string" && title !== "") {
+          return title;
+        }
+      }
+    } catch {
+      // A descriptor we cannot read is one the engine shows by id too.
+    }
+    return fallback;
+  }
+
+  /** The newest `.mpkg` the Save dialog wrote into its default folder. */
+  async function savedPackageSince(
+    startedAt: number,
+  ): Promise<string | undefined> {
+    let entries;
+    try {
+      entries = await fs.readdir(documentsDirectory, { withFileTypes: true });
+    } catch {
+      return undefined;
+    }
+
+    let newest:
+      | { readonly file: string; readonly modified: number }
+      | undefined;
+    for (const entry of entries) {
+      if (!entry.isFile()) {
+        continue;
+      }
+      if (path.extname(entry.name).toLowerCase() !== ".mpkg") {
+        continue;
+      }
+      const file = path.join(documentsDirectory, entry.name);
+      const stats = await regularFileStats(file);
+      if (stats === undefined || stats.mtimeMs <= startedAt - 1_000) {
+        continue;
+      }
+      if (newest === undefined || stats.mtimeMs > newest.modified) {
+        newest = { file, modified: stats.mtimeMs };
+      }
+    }
+    return newest?.file;
+  }
+
+  /**
+   * Turns the package the author saved into the video the editor imports.
+   *
+   * The engine writes its package as it encodes, so a file that parses can be a
+   * truncated one: only a size that held across a poll is read. The video lands
+   * in the engine's own export folder, which `exportsSince` already watches, so
+   * the sheet picks it up by the same route as a manual export.
+   */
+  async function harvest(
+    install: WallpaperEngineInstall,
+    workshopId: string,
+    startedAt: number,
+  ): Promise<void> {
+    const deadline = Date.now() + HARVEST_MS;
+    let settled: { readonly file: string; readonly size: number } | undefined;
+
+    while (Date.now() < deadline) {
+      const file = await savedPackageSince(startedAt);
+      const stats =
+        file === undefined ? undefined : await regularFileStats(file);
+
+      if (file !== undefined && stats !== undefined) {
+        if (settled?.file === file && settled.size === stats.size) {
+          const bytes = await readOrUndefined(file);
+          const video = bytes === undefined ? undefined : mobileVideo(bytes);
+          if (video !== undefined && video.length > 0) {
+            const name = `yunari-${workshopId}-${startedAt}.mp4`;
+            try {
+              await fs.mkdir(path.join(install.root, "projects", "temp"), {
+                recursive: true,
+              });
+              await fs.writeFile(
+                path.join(install.root, "projects", "temp", name),
+                video,
+              );
+            } catch {
+              // The author still has the package; the sheet simply offers
+              // nothing, which is the same answer as an unwatched folder.
+            }
+            return;
+          }
+        }
+        settled = { file, size: stats.size };
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, HARVEST_POLL_MS));
+    }
+  }
+
+  /** One export at a time per item: a second run would stack Save dialogs. */
+  const exporting = new Set<string>();
+
+  /**
+   * Unpacks one item and drives the engine to its mobile export dialog. The
+   * author's Save click finishes the job; `harvest` waits for it in the
+   * background and drops the video where the export watcher looks.
+   */
+  async function mobileExport(
+    workshopId: string,
+  ): Promise<MobileExportOutcome> {
+    const item = await itemOf(workshopId);
+    const install = located;
+
+    if (install === undefined) {
+      return { ok: false, reason: "no-install" };
+    }
+    if (item === undefined || exporting.has(workshopId)) {
+      return { ok: false, reason: "refused" };
+    }
+
+    const unpacked = await unpackScene(install, item);
+    if (!unpacked.ok) {
+      return unpacked;
+    }
+
+    const title = await projectTitle(
+      path.join(install.myProjects, unpacked.name),
+      item.title,
+    );
+
+    exporting.add(workshopId);
+    const startedAt = Date.now();
+    const result = await requestExport({ title });
+    if (!result.ok) {
+      exporting.delete(workshopId);
+      return result;
+    }
+
+    void harvest(install, workshopId, startedAt)
+      .catch(() => undefined)
+      .finally(() => exporting.delete(workshopId));
+    return { ok: true };
   }
 
   /** The three directories the export step watches (§8, step 5), and only
@@ -380,6 +565,7 @@ export function createWallpaperEngineSource(
     listing,
     bytesOf,
     project,
+    mobileExport,
     exportsSince,
     exportBytes,
   };

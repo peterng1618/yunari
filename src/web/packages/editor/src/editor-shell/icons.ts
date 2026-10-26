@@ -14,6 +14,7 @@ import {
   EyeOff,
   FileText,
   Folder,
+  FolderOpen,
   Gauge,
   Hexagon,
   Image as ImageIcon,
@@ -22,6 +23,7 @@ import {
   Layers2,
   Link,
   LoaderCircle,
+  LoaderPinwheel,
   Lock,
   LogIn,
   LogOut,
@@ -32,13 +34,17 @@ import {
   Palette,
   Pencil,
   Pipette,
+  Play,
   Plus,
+  Radar,
+  RefreshCw,
   Scan,
   Search,
   Settings,
   Shapes,
   Spline,
   Square,
+  SquarePlus,
   Star,
   Trash2,
   TriangleAlert,
@@ -127,6 +133,11 @@ export const STACK_GLYPH: LucideIcon = Layers2;
  *  kind's picture, so a background and an image layer never wear one glyph. */
 export const BACKGROUND_GLYPH: LucideIcon = Wallpaper;
 
+/** A video declaration's mark: a declared movie has no preview the pane can
+ *  draw, so its card and the cleanup sheet use the control every player
+ *  carries. */
+export const VIDEO_GLYPH: LucideIcon = Play;
+
 /** §7.2's page, the Document slot. */
 export const PAGE_GLYPH: LucideIcon = FileText;
 /** The tokens palette — the rail's slot and the settings Appearance tab. */
@@ -135,6 +146,9 @@ export const PALETTE_GLYPH: LucideIcon = Palette;
 export const PIPETTE_GLYPH: LucideIcon = Pipette;
 /** The Add slot's plus, and the camera cluster's zoom-in. */
 export const PLUS_GLYPH: LucideIcon = Plus;
+/** The Assets slot: the declared files as one open collection, rather than the
+ *  store's `Folder` for opening a single item. */
+export const ASSETS_GLYPH: LucideIcon = FolderOpen;
 /** The camera cluster's zoom-out. */
 export const MINUS_GLYPH: LucideIcon = Minus;
 /** The camera cluster's fit. */
@@ -149,11 +163,13 @@ export const CHECK_GLYPH: LucideIcon = Check;
 export const ERROR_GLYPH: LucideIcon = OctagonAlert;
 export const WARNING_GLYPH: LucideIcon = TriangleAlert;
 
-/** The four chart families the document can name. */
+/** The six chart families the document can name. */
 export const CHART_GAUGE_GLYPH: LucideIcon = Gauge;
 export const CHART_LINE_GLYPH: LucideIcon = ChartLine;
 export const CHART_BAR_GLYPH: LucideIcon = ChartColumn;
 export const CHART_PIE_GLYPH: LucideIcon = ChartPie;
+export const CHART_RADAR_GLYPH: LucideIcon = Radar;
+export const CHART_POLAR_BAR_GLYPH: LucideIcon = LoaderPinwheel;
 
 /**
  * One glyph per primitive the Add pane offers, keyed by `ShapeKind`, so a
@@ -207,6 +223,13 @@ export const LEAVE_GLYPH: LucideIcon = LogOut;
 export const VISIBLE_GLYPH: LucideIcon = Eye;
 export const HIDDEN_GLYPH: LucideIcon = EyeOff;
 
+/** The Assets pane's two card actions that have no other surface: putting a
+ *  file on the canvas, and swapping the bytes of the asset already chosen. The
+ *  pair is the drawing's (`assets-pane.html`) — a square with a plus, and the
+ *  refresh arrows. */
+export const PLACE_ON_CANVAS_GLYPH: LucideIcon = SquarePlus;
+export const REPLACE_ASSET_GLYPH: LucideIcon = RefreshCw;
+
 /** The store cell's four actions, from the drawing's facts band
  *  (`mockups/current/store-themes.html`): a folder for opening the item, a
  *  monitor for assigning it to a display, a download for exporting it as a
@@ -228,14 +251,15 @@ export const INSTALL_ITEM_GLYPH: LucideIcon = Upload;
  *  the only mark that says "this closes" without a word beside it. */
 export const CLOSE_GLYPH: LucideIcon = X;
 
-/** The rail's four slot glyphs, from §7.2's table. Keyed by the rail's own slot
- *  union so a fifth slot is a compile error here rather than a slot with no
+/** The rail's five slot glyphs, from §7.2's table. Keyed by the rail's own slot
+ *  union so a new slot is a compile error here rather than a slot with no
  *  mark. Exported because the pane each slot opens wears the same glyph in its
  *  title bar — two owners of "which glyph names this pane" would be two places
  *  for them to disagree. */
 export const RAIL_GLYPHS: Readonly<Record<RailSlot, LucideIcon>> = {
   composition: STACK_GLYPH,
   add: PLUS_GLYPH,
+  assets: ASSETS_GLYPH,
   tokens: PALETTE_GLYPH,
   document: PAGE_GLYPH,
 };
@@ -264,7 +288,7 @@ export const RAIL_GLYPHS: Readonly<Record<RailSlot, LucideIcon>> = {
  * (`SHAPE_GLYPHS`, falling back to this map's generic `Shapes` for a shape whose
  * kind the build does not know); and `chart` answers a different question — the
  * *family* — through `chartFamilyGlyph`, so `chart` here is the kind's generic
- * mark rather than the one four chart rows wear.
+ * mark rather than the one the family rows wear.
  *
  * **`chart` is `ChartNoAxesCombined`, and it used to be `CHART_BAR_GLYPH`**
  * (`vg-489`). A chart whose family this build cannot name falls back here, and

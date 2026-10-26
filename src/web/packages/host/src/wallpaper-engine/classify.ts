@@ -1,4 +1,4 @@
-import { memberBytes, readScenePackage } from "./pkg.js";
+import { memberBytes, readPackage } from "./pkg.js";
 
 /**
  * "Still at rest" (§4.1): a scene whose picture does not change without input.
@@ -47,7 +47,7 @@ function hasKeyAnywhere(value: unknown, key: string): boolean {
 }
 
 export function readSceneFacts(bytes: Uint8Array): SceneFacts | undefined {
-  const pkg = readScenePackage(bytes);
+  const pkg = readPackage(bytes);
   if (pkg === undefined) {
     return undefined;
   }

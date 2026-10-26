@@ -68,10 +68,24 @@ afterEach(() => {
   host = undefined;
 });
 
-it("offers exactly the four slots DESIGN.md names", () => {
+it("has five slots with Assets between Add and Tokens", () => {
+  expect(RAIL_SLOTS).toEqual([
+    "composition",
+    "add",
+    "assets",
+    "tokens",
+    "document",
+  ]);
+});
+
+it("names the fifth slot Assets", () => {
+  expect(uiCopy.rail.slots.assets).toBe("Assets");
+});
+
+it("offers exactly the slots DESIGN.md names", () => {
   const host = mount({ slot: "composition" });
 
-  // Derived from `RAIL_SLOTS` rather than restated: a fifth slot added to the
+  // Derived from `RAIL_SLOTS` rather than restated: a new slot added to the
   // rail cannot arrive without a word for it appearing here, and a dropped one
   // cannot leave a stale fourth. The word is the accessible name, because the
   // slot draws a glyph and no text.
@@ -84,7 +98,7 @@ it("offers exactly the four slots DESIGN.md names", () => {
 it("carries the settings gear at the foot, and it is not a slot", () => {
   const host = mount({ slot: "composition" });
 
-  // The gear is the fifth thing on the rail and not one of the four: it has no
+  // The gear is on the rail and not one of the slots: it has no
   // `aria-pressed`, because it chooses nothing, and it carries no `data-rail-slot`,
   // because the slot enumeration must not grow to include it (§3.2). It is named
   // by the modal it opens, not by a slot word.
@@ -128,7 +142,7 @@ it("keeps the column's state on the rail rather than on the slots", () => {
   // (the test above); whether the column is out at all is a fact about the
   // shell, and it is stated once, here. A slot carrying `aria-expanded` would
   // be a second attribute for a fact that is not the slot's — with `tokens`
-  // shown, the other three panes are `hidden`.
+  // shown, the other panes are `hidden`.
   expect(
     open.querySelector(".editor-shell-rail")?.getAttribute("data-collapsed"),
   ).toBe("false");

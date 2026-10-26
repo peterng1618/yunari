@@ -302,17 +302,17 @@ describe("settings field", () => {
         property: "interpolation",
         kind: "select",
         options: [
-          { value: "linear", label: "Linear" },
-          { value: "smooth", label: "Smooth" },
+          { value: "alpha", label: "Alpha" },
+          { value: "beta", label: "Beta" },
         ],
       },
-      { value: "smooth", onChange: vi.fn() },
+      { value: "beta", onChange: vi.fn() },
     );
     // The descriptor's order is the picker's order; the surface does not sort.
     expect(
       [...select.querySelectorAll("option")].map((option) => option.value),
-    ).toEqual(["linear", "smooth"]);
-    expect(controlOf(select).value).toBe("smooth");
+    ).toEqual(["alpha", "beta"]);
+    expect(controlOf(select).value).toBe("beta");
   });
 
   it("commits an edit, and carries the descriptor's kind into it", () => {
@@ -451,5 +451,17 @@ describe("settings field", () => {
     );
     // A descriptor with no condition is always a question.
     expect(isSettingVisible(setting, {})).toBe(true);
+  });
+
+  it("asks a notEquals question only in an authored state that differs", () => {
+    const segmented = {
+      ...setting,
+      visibleWhen: { path: ["segmentDivisor"], notEquals: "100" },
+    } as typeof setting;
+
+    // Absent means continuous, which is not the state the field is about.
+    expect(isSettingVisible(segmented, {})).toBe(false);
+    expect(isSettingVisible(segmented, { segmentDivisor: 100 })).toBe(false);
+    expect(isSettingVisible(segmented, { segmentDivisor: 20 })).toBe(true);
   });
 });

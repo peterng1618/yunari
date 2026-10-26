@@ -122,15 +122,15 @@ describe("scanning the workshop library", () => {
     ]);
   }
 
-  it("lists the three wallpapers, counts the two refusals, and joins the cache", async () => {
+  it("lists the two supported wallpapers, counts the two refusals, and joins the cache", async () => {
     await fixture();
 
     const scan = await scanLibrary(install);
     const byId = new Map(scan.items.map((item) => [item.workshopId, item]));
 
-    expect(scan.items).toHaveLength(3);
+    expect(scan.items).toHaveLength(2);
     expect(scan.skipped).toBe(2);
-    expect([...byId.keys()].sort()).toEqual(["101", "102", "103"]);
+    expect([...byId.keys()].sort()).toEqual(["101", "102"]);
 
     expect(byId.get("101")).toEqual({
       workshopId: "101",
@@ -158,19 +158,35 @@ describe("scanning the workshop library", () => {
   });
 
   it("leaves attribution and title absent of the cache when there is no row", async () => {
-    await fixture();
+    await writeItem("110", {
+      "project.json": JSON.stringify({
+        type: "video",
+        file: "clip.mp4",
+        title: "Disk Clip",
+      }),
+      "clip.mp4": "mp4",
+    });
 
     const scan = await scanLibrary(install);
-    const web = scan.items.find((item) => item.workshopId === "103");
 
-    expect(web).toMatchObject({
-      title: "Disk Page",
-      type: "web",
-      filesize: Buffer.byteLength(HTML),
+    expect(scan.items[0]).toMatchObject({
+      title: "Disk Clip",
+      type: "video",
+      filesize: 3,
       tags: [],
       authorSteamId: undefined,
       workshopUrl: undefined,
     });
+  });
+
+  it("hides a web wallpaper instead of listing one Yunari would refuse", async () => {
+    await fixture();
+
+    const scan = await scanLibrary(install);
+
+    expect(scan.items.some((item) => item.type === "web")).toBe(false);
+    // Hiding is a decision about the list, not a refusal of the item.
+    expect(scan.skipped).toBe(2);
   });
 
   it("makes a scene's package its payload, and keeps the named file otherwise", async () => {

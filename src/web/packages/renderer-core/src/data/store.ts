@@ -107,11 +107,46 @@ export class SampleStore implements SampleSource {
       return [];
     }
 
+    // The sample just before the window, so a chart can interpolate from the
+    // last reading it had rather than starting at the window's edge. The stored
+    // time is what the search ordered by, so it is the one to test.
+    const before = (
+      times: readonly number[],
+      samples: readonly Sample[],
+      firstInWindow: number,
+    ): readonly Sample[] => {
+      const index = firstInWindow - 1;
+      const time = times[index];
+      const sample = samples[index];
+
+      return index >= 0 && time !== undefined && Number.isFinite(time)
+        ? [sample as Sample]
+        : [];
+    };
+
     if (!series.timeOrdered) {
-      return series.samples.filter((_sample, index) => {
-        const time = series.times[index] ?? Number.NEGATIVE_INFINITY;
-        return Number.isFinite(time) && time >= start && time <= this.lastNowMs;
-      });
+      let predecessor: Sample | undefined;
+      let predecessorTime = Number.NEGATIVE_INFINITY;
+      const inWindow: Sample[] = [];
+
+      for (const sample of series.samples) {
+        const time = sampleTimeMs(sample);
+
+        if (!Number.isFinite(time)) {
+          continue;
+        }
+
+        if (time < start) {
+          if (time > predecessorTime) {
+            predecessor = sample;
+            predecessorTime = time;
+          }
+        } else if (time <= this.lastNowMs) {
+          inWindow.push(sample);
+        }
+      }
+
+      return predecessor === undefined ? inWindow : [predecessor, ...inWindow];
     }
 
     let low = 0;
@@ -143,7 +178,7 @@ export class SampleStore implements SampleSource {
       }
     }
 
-    return window;
+    return [...before(series.times, series.samples, low), ...window];
   }
 
   /** Clear on reconnect so old and server-replayed timelines cannot interleave. */

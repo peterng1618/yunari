@@ -122,7 +122,7 @@ test("the two control drawings declare the one field row a row reads", () => {
   }
 });
 
-test("the two shapes the field row is not are read from the drawing that draws each", () => {
+test("the shape the field row is not is read from the drawing that draws it", () => {
   // The settings modal's switch row, addressed by the box it is: the label at
   // `flex:1` inside a `--panel-2` panel at `--radius-lg`, with no label column.
   // That absence is the reading — a row that took the field row's 74px column
@@ -137,27 +137,24 @@ test("the two shapes the field row is not are read from the drawing that draws e
   expect(mockupDeclared(settings, BOXED_ROW, "border-radius")).toBe("8px");
   expect(mockupDeclared(settings, BOXED_ROW, "gap")).toBe("10px");
 
-  // The Add pane's asset trigger. The drawing writes the trigger declaration
-  // twice more, identically, on the inspector's own select triggers, and the
-  // picker's element is that declaration as a *suffix* of theirs — so the reader
-  // settles the shared form and cannot settle the picker alone. Asserted here
-  // rather than left implicit: the duplication is why this row's selector names
-  // the second form, and a reader that started guessing between them would make
-  // this row a comparison of whichever element the document lists last.
+  // The Add pane's asset trigger. The drawing used to carry this declaration
+  // twice — the picker's element was a shorter form of it — which is why this
+  // row names the shared form and the reader threw on the bare suffix. The
+  // assets rework moved that trigger to its own pane and redrew this one, so the
+  // suffix now addresses exactly one element; asserted rather than left implicit,
+  // because a second form returning is what would make the row read whichever
+  // element the document lists last.
   const ASSET_TRIGGER =
     '[style*="flex:1;display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--edge);border-radius:6px;padding:4px 8px"]';
   expect(mockupDeclared(drawing, ASSET_TRIGGER, "border-radius")).toBe("6px");
   expect(mockupDeclared(drawing, ASSET_TRIGGER, "gap")).toBe("6px");
-  // The picker's own element addresses two forms, and that is the reason the
-  // row names the shared one rather than the picker's: a selector that matched
-  // both throws instead of picking whichever the document lists last.
-  expect(() =>
+  expect(
     mockupDeclared(
       drawing,
       '[style*="display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--edge);border-radius:6px;padding:4px 8px"]',
       "border-radius",
     ),
-  ).toThrow(/does not settle which one it means/);
+  ).toBe("6px");
 });
 
 test("the settings drawing declares the modal's regions, each read by the row that names it", () => {

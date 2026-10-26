@@ -24,8 +24,11 @@ credits entry.
 ## Rulings taken 2026-10-21
 
 **R1 — One surface, a modal.** A Base UI `Dialog`, the primitive Settings
-already uses. It is opened from the Add pane's file section and the File menu.
-The canvas is covered while browsing; that is the cost of giving search grids and
+already uses. It is opened from the Assets pane's **Find assets** control and the
+File menu (amended 2026-10-25 by
+[`2026-10-25-fonts-and-assets-design.md`](2026-10-25-fonts-and-assets-design.md);
+it was the Add pane's file section when this ruling was taken). The canvas is
+covered while browsing; that is the cost of giving search grids and
 specimens full width.
 
 **R2 — Sources are a registry, and the list is data.** Adding an icon provider

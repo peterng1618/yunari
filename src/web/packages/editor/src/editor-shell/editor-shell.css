@@ -521,6 +521,22 @@ body,
   --header-height: 42px;
   --menu-min-width: 190px;
   --asset-preview-max-height: 120px;
+  /* The asset preview's box and right panel are the drawing's own
+     (`assets-preview.html`): the finder's inset-24 size, a 270px facts column,
+     and a fixed stage ground a picture is judged against under every palette.
+     The header gutter clears the 26px close control. */
+  --asset-preview-width: 1132px;
+  --asset-preview-height: 852px;
+  --asset-preview-panel-width: 270px;
+  --asset-preview-header-gutter: 48px;
+  --asset-preview-stage: #080a0d;
+  /* The store item's own surface (`store-detail.html`): a 960 x 760 box with a
+     270px facts column. The stage takes every pixel the panel leaves, so the
+     box keeps one height as a person steps between items, and its ground is the
+     viewer's fixed dark rather than the canvas paint. */
+  --store-item-height: 760px;
+  --store-item-panel-width: 270px;
+  --store-item-stage: #080a0d;
   --dialog-min-width: 340px;
   --dialog-max-width: 560px;
   --dialog-max-height: 720px;
@@ -534,6 +550,23 @@ body,
      stretch past reading. The measure is the drawing's own
      (`docs/design/mockups/current/host-settings.html:43`). */
   --host-settings-measure: 640px;
+  /* The finder's dimensions and the Assets card's mark are the drawings'
+     (`asset-finder-fonts.html`, `assets-pane.html`); the specimen glyph sizes
+     are the two panels' own. The specimen backdrop is fixed on purpose: a font
+     preview has to read the same under every palette, so it cannot be a §4
+     role. */
+  --font-preview-width: 336px;
+  --font-tile-min-height: 112px;
+  --font-tile-glyph-size: 27px;
+  --font-specimen-glyph-size: 31px;
+  --font-trio-specimen-height: 214px;
+  --font-specimen-backdrop: linear-gradient(
+    135deg,
+    #16202b,
+    #101820 60%,
+    #0e141b
+  );
+  --asset-thumbnail-size: 38px;
   /* Read through `theme()` by the media query below: a custom property cannot
      be a `@media` feature value, so the query is resolved at build time. */
   --breakpoint-compact: 980px;
@@ -1208,7 +1241,7 @@ body,
   background: var(--accent);
 }
 /* The settings gear, pinned to the foot (DESIGN.md §7.2). `margin-top: auto` is the
-   whole of the pin: it takes the slack between the four slots and the gear, so
+   whole of the pin: it takes the slack between the slots and the gear, so
    the gear sits on the rail's bottom edge without a spacer element. It is
    `--muted` rather than a closed slot's `--faint`, because it is a real control
    an author reaches on purpose, not a slot that is merely unchosen. The
@@ -1750,6 +1783,41 @@ body,
   height: 28px;
   margin: 0;
   padding: 0;
+}
+
+/* The asset preview (`assets-preview.html`): the finder's inset-24 box, no title
+   bar, and a fixed stage taking every pixel the 270px panel leaves. It is a
+   viewer rather than a sheet, so it overrides the sheet's width cap, padding
+   and scroll: the stage clips and the panel's body scrolls. The way out is the
+   panel header's corner, not a title bar's. */
+.editor-shell-dialog.editor-shell-dialog--asset-preview {
+  display: flex;
+  width: min(var(--asset-preview-width), calc(100vw - 2 * var(--space-24)));
+  height: min(var(--asset-preview-height), calc(100vh - 2 * var(--space-24)));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border-color: var(--edge);
+  background: var(--panel);
+}
+.editor-shell-dialog.editor-shell-dialog--asset-preview
+  .editor-shell-dialog-close {
+  position: absolute;
+  top: var(--space-14);
+  right: var(--space-16);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--muted);
 }
 
 /* The sheet's own type, on the shell's text tokens so it recolours with the

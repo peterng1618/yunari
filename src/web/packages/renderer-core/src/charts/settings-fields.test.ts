@@ -6,6 +6,9 @@ import { ANIMATION_EASINGS, type AnimationSettings } from "./animation.js";
 import { type BarSettings, defaultBarSettings } from "./bar.js";
 import { defaultLineSettings, type LineSettings } from "./line.js";
 import { defaultPieSettings, type PieSettings } from "./pie.js";
+import { defaultPolarBarSettings, type PolarBarSettings } from "./polar-bar.js";
+import { defaultRadarSettings, type RadarSettings } from "./radar.js";
+import { SEGMENT_DIVISORS } from "./segments.js";
 import {
   CHART_PAINT_FIELDS,
   CHART_SETTINGS_FIELDS,
@@ -102,6 +105,9 @@ const GAUGE_COVERAGE: Record<keyof GaugeSettings, "setting" | "paint"> = {
   track: "paint",
   progress: "paint",
   roundCap: "setting",
+  segmentDivisor: "setting",
+  segmentSpacingPercent: "setting",
+  segmentFill: "setting",
   gradientSegments: "setting",
   animation: "setting",
 };
@@ -134,8 +140,10 @@ const BAR_COVERAGE: Record<keyof BarSettings, "setting" | "paint"> = {
   fill: "paint",
   track: "paint",
   trackCornerRadius: "setting",
+  segmentDivisor: "setting",
+  segmentSpacingPercent: "setting",
+  segmentFill: "setting",
   showAxes: "setting",
-  showCategoryLabels: "setting",
   animation: "setting",
 };
 
@@ -146,11 +154,42 @@ const PIE_COVERAGE: Record<keyof PieSettings, "setting" | "paint"> = {
   endAngle: "setting",
   padAngle: "setting",
   cornerRadius: "setting",
+  segmentDivisor: "setting",
+  segmentSpacingPercent: "setting",
   total: "setting",
   remainderFill: "paint",
   palette: "paint",
-  showLabels: "setting",
   animation: "setting",
+};
+
+const RADAR_COVERAGE: Record<keyof RadarSettings, "setting" | "paint"> = {
+  min: "setting",
+  max: "setting",
+  shape: "setting",
+  splitNumber: "setting",
+  lineWidth: "setting",
+  showMarkers: "setting",
+  markerSize: "setting",
+  showAxes: "setting",
+  stroke: "paint",
+  area: "paint",
+  animation: "setting",
+};
+
+const POLAR_COVERAGE: Record<keyof PolarBarSettings, "setting" | "paint"> = {
+  min: "setting",
+  max: "setting",
+  barWidth: "setting",
+  categoryGapPercent: "setting",
+  cornerRadius: "setting",
+  fill: "paint",
+  track: "paint",
+  trackCornerRadius: "setting",
+  showAxes: "setting",
+  animation: "setting",
+  startAngle: "setting",
+  innerRadiusPercent: "setting",
+  outerRadiusPercent: "setting",
 };
 
 const ANIMATION_COVERAGE: Record<keyof AnimationSettings, "setting"> = {
@@ -168,6 +207,8 @@ const COVERAGE: Record<
   line: LINE_COVERAGE,
   bar: BAR_COVERAGE,
   pie: PIE_COVERAGE,
+  radar: RADAR_COVERAGE,
+  polarBar: POLAR_COVERAGE,
 };
 
 const DEFAULTS: Record<ChartFamily, object> = {
@@ -175,6 +216,8 @@ const DEFAULTS: Record<ChartFamily, object> = {
   line: defaultLineSettings,
   bar: defaultBarSettings,
   pie: defaultPieSettings,
+  radar: defaultRadarSettings,
+  polarBar: defaultPolarBarSettings,
 };
 
 /**
@@ -258,6 +301,28 @@ describe("coverage against the real settings shapes", () => {
       expect(unresolved).toEqual([]);
       expect(stray).toEqual([]);
     }
+  });
+});
+
+describe("the segment divisor", () => {
+  it("declares the discrete divisors on all three segmented families", () => {
+    for (const family of ["gauge", "bar", "pie"] as const) {
+      expect(
+        settingsFieldsFor(family).find((f) => f.property === "segmentDivisor"),
+      ).toMatchObject({ kind: "number", values: SEGMENT_DIVISORS });
+    }
+  });
+
+  it("declares both new families' settings", () => {
+    expect(settingsFieldsFor("radar").map((f) => f.property)).toContain(
+      "shape",
+    );
+    expect(settingsFieldsFor("polarBar").map((f) => f.property)).toContain(
+      "innerRadiusPercent",
+    );
+    expect(settingsFieldsFor("polarBar").map((f) => f.property)).not.toContain(
+      "segmentDivisor",
+    );
   });
 });
 
@@ -353,6 +418,9 @@ describe("descriptor order is the likelihood order", () => {
       "max",
       "thickness",
       "roundCap",
+      "segmentDivisor",
+      "segmentSpacingPercent",
+      "segmentFill",
       "gradientSegments",
       ...ANIMATION_PROPERTIES,
     ],
@@ -378,8 +446,10 @@ describe("descriptor order is the likelihood order", () => {
       "categoryGapPercent",
       "cornerRadius",
       "trackCornerRadius",
+      "segmentDivisor",
+      "segmentSpacingPercent",
+      "segmentFill",
       "showAxes",
-      "showCategoryLabels",
       ...ANIMATION_PROPERTIES,
     ],
     pie: [
@@ -389,9 +459,34 @@ describe("descriptor order is the likelihood order", () => {
       "endAngle",
       "padAngle",
       "cornerRadius",
+      "segmentDivisor",
+      "segmentSpacingPercent",
       "total",
       "total.value",
-      "showLabels",
+      ...ANIMATION_PROPERTIES,
+    ],
+    radar: [
+      "min",
+      "max",
+      "shape",
+      "splitNumber",
+      "lineWidth",
+      "showMarkers",
+      "markerSize",
+      "showAxes",
+      ...ANIMATION_PROPERTIES,
+    ],
+    polarBar: [
+      "startAngle",
+      "innerRadiusPercent",
+      "outerRadiusPercent",
+      "min",
+      "max",
+      "barWidth",
+      "categoryGapPercent",
+      "cornerRadius",
+      "trackCornerRadius",
+      "showAxes",
       ...ANIMATION_PROPERTIES,
     ],
   };
@@ -409,6 +504,8 @@ describe("descriptor order is the likelihood order", () => {
     line: ["stroke", "palette", "area"],
     bar: ["fill", "track"],
     pie: ["remainderFill", "palette"],
+    radar: ["stroke", "area"],
+    polarBar: ["fill", "track"],
   };
 
   for (const family of CHART_FAMILIES) {
@@ -448,6 +545,34 @@ describe("the two settings one level down", () => {
     expect(value?.visibleWhen).toEqual({
       path: ["total", "kind"],
       equals: "fixed",
+    });
+  });
+
+  it("declares the spacing as an integer share of the segment", () => {
+    for (const family of ["gauge", "bar", "pie"] as const) {
+      const spacing = settingsFieldsFor(family).find(
+        (field) => field.property === "segmentSpacingPercent",
+      );
+      expect(spacing?.kind).toBe("number");
+      // 1–100 whole percents: at 100 the empty space equals the segment.
+      expect(spacing?.min).toBe(1);
+      expect(spacing?.max).toBe(100);
+      expect(spacing?.integer).toBe(true);
+      expect(spacing?.decimals).toBeUndefined();
+      expect(spacing?.step).toBeUndefined();
+    }
+
+    const fill = settingsFieldsFor("bar").find(
+      (field) => field.property === "segmentFill",
+    );
+    expect(fill?.kind).toBe("select");
+    expect(fill?.options?.map((option) => option.value)).toEqual([
+      "whole",
+      "partial",
+    ]);
+    expect(fill?.visibleWhen).toEqual({
+      path: ["segmentDivisor"],
+      notEquals: "100",
     });
   });
 

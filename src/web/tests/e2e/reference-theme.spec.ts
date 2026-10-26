@@ -2478,8 +2478,8 @@ test.describe("background media", () => {
     page,
   }, testInfo) => {
     desktop(testInfo);
-    // **What the product actually offers, named.** The Add pane's file section
-    // *Replace* acts on the chosen declaration, not necessarily the asset the
+    // **What the product actually offers, named.** The Assets pane's *Replace*
+    // acts on the chosen declaration, not necessarily the asset the
     // artboard names, so there is no control that swaps a background's bytes in
     // place without first choosing that declaration. What an author does
     // instead is import the new image and repoint the artboard at it, and that
@@ -2488,14 +2488,14 @@ test.describe("background media", () => {
     // filename, so the old declaration cannot be reused.
     await openEditor(page);
 
-    await openPane(page, "Add");
+    await openPane(page, "Assets");
     await chooseAssetFile(page, "import", {
       name: "hero.png",
       mimeType: "image/png",
       buffer: PIXEL_PNG,
     });
     // The picture is the background layer's, so the control is in the selection
-    // inspector, which renders while that layer is selected. The Add pane was
+    // inspector, which renders while that layer is selected. The Assets pane was
     // showing, so selecting the layer is a real pane swap.
     await selectLayer(page, "Background");
     await chooseIn(page, "[data-yunari-background-asset]", "hero");
@@ -2511,7 +2511,7 @@ test.describe("background media", () => {
 
     // **A second image under the same name.** A repeated filename is suffixed,
     // so it lands beside the first rather than on top of it.
-    await openPane(page, "Add");
+    await openPane(page, "Assets");
     await chooseAssetFile(page, "import", {
       name: "hero.png",
       mimeType: "image/png",
@@ -2560,7 +2560,7 @@ test.describe("background media", () => {
     // reaches the media layer as a `<video>`. Fabric cannot see a DOM sibling,
     // so a decoded frame is the media owner's business, not this file's.
     await openEditor(page);
-    await openPane(page, "Add");
+    await openPane(page, "Assets");
     await chooseAssetFile(page, "import", {
       name: "loop.mp4",
       mimeType: "video/mp4",
@@ -2647,7 +2647,7 @@ test.describe("known gaps, pinned", () => {
     page,
   }, testInfo) => {
     desktop(testInfo);
-    // **Measured.** Importing an image through the Add pane's file section
+    // **Measured.** Importing an image through the Assets pane's import control
     // inserts a Fabric `Image` whose `src` was the `blob:` URL the editor minted
     // for it and whose `crossOrigin` was whatever that decode asked the network
     // for. `serialiseScene` sets `includeDefaultValues = false` and passes
@@ -2663,7 +2663,7 @@ test.describe("known gaps, pinned", () => {
     // works — the object is re-resolved from `yunariAsset.assetId` — so this
     // is a leak, not a break.
     await openEditor(page);
-    await openPane(page, "Add");
+    await openPane(page, "Assets");
     await chooseAssetFile(page, "import", {
       name: "logo.png",
       mimeType: "image/png",

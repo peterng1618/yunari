@@ -2,7 +2,6 @@ import {
   type ChartContent,
   type ChartFamily,
   type ChartOption,
-  type LineOption,
   toEngineOption,
 } from "@yunari/renderer-core";
 import * as echarts from "echarts/core";
@@ -30,11 +29,6 @@ type AssertNever<T extends never> = T;
 type _EveryContentKeyIsPersisted = AssertNever<
   Exclude<keyof ChartContent, ChartSerialisedKey>
 >;
-
-/** Disable ECharts animation without mutating the pure plan option. */
-export function withoutEngineAnimation(option: ChartOption): ChartOption {
-  return { ...(option as object), animation: false } as ChartOption;
-}
 
 /** `option` and `renderScale` are runtime-only and never persisted. */
 export type YunariChartOptions = ChartContent &
@@ -157,7 +151,7 @@ export class YunariChart extends FabricObject {
 
     this._resizeBackingCanvas();
     this._chart?.setOption(
-      toEngineOption(withoutEngineAnimation(option)),
+      toEngineOption(option),
       options.replace === true
         ? { notMerge: true, lazyUpdate: false }
         : { notMerge: false, replaceMerge: ["series"], lazyUpdate: false },
@@ -230,7 +224,7 @@ export class YunariChart extends FabricObject {
       element,
       0,
       0,
-      this._visibleBackingWidth(),
+      element.width,
       element.height,
       -this.width / 2,
       -this.height / 2,
@@ -282,40 +276,10 @@ export class YunariChart extends FabricObject {
   }
 
   private _backingSize(): { width: number; height: number } {
-    const width = Math.max(1, Math.round(this.width * this._renderScale));
     return {
-      width: width + this._overscanWidth(width),
+      width: Math.max(1, Math.round(this.width * this._renderScale)),
       height: Math.max(1, Math.round(this.height * this._renderScale)),
     };
-  }
-
-  private _visibleBackingWidth(): number {
-    return Math.max(1, Math.round(this.width * this._renderScale));
-  }
-
-  private _overscanWidth(visibleWidth: number): number {
-    const option = this._option;
-    if (!isOverscannedLineOption(option)) {
-      return 0;
-    }
-
-    const overscanMs = option.renderOverscanRightMs;
-    const windowMs = option.xAxis.max - option.xAxis.min - (overscanMs ?? 0);
-    if (
-      overscanMs === undefined ||
-      overscanMs <= 0 ||
-      !Number.isFinite(windowMs) ||
-      windowMs <= 0
-    ) {
-      return 0;
-    }
-
-    const left = typeof option.grid.left === "number" ? option.grid.left : 0;
-    const right = typeof option.grid.right === "number" ? option.grid.right : 0;
-    return Math.max(
-      1,
-      Math.ceil(((visibleWidth - left - right) * overscanMs) / windowMs),
-    );
   }
 
   private _resizeBackingCanvas(): void {
@@ -336,12 +300,6 @@ export class YunariChart extends FabricObject {
     // `resize()` defers painting; flush before Fabric can blit a half-cleared canvas.
     chart.getZr().flush();
   }
-}
-
-function isOverscannedLineOption(
-  option: ChartOption | undefined,
-): option is LineOption {
-  return option !== undefined && "renderOverscanRightMs" in option;
 }
 
 /** Deep-freeze authored settings so snapshots cannot be mutated through aliases. */

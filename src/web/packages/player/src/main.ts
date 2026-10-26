@@ -1,24 +1,23 @@
 import {
   type Binding,
   buildChartPlan,
-  buildLineOption,
-  buildLinePoints,
   type ChartContent,
-  collectChartIssues,
+  chartReadingSignature,
   createAssetResolver,
   createLiveSource,
   type FabricPalette,
   type FabricThemeEnvelope,
-  type LineSettings,
   type LiveSourceHandle,
   type PlanIssue,
   SAMPLE_STREAM_PATH,
   type SampleSource,
   type SceneHandle,
-  type SeriesInput,
 } from "@yunari/renderer-core";
 import {
   applyAuthoredText,
+  type ChartRefreshRate,
+  chartAnimationFor,
+  chartPlaybackDelayFor,
   loadFontAssets,
   mountFabricScene,
   refreshBoundImages,
@@ -306,17 +305,18 @@ async function startHostedTheme(
   applyAuthoredText(handle.canvas, theme.globals, {
     ...(theme.bindings === undefined ? {} : { bindings: theme.bindings }),
   });
-  // What the last frame drew. Gauges, bars, pies, bound text, bound images and
-  // the availability notice only change when a sample arrives, and an accepted
-  // ingest is the only thing that moves the revision — so a frame between
-  // samples has nothing to repaint. A clock binding still advances, because the
+  // What the last frame drew. Bound text, bound images and the availability
+  // notice only change when a sample arrives, and an accepted ingest is the
+  // only thing that moves the revision — so a frame between samples has
+  // nothing of that work to redo. A clock binding still advances, because the
   // host's clock provider emits `time.now`/`date.today` samples of its own.
   let lastRevision: number | undefined;
-  /** One point list per line chart, reused until the revision or the settings
-   *  move; a line's option is still rebuilt every frame, because its window
-   *  slides with the clock. */
-  const lineSeries = new Map<string, LineSeriesCache>();
-
+  // The reading each chart last drew with. Unchanged readings skip `setOption`
+  // so an engine transition can finish instead of restarting every frame.
+  const drawnReadings = new WeakMap<object, string>();
+  // The host's rate arrives on the poll below, so the first frame uses the
+  // paired default and is re-rated in place.
+  let chartRate: ChartRefreshRate = 30;
   const refresh = (): void => {
     const revision = liveHandle.source.revision;
     const sampleChanged = revision !== lastRevision;
@@ -325,8 +325,8 @@ async function startHostedTheme(
       theme.bindings ?? {},
       liveHandle.source,
       theme.globals?.palette,
-      sampleChanged,
-      lineSeries,
+      chartRate,
+      drawnReadings,
     );
     if (sampleChanged) {
       // An image reading is a URL on this host, resolved through the session the
@@ -502,7 +502,7 @@ async function startHostedTheme(
   // The display's own rate arrives on the poll below, so the loop starts on the
   // paired default and is re-rated in place the moment an answer lands: a rate
   // change is a `setRate` on the loop that exists, not a second loop.
-  const chartRefresh = startChartRefresh(refresh, 30, undefined, {
+  const chartRefresh = startChartRefresh(refresh, chartRate, undefined, {
     onError: reportRepaintError,
   });
   const stopFollowing = followPublished(session, reResolve, {
@@ -513,7 +513,10 @@ async function startHostedTheme(
     // `refind` decides whether this display has an identity to match and
     // whether the last sweep is far enough behind it to run another.
     onUnreachable: () => void refind(),
-    onRateChange: (rate) => chartRefresh.setRate(rate),
+    onRateChange: (rate) => {
+      chartRate = rate;
+      chartRefresh.setRate(rate);
+    },
   });
   const observer = new ResizeObserver(() => handle.resize());
   observer.observe(host);
@@ -571,31 +574,46 @@ async function startHostedTheme(
   exposeForDiagnostics(handle, liveHandle);
 }
 
-/** A line chart's points, and the revision/settings they were built from. */
-interface LineSeriesCache {
-  readonly revision: number;
-  readonly settings: LineSettings;
-  readonly series: readonly SeriesInput[];
+/**
+ * The smaller edge of the canvas ECharts draws into, in backing pixels.
+ *
+ * The scene box at its own scale times the object's render scale. The gauge's
+ * cap clearance is a pixel measure against that canvas and its thickness is in
+ * the same pixels; absent means the object measures nothing and the adapter
+ * skips the term rather than guessing a size.
+ */
+function drawnEdgePxOf(
+  chart: YunariChart,
+): { readonly drawnEdgePx: number } | Record<string, never> {
+  const smaller =
+    Math.min(chart.width * chart.scaleX, chart.height * chart.scaleY) *
+    chart.renderScale;
+  return Number.isFinite(smaller) && smaller > 0
+    ? { drawnEdgePx: Math.floor(smaller) }
+    : {};
 }
 
 /**
- * Repaints the charts whose readings moved, and every line chart's window.
+ * Repaints the charts whose readings moved.
  *
  * Returns whether anything was handed to a chart, which is what decides whether
- * the scene needs a repaint of its own. `sampleChanged` is the source's revision
- * moving; a line is rebuilt every frame regardless because its window slides
- * with the clock.
+ * the scene needs a repaint of its own.
  */
 function hydrateCharts(
   objects: readonly { get(key: string): unknown }[],
   bindings: Readonly<Record<string, readonly Binding[]>>,
   source: SampleSource,
   palette: FabricPalette | undefined,
-  sampleChanged: boolean,
-  lineSeries: Map<string, LineSeriesCache>,
+  rate: ChartRefreshRate,
+  drawnReadings: WeakMap<object, string>,
 ): boolean {
   const issues: PlanIssue[] = [];
   let changed = false;
+  const nowMs = Date.now();
+  const playbackDelayMs = chartPlaybackDelayFor(
+    rate,
+    source.chartPlaybackDelayMs,
+  );
   for (const object of objects) {
     if (object instanceof YunariChart) {
       const id = object.get("id");
@@ -611,61 +629,35 @@ function hydrateCharts(
           family: object.family,
           settings: object.settings,
         } as ChartContent;
-        if (content.family === "line") {
-          // The line path skips `buildChartPlan`, so its diagnostics are asked
-          // for here — on a sample change only, leaving the dedupe to keep a
-          // standing fault to one line.
-          if (sampleChanged) {
-            collectChartIssues(
-              id,
-              content,
-              bindings[id] ?? [],
-              source,
-              issues,
-              palette,
-            );
-          }
-          const cached = lineSeries.get(id);
-          const series =
-            cached !== undefined &&
-            cached.revision === source.revision &&
-            cached.settings === content.settings
-              ? cached.series
-              : buildLinePoints(bindings[id] ?? [], content.settings, source);
-          if (series !== cached?.series) {
-            lineSeries.set(id, {
-              revision: source.revision,
-              settings: content.settings,
-              series,
-            });
-          }
-          object.setOption(
-            buildLineOption(
-              content.settings,
-              series,
-              Date.now(),
-              false,
-              palette,
-              source.chartPlaybackDelayMs,
-            ),
-          );
-          changed = true;
-        } else if (sampleChanged) {
-          const plan = buildChartPlan(
-            id,
-            content,
-            bindings[id] ?? [],
-            {
-              source,
-              nowMs: Date.now(),
-              animate: false,
-            },
-            issues,
-            palette,
-          );
-          object.setOption(plan.option);
-          changed = true;
-        }
+        const chartBindings = bindings[id] ?? [];
+        const geometry = drawnEdgePxOf(object);
+        const reading = chartReadingSignature(
+          content,
+          chartBindings,
+          source,
+          nowMs,
+          palette,
+          playbackDelayMs,
+          geometry.drawnEdgePx,
+        );
+        if (drawnReadings.get(object) === reading) continue;
+        const plan = buildChartPlan(
+          id,
+          content,
+          chartBindings,
+          {
+            source,
+            nowMs,
+            animate: chartAnimationFor(content.family, rate),
+            playbackDelayMs,
+            ...geometry,
+          },
+          issues,
+          palette,
+        );
+        object.setOption(plan.option);
+        drawnReadings.set(object, reading);
+        changed = true;
       } catch (error) {
         reportRepaintError(
           `Chart "${id}" failed to draw and was left as it was. ${
@@ -684,8 +676,8 @@ function hydrateCharts(
           bindings,
           source,
           palette,
-          sampleChanged,
-          lineSeries,
+          rate,
+          drawnReadings,
         )
       ) {
         changed = true;

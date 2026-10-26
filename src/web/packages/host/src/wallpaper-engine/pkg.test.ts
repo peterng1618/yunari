@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { memberBytes, readScenePackage } from "./pkg.js";
+import { memberBytes, mobileVideo, readPackage } from "./pkg.js";
 
 const encoder = new TextEncoder();
 
 /**
- * One `scene.pkg` as the format stores it: magic length, magic, entry count,
+ * One package as the format stores it: magic length, magic, entry count,
  * name/offset/length per entry, then the member bytes contiguous.
  */
 function buildPackage(
   members: readonly (readonly [string, Uint8Array])[],
+  magic = "PKGV0001",
 ): Uint8Array {
   const names = members.map(([name]) => encoder.encode(name));
   const namesSize = names.reduce(
@@ -21,7 +22,7 @@ function buildPackage(
   const view = new DataView(out.buffer);
 
   view.setUint32(0, 8, true);
-  out.set(encoder.encode("PKGV0001"), 4);
+  out.set(encoder.encode(magic), 4);
   view.setUint32(12, members.length, true);
 
   let cursor = 16;
@@ -57,7 +58,7 @@ describe("scene package container", () => {
       ["preview.jpg", THUMBNAIL],
     ]);
 
-    const pkg = readScenePackage(bytes);
+    const pkg = readPackage(bytes);
 
     expect(pkg).toBeDefined();
     expect(pkg?.dataStart).toBe(16 + (4 + 10 + 8) + (4 + 11 + 8));
@@ -78,37 +79,35 @@ describe("scene package container", () => {
   it("refuses a truncated header", () => {
     const bytes = buildPackage([["scene.json", SCENE_JSON]]);
 
-    expect(readScenePackage(bytes.subarray(0, 10))).toBeUndefined();
-    expect(readScenePackage(bytes.subarray(0, 15))).toBeUndefined();
+    expect(readPackage(bytes.subarray(0, 10))).toBeUndefined();
+    expect(readPackage(bytes.subarray(0, 15))).toBeUndefined();
   });
 
   it("refuses a table whose last member runs past the file's end", () => {
     const bytes = buildPackage([["scene.json", SCENE_JSON]]);
 
-    expect(
-      readScenePackage(bytes.subarray(0, bytes.length - 1)),
-    ).toBeUndefined();
+    expect(readPackage(bytes.subarray(0, bytes.length - 1))).toBeUndefined();
   });
 
   it("refuses a zero-length name", () => {
     const bytes = buildPackage([["scene.json", SCENE_JSON]]);
     new DataView(bytes.buffer).setUint32(16, 0, true);
 
-    expect(readScenePackage(bytes)).toBeUndefined();
+    expect(readPackage(bytes)).toBeUndefined();
   });
 
-  it("refuses a magic that is not PKGV", () => {
+  it("refuses a magic that is not a Wallpaper Engine package", () => {
     const bytes = buildPackage([["scene.json", SCENE_JSON]]);
     bytes.set(encoder.encode("XKGV0001"), 4);
 
-    expect(readScenePackage(bytes)).toBeUndefined();
+    expect(readPackage(bytes)).toBeUndefined();
   });
 
   it("refuses a zero magic length", () => {
     const bytes = buildPackage([["scene.json", SCENE_JSON]]);
     new DataView(bytes.buffer).setUint32(0, 0, true);
 
-    expect(readScenePackage(bytes)).toBeUndefined();
+    expect(readPackage(bytes)).toBeUndefined();
   });
 
   it("refuses a name that repeats an earlier one", () => {
@@ -117,6 +116,38 @@ describe("scene package container", () => {
       ["scene.json", THUMBNAIL],
     ]);
 
-    expect(readScenePackage(bytes)).toBeUndefined();
+    expect(readPackage(bytes)).toBeUndefined();
+  });
+});
+
+describe("mobile package", () => {
+  const VIDEO = new Uint8Array([
+    0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
+  ]);
+
+  it("reads the video out of a PKGM export", () => {
+    const bytes = buildPackage(
+      [
+        ["nopreview.jpg", THUMBNAIL],
+        ["project.json", encoder.encode("{}")],
+        ["wallpaper.mp4", VIDEO],
+      ],
+      "PKGM0014",
+    );
+
+    expect(mobileVideo(bytes)).toEqual(VIDEO);
+  });
+
+  it("answers nothing for a mobile package with no video", () => {
+    const bytes = buildPackage(
+      [["project.json", encoder.encode("{}")]],
+      "PKGM0014",
+    );
+
+    expect(mobileVideo(bytes)).toBeUndefined();
+  });
+
+  it("answers nothing for something that is not a package", () => {
+    expect(mobileVideo(encoder.encode("not a package"))).toBeUndefined();
   });
 });

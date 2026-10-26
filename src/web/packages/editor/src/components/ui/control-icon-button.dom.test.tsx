@@ -10,16 +10,13 @@ import { LayerActions } from "../../editor-shell/layer-panel.js";
 import type { LayerRow } from "../../editor-shell/layer-tree.js";
 import { Pane } from "../../editor-shell/pane.js";
 import { Rail } from "../../editor-shell/rail.js";
-import { catalogFaces, fontTrios } from "../../font-catalog.js";
-import { FontPicker } from "../../font-picker/font-picker.js";
-import { createSpecimenCache } from "../../font-specimen-cache.js";
 import { CompositionPane } from "../../panes/composition/composition-pane.js";
 import { ControlIconButton } from "./control-icon-button.js";
 import { GradientEditor } from "./gradient-editor.js";
 
 // Base UI's popups need three browser APIs jsdom has none of — the same three
 // `control.dom.test.tsx` supplies for the same reason — plus the switch's
-// `PointerEvent` re-dispatch. FontPicker, mounted below, carries the selects.
+// `PointerEvent` re-dispatch. The fleet below carries Base UI controls.
 globalThis.ResizeObserver ??= class {
   observe(): void {}
   unobserve(): void {}
@@ -59,10 +56,10 @@ beforeAll(() => {
  * `tooltip.ts`'s 220ms.
  *
  * The surfaces mounted here are the ones the census found carrying an icon-only
- * control: the rail and its gear, the canvas dock's two halves, a pane's footer
- * with the Composition tree in its body, and the font picker's trio list. A
- * surface that is not mounted is not audited — the same limit, and the same
- * stated contract, as `accessible-names.dom.test.ts`'s `mountPanels`.
+ * control: the rail and its gear, the canvas dock's two halves, and a pane's
+ * footer with the Composition tree in its body. A surface that is not mounted
+ * is not audited — the same limit, and the same stated contract, as
+ * `accessible-names.dom.test.ts`'s `mountPanels`.
  */
 
 /**
@@ -195,41 +192,35 @@ describe("an icon-only control's name and its tooltip", () => {
     // rather than over `reachable`, because the first case is about what a
     // person can reach and this one is about everything the fleet rendered.
     //
-    // **Settled at 0, from the census's 4.** Three of the four gained the
+    // **Settled at 0.** The tree's twisty and its group-entry button gained the
     // tooltip that is their label, each through the control set's one owner of
-    // the pairing: the font picker's favourite `Star` (§6 rule 1's first clause
-    // — a star is unambiguous, so the glyph may replace the word), the tree's
-    // twisty, and its group-entry button (the same clause, where the door glyph
-    // is made unambiguous *by* the tooltip — rule 1's middle clause at work).
-    // The fourth, the gradient editor's stop dots, is mounted in the fleet
-    // below and carries no tooltip **by ruling**: a drag handle is not a glyph,
-    // so rule 1 never applied to it. What keeps it out of the count is the
-    // glyph clause in `iconOnly`, and that the clause is *live* is the number
-    // this case measures the moment it is deleted — with the clause gone the
-    // fleet reports **6** (the two stop dots, the two colour-picker triggers,
-    // the font picker's search field and its favourites-only checkbox), where
-    // before the dots were mounted the same deletion still reported 0. The
-    // number is 0 because no icon-only control is left without the tooltip that
-    // is its name — a fifth one written tomorrow makes it 1 and lands here.
+    // the pairing (§6 rule 1: a twisty is unambiguous, and the door glyph is
+    // made unambiguous *by* the tooltip). The gradient editor's stop dots are
+    // mounted in the fleet below and carry no tooltip **by ruling**: a drag
+    // handle is not a glyph, so rule 1 never applied to it. What keeps them out
+    // of the count is the glyph clause in `iconOnly`, and that the clause is
+    // *live* is what this case measures the moment it is deleted — the fleet
+    // then reports the stop dots and the colour-picker triggers, none of which
+    // draws a glyph. The number is 0 because no icon-only control is left
+    // without the tooltip that is its name — one written tomorrow makes it 1
+    // and lands here.
     expect(noTooltip(mountFleet()).length).toBe(0);
   });
 
   it("is one string where a surface draws its own button, not the component", () => {
-    // The dock, the rail, a layer row and the font picker each render a bare
-    // `<button>` rather than `ControlIconButton`: a dock action is a glass
-    // control of its own size, a rail slot carries `aria-pressed`, a row
-    // control sits directly in `.yunari-layer-state` so the stylesheet can ask
-    // the slot how much room beside the key it needs, and the star's label
-    // changes with its pressed state. All take the same owner of the pairing,
-    // and one of each is named here so a bespoke button cannot quietly stop at
-    // two strings while the fleet case stays green over controls that never
-    // reach it.
+    // The dock, the rail and a layer row each render a bare `<button>` rather
+    // than `ControlIconButton`: a dock action is a glass control of its own
+    // size, a rail slot carries `aria-pressed`, and a row control sits directly
+    // in `.yunari-layer-state` so the stylesheet can ask the slot how much room
+    // beside the key it needs. All take the same owner of the pairing, and one
+    // of each is named here so a bespoke button cannot quietly stop at two
+    // strings while the fleet case stays green over controls that never reach
+    // it.
     const mounted = mountFleet();
     const bespoke = [
       "[data-rail-slot]",
       "[data-yunari-canvas-toolbar] button",
       "[data-yunari-layer-entry]",
-      "[data-yunari-font-favorite]",
     ];
     for (const selector of bespoke) {
       const control = mounted.querySelector<HTMLElement>(selector);
@@ -338,23 +329,6 @@ function mountFleet(): HTMLElement {
         >
           <CompositionPane bridge={bridge} />
         </Pane>
-        <FontPicker
-          trios={fontTrios()}
-          faces={catalogFaces()}
-          favorites={[]}
-          cache={createSpecimenCache({
-            fetch: vi.fn(
-              async () => new Response(new Uint8Array([0]), { status: 200 }),
-            ),
-            createFontFace: vi.fn(() => ({
-              load: vi.fn(async () => undefined),
-            })),
-            fonts: { add: vi.fn(), delete: vi.fn() },
-          })}
-          onApplyTrio={vi.fn()}
-          onApplyFace={vi.fn()}
-          onToggleFavorite={vi.fn()}
-        />
         <GradientEditor
           // Two stops, so the census has two handles to exclude rather than
           // one. `hsl()` and not a hex: this file is under the design ratchet,

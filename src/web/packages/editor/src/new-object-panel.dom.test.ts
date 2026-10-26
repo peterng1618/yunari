@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { CHART_FAMILIES } from "@yunari/renderer-core";
 import { YUNARI_PAINT_PROPERTY } from "@yunari/scene-fabric";
 import { Ellipse, Line, Path, Polygon, Polyline, Rect } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
@@ -204,6 +205,8 @@ describe("new object panel", () => {
     ["Line", "line"],
     ["Bar", "bar"],
     ["Pie", "pie"],
+    ["Radar", "radar"],
+    ["Polar bar", "polarBar"],
   ] as const)("delegates %s to ChartManager", (label, family) => {
     const addChart = vi.fn();
     const panel = createNewObjectPanel(
@@ -249,14 +252,14 @@ describe("new object panel", () => {
       },
     );
 
-    for (const label of ["Gauge", "Line", "Bar", "Pie"]) {
+    for (const label of ["Gauge", "Line", "Bar", "Pie", "Radar", "Polar bar"]) {
       chartButton(panel.root, label).click();
     }
 
-    // All four, not one: the wrapper is the module's, so a button that opted
+    // All six, not one: the wrapper is the module's, so a button that opted
     // out would be a silent failure the author cannot see.
-    expect(addChart).toHaveBeenCalledTimes(4);
-    expect(editor.errorManager.warn).toHaveBeenCalledTimes(4);
+    expect(addChart).toHaveBeenCalledTimes(6);
+    expect(editor.errorManager.warn).toHaveBeenCalledTimes(6);
     for (const call of editor.errorManager.warn.mock.calls) {
       expect(call[0]).toBe("controls");
       expect(call[1]).toContain("palette token");
@@ -459,6 +462,25 @@ describe("new object panel", () => {
     expect(editor.canvas.add).not.toHaveBeenCalled();
   });
 
+  it("draws no file section in the Add pane", () => {
+    // Local files belong to the Assets pane (DESIGN.md §7.2): the Add pane is
+    // insertion-only, so neither an import control nor a finder link lives here.
+    const { root } = createNewObjectPanel(
+      document.body,
+      editorStub() as never,
+      palette as never,
+    );
+
+    for (const selector of [
+      "[data-yunari-asset-import]",
+      "[data-yunari-asset-import-background]",
+      "[data-yunari-find-assets]",
+      "[data-yunari-asset-select]",
+    ]) {
+      expect(root.querySelector(selector), selector).toBeNull();
+    }
+  });
+
   it("arms the session's text route instead of constructing at the click", () => {
     // The pointer, not the menu, decides what the text is and where it lands.
     // A tile that constructed here would make the placement gesture a second,
@@ -579,7 +601,7 @@ describe("the chooser offers units and primitives", () => {
 
     expect(cards).toHaveLength(CARD_LIBRARY.length);
     expect(shapes).toHaveLength(SHAPE_KINDS.length);
-    expect(charts).toHaveLength(4);
+    expect(charts).toHaveLength(CHART_FAMILIES.length);
     // Text stands on its own outside any fieldset, and is still offered.
     expect(
       [...root.querySelectorAll("button")].map((b) => b.textContent),

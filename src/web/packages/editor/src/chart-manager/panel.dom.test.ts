@@ -2,8 +2,11 @@
 
 import {
   defaultPieSettings,
+  defaultPolarBarSettings,
+  defaultRadarSettings,
   type FabricPalette,
   type PieSettings,
+  SEGMENT_DIVISORS,
   SEMANTIC_KEYS,
   type SemanticKeyDescriptor,
   settingsFieldsFor,
@@ -49,6 +52,7 @@ const charts: readonly ChartFieldTarget[] = [
         track: { kind: "solid", color: "#000" },
         progress: { kind: "solid", color: "#fff" },
         roundCap: true,
+        segmentDivisor: 100,
       },
     },
     bindings: [{ id: "g", semanticKey: "ram.used.percent" }],
@@ -59,7 +63,7 @@ const charts: readonly ChartFieldTarget[] = [
       family: "line",
       settings: {
         lineWidth: 2,
-        interpolation: "smooth",
+        interpolation: "linear",
         stroke: { kind: "solid", color: "#00b8d9" },
         showMarkers: false,
         markerSize: 4,
@@ -92,10 +96,10 @@ const charts: readonly ChartFieldTarget[] = [
         categoryGapPercent: 40,
         cornerRadius: 10,
         trackCornerRadius: 10,
+        segmentDivisor: 100,
         fill: { ref: "palette.cpu" },
         track: { ref: "palette.gpu" },
         showAxes: false,
-        showCategoryLabels: false,
       },
     },
     bindings: [{ id: "disk", semanticKey: "disk.used" }],
@@ -111,7 +115,7 @@ const charts: readonly ChartFieldTarget[] = [
         endAngle: 360,
         padAngle: 0,
         cornerRadius: 4,
-        showLabels: false,
+        segmentDivisor: 100,
         palette: [{ ref: "palette.cpu" }],
         remainderFill: { ref: "palette.gpu" },
         total: { kind: "sum" },
@@ -209,6 +213,20 @@ describe("a chart's bounded settings, as the owner hands them over", () => {
       min: -360,
       max: 360,
     });
+    // A segment share is authored, so an unauthored gauge shows the renderer's
+    // own 10% rather than a zero-track, and the well says it is a percentage.
+    // Whole percents only: the track and the well both refuse a fraction.
+    const spacing = rowOf(charts[0]!, "segmentSpacingPercent");
+    expect(spacing).toMatchObject({
+      control: "slider",
+      value: 10,
+      min: 1,
+      max: 100,
+      integer: true,
+      suffix: "%",
+    });
+    expect(spacing).not.toHaveProperty("decimals");
+    expect(spacing).not.toHaveProperty("step");
     // A slice gap's ceiling is a full turn, which is the unit's own bound.
     expect(rowOf(charts[3]!, "padAngle")).toMatchObject({
       control: "slider",
@@ -229,6 +247,20 @@ describe("a chart's bounded settings, as the owner hands them over", () => {
     expect(rowOf(charts[3]!, "cornerRadius")).toMatchObject({
       control: "slider",
       max: 80,
+    });
+  });
+
+  it("offers the segment divisor as the discrete track", () => {
+    // The track's own range comes from the list, not from the descriptor's
+    // numeric bounds: the values between two divisors are not commits anyone
+    // can make, so the control steps index to index.
+    expect(rowOf(charts[0]!, "segmentDivisor")).toMatchObject({
+      control: "slider",
+      value: 100,
+      min: 1,
+      max: 100,
+      values: SEGMENT_DIVISORS,
+      clearable: false,
     });
   });
 
@@ -274,9 +306,9 @@ describe("a chart's bounded settings, as the owner hands them over", () => {
           max: 100,
           categoryGapPercent: 40,
           cornerRadius: 7,
+          segmentDivisor: 100,
           fill: { kind: "solid", color: "#000" },
           showAxes: false,
-          showCategoryLabels: false,
         },
       },
       bindings: [],
@@ -429,6 +461,35 @@ describe("a chart's series, as a value", () => {
     expect(series.refused).toBe(true);
     expect(series.full).toContain("gauge");
   });
+
+  it("offers a radar twelve spokes and a polar bar unbounded", () => {
+    const withBindings = (
+      family: "radar" | "polarBar",
+      count: number,
+    ): ChartFieldTarget => ({
+      id: family,
+      content:
+        family === "radar"
+          ? { family, settings: defaultRadarSettings }
+          : { family, settings: defaultPolarBarSettings },
+      bindings: Array.from({ length: count }, (_, index) => ({
+        id: `b${index}`,
+        semanticKey: "cpu.load",
+      })),
+    });
+
+    expect(chartContentView(withBindings("radar", 11)).series.refused).toBe(
+      false,
+    );
+    const full = chartContentView(withBindings("radar", 12)).series;
+    expect(full.refused).toBe(true);
+    expect(full.full).toContain("radar");
+
+    // A polar bar draws one category per binding, so it has no cap.
+    expect(chartContentView(withBindings("polarBar", 40)).series.refused).toBe(
+      false,
+    );
+  });
 });
 
 describe("a chart's readings, as the catalogue offers them", () => {
@@ -552,6 +613,7 @@ describe("what a chart paints its data with", () => {
             track: { ref: "palette.cpu" },
             progress: { ref: "palette.gpu" },
             roundCap: true,
+            segmentDivisor: 100,
           },
         },
         bindings: [],

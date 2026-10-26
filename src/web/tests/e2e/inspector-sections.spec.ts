@@ -235,6 +235,140 @@ async function propertyOf(
  * `toEngineOption` and ECharts normalise it — the option builder's own output
  * rather than the settings object or the engine's merged view of it.
  */
+/**
+ * The page point for a scene point, through the live viewport transform.
+ *
+ * `rebuild-driver`'s own helper is private, and a blank document's artboard is
+ * not the starter's width, so the transform is read rather than assumed.
+ */
+async function sceneClient(
+  page: Page,
+  x: number,
+  y: number,
+): Promise<{ x: number; y: number }> {
+  return page.evaluate(
+    ([sceneX, sceneY]: readonly [number, number]) => {
+      const { canvas } = (
+        window as unknown as {
+          yunariEditorBridge: {
+            editor: {
+              canvas: {
+                upperCanvasEl: HTMLCanvasElement;
+                viewportTransform: readonly number[];
+              };
+            };
+          };
+        }
+      ).yunariEditorBridge.editor;
+      const rect = canvas.upperCanvasEl.getBoundingClientRect();
+      const [scaleX, , , scaleY, translateX, translateY] =
+        canvas.viewportTransform as readonly [
+          number,
+          number,
+          number,
+          number,
+          number,
+          number,
+        ];
+      return {
+        x: rect.left + translateX + sceneX * scaleX,
+        y: rect.top + translateY + sceneY * scaleY,
+      };
+    },
+    [x, y] as const,
+  );
+}
+
+/**
+ * The gauge's drawn spacing, split into what is seen and what is not.
+ *
+ * Read from the built option rather than measured in pixels: the claim is that
+ * the relationship between the empty space and the painted band follows the
+ * authored share, and the option is where the adapter's arithmetic lands. The
+ * clearance is the cap overhang across one gap, derived from the option's own
+ * thickness and round ends against the backing edge the editor passed in.
+ */
+async function gaugeSpacingState(
+  page: Page,
+  name: string,
+): Promise<{
+  readonly empty: number;
+  readonly painted: number;
+}> {
+  const option = (await builtOption(page, name)) as {
+    series: {
+      startAngle?: number;
+      endAngle?: number;
+      axisLine?: {
+        roundCap?: boolean;
+        lineStyle: { width?: number; color: readonly [number, string][] };
+      };
+    }[];
+  };
+  const series = option.series[0];
+  const colors = series?.axisLine?.lineStyle.color ?? [];
+  const sweep = Math.abs((series?.endAngle ?? 0) - (series?.startAngle ?? 0));
+  const count = (colors.length + 1) / 2;
+  const band = sweep / count;
+  const stopGap = (1 / count - (colors[0]?.[0] ?? 0)) * sweep;
+  const edge = await chartBackingEdge(page, name);
+  const clearance =
+    series?.axisLine?.roundCap === false
+      ? 0
+      : ((series?.axisLine?.lineStyle.width ?? 0) / Math.max(1, edge / 2)) *
+        (180 / Math.PI);
+  return {
+    empty: stopGap - clearance,
+    painted: band - stopGap + clearance,
+  };
+}
+
+/**
+ * The smaller edge of the canvas ECharts draws the chart into, in backing
+ * pixels — the number the editor hands the gauge adapter.
+ */
+async function chartBackingEdge(page: Page, name: string): Promise<number> {
+  return page.evaluate((wanted) => {
+    type Chart = {
+      get(name: string): unknown;
+      getObjects?(): readonly Chart[];
+      width: number;
+      height: number;
+      scaleX: number;
+      scaleY: number;
+      renderScale: number;
+    };
+    const roots = (
+      window as unknown as {
+        yunariEditorBridge: {
+          editor: { canvas: { getObjects(): readonly Chart[] } };
+        };
+      }
+    ).yunariEditorBridge.editor.canvas.getObjects();
+    const find = (objects: readonly Chart[]): Chart | undefined => {
+      for (const object of objects) {
+        if (object.get("name") === wanted) return object;
+        const found = find(object.getObjects?.() ?? []);
+        if (found !== undefined) return found;
+      }
+      return undefined;
+    };
+    const chart = find(roots);
+    if (chart === undefined) return 0;
+    return Math.floor(
+      Math.min(chart.width * chart.scaleX, chart.height * chart.scaleY) *
+        chart.renderScale,
+    );
+  }, name);
+}
+
+async function gaugeColorCount(page: Page, name: string): Promise<number> {
+  const option = (await builtOption(page, name)) as {
+    series: { axisLine?: { lineStyle: { color: readonly unknown[] } } }[];
+  };
+  return option.series[0]?.axisLine?.lineStyle.color.length ?? 0;
+}
+
 async function builtOption(page: Page, name: string): Promise<unknown> {
   return page.evaluate((wanted) => {
     type Chart = {
@@ -258,6 +392,91 @@ async function builtOption(page: Page, name: string): Promise<unknown> {
       return undefined;
     };
     return find(roots)?._option ?? null;
+  }, name);
+}
+
+/**
+ * A hash of the chart's own backing canvas.
+ *
+ * The claim is that the picture changed, and no object count can see a picture:
+ * a segmented fill that drew nothing still has the same settings and the same
+ * option shape. Two hashes of the rendered pixels are the browser's own answer.
+ */
+async function chartCanvasHash(page: Page, name: string): Promise<string> {
+  return page.evaluate((wanted) => {
+    type Chart = {
+      get(name: string): unknown;
+      getObjects?(): readonly Chart[];
+      _element?: HTMLCanvasElement;
+    };
+    const roots = (
+      window as unknown as {
+        yunariEditorBridge: {
+          editor: { canvas: { getObjects(): readonly Chart[] } };
+        };
+      }
+    ).yunariEditorBridge.editor.canvas.getObjects();
+    const find = (objects: readonly Chart[]): Chart | undefined => {
+      for (const object of objects) {
+        if (object.get("name") === wanted) return object;
+        const found = find(object.getObjects?.() ?? []);
+        if (found !== undefined) return found;
+      }
+      return undefined;
+    };
+    const canvas = find(roots)?._element;
+    const data = canvas
+      ?.getContext("2d")
+      ?.getImageData(0, 0, canvas.width, canvas.height).data;
+    if (data === undefined) return "";
+    let hash = 0;
+    for (let index = 0; index < data.length; index += 97) {
+      hash = (hash * 31 + (data[index] ?? 0)) | 0;
+    }
+    return String(hash);
+  }, name);
+}
+
+/**
+ * The fraction of the chart's own backing canvas that is painted at all.
+ *
+ * A hash of a blank canvas is the string `"0"`, and `"0"` is truthy — the check
+ * above could not tell a drawn chart from one ECharts never rendered. Ink is
+ * the fraction of pixels with any alpha, and a family the engine has not
+ * registered paints none of it.
+ */
+async function chartCanvasInk(page: Page, name: string): Promise<number> {
+  return page.evaluate((wanted) => {
+    type Chart = {
+      get(name: string): unknown;
+      getObjects?(): readonly Chart[];
+      _element?: HTMLCanvasElement;
+    };
+    const roots = (
+      window as unknown as {
+        yunariEditorBridge: {
+          editor: { canvas: { getObjects(): readonly Chart[] } };
+        };
+      }
+    ).yunariEditorBridge.editor.canvas.getObjects();
+    const find = (objects: readonly Chart[]): Chart | undefined => {
+      for (const object of objects) {
+        if (object.get("name") === wanted) return object;
+        const found = find(object.getObjects?.() ?? []);
+        if (found !== undefined) return found;
+      }
+      return undefined;
+    };
+    const canvas = find(roots)?._element;
+    const data = canvas
+      ?.getContext("2d")
+      ?.getImageData(0, 0, canvas.width, canvas.height).data;
+    if (data === undefined) return 0;
+    let painted = 0;
+    for (let index = 3; index < data.length; index += 4) {
+      if ((data[index] ?? 0) > 0) painted += 1;
+    }
+    return painted / (data.length / 4);
   }, name);
 }
 
@@ -999,6 +1218,391 @@ test.describe("the per-kind inspector column", () => {
     });
   });
 
+  test("draws the segmented fill in bar, gauge and pie, read rendered", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    await page.goto(EDITOR);
+    await page.waitForFunction(() => "yunariEditorBridge" in window);
+    await openBlank(page);
+
+    const families = [
+      { insert: "Bar", name: "bar", x: 40 },
+      { insert: "Gauge", name: "gauge", x: 480 },
+      { insert: "Pie", name: "pie", x: 920 },
+    ] as const;
+
+    for (const family of families) {
+      await addChart(page, {
+        family: family.insert,
+        name: family.name,
+        x: family.x,
+        y: 60,
+        w: 320,
+        h: 280,
+        series: ["cpu.load"],
+      });
+
+      const slider = page.locator(
+        '[data-yunari-chart-setting="segmentDivisor"]',
+      );
+      const well = page.locator(
+        '[data-yunari-chart-setting-well="segmentDivisor"]',
+      );
+      await expect(slider).toBeVisible();
+      // Continuous is where a new chart starts, and where the authored
+      // default is: 100 means one fill, not a hundred slices.
+      await expect(well).toHaveValue("100");
+
+      const picture = async (divisor: number): Promise<string> => {
+        await captureVisualReview(
+          page,
+          testInfo,
+          `editor-chart-segmented-${family.name}-${divisor}`,
+          page.locator(COLUMN),
+        );
+        return chartCanvasHash(page, family.name);
+      };
+
+      const continuous = await picture(100);
+
+      // One track step per list member, in the list's own order:
+      // 100 → 50 → 25 → 20 → 10.
+      for (let step = 0; step < 4; step += 1) {
+        await slider.press("ArrowLeft");
+        if (step === 0) {
+          await expect(well).toHaveValue("50");
+          await expect
+            .poll(() => chartCanvasHash(page, family.name))
+            .not.toBe(continuous);
+          await picture(50);
+        }
+      }
+      await expect(well).toHaveValue("10");
+      const segmented = await picture(10);
+      expect(segmented, `${family.name} drew the same picture`).not.toBe(
+        continuous,
+      );
+
+      const option = (await builtOption(page, family.name)) as {
+        series: {
+          type: string;
+          data: readonly unknown[];
+          progress?: { show: boolean };
+          axisLine?: { lineStyle: { color: readonly unknown[] } };
+        }[];
+      };
+      // The option proves which mechanism each family used; the pixel hashes
+      // above prove it reached the glass.
+      if (family.name === "bar") {
+        expect(option.series[0]?.type).toBe("custom");
+      }
+      if (family.name === "gauge") {
+        expect(option.series[0]?.axisLine?.lineStyle.color).toHaveLength(19);
+      }
+      if (family.name === "pie") {
+        expect(option.series[0]?.data).toHaveLength(20);
+      }
+
+      // 10 → 5 → 4 → 2, then 2 → 1.
+      for (let step = 0; step < 3; step += 1) {
+        await slider.press("ArrowLeft");
+      }
+      await expect(well).toHaveValue("2");
+      expect(await picture(2)).not.toBe(segmented);
+      await slider.press("ArrowLeft");
+      await expect(well).toHaveValue("1");
+      expect(await picture(1)).not.toBe(segmented);
+
+      // Back to continuous: eight steps right is the whole list.
+      for (let step = 0; step < 8; step += 1) {
+        await slider.press("ArrowRight");
+      }
+      await expect(well).toHaveValue("100");
+      const restored = (await builtOption(page, family.name)) as {
+        series: {
+          type: string;
+          data: readonly unknown[];
+          progress?: { show: boolean };
+        }[];
+      };
+      if (family.name === "bar") {
+        expect(restored.series[0]?.type).toBe("bar");
+      }
+      if (family.name === "gauge") {
+        expect(restored.series[0]?.progress?.show).toBe(true);
+      }
+      if (family.name === "pie") {
+        expect(restored.series[0]?.data).toHaveLength(1);
+      }
+    }
+  });
+
+  test("offers radar and polar bar from the Add pane, read rendered", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    await page.goto(EDITOR);
+    await page.waitForFunction(() => "yunariEditorBridge" in window);
+    await openBlank(page);
+
+    await addChart(page, {
+      family: "Radar",
+      name: "radar",
+      x: 40,
+      y: 60,
+      w: 320,
+      h: 300,
+      series: ["cpu.load", "gpu.load", "ram.used", "cpu.temp"],
+    });
+    await addChart(page, {
+      family: "Radar",
+      name: "radar-fewer",
+      x: 420,
+      y: 60,
+      w: 320,
+      h: 300,
+      series: ["cpu.load", "gpu.load"],
+    });
+    await addChart(page, {
+      family: "Polar bar",
+      name: "polar-bar",
+      x: 800,
+      y: 60,
+      w: 320,
+      h: 300,
+      series: ["cpu.load"],
+    });
+
+    // Each capture is the canvas with that chart selected, because the column
+    // shows whichever chart is selected and three columns would be the same
+    // controls three times. A chart paints a frame after its option lands, so
+    // waiting for ink first is what stops the evidence being an empty canvas.
+    const canvas = page.locator("#yunari-fabric-editor canvas.lower-canvas");
+    for (const name of ["radar", "radar-fewer", "polar-bar"]) {
+      await expect
+        .poll(() => chartCanvasInk(page, name))
+        .toBeGreaterThan(0.001);
+    }
+    await selectLayer(page, "radar");
+    await captureVisualReview(
+      page,
+      testInfo,
+      "editor-chart-radar-four-readings",
+      canvas,
+    );
+    await selectLayer(page, "radar-fewer");
+    await captureVisualReview(
+      page,
+      testInfo,
+      "editor-chart-radar-two-readings",
+      canvas,
+    );
+    await selectLayer(page, "polar-bar");
+    await captureVisualReview(page, testInfo, "editor-chart-polar-bar", canvas);
+
+    // The palette the blank document carries: one spoke per bound series, on
+    // the settings' shared scale, and one category around the polar axis.
+    const radar = (await builtOption(page, "radar")) as {
+      radar: { indicator: { name: string }[]; axisName: { show: boolean } };
+      series: { type: string; data: { value: number[] }[] }[];
+    };
+    expect(radar.radar.indicator.map((spoke) => spoke.name)).toEqual([
+      "cpu.load",
+      "gpu.load",
+      "ram.used",
+      "cpu.temp",
+    ]);
+    expect(radar.radar.axisName.show).toBe(false);
+    expect(radar.series[0]?.type).toBe("radar");
+    expect(radar.series[0]?.data[0]?.value).toHaveLength(4);
+
+    // Fewer than three spokes leaves the frame and draws no polygon: never a
+    // polygon closed on a reading nobody took (§D1).
+    const fewer = (await builtOption(page, "radar-fewer")) as {
+      series: { data: readonly unknown[] }[];
+    };
+    expect(fewer.series[0]?.data).toEqual([]);
+
+    const polar = (await builtOption(page, "polar-bar")) as {
+      angleAxis: { data: string[]; axisLabel: { show: boolean } };
+      series: { type: string; coordinateSystem: string }[];
+    };
+    expect(polar.angleAxis.data).toEqual(["cpu.load"]);
+    expect(polar.angleAxis.axisLabel.show).toBe(false);
+    expect(polar.series[0]).toMatchObject({
+      type: "bar",
+      coordinateSystem: "polar",
+    });
+
+    // The option says what was built; the backing canvas says it reached the
+    // glass rather than stopping at an option nobody drew. The floors are
+    // measured: the four-spoke polygon covers 4.9% and the polar bar's 216°
+    // sector 26.7%, while an empty frame is 0.16% — high enough that registering
+    // the component without its series still fails.
+    expect(await chartCanvasInk(page, "radar")).toBeGreaterThan(0.01);
+    expect(await chartCanvasInk(page, "polar-bar")).toBeGreaterThan(0.1);
+  });
+
+  test("spaces the segmented gauge by its drawn size and fills whole or partial, read rendered", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    await page.goto(EDITOR);
+    await page.waitForFunction(() => "yunariEditorBridge" in window);
+    await openBlank(page);
+    await addChart(page, {
+      family: "Gauge",
+      name: "spacing",
+      x: 40,
+      y: 60,
+      // Large enough that the backing edge is unambiguous, so the derived cap
+      // clearance is small against the band and the authored share is what the
+      // picture shows.
+      w: 1120,
+      h: 840,
+      series: ["cpu.load"],
+    });
+    // A 0–20 scale keeps the fake load reading near the top of the ring, so the
+    // caps, bands and gaps are all visible in the captures. The colour counts
+    // below do not depend on the reading; the fill-toggle case re-scales it.
+    await typeIntoControl(
+      page,
+      page.locator('[data-yunari-chart-setting="max"]'),
+      20,
+    );
+
+    const slider = page.locator('[data-yunari-chart-setting="segmentDivisor"]');
+    const well = page.locator(
+      '[data-yunari-chart-setting-well="segmentDivisor"]',
+    );
+    await expect(slider).toBeVisible();
+    // 100 → 50 → 25 → 20: five bands, the count the defect was reported at
+    // (twenty *segments* is divisor five, but this is the list's own step).
+    for (let step = 0; step < 3; step += 1) await slider.press("ArrowLeft");
+    await expect(well).toHaveValue("20");
+
+    const canvas = page.locator("#yunari-fabric-editor canvas.lower-canvas");
+    await expect
+      .poll(() => chartCanvasInk(page, "spacing"))
+      .toBeGreaterThan(0.01);
+
+    // The default tenth: the empty space is a tenth of the painted band, caps
+    // included, which is the relationship the slider sets.
+    await expect
+      .poll(async () => {
+        const state = await gaugeSpacingState(page, "spacing");
+        return state.empty / state.painted;
+      })
+      .toBeCloseTo(0.1, 2);
+    await selectLayer(page, "spacing");
+    await captureVisualReview(
+      page,
+      testInfo,
+      "editor-chart-gauge-spacing-large",
+      canvas,
+    );
+
+    // Half the width, by the same right-edge handle an author drags.
+    const box = (await readScene(page)).find(
+      (object) => object.name === "spacing",
+    );
+    if (box === undefined) throw new Error("the gauge is not in the scene");
+    const from = await sceneClient(
+      page,
+      box.left + box.width,
+      box.top + box.height / 2,
+    );
+    const to = await sceneClient(
+      page,
+      box.left + box.width / 2,
+      box.top + box.height / 2,
+    );
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 12 });
+    await page.mouse.up();
+
+    // The same relationship on half the chart: the gap is a share of the band,
+    // not of the edge, so it halves with the band instead of disappearing. The
+    // stop gap itself grows slightly — the caps are pixels and now cover more
+    // of the smaller ring — which is exactly what the clearance term removes.
+    await expect
+      .poll(async () => {
+        const state = await gaugeSpacingState(page, "spacing");
+        return state.empty / state.painted;
+      })
+      .toBeCloseTo(0.1, 2);
+    await captureVisualReview(
+      page,
+      testInfo,
+      "editor-chart-gauge-spacing-small",
+      canvas,
+    );
+
+    // At the top of the slider the owner's definition is literal: the empty
+    // space is as wide as the painted band, with the rounded corners included.
+    await typeIntoControl(
+      page,
+      page.locator('[data-yunari-chart-setting-well="segmentSpacingPercent"]'),
+      100,
+    );
+    await expect
+      .poll(async () => {
+        const state = await gaugeSpacingState(page, "spacing");
+        return state.empty / state.painted;
+      })
+      .toBeCloseTo(1, 2);
+    await captureVisualReview(
+      page,
+      testInfo,
+      "editor-chart-gauge-spacing-100",
+      canvas,
+    );
+
+    // Back to the default spacing, and a 0–100 scale so the reading moves
+    // through the ring: a partial fill's own boundary exists only while the
+    // reading sits inside a painted band, and at 100% spacing it would usually
+    // sit in a gap where neither mode paints anything.
+    await typeIntoControl(
+      page,
+      page.locator('[data-yunari-chart-setting-well="segmentSpacingPercent"]'),
+      10,
+    );
+    await typeIntoControl(
+      page,
+      page.locator('[data-yunari-chart-setting="max"]'),
+      100,
+    );
+
+    // The fill toggle is a question about a segmented chart, and it changes the
+    // picture: whole lights the slice, partial stops at the reading.
+    const whole = await chartCanvasHash(page, "spacing");
+    await chooseIn(
+      page,
+      '[data-yunari-chart-setting="segmentFill"]',
+      "partial",
+    );
+    await expect(
+      await choiceOf(page.locator('[data-yunari-chart-setting="segmentFill"]')),
+    ).toBe("Partial segment");
+    // A partial fill adds the reading's own boundary inside its band, so the
+    // colour list is no longer one band and one gap per slice. The reading is
+    // live and the boundary exists only while it sits inside a painted band —
+    // gaps cover a ninth of the ring — so the wait is longer than a single
+    // draw and the claim is the colour list, not a sampled frame.
+    await expect
+      .poll(() => gaugeColorCount(page, "spacing"), { timeout: 15_000 })
+      .toBeGreaterThan(9);
+    await expect.poll(() => chartCanvasHash(page, "spacing")).not.toBe(whole);
+    await captureVisualReview(
+      page,
+      testInfo,
+      "editor-chart-gauge-fill-partial",
+      canvas,
+    );
+  });
+
   test("gives every bounded number in the chart manager the pair, read rendered", async ({
     page,
   }, testInfo) => {
@@ -1129,7 +1733,7 @@ test.describe("the per-kind inspector column", () => {
     await expect(page.locator("[data-yunari-panel-fill]")).toHaveCount(0);
 
     // An image: the one kind that can crop, and not a panel either.
-    await openPane(page, "Add");
+    await openPane(page, "Assets");
     await chooseAssetFile(page, "import", {
       name: "logo.png",
       mimeType: "image/png",

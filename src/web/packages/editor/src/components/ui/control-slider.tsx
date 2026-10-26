@@ -53,13 +53,20 @@ export function ControlSlider(
      *  every other number field does, and the track already steps by 1. */
     readonly integer?: boolean;
     /**
-     * The drag's step, when the value's own range is finer than one. A 0–1
-     * fraction is a bounded number like any other (`vg-493`), and the control
-     * set's default step of 1 would leave it holding only its two ends. Read
-     * back off the range input by the wheel, so the gesture and the drag cannot
-     * step differently.
+     * The only commits this setting accepts, when it is discrete.
+     *
+     * The track still runs over whole steps, but **over list indices**, not over
+     * the values: a divisor of 100 splits into slices of 1, 2, 4, 5, … and a
+     * track spanning 1–100 would offer every value between them — each one a
+     * commit no adapter can draw. Index-to-value is this control's whole part in
+     * it; the list itself belongs to the setting's owner.
      */
-    readonly step?: number;
+    readonly values?: readonly number[];
+    /** How many decimals the well shows; the stored value keeps its precision. */
+    readonly decimals?: number;
+    /** What the number is a share of, written beside the well and spoken by the
+     *  track — a bare `2.5` beside a width in degrees reads as degrees too. */
+    readonly suffix?: string;
     /** The owner can take the key away again — an absent optional setting. The
      *  track has no empty state, so the well is where that act lives. */
     readonly onClear?: () => void;
@@ -98,7 +105,9 @@ export function ControlSlider(
     min,
     max,
     integer,
-    step,
+    values,
+    decimals,
+    suffix,
     onClear,
     unauthored,
     onPreview,
@@ -144,6 +153,32 @@ export function ControlSlider(
   // nothing — cannot strand the thumb on a value the document never took.
   const [dragging, setDragging] = useState<number | null>(null);
   const shown = dragging ?? value;
+  // A discrete setting's track is its list's index space. A value the list does
+  // not carry — a hand-edited document — leaves the thumb at the continuous end
+  // rather than inventing a member; the well still shows the document's number.
+  const selected = values === undefined ? -1 : values.indexOf(value);
+  const trackMin = values === undefined ? min : 0;
+  const trackMax = values === undefined ? max : values.length - 1;
+  const trackShown =
+    values === undefined
+      ? shown
+      : (dragging ?? (selected === -1 ? trackMax : selected));
+  const shownValue =
+    values === undefined ? shown : (values[trackShown] ?? value);
+  // What a screen reader hears. A discrete track speaks its member, which the
+  // thumb's numeric value cannot; a measured one speaks the number with the
+  // unit it is measured in.
+  const spoken =
+    values === undefined
+      ? `${
+          decimals === undefined
+            ? String(shownValue)
+            : shownValue.toFixed(decimals)
+        }${suffix ?? ""}`
+      : String(shownValue);
+  /** What a track position commits: the value itself, or its list member. */
+  const valueAt = (position: number): number =>
+    values === undefined ? position : (values[position] ?? value);
   // The well reads the document, so a value the document does not hold leaves it
   // empty — the track's fallback is not something the author wrote (`vg-497`).
   // The gesture is the one exception: while a drag is in flight the moving value
@@ -197,25 +232,45 @@ export function ControlSlider(
       // value lowering it, with a history entry for an edit nobody made. Which
       // of the two is right is not this control's to decide, so it decides
       // neither.
-      if (value < min || value > max) return;
+      if (values === undefined) {
+        if (value < min || value > max) return;
+      } else if (selected === -1) {
+        // A value the list does not carry is in the same state: a gesture that
+        // moved the thumb would commit a neighbour the document never named.
+        return;
+      }
       // The step the drag uses, read off the element that carries it. A step of
       // `any` reports 0, and a wheel cannot move by nothing.
       const step = stepOf(input.current);
-      const from = ticked.current ?? value;
+      const from = ticked.current ?? trackShown;
       const next = Math.min(
-        Math.max(from + (event.deltaY < 0 ? step : -step), min),
-        max,
+        Math.max(from + (event.deltaY < 0 ? step : -step), trackMin),
+        trackMax,
       );
       if (next === from) return;
       ticked.current = next;
       cancelled.current = false;
       setDragging(next);
-      onPreview?.(next);
-      onCommit(next);
+      const committed = valueAt(next);
+      onPreview?.(committed);
+      onCommit(committed);
     };
     node.addEventListener("wheel", onWheel, { passive: false });
     return () => node.removeEventListener("wheel", onWheel);
-  }, [blocked, value, min, max, onPreview, onCommit]);
+  }, [
+    blocked,
+    value,
+    min,
+    max,
+    values,
+    selected,
+    trackShown,
+    trackMin,
+    trackMax,
+    valueAt,
+    onPreview,
+    onCommit,
+  ]);
 
   // The hold is only honest while the document catches up: any answer that
   // moves the value retires it, so a tick that was refused cannot strand the
@@ -235,10 +290,10 @@ export function ControlSlider(
     >
       <Slider.Root
         ref={root}
-        value={shown}
-        min={min}
-        max={max}
-        step={step}
+        value={trackShown}
+        min={trackMin}
+        max={trackMax}
+        {...(values === undefined ? {} : { step: 1 })}
         disabled={disabled}
         aria-disabled={refused === undefined ? undefined : true}
         onPointerDown={() => {
@@ -266,7 +321,7 @@ export function ControlSlider(
           }
           if (details.reason === "keyboard") cancelled.current = false;
           setDragging(next);
-          onPreview?.(next);
+          onPreview?.(valueAt(next));
         }}
         onValueCommitted={(next) => {
           pressing.current = false;
@@ -276,7 +331,7 @@ export function ControlSlider(
             return;
           }
           if (blocked) return;
-          onCommit(next);
+          onCommit(valueAt(next));
         }}
         className="flex w-full flex-wrap items-center gap-x-[var(--space-6)] gap-y-[var(--space-4)]"
       >
@@ -292,6 +347,11 @@ export function ControlSlider(
           <Slider.Thumb
             inputRef={input}
             aria-labelledby={ids.label}
+            // The track's number is an index; a screen reader has to hear the
+            // setting's own value, which is the list member at that index.
+            {...(values === undefined && suffix === undefined
+              ? {}
+              : { "aria-valuetext": spoken })}
             // The hint and the refusal are the two notes the row owns, and the
             // range input is the element a screen reader reaches: a hint that
             // stayed on the wrapper would reach nobody (§5.3 keeps a refusal out
@@ -322,10 +382,13 @@ export function ControlSlider(
           label={label}
           {...(hooks === undefined ? {} : { data: hooks })}
           wellClassName="w-[40px] flex-none"
-          value={wellEmpty ? undefined : shown}
+          value={wellEmpty ? undefined : shownValue}
           min={min}
           max={max}
+          {...(values === undefined ? {} : { oneOf: values })}
           {...(integer === undefined ? {} : { integer })}
+          {...(decimals === undefined ? {} : { decimals })}
+          {...(suffix === undefined ? {} : { unit: suffix })}
           {...(density === undefined ? {} : { density })}
           {...(onClear === undefined ? {} : { onClear })}
           // The well is the half that reads the document, so it is described by

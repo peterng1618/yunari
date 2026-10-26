@@ -24,12 +24,18 @@ const EDITOR = "http://127.0.0.1:4174/";
 
 const PANELS = ["Theme settings", "Palette", "Type presets"];
 
-/** The Tokens pane's controls, in the states that render them all. */
-const TOKENS_CONTROLS = [
-  // Palette. A solid token's one colour control is the picker's trigger in its
-  // §5 well; the exact-value field is inside the picker's popover, which the
-  // audit does not open — the trigger is what an author meets first.
-  "[data-yunari-palette-token]",
+/** The Tokens pane's paint controls, in the states that render them all.
+ *
+ *  The pane is lists-only now: a row press selects the token, and its fields
+ *  render in the right column's token inspector. The audit therefore measures
+ *  this list with a paint token selected, and the preset list below with a
+ *  preset selected — one inspector renders one section at a time. The pane's
+ *  old chooser is gone with the field set it browsed, so `[data-yunari-palette-token]`
+ *  is not named here: there is no such control to name. */
+const PAINT_CONTROLS = [
+  // A solid token's one colour control is the picker's trigger in its §5 well;
+  // the exact-value field is inside the picker's popover, which the audit does
+  // not open — the trigger is what an author meets first.
   "[data-yunari-palette-name]",
   "[data-yunari-palette-kind]",
   "[data-yunari-palette-picker]",
@@ -45,18 +51,28 @@ const TOKENS_CONTROLS = [
   '[data-testid="gradient-remove"]',
   '[data-testid="gradient-offset"]',
   '[data-testid="gradient-angle"]',
-  // Type presets
-  "[data-yunari-type-preset]",
-  "[data-yunari-type-name]",
-  "[data-yunari-type-family]",
-  "[data-yunari-type-size]",
-  "[data-yunari-type-weight]",
-  "[data-yunari-type-line-height]",
-  "[data-yunari-type-letter-spacing]",
-  "[data-yunari-font-face]",
-  "[data-yunari-font-trio]",
-  "[data-yunari-type-replacement]",
-  "[data-yunari-type-delete]",
+];
+
+/** The selected preset's controls, in the token inspector. The pane is a list
+ *  now: one pressable row per preset and the add action. The chooser and the
+ *  field set that went with it are the token inspector's, so they are measured
+ *  there — after a preset row press replaces the paint section. */
+const PRESET_CONTROLS = [
+  "[data-yunari-type-preset-row]",
+  "[data-yunari-type-preset-add]",
+  // `unbind` renders only for a preset bound to a packaged face, and the starter
+  // preset the audit selects is free, so that selector is audited when a
+  // scenario binds one.
+  "[data-yunari-token-name]",
+  "[data-yunari-token-role]",
+  "[data-yunari-token-family]",
+  "[data-yunari-token-weight]",
+  "[data-yunari-token-size]",
+  "[data-yunari-token-line-height]",
+  "[data-yunari-token-letter-spacing]",
+  "[data-yunari-token-unbind]",
+  "[data-yunari-token-replacement]",
+  "[data-yunari-token-delete]",
 ];
 
 /** The Document pane's controls: the artboard panel's theme settings. */
@@ -149,15 +165,13 @@ test.describe("the settings panels name every control", () => {
     // case that needs the Document pane opens it itself.
     await openPane(page, "Tokens");
     // The gradient and delete branches render controls a solid token does not,
-    // so the audit has to open the same branches an author opens. A token with
-    // other tokens to reassign to is what puts the delete row on screen.
-    await chooseIn(page, "[data-yunari-palette-token]", "cpu");
+    // so the audit has to open the same branches an author opens. The pane is
+    // lists-only: a row press selects the token, and its fields — the kind
+    // switch included — render in the right column's token inspector.
+    await page.locator('[data-yunari-palette-token-row="cpu"]').click();
     // The gradient branch renders the track, its marks and its two wells, which
     // a solid token does not, so the audit opens the branch an author opens.
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
-    // The preset chooser is a plan-1 select too, so it is opened and chosen the
-    // way the palette's is rather than by `selectOption`.
-    await chooseIn(page, "[data-yunari-type-preset]", "20-500");
   });
 
   test("no control is unnamed", async ({ page }) => {
@@ -185,8 +199,15 @@ test.describe("the settings panels name every control", () => {
     // Tokens, the theme settings in Document. Each is measured with its own
     // pane open, because a control inside a hidden pane is out of the
     // accessibility tree and measuring it there would report a name it does
-    // not announce. Tokens is open from the setup.
-    await audit(TOKENS_CONTROLS);
+    // not announce. Tokens is open from the setup, with a paint token selected.
+    await audit(PAINT_CONTROLS);
+    // One inspector renders one section, so the preset half is measured after
+    // pressing a preset row, which replaces the paint section. `20-500` is the
+    // starter theme's "Rate".
+    const presetRow = page.locator('[data-yunari-type-preset-row="20-500"]');
+    await expect(presetRow).toBeVisible();
+    await presetRow.click();
+    await audit(PRESET_CONTROLS);
     await openPane(page, "Document");
     await audit(DOCUMENT_CONTROLS);
     // The background's controls are the selection inspector's, which renders
@@ -225,16 +246,6 @@ test.describe("the settings panels name every control", () => {
       .locator("[data-yunari-theme-version]")
       .ariaSnapshot();
     expect(snapshot.trim()).toMatch(/^- status "Release version"/);
-  });
-
-  test("each panel's chooser says what it lists", async ({ page }) => {
-    // Both choosers are the Tokens pane's, open from the setup.
-    expect(
-      await accessibleName(page.locator("[data-yunari-palette-token]")),
-    ).toBe("Colour token");
-    expect(
-      await accessibleName(page.locator("[data-yunari-type-preset]")),
-    ).toBe("Type preset");
   });
 
   test("the three panels are the ones the audit claims to cover", async ({

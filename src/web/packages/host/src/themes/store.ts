@@ -256,9 +256,21 @@ type ScratchKind = "staging" | "retired";
  *  for the archive's envelope (95 MiB) so neither format accepts a theme the
  *  other would refuse. */
 const MAX_THEME_FILE_BYTES = 32 * 1024 * 1024;
-const MAX_ASSET_BYTES = 80 * 1024 * 1024;
+/** One asset's ceiling, and the trash route's own per-file cap: the bytes an
+ *  editor sends it are the bytes this store would have accepted. */
+export const MAX_ASSET_BYTES = 80 * 1024 * 1024;
 const MAX_ASSET_COUNT = 128;
 const MAX_TOTAL_ASSET_BYTES = 90 * 1024 * 1024;
+/** What a trash request may carry on the wire for a whole theme's assets.
+ *
+ *  The body is base64 — four characters per three bytes — and Task 19 sends
+ *  every unused declaration in one call, so the bound is the theme's total
+ *  asset cap rather than one asset's. The slack is the JSON around each file
+ *  (name, punctuation) for `MAX_ASSET_COUNT` names. `MAX_TRASH_UPLOAD_BYTES >
+ *  4 * MAX_ASSET_BYTES / 3`, so a single file at its own cap still fits: the
+ *  per-file refusal stays the author's sentence. */
+export const MAX_TRASH_UPLOAD_BYTES =
+  4 * Math.ceil(MAX_TOTAL_ASSET_BYTES / 3) + 1024 * 1024;
 
 /** Bytes as an author reads them, and the exact bytes behind them. The
  *  platform does both, so there is no size table here to drift from the bounds

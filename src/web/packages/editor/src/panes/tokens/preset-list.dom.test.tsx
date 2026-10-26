@@ -1,58 +1,41 @@
 // @vitest-environment jsdom
 
 /**
- * The Tokens pane's preset list.
+ * The Tokens pane's preset list, now a list.
  *
- * **A resolution is not a control.** The line beside a preset is its label and a
- * mono value with no well — a border means editable (DESIGN.md §5.1) — and the
- * editable copy of the same numbers is a bordered field inches below it. The
- * case below reads the resolution's own row, where a well would land, the way
- * the selection inspector's `index.dom.test.ts` reads its resolution row.
+ * **A row is a selector, not a control.** Pressing it selects the token for the
+ * inspector; nothing in the list edits the document, so the cases that drove
+ * the removed fields went with them. What a row shows is the specimen `Aa` in
+ * the preset's own family, its name, its role badge where it has a role, and
+ * its resolution line.
  *
  * **The resolver is the owner, so the expectation is its answer.** The line's
  * value is `resolveTypePreset`'s own output, never a copy of the
  * "family weight sizepx" rule this file would otherwise restate.
  *
- * `Harness` is the session's half of the contract: a commit comes back as a new
+ * `Harness` is the session's half of the contract: an add comes back as a new
  * `presets` prop, exactly as `editor-session`'s `render()` hands one back.
  */
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, expect, it, vi } from "vitest";
-import type { ActiveKind } from "../../editor-shell/bridge.js";
-import { catalogFaces, fontTrios } from "../../font-catalog.js";
-import { resolveTypePreset } from "../../selection-inspector/appearance.js";
+import { afterEach, expect, it, vi } from "vitest";
 import type {
-  TypePresetFontActions,
-  TypePresets,
-} from "../../type-preset-manager/panel.js";
+  ActiveKind,
+  EditorShellBridge,
+} from "../../editor-shell/bridge.js";
+import {
+  SelectionStore,
+  TokenSelectionStore,
+} from "../../editor-shell/shell-stores.js";
+import { newPresetType } from "../../new-fabric-theme-globals.js";
+import { resolveTypePreset } from "../../selection-inspector/appearance.js";
+import type { TypePresets } from "../../type-preset-manager/panel.js";
 import { uiCopy } from "../../ui-copy.js";
 import { PresetList, type PresetListProps } from "./preset-list.js";
-
-// Base UI's popups need three browser APIs jsdom has none of — the same three
-// `paint-list.dom.test.tsx` supplies, for the same reason.
-globalThis.ResizeObserver ??= class {
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
-} as never;
-Element.prototype.getAnimations ??= (): never[] => [];
-window.PointerEvent ??= MouseEvent as never;
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
-
-beforeAll(() => {
-  const matches = Element.prototype.matches;
-  Element.prototype.matches = Object.assign(function (
-    this: Element,
-    selector: string,
-  ): boolean {
-    if (selector === ":modal" || selector === ":popover-open") return false;
-    return matches.call(this, selector);
-  }, matches);
-});
 
 let root: Root | undefined;
 
@@ -63,26 +46,68 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-/** The list over a preset map it owns, so a commit comes back the way the
- *  session hands one back rather than leaving the component on stale props. */
+/** The shell bridge, as far as a token selection can see one: a snapshot, a
+ *  subscription, and the clear gesture. `selectLayers([])` moves the snapshot
+ *  to empty and notifies, which is what the real bridge does, so the clear a
+ *  press causes arrives back through the same path a canvas click uses. */
+function canvas(initial: {
+  readonly selectedCount: number;
+  readonly activeKind: ActiveKind;
+}) {
+  let snapshot = {
+    objectCount: 1,
+    tokenCount: 1,
+    selectedCount: initial.selectedCount,
+    locked: false,
+    activeKind: initial.activeKind,
+    documentName: "Theme",
+    selectionPresetId: undefined as string | undefined,
+  };
+  const listeners = new Set<() => void>();
+  const selectLayers = vi.fn((ids: readonly string[]) => {
+    if (ids.length !== 0) return;
+    snapshot = { ...snapshot, selectedCount: 0, activeKind: "none" };
+    for (const listener of listeners) listener();
+  });
+  const bridge = {
+    snapshot: () => snapshot,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    selectLayers,
+  } as unknown as EditorShellBridge;
+  return { bridge, selectLayers };
+}
+
+/** The list over a preset map it owns, so an add comes back the way the panel's
+ *  own `onChange` hands one back rather than leaving the component on stale
+ *  props. */
 function Harness(props: {
   readonly initial: TypePresets;
-  readonly onDelete: PresetListProps["onDelete"];
-  readonly fontActions: PresetListProps["fontActions"];
   readonly selection: PresetListProps["selection"];
+  readonly tokenSelection: PresetListProps["tokenSelection"];
   readonly change: (presets: TypePresets) => void;
 }): React.JSX.Element {
   const [presets, setPresets] = useState(props.initial);
+  const commit = (next: TypePresets): void => {
+    props.change(next);
+    setPresets(next);
+  };
   return (
     <PresetList
       presets={presets}
-      onDelete={props.onDelete}
-      fontActions={props.fontActions}
+      // The panel's own add: the list mints the id, the host builds the record.
+      onAdd={(id) =>
+        commit({
+          ...presets,
+          [id]: { name: uiCopy.panels.newType, value: newPresetType },
+        })
+      }
       selection={props.selection}
-      onChange={(next) => {
-        props.change(next);
-        setPresets(next);
-      }}
+      tokenSelection={props.tokenSelection}
     />
   );
 }
@@ -133,9 +158,8 @@ function stage(): {
 async function mount(
   initial: TypePresets,
   options: {
-    readonly onDelete?: PresetListProps["onDelete"];
-    readonly fontActions?: PresetListProps["fontActions"];
     readonly selection?: PresetListProps["selection"];
+    readonly tokenSelection?: PresetListProps["tokenSelection"];
   } = {},
 ): Promise<{
   readonly host: HTMLElement;
@@ -153,9 +177,8 @@ async function mount(
     mounted.render(
       <Harness
         initial={initial}
-        onDelete={options.onDelete}
-        fontActions={options.fontActions}
         selection={options.selection}
+        tokenSelection={options.tokenSelection}
         change={change}
       />,
     );
@@ -163,87 +186,12 @@ async function mount(
   return { host, change };
 }
 
-/** React and floating-ui schedule outside `act`, so a popup is flushed with
- *  macrotasks rather than one. */
-async function flush(): Promise<void> {
-  for (let round = 0; round < 3; round += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-}
-
-async function click(target: Element, detail = 0): Promise<void> {
+async function click(target: Element): Promise<void> {
   await act(async () => {
     target.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true, detail }),
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
     );
   });
-}
-
-/** Base UI commits a list item only when the press that precedes the click
- *  started on it, so the press is part of the interaction. */
-async function pointerDown(target: Element): Promise<void> {
-  await act(async () => {
-    target.dispatchEvent(
-      new PointerEvent("pointerdown", {
-        bubbles: true,
-        cancelable: true,
-        pointerType: "mouse",
-        button: 0,
-      }),
-    );
-  });
-}
-
-/** A real edit, as React sees one: the value goes through the prototype's
- *  setter because React replaces `value` on the node with a tracker that
- *  records every assignment, and `input` is the native event for a text field. */
-async function type(control: Element, value: string): Promise<void> {
-  await act(async () => {
-    // Focused first: `blur()` on an element that never held focus is a no-op
-    // and fires no event, so the commit below would never arrive.
-    (control as HTMLElement).focus();
-    const setter = Object.getOwnPropertyDescriptor(
-      Object.getPrototypeOf(control) as HTMLInputElement,
-      "value",
-    )?.set;
-    if (setter === undefined) (control as HTMLInputElement).value = value;
-    else setter.call(control, value);
-    control.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await act(async () => {
-    (control as HTMLElement).blur();
-  });
-}
-
-/** The first preset is the selected one in every fixture here, so a field is
- *  named by its hook alone and no preset has to be chosen first. */
-async function commitField(control: string, value: string): Promise<void> {
-  const input = document.querySelector<HTMLInputElement>(control);
-  if (input === null) throw new Error(`no field matches ${control}`);
-  await type(input, value);
-}
-
-/** A select's trigger, opened; the options are read and chosen from the popup
- *  this leaves standing, because Base UI renders none until it is open. */
-async function openControl(control: string): Promise<readonly Element[]> {
-  const trigger = document.querySelector<HTMLElement>(control);
-  if (trigger === null) throw new Error(`no control matches ${control}`);
-  await click(trigger);
-  await flush();
-  return Array.from(document.querySelectorAll('[role="option"]'));
-}
-
-/** Picks the option whose value is `id` — the id the control commits, never the
- *  label it prints, because the labels are the document's own preset names. */
-async function chooseIn(control: string, id: string): Promise<void> {
-  const options = await openControl(control);
-  const option = options.find(
-    (candidate) => candidate.getAttribute("data-yunari-option") === id,
-  );
-  if (option === undefined) throw new Error(`no option ${id} in ${control}`);
-  await pointerDown(option);
-  await click(option, 1);
-  await flush();
 }
 
 /** A preset's resolution value span, by the row that carries the preset's id. */
@@ -255,22 +203,13 @@ function resolutionLine(host: HTMLElement, id: string): HTMLElement {
   return value;
 }
 
-/** The words a control is announced under: the label its own row points at,
- *  read the way a screen reader finds it, not the source string that built it. */
-function controlName(host: HTMLElement, control: string): string {
-  const target = host.querySelector<HTMLElement>(control);
-  const id = target?.id ?? "";
-  if (id === "") return "";
-  return host.querySelector(`label[for="${id}"]`)?.textContent ?? "";
-}
-
-/** The ports the panel adopts faces and trios through, all recording. */
-function ports() {
-  return {
-    preview: vi.fn(async () => {}),
-    applyFace: vi.fn(async () => {}),
-    applyTrio: vi.fn(async () => {}),
-  } satisfies TypePresetFontActions;
+/** The readout the pane states its answer in, as against the list below it. */
+function binding(host: HTMLElement): HTMLElement {
+  const found = host.querySelector<HTMLElement>(
+    "[data-yunari-type-preset-binding]",
+  );
+  if (found === null) throw new Error("the list states no binding");
+  return found;
 }
 
 const withWeight: TypePresets = {
@@ -279,6 +218,20 @@ const withWeight: TypePresets = {
     value: { family: "Inter", size: 16, weight: 600, lineHeight: 1.4 },
   },
   caption: { name: "Caption", value: { family: "Inter", size: 12 } },
+};
+
+/** Presets that carry a trio role and one that does not, so the badge's
+ *  presence and its absence are both read. */
+const withRoles: TypePresets = {
+  display: {
+    name: "Display",
+    value: { family: "Inter", size: 36, weight: 600, trioRole: "heading" },
+  },
+  text: {
+    name: "Text",
+    value: { family: "Inter", size: 16, trioRole: "body" },
+  },
+  plain: { name: "Plain", value: { family: "Inter", size: 14 } },
 };
 
 /** A library whose *first declared* key is also the one the selection is set
@@ -293,38 +246,81 @@ const withNumbers: TypePresets = {
 };
 const firstDeclaredPresetId = Object.keys(withNumbers)[0]!;
 
-/** The readout the pane states its answer in, as against the chooser: the
- *  chooser prints preset names too, so a case that read the whole pane could
- *  not tell the two apart. */
-function binding(host: HTMLElement): HTMLElement {
-  const found = host.querySelector<HTMLElement>(
-    "[data-yunari-type-preset-binding]",
+it("draws each preset as a row with a specimen and a resolution, and no input controls", async () => {
+  // DESIGN.md §5.1–§5.3: a row with a well would read as editable. This row is
+  // a selector — one pressable line, nothing to type in.
+  const { host } = await mount(withRoles);
+  const row = host.querySelector<HTMLButtonElement>(
+    '[data-yunari-type-preset-row="display"]',
   );
-  if (found === null) throw new Error("the list states no binding");
-  return found;
-}
+  if (row === null) throw new Error("no display row");
 
-it("shows each preset's resolved family, weight and size as a resolution, not as a field", async () => {
-  // DESIGN.md §5.1–§5.3: a border means editable, and the two treatments sit inches
-  // apart in this pane. The expected line is `resolveTypePreset`'s own answer,
-  // read from the same record the panel is given — never a copy of its rule.
-  const { host } = await mount(withWeight);
+  expect(row.tagName).toBe("BUTTON");
+  expect(row.getAttribute("aria-pressed")).toBe("false");
+
+  // The specimen is `Aa` in the preset's own family: packaged faces are already
+  // in `document.fonts`, so nothing is fetched to draw it.
+  const specimen = row.querySelector<HTMLElement>(
+    "[data-yunari-type-preset-specimen]",
+  );
+  expect(specimen?.textContent).toBe("Aa");
+  expect(specimen?.style.fontFamily).toBe("Inter");
+
+  expect(row.textContent).toContain(withRoles.display?.name);
+  // The badge is the copy table's word, read on the badge itself rather than
+  // matched anywhere in the row: a hardcoded "Heading" would otherwise hide
+  // behind the preset's own name.
+  expect(row.querySelector("[data-yunari-type-preset-role]")?.textContent).toBe(
+    uiCopy.assets.fontPreview.role.heading,
+  );
+
   const expected = resolveTypePreset(
-    { typePresets: withWeight },
-    "typePresets.body",
+    { typePresets: withRoles },
+    "typePresets.display",
   );
-  const line = resolutionLine(host, "body");
+  expect(resolutionLine(host, "display").textContent).toBe(expected);
+  expect(resolutionLine(host, "display").textContent).not.toBe("");
 
-  expect(line.textContent).toBe(expected);
-  expect(line.textContent).not.toBe("");
+  expect(row.querySelector("input, select, textarea")).toBeNull();
+  // A roleless preset carries no badge, so the badge means a role rather than
+  // "every row has one".
+  expect(
+    host.querySelector(
+      '[data-yunari-type-preset-row="plain"] [data-yunari-type-preset-role]',
+    ),
+  ).toBeNull();
+  // The pane is a list now: the chooser that browsed it for the deleted field
+  // set is gone with the fields.
+  expect(host.querySelector("[data-yunari-type-preset]")).toBeNull();
+});
 
-  // A row, not a control: no border on the row, no bordered descendant, and
-  // nothing to type in. This is where a well would land.
-  const row = line.parentElement;
-  expect(row?.classList.contains("border")).toBe(false);
-  expect(row?.querySelector('[class~="border"]')).toBeNull();
-  expect(row?.querySelector("input, select, button, textarea")).toBeNull();
-  expect(row?.textContent).toContain("Body");
+it("selects a token when a row is pressed, and clears the canvas selection", async () => {
+  const surface = canvas({ selectedCount: 1, activeKind: "object" });
+  const selection = new SelectionStore();
+  selection.set(surface.bridge);
+  const tokenSelection = new TokenSelectionStore(selection);
+  const { host } = await mount(withWeight, { tokenSelection });
+
+  await click(
+    host.querySelector('[data-yunari-type-preset-row="caption"]') as Element,
+  );
+
+  // The canvas selection is cleared through the bridge's own empty-list
+  // gesture — the Fabric boundary stays in `bridge.ts`.
+  expect(surface.selectLayers).toHaveBeenCalledWith([]);
+  expect(selection.get().selectedCount).toBe(0);
+  expect(tokenSelection.get()).toEqual({ kind: "preset", id: "caption" });
+  // The row states the token selection, so a press reads back on the list.
+  expect(
+    host
+      .querySelector('[data-yunari-type-preset-row="caption"]')
+      ?.getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(
+    host
+      .querySelector('[data-yunari-type-preset-row="body"]')
+      ?.getAttribute("aria-pressed"),
+  ).toBe("false");
 });
 
 it("says nothing is selected rather than showing the first declared preset", async () => {
@@ -425,219 +421,15 @@ it("reads a dangling reference as unresolved, which is neither empty answer", as
   expect(text).not.toContain(uiCopy.panels.selectionNoType);
 });
 
-it("opens the chooser on the preset the selection is set in, and stays browseable", async () => {
-  // Library selection is not document selection: the chooser opens on what the
-  // selection is set in, the author may still pick any preset to edit, and the
-  // readout above keeps stating the selection's own reference either way.
-  const selection = stage();
-  const { host } = await mount(withNumbers, { selection: selection.source });
-
-  await act(async () => selection.set("24-400", true));
-  const chooser = (): string | null | undefined =>
-    host
-      .querySelector("[data-yunari-type-preset] [data-yunari-value]")
-      ?.getAttribute("data-yunari-value");
-  expect(chooser()).toBe("24-400");
-
-  await chooseIn("[data-yunari-type-preset]", "body");
-
-  expect(chooser()).toBe("body");
-  expect(binding(host).textContent).toContain(withNumbers["24-400"]!.name);
-});
-
-it("drops an optional field when the author empties it, rather than writing an empty string", async () => {
-  const { change } = await mount(withWeight);
-
-  await commitField("[data-yunari-type-weight]", "");
-
-  const committed = change.mock.calls[0]?.[0] as TypePresets;
-  expect(Object.keys(committed)).toEqual(["body", "caption"]);
-  expect(committed.body?.value).not.toHaveProperty("weight");
-  // The rest of the value survives the removal.
-  expect(committed.body?.value).toEqual({
-    family: "Inter",
-    size: 16,
-    lineHeight: 1.4,
-  });
-});
-
-it("drops an optional number when the author clears it", async () => {
-  const { change } = await mount(withWeight);
-
-  await commitField("[data-yunari-type-line-height]", "");
-
-  const committed = change.mock.calls[0]?.[0] as TypePresets;
-  expect(committed.body?.value).not.toHaveProperty("lineHeight");
-  expect(committed.body?.value?.weight).toBe(600);
-});
-
-it("drops an optional letter spacing when the author clears it", async () => {
-  // The third clause of the same rule, and its own sibling block: a copy-paste
-  // slip is what a shared weight/lineHeight case cannot see.
-  const { change } = await mount({
-    body: {
-      name: "Body",
-      value: {
-        family: "Inter",
-        size: 16,
-        weight: 600,
-        lineHeight: 1.4,
-        letterSpacing: 0.2,
-      },
-    },
-  });
-
-  await commitField("[data-yunari-type-letter-spacing]", "");
-
-  // The whole value, so a clear that committed nothing at all is red here too.
-  expect((change.mock.calls[0]?.[0] as TypePresets).body?.value).toEqual({
-    family: "Inter",
-    size: 16,
-    weight: 600,
-    lineHeight: 1.4,
-  });
-});
-
-it("refuses an empty name or family", async () => {
-  const { change } = await mount(withWeight);
-
-  await commitField("[data-yunari-type-name]", "");
-  expect(change).not.toHaveBeenCalled();
-
-  // Whitespace is empty after the trim the rule applies, so it is refused too;
-  // a family of `"   "` would be a name no renderer can resolve.
-  await commitField("[data-yunari-type-family]", "   ");
-  expect(change).not.toHaveBeenCalled();
-});
-
-it("refuses a size that is not a positive number", async () => {
-  const { change } = await mount(withWeight);
-
-  await commitField("[data-yunari-type-size]", "0");
-  expect(change).not.toHaveBeenCalled();
-
-  await commitField("[data-yunari-type-size]", "abc");
-  expect(change).not.toHaveBeenCalled();
-
-  await commitField("[data-yunari-type-size]", "18");
-  expect((change.mock.calls[0]?.[0] as TypePresets).body?.value.size).toBe(18);
-});
-
-it("refuses to delete the last preset, because nothing is left to reassign to", async () => {
-  const remove = vi.fn();
-  const { host } = await mount(
-    { body: { name: "Body", value: { family: "Inter", size: 16 } } },
-    { onDelete: remove },
-  );
-
-  const remove1 = host.querySelector<HTMLButtonElement>(
-    "[data-yunari-type-delete]",
-  );
-  expect(remove1).toHaveProperty("disabled", true);
-  await click(remove1!);
-  expect(remove).not.toHaveBeenCalled();
-});
-
-it("offers every other preset as the replacement, and deletes through the port", async () => {
-  const remove = vi.fn();
-  const { host } = await mount(withWeight, { onDelete: remove });
-
-  const deleteControl = host.querySelector<HTMLButtonElement>(
-    "[data-yunari-type-delete]",
-  );
-  expect(deleteControl).toHaveProperty("disabled", false);
-
-  const options = await openControl("[data-yunari-type-replacement]");
-  expect(
-    options.map((option) => option.getAttribute("data-yunari-option")),
-  ).toEqual(["caption"]);
-
-  const caption = options.find(
-    (option) => option.getAttribute("data-yunari-option") === "caption",
-  )!;
-  await pointerDown(caption);
-  await click(caption, 1);
-  await flush();
-
-  await click(deleteControl!);
-  expect(remove.mock.calls).toEqual([["body", "caption"]]);
-});
-
-it("runs the face preview, the face adoption and the trio adoption through the ports it was given", async () => {
-  const fontActions = ports();
-  const { host } = await mount(withWeight, { fontActions });
-  // The second face, so the choice is proven to be the one the ports receive
-  // rather than the list's first row.
-  const face = catalogFaces()[1]!;
-
-  await chooseIn("[data-yunari-font-face]", face.id);
-  await click(host.querySelector("[data-yunari-font-preview]")!);
-  expect(fontActions.preview.mock.calls).toEqual([[face]]);
-
-  await click(host.querySelector("[data-yunari-font-apply]")!);
-  expect(fontActions.applyFace.mock.calls).toEqual([["body", face]]);
-
-  const trio = fontTrios()[1]!;
-  await chooseIn("[data-yunari-font-trio]", trio.id);
-  await click(host.querySelector("[data-yunari-font-trio-apply]")!);
-  expect(fontActions.applyTrio.mock.calls).toEqual([[trio.id]]);
-});
-
-it("names the two adoption controls Font face and Font trio", async () => {
-  // Amended R20. These were `Font`/`Trio` on the imperative panel; the words are
-  // pinned **on the controls** and not only in the table, so a rename in
-  // `ui-copy.ts` cannot drift the two names back with the whole suite green.
-  const { host } = await mount(withWeight, { fontActions: ports() });
-
-  expect(uiCopy.panels.fontFace).toBe("Font face");
-  expect(uiCopy.panels.fontTrioAdopt).toBe("Font trio");
-  expect(controlName(host, "[data-yunari-font-face]")).toBe("Font face");
-  expect(controlName(host, "[data-yunari-font-trio]")).toBe("Font trio");
-});
-
-it("preserves packaged face metadata when editing size", async () => {
-  const { change } = await mount({
-    body: {
-      name: "Body",
-      value: {
-        family: "Inter",
-        size: 16,
-        weight: 600,
-        letterSpacing: 0.2,
-        lineHeight: 1.4,
-        face: { assetId: "inter-600" },
-        trioRole: "body",
-      },
-    },
-  });
-
-  await commitField("[data-yunari-type-size]", "18");
-
-  expect(change).toHaveBeenLastCalledWith({
-    body: {
-      name: "Body",
-      value: {
-        family: "Inter",
-        size: 18,
-        weight: 600,
-        letterSpacing: 0.2,
-        lineHeight: 1.4,
-        face: { assetId: "inter-600" },
-        trioRole: "body",
-      },
-    },
-  });
-});
-
 it("adds a preset under the first free id", async () => {
   const { host, change } = await mount(withWeight);
 
-  await click(host.querySelector("[data-yunari-type-preset-add]")!);
+  await click(host.querySelector("[data-yunari-type-preset-add]") as Element);
 
   const added = change.mock.calls[0]?.[0] as TypePresets;
   expect(added.type).toEqual({
     name: uiCopy.panels.newType,
-    value: { family: "Segoe UI, sans-serif", size: 16 },
+    value: newPresetType,
   });
   expect(added.body).toEqual(withWeight.body);
 });

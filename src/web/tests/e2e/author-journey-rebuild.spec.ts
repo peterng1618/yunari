@@ -759,9 +759,6 @@ test.describe("the rest of the composition", () => {
       paint: ["CPU blue"],
     });
     await page.locator('[data-yunari-chart-setting="showAxes"]').uncheck();
-    await page
-      .locator('[data-yunari-chart-setting="showCategoryLabels"]')
-      .uncheck();
     await addText(page, {
       name: "storage-card-name",
       text: "Games (D:)",

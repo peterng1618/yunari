@@ -10,6 +10,7 @@ const encoder = new TextEncoder();
 /** The same hand-built container `classify.test.ts` uses. */
 function buildPackage(
   members: readonly (readonly [string, string])[],
+  magic = "PKGV0001",
 ): Uint8Array {
   const entries = members.map(
     ([name, body]) => [encoder.encode(name), encoder.encode(body)] as const,
@@ -24,7 +25,7 @@ function buildPackage(
   const view = new DataView(out.buffer);
 
   view.setUint32(0, 8, true);
-  out.set(encoder.encode("PKGV0001"), 4);
+  out.set(encoder.encode(magic), 4);
   view.setUint32(12, entries.length, true);
 
   let cursor = 16;
@@ -245,6 +246,87 @@ describe("the Wallpaper Engine source", () => {
     await source.listing();
 
     expect(await source.bytesOf("302", "preview")).toBeUndefined();
+  });
+
+  it("refuses an item the library does not hold without running anything", async () => {
+    await fixture();
+    let asked = 0;
+    const source = createWallpaperEngineSource({
+      locate,
+      requestExport: async () => {
+        asked += 1;
+        return { ok: true };
+      },
+    });
+
+    expect(await source.mobileExport("999")).toEqual({
+      ok: false,
+      reason: "refused",
+    });
+    expect(asked).toBe(0);
+  });
+
+  it("asks the engine for the title its descriptor carries", async () => {
+    await fixture();
+    await fs.mkdir(install.myProjects, { recursive: true });
+    const titles: string[] = [];
+    const source = createWallpaperEngineSource({
+      locate,
+      // A refusal, so nothing is saved and no harvest starts.
+      requestExport: async (request) => {
+        titles.push(request.title);
+        return { ok: false, reason: "refused" };
+      },
+    });
+
+    expect(await source.mobileExport("201")).toEqual({
+      ok: false,
+      reason: "refused",
+    });
+    // Not the cache's title and not the directory name: the project the engine
+    // reads is the one this unpack wrote.
+    expect(titles).toEqual(["Still Scene"]);
+  });
+
+  it("leaves the saved package's video where the export watcher finds it", async () => {
+    await fixture();
+    await fs.mkdir(install.myProjects, { recursive: true });
+    const documents = path.join(tmp, "Documents");
+    await fs.mkdir(documents, { recursive: true });
+    const source = createWallpaperEngineSource({
+      locate,
+      documentsDirectory: documents,
+      requestExport: async () => ({ ok: true }),
+    });
+
+    const since = Date.now();
+    expect(await source.mobileExport("201")).toEqual({ ok: true });
+
+    // The author's Save click, which is what finishes the engine's export.
+    await fs.writeFile(
+      path.join(documents, "Still Scene.mpkg"),
+      buildPackage(
+        [
+          ["project.json", "{}"],
+          ["wallpaper.mp4", "video-bytes"],
+        ],
+        "PKGM0014",
+      ),
+    );
+
+    let files = await source.exportsSince(since);
+    for (let poll = 0; poll < 40 && files.length === 0; poll += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      files = await source.exportsSince(since);
+    }
+
+    expect(files).toHaveLength(1);
+    const name = files[0]?.name ?? "";
+    expect(name).toMatch(/^yunari-201-\d+\.mp4$/);
+
+    const served = await source.exportBytes(name);
+    expect(served?.contentType).toBe("video/mp4");
+    expect(new TextDecoder().decode(served?.bytes)).toBe("video-bytes");
   });
 });
 

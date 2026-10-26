@@ -1,5 +1,6 @@
 import type { ChartFamily } from "../theme/document.js";
 import { ANIMATION_EASINGS, type AnimationEasing } from "./animation.js";
+import { SEGMENT_DIVISORS } from "./segments.js";
 
 /**
  * Which settings each chart family accepts, as editable field descriptors.
@@ -39,7 +40,7 @@ import { ANIMATION_EASINGS, type AnimationEasing } from "./animation.js";
  * `path` names where a field writes when it is not the top-level `property`, and
  * `visibleWhen` asks it only in the state it applies to. Both exist for exactly
  * two settings — `PieSettings.total.value` and the optional `AnimationSettings`
- * block on all four families — which is why ADR-0028 chose a path over a nested
+ * block on every family — which is why ADR-0028 chose a path over a nested
  * descriptor tree. A surface reads and writes them through `settings-path.ts`,
  * so the write path is the renderer's read path.
  *
@@ -147,13 +148,30 @@ export interface SettingsFieldDescriptor {
    * The field is a question about one state of another, asked only in that
    * state — `total.value` applies when `total.kind` is `fixed`.
    */
-  readonly visibleWhen?: {
-    readonly path: readonly string[];
-    readonly equals: string;
-  };
+  readonly visibleWhen?:
+    | {
+        readonly path: readonly string[];
+        readonly equals: string;
+      }
+    | {
+        /** Asked when the state at `path` is **not** this value. An absent
+         *  setting is not the named state either, so a question about a mode
+         *  the document never opted into stays hidden. */
+        readonly path: readonly string[];
+        readonly notEquals: string;
+      };
   readonly min?: number;
   readonly max?: number;
+  /** How far one step of a bounded number moves, for the surface that draws a
+   *  native field; absent means one. */
   readonly step?: number;
+  /**
+   * The field accepts whole numbers only. A share that means "how wide the gap
+   * is" is not finer than a percent in the author's terms, and the envelope
+   * refuses a fraction the way it refuses an out-of-bounds value — the same
+   * rule `values` states for a discrete field.
+   */
+  readonly integer?: true;
   /**
    * What this field's ceiling is read from, when it is not a number.
    *
@@ -176,6 +194,24 @@ export interface SettingsFieldDescriptor {
     readonly value: string;
     readonly label: string;
   }[];
+  /**
+   * For `number`, the only values the field accepts, in ascending order.
+   *
+   * A discrete setting is not a bounded one: `min`/`max` alone would offer every
+   * integer between the ends, and each of those is a value the adapters cannot
+   * draw. The list is the document's own — the envelope refuses a present value
+   * outside it — so the control, the loader and the adapters read one list.
+   */
+  readonly values?: readonly number[];
+  /**
+   * How many decimals the control shows. The stored value keeps its own
+   * precision; this is display only, so a share reads `2.5` rather than `2.50`
+   * or a bare `2`.
+   */
+  readonly decimals?: number;
+  /** The unit the number is measured in, written beside the control so a share
+   *  of the chart is not read as pixels or degrees. */
+  readonly suffix?: string;
 }
 
 /** Persisted chart paint settings; token choice is shared across editor surfaces. */
@@ -192,9 +228,10 @@ export interface ChartPaintFieldDescriptor {
   readonly multiple?: true;
 }
 
+/** No `smooth`: a smoothed segment is bent by the points either side of it, so
+    a live line's painted history would move on every batch (0116). */
 const INTERPOLATION = [
   { value: "linear", label: "Linear" },
-  { value: "smooth", label: "Smooth" },
   { value: "step", label: "Step" },
 ] as const;
 
@@ -213,6 +250,11 @@ const SAMPLING = [
 const ORIENTATION = [
   { value: "horizontal", label: "Horizontal" },
   { value: "vertical", label: "Vertical" },
+] as const;
+
+const RADAR_SHAPE = [
+  { value: "polygon", label: "Polygon" },
+  { value: "circle", label: "Circle" },
 ] as const;
 
 /** Every easing named for an author; a `Record` so a new one must be named too. */
@@ -284,7 +326,7 @@ const ANIMATION_FIELDS: readonly SettingsFieldDescriptor[] = [
 /**
  * Every scalar setting, per family.
  *
- * Keyed by `ChartFamily` as a `Record`, so a fifth family is a compile error
+ * Keyed by `ChartFamily` as a `Record`, so a new family is a compile error
  * until it gains a row — the same mechanism the capability matrix uses.
  *
  * Array order is the likelihood order: the fields an author reaches for most sit
@@ -345,6 +387,41 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       hint: "Rounds the two cut ends of the arc instead of leaving them square.",
     },
     {
+      property: "segmentDivisor",
+      label: "Segments",
+      kind: "number",
+      section: "content",
+      hint: "Splits the arc into equal slices, each inheriting the rounded ends; 100 leaves it continuous.",
+      min: 1,
+      max: 100,
+      values: SEGMENT_DIVISORS,
+    },
+    {
+      property: "segmentSpacingPercent",
+      label: "Segment spacing",
+      kind: "number",
+      section: "content",
+      optional: true,
+      hint: "How wide the empty space is, as a share of a slice; 100 leaves as much space as painted slice.",
+      min: 1,
+      max: 100,
+      integer: true,
+      suffix: "%",
+    },
+    {
+      property: "segmentFill",
+      label: "Fill",
+      kind: "select",
+      section: "content",
+      optional: true,
+      hint: "Whole lights the slice the reading reaches; partial stops the fill at the reading.",
+      visibleWhen: { path: ["segmentDivisor"], notEquals: "100" },
+      options: [
+        { value: "whole", label: "Whole segment" },
+        { value: "partial", label: "Partial segment" },
+      ],
+    },
+    {
       property: "gradientSegments",
       label: "Gradient segments",
       kind: "number",
@@ -372,7 +449,7 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       label: "Interpolation",
       kind: "select",
       section: "content",
-      hint: "How samples are joined: straight segments, a smoothed curve, or steps.",
+      hint: "How samples are joined: straight segments or steps.",
       options: INTERPOLATION,
     },
     {
@@ -438,7 +515,7 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       label: "Show axes",
       kind: "boolean",
       section: "content",
-      hint: "Draws the time and value axes and their grid.",
+      hint: "Draws the time and value axes and their gridlines.",
     },
     {
       property: "sampling",
@@ -516,18 +593,46 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       bound: "halfDrawnBox",
     },
     {
+      property: "segmentDivisor",
+      label: "Segments",
+      kind: "number",
+      section: "content",
+      hint: "Splits the bar into equal slices, each inheriting the corner radius; 100 leaves it continuous.",
+      min: 1,
+      max: 100,
+      values: SEGMENT_DIVISORS,
+    },
+    {
+      property: "segmentSpacingPercent",
+      label: "Segment spacing",
+      kind: "number",
+      section: "content",
+      optional: true,
+      hint: "How wide the empty space is, as a share of a slice; 100 leaves as much space as painted slice.",
+      min: 1,
+      max: 100,
+      integer: true,
+      suffix: "%",
+    },
+    {
+      property: "segmentFill",
+      label: "Fill",
+      kind: "select",
+      section: "content",
+      optional: true,
+      hint: "Whole lights the slice the reading reaches; partial stops the fill at the reading.",
+      visibleWhen: { path: ["segmentDivisor"], notEquals: "100" },
+      options: [
+        { value: "whole", label: "Whole segment" },
+        { value: "partial", label: "Partial segment" },
+      ],
+    },
+    {
       property: "showAxes",
       label: "Show axes",
       kind: "boolean",
       section: "content",
-      hint: "Draws the value axis with its labels and gridlines.",
-    },
-    {
-      property: "showCategoryLabels",
-      label: "Show labels",
-      kind: "boolean",
-      section: "content",
-      hint: "Draws each series' name beside its own bar.",
+      hint: "Draws the value axis and its gridlines.",
     },
     ...ANIMATION_FIELDS,
   ],
@@ -592,6 +697,28 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       bound: "halfDrawnBox",
     },
     {
+      property: "segmentDivisor",
+      label: "Segments",
+      kind: "number",
+      section: "content",
+      hint: "Splits each slice's fill into equal wedges, each inheriting the corner radius; 100 leaves it continuous.",
+      min: 1,
+      max: 100,
+      values: SEGMENT_DIVISORS,
+    },
+    {
+      property: "segmentSpacingPercent",
+      label: "Segment spacing",
+      kind: "number",
+      section: "content",
+      optional: true,
+      hint: "How wide the empty space is, as a share of a slice; 100 leaves as much space as painted slice.",
+      min: 1,
+      max: 100,
+      integer: true,
+      suffix: "%",
+    },
+    {
       property: "total",
       label: "Total",
       kind: "select",
@@ -613,12 +740,164 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       visibleWhen: { path: ["total", "kind"], equals: "fixed" },
       min: 0,
     },
+    ...ANIMATION_FIELDS,
+  ],
+  radar: [
     {
-      property: "showLabels",
-      label: "Show labels",
+      property: "min",
+      label: "Minimum",
+      kind: "number",
+      section: "content",
+      hint: "The value the centre stands for; a lower reading draws at the centre.",
+    },
+    {
+      property: "max",
+      label: "Maximum",
+      kind: "number",
+      section: "content",
+      hint: "The value the outer edge stands for, shared by every spoke. Readings in different units must be normalised through the series.",
+    },
+    {
+      property: "shape",
+      label: "Shape",
+      kind: "select",
+      section: "content",
+      hint: "Joins the spokes with straight edges or draws the frame as a circle.",
+      options: RADAR_SHAPE,
+    },
+    {
+      property: "splitNumber",
+      label: "Split rings",
+      kind: "number",
+      section: "content",
+      advanced: true,
+      hint: "How many rings divide the scale from the centre to the edge.",
+      min: 1,
+      max: 10,
+    },
+    {
+      property: "lineWidth",
+      label: "Line width",
+      kind: "number",
+      section: "content",
+      hint: "How thick the polygon's outline is drawn, in pixels.",
+      min: 0,
+      bound: "drawnBox",
+    },
+    {
+      property: "showMarkers",
+      label: "Show markers",
       kind: "boolean",
       section: "content",
-      hint: "Draws each slice's name and its leader line.",
+      hint: "Draws a dot at each reading on the polygon.",
+    },
+    {
+      property: "markerSize",
+      label: "Marker size",
+      kind: "number",
+      section: "content",
+      advanced: true,
+      hint: "How large each reading's dot is, in pixels.",
+      min: 0,
+      bound: "drawnBox",
+    },
+    {
+      property: "showAxes",
+      label: "Show axes",
+      kind: "boolean",
+      section: "content",
+      hint: "Draws the spokes, the rings and the split area behind the polygon.",
+    },
+    ...ANIMATION_FIELDS,
+  ],
+  polarBar: [
+    {
+      property: "startAngle",
+      label: "Start angle",
+      kind: "number",
+      section: "content",
+      hint: "Where the first category begins, in degrees — 90 is twelve o'clock and bars run clockwise.",
+      min: -360,
+      max: 360,
+    },
+    {
+      property: "innerRadiusPercent",
+      label: "Inner radius %",
+      kind: "number",
+      section: "content",
+      hint: "How far from the centre the bars begin; anything above zero leaves a hole.",
+      min: 0,
+      max: 100,
+    },
+    {
+      property: "outerRadiusPercent",
+      label: "Outer radius %",
+      kind: "number",
+      section: "content",
+      hint: "How far out a full bar reaches; 100 fills the available space.",
+      min: 0,
+      max: 100,
+    },
+    {
+      property: "min",
+      label: "Minimum",
+      kind: "number",
+      section: "content",
+      hint: "The value the inner edge stands for; a lower reading draws as an empty bar.",
+    },
+    {
+      property: "max",
+      label: "Maximum",
+      kind: "number",
+      section: "content",
+      hint: "The value a bar reaching the outer edge stands for; a higher reading draws full rather than rescaling.",
+    },
+    {
+      property: "barWidth",
+      label: "Bar width",
+      kind: "number",
+      section: "content",
+      optional: true,
+      hint: "How many degrees wide each bar is; empty lets the category gap size it.",
+      min: 0,
+      max: 360,
+    },
+    {
+      property: "categoryGapPercent",
+      label: "Category gap %",
+      kind: "number",
+      section: "content",
+      advanced: true,
+      hint: "How much of each angle slot is left as space between bars.",
+      min: 0,
+      max: 100,
+    },
+    {
+      property: "cornerRadius",
+      label: "Corner radius",
+      kind: "number",
+      section: "content",
+      hint: "How much each bar's own corners are rounded, in pixels.",
+      min: 0,
+      bound: "halfDrawnBox",
+    },
+    {
+      property: "trackCornerRadius",
+      label: "Track corner radius",
+      kind: "number",
+      section: "content",
+      optional: true,
+      advanced: true,
+      hint: "The unfilled track's own rounding, beside the bar's. Empty leaves it square.",
+      min: 0,
+      bound: "halfDrawnBox",
+    },
+    {
+      property: "showAxes",
+      label: "Show axes",
+      kind: "boolean",
+      section: "content",
+      hint: "Draws the angle and radius axes with their gridlines, without labels.",
     },
     ...ANIMATION_FIELDS,
   ],
@@ -696,6 +975,34 @@ export const CHART_PAINT_FIELDS: Readonly<
       section: "paint",
       hint: "One colour per slice, cycled when there are more slices than entries.",
       multiple: true,
+    },
+  ],
+  radar: [
+    {
+      property: "stroke",
+      label: "Outline paint",
+      section: "paint",
+      hint: "The polygon's outline. One polygon cannot carry a colour per spoke, so a threshold takes its top band.",
+    },
+    {
+      property: "area",
+      label: "Fill paint",
+      section: "paint",
+      hint: "The area inside the polygon; empty draws the outline alone.",
+    },
+  ],
+  polarBar: [
+    {
+      property: "fill",
+      label: "Fill paint",
+      section: "paint",
+      hint: "The ink each bar is drawn in.",
+    },
+    {
+      property: "track",
+      label: "Track paint",
+      section: "paint",
+      hint: "The unfilled track behind each bar; giving one turns the bars into progress bars.",
     },
   ],
 };

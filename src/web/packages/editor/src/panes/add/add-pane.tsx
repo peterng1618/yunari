@@ -6,8 +6,7 @@ import { chartFamilyGlyph } from "../composition/kind-mark.js";
 import { CARD_DIAGRAMS } from "./card-diagrams.js";
 
 /**
- * The Add pane's body: `insertGroups()`, drawn as tiles, and the file path the
- * caller hands in at the foot.
+ * The Add pane's body: `insertGroups()`, drawn as tiles.
  *
  * **The list is not re-derived here.** The pane renders the groups it is given,
  * in the order it is given them, and the shape of the drawing follows from that
@@ -30,18 +29,14 @@ import { CARD_DIAGRAMS } from "./card-diagrams.js";
  *
  * A group is scoped by `data-yunari-add-group="<kind>"` — the group's own
  * identity, never the heading above it, which is copy an author reads and a
- * copy change moves. The pane holds the file path as well as this list, so a
- * locator scoped to the pane reaches controls that are not insert controls.
+ * copy change moves.
  */
 export function AddPane({
   groups,
   onInsert,
-  children,
 }: {
   readonly groups: readonly InsertGroup[];
   readonly onInsert: (object: InsertableObject) => void;
-  /** What sits below the insert grid. The pane places it; it does not own it. */
-  readonly children?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <>
@@ -76,7 +71,6 @@ export function AddPane({
           </fieldset>
         );
       })}
-      {children}
     </>
   );
 }

@@ -2,6 +2,7 @@ import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import {
+  checkDeclaredAssets,
   readThemePackage,
   writeThemePackage,
   ZIP_MAX_CENTRAL_DIRECTORY_BYTES,
@@ -394,6 +395,22 @@ describe("a package's thumbnail", () => {
       }),
     ).toMatchObject({ ok: false });
   });
+
+  it("checks the writer's asset rule without writing, with the writer's answer", () => {
+    // Missing bytes for a declared asset: the pre-trash cleanup asks this
+    // rather than compressing the package, so both must refuse identically.
+    const missing = { envelope, assets: {} };
+    expect(checkDeclaredAssets(missing.envelope, missing.assets)).toEqual(
+      writeThemePackage(missing),
+    );
+    expect(checkDeclaredAssets(missing.envelope, missing.assets)).toEqual({
+      ok: false,
+      message: "Package assets must exactly match the theme declaration.",
+    });
+    expect(
+      checkDeclaredAssets(envelope, { "assets/logo.png": png(1) }),
+    ).toEqual({ ok: true });
+  });
 });
 
 describe("credits", () => {
@@ -407,9 +424,54 @@ describe("credits", () => {
         license: "ISC",
         changes: "Imported unchanged",
         source: { url: "https://lucide.dev/icons/house" },
+        assetId: "asset-1",
       },
     ],
   };
+
+  it("round-trips an assetId on a credit", () => {
+    const written = writeThemePackage({
+      envelope,
+      assets: { "assets/logo.png": png(1) },
+      credits,
+    });
+    expect(written.ok).toBe(true);
+    if (!written.ok) return;
+
+    const read = readThemePackage(written.bytes);
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.credits?.entries[0]?.assetId).toBe("asset-1");
+  });
+
+  it("still reads a credit written before assetId existed", () => {
+    const before = {
+      format: "yunari-theme-credits" as const,
+      version: 1 as const,
+      entries: [
+        {
+          kind: "icon",
+          title: "house",
+          license: "ISC",
+          changes: "Imported unchanged",
+          source: { url: "https://lucide.dev/icons/house" },
+        },
+      ],
+    };
+    const written = writeThemePackage({
+      envelope,
+      assets: { "assets/logo.png": png(1) },
+      credits: before,
+    });
+    expect(written.ok).toBe(true);
+    if (!written.ok) return;
+
+    const read = readThemePackage(written.bytes);
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.credits).toEqual(before);
+    expect(read.credits?.entries[0]).not.toHaveProperty("assetId");
+  });
 
   it("writes the member the manifest names, and reads it back", () => {
     const written = writeThemePackage({

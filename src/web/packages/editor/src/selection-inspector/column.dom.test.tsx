@@ -479,7 +479,7 @@ describe("SelectionColumn", () => {
    * ask for that surface. The preset a face applies to is read where the write
    * happens, because only the session still holds the selected object.
    */
-  it("renders a button that asks for the finder instead of the picker", async () => {
+  it("renders a button that asks for the finder", async () => {
     const openPicker = vi.fn();
     const text = new IText("", { left: 0, top: 0 });
     text.set({
@@ -504,8 +504,6 @@ describe("SelectionColumn", () => {
 
     const field = host.querySelector("[data-yunari-font-face-field]");
     expect(field).not.toBeNull();
-    // The picker stayed with the catalogue: nothing of it is mounted here.
-    expect(field?.querySelector("[data-yunari-font-picker]")).toBeNull();
 
     const button = field?.querySelector<HTMLButtonElement>(
       "[data-yunari-open-font-picker]",

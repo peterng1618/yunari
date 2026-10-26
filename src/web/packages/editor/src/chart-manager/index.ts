@@ -4,15 +4,21 @@ import {
   type ChartContent,
   type ChartFamily,
   carriedPaintFor,
+  chartReadingSignature,
   type FabricGlobals,
-  lineHistorySeconds,
   reassignChartPaintReferences,
   type SampleSource,
   SEMANTIC_KEYS,
   type SemanticKeyDescriptor,
   seriesPaintFor,
 } from "@yunari/renderer-core";
-import { type SceneAdapter, YunariChart } from "@yunari/scene-fabric";
+import {
+  type ChartRefreshRate,
+  chartAnimationFor,
+  chartPlaybackDelayFor,
+  type SceneAdapter,
+  YunariChart,
+} from "@yunari/scene-fabric";
 import { type FabricObject, Group } from "fabric/es";
 import type { EditorInteraction } from "../editor-interaction.js";
 import {
@@ -83,6 +89,18 @@ function newChart(
         family,
         settings: createNewChartDefaults(globals, family),
       });
+    case "radar":
+      return new YunariChart({
+        ...common,
+        family,
+        settings: createNewChartDefaults(globals, family),
+      });
+    case "polarBar":
+      return new YunariChart({
+        ...common,
+        family,
+        settings: createNewChartDefaults(globals, family),
+      });
   }
 }
 
@@ -129,6 +147,26 @@ function drawnEdgeOf(
     : {};
 }
 
+/**
+ * The smaller edge of the canvas ECharts draws into, in backing pixels.
+ *
+ * The scene box at its own scale times the object's render scale: a gauge's cap
+ * clearance is a pixel measure against that canvas, and the option's thickness
+ * is in the same pixels, so the two cannot be mixed. Absent when the object
+ * measures nothing, and the adapter then skips the clearance rather than
+ * guessing a size.
+ */
+function drawnEdgePxOf(
+  chart: YunariChart,
+): { readonly drawnEdgePx: number } | Record<string, never> {
+  const smaller =
+    Math.min(chart.width * chart.scaleX, chart.height * chart.scaleY) *
+    chart.renderScale;
+  return Number.isFinite(smaller) && smaller > 0
+    ? { drawnEdgePx: Math.floor(smaller) }
+    : {};
+}
+
 /** Yunari-owned chart semantics layered on the editor's generic canvas mechanics. */
 export class ChartManager {
   readonly #editor: EditorInteraction;
@@ -142,6 +180,7 @@ export class ChartManager {
   /** The readings a series may name, pulled at projection time so a catalogue
       refreshed after mount is offered on the next render. */
   readonly #descriptors: () => readonly SemanticKeyDescriptor[];
+  readonly #refreshRate: () => ChartRefreshRate;
 
   /**
    * The reading each chart last drew with, keyed by object id.
@@ -216,6 +255,7 @@ export class ChartManager {
     readonly globals?: FabricGlobals;
     /** The available readings; absent keeps the built-in vocabulary. */
     readonly descriptors?: () => readonly SemanticKeyDescriptor[];
+    readonly refreshRate?: () => ChartRefreshRate;
     readonly onBindingsChange?: (
       id: string,
       bindings: readonly Binding[],
@@ -227,6 +267,7 @@ export class ChartManager {
     this.#bindings = options.bindings ?? {};
     this.#globals = options.globals;
     this.#descriptors = options.descriptors ?? (() => SEMANTIC_KEYS);
+    this.#refreshRate = options.refreshRate ?? (() => 30);
     this.#onBindingsChange = options.onBindingsChange;
     this.#editor.canvas.on("object:modified", this.#rerasterizeScaledChart);
     this.#editor.canvas.on(
@@ -254,9 +295,11 @@ export class ChartManager {
 
   setGlobals(globals: FabricGlobals | undefined): void {
     this.#globals = globals;
-    // A palette decides every chart's ink, so new globals move a chart the
-    // data did not.
-    this.#applyCharts(true);
+    // A palette decides every chart's ink, so the ink is part of a chart's
+    // reading (`chartReadingSignature`). Forcing here redrew all seven Starter
+    // charts — seven ECharts `setOption`s and their animation work — on every
+    // live sample of a colour drag, including tokens no chart names.
+    this.#applyCharts(false);
   }
 
   /**
@@ -492,6 +535,10 @@ export class ChartManager {
     // the same one: read twice, a chart that moved between the two reads is
     // skipped for a window it never drew.
     const nowMs = Date.now();
+    const playbackDelayMs = chartPlaybackDelayFor(
+      this.#refreshRate(),
+      this.#source.chartPlaybackDelayMs,
+    );
     const visit = (objects: readonly object[]): void => {
       for (const object of objects) {
         if (object instanceof YunariChart) {
@@ -501,7 +548,19 @@ export class ChartManager {
           // does: the draw is still attempted, so `#applyChart` reports it.
           let reading: string | undefined;
           try {
-            reading = this.#readingSignature(id, object, nowMs);
+            const content = {
+              family: object.family,
+              settings: object.settings,
+            } as ChartContent;
+            reading = chartReadingSignature(
+              content,
+              this.#bindings[id] ?? [],
+              this.#source,
+              nowMs,
+              this.#globals?.palette,
+              playbackDelayMs,
+              drawnEdgePxOf(object).drawnEdgePx,
+            );
           } catch {
             reading = undefined;
           }
@@ -523,65 +582,6 @@ export class ChartManager {
     };
     visit(this.#editor.canvas.getObjects());
     if (drawn) this.#editor.canvas.requestRenderAll();
-  }
-
-  /**
-   * What this chart's own plan would draw, as one string.
-   *
-   * **The pull is the family's own**, because a reading that is not what the
-   * chart draws is not a reading. A gauge, a bar and a pie draw `latest`; a line
-   * draws its trailing window, so its newest entry is what moves — read with the
-   * same window the plan builder asks for (`windowSeconds` plus the source's own
-   * playback delay), because a shorter one would miss a sample that arrived late
-   * with an older timestamp. `history`'s newest entry is also what keeps the
-   * preview source honest: it answers `latest` from the wall clock, so a gauge
-   * bound to one genuinely moves on every call and is drawn for it.
-   *
-   * **A line's signature carries `nowMs`, because a line draws its window and
-   * the window is placed from the clock.** `buildLineOption` sets `xAxis.min`
-   * and `xAxis.max` from `nowMs` and extends the series one playback delay past
-   * the visible right edge, so two frames with one sample between them draw two
-   * different pictures. Gating on the sample alone held a trends chart at its
-   * data's cadence — 1 fps against the 30 fps the author chose, which is the
-   * refresh that never happened (vg-107 reversed this trade for the line family
-   * alone). A gauge, a bar and a pie read `latest` and are genuinely
-   * clock-independent, so they keep the data-only signature and an idle one is
-   * still skipped.
-   *
-   * A chart with no bindings draws a fixed placeholder, so its reading never
-   * moves and it is drawn once.
-   *
-   * **Nothing is guaranteed about `history(small).at(-1)` being `latest`**
-   * (`renderer-core/src/data/source.ts`): a sample whose own timestamp runs
-   * ahead of the store's `lastNowMs` — reachable with clock skew on a LAN device
-   * — is returned by `latest` and excluded by `history`. Reading `history` for a
-   * gauge was how a bar kept drawing the old value while its newest changed.
-   */
-  #readingSignature(id: string, chart: YunariChart, nowMs: number): string {
-    const content = {
-      family: chart.family,
-      settings: chart.settings,
-    } as ChartContent;
-    const readings = (this.#bindings[id] ?? [])
-      .map((binding) => {
-        const sample =
-          content.family === "line"
-            ? this.#source
-                .history(
-                  binding.semanticKey,
-                  lineHistorySeconds(
-                    content.settings.windowSeconds,
-                    this.#source.chartPlaybackDelayMs,
-                  ),
-                )
-                .at(-1)
-            : this.#source.latest(binding.semanticKey);
-        return `${binding.id}:${sample?.status ?? "-"}:${
-          sample?.timestamp ?? "-"
-        }:${sample?.value ?? sample?.textValue ?? "-"}`;
-      })
-      .join("|");
-    return content.family === "line" ? `${readings}|now:${nowMs}` : readings;
   }
 
   #chartFor(id: string): YunariChart | undefined {
@@ -627,7 +627,14 @@ export class ChartManager {
         {
           source: this.#source,
           nowMs: options.nowMs ?? Date.now(),
-          animate: false,
+          animate: chartAnimationFor(chart.family, this.#refreshRate()),
+          playbackDelayMs: chartPlaybackDelayFor(
+            this.#refreshRate(),
+            this.#source.chartPlaybackDelayMs,
+          ),
+          // The canvas the caps are measured against: the backing edge, which
+          // is the scene box times the chart's render scale.
+          ...drawnEdgePxOf(chart),
         },
         [],
         this.#globals?.palette,

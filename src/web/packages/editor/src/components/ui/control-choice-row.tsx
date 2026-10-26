@@ -11,12 +11,15 @@ import {
  * default; `card` is the settings modal's palette tile, which
  * `mockups/current/settings.html:44-87` draws as a `--radius-lg` card at
  * `--panel-2` carrying the caller's swatch *above* the name, the chosen one
- * marked by the accent border and its 3px glow rather than by a lift. A card is
- * a shape of this control rather than a second control: the radio, the group's
- * ownership of the checked bit and its roving focus are the same in both, and
- * only the geometry differs — exactly as `ControlRow`'s three shapes divide.
+ * marked by the accent border and its 3px glow rather than by a lift. `chip` is
+ * §5's **preset chip**: a 24px rounded square carrying the swatch alone, its
+ * name staying the programmatic label — the shape a swatch library takes when
+ * the swatch is what the author recognises. All three are shapes of this
+ * control rather than separate controls: the radio, the group's ownership of
+ * the checked bit and its roving focus are the same in all, and only the
+ * geometry differs — exactly as `ControlRow`'s three shapes divide.
  */
-type ChoiceShape = "row" | "card";
+type ChoiceShape = "row" | "card" | "chip";
 
 /**
  * One member of a closed set where every member has its own colour: a
@@ -55,6 +58,10 @@ export function ControlChoiceRow(
   const shapeClasses = {
     row: "flex min-h-[32px] w-full flex-row items-center gap-[var(--space-8)] rounded-md px-[var(--space-10)] py-[var(--space-6)] text-muted data-[checked]:text-text data-[checked]:[background:var(--stage)]",
     card: "flex w-full flex-col gap-[var(--space-6)] rounded-lg p-[var(--space-8)] text-text data-[checked]:ring-3 data-[checked]:ring-accent/18",
+    // The chip's own edge is the swatch's boundary; the chosen one takes the
+    // accent border and §4's translucent accent halo, the same chosen marker
+    // the card uses. The swatch fills it, so there is no padding to lose height.
+    chip: "relative size-6 flex-none overflow-hidden rounded-sm p-0 data-[checked]:ring-2 data-[checked]:ring-accent/18",
   }[shape ?? "row"];
 
   return (
@@ -79,7 +86,9 @@ export function ControlChoiceRow(
         className={`${shapeClasses} border border-edge bg-panel-2 text-left text-xs hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 data-[checked]:border-accent`}
       >
         {swatch}
-        {label}
+        {/* A chip's whole visible content is the swatch; its name is the
+            accessible label, and printing it is the row this shape replaces. */}
+        {shape === "chip" ? null : label}
       </Radio.Root>
       {/* The ids live in the row rather than in a `ControlRow`: a choice row is
           itself the whole row, so a label-and-control pair beside it would be a

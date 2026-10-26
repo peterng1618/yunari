@@ -4,8 +4,10 @@ import {
   buildPieOption,
   computeComposition,
   defaultPieSettings,
+  type PieDataItem,
   type PieSettings,
   type PieSliceInput,
+  toSegmentedPieData,
 } from "./pie.js";
 
 function sample(value: number, sensorId = "ram.used"): Sample {
@@ -163,6 +165,137 @@ describe("computeComposition — fixed total", () => {
   });
 });
 
+describe("toSegmentedPieData", () => {
+  const item = (name: string, value: number, color: string): PieDataItem => ({
+    name,
+    value,
+    itemStyle: { color, borderRadius: 4 },
+  });
+
+  it("splits every slice into equal real items with spacers between", () => {
+    const items = toSegmentedPieData(
+      [item("cpu", 50, "#0f0"), item("gpu", 50, "#00f")],
+      2,
+      0,
+      0,
+    );
+
+    expect(items.filter((entry) => entry.name === "cpu")).toHaveLength(2);
+    expect(items.filter((entry) => entry.name === "gpu")).toHaveLength(2);
+    // One internal gap per slice plus one slice-boundary gap per slice.
+    expect(items.filter((entry) => entry.name === "")).toHaveLength(4);
+  });
+
+  it("keeps the visible shares equal", () => {
+    const items = toSegmentedPieData(
+      [item("a", 75, "#0f0"), item("b", 25, "#00f")],
+      4,
+      2,
+      2,
+    );
+    const real = items.filter((entry) => entry.name !== "");
+    const a = real.filter((entry) => entry.name === "a");
+    const b = real.filter((entry) => entry.name === "b");
+
+    expect(
+      a.reduce((sum, entry) => sum + entry.value, 0) /
+        b.reduce((sum, entry) => sum + entry.value, 0),
+    ).toBeCloseTo(3);
+  });
+
+  it("draws each internal gap as the authored share of its own piece", () => {
+    const items = toSegmentedPieData(
+      [item("a", 70, "#0f0"), item("b", 20, "#00f"), item("c", 10, "#f00")],
+      4,
+      0,
+      10,
+    );
+
+    // Nine internal gaps, one after every piece but each slice's last. Each is
+    // a tenth of the piece it follows, so a larger slice leaves a larger gap.
+    const gaps: { readonly gap: PieDataItem; readonly piece: PieDataItem }[] =
+      [];
+    for (let index = 0; index < items.length - 1; index += 1) {
+      const piece = items[index]!;
+      const after = items[index + 1]!;
+      if (piece.name !== "" && after.name === "" && after.value > 0) {
+        gaps.push({ gap: after, piece });
+      }
+    }
+
+    expect(gaps).toHaveLength(9);
+    for (const { gap, piece } of gaps) {
+      expect(gap.value / piece.value).toBeCloseTo(0.1, 10);
+    }
+    expect(gaps[0]!.gap.value).toBeGreaterThan(gaps.at(-1)!.gap.value);
+  });
+
+  it("keeps the ring whole once the gaps are placed", () => {
+    const items = toSegmentedPieData(
+      [item("a", 70, "#0f0"), item("b", 20, "#00f"), item("c", 10, "#f00")],
+      4,
+      2,
+      10,
+    );
+
+    // The spacers take angles from the ring, never add to it: the pieces plus
+    // every gap still describe one full turn.
+    expect(items.reduce((sum, entry) => sum + entry.value, 0)).toBeCloseTo(
+      360,
+      10,
+    );
+    // The authored boundary gap is still the pad, not the piece share.
+    const boundaries = items.filter(
+      (entry) => entry.name === "" && entry.value === 2,
+    );
+    expect(boundaries).toHaveLength(3);
+  });
+
+  it("keeps composition shares exact when the spacing changes", () => {
+    const shares = (spacingPercent: number) => {
+      const data = toSegmentedPieData(
+        [item("a", 70, "#0f0"), item("b", 20, "#00f"), item("c", 10, "#f00")],
+        5,
+        1,
+        spacingPercent,
+      );
+      const total = data
+        .filter((entry) => entry.name !== "")
+        .reduce((sum, entry) => sum + entry.value, 0);
+      return ["a", "b", "c"].map(
+        (name) =>
+          data
+            .filter((entry) => entry.name === name)
+            .reduce((sum, entry) => sum + entry.value, 0) / total,
+      );
+    };
+
+    const tight = shares(1);
+    const wide = shares(60);
+    for (const [index, share] of tight.entries()) {
+      expect(wide[index]).toBeCloseTo(share, 10);
+    }
+  });
+
+  it("leaves the continuous data at 100", () => {
+    const option = buildPieOption(defaultPieSettings, parts(50));
+
+    expect(option.series[0].padAngle).toBe(defaultPieSettings.padAngle);
+    expect(option.series[0].data).toHaveLength(1);
+  });
+
+  it("emits no labels and a zero series pad for the segmented path", () => {
+    const option = buildPieOption(
+      { ...defaultPieSettings, segmentDivisor: 10 },
+      parts(50),
+    );
+
+    expect(option.series[0].padAngle).toBe(0);
+    expect(option.series[0].label.show).toBe(false);
+    expect(option.series[0].labelLine.show).toBe(false);
+  });
+});
+
 describe("buildPieOption", () => {
   it("emits a donut radius pair from the percentages", () => {
     const option = buildPieOption(defaultPieSettings, parts(1, 1));
@@ -268,10 +401,11 @@ describe("buildPieOption", () => {
     expect(option.series[0].data[0]!.itemStyle.color).toBe("#ff0000");
   });
 
-  it("keeps engine labels off by default so typography stays ours", () => {
+  it("never draws engine text, with no setting to turn it on", () => {
     const option = buildPieOption(defaultPieSettings, parts(1));
     expect(option.series[0].label.show).toBe(false);
     expect(option.series[0].labelLine.show).toBe(false);
+    expect("showLabels" in defaultPieSettings).toBe(false);
   });
 
   it("never emits a negative pad angle or corner radius", () => {

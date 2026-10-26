@@ -791,11 +791,32 @@ function chartScalars(
   issues: ValidationIssue[],
 ): void {
   for (const descriptor of CHART_SETTINGS_FIELDS[family]) {
-    if (descriptor.kind !== "number") continue;
     const field = descriptor.path ?? [descriptor.property];
     const value = valueAt(settings, field);
     if (value === undefined) continue;
     const where = `${path}/settings/${field.join("/")}`;
+
+    // A select's options are the document's bound, not only the picker's: a
+    // removed choice (smoothing, 0116) must be refused rather than loaded and
+    // drawn as something else.
+    if (descriptor.kind === "select") {
+      const allowed = (descriptor.options ?? []).map((option) => option.value);
+      if (
+        allowed.length > 0 &&
+        (typeof value !== "string" || !allowed.includes(value))
+      ) {
+        issues.push(
+          issue(
+            "invalid-enum",
+            where,
+            `${descriptor.property} must be one of ${allowed.join(", ")}.`,
+          ),
+        );
+      }
+      continue;
+    }
+
+    if (descriptor.kind !== "number") continue;
     if (typeof value !== "number" || !Number.isFinite(value)) {
       issues.push(
         issue(
@@ -820,6 +841,33 @@ function chartScalars(
           "out-of-range",
           where,
           `${descriptor.property} must be at most ${descriptor.max}.`,
+        ),
+      );
+    } else if (
+      descriptor.integer === true &&
+      Number.isFinite(value) &&
+      !Number.isInteger(value)
+    ) {
+      // A whole-number field's unit is the document's, exactly as `values` is:
+      // the control authored whole percents and nothing between them.
+      issues.push(
+        issue(
+          "out-of-range",
+          where,
+          `${descriptor.property} must be a whole number.`,
+        ),
+      );
+    } else if (
+      descriptor.values !== undefined &&
+      !descriptor.values.includes(value)
+    ) {
+      // A discrete field's list is the document's bound, not only the control's:
+      // the adapters cannot draw the values between two members.
+      issues.push(
+        issue(
+          "out-of-range",
+          where,
+          `${descriptor.property} must be one of ${descriptor.values.join(", ")}.`,
         ),
       );
     }
@@ -858,12 +906,16 @@ function chartScalars(
 function scalarPairs(
   family: ChartFamily,
 ): readonly (readonly [string, string])[] {
-  if (family === "pie") return [["innerRadiusPercent", "outerRadiusPercent"]];
   // Both pairs are top-level today; one that gains a `path` must be read through it.
   const properties = new Set(
     CHART_SETTINGS_FIELDS[family].map((descriptor) => descriptor.property),
   );
-  return properties.has("min") && properties.has("max") ? [["min", "max"]] : [];
+  const pairs: (readonly [string, string])[] =
+    properties.has("min") && properties.has("max") ? [["min", "max"]] : [];
+  if (family === "pie" || family === "polarBar") {
+    pairs.push(["innerRadiusPercent", "outerRadiusPercent"]);
+  }
+  return pairs;
 }
 
 /**

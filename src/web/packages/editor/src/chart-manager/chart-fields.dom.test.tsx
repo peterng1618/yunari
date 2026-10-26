@@ -59,6 +59,7 @@ const gauge: ChartFieldTarget = {
       track: { ref: "palette.cpu" },
       progress: { ref: "palette.gpu" },
       roundCap: true,
+      segmentDivisor: 100,
     },
   },
   bindings: [{ id: "cpu", semanticKey: "cpu.load" }],
@@ -85,10 +86,10 @@ const bar: ChartFieldTarget = {
       categoryGapPercent: 40,
       cornerRadius: 10,
       trackCornerRadius: 10,
+      segmentDivisor: 100,
       fill: { ref: "palette.cpu" },
       track: { ref: "palette.gpu" },
       showAxes: false,
-      showCategoryLabels: false,
     },
   },
   bindings: [{ id: "disk", semanticKey: "disk.used" }],
@@ -424,6 +425,36 @@ describe("a setting one level down", () => {
     expect(written.barWidth).toBe(30);
   });
 
+  it("shows a segment share as a whole percentage", async () => {
+    const { stage, calls } = over(gauge);
+
+    const track = pick<HTMLInputElement>(
+      stage.host,
+      'data-yunari-chart-setting="segmentSpacingPercent"',
+    );
+    expect(track.type).toBe("range");
+    expect([track.min, track.max]).toEqual(["1", "100"]);
+    // Whole percents: the track's own step is 1 and the well refuses a fraction.
+    expect(track.step).toBe("1");
+    // A bare `10` beside a bar width that means degrees would read as the same
+    // unit, so the track says what the number is a share of.
+    expect(track.getAttribute("aria-valuetext")).toBe("10%");
+
+    const well = pick<HTMLInputElement>(
+      stage.host,
+      'data-yunari-chart-setting-well="segmentSpacingPercent"',
+    );
+    // The field stays a number so it can be typed into; the suffix sits beside
+    // it rather than inside the draft it has to parse back.
+    expect(well.value).toBe("10");
+    expect(well.parentElement?.textContent).toContain("%");
+
+    // A fraction is refused rather than rounded to a value nobody chose.
+    await edit(well, "10.5");
+    expect(calls.settings).toHaveLength(0);
+    expect(well.getAttribute("aria-invalid")).toBe("true");
+  });
+
   it("clears an optional setting back to the renderer's own choice", async () => {
     const { stage, calls } = over({
       ...pie,
@@ -472,7 +503,7 @@ describe("a setting one level down", () => {
     const { stage } = over(line);
     expect(
       await optionsOf(stage.host, 'data-yunari-chart-setting="interpolation"'),
-    ).toEqual(["Linear", "Smooth", "Step"]);
+    ).toEqual(["Linear", "Step"]);
   });
 });
 

@@ -233,19 +233,19 @@ it("mounts the OS-resolved palette, menus, rail, inspector and dock hosts", () =
   expect(root.querySelector(".editor-shell-dock")?.closest("#stage")).toBe(
     root.querySelector("#stage"),
   );
-  // Four slots, and no `+`: the insert chooser went with the pane bar, and the
+  // Five slots, and no `+`: the insert chooser went with the pane bar, and the
   // Add pane is the one surface the insertable list is reached from now that
-  // the Insert menu has gone with it. A slot with nothing behind it is the
-  // defect this plan exists to fix, so the count is a claim about the left
-  // column, not a snapshot of how many icons happen to be there. Scoped to
-  // `[data-rail-slot]`: the foot's settings gear is a button on the rail too,
-  // and it is deliberately not a slot.
-  expect(root.querySelectorAll(".editor-shell-rail-slot")).toHaveLength(4);
+  // the Insert menu has gone with it. The Assets slot has landed here ahead of
+  // its pane, which is the one exception to "a slot with nothing behind it is
+  // the defect this plan exists to fix" — it is the next step of the same plan.
+  // Scoped to `[data-rail-slot]`: the foot's settings gear is a button on the
+  // rail too, and it is deliberately not a slot.
+  expect(root.querySelectorAll(".editor-shell-rail-slot")).toHaveLength(5);
   expect(root.querySelector(".editor-shell-rail-settings")).not.toBeNull();
-  // The rail's whole button count, not only its slots: five is the four slots
-  // plus the foot's gear, and a sixth control arriving on the rail where it
+  // The rail's whole button count, not only its slots: six is the five slots
+  // plus the foot's gear, and a seventh control arriving on the rail where it
   // should not fails here rather than hiding behind the slot count.
-  expect(root.querySelectorAll(".editor-shell-rail button")).toHaveLength(5);
+  expect(root.querySelectorAll(".editor-shell-rail button")).toHaveLength(6);
   // The horizontal bar is gone, not merely hidden.
   expect(root.querySelector(".editor-shell-pane-bar")).toBeNull();
   expect(root.textContent).toContain("File");
@@ -269,16 +269,16 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
   const root = document.createElement("div");
   const layout = createShellLayout(root);
 
-  // One pane per rail slot, each wearing a title bar, its own `data-yunari-panel`
-  // name and `hidden` unless its slot is chosen. The Composition pane's DOM name
-  // is the `layers` the browser specs and the panel CSS already browse by, so
-  // the chrome moved around the contract rather than the contract moving; its
-  // visible title, like the other three, is the slot's own word.
+  // A pane per slot, each wearing a title bar, its own `data-yunari-panel` name
+  // and `hidden` unless its slot is chosen. The Composition pane's DOM name is
+  // the `layers` the browser specs and the panel CSS already browse by, so the
+  // chrome moved around the contract rather than the contract moving; its
+  // visible title, like the other four, is the slot's own word.
   const panes = root.querySelectorAll(".editor-shell-pane");
-  expect(panes).toHaveLength(4);
+  expect(panes).toHaveLength(5);
   expect(
     [...panes].map((pane) => pane.getAttribute("data-yunari-panel")).sort(),
-  ).toEqual(["add", "document", "layers", "tokens"]);
+  ).toEqual(["add", "assets", "document", "layers", "tokens"]);
   for (const pane of panes) {
     expect(pane.querySelector(".editor-shell-pane-title")).not.toBeNull();
   }
@@ -306,19 +306,22 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
  * The row ruled per pane rather than per editor: the Add pane counts the card
  * library, the Composition pane the scene's objects, the Tokens pane the
  * theme's paints. Each source is named at the mount in `shell-layout`, because
- * three of the four panes are imperative hosts with no React component inside
+ * four of the five panes are imperative hosts with no React component inside
  * that owns a list.
  *
- * Two absences are the whole of the negative half. **Document draws none** —
+ * Three absences are the whole of the negative half. **Document draws none** —
  * its body is two sections of fields and it holds no list of its own, so a
- * count there would be fabricated. And **before a bridge is set the two
+ * count there would be fabricated. **Assets draws none until the session
+ * reports one** — its list is the asset manager's declarations and the shell
+ * holds no manager, so `assetCount` arrives through the store and a `0` before
+ * that would be the same fabrication. And **before a bridge is set the
  * snapshot-fed counts draw none either**: `0 objects` over a canvas that has not
  * mounted its document is a claim the product does not have (DESIGN.md §9). The
  * Add pane's count is the exception, and it proves the rule rather than
  * breaking it: `CARD_LIBRARY` is a module constant, so eight units is a reading
  * at every moment the pane exists, never a default standing in for one.
  */
-it("prints each pane's own count, and no count where a pane has no list", () => {
+it("prints each pane's own count, and no count where a pane has no list", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
 
@@ -328,6 +331,7 @@ it("prints each pane's own count, and no count where a pane has no list", () => 
 
   expect(countOf("add")).toBe(uiCopy.paneCounts.units(CARD_LIBRARY.length));
   expect(countOf("layers")).toBeNull();
+  expect(countOf("assets")).toBeNull();
   expect(countOf("tokens")).toBeNull();
   expect(countOf("document")).toBeNull();
 
@@ -350,8 +354,19 @@ it("prints each pane's own count, and no count where a pane has no list", () => 
   expect(countOf("tokens")).toBe(uiCopy.paneCounts.tokens(5));
   expect(countOf("add")).toBe(uiCopy.paneCounts.units(CARD_LIBRARY.length));
   expect(countOf("document")).toBeNull();
-  // Three spans, not four: the Document pane is the one pane that prints none.
+  expect(countOf("assets")).toBeNull();
+  // Three spans, not five: Document and Assets are the two panes that print
+  // none.
   expect(root.querySelectorAll(".editor-shell-pane-count")).toHaveLength(3);
+
+  // The session's own reading of the manager moves the Assets count, and the
+  // bridge snapshot's silence on it never fabricates a zero.
+  await act(async () => layout.selection.setAssetCount(4));
+  expect(countOf("assets")).toBe(uiCopy.paneCounts.files(4));
+  expect(root.querySelectorAll(".editor-shell-pane-count")).toHaveLength(4);
+  // No document is no assets: the store drops the reading with the bridge.
+  layout.setBridge(undefined, undefined);
+  expect(countOf("assets")).toBeNull();
 
   layout.destroy();
 });
@@ -525,7 +540,7 @@ it("collapses the panel when the segment for the visible pane is clicked again",
   // worse than one that is merely narrow. The rail keeps saying which pane is
   // chosen — `aria-pressed` outlives the collapse, so reopening restores it —
   // and the column's own state is stated once, on the rail, rather than
-  // repeated on all four slots.
+  // repeated on every slot.
   expect(panel.hidden).toBe(true);
   expect(body.dataset["collapsed"]).toBe("true");
   expect(rail.dataset["collapsed"]).toBe("true");

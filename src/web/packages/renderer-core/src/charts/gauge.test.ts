@@ -12,6 +12,47 @@ import {
   toColorSegments,
 } from "./gauge.js";
 
+const PROGRESS = "#00b8d9";
+const TRACK = "#222222";
+
+/** A full-turn gauge with flat paints, so a gap is a number and a colour. */
+function gaugeOption(
+  over: Partial<GaugeSettings>,
+  drawnEdgePx?: number,
+  value = 50,
+) {
+  return buildGaugeOption(
+    {
+      ...defaultGaugeSettings,
+      startAngle: 0,
+      endAngle: 360,
+      min: 0,
+      max: 100,
+      roundCap: false,
+      track: { kind: "solid", color: TRACK },
+      progress: { kind: "solid", color: PROGRESS },
+      ...over,
+    },
+    sample(value),
+    true,
+    undefined,
+    drawnEdgePx,
+  );
+}
+
+const colorBands = (
+  option: ReturnType<typeof buildGaugeOption>,
+): [number, string][] => option.series[0].axisLine.lineStyle.color;
+
+/** The empty arc each of `count` bands leaves, read back as degrees. */
+function gapDegrees(
+  option: ReturnType<typeof buildGaugeOption>,
+  count: number,
+  sweep = 360,
+): number {
+  return (1 / count - colorBands(option)[0]![0]) * sweep;
+}
+
 /** An ok sample carrying a plottable value. */
 function sample(value = 50): Sample {
   return {
@@ -89,6 +130,203 @@ describe("buildGaugeOption", () => {
   it("disables animation when asked, for deterministic screenshots", () => {
     const option = buildGaugeOption(defaultGaugeSettings, sample(), false);
     expect(option.series[0].animation).toBe(false);
+  });
+
+  it("splits the ring into equal bands with transparent gaps", () => {
+    const option = buildGaugeOption(
+      { ...defaultGaugeSettings, segmentDivisor: 10 },
+      sample(55),
+    );
+    const colors = option.series[0].axisLine.lineStyle.color;
+
+    // 10 bands: each visible band followed by a gap, except the last band's end.
+    expect(colors).toHaveLength(19);
+    // The band ends where its gap begins: a share of the band's painted width.
+    expect(colors[0]![0]).toBeCloseTo(0.1 - gapDegrees(option, 10, 270) / 270);
+    expect(colors[1]).toEqual([0.1, "transparent"]);
+    expect(option.series[0].progress.show).toBe(false);
+    expect(option.series[0].data).toEqual([]);
+  });
+
+  it("fills bands the reading reaches and tracks the rest", () => {
+    const option = buildGaugeOption(
+      {
+        ...defaultGaugeSettings,
+        segmentDivisor: 10,
+        track: { kind: "solid", color: "#222222" },
+        progress: { kind: "solid", color: "#00b8d9" },
+      },
+      sample(55),
+    );
+    const colors = option.series[0].axisLine.lineStyle.color;
+    const solid = colors.filter(([, color]) => color !== "transparent");
+
+    expect(solid.slice(0, 5).every(([, color]) => color === "#00b8d9")).toBe(
+      true,
+    );
+    expect(solid.slice(5).every(([, color]) => color === "#222222")).toBe(true);
+  });
+
+  it("leaves a missing sample entirely in track paint", () => {
+    const option = buildGaugeOption(
+      { ...defaultGaugeSettings, segmentDivisor: 10 },
+      undefined,
+    );
+    const solid = option.series[0].axisLine.lineStyle.color.filter(
+      ([, color]) => color !== "transparent",
+    );
+
+    expect(new Set(solid.map(([, color]) => color)).size).toBe(1);
+  });
+
+  it("keeps the empty space a share of the band as the count rises", () => {
+    // Five slices and ten on the starter's 270° sweep. The gap narrows with the
+    // band, which is what keeps the same *relationship* visible at any count.
+    const shareOf = (divisor: number, count: number): number =>
+      gapDegrees(
+        gaugeOption({
+          segmentDivisor: divisor,
+          startAngle: 225,
+          endAngle: -45,
+        }),
+        count,
+        270,
+      ) /
+      (270 / count);
+
+    expect(shareOf(20, 5)).toBeCloseTo(1 / 11, 5);
+    expect(shareOf(10, 10)).toBeCloseTo(1 / 11, 5);
+  });
+
+  it("widens the gap to clear round caps on a small chart", () => {
+    // A cap extends each band end by half the thickness, so the gap has to be
+    // measured against the radius rather than the chart's raw size. Spacing is
+    // zero, so the clearance alone is what is being read.
+    const large = gapDegrees(
+      gaugeOption(
+        {
+          segmentDivisor: 5,
+          thickness: 12,
+          roundCap: true,
+          segmentSpacingPercent: 0,
+        },
+        800,
+      ),
+      20,
+    );
+    const small = gapDegrees(
+      gaugeOption(
+        {
+          segmentDivisor: 5,
+          thickness: 12,
+          roundCap: true,
+          segmentSpacingPercent: 0,
+        },
+        200,
+      ),
+      20,
+    );
+
+    expect(small).toBeGreaterThan(large);
+  });
+
+  it("leaves square ends on the authored share at any size", () => {
+    // No round cap, no clearance: a small chart draws the same angle as a large
+    // one, because the share is measured against the band and not the glass.
+    const large = gapDegrees(
+      gaugeOption(
+        {
+          segmentDivisor: 10,
+          startAngle: 225,
+          endAngle: -45,
+          thickness: 12,
+          roundCap: false,
+        },
+        800,
+      ),
+      10,
+      270,
+    );
+    const small = gapDegrees(
+      gaugeOption(
+        {
+          segmentDivisor: 10,
+          startAngle: 225,
+          endAngle: -45,
+          thickness: 12,
+          roundCap: false,
+        },
+        200,
+      ),
+      10,
+      270,
+    );
+
+    expect(small).toBeCloseTo(large, 5);
+  });
+
+  it("takes half of a band at 100% spacing", () => {
+    // A full turn in a hundred bands: 3.6° each, half of it empty.
+    const gap = gapDegrees(
+      gaugeOption({ segmentDivisor: 1, segmentSpacingPercent: 100 }),
+      100,
+      360,
+    );
+
+    expect(gap).toBeCloseTo(1.8, 5);
+  });
+
+  it("draws touching bands at zero spacing, measured or not", () => {
+    for (const edge of [undefined, 400]) {
+      const bands = colorBands(
+        gaugeOption(
+          { segmentDivisor: 20, segmentSpacingPercent: 0, roundCap: false },
+          edge,
+        ),
+      );
+
+      expect(bands.some(([, color]) => color === "transparent")).toBe(false);
+    }
+  });
+
+  it("stops a partial fill at the reading", () => {
+    const bands = colorBands(
+      gaugeOption(
+        { segmentDivisor: 25, segmentFill: "partial", min: 0, max: 100 },
+        undefined,
+        30,
+      ),
+    );
+    const boundary = bands.findIndex(
+      ([at, color]) => at === 0.3 && color === PROGRESS,
+    );
+
+    // The band the reading lands in is progress up to the reading and track
+    // afterwards, not the whole slice.
+    expect(boundary).toBeGreaterThan(-1);
+    expect(bands[boundary + 1]?.[1]).toBe(TRACK);
+  });
+
+  it("quantises a whole fill to the band the reading reaches", () => {
+    const bands = colorBands(
+      gaugeOption(
+        { segmentDivisor: 25, segmentFill: "whole", min: 0, max: 100 },
+        undefined,
+        20,
+      ),
+    );
+
+    // A reading inside the first quarter has not yet reached that slice's
+    // visible end, so nothing lights: the slice boundary is where the gap
+    // begins, as it has always drawn.
+    expect(bands.filter(([, color]) => color === PROGRESS)).toHaveLength(0);
+  });
+
+  it("keeps the continuous option at 100", () => {
+    const option = buildGaugeOption(defaultGaugeSettings, sample(55));
+
+    expect(option.series[0].progress.show).toBe(true);
+    expect(option.series[0].axisLine.lineStyle.color).toEqual([[1, "#2a2f3a"]]);
   });
 });
 

@@ -4,7 +4,12 @@ import type {
   AssetSourceListing,
 } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
-import { assetBytes, listSources, searchAssets } from "./client.js";
+import {
+  assetBytes,
+  listSources,
+  searchAssets,
+  trashAssets,
+} from "./client.js";
 
 const listing: AssetSourceListing = {
   id: "lucide",
@@ -135,5 +140,49 @@ describe("assetBytes", () => {
     expect(
       await assetBytes("lucide", "missing", { fetch: fetcher }),
     ).toBeUndefined();
+  });
+});
+
+describe("trashAssets", () => {
+  it("posts the files as base64 to the trash route", async () => {
+    const { fetcher, calls } = stub(
+      () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    const answer = await trashAssets(
+      [{ name: "old.woff2", bytes: new TextEncoder().encode("woff") }],
+      { fetch: fetcher },
+    );
+
+    expect(answer).toEqual({ ok: true });
+    expect(calls[0]?.url).toBe("/api/assets/trash");
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect(calls[0]?.init?.body).toBe(
+      JSON.stringify({ files: [{ name: "old.woff2", bytes: btoa("woff") }] }),
+    );
+  });
+
+  it("carries the host's refusal sentence, which a save must print", async () => {
+    const { fetcher } = stub(
+      () => new Response("This PC has no trash command.", { status: 500 }),
+    );
+
+    expect(
+      await trashAssets([{ name: "old.woff2", bytes: new Uint8Array() }], {
+        fetch: fetcher,
+      }),
+    ).toEqual({ ok: false, message: "This PC has no trash command." });
+  });
+
+  it("answers a transport failure rather than throwing", async () => {
+    const fetcher = (async () => {
+      throw new TypeError("fetch failed");
+    }) as typeof fetch;
+
+    expect(
+      await trashAssets([{ name: "old.woff2", bytes: new Uint8Array() }], {
+        fetch: fetcher,
+      }),
+    ).toEqual({ ok: false, message: "fetch failed" });
   });
 });

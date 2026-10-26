@@ -239,13 +239,13 @@ describe("the Add pane's insert surface", () => {
       // Every grid tile carries a tooltip, and the tooltip's press-elsewhere
       // dismissal is a `document`-level `pointerdown`
       // (`editor-shell/controls/tooltip.ts:134`) removed only by its `destroy`.
-      // 8 units + 8 primitives + 4 families = 20, the Text row exempt. Asserted
+      // 8 units + 8 primitives + 6 families = 22, the Text row exempt. Asserted
       // as added *and* removed: a count of 0 removed would pass vacuously
       // against a pane that registered none, and a panel that removed its host
-      // node without unmounting the tree left all twenty behind, once per
+      // node without unmounting the tree left all twenty-two behind, once per
       // session teardown.
-      expect(added["pointerdown"]).toBe(20);
-      expect(removed["pointerdown"]).toBe(20);
+      expect(added["pointerdown"]).toBe(22);
+      expect(removed["pointerdown"]).toBe(22);
     } finally {
       addSpy.mockRestore();
       removeSpy.mockRestore();

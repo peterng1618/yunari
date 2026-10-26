@@ -1,15 +1,12 @@
 // @vitest-environment jsdom
 /**
- * The copy net over the imperative panels and the picker they mount: every word
- * they show comes from `uiCopy`, or is data — a token's name, a locale's, an
- * asset's, a preset's.
+ * The copy net over the imperative panels: every word they show comes from
+ * `uiCopy`, or is data — a token's name, a locale's, an asset's, a preset's.
  *
- * **What this half reads.** The artboard, palette and type-preset panels are
- * read for their own DOM, and the font picker — a React island the type-preset
- * panel mounts, so the panels' net never reaches it — is mounted here directly.
- * The palette's paint kinds and both unit display lists are read from the Base
- * UI popups their triggers open, because a closed control prints the chosen
- * value rather than the words it offers.
+ * **What this half reads.** The artboard, palette, type-preset and token-inspector
+ * panels are read for their own DOM. The palette's paint kinds and both unit
+ * display lists are read from the Base UI popups their triggers open, because a
+ * closed control prints the chosen value rather than the words it offers.
  *
  * **What it deliberately does not read, and why.** A control that prints a
  * *value* is read for the concept and not the reading: a select's trigger shows
@@ -38,13 +35,11 @@ import {
   chartContentView,
   chartPaintView,
 } from "./chart-manager/panel.js";
-import { catalogFaces, fontTrios } from "./font-catalog.js";
-import { FontPicker } from "./font-picker/font-picker.js";
 import { createPalettePanel } from "./palette-manager/panel.js";
+import { createTokenInspectorPanel } from "./panes/tokens/token-inspector.js";
 import { projectRuns, RunEditor } from "./selection-inspector/runs.js";
 import type { RunEdits } from "./selection-inspector/view.js";
 import { createTypePresetPanel } from "./type-preset-manager/panel.js";
-import { uiCopy } from "./ui-copy.js";
 import { copy, spokenText } from "./ui-copy-readers.js";
 
 /** A run-editor write port that records nothing: this file reads copy, not writes. */
@@ -64,7 +59,7 @@ function runEdits(): RunEdits {
 }
 
 /**
- * The three panels say no word the table does not hold.
+ * The mounted panels say no word the table does not hold.
  *
  * A string literal in a panel is invisible to a reviewer reading `ui-copy.ts`
  * and invisible to the pictograph rule in `ui-copy.test.ts`, which only sees
@@ -78,7 +73,7 @@ function runEdits(): RunEdits {
  * an asset's, a preset's — and is deliberately not covered; the paint kinds
  * are copy and are listed by name.
  */
-it("leaves the three panels with no copy of their own", async () => {
+it("leaves the mounted panels with no copy of their own", async () => {
   const root = document.createElement("div");
   document.body.append(root);
 
@@ -88,52 +83,86 @@ it("leaves the three panels with no copy of their own", async () => {
     { width: 1280, height: 720 },
     { name: "Living Room", themeLanguage: "en" },
   );
-  const palettePanel = createPalettePanel(
-    root,
-    () => undefined,
-    () => undefined,
-  );
+  const palettePanel = createPalettePanel(root, () => undefined);
+  const palette = {
+    background: {
+      name: "Background",
+      value: { kind: "solid" as const, color: "#000" },
+    },
+    glow: {
+      name: "Glow",
+      value: {
+        kind: "gradient" as const,
+        angle: 45,
+        stops: [
+          { offset: 0, color: "#ffffff" },
+          { offset: 1, color: "#000000" },
+        ],
+      },
+    },
+    accent: {
+      name: "Accent",
+      value: { kind: "solid" as const, color: "#0ff" },
+    },
+  };
   await act(async () => {
-    palettePanel.render({
-      background: {
-        name: "Background",
-        value: { kind: "solid", color: "#000" },
-      },
-      glow: {
-        name: "Glow",
-        value: {
-          kind: "gradient",
-          angle: 45,
-          stops: [
-            { offset: 0, color: "#ffffff" },
-            { offset: 1, color: "#000000" },
-          ],
-        },
-      },
-      accent: { name: "Accent", value: { kind: "solid", color: "#0ff" } },
-    });
-    // The gradient and delete branches, because a solid token renders neither.
-    // The token list is React now, so the branch is opened by choosing the row
-    // rather than by setting a native `<select>`'s value.
-    const glow = root.querySelector<HTMLElement>(
-      '[data-yunari-palette-token-row="glow"]',
-    );
-    if (glow === null) throw new Error("the Tokens pane listed no glow token");
-    glow.click();
+    palettePanel.render(palette);
   });
+  // The gradient and delete branches render in the token inspector now: the
+  // pane is lists-only, so the selected paint's field set is mounted there.
+  createTokenInspectorPanel(root, {
+    onChange: () => undefined,
+    onDelete: () => undefined,
+    setRole: () => undefined,
+    unbindFace: () => undefined,
+    paints: {
+      palette: () => palette,
+      onChange: () => undefined,
+      onDelete: undefined,
+      usage: undefined,
+    },
+  }).render({ kind: "paint", id: "glow" }, {}, undefined);
   createTypePresetPanel(
     root,
     () => undefined,
     () => undefined,
     {
-      preview: async () => undefined,
       applyFace: async () => undefined,
       applyTrio: async () => undefined,
     },
   ).render({
-    body: { name: "Body", value: { family: "Inter", size: 16 } },
+    body: {
+      name: "Body",
+      value: { family: "Inter", size: 16, trioRole: "heading" },
+    },
     caption: { name: "Caption", value: { family: "Inter", size: 12 } },
   });
+
+  // The selected token's column is the Tokens pane's other half, and it is
+  // where the field set's labels moved. Its select triggers print values and are
+  // excluded from the button net; the labels and Delete are copy and are read.
+  const tokenPresets = {
+    body: {
+      name: "Body",
+      value: { family: "Inter", size: 16, trioRole: "heading" as const },
+    },
+  };
+  createTokenInspectorPanel(root, {
+    onChange: () => undefined,
+    onDelete: () => undefined,
+    setRole: () => undefined,
+    unbindFace: () => undefined,
+    paints: undefined,
+  }).render({ kind: "preset", id: "body" }, tokenPresets, {
+    typePresets: tokenPresets,
+  });
+  // The fourth mount, non-vacuous with a number: a panel that rendered nothing
+  // would leave the net passing without reading one of its words. Eight is the
+  // labels a free preset renders — name, role, family, weight, size, line
+  // height, letter spacing and reassignment; Delete is a button, read below.
+  expect(
+    root.querySelectorAll("[data-yunari-token-fields] label"),
+  ).toHaveLength(8);
 
   // The palette's paint kinds, which are copy. They live in a Base UI popup that
   // exists only while it is open, so they are read the way an author reads them.
@@ -150,6 +179,11 @@ it("leaves the three panels with no copy of their own", async () => {
   // what the pane offers (`solid`, `gradient`), read off the opened list.
   expect(paintKinds).toHaveLength(2);
   const owned = new Set(copy());
+  // The badge route below reads nothing when no fixture preset carries a role, so
+  // the count is said out loud: the fixture declares one `trioRole`, and a net
+  // that measured zero badges would pass without covering the word at all.
+  const roleBadges = root.querySelectorAll("[data-yunari-type-preset-role]");
+  expect(roleBadges).toHaveLength(1);
   const spoken = [
     ...Array.from(root.querySelectorAll("label"), (label) => label.textContent),
     // The gradient editor's stop marks are `role="slider"` divs, not labels or
@@ -162,18 +196,27 @@ it("leaves the three panels with no copy of their own", async () => {
       (stop) => stop.getAttribute("aria-label"),
     ),
     // Two kinds of button are excluded, both because their text is data. A token
-    // well prints the document's own token name and usage figure; a select's
-    // trigger prints the chosen value, which on every panel here is a token's
-    // name, a preset's, a unit's or a locale's — the chevron beside it is
-    // decoration. The words a select *offers* are copy and are read from its
-    // open list, so excluding the closed control loses nothing.
+    // well prints the document's own token name and usage figure; a type-preset
+    // row prints the preset's own name and resolution — its role badge is copy
+    // and is read on its own below. A select's trigger prints the chosen value,
+    // which on every panel here is a token's name, a preset's, a unit's or a
+    // locale's — the chevron beside it is decoration. The words a select
+    // *offers* are copy and are read from its open list, so excluding the
+    // closed control loses nothing.
     ...Array.from(root.querySelectorAll("button"))
       .filter(
         (button) =>
           button.getAttribute("data-yunari-palette-token-row") === null &&
+          button.getAttribute("data-yunari-type-preset-row") === null &&
           button.querySelector("[data-yunari-value]") === null,
       )
       .map((button) => spokenText(button)),
+    // The preset row's role badge prints a copy word (Heading/Body/Mono), not
+    // data, so it goes through the net even though the row around it does not.
+    ...Array.from(
+      root.querySelectorAll("[data-yunari-type-preset-role]"),
+      (badge) => spokenText(badge),
+    ),
     ...paintKinds,
   ]
     .map((text) => text?.trim() ?? "")
@@ -183,93 +226,11 @@ it("leaves the three panels with no copy of their own", async () => {
     .filter((text) => text !== "" && !/^[\d.v-]+$/.test(text));
   expect(spoken.filter((text) => !owned.has(text))).toEqual([]);
 
-  // This test mounts three panels that nothing unmounts, and the paint-kind list
+  // This test mounts panels that nothing unmounts, and the paint-kind list
   // it opened portals into `document.body`. Left standing, that popup is the next
   // test's `[role="option"]` set — read as four extra unit-display words.
   await act(async () => palettePanel.destroy());
   document.body.replaceChildren();
-});
-
-/**
- * The font picker says no word the table does not hold.
- *
- * The picker is a React island the type-preset panel mounts, so the net above —
- * which reads the three imperative panels' DOM — does not reach it. A string
- * literal in `font-picker.tsx` would therefore be invisible to the rule that
- * exists to catch exactly that, which is why the picker is mounted here
- * directly rather than waiting for the panel that will host it.
- *
- * Data is excluded on purpose, the way it is above: a face's family name, a
- * trio's name and an upstream facet value are the catalogue's words, not this
- * component's. The facet values in particular are the tags Fonttrio assigned,
- * and they round-trip into the query, so a test that demanded the table own
- * "versatile (107)" would be demanding the table own the catalogue.
- */
-it("leaves the font picker with no copy of its own", async () => {
-  const root = document.createElement("div");
-  document.body.append(root);
-  const reactRoot = createRoot(root);
-  await act(async () =>
-    reactRoot.render(
-      createElement(FontPicker, {
-        trios: fontTrios(),
-        faces: catalogFaces(),
-        favorites: [],
-        // A cache that never loads, so every row renders its "still coming"
-        // note: the note is copy, and a specimen that arrived would hide it.
-        cache: {
-          ensure: () => new Promise<void>(() => undefined),
-          resident: () => undefined,
-          release: () => undefined,
-        },
-        onApplyTrio: () => undefined,
-        onApplyFace: () => undefined,
-        onToggleFavorite: () => undefined,
-      }),
-    ),
-  );
-
-  const owned = new Set(copy());
-  const spoken = [
-    // Labels and their accessible names: the search field, the three facets,
-    // the sort, the trio chooser, and the two states of the favourite toggle.
-    // A converted chooser's own words are here: the facet's "any" entry is the
-    // row's label, so the closed control prints the table's word and no second
-    // read is needed.
-    ...Array.from(root.querySelectorAll("label"), (label) => label.textContent),
-    ...Array.from(root.querySelectorAll("[aria-label]"), (element) =>
-      element.getAttribute("aria-label"),
-    ),
-    // The picker's own buttons, minus the rows whose text is a catalogue name
-    // and the choosers' triggers, whose text is the value they print — a face's
-    // family, a trio's name — plus the control set's own `▼`.
-    ...Array.from(root.querySelectorAll("button"))
-      .filter(
-        (button) =>
-          !button.hasAttribute("data-yunari-font-face-row") &&
-          !button.hasAttribute("data-yunari-font-trio-row") &&
-          button.querySelector("[data-yunari-value]") === null,
-      )
-      .map((button) => button.textContent),
-  ]
-    .map((text) => text?.trim() ?? "")
-    .filter((text) => text !== "" && !/^[\d.v-]+$/.test(text));
-  expect(spoken.filter((text) => !owned.has(text))).toEqual([]);
-  reactRoot.unmount();
-});
-
-/** The two states of the favourite toggle name two different actions, so a
- *  screen reader can tell what the press will do. Pinned here beside the copy
- *  rule rather than only in the picker's own test because both words have to
- *  come from the table for the rule above to mean anything. */
-it("names both states of the favourite toggle", () => {
-  expect(uiCopy.panels.fontFavorite).not.toBe(uiCopy.panels.fontUnfavorite);
-  for (const word of [
-    uiCopy.panels.fontFavorite,
-    uiCopy.panels.fontUnfavorite,
-  ]) {
-    expect(/\p{S}/u.test(word)).toBe(false);
-  }
 });
 
 /**
@@ -343,6 +304,7 @@ async function chartUnitDisplayOptions(root: HTMLElement): Promise<string[]> {
         track: { kind: "solid", color: "#000" },
         progress: { kind: "solid", color: "#fff" },
         roundCap: true,
+        segmentDivisor: 100,
       },
     },
     bindings: [{ id: "g", semanticKey: "ram.used.percent" }],

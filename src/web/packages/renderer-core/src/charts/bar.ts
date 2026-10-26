@@ -1,5 +1,5 @@
 import type { FabricPalette } from "../theme/fabric-envelope.js";
-import type { ChartPaint, Sample } from "../types.js";
+import type { ChartPaint, Fill, Sample } from "../types.js";
 import { hasPlottableValue } from "../types.js";
 import {
   type AnimationSettings,
@@ -8,12 +8,23 @@ import {
 } from "./animation.js";
 import { NO_INK, NO_PAINT, resolveChartPaint } from "./chart-paint.js";
 import {
+  colorAt,
   type EngineColor,
+  type GradientDirection,
   normalizePosition,
   resolveFlatColor,
   toLinearGradient,
 } from "./fill.js";
 import { type CartesianGrid, cartesianGrid } from "./grid.js";
+import {
+  barGapPx,
+  SEGMENT_SPACING_PERCENT_DEFAULT,
+  type SegmentFill,
+  segmentCount,
+  segmentDivisorOf,
+  segmentFillOf,
+  segmentSpacingPercentOf,
+} from "./segments.js";
 
 /**
  * Bar/progress adapter. Thresholds are native per bar; one-category bars with a
@@ -42,8 +53,13 @@ export interface BarSettings {
    * them independent. Absent means square, as a track has always been.
    */
   readonly trackCornerRadius?: number;
+  /** How many slices the fill is cut into; 100 is one continuous bar. */
+  readonly segmentDivisor: number;
+  /** Empty space between slices, as a share of a slice's painted length. */
+  readonly segmentSpacingPercent?: number;
+  /** Whether the reading lights a whole slice or stops at its own value. */
+  readonly segmentFill?: SegmentFill;
   readonly showAxes: boolean;
-  readonly showCategoryLabels: boolean;
   readonly animation?: AnimationSettings;
 }
 
@@ -59,9 +75,24 @@ export const defaultBarSettings: BarSettings = {
   // Matches the bar by default, because the two share one slot's geometry — but
   // it is its own value, so a theme can round one and not the other.
   trackCornerRadius: 7,
+  segmentDivisor: 100,
+  segmentSpacingPercent: SEGMENT_SPACING_PERCENT_DEFAULT,
+  // A bar's reading already maps to a distance along it, so stopping the fill
+  // where the reading lands is what a bar means; a gauge's reading has no such
+  // length and lights its whole slice.
+  segmentFill: "partial",
   showAxes: false,
-  showCategoryLabels: false,
 };
+
+/**
+ * What both bar families carry for paint and data.
+ *
+ * A polar bar has no orientation, so the helpers below ask whether one is
+ * present rather than forcing a cartesian growth direction onto it (§E1).
+ */
+export type BarPaintSettings =
+  | BarSettings
+  | Omit<BarSettings, "orientation" | "segmentDivisor">;
 
 export interface BarInput {
   readonly sensorId: string;
@@ -83,7 +114,7 @@ interface CategoryAxis {
   readonly data: readonly string[];
   readonly axisTick: { readonly show: false };
   readonly axisLine: { readonly show: false };
-  readonly axisLabel: { readonly show: boolean };
+  readonly axisLabel: { readonly show: false };
   readonly boundaryGap: true;
   /** ECharts y categories run bottom-up; invert horizontal bars to authored order. */
   readonly inverse: boolean;
@@ -94,29 +125,87 @@ interface ValueAxis {
   readonly show: boolean;
   readonly min: number;
   readonly max: number;
-  readonly axisLabel: { readonly show: boolean };
+  readonly axisLabel: { readonly show: false };
   readonly splitLine: { readonly show: boolean };
 }
 
-export interface BarOption extends EngineAnimation {
+export interface ContinuousBarSeries {
+  readonly type: "bar";
+  readonly data: readonly BarDataItem[];
+  readonly barWidth?: number;
+  readonly barCategoryGap: string;
+  readonly showBackground: boolean;
+  readonly backgroundStyle?: {
+    readonly color: EngineColor;
+    readonly borderRadius?: number;
+  };
+  readonly silent: true;
+}
+
+/** One `[categoryIndex, value]` per binding; `null` draws no fill. */
+export type SegmentedBarDatum = readonly [number, number | null];
+
+export interface BarRenderParams {
+  readonly dataIndex: number;
+}
+
+/** The part of ECharts' render API this renderer uses. */
+export interface BarRenderApi {
+  coord(point: readonly [number, number]): readonly [number, number];
+  size(size: readonly [number, number]): readonly [number, number];
+}
+
+export interface BarRect {
+  readonly type: "rect";
+  /** Which pass drew it; the engine ignores the name, the tests read it. */
+  readonly name: "track" | "fill";
+  readonly shape: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+    readonly r?: number;
+  };
+  readonly style: { readonly fill: string };
+  /** The filled rect moves its extent rather than fading in place. */
+  readonly transition?: "shape";
+  readonly silent: true;
+}
+
+export interface BarRectGroup {
+  readonly type: "group";
+  readonly children: readonly BarRect[];
+}
+
+export type BarRenderItem = (
+  params: BarRenderParams,
+  api: BarRenderApi,
+) => BarRectGroup;
+
+export interface SegmentedBarSeries {
+  readonly type: "custom";
+  readonly coordinateSystem: "cartesian2d";
+  readonly data: readonly SegmentedBarDatum[];
+  readonly renderItem: BarRenderItem;
+  readonly silent: true;
+  readonly clip: true;
+}
+
+interface BarAxes {
   readonly grid: CartesianGrid;
   readonly xAxis: CategoryAxis | ValueAxis;
   readonly yAxis: CategoryAxis | ValueAxis;
-  readonly series: readonly [
-    {
-      readonly type: "bar";
-      readonly data: readonly BarDataItem[];
-      readonly barWidth?: number;
-      readonly barCategoryGap: string;
-      readonly showBackground: boolean;
-      readonly backgroundStyle?: {
-        readonly color: EngineColor;
-        readonly borderRadius?: number;
-      };
-      readonly silent: true;
-    },
-  ];
 }
+
+export interface ContinuousBarOption extends EngineAnimation, BarAxes {
+  readonly series: readonly [ContinuousBarSeries];
+}
+
+export interface SegmentedBarOption extends EngineAnimation, BarAxes {
+  readonly series: readonly [SegmentedBarSeries];
+}
+
+export type BarOption = ContinuousBarOption | SegmentedBarOption;
 
 export function buildBarOption(
   settings: BarSettings,
@@ -124,42 +213,15 @@ export function buildBarOption(
   animate = true,
   palette?: FabricPalette,
 ): BarOption {
-  const horizontal = settings.orientation === "horizontal";
+  const axes = barAxes(settings, inputs);
 
-  const categoryAxis: CategoryAxis = {
-    type: "category",
-    show: settings.showAxes || settings.showCategoryLabels,
-    data: inputs.map((input) => input.label ?? input.sensorId),
-    axisTick: { show: false },
-    axisLine: { show: false },
-    axisLabel: { show: settings.showCategoryLabels },
-    boundaryGap: true,
-    inverse: horizontal,
-  };
-
-  const valueAxis: ValueAxis = {
-    type: "value",
-    show: settings.showAxes,
-    // Keep bar fractions stable instead of auto-rescaling with current data.
-    min: settings.min,
-    max: settings.max,
-    axisLabel: { show: settings.showAxes },
-    splitLine: { show: settings.showAxes },
-  };
+  if (segmentCount(segmentDivisorOf(settings)) > 1) {
+    return buildSegmentedBarOption(settings, inputs, animate, palette, axes);
+  }
 
   return {
     ...toEngineAnimation(settings.animation, animate),
-    grid: cartesianGrid(
-      {
-        left: settings.showAxes || settings.showCategoryLabels ? 8 : 0,
-        right: 0,
-        top: 0,
-        bottom: settings.showAxes ? 8 : 0,
-      },
-      settings.showAxes || settings.showCategoryLabels,
-    ),
-    xAxis: horizontal ? valueAxis : categoryAxis,
-    yAxis: horizontal ? categoryAxis : valueAxis,
+    ...axes,
     series: [
       {
         type: "bar",
@@ -178,9 +240,217 @@ export function buildBarOption(
   };
 }
 
+function barAxes(settings: BarSettings, inputs: readonly BarInput[]): BarAxes {
+  const horizontal = settings.orientation === "horizontal";
+
+  const categoryAxis: CategoryAxis = {
+    type: "category",
+    show: false,
+    data: inputs.map((input) => input.label ?? input.sensorId),
+    axisTick: { show: false },
+    axisLine: { show: false },
+    axisLabel: { show: false },
+    boundaryGap: true,
+    inverse: horizontal,
+  };
+
+  const valueAxis: ValueAxis = {
+    type: "value",
+    show: settings.showAxes,
+    // Keep bar fractions stable instead of auto-rescaling with current data.
+    min: settings.min,
+    max: settings.max,
+    axisLabel: { show: false },
+    splitLine: { show: settings.showAxes },
+  };
+
+  return {
+    grid: cartesianGrid(
+      {
+        left: settings.showAxes ? 8 : 0,
+        right: 0,
+        top: 0,
+        bottom: settings.showAxes ? 8 : 0,
+      },
+      false,
+    ),
+    xAxis: horizontal ? valueAxis : categoryAxis,
+    yAxis: horizontal ? categoryAxis : valueAxis,
+  };
+}
+
+/**
+ * The segmented bar as a custom series, because a bar series can draw one rect
+ * per category and a segmented fill needs one per band.
+ *
+ * **Bands are geometry, not data.** The reading still decides how far the fill
+ * reaches; the bands only decide where the cuts fall. The gap is a share of the
+ * band itself, so it measures the same on a large bar and a small one. In
+ * `partial` mode the fill edge follows the reading: the band holding it is
+ * painted up to the reading and no further; in `whole` mode a band lights only
+ * once the reading has painted it to its own end.
+ */
+export function buildSegmentedBarOption(
+  settings: BarSettings,
+  inputs: readonly BarInput[],
+  animate = true,
+  palette?: FabricPalette,
+  axes: BarAxes = barAxes(settings, inputs),
+): SegmentedBarOption {
+  const count = segmentCount(segmentDivisorOf(settings));
+  const data: SegmentedBarDatum[] = inputs.map((input, index) => {
+    if (!hasPlottableValue(input.sample)) return [index, null];
+    // A bar whose paint resolved to nothing carries no value either (0007).
+    if (resolveChartPaint(settings.fill, palette) === undefined) {
+      return [index, null];
+    }
+    return [
+      index,
+      Math.min(Math.max(input.sample.value, settings.min), settings.max),
+    ];
+  });
+
+  return {
+    ...toEngineAnimation(settings.animation, animate),
+    ...axes,
+    series: [
+      {
+        type: "custom",
+        coordinateSystem: "cartesian2d",
+        data,
+        renderItem: segmentedRenderItem(
+          settings,
+          count,
+          palette,
+          data.map((datum) => datum[1]),
+        ),
+        silent: true,
+        clip: true,
+      },
+    ],
+  };
+}
+
+function segmentedRenderItem(
+  settings: BarSettings,
+  count: number,
+  palette: FabricPalette | undefined,
+  readings: readonly (number | null)[],
+): BarRenderItem {
+  const horizontal = settings.orientation === "horizontal";
+  const whole = segmentFillOf(settings, "partial") === "whole";
+  const track =
+    settings.track === undefined
+      ? undefined
+      : resolveChartPaint(settings.track, palette);
+  const fill = resolveChartPaint(settings.fill, palette);
+  const range = settings.max - settings.min;
+
+  return (params, api) => {
+    const index = params.dataIndex;
+    const reading = readings[index] ?? null;
+    const position =
+      reading === null || range === 0 ? 0 : (reading - settings.min) / range;
+
+    const [minX, minY] = api.coord([settings.min, index]);
+    const [maxX, maxY] = api.coord([settings.max, index]);
+    const sign = horizontal ? Math.sign(maxX - minX) : Math.sign(maxY - minY);
+    const span = horizontal ? Math.abs(maxX - minX) : Math.abs(maxY - minY);
+    const band = span / count;
+    const gapPx = barGapPx(band, segmentSpacingPercentOf(settings));
+    const visible = band - gapPx;
+    const thickness =
+      settings.barWidth ??
+      (horizontal ? api.size([0, 1])[1] : api.size([1, 0])[0]) *
+        (1 - clampPercent(settings.categoryGapPercent) / 100);
+    const centre = horizontal ? minY : minX;
+
+    const rect = (
+      name: BarRect["name"],
+      from: number,
+      length: number,
+      color: string,
+      radius: number | undefined,
+    ): BarRect => {
+      // A value axis can run either way in pixels — a vertical bar's grows
+      // upward — so the rect is built from the two offsets it actually spans,
+      // never from an assumed direction.
+      const first = sign * from;
+      const second = sign * (from + length);
+      const along = Math.min(first, second);
+      const extent = Math.abs(second - first);
+      return {
+        type: "rect",
+        name,
+        shape: horizontal
+          ? {
+              x: minX + along,
+              y: centre - thickness / 2,
+              width: extent,
+              height: thickness,
+              ...(radius === undefined ? {} : { r: radius }),
+            }
+          : {
+              x: centre - thickness / 2,
+              y: minY + along,
+              width: thickness,
+              height: extent,
+              ...(radius === undefined ? {} : { r: radius }),
+            },
+        style: { fill: color },
+        ...(name === "fill" ? { transition: "shape" as const } : {}),
+        silent: true,
+      };
+    };
+
+    const children: BarRect[] = [];
+    if (track !== undefined) {
+      for (let bandIndex = 0; bandIndex < count; bandIndex += 1) {
+        children.push(
+          rect(
+            "track",
+            bandIndex * band,
+            visible,
+            bandColor(track, (bandIndex + 0.5) / count, 1),
+            settings.trackCornerRadius,
+          ),
+        );
+      }
+    }
+    if (fill !== undefined && reading !== null && position > 0) {
+      // The reading's own distance along the track. A band is painted up to
+      // that edge, clamped to the band's visible length — counting the gap as
+      // fill would make the edge lag the reading and the next band start before
+      // this one reached its end.
+      const reach = position * span;
+      for (let bandIndex = 0; bandIndex < count; bandIndex += 1) {
+        const length = Math.min(Math.max(reach - bandIndex * band, 0), visible);
+        if (length <= 0) continue;
+        if (whole && length < visible) continue;
+        children.push(
+          rect(
+            "fill",
+            bandIndex * band,
+            whole ? visible : length,
+            bandColor(fill, (bandIndex + 0.5) / count, position),
+            settings.cornerRadius,
+          ),
+        );
+      }
+    }
+    return { type: "group", children };
+  };
+}
+
+/** One band's colour: a gradient follows the value axis, the rest are flat. */
+function bandColor(paint: Fill, midpoint: number, reading: number): string {
+  if (paint.kind === "gradient") return colorAt(paint.stops, midpoint);
+  return resolveFlatColor(paint, paint.kind === "thresholds" ? reading : 0);
+}
+
 /** Missing samples return `null`; a zero-length bar would be indistinguishable from real zero. */
 export function toBarDataItem(
-  settings: BarSettings,
+  settings: BarPaintSettings,
   input: BarInput,
   palette?: FabricPalette,
 ): BarDataItem {
@@ -210,17 +480,14 @@ export function toBarDataItem(
 
 /** Resolve per-bar solid/threshold colour or a cartesian growth-direction gradient. */
 export function toBarColor(
-  settings: BarSettings,
+  settings: BarPaintSettings,
   position: number,
   palette?: FabricPalette,
 ): EngineColor | undefined {
   const fill = resolveChartPaint(settings.fill, palette);
   if (fill === undefined) return undefined;
   if (fill.kind === "gradient") {
-    return toLinearGradient(
-      fill.stops,
-      settings.orientation === "horizontal" ? "to-right" : "to-top",
-    );
+    return toLinearGradient(fill.stops, gradientDirection(settings));
   }
 
   return resolveFlatColor(fill, position);
@@ -234,8 +501,8 @@ export function toBarColor(
  * rounds the two ends of the progress bar rather than the outside of a larger
  * background.
  */
-function toBackgroundStyle(
-  settings: BarSettings,
+export function toBackgroundStyle(
+  settings: BarPaintSettings,
   palette: FabricPalette | undefined,
 ): { readonly color: EngineColor; readonly borderRadius?: number } {
   const radius = settings.trackCornerRadius;
@@ -250,7 +517,7 @@ function toBackgroundStyle(
 
 /** Track gradients span the whole slot; threshold tracks resolve to their top band. */
 function toTrackColor(
-  settings: BarSettings,
+  settings: BarPaintSettings,
   palette: FabricPalette | undefined,
 ): EngineColor {
   const track = settings.track;
@@ -261,13 +528,17 @@ function toTrackColor(
 
   const resolved = resolveChartPaint(track, palette) ?? NO_PAINT;
   if (resolved.kind === "gradient") {
-    return toLinearGradient(
-      resolved.stops,
-      settings.orientation === "horizontal" ? "to-right" : "to-top",
-    );
+    return toLinearGradient(resolved.stops, gradientDirection(settings));
   }
 
   return resolveFlatColor(resolved, 1);
+}
+
+/** A cartesian bar reads its orientation; a polar bar grows to the top. */
+function gradientDirection(settings: BarPaintSettings): GradientDirection {
+  return "orientation" in settings && settings.orientation === "horizontal"
+    ? "to-right"
+    : "to-top";
 }
 
 function clampPercent(value: number): number {

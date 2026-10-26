@@ -4,13 +4,15 @@ import type { BarOption } from "./bar.js";
 import type { GaugeOption } from "./gauge.js";
 import type { LineOption } from "./line.js";
 import type { PieOption } from "./pie.js";
+import type { PolarBarOption } from "./polar-bar.js";
+import type { RadarOption } from "./radar.js";
 
 /**
  * The one place a Yunari chart option becomes an engine option.
  *
  * ## Why this file exists rather than a cast at each call site
  *
- * The four `buildXOption` builders emit **Yunari's** typed shapes — narrow,
+ * The `buildXOption` builders emit **Yunari's** typed shapes — narrow,
  * reviewable, unit-tested objects that happen to be structured the way ECharts
  * wants. That is the point of "typed chart settings only": raw engine options
  * never enter the theme format, and a feature never reaches for
@@ -27,7 +29,7 @@ import type { PieOption } from "./pie.js";
 /**
  * Each family's option type, keyed by `ChartFamily`.
  *
- * A `Record` over the union rather than a hand-written union, so a fifth family
+ * A `Record` over the union rather than a hand-written union, so a new family
  * is a compile error here instead of a silently unhandled case — the same
  * mechanism `charts/settings-fields.ts` uses for its descriptors.
  */
@@ -36,6 +38,8 @@ export interface ChartOptionByFamily extends Record<ChartFamily, unknown> {
   readonly line: LineOption;
   readonly bar: BarOption;
   readonly pie: PieOption;
+  readonly radar: RadarOption;
+  readonly polarBar: PolarBarOption;
 }
 
 /** Any family's built option. */
@@ -49,7 +53,5 @@ export type ChartOption = ChartOptionByFamily[ChartFamily];
  * builders' outputs, and the question to answer first is why.
  */
 export function toEngineOption(option: ChartOption): EChartsCoreOption {
-  const { renderOverscanRightMs: _renderOverscanRightMs, ...engineOption } =
-    option as LineOption;
-  return engineOption as unknown as EChartsCoreOption;
+  return option as unknown as EChartsCoreOption;
 }

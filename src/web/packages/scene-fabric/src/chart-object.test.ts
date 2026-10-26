@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  CHART_SERIALISED_KEYS,
-  withoutEngineAnimation,
-  YunariChart,
-} from "./chart-object.js";
+import { CHART_SERIALISED_KEYS, YunariChart } from "./chart-object.js";
 
 /**
  * The chart object's decisions and its shape.
@@ -202,7 +198,7 @@ describe("how an option reaches the engine", () => {
 
     expect(calls).toEqual([
       [
-        { series: [{ type: "line" }], animation: false },
+        { series: [{ type: "line" }] },
         { notMerge: false, replaceMerge: ["series"], lazyUpdate: false },
       ],
     ]);
@@ -218,46 +214,7 @@ describe("how an option reaches the engine", () => {
     instance.setOption({ series: [] } as never, { replace: true });
 
     expect(calls).toEqual([
-      [
-        { series: [], animation: false },
-        { notMerge: true, lazyUpdate: false },
-      ],
+      [{ series: [] }, { notMerge: true, lazyUpdate: false }],
     ]);
-  });
-});
-
-describe("withoutEngineAnimation", () => {
-  it("disables the engine animation loop", () => {
-    // Measured: with animation on, one data push fires the invalidation hook
-    // ~31 times and repaints the whole canvas each time, for one visible
-    // change. Yunari's own appear animations live in the plan instead.
-    const option = { series: [{ type: "line" }] } as never;
-
-    expect(withoutEngineAnimation(option)).toMatchObject({ animation: false });
-  });
-
-  it("overrides an option that asked for animation", () => {
-    const option = { animation: true, series: [] } as never;
-
-    expect(withoutEngineAnimation(option)).toMatchObject({ animation: false });
-  });
-
-  it("does not mutate the plan option it was given", () => {
-    // The option comes from `plan.ts`, which is pure and may share a value
-    // between frames. Mutating it would reach back into the plan.
-    const option = { animation: true, series: [] };
-
-    withoutEngineAnimation(option as never);
-
-    expect(option.animation).toBe(true);
-  });
-
-  it("keeps everything else the option said", () => {
-    const option = { series: [{ type: "gauge" }], grid: { left: 4 } } as never;
-
-    expect(withoutEngineAnimation(option)).toMatchObject({
-      series: [{ type: "gauge" }],
-      grid: { left: 4 },
-    });
   });
 });

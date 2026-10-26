@@ -13,6 +13,10 @@ import { isDesktopSurface } from "./surface.js";
  * pane — and what the deleted file proved is kept: the pane offers the whole
  * `insertGroups()` list, and a card inserted from it arrives as a unit the tree
  * can name.
+ *
+ * The third case came here from the Add pane's deleted file section: local files
+ * belong to the Assets pane (DESIGN.md §7.2), so the control it measures is
+ * opened where it now lives.
  */
 
 const EDITOR = "http://127.0.0.1:4174/";
@@ -56,13 +60,13 @@ test("the Add pane offers units and primitives, neither greyed, neither a fallba
   }
 });
 
-test(`the pane's file controls take control text, not the shell's ${themeToken("--text-md")} base`, async ({
+test(`the Assets pane's import control takes control text, not the shell's ${themeToken("--text-md")} base`, async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   await page.goto(EDITOR);
-  await openPane(page, "Add");
+  await openPane(page, "Assets");
 
   // Plan 8's census measured these boxes' text as *inherited*, not stated
   // (D9), so they took the shell root's `--text-md`. §2 gives control text
@@ -70,7 +74,12 @@ test(`the pane's file controls take control text, not the shell's ${themeToken("
   // groups states it — as does `shell.html:137`/`:140` for this pane's own
   // instances. The expected pair is the stylesheet's own declaration, so the
   // row moves with §2 rather than restating it.
-  const importButton = page.locator("[data-yunari-asset-import]");
+  //
+  // The import button is the Assets pane's now; the Add pane's file section
+  // that used to carry it is deleted (§7.2).
+  const importButton = page.locator(
+    '[data-yunari-panel="assets"] [data-yunari-asset-import]',
+  );
   await expect(importButton).toBeVisible();
   await expect(importButton).toHaveCSS(
     "font-size",

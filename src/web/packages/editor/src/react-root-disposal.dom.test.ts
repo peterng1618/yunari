@@ -9,9 +9,9 @@
  * removal alone; the palette panel was the second, and it was worse — its picker
  * and gradient roots were nested `createRoot`s re-created every time the field
  * set rebuilt (the `built`/`shape` rule), so it leaked per token switch as well
- * as per session teardown. Task 5 replaced that file's rendering leaves: the
- * picker and the gradient editor are children of the Tokens pane's tree now, so
- * the file declares one root and the cases below pin that it stays one.
+ * as per session teardown. The picker and the gradient editor moved to the token
+ * inspector with the field set, so both files declare one root and the cases
+ * below pin that each stays one.
  *
  * Three instruments, because the defect has three faces and only one of them is
  * a document listener:
@@ -45,6 +45,7 @@ import type { FabricPalette } from "@yunari/renderer-core";
 import { act } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPalettePanel } from "./palette-manager/panel.js";
+import { createTokenInspectorPanel } from "./panes/tokens/token-inspector.js";
 
 const SRC = dirname(fileURLToPath(import.meta.url));
 
@@ -180,13 +181,11 @@ function spyDocumentListeners(): {
  */
 const NOT_THE_PANELS = new Set(["selectionchange", "mouseover", "mouseout"]);
 
-describe("a palette panel's React roots", () => {
+describe("the palette panel's and token inspector's React roots", () => {
   it("are all unmounted when the panel is disposed", () => {
-    const panel = createPalettePanel(mountHost(), () => {}, undefined, {});
-    panel.render(paletteWithOneSolidToken);
+    const panel = createPalettePanel(mountHost(), () => {});
 
-    // The field set really mounted a root: without this, a panel that created
-    // none would report every root unmounted, which is the vacuous pass.
+    // The pane rendered its list, so a root exists to leak.
     expect(createdRoots.length).toBeGreaterThan(0);
 
     panel.destroy();
@@ -197,8 +196,22 @@ describe("a palette panel's React roots", () => {
   });
 
   it("keeps one root across a rebuild of the field set", () => {
-    const panel = createPalettePanel(mountHost(), () => {}, undefined, {});
-    panel.render(paletteWithOneSolidToken);
+    // The field set is the token inspector's now; the palette panel renders the
+    // rows only.
+    let palette = paletteWithOneSolidToken;
+    const inspector = createTokenInspectorPanel(mountHost(), {
+      onChange: () => undefined,
+      onDelete: () => undefined,
+      setRole: () => undefined,
+      unbindFace: () => undefined,
+      paints: {
+        palette: () => palette,
+        onChange: () => undefined,
+        onDelete: undefined,
+        usage: undefined,
+      },
+    });
+    inspector.render({ kind: "paint", id: "panel" }, {}, undefined);
     const firstFieldSet = createdRoots.length;
     expect(firstFieldSet).toBeGreaterThan(0);
 
@@ -206,20 +219,33 @@ describe("a palette panel's React roots", () => {
     // rebuilds. It used to be rebuilt as a second root — the picker's, holding
     // the discarded token in its closures — and it is the same tree now, which
     // is why this asserts a count that does not move rather than one that does.
-    panel.render(paletteWithOneGradientToken);
+    palette = paletteWithOneGradientToken;
+    inspector.render({ kind: "paint", id: "panel" }, {}, undefined);
 
     expect(createdRoots.length).toBe(firstFieldSet);
     expect(createdRoots.map((root) => root.unmounted)).toEqual(
       createdRoots.map(() => false),
     );
+    inspector.destroy();
   });
 
   it("releases the document listeners its open popover registered", async () => {
     const host = mountHost();
     const listeners = spyDocumentListeners();
-    const panel = createPalettePanel(host, () => {}, undefined, {});
+    const inspector = createTokenInspectorPanel(host, {
+      onChange: () => undefined,
+      onDelete: () => undefined,
+      setRole: () => undefined,
+      unbindFace: () => undefined,
+      paints: {
+        palette: () => paletteWithOneSolidToken,
+        onChange: () => undefined,
+        onDelete: undefined,
+        usage: undefined,
+      },
+    });
     await act(async () => {
-      panel.render(paletteWithOneSolidToken);
+      inspector.render({ kind: "paint", id: "panel" }, {}, undefined);
     });
 
     // The popover has to be *open*: closed, Base UI registers nothing on the
@@ -232,7 +258,7 @@ describe("a palette panel's React roots", () => {
     ).not.toBeNull();
 
     await act(async () => {
-      panel.destroy();
+      inspector.destroy();
     });
 
     const owned = [...listeners.added.keys()].filter(
@@ -304,6 +330,11 @@ const SHIPPED_ROOTS: readonly (readonly [string, number])[] = [
   // per field-set rebuild. They are React children of the Tokens pane now, so
   // the file creates one root and this declaration follows the code.
   ["palette-manager/panel.ts", 1],
+  // the Assets pane's own tree, released by `createAssetsPane`'s `destroy()`.
+  ["panes/assets/assets-pane.tsx", 1],
+  // the selected token's own column, released by `destroy()` (Task 15a) — the
+  // same duplicate-pane shape the Assets pane's entry above pins.
+  ["panes/tokens/token-inspector.tsx", 1],
   ["selection-inspector/column.tsx", 1],
   ["selection-inspector/inspector.tsx", 1],
   // the lead block's own tree, between the subject and the sections, released

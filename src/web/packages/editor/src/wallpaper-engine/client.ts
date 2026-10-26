@@ -366,6 +366,42 @@ export async function startProject(
   }
 }
 
+/** The engine's own mobile export answer. `ok` means its Save dialog is open and
+ *  the author's click finishes the export; the file arrives through the export
+ *  watcher, not this answer. */
+export type StartMobileExportAnswer =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string };
+
+/** Unpack the item and drive Wallpaper Engine to its `.mpkg` export dialog.
+ *  Long: the engine unpacks, scans and checks before the dialog appears. */
+export async function startMobileExport(
+  workshopId: string,
+  options?: WallpaperEngineClientOptions,
+): Promise<StartMobileExportAnswer> {
+  const { fetcher, url } = request(options);
+  const refused: StartMobileExportAnswer = { ok: false, reason: "refused" };
+
+  try {
+    const response = await fetcher(
+      url(
+        `/api/wallpaper-engine/item/${encodeURIComponent(workshopId)}/mobile-export`,
+      ),
+      { method: "POST" },
+    );
+    if (!response.ok) return refused;
+
+    const body = (await response.json()) as unknown;
+    if (typeof body !== "object" || body === null) return refused;
+    const answer = body as Record<string, unknown>;
+
+    if (answer.ok === true) return { ok: true };
+    return { ok: false, reason: stringAt(answer, "reason") ?? "refused" };
+  } catch {
+    return refused;
+  }
+}
+
 /** The exports written since the sheet opened, newest first. A host that
  *  refuses answers nothing rather than inventing a file. */
 export async function findExports(

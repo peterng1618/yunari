@@ -4,15 +4,21 @@
  * The palette panel's factory: what `editor-session` constructs and calls.
  *
  * The field rules — a colour edit, a paint-kind switch, the picker's identity,
- * the reassignment-on-delete — are the Tokens pane's now and are asserted in
- * `panes/tokens/paint-list.dom.test.tsx`, against the component that owns them.
- * What is left here is the contract the session holds: `render` paints
- * synchronously, a commit travels out through the callbacks it was built with,
- * and `destroy` releases what it created.
+ * the reassignment-on-delete — are the token inspector's now and are asserted in
+ * `panes/tokens/paint-fields.dom.test.tsx` and
+ * `panes/tokens/token-inspector.dom.test.tsx`, against the components that own
+ * them. What is left here is the contract the session holds: `render` paints
+ * synchronously, a row press sets the token selection, and `destroy` releases
+ * what it created.
  */
 import type { FabricPalette } from "@yunari/renderer-core";
 import { act } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  SelectionStore,
+  TokenSelectionStore,
+} from "../editor-shell/shell-stores.js";
+import { uiCopy } from "../ui-copy.js";
 import { createPalettePanel } from "./panel.js";
 
 const palette = {
@@ -62,45 +68,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Types into a field the way an author does, and commits it by leaving. */
-async function commitField(control: string, value: string): Promise<void> {
-  const input = document.querySelector<HTMLInputElement>(control);
-  if (input === null) throw new Error(`no field matches ${control}`);
-  await act(async () => {
-    input.focus();
-    const setter = Object.getOwnPropertyDescriptor(
-      Object.getPrototypeOf(input) as HTMLInputElement,
-      "value",
-    )?.set;
-    if (setter === undefined) input.value = value;
-    else setter.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await act(async () => {
-    input.blur();
-  });
-}
-
-/** Opens the picker's popover, fills its one colour field and commits by
- *  leaving the field — the pane owns no exact-value field of its own. */
-async function commitColour(value: string): Promise<void> {
-  const trigger = document.querySelector<HTMLButtonElement>(
-    "[data-yunari-palette-picker]",
-  );
-  if (trigger === null) throw new Error("the panel rendered no picker trigger");
-  await act(async () => {
-    trigger.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true }),
-    );
-  });
-  for (let round = 0; round < 3; round += 1) {
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-  }
-  await commitField("[data-yunari-palette-color]", value);
-}
-
 describe("palette panel", () => {
   it("paints the tokens on render without waiting for a frame", () => {
     const panel = createPalettePanel(document.body, vi.fn());
@@ -121,52 +88,44 @@ describe("palette panel", () => {
     ).toEqual(["background", "accent"]);
   });
 
-  it("commits an edit under the token's stable id, through the callback it was built with", async () => {
-    const change = vi.fn();
-    const settled = vi.fn();
-    const panel = createPalettePanel(document.body, change, undefined, {
-      onSettled: settled,
+  it("hands a row press to the token selection, so the inspector can open", async () => {
+    const tokenSelection = new TokenSelectionStore(new SelectionStore());
+    const panel = createPalettePanel(document.body, vi.fn(), {
+      tokenSelection,
     });
-    panel.render(palette);
-
-    await commitColour("rgb(16 32 48)");
-
-    // The picker reports a colour, not the document's spelling of one: the
-    // stored value is the hex form (Review Focus 1).
-    expect(change).toHaveBeenLastCalledWith({
-      ...palette,
-      background: {
-        name: "Background",
-        value: { kind: "solid", color: "#102030" },
-      },
-    });
-    expect(
-      settled,
-      "the pane forwards the session's settled boundary",
-    ).toHaveBeenCalledOnce();
-
-    // The popover's portal is open; releasing the root is what removes it from
-    // `body` before the next case's cleanup.
-    await act(async () => {
-      panel.destroy();
-    });
-  });
-
-  it("carries the reassignment-on-delete out through its own callback", async () => {
-    const remove = vi.fn();
-    const panel = createPalettePanel(document.body, vi.fn(), remove);
     panel.render(palette);
 
     await act(async () => {
       panel.root
-        .querySelector<HTMLButtonElement>("[data-yunari-palette-delete]")!
+        .querySelector<HTMLButtonElement>(
+          '[data-yunari-palette-token-row="accent"]',
+        )!
         .dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    // The default target is the first token the chooser does not exclude —
-    // `none` included, as the imperative panel allowed: reassigning to the
-    // reserved transparent token is how an author says "stop painting this".
-    expect(remove).toHaveBeenCalledWith("background", "none");
+    expect(tokenSelection.get()).toEqual({ kind: "paint", id: "accent" });
+  });
+
+  it("adds a token through the change callback and selects it", async () => {
+    const change = vi.fn();
+    const tokenSelection = new TokenSelectionStore(new SelectionStore());
+    const panel = createPalettePanel(document.body, change, { tokenSelection });
+    panel.render(palette);
+
+    await act(async () => {
+      panel.root
+        .querySelector<HTMLButtonElement>("[data-yunari-palette-add]")!
+        .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(change).toHaveBeenLastCalledWith({
+      ...palette,
+      colour: {
+        name: uiCopy.panels.newColour,
+        value: { kind: "solid", color: expect.any(String) },
+      },
+    });
+    expect(tokenSelection.get()).toEqual({ kind: "paint", id: "colour" });
   });
 
   it("re-reads the scene on every render, and states an absent reading", () => {
@@ -178,7 +137,7 @@ describe("palette panel", () => {
       background: [{ objectId: "a", name: "Card title" }],
       accent: [],
     };
-    const panel = createPalettePanel(document.body, vi.fn(), undefined, {
+    const panel = createPalettePanel(document.body, vi.fn(), {
       usage: () => uses,
     });
     panel.render(palette);

@@ -1,19 +1,18 @@
 // @vitest-environment jsdom
 
 /**
- * What a token is linked to, in the pane.
+ * What a token is linked to, as the pane's rows state it.
  *
  * The count and the delete guard have to come from one walk: a pane saying
  * "3 uses" while the delete decides from a different traversal is how a token
  * is removed from under a live object. `usage` is injected rather than
- * recomputed here, so this file asserts the pane reports what it is given and
- * names the objects — the traversal itself is proven in scene-fabric.
+ * recomputed here, so this file asserts the pane reports what it is given — the
+ * traversal itself is proven in scene-fabric.
  *
- * The figure rides each row and the users list names the chosen token's objects,
- * so a dead token is visible without being selected first and the list is the
- * confirmation.
+ * The figure rides each row, so a dead token is visible without being selected
+ * first. The list that names the objects is the token inspector's now
+ * (`panes/tokens/paint-fields.dom.test.tsx`), reading the same getter.
  */
-import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { uiCopy } from "../ui-copy.js";
 import { createPalettePanel } from "./panel.js";
@@ -62,7 +61,6 @@ function render(withScene = true): HTMLElement {
   const panel = createPalettePanel(
     document.body,
     vi.fn(),
-    undefined,
     withScene ? { usage } : {},
   );
   panel.render(palette);
@@ -81,9 +79,6 @@ const row = (id: string): HTMLElement =>
     `[data-yunari-palette-token-row="${id}"]`,
   )!;
 
-const users = (): HTMLElement | null =>
-  document.querySelector("[data-yunari-palette-users]");
-
 describe("palette token usage", () => {
   it("names how many objects a token is linked to, per token", () => {
     render();
@@ -98,24 +93,10 @@ describe("palette token usage", () => {
     expect(row("accent").textContent).toContain("Accent");
   });
 
-  it("names the objects a token is used by", () => {
+  it("marks a dead token on its row, without selecting it first", () => {
     render();
 
-    expect(users()?.textContent).toContain("Card title");
-    expect(users()?.textContent).toContain("Header");
-    expect(users()?.textContent).toContain("RAM gauge");
-  });
-
-  it("says so plainly when nothing uses the token, so dead tokens show", async () => {
-    render();
-    // The figure is on the row, so a dead token is visible without selecting
-    // it; the list is the confirmation.
     expect(figure("unused")).toContain("0");
-
-    await act(async () => {
-      row("unused").dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(users()?.textContent).not.toContain("Card title");
   });
 
   it("states an absent reading when the panel is given no scene to read", () => {
@@ -125,6 +106,5 @@ describe("palette token usage", () => {
 
     expect(figure("accent")).toBe(uiCopy.panels.notSet);
     expect(figure("accent")).not.toBe("0");
-    expect(users()).toBeNull();
   });
 });

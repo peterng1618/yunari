@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { CATALOGUE_ORIGIN } from "@yunari/renderer-core";
 import { uiCopy } from "../../packages/editor/src/ui-copy.js";
 import { captureVisualReview } from "./editor-canvas.js";
 import { isDesktopSurface } from "./surface.js";
@@ -167,11 +168,12 @@ test.beforeEach(async ({ page }) => {
   );
   // The entry's picture is a path on the store's own origin, and this spec
   // claims nothing about it: a 1×1 pixel at the panel ground keeps the stage an
-  // empty box rather than the browser's broken-image mark.
+  // empty box rather than the browser's broken-image mark. The host comes from
+  // `CATALOGUE_ORIGIN` rather than a copy of it, so a moved origin cannot leave
+  // these rows drawing broken marks while the spec passes.
+  const storeHostname = new URL(CATALOGUE_ORIGIN).hostname;
   await page.route(
-    (url) =>
-      url.hostname === "yunari-store.workers.dev" &&
-      url.pathname.endsWith(".png"),
+    (url) => url.hostname === storeHostname && url.pathname.endsWith(".png"),
     (route) =>
       route.fulfill({ contentType: "image/png", body: EMPTY_PICTURE_PNG }),
   );

@@ -8,6 +8,8 @@ import {
   defaultGaugeSettings,
   defaultLineSettings,
   defaultPieSettings,
+  defaultPolarBarSettings,
+  defaultRadarSettings,
   type FabricPalette,
   paletteTokenOptions,
   readSetting,
@@ -77,6 +79,8 @@ function defaultsOf(family: ChartFamily): unknown {
     line: defaultLineSettings,
     bar: defaultBarSettings,
     pie: defaultPieSettings,
+    radar: defaultRadarSettings,
+    polarBar: defaultPolarBarSettings,
   };
   return {
     animation: defaultAnimationSettings,
@@ -126,6 +130,9 @@ const MAX_BINDINGS: Readonly<Record<ChartFamily, number>> = {
   line: Number.POSITIVE_INFINITY,
   bar: Number.POSITIVE_INFINITY,
   pie: Number.POSITIVE_INFINITY,
+  // More spokes than twelve collapse the polygon at theme sizes (§D1).
+  radar: 12,
+  polarBar: Number.POSITIVE_INFINITY,
 };
 
 /** The ratios the line-chart control group offers, widest last. It lives here
@@ -247,6 +254,32 @@ function settingRows(
     const id = `yunari-chart-setting-${field.property}`;
 
     if (field.kind === "number") {
+      // A discrete number is a track over its own list: its ends are the list's,
+      // and the values between two members are not commits any adapter draws.
+      if (field.values !== undefined) {
+        const values = field.values;
+        rows.push({
+          id,
+          key: field.property,
+          label: field.label,
+          hint: field.hint,
+          path,
+          control: "slider",
+          value:
+            authoredNumber(value) ??
+            authoredNumber(readSetting(defaultsOf(content.family), path)) ??
+            values.at(-1) ??
+            1,
+          min: values[0] ?? 1,
+          max: values.at(-1) ?? 1,
+          values,
+          ...(field.decimals === undefined ? {} : { decimals: field.decimals }),
+          ...(field.integer === undefined ? {} : { integer: field.integer }),
+          ...(field.suffix === undefined ? {} : { suffix: field.suffix }),
+          clearable: false,
+        });
+        continue;
+      }
       const bound = ceilingOf(field, drawnEdge);
       if (bound !== undefined) {
         rows.push({
@@ -266,6 +299,9 @@ function settingRows(
             bound.min,
           min: bound.min,
           max: bound.max,
+          ...(field.decimals === undefined ? {} : { decimals: field.decimals }),
+          ...(field.integer === undefined ? {} : { integer: field.integer }),
+          ...(field.suffix === undefined ? {} : { suffix: field.suffix }),
           clearable: field.optional === true,
         });
         continue;

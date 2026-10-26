@@ -3,6 +3,7 @@ import {
   ASSET_PATH_PATTERN,
   type AssetKind,
   BACKGROUND_MEDIA_BOUNDS,
+  FONT_ASSET_FORMATS,
   GLOBAL_GROUPS,
   MAX_ARTBOARD_DIMENSION,
   MAX_BACKGROUND_OFFSET,
@@ -629,42 +630,65 @@ function validateFontAsset(
     `${path}/style`,
     "A font asset style",
   );
-  if (asset["format"] !== "woff2")
-    issues.add(
-      "invalid-enum",
-      `${path}/format`,
-      "A font asset format must be woff2.",
-    );
-  if (typeof asset["path"] !== "string" || !asset["path"].endsWith(".woff2")) {
+  issues.enumValue(
+    asset["format"],
+    FONT_ASSET_FORMATS,
+    `${path}/format`,
+    "A font asset format",
+  );
+  const format = asset["format"];
+  if (
+    typeof asset["path"] !== "string" ||
+    typeof format !== "string" ||
+    !asset["path"].endsWith(`.${format}`)
+  ) {
     issues.add(
       "invalid-asset-path",
       `${path}/path`,
-      "A WOFF2 font asset path must end in .woff2.",
+      "A font asset path's extension must equal its format.",
     );
   }
   if (
-    typeof asset["sourceUrl"] !== "string" ||
-    !isHttpUrl(asset["sourceUrl"])
+    asset["sourceUrl"] !== undefined &&
+    (typeof asset["sourceUrl"] !== "string" || !isHttpUrl(asset["sourceUrl"]))
   ) {
     issues.add(
       "wrong-type",
       `${path}/sourceUrl`,
-      "A font asset needs an HTTPS Fontsource source URL.",
+      "A font asset source URL must be HTTPS.",
     );
   }
   const license = asset["license"];
-  if (
-    !isRecord(license) ||
-    typeof license["name"] !== "string" ||
-    license["name"].trim().length === 0 ||
-    typeof license["url"] !== "string" ||
-    !isHttpUrl(license["url"])
-  ) {
-    issues.add(
-      "missing-field",
-      `${path}/license`,
-      "A font asset needs licence name and URL metadata.",
-    );
+  if (license !== undefined) {
+    if (!isRecord(license)) {
+      issues.add(
+        "wrong-type",
+        `${path}/license`,
+        "A font asset licence must be an object.",
+      );
+    } else {
+      if (
+        license["name"] !== undefined &&
+        (typeof license["name"] !== "string" ||
+          license["name"].trim().length === 0)
+      ) {
+        issues.add(
+          "missing-field",
+          `${path}/license/name`,
+          "A font asset licence name must be a non-empty string.",
+        );
+      }
+      if (
+        license["url"] !== undefined &&
+        (typeof license["url"] !== "string" || !isHttpUrl(license["url"]))
+      ) {
+        issues.add(
+          "wrong-type",
+          `${path}/license/url`,
+          "A font asset licence URL must be HTTPS.",
+        );
+      }
+    }
   }
 }
 

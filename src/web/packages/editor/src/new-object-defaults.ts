@@ -5,6 +5,8 @@ import {
   defaultGaugeSettings,
   defaultLineSettings,
   defaultPieSettings,
+  defaultPolarBarSettings,
+  defaultRadarSettings,
   type FabricGlobals,
   type TypePreset,
 } from "@yunari/renderer-core";
@@ -586,6 +588,14 @@ export function createNewChartDefaults(
 ): Extract<ChartContent, { readonly family: "pie" }>["settings"];
 export function createNewChartDefaults(
   globals: FabricGlobals | undefined,
+  family: "radar",
+): Extract<ChartContent, { readonly family: "radar" }>["settings"];
+export function createNewChartDefaults(
+  globals: FabricGlobals | undefined,
+  family: "polarBar",
+): Extract<ChartContent, { readonly family: "polarBar" }>["settings"];
+export function createNewChartDefaults(
+  globals: FabricGlobals | undefined,
   family: ChartFamily,
 ): ChartContent["settings"];
 export function createNewChartDefaults(
@@ -619,6 +629,12 @@ export function createNewChartDefaults(
         palette: [ref],
         remainderFill: surfaceRef,
       };
+    case "radar":
+      // No area: an outline is what a radar is for until the author asks for
+      // the fill, and an optional setting arrives absent.
+      return { ...defaultRadarSettings, stroke: ref };
+    case "polarBar":
+      return { ...defaultPolarBarSettings, fill: ref, track: surfaceRef };
   }
 }
 

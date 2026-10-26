@@ -736,6 +736,99 @@ describe("Fabric theme envelope validation", () => {
     ]);
   });
 
+  it("refuses an interpolation the line no longer offers", () => {
+    // `smooth` was removed rather than silently straightened: a theme asking
+    // for it is authored data the renderer cannot honour (0116).
+    const accepted = validateFabricThemeEnvelope(
+      chartEnvelope("line", { interpolation: "step" }),
+    );
+    const refused = issuesOf(
+      validateFabricThemeEnvelope(
+        chartEnvelope("line", { interpolation: "smooth" }),
+      ),
+    );
+
+    expect(accepted).toMatchObject({ ok: true });
+    expect(refused).toEqual([
+      {
+        code: "invalid-enum",
+        path: "/scene/objects/0/settings/interpolation",
+        message: "interpolation must be one of linear, step.",
+      },
+    ]);
+  });
+
+  it("refuses crossed polar radii", () => {
+    const issues = issuesOf(
+      validateFabricThemeEnvelope(
+        chartEnvelope("polarBar", {
+          innerRadiusPercent: 80,
+          outerRadiusPercent: 20,
+        }),
+      ),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        code: "out-of-range",
+        path: "/scene/objects/0/settings/outerRadiusPercent",
+      }),
+    );
+  });
+
+  it("refuses a segment divisor that is not an allowed value", () => {
+    const issues = issuesOf(
+      validateFabricThemeEnvelope(chartEnvelope("bar", { segmentDivisor: 33 })),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        code: "out-of-range",
+        path: "/scene/objects/0/settings/segmentDivisor",
+      }),
+    );
+  });
+
+  it("refuses a spacing outside 1–100 and a fill mode it does not offer", () => {
+    for (const value of [0, 101, 10.5]) {
+      const spacing = issuesOf(
+        validateFabricThemeEnvelope(
+          chartEnvelope("gauge", { segmentSpacingPercent: value }),
+        ),
+      );
+      expect(spacing).toContainEqual(
+        expect.objectContaining({
+          code: "out-of-range",
+          path: "/scene/objects/0/settings/segmentSpacingPercent",
+        }),
+      );
+    }
+    expect(
+      issuesOf(
+        validateFabricThemeEnvelope(
+          chartEnvelope("gauge", { segmentSpacingPercent: 30 }),
+        ),
+      ),
+    ).toEqual([]);
+
+    const fill = issuesOf(
+      validateFabricThemeEnvelope(
+        chartEnvelope("bar", { segmentFill: "half" }),
+      ),
+    );
+    expect(fill).toContainEqual(
+      expect.objectContaining({
+        code: "invalid-enum",
+        path: "/scene/objects/0/settings/segmentFill",
+      }),
+    );
+    expect(
+      issuesOf(
+        validateFabricThemeEnvelope(
+          chartEnvelope("bar", { segmentFill: "partial" }),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
   it("refuses a crossed pair the family's own descriptors own", () => {
     const gauge = validateFabricThemeEnvelope(
       chartEnvelope("gauge", { min: 10, max: 1 }),
@@ -785,6 +878,18 @@ describe("Fabric theme envelope validation", () => {
     expect(issuesOf(unknown)).toMatchObject([
       { code: "unknown-field", path: "/scene/objects/0/settings/minimum" },
     ]);
+  });
+
+  it("refuses the removed label keys", () => {
+    for (const [family, settings] of [
+      ["bar", { showCategoryLabels: true }],
+      ["pie", { showLabels: true }],
+    ] as const) {
+      const issues = issuesOf(
+        validateFabricThemeEnvelope(chartEnvelope(family, settings)),
+      );
+      expect(issues.some((issue) => issue.code === "unknown-field")).toBe(true);
+    }
   });
 
   it("refuses a fixed pie total with no finite value", () => {
@@ -963,6 +1068,105 @@ describe("Fabric theme envelope validation", () => {
       ok: false,
       issues: expect.arrayContaining([
         expect.objectContaining({ path: "/globals/typePresets" }),
+      ]),
+    });
+  });
+
+  it.each(["woff2", "woff", "ttf", "otf"] as const)(
+    "accepts a local font reference in %s",
+    (format) => {
+      const result = validateFabricThemeEnvelope({
+        ...envelope(),
+        assets: [
+          {
+            id: "body-face",
+            kind: "font",
+            path: `assets/faces/body.${format}`,
+            family: "Inter",
+            weight: 400,
+            style: "normal",
+            format,
+          },
+        ],
+      });
+
+      expect(result).toMatchObject({ ok: true });
+    },
+  );
+
+  it("refuses a format that disagrees with the path extension", () => {
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      assets: [
+        {
+          id: "body-face",
+          kind: "font",
+          path: "assets/faces/body.ttf",
+          family: "Inter",
+          weight: 400,
+          style: "normal",
+          format: "woff2",
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "invalid-asset-path",
+          path: "/assets/0/path",
+        }),
+      ]),
+    });
+  });
+
+  it("accepts a local font with no license or with a name-only license", () => {
+    for (const license of [undefined, { name: "unknown" }]) {
+      const result = validateFabricThemeEnvelope({
+        ...envelope(),
+        assets: [
+          {
+            id: "body-face",
+            kind: "font",
+            path: "assets/faces/body.ttf",
+            family: "Inter",
+            weight: 400,
+            style: "normal",
+            format: "ttf",
+            ...(license === undefined ? {} : { license }),
+          },
+        ],
+      });
+
+      expect(result, JSON.stringify(license)).toMatchObject({ ok: true });
+    }
+  });
+
+  it("refuses a present licence name that is empty", () => {
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      assets: [
+        {
+          id: "body-face",
+          kind: "font",
+          path: "assets/faces/body.woff2",
+          family: "Inter",
+          weight: 400,
+          style: "normal",
+          format: "woff2",
+          license: { name: "" },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "missing-field",
+          path: "/assets/0/license/name",
+        }),
       ]),
     });
   });

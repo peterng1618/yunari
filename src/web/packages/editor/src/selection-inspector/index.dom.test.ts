@@ -2122,4 +2122,33 @@ describe("the column a kind gets", () => {
       },
     );
   });
+
+  /** The token inspector owns this column while a token is selected, so the
+   *  object column must not draw into it — and must take it back when the token
+   *  is cleared. Inline `display` because the root's own Tailwind display
+   *  utilities beat `[hidden]` or a `hidden` class in the cascade. */
+  it("draws no object column while a token is selected", () => {
+    let active: FabricObject | undefined = new Rect({
+      name: "First",
+      width: 10,
+      height: 10,
+    });
+    const { inspector, host } = setup(() => active);
+    expect(host.textContent).toContain("First");
+
+    inspector.setSuppressed(true);
+    expect(inspector.root.style.display).toBe("none");
+
+    // A render while suppressed projects nothing: the surface is another
+    // owner's, so what it would have said is not merely hidden but unread.
+    active = new Rect({ name: "Second", width: 10, height: 10 });
+    inspector.render();
+    expect(host.textContent).toContain("First");
+    expect(host.textContent).not.toContain("Second");
+
+    inspector.setSuppressed(false);
+    expect(inspector.root.style.display).toBe("");
+    expect(host.textContent).toContain("Second");
+    inspector.destroy();
+  });
 });

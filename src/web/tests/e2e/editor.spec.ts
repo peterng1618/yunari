@@ -11,7 +11,6 @@ import { installFixedClock } from "./clock.js";
 import {
   choiceOf,
   chooseIn,
-  optionPairs,
   optionsOf,
   sectionExpanded,
   typeIntoControl,
@@ -44,14 +43,13 @@ import {
   PLATE_PAINT,
   storedColour,
 } from "./editor-fixture.js";
-import { openPane } from "./editor-rail.js";
+import { assetCard, chooseAssetCard, openPane } from "./editor-rail.js";
 import {
   openPosition,
   placeText,
   readScene,
   selectLayer,
 } from "./rebuild-driver.js";
-import { choosePalette } from "./shell-palette.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
 
@@ -1378,7 +1376,10 @@ test.describe("Fabric editor route", () => {
     const charts = page
       .locator('[data-yunari-panel="add"]')
       .getByRole("group", { name: "Chart" });
-    await expect(charts.getByRole("button")).toHaveCount(4);
+    // Six, which is `CHART_FAMILIES` — gauge, line, bar, pie, radar, polar bar —
+    // spelled out here rather than imported, for the reason the shapes count
+    // below is: the count is the claim being made.
+    await expect(charts.getByRole("button")).toHaveCount(6);
     await expect(
       page
         .locator("[data-yunari-add-group]")
@@ -1437,9 +1438,9 @@ test.describe("Fabric editor route", () => {
     // `text` is the token the new panel's border and shadow now point at. The
     // palette panel is the Tokens pane's, so it is in the Tokens pane.
     await openPane(page, "Tokens");
-    // The Tokens pane's choosers are Base UI selects now, so a choice is a
-    // click into an opened listbox rather than a native `selectOption`.
-    await chooseIn(page, "[data-yunari-palette-token]", "text");
+    // The Tokens pane's rows are selectors now; a press hands the token to the
+    // inspector, where the reassignment row lives.
+    await page.locator('[data-yunari-palette-token-row="text"]').click();
     await chooseIn(page, "[data-yunari-palette-replacement]", "dim");
     await page.locator("[data-yunari-palette-delete]").click();
 
@@ -2123,7 +2124,7 @@ test.describe("Fabric editor route", () => {
     await page.goto(EDITOR);
     // The palette panel is the Tokens pane's, so it is in the Tokens pane.
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     // The exact-value field is the popover's, so the trigger opens it first.
     await page.locator("[data-yunari-palette-picker]").click();
     const color = page.locator("[data-yunari-palette-color]");
@@ -2156,9 +2157,10 @@ test.describe("Fabric editor route", () => {
     // here where the background layer is selected — the pane that owns it.
     await selectLayer(page, "Background");
     await chooseIn(page, "[data-yunari-background]", "palette.bars");
-    // The palette panel is the Tokens pane's, so it is in the Tokens pane.
+    // The palette panel is the Tokens pane's, so it is in the Tokens pane; a row
+    // press hands the token to the inspector, where the delete row lives.
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-palette-token]", "bars");
+    await page.locator('[data-yunari-palette-token-row="bars"]').click();
     await chooseIn(page, "[data-yunari-palette-replacement]", "panel");
     await captureVisualReview(page, testInfo, "editor-palette-reassignment");
     await page.locator("[data-yunari-palette-delete]").click();
@@ -2183,9 +2185,10 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    // The palette panel is the Tokens pane's, so it is in the Tokens pane.
+    // The palette panel is the Tokens pane's, so it is in the Tokens pane; a row
+    // press hands the token to the inspector, where the delete row lives.
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-palette-token]", "chartTrack");
+    await page.locator('[data-yunari-palette-token-row="chartTrack"]').click();
     await chooseIn(page, "[data-yunari-palette-replacement]", "bars");
     await page.locator("[data-yunari-palette-delete]").click();
 
@@ -2214,23 +2217,16 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    await page.route("https://cdn.jsdelivr.net/fontsource/fonts/**", (route) =>
-      route.fulfill({ body: Buffer.from([0, 1, 2]) }),
-    );
-    // The type-preset panel is the Tokens pane's, so it is in the Tokens pane.
+    // The type-preset library is a list now; a row press hands the preset to
+    // the token inspector, which is the field set's new home (spec, Tokens
+    // pane). `36-500` is the starter theme's "Wordmark".
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-type-preset]", "36-500");
-    // Read the option the panel offers rather than typing an id: the picker's
-    // rows come from the generated catalogue, so a literal here pins one
-    // revision of it.
-    const [faceId] = await optionsOf(page, "[data-yunari-font-face]");
-    await chooseIn(page, "[data-yunari-font-face]", faceId!);
-    await page.locator("[data-yunari-font-apply]").click();
-    const size = page.locator("[data-yunari-type-size]");
+    await page.locator('[data-yunari-type-preset-row="36-500"]').click();
+    const size = page.locator("[data-yunari-token-size]");
     await size.fill("34");
     await size.press("Tab");
     await expect(size).toHaveValue("34");
-    const letterSpacing = page.locator("[data-yunari-type-letter-spacing]");
+    const letterSpacing = page.locator("[data-yunari-token-letter-spacing]");
     await letterSpacing.fill("0.25");
     await letterSpacing.press("Tab");
 
@@ -2238,7 +2234,7 @@ test.describe("Fabric editor route", () => {
     await openThemeFromStore(page, storedThemeOfPackage(saved.bytes));
     // Reopening a package remounts the shell, so the pane is shut again.
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-type-preset]", "36-500");
+    await page.locator('[data-yunari-type-preset-row="36-500"]').click();
     const reopened = (await saveEnvelope(page)) as {
       globals: {
         typePresets: {
@@ -2246,7 +2242,6 @@ test.describe("Fabric editor route", () => {
             value: {
               size: number;
               letterSpacing: number;
-              face: { assetId: string };
               trioRole: string;
             };
           };
@@ -2256,11 +2251,10 @@ test.describe("Fabric editor route", () => {
     expect(reopened.globals.typePresets["36-500"].value).toMatchObject({
       size: 34,
       letterSpacing: 0.25,
-      face: { assetId: faceId! },
       trioRole: "heading",
     });
     await page
-      .locator("[data-yunari-type-letter-spacing]")
+      .locator("[data-yunari-token-letter-spacing]")
       .scrollIntoViewIfNeeded();
     await captureVisualReview(page, testInfo, "editor-type-preset");
   });
@@ -2278,10 +2272,9 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    // The type-preset panel is the Tokens pane's, so it is in the Tokens pane.
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-type-preset]", "36-500");
-    const tracking = page.locator("[data-yunari-type-letter-spacing]");
+    await page.locator('[data-yunari-type-preset-row="36-500"]').click();
+    const tracking = page.locator("[data-yunari-token-letter-spacing]");
 
     await tracking.fill("0");
     await tracking.press("Tab");
@@ -2298,62 +2291,20 @@ test.describe("Fabric editor route", () => {
     expect(tracked - untracked).toBeGreaterThan(8);
   });
 
-  test("captures curated font trio controls for visual review", async ({
-    page,
-  }, testInfo) => {
-    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-
-    await page.goto(EDITOR);
-    // The type-preset panel is the Tokens pane's, so it is in the Tokens pane.
-    await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-type-preset]", "36-500");
-    const face = page.locator("[data-yunari-font-face]");
-    await face.scrollIntoViewIfNeeded();
-    await expect(face).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Apply trio" }),
-    ).toBeVisible();
-    // Nothing was chosen, so the helper's dark OS is what puts this on the
-    // shipping default; `ground` is asserted before the shot, not after it, so a
-    // late re-render cannot leave a light PNG behind a green assertion.
-    await captureVisualReview(
-      page,
-      testInfo,
-      "editor-font-trio",
-      undefined,
-      "graphite",
-    );
-    // Two palettes, for the reason the control set pairs them: these choosers
-    // are wells with an accent boundary and a popup, and editorial is the light
-    // ground the same vocabulary has to hold on as well as graphite.
-    await choosePalette(page, "editorial");
-    await face.scrollIntoViewIfNeeded();
-    await expect(face).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Apply trio" }),
-    ).toBeVisible();
-    // No `ground` here: `choosePalette` already asserts the attribute, and the
-    // stored choice disarms the OS listener, so the helper's emulation cannot
-    // repaint it.
-    await captureVisualReview(page, testInfo, "editor-font-trio-editorial");
-  });
-
   test("reassigns text type presets before deleting one", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    // The type-preset panel is the Tokens pane's, so it is in the Tokens pane.
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-type-preset]", "20-400");
-    await chooseIn(page, "[data-yunari-type-replacement]", "24-400");
-    await page.locator("[data-yunari-type-delete]").scrollIntoViewIfNeeded();
+    await page.locator('[data-yunari-type-preset-row="20-400"]').click();
+    await chooseIn(page, "[data-yunari-token-replacement]", "24-400");
+    await page.locator("[data-yunari-token-delete]").scrollIntoViewIfNeeded();
     await captureVisualReview(page, testInfo, "editor-type-reassignment");
-    await page.locator("[data-yunari-type-delete]").click();
-    // The row is the preset's own resolution line in the list, so a deletion
-    // takes the whole row with it — the same fact `option[value="20-400"]`
-    // stated about the native chooser it used to be.
+    await page.locator("[data-yunari-token-delete]").click();
+    // The row is the preset's own row in the list, so a deletion takes the
+    // whole row with it.
     await expect(
       page.locator('[data-yunari-type-preset-row="20-400"]'),
     ).toHaveCount(0);
@@ -3104,13 +3055,14 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     await page.goto(EDITOR);
     // **The pane is opened first, because an author opens it first.** The import
-    // and replace below go through the buttons the pane renders, and a control
-    // behind a closed pane is not one a person can press. Driving the hidden
-    // input directly is the route this finding is about: it stays green while
-    // the feature is unreachable, so it proves nothing.
-    await openPane(page, "Add");
-    await expect(page.locator("[data-yunari-asset-import]")).toBeVisible();
-    await expect(page.locator("[data-yunari-asset-replace]")).toBeVisible();
+    // and replace below go through the controls the Assets pane renders, and a
+    // control behind a closed pane is not one a person can press. Driving the
+    // hidden input directly is the route this finding is about: it stays green
+    // while the feature is unreachable, so it proves nothing.
+    await openPane(page, "Assets");
+    const assets = page.locator('[data-yunari-panel="assets"]');
+    await expect(assets.locator("[data-yunari-asset-import]")).toBeVisible();
+    await expect(assets.locator("[data-yunari-asset-replace]")).toBeVisible();
     await chooseAssetFile(page, "import", {
       name: "logo.png",
       mimeType: "image/png",
@@ -3119,25 +3071,22 @@ test.describe("Fabric editor route", () => {
         "base64",
       ),
     });
-    // The list is a plan-1 select: it renders no option until its popup is
-    // open, and the import that adds the row is asynchronous, so a read of what
-    // it prints opens the popup each turn.
-    const listedAssets = (): ReturnType<typeof optionPairs> =>
-      optionPairs(page, "[data-yunari-asset-select]");
+    // The list is the pane's cards, one per declaration: a card prints the file
+    // the author chose, so the import that adds one is counted by that text.
+    const listedAssets = (): Locator =>
+      assets.locator("[data-yunari-asset-select]");
     const importedCount = async (fragment: string): Promise<number> =>
-      (await listedAssets()).filter((option) => option.label.includes(fragment))
-        .length;
+      listedAssets().filter({ hasText: fragment }).count();
     // The starter declares a packaged backdrop of its own, so the claim is that
-    // this import produced exactly one option named for it — not a bare total,
-    // which a starter change would silently move. An option carries the file the
+    // this import produced exactly one card named for it — not a bare total,
+    // which a starter change would silently move. A card carries the file the
     // author chose, so that is what it is matched on.
     await expect.poll(() => importedCount("logo")).toBe(1);
-    // **The asset to replace is named, not assumed.** The select keeps
-    // whatever was selected, and a fresh document's first declaration is now
-    // the starter's own backdrop — so a bare "replace" here would rewrite that
-    // one. Saying which asset is meant keeps the test independent of
-    // declaration order.
-    await chooseIn(page, "[data-yunari-asset-select]", "logo");
+    // **The asset to replace is named, not assumed.** The pane keeps whatever
+    // was chosen, and a fresh document's first declaration is now the starter's
+    // own backdrop — so a bare "replace" here would rewrite that one. Saying
+    // which asset is meant keeps the test independent of declaration order.
+    await chooseAssetCard(page, "logo.png");
     // **A different extension is refused, and this is now pinned as one.**
     // `replace` keeps the declared path and its bytes in step, so swapping a
     // `.png` for `.svg` would leave the package claiming `.png` over SVG bytes.
@@ -3163,7 +3112,7 @@ test.describe("Fabric editor route", () => {
     // bytes, everything bound to it re-pointed. **Reselected first**, because a
     // refused replace clears the selection and the geometry below reads the
     // active object.
-    await chooseIn(page, "[data-yunari-asset-select]", "logo");
+    await chooseAssetCard(page, "logo.png");
     // **A PNG that actually decodes, and that is the whole fix.** The previous
     // fixture was 50 bytes of a truncated PNG — `libpng` rejects it outright —
     // so the *reopened* document had no image object and the tail of this test
@@ -3196,14 +3145,14 @@ test.describe("Fabric editor route", () => {
     // package does not grow by one file per press. The count is asserted so a
     // regression that went back to declaring would be caught here.
     await expect.poll(() => importedCount("logo")).toBe(1);
-    // **What the select holds afterwards is asserted, because the panel now
-    // guarantees it.** Re-rendering rebuilds the options and restores the
-    // previous selection, so replacing must not move the author off the asset
-    // they were pointing at. The committed id is read off the hook `Select.Value`
-    // prints it with — the native element's `.value` in the only place it is.
-    await expect(
-      page.locator("[data-yunari-asset-select] [data-yunari-value]"),
-    ).toHaveAttribute("data-yunari-value", "logo");
+    // **What the pane holds afterwards is asserted, because the pane now
+    // guarantees it.** The chosen card keeps its `aria-pressed` across the
+    // re-render a replacement causes, so replacing must not move the author off
+    // the asset they were pointing at.
+    await expect(assetCard(page, "logo.png")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     // What the round trip owes is the one declaration, re-pointed at the new
     // file, and the object still bound to it.
     await expect(assetReferences(page)).resolves.toEqual([
@@ -3292,10 +3241,10 @@ test.describe("Fabric editor route", () => {
       controls: { tl: true, tr: true, bl: true, br: true },
       hasSelectionGeometry: true,
     });
-    await openPane(page, "Add");
-    // The declared-asset library is the Add pane's foot now, not a pane of its
-    // own, so what is scrolled to is the section's own import control.
-    await page.locator("[data-yunari-asset-import]").scrollIntoViewIfNeeded();
+    await openPane(page, "Assets");
+    // The declared-asset library is the Assets pane's body, so what is scrolled
+    // to is the card the import declared.
+    await assetCard(page, "logo.png").scrollIntoViewIfNeeded();
     await captureVisualReview(page, testInfo, "editor-assets");
     const saved = await savePackage(page);
     expect(saved.parsed.ok).toBe(true);
@@ -3320,12 +3269,38 @@ test.describe("Fabric editor route", () => {
     });
   });
 
+  test("opens the metadata form when a font is picked", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    await page.goto(EDITOR);
+    await openPane(page, "Assets");
+    const assets = page.locator('[data-yunari-panel="assets"]');
+    // A fake `.ttf`: nothing parses until Create type preset, which this case
+    // does not press — a parseable font binary is not available to the test.
+    await chooseAssetFile(page, "import", {
+      name: "Inter-Bold.ttf",
+      mimeType: "font/ttf",
+      buffer: Buffer.from("not-a-real-font"),
+    });
+    // The pick itself declares nothing: the form is what the author confirms,
+    // and its family and weight come from the filename.
+    const details = assets.locator("[data-yunari-font-details]");
+    await expect(details).toBeVisible();
+    await expect(details.locator("[data-yunari-font-family]")).toHaveValue(
+      "Inter",
+    );
+    await expect(details.locator("[data-yunari-font-weight]")).toHaveValue(
+      "700",
+    );
+  });
+
   test("authors a packaged background image through the inspector", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     await page.goto(EDITOR);
-    await openPane(page, "Add");
+    await openPane(page, "Assets");
     await chooseAssetFile(page, "import", {
       name: "hero.png",
       mimeType: "image/png",

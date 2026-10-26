@@ -126,8 +126,12 @@ export class FakeSampleSource implements SampleSource {
     const end = this.#quantise(this.#nowMs);
     const start = end - Math.max(0, windowSeconds) * 1000;
     const samples: Sample[] = [];
+    // One cadence before the aligned cutoff is the predecessor the source
+    // contract promises, so the line reaches its left edge on every frame.
+    const first =
+      Math.ceil(start / this.#intervalMs) * this.#intervalMs - this.#intervalMs;
 
-    for (let t = this.#quantise(start); t <= end; t += this.#intervalMs) {
+    for (let t = first; t <= end; t += this.#intervalMs) {
       samples.push(this.sampleAt(semanticKey, t));
     }
 

@@ -1,24 +1,23 @@
-import type {
-  FabricPalette,
-  FabricPaletteEntry,
-  PalettePaint,
-} from "@yunari/renderer-core";
-import { useState } from "react";
-import { ColourPicker } from "../../components/ui/colour-picker.js";
-import { ControlSelect } from "../../components/ui/control-select.js";
-import { ControlText } from "../../components/ui/control-text.js";
+import type { FabricPalette, PalettePaint } from "@yunari/renderer-core";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
 import { gradientCss } from "../../components/ui/gradient-css.js";
-import { GradientEditor } from "../../components/ui/gradient-editor.js";
+import {
+  type TokenSelectionStore,
+  useTokenSelection,
+} from "../../editor-shell/shell-stores.js";
 import { newTokenPaint } from "../../new-fabric-theme-globals.js";
 import type { PaletteTokenUse } from "../../palette-manager/panel.js";
 import { paletteTokenIds } from "../../palette-manager/token-list.js";
 import { uiCopy } from "../../ui-copy.js";
 
 /**
- * The Tokens pane's paint library: every token as a swatch well with its name and
- * its usage figure, the chooser that names it, a new-paint row, and the chosen
- * token's own fields.
+ * The Tokens pane's paint library as a list: every token as one pressable row,
+ * with its swatch, its name and its usage figure, and a new-paint action.
+ *
+ * **A row is a selector, not a control.** Pressing it selects the token for the
+ * inspector, where the fields live; nothing here edits the document. The row's
+ * shape is unchanged from the pane's field-set days — the spec keeps paint rows
+ * as they were — and what left is the chooser, the fields and the users list.
  *
  * **The membership is not re-derived here.** The list is `paletteTokenIds`,
  * which the pane's title-bar count also reads, so the rows drawn and the number
@@ -33,10 +32,6 @@ import { uiCopy } from "../../ui-copy.js";
  * opens a field set refusing every edit. It stays a reassignment target, which
  * is the one thing an author has it for — "stop painting this" is a real answer
  * to the question the delete asks.
- *
- * **Two routes to one selection, not two selections.** The well rows and the
- * chooser both move the same `selected`, so the list can be browsed by pointer
- * while the chooser keeps the control set's keyboard model.
  */
 export interface PaintListProps {
   readonly palette: FabricPalette;
@@ -47,33 +42,28 @@ export interface PaintListProps {
     | (() => Readonly<Record<string, readonly PaletteTokenUse[]>>)
     | undefined;
   readonly onChange: (palette: FabricPalette) => void;
-  /** The settled boundary of one commit: a colour gesture's end, or a discrete
-   *  edit that has no gesture — the rename, the kind switch and the new token.
-   *  Without the latter they are unundoable, and a later undo's globals restore
-   *  silently reverts them. */
+  /** The settled boundary of the one discrete edit left in the pane: adding a
+   *  token has no gesture to settle behind it, and without the entry a later
+   *  undo's globals restore silently removes it. */
   readonly onSettled?: (() => void) | undefined;
-  readonly onDelete: ((id: string, replacement: string) => void) | undefined;
+  /** The token selection the rows set and state. Absent reads as none: a list
+   *  mounted with no session behind it selects nothing. */
+  readonly tokenSelection: TokenSelectionStore | undefined;
 }
 
 export function PaintList(props: PaintListProps): React.JSX.Element {
-  const { palette, usage, onChange, onSettled, onDelete } = props;
+  const { palette, usage, onChange, onSettled, tokenSelection } = props;
+  const selectedToken = useTokenSelection(tokenSelection);
   // Read once per draw, so the figure beside a token and the set a deletion
   // moves are one walk of one scene.
   const uses = usage?.();
   // The pane's own list, from the module the bridge's count also reads, so the
   // rows drawn and the number in the title bar cannot disagree (§7.3).
   const ids = paletteTokenIds(palette);
-  const [picked, setPicked] = useState<string | undefined>(ids[0]);
-  // Derived, not stored: when the picked token leaves the palette the pane falls
-  // back to the first declared one, which is what `draw` did imperatively.
+  // A preset ref is not this list's selection: `aria-pressed` would otherwise
+  // mark a paint row whose id happened to match.
   const selected =
-    picked !== undefined && palette[picked] !== undefined ? picked : ids[0];
-  const entry = selected === undefined ? undefined : palette[selected];
-
-  const commit = (next: FabricPaletteEntry): void => {
-    if (selected === undefined) return;
-    onChange({ ...palette, [selected]: next });
-  };
+    selectedToken?.kind === "paint" ? selectedToken.id : undefined;
 
   const add = (): void => {
     const id = nextId(palette);
@@ -84,19 +74,14 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
         value: { kind: "solid", color: newTokenPaint },
       },
     });
-    setPicked(id);
+    // Selected here so the new token's fields open beside the list; a list with
+    // no session behind it still adds.
+    tokenSelection?.set({ kind: "paint", id });
     onSettled?.();
   };
 
   return (
     <div className="flex flex-col gap-[var(--space-8)]">
-      <ControlSelect
-        label={uiCopy.panels.colourToken}
-        data={{ "data-yunari-palette-token": "" }}
-        value={selected ?? ""}
-        options={ids.map((id) => ({ id, name: palette[id]?.name ?? id }))}
-        onChange={(id) => setPicked(id)}
-      />
       <ul className="flex flex-col gap-[var(--space-4)]">
         {ids.map((id) => {
           const token = palette[id];
@@ -107,12 +92,8 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
                 type="button"
                 data-yunari-palette-token-row={id}
                 aria-pressed={id === selected}
-                onClick={() => setPicked(id)}
-                className={`flex min-h-[26px] w-full items-center gap-[var(--space-6)] rounded-md border ${
-                  id === selected
-                    ? "border-muted bg-panel"
-                    : "border-edge bg-panel-2"
-                } px-[var(--space-6)] text-left text-sm text-text hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
+                onClick={() => tokenSelection?.set({ kind: "paint", id })}
+                className="flex min-h-[26px] w-full items-center gap-[var(--space-6)] rounded-md border border-edge bg-panel-2 px-[var(--space-6)] text-left text-sm text-text hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent aria-pressed:border-accent"
               >
                 <span
                   aria-hidden={true}
@@ -139,198 +120,7 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
       >
         {uiCopy.panels.addColour}
       </button>
-      {selected === undefined || entry === undefined ? null : (
-        /* Keyed by the token **and the paint kind**: a colour or an angle changes
-           a value, so the field set stands and the picker keeps its trigger; a
-           kind switch changes the shape of the fields, so the set is rebuilt.
-           That is the imperative `built`/`shape` rule in its React form — the
-           rebuild used to destroy the picker's trigger and the popover then
-           measured a detached node. */
-        <TokenFields
-          key={`${selected}|${entry.value.kind}`}
-          entry={entry}
-          palette={palette}
-          selected={selected}
-          commit={commit}
-          onSettled={onSettled}
-          onDelete={onDelete}
-        />
-      )}
-      {uses === undefined ? null : (
-        <>
-          <h3 className="text-xs text-muted">{uiCopy.panels.layers}</h3>
-          <ul
-            data-yunari-palette-users=""
-            className="flex flex-col gap-[var(--space-4)] text-xs text-text"
-          >
-            {(uses[selected ?? ""] ?? []).map((use) => (
-              <li key={use.objectId}>{use.name}</li>
-            ))}
-          </ul>
-        </>
-      )}
     </div>
-  );
-}
-
-/** The chosen token's own fields: its name, its paint kind, its value, and the
- *  reassignment-on-delete row. */
-function TokenFields(props: {
-  readonly entry: FabricPaletteEntry;
-  readonly palette: FabricPalette;
-  readonly selected: string;
-  readonly commit: (entry: FabricPaletteEntry) => void;
-  readonly onSettled?: (() => void) | undefined;
-  readonly onDelete: ((id: string, replacement: string) => void) | undefined;
-}): React.JSX.Element {
-  const { entry, palette, selected, commit, onSettled, onDelete } = props;
-  return (
-    <div
-      data-yunari-palette-fields=""
-      className="flex flex-col gap-[var(--space-8)]"
-    >
-      <ControlText
-        label={uiCopy.panels.name}
-        data={{ "data-yunari-palette-name": "" }}
-        value={entry.name}
-        onCommit={(next) => {
-          const trimmed = next.trim();
-          if (trimmed === "") return;
-          commit({ ...entry, name: trimmed });
-          onSettled?.();
-        }}
-      />
-      <ControlSelect
-        label={uiCopy.panels.paint}
-        data={{ "data-yunari-palette-kind": "" }}
-        value={entry.value.kind}
-        options={(["solid", "gradient"] as const).map((kind) => ({
-          id: kind,
-          name: uiCopy.panels.paintKinds[kind],
-        }))}
-        onChange={(kind) => {
-          const wanted = kind === "gradient" ? "gradient" : "solid";
-          if (entry.value.kind === wanted) return;
-          commit({ ...entry, value: seedPaint(entry.value) });
-          onSettled?.();
-        }}
-      />
-      {entry.value.kind === "solid" ? (
-        <SolidFields
-          entry={entry}
-          value={entry.value}
-          commit={commit}
-          onSettled={onSettled}
-        />
-      ) : (
-        <GradientFields
-          entry={entry}
-          value={entry.value}
-          commit={commit}
-          onSettled={onSettled}
-        />
-      )}
-      <DeletionControls
-        palette={palette}
-        selected={selected}
-        onDelete={onDelete}
-      />
-    </div>
-  );
-}
-
-/** A solid token's colour: one trigger, and the picker's own popover holding the
- *  area, the channels, the one exact-value field and the presets.
- *
- * The pane used to carry a second field and a swatch beside the picker. Two
- * controls for one value meant two draft states, two refusals and two routes to
- * the same token. */
-function SolidFields(props: {
-  readonly entry: FabricPaletteEntry;
-  readonly value: Extract<PalettePaint, { readonly kind: "solid" }>;
-  readonly commit: (entry: FabricPaletteEntry) => void;
-  readonly onSettled?: (() => void) | undefined;
-}): React.JSX.Element {
-  const { entry, value, commit, onSettled } = props;
-  const put = (color: string): void => {
-    commit({ ...entry, value: { kind: "solid", color } });
-  };
-  return (
-    <ColourPicker
-      label={uiCopy.panels.colour}
-      value={value.color}
-      onValueChange={put}
-      onValueCommit={(color) => {
-        put(color);
-        onSettled?.();
-      }}
-    />
-  );
-}
-
-/** A gradient token: the one visual editor, which owns its own angle and stop
- *  wells, the track being both the preview and the manipulator. */
-function GradientFields(props: {
-  readonly entry: FabricPaletteEntry;
-  readonly value: Extract<PalettePaint, { readonly kind: "gradient" }>;
-  readonly commit: (entry: FabricPaletteEntry) => void;
-  readonly onSettled?: (() => void) | undefined;
-}): React.JSX.Element {
-  const { entry, value, commit, onSettled } = props;
-  return (
-    <div data-yunari-palette-gradient="" className="w-full">
-      <GradientEditor
-        stops={value.stops}
-        angle={value.angle}
-        label={uiCopy.panels.gradient}
-        onCommit={onSettled}
-        onChange={({ stops, angle }) => {
-          commit({ ...entry, value: { ...value, stops, angle } });
-        }}
-      />
-    </div>
-  );
-}
-
-/** The reassignment-on-delete row: the token this one's references move to, and
- *  the deletion itself. Deleting goes through `reassignPaletteToken` — no
- *  surface walks the scene for references a second time. */
-function DeletionControls(props: {
-  readonly palette: FabricPalette;
-  readonly selected: string;
-  readonly onDelete: ((id: string, replacement: string) => void) | undefined;
-}): React.JSX.Element | null {
-  const { palette, selected, onDelete } = props;
-  const [picked, setPicked] = useState<string | undefined>(undefined);
-  if (onDelete === undefined) return null;
-  const options = Object.entries(palette)
-    .filter(([id]) => id !== selected)
-    .map(([id, entry]) => ({ id, name: entry.name }));
-  const replacement =
-    picked !== undefined && picked !== selected && palette[picked] !== undefined
-      ? picked
-      : options[0]?.id;
-  return (
-    <>
-      <ControlSelect
-        label={uiCopy.panels.reassign}
-        data={{ "data-yunari-palette-replacement": "" }}
-        value={replacement ?? ""}
-        options={options}
-        onChange={setPicked}
-      />
-      <button
-        type="button"
-        data-yunari-palette-delete=""
-        disabled={replacement === undefined}
-        onClick={() => {
-          if (replacement !== undefined) onDelete(selected, replacement);
-        }}
-        className="self-start rounded-md border border-edge bg-panel-2 px-[var(--space-6)] py-[var(--space-4)] text-sm text-hot hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:text-faint"
-      >
-        {uiCopy.panels.deleteColour}
-      </button>
-    </>
   );
 }
 
@@ -349,33 +139,6 @@ function figureFor(
 function paintCss(value: PalettePaint): string {
   if (value.kind === "solid") return value.color;
   return gradientCss(value.stops, value.angle);
-}
-
-/**
- * The same paint in the other shape, carrying the colour it already had.
- *
- * Switching kind used to invent one: a gradient opened on white and black, so
- * choosing "Linear gradient" over a 30% alpha panel replaced it, in one
- * dropdown choice, with an opaque sweep of two colours nobody asked for — and
- * undo was the way back. Seeding both stops from the colour being replaced
- * loses nothing, and going back to a solid takes the gradient's first stop,
- * because that is the one colour a gradient can still name.
- */
-function seedPaint(value: PalettePaint): PalettePaint {
-  if (value.kind === "solid") {
-    return {
-      kind: "gradient",
-      angle: 0,
-      stops: [
-        { offset: 0, color: value.color },
-        { offset: 1, color: value.color },
-      ],
-    };
-  }
-  return {
-    kind: "solid",
-    color: value.stops[0]?.color ?? newTokenPaint,
-  };
 }
 
 /** The first free `colour`, `colour-2`, … — the ids are stable keys references

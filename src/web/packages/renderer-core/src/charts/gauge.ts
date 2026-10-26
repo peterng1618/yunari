@@ -9,6 +9,13 @@ import {
   normalizePosition,
   resolveFlatColor,
 } from "./fill.js";
+import {
+  gaugeGap,
+  type SegmentFill,
+  segmentCount,
+  segmentDivisorOf,
+  segmentFillOf,
+} from "./segments.js";
 
 // Preserved public export; implementation moved to fill.ts.
 export { mixHex } from "./fill.js";
@@ -60,6 +67,7 @@ export function buildGaugeOption(
   sample: Sample | undefined,
   animate = true,
   palette?: FabricPalette,
+  drawnEdgePx?: number,
 ): GaugeOption {
   const plottable = hasPlottableValue(sample);
   const track = resolveChartPaint(settings.track, palette);
@@ -75,6 +83,21 @@ export function buildGaugeOption(
     ? clamp(sample.value, settings.min, settings.max)
     : settings.min;
 
+  // A segmented gauge draws the ring as colour bands and leaves `progress` out
+  // entirely: two fills over the same arc cannot both own the slices.
+  const sweepDegrees = Math.abs(settings.endAngle - settings.startAngle);
+  const count = segmentCount(segmentDivisorOf(settings));
+  const bands = segmentedBands(
+    count,
+    plottable && progress !== undefined,
+    normalizePosition(displayValue, settings.min, settings.max),
+    track,
+    progress,
+    segmentFillOf(settings, "whole"),
+    gaugeGap(settings, sweepDegrees, count, drawnEdgePx),
+    sweepDegrees,
+  );
+
   return {
     series: [
       {
@@ -89,11 +112,11 @@ export function buildGaugeOption(
           roundCap: settings.roundCap,
           lineStyle: {
             width: settings.thickness,
-            color: toColorSegments(track ?? NO_PAINT, settings),
+            color: bands ?? toColorSegments(track ?? NO_PAINT, settings),
           },
         },
         progress: {
-          show: arcDrawn,
+          show: bands === undefined && arcDrawn,
           width: settings.thickness,
           roundCap: settings.roundCap,
           ...progressItemStyle(progress ?? NO_PAINT, settings, displayValue),
@@ -108,7 +131,7 @@ export function buildGaugeOption(
         // inside the data-diff update callback and only fills it after a render
         // that drew an arc, so a datum outliving `progress.show: false` throws
         // inside its renderer (0008).
-        data: arcDrawn ? [{ value: displayValue }] : [],
+        data: bands === undefined && arcDrawn ? [{ value: displayValue }] : [],
         silent: true,
         ...toEngineAnimation(settings.animation, animate),
       },
@@ -131,6 +154,109 @@ export function toColorSegments(
     case "gradient":
       return approximateGradient(fill.stops, settings.gradientSegments ?? 64);
   }
+}
+
+/**
+ * The ring as equal bands with transparent gaps, or `undefined` when the
+ * divisor asks for one continuous arc.
+ *
+ * A band is filled when **its own end** reaches the reading, so a partial band
+ * never draws half a slice: the boundary is a slice edge, not a percentage —
+ * unless the author chose `partial`, where the whole point is that the fill
+ * stops at the reading itself. Either way the reading stays out of the tick
+ * list (`progress.show` is false), which is what makes the slices independent of
+ * the arc's smooth fill.
+ */
+function segmentedBands(
+  count: number,
+  filled: boolean,
+  position: number,
+  track: Fill | undefined,
+  progress: Fill | undefined,
+  fill: SegmentFill,
+  gapDegrees: number,
+  sweepDegrees: number,
+): ColorSegment[] | undefined {
+  if (count <= 1) return undefined;
+
+  // The gap as a share of the sweep. A zero sweep has no arc to divide; the
+  // guard keeps the proportion finite rather than depending on an early return
+  // somewhere above.
+  const gap = sweepDegrees === 0 ? 0 : gapDegrees / sweepDegrees;
+
+  // A gap as wide as the band leaves nothing to paint — only possible when the
+  // cap clearance alone fills the band. Continuous track paint is closer to the
+  // truth than a list of zero-width bands, and ECharts needs ascending stops.
+  if (gap >= 1 / count) return undefined;
+
+  const bands: ColorSegment[] = [];
+
+  for (let index = 0; index < count; index += 1) {
+    const start = index / count;
+    const end = (index + 1) / count;
+    const bandEnd = end - gap;
+
+    if (fill === "partial" && filled) {
+      if (position <= start) {
+        bands.push([
+          bandEnd,
+          bandColor(track ?? NO_PAINT, false, position, bandEnd),
+        ]);
+      } else if (position >= bandEnd) {
+        bands.push([
+          bandEnd,
+          bandColor(progress ?? NO_PAINT, true, position, bandEnd),
+        ]);
+      } else {
+        // The reading lands inside this band: progress up to it, track after.
+        bands.push([
+          position,
+          bandColor(progress ?? NO_PAINT, true, position, position),
+        ]);
+        bands.push([
+          bandEnd,
+          bandColor(
+            track ?? NO_PAINT,
+            false,
+            position,
+            (position + bandEnd) / 2,
+          ),
+        ]);
+      }
+    } else {
+      const reaches = filled && bandEnd <= position;
+      const paint = reaches ? progress : track;
+      bands.push([
+        bandEnd,
+        bandColor(paint ?? NO_PAINT, reaches, position, (start + bandEnd) / 2),
+      ]);
+    }
+
+    // The gap belongs to the slice it follows, so the final band reaches the
+    // ring's end rather than trailing an unpainted sliver.
+    if (index < count - 1 && gap > 0) bands.push([end, "transparent"]);
+  }
+  return bands;
+}
+
+/** One band's flat colour, sampled from a paint the author authored. */
+function bandColor(
+  paint: Fill,
+  filled: boolean,
+  position: number,
+  midpoint: number,
+): string {
+  if (paint.kind === "gradient") {
+    // The band's midpoint, so a gradient still follows the ring rather than
+    // repeating one colour per slice.
+    return colorAt(paint.stops, midpoint);
+  }
+  if (paint.kind === "thresholds") {
+    // A filled band answers the reading; an unfilled one is the track, whose
+    // colour is the top of its own scale — the backstop behind every value.
+    return resolveFlatColor(paint, filled ? position : 1);
+  }
+  return paint.color;
 }
 
 /** ECharts needs ascending, unique segment ends covering the full ring. */

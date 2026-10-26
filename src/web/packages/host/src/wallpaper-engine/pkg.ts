@@ -1,5 +1,6 @@
 /**
- * The `scene.pkg` container, as Wallpaper Engine packs it:
+ * The Wallpaper Engine package container, as both `scene.pkg` and the mobile
+ * `.mpkg` export pack it:
  *
  *   u32 magicLen  "PKGV0001"  u32 entryCount
  *   per entry: u32 nameLen  name[nameLen]  u32 dataOffset  u32 dataLen
@@ -16,15 +17,17 @@ export interface PackageMember {
   readonly length: number;
 }
 
-export interface ScenePackage {
+export interface Package {
   /** Member offsets are relative to `dataStart`, as the format stores them. */
   readonly bytes: Uint8Array;
   readonly dataStart: number;
   readonly members: ReadonlyMap<string, PackageMember>;
 }
 
-/** `0001`, `0020`, `0024` and `0025` all occur in shipped packages. */
-const MAGIC = /^PKGV\d{4}$/;
+/** `PKGV` is the desktop scene package, `PKGM` the mobile export; the table is
+ *  the same and only the magic differs. `0001`, `0014`, `0020`, `0024` and
+ *  `0025` all occur in shipped packages. */
+const MAGIC = /^PKG[VM]\d{4}$/;
 
 function readUInt32(view: DataView, at: number): number | undefined {
   if (at < 0 || at + 4 > view.byteLength) {
@@ -34,7 +37,7 @@ function readUInt32(view: DataView, at: number): number | undefined {
   return view.getUint32(at, true);
 }
 
-export function readScenePackage(bytes: Uint8Array): ScenePackage | undefined {
+export function readPackage(bytes: Uint8Array): Package | undefined {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
   const magicLength = readUInt32(view, 0);
@@ -101,7 +104,7 @@ export function readScenePackage(bytes: Uint8Array): ScenePackage | undefined {
 }
 
 export function memberBytes(
-  pkg: ScenePackage,
+  pkg: Package,
   name: string,
 ): Uint8Array | undefined {
   const member = pkg.members.get(name);
@@ -112,4 +115,15 @@ export function memberBytes(
   const start = pkg.dataStart + member.offset;
 
   return pkg.bytes.subarray(start, start + member.length);
+}
+
+/** The one member a mobile export's video lives in. */
+const MOBILE_VIDEO = "wallpaper.mp4";
+
+/** The MP4 out of an `.mpkg`, or `undefined` for a package that is not the
+ *  mobile shape. A still-at-rest scene exports as a video too, so this is the
+ *  only payload the export route produces. */
+export function mobileVideo(bytes: Uint8Array): Uint8Array | undefined {
+  const pkg = readPackage(bytes);
+  return pkg === undefined ? undefined : memberBytes(pkg, MOBILE_VIDEO);
 }

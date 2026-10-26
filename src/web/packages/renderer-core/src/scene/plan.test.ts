@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { defaultBarSettings } from "../charts/bar.js";
 import { defaultLineSettings } from "../charts/line.js";
+import { defaultPolarBarSettings } from "../charts/polar-bar.js";
+import { defaultRadarSettings } from "../charts/radar.js";
 import { LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS } from "../data/live-source.js";
 import type { SemanticKeyDescriptor } from "../data/semantic-keys.js";
 import type { SampleSource } from "../data/source.js";
@@ -792,6 +794,62 @@ describe("charts", () => {
     }
   });
 
+  it("reads the chart's drawn edge into a gauge's gaps", () => {
+    const firstGapOffset = (drawnEdgePx: number) => {
+      const issues: PlanIssue[] = [];
+      const chart = buildChartPlan(
+        "c",
+        {
+          family: "gauge",
+          settings: { ...defaultGaugeSettings, segmentDivisor: 10 },
+        },
+        [],
+        { source: emptySampleSource, nowMs: NOW, animate: false, drawnEdgePx },
+        issues,
+      );
+      if (chart.family !== "gauge") throw new Error("not a gauge");
+      return chart.option.series[0].axisLine.lineStyle.color[0]![0];
+    };
+
+    // A 120px chart's caps take a larger angle than an 800px one's, so the stop
+    // gap widens to keep the empty space the same share of the painted band.
+    expect(firstGapOffset(120)).toBeLessThan(firstGapOffset(800));
+  });
+
+  it("plans a radar from the bound latest readings", () => {
+    const { chart } = chartPlan(
+      { family: "radar", settings: defaultRadarSettings },
+      [
+        { id: "a", semanticKey: "cpu.load.total" },
+        { id: "b", semanticKey: "gpu.load.total" },
+        { id: "c", semanticKey: "ram.used" },
+      ],
+      storeWith({
+        "cpu.load.total": ok(70),
+        "gpu.load.total": ok(40, "", "gpu.load.total"),
+        "ram.used": ok(55, "", "ram.used"),
+      }),
+    );
+
+    expect(chart.family).toBe("radar");
+    if (chart.family === "radar") {
+      expect(chart.option.series[0]!.data).toEqual([{ value: [70, 40, 55] }]);
+    }
+  });
+
+  it("plans a polar bar from the bound latest readings", () => {
+    const { chart } = chartPlan(
+      { family: "polarBar", settings: defaultPolarBarSettings },
+      [{ id: "a", semanticKey: "cpu.load.total" }],
+      storeWith({ "cpu.load.total": ok(70) }),
+    );
+
+    expect(chart.family).toBe("polarBar");
+    if (chart.family === "polarBar") {
+      expect(chart.option.series[0]!.type).toBe("bar");
+    }
+  });
+
   it("gives a line chart its windowed history", () => {
     const store = new SampleStore();
     store.ingest(
@@ -936,8 +994,8 @@ describe("charts", () => {
     );
 
     if (chart.family === "line") {
-      expect(chart.option.xAxis.max).toBe(NOW);
-      expect(chart.option.renderOverscanRightMs).toBe(1_000);
+      expect(chart.option.xAxis.max).toBe(NOW - 1_000);
+      expect("renderOverscanRightMs" in chart.option).toBe(false);
       expect(chart.option.series[0]!.data.at(-1)).toEqual([NOW, 30]);
     }
   });
@@ -962,9 +1020,37 @@ describe("charts", () => {
       [],
     );
 
-    // The axis window plus one cadence: the window alone leaves the sample
-    // `toSeriesPoints` keeps for the left edge below the source's own cutoff.
-    expect(windows).toEqual([defaultLineSettings.windowSeconds + 2]);
+    // The axis window plus one playback delay: the source now returns the
+    // sample before its cutoff, so the two-delay compensation is gone.
+    expect(windows).toEqual([defaultLineSettings.windowSeconds + 1]);
+  });
+
+  it("drops the source's delay when the caller's cadence does not need one", () => {
+    // A 1 fps display draws once a second, so a delayed edge only makes every
+    // reading late: the caller passes 0 and both the history request and the
+    // axis edge follow it.
+    const windows: number[] = [];
+    const source = {
+      chartPlaybackDelayMs: LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
+      latest: () => undefined,
+      history: (_key: string, windowSeconds: number) => {
+        windows.push(windowSeconds);
+        return [];
+      },
+    };
+
+    const chart = buildChartPlan(
+      "line",
+      { family: "line", settings: defaultLineSettings },
+      [{ id: "b", semanticKey: "cpu.load.total" }],
+      { source, nowMs: NOW, animate: false, playbackDelayMs: 0 },
+      [],
+    );
+
+    expect(windows).toEqual([defaultLineSettings.windowSeconds]);
+    if (chart.family === "line") {
+      expect(chart.option.xAxis.max).toBe(NOW);
+    }
   });
 
   /**
@@ -1045,7 +1131,9 @@ describe("charts", () => {
     );
 
     if (chart.family === "bar") {
-      expect(chart.option.series[0].data.map((d) => d.value)).toEqual([30, 70]);
+      const series = chart.option.series[0];
+      if (series.type !== "bar") throw new Error("expected a bar series");
+      expect(series.data.map((d) => d.value)).toEqual([30, 70]);
     }
   });
 
@@ -1185,7 +1273,9 @@ describe("chart paint references", () => {
     const { chart, issues } = storageBar(true);
 
     if (chart.family === "bar") {
-      expect(chart.option.series[0].data[0]!.itemStyle.color).toBe("#00b8d9");
+      const series = chart.option.series[0];
+      if (series.type !== "bar") throw new Error("expected a bar series");
+      expect(series.data[0]!.itemStyle.color).toBe("#00b8d9");
     }
     expect(issues).toEqual([]);
   });
@@ -1195,7 +1285,9 @@ describe("chart paint references", () => {
     const { chart, issues } = storageBar(false);
 
     if (chart.family === "bar") {
-      expect(chart.option.series[0].data[0]!.value).toBeNull();
+      const series = chart.option.series[0];
+      if (series.type !== "bar") throw new Error("expected a bar series");
+      expect(series.data[0]!.value).toBeNull();
     }
     expect(issues.map((issue) => issue.detail)).toEqual([
       'Chart paint "palette.storage" is not defined in this document.',

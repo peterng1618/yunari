@@ -1,9 +1,11 @@
-import type {
-  AssetReference,
-  FabricThemeEnvelope,
-  FontAssetReference,
+import {
+  type AssetReference,
+  type FabricThemeEnvelope,
+  FONT_ASSET_FORMATS,
+  type FontAssetFormat,
+  type FontAssetReference,
+  themeAssetContentType,
 } from "@yunari/renderer-core";
-import { themeAssetContentType } from "@yunari/renderer-core";
 import {
   objectAssetReference,
   setObjectAssetReference,
@@ -17,6 +19,11 @@ import {
 import type { EditorInteraction } from "../editor-interaction.js";
 import type { CuratedFontFace } from "../font-catalog.js";
 import { boundedImageElement } from "../image-manager/index.js";
+import {
+  FONT_WEIGHT_MAX,
+  FONT_WEIGHT_MIN,
+  type FontMetadata,
+} from "./font-metadata.js";
 
 /** The kinds this editor packages. A `gif` is a valid envelope kind but the
  *  editor has no image object for it, so it is deliberately not offered. */
@@ -30,6 +37,9 @@ const KIND_OF = {
   mp4: "video",
   webm: "video",
   woff2: "font",
+  woff: "font",
+  ttf: "font",
+  otf: "font",
 } as const;
 
 type AssetExtension = keyof typeof KIND_OF;
@@ -82,6 +92,23 @@ export class AssetManager {
    *  that memoises a decision over both watches this rather than the values:
    *  `load` can change either while reusing declaration references. */
   #mutationCount = 0;
+  #changeListeners = new Set<() => void>();
+
+  /** Told after every declaration mutation. The pane used to redraw only from
+   *  its own presses, so a prune made by a save left its cards stale. */
+  subscribe(listener: () => void): () => void {
+    this.#changeListeners.add(listener);
+    return () => {
+      this.#changeListeners.delete(listener);
+    };
+  }
+
+  /** Every mutation site goes through here: one counter for the memo key and
+   *  one notification for the panes, so neither can be forgotten alone. */
+  #mutated(): void {
+    this.#mutationCount += 1;
+    for (const listener of this.#changeListeners) listener();
+  }
 
   get assets(): Readonly<Record<string, Uint8Array>> {
     return { ...this.#assets };
@@ -130,6 +157,10 @@ export class AssetManager {
     });
     imported.image.setCoords();
     editor.canvas.setActiveObject(imported.image);
+    // R3: an import's one automatic placement is the canvas centre, so every
+    // "place this file" path lands where the author is looking rather than at
+    // the object's default origin.
+    editor.canvas.centerObject(imported.image);
     return imported.image;
   }
 
@@ -153,7 +184,6 @@ export class AssetManager {
 
     this.#assets[path] = bytes;
     this.#declarations.push(reference);
-    this.#mutationCount += 1;
     if (type.kind === "image" || type.kind === "svg") {
       this.#previewUrls.set(
         id,
@@ -162,6 +192,7 @@ export class AssetManager {
         ),
       );
     }
+    this.#mutated();
     return reference;
   }
 
@@ -188,8 +219,76 @@ export class AssetManager {
     if (existing >= 0) this.#declarations.splice(existing, 1, reference);
     else this.#declarations.push(reference);
     this.#assets[path] = new Uint8Array(bytes);
-    this.#mutationCount += 1;
+    this.#mutated();
     return reference;
+  }
+
+  /**
+   * Declares a local font with the metadata its filename cannot settle.
+   *
+   * The bytes are validated by the browser's own parser before anything is
+   * declared: a file that is not a font would otherwise sit in the package as a
+   * shapeless declaration, and a second, weaker signature check here would be
+   * exactly the wrong owner. `loadFace` is the browser's `FontFace`; jsdom has
+   * none, so a test injects one.
+   */
+  async importFont(
+    file: File,
+    metadata: FontMetadata,
+    loadFace: FontLoader = loadWithFontFace,
+  ): Promise<FontAssetReference> {
+    const checked = fontMetadataOrThrow(metadata);
+    const extension = extensionOf(file.name);
+    if (extension === undefined || !isFontFormat(extension))
+      throw new Error("Unsupported font file type.");
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    try {
+      await loadFace(checked.family, bytes);
+    } catch {
+      throw new Error("The file's bytes are not a font the browser can read.");
+    }
+
+    // `import` has already validated the MIME type and allocated the path;
+    // amending it is what writes the facts the file cannot answer.
+    const imported = await this.import(file);
+    return this.amendFont(imported.id, checked);
+  }
+
+  /** Declares a face: the bytes, path and id are the declaration's, and the
+   *  form's values are the facts about it. */
+  amendFont(assetId: string, metadata: FontMetadata): FontAssetReference {
+    const checked = fontMetadataOrThrow(metadata);
+    const index = this.#declarations.findIndex((asset) => asset.id === assetId);
+    const existing = this.#declarations[index];
+    if (index < 0 || existing === undefined || existing.kind !== "font")
+      throw new Error(`No declared font to amend: ${assetId}.`);
+
+    // A bare import writes no `format`; the path's tail is the one `#allocate`
+    // gave it, so the declaration and the file name cannot disagree.
+    const format =
+      "format" in existing ? existing.format : extensionOf(existing.path);
+    if (format === undefined || !isFontFormat(format))
+      throw new Error(`No declared font to amend: ${assetId}.`);
+
+    const { sourceUrl: _previousSourceUrl, ...kept } = existing;
+    const next: FontAssetReference = {
+      ...kept,
+      kind: "font",
+      format: format as FontAssetFormat,
+      family: checked.family,
+      weight: checked.weight,
+      style: checked.style,
+      // A curated face's licence carries a URL and sometimes an attribution;
+      // amending the name must not strip them from the saved package.
+      license: { ...existing.license, name: checked.licence },
+      ...(checked.sourceUrl === undefined
+        ? {}
+        : { sourceUrl: checked.sourceUrl }),
+    };
+    this.#declarations.splice(index, 1, next);
+    this.#mutated();
+    return next;
   }
 
   remove(assetId: string): boolean {
@@ -198,7 +297,7 @@ export class AssetManager {
     const [asset] = this.#declarations.splice(index, 1);
     if (asset !== undefined) delete this.#assets[asset.path];
     this.#revoke(assetId);
-    this.#mutationCount += 1;
+    this.#mutated();
     return true;
   }
 
@@ -239,6 +338,8 @@ export class AssetManager {
         ),
       );
     }
+    // One replace is one mutation: `replaceBytes` has already counted the
+    // declaration and byte change, and the preview URL is not part of either.
     return next;
   }
 
@@ -268,7 +369,7 @@ export class AssetManager {
     // The preview URL is a blob of the old bytes; keeping it would leave the
     // pane showing the picture the author just replaced.
     this.#revoke(assetId);
-    this.#mutationCount += 1;
+    this.#mutated();
     return next;
   }
 
@@ -290,7 +391,7 @@ export class AssetManager {
         new Uint8Array(bytes),
       ]),
     );
-    this.#mutationCount += 1;
+    this.#mutated();
   }
 
   async hydrate(canvas: StaticCanvas): Promise<void> {
@@ -403,6 +504,52 @@ export class AssetManager {
     if (url !== undefined) URL.revokeObjectURL(url);
     this.#previewUrls.delete(assetId);
   }
+}
+
+/** The browser's own parser, as the one owner of "is this a font". */
+export type FontLoader = (
+  family: string,
+  bytes: Uint8Array,
+) => Promise<unknown>;
+
+/** The file name a declaration was made from, rather than the id the package
+ *  keys it by. */
+export function assetFileName(asset: LocalAssetReference): string {
+  const separator = asset.path.lastIndexOf("/");
+  return separator < 0 ? asset.path : asset.path.slice(separator + 1);
+}
+
+function loadWithFontFace(family: string, bytes: Uint8Array): Promise<unknown> {
+  return new FontFace(family, bytes as unknown as BufferSource).load();
+}
+
+function isFontFormat(extension: AssetExtension): boolean {
+  return (FONT_ASSET_FORMATS as readonly string[]).includes(extension);
+}
+
+/** The form's values, trimmed and refused where unusable — never coerced. An
+ *  empty licence is the documented default, not a value nobody chose. */
+function fontMetadataOrThrow(metadata: FontMetadata): FontMetadata {
+  const family = metadata.family.trim();
+  if (family === "") throw new Error("A font needs a family name.");
+  const weight = metadata.weight;
+  if (
+    !Number.isFinite(weight) ||
+    weight < FONT_WEIGHT_MIN ||
+    weight > FONT_WEIGHT_MAX
+  )
+    throw new Error(
+      `A font weight must be between ${FONT_WEIGHT_MIN} and ${FONT_WEIGHT_MAX}.`,
+    );
+  const licence = metadata.licence.trim();
+  const sourceUrl = metadata.sourceUrl?.trim();
+  return {
+    family,
+    weight,
+    style: metadata.style,
+    licence: licence === "" ? "unknown" : licence,
+    ...(sourceUrl === undefined || sourceUrl === "" ? {} : { sourceUrl }),
+  };
 }
 
 function extensionOf(name: string): AssetExtension | undefined {

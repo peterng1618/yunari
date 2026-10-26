@@ -33,16 +33,27 @@ function parse(draft: string): number | undefined {
   return Number.isFinite(value) ? value : undefined;
 }
 
-function format(value: number | undefined): string {
-  return value === undefined ? "" : String(value);
+function format(
+  value: number | undefined,
+  decimals: number | undefined,
+): string {
+  if (value === undefined) return "";
+  // Display only: the draft is parsed back as the number the author typed, so
+  // rounding here never writes a value nobody chose.
+  return decimals === undefined ? String(value) : value.toFixed(decimals);
 }
 
 export function ControlNumber(
   props: ControlProps & {
     readonly value: number | undefined;
     readonly unit?: string;
+    /** How many decimals the box shows when it is not being edited. */
+    readonly decimals?: number;
     readonly min?: number;
     readonly max?: number;
+    /** The only values the owner accepts; a value between two members is
+     *  refused rather than coerced to the nearest one the owner can draw. */
+    readonly oneOf?: readonly number[];
     /** The owner asked for whole numbers; a fraction is refused like out-of-bounds. */
     readonly integer?: boolean;
     /**
@@ -81,8 +92,10 @@ export function ControlNumber(
     density,
     value,
     unit,
+    decimals,
     min,
     max,
+    oneOf,
     integer,
     readOnly,
     inline,
@@ -95,7 +108,7 @@ export function ControlNumber(
   const blocked = isBlocked({ disabled, refused });
   const [draft, setDraft] = useState<string | null>(null);
   const [invalid, setInvalid] = useState<string | undefined>(undefined);
-  const shown = draft ?? format(value);
+  const shown = draft ?? format(value, decimals);
 
   const commit = (): void => {
     // Nothing was edited, so there is nothing to validate: a blur of a field
@@ -135,6 +148,10 @@ export function ControlNumber(
     }
     if (max !== undefined && parsed > max) {
       setInvalid(uiCopy.controls.atMost(max));
+      return;
+    }
+    if (oneOf !== undefined && !oneOf.includes(parsed)) {
+      setInvalid(uiCopy.controls.oneOf(oneOf));
       return;
     }
     setInvalid(undefined);

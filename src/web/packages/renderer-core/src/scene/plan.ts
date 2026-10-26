@@ -9,6 +9,8 @@ import {
   type SeriesInput,
 } from "../charts/line.js";
 import { buildPieOption, type PieSliceInput } from "../charts/pie.js";
+import { buildPolarBarOption } from "../charts/polar-bar.js";
+import { buildRadarOption, type RadarInput } from "../charts/radar.js";
 import { chartPaintFieldsFor } from "../charts/settings-fields.js";
 import {
   describeSemanticKey,
@@ -173,7 +175,29 @@ export interface PlanInputs {
 }
 
 /** Runtime inputs required to derive one authored chart's display option. */
-export type ChartPlanContext = Pick<PlanInputs, "source" | "nowMs" | "animate">;
+export type ChartPlanContext = Pick<
+  PlanInputs,
+  "source" | "nowMs" | "animate"
+> & {
+  /**
+   * The delay the caller's cadence allows, when it differs from the source's
+   * own. `0` drops the delay — what a once-a-second redraw needs, since it has
+   * no trail to hide and every delayed reading would only be late.
+   */
+  readonly playbackDelayMs?: number;
+  /**
+   * The smaller edge of the canvas ECharts draws into, in backing pixels, when
+   * the caller knows it.
+   *
+   * A gap measured in pixels — the clearance a round cap needs — cannot become
+   * an angle without the radius, and the adapters draw at `radius: "100%"` of
+   * the backing canvas, which is the scene box times the chart's render scale.
+   * The option's thickness is in those same backing pixels, so the scale cannot
+   * be dropped here. Absent means the caller has not measured it, and an adapter
+   * skips the term rather than guessing a size.
+   */
+  readonly drawnEdgePx?: number;
+};
 
 /**
  * The artboard's geometry with the background layer's colour resolved through
@@ -539,6 +563,8 @@ export function buildChartPlan(
   palette?: import("../theme/fabric-envelope.js").FabricPalette,
 ): PlanChart {
   const animate = context.animate ?? true;
+  const playbackDelayMs =
+    context.playbackDelayMs ?? context.source.chartPlaybackDelayMs;
 
   collectChartIssues(
     nodeId,
@@ -566,6 +592,7 @@ export function buildChartPlan(
           applyTransform(sample, binding),
           animate,
           palette,
+          context.drawnEdgePx,
         ),
       };
     }
@@ -575,6 +602,7 @@ export function buildChartPlan(
         bindings,
         content.settings,
         context.source,
+        playbackDelayMs,
       );
 
       return {
@@ -587,7 +615,7 @@ export function buildChartPlan(
           context.nowMs,
           animate,
           palette,
-          context.source.chartPlaybackDelayMs,
+          playbackDelayMs,
         ),
       };
     }
@@ -623,6 +651,40 @@ export function buildChartPlan(
         family: "pie",
         settings: content.settings,
         option: buildPieOption(content.settings, slices, animate, palette),
+      };
+    }
+
+    case "radar": {
+      const spokes: RadarInput[] = bindings.map((binding) => ({
+        sensorId: binding.semanticKey,
+        sample: applyTransform(
+          context.source.latest(binding.semanticKey),
+          binding,
+        ),
+      }));
+
+      return {
+        kind: "chart",
+        family: "radar",
+        settings: content.settings,
+        option: buildRadarOption(content.settings, spokes, animate, palette),
+      };
+    }
+
+    case "polarBar": {
+      const bars: BarInput[] = bindings.map((binding) => ({
+        sensorId: binding.semanticKey,
+        sample: applyTransform(
+          context.source.latest(binding.semanticKey),
+          binding,
+        ),
+      }));
+
+      return {
+        kind: "chart",
+        family: "polarBar",
+        settings: content.settings,
+        option: buildPolarBarOption(content.settings, bars, animate, palette),
       };
     }
   }
@@ -672,13 +734,16 @@ export function buildLinePoints(
   bindings: readonly Binding[],
   settings: LineSettings,
   source: SampleSource,
+  playbackDelayMs: number = source.chartPlaybackDelayMs,
 ): readonly SeriesInput[] {
   // The line owns how much history it needs, including the one sample its left
   // edge is drawn from; asking for less starts the line inside the plot
-  // (vg-571).
+  // (vg-571). The caller's delay is the one the option is drawn with, so a
+  // display whose cadence overrides the source's asks for the same window the
+  // axis will show.
   const historySeconds = lineHistorySeconds(
     settings.windowSeconds,
-    source.chartPlaybackDelayMs,
+    playbackDelayMs,
   );
 
   return bindings.map((binding) => ({

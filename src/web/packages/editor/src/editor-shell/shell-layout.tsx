@@ -53,6 +53,7 @@ import {
   PublishSurfaceStore,
   SelectionStore,
   SheetStore,
+  TokenSelectionStore,
   useFinder,
   useSelection,
   useSheet,
@@ -156,9 +157,11 @@ function ModeSwitch(props: ShellLayoutProps): React.JSX.Element {
  * directly. */
 interface ShellHosts {
   readonly canvas: HTMLElement;
-  /** The Add pane's body: the insert list and, at its foot, the declared-asset
-      library (`§5.2` absorbs the Assets pane into Add). */
+  /** The Add pane's body: shapes, text and the card library. */
   readonly add: HTMLElement;
+  /** The Assets pane: every declared file, its import and placement, and the
+      finder link (DESIGN.md §7.2). */
+  readonly assets: HTMLElement;
   /** The Tokens pane: the theme's paints and type presets. */
   readonly tokens: HTMLElement;
   /** The Document pane: the artboard and the references it resolves. */
@@ -175,9 +178,12 @@ export interface ShellLayout {
   readonly stage: HTMLElement;
   readonly dock: HTMLElement;
   /** The shell's own projection of the selection, for the panes that read it —
-   *  the Tokens pane's preset chooser opens on the preset the selection is set
-   *  in rather than on the first declared one (`vg-094`). */
+   *  the Tokens pane's preset list says what the canvas selection is set in
+   *  rather than showing the first declared preset (`vg-094`). */
   readonly selection: SelectionStore;
+  /** The token the Tokens pane has selected for the inspector. Exclusive with
+   *  the canvas selection in both directions; it lives as long as the shell. */
+  readonly tokenSelection: TokenSelectionStore;
   setBridge(
     bridge: EditorShellBridge | undefined,
     view: EditorViewControls | undefined,
@@ -258,6 +264,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
   const hosts: ShellHosts = {
     canvas: element(),
     add: element("yunariPanelHostAdd"),
+    assets: element("yunariPanelHostAssets"),
     tokens: element("yunariPanelHostTokens"),
     document: element("yunariPanelHostDocument"),
     selection: element("yunariPanelHostSelection"),
@@ -275,6 +282,9 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
   let publish: PublishSwitch | undefined;
   let reactRoot: Root | undefined;
   const store = new SelectionStore();
+  // Beside the selection it follows, and never disposed: the shell outlives
+  // every document it opens.
+  const tokenSelection = new TokenSelectionStore(store);
   const sheet = new SheetStore();
   const publishSurface = new PublishSurfaceStore();
   const finder = new FinderStore();
@@ -325,7 +335,8 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
      *  shell's one reading of `ThemeMetadata` — the bridge snapshot — so the
      *  About tab's version is the same fact the Document pane's
      *  `releaseVersion` row reads, never a second source. */
-    const { releaseVersion, objectCount, tokenCount } = useSelection(store);
+    const { releaseVersion, objectCount, tokenCount, assetCount } =
+      useSelection(store);
     const sheetOpen = useSheet(sheet);
     const finderState = useFinder(finder);
     const finderOpen = finderState.open;
@@ -360,7 +371,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
     /** The box that scrolls, which is the showing pane's **body** and not the
      *  column around it (§7.7, `vg-208`): the column clips, so its own
      *  `scrollTop` is always 0 and the offset has to come off the body inside
-     *  it. Only the showing pane's body carries this — the other three are
+     *  it. Only the showing pane's body carries this — the other four are
      *  `hidden`, so their bodies are not scrollable boxes at all. */
     const paneBody = useRef<HTMLDivElement | null>(null);
 
@@ -485,13 +496,13 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
                 host's content with it. The pane is the one owner of the
                 `data-yunari-panel` name, so the Composition pane's is
                 `layers` — the name the specs and the panel CSS already browse
-                by — and the other three are named for their rail slot. The
-                visible title is the slot's own word, as the other three are;
+                by — and the other four are named for their rail slot. The
+                visible title is the slot's own word, as the other four are;
                 the `layers` name is only the DOM handle.
 
                 **Each title bar carries its own list's count (§7.3), and the
-                list is named at the mount rather than in the pane.** Three of
-                the four panes are imperative hosts, so no React component
+                list is named at the mount rather than in the pane.** Four of
+                the five panes are imperative hosts, so no React component
                 inside one owns its list and the count has to be sourced here.
                 The source of each:
                 - Composition — the scene's objects, through the bridge's own
@@ -507,6 +518,9 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
                   holds no list of its own, so it draws no count rather than a
                   fabricated `0` (the same rule the two counts above take before
                   a bridge is set).
+                - Assets — the asset manager's declarations, through
+                  `assetCount`, which the session reports because the manager is
+                  the session's and the shell never holds it.
 
                 A count is `undefined` where the list has not loaded, and `Pane`
                 then draws no count span at all. */}
@@ -525,10 +539,9 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
             >
               <CompositionPane bridge={store.bridge} />
             </Pane>
-            {/* The Add pane's body — the insert list and, at its foot, the
-                declared-asset library — is one host and one React tree. `§5.2`
-                puts the file path in Add, and a fourth slot for it would be a
-                slot DESIGN.md does not name. */}
+            {/* The Add pane's body is one host and one React tree: shapes,
+                text and the card library. Local files belong to the Assets slot
+                (DESIGN.md §7.2). */}
             <Pane
               id="add"
               title={uiCopy.rail.slots.add}
@@ -538,6 +551,22 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
               bodyRef={paneBody}
             >
               <Host node={hosts.add} hidden={slot !== "add"} />
+            </Pane>
+            {/* The declared files' own pane. Its body is the persistent host
+                the session's asset library mounts into. */}
+            <Pane
+              id="assets"
+              title={uiCopy.rail.slots.assets}
+              icon={RAIL_GLYPHS.assets}
+              count={
+                assetCount === undefined
+                  ? undefined
+                  : uiCopy.paneCounts.files(assetCount)
+              }
+              hidden={slot !== "assets"}
+              bodyRef={paneBody}
+            >
+              <Host node={hosts.assets} hidden={slot !== "assets"} />
             </Pane>
             <Pane
               id="tokens"
@@ -822,6 +851,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
     stage,
     dock,
     selection: store,
+    tokenSelection,
     setBridge(nextBridge, nextView, nextPublish) {
       // The store notifies subscribers, so React re-renders the inspector and
       // menus without a manual root re-render — and it keeps working when the

@@ -69,6 +69,9 @@ export function GradientEditor({
 }): React.JSX.Element {
   const presets = usePresetLibrary();
   const [selected, setSelected] = useState(0);
+  // The popover belongs to the stop under the selection: a press that does not
+  // travel opens it, so the stop and the picker that edits it are one gesture.
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [menu, setMenu] = useState<PresetMenuTarget | undefined>(undefined);
   const track = useRef<HTMLDivElement | null>(null);
   const drag = useRef<Drag | null>(null);
@@ -93,11 +96,18 @@ export function GradientEditor({
   const ratioAt = (clientX: number): number | undefined =>
     track.current === null ? undefined : ratioAlong(track.current, clientX);
 
-  const endDrag = (): void => {
+  const endDrag = (opensPicker: boolean): void => {
     const gesture = drag.current;
     drag.current = null;
-    // A press that never travelled is a selection, not an edit.
-    if (gesture?.moved === true) onCommit?.();
+    if (gesture?.moved === true) {
+      // A drag adjusted the stop; opening a popover under the pointer would
+      // cover the track the author is aiming along.
+      onCommit?.();
+      return;
+    }
+    // A press that never travelled is a selection, not an edit — and the
+    // selection is what the picker edits, so it is also how the picker opens.
+    if (opensPicker && gesture !== undefined) setPickerOpen(true);
   };
 
   const addAt = (offset: number): void => {
@@ -181,7 +191,11 @@ export function GradientEditor({
             aria-valuemax={100}
             aria-valuenow={Math.round(stop.offset * 100)}
             aria-valuetext={`${Math.round(stop.offset * 100)}% ${stop.color}`}
-            className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border-2 border-text outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            // The stop the wells and the picker edit. A bordered dot among
+            // bordered dots gives no answer without it, and it is the marker
+            // every chosen control in the set uses: the accent boundary.
+            data-selected={active === index ? "" : undefined}
+            className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border-2 border-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent data-[selected]:border-accent"
             style={{
               left: `${stop.offset * 100}%`,
               background: stop.color,
@@ -218,9 +232,18 @@ export function GradientEditor({
               if (offset !== undefined)
                 put(index, { offset, color: stop.color });
             }}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
+            onPointerUp={() => endDrag(true)}
+            onPointerCancel={() => endDrag(false)}
             onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                // The pointer's press-without-travel, for a keyboard author:
+                // the stop opens the picker that edits it.
+                event.preventDefault();
+                event.stopPropagation();
+                setSelected(index);
+                setPickerOpen(true);
+                return;
+              }
               if (event.key === "Delete") {
                 event.preventDefault();
                 // The shortcut dispatcher is a `window` bubble listener and
@@ -282,6 +305,8 @@ export function GradientEditor({
           />
           <ColourPicker
             key={active}
+            open={pickerOpen}
+            onOpenChange={setPickerOpen}
             label={uiCopy.panels.stopColour(active + 1)}
             value={current.color}
             onValueChange={(color) =>
@@ -309,7 +334,7 @@ export function GradientEditor({
           value=""
           onValueChange={(id) => applyPreset(id)}
           aria-label={uiCopy.panels.gradientPresets}
-          className="space-y-1"
+          className="flex flex-wrap gap-[var(--space-4)]"
         >
           {presets.gradients.map((preset) => (
             <span
@@ -339,6 +364,7 @@ export function GradientEditor({
               }}
             >
               <ControlChoiceRow
+                shape="chip"
                 label={preset.name}
                 value={preset.id}
                 data={{
@@ -349,7 +375,7 @@ export function GradientEditor({
                   <span
                     aria-hidden
                     data-yunari-value=""
-                    className="size-4 flex-none rounded-sm border border-edge"
+                    className="block size-full"
                     style={{
                       background: gradientCss(preset.stops, preset.angle),
                     }}

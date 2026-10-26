@@ -4,6 +4,7 @@ import {
   AssetManager,
   type LocalAssetReference,
 } from "../asset-manager/index.js";
+import type { CleanupAnswer } from "../editor-document.js";
 import type { ErrorManager } from "../error-manager/index.js";
 import {
   ThemeConflictError,
@@ -104,6 +105,9 @@ function harness(options: {
   /** The answer to the replacement question. `true` unless a case is about the
    *  refusal, which is the one road that reads nothing. */
   readonly confirm?: () => Promise<boolean>;
+  /** The document's cleanup question, which this manager asks before writing.
+   *  Nothing unused by default, so an existing case is not about it. */
+  readonly cleanup?: () => Promise<CleanupAnswer>;
 }) {
   const save = vi.fn(async () => "base-after-save");
   const open = vi.fn(async () => ({
@@ -152,6 +156,7 @@ function harness(options: {
     announceChange,
     errors,
     confirmReplacement: options.confirm ?? (async () => true),
+    confirmCleanup: options.cleanup ?? (async () => ({ proceed: true })),
     onSaved,
     onNewFromStarter,
     client,
@@ -260,6 +265,44 @@ describe("ThemeLibraryManager", () => {
     expect(markSaved).not.toHaveBeenCalled();
     expect(announceChange).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("saves nothing when the cleanup question is cancelled", async () => {
+    const { manager, save, markSaved, onSaved, onError } = harness({
+      assets: assetsWith([declaration("backdrop", "digest")], {
+        "assets/backdrop.png": PNG,
+      }),
+      cleanup: async () => ({ proceed: false }),
+    });
+
+    await manager.save();
+
+    expect(save).not.toHaveBeenCalled();
+    expect(markSaved).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    // A cancel carries no message: nothing was refused, the author said no.
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("prints a refused trash unwrapped and writes nothing", async () => {
+    const { manager, save, markSaved, onError } = harness({
+      assets: assetsWith([declaration("backdrop", "digest")], {
+        "assets/backdrop.png": PNG,
+      }),
+      cleanup: async () => ({
+        proceed: false,
+        message: "The Recycle Bin is not available on this machine.",
+      }),
+    });
+
+    await manager.save();
+
+    expect(save).not.toHaveBeenCalled();
+    expect(markSaved).not.toHaveBeenCalled();
+    // The host's sentence, not "Could not save to library: …" around it.
+    expect(onError).toHaveBeenCalledWith(
+      "The Recycle Bin is not available on this machine.",
+    );
   });
 
   it("overwrites deliberately when that is the answer about a refused save", async () => {

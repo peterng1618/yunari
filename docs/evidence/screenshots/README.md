@@ -134,6 +134,7 @@ result, not merely a mounted editor.
 | Live bindings | Select a bound text run, format its value and pin its zone | `editor-text-reads` / `captures the controls that give a text run its reading` |
 | Layers/arrange | Select a semantic layer and expose its layer/arrange controls | `editor-layer-arrange` / `captures semantic layer controls` |
 | Chart settings | Change family-specific scalar setting | `editor-chart-binding` / `captures selected chart binding controls` |
+| Chart spacing | Set the segment spacing 1–100 and switch fill mode on a gauge | `editor-chart-gauge-spacing-large` / `editor-chart-gauge-spacing-small` / `editor-chart-gauge-spacing-100` / `editor-chart-gauge-fill-partial` — `spaces the segmented gauge by its drawn size and fills whole or partial, read rendered` |
 | Chart creation | Create a chart, read its palette-backed settings, and reopen them | `editor-chart-creation` / `creates a chart with palette-backed settings that save and reopen` |
 | Artboard | Change dimensions or preview fit | `editor-artboard` / `captures changed artboard controls` |
 | Artboard | Change gradient/literal artboard paint | `editor-artboard-gradient` / `renders palette gradients` |
@@ -167,7 +168,7 @@ result, not merely a mounted editor.
 | Palette | Edit or reassign a palette token | `editor-palette-solid` or `editor-palette-reassignment` / `edits an artboard palette token|reassigns palette references` |
 | Palette | Open the colour picker and commit a picked colour | `editor-colour-picker` / `picks a palette colour in the picker` |
 | Palette | Edit a gradient stop by drag and by number | `editor-gradient-editor` / `builds a gradient with a drag and a number` |
-| Type presets | Edit, reassign or apply a font trio | `editor-type-preset`, `editor-type-reassignment` or `editor-font-trio` / `edits a global type preset|reassigns text type presets|captures curated font trio` — two files, `-desktop-chromium` (graphite) and `-editorial-desktop-chromium`, because the face and trio choosers are wells whose boundary and popup read against the paper they sit on |
+| Type presets | Edit or reassign a type preset | `editor-type-preset` or `editor-type-reassignment` / `edits a global type preset|reassigns text type presets` — one file, `-desktop-chromium` (graphite). The trio choosers' capture is gone with the controls Task 14 removed; the finder owns the trio surface and Task 22 owns the evidence sweep |
 | Background layer | Author a background image in the selection inspector's background column | `editor-background-media` / `authors a packaged background image through the inspector` |
 | Viewport | Resize or change zoom | `editor-zoom-readout` / `tracks the camera's zoom in the stage readout` |
 | Viewport | Read the same composition at a two-device-pixel ratio | `editor-reference-dpr2` / `the fitted, reference-size and DPR views` |
@@ -212,9 +213,10 @@ The catalogue, the library, `/api/themes/install`, `/api/themes/submit`, both
 `/api/store/items/:id/unpublish|publish` commands are all answered by
 `page.route`, so these sixteen show a routed fixture and not the live origin —
 the real catalogue is empty until phase E and the author's own rows need a
-deployed Worker. Each cell's picture is a 1×1 PNG served by the fixture at the
-panel ground, so the empty picture boxes are the stand-in, not a defect in the
-catalogue's thumbnails or their CDN. The three `store-mine-*` files are written
+deployed Worker. Each item's picture is a 1×1 PNG the case routes at the store's
+own origin (`yunari-store.workers.dev`), painted at the panel ground, so the
+empty picture boxes are the stand-in, not a defect in the catalogue's
+thumbnails. The three `store-mine-*` files are written
 by `src/web/tests/e2e/store-mine.spec.ts`; the rest of the table by
 `editor-rail.spec.ts`.
 

@@ -1,5 +1,9 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { type FabricThemeEnvelope, facetRecordOf } from "@yunari/renderer-core";
+import {
+  CATALOGUE_ORIGIN,
+  type FabricThemeEnvelope,
+  facetRecordOf,
+} from "@yunari/renderer-core";
 import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
 import { DARK_GROUND } from "../../packages/editor/src/store-mode/item-fixture.js";
 import type { ThemeOrigin } from "../../packages/editor/src/theme-library-client.js";
@@ -10,7 +14,12 @@ import {
   captureVisualReview,
   chooseAssetFile,
 } from "./editor-canvas.js";
-import { openEveryGroup, openPane, paneBody } from "./editor-rail.js";
+import {
+  chooseAssetCard,
+  openEveryGroup,
+  openPane,
+  paneBody,
+} from "./editor-rail.js";
 import { selectLayer } from "./rebuild-driver.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
@@ -295,39 +304,43 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
   await expect(list).toBeHidden();
 
   await openPane(page, "Add");
-  await expect(page.locator("[data-yunari-asset-import]")).toBeVisible();
+  await expect(page.locator('[data-yunari-panel="add"]')).toBeVisible();
   await openPane(page, "Composition");
   await expect(page.locator('[data-yunari-panel="layers"]')).toBeVisible();
 
   await expect.poll(() => list.evaluate((node) => node.scrollTop)).toBe(offset);
 });
 
-/** §7.7's per-pane offsets, on every pane and not only the layer list.
- *
- *  The rule is one sentence — "preserve per-pane offsets and disclosure state
- *  across routine updates" — and `choosePane` implements it once, over a map
- *  keyed by the rail's slot. The case above pins it for the Composition pane;
- *  a proof of one pane is a proof of that pane's luck, so this walks all four
- *  and asserts each one comes back where it was left.
+/** §7.7's per-pane offsets, on every pane that can hold one. The rule is one
+ *  sentence — "preserve per-pane offsets and disclosure state across routine
+ *  updates" — and `choosePane` implements it once, over a map keyed by the
+ *  rail's slot. The case above pins it for the Composition pane; a proof of one
+ *  pane is a proof of that pane's luck, so this walks the panes long enough to
+ *  scroll and asserts each one comes back where it was left.
  *
  *  **A pane that cannot scroll proves nothing**, so each slot's offset is read
  *  back off the element after it is written: a pane whose body fits fails here
  *  with the slot named rather than passing on a `0` that survived a swap.
  *  Composition is opened to its full length first for the reason the case above
- *  gives — a collapsed starter does not overflow the panel. Add, Tokens and
- *  Document overflow at rest, and two of them are the surfaces the archived
- *  bullet named: the declared-asset library renders inside the Add pane's body,
- *  so Add is where the Assets pane that bullet named survives, and Document is
- *  the other. Their overflow heights are deliberately not stated — measured
- *  twice at this viewport they differed by tens of px, because they move with
- *  font loading — and the guard above is the load-bearing claim, not the sizes.
+ *  gives — a collapsed starter does not overflow the panel. Tokens and Document
+ *  overflow at rest. The archived bullet this case descends from named the
+ *  asset-library surface and Document; the library is the Assets pane now, and
+ *  Assets is excluded because at rest it declares the starter's one backdrop — a
+ *  single card that fits, so it cannot hold an offset. Add is not walked any more
+ *  either: the file section that gave it a long tail is the Assets pane's, and
+ *  what is left — shapes, text and the card library — fits the panel. The slot
+ *  list is hand-written, so a starter that later made either pane overflow would
+ *  not re-enter this walk by itself. Their overflow heights are deliberately not
+ *  stated — measured twice at this viewport they differed by tens of px, because
+ *  they move with font loading — and the guard above is the load-bearing claim,
+ *  not the sizes.
  *
  *  The offset lives on the showing pane's **body** (§7.7, `vg-208`), and a
  *  browser discards a `display: none` box's scroll position — the swap hides
  *  the pane it leaves — so what the read-back finds after the return is the
  *  shell's own restore and not the box remembering.
  */
-test("each pane comes back to the offset it was left at", async ({
+test("each pane long enough to scroll comes back to the offset it was left at", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -339,7 +352,7 @@ test("each pane comes back to the offset it was left at", async ({
   await openEveryGroup(page);
 
   const measured: Record<string, number> = {};
-  for (const slot of ["Composition", "Add", "Tokens", "Document"]) {
+  for (const slot of ["Composition", "Tokens", "Document"]) {
     await openPane(page, slot);
     const body = paneBody(page);
     await expect(body, `${slot} is the pane showing`).toHaveCount(1);
@@ -1552,14 +1565,16 @@ test("the store lists a library, opens an item, and comes back to the same page"
    * way and the surface is not left open for the next one.
    *
    * **The boxes are measured because the numbers are design language now**:
-   * `DESIGN.md` fixes the modal at 960 and its stage at 420, and a case that
-   * asserted only that two stages were equal would pass a 100px stage.
+   * `DESIGN.md` fixes the modal at 960 × 760, and the stage is the box's height
+   * less its border, so a case that asserted only that two stages were equal
+   * would pass a 100px stage.
    */
   const drawn = async (
     id: string,
   ): Promise<{
     readonly stage: number;
-    readonly box: number;
+    readonly width: number;
+    readonly height: number;
     readonly stamp: string;
     readonly picture: { readonly width: number; readonly height: number };
   }> => {
@@ -1584,7 +1599,8 @@ test("the store lists a library, opens an item, and comes back to the same page"
     }
     return {
       stage: box.height,
-      box: modal.width,
+      width: modal.width,
+      height: modal.height,
       stamp: stamp.trim(),
       picture: { width: picture.width, height: picture.height },
     };
@@ -1594,21 +1610,50 @@ test("the store lists a library, opens an item, and comes back to the same page"
   // at its own ratio inside that height: a viewer must not have the box move as
   // a person steps between items, and a portrait board must still be seen
   // uncropped.
+  //
+  // **The popup caps itself at `90vh`, and the project's 720px viewport caps the
+  // box at 648** — a height any declaration at or above 648 would satisfy, so
+  // the drawing's 760 would never be exercised. Read the geometry at a viewport
+  // tall enough for the box, then restore the project's own size for the rest of
+  // the case (the page is this test's own, but later steps read the layout too).
+  const projectViewport = page.viewportSize() ?? { width: 1280, height: 720 };
+  await page.setViewportSize({ width: projectViewport.width, height: 1000 });
   const landscape = await drawn("store-01");
   const portrait = await drawn("store-02");
-  const itemReading = `store-item box ${landscape.box}px stage landscape ${landscape.stage} portrait ${portrait.stage}; picture ${landscape.picture.width}x${landscape.picture.height} and ${portrait.picture.width}x${portrait.picture.height}; stamp "${landscape.stamp}"`;
+  await page.setViewportSize(projectViewport);
+  // **The popup's own cap, which the tall read cannot exercise.** At the
+  // project's 720px viewport `90vh` is 648, so the 760 box is capped there —
+  // the drawing's height would otherwise run past the fold and clip the foot.
+  const capped = await drawn("store-01");
+  expect(
+    capped.height,
+    "the modal does not cap itself to 90vh on a short viewport",
+  ).toBe(648);
+  expect(capped.stage, "the stage is not the capped box's content height").toBe(
+    648 - 2,
+  );
+
+  const itemReading = `store-item box ${landscape.width}x${landscape.height}px stage landscape ${landscape.stage} portrait ${portrait.stage}; picture ${landscape.picture.width}x${landscape.picture.height} and ${portrait.picture.width}x${portrait.picture.height}; stamp "${landscape.stamp}"`;
   console.log(itemReading);
   testInfo.annotations.push({ type: "store-item", description: itemReading });
   expect(
     portrait.stage,
     `the stage follows the item instead of holding one height (${itemReading})`,
   ).toBe(landscape.stage);
+  // The drawing's own numbers, read where the box can reach them; the stage is
+  // the box's content height — the 1px border twice.
+  expect(
+    landscape.height,
+    `the modal is not the drawing's 760px (${itemReading})`,
+  ).toBe(760);
+  // 760 less the popup's 1px border twice; written as the subtraction so the
+  // test does not mint a second design-language number for a derived height.
   expect(
     landscape.stage,
-    `the stage is not the 420px DESIGN.md fixes (${itemReading})`,
-  ).toBe(420);
+    `the stage is not the box's own content height (${itemReading})`,
+  ).toBe(760 - 2);
   expect(
-    landscape.box,
+    landscape.width,
     `the modal is not the 960px DESIGN.md fixes (${itemReading})`,
   ).toBe(960);
   expect(
@@ -2453,13 +2498,19 @@ async function showOnlineStore(
   await page.route("**/api/themes", (route) =>
     route.fulfill({ json: { themes: ONLINE_LIBRARY } }),
   );
-  // The pictures come from a CDN this case claims nothing about, and the real
-  // catalogue always holds one: a 1×1 PNG stands in, so no cell and no stage
-  // draws the browser's broken-image mark, which would read as a defect in the
-  // surface rather than as a fixture that left the network alone. The pixel is
-  // the panel ground, so the stand-in reads as an empty picture box.
+  // The pictures come from the store's own origin — the one `thumbnail` paths
+  // resolve against (`catalogue-location.ts`) — and the real catalogue always
+  // holds one: a 1×1 PNG stands in, so no cell and no stage draws the browser's
+  // broken-image mark, which would read as a defect in the surface rather than
+  // as a fixture that left the network alone. The pixel is the panel ground, so
+  // the stand-in reads as an empty picture box.
+  const catalogueHostname = new URL(CATALOGUE_ORIGIN).hostname;
   await page.route(
-    (url) => url.hostname === "cdn.jsdelivr.net",
+    // The path matters as well as the host: a host-only matcher is registered
+    // after `**/index.json` and would answer the catalogue itself with a PNG.
+    (url) =>
+      url.hostname === catalogueHostname &&
+      url.pathname.endsWith("/thumbnail.png"),
     (route) =>
       route.fulfill({
         contentType: "image/png",
@@ -3441,8 +3492,8 @@ test("the store opens a library theme as the document, from the cell and its foo
   ).toBeVisible();
   await expect(
     page.locator("[data-yunari-store-item-action='open']"),
-    "the item's own surface does not print the open action's own word",
-  ).toHaveText(uiCopy.store.cell.actions.open);
+    "the item's own surface does not print the short word the drawing gives the open action",
+  ).toHaveText(uiCopy.store.item.actions.open);
   await page.locator("[data-yunari-store-item-close]").click();
   await expect(modal, "the item's own surface does not close").toBeHidden();
   expect(
@@ -3605,7 +3656,7 @@ test("normalizes a declared video without replacing its master", async ({
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(EDITOR);
-  await openPane(page, "Add");
+  await openPane(page, "Assets");
   await chooseAssetFile(page, "import", {
     name: "clip.mp4",
     mimeType: "video/mp4",
@@ -3614,15 +3665,16 @@ test("normalizes a declared video without replacing its master", async ({
 
   // The artboard's background media is the one surface that renders a video,
   // and it is the background layer's, so it is chosen where that layer is
-  // selected; the Add pane was showing, so the selection is a real pane swap.
+  // selected; the Assets pane was showing, so the selection is a real pane
+  // swap.
   await selectLayer(page, "Background");
   await chooseIn(page, "[data-yunari-background-asset]", "clip");
-  await openPane(page, "Add");
-  await chooseIn(page, "[data-yunari-asset-select]", "clip");
+  await openPane(page, "Assets");
+  await chooseAssetCard(page, "clip.mp4");
 
   const normalize = page.locator("[data-yunari-asset-normalize]");
   const useCopy = page.locator("[data-yunari-asset-use-normalized]");
-  const alert = page.locator('[data-yunari-panel="add"] [role="alert"]');
+  const alert = page.locator('[data-yunari-panel="assets"] [role="alert"]');
   // One action, keeping the whole frame: the layer crops at render time (0095).
   await expect(normalize).toBeVisible();
 
@@ -3646,14 +3698,14 @@ test("normalizes a declared video without replacing its master", async ({
   await expect(useCopy).toHaveCount(0);
   // A refusal is an answer, not a broken run: the control stays pressable.
   await expect(normalize).toBeEnabled();
-  // The section is the pane's foot, so a capture of the pane has to be told to
-  // bring the refusal into frame rather than cropping it below the fold.
+  // The refusal sits below the normalization row, so a capture of the pane has
+  // to be told to bring it into frame rather than cropping it below the fold.
   await alert.scrollIntoViewIfNeeded();
   await captureVisualReview(
     page,
     testInfo,
     "editor-video-normalize",
-    page.locator('[data-yunari-panel="add"]'),
+    page.locator('[data-yunari-panel="assets"]'),
   );
 
   const background = page.locator("[data-yunari-background-media] video");

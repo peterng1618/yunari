@@ -7,19 +7,33 @@ import {
   type FabricPalette,
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
+  type FontAssetReference,
+  type FontCut,
+  type FontTrioInfo,
 } from "@yunari/renderer-core";
 import {
+  checkDeclaredAssets,
   MAX_CREDITS_ENTRIES,
   type ThemeCredits,
   type ThemeCreditsEntry,
 } from "@yunari/theme-package";
 import type { ArtboardPanel } from "./artboard-panel.js";
-import type { AssetManager } from "./asset-manager/index.js";
+import { assetBytes, trashAssets } from "./asset-finder/client.js";
+import {
+  type AssetManager,
+  assetFileName,
+  type LocalAssetReference,
+} from "./asset-manager/index.js";
+import { unusedAssets as computeUnusedAssets } from "./asset-manager/unused.js";
 import { insertCard } from "./card-library.js";
 import type { ChartManager } from "./chart-manager/index.js";
+import {
+  confirmSaveCleanup,
+  type SaveCleanupFile,
+} from "./components/save-cleanup-dialog.js";
 import type { EditorShell } from "./editor-shell.js";
 import {
-  applyFontTrio,
+  applyFontTrio as applyCatalogTrio,
   type CuratedFontFace,
   fontTrio,
 } from "./font-catalog.js";
@@ -43,10 +57,27 @@ import type { ThemeLibraryClient } from "./theme-library-client.js";
 import { ThemeLibraryManager } from "./theme-library-manager/index.js";
 import { captureThumbnail } from "./thumbnail-capture.js";
 import {
+  applyFontTrio as applyTrioPresets,
+  FONT_ROLES,
+  type FontTrioRole,
+  fontAssetId,
+  fontWeight,
+  freePresetId,
+  presetForRole,
+  rolePreset,
+} from "./type-preset-apply.js";
+import {
   reassignTypePresetToken,
   type TypePresetPanel,
   type TypePresets,
 } from "./type-preset-manager/index.js";
+import { uiCopy } from "./ui-copy.js";
+
+/** Whether a save may go on. `message` is a host refusal the author must
+ *  read; a cancel carries none. */
+export type CleanupAnswer =
+  | { readonly proceed: true }
+  | { readonly proceed: false; readonly message?: string };
 
 /**
  * What the document needs of whoever is editing it, which is the session's own
@@ -113,9 +144,36 @@ interface EditorDocumentOptions {
   readonly consumers: EditorDocumentConsumers;
 }
 
-/** A credit's identity: the item, and where it came from. */
+/** A credit's identity: the item, where it came from, and the asset it
+ *  attributes. A credit written before `assetId` existed has no asset segment,
+ *  so its identity is what it always was. */
 function creditKey(entry: ThemeCreditsEntry): string {
-  return `${entry.source?.url ?? ""}\n${entry.title}`;
+  return `${entry.source?.url ?? ""}\n${entry.title}\n${entry.assetId ?? ""}`;
+}
+
+/**
+ * A provider cut as the catalogue face shape the asset manager adopts. The id
+ * is the packaged one, because a cut id is a byte address and not a stable id.
+ * Both font sources serve woff2; a cut in another format has no adoption path
+ * here and is refused rather than mislabelled.
+ */
+function faceOfCut(cut: FontCut, role: FontTrioRole): CuratedFontFace {
+  if (cut.format !== "woff2") {
+    throw new Error(
+      `"${cut.family}" is not a font file this editor can package.`,
+    );
+  }
+  return {
+    id: fontAssetId(cut),
+    role,
+    family: cut.family,
+    weight: fontWeight(cut),
+    style: cut.style,
+    format: "woff2",
+    subset: cut.subset,
+    sourceUrl: cut.sourceUrl ?? cut.previewUrl,
+    license: { name: cut.licence },
+  };
 }
 
 /**
@@ -146,12 +204,15 @@ export class EditorDocument {
   readonly #onBindingsChange: (() => void) | undefined;
   /** Told the document may have moved; see `#writeEnvelope`. */
   readonly #documentChangeListeners = new Set<() => void>();
-  /** Whether a flush is already queued. Set before scheduling, so the dozens of
-   *  announcements a paste or a revive makes in one task collapse into one
-   *  recompute rather than one per Fabric event. */
+  /** Whether a listener flush is already queued. Set before scheduling, so the
+   *  dozens of announcements a paste or a revive makes in one task collapse
+   *  into one recompute rather than one per Fabric event. */
   #announceScheduled = false;
-  /** Bumped once per flush, so every Fabric event in one batch is one revision.
-   *  The dirty answer is memoised against it rather than against the clock. */
+  /** Bumped by every announcement — synchronously, so a reader that asks right
+   *  after the change never sees the previous answer. It is also the reading's
+   *  key: every asker of the same change shares one serialise-and-validate
+   *  rather than each doing its own, which three surfaces did per pointer move
+   *  of a palette picker drag. */
   #revision = 0;
   /** The last dirty answer and what it was computed from. A save moves the
    *  baseline without bumping the revision, so it clears this outright; the
@@ -168,6 +229,7 @@ export class EditorDocument {
    *  the library manager takes it as a port and the session hands it to every
    *  canvas event that means "the document moved". */
   readonly announceChange = (): void => {
+    this.#revision += 1;
     if (this.#announceScheduled) return;
     this.#announceScheduled = true;
     queueMicrotask(() => {
@@ -175,7 +237,6 @@ export class EditorDocument {
       // flush is a second batch, so it schedules one more pass rather than
       // being folded into the pass that is already reading stale state.
       this.#announceScheduled = false;
-      this.#revision += 1;
       // A copy, so a listener added or removed during the flush does not
       // change who this batch reaches.
       for (const listener of [...this.#documentChangeListeners]) listener();
@@ -216,6 +277,9 @@ export class EditorDocument {
       announceChange: this.announceChange,
       errors: source.shell.editor.errorManager,
       confirmReplacement: () => this.confirmReplacement(),
+      // The title is the save the author pressed; the library's own is the one
+      // this port carries, and the package save passes its own.
+      confirmCleanup: () => this.confirmAssetCleanup(uiCopy.file.saveLibrary),
       onSaved: source.onSaved,
       onNewFromStarter: source.onNewFromStarter,
       ...(source.libraryBase === undefined ? {} : { base: source.libraryBase }),
@@ -257,8 +321,10 @@ export class EditorDocument {
   /** Whether the document differs from what was last saved. Pulled, never held:
    *  the comparison already exists for the replace prompt, and a stored flag
    *  would be one more thing to keep true. Two JSON passes over the document and
-   *  its assets are what the timer and the identity chip used to pay per read,
-   *  so the answer is kept until the revision or an asset mutation moves. */
+   *  its assets are what the timer, the identity chip and the publish control
+   *  used to pay per read — each doing its own on every live palette sample of
+   *  a picker drag — so one answer is kept per change, until the revision or an
+   *  asset mutation moves. */
   isDirty(): boolean {
     const memo = this.#dirty;
     if (
@@ -286,8 +352,9 @@ export class EditorDocument {
   }
 
   /** Whether one more credit can be held: the package writer refuses a list
-   *  past its cap, and nothing removes an entry, so the refusal happens before
-   *  the bytes are declared rather than at the next save. */
+   *  past its cap, so the refusal happens before the bytes are declared rather
+   *  than at the next save. A prune can free a slot, but only by removing the
+   *  asset that credit attributes. */
   canAddCredit(entry: ThemeCreditsEntry): boolean {
     return (
       this.#credits.length < MAX_CREDITS_ENTRIES ||
@@ -328,6 +395,13 @@ export class EditorDocument {
   async save(): Promise<void> {
     const options = this.#source;
     try {
+      // Asked before anything is built, so a refused trash or a cancel leaves
+      // no package and no write behind it.
+      const cleanup = await this.confirmAssetCleanup();
+      if (!cleanup.proceed) {
+        if (cleanup.message !== undefined) options.onError?.(cleanup.message);
+        return;
+      }
       const current = this.snapshot();
       // The package carries the theme's picture so whoever receives the file
       // can see the look without installing anything.
@@ -405,8 +479,18 @@ export class EditorDocument {
 
       if (choice === "cancel") return false;
       if (choice === "save") {
+        // A replacement's save asks the same cleanup question, and a cleanup
+        // that stops there stops the replacement too: a save the author
+        // cancelled must not go on to discard the document behind it.
+        const cleanup = await this.confirmAssetCleanup();
+        if (!cleanup.proceed) {
+          if (cleanup.message !== undefined) {
+            this.#source.onError?.(cleanup.message);
+          }
+          return false;
+        }
         await this.#persistence.save(
-          current,
+          this.snapshot(),
           this.#assets.assets,
           undefined,
           this.#creditsPackage(),
@@ -440,6 +524,10 @@ export class EditorDocument {
       );
       this.setMetadata({ ...this.#envelope.metadata, version });
       await this.save();
+      // `save()` owns its own errors and a cancelled cleanup returns without
+      // writing, so the release is reported only if the document actually
+      // stopped being dirty — the same re-read the mode switch makes.
+      if (this.isDirty()) return;
       options.onSaved(`Released ${version}`);
     } catch (error) {
       options.onError?.(error instanceof Error ? error.message : String(error));
@@ -489,6 +577,127 @@ export class EditorDocument {
     return Object.values(presets ?? {}).some(
       (preset) => preset.value.face?.assetId === assetId,
     );
+  }
+
+  /** The declarations neither the envelope nor the scene still references. The
+   *  one walk: the helper owns reachability, this owner supplies its inputs. */
+  unusedAssets(): readonly LocalAssetReference[] {
+    return computeUnusedAssets({
+      declarations: this.#assets.declarations,
+      objects: this.#source.shell.editor.canvas.getObjects(),
+      holdsAsset: (assetId) => this.holdsAsset(assetId),
+    });
+  }
+
+  /** Removes the declarations, their bytes, their preview URLs and the credits
+   *  whose `assetId` is in `ids`. A credit with no `assetId` is kept. */
+  pruneAssets(ids: readonly string[]): void {
+    // A caller's list can be stale by the time it confirms — the author can
+    // place or bind an asset in between — so reachability is re-read, never
+    // trusted. An id the manager no longer declares is not in this set either.
+    const unused = new Set(this.unusedAssets().map((asset) => asset.id));
+    const pruned = ids.filter((id) => unused.has(id));
+    if (pruned.length === 0) return;
+    for (const id of pruned) this.#assets.remove(id);
+    const removed = new Set(pruned);
+    for (let index = this.#credits.length - 1; index >= 0; index -= 1) {
+      const assetId = this.#credits[index]?.assetId;
+      if (assetId !== undefined && removed.has(assetId))
+        this.#credits.splice(index, 1);
+    }
+    // Not a history write: the manager's own Remove is not undoable either,
+    // and this only announces so the unsaved marker and panels re-read.
+    this.announceChange();
+  }
+
+  /**
+   * The one owner of the cleanup question both saves ask.
+   *
+   * Nothing unused means nothing to ask and the save runs unchanged. A
+   * dismissal is a cancel, never a keep: closing the sheet is not permission to
+   * remove a file. `"remove"` proves the post-prune package buildable, and only
+   * a proof that passed moves the files to the host's trash; only a trash that
+   * succeeded prunes. A refusal stops the save with the host's or the
+   * serializer's own sentence, so nothing is removed and nothing is written.
+   */
+  async confirmAssetCleanup(
+    title: string = uiCopy.file.savePackage,
+  ): Promise<CleanupAnswer> {
+    const unused = this.unusedAssets();
+    if (unused.length === 0) return { proceed: true };
+
+    const assets = this.#assets.assets;
+    const files: SaveCleanupFile[] = unused.map((asset) => {
+      const previewUrl =
+        asset.kind === "image" || asset.kind === "svg"
+          ? this.#assets.previewUrl(asset.id)
+          : undefined;
+      return {
+        name: assetFileName(asset),
+        kind: asset.kind,
+        // A declaration with no bytes is already broken; it contributes nothing
+        // to either size rather than inventing one.
+        sizeBytes: assets[asset.path]?.byteLength ?? 0,
+        reason: uiCopy.saveCleanup.reason[asset.kind],
+        ...(previewUrl === undefined ? {} : { previewUrl }),
+      };
+    });
+    const documentName = this.#envelope.metadata?.name;
+    const answer = await confirmSaveCleanup({
+      title,
+      ...(documentName === undefined ? {} : { documentName }),
+      files,
+      themeBytes: this.#themeBytes(unused),
+    });
+    if (answer === "cancel") return { proceed: false };
+    if (answer === "keep") return { proceed: true };
+
+    // The trash move is ordered last, after the save is otherwise ready: a
+    // package the writer would refuse must cost nothing but the refusal, not
+    // files already in the Recycle Bin. The candidate asks the writer's own
+    // asset check rather than building a package it would throw away.
+    // Declarations and bytes only: the credits cap is the one writer refusal
+    // this cannot reproduce — unreachable while `canAddCredit` and the credits
+    // reader bound the list, reachable from a hand-edited package that seeds
+    // `#credits` past it.
+    const unusedIds = new Set(unused.map((asset) => asset.id));
+    const unusedPaths = new Set(unused.map((asset) => asset.path));
+    const candidate = checkDeclaredAssets(
+      {
+        assets: this.#assets.declarations.filter(
+          (asset) => !unusedIds.has(asset.id),
+        ),
+      },
+      Object.fromEntries(
+        Object.entries(assets).filter(([path]) => !unusedPaths.has(path)),
+      ),
+    );
+    if (!candidate.ok) return { proceed: false, message: candidate.message };
+
+    const outcome = await trashAssets(
+      unused.map((asset) => ({
+        name: assetFileName(asset),
+        bytes: assets[asset.path] ?? new Uint8Array(),
+      })),
+    );
+    if (!outcome.ok) return { proceed: false, message: outcome.message };
+    this.pruneAssets(unused.map((asset) => asset.id));
+    return { proceed: true };
+  }
+
+  /** The theme's own size, without the files the cleanup is about: the
+   *  envelope as JSON plus the bytes still referenced. */
+  #themeBytes(unused: readonly LocalAssetReference[]): number {
+    const unusedIds = new Set(unused.map((asset) => asset.id));
+    const assets = this.#assets.assets;
+    let bytes = new TextEncoder().encode(
+      JSON.stringify(this.snapshot()),
+    ).byteLength;
+    for (const asset of this.#assets.declarations) {
+      if (unusedIds.has(asset.id)) continue;
+      bytes += assets[asset.path]?.byteLength ?? 0;
+    }
+    return bytes;
   }
 
   /**
@@ -720,20 +929,180 @@ export class EditorDocument {
     this.#shell.editor.historyManager.saveState();
   }
 
-  async applyFontTrio(id: string): Promise<FabricThemeEnvelope> {
-    const trio = fontTrio(id);
-    if (trio === undefined) throw new Error(`Unknown font trio "${id}".`);
-    const bytes = await Promise.all(
-      trio.faces.map((face) => this.#downloadFace(face)),
-    );
-    for (const [index, face] of trio.faces.entries()) {
-      await this.#assets.adoptFont(face, bytes[index]!);
+  /** The theme's type presets, or none before the first one is written. */
+  #typePresets(): TypePresets {
+    return (this.#envelope.globals?.typePresets ?? {}) as TypePresets;
+  }
+
+  /** The cuts a trio names, in reading order. */
+  #trioCuts(
+    trio: FontTrioInfo,
+  ): { readonly cut: FontCut; readonly role: FontTrioRole }[] {
+    return FONT_ROLES.flatMap((role) => {
+      const cut = trio.roles[role];
+      return cut === undefined ? [] : [{ cut, role }];
+    });
+  }
+
+  /**
+   * Reads every cut's bytes from the host and declares them. Every read and
+   * every conversion finishes before the first adoption, so a host that
+   * answered nothing leaves the theme untouched rather than half-imported.
+   */
+  async #adoptCuts(
+    entries: readonly { readonly cut: FontCut; readonly role: FontTrioRole }[],
+  ): Promise<void> {
+    if (entries.length === 0)
+      throw new Error("That font names no cut to import.");
+    const read: {
+      readonly face: CuratedFontFace;
+      readonly bytes: Uint8Array;
+    }[] = [];
+    for (const entry of entries) {
+      const face = faceOfCut(entry.cut, entry.role);
+      const answer = await assetBytes(entry.cut.source, entry.cut.id);
+      if (answer === undefined)
+        throw new Error(
+          `The host did not send "${entry.cut.family}", so nothing was changed.`,
+        );
+      read.push({ face, bytes: answer.bytes });
     }
-    const presets = this.#envelope.globals?.typePresets as
-      | TypePresets
-      | undefined;
-    if (presets !== undefined) this.setTypes(applyFontTrio(presets, trio));
-    return this.snapshot();
+    for (const entry of read) {
+      await this.#assets.adoptFont(entry.face, entry.bytes);
+    }
+  }
+
+  /**
+   * Applies a host trio to the theme, or opens a curated one by id for the old
+   * picker. The id form is retired with that picker in Task 13.
+   */
+  async applyFontTrio(id: string): Promise<FabricThemeEnvelope>;
+  async applyFontTrio(trio: FontTrioInfo): Promise<void>;
+  async applyFontTrio(
+    source: string | FontTrioInfo,
+  ): Promise<FabricThemeEnvelope | void> {
+    if (typeof source === "string") {
+      const trio = fontTrio(source);
+      if (trio === undefined) throw new Error(`Unknown font trio "${source}".`);
+      const bytes = await Promise.all(
+        trio.faces.map((face) => this.#downloadFace(face)),
+      );
+      for (const [index, face] of trio.faces.entries()) {
+        await this.#assets.adoptFont(face, bytes[index]!);
+      }
+      const presets = this.#envelope.globals?.typePresets as
+        | TypePresets
+        | undefined;
+      if (presets !== undefined) this.setTypes(applyCatalogTrio(presets, trio));
+      return this.snapshot();
+    }
+
+    await this.#adoptCuts(this.#trioCuts(source));
+    this.setTypes(applyTrioPresets(this.#typePresets(), source));
+  }
+
+  /** The three role presets a trio names, created beside whatever the theme
+   *  already has rather than rewriting it. */
+  async addTypePresetsFromTrio(trio: FontTrioInfo): Promise<void> {
+    const entries = this.#trioCuts(trio);
+    await this.#adoptCuts(entries);
+    let presets = this.#typePresets();
+    for (const { cut, role } of entries) {
+      presets = {
+        ...presets,
+        [freePresetId(role, presets)]: rolePreset(role, cut),
+      };
+    }
+    this.setTypes(presets);
+  }
+
+  /** One preset from one cut, named role-first and sized by its role. `null`
+   *  means the author chose no role: the name and size still follow Body. */
+  async addTypePresetFromCut(
+    cut: FontCut,
+    role: FontTrioRole | null,
+  ): Promise<string> {
+    await this.#adoptCuts([{ cut, role: role ?? "body" }]);
+    const presets = this.#typePresets();
+    const id = freePresetId(role ?? "body", presets);
+    this.setTypes({ ...presets, [id]: rolePreset(role, cut) });
+    return id;
+  }
+
+  /**
+   * One preset from a local file already declared in the package.
+   *
+   * Not routed through `addTypePresetFromCut`: that path reads the cut's bytes
+   * from the host and throws for a local source, while the bytes here are
+   * already the manager's.
+   */
+  addTypePresetFromLocalFont(
+    asset: FontAssetReference,
+    role: FontTrioRole | null,
+  ): string {
+    const weight = Number(asset.weight);
+    if (!Number.isFinite(weight) || weight <= 0)
+      throw new Error(`"${asset.family}" has no usable font weight.`);
+    const entry = presetForRole(role, asset.family, weight);
+    const presets = this.#typePresets();
+    const id = freePresetId(role ?? "body", presets);
+    this.setTypes({
+      ...presets,
+      [id]: {
+        ...entry,
+        value: { ...entry.value, face: { assetId: asset.id } },
+      },
+    });
+    return id;
+  }
+
+  /** Rewrites one named preset with a finder cut — the explicit target the
+   *  Apply to selected preset action names. */
+  async applyCutToPreset(id: string, cut: FontCut): Promise<void> {
+    const presets = this.#typePresets();
+    const preset = presets[id];
+    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
+    await this.#adoptCuts([{ cut, role: preset.value.trioRole ?? "body" }]);
+    const latest = this.#typePresets();
+    const current = latest[id] ?? preset;
+    this.setTypes({
+      ...latest,
+      [id]: {
+        ...current,
+        value: {
+          ...current.value,
+          family: cut.family,
+          weight: fontWeight(cut),
+          face: { assetId: fontAssetId(cut) },
+        },
+      },
+    });
+  }
+
+  /** Sets or clears the role a preset participates in. */
+  setPresetRole(id: string, role: FontTrioRole | null): void {
+    const presets = this.#typePresets();
+    const preset = presets[id];
+    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
+    const { trioRole: _previous, ...value } = preset.value;
+    this.setTypes({
+      ...presets,
+      [id]: {
+        ...preset,
+        value: role === null ? value : { ...value, trioRole: role },
+      },
+    });
+  }
+
+  /** Releases a preset's packaged face. Family and weight stay as authored and
+   *  become editable again (R10). */
+  unbindPresetFace(id: string): void {
+    const presets = this.#typePresets();
+    const preset = presets[id];
+    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
+    if (preset.value.face === undefined) return;
+    const { face: _face, ...value } = preset.value;
+    this.setTypes({ ...presets, [id]: { ...preset, value } });
   }
 
   async applyPresetFace(

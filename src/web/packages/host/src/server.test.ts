@@ -6436,6 +6436,43 @@ describe("Asset finder routes", () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it("mounts the trash route and stages through the injected seam", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-assets-"));
+    const staged: string[] = [];
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      assets: {
+        trash: async (paths) => {
+          staged.push(...paths);
+        },
+      },
+    });
+    try {
+      const res = await request(
+        hosted.server,
+        "POST",
+        "/api/assets/trash",
+        JSON.stringify({
+          files: [
+            {
+              name: "old.woff2",
+              bytes: Buffer.from("woff").toString("base64"),
+            },
+          ],
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.json()).toEqual({ ok: true });
+      expect(staged).toHaveLength(1);
+      expect(staged[0]?.endsWith("old.woff2")).toBe(true);
+    } finally {
+      await hosted.close();
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
 });
 
 /** The published key a group's choice rides under — `system-disk` →
@@ -10022,6 +10059,12 @@ describe("Host Wallpaper Engine routes", () => {
             ? unpacked
             : { ok: false as const, reason: "refused" as const },
         ),
+      mobileExport: (workshopId) =>
+        Promise.resolve(
+          workshopId === "201"
+            ? { ok: true as const }
+            : { ok: false as const, reason: "refused" as const },
+        ),
       exportsSince: (since) =>
         Promise.resolve([
           {
@@ -10224,6 +10267,57 @@ describe("Host Wallpaper Engine routes", () => {
         hosted.server,
         "POST",
         "/api/wallpaper-engine/item/201/project",
+      );
+      expect(answer.json()).toEqual({ ok: false, reason: "no-install" });
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("starts the mobile export on POST /mobile-export and refuses that path on GET", async () => {
+    const hosted = host(fakeSource());
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "POST",
+        "/api/wallpaper-engine/item/201/mobile-export",
+      );
+      expect(answer.status).toBe(200);
+      expect(answer.json()).toEqual({ ok: true });
+
+      expect(
+        (
+          await request(
+            hosted.server,
+            "GET",
+            "/api/wallpaper-engine/item/201/mobile-export",
+          )
+        ).status,
+      ).toBe(405);
+
+      expect(
+        (
+          await request(
+            hosted.server,
+            "POST",
+            "/api/wallpaper-engine/item/999/mobile-export",
+          )
+        ).json(),
+      ).toEqual({ ok: false, reason: "refused" });
+    } finally {
+      await hosted.close();
+    }
+  });
+
+  it("answers no-install on POST /mobile-export when the host has no source", async () => {
+    const hosted = host();
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "POST",
+        "/api/wallpaper-engine/item/201/mobile-export",
       );
       expect(answer.json()).toEqual({ ok: false, reason: "no-install" });
     } finally {

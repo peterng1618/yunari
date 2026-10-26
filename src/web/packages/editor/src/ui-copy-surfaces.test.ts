@@ -796,7 +796,6 @@ async function mountLandedSurfaces(): Promise<{
       // are handed over — and a surface the walk does not mount is a surface it
       // cannot read.
       fontActions: {
-        preview: async () => undefined,
         applyFace: async () => undefined,
         applyTrio: async () => undefined,
       },

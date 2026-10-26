@@ -8,6 +8,12 @@ import {
 } from "./animation.js";
 import { NO_INK, resolveChartPaint } from "./chart-paint.js";
 import { type EngineColor, resolveFlatColor } from "./fill.js";
+import {
+  SEGMENT_SPACING_PERCENT_DEFAULT,
+  segmentCount,
+  segmentDivisorOf,
+  segmentSpacingPercentOf,
+} from "./segments.js";
 
 /**
  * Pie/donut adapter. Composition differs from gauge progress: missing parts must
@@ -26,12 +32,14 @@ export interface PieSettings {
   readonly endAngle?: number;
   readonly padAngle: number;
   readonly cornerRadius: number;
+  /** How many slices each part's fill is cut into; 100 is continuous. */
+  readonly segmentDivisor: number;
+  /** Empty space after each piece, as a share of that piece's own angle. */
+  readonly segmentSpacingPercent?: number;
   readonly total: PieTotal;
   /** Drawn only for fixed totals, where the remainder is measurable. */
   readonly remainderFill?: ChartPaint;
   readonly palette: readonly ChartPaint[];
-  /** Engine labels are normally off; shared text owns typography (§91). */
-  readonly showLabels: boolean;
   readonly animation?: AnimationSettings;
 }
 
@@ -41,6 +49,8 @@ export const defaultPieSettings: PieSettings = {
   startAngle: 90,
   padAngle: 2,
   cornerRadius: 4,
+  segmentDivisor: 100,
+  segmentSpacingPercent: SEGMENT_SPACING_PERCENT_DEFAULT,
   total: { kind: "sum" },
   palette: [
     { kind: "solid", color: "#00b8d9" },
@@ -50,7 +60,6 @@ export const defaultPieSettings: PieSettings = {
     { kind: "solid", color: "#ff5630" },
   ],
   remainderFill: { kind: "solid", color: "#2a2f3a" },
-  showLabels: false,
 };
 
 export interface PieSliceInput {
@@ -98,8 +107,8 @@ export interface PieOption extends EngineAnimation {
       readonly startAngle: number;
       readonly endAngle?: number;
       readonly padAngle: number;
-      readonly label: { readonly show: boolean };
-      readonly labelLine: { readonly show: boolean };
+      readonly label: { readonly show: false };
+      readonly labelLine: { readonly show: false };
       readonly avoidLabelOverlap: false;
       readonly data: readonly PieDataItem[];
       readonly silent: true;
@@ -205,6 +214,10 @@ export function buildPieOption(
     });
   }
 
+  const count = segmentCount(segmentDivisorOf(settings));
+  const padAngle = Math.max(0, settings.padAngle);
+  const segmented = count > 1;
+
   return {
     ...toEngineAnimation(settings.animation, animate),
     series: [
@@ -219,15 +232,92 @@ export function buildPieOption(
         ...(settings.endAngle === undefined
           ? {}
           : { endAngle: settings.endAngle }),
-        padAngle: Math.max(0, settings.padAngle),
-        label: { show: settings.showLabels },
-        labelLine: { show: settings.showLabels },
+        // The renderer's own pad is replaced by spacer items on the segmented
+        // path, so the authored gap is not applied twice.
+        padAngle: segmented ? 0 : padAngle,
+        label: { show: false },
+        labelLine: { show: false },
         // Preserve authored order; composition order can carry meaning.
         avoidLabelOverlap: false,
-        data,
+        data: segmented
+          ? toSegmentedPieData(
+              data,
+              count,
+              padAngle,
+              segmentSpacingPercentOf(settings),
+            )
+          : data,
         silent: true,
       },
     ],
+  };
+}
+
+/**
+ * Each slice's share split into `count` equal items, with a spacer between them
+ * and one after the slice.
+ *
+ * **A spacer is how a gap is drawn at all.** ECharts' `padAngle` pads between
+ * *data items*, not between the slices an author authored, so splitting one
+ * slice into several would put its own authored gap between every piece. The
+ * series pad is therefore zero here and the gaps are items: `NO_INK`, no
+ * rounding, and a value chosen to take the angle each gap should occupy.
+ *
+ * A piece's share still sums with its siblings to the slice's authored value,
+ * so the composition reads exactly as it did. Each internal spacer is the
+ * authored share **of the piece it follows**, so unequal slices leave unequal
+ * gaps; the boundary spacers stay the authored `padAngle`. The real items are
+ * scaled by the one denominator that fits both, which is what preserves the
+ * shares rather than renormalising them around the gaps.
+ *
+ * Values are angles in degrees and the returned items sum to one full turn;
+ * ECharts normalises whatever it is given, so the unit is the same one the pad
+ * is authored in.
+ */
+export function toSegmentedPieData(
+  items: readonly PieDataItem[],
+  count: number,
+  padAngle: number,
+  spacingPercent: number,
+): PieDataItem[] {
+  const segments = Math.max(1, Math.floor(count));
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  if (items.length === 0 || total <= 0) return [];
+
+  const q = Math.max(0, spacingPercent) / 100;
+  // Gaps may not take the ring: at least a tenth of it stays real, whatever the
+  // author asked for, because a pie with no slices left is not a pie.
+  const boundaryShare = Math.min(
+    0.9,
+    (items.length * Math.max(0, padAngle)) / 360,
+  );
+  const boundary = (boundaryShare * 360) / items.length;
+  const whole = 360 - items.length * boundary;
+  // A slice occupies its pieces plus a gap after every piece but the last:
+  // n · piece + (n - 1) q · piece. The denominator is that multiplier.
+  const unit = whole / (total * (segments + (segments - 1) * q));
+
+  const data: PieDataItem[] = [];
+  for (const item of items) {
+    const piece = unit * item.value;
+    const gap = q * piece;
+    for (let index = 0; index < segments; index += 1) {
+      data.push({ ...item, value: piece });
+      if (index < segments - 1) {
+        data.push(spacer(gap));
+      }
+    }
+    data.push(spacer(boundary));
+  }
+  return data;
+}
+
+/** An unpainted, unrounded item whose only job is to occupy an angle. */
+function spacer(value: number): PieDataItem {
+  return {
+    name: "",
+    value,
+    itemStyle: { color: NO_INK, borderRadius: 0 },
   };
 }
 

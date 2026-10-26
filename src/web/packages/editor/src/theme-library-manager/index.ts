@@ -4,6 +4,7 @@ import type {
   ThemeRemix,
 } from "@yunari/renderer-core";
 import type { AssetManager } from "../asset-manager/index.js";
+import type { CleanupAnswer } from "../editor-document.js";
 import type { ErrorManager } from "../error-manager/index.js";
 import {
   createThemeLibraryClient,
@@ -132,6 +133,10 @@ interface ThemeLibraryManagerOptions {
   readonly errors: ErrorManager;
   /** Asks before the open document is replaced; `false` stops the open. */
   readonly confirmReplacement: () => Promise<boolean>;
+  /** The document's cleanup question, asked before this save writes anything.
+   *  A refusal carries the host's own sentence, which must reach the author
+   *  unwrapped. */
+  readonly confirmCleanup: () => Promise<CleanupAnswer>;
   /** A save that happened, in the editor's own words. */
   readonly onSaved: (message?: string) => void;
   /** Builds a document from the reference composition, as a template. */
@@ -189,6 +194,14 @@ export class ThemeLibraryManager {
    *  happen — the document is untouched either way. */
   async save(): Promise<void> {
     const options = this.#options;
+    // Before the `try` whose catch owns "Could not save to library: …": a
+    // refused trash already is the host's sentence, and wrapping it would ask
+    // the author to read the same refusal twice.
+    const cleanup = await options.confirmCleanup();
+    if (!cleanup.proceed) {
+      if (cleanup.message !== undefined) options.onError?.(cleanup.message);
+      return;
+    }
     const current = options.snapshot();
     const client = this.#client();
     try {

@@ -25,13 +25,16 @@ export type {
   AssetSearchRequest,
   AssetSourceListing,
   CredentialRow,
+  FontCut,
+  FontFormat,
+  FontTrioInfo,
   ListingCategory,
   PresetKind,
   SourceCategory,
 } from "./assets/wire.js";
 export { parseAssetSearchRequest } from "./assets/wire.js";
 /**
- * The animation block's own defaults, exported beside the four families' because
+ * The animation block's own defaults, exported beside the families' because
  * a surface has to show the value a chart draws with: `AnimationSettings` is an
  * optional block, so an unauthored one is absent, and a control that shows an
  * empty track would be reporting a duration the chart does not use.
@@ -107,6 +110,36 @@ export {
   computeComposition,
   defaultPieSettings,
 } from "./charts/pie.js";
+export type {
+  PolarBarOption,
+  PolarBarSettings,
+} from "./charts/polar-bar.js";
+export {
+  buildPolarBarOption,
+  defaultPolarBarSettings,
+} from "./charts/polar-bar.js";
+export type {
+  RadarInput,
+  RadarOption,
+  RadarSettings,
+  RadarShape,
+} from "./charts/radar.js";
+export {
+  buildRadarOption,
+  defaultRadarSettings,
+} from "./charts/radar.js";
+export { chartReadingSignature } from "./charts/reading-signature.js";
+export {
+  barGapPx,
+  gaugeGap,
+  SEGMENT_DIVISORS,
+  SEGMENT_SPACING_PERCENT_DEFAULT,
+  type SegmentFill,
+  segmentCount,
+  segmentDivisorOf,
+  segmentFillOf,
+  segmentSpacingPercentOf,
+} from "./charts/segments.js";
 export {
   carriedPaintFor,
   seriesPaintFor,
@@ -306,6 +339,7 @@ export type {
   Binding,
   ChartContent,
   ChartFamily,
+  FontAssetFormat,
   FontAssetReference,
   GlobalEntry,
   GlobalGroup,
@@ -328,6 +362,7 @@ export {
   BACKGROUND_MEDIA_DEFAULTS,
   bumpSemanticVersion,
   CHART_FAMILIES,
+  FONT_ASSET_FORMATS,
   GLOBAL_GROUPS,
   isSemanticVersion,
   MAX_ARTBOARD_DIMENSION,
