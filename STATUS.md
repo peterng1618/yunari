@@ -1,7 +1,7 @@
 # Yunari status
 
 Updated: 2026-10-27
-Branch: `peterng1618/improve-charts`
+Branch: `main`
 
 ## Current objective
 
