@@ -16,11 +16,11 @@
  */
 
 import {
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -176,6 +176,19 @@ function licenceFromTitle(text) {
 }
 
 /**
+ * The text of a candidate licence file, or `undefined` when it is absent or is
+ * not a regular file. A directory named `LICENSE` is a shape, not an error.
+ */
+function licenceFileText(file) {
+  try {
+    if (!statSync(file).isFile()) return undefined;
+    return readFileSync(file, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * What is installed at a lockfile key. A missing manifest is the caller's
  * prerequisite failure; a manifest with no licence field falls back to the
  * title of its own `LICENSE` file.
@@ -195,16 +208,15 @@ function installedFacts(dir) {
     const declared = manifest.license.trim();
     // npm stores `SEE LICENSE IN <file>` in the licence field; the file's own
     // title is the evidence, and the name must stay inside the package.
-    const seeIn = /^SEE LICEN[CS]E IN (.+)$/i.exec(declared);
+    const seeIn = /^SEE LICEN[CS]E IN\b(.*)$/i.exec(declared);
     if (seeIn === null) {
       licence = declared;
     } else {
       namedFile = seeIn[1].trim();
-      if (
-        namedFile === "" ||
-        namedFile.includes("..") ||
-        /[\\/]/.test(namedFile)
-      ) {
+      if (namedFile === "") {
+        problem = 'its manifest says "SEE LICENSE IN" with no file to read';
+        namedFile = undefined;
+      } else if (namedFile.includes("..") || /[\\/]/.test(namedFile)) {
         problem = `its license field names "${namedFile}", which is not a file inside the package`;
         namedFile = undefined;
       }
@@ -217,22 +229,36 @@ function installedFacts(dir) {
   }
 
   if (licence === undefined && problem === undefined) {
-    const names =
-      namedFile === undefined
-        ? ["LICENSE", "LICENSE.txt", "LICENSE.md"]
-        : [namedFile];
-    const file = names.map((name) => join(dir, name)).find(existsSync);
-    if (file === undefined) {
-      problem =
-        namedFile === undefined
-          ? "no declared licence field and no LICENSE file"
+    if (namedFile !== undefined) {
+      const at = join(dir, namedFile);
+      const text = licenceFileText(at);
+      if (text === undefined) {
+        let directory = false;
+        try {
+          directory = statSync(at).isDirectory();
+        } catch {
+          directory = false;
+        }
+        problem = directory
+          ? `SEE LICENSE IN ${namedFile} names a directory, not a file`
           : `its license field names "${namedFile}", but the package has no such file`;
+      } else {
+        licence = licenceFromTitle(text);
+        if (licence === undefined) {
+          problem = `its manifest points at ${namedFile}, whose first line "${nonEmptyLines(text)[0] ?? ""}" the check cannot map`;
+        }
+      }
     } else {
-      const text = readFileSync(file, "utf8");
-      const title = nonEmptyLines(text)[0] ?? "";
-      licence = licenceFromTitle(text);
-      if (licence === undefined) {
-        problem = `no declared licence field, and its LICENSE begins "${title}", which the check cannot map`;
+      const text = ["LICENSE", "LICENSE.txt", "LICENSE.md"]
+        .map((name) => licenceFileText(join(dir, name)))
+        .find((candidate) => candidate !== undefined);
+      if (text === undefined) {
+        problem = "no declared licence field and no LICENSE file";
+      } else {
+        licence = licenceFromTitle(text);
+        if (licence === undefined) {
+          problem = `no declared licence field, and its LICENSE begins "${nonEmptyLines(text)[0] ?? ""}", which the check cannot map`;
+        }
       }
     }
   }
@@ -661,6 +687,76 @@ function selfTest() {
             );
           },
           ({ exitCode }) => exitCode === 0,
+        ),
+    ],
+    [
+      "refuses a SEE LICENSE IN name that is a directory",
+      () =>
+        withFixture(
+          ({ files, web }) => {
+            files.set(join(web, "node_modules/gamma/package.json"), {
+              name: "gamma",
+              version: "3.0.0",
+              license: "SEE LICENSE IN docs",
+            });
+            files.set(join(web, "node_modules/gamma/docs/note.txt"), "x");
+          },
+          ({ exitCode, lines }) =>
+            exitCode === 1 &&
+            lines.some((line) =>
+              line.includes("SEE LICENSE IN docs names a directory, not a file"),
+            ),
+        ),
+    ],
+    [
+      "refuses a bare SEE LICENSE IN instead of treating it as a licence",
+      () =>
+        withFixture(
+          ({ files, web, root }) => {
+            files.set(join(web, "node_modules/gamma/package.json"), {
+              name: "gamma",
+              version: "3.0.0",
+              license: "SEE LICENSE IN",
+            });
+            files.set(
+              join(root, "THIRD-PARTY-NOTICES.md"),
+              NOTICES_CLEAN.replace(
+                "| `gamma` | 3.0.0 | BSD-3-Clause |",
+                "| `gamma` | 3.0.0 | SEE LICENSE IN |",
+              ),
+            );
+          },
+          ({ exitCode, lines }) =>
+            exitCode === 1 &&
+            lines.some((line) =>
+              line.includes(
+                'its manifest says "SEE LICENSE IN" with no file to read',
+              ),
+            ),
+        ),
+    ],
+    [
+      "names the SEE LICENSE IN file it could not map",
+      () =>
+        withFixture(
+          ({ files, web }) => {
+            files.set(join(web, "node_modules/gamma/package.json"), {
+              name: "gamma",
+              version: "3.0.0",
+              license: "SEE LICENSE IN LEGAL",
+            });
+            files.set(
+              join(web, "node_modules/gamma/LEGAL"),
+              "Proprietary Terms\n\nAll rights reserved.\n",
+            );
+          },
+          ({ exitCode, lines }) =>
+            exitCode === 1 &&
+            lines.some(
+              (line) =>
+                line.includes("its manifest points at LEGAL") &&
+                line.includes("Proprietary Terms"),
+            ),
         ),
     ],
   ];
