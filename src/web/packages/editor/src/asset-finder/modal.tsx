@@ -710,7 +710,7 @@ export function AssetFinder({
                     // new question is out: the wait is the grid that is coming.
                     <div
                       data-yunari-asset-loading=""
-                      className="min-h-0 flex-1 overflow-y-auto p-[var(--space-16)]"
+                      className="min-h-0 flex-1 overflow-y-auto"
                     >
                       <CardGridSkeleton />
                     </div>
