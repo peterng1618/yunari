@@ -74,6 +74,7 @@ import {
   createTokenInspectorPanel,
   type TokenInspectorPanel,
 } from "./panes/tokens/token-inspector.js";
+import { weightChoices } from "./panes/tokens/weight-choices.js";
 import {
   createSelectionInspector,
   type SelectionInspector,
@@ -485,20 +486,24 @@ export class EditorSession {
         onDelete: (id, replacement) => this.#deleteType(id, replacement),
         unbindFace: (id) => this.#document.unbindPresetFace(id),
         // The package's own faces, so a bound preset's weight is chosen from
-        // what it holds rather than typed into a fallback.
+        // what it holds rather than typed into a fallback. A packaged family
+        // declares one face per subset, so the list collapses each
+        // weight-and-style group to one entry before the control sees it.
         facesOf: (family) =>
-          options.assetManager.declarations.flatMap((asset) =>
-            asset.kind === "font" &&
-            "family" in asset &&
-            asset.family === family
-              ? [
-                  {
-                    assetId: asset.id,
-                    weight: asset.weight,
-                    style: asset.style,
-                  },
-                ]
-              : [],
+          weightChoices(
+            options.assetManager.declarations.flatMap((asset) =>
+              asset.kind === "font" &&
+              "family" in asset &&
+              asset.family === family
+                ? [
+                    {
+                      assetId: asset.id,
+                      weight: asset.weight,
+                      style: asset.style,
+                    },
+                  ]
+                : [],
+            ),
           ),
         // The paint half: the selected paint token's fields write through the
         // same document and history ports as the pane's rows once did.

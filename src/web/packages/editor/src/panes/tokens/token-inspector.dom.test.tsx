@@ -252,6 +252,43 @@ describe("token inspector", () => {
     panel.destroy();
   });
 
+  it("writes weight and face.assetId together when a weight is chosen", async () => {
+    // The weight list is the weight dropdown; the write it makes carries both
+    // halves, because a weight without its face would draw from a file the
+    // family may not hold.
+    const presets: TypeTokens = {
+      bound: {
+        family: "Manrope",
+        weight: 400,
+        face: { assetId: "manrope-latin-400" },
+      },
+    };
+    const write = actions(undefined, () => [
+      { assetId: "manrope-latin-400", weight: 400, style: "normal" },
+      { assetId: "manrope-latin-700", weight: 700, style: "normal" },
+    ]);
+    const panel = createTokenInspectorPanel(document.body, write);
+    panel.render({ kind: "preset", id: "bound" }, presets, {
+      typeTokens: presets,
+    });
+
+    await chooseIn(
+      panel.root,
+      "[data-yunari-token-weight]",
+      "manrope-latin-700",
+    );
+
+    expect(write.onChange).toHaveBeenCalledTimes(1);
+    expect(write.onChange).toHaveBeenCalledWith({
+      bound: {
+        family: "Manrope",
+        weight: 700,
+        face: { assetId: "manrope-latin-700" },
+      },
+    });
+    panel.destroy();
+  });
+
   it("makes family and weight editable after Unbind", async () => {
     const write = actions();
     const panel = createTokenInspectorPanel(document.body, write);
