@@ -264,8 +264,6 @@ function PanelHeader(props: {
         >
           {item.name}
         </span>
-        {/* A Mine row's own state, absent on the public listing. */}
-        <StoreStatusBadge status={item.status} />
         <span
           data-yunari-store-item-kind=""
           className="flex-none rounded-full border border-edge px-[var(--space-8)] py-[var(--space-4)] text-2xs font-medium text-muted"
@@ -373,7 +371,16 @@ function PanelBody(props: {
           )}
         </span>
       )}
-      {/* **What the state means, where the badge is only a word.** */}
+      {/* **What the state is, and what it means.** A Mine row's state badge
+          lives here rather than beside the name: the header is 238px wide, and
+          a second badge there took the name down to "Withd…" on exactly the
+          states that draw one. The badge is the word, the sentence below it the
+          consequence. */}
+      {item.status === undefined ? null : (
+        <span className="flex">
+          <StoreStatusBadge status={item.status} />
+        </span>
+      )}
       {item.status === "pending" ? (
         <span
           data-yunari-store-item-status-note=""
