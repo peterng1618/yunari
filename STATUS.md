@@ -9,7 +9,7 @@ Fix every finding in the 2026-10-25 performance and security audit, plus anythin
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-performance-security-hardening.md` — Phases 0–6 complete; Phase 7 is next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-performance-security-hardening.md` — Phases 0–7 complete; Phase 8 is next.
 - **Spec:** [`2026-10-25-performance-security-hardening-design.md`](docs/superpowers/specs/2026-10-25-performance-security-hardening-design.md) is approved and all findings are marked Fix.
 - **Decision notes 0116–0120 are landed** for the request boundary, chart repaint, store upload, provenance checks and secrets at rest.
 - **Backlog drain is queued behind this plan:** [`spec`](docs/superpowers/specs/2026-10-12-the-backlog-drain-design.md) and [`plan`](docs/superpowers/plans/2026-10-12-the-backlog-drain.md) start after this closes.
@@ -17,23 +17,23 @@ Fix every finding in the 2026-10-25 performance and security audit, plus anythin
 
 ## Last completed change
 
-- **Phase 6 is complete:** an upload reserves a row under a per-author ceiling, a version PUT streams into a conditional R2 put, and finalize settles the version and its reservation in one `db.batch`.
-- **Cleanup is a scheduled job,** deleting expired reservations' objects from hour + one tick and pruning their rows after a week, with R2 deletes sliced at the 1000-key cap.
-- **One growing reader caps every JSON body** before parse, and the owner gate needs a verified address while `/migrate` compares its token in constant time.
-- **Listings are one joined statement each** and `/index.json` is served from `caches.default` under one canonical key; the query-count guard can now see a per-user email read.
-- **Gate:** `npm run gate` exit 0 — 413 files / 6170 passed (1 skipped), Worker 13 / 130. Three earlier runs lost load-sensitive host waits first; the waits now carry a 15 s budget and every count is unchanged.
+- **Phase 7 is complete:** one OS-wrapped key encrypts credentials, the store session and the CA key, each migrated off its plaintext file once and only when the whole legacy document validated.
+- **A cleared credential stays cleared** through a `credentials-retired` tombstone set, which the legacy merge honours and an explicit save lifts.
+- **The display token left the URL:** `POST /api/session` sets an `HttpOnly; SameSite=Strict` cookie with a 400-day lifetime, the root exchanges a `?session=` once, and every other route refuses a query token.
+- **The host prints its CA's SHA-256 fingerprint** and serves the same value on the certificate route, from the certificate itself rather than a copy beside it.
+- **Gate:** `npm run gate` exit 0 — 416 files / 6250 passed (1 skipped), Worker 13 / 130; two host waits that assumed the newest frame or a 20 s budget were wrong, and both were fixed at the premise.
 
 ## Next
 
-1. Run Phase 7 (secrets, sessions, TLS): the encrypted secret store, then credentials, the store session and the CA key onto it.
-2. Then the HttpOnly session cookie and the printed CA fingerprint, with the Phase 7 gate.
-3. Run Phase 8: supply chain, workflows, advisories and the close.
-4. Then the final whole-branch review on the most capable model.
+1. Run Phase 8: staged-version pinning and notice checks, least-privilege SHA-pinned workflows, advisories, and the ffmpeg hash check.
+2. Then the Phase 8 close: full gate, browser set, red-proof audit, STATUS and spec closure, plan archived.
+3. Then the final whole-branch review on the most capable model.
+4. Then `superpowers:finishing-a-development-branch`.
 
 ## Blockers / unverified
 
-- **The store upload proxy is unverified live:** the Worker tests and the host client are the evidence until a real upload runs.
-- **No Linux secret-store probe:** `secret-tool` is absent on this Windows host; the protector must refuse rather than fall back.
-- **The CA fingerprint and cookie flow will be unit-tested only:** a real phone pairing needs a live run after Phase 7.
+- **No live pairing run:** the cookie exchange and the printed fingerprint are covered by unit and e2e tests, not by a real phone installing the root and comparing the value.
+- **The store upload proxy is unverified live:** Worker tests and the host client are the evidence until a real upload runs.
+- **No Linux secret-store probe:** `secret-tool` is absent on this Windows host; the keyring branch is exercised against a mocked child process only.
 - **Phases 1–2 visible behaviour has no browser proof:** their suites assert objects and geometry; rebuild and inspect before the final review.
-- **The host suite's waits are now 15 s:** a genuine hang surfaces later than it would have, and a loaded gate no longer reports a cap or bound breach that did not happen.
+- **The launcher's startup print is unexecuted by any test:** the value it prints is proven at the authority, not through `run()`.
