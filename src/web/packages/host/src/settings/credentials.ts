@@ -38,7 +38,7 @@ const SECRET = "credentials";
  * Encrypted like the credentials themselves; see `readRetired`.
  */
 const RETIRED = "credentials-retired";
-/** The newest ids kept in the retired set; see `retire`. */
+/** The newest tombstones kept, counting only clears that retired something. */
 const RETIRED_LIMIT = 256;
 /**
  * The pre-encryption file. A document that validates whole is migrated and
@@ -224,12 +224,42 @@ export function createCredentialStore(
   };
 
   /**
+   * Whether `id` could still come back, so its clear needs a tombstone.
+   *
+   * True when the stored credentials still hold it, when the legacy file names
+   * it, and when the legacy file exists but cannot be read — there is no way to
+   * rule it out, and an unreadable file is exactly what the tombstone guards.
+   * A file that reads as a document this reader would never merge cannot serve
+   * the id again, so it does not count.
+   */
+  const couldReturn = async (id: string): Promise<boolean> => {
+    const stored = await secrets.read(SECRET);
+    if (stored !== undefined && Object.hasOwn(decode(stored), id)) return true;
+
+    let text: string;
+    try {
+      text = await readFile(legacyFile, "utf8");
+    } catch (error) {
+      // Absent is the one answer that rules it out.
+      return (error as NodeJS.ErrnoException).code !== "ENOENT";
+    }
+
+    try {
+      const parsed = JSON.parse(text);
+      return isObject(parsed) ? Object.hasOwn(parsed, id) : false;
+    } catch {
+      return false;
+    }
+  };
+
+  /**
    * Record `id` as cleared, newest last.
    *
    * Only the newest `RETIRED_LIMIT` tombstones are kept, dropping the oldest
-   * first, so a long-lived folder cannot grow the set without bound. Dropping
-   * one can only let a leftover legacy file re-add an id that has already been
-   * gone for that many clears.
+   * first. `clear` checks `couldReturn` first, so the cap counts clears that
+   * retired something and a run of no-op clears cannot evict a real tombstone.
+   * Dropping the oldest can only let a leftover legacy file re-add an id that
+   * has already been gone for that many real clears.
    */
   const retire = async (id: string): Promise<void> => {
     const ids = (await readRetired()).filter((other) => other !== id);
@@ -349,8 +379,12 @@ export function createCredentialStore(
       await writeExclusively(async () => {
         if (!CREDENTIAL_ID.test(id)) return;
 
-        // The tombstone lands before the stored removal, so a crash between
-        // the two still leaves the id retired.
+        // Only an id that could come back earns a tombstone: a no-op clear
+        // that wrote one could push a real tombstone out of the cap. The
+        // tombstone still lands before the stored removal, so a crash between
+        // the two leaves the id retired.
+        if (!(await couldReturn(id))) return;
+
         await retire(id);
         // The read hides it and purges it from `.bin` when it was still there.
         await readAll();

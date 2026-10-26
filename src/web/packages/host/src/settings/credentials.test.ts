@@ -286,11 +286,93 @@ describe("credentials", () => {
     });
     expect(await store.read()).toEqual({});
 
+    // A restarted host reads the same absence from the same directory.
+    const restarted = createCredentialStore(
+      dir,
+      createSecretStore(dir, createFakeProtector()),
+    );
+    expect(await restarted.read()).toEqual({});
+
     // An explicit save is the only way back.
     await store.write("first", "first-value-2", savedAt);
     expect(await store.read()).toEqual({
       first: { value: "first-value-2", savedAt: "2026-10-21T09:00:00.000Z" },
     });
+  });
+
+  it("records the tombstone before the stored removal, so a failed clear still retires", async () => {
+    await store.write("one", "value-one", savedAt);
+
+    let failNext = true;
+    const failing: SecretStore = {
+      available: () => secrets.available(),
+      read: (name) => secrets.read(name),
+      write: async (name, bytes) => {
+        if (name === "credentials" && failNext) {
+          failNext = false;
+          throw new Error("injected write failure");
+        }
+        await secrets.write(name, bytes);
+      },
+      remove: (name) => secrets.remove(name),
+    };
+    const crashing = createCredentialStore(dir, failing);
+
+    await expect(crashing.clear("one")).rejects.toThrow(
+      "injected write failure",
+    );
+
+    // The tombstone landed first, so the id is retired even though the stored
+    // removal never ran; the next read purges the stored entry.
+    expect(await store.read()).toEqual({});
+    const restarted = createCredentialStore(
+      dir,
+      createSecretStore(dir, createFakeProtector()),
+    );
+    expect(await restarted.read()).toEqual({});
+  });
+
+  it("writes no tombstone for a clear that retires nothing", async () => {
+    await store.write("kept", "value-kept", savedAt);
+
+    await store.clear("never-stored");
+
+    await expect(
+      readFile(path.join(dir, "credentials-retired.bin")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await store.read()).toEqual({
+      kept: { value: "value-kept", savedAt: "2026-10-21T09:00:00.000Z" },
+    });
+  });
+
+  it("keeps a real tombstone through 256 no-op clears", async () => {
+    if (process.platform !== "win32") return;
+
+    const first = { value: "first-value", savedAt: savedAt.toISOString() };
+    await seed(JSON.stringify({ first }));
+    const release = await holdForReading(legacyFile(dir));
+
+    try {
+      expect(await store.read()).toEqual({ first });
+      await store.clear("first");
+      expect(await store.read()).toEqual({});
+
+      // A no-op clear must not churn the cap: these ids are in neither the
+      // stored credentials nor the leftover, so none of them earns a tombstone.
+      for (let index = 0; index < 256; index += 1) {
+        await store.clear(`orphan${index}`);
+      }
+
+      const raw = await secrets.read("credentials-retired");
+      expect(JSON.parse((raw as Buffer).toString("utf8"))).toEqual(["first"]);
+
+      // The real tombstone survived, so the leftover cannot put `first` back.
+      expect(await store.read()).toEqual({});
+    } finally {
+      await release();
+    }
+
+    expect(await store.read()).toEqual({});
   });
 
   it("leaves a legacy entry alone when a different id is retired", async () => {
