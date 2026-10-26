@@ -211,6 +211,29 @@ describe("AssetManager", () => {
     expect(manager.previewUrl("logo")).not.toBe("blob:probe");
   });
 
+  it("answers an avif preview and a miss for an extension it cannot type", () => {
+    // `avif` is in the shared media-type table, so the host serves it and the
+    // editor must be able to show it; an extension the table does not type is
+    // the miss `previewUrl` promises, not an exception out of a revival.
+    const manager = new AssetManager();
+    manager.load(
+      {
+        assets: [
+          { id: "photo", kind: "image", path: "assets/photo.avif" },
+          { id: "mystery", kind: "image", path: "assets/mystery.tiff" },
+        ],
+      },
+      {
+        "assets/photo.avif": new Uint8Array([1]),
+        "assets/mystery.tiff": new Uint8Array([2]),
+      },
+    );
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:photo");
+
+    expect(manager.previewUrl("photo")).toBe("blob:photo");
+    expect(manager.previewUrl("mystery")).toBeUndefined();
+  });
+
   it("hydrates an asset-referenced Fabric image from declared package bytes", async () => {
     const manager = new AssetManager();
     const element = document.createElement("img");

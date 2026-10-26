@@ -27,6 +27,8 @@ const SHELL_CACHE = "yunari-shell-v2";
 const SHELL_FILES = ["/manifest.webmanifest", "/favicon.svg"];
 /**
  * The document's cache key, and deliberately **not** the URL that asked for it.
+ * It is also the only navigation path this worker caches: any other path is a
+ * different page and passes through.
  *
  * The document is the same bytes whatever the query asked for (the theme is
  * read from the query at runtime, and the HTML names neither), and a request
@@ -83,6 +85,12 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
+    // Only the player's own document is cached. Any other navigation — the
+    // editor, the settings page, a bundle path — passes through uncached, so
+    // an offline display is never handed the editor's document in place of
+    // the page it asked for.
+    if (url.pathname !== SHELL_DOCUMENT) return;
+
     // **The network answers first, always.** The host marks the document
     // `no-store` because entry HTML must not retain references to an old
     // build, and a cache-first navigation would keep a display on a shell the

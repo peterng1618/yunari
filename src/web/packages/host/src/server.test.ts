@@ -377,6 +377,41 @@ function request(
 }
 
 /**
+ * Holds a real Windows share lock on `file`: readers are allowed, deletion is
+ * refused. A Node handle cannot express this (every Node open shares delete),
+ * and only Windows refuses to unlink a file another handle holds, so callers
+ * skip on other platforms rather than mocking the removal. The same helper
+ * lives beside the settings stores it exercises.
+ */
+async function holdForReading(file: string): Promise<() => Promise<void>> {
+  const literal = file.replace(/'/g, "''");
+  const script =
+    `$f=[IO.File]::Open('${literal}','Open','Read','Read');` +
+    "[Console]::Out.WriteLine('held');[Console]::In.ReadLine()|Out-Null;" +
+    "$f.Dispose()";
+
+  const child = spawn(
+    "powershell",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    { stdio: ["pipe", "pipe", "ignore"], windowsHide: true },
+  );
+
+  await new Promise<void>((resolve, reject) => {
+    child.stdout.once("data", () => resolve());
+    child.once("error", reject);
+    child.once("exit", (code) =>
+      reject(new Error(`the lock process exited with ${String(code)}`)),
+    );
+  });
+
+  return () =>
+    new Promise<void>((resolve) => {
+      child.once("exit", () => resolve());
+      child.stdin.end("release\n");
+    });
+}
+
+/**
  * A request whose body has begun but not finished, so the route reading it is
  * still in flight. `started` resolves once the body has been asked for, which is
  * after the route has claimed whatever gate it reads through.
@@ -2998,23 +3033,46 @@ describe("Host theme routes", () => {
       const token = await pair();
       const lan = { remoteAddress: "192.168.1.50" };
 
+      // The document is what a display shows, and it stays readable with a
+      // live credential in either carrier.
       expect(
         (
-          await request(paired.server, "GET", "/api/themes", undefined, {
-            ...lan,
-            headers: { "x-yunari-session": token },
-          })
+          await request(
+            paired.server,
+            "GET",
+            "/api/themes/living-room/document",
+            undefined,
+            { ...lan, headers: { "x-yunari-session": token } },
+          )
         ).status,
       ).toBe(200);
 
       expect(
         (
-          await request(paired.server, "GET", "/api/themes", undefined, {
-            ...lan,
-            headers: asCookie(token),
-          })
+          await request(
+            paired.server,
+            "GET",
+            "/api/themes/living-room/document",
+            undefined,
+            { ...lan, headers: asCookie(token) },
+          )
         ).status,
       ).toBe(200);
+
+      // The library index and the whole-theme read (every asset base64) are
+      // this PC's editor surfaces: a paired display is refused both even with
+      // a live credential.
+      for (const path of ["/api/themes", "/api/themes/living-room"]) {
+        expect(
+          (
+            await request(paired.server, "GET", path, undefined, {
+              ...lan,
+              headers: asCookie(token),
+            })
+          ).status,
+          path,
+        ).toBe(403);
+      }
 
       // The stream is gated by the same check. A cookie is what an EventSource
       // carries by itself, so it opens; a query credential is refused, because
@@ -3042,6 +3100,17 @@ describe("Host theme routes", () => {
       expect(
         (await streamStatus(paired.server, "/ws?keys=cpu.load")).status,
       ).toBe(403);
+    });
+
+    it("keeps the theme index and a whole theme to this PC", async () => {
+      // The loopback caller is the editor, which opens, lists and saves; the
+      // two surfaces are still read freely here.
+      expect((await request(paired.server, "GET", "/api/themes")).status).toBe(
+        200,
+      );
+      expect(
+        (await request(paired.server, "GET", "/api/themes/living-room")).status,
+      ).toBe(200);
     });
 
     it("lets the cookie outrank a header left over from before a re-pair", async () => {
@@ -3868,21 +3937,18 @@ describe("A display's credential outlives the host that minted it", () => {
     await first.close();
 
     // A second host, over the same settings directory and nothing else: the
-    // credential is the whole of what the phone has.
+    // credential is the whole of what the phone has. The document is the
+    // display's own read; the library index is loopback-only now.
     const second = await launch();
     const withToken = await request(
       second.server,
       "GET",
-      "/api/themes",
+      "/api/themes/living-room/document",
       undefined,
       { ...LAN, headers: { "x-yunari-session": token } },
     );
     expect(withToken.status).toBe(200);
-    expect(
-      (withToken.json() as { themes: readonly { id: string }[] }).themes.map(
-        (theme) => theme.id,
-      ),
-    ).toEqual(["living-room"]);
+    expect((withToken.json() as { id: string }).id).toBe("living-room");
   });
 
   it("refuses a token that no display holds", async () => {
@@ -10335,6 +10401,33 @@ describe("Weather settings routes", () => {
         )
       ).status,
     ).toBe(403);
+  });
+
+  it("answers a locked weather file with a fixed message, not the path", async () => {
+    if (process.platform !== "win32") return;
+
+    const { server, weather } = await launch();
+    await weather.write(BERLIN);
+    const release = await holdForReading(
+      path.join(settingsDir, "weather.json"),
+    );
+
+    try {
+      const refused = await request(
+        server,
+        "PUT",
+        "/api/weather/settings",
+        JSON.stringify(BERLIN),
+      );
+
+      // A failed rename names this machine's temporary and target paths; a
+      // browser gets the failure and no filesystem detail (S25).
+      expect(refused.status).toBe(400);
+      expect(refused.text()).toBe("The weather settings could not be saved.");
+      expect(refused.text()).not.toMatch(/[\\/]/);
+    } finally {
+      await release();
+    }
   });
 
   it("answers the selected backend's attribution with its settings", async () => {

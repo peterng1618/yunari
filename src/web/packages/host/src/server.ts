@@ -437,7 +437,6 @@ class LargeBodyBusyError extends Error {}
  */
 export function createLargeBodyGate(maxConcurrent = 1): {
   run<T>(work: () => Promise<T>): Promise<T>;
-  busy(): boolean;
 } {
   let inFlight = 0;
 
@@ -453,7 +452,6 @@ export function createLargeBodyGate(maxConcurrent = 1): {
         inFlight -= 1;
       }
     },
-    busy: () => inFlight >= maxConcurrent,
   };
 }
 
@@ -2195,6 +2193,17 @@ export function createHostServer(options: HostServerOptions): HostServer {
           const saved = await devices.write(body);
           sendJson(response, 200, { ok: true, assigned: saved });
         } catch (error: unknown) {
+          // The store's own file failures name this machine's paths; the
+          // detail goes to the host's console, not to the caller.
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(
+              response,
+              400,
+              "The device assignments could not be saved.",
+            );
+            return;
+          }
           sendText(
             response,
             400,
@@ -2268,6 +2277,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
           options.onDisplayChange?.(saved);
           sendJson(response, 200, { ok: true, settings: saved });
         } catch (error: unknown) {
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(response, 400, "The display settings could not be saved.");
+            return;
+          }
           sendText(
             response,
             400,
@@ -2356,6 +2370,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
               attribution: { text: backend.attribution, url: backend.termsUrl },
             });
           } catch (error: unknown) {
+            if (isPlatformError(error)) {
+              console.error(error);
+              sendText(
+                response,
+                400,
+                "The weather settings could not be saved.",
+              );
+              return;
+            }
             sendText(
               response,
               400,
@@ -2504,6 +2527,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
           const favorites = await fontFavorites.write(body);
           sendJson(response, 200, { favorites });
         } catch (error: unknown) {
+          if (isPlatformError(error)) {
+            console.error(error);
+            sendText(response, 400, "The font favourites could not be saved.");
+            return;
+          }
           sendText(
             response,
             400,
@@ -3302,6 +3330,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
     if (url.pathname === "/api/themes") {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+      // The library index is this PC's own surface. A display names one theme
+      // it was given through its document, asset and answers routes, so nothing
+      // the player does needs the list (S12, the same argument that gated the
+      // unused route beside it).
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Themes are available on this PC only.");
         return;
       }
       // Templates travel beside the stored themes and are kept out of them: a
@@ -4114,6 +4150,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
     if (themeMatch) {
       const rawId = decodeURIComponent(themeMatch[1] ?? "");
       if (request.method === "GET") {
+        // The whole-theme read carries every asset as base64, which is the
+        // editor's shape, not a reading a display needs: a display uses the
+        // document, asset and answers routes.
+        if (!isLoopbackRemote(request.socket.remoteAddress)) {
+          sendText(response, 403, "Themes are available on this PC only.");
+          return;
+        }
         if (!isValidThemeId(rawId)) {
           sendText(response, 400, "Invalid theme id.");
           return;
