@@ -82,7 +82,7 @@ function globalsWith(...ids: readonly string[]): FabricGlobals {
   return {
     typeTokens: Object.fromEntries(
       names.map((id) => [id, { family: "Inter" }]),
-    ) as FabricGlobals["typeTokens"],
+    ) as NonNullable<FabricGlobals["typeTokens"]>,
   };
 }
 
