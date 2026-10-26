@@ -16,7 +16,7 @@
 - `SEGMENT_GAP_RATIO` is replaced for gauge and bar; the pie keeps its spacer construction but its target angle comes from the same spacing share.
 - Rounded ends are never silently disabled; the clearance widens the gap instead.
 - Absent `segmentFill` means gauge `"whole"`, bar `"partial"`; absent `segmentSpacingPercent` means the family default.
-- Charts under `src/web/packages/renderer-core/src/charts/` are a mechanism boundary: `docs/decisions/0119-<slug>.md` must land before the first write there.
+- Charts under `src/web/packages/renderer-core/src/charts/` are a mechanism boundary: `docs/decisions/0120-<slug>.md` must land before the first write there.
 - Every new test is watched fail before its implementation exists.
 
 ## Review Focus
@@ -32,7 +32,7 @@
 ### Task 1: Settings, defaults and the editor's percentage track
 
 **Files:**
-- Create: `docs/decisions/0119-segment-spacing-is-a-share-of-the-chart.md`
+- Create: `docs/decisions/0120-segment-spacing-is-a-share-of-the-chart.md`
 - Modify: `src/web/packages/renderer-core/src/charts/segments.ts`
 - Modify: `src/web/packages/renderer-core/src/charts/gauge.ts` (`GaugeSettings`, `defaultGaugeSettings`)
 - Modify: `src/web/packages/renderer-core/src/charts/bar.ts` (`BarSettings`, `defaultBarSettings`)
@@ -50,7 +50,7 @@
 
 - [ ] **Step 1: Write the decision note**
 
-Create `docs/decisions/0119-segment-spacing-is-a-share-of-the-chart.md` with the problem (slot-relative gap shrinks with count; `roundCap` clearance is in pixels), the ruling (spacing is a share of the smaller drawn edge; clearance = `thickness / radius`, clamped to 45% of a slot), the rejected alternatives (share-of-slot, thickness multiples), and the searches performed for each. Follow `docs/decisions/README.md`'s template.
+Create `docs/decisions/0120-segment-spacing-is-a-share-of-the-chart.md` with the problem (slot-relative gap shrinks with count; `roundCap` clearance is in pixels), the ruling (spacing is a share of the smaller drawn edge; clearance = `thickness / radius`, clamped to 45% of a slot), the rejected alternatives (share-of-slot, thickness multiples), and the searches performed for each. Follow `docs/decisions/README.md`'s template.
 
 - [ ] **Step 2: Write the failing setting tests**
 
@@ -92,7 +92,7 @@ Expected: PASS, both commands exit 0.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add docs/decisions/0119-segment-spacing-is-a-share-of-the-chart.md STATUS.md src/web/packages/renderer-core/src/charts/segments.ts src/web/packages/renderer-core/src/charts/gauge.ts src/web/packages/renderer-core/src/charts/bar.ts src/web/packages/renderer-core/src/charts/pie.ts src/web/packages/renderer-core/src/charts/settings-fields.ts src/web/packages/renderer-core/src/charts/settings-fields.test.ts src/web/packages/renderer-core/src/charts/segments.test.ts src/web/packages/renderer-core/src/theme/fabric-envelope-validate.test.ts src/web/packages/editor/src/chart-manager/panel.ts src/web/packages/editor/src/chart-manager/chart-fields.ts src/web/packages/editor/src/chart-manager/chart-fields.tsx src/web/packages/editor/src/chart-manager/panel.dom.test.ts src/web/packages/editor/src/chart-manager/chart-fields.dom.test.tsx
+git add docs/decisions/0120-segment-spacing-is-a-share-of-the-chart.md STATUS.md src/web/packages/renderer-core/src/charts/segments.ts src/web/packages/renderer-core/src/charts/gauge.ts src/web/packages/renderer-core/src/charts/bar.ts src/web/packages/renderer-core/src/charts/pie.ts src/web/packages/renderer-core/src/charts/settings-fields.ts src/web/packages/renderer-core/src/charts/settings-fields.test.ts src/web/packages/renderer-core/src/charts/segments.test.ts src/web/packages/renderer-core/src/theme/fabric-envelope-validate.test.ts src/web/packages/editor/src/chart-manager/panel.ts src/web/packages/editor/src/chart-manager/chart-fields.ts src/web/packages/editor/src/chart-manager/chart-fields.tsx src/web/packages/editor/src/chart-manager/panel.dom.test.ts src/web/packages/editor/src/chart-manager/chart-fields.dom.test.tsx
 git commit -m "feat(charts): author segment spacing as a share of the chart"
 ```
 

@@ -25,7 +25,7 @@ export const SEGMENT_DIVISORS: readonly [1, 2, 4, 5, 10, 20, 25, 50, 100] = [
  * a slice shrinks with the count twice over — more slices means both a smaller
  * slot and a smaller gap — so a 20-slice gauge whose gaps looked right at one
  * size lost them at half the size. A gap measured against the drawn edge is the
- * same gap to the eye at every size (`ADR 0119`).
+ * same gap to the eye at every size (`ADR 0120`).
  */
 export const SEGMENT_SPACING_PERCENT_DEFAULT = 2.5;
 

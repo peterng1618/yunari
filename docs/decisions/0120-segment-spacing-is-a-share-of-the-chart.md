@@ -1,4 +1,4 @@
-# 0119 — Segment spacing is a share of the chart, cleared by the caps
+# 0120 — Segment spacing is a share of the chart, cleared by the caps
 
 - **Date:** 2026-10-26
 - **Status:** accepted
