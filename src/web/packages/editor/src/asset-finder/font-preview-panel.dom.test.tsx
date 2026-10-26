@@ -300,6 +300,27 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
   expect(chips[1]?.getAttribute("aria-pressed")).toBe("true");
 });
 
+it("applies the face the family's id names, not the first cut listed", () => {
+  // A family lists every weight × subset. Position 0 is often a subset with no
+  // Latin glyphs, and adopting it left the author's text in the browser
+  // fallback; the row's id names the lead face the host chose.
+  const listed = family.font.cuts[0]!;
+  const lead = family.font.cuts[1]!;
+  const reordered = {
+    ...family,
+    id: lead.id,
+    font: { cuts: [listed, lead] },
+  };
+  const onApplyToSelected = vi.fn();
+  mount(panel({ selected: reordered, onApplyToSelected }));
+
+  act(() => {
+    button("[data-yunari-font-apply]").click();
+  });
+
+  expect(onApplyToSelected).toHaveBeenCalledWith(lead);
+});
+
 it("releases every face it added when the panel unmounts", () => {
   const fonts = stubFonts();
 

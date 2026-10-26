@@ -31,13 +31,31 @@ function rolePresets(
   );
 }
 
-function cutsOf(selected: FontResult): readonly FontCut[] {
+export function cutsOf(selected: FontResult): readonly FontCut[] {
   const trio = selected.font.trio;
   if (trio === undefined) return selected.font.cuts;
   return ROLES.flatMap((role) => {
     const cut = trio.roles[role];
     return cut === undefined ? [] : [cut];
   });
+}
+
+/**
+ * The face a family row is addressed by.
+ *
+ * A family's cuts are every published file — weight × subset — so position 0 is
+ * whatever the provider listed first, which for a Google family is often a
+ * subset with no Latin glyphs. Drawn or adopted, that face leaves the author's
+ * own text in the browser fallback (a serif), while the row's own id names the
+ * cut the host chose as the family's lead: this reads that id rather than an
+ * array position.
+ */
+export function leadCutOf(selected: {
+  readonly id: string;
+  readonly font?: { readonly cuts: readonly FontCut[] } | undefined;
+}): FontCut | undefined {
+  const cuts = selected.font?.cuts ?? [];
+  return cuts.find((cut) => cut.id === selected.id) ?? cuts[0];
 }
 
 export function faceStyle(cut: FontCut | undefined): React.CSSProperties {
@@ -117,7 +135,7 @@ export function FontPreviewPanel({
   useSpecimens(cuts);
 
   const selectedCut =
-    selected.font.cuts.find((cut) => cut.id === cutId) ?? selected.font.cuts[0];
+    selected.font.cuts.find((cut) => cut.id === cutId) ?? leadCutOf(selected);
   // No role-tagged preset means Apply has nothing to rewrite; only trio panels
   // draw that button, and only with it does the reason have a subject.
   const roleless = ROLES.every(
