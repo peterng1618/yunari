@@ -48,7 +48,7 @@
 ### Task 1: The preview-ratio catalogue
 
 **Files:**
-- Create: `docs/decisions/0119-a-preview-ratio-is-a-catalogue-entry-and-the-lens-is-scene-geometry.md`
+- Create: `docs/decisions/0123-a-preview-ratio-is-a-catalogue-entry-and-the-lens-is-scene-geometry.md`
 - Modify: `packages/editor/src/display-lens.ts`
 - Test: `packages/editor/src/display-lens.test.ts`
 
@@ -79,7 +79,7 @@
 
 - [ ] **Step 1: Write the decision note**
 
-Write `docs/decisions/0119-a-preview-ratio-is-a-catalogue-entry-and-the-lens-is-scene-geometry.md` from the template. Paths: `packages/editor/src/display-lens.ts`, `packages/editor/src/viewport-manager/index.ts`, `packages/editor/src/editor-shell.ts`, `packages/editor/src/editor-shell/editor-shell.css`. Record the searches actually made: the existing `display-lens.ts` derivation, `palette.ts`/`bindings.ts` for the storage-key rule, `screenRect` for host-space framing, the shell mockup's stage gradient, and the decision that the lens is camera state (`§67`), not document content.
+Write `docs/decisions/0123-a-preview-ratio-is-a-catalogue-entry-and-the-lens-is-scene-geometry.md` from the template. Paths: `packages/editor/src/display-lens.ts`, `packages/editor/src/viewport-manager/index.ts`, `packages/editor/src/editor-shell.ts`, `packages/editor/src/editor-shell/editor-shell.css`. Record the searches actually made: the existing `display-lens.ts` derivation, `palette.ts`/`bindings.ts` for the storage-key rule, `screenRect` for host-space framing, the shell mockup's stage gradient, and the decision that the lens is camera state (`§67`), not document content.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -166,7 +166,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/web/packages/editor/src/display-lens.ts src/web/packages/editor/src/display-lens.test.ts docs/decisions/0119-a-preview-ratio-is-a-catalogue-entry-and-the-lens-is-scene-geometry.md
+git add src/web/packages/editor/src/display-lens.ts src/web/packages/editor/src/display-lens.test.ts docs/decisions/0123-a-preview-ratio-is-a-catalogue-entry-and-the-lens-is-scene-geometry.md
 git commit -m "feat(editor): own the preview-ratio catalogue"
 ```
 
