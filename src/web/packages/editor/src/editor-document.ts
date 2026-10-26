@@ -490,12 +490,11 @@ export class EditorDocument {
   /** Removes the declarations, their bytes, their preview URLs and the credits
    *  whose `assetId` is in `ids`. A credit with no `assetId` is kept. */
   pruneAssets(ids: readonly string[]): void {
-    // A stale id must not delete a credit on its own: only an id the manager
-    // still declares reaches the credit removal below.
-    const declared = new Set(
-      this.#assets.declarations.map((asset) => asset.id),
-    );
-    const pruned = ids.filter((id) => declared.has(id));
+    // A caller's list can be stale by the time it confirms — the author can
+    // place or bind an asset in between — so reachability is re-read, never
+    // trusted. An id the manager no longer declares is not in this set either.
+    const unused = new Set(this.unusedAssets().map((asset) => asset.id));
+    const pruned = ids.filter((id) => unused.has(id));
     if (pruned.length === 0) return;
     for (const id of pruned) this.#assets.remove(id);
     const removed = new Set(pruned);

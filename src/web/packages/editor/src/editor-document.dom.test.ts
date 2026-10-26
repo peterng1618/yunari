@@ -4,8 +4,9 @@ import type {
   FontCut,
   FontTrioInfo,
 } from "@yunari/renderer-core";
+import { setObjectAssetReference } from "@yunari/scene-fabric";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
-import type { FabricObject } from "fabric/es";
+import { type FabricObject, Rect } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
 import {
   AssetManager,
@@ -71,6 +72,12 @@ function managerWith(assets: readonly LocalAssetReference[]): AssetManager {
 
 function imageAsset(id: string): LocalAssetReference {
   return { id, kind: "image", path: `assets/${id}.png`, sha256: "0" };
+}
+
+function placedObject(assetId: string): FabricObject {
+  const object = new Rect();
+  setObjectAssetReference(object, { assetId, kind: "image" });
+  return object;
 }
 
 const entry = (title: string, url: string): ThemeCreditsEntry => ({
@@ -179,14 +186,47 @@ describe("EditorDocument credits", () => {
   });
 
   it("keeps a credit with no assetId", () => {
-    const assetManager = managerWith([imageAsset("photo")]);
+    const assetManager = managerWith([imageAsset("photo"), imageAsset("logo")]);
     const unlinked = entry("house", "https://lucide.dev/icons/house");
-    const document = documentWith([unlinked], { assetManager });
+    const linked: ThemeCreditsEntry = {
+      ...entry("logo", "https://example.test/logo"),
+      assetId: "logo",
+    };
+    const document = documentWith([unlinked, linked], {
+      assetManager,
+      objects: [placedObject("logo")],
+    });
 
     document.pruneAssets(["photo"]);
 
-    expect(assetManager.declarations).toEqual([]);
-    expect(document.credits()).toEqual([unlinked]);
+    // The unlinked credit has nothing to match, and the linked one names an
+    // asset that is still on the canvas — neither follows the pruned photo.
+    expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
+      "logo",
+    ]);
+    expect(assetManager.assets["assets/logo.png"]).toEqual(new Uint8Array([1]));
+    expect(document.credits()).toEqual([unlinked, linked]);
+    document.destroy();
+  });
+
+  it("leaves a requested asset alone while the scene still references it", () => {
+    // The save dialog's list can be stale by the time the author confirms: an
+    // asset that was unused when it was asked can be placed before the prune.
+    const assetManager = managerWith([imageAsset("logo")]);
+    const document = documentWith(undefined, {
+      assetManager,
+      objects: [placedObject("logo")],
+    });
+    const changed = vi.fn();
+    document.subscribeDocumentChange(changed);
+
+    document.pruneAssets(["logo"]);
+
+    expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
+      "logo",
+    ]);
+    expect(assetManager.assets["assets/logo.png"]).toEqual(new Uint8Array([1]));
+    expect(changed).not.toHaveBeenCalled();
     document.destroy();
   });
 });
