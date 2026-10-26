@@ -19,9 +19,9 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 - **A family is drawn and applied by its lead face:** `leadCutOf` reads the cut id behind the row's `<source>:` prefix, not `cuts[0]` — the non-Latin subset that rendered as a serif.
 - **A cut's subset is named when weight and style repeat** (`400 · latin`), and the chips use the panel's own face, not the specimen's.
-- **An import brings the lead subset's weights:** Apply / Add as preset adopts every weight and style of the family's lead subset, so the preset's weight field draws each of them; an already-declared face is never re-downloaded.
-- **The Assets pane draws one card per family,** listing the weights it holds; Remove takes the whole family.
-- **Proof:** editor/document/assets suites pass, `npm run typecheck` exit 0; browser run shows the latin cut pressed, `latin-400` and `latin-700` requested, `vietnamese` untouched, and Manrope measuring apart from serif and sans-serif once adopted.
+- **An import brings the lead subset's weights:** Apply / Add as preset adopts every weight and style of the family's lead subset, and the Assets pane draws one card per family listing them; an already-declared face is never re-downloaded.
+- **A bound preset's weight is a list of the faces the package holds,** not free text that would fall back to the browser font; an unbound preset keeps its editable family and weight.
+- **Proof:** editor/document/assets suites pass, `npm run typecheck` exit 0; a browser run presses the latin cut, requests `latin-400` and `latin-700` (not `vietnamese`), and the bound preset's weight opens as a list of exactly `400` and `700`.
 
 ## Next
 
