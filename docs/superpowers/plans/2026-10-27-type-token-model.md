@@ -121,7 +121,7 @@ Outcome: a declared face remembers its subset, registration selects by `unicode-
 
 ## Phase 3 — Starter theme, cards and fixtures
 
-Outcome: every shipped theme is v3 and its runs carry their own size.
+Outcome: every shipped theme stays schema 2 and its runs carry their own size.
 
 ### Task 3.1 — Starter tokens
 
