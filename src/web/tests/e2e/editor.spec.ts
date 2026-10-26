@@ -3885,7 +3885,11 @@ test.describe("Fabric editor route", () => {
             value: { kind: "solid" as const, color: INK_PAINT },
           },
         },
-        typeTokens: {},
+        typeTokens: {
+          heading: { family: "system-ui, sans-serif", weight: "600" },
+          body: { family: "system-ui, sans-serif", weight: "400" },
+          mono: { family: "ui-monospace, monospace", weight: "400" },
+        },
       },
       bindings: {},
       scene: {

@@ -91,7 +91,11 @@ const envelope = {
         value: { kind: "solid" as const, color: "#e8e4da" },
       },
     },
-    typeTokens: {},
+    typeTokens: {
+      heading: { family: "system-ui, sans-serif", weight: "600" },
+      body: { family: "system-ui, sans-serif", weight: "400" },
+      mono: { family: "ui-monospace, monospace", weight: "400" },
+    },
   },
   assets: [],
   scene: { version: "7.4.0" as const, objects: [] },

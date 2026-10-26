@@ -19,7 +19,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 describe("the seeded host fixtures", () => {
   for (const envelope of hostThemeEnvelopes()) {
     it(`${envelope.id} validates as a current theme`, () => {
-      const result = readFabricThemeEnvelope(envelope);
+      // A rendered theme needs its three roles: an empty bag is refused once
+      // the option is on, so a fixture that loses heading/body/mono fails here.
+      const result = readFabricThemeEnvelope(envelope, {
+        requireTrioRoles: true,
+      });
       expect(result.ok, JSON.stringify(result)).toBe(true);
     });
   }
