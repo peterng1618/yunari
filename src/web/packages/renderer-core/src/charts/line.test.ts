@@ -79,9 +79,10 @@ describe("liveTail — the last reading fills the edge", () => {
   });
 
   it("keeps the flat stretch a stall painted when the batch arrives", () => {
-    // The edge had passed 4000 (the gap is 3 s, longer than the 2 s delay), so
-    // 4000..7000 was painted flat. The arriving sample repeats the previous
-    // reading at its own timestamp and steps there.
+    // Both gaps are longer than the 2 s delay, so the edge had passed the
+    // sample before each of them and both stretches were painted flat. Each
+    // arriving sample repeats the previous reading at its own timestamp and
+    // steps there.
     expect(
       liveTail(
         [
@@ -94,6 +95,7 @@ describe("liveTail — the last reading fills the edge", () => {
       ),
     ).toEqual([
       [T0, 40],
+      [T0 + 4000, 40],
       [T0 + 4000, 44],
       [T0 + 7000, 44],
       [T0 + 7000, 60],
@@ -115,29 +117,55 @@ describe("liveTail — the last reading fills the edge", () => {
       ),
     ).toEqual([
       [T0, 40],
+      [T0 + 4000, 40],
       [T0 + 4000, 44],
       [T0 + 7000, 44],
       [T0 + 7000, null],
     ]);
   });
 
-  it("does not step when the edge never passed the previous sample", () => {
-    // A 1.5 s gap is shorter than the delay, so the edge was still between the
-    // two samples and nothing was painted flat to revise.
+  it("keeps a stall's step when a later batch extends the line", () => {
+    // The step at 4000 was painted when the 3 s stall ended. The next batch
+    // extends the line to 5000, and re-deciding only the newest pair would
+    // drop that step and reshape pixels the reader has already seen.
     expect(
       liveTail(
         [
           [T0, 40],
-          [T0 + 5000, 44],
-          [T0 + 6500, 60],
+          [T0 + 1000, 41],
+          [T0 + 4000, 50],
+          [T0 + 5000, 51],
         ],
-        T0 + 6000,
+        T0 + 5001,
         2000,
       ),
     ).toEqual([
       [T0, 40],
-      [T0 + 5000, 44],
-      [T0 + 6500, 60],
+      [T0 + 1000, 41],
+      [T0 + 4000, 41],
+      [T0 + 4000, 50],
+      [T0 + 5000, 51],
+      [T0 + 5001, 51],
+    ]);
+  });
+
+  it("does not step when the edge never passed the previous sample", () => {
+    // Both gaps are shorter than the delay, so the edge was still between the
+    // samples and nothing was painted flat to revise.
+    expect(
+      liveTail(
+        [
+          [T0, 40],
+          [T0 + 1500, 44],
+          [T0 + 3000, 60],
+        ],
+        T0 + 2500,
+        2000,
+      ),
+    ).toEqual([
+      [T0, 40],
+      [T0 + 1500, 44],
+      [T0 + 3000, 60],
     ]);
   });
 
@@ -278,6 +306,42 @@ describe("a delayed line", () => {
         drawnValueAt(afterData, xMs),
         `x=${xMs - T0} ms after the last batch before the stall`,
       ).toBe(drawnValueAt(beforeData, xMs));
+    }
+  });
+
+  it("draws the same visible stretch after the batch that follows a stall", () => {
+    // The step a stall paints must survive the next batch too. Re-deciding the
+    // newest pair alone dropped it one batch late and sloped the flat stretch
+    // the edge had already drawn.
+    const stall = buildLineOption(
+      defaultLineSettings,
+      [{ sensorId: "cpu.load.total", samples: [...samples, at(7, 60)] }],
+      T0 + 7000,
+      false,
+      undefined,
+      LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
+    );
+    const next = buildLineOption(
+      defaultLineSettings,
+      [
+        {
+          sensorId: "cpu.load.total",
+          samples: [...samples, at(7, 60), at(8, 61)],
+        },
+      ],
+      T0 + 8000,
+      false,
+      undefined,
+      LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
+    );
+
+    const stallData = stall.series[0]!.data;
+    const nextData = next.series[0]!.data;
+    for (let xMs = T0 + 4000; xMs <= stall.xAxis.max; xMs += 100) {
+      expect(
+        drawnValueAt(nextData, xMs),
+        `x=${xMs - T0} ms after the batch that ended the stall`,
+      ).toBe(drawnValueAt(stallData, xMs));
     }
   });
 });

@@ -199,6 +199,11 @@ export function toSeriesPoints(
  * previous frame drew. The threshold is the playback delay: the edge can only
  * have passed the sample when the gap is longer than it.
  *
+ * **Every gap is decided from the samples, not from the newest pair.** A step
+ * that was painted when one stall ended must survive the batches that follow
+ * it: re-deciding only the last pair dropped it one batch later and sloped the
+ * flat stretch the reader had already seen.
+ *
  * A trailing `null` is a reported gap, not a late tick: it is never held
  * forward (§83), but the flat stretch before it is still preserved. A
  * zero-delay source cannot hold or step, because its edge never runs ahead of
@@ -212,15 +217,18 @@ export function liveTail(
   const last = points.at(-1);
   if (last === undefined) return points;
 
-  let tail: readonly SeriesPoint[] = points;
-  const previous = tail.at(-2);
-  if (
-    delayMs > 0 &&
-    previous !== undefined &&
-    previous[1] !== null &&
-    last[0] - previous[0] > delayMs
-  ) {
-    tail = [...tail.slice(0, -1), [last[0], previous[1]], last];
+  const tail: SeriesPoint[] = [];
+  for (const [index, point] of points.entries()) {
+    const previous = points[index - 1];
+    if (
+      delayMs > 0 &&
+      previous !== undefined &&
+      previous[1] !== null &&
+      point[0] - previous[0] > delayMs
+    ) {
+      tail.push([point[0], previous[1]]);
+    }
+    tail.push(point);
   }
 
   if (last[1] === null || delayMs === 0 || renderNowMs <= last[0]) {

@@ -1,11 +1,11 @@
 # Yunari status
 
-Updated: 2026-10-26
-Branch: `main`
+Updated: 2026-10-27
+Branch: `peterng1618/improve-charts`
 
 ## Current objective
 
-The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md) (per-display shape and rotation, [`spec B`](docs/superpowers/specs/2026-10-26-display-rotation-design.md)) is the next plan, and the queued backlog drain follows it.
+Stop the live line's right edge revising a stretch it has already painted, the owner's report from 2026-10-27; plan B and the backlog drain stay queued behind it.
 
 ## Active work
 
@@ -17,18 +17,17 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Last completed change
 
-- **A family is drawn and applied by its lead face:** `leadCutOf` reads the cut id the result row carries, not `cuts[0]`, which for a Google family is often a non-Latin subset — the serif fallback Water Brush and Waterfall showed.
-- **A cut's subset is named when weight and style repeat:** three 400 cuts read `400 · vietnamese`, `400 · latin-ext`, `400 · latin` instead of three identical `400` chips.
-- **A face adopted mid-session is registered:** `watchDeclaredFontFaces` adds it to `document.fonts` and remeasures matching text; tiles are cards drawing a trio at 20 / 15 / 12 px.
-- **A face is named by family and weight** wherever files are listed — Assets card, preview modal, background list, save cleanup — not by its packaged `google-fonts-cut-…` id.
-- **Proof:** finder suite 10 files / 108 passed, `npm run typecheck` exit 0; real-glyph rendering of an adopted CDN face is still unverified here (the sandbox cannot reach the CDN).
+- **A stall's step survives the batches that follow it:** `liveTail` derives the hold and step from every sample gap instead of the newest pair, so the next batch no longer slopes a flat stretch already painted.
+- **The live line no longer corrects at the edge:** the per-frame probe read 15 revisions per line chart before the change and 0 after, on the editor's real machine sensors.
+- **Red first:** the drawn-value case across the batch after a stall and three `liveTail` expectations failed before the change; the chart suite is 324/324 after it, typecheck exit 0.
 
 ## Next
 
-1. Execute plan B with subagent-driven development; local merge to `main` on completion.
-2. Resume the backlog-drain plan at Phase 0 after that merge.
-3. Triage the pre-existing browser reds recorded below.
-4. Owner tests remain: segment spacing and fill, radar and polar bar, scene export, fonts and assets rework.
+1. Owner test of the live line's right edge, in the editor and on a phone, with machine sensors.
+2. Decide whether the 2 s delay should follow the received cadence: the editor receives a batch every ~2 s because the host drops every other one under backpressure (`vg-753`).
+3. Execute plan B with subagent-driven development; local merge to `main` on completion.
+4. Resume the backlog-drain plan at Phase 0 after that merge.
+5. Triage the pre-existing browser reds recorded below.
 
 ## Blockers / unverified
 
