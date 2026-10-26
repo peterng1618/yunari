@@ -1201,6 +1201,9 @@ describe("Fabric theme envelope validation", () => {
         expect.objectContaining({
           code: "unknown-field",
           path: "/assets/0/subset",
+          // The refusal has to name the key: a reader who only sees the path in
+          // a UI message still has to know what to delete.
+          message: expect.stringContaining("subset"),
         }),
       ]),
     });
