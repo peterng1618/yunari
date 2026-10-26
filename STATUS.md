@@ -19,7 +19,7 @@ The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design
 
 - **Every e2e theme is written in the new shape:** the seeded host library carries heading/body/mono and each run's old size in its own style, and no tracked spec names a `size-weight` token id.
 - **A retained old-shape fixture proves the refusal:** `tests/e2e/fixtures/e2e-old-shape/theme.json` is never seeded, and the new test asserts `typePresets` is named in the issue.
-- **Proof:** 8/8 rebuild tests (after the inventory count became the three-role contract), the display proof passed, `typecheck` exit 0; the unit suite is the same 4 files / 7 tests owned by Task 4.1 and 5.4.
+- **Proof:** rebuild 9/9 and display 1/1 after rebuilding bundles, fixtures 15/15, `typecheck` exit 0; the unit suite is the same 4 files / 7 tests owned by Task 4.1 and 5.4.
 
 ## Next
 
@@ -32,4 +32,4 @@ The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design
 - **Four test files are red on purpose,** owned by Task 4.1 (renamed-token fixture, runs tracking, token inspector) and Task 5.4 (new-object defaults).
 - **`new-object-defaults.ts` still reads `size`/`trioRole` off tokens,** so the body-token preference is dead until Task 5.4.
 - **The token inspector no longer renders size, leading or tracking,** but its dom test still expects them — owned by Task 4.1.
-- **The full unit suite was not a green gate at this boundary** — 7 failures, all mapped above; no e2e run yet.
+- **The main Playwright suite is unrun here:** port 4174 is owned by another worktree, and the npm e2e scripts resolve playwright 1.64.0-alpha over `@playwright/test` 1.63.0 (`vg-756`).
