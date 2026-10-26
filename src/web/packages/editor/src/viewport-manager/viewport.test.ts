@@ -155,6 +155,7 @@ describe("viewport camera", () => {
       host,
       artboard: () => board,
     });
+    cameras.push(camera);
     camera.zoomToPoint(new Point(0, 0), 0.5);
 
     board = { width: 0, height: 720 };
@@ -178,6 +179,7 @@ describe("viewport camera", () => {
       host,
       artboard: () => board,
     });
+    cameras.push(camera);
     camera.zoomToPoint(new Point(0, 0), 0.5);
 
     board = { width: Number.NaN, height: 720 };
