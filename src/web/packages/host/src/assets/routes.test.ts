@@ -389,6 +389,65 @@ describe("the asset routes", () => {
       expect(encoded.status).toBe(400);
     });
 
+    it("refuses two files that sanitise to the same staged name", async () => {
+      const root = await stagingRoot();
+      const trashed: string[][] = [];
+      const base = await start({
+        stagingRoot: root,
+        trash: async (paths) => {
+          trashed.push([...paths]);
+        },
+      });
+
+      try {
+        const response = await fetch(`${base}/api/assets/trash`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          // Both are `x.woff2` once the path is a basename; one copy would
+          // overwrite the other before either reached the trash.
+          body: trashBody([
+            { name: "a/x.woff2", bytes: utf8("a") },
+            { name: "b/x.woff2", bytes: utf8("b") },
+          ]),
+        });
+
+        expect(response.status).toBe(400);
+        expect(trashed).toEqual([]);
+        expect(await fs.readdir(root)).toEqual([]);
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    });
+
+    it("answers 400 for a name the platform cannot store", async () => {
+      const root = await stagingRoot();
+      const trashed: string[][] = [];
+      const base = await start({
+        stagingRoot: root,
+        trash: async (paths) => {
+          trashed.push([...paths]);
+        },
+      });
+
+      try {
+        // Past every platform's single-component filename limit, so the write
+        // itself refuses it (`ENAMETOOLONG`) rather than the host compiling a
+        // platform rule of its own.
+        const response = await fetch(`${base}/api/assets/trash`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: trashBody([{ name: "x".repeat(300), bytes: utf8("a") }]),
+        });
+
+        expect(response.status).toBe(400);
+        expect(await response.text()).toContain("cannot be stored");
+        expect(trashed).toEqual([]);
+        expect(await fs.readdir(root)).toEqual([]);
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    });
+
     it("keeps the trash on this PC", async () => {
       const base = await start({ trash: async () => undefined }, false);
 

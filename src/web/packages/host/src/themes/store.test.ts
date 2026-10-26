@@ -12,6 +12,8 @@ import { bootTheme } from "../../../editor/src/boot-theme.js";
 import {
   createThemeStore,
   isValidThemeId,
+  MAX_ASSET_BYTES,
+  MAX_TRASH_UPLOAD_BYTES,
   ThemeAssetLimitError,
   ThemeConflictError,
   type ThemeContent,
@@ -114,6 +116,17 @@ async function scratchNames(library: string, id: string, kind: string) {
     (name) => name.startsWith(`.${kind}-`) && name.endsWith(`.${id}`),
   );
 }
+
+describe("the trash request bound", () => {
+  it("fits one asset at its own cap on the base64 wire", () => {
+    // The trash route reads this as its body limit. At the shared 96 MiB
+    // request cap an 80 MiB asset encoded to ~107 MiB and was always refused
+    // as a body, so the per-file 413 could never fire in production.
+    expect(MAX_TRASH_UPLOAD_BYTES).toBeGreaterThan(
+      4 * Math.ceil(MAX_ASSET_BYTES / 3),
+    );
+  });
+});
 
 describe("ThemeStore", () => {
   let tmpDir: string;

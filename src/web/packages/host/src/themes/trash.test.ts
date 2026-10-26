@@ -10,7 +10,7 @@ describe("trashPlan", () => {
   const folder = "/home/ada/.yunari/themes/living-room";
   const routesOf = (
     platform: NodeJS.Platform,
-    at = folder,
+    at: string | readonly string[] = folder,
     kind?: TrashTarget,
   ): readonly TrashRoute[] => {
     const plan = trashPlan(platform, at, kind);
@@ -58,6 +58,29 @@ describe("trashPlan", () => {
       "gio",
       "trash-put",
     ]);
+  });
+
+  it("sends a list of files as one route per platform", () => {
+    // One invocation for the whole list: a refusal on the second file must not
+    // leave the first already moved, with the caller never pruning its own
+    // declarations.
+    const files = ["/home/ada/a.woff2", "/home/ada/b.woff2"];
+    const [windows] = routesOf("win32", files, "file");
+    const script = windows?.args.at(-1) ?? "";
+    expect(script.match(/DeleteFile\(/g)).toHaveLength(2);
+    expect(script).toContain("/home/ada/a.woff2");
+    expect(script).toContain("/home/ada/b.woff2");
+    // The one `Add-Type` statement, then one statement per file.
+    expect(script.split(";")).toHaveLength(3);
+
+    const [mac] = routesOf("darwin", files, "file");
+    expect(mac?.args.at(-1)).toBe(
+      'tell application "Finder" to delete {POSIX file "/home/ada/a.woff2", POSIX file "/home/ada/b.woff2"}',
+    );
+
+    const linuxRoutes = routesOf("linux", files, "file");
+    expect(linuxRoutes[0]?.args).toEqual(["trash", ...files]);
+    expect(linuxRoutes[1]?.args).toEqual(["--", ...files]);
   });
 
   it("escapes an apostrophe in the path for PowerShell's single-quoted literal", () => {

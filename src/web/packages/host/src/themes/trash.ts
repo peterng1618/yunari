@@ -34,22 +34,26 @@ export type TrashTarget = "folder" | "file";
  * `RecycleBinOption` does not exist, and naming it fails at run time.
  *
  * The VisualBasic call names what it takes — `DeleteDirectory` or `DeleteFile` —
- * so the kind is a platform fact, not a caller's convenience.
+ * so the kind is a platform fact, not a caller's convenience. Every target is
+ * one `DeleteFile` statement in the same script, so a refusal is one process's
+ * answer for the whole list.
  */
-function windows(target: string, kind: TrashTarget): TrashRoute {
-  // Two statements, not five: `Add-Type` and then ONE method call. The
-  // separators belong between the statements, never inside the call's
-  // argument list — a `;` after the opening paren made PowerShell read the
-  // path as its own statement and fail to parse, so the Windows route had
-  // never run. It was asserted as a string and never executed.
+function windows(targets: readonly string[], kind: TrashTarget): TrashRoute {
+  // `Add-Type` and then one call per target. The separators belong between the
+  // statements, never inside a call's argument list — a `;` after the opening
+  // paren made PowerShell read the path as its own statement and fail to parse,
+  // so the Windows route had never run. It was asserted as a string and never
+  // executed.
   const method = kind === "file" ? "DeleteFile" : "DeleteDirectory";
-  const call =
-    `[Microsoft.VisualBasic.FileIO.FileSystem]::${method}(` +
-    // A single-quoted PowerShell literal escapes by doubling, which is what
-    // a `--themes-dir` holding an apostrophe needs.
-    `'${target.replaceAll("'", "''")}'` +
-    ", [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs" +
-    ", [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)";
+  const calls = targets.map(
+    (target) =>
+      `[Microsoft.VisualBasic.FileIO.FileSystem]::${method}(` +
+      // A single-quoted PowerShell literal escapes by doubling, which is what
+      // a `--themes-dir` holding an apostrophe needs.
+      `'${target.replaceAll("'", "''")}'` +
+      ", [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs" +
+      ", [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)",
+  );
 
   return {
     command: "powershell.exe",
@@ -57,7 +61,7 @@ function windows(target: string, kind: TrashTarget): TrashRoute {
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      "Add-Type -AssemblyName Microsoft.VisualBasic; " + call,
+      `Add-Type -AssemblyName Microsoft.VisualBasic; ${calls.join("; ")}`,
     ],
   };
 }
@@ -68,27 +72,31 @@ function windows(target: string, kind: TrashTarget): TrashRoute {
  * buys **Put Back** — the folder comes back where it was, which is the whole
  * claim the delete makes. `NSFileManager` gives neither that nor a binary the
  * host is allowed to ship.
+ *
+ * One `delete` takes a list, so the whole set is one automation answer.
  */
-function macos(target: string): TrashRoute {
-  return {
-    command: "osascript",
-    args: [
-      "-e",
-      `tell application "Finder" to delete POSIX file ${appleScriptString(target)}`,
-    ],
-  };
+function macos(targets: readonly string[]): TrashRoute {
+  const files = targets.map(
+    (target) => `POSIX file ${appleScriptString(target)}`,
+  );
+  const script =
+    files.length === 1
+      ? `tell application "Finder" to delete ${files[0] ?? ""}`
+      : `tell application "Finder" to delete {${files.join(", ")}}`;
+
+  return { command: "osascript", args: ["-e", script] };
 }
 
 /** What each Linux route would run, in the order it would be tried. */
-function linux(target: string): readonly TrashRoute[] {
+function linux(targets: readonly string[]): readonly TrashRoute[] {
   return [
     // `gio` is GIO's `g_file_trash`, the desktop's own implementation of the
-    // freedesktop.org specification. It takes the path positionally.
-    { command: "gio", args: ["trash", target] },
+    // freedesktop.org specification. It takes every path positionally.
+    { command: "gio", args: ["trash", ...targets] },
     // `trash-put` from trash-cli, and the only route on a machine with no
     // desktop session. It takes `--`, so a `--themes-dir` beginning with a dash
     // is a path rather than an option.
-    { command: "trash-put", args: ["--", target] },
+    { command: "trash-put", args: ["--", ...targets] },
   ];
 }
 
@@ -101,22 +109,26 @@ type TrashPlan =
  * The routes this platform's own trash is reached by, in the order they would
  * be tried, or the reason there are none.
  *
- * Linux answers with several, because "is `gio` installed" is not a question
- * this process can answer without running it, and a machine with no desktop
- * session has `trash-put` instead.
+ * Takes one target or a list; a list is one route per platform, because a
+ * refusal part-way through a list must not leave the earlier targets already
+ * moved. Linux answers with several routes, because "is `gio` installed" is not
+ * a question this process can answer without running it, and a machine with no
+ * desktop session has `trash-put` instead.
  */
 export function trashPlan(
   platform: NodeJS.Platform,
-  target: string,
+  targets: string | readonly string[],
   kind: TrashTarget = "folder",
 ): TrashPlan {
+  const list = typeof targets === "string" ? [targets] : targets;
+
   switch (platform) {
     case "win32":
-      return { ok: true, routes: [windows(target, kind)] };
+      return { ok: true, routes: [windows(list, kind)] };
     case "darwin":
-      return { ok: true, routes: [macos(target)] };
+      return { ok: true, routes: [macos(list)] };
     case "linux":
-      return { ok: true, routes: linux(target) };
+      return { ok: true, routes: linux(list) };
     default:
       return {
         ok: false,
@@ -151,15 +163,23 @@ function run(command: string, args: readonly string[]): Promise<string> {
 }
 
 /**
- * Moves one target to the trash, and throws when it cannot.
+ * Moves a list of targets to the trash, and throws when it cannot.
  *
  * There is deliberately no fallback to a permanent delete. A refused delete is
  * recoverable and a missing feature is a small thing; a silent `fs.rm` of the
  * only copy of an author's theme is the defect this exists to prevent, and it
  * would come back on exactly the machines nobody tested.
+ *
+ * The whole list is one invocation per platform route: a refusal on the Nth
+ * target must not leave the first N-1 already moved to the trash.
  */
-async function trashTarget(target: string, kind: TrashTarget): Promise<void> {
-  const plan = trashPlan(process.platform, target, kind);
+async function trashTargets(
+  targets: readonly string[],
+  kind: TrashTarget,
+): Promise<void> {
+  if (targets.length === 0) return;
+
+  const plan = trashPlan(process.platform, targets, kind);
   if (!plan.ok) {
     throw new Error(plan.reason);
   }
@@ -192,14 +212,12 @@ async function trashTarget(target: string, kind: TrashTarget): Promise<void> {
 
 /** Moves a theme's folder to the trash. */
 export async function moveToTrash(folder: string): Promise<void> {
-  await trashTarget(folder, "folder");
+  await trashTargets([folder], "folder");
 }
 
-/** Moves files to the trash, one at a time, and throws on the first refusal. */
+/** Moves files to the trash, as one invocation for the whole list. */
 export async function moveFilesToTrash(
   paths: readonly string[],
 ): Promise<void> {
-  for (const path of paths) {
-    await trashTarget(path, "file");
-  }
+  await trashTargets(paths, "file");
 }

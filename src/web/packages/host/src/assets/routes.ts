@@ -6,9 +6,8 @@ import {
   type AssetSourceListing,
   parseAssetSearchRequest,
 } from "@yunari/renderer-core";
-import { MAX_THEME_UPLOAD_BYTES } from "../server.js";
 import type { CredentialStore } from "../settings/credentials.js";
-import { MAX_ASSET_BYTES } from "../themes/store.js";
+import { MAX_ASSET_BYTES, MAX_TRASH_UPLOAD_BYTES } from "../themes/store.js";
 import { moveFilesToTrash } from "../themes/trash.js";
 import { searchSources } from "./search.js";
 import type { AssetSource, SourceContext } from "./source.js";
@@ -158,6 +157,33 @@ function trashFiles(body: unknown): TrashFiles {
   return { ok: true, files: staged };
 }
 
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** A write only the name itself can refuse. Windows reports an over-long or
+ *  unrepresentable path as `ENOENT` rather than `ENAMETOOLONG`; the staging
+ *  directory was made by this request, so its absence here is the name. */
+const NAME_REFUSALS = new Set(["EINVAL", "ENAMETOOLONG", "EPERM", "ENOENT"]);
+
+/**
+ * Why staging one file failed: the caller's 400 when the host platform's own
+ * naming rules refused it — a colon or a device name on Windows, a trailing
+ * dot, a name past the filesystem's limit — and this host's 500 otherwise.
+ */
+function stageRefusal(
+  name: string,
+  error: unknown,
+): { readonly status: 400 | 500; readonly message: string } {
+  const code = (error as NodeJS.ErrnoException).code ?? "";
+  return NAME_REFUSALS.has(code)
+    ? {
+        status: 400,
+        message: `"${name}" cannot be stored on this PC: ${messageOf(error)}`,
+      }
+    : { status: 500, message: messageOf(error) };
+}
+
 /**
  * `POST /api/assets/trash`: the author asked for these copies to go to the
  * platform's trash.
@@ -165,7 +191,8 @@ function trashFiles(body: unknown): TrashFiles {
  * A refusal is the platform's own sentence and a 500, because a refused trash
  * is a refusal: nothing here falls back to a permanent delete. The staging
  * directory is swept either way — a successful trash has already moved the
- * copies out of it.
+ * copies out of it. The whole list goes to one trash invocation, so a refusal
+ * cannot leave the earlier files already moved.
  */
 async function moveStagedFiles(
   input: AssetRouteInput,
@@ -180,11 +207,11 @@ async function moveStagedFiles(
 
   let raw: string;
   try {
-    raw = await input.readBody(request, MAX_THEME_UPLOAD_BYTES);
+    raw = await input.readBody(request, MAX_TRASH_UPLOAD_BYTES);
   } catch (error: unknown) {
     // The body's size is its own refusal: a body this host will not read is not
     // a malformed one it read and rejected.
-    text(response, 413, error instanceof Error ? error.message : String(error));
+    text(response, 413, messageOf(error));
     return;
   }
 
@@ -205,7 +232,9 @@ async function moveStagedFiles(
   const root = assets?.stagingRoot ?? os.tmpdir();
   const trash = assets?.trash ?? moveFilesToTrash;
   let directory: string | undefined;
-  let refusal: string | undefined;
+  let failure:
+    | { readonly status: 400 | 500; readonly message: string }
+    | undefined;
 
   try {
     directory = await fs.mkdtemp(path.join(root, "yunari-trash-"));
@@ -213,13 +242,25 @@ async function moveStagedFiles(
 
     for (const file of parsed.files) {
       const target = path.join(directory, file.name);
-      await fs.writeFile(target, file.bytes);
+      try {
+        await fs.writeFile(target, file.bytes);
+      } catch (error: unknown) {
+        failure = stageRefusal(file.name, error);
+        break;
+      }
       paths.push(target);
     }
 
-    await trash(paths);
+    if (failure === undefined) {
+      try {
+        await trash(paths);
+      } catch (error: unknown) {
+        failure = { status: 500, message: messageOf(error) };
+      }
+    }
   } catch (error: unknown) {
-    refusal = error instanceof Error ? error.message : String(error);
+    // `mkdtemp` itself: the staging root is this host's own directory.
+    failure = { status: 500, message: messageOf(error) };
   } finally {
     if (directory !== undefined) {
       await fs
@@ -230,12 +271,12 @@ async function moveStagedFiles(
 
   // Answered only once the staging directory is swept: a caller that prunes
   // declarations after a success must not race a cleanup still running.
-  if (refusal === undefined) {
+  if (failure === undefined) {
     json(response, 200, { ok: true });
     return;
   }
 
-  text(response, 500, refusal);
+  text(response, failure.status, failure.message);
 }
 
 function listingOf(source: AssetSource): AssetSourceListing {
