@@ -1265,13 +1265,14 @@ export const uiCopy = {
       /** The caption's verb, without a measurement this build could not read. */
       fit: "fit",
       statusUnused:
-        "A local file. Nothing on the canvas and no type preset refers to it.",
-      statusUsed: "Something on the canvas or a type preset refers to it.",
+        "A local file. No object, background or type preset refers to it.",
+      statusUsed:
+        "The artboard's background, an object on the canvas, or a type preset refers to it.",
       usedByNothing: "Used by nothing",
       /** The drawing says `Used by N objects`; the manager's reachability
        *  answer is a boolean, so the line names the routes rather than a count
        *  nobody measured. */
-      usedBySome: "Used by an object or a type preset",
+      usedBySome: "Used by the artboard background, an object or a type preset",
       recycleNote: "Remove goes to the Recycle Bin on save",
       /** The two commands the card's words do not fit: its Replace and Remove
        *  are reused, and these are the one-word forms the 2×2 foot draws. */

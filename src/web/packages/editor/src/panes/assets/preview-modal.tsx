@@ -1,5 +1,4 @@
 import type { AssetReference } from "@yunari/renderer-core";
-import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import type * as React from "react";
 import { useState } from "react";
 import {
@@ -35,9 +34,6 @@ export interface AssetPreviewInput {
    *  which `AssetManager.previewUrl` deliberately answers `undefined` for. */
   readonly previewUrl: string | undefined;
   readonly inUse: boolean;
-  /** The document's credit for this asset, where the caller can reach one. The
-   *  pane can only read the declaration's own `license`/`sourceUrl`. */
-  readonly credit: ThemeCreditsEntry | undefined;
   /** The declared bytes' length, read from the package by the pane. A file the
    *  manager holds no bytes for has no reading and draws no size. */
   readonly sizeBytes: number | undefined;
@@ -129,12 +125,10 @@ function ratioOf(width: number, height: number): string {
   return `${width / divisor}:${height / divisor}`;
 }
 
-/** The attribution pills: the declaration's own licence and source, then the
- *  document credit the caller could reach, each once. Nothing recorded is said
- *  rather than left blank. */
+/** The attribution pills: the declaration's own licence and source, each once.
+ *  Nothing recorded is said rather than left blank. */
 function attributionReadings(
   asset: PlacedOrLocalAsset,
-  credit: ThemeCreditsEntry | undefined,
 ): readonly PillReading[] {
   const readings: PillReading[] = [];
   const seen = new Set<string>();
@@ -146,8 +140,6 @@ function attributionReadings(
   add("license", asset.license?.name, false);
   add("attribution", asset.license?.attribution, false);
   add("source", asset.sourceUrl, true);
-  add("credit-license", credit?.license, false);
-  add("credit-source", credit?.source?.url, true);
   if (readings.length === 0) {
     readings.push({
       id: "none",
@@ -241,7 +233,8 @@ function AssetPreviewModal({
             id: "place" as const,
             label: copy.place,
             icon: PLACE_ON_CANVAS_GLYPH,
-            primary: false,
+            // A picture's one canvas write: the foot's primary verb.
+            primary: true,
             press: () => {
               input.onPlace?.();
               close();
@@ -276,7 +269,7 @@ function AssetPreviewModal({
             proposed: false,
           },
         ];
-  const attribution = attributionReadings(asset, input.credit);
+  const attribution = attributionReadings(asset);
 
   return (
     <Dialog
@@ -395,7 +388,9 @@ function AssetPreviewModal({
             />
 
             <div className="flex flex-col gap-[var(--space-4)] border-t border-edge-2 pt-[var(--space-6)] text-2xs text-faint">
-              <span>{input.inUse ? copy.usedBySome : copy.usedByNothing}</span>
+              <span id="asset-preview-usage">
+                {input.inUse ? copy.usedBySome : copy.usedByNothing}
+              </span>
               <span>{copy.recycleNote}</span>
             </div>
           </div>
@@ -408,7 +403,20 @@ function AssetPreviewModal({
                 icon={action.icon}
                 label={action.label}
                 {...(action.primary ? { tone: "accent" as const } : {})}
-                {...(action.id === "remove" ? { destructive: true } : {})}
+                {...(action.id === "remove"
+                  ? {
+                      destructive: true,
+                      // A referenced asset cannot be removed, so the reason is
+                      // what the disabled box points at rather than a refusal
+                      // spoken behind a surface that already closed.
+                      ...(input.inUse
+                        ? {
+                            disabled: true as const,
+                            describedById: "asset-preview-usage",
+                          }
+                        : {}),
+                    }
+                  : {})}
                 onClick={action.press}
               />
             ))}

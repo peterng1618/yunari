@@ -58,7 +58,6 @@ function inputFor(
     asset,
     previewUrl: asset.kind === "video" ? "blob:clip" : "blob:studio",
     inUse: false,
-    credit: undefined,
     sizeBytes: 840 * 1024,
     onRemove: async () => {},
     onReplace: () => {},
@@ -181,6 +180,58 @@ it("drops Place and draws a player for a video", async () => {
       "[data-yunari-asset-preview-action='background']",
     )?.className,
   ).toContain("border-accent");
+  // Remove carries §4's destructive mark, which `ActionBox` now owns.
+  expect(
+    modal
+      .querySelector<HTMLElement>("[data-yunari-asset-preview-action='remove']")
+      ?.hasAttribute("data-yunari-destructive"),
+  ).toBe(true);
+});
+
+it("draws Place as an image's one primary command", async () => {
+  const modal = await open(IMAGE);
+
+  // A picture has exactly one canvas write, so its Place box is the accent one
+  // — and its Background is the secondary.
+  expect(
+    modal.querySelector<HTMLElement>(
+      "[data-yunari-asset-preview-action='place']",
+    )?.className,
+  ).toContain("border-accent");
+  expect(
+    modal.querySelector<HTMLElement>(
+      "[data-yunari-asset-preview-action='background']",
+    )?.className,
+  ).not.toContain("border-accent");
+  // Remove carries §4's destructive mark, which `ActionBox` now owns.
+  expect(
+    modal
+      .querySelector<HTMLElement>("[data-yunari-asset-preview-action='remove']")
+      ?.hasAttribute("data-yunari-destructive"),
+  ).toBe(true);
+});
+
+it("disables Remove for a referenced asset and points at the reason", async () => {
+  const modal = await open(IMAGE, { inUse: true });
+
+  expect(
+    modal.querySelector<HTMLSpanElement>("#asset-preview-usage")?.textContent,
+  ).toBe(uiCopy.assets.preview.usedBySome);
+  const remove = modal.querySelector<HTMLButtonElement>(
+    "[data-yunari-asset-preview-action='remove']",
+  );
+  expect(remove?.disabled).toBe(true);
+  expect(remove?.getAttribute("aria-describedby")).toBe("asset-preview-usage");
+});
+
+it("leaves Remove enabled and unannotated for an unused asset", async () => {
+  const modal = await open(IMAGE);
+
+  const remove = modal.querySelector<HTMLButtonElement>(
+    "[data-yunari-asset-preview-action='remove']",
+  );
+  expect(remove?.disabled).toBe(false);
+  expect(remove?.hasAttribute("aria-describedby")).toBe(false);
 });
 
 it("reports a command to the pane and closes", async () => {

@@ -489,9 +489,6 @@ export function AssetsPane({
       previewUrl:
         asset.kind === "video" ? videoUrl : manager.previewUrl(asset.id),
       inUse: referenced(asset.id),
-      // The session's credits are not the pane's to read; the declaration's own
-      // licence and source are the attribution this surface can show.
-      credit: undefined,
       sizeBytes: bytes?.byteLength,
       onRemove: () => submit(() => remove(asset)),
       onReplace: () => {
