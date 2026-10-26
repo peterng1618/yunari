@@ -30,7 +30,10 @@ export function hasPlottableValue(
 // GaugeSettings remains here historically; animation imports do not form a runtime cycle.
 import type { AnimationSettings } from "./charts/animation.js";
 import type { ChartPaint } from "./charts/chart-paint.js";
-import { SEGMENT_SPACING_PERCENT_DEFAULT, type SegmentFill } from "./charts/segments.js";
+import {
+  SEGMENT_SPACING_PERCENT_DEFAULT,
+  type SegmentFill,
+} from "./charts/segments.js";
 
 export interface GradientStop {
   readonly offset: number;
