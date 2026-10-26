@@ -127,6 +127,7 @@ import { normalizeVideo } from "./themes/normalize-video.js";
 import {
   createThemeStore,
   isValidThemeId,
+  MAX_ASSET_BYTES,
   ThemeAssetLimitError,
   ThemeConflictError,
   type ThemeStore,
@@ -414,12 +415,18 @@ const WEATHER_ICON_DIR = path.join(
   "weather-icons",
 );
 /** A save is JSON with base64 assets, so the wire is a third larger than the
- *  archive it replaced; the store enforces its own bounds on the decoded side. */
+ *  archive it replaced; the store enforces its own bounds on the decoded side.
+ *  This is the whole-theme upload ceiling, not one asset's. */
 export const MAX_THEME_UPLOAD_BYTES = 96 * 1024 * 1024;
 /** A source video or `.mpkg` is normalized after it arrives, so the author may
  *  bring a file larger than the theme it becomes. This is the source ceiling;
- *  `MAX_THEME_UPLOAD_BYTES` is the one the normalized output must still fit. */
+ *  the normalized output must fit the store's `MAX_ASSET_BYTES` instead. */
 export const MAX_VIDEO_SOURCE_BYTES = 512 * 1024 * 1024;
+/** The one sentence both video import routes answer over the store's per-asset
+ *  bound, so an importable video is always saveable. */
+const VIDEO_OVER_ASSET_BOUND = `That video is larger than the ${
+  MAX_ASSET_BYTES / (1024 * 1024)
+} MB one theme asset may carry; re-encode it and try again.`;
 /** A dashboard screenshot; the store enforces the same bound. */
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 
@@ -3524,14 +3531,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
       // The source and the theme have different ceilings: a package may exceed
-      // 96 MB, but what the theme carries may not.
-      if (normalized.bytes.byteLength > MAX_THEME_UPLOAD_BYTES) {
-        sendJson(response, 200, {
-          ok: false,
-          message:
-            "That package's video is larger than the 96 MB a theme may carry; " +
-            "re-encode it and try again.",
-        });
+      // the whole-theme upload bound, but the video the theme carries must fit
+      // the store's per-asset bound or the save would refuse it later.
+      if (normalized.bytes.byteLength > MAX_ASSET_BYTES) {
+        sendJson(response, 200, { ok: false, message: VIDEO_OVER_ASSET_BOUND });
         return;
       }
 
@@ -3996,6 +3999,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // The normalizer's own sentence: it names which rule was broken, and a
         // sentence composed here would lose that.
         sendJson(response, 200, { ok: false, message: normalized.message });
+        return;
+      }
+      // The store refuses an asset over its per-asset bound at save, so the
+      // import path refuses it first rather than declaring what cannot persist.
+      if (normalized.bytes.byteLength > MAX_ASSET_BYTES) {
+        sendJson(response, 200, { ok: false, message: VIDEO_OVER_ASSET_BOUND });
         return;
       }
       sendJson(response, 200, {

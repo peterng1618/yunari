@@ -16,7 +16,7 @@
 - No UI automation, no engine launch, no export-folder watcher, no Save-dialog interaction.
 - The editor never parses a package; the host never imports a theme asset.
 - Tests never start Wallpaper Engine.
-- Source uploads cap at **512 MiB**; the normalized output cap stays **96 MB**.
+- Source uploads cap at **512 MiB**; the normalized video must fit the store's **80 MiB** per-asset bound, and a theme's assets total **90 MiB** at save.
 - A fresh unpack prefixes the project title with exactly `"[yunari] "` and never double-prefixes.
 - Card actions are lucide icon buttons with accessible labels and hover/focus tooltips; no text buttons in the card grid.
 - Every route that spawns a process or writes a directory keeps loopback + same-origin checks.
@@ -26,7 +26,7 @@
 
 ## Review Focus
 
-1. A picked source larger than 96 MB but under 512 MiB imports successfully when its normalized output fits — the ceiling is on output, not source.
+1. A picked source larger than 80 MB but under 512 MiB imports successfully when its normalized output fits under the 80 MiB per-asset bound — the ceiling is on output, not source.
 2. A package without `wallpaper.mp4` keeps the modal open with a sentence and declares no asset.
 3. A reused local project keeps the author's edited title; only a fresh unpack gets the `[yunari] ` prefix, once.
 4. An offline/failing Steam lookup never blocks an import; the credit still lands with `author.steamId`.
@@ -102,20 +102,20 @@
   - `pkg.test.ts`: a synthesized `PKGM0014` table holding a `project.json` (`title`, `package.workshopId`) and a `wallpaper.mp4` returns both; a table without the video returns `undefined`; malformed JSON in `project.json` still returns the video with no metadata.
   - `author.test.ts`: a fake `fetch` answering `<steamID>Ada</steamID>` returns `"Ada"`; `&amp;` is decoded; a non-OK response, a timeout (`AbortError`), and a body without `<steamID>` return `undefined`; a non-17-digit id performs no fetch.
   - `source.test.ts`: `authorName("76561198000000001")` calls the injected fetch once and answers from cache on the second call.
-  - `server.test.ts`: mpkg route — 405 for GET, 403 for a non-loopback address, 403 for a foreign origin, 413 above `MAX_VIDEO_SOURCE_BYTES`, 429 while the large-body slot is busy, 200 with `videoBase64` for a valid package, 200 `{ ok: false }` for a package without the video. A conforming MP4 fixture inside the package keeps `reencoded: false`. A package over 96 MiB whose video normalizes under 96 MiB succeeds; a normalized output over `MAX_THEME_UPLOAD_BYTES` answers `{ ok: false }`. Author route: 405 for POST, 403 non-loopback, a cached name, and an absent name. Normalize route: a raw binary body of a conforming fixture answers `bytesBase64` unchanged; a body over `MAX_VIDEO_SOURCE_BYTES` answers 413.
+  - `server.test.ts`: mpkg route — 405 for GET, 403 for a non-loopback address, 403 for a foreign origin, 413 above `MAX_VIDEO_SOURCE_BYTES`, 429 while the large-body slot is busy, 200 with `videoBase64` for a valid package, 200 `{ ok: false }` for a package without the video. A conforming MP4 fixture inside the package keeps `reencoded: false`. A package over 80 MiB whose video normalizes under 80 MiB succeeds; a normalized output over `MAX_ASSET_BYTES` answers `{ ok: false }`, including the 80–96 MiB range the old whole-theme ceiling let through. Author route: 405 for POST, 403 non-loopback, a cached name, and an absent name. Normalize route: a raw binary body of a conforming fixture answers `bytesBase64` unchanged; a body over `MAX_VIDEO_SOURCE_BYTES` answers 413; an output over `MAX_ASSET_BYTES` answers `{ ok: false }`.
 
 - [ ] **Step 2: Run the tests to verify they fail**
   Run: `npx vitest run packages/host/src/wallpaper-engine/pkg.test.ts packages/host/src/wallpaper-engine/author.test.ts packages/host/src/wallpaper-engine/source.test.ts packages/host/src/server.test.ts`
   Expected: FAIL on the missing functions and routes.
 
 - [ ] **Step 3: Implement `mobilePackage`**
-  Reuse `readPackage`/`memberBytes`/`mobileVideo`. Read `project.json` when present; `title` from a string `title`; `workshopId` from `package.workshopId` coerced to a string when it is a string or safe integer. A missing or unreadable member is `undefined`.
+  Reuse `readPackage`/`memberBytes`/`mobilePackage`. Read `project.json` when present; `title` from a string `title`; `workshopId` from `package.workshopId` coerced to a string when it is a string or safe integer. A missing or unreadable member is `undefined`.
 
 - [ ] **Step 4: Implement `fetchAuthorName` and the source cache**
   Validate `/^\d{17}$/` before fetching. `fetch("https://steamcommunity.com/profiles/<id>/?xml=1", { signal: AbortSignal.timeout(timeoutMs ?? 5000) })`; parse `/<steamID>([^<]*)<\/steamID>/`; decode `&amp; &lt; &gt; &quot; &apos;`; trim; empty is `undefined`. Cache the answer (including `undefined`) in a `Map<string, string | undefined>` and expose it as `authorName`.
 
 - [ ] **Step 5: Implement the routes**
-  Add the two WE routes with the existing loopback/origin helpers. The mpkg route uses `largeBody.run(() => readBytes(request, MAX_VIDEO_SOURCE_BYTES))`, maps `LargeBodyBusyError` to 429 and an oversized body to 413, then `mobilePackage` → `normalizeVideo` → the 96 MB output check → JSON. Change the normalize route's body read to raw bytes with `MAX_VIDEO_SOURCE_BYTES`; keep its `{ ok, bytesBase64, reencoded }` / `{ ok: false, message }` answers. Add the author route as loopback-only GET.
+  Add the two WE routes with the existing loopback/origin helpers. The mpkg route uses `largeBody.run(() => readBytes(request, MAX_VIDEO_SOURCE_BYTES))`, maps `LargeBodyBusyError` to 429 and an oversized body to 413, then `mobilePackage` → `normalizeVideo` → the `MAX_ASSET_BYTES` output check → JSON. Change the normalize route's body read to raw bytes with `MAX_VIDEO_SOURCE_BYTES` and give it the same output check; keep its `{ ok, bytesBase64, reencoded }` / `{ ok: false, message }` answers. Add the author route as loopback-only GET.
 
 - [ ] **Step 6: Run the tests to verify they pass**
   Run the command from Step 2.
@@ -361,7 +361,7 @@
 - Modify: `STATUS.md`
 
 - [ ] **Step 1: Rewrite spec §8**
-  Describe the shipped route: convert to a local project (unpack only, `[yunari] ` title prefix), the author's manual `.mpkg` export, the import modal, the 512 MiB source / 96 MB output split, the author lookup, and the card grid. Delete claims that the host drives the engine.
+  Describe the shipped route: convert to a local project (unpack only, `[yunari] ` title prefix), the author's manual `.mpkg` export, the import modal, the 512 MiB source / 80 MiB per-asset / 90 MiB per-theme split, the author lookup, and the card grid. Delete claims that the host drives the engine.
 
 - [ ] **Step 2: Close the old decision and archive the old plan**
   Set 0118's status to `superseded by 0124`. Move the mobile-export plan into `archive/`; check no active plan links to it.

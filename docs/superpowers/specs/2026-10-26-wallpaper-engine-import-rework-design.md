@@ -1,9 +1,9 @@
 # Wallpaper Engine import rework — design
 
 - **Date:** 2026-10-26
-- **Status:** draft for review
-- **Supersedes:** decision [0118](../decisions/0118-a-scene-is-exported-by-driving-the-engine-ui.md)
-  (UI-driven mobile export)
+- **Status:** implemented
+- **Implements:** decision [0124](../../decisions/0124-the-engine-is-converted-to-not-driven.md)
+  (the engine is converted to, never driven)
 - **Amends:** [Wallpaper Engine import design](2026-10-21-wallpaper-engine-import-design.md)
   §8 (the export route)
 
@@ -60,7 +60,7 @@ Delete:
   `onImportExport` prop threaded through session, facade and finder body
 - the `ExportFile` type still exported from `unpack.ts`
 
-Keep `readPackage`/`memberBytes`/`mobileVideo`; the import route uses them.
+Keep `readPackage`/`memberBytes`/`mobilePackage`; the import route uses them.
 
 ### R2 — Convert to local project
 
@@ -94,19 +94,21 @@ automatically:
 Images and fonts keep today's direct path; only video-shaped picks use the
 modal.
 
-**Source size vs output size.** The 96 MB ceiling is the **theme envelope on
-what is imported**, not a limit on what the author may pick. A source video or
-package may be larger; the host accepts up to **512 MiB of source**, and the
-normalizer's capped-CRF ladder keeps a 30 s loop under the 96 MB output ceiling.
-The host refuses a normalized output that still exceeds 96 MB rather than
-importing an asset the package writer would refuse.
+**Source size vs output size.** Three bounds, split by side. The source is not
+the envelope: a video or `.mpkg` picked for import may be up to **512 MiB**.
+The normalized video it becomes must fit the theme writer's **per-asset bound of
+80 MiB**, and the theme's assets together must fit **90 MiB** or the save
+refuses it. The normalizer's capped-CRF ladder keeps a 30 s loop under the
+80 MiB output bound. The host refuses a normalized output that still exceeds
+80 MiB rather than importing an asset the writer would refuse.
+The source decision — 512 MiB — is unchanged by this correction.
 
 **Host routes.** Both take the source as a **raw binary body**
 (`application/octet-stream`), under one large-body slot, with loopback +
 same-origin guards:
 
 - `POST /api/wallpaper-engine/mpkg` — reads the package, extracts
-  `wallpaper.mp4` with `mobileVideo`, normalizes it, and answers
+  `wallpaper.mp4` with `mobilePackage`, normalizes it, and answers
   `{ ok: true, videoBase64, reencoded, title?, workshopId? }` where `title` and
   `workshopId` come from the package's `project.json` member. It answers
   `{ ok: false, message }` for a malformed table, a missing/empty video, or a
@@ -116,14 +118,18 @@ same-origin guards:
   JSON to a raw binary source so the 512 MiB source cap is reachable. It keeps
   its JSON answer (`{ ok, bytesBase64, reencoded }` / `{ ok: false, message }`).
 
-Both return only the normalized video (≤96 MB), never the extracted source, so
+Both return only the normalized video (≤80 MiB), never the extracted source, so
 a large package crosses the wire once.
 
 **Modal states.** `preparing → importing → done | failed`, where *preparing*
 reads "Extracting and preparing the video…" for an `.mpkg` and "Preparing the
-video…" for a video file. The modal shows a skeleton/progress block and, on
-failure, stays open with the host's own sentence. A dismissed modal imports
-nothing.
+video…" for a video file. The modal shows a skeleton/progress block, states in
+its own copy that a clock or other dynamic text already in the video cannot be
+removed by Yunari and will loop as-is, and, on failure, stays open with the
+host's own sentence. While the run is live the surface is not dismissable — no
+close control, and Escape or a backdrop press do not close it — because a
+dismissal cannot stop the host work already under way; once it settles, a
+dismissal closes it and nothing further is imported.
 
 **Assets pane.** The manual `Normalize video` button, its preview and its
 use-normalized confirmation are removed; the modal replaces them. Picking a
@@ -206,7 +212,7 @@ the Fonts body. Pagination keeps existing results on screen with `aria-busy`.
 | Concern | Owner | Change |
 |---|---|---|
 | `.mpkg` bytes → normalized video + metadata | `host/src/wallpaper-engine/pkg.ts`, new route in `server.ts` | extraction + normalization in one call over the existing table walk |
-| Video source → normalized video | `src/themes/normalize-video.ts`, its route in `server.ts` | raw binary source, 512 MiB cap, unchanged output ceiling |
+| Video source → normalized video | `src/themes/normalize-video.ts`, its route in `server.ts` | raw binary source, 512 MiB cap, 80 MiB per-asset output bound |
 | Unpack a scene | `host/src/wallpaper-engine/unpack.ts` | title prefix; no launch |
 | Steam author name | `host/src/wallpaper-engine/source.ts` + `server.ts` | fetch + cache + route |
 | Library listing | `source.ts`, `library.ts` | no export members; kinds unchanged |
@@ -228,7 +234,7 @@ imports a theme asset: the editor owns the document.
 | Not a `PKGV`/`PKGM` table | modal: the package could not be read |
 | `PKGM` without `wallpaper.mp4` | modal: no video in this package |
 | Upload over 512 MiB of source | modal: source too large to import |
-| Normalized output still over 96 MB | modal: the video exceeds the theme envelope |
+| Normalized output still over 80 MiB | modal: the video exceeds the theme's per-asset bound |
 | Normalizer refuses | modal: the host's own sentence |
 | Asset manager refuses | modal: the manager's sentence |
 | Steam lookup fails | import continues; credit carries `author.steamId` only |
@@ -239,10 +245,10 @@ imports a theme asset: the editor owns the document.
 
 - **Unit (host):** mpkg route guards (405, 403 loopback, 403 foreign origin),
   512 MiB source cap, valid `PKGM`, missing video, malformed table, metadata
-  from `project.json`; a source over 96 MiB whose normalized output fits is
-  accepted; a normalized output over 96 MiB is refused; author route with
-  injected fetch: name, timeout, refusal, invalid id, cache; `project` returns
-  no `launched`; fresh unpack prefixes the title once; reuse leaves the
+  from `project.json`; a source over 96 MiB whose normalized output fits under
+  80 MiB is accepted; a normalized output over 80 MiB is refused; author route
+  with injected fetch: name, timeout, refusal, invalid id, cache; `project`
+  returns no `launched`; fresh unpack prefixes the title once; reuse leaves the
   descriptor alone.
 - **Unit/DOM (editor):** picker routes `.mpkg` and video to the modal and keeps
   images/fonts direct; modal step order and every failure; `.mpkg` never reaches
@@ -272,8 +278,9 @@ imports a theme asset: the editor owns the document.
 
 - **512 MiB source cap, buffered:** a source larger than that is refused; the
   buffered body plus ffmpeg's temp file is the memory cost. The normalized
-  output ceiling is unchanged at 96 MB. If real exports exceed 512 MiB, the next
-  step is streaming the body to a temp file, not raising the cap again.
+  output must still fit the store's 80 MiB per-asset bound. If real exports
+  exceed 512 MiB, the next step is streaming the body to a temp file, not
+  raising the cap again.
 - **Steam lookup is the only outbound request this feature adds.** It is
   per-import, cached, timed out, and never blocks the import.
 - **Guide text is static.** Wallpaper Engine can rename a menu item in a future

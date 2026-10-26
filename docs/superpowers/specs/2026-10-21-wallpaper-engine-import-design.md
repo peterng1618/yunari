@@ -293,8 +293,9 @@ minute forever. So the export carries one required author step, named before it
 happens rather than after: **delete the dynamic text objects in the editor** —
 clock, weather, media label — and export without them. The classifier reports
 whether the scene carries text (§5.2), and the guide always states the step; a
-video or `.mpkg` import carries the same warning, because its clock is already
-baked in and cannot be checked for.
+video or `.mpkg` import warns in its own modal that a clock or other dynamic
+text already in the video cannot be removed by Yunari and will loop as-is,
+because it is already baked in and cannot be checked for.
 
 This changes nothing about the classification: a scene with a clock and no
 particles is still a still-at-rest theme. It changes what goes into the frame.
@@ -372,7 +373,7 @@ POST /api/wallpaper-engine/mpkg
 
 POST /api/themes/normalize-video
   → raw binary body, up to 512 MiB of source; { ok, bytesBase64, reencoded }
-  → { ok: false, message } when the normalized output still exceeds 96 MB
+  → { ok: false, message } when the normalized output exceeds 80 MiB
 ```
 ```
 
@@ -555,11 +556,13 @@ the author takes in Wallpaper Engine's own window.
    video, a malformed table or a foreign container answers `{ ok: false,
    message }` with the host's own sentence, and the modal stays open showing it.
    The host needs no Wallpaper Engine install for this step.
-7. **Two size caps, split by side.** Up to **512 MiB of source** may be picked;
-   the normalized output must fit the theme's **96 MB** ceiling. The normalizer's
-   capped-CRF ladder is what meets it, and a host that still produces more than
-   96 MB refuses rather than importing an asset the package writer would reject.
-   The source size is not the envelope.
+7. **Three size bounds, split by side.** Up to **512 MiB of source** may be
+   picked; the normalized video must fit the theme writer's **per-asset bound of
+   80 MiB**, and the theme's assets together must fit **90 MiB** or the save
+   refuses it. The normalizer's capped-CRF ladder is what meets the per-asset
+   bound, and a host that still produces more than 80 MiB refuses rather than
+   importing an asset the package writer would reject. The source size is not
+   the envelope.
 8. **The asset arrives with attribution.** A grid video import writes a theme
    credit and sets the asset's licence to `unknown` plus a source: the workshop
    URL when cached, otherwise the Steam profile URL from the id. When the item
@@ -696,7 +699,7 @@ are tens of lines each against formats already decoded here.
 | `scene.pkg` table runs past the file's end, or a member write fails | the directory this run created is removed and the route answers `unreadable`; an existing directory is never touched |
 | `myprojects` not writable | `ok: false, reason: "refused"`; the card returns to idle and the status line says why |
 | Conversion fails | the status line names `no-install` / `unreadable` / `refused`; the card's button returns to idle |
-| Video over the output ceiling | a source up to 512 MiB is accepted; a normalized output still over 96 MB is refused with the host's sentence |
+| Video over the output ceiling | a source up to 512 MiB is accepted; a normalized output still over 80 MiB is refused with the host's sentence |
 | Web item | never listed: a page is not a file Yunari can put in a theme |
 | `.mpkg` is not a Wallpaper Engine container, or holds no video | the import modal stays open with the host's own sentence |
 
@@ -777,7 +780,7 @@ the file's end, and to reuse — not rewrite — a directory that already exists
 - A video card's action imports the video through the modal and sets it as the
   theme's background.
 - A source over **512 MiB** is refused in the modal with the host's sentence; a
-  normalized output still over **96 MB** is refused rather than imported.
+  normalized output still over **80 MiB** is refused rather than imported.
 - A scene card offers **Convert to local project** and never an import action.
 - The still test returns **true** for a fixture with text, sound, parallax and a
   mouse-interactive layer, and **false** for one with a particle object, an

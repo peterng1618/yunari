@@ -92,6 +92,7 @@ import {
 } from "./settings/weather.js";
 import {
   createThemeStore,
+  MAX_ASSET_BYTES,
   type ThemeContent,
   ThemeTooLargeError,
 } from "./themes/store.js";
@@ -2034,6 +2035,42 @@ describe("Host theme routes", () => {
       expect(answer.ok).toBe(true);
       expect(answer.reencoded).toBe(false);
       expect(Buffer.from(answer.bytesBase64, "base64")).toEqual(bytes);
+    });
+
+    it("refuses a normalized output above the store's per-asset bound", async () => {
+      // The route had no output check at all, so a conforming video the writer
+      // would refuse above 80 MiB crossed here and failed only at save. The
+      // size is also below the 96 MB whole-theme ceiling, which is the gap.
+      expect(MAX_ASSET_BYTES).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
+      const base = new Uint8Array(
+        await fs.readFile(
+          fileURLToPath(
+            new URL(
+              "../../theme-package/test-fixtures/conforming.mp4",
+              import.meta.url,
+            ),
+          ),
+        ),
+      );
+      const size = MAX_ASSET_BYTES + 1;
+      expect(size).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
+      const padded = new Uint8Array(size);
+      padded.set(base, 0);
+      const freeStart = base.length;
+      const payload = padded.length - freeStart - 8;
+      new DataView(padded.buffer).setUint32(freeStart, 8 + payload, false);
+      padded.set(new TextEncoder().encode("free"), freeStart + 4);
+
+      const res = await request(
+        normalizing.server,
+        "POST",
+        "/api/themes/normalize-video",
+        padded,
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.json()).toMatchObject({ ok: false });
+      expect((res.json() as { message: string }).message).toContain("80 MB");
     });
   });
 
@@ -10092,6 +10129,19 @@ describe("Host Wallpaper Engine routes", () => {
     );
   }
 
+  /** A conforming video padded with a `free` box to an exact size: the MP4
+   *  parser still reads it, so a route's own output check must be what refuses
+   *  it. */
+  function paddedVideo(base: Uint8Array, size: number): Uint8Array {
+    const out = new Uint8Array(size);
+    out.set(base, 0);
+    const freeStart = base.length;
+    const payload = out.length - freeStart - 8;
+    new DataView(out.buffer).setUint32(freeStart, 8 + payload, false);
+    out.set(encoder.encode("free"), freeStart + 4);
+    return out;
+  }
+
   function fakeSource(): WallpaperEngineSource {
     return {
       listing: () => Promise.resolve(listingAnswer),
@@ -10480,8 +10530,8 @@ describe("Host Wallpaper Engine routes", () => {
     });
 
     it("imports a package larger than the output cap when its video fits", async () => {
-      // The package may exceed 96 MB as long as the video it yields does not:
-      // the source and output caps are different ceilings.
+      // The package may exceed the output cap as long as the video it yields
+      // does not: the source and output caps are different ceilings.
       const hosted = host(fakeSource());
       const video = await conformingVideo();
 
@@ -10507,18 +10557,16 @@ describe("Host Wallpaper Engine routes", () => {
       }
     });
 
-    it("answers ok:false when the normalized output exceeds the theme cap", async () => {
+    it("refuses a normalized output above the store's per-asset bound", async () => {
+      // The old check used the 96 MB whole-theme ceiling, so a video between
+      // 80 and 96 MB imported and then could not be saved. The bound is now
+      // the writer's own `MAX_ASSET_BYTES`, which is lower.
+      expect(MAX_ASSET_BYTES).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
+      const size = MAX_ASSET_BYTES + 1;
+      expect(size).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
+
       const hosted = host(fakeSource());
-      const base = await conformingVideo();
-      // A conforming video padded with a `free` box past the output cap: the
-      // parser still reads it, so the route's own check is what refuses it.
-      const padded = new Uint8Array(MAX_THEME_UPLOAD_BYTES + 1);
-      padded.set(base, 0);
-      const freeStart = base.length;
-      const payload = padded.length - freeStart - 8;
-      const view = new DataView(padded.buffer);
-      view.setUint32(freeStart, 8 + payload, false);
-      padded.set(encoder.encode("free"), freeStart + 4);
+      const padded = paddedVideo(await conformingVideo(), size);
 
       try {
         const answer = await request(
@@ -10529,7 +10577,10 @@ describe("Host Wallpaper Engine routes", () => {
         );
 
         expect(answer.status).toBe(200);
-        expect((answer.json() as { ok: boolean }).ok).toBe(false);
+        expect(answer.json()).toMatchObject({ ok: false });
+        expect((answer.json() as { message: string }).message).toContain(
+          "80 MB",
+        );
       } finally {
         await hosted.close();
       }
