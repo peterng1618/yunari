@@ -319,8 +319,8 @@ function fontPresetFaces(
   requireTrioRoles: boolean,
   issues: ValidationIssue[],
 ): void {
-  if (!isRecord(globals) || !isRecord(globals["typePresets"])) return;
-  const presets = globals["typePresets"];
+  if (!isRecord(globals) || !isRecord(globals["typeTokens"])) return;
+  const presets = globals["typeTokens"];
   const fontAssets = new Map<string, Record<string, unknown>>();
   if (Array.isArray(assets)) {
     for (const asset of assets) {
@@ -334,8 +334,7 @@ function fontPresetFaces(
   }
   const roles = new Set<string>();
   for (const [id, entry] of Object.entries(presets)) {
-    const value =
-      isRecord(entry) && isRecord(entry["value"]) ? entry["value"] : undefined;
+    const value = isRecord(entry) ? entry : undefined;
     if (value === undefined) continue;
     if (typeof value["trioRole"] === "string") roles.add(value["trioRole"]);
     const face = isRecord(value["face"]) ? value["face"] : undefined;
@@ -344,7 +343,7 @@ function fontPresetFaces(
         issues.push(
           issue(
             "missing-field",
-            `/globals/typePresets/${id}/value/face`,
+            `/globals/typeTokens/${id}/face`,
             "New theme type presets need a declared packaged font face.",
           ),
         );
@@ -361,7 +360,7 @@ function fontPresetFaces(
       issues.push(
         issue(
           "unresolved-asset-ref",
-          `/globals/typePresets/${id}/value/face/assetId`,
+          `/globals/typeTokens/${id}/face/assetId`,
           "A type preset face must reference a declared matching font asset.",
         ),
       );
@@ -374,7 +373,7 @@ function fontPresetFaces(
     issues.push(
       issue(
         "missing-field",
-        "/globals/typePresets",
+        "/globals/typeTokens",
         "New themes need heading, body and mono type-preset roles.",
       ),
     );
@@ -389,8 +388,8 @@ function sceneTypeReferences(
 ): void {
   if (!isRecord(scene) || !Array.isArray(scene["objects"])) return;
   const presets =
-    isRecord(globals) && isRecord(globals["typePresets"])
-      ? globals["typePresets"]
+    isRecord(globals) && isRecord(globals["typeTokens"])
+      ? globals["typeTokens"]
       : undefined;
   const palette =
     isRecord(globals) && isRecord(globals["palette"])
@@ -412,21 +411,21 @@ function sceneTypeReferences(
           issue(
             "unresolved-global-ref",
             `${path}/yunariText`,
-            "Text objects need authored runs with typePreset and palette references.",
+            "Text objects need authored runs with typeToken and palette references.",
           ),
         );
       } else {
         for (const [index, run] of runs.entries()) {
-          const ref = isRecord(run) ? run["typePreset"] : undefined;
+          const ref = isRecord(run) ? run["typeToken"] : undefined;
           const preset =
-            typeof ref === "string" && ref.startsWith("typePresets.")
-              ? presets?.[ref.slice("typePresets.".length)]
+            typeof ref === "string" && ref.startsWith("typeTokens.")
+              ? presets?.[ref.slice("typeTokens.".length)]
               : undefined;
-          if (!isRecord(preset) || !isRecord(preset["value"])) {
+          if (!isRecord(preset)) {
             issues.push(
               issue(
                 "unresolved-global-ref",
-                `${path}/yunariText/runs/${index}/typePreset`,
+                `${path}/yunariText/runs/${index}/typeToken`,
                 "Text runs must reference an existing type preset.",
               ),
             );

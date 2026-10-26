@@ -88,7 +88,7 @@ export function isThemeRemix(value: unknown): value is ThemeRemix {
 
 export const GLOBAL_GROUPS = [
   "palette",
-  "typePresets",
+  "typeTokens",
   "fonts",
   "fontSizes",
   "spacing",
@@ -145,19 +145,29 @@ export type PalettePaint =
       }[];
     };
 
-/** One reusable typography treatment, applied independently to each text run. */
-export interface TypePreset {
+/** One face in the theme's vocabulary: the family, weight and packaged face a
+ *  run is set in. Size, leading and tracking belong to the run's own style. */
+export interface TypeToken {
   readonly family: string;
-  readonly size: number;
   readonly weight?: string | number;
-  readonly letterSpacing?: number;
-  readonly lineHeight?: number;
   readonly face?: { readonly assetId: string };
-  readonly trioRole?: "heading" | "body" | "mono";
+}
+
+/** The three role ids a theme's token set covers; a role is a token id. */
+export const TYPE_TOKEN_ROLES = ["heading", "body", "mono"] as const;
+
+export function isTypeTokenRole(
+  id: string,
+): id is (typeof TYPE_TOKEN_ROLES)[number] {
+  return (TYPE_TOKEN_ROLES as readonly string[]).includes(id);
 }
 
 export type GlobalGroup = Readonly<Record<string, GlobalEntry>>;
-export type Globals = Readonly<Partial<Record<GlobalGroupName, GlobalGroup>>>;
+export type Globals = Readonly<{
+  [K in GlobalGroupName]?: K extends "typeTokens"
+    ? Readonly<Record<string, TypeToken>>
+    : GlobalGroup;
+}>;
 
 export interface Artboard {
   readonly width: number;
@@ -248,7 +258,7 @@ export type TextRun =
   | {
       readonly kind: "literal";
       readonly text: string;
-      readonly typePreset?: `typePresets.${string}`;
+      readonly typeToken?: `typeTokens.${string}`;
       readonly style?: StyleMap;
     }
   | {
@@ -257,7 +267,7 @@ export type TextRun =
       readonly bindingId: string;
       readonly precision?: number;
       readonly unitDisplay?: "none" | "short" | "long";
-      readonly typePreset?: `typePresets.${string}`;
+      readonly typeToken?: `typeTokens.${string}`;
       readonly style?: StyleMap;
     };
 

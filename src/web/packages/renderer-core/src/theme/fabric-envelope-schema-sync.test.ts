@@ -84,14 +84,14 @@ describe("published Fabric theme schema", () => {
       string,
       Record<string, unknown>
     >;
-    const preset = document.$defs["typePreset"]!;
+    const preset = document.$defs["typeToken"]!;
     const artboard = document.$defs["artboard"]!["properties"] as Record<
       string,
       Record<string, unknown>
     >;
 
-    expect(Object.keys(globals)).toEqual(["palette", "typePresets"]);
-    expect(globals["typePresets"]).toEqual({ $ref: "#/$defs/typePresetGroup" });
+    expect(Object.keys(globals)).toEqual(["palette", "typeTokens"]);
+    expect(globals["typeTokens"]).toEqual({ $ref: "#/$defs/typeTokenGroup" });
     expect(preset["required"]).toEqual(["family", "size", "face"]);
     expect(preset["properties"]).toMatchObject({
       face: { $ref: "#/$defs/fontFaceReference" },

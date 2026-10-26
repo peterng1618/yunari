@@ -141,7 +141,7 @@ function setup(
       palette: {
         ink: { name: "Ink", value: { kind: "solid", color: "#e8ecf3" } },
       },
-      typePresets: {
+      typeTokens: {
         body: {
           name: "Body",
           value: { family: "Inter", size: 16, weight: "600" },
@@ -900,8 +900,8 @@ describe("the run editor's tab selection", () => {
     text.set({
       yunariText: {
         runs: [
-          { kind: "literal", text: "A", typePreset: "typePresets.body" },
-          { kind: "literal", text: "B", typePreset: "typePresets.body" },
+          { kind: "literal", text: "A", typeToken: "typeTokens.body" },
+          { kind: "literal", text: "B", typeToken: "typeTokens.body" },
         ],
       },
     });
@@ -1511,7 +1511,7 @@ describe("the size of a text object", () => {
           {
             kind: "literal",
             text: "AMD Ryzen 7 7800X3D",
-            typePreset: "typePresets.body",
+            typeToken: "typeTokens.body",
           },
         ],
       },
@@ -1724,7 +1724,7 @@ describe("the class the inspector states", () => {
     const text = new IText("Hi", { left: 0, top: 0, id });
     text.set({
       yunariText: {
-        runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+        runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
       },
     });
     return text;
@@ -1735,7 +1735,7 @@ describe("the class the inspector states", () => {
     const text = new Textbox("Hi", { left: 0, top: 0, width: 120, id });
     text.set({
       yunariText: {
-        runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+        runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
       },
     });
     return text;
@@ -1831,7 +1831,7 @@ describe("the column a kind gets", () => {
       id: "label-1",
     });
     text.set("yunariText", {
-      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
     });
     return text;
   }

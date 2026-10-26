@@ -58,7 +58,7 @@ const KNOWN_KEYS = {
     "format",
   ],
   globalEntry: ["name", "value"],
-  typePreset: [
+  typeToken: [
     "family",
     "size",
     "weight",
@@ -102,7 +102,7 @@ const ENVELOPE_KEYS = {
     "editorMetadata",
     "scene",
   ],
-  globals: ["palette", "typePresets"],
+  globals: ["palette", "typeTokens"],
   background: ["color", "media"],
   backgroundMedia: [
     "assetId",

@@ -179,7 +179,7 @@ export interface Run {
  *
  * The first run carries the object's own resolved Fabric fields, because that
  * is the run whose preset Fabric measures: the same rule
- * `applyObjectTypePresets` follows, and the reason a mixed-size label still
+ * `applyObjectTypeTokens` follows, and the reason a mixed-size label still
  * opens at the right size.
  *
  * `left`, `top`, `width` and `height` are the author's box, not a measurement:
@@ -252,7 +252,7 @@ export function text(
           ? {
               kind: "literal",
               text: run.text ?? "",
-              typePreset: `typePresets.${run.size}-${run.weight}`,
+              typeToken: `typeTokens.${run.size}-${run.weight}`,
               style: { color: { ref: `palette.${run.token}` } },
             }
           : {
@@ -264,7 +264,7 @@ export function text(
               ...(run.unitDisplay === undefined
                 ? {}
                 : { unitDisplay: run.unitDisplay }),
-              typePreset: `typePresets.${run.size}-${run.weight}`,
+              typeToken: `typeTokens.${run.size}-${run.weight}`,
               style: { color: { ref: `palette.${run.token}` } },
             },
       ),

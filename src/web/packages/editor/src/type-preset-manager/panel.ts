@@ -1,4 +1,4 @@
-import type { TypePreset } from "@yunari/renderer-core";
+import type { TypeToken } from "@yunari/renderer-core";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -9,22 +9,19 @@ import {
   PresetList,
   type PresetSelection,
 } from "../panes/tokens/preset-list.js";
-import { uiCopy } from "../ui-copy.js";
 
-export type TypePresets = Readonly<
-  Record<string, { readonly name: string; readonly value: TypePreset }>
->;
+export type TypeTokens = Readonly<Record<string, TypeToken>>;
 
-export interface TypePresetPanel {
+export interface TypeTokenPanel {
   readonly root: HTMLElement;
-  render(presets: TypePresets | undefined): void;
+  render(presets: TypeTokens | undefined): void;
   /** Unmounts the React tree, then removes the section. A React root
    *  subscribes; removing its container unsubscribes nothing, so the tree would
    *  outlive the pane for the page's lifetime (`react-root-disposal.dom.test.ts`
    *  pins this file's one root). */
   destroy(): void;
 }
-export interface TypePresetFontActions {
+export interface TypeTokenFontActions {
   readonly applyFace: (
     presetId: string,
     face: CuratedFontFace,
@@ -55,14 +52,14 @@ export interface TypePresetFontActions {
  * parameters are the session's call site. The preset's editable fields — and
  * the delete row among them — now belong to the token inspector.
  */
-export function createTypePresetPanel(
+export function createTypeTokenPanel(
   host: HTMLElement,
-  onChange: (presets: TypePresets) => void,
+  onChange: (presets: TypeTokens) => void,
   onDelete?: (id: string, replacement: string) => void,
-  fontActions?: TypePresetFontActions,
+  fontActions?: TypeTokenFontActions,
   selection?: PresetSelection,
   tokenSelection?: TokenSelectionStore,
-): TypePresetPanel {
+): TypeTokenPanel {
   const root = document.createElement("section");
   // No `data-yunari-panel` and no title here: `Pane` owns the identity and the
   // title bar, and a second element under either is a strict-mode failure for
@@ -70,7 +67,7 @@ export function createTypePresetPanel(
   host.append(root);
 
   const reactRoot: Root = createRoot(root);
-  const draw = (presets: TypePresets | undefined): void => {
+  const draw = (presets: TypeTokens | undefined): void => {
     const current = presets ?? {};
     // Flushed, so a caller that reads the pane straight after building or
     // refreshing it sees the presets rather than the frame before React commits
@@ -84,7 +81,7 @@ export function createTypePresetPanel(
           onAdd: (id: string) =>
             onChange({
               ...current,
-              [id]: { name: uiCopy.panels.newType, value: newPresetType },
+              [id]: newPresetType,
             }),
           selection,
           tokenSelection,

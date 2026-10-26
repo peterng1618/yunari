@@ -110,7 +110,7 @@ export function writeRunPreset(
 ): boolean {
   return rewriteRun(target, index, (run) => ({
     ...run,
-    typePreset: ref as `typePresets.${string}`,
+    typeToken: ref as `typeTokens.${string}`,
   }));
 }
 

@@ -1,4 +1,4 @@
-import type { FabricGlobals } from "@yunari/renderer-core";
+import { type FabricGlobals, isTypeTokenRole } from "@yunari/renderer-core";
 import { useCallback, useSyncExternalStore } from "react";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
 import type { ActiveKind } from "../../editor-shell/bridge.js";
@@ -6,8 +6,8 @@ import {
   type TokenSelectionStore,
   useTokenSelection,
 } from "../../editor-shell/shell-stores.js";
-import { resolveTypePreset } from "../../selection-inspector/appearance.js";
-import type { TypePresets } from "../../type-preset-manager/panel.js";
+import { resolveTypeToken } from "../../selection-inspector/appearance.js";
+import type { TypeTokens } from "../../type-preset-manager/panel.js";
 import { uiCopy } from "../../ui-copy.js";
 
 /**
@@ -23,7 +23,7 @@ import { uiCopy } from "../../ui-copy.js";
  *
  * **A resolution is not a control.** The line beside a preset is a mono value
  * with no well, because a border means editable (DESIGN.md §5.1).
- * `resolveTypePreset` is the one owner of what a preset resolves to, so this
+ * `resolveTypeToken` is the one owner of what a preset resolves to, so this
  * file reads the rule rather than restating the "family weight sizepx" it
  * composes.
  *
@@ -31,7 +31,7 @@ import { uiCopy } from "../../ui-copy.js";
  * and the resolved value is the selection-inspector's resolver.
  */
 export interface PresetListProps {
-  readonly presets: TypePresets;
+  readonly presets: TypeTokens;
   /** The host's add port. The id is minted here, because this list owns the
    *  stable ids references are written against. */
   readonly onAdd: (id: string) => void;
@@ -105,7 +105,7 @@ function Binding(props: {
   readonly presetId: string | undefined;
   readonly hasSelection: boolean;
   readonly activeKind: ActiveKind;
-  readonly presets: TypePresets;
+  readonly presets: TypeTokens;
 }): React.JSX.Element | null {
   const { presetId, hasSelection, activeKind, presets } = props;
   const sentence = ((): string => {
@@ -120,10 +120,13 @@ function Binding(props: {
     }
     // The name, because every surface that offers a reference names what it
     // offers; the ref is what is left when the document no longer declares it.
-    const name = presets[presetId]?.name;
-    return name === undefined
-      ? uiCopy.panels.selectionUnresolved(`typePresets.${presetId}`)
-      : uiCopy.panels.selectionSetTo(name);
+    // ponytail: `[id] family weight` until Task 4.1's computed name lands.
+    const token = presets[presetId];
+    return token === undefined
+      ? uiCopy.panels.selectionUnresolved(`typeTokens.${presetId}`)
+      : uiCopy.panels.selectionSetTo(
+          `${presetId} ${token.family}${token.weight === undefined ? "" : ` ${token.weight}`}`,
+        );
   })();
   // A plain line, not a live region: the pane is rerendered on every selection,
   // and an announcement per canvas click is noise rather than information.
@@ -140,8 +143,8 @@ export function PresetList(props: PresetListProps): React.JSX.Element {
   const stage = usePresetSelection(selection);
   const selectedToken = useTokenSelection(tokenSelection);
   // The resolver reads a `FabricGlobals`, and this list's own record *is* the
-  // `typePresets` of one — so the rule keeps its single owner with no copy.
-  const globals: FabricGlobals = { typePresets: presets };
+  // `typeTokens` of one — so the rule keeps its single owner with no copy.
+  const globals: FabricGlobals = { typeTokens: presets };
   // A row's one gesture. The store owns the canvas clear, so this file never
   // reaches Fabric.
   const onSelect = (id: string): void =>
@@ -153,7 +156,7 @@ export function PresetList(props: PresetListProps): React.JSX.Element {
       className="flex flex-col gap-[var(--space-8)]"
     >
       <h2 className="text-xs font-semibold tracking-[0.11em] text-muted uppercase">
-        {uiCopy.panels.typePresets}
+        {uiCopy.panels.typeTokens}
       </h2>
       {/* What the selection is set in, above the list: the two are separate
           readouts, so selecting a token to edit below never claims to have
@@ -172,9 +175,9 @@ export function PresetList(props: PresetListProps): React.JSX.Element {
       />
       <ul className="flex flex-col gap-[var(--space-4)]">
         {ids.map((id) => {
-          const preset = presets[id];
-          if (preset === undefined) return null;
-          const role = preset.value.trioRole;
+          const token = presets[id];
+          if (token === undefined) return null;
+          const role = isTypeTokenRole(id) ? id : undefined;
           return (
             <li key={id}>
               <button
@@ -190,11 +193,13 @@ export function PresetList(props: PresetListProps): React.JSX.Element {
                   data-yunari-type-preset-specimen=""
                   aria-hidden="true"
                   className="text-sm text-text"
-                  style={{ fontFamily: preset.value.family }}
+                  style={{ fontFamily: token.family }}
                 >
                   Aa
                 </span>
-                <span className="text-xs text-muted">{preset.name}</span>
+                <span className="text-xs text-muted">
+                  {`${id} ${token.family}${token.weight === undefined ? "" : ` ${token.weight}`}`}
+                </span>
                 {role === undefined ? null : (
                   <span
                     data-yunari-type-preset-role=""
@@ -207,7 +212,7 @@ export function PresetList(props: PresetListProps): React.JSX.Element {
                   data-yunari-type-preset-resolution=""
                   className="ml-auto font-mono text-xs text-muted"
                 >
-                  {resolveTypePreset(globals, `typePresets.${id}`) ?? ""}
+                  {resolveTypeToken(globals, `typeTokens.${id}`) ?? ""}
                 </span>
               </button>
             </li>
@@ -228,7 +233,7 @@ export function PresetList(props: PresetListProps): React.JSX.Element {
 
 /** The first free `type`, `type-2`, … — the ids are stable keys references are
  *  written against, so a new preset never reuses a deleted one's id. */
-function nextId(presets: TypePresets): string {
+function nextId(presets: TypeTokens): string {
   for (let index = 1; ; index += 1) {
     const id = index === 1 ? "type" : `type-${index}`;
     if (presets[id] === undefined) return id;

@@ -1165,7 +1165,7 @@ test.describe("Fabric editor route", () => {
           yunariText?: {
             runs: Array<{
               text?: string;
-              typePreset?: string;
+              typeToken?: string;
               style?: { color?: { ref?: string } };
             }>;
           };
@@ -1187,7 +1187,7 @@ test.describe("Fabric editor route", () => {
             // defaults pick — not the first entry, and not a caption too small
             // to inspect comfortably. At the reference's artboard that is the
             // 32px date face.
-            typePreset: "typePresets.32-400",
+            typeToken: "typeTokens.32-400",
             style: { color: { ref: "palette.text" } },
           },
         ],
@@ -2211,24 +2211,24 @@ test.describe("Fabric editor route", () => {
     ).toEqual({ ref: "palette.bars" });
   });
 
-  test("edits a global type preset through the property surface", async ({
+  test("edits a global type token through the property surface", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    // The type-preset library is a list now; a row press hands the preset to
+    // The type-token library is a list now; a row press hands the token to
     // the token inspector, which is the field set's new home (spec, Tokens
     // pane). `36-500` is the starter theme's "Wordmark".
     await openPane(page, "Tokens");
     await page.locator('[data-yunari-type-preset-row="36-500"]').click();
-    const size = page.locator("[data-yunari-token-size]");
-    await size.fill("34");
-    await size.press("Tab");
-    await expect(size).toHaveValue("34");
-    const letterSpacing = page.locator("[data-yunari-token-letter-spacing]");
-    await letterSpacing.fill("0.25");
-    await letterSpacing.press("Tab");
+    const family = page.locator("[data-yunari-token-family]");
+    await family.fill("Georgia, serif");
+    await family.press("Tab");
+    await expect(family).toHaveValue("Georgia, serif");
+    const weight = page.locator("[data-yunari-token-weight]");
+    await weight.fill("600");
+    await weight.press("Tab");
 
     const saved = await savePackage(page);
     await openThemeFromStore(page, storedThemeOfPackage(saved.bytes));
@@ -2237,21 +2237,14 @@ test.describe("Fabric editor route", () => {
     await page.locator('[data-yunari-type-preset-row="36-500"]').click();
     const reopened = (await saveEnvelope(page)) as {
       globals: {
-        typePresets: {
-          "36-500": {
-            value: {
-              size: number;
-              letterSpacing: number;
-              trioRole: string;
-            };
-          };
+        typeTokens: {
+          "36-500": { family: string; weight: string | number };
         };
       };
     };
-    expect(reopened.globals.typePresets["36-500"].value).toMatchObject({
-      size: 34,
-      letterSpacing: 0.25,
-      trioRole: "heading",
+    expect(reopened.globals.typeTokens["36-500"]).toMatchObject({
+      family: "Georgia, serif",
+      weight: "600",
     });
     await page
       .locator("[data-yunari-token-letter-spacing]")
@@ -2263,7 +2256,7 @@ test.describe("Fabric editor route", () => {
     page,
   }, testInfo) => {
     // The one assertion the unit tests cannot make: that ink actually moves.
-    // `applyObjectTypePresets` could set `charSpacing` correctly and the canvas
+    // `applyObjectTypeTokens` could set `charSpacing` correctly and the canvas
     // could still not show it.
     //
     // Measured as pixels rather than as the object's `width`, because the
@@ -2310,22 +2303,22 @@ test.describe("Fabric editor route", () => {
     ).toHaveCount(0);
 
     const envelope = (await saveEnvelope(page)) as {
-      globals: { typePresets: Record<string, unknown> };
+      globals: { typeTokens: Record<string, unknown> };
       scene: {
         objects: Array<{
           id?: string;
-          yunariText?: { runs: Array<{ typePreset?: string }> };
+          yunariText?: { runs: Array<{ typeToken?: string }> };
         }>;
       };
     };
-    expect(envelope.globals.typePresets["20-400"]).toBeUndefined();
+    expect(envelope.globals.typeTokens["20-400"]).toBeUndefined();
     expect(
       (
         sceneObject(envelope, "cpu-card-title")?.["yunariText"] as
-          | { runs: ReadonlyArray<{ typePreset?: string }> }
+          | { runs: ReadonlyArray<{ typeToken?: string }> }
           | undefined
-      )?.runs[0]?.typePreset,
-    ).toBe("typePresets.24-400");
+      )?.runs[0]?.typeToken,
+    ).toBe("typeTokens.24-400");
   });
 
   test("captures dirty document replacement confirmation for visual review", async ({
@@ -2726,8 +2719,8 @@ test.describe("Fabric editor route", () => {
           },
           ink: { name: "Ink", value: { kind: "solid", color: ACCENT_PAINT } },
         },
-        typePresets: {
-          body: { name: "Body", value: { family: "sans-serif", size: 16 } },
+        typeTokens: {
+          body: { family: "sans-serif" },
         },
       },
       bindings: {
@@ -2752,13 +2745,13 @@ test.describe("Fabric editor route", () => {
                 {
                   kind: "literal",
                   text: "CPU ",
-                  typePreset: "typePresets.body",
+                  typeToken: "typeTokens.body",
                   style: { color: { ref: "palette.ink" } },
                 },
                 {
                   kind: "value",
                   bindingId: "load",
-                  typePreset: "typePresets.body",
+                  typeToken: "typeTokens.body",
                   style: { color: { ref: "palette.ink" } },
                 },
               ],
@@ -3893,7 +3886,7 @@ test.describe("Fabric editor route", () => {
             value: { kind: "solid" as const, color: INK_PAINT },
           },
         },
-        typePresets: {},
+        typeTokens: {},
       },
       bindings: {},
       scene: {

@@ -12,8 +12,7 @@
 import type { FabricPalette } from "@yunari/renderer-core";
 import { act } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { FontTrioRole } from "../../type-preset-apply.js";
-import type { TypePresets } from "../../type-preset-manager/panel.js";
+import type { TypeTokens } from "../../type-preset-manager/panel.js";
 import { uiCopy } from "../../ui-copy.js";
 import {
   BACKGROUND_PAINT,
@@ -55,29 +54,10 @@ beforeAll(() => {
 
 afterEach(() => document.body.replaceChildren());
 
-const PRESETS: TypePresets = {
-  body: {
-    name: "Body",
-    value: {
-      family: "Inter",
-      size: 16,
-      weight: "600",
-      lineHeight: 1.4,
-      letterSpacing: 0.5,
-      trioRole: "body",
-    },
-  },
-  bound: {
-    name: "Bound",
-    value: {
-      family: "Manrope",
-      size: 24,
-      weight: 700,
-      face: { assetId: "manrope-700" },
-      trioRole: "heading",
-    },
-  },
-  caption: { name: "Caption", value: { family: "Inter", size: 12 } },
+const PRESETS: TypeTokens = {
+  body: { family: "Inter", weight: "600" },
+  bound: { family: "Manrope", weight: 700, face: { assetId: "manrope-700" } },
+  caption: { family: "Inter" },
 };
 
 type PaintPort = NonNullable<TokenInspectorActions["paints"]>;
@@ -102,9 +82,8 @@ function actions(
   facesOf?: TokenInspectorActions["facesOf"],
 ): TokenInspectorActions {
   return {
-    onChange: vi.fn<(presets: TypePresets) => void>(),
+    onChange: vi.fn<(presets: TypeTokens) => void>(),
     onDelete: vi.fn<(id: string, replacement: string) => void>(),
-    setRole: vi.fn<(id: string, role: FontTrioRole | null) => void>(),
     unbindFace: vi.fn<(id: string) => void>(),
     ...(facesOf === undefined ? {} : { facesOf }),
     paints,
@@ -191,7 +170,7 @@ describe("token inspector", () => {
     const write = actions();
     const panel = createTokenInspectorPanel(document.body, write);
     panel.render({ kind: "preset", id: "body" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
 
     expect(field(panel.root, "[data-yunari-token-name]").value).toBe("Body");
@@ -215,7 +194,7 @@ describe("token inspector", () => {
     const write = actions();
     const panel = createTokenInspectorPanel(document.body, write);
     panel.render({ kind: "preset", id: "bound" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
 
     // No editable family or weight: the face owns both while it is bound.
@@ -243,19 +222,16 @@ describe("token inspector", () => {
     ]);
     const panel = createTokenInspectorPanel(document.body, write);
     panel.render({ kind: "preset", id: "bound" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
 
     await chooseIn(panel.root, "[data-yunari-token-weight]", "manrope-400");
     expect(write.onChange).toHaveBeenCalledWith({
       ...PRESETS,
       bound: {
-        name: "Bound",
-        value: {
-          ...PRESETS["bound"]!.value,
-          weight: 400,
-          face: { assetId: "manrope-400" },
-        },
+        ...PRESETS["bound"]!,
+        weight: 400,
+        face: { assetId: "manrope-400" },
       },
     });
 
@@ -268,30 +244,11 @@ describe("token inspector", () => {
     expect(write.onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         bound: expect.objectContaining({
-          value: expect.objectContaining({
-            weight: 700,
-            face: { assetId: "manrope-700-italic" },
-          }),
+          weight: 700,
+          face: { assetId: "manrope-700-italic" },
         }),
       }),
     );
-    panel.destroy();
-  });
-
-  it("writes the role the author chooses, and clears it with None", async () => {
-    const write = actions();
-    const panel = createTokenInspectorPanel(document.body, write);
-    panel.render({ kind: "preset", id: "body" }, PRESETS, {
-      typePresets: PRESETS,
-    });
-
-    await chooseIn(panel.root, "[data-yunari-token-role]", "heading");
-    expect(write.setRole).toHaveBeenCalledWith("body", "heading");
-
-    // `""` is the None row's id; the panel maps it to the document's `null`,
-    // which is the branch that removes `trioRole` rather than writing a role.
-    await chooseIn(panel.root, "[data-yunari-token-role]", "");
-    expect(write.setRole).toHaveBeenLastCalledWith("body", null);
     panel.destroy();
   });
 
@@ -299,7 +256,7 @@ describe("token inspector", () => {
     const write = actions();
     const panel = createTokenInspectorPanel(document.body, write);
     panel.render({ kind: "preset", id: "bound" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
 
     await click(
@@ -309,15 +266,12 @@ describe("token inspector", () => {
 
     // The session answers an unbind by re-rendering without the face, which is
     // the state the editable fields appear in.
-    const freed: TypePresets = {
+    const freed: TypeTokens = {
       ...PRESETS,
-      bound: {
-        name: "Bound",
-        value: { family: "Manrope", size: 24, weight: 700 },
-      },
+      bound: { family: "Manrope", weight: 700 },
     };
     panel.render({ kind: "preset", id: "bound" }, freed, {
-      typePresets: freed,
+      typeTokens: freed,
     });
 
     const family = field(panel.root, "[data-yunari-token-family]");
@@ -340,7 +294,7 @@ describe("token inspector", () => {
     const write = actions();
     const panel = createTokenInspectorPanel(document.body, write);
     panel.render({ kind: "preset", id: "body" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
 
     // The replacement names the remaining presets only — the preset being
@@ -365,7 +319,7 @@ describe("token inspector", () => {
 
   it("draws nothing when no token is selected", () => {
     const panel = createTokenInspectorPanel(document.body, actions());
-    panel.render(undefined, PRESETS, { typePresets: PRESETS });
+    panel.render(undefined, PRESETS, { typeTokens: PRESETS });
 
     expect(panel.root.textContent).toBe("");
     panel.destroy();
@@ -384,7 +338,7 @@ describe("the paint section", () => {
       actions(paintActions()),
     );
     panel.render({ kind: "paint", id: "background" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
 
     // A paint's properties are its existing field set: the editable name, the
@@ -403,7 +357,7 @@ describe("the paint section", () => {
     const paints = paintActions();
     const panel = createTokenInspectorPanel(document.body, actions(paints));
     panel.render({ kind: "paint", id: "background" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
 
     await edit(field(panel.root, "[data-yunari-palette-name]"), "Renamed");
@@ -421,7 +375,7 @@ describe("the paint section", () => {
     const paints = paintActions();
     const panel = createTokenInspectorPanel(document.body, actions(paints));
     panel.render({ kind: "paint", id: "background" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
 
     // The replacement names the other paints only, and defaults to the first.
@@ -441,7 +395,7 @@ describe("the paint section", () => {
     });
     const panel = createTokenInspectorPanel(document.body, actions(paints));
     panel.render({ kind: "paint", id: "background" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
 
     expect(
@@ -455,7 +409,7 @@ describe("the paint section", () => {
       actions(paintActions()),
     );
     bare.render({ kind: "paint", id: "background" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
     expect(bare.root.querySelector("[data-yunari-palette-users]")).toBeNull();
     panel.destroy();
@@ -468,7 +422,7 @@ describe("the paint section", () => {
       actions(paintActions()),
     );
     panel.render({ kind: "paint", id: "background" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
 
     expect(
@@ -494,7 +448,7 @@ describe("the paint section", () => {
     const paints: PaintPort = { ...paintActions(), palette: () => palette };
     const panel = createTokenInspectorPanel(document.body, actions(paints));
     panel.render({ kind: "paint", id: "background" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
     const before = panel.root.querySelector("[data-yunari-palette-fields]");
     expect(before).not.toBeNull();
@@ -514,7 +468,7 @@ describe("the paint section", () => {
       },
     };
     panel.render({ kind: "paint", id: "background" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
 
     expect(panel.root.querySelector("[data-yunari-palette-fields]")).not.toBe(
@@ -530,13 +484,13 @@ describe("the paint section", () => {
     const paints = paintActions();
     const panel = createTokenInspectorPanel(document.body, actions(paints));
     panel.render({ kind: "paint", id: "background" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
     const before = panel.root.querySelector("[data-yunari-palette-fields]");
     expect(before).not.toBeNull();
 
     panel.render({ kind: "paint", id: "accent" }, PRESETS, {
-      typePresets: PRESETS,
+      typeTokens: PRESETS,
     });
 
     expect(panel.root.querySelector("[data-yunari-palette-fields]")).not.toBe(

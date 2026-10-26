@@ -1,20 +1,18 @@
 import type {
   FabricGlobals,
   FabricPalette,
-  TypePreset,
+  TypeToken,
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { ControlNumber } from "../../components/ui/control-number.js";
 import { ControlSelect } from "../../components/ui/control-select.js";
 import { ControlText } from "../../components/ui/control-text.js";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
 import type { TokenRef } from "../../editor-shell/shell-stores.js";
 import type { PaletteTokenUse } from "../../palette-manager/panel.js";
-import { FONT_ROLES, type FontTrioRole } from "../../type-preset-apply.js";
-import type { TypePresets } from "../../type-preset-manager/panel.js";
+import type { TypeTokens } from "../../type-preset-manager/panel.js";
 import { uiCopy } from "../../ui-copy.js";
 import { PaintFields } from "./paint-fields.js";
 
@@ -44,7 +42,7 @@ export interface TokenInspectorPanel {
   readonly root: HTMLElement;
   render(
     ref: TokenRef | undefined,
-    presets: TypePresets,
+    presets: TypeTokens,
     globals: FabricGlobals | undefined,
   ): void;
   /** Unmounts the React tree, then removes the section. A React root
@@ -61,9 +59,8 @@ export interface FaceChoice {
 }
 
 export interface TokenInspectorActions {
-  readonly onChange: (presets: TypePresets) => void;
+  readonly onChange: (presets: TypeTokens) => void;
   readonly onDelete: (id: string, replacement: string) => void;
-  readonly setRole: (id: string, role: FontTrioRole | null) => void;
   readonly unbindFace: (id: string) => void;
   /** Every declared face of a family, so a bound preset's weight is a list of
    *  the weights the package actually holds rather than free text that would
@@ -98,7 +95,7 @@ export function createTokenInspectorPanel(
   const reactRoot: Root = createRoot(root);
   const draw = (
     ref: TokenRef | undefined,
-    presets: TypePresets,
+    presets: TypeTokens,
     _globals: FabricGlobals | undefined,
   ): void => {
     flushSync(() => {
@@ -121,7 +118,7 @@ export function createTokenInspectorPanel(
 
 function TokenInspector(props: {
   readonly tokenRef: TokenRef | undefined;
-  readonly presets: TypePresets;
+  readonly presets: TypeTokens;
   readonly actions: TokenInspectorActions;
 }): React.JSX.Element | null {
   const { tokenRef, presets, actions } = props;
@@ -167,14 +164,14 @@ function TokenInspector(props: {
 
 function PresetFields(props: {
   readonly id: string;
-  readonly entry: { readonly name: string; readonly value: TypePreset };
-  readonly presets: TypePresets;
+  readonly entry: TypeToken;
+  readonly presets: TypeTokens;
   readonly actions: TokenInspectorActions;
 }): React.JSX.Element {
   const { id, entry, presets, actions } = props;
-  const value = entry.value;
-  const put = (next: TypePreset, name = entry.name): void => {
-    actions.onChange({ ...presets, [id]: { name, value: next } });
+  const value = entry;
+  const put = (next: TypeToken): void => {
+    actions.onChange({ ...presets, [id]: next });
   };
   // Lightest first: a weight list reads 400, 500, 700, not declaration order.
   const faces =
@@ -196,7 +193,7 @@ function PresetFields(props: {
       className="flex flex-col gap-[var(--space-8)]"
     >
       <h2 className="text-xs font-semibold tracking-[0.11em] text-muted uppercase">
-        {uiCopy.panels.typePreset}
+        {uiCopy.panels.typeToken}
       </h2>
       <span
         data-yunari-token-specimen=""
@@ -206,31 +203,6 @@ function PresetFields(props: {
       >
         Aa
       </span>
-      <ControlText
-        label={uiCopy.panels.name}
-        data={{ "data-yunari-token-name": "" }}
-        value={entry.name}
-        onCommit={(next) => {
-          const trimmed = next.trim();
-          if (trimmed === "") return;
-          put(value, trimmed);
-        }}
-      />
-      <ControlSelect
-        label={uiCopy.assets.fontPreview.roleLabel}
-        data={{ "data-yunari-token-role": "" }}
-        value={value.trioRole ?? ""}
-        options={[
-          { id: "", name: uiCopy.panels.none },
-          ...FONT_ROLES.map((role) => ({
-            id: role,
-            name: uiCopy.assets.fontPreview.role[role],
-          })),
-        ]}
-        onChange={(next) =>
-          actions.setRole(id, next === "" ? null : (next as FontTrioRole))
-        }
-      />
       {value.face === undefined ? (
         <>
           <ControlText
@@ -304,43 +276,6 @@ function PresetFields(props: {
           </button>
         </div>
       )}
-      <ControlNumber
-        label={uiCopy.panels.size}
-        data={{ "data-yunari-token-size": "" }}
-        value={value.size}
-        onCommit={(size) => {
-          // A preset's size cannot be zero or negative; `ControlNumber` refuses
-          // a non-number, and this refuses the number it lets through.
-          if (!Number.isFinite(size) || size <= 0) return;
-          put({ ...value, size });
-        }}
-      />
-      <ControlNumber
-        label={uiCopy.panels.lineHeight}
-        data={{ "data-yunari-token-line-height": "" }}
-        value={value.lineHeight}
-        onClear={() => {
-          const { lineHeight: _lineHeight, ...rest } = value;
-          put(rest);
-        }}
-        onCommit={(lineHeight) => {
-          if (!Number.isFinite(lineHeight) || lineHeight <= 0) return;
-          put({ ...value, lineHeight });
-        }}
-      />
-      <ControlNumber
-        label={uiCopy.panels.letterSpacing}
-        data={{ "data-yunari-token-letter-spacing": "" }}
-        value={value.letterSpacing}
-        onClear={() => {
-          const { letterSpacing: _letterSpacing, ...rest } = value;
-          put(rest);
-        }}
-        onCommit={(letterSpacing) => {
-          if (!Number.isFinite(letterSpacing)) return;
-          put({ ...value, letterSpacing });
-        }}
-      />
       <Deletion id={id} presets={presets} actions={actions} />
     </div>
   );
@@ -367,14 +302,17 @@ function ReadOnlyPair(props: {
  */
 function Deletion(props: {
   readonly id: string;
-  readonly presets: TypePresets;
+  readonly presets: TypeTokens;
   readonly actions: TokenInspectorActions;
 }): React.JSX.Element {
   const { id, presets, actions } = props;
   const [picked, setPicked] = useState<string | undefined>(undefined);
   const options = Object.entries(presets)
     .filter(([candidate]) => candidate !== id)
-    .map(([candidate, entry]) => ({ id: candidate, name: entry.name }));
+    .map(([candidate, token]) => ({
+      id: candidate,
+      name: `${candidate} ${token.family}${token.weight === undefined ? "" : ` ${token.weight}`}`,
+    }));
   const replacement =
     picked !== undefined && picked !== id && presets[picked] !== undefined
       ? picked

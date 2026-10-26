@@ -11,7 +11,7 @@ import { YUNARI_TEXT_PROPERTY } from "./fabric-text.js";
  * preset field that never reaches the object here is authored, editable and
  * invisible everywhere except the editor.
  */
-export function applyObjectTypePresets(
+export function applyObjectTypeTokens(
   canvas: StaticCanvas,
   globals: Globals | undefined,
 ): void {
@@ -25,10 +25,10 @@ export function applyObjectTypePresets(
 }
 
 /** Rewrite persisted text-run preset references before a preset is removed. */
-export function reassignObjectTypePresetReferences(
+export function reassignObjectTypeTokenReferences(
   canvas: StaticCanvas,
-  from: `typePresets.${string}`,
-  to: `typePresets.${string}`,
+  from: `typeTokens.${string}`,
+  to: `typeTokens.${string}`,
 ): number {
   let changes = 0;
   const visit = (objects: readonly ReassignableObject[]): void => {
@@ -36,9 +36,9 @@ export function reassignObjectTypePresetReferences(
       const text = object.get(YUNARI_TEXT_PROPERTY);
       if (isAuthoredText(text)) {
         const runs = text.runs.map((run) => {
-          if (run.typePreset !== from) return run;
+          if (run.typeToken !== from) return run;
           changes += 1;
-          return { ...run, typePreset: to };
+          return { ...run, typeToken: to };
         });
         object.set(YUNARI_TEXT_PROPERTY, { ...text, runs });
       }
@@ -55,23 +55,15 @@ function applyTypes(
 ): void {
   for (const object of objects) {
     const run = firstRun(object.get(YUNARI_TEXT_PROPERTY));
-    const ref = run?.["typePreset"];
+    const ref = run?.["typeToken"];
     const value =
-      typeof ref === "string" && ref.startsWith("typePresets.")
-        ? globals?.typePresets?.[ref.slice("typePresets.".length)]?.value
+      typeof ref === "string" && ref.startsWith("typeTokens.")
+        ? globals?.typeTokens?.[ref.slice("typeTokens.".length)]
         : undefined;
     if (isPreset(value)) {
       object.set({
         fontFamily: value.family,
-        fontSize: value.size,
         ...(value.weight === undefined ? {} : { fontWeight: value.weight }),
-        ...(value.lineHeight === undefined
-          ? {}
-          : { lineHeight: value.lineHeight }),
-        // Fabric measures spacing in 1/1000 em, so the ratio needs the size it
-        // is being applied with. A size or spacing that cannot convert leaves
-        // the last honest value rather than becoming a plausible-looking one.
-        ...charSpacingOf(value),
       });
     }
     if (object instanceof Group) applyTypes(object.getObjects(), globals);
@@ -80,30 +72,8 @@ function applyTypes(
 
 type Preset = {
   family: string;
-  size: number;
   weight?: string | number;
-  letterSpacing?: number;
-  lineHeight?: number;
 };
-
-/**
- * Fabric's `charSpacing` as 1/1000 em, or nothing when the preset cannot say
- * what the spacing is.
- *
- * Per-character tracking is not expressible — Fabric measures spacing once from
- * the object — so one run's spacing is the whole object's: the first run's,
- * which is the run whose preset the object already takes its type from. The run
- * editor says so where an author picks the preset.
- */
-function charSpacingOf(
-  value: Preset,
-): { charSpacing: number } | Record<string, never> {
-  const { letterSpacing, size } = value;
-  if (letterSpacing === undefined) return { charSpacing: 0 };
-  if (!Number.isFinite(letterSpacing) || !Number.isFinite(size) || size <= 0)
-    return {};
-  return { charSpacing: (letterSpacing / size) * 1000 };
-}
 
 type PaintableObject = {
   get(name: string): unknown;
@@ -115,7 +85,7 @@ type ReassignableObject = {
 };
 
 type AuthoredRun = {
-  readonly typePreset?: string;
+  readonly typeToken?: string;
   readonly [key: string]: unknown;
 };
 type AuthoredText = {
@@ -148,7 +118,6 @@ function isPreset(value: unknown): value is Preset {
   return (
     typeof value === "object" &&
     value !== null &&
-    typeof (value as Record<string, unknown>)["family"] === "string" &&
-    typeof (value as Record<string, unknown>)["size"] === "number"
+    typeof (value as Record<string, unknown>)["family"] === "string"
   );
 }

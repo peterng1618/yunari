@@ -33,13 +33,13 @@ const literalClock: readonly TextRun[] = [
   {
     kind: "literal",
     text: "07:24",
-    typePreset: "typePresets.70-300",
+    typeToken: "typeTokens.70-300",
     style: { color: { ref: "palette.text" } },
   },
 ];
 
 const TRACKING_GLOBALS = {
-  typePresets: {
+  typeTokens: {
     tracked: {
       name: "Tracked",
       value: { family: "Inter", size: 32, letterSpacing: 4 },
@@ -66,7 +66,7 @@ describe("binding a text run to a sensor", () => {
     expect(box.runs()[0]).toMatchObject({
       kind: "value",
       bindingId: binding?.id,
-      typePreset: "typePresets.70-300",
+      typeToken: "typeTokens.70-300",
       style: { color: { ref: "palette.text" } },
     });
     return box.dispose();
@@ -408,7 +408,7 @@ describe("binding a text run to a sensor", () => {
     expect(box.stored()).toEqual([]);
     expect(box.runs()[0]).toMatchObject({
       kind: "literal",
-      typePreset: "typePresets.70-300",
+      typeToken: "typeTokens.70-300",
     });
     return box.dispose();
   });
@@ -416,8 +416,8 @@ describe("binding a text run to a sensor", () => {
 
 describe("what a run cannot carry", () => {
   const mixedRuns: readonly TextRun[] = [
-    { kind: "literal", text: "CPU ", typePreset: "typePresets.plain" },
-    { kind: "literal", text: "42%", typePreset: "typePresets.tracked" },
+    { kind: "literal", text: "CPU ", typeToken: "typeTokens.plain" },
+    { kind: "literal", text: "42%", typeToken: "typeTokens.tracked" },
   ];
 
   it("says a second run's tracking is not shown separately", async () => {
@@ -427,7 +427,7 @@ describe("what a run cannot carry", () => {
     const box = mountRunEditor({ runs: mixedRuns, globals: TRACKING_GLOBALS });
 
     expect(box.notes()).toHaveLength(1);
-    expect(box.notes()[0]).toContain("typePresets.tracked");
+    expect(box.notes()[0]).toContain("typeTokens.tracked");
     expect(box.notes()[0]).toContain("one tracking value");
     return box.dispose();
   });
@@ -437,7 +437,7 @@ describe("what a run cannot carry", () => {
     // note here would train the author to ignore the ones that matter.
     const box = mountRunEditor({
       runs: [
-        { kind: "literal", text: "YUNARI", typePreset: "typePresets.tracked" },
+        { kind: "literal", text: "YUNARI", typeToken: "typeTokens.tracked" },
       ],
       globals: TRACKING_GLOBALS,
     });
@@ -451,7 +451,7 @@ describe("what a run cannot carry", () => {
     // run asking for the value the object already carries loses nothing, and
     // warning about it would teach the author to ignore the note.
     const same = {
-      typePresets: {
+      typeTokens: {
         tracked: {
           name: "Tracked",
           value: { family: "Inter", size: 32, letterSpacing: 4 },
@@ -460,8 +460,8 @@ describe("what a run cannot carry", () => {
     } as unknown as FabricGlobals;
     const box = mountRunEditor({
       runs: [
-        { kind: "literal", text: "CPU ", typePreset: "typePresets.tracked" },
-        { kind: "literal", text: "42%", typePreset: "typePresets.tracked" },
+        { kind: "literal", text: "CPU ", typeToken: "typeTokens.tracked" },
+        { kind: "literal", text: "42%", typeToken: "typeTokens.tracked" },
       ],
       globals: same,
     });
@@ -478,7 +478,7 @@ describe("what a run cannot carry", () => {
     const box = mountRunEditor({ runs: mixedRuns, globals: TRACKING_GLOBALS });
 
     expect(box.notes()).toHaveLength(1);
-    expect(box.notes()[0]).toContain("typePresets.tracked");
+    expect(box.notes()[0]).toContain("typeTokens.tracked");
     return box.dispose();
   });
 
@@ -487,9 +487,9 @@ describe("what a run cannot carry", () => {
     // three-run shape is now covered once, in the place that renders it.
     const box = mountRunEditor({
       runs: [
-        { kind: "literal", text: "CPU ", typePreset: "typePresets.plain" },
-        { kind: "literal", text: "48", typePreset: "typePresets.tracked" },
-        { kind: "literal", text: " %", typePreset: "typePresets.tracked" },
+        { kind: "literal", text: "CPU ", typeToken: "typeTokens.plain" },
+        { kind: "literal", text: "48", typeToken: "typeTokens.tracked" },
+        { kind: "literal", text: " %", typeToken: "typeTokens.tracked" },
       ],
       globals: TRACKING_GLOBALS,
     });
@@ -502,8 +502,8 @@ describe("what a run cannot carry", () => {
   it("says nothing when no run tracks", async () => {
     const box = mountRunEditor({
       runs: [
-        { kind: "literal", text: "CPU ", typePreset: "typePresets.plain" },
-        { kind: "literal", text: "42%", typePreset: "typePresets.plain" },
+        { kind: "literal", text: "CPU ", typeToken: "typeTokens.plain" },
+        { kind: "literal", text: "42%", typeToken: "typeTokens.plain" },
       ],
       globals: TRACKING_GLOBALS,
     });
@@ -515,7 +515,7 @@ describe("what a run cannot carry", () => {
 
 describe("how many runs a text object has", () => {
   const globals = {
-    typePresets: {
+    typeTokens: {
       "60-600": { name: "Reading", value: { family: "Inter", size: 60 } },
       "20-400": { name: "Unit", value: { family: "Inter", size: 20 } },
     },
@@ -525,8 +525,8 @@ describe("how many runs a text object has", () => {
   } as unknown as FabricGlobals;
 
   const readingAndUnit: readonly TextRun[] = [
-    { kind: "value", bindingId: "load", typePreset: "typePresets.60-600" },
-    { kind: "literal", text: "%", typePreset: "typePresets.20-400" },
+    { kind: "value", bindingId: "load", typeToken: "typeTokens.60-600" },
+    { kind: "literal", text: "%", typeToken: "typeTokens.20-400" },
   ];
 
   it("appends a run that looks the way the one before it does", async () => {
@@ -540,7 +540,7 @@ describe("how many runs a text object has", () => {
     expect(box.runs()[1]).toMatchObject({
       kind: "literal",
       text: "",
-      typePreset: "typePresets.70-300",
+      typeToken: "typeTokens.70-300",
     });
     return box.dispose();
   });
@@ -596,7 +596,7 @@ describe("how many runs a text object has", () => {
     const box = mountRunEditor({
       runs: [
         ...readingAndUnit,
-        { kind: "literal", text: " of 4", typePreset: "typePresets.20-400" },
+        { kind: "literal", text: " of 4", typeToken: "typeTokens.20-400" },
       ],
       globals,
       arrived: ["cpu.load"],
@@ -620,58 +620,58 @@ describe("how many runs a text object has", () => {
 
 describe("which type preset a run is set in", () => {
   const globals = {
-    typePresets: {
-      "24-400": { name: "Card title", value: { family: "Inter", size: 24 } },
-      "46-600": { name: "Ring unit", value: { family: "Inter", size: 46 } },
-      mono: { name: "Mono", value: { family: "Inter", size: 14 } },
+    typeTokens: {
+      "24-400": { family: "Inter", weight: 400 },
+      "46-600": { family: "Inter", weight: 600 },
+      mono: { family: "Fira Code" },
     },
     palette: {
       text: { name: "Text", value: { kind: "solid", color: "#fff" } },
     },
   } as unknown as FabricGlobals;
 
-  it("lists each preset under the name the type preset panel lists it by", async () => {
+  it("lists each preset under the label the type preset panel lists it by", async () => {
     // Two dropdowns, thirteen presets, one document — and the run editor printed
     // the ids (`24-400`) where every other reference picker in the editor prints
-    // the authored name (`Card title`). An author who read one could not find the
-    // same preset in the other, a field apart.
+    // the token's own label (`Inter 400`). An author who read one could not find
+    // the same preset in the other, a field apart.
     const box = mountRunEditor({
-      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.24-400" }],
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.24-400" }],
       globals,
     });
 
     expect(await optionsOf(box.host, 'data-yunari-run-preset="0"')).toEqual([
-      "Card title",
-      "Ring unit",
-      "Mono",
+      "Inter 400",
+      "Inter 600",
+      "Fira Code",
     ]);
     return box.dispose();
   });
 
   it("stores the reference, not the name it shows", async () => {
     const box = mountRunEditor({
-      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.24-400" }],
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.24-400" }],
       globals,
     });
 
-    await choose(box.host, 'data-yunari-run-preset="0"', "Ring unit");
+    await choose(box.host, 'data-yunari-run-preset="0"', "Inter 600");
 
     // The label is display; the value is what persists. Changing the first must
     // not change the second.
-    expect(box.runs()[0]?.typePreset).toBe("typePresets.46-600");
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.46-600");
     return box.dispose();
   });
 
   it("shows the preset the run is actually set in", async () => {
     const box = mountRunEditor({
-      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.46-600" }],
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.46-600" }],
       globals,
     });
 
     // The control was never mis-bound — it holds the stored reference, which is
     // what the run carries. What an author could not do was read the option it
     // had landed on and match it against the list beside it.
-    expect(valueText(box.host, 'data-yunari-run-preset="0"')).toBe("Ring unit");
+    expect(valueText(box.host, 'data-yunari-run-preset="0"')).toBe("Inter 600");
     return box.dispose();
   });
 });
@@ -725,7 +725,7 @@ describe("which palette token a run's colour is set in", () => {
 
 describe("which binding a value run carries", () => {
   const bound: readonly TextRun[] = [
-    { kind: "value", bindingId: "load", typePreset: "typePresets.60-600" },
+    { kind: "value", bindingId: "load", typeToken: "typeTokens.60-600" },
   ];
 
   it("names the key, and says nothing is missing, when a reading has arrived", async () => {
@@ -771,7 +771,7 @@ describe("which binding a value run carries", () => {
         {
           kind: "literal",
           text: "Free space",
-          typePreset: "typePresets.60-600",
+          typeToken: "typeTokens.60-600",
         },
         { kind: "value", bindingId: "disk.free" },
       ],

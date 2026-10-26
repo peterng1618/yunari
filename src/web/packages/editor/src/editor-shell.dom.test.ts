@@ -604,11 +604,8 @@ function legacyTextEnvelope(): NonNullable<
         none: { name: "None", value: { kind: "solid", color: "transparent" } },
         ink: { name: "Ink", value: { kind: "solid", color: "#112233" } },
       },
-      typePresets: {
-        body: {
-          name: "Body",
-          value: { family: "Inter", size: 24, weight: 400, lineHeight: 1.2 },
-        },
+      typeTokens: {
+        body: { family: "Inter", weight: 400 },
       },
     },
     metadata: { themeLanguage: "en" },
@@ -626,7 +623,7 @@ function legacyTextEnvelope(): NonNullable<
               {
                 kind: "literal",
                 text: "CPU 48%",
-                typePreset: "typePresets.body",
+                typeToken: "typeTokens.body",
                 style: { color: { ref: "palette.ink" } },
               },
             ],

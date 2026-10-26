@@ -1,27 +1,27 @@
-import { reassignObjectTypePresetReferences } from "@yunari/scene-fabric";
+import { reassignObjectTypeTokenReferences } from "@yunari/scene-fabric";
 import type { Canvas } from "fabric/es";
-import type { TypePresets } from "./panel.js";
+import type { TypeTokens } from "./panel.js";
 
 /** Rewrites every canvas reference to a deleted type preset and drops it. */
-export function reassignTypePresetToken(
+export function reassignTypeToken(
   canvas: Canvas,
-  typePresets: TypePresets,
+  typeTokens: TypeTokens,
   id: string,
   replacement: string,
-): TypePresets {
-  reassignObjectTypePresetReferences(
+): TypeTokens {
+  reassignObjectTypeTokenReferences(
     canvas,
-    `typePresets.${id}` as const,
-    `typePresets.${replacement}` as const,
+    `typeTokens.${id}` as const,
+    `typeTokens.${replacement}` as const,
   );
-  const next = { ...typePresets };
+  const next = { ...typeTokens };
   delete next[id];
   return next;
 }
 
 export {
-  createTypePresetPanel,
-  type TypePresetFontActions,
-  type TypePresetPanel,
-  type TypePresets,
+  createTypeTokenPanel,
+  type TypeTokenFontActions,
+  type TypeTokenPanel,
+  type TypeTokens,
 } from "./panel.js";

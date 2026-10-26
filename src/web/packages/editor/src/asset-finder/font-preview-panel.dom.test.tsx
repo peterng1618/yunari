@@ -3,7 +3,7 @@ import type { AssetResult, FontCut, FontTrioInfo } from "@yunari/renderer-core";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import type { TypePresets } from "../type-preset-manager/panel.js";
+import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   FontPreviewPanel,
@@ -64,37 +64,14 @@ const family: AssetResult & { font: { cuts: FontCut[] } } = {
   font: { cuts: [cut("Manrope", 400), cut("Manrope", 700)] },
 };
 
-const starter: TypePresets = {
-  clock108: {
-    name: "Clock 108",
-    value: { family: "Yaldevi", size: 108, weight: 300, trioRole: "heading" },
-  },
-  clock72: {
-    name: "Clock 72",
-    value: { family: "Yaldevi", size: 72, weight: 600, trioRole: "heading" },
-  },
-  body16: {
-    name: "Body 16",
-    value: {
-      family: "Libre Franklin",
-      size: 16,
-      weight: 400,
-      trioRole: "body",
-    },
-  },
-  mono14: {
-    name: "Mono 14",
-    value: {
-      family: "Spline Sans Mono",
-      size: 14,
-      weight: 400,
-      trioRole: "mono",
-    },
-  },
+const starter: TypeTokens = {
+  heading: { family: "Yaldevi", weight: 300 },
+  body: { family: "Libre Franklin", weight: 400 },
+  mono: { family: "Spline Sans Mono", weight: 400 },
 };
 
-const roleless: TypePresets = {
-  plain: { name: "Plain", value: { family: "Segoe UI", size: 14 } },
+const roleless: TypeTokens = {
+  plain: { family: "Segoe UI" },
 };
 
 let root: HTMLDivElement | undefined;
@@ -146,7 +123,7 @@ function stubFonts(load: () => Promise<unknown> = async () => undefined) {
 
 function panel(props: {
   readonly selected: FontResult;
-  readonly presets?: TypePresets;
+  readonly presets?: TypeTokens;
   readonly onApplyTrio?: (value: FontTrioInfo) => void;
   readonly onAddTrioPresets?: (value: FontTrioInfo) => void;
   readonly onAddPreset?: (value: FontCut, role: FontRole) => void;
@@ -222,17 +199,17 @@ it("names the apply scope and each before→after row", () => {
   mount(panel({ selected: trio, onApplyTrio, onAddTrioPresets }));
 
   expect(document.querySelector("[data-yunari-font-scope]")?.textContent).toBe(
-    "Heading × 2 · Body × 1 · Mono × 1",
+    "Heading × 1 · Body × 1 · Mono × 1",
   );
   expect(
     document.querySelector('[data-yunari-font-change="heading"]')?.textContent,
-  ).toBe("Clock 108 · 300 → Manrope 700");
+  ).toBe("Yaldevi · 300 → Manrope 700");
   expect(
     document.querySelector('[data-yunari-font-change="body"]')?.textContent,
-  ).toBe("Body 16 · 400 → IBM Plex Sans 400");
+  ).toBe("Libre Franklin · 400 → IBM Plex Sans 400");
   expect(
     document.querySelector('[data-yunari-font-change="mono"]')?.textContent,
-  ).toBe("Mono 14 · 400 → IBM Plex Mono 400");
+  ).toBe("Spline Sans Mono · 400 → IBM Plex Mono 400");
 
   act(() => {
     button("[data-yunari-font-add-presets]").click();

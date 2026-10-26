@@ -87,7 +87,7 @@ vi.mock("./palette-manager/index.js", async (importOriginal) => {
 /** The panel's two ports are held so a test can drive a rename the way the
  *  panel's own field does — the panel is a double here, so nothing else
  *  reaches `EditorDocument.setTypes`. */
-const typePresetPortMock = vi.hoisted(() => ({
+const typeTokenPortMock = vi.hoisted(() => ({
   change: undefined as ((presets: Record<string, unknown>) => void) | undefined,
   remove: undefined as ((id: string, replacement: string) => void) | undefined,
 }));
@@ -95,16 +95,16 @@ vi.mock("./type-preset-manager/index.js", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("./type-preset-manager/index.js")>();
   return {
-    // Only the panel is doubled. `reassignTypePresetToken` is the document's
+    // Only the panel is doubled. `reassignTypeToken` is the document's
     // delete path and stays the real one, so a delete case exercises it.
     ...actual,
-    createTypePresetPanel: (
+    createTypeTokenPanel: (
       _host: unknown,
       change: (presets: Record<string, unknown>) => void,
       remove: (id: string, replacement: string) => void,
     ) => {
-      typePresetPortMock.change = change;
-      typePresetPortMock.remove = remove;
+      typeTokenPortMock.change = change;
+      typeTokenPortMock.remove = remove;
       return panel();
     },
   };
@@ -660,7 +660,7 @@ describe("EditorSession", () => {
     extensions.destroy();
   });
 
-  it("adopts a trio and replaces every assigned preset face", async () => {
+  it("adopts a trio, replacing every role token and leaving a non-role alone", async () => {
     const fetch = vi.fn(async () => new Response(new Uint8Array([1, 2, 3])));
     vi.stubGlobal("fetch", fetch);
     const onAssetCountChange = vi.fn();
@@ -694,26 +694,10 @@ describe("EditorSession", () => {
       envelope: {
         ...envelope,
         globals: {
-          typePresets: {
-            heading: {
-              name: "Heading",
-              value: {
-                family: "Segoe UI",
-                size: 32,
-                weight: "500",
-                trioRole: "heading",
-              },
-            },
-            metric: {
-              name: "Metric",
-              value: {
-                family: "Segoe UI",
-                size: 70,
-                weight: "300",
-                trioRole: "heading",
-              },
-            },
-            custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+          typeTokens: {
+            heading: { family: "Segoe UI", weight: "500" },
+            metric: { family: "Segoe UI", weight: "300" },
+            custom: { family: "Georgia" },
           },
         },
       },
@@ -741,24 +725,14 @@ describe("EditorSession", () => {
     const heading = fontTrio("minimal")!.faces[0]!;
 
     expect(fetch).toHaveBeenCalledTimes(3);
-    expect(result.globals?.typePresets).toMatchObject({
+    expect(result.globals?.typeTokens).toMatchObject({
       heading: {
-        value: {
-          family: heading.family,
-          size: 32,
-          weight: heading.weight,
-          face: { assetId: heading.id },
-        },
+        family: heading.family,
+        weight: heading.weight,
+        face: { assetId: heading.id },
       },
-      metric: {
-        value: {
-          family: heading.family,
-          size: 70,
-          weight: heading.weight,
-          face: { assetId: heading.id },
-        },
-      },
-      custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+      metric: { family: "Segoe UI", weight: "300" },
+      custom: { family: "Georgia" },
     });
     expect(result.assets).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: heading.id })]),
@@ -803,16 +777,11 @@ describe("EditorSession", () => {
       envelope: {
         ...envelope,
         globals: {
-          typePresets: {
+          typeTokens: {
             heading: {
-              name: "Heading",
-              value: {
-                family: "Segoe UI",
-                size: 32,
-                weight: "700",
-                trioRole: "heading",
-                face: { assetId: fontTrio("minimal")!.faces[0]!.id },
-              },
+              family: "Segoe UI",
+              weight: "700",
+              face: { assetId: fontTrio("minimal")!.faces[0]!.id },
             },
           },
         },
@@ -831,15 +800,11 @@ describe("EditorSession", () => {
 
     const result = await extensions.applyPresetFace("heading", body);
 
-    expect(result.globals?.typePresets).toMatchObject({
+    expect(result.globals?.typeTokens).toMatchObject({
       heading: {
-        value: {
-          family: body.family,
-          size: 32,
-          weight: body.weight,
-          trioRole: "heading",
-          face: { assetId: body.id },
-        },
+        family: body.family,
+        weight: body.weight,
+        face: { assetId: body.id },
       },
     });
     expect(result.assets).toEqual(
@@ -982,11 +947,8 @@ describe("EditorSession", () => {
       envelope: {
         ...envelope,
         globals: {
-          typePresets: {
-            heading: {
-              name: "Heading",
-              value: { family: "Segoe UI", size: 32, trioRole: "heading" },
-            },
+          typeTokens: {
+            heading: { family: "Segoe UI", weight: "500" },
           },
         },
       },
@@ -1003,11 +965,8 @@ describe("EditorSession", () => {
     });
 
     await expect(extensions.applyFontTrio("minimal")).rejects.toThrow("404");
-    expect(extensions.envelope.globals?.typePresets).toEqual({
-      heading: {
-        name: "Heading",
-        value: { family: "Segoe UI", size: 32, trioRole: "heading" },
-      },
+    expect(extensions.envelope.globals?.typeTokens).toEqual({
+      heading: { family: "Segoe UI", weight: "500" },
     });
     expect(shell.editor.historyManager.saveState).not.toHaveBeenCalled();
     extensions.destroy();
@@ -1090,7 +1049,7 @@ describe("EditorSession", () => {
     const text = new IText("Hi", { left: 0, top: 0 });
     text.set({
       yunariText: {
-        runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+        runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
       },
     });
     const selectionHost = document.createElement("div");
@@ -1123,14 +1082,14 @@ describe("EditorSession", () => {
       setGlobals: vi.fn(),
       refreshGlass: vi.fn(),
     };
-    const presets = (name: string) => ({
-      body: { name, value: { family: "Inter", size: 16, weight: "600" } },
+    const presets = (_name: string) => ({
+      body: { family: "Inter", weight: "600" },
     });
     const extensions = new EditorSession({
       assetManager: new AssetManager(),
       shell: shell as never,
       source: {} as never,
-      envelope: { ...envelope, globals: { typePresets: presets("Body") } },
+      envelope: { ...envelope, globals: { typeTokens: presets("Body") } },
       panelHosts: {
         add: document.body,
         assets: document.body,
@@ -1151,7 +1110,7 @@ describe("EditorSession", () => {
     expect(printed()).toBe("Body");
 
     // The panel's own field writes the whole map, which is what a rename is.
-    typePresetPortMock.change?.(presets("Body Renamed"));
+    typeTokenPortMock.change?.(presets("Body Renamed"));
 
     expect(printed()).toBe("Body Renamed");
     extensions.destroy();
@@ -1166,8 +1125,8 @@ describe("EditorSession", () => {
     document.body.append(selectionHost);
     const tokenSelection = new TokenSelectionStore(new SelectionStore());
     const presets = {
-      body: { name: "Body", value: { family: "Inter", size: 16 } },
-      caption: { name: "Caption", value: { family: "Inter", size: 12 } },
+      body: { family: "Inter" },
+      caption: { family: "Inter" },
     };
     const paints = {
       background: {
@@ -1212,7 +1171,7 @@ describe("EditorSession", () => {
       source: {} as never,
       envelope: {
         ...envelope,
-        globals: { typePresets: presets, palette: paints },
+        globals: { typeTokens: presets, palette: paints },
       },
       panelHosts: {
         add: document.body,
@@ -1240,7 +1199,7 @@ describe("EditorSession", () => {
     tokenSelection.set({ kind: "preset", id: "body" });
     expect(objectColumn?.style.display).toBe("none");
     expect(
-      tokenColumn?.querySelector("[data-yunari-token-name]"),
+      tokenColumn?.querySelector("[data-yunari-token-family]"),
     ).not.toBeNull();
 
     tokenSelection.clear();
@@ -1286,9 +1245,9 @@ describe("EditorSession", () => {
     tokenSelection.set({ kind: "preset", id: "caption" });
     expect(objectColumn?.style.display).toBe("none");
     expect(
-      tokenColumn?.querySelector("[data-yunari-token-name]"),
+      tokenColumn?.querySelector("[data-yunari-token-family]"),
     ).not.toBeNull();
-    typePresetPortMock.change?.({});
+    typeTokenPortMock.change?.({});
     // The document batches a task's announcements into one flush, so the
     // re-render that drops the ref arrives on the microtask.
     await Promise.resolve();
@@ -2119,8 +2078,8 @@ describe("a save that carries only what changed", () => {
       envelope: {
         ...opened,
         globals: {
-          typePresets: {
-            heading: { name: "Heading", value: { family: "Inter" } },
+          typeTokens: {
+            heading: { family: "Inter" },
           },
         },
         assets: [
@@ -2676,11 +2635,13 @@ describe("the local font import", () => {
     await extensions.actionFacade().savePackage();
     const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
     const presets =
-      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typePresets ??
+      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens ??
       {};
     expect(Object.values(presets)).toHaveLength(1);
     expect(Object.values(presets)[0]).toMatchObject({
-      value: { family: "Inter", weight: 700, face: { assetId: "Inter-Bold" } },
+      family: "Inter",
+      weight: 700,
+      face: { assetId: "Inter-Bold" },
     });
     expect(saveMock).toHaveBeenLastCalledWith(
       expect.anything(),
@@ -2727,7 +2688,7 @@ describe("the local font import", () => {
     await extensions.actionFacade().savePackage();
     const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
     expect(
-      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typePresets,
+      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens,
     ).toBeUndefined();
     expect(saved?.[3]).toBeUndefined();
 
@@ -2819,11 +2780,11 @@ describe("the local font import", () => {
     await extensions.actionFacade().savePackage();
     const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
     const presets =
-      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typePresets ??
+      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens ??
       {};
     expect(Object.values(presets)).toHaveLength(1);
     expect(Object.values(presets)[0]).toMatchObject({
-      value: { face: { assetId: face.id } },
+      face: { assetId: face.id },
     });
     const shipped = saved?.[3] as
       | { readonly entries: readonly ThemeCreditsEntry[] }
@@ -2845,11 +2806,8 @@ describe("arming a text placement from every surface", () => {
     palette: {
       ink: { name: "Ink", value: { kind: "solid" as const, color: "#102030" } },
     },
-    typePresets: {
-      body: {
-        name: "Body",
-        value: { family: "Inter", size: 16, weight: "600" },
-      },
+    typeTokens: {
+      body: { family: "Inter", size: 16, weight: "600" },
     },
   };
   const withGlobals = { ...envelope, globals };

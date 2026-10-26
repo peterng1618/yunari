@@ -8,7 +8,7 @@ import {
   defaultPolarBarSettings,
   defaultRadarSettings,
   type FabricGlobals,
-  type TypePreset,
+  type TypeToken,
 } from "@yunari/renderer-core";
 import {
   Arc,
@@ -58,7 +58,7 @@ interface NewTextDefaults extends NewPaintDefaults {
       {
         readonly kind: "literal";
         readonly text: string;
-        readonly typePreset: `typePresets.${string}`;
+        readonly typeToken: `typeTokens.${string}`;
         readonly style: {
           readonly color: { readonly ref: `palette.${string}` };
         };
@@ -540,8 +540,8 @@ export function createNewTextDefaults(
   box?: { readonly width: number; readonly height: number },
 ): NewTextDefaults {
   const paint = createNewPaintDefaults(globals);
-  const [id, preset] = firstTypePreset(globals);
-  const typePreset = `typePresets.${id}` as const;
+  const [id, preset] = firstTypeToken(globals);
+  const typeToken = `typeTokens.${id}` as const;
   const color = paint[YUNARI_PAINT_PROPERTY].fill;
 
   if (color === undefined)
@@ -556,14 +556,16 @@ export function createNewTextDefaults(
     ...placed(placement),
     ...(box === undefined ? {} : { box }),
     fontFamily: preset.family,
-    fontSize: preset.size,
+    // ponytail: the legacy starter size stands in until Task 1.3 lands
+    // `defaultTypeSize`; a token without one seeds a body-sized run.
+    fontSize: preset.size ?? 16,
     ...(preset.weight === undefined ? {} : { fontWeight: preset.weight }),
     ...(preset.lineHeight === undefined
       ? {}
       : { lineHeight: preset.lineHeight }),
     [YUNARI_TEXT_PROPERTY]: {
       runs: [
-        { kind: "literal", text, typePreset, style: { color: { ref: color } } },
+        { kind: "literal", text, typeToken, style: { color: { ref: color } } },
       ],
     },
   };
@@ -772,40 +774,50 @@ function firstPalette(
  * remaining preset as the fallback. Heading presets are excluded: a 70px clock
  * face is not a sensible default for a fresh text object.
  */
-function firstTypePreset(
+function firstTypeToken(
   globals: FabricGlobals | undefined,
-): readonly [string, TypePreset] {
-  let body: readonly [string, TypePreset] | undefined;
-  let largest: readonly [string, TypePreset] | undefined;
+): readonly [string, LegacySizedToken] {
+  let body: readonly [string, LegacySizedToken] | undefined;
+  let largest: readonly [string, LegacySizedToken] | undefined;
 
-  for (const [id, entry] of Object.entries(globals?.typePresets ?? {})) {
-    if (!isTypePreset(entry.value)) continue;
+  for (const [id, entry] of Object.entries(globals?.typeTokens ?? {})) {
+    const token = entry as LegacySizedToken;
+    if (!isTypeToken(token)) continue;
+    const size = token.size ?? 0;
 
-    if (largest === undefined || entry.value.size > largest[1].size) {
-      largest = [id, entry.value];
+    if (largest === undefined || size > (largest[1].size ?? 0)) {
+      largest = [id, token];
     }
 
-    if (entry.value.trioRole !== "body") continue;
+    if (token.trioRole !== "body") continue;
 
-    if (body === undefined || entry.value.size > body[1].size) {
-      body = [id, entry.value];
+    if (body === undefined || size > (body[1].size ?? 0)) {
+      body = [id, token];
     }
   }
 
   const chosen = body ?? largest;
 
   if (chosen === undefined) {
-    throw new Error("New text requires a type preset.");
+    throw new Error("New text requires a type token.");
   }
 
   return chosen;
 }
 
-function isTypePreset(value: unknown): value is TypePreset {
+/** The starter tokens still carry the size and role their ids were named for
+ *  until Task 3.2 moves each onto its run. ponytail: a read-time bridge; delete
+ *  once no shipped token carries either field. */
+type LegacySizedToken = TypeToken & {
+  readonly size?: number;
+  readonly trioRole?: string;
+  readonly lineHeight?: number;
+};
+
+function isTypeToken(value: unknown): value is TypeToken {
   return (
     typeof value === "object" &&
     value !== null &&
-    typeof (value as Record<string, unknown>)["family"] === "string" &&
-    typeof (value as Record<string, unknown>)["size"] === "number"
+    typeof (value as Record<string, unknown>)["family"] === "string"
   );
 }

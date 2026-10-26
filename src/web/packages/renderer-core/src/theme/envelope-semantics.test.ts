@@ -159,16 +159,11 @@ describe("globals", () => {
     expectValid({
       ...baseEnvelope(),
       globals: {
-        typePresets: {
+        typeTokens: {
           body: {
-            name: "Body",
-            value: {
-              family: "Inter",
-              size: 16,
-              weight: 500,
-              letterSpacing: 0.2,
-              lineHeight: 1.2,
-            },
+            family: "Inter",
+
+            weight: 500,
           },
         },
       },
@@ -178,7 +173,7 @@ describe("globals", () => {
       codes({
         ...baseEnvelope(),
         globals: {
-          typePresets: {
+          typeTokens: {
             body: { name: "Body", value: { family: "", size: 0 } },
           },
         },

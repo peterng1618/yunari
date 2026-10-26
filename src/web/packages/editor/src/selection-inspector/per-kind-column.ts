@@ -24,7 +24,7 @@ import {
   type AppearanceContext,
   opacityField,
   resolveToken,
-  typePresetOf,
+  typeTokenOf,
 } from "./appearance.js";
 import { cropView } from "./crop.js";
 import { glassFields } from "./glass.js";
@@ -431,11 +431,11 @@ function contentBody(
   // preset* and a text object whose runs name none has no face to change — the
   // same rule the run editor follows for a box with no authored text, and the
   // reason an empty box is not given a browser over a value it does not have.
-  const presetRef = isTextObject(target) ? typePresetOf(target) : undefined;
+  const presetRef = isTextObject(target) ? typeTokenOf(target) : undefined;
   if (presetRef !== undefined && context.canWriteFontFace === true) {
     extras.push({
       kind: "fontFace",
-      font: { presetId: presetRef.slice("typePresets.".length) },
+      font: { presetId: presetRef.slice("typeTokens.".length) },
     });
   }
 

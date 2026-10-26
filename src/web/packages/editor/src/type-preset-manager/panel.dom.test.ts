@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { newPresetType } from "../new-fabric-theme-globals.js";
-import { resolveTypePreset } from "../selection-inspector/appearance.js";
+import { resolveTypeToken } from "../selection-inspector/appearance.js";
 import { uiCopy } from "../ui-copy.js";
-import { createTypePresetPanel } from "./panel.js";
+import { createTypeTokenPanel } from "./panel.js";
 
 // The panel appends to the host it is given, and one case reads through
 // `document` rather than through the panel's own root, so one test's markup
@@ -11,13 +11,13 @@ import { createTypePresetPanel } from "./panel.js";
 afterEach(() => document.body.replaceChildren());
 
 const presets = {
-  body: { name: "Body", value: { family: "Inter", size: 16 } },
-  caption: { name: "Caption", value: { family: "Inter", size: 12 } },
+  body: { family: "Inter", size: 16 },
+  caption: { family: "Inter", size: 12 },
 };
 
 describe("type preset panel", () => {
   it("builds its own section, whose heading names the panel", () => {
-    const panel = createTypePresetPanel(document.body, vi.fn());
+    const panel = createTypeTokenPanel(document.body, vi.fn());
     panel.render(presets);
 
     // `panel-labels.spec.ts` reads every `section h2` and matches the panel's
@@ -25,22 +25,20 @@ describe("type preset panel", () => {
     // the table's word and no disclosure chrome beside it.
     expect(panel.root.tagName).toBe("SECTION");
     expect(panel.root.querySelector("h2")?.textContent).toBe(
-      uiCopy.panels.typePresets,
+      uiCopy.panels.typeTokens,
     );
   });
 
   it("renders a row and a resolution line for each preset", () => {
-    const panel = createTypePresetPanel(document.body, vi.fn());
+    const panel = createTypeTokenPanel(document.body, vi.fn());
     panel.render(presets);
 
-    // The value is `resolveTypePreset`'s own answer, read from the same record
+    // The value is `resolveTypeToken`'s own answer, read from the same record
     // the panel is given — never a copy of the "family weight sizepx" rule.
     expect(
       panel.root.querySelector('[data-yunari-type-preset-row="body"]')
         ?.textContent,
-    ).toContain(
-      resolveTypePreset({ typePresets: presets }, "typePresets.body"),
-    );
+    ).toContain(resolveTypeToken({ typeTokens: presets }, "typeTokens.body"));
     expect(
       panel.root.querySelector('[data-yunari-type-preset-row="caption"]'),
     ).not.toBeNull();
@@ -54,7 +52,7 @@ describe("type preset panel", () => {
     // add is driven through the panel rather than through a harness that copies
     // it: this asserts what `EditorDocument.setTypes` actually receives.
     const change = vi.fn();
-    const panel = createTypePresetPanel(document.body, change);
+    const panel = createTypeTokenPanel(document.body, change);
     panel.render(presets);
 
     panel.root
@@ -64,12 +62,12 @@ describe("type preset panel", () => {
     expect(change).toHaveBeenCalledTimes(1);
     expect(change).toHaveBeenCalledWith({
       ...presets,
-      type: { name: uiCopy.panels.newType, value: newPresetType },
+      type: newPresetType,
     });
   });
 
   it("unmounts its React tree and removes the section on disposal", () => {
-    const panel = createTypePresetPanel(document.body, vi.fn());
+    const panel = createTypeTokenPanel(document.body, vi.fn());
     panel.render(presets);
 
     panel.destroy();

@@ -239,7 +239,7 @@ export interface RunRowView {
   /** What the row is called: a reading's key, or the prose it says. */
   readonly label: string;
   readonly text: string;
-  readonly typePreset: string;
+  readonly typeToken: string;
   readonly colour: string;
   /**
    * The binding this run names, for the note's `data-yunari-run-binding` — the
@@ -321,13 +321,13 @@ export interface CropEdits {
  *
  * A text object's face is not the object's own — a run names a preset and the
  * preset carries the face — so the field writes to the preset the object is set
- * in (`typePresetOf`, the one owner of that reading) rather than to the object.
+ * in (`typeTokenOf`, the one owner of that reading) rather than to the object.
  * That is also why the field carries the preset and nothing else: the catalogue,
  * the author's favourites and the specimen cache are the control's own, and
  * `favorites` in particular is asynchronous, which a projected value cannot be.
  */
 export interface FontFaceView {
-  /** The preset id, without the `typePresets.` prefix the writer takes off. */
+  /** The preset id, without the `typeTokens.` prefix the writer takes off. */
   readonly presetId: string;
 }
 

@@ -64,7 +64,7 @@ const KNOWN_KEY_SHAPES: Partial<Record<KnownKeyShape, readonly string[][]>> = {
   metadata: [["$defs", "metadata"]],
   artboard: [["$defs", "artboard"]],
   binding: [["$defs", "binding"]],
-  typePreset: [["$defs", "typePreset"]],
+  typeToken: [["$defs", "typeToken"]],
   fontFaceReference: [["$defs", "fontFaceReference"]],
   // One bag in code, two in the schema: a font asset declares the non-font
   // keys plus its own, so the merged list is the union of both.
@@ -74,7 +74,7 @@ const KNOWN_KEY_SHAPES: Partial<Record<KnownKeyShape, readonly string[][]>> = {
   ],
   globalEntry: [
     ["$defs", "paletteGroup", "additionalProperties"],
-    ["$defs", "typePresetGroup", "additionalProperties"],
+    ["$defs", "typeTokenGroup", "additionalProperties"],
   ],
 };
 

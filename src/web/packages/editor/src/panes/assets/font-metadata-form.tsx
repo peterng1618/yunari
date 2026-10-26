@@ -236,7 +236,7 @@ export function FontMetadataForm(props: {
           }}
           className="rounded-[var(--radius-md)] bg-accent px-[var(--space-8)] py-[var(--space-4)] text-xs font-semibold text-[var(--bg)] disabled:opacity-50"
         >
-          {uiCopy.panels.assetCard.createTypePreset}
+          {uiCopy.panels.assetCard.createTypeToken}
         </button>
         <button
           type="button"

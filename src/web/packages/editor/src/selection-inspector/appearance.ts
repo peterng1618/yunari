@@ -1,8 +1,4 @@
-import {
-  type FabricGlobals,
-  type FabricPalette,
-  type TypePreset,
-} from "@yunari/renderer-core";
+import { type FabricGlobals, type FabricPalette } from "@yunari/renderer-core";
 import type { FabricObject } from "fabric/es";
 import type { EditorInteraction } from "../editor-interaction.js";
 import { uiCopy } from "../ui-copy.js";
@@ -49,37 +45,34 @@ export function resolveToken(
 }
 
 /**
- * The type preset a text object is set in. The model names a preset per *run*,
- * and `applyObjectTypePresets` paints the object from its first run, so the
+ * The type token a text object is set in. The model names a token per *run*,
+ * and `applyObjectTypeTokens` paints the object from its first run, so the
  * object's own type is that same run's reference — one owner, not a second rule.
  */
-export function typePresetOf(
+export function typeTokenOf(
   object: FabricObject,
-): `typePresets.${string}` | undefined {
-  const ref = textRunsOf(object)[0]?.typePreset;
+): `typeTokens.${string}` | undefined {
+  const ref = textRunsOf(object)[0]?.typeToken;
   return ref === undefined ? undefined : ref;
 }
 
-/** What a type preset resolves to, in the terms the author chose it by. */
-export function resolveTypePreset(
+/** What a type token resolves to, in the terms the author chose it by. */
+export function resolveTypeToken(
   globals: FabricGlobals | undefined,
   ref: string | undefined,
 ): string | undefined {
-  if (ref === undefined || !ref.startsWith("typePresets.")) {
+  if (ref === undefined || !ref.startsWith("typeTokens.")) {
     return undefined;
   }
 
-  const preset = globals?.typePresets?.[ref.slice("typePresets.".length)] as
-    | { readonly value?: TypePreset }
-    | undefined;
-  const value = preset?.value;
+  const value = globals?.typeTokens?.[ref.slice("typeTokens.".length)];
   if (value === undefined) {
     return undefined;
   }
 
-  // "Inter 600 16px" — the family, weight and size the author would see in the
-  // preset panel, without duplicating its fields.
-  return [value.family, value.weight, `${value.size}px`]
+  // "Inter 600" — the family and weight the author would see in the token
+  // panel, without duplicating its fields. Size lives on the run now.
+  return [value.family, value.weight]
     .filter((part) => part !== undefined && part !== "")
     .join(" ");
 }

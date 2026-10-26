@@ -23,7 +23,7 @@ const AUTHORED = {
     {
       kind: "value" as const,
       bindingId: "load",
-      typePreset: "typePresets.60-600",
+      typeToken: "typeTokens.60-600",
     },
   ],
 };
@@ -287,7 +287,7 @@ describe.each([
     expect(authored.runs[0]).toMatchObject({
       kind: "literal",
       text: "MEM 16.0 GB",
-      typePreset: "typePresets.60-600",
+      typeToken: "typeTokens.60-600",
     });
     // One commit for one edit, whichever route entered editing.
     expect(save).toHaveBeenCalledOnce();
@@ -1059,13 +1059,13 @@ describe("what a text object an author inserts can do", () => {
         {
           kind: "literal" as const,
           text: "CPU",
-          typePreset: "typePresets.90-600",
+          typeToken: "typeTokens.90-600",
         },
       ],
     });
     const canvas = scene(object);
     const globals = {
-      typePresets: {
+      typeTokens: {
         "90-600": {
           name: "Card reading",
           value: { family: "Inter", size: 90, weight: "600" },

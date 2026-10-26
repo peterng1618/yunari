@@ -39,7 +39,7 @@ import type { RunEdits, RunOptionView, RunRowView, RunsView } from "./view.js";
 /**
  * Styled runs of a text object (§89): a value, its unit and its label may each
  * carry a different preset and colour. The model already represents this — a
- * run has its own `typePreset` and `style` map — so this is the authoring
+ * run has its own `typeToken` and `style` map — so this is the authoring
  * surface, not a format change.
  *
  * React renders a projected `RunsView` and writes through `RunEdits`; it holds
@@ -118,9 +118,9 @@ function paletteOptions(globals: FabricGlobals | undefined): readonly {
 function presetOptions(
   globals: FabricGlobals | undefined,
 ): readonly RunOptionView[] {
-  return Object.entries(globals?.typePresets ?? {}).map(([id, entry]) => ({
-    id: `typePresets.${id}`,
-    name: entry.name,
+  return Object.entries(globals?.typeTokens ?? {}).map(([id, token]) => ({
+    id: `typeTokens.${id}`,
+    name: `${token.family}${token.weight === undefined ? "" : ` ${token.weight}`}`,
   }));
 }
 
@@ -136,30 +136,26 @@ function presetGaps(
   globals: FabricGlobals | undefined,
   runs: readonly TextRun[],
 ): readonly string[] {
-  const painted = letterSpacingOf(globals, runs[0]?.typePreset);
+  const painted = letterSpacingOf(globals, runs[0]?.typeToken);
   const gaps = new Set<string>();
   for (const run of runs.slice(1)) {
-    const spacing = letterSpacingOf(globals, run.typePreset);
+    const spacing = letterSpacingOf(globals, run.typeToken);
     if (spacing === undefined || spacing === painted) continue;
     gaps.add(
-      uiCopy.inspectorFields.runTrackingNotSeparate(run.typePreset ?? ""),
+      uiCopy.inspectorFields.runTrackingNotSeparate(run.typeToken ?? ""),
     );
   }
   return [...gaps];
 }
 
-/** A preset's authored tracking, or undefined when it asks for none. */
+/** A token's authored tracking, or undefined when it asks for none.
+ *  ponytail: tracking left the token with the type-token split, so nothing is
+ *  token-borne to compare until the run-style warning is rewritten. */
 function letterSpacingOf(
-  globals: FabricGlobals | undefined,
-  ref: `typePresets.${string}` | undefined,
+  _globals: FabricGlobals | undefined,
+  _ref: `typeTokens.${string}` | undefined,
 ): number | undefined {
-  const id = ref?.slice("typePresets.".length);
-  const value: unknown = (
-    globals?.typePresets?.[id ?? ""]?.value as
-      | { readonly letterSpacing?: unknown }
-      | undefined
-  )?.letterSpacing;
-  return typeof value === "number" ? value : undefined;
+  return undefined;
 }
 
 /**
@@ -230,7 +226,7 @@ export function projectRuns(
       kind: "literal" | "value";
       label: string;
       text: string;
-      typePreset: string;
+      typeToken: string;
       colour: string;
       bindingId: string;
       sourceKey: string;
@@ -249,7 +245,7 @@ export function projectRuns(
       kind: run.kind,
       label: describeRun(run),
       text: run.kind === "literal" ? run.text : "",
-      typePreset: run.typePreset ?? presets[0]?.id ?? "",
+      typeToken: run.typeToken ?? presets[0]?.id ?? "",
       colour,
       // The binding the run names, as the note's own hook carried it before the
       // column was React (`run.bindingId`, not the row's ordinal): the ordinal
@@ -514,7 +510,7 @@ function RunRow(props: {
       <ControlSelect
         label={uiCopy.inspectorFields.runPreset}
         data={{ "data-yunari-run-preset": String(index) }}
-        value={row.typePreset}
+        value={row.typeToken}
         options={view.presets}
         onChange={(ref) => edits.setRunPreset(index, ref)}
       />

@@ -83,8 +83,8 @@ export {
   YUNARI_PAINT_PROPERTY,
 } from "./object-paint.js";
 export {
-  applyObjectTypePresets,
-  reassignObjectTypePresetReferences,
+  applyObjectTypeTokens,
+  reassignObjectTypeTokenReferences,
 } from "./object-type.js";
 export {
   objectPaletteReferences,

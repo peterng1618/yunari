@@ -12,7 +12,7 @@ import {
 } from "@yunari/renderer-core";
 import {
   applyObjectPalettePaints,
-  applyObjectTypePresets,
+  applyObjectTypeTokens,
   artboardBackdrop,
   artboardPaintKey,
   type BackdropMedia,
@@ -281,7 +281,7 @@ function applyArtboardPaint(
     // reports, so a document that opens having lost something is not silent.
     onRefusedPaint: (message) => editor.errorManager.warn("paint", message),
   });
-  applyObjectTypePresets(editor.canvas, globals);
+  applyObjectTypeTokens(editor.canvas, globals);
   editor.canvas.requestRenderAll();
   // The caller keeps this: it is what the glass backdrop composes the media
   // over, and re-resolving it there would put a second owner on the paint.

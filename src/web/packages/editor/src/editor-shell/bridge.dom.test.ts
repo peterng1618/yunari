@@ -176,12 +176,12 @@ it("reports selection changes and removes its canvas listeners", () => {
 it("carries the library key the selection's own first run is set in", () => {
   // The Tokens pane's chooser opens on this rather than on
   // `Object.keys(presets)[0]`, which is a default masquerading as an answer
-  // (`vg-094`). The reference is `typePresetOf`'s — the pane's keys are its
-  // tail — so the field is the key, not the `typePresets.` reference.
+  // (`vg-094`). The reference is `typeTokenOf`'s — the pane's keys are its
+  // tail — so the field is the key, not the `typeTokens.` reference.
   const text = new IText("Hi", { left: 0, top: 0 });
   text.set({
     yunariText: {
-      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.24-400" }],
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.24-400" }],
     },
   });
   const { bridge } = bridgeFor(text);

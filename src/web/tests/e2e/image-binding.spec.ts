@@ -68,7 +68,7 @@ const envelope = {
       },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
     },
-    typePresets: {},
+    typeTokens: {},
   },
   assets: [
     {

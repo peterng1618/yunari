@@ -132,7 +132,7 @@ test.describe("the reference composition, built from blank", () => {
       y: 62,
       w: 320,
       h: 46,
-      preset: "typePresets.46-600",
+      preset: "typeTokens.46-600",
       colour: "palette.text",
     });
 
@@ -144,7 +144,7 @@ test.describe("the reference composition, built from blank", () => {
       y: 112,
       w: 300,
       h: 20,
-      preset: "typePresets.17-400",
+      preset: "typeTokens.17-400",
       colour: "palette.dim",
     });
 
@@ -171,7 +171,7 @@ test.describe("the reference composition, built from blank", () => {
       y: 244,
       w: 300,
       h: 90,
-      preset: "typePresets.108-300",
+      preset: "typeTokens.108-300",
       colour: "palette.text",
     });
     await selectLayer(page, "time");
@@ -181,7 +181,7 @@ test.describe("the reference composition, built from blank", () => {
     // PM beside it, as its own run — the reason F2.1 was blocking.
     await page.locator("[data-yunari-run-add]").click();
     await fill(page, '[data-yunari-run-text="1"]', "PM");
-    await chooseIn(page, '[data-yunari-run-preset="1"]', "typePresets.24-400");
+    await chooseIn(page, '[data-yunari-run-preset="1"]', "typeTokens.24-400");
     await chooseIn(page, '[data-yunari-run-colour="1"]', "palette.dim");
 
     // The rule under it. A `Path` takes its data as SVG commands, which is the
@@ -204,7 +204,7 @@ test.describe("the reference composition, built from blank", () => {
       y: 372,
       w: 306,
       h: 34,
-      preset: "typePresets.24-400",
+      preset: "typeTokens.24-400",
       colour: "palette.dim",
     });
     await selectLayer(page, "date");
@@ -276,7 +276,7 @@ test.describe("the reference composition, built from blank", () => {
       y: 222,
       w: 120,
       h: 22,
-      preset: "typePresets.24-400",
+      preset: "typeTokens.24-400",
       colour: "palette.dim",
     });
 
@@ -285,12 +285,12 @@ test.describe("the reference composition, built from blank", () => {
     await insertTextBox(page, { x: 448, y: 262, w: 220, h: 60 });
     await setName(page, "cpu-card-value");
     await fill(page, '[data-yunari-run-text="0"]', "32");
-    await chooseIn(page, '[data-yunari-run-preset="0"]', "typePresets.60-600");
+    await chooseIn(page, '[data-yunari-run-preset="0"]', "typeTokens.60-600");
     await chooseIn(page, '[data-yunari-run-colour="0"]', "palette.text");
     await chooseIn(page, '[data-yunari-run-source="0"]', "cpu.load");
     await page.locator("[data-yunari-run-add]").click();
     await fill(page, '[data-yunari-run-text="1"]', "%");
-    await chooseIn(page, '[data-yunari-run-preset="1"]', "typePresets.32-400");
+    await chooseIn(page, '[data-yunari-run-preset="1"]', "typeTokens.32-400");
     await chooseIn(page, '[data-yunari-run-colour="1"]', "palette.dim");
     await page.waitForTimeout(200);
 
@@ -298,8 +298,8 @@ test.describe("the reference composition, built from blank", () => {
     expect(await readObject(page, "cpu-card-value")).toMatchObject({
       yunariText: {
         runs: [
-          { kind: "value", typePreset: "typePresets.60-600" },
-          { kind: "literal", text: "%", typePreset: "typePresets.32-400" },
+          { kind: "value", typeToken: "typeTokens.60-600" },
+          { kind: "literal", text: "%", typeToken: "typeTokens.32-400" },
         ],
       },
     });
@@ -391,7 +391,7 @@ async function reading(
     y: box.y,
     w: box.w,
     h: box.h,
-    preset: "typePresets.60-600",
+    preset: "typeTokens.60-600",
     colour: "palette.text",
   });
   await selectLayer(page, name);
@@ -400,7 +400,7 @@ async function reading(
   await chooseIn(page, '[data-yunari-run-source="0"]', key);
   await page.locator("[data-yunari-run-add]").click();
   await fill(page, '[data-yunari-run-text="1"]', "%");
-  await chooseIn(page, '[data-yunari-run-preset="1"]', "typePresets.32-400");
+  await chooseIn(page, '[data-yunari-run-preset="1"]', "typeTokens.32-400");
   await chooseIn(page, '[data-yunari-run-colour="1"]', "palette.dim");
 }
 
@@ -439,7 +439,7 @@ test.describe("the rest of the composition", () => {
       y: 222,
       w: 120,
       h: 22,
-      preset: "typePresets.24-400",
+      preset: "typeTokens.24-400",
       colour: "palette.dim",
     });
     await reading(
@@ -460,7 +460,7 @@ test.describe("the rest of the composition", () => {
       y: 344,
       w: 240,
       h: 24,
-      preset: "typePresets.20-400",
+      preset: "typeTokens.20-400",
       colour: "palette.dim",
     });
     await addChart(page, {
@@ -485,7 +485,7 @@ test.describe("the rest of the composition", () => {
     expect(await readObject(page, "gpu-card-value")).toMatchObject({
       yunariText: {
         runs: [
-          { kind: "value", typePreset: "typePresets.60-600" },
+          { kind: "value", typeToken: "typeTokens.60-600" },
           { kind: "literal", text: "%" },
         ],
       },
@@ -519,7 +519,7 @@ test.describe("the rest of the composition", () => {
       y: 222,
       w: 120,
       h: 22,
-      preset: "typePresets.24-400",
+      preset: "typeTokens.24-400",
       colour: "palette.dim",
     });
     await addChart(page, {
@@ -558,7 +558,7 @@ test.describe("the rest of the composition", () => {
       y: 400,
       w: 220,
       h: 24,
-      preset: "typePresets.20-400",
+      preset: "typeTokens.20-400",
       colour: "palette.dim",
     });
 
@@ -587,7 +587,7 @@ test.describe("the rest of the composition", () => {
       y: 222,
       w: 120,
       h: 22,
-      preset: "typePresets.24-400",
+      preset: "typeTokens.24-400",
       colour: "palette.dim",
     });
     await addChart(page, {
@@ -618,7 +618,7 @@ test.describe("the rest of the composition", () => {
       y: 400,
       w: 220,
       h: 24,
-      preset: "typePresets.20-400",
+      preset: "typeTokens.20-400",
       colour: "palette.dim",
     });
     await page.screenshot({ path: SHOT("05-memory-rings") });
@@ -672,7 +672,7 @@ test.describe("the rest of the composition", () => {
       y: 534,
       w: 320,
       h: 26,
-      preset: "typePresets.24-400",
+      preset: "typeTokens.24-400",
       colour: "palette.text",
     });
     // Three series, three sensors, three tokens — the shape the chart panel
@@ -730,7 +730,7 @@ test.describe("the rest of the composition", () => {
       y: 534,
       w: 180,
       h: 26,
-      preset: "typePresets.24-400",
+      preset: "typeTokens.24-400",
       colour: "palette.text",
     });
     await addText(page, {
@@ -740,13 +740,13 @@ test.describe("the rest of the composition", () => {
       y: 528,
       w: 120,
       h: 38,
-      preset: "typePresets.36-500",
+      preset: "typeTokens.36-500",
       colour: "palette.text",
     });
     await selectLayer(page, "storage-card-value");
     await page.locator("[data-yunari-run-add]").click();
     await fill(page, '[data-yunari-run-text="1"]', "%");
-    await chooseIn(page, '[data-yunari-run-preset="1"]', "typePresets.24-400");
+    await chooseIn(page, '[data-yunari-run-preset="1"]', "typeTokens.24-400");
     await chooseIn(page, '[data-yunari-run-colour="1"]', "palette.dim");
     await addChart(page, {
       family: "Bar",
@@ -766,7 +766,7 @@ test.describe("the rest of the composition", () => {
       y: 624,
       w: 260,
       h: 24,
-      preset: "typePresets.20-400",
+      preset: "typeTokens.20-400",
       colour: "palette.dim",
     });
     await page.screenshot({ path: SHOT("07-storage") });
@@ -798,7 +798,7 @@ test.describe("the rest of the composition", () => {
       y: 708,
       w: 180,
       h: 26,
-      preset: "typePresets.24-400",
+      preset: "typeTokens.24-400",
       colour: "palette.text",
     });
     await addText(page, {
@@ -808,7 +808,7 @@ test.describe("the rest of the composition", () => {
       y: 710,
       w: 160,
       h: 22,
-      preset: "typePresets.20-400",
+      preset: "typeTokens.20-400",
       colour: "palette.text",
     });
     await addText(page, {
@@ -818,7 +818,7 @@ test.describe("the rest of the composition", () => {
       y: 710,
       w: 160,
       h: 22,
-      preset: "typePresets.20-400",
+      preset: "typeTokens.20-400",
       colour: "palette.dim",
     });
     await addChart(page, {
@@ -886,14 +886,14 @@ test("what the rebuild authored survives the save", async ({
     y: 262,
     w: 220,
     h: 60,
-    preset: "typePresets.60-600",
+    preset: "typeTokens.60-600",
     colour: "palette.text",
   });
   await selectLayer(page, "cpu-card-value");
   await chooseIn(page, '[data-yunari-run-source="0"]', "cpu.load");
   await page.locator("[data-yunari-run-add]").click();
   await fill(page, '[data-yunari-run-text="1"]', "%");
-  await chooseIn(page, '[data-yunari-run-preset="1"]', "typePresets.32-400");
+  await chooseIn(page, '[data-yunari-run-preset="1"]', "typeTokens.32-400");
   await chooseIn(page, '[data-yunari-run-colour="1"]', "palette.dim");
   await addChart(page, {
     family: "Line",
@@ -932,7 +932,7 @@ test("what the rebuild authored survives the save", async ({
             readonly kind: string;
             readonly text?: string;
             readonly bindingId?: string;
-            readonly typePreset?: string;
+            readonly typeToken?: string;
           }[];
           readonly box?: { readonly width: number; readonly height: number };
         };
@@ -959,12 +959,12 @@ test("what the rebuild authored survives the save", async ({
   expect(byName("cpu-card-value")?.yunariText?.runs).toEqual([
     expect.objectContaining({
       kind: "value",
-      typePreset: "typePresets.60-600",
+      typeToken: "typeTokens.60-600",
     }),
     expect.objectContaining({
       kind: "literal",
       text: "%",
-      typePreset: "typePresets.32-400",
+      typeToken: "typeTokens.32-400",
     }),
   ]);
 

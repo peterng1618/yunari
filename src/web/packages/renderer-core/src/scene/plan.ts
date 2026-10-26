@@ -29,7 +29,7 @@ import type {
   StyleValue,
   TextContent,
   TextRun,
-  TypePreset,
+  TypeToken,
 } from "../theme/document.js";
 import type { Sample, SensorStatus } from "../types.js";
 import { formatInstant } from "./datetime/format.js";
@@ -251,7 +251,7 @@ export function resolveTextSegments(
 ): PlanTextSegment[] {
   return runs.map((run) => {
     const style = {
-      ...resolveTypePreset(run.typePreset, globals, nodeId, issues),
+      ...resolveTypeToken(run.typeToken, globals, nodeId, issues),
       ...resolveStyleMap(run.style, globals, nodeId, issues),
     };
 
@@ -834,58 +834,43 @@ export function resolveStyleValue(
     return undefined;
   }
 
-  const palette = entry.value;
+  const palette = "value" in entry ? entry.value : undefined;
   return isSolidPalettePaint(palette) ? palette.color : palette;
 }
 
-/** Presets are resolved per run so label, value and unit never inherit one text-object preset. */
-function resolveTypePreset(
-  ref: TextRun["typePreset"],
+/** Tokens are resolved per run so label, value and unit never inherit one text-object token. */
+function resolveTypeToken(
+  ref: TextRun["typeToken"],
   globals: Globals,
   nodeId: string,
   issues: PlanIssue[],
 ): ResolvedStyle {
   if (ref === undefined) return {};
-  const id = ref.slice("typePresets.".length);
-  const value = globals.typePresets?.[id]?.value;
-  if (!isTypePreset(value)) {
+  const id = ref.slice("typeTokens.".length);
+  const value = globals.typeTokens?.[id];
+  if (!isTypeToken(value)) {
     issues.push({
       code: "unresolved-global",
       nodeId,
-      detail: `Type preset "${ref}" is not defined or invalid.`,
+      detail: `Type token "${ref}" is not defined or invalid.`,
     });
     return {};
   }
   return {
     fontFamily: value.family,
-    fontSize: value.size,
     ...(value.weight === undefined ? {} : { fontWeight: value.weight }),
-    ...(value.letterSpacing === undefined
-      ? {}
-      : { letterSpacing: value.letterSpacing }),
-    ...(value.lineHeight === undefined ? {} : { lineHeight: value.lineHeight }),
   };
 }
 
-function isTypePreset(value: unknown): value is TypePreset {
+function isTypeToken(value: unknown): value is TypeToken {
   if (typeof value !== "object" || value === null) return false;
-  const preset = value as Record<string, unknown>;
+  const token = value as Record<string, unknown>;
   return (
-    typeof preset["family"] === "string" &&
-    preset["family"].length > 0 &&
-    typeof preset["size"] === "number" &&
-    Number.isFinite(preset["size"]) &&
-    preset["size"] > 0 &&
-    (preset["weight"] === undefined ||
-      typeof preset["weight"] === "string" ||
-      typeof preset["weight"] === "number") &&
-    (preset["letterSpacing"] === undefined ||
-      (typeof preset["letterSpacing"] === "number" &&
-        Number.isFinite(preset["letterSpacing"]))) &&
-    (preset["lineHeight"] === undefined ||
-      (typeof preset["lineHeight"] === "number" &&
-        Number.isFinite(preset["lineHeight"]) &&
-        preset["lineHeight"] > 0))
+    typeof token["family"] === "string" &&
+    token["family"].length > 0 &&
+    (token["weight"] === undefined ||
+      typeof token["weight"] === "string" ||
+      typeof token["weight"] === "number")
   );
 }
 

@@ -16,7 +16,7 @@ import {
 import {
   type StarterPaletteId,
   starterPalette,
-  starterTypePresets,
+  starterTypeTokens,
 } from "./new-fabric-theme-globals.js";
 import { label } from "./new-fabric-theme-objects.js";
 import { starterBackdrop } from "./starter-backdrop.js";
@@ -72,7 +72,7 @@ export function createNewFabricTheme(): FabricThemeEnvelope {
     },
     globals: {
       palette: starterPalette,
-      typePresets: starterTypePresets,
+      typeTokens: starterTypeTokens,
     },
     assets: [starterBackdrop],
     bindings: {
@@ -299,9 +299,9 @@ export function createBlankFabricTheme(
     background: { color: { ref: "palette.chartTrack" } },
     globals: {
       palette,
-      ...(starter.globals?.typePresets === undefined
+      ...(starter.globals?.typeTokens === undefined
         ? {}
-        : { typePresets: starter.globals.typePresets }),
+        : { typeTokens: starter.globals.typeTokens }),
     },
     assets: [],
     bindings: {},

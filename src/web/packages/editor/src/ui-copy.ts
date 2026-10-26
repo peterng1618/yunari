@@ -1241,7 +1241,7 @@ export const uiCopy = {
         `${count} ${count === 1 ? "preset" : "presets"}`,
       scopeCount: (role: string, count: number): string => `${role} × ${count}`,
       willBeCreated: "will be created",
-      /** `Clock 108 · 300 → Manrope 700`: the preset's own name and weight
+      /** `Yaldevi · 300 → Manrope 700`: the token's own family and weight
        *  before the trio's family and weight after. */
       change: (
         name: string,
@@ -1773,7 +1773,7 @@ export const uiCopy = {
       preview: "Preview",
       replace: "Replace",
       remove: "Remove",
-      createTypePreset: "Create type preset",
+      createTypeToken: "Create type preset",
     },
     /** The inline form a chosen font expands to: the facts the file cannot
      *  answer for itself, and the one write that binds it to a preset. */
@@ -1857,7 +1857,7 @@ export const uiCopy = {
     /** Each pane's own chooser, named by what it lists rather than by the pane
      * it sits in — the section heading already says Palette or Type presets. */
     colourToken: "Colour token",
-    typePreset: "Type preset",
+    typeToken: "Type preset",
     /** What the Tokens pane says the *selection* is set in, as against what its
      *  chooser is browsing. The five cases must each read their own way: a
      *  default that looks like an answer is `vg-094`, a dangling reference is a
@@ -1876,7 +1876,7 @@ export const uiCopy = {
     removeStop: "Remove stop",
     deleteColour: "Delete colour",
     reassign: "Reassign to",
-    typePresets: "Type presets",
+    typeTokens: "Type presets",
     addType: "Add type",
     deleteType: "Delete type",
     previewFont: "Preview font",

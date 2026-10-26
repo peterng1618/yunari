@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
+import type { TypeToken } from "@yunari/renderer-core";
 import { type FabricObject, StaticCanvas, Textbox } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import { YUNARI_TEXT_PROPERTY } from "./fabric-text.js";
 import {
-  applyObjectTypePresets,
-  reassignObjectTypePresetReferences,
+  applyObjectTypeTokens,
+  reassignObjectTypeTokenReferences,
 } from "./object-type.js";
 import { reviveScene, serialiseScene } from "./persist.js";
 
@@ -25,12 +26,12 @@ function canvasOf(objects: readonly FabricObject[]): StaticCanvas {
   return canvas;
 }
 
-/** A tracked preset, in the shape `applyObjectTypePresets` reads it. */
+/** A tracked token, in the shape `applyObjectTypeTokens` reads it. */
 function globalsWith(
   value: Readonly<Record<string, unknown>>,
   id = "tracked",
-): Parameters<typeof applyObjectTypePresets>[1] {
-  return { typePresets: { [id]: { name: id, value } } };
+): Parameters<typeof applyObjectTypeTokens>[1] {
+  return { typeTokens: { [id]: value as unknown as TypeToken } };
 }
 
 function textbox(
@@ -42,17 +43,17 @@ function textbox(
   return object;
 }
 
-const literal = (typePreset: string) => ({
+const literal = (typeToken: string) => ({
   kind: "literal",
   text: "CPU",
-  typePreset,
+  typeToken,
 });
 
 describe("object-level tracking", () => {
   it("converts a preset's letter spacing into Fabric charSpacing", () => {
-    const object = textbox("metric", [literal("typePresets.tracked")]);
+    const object = textbox("metric", [literal("typeTokens.tracked")]);
 
-    applyObjectTypePresets(
+    applyObjectTypeTokens(
       canvasOf([object]),
       globalsWith({ family: "Inter", size: 32, letterSpacing: 0.8 }),
     );
@@ -64,10 +65,10 @@ describe("object-level tracking", () => {
   it("converts against the size it just applied, not a stale one", () => {
     // The editor's preset panel commits size and spacing together, so an object
     // already sitting at another size must not keep the old ratio.
-    const object = textbox("metric", [literal("typePresets.tracked")]);
+    const object = textbox("metric", [literal("typeTokens.tracked")]);
     object.set({ fontSize: 12, charSpacing: 100 });
 
-    applyObjectTypePresets(
+    applyObjectTypeTokens(
       canvasOf([object]),
       globalsWith({ family: "Inter", size: 32, letterSpacing: 0.8 }),
     );
@@ -77,11 +78,11 @@ describe("object-level tracking", () => {
   });
 
   it("removes tracking when the preset stops carrying it", () => {
-    const object = textbox("metric", [literal("typePresets.tracked")]);
+    const object = textbox("metric", [literal("typeTokens.tracked")]);
     object.set({ charSpacing: 40 });
     object.initDimensions();
 
-    applyObjectTypePresets(
+    applyObjectTypeTokens(
       canvasOf([object]),
       globalsWith({ family: "Inter", size: 32 }),
     );
@@ -92,13 +93,13 @@ describe("object-level tracking", () => {
   });
 
   it("refuses a size that cannot convert instead of inventing a ratio", () => {
-    const object = textbox("metric", [literal("typePresets.tracked")]);
-    applyObjectTypePresets(
+    const object = textbox("metric", [literal("typeTokens.tracked")]);
+    applyObjectTypeTokens(
       canvasOf([object]),
       globalsWith({ family: "Inter", size: 32, letterSpacing: 0.8 }),
     );
 
-    applyObjectTypePresets(
+    applyObjectTypeTokens(
       canvasOf([object]),
       globalsWith({ family: "Inter", size: 0, letterSpacing: 0.8 }),
     );
@@ -109,13 +110,13 @@ describe("object-level tracking", () => {
   });
 
   it("refuses a letter spacing that is not a finite number", () => {
-    const object = textbox("metric", [literal("typePresets.tracked")]);
-    applyObjectTypePresets(
+    const object = textbox("metric", [literal("typeTokens.tracked")]);
+    applyObjectTypeTokens(
       canvasOf([object]),
       globalsWith({ family: "Inter", size: 32, letterSpacing: 0.8 }),
     );
 
-    applyObjectTypePresets(
+    applyObjectTypeTokens(
       canvasOf([object]),
       globalsWith({ family: "Inter", size: 32, letterSpacing: Number.NaN }),
     );
@@ -128,7 +129,7 @@ describe("font readiness", () => {
   it("derives tracking from the preset's size alone, and reapplying is stable", () => {
     // **What this does not cover:** whether a face that has not loaded measures
     // differently. That is not unit-testable here — jsdom measures every family
-    // with the same fallback, and `applyObjectTypePresets` overwrites
+    // with the same fallback, and `applyObjectTypeTokens` overwrites
     // `fontFamily` from the preset, so a deliberately-missing family would be
     // replaced before anything read it. The rendered guarantee is the value
     // being em-relative, which is arithmetic rather than measurement: Fabric
@@ -144,41 +145,41 @@ describe("font readiness", () => {
       size: 32,
       letterSpacing: 0.8,
     });
-    const object = textbox("metric", [literal("typePresets.tracked")]);
+    const object = textbox("metric", [literal("typeTokens.tracked")]);
     const canvas = canvasOf([object]);
 
-    applyObjectTypePresets(canvas, globals);
+    applyObjectTypeTokens(canvas, globals);
     expect(object.charSpacing).toBeCloseTo(25, 6);
 
     // The preset's size is the denominator, not the object's current one: an
     // object sitting at another size must not keep a stale ratio.
     object.set({ fontSize: 12 });
-    applyObjectTypePresets(canvas, globals);
+    applyObjectTypeTokens(canvas, globals);
     expect(object.fontSize).toBe(32);
     expect(object.charSpacing).toBeCloseTo(25, 6);
 
     // Idempotent, so a second application cannot drift the value.
-    applyObjectTypePresets(canvas, globals);
+    applyObjectTypeTokens(canvas, globals);
     expect(object.charSpacing).toBeCloseTo(25, 6);
   });
 });
 
 describe("preset reassignment", () => {
   it("reapplies tracking from the preset that replaced the deleted one", () => {
-    const object = textbox("metric", [literal("typePresets.old")]);
+    const object = textbox("metric", [literal("typeTokens.old")]);
     const canvas = canvasOf([object]);
-    applyObjectTypePresets(
+    applyObjectTypeTokens(
       canvas,
       globalsWith({ family: "Inter", size: 32, letterSpacing: 4 }, "old"),
     );
     expect(object.charSpacing).toBeCloseTo(125, 6);
 
-    reassignObjectTypePresetReferences(
+    reassignObjectTypeTokenReferences(
       canvas,
-      "typePresets.old",
-      "typePresets.tracked",
+      "typeTokens.old",
+      "typeTokens.tracked",
     );
-    applyObjectTypePresets(
+    applyObjectTypeTokens(
       canvas,
       globalsWith({ family: "Inter", size: 32, letterSpacing: 0.8 }),
     );
@@ -191,13 +192,13 @@ describe("persistence", () => {
   it("carries tracking through a scene round trip", async () => {
     // The display reads the persisted Fabric object, so a resolved ratio that
     // never reaches the saved scene is a ratio only the editor can see.
-    const object = textbox("metric", [literal("typePresets.tracked")]);
+    const object = textbox("metric", [literal("typeTokens.tracked")]);
     const globals = globalsWith({
       family: "Inter",
       size: 32,
       letterSpacing: 0.8,
     });
-    applyObjectTypePresets(canvasOf([object]), globals);
+    applyObjectTypeTokens(canvasOf([object]), globals);
 
     const scene = serialiseScene(canvasOf([object]));
     const revived = new StaticCanvas(undefined, { width: 400, height: 300 });

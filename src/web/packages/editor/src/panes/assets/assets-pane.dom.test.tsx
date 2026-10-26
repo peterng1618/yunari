@@ -252,7 +252,7 @@ describe("the Assets pane", () => {
 
     await selectCard(host, "body");
     expect(actionNames(host, "body")).toContain(
-      uiCopy.panels.assetCard.createTypePreset,
+      uiCopy.panels.assetCard.createTypeToken,
     );
   });
 

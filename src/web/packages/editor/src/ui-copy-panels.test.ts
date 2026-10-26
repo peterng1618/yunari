@@ -39,7 +39,7 @@ import { createPalettePanel } from "./palette-manager/panel.js";
 import { createTokenInspectorPanel } from "./panes/tokens/token-inspector.js";
 import { projectRuns, RunEditor } from "./selection-inspector/runs.js";
 import type { RunEdits } from "./selection-inspector/view.js";
-import { createTypePresetPanel } from "./type-preset-manager/panel.js";
+import { createTypeTokenPanel } from "./type-preset-manager/panel.js";
 import { copy, spokenText } from "./ui-copy-readers.js";
 
 /** A run-editor write port that records nothing: this file reads copy, not writes. */
@@ -113,7 +113,6 @@ it("leaves the mounted panels with no copy of their own", async () => {
   createTokenInspectorPanel(root, {
     onChange: () => undefined,
     onDelete: () => undefined,
-    setRole: () => undefined,
     unbindFace: () => undefined,
     paints: {
       palette: () => palette,
@@ -122,7 +121,7 @@ it("leaves the mounted panels with no copy of their own", async () => {
       usage: undefined,
     },
   }).render({ kind: "paint", id: "glow" }, {}, undefined);
-  createTypePresetPanel(
+  createTypeTokenPanel(
     root,
     () => undefined,
     () => undefined,
@@ -131,38 +130,31 @@ it("leaves the mounted panels with no copy of their own", async () => {
       applyTrio: async () => undefined,
     },
   ).render({
-    body: {
-      name: "Body",
-      value: { family: "Inter", size: 16, trioRole: "heading" },
-    },
-    caption: { name: "Caption", value: { family: "Inter", size: 12 } },
+    body: { family: "Inter" },
+    caption: { family: "Inter" },
   });
 
   // The selected token's column is the Tokens pane's other half, and it is
   // where the field set's labels moved. Its select triggers print values and are
   // excluded from the button net; the labels and Delete are copy and are read.
   const tokenPresets = {
-    body: {
-      name: "Body",
-      value: { family: "Inter", size: 16, trioRole: "heading" as const },
-    },
+    body: { family: "Inter" },
   };
   createTokenInspectorPanel(root, {
     onChange: () => undefined,
     onDelete: () => undefined,
-    setRole: () => undefined,
     unbindFace: () => undefined,
     paints: undefined,
   }).render({ kind: "preset", id: "body" }, tokenPresets, {
-    typePresets: tokenPresets,
+    typeTokens: tokenPresets,
   });
   // The fourth mount, non-vacuous with a number: a panel that rendered nothing
-  // would leave the net passing without reading one of its words. Eight is the
-  // labels a free preset renders — name, role, family, weight, size, line
-  // height, letter spacing and reassignment; Delete is a button, read below.
+  // would leave the net passing without reading one of its words. Three is the
+  // labels a free token renders — family, weight and reassignment; Delete is a
+  // button, read below.
   expect(
     root.querySelectorAll("[data-yunari-token-fields] label"),
-  ).toHaveLength(8);
+  ).toHaveLength(3);
 
   // The palette's paint kinds, which are copy. They live in a Base UI popup that
   // exists only while it is open, so they are read the way an author reads them.

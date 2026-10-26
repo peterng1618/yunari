@@ -481,11 +481,8 @@ describe("a theme whose vocabulary is not the starter's", () => {
       },
       ink: { name: "Ink", value: { kind: "solid", color: "#e8f0fa" } },
     },
-    typePresets: {
-      label: {
-        name: "Label",
-        value: { family: "Inter, sans-serif", size: 14, trioRole: "body" },
-      },
+    typeTokens: {
+      label: { family: "Inter, sans-serif" },
     },
   } as FabricGlobals;
 

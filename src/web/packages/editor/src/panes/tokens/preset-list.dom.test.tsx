@@ -10,12 +10,13 @@
  * its resolution line.
  *
  * **The resolver is the owner, so the expectation is its answer.** The line's
- * value is `resolveTypePreset`'s own output, never a copy of the
+ * value is `resolveTypeToken`'s own output, never a copy of the
  * "family weight sizepx" rule this file would otherwise restate.
  *
  * `Harness` is the session's half of the contract: an add comes back as a new
  * `presets` prop, exactly as `editor-session`'s `render()` hands one back.
  */
+import type { TypeToken } from "@yunari/renderer-core";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
@@ -28,8 +29,8 @@ import {
   TokenSelectionStore,
 } from "../../editor-shell/shell-stores.js";
 import { newPresetType } from "../../new-fabric-theme-globals.js";
-import { resolveTypePreset } from "../../selection-inspector/appearance.js";
-import type { TypePresets } from "../../type-preset-manager/panel.js";
+import { resolveTypeToken } from "../../selection-inspector/appearance.js";
+import type { TypeTokens } from "../../type-preset-manager/panel.js";
 import { uiCopy } from "../../ui-copy.js";
 import { PresetList, type PresetListProps } from "./preset-list.js";
 
@@ -86,13 +87,13 @@ function canvas(initial: {
  *  own `onChange` hands one back rather than leaving the component on stale
  *  props. */
 function Harness(props: {
-  readonly initial: TypePresets;
+  readonly initial: TypeTokens;
   readonly selection: PresetListProps["selection"];
   readonly tokenSelection: PresetListProps["tokenSelection"];
-  readonly change: (presets: TypePresets) => void;
+  readonly change: (presets: TypeTokens) => void;
 }): React.JSX.Element {
   const [presets, setPresets] = useState(props.initial);
-  const commit = (next: TypePresets): void => {
+  const commit = (next: TypeTokens): void => {
     props.change(next);
     setPresets(next);
   };
@@ -103,7 +104,7 @@ function Harness(props: {
       onAdd={(id) =>
         commit({
           ...presets,
-          [id]: { name: uiCopy.panels.newType, value: newPresetType },
+          [id]: newPresetType,
         })
       }
       selection={props.selection}
@@ -156,7 +157,7 @@ function stage(): {
 }
 
 async function mount(
-  initial: TypePresets,
+  initial: TypeTokens,
   options: {
     readonly selection?: PresetListProps["selection"];
     readonly tokenSelection?: PresetListProps["tokenSelection"];
@@ -212,37 +213,30 @@ function binding(host: HTMLElement): HTMLElement {
   return found;
 }
 
-const withWeight: TypePresets = {
-  body: {
-    name: "Body",
-    value: { family: "Inter", size: 16, weight: 600, lineHeight: 1.4 },
-  },
-  caption: { name: "Caption", value: { family: "Inter", size: 12 } },
+/** The interim name the list prints until Task 4.1's computed name lands. */
+function tokenName(id: string, token: TypeToken): string {
+  return `${id} ${token.family}${token.weight === undefined ? "" : ` ${token.weight}`}`;
+}
+
+const withWeight: TypeTokens = {
+  body: { family: "Inter", weight: 600 },
+  caption: { family: "Inter" },
 };
 
-/** Presets that carry a trio role and one that does not, so the badge's
- *  presence and its absence are both read. */
-const withRoles: TypePresets = {
-  display: {
-    name: "Display",
-    value: { family: "Inter", size: 36, weight: 600, trioRole: "heading" },
-  },
-  text: {
-    name: "Text",
-    value: { family: "Inter", size: 16, trioRole: "body" },
-  },
-  plain: { name: "Plain", value: { family: "Inter", size: 14 } },
+/** Tokens keyed by a role id and one that is not, so the badge's presence and
+ *  its absence are both read. */
+const withRoles: TypeTokens = {
+  heading: { family: "Inter", weight: 600 },
+  body: { family: "Inter" },
+  plain: { family: "Inter" },
 };
 
 /** A library whose *first declared* key is also the one the selection is set
  *  in, so restoring the `Object.keys(presets)[0]` default cannot pass the
- *  "nothing is selected" case by naming some other preset. */
-const withNumbers: TypePresets = {
-  "24-400": {
-    name: "Card title",
-    value: { family: "Inter", size: 24, weight: 400 },
-  },
-  body: { name: "Body", value: { family: "Inter", size: 16 } },
+ *  "nothing is selected" case by naming some other token. */
+const withNumbers: TypeTokens = {
+  "24-400": { family: "Inter", weight: 400 },
+  body: { family: "Inter" },
 };
 const firstDeclaredPresetId = Object.keys(withNumbers)[0]!;
 
@@ -251,9 +245,9 @@ it("draws each preset as a row with a specimen and a resolution, and no input co
   // a selector — one pressable line, nothing to type in.
   const { host } = await mount(withRoles);
   const row = host.querySelector<HTMLButtonElement>(
-    '[data-yunari-type-preset-row="display"]',
+    '[data-yunari-type-preset-row="heading"]',
   );
-  if (row === null) throw new Error("no display row");
+  if (row === null) throw new Error("no heading row");
 
   expect(row.tagName).toBe("BUTTON");
   expect(row.getAttribute("aria-pressed")).toBe("false");
@@ -266,23 +260,23 @@ it("draws each preset as a row with a specimen and a resolution, and no input co
   expect(specimen?.textContent).toBe("Aa");
   expect(specimen?.style.fontFamily).toBe("Inter");
 
-  expect(row.textContent).toContain(withRoles.display?.name);
+  expect(row.textContent).toContain(tokenName("heading", withRoles.heading!));
   // The badge is the copy table's word, read on the badge itself rather than
   // matched anywhere in the row: a hardcoded "Heading" would otherwise hide
-  // behind the preset's own name.
+  // behind the token's own name.
   expect(row.querySelector("[data-yunari-type-preset-role]")?.textContent).toBe(
     uiCopy.assets.fontPreview.role.heading,
   );
 
-  const expected = resolveTypePreset(
-    { typePresets: withRoles },
-    "typePresets.display",
+  const expected = resolveTypeToken(
+    { typeTokens: withRoles },
+    "typeTokens.heading",
   );
-  expect(resolutionLine(host, "display").textContent).toBe(expected);
-  expect(resolutionLine(host, "display").textContent).not.toBe("");
+  expect(resolutionLine(host, "heading").textContent).toBe(expected);
+  expect(resolutionLine(host, "heading").textContent).not.toBe("");
 
   expect(row.querySelector("input, select, textarea")).toBeNull();
-  // A roleless preset carries no badge, so the badge means a role rather than
+  // A roleless token carries no badge, so the badge means a role rather than
   // "every row has one".
   expect(
     host.querySelector(
@@ -333,7 +327,9 @@ it("says nothing is selected rather than showing the first declared preset", asy
   await act(async () => selection.set(undefined, false));
 
   const text = binding(host).textContent;
-  expect(text).not.toContain(withNumbers[firstDeclaredPresetId]!.name);
+  expect(text).not.toContain(
+    tokenName(firstDeclaredPresetId, withNumbers[firstDeclaredPresetId]!),
+  );
   expect(text?.trim(), "an absent answer is stated, not left blank").not.toBe(
     "",
   );
@@ -348,7 +344,7 @@ it("names the preset the selected run is set in", async () => {
   await act(async () => selection.set("24-400", true));
 
   const text = binding(host).textContent;
-  expect(text).toContain(withNumbers["24-400"]!.name);
+  expect(text).toContain(tokenName("24-400", withNumbers["24-400"]!));
   expect(text).not.toContain(uiCopy.panels.selectionEmpty);
 });
 
@@ -388,7 +384,9 @@ it("reads a group or a multi-selection as its children's presets, not as none", 
   await act(async () => selection.set(undefined, true, "object"));
   expect(binding(host).textContent).toContain(uiCopy.panels.selectionNoType);
   await act(async () => selection.set("24-400", true, "group"));
-  expect(binding(host).textContent).toContain(withNumbers["24-400"]!.name);
+  expect(binding(host).textContent).toContain(
+    tokenName("24-400", withNumbers["24-400"]!),
+  );
 });
 
 it("reads a background selection as nothing selected, because it has no type", async () => {
@@ -415,7 +413,7 @@ it("reads a dangling reference as unresolved, which is neither empty answer", as
   await act(async () => selection.set("gone", true));
 
   const text = binding(host).textContent;
-  expect(text).toContain("typePresets.gone");
+  expect(text).toContain("typeTokens.gone");
   expect(text).toContain(uiCopy.inspectorFields.unresolved);
   expect(text).not.toContain(uiCopy.panels.selectionEmpty);
   expect(text).not.toContain(uiCopy.panels.selectionNoType);
@@ -426,10 +424,7 @@ it("adds a preset under the first free id", async () => {
 
   await click(host.querySelector("[data-yunari-type-preset-add]") as Element);
 
-  const added = change.mock.calls[0]?.[0] as TypePresets;
-  expect(added.type).toEqual({
-    name: uiCopy.panels.newType,
-    value: newPresetType,
-  });
+  const added = change.mock.calls[0]?.[0] as TypeTokens;
+  expect(added.type).toEqual(newPresetType);
   expect(added.body).toEqual(withWeight.body);
 });

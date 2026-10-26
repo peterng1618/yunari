@@ -90,44 +90,30 @@ function envelopeWithFontRoles(): Record<string, unknown> {
       fontAsset("mono-face", 400),
     ],
     globals: {
-      typePresets: {
+      typeTokens: {
         heading: {
-          name: "Heading",
-          value: {
-            family: "Inter",
-            size: 32,
-            weight: 700,
-            face: { assetId: "heading-face" },
-            trioRole: "heading",
-          },
+          family: "Inter",
+
+          weight: 700,
+
+          face: { assetId: "heading-face" },
         },
         metric: {
-          name: "Metric",
-          value: {
-            family: "Inter",
-            size: 48,
-            weight: 700,
-            face: { assetId: "heading-face" },
-            trioRole: "heading",
-          },
+          family: "Inter",
+
+          weight: 700,
+
+          face: { assetId: "heading-face" },
         },
         body: {
-          name: "Body",
-          value: {
-            family: "Inter",
-            size: 16,
-            face: { assetId: "body-face" },
-            trioRole: "body",
-          },
+          family: "Inter",
+
+          face: { assetId: "body-face" },
         },
         mono: {
-          name: "Mono",
-          value: {
-            family: "Inter",
-            size: 14,
-            face: { assetId: "mono-face" },
-            trioRole: "mono",
-          },
+          family: "Inter",
+
+          face: { assetId: "mono-face" },
         },
       },
     },
@@ -939,8 +925,8 @@ describe("Fabric theme envelope validation", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),
       globals: {
-        typePresets: {
-          body: { name: "Body", value: { family: "Inter", size: 16 } },
+        typeTokens: {
+          body: { family: "Inter" },
         },
       },
       scene: {
@@ -976,8 +962,8 @@ describe("Fabric theme envelope validation", () => {
           },
           text: { name: "Text", value: { kind: "solid", color: "#fff" } },
         },
-        typePresets: {
-          body: { name: "Body", value: { family: "Inter", size: 16 } },
+        typeTokens: {
+          body: { family: "Inter" },
         },
       },
       scene: {
@@ -993,7 +979,7 @@ describe("Fabric theme envelope validation", () => {
                 {
                   kind: "literal",
                   text: "CPU",
-                  typePreset: "typePresets.body",
+                  typeToken: "typeTokens.body",
                   style: { color: { ref: "palette.text" } },
                 },
               ],
@@ -1011,15 +997,11 @@ describe("Fabric theme envelope validation", () => {
       validateFabricThemeEnvelope({
         ...envelope(),
         globals: {
-          typePresets: {
+          typeTokens: {
             metric: {
-              name: "Metric",
-              value: {
-                family: "Inter",
-                size: 32,
-                weight: 700,
-                lineHeight: 1.1,
-              },
+              family: "Inter",
+
+              weight: 700,
             },
           },
         },
@@ -1049,7 +1031,7 @@ describe("Fabric theme envelope validation", () => {
       ok: false,
       issues: expect.arrayContaining([
         expect.objectContaining({
-          path: "/globals/typePresets/heading/value/face/assetId",
+          path: "/globals/typeTokens/heading/face/assetId",
         }),
       ]),
     });
@@ -1058,7 +1040,7 @@ describe("Fabric theme envelope validation", () => {
   it("requires all starter roles only when requested", () => {
     const theme = envelopeWithFontRoles();
     const globals = theme["globals"] as Record<string, unknown>;
-    const presets = globals["typePresets"] as Record<string, unknown>;
+    const presets = globals["typeTokens"] as Record<string, unknown>;
     delete presets["mono"];
 
     expect(validateFabricThemeEnvelope(theme)).toMatchObject({ ok: true });
@@ -1067,7 +1049,7 @@ describe("Fabric theme envelope validation", () => {
     ).toMatchObject({
       ok: false,
       issues: expect.arrayContaining([
-        expect.objectContaining({ path: "/globals/typePresets" }),
+        expect.objectContaining({ path: "/globals/typeTokens" }),
       ]),
     });
   });
@@ -1204,8 +1186,8 @@ describe("Fabric theme envelope validation", () => {
           },
           text: { name: "Text", value: { kind: "solid", color: "#fff" } },
         },
-        typePresets: {
-          body: { name: "Body", value: { family: "Inter", size: 16 } },
+        typeTokens: {
+          body: { family: "Inter" },
         },
       },
       scene: {
@@ -1221,7 +1203,7 @@ describe("Fabric theme envelope validation", () => {
                 {
                   kind: "literal",
                   text: "CPU",
-                  typePreset: "typePresets.body",
+                  typeToken: "typeTokens.body",
                   style: { color: { value: "#fff" }, fontSize: { value: 16 } },
                 },
               ],

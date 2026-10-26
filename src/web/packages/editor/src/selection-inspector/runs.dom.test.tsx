@@ -26,8 +26,8 @@ import { RUN_GLOBALS } from "./runs-fixture.js";
  */
 
 const twoRuns: readonly TextRun[] = [
-  { kind: "literal", text: "CPU ", typePreset: "typePresets.plain" },
-  { kind: "literal", text: "%", typePreset: "typePresets.plain" },
+  { kind: "literal", text: "CPU ", typeToken: "typeTokens.plain" },
+  { kind: "literal", text: "%", typeToken: "typeTokens.plain" },
 ];
 
 describe("the run editor's own state", () => {
@@ -107,9 +107,9 @@ describe("the run editor's own state", () => {
     // run of three leaves.
     const box = mountRunEditor({
       runs: [
-        { kind: "literal", text: "A", typePreset: "typePresets.plain" },
-        { kind: "literal", text: "B", typePreset: "typePresets.caption" },
-        { kind: "literal", text: "C", typePreset: "typePresets.title" },
+        { kind: "literal", text: "A", typeToken: "typeTokens.plain" },
+        { kind: "literal", text: "B", typeToken: "typeTokens.caption" },
+        { kind: "literal", text: "C", typeToken: "typeTokens.title" },
       ],
       globals: RUN_GLOBALS,
     });
@@ -135,8 +135,8 @@ describe("the run editor's own state", () => {
     // not the row that moved up under it (vg-249).
     const box = mountRunEditor({
       runs: [
-        { kind: "literal", text: "A", typePreset: "typePresets.plain" },
-        { kind: "literal", text: "B", typePreset: "typePresets.plain" },
+        { kind: "literal", text: "A", typeToken: "typeTokens.plain" },
+        { kind: "literal", text: "B", typeToken: "typeTokens.plain" },
       ],
       globals: RUN_GLOBALS,
     });
@@ -158,9 +158,9 @@ describe("the run editor's own state", () => {
 
 describe("showing one run at a time behind numbered tabs", () => {
   const threeRuns: readonly TextRun[] = [
-    { kind: "literal", text: "A", typePreset: "typePresets.plain" },
-    { kind: "literal", text: "B", typePreset: "typePresets.caption" },
-    { kind: "literal", text: "C", typePreset: "typePresets.title" },
+    { kind: "literal", text: "A", typeToken: "typeTokens.plain" },
+    { kind: "literal", text: "B", typeToken: "typeTokens.caption" },
+    { kind: "literal", text: "C", typeToken: "typeTokens.title" },
   ];
 
   const tab = (box: ReturnType<typeof mountRunEditor>, position: number) =>

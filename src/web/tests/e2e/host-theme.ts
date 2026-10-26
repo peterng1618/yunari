@@ -176,11 +176,8 @@ const envelopeFor = (
       ink: { name: "Ink", value: { kind: "solid" as const, color: "#e8ecf3" } },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
     },
-    typePresets: {
-      "11-400": {
-        name: "Caption",
-        value: { family: "system-ui, sans-serif", size: 22, weight: "400" },
-      },
+    typeTokens: {
+      "11-400": { family: "system-ui, sans-serif", weight: "400" },
     },
   },
   assets: [
@@ -243,7 +240,7 @@ const envelopeFor = (
           runs: [
             {
               text: "Hosted theme from the real host",
-              typePreset: "typePresets.11-400",
+              typeToken: "typeTokens.11-400",
               style: { color: { ref: "palette.ink" } },
             },
           ],
@@ -271,7 +268,7 @@ const envelopeFor = (
             {
               kind: "value",
               bindingId: "bound-value",
-              typePreset: "typePresets.11-400",
+              typeToken: "typeTokens.11-400",
               style: { color: { ref: "palette.ink" } },
             },
           ],
@@ -300,7 +297,7 @@ const envelopeFor = (
             {
               kind: "value",
               bindingId: "bound-value",
-              typePreset: "typePresets.11-400",
+              typeToken: "typeTokens.11-400",
               style: { color: { ref: "palette.ink" } },
             },
           ],
@@ -344,7 +341,7 @@ const chartEnvelope = {
       },
       ink: { name: "Ink", value: { kind: "solid" as const, color: "#e8ecf3" } },
     },
-    typePresets: {},
+    typeTokens: {},
   },
   assets: [],
   scene: {
@@ -455,7 +452,7 @@ const mediaEnvelope = {
       },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
     },
-    typePresets: {},
+    typeTokens: {},
   },
   assets: [
     {
@@ -512,7 +509,7 @@ const backgroundLayerEnvelope = {
         value: { kind: "solid" as const, color: "rgba(255, 255, 255, 0.35)" },
       },
     },
-    typePresets: {},
+    typeTokens: {},
   },
   assets: [
     {
@@ -587,7 +584,7 @@ const backgroundEdgeEnvelope = {
       },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
     },
-    typePresets: {},
+    typeTokens: {},
   },
   assets: [
     {
@@ -647,7 +644,7 @@ const backgroundFlipEnvelope = {
         value: { kind: "solid" as const, color: "rgba(255, 255, 255, 0.35)" },
       },
     },
-    typePresets: {},
+    typeTokens: {},
   },
   assets: [
     {
@@ -713,7 +710,7 @@ const videoEnvelope = {
       },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
     },
-    typePresets: {},
+    typeTokens: {},
   },
   assets: [
     {
@@ -747,7 +744,7 @@ const overhangEnvelope = {
       ink: { name: "Ink", value: { kind: "solid" as const, color: "#e8ecf3" } },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
     },
-    typePresets: {},
+    typeTokens: {},
   },
   assets: [],
   scene: {
@@ -894,14 +891,11 @@ const groupedGlassEnvelope = {
       tag: { name: "Tag", value: { kind: "solid" as const, color: "#2f6f4f" } },
       ink: { name: "Ink", value: { kind: "solid" as const, color: "#e8ecf3" } },
     },
-    typePresets: {
+    typeTokens: {
       "11-400": {
-        name: "Caption",
-        value: {
-          family: "Inter, system-ui, sans-serif",
-          size: 22,
-          weight: "400",
-        },
+        family: "Inter, system-ui, sans-serif",
+
+        weight: "400",
       },
     },
   },
@@ -1042,7 +1036,7 @@ const groupedGlassEnvelope = {
             {
               kind: "value",
               bindingId: "bound-value",
-              typePreset: "typePresets.11-400",
+              typeToken: "typeTokens.11-400",
               style: { color: { ref: "palette.ink" } },
             },
           ],
@@ -1198,7 +1192,7 @@ export async function seedHostTheme(): Promise<void> {
                 {
                   kind: "value",
                   bindingId: "bound-value",
-                  typePreset: "typePresets.11-400",
+                  typeToken: "typeTokens.11-400",
                   style: { color: { ref: "palette.ink" } },
                 },
               ],

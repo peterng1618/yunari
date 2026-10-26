@@ -4,6 +4,7 @@ import {
   type FabricGlobals,
   type Globals,
   resolveTextSegments,
+  type TypeToken,
 } from "@yunari/renderer-core";
 import { type FabricObject, StaticCanvas, Textbox } from "fabric/es";
 import { describe, expect, it } from "vitest";
@@ -12,7 +13,7 @@ import {
   refreshBoundText,
   YUNARI_TEXT_PROPERTY,
 } from "./fabric-text.js";
-import { applyObjectTypePresets } from "./object-type.js";
+import { applyObjectTypeTokens } from "./object-type.js";
 import { reviveScene, serialiseScene } from "./persist.js";
 import { textShapeFor } from "./text-runs.js";
 
@@ -69,15 +70,15 @@ function number(key: string, value: number, unit?: string) {
 
 /**
  * A tracked preset, in the shape the v2 path reads it. `FabricGlobals` is the
- * narrower type the text functions take; `applyObjectTypePresets` accepts it.
+ * narrower type the text functions take; `applyObjectTypeTokens` accepts it.
  */
 function globalsWith(
   value: Readonly<Record<string, unknown>>,
   id = "tracked",
 ): FabricGlobals {
   return {
-    typePresets: {
-      [id]: { name: id, value: { family: "Inter", size: 32, ...value } },
+    typeTokens: {
+      [id]: { family: "Inter", size: 32, ...value } as unknown as TypeToken,
     },
   };
 }
@@ -130,10 +131,10 @@ function clipWidthOf(object: { clipPath?: unknown }): number | undefined {
 describe("the v2 path applies tracking", () => {
   it("tracks a revived object from its persisted runs", async () => {
     const source = textbox("metric", [
-      { kind: "literal", text: "CPU", typePreset: "typePresets.tracked" },
+      { kind: "literal", text: "CPU", typeToken: "typeTokens.tracked" },
     ]);
     const canvas = canvasOf([source]);
-    applyObjectTypePresets(canvas, globalsWith({ letterSpacing: 0.8 }));
+    applyObjectTypeTokens(canvas, globalsWith({ letterSpacing: 0.8 }));
 
     const scene = serialiseScene(canvas);
     const revived = new StaticCanvas(undefined, { width: 400, height: 300 });
@@ -148,11 +149,11 @@ describe("the v2 path applies tracking", () => {
     // `refreshBoundText` rewrites text and styles from the runs. If it reset the
     // object's own type, tracking would vanish on the first sample.
     const object = textbox("clock", [
-      { kind: "value", bindingId: "t", typePreset: "typePresets.tracked" },
+      { kind: "value", bindingId: "t", typeToken: "typeTokens.tracked" },
     ]);
     const canvas = canvasOf([object]);
     const globals = globalsWith({ letterSpacing: 0.8 });
-    applyObjectTypePresets(canvas, globals);
+    applyObjectTypeTokens(canvas, globals);
 
     refreshBoundText(
       canvas,
@@ -169,11 +170,11 @@ describe("the v2 path applies tracking", () => {
 
   it("keeps tracking when the editor repaints authored text", () => {
     const object = textbox("wordmark", [
-      { kind: "literal", text: "YUNARI", typePreset: "typePresets.tracked" },
+      { kind: "literal", text: "YUNARI", typeToken: "typeTokens.tracked" },
     ]);
     const canvas = canvasOf([object]);
     const globals = globalsWith({ letterSpacing: 0.8 });
-    applyObjectTypePresets(canvas, globals);
+    applyObjectTypeTokens(canvas, globals);
 
     applyAuthoredText(canvas, globals, { bindings: {} });
 
@@ -189,14 +190,14 @@ describe("fixed boxes survive a changing reading", () => {
     const object = reading(
       "capacity",
       [
-        { kind: "literal", text: "MEM ", typePreset: "typePresets.tracked" },
-        { kind: "value", bindingId: "m", typePreset: "typePresets.tracked" },
+        { kind: "literal", text: "MEM ", typeToken: "typeTokens.tracked" },
+        { kind: "value", bindingId: "m", typeToken: "typeTokens.tracked" },
       ],
       { align: "center", overflow: "ellipsis" },
     );
     const canvas = canvasOf([object]);
     const globals = globalsWith({ letterSpacing: 0.8 });
-    applyObjectTypePresets(canvas, globals);
+    applyObjectTypeTokens(canvas, globals);
     const bindings = { capacity: [{ id: "m", semanticKey: "ram.used" }] };
 
     const after = (used: number): { centre: number; width: number } => {
@@ -225,12 +226,12 @@ describe("fixed boxes survive a changing reading", () => {
   it("keeps a right-aligned reading against its authored right edge", () => {
     const object = reading(
       "reading",
-      [{ kind: "value", bindingId: "m", typePreset: "typePresets.tracked" }],
+      [{ kind: "value", bindingId: "m", typeToken: "typeTokens.tracked" }],
       { align: "right", overflow: "ellipsis" },
     );
     const canvas = canvasOf([object]);
     const globals = globalsWith({ letterSpacing: 0.8 });
-    applyObjectTypePresets(canvas, globals);
+    applyObjectTypeTokens(canvas, globals);
     const bindings = { reading: [{ id: "m", semanticKey: "ram.used" }] };
 
     const rightAfter = (used: number): { right: number; width: number } => {
@@ -258,13 +259,13 @@ describe("fixed boxes survive a changing reading", () => {
   it("ellipsises a tracked reading that outgrows its box instead of spilling", () => {
     const object = reading(
       "reading",
-      [{ kind: "value", bindingId: "m", typePreset: "typePresets.tracked" }],
+      [{ kind: "value", bindingId: "m", typeToken: "typeTokens.tracked" }],
       { align: "right", overflow: "ellipsis" },
       { ...BOX, width: 90 },
     );
     const canvas = canvasOf([object]);
     const globals = globalsWith({ letterSpacing: 0.8 });
-    applyObjectTypePresets(canvas, globals);
+    applyObjectTypeTokens(canvas, globals);
 
     refreshBoundText(
       canvas,
@@ -284,12 +285,12 @@ describe("fixed boxes survive a changing reading", () => {
     // author previewed in English is not the string the display paints.
     const object = reading(
       "date",
-      [{ kind: "value", bindingId: "d", typePreset: "typePresets.tracked" }],
+      [{ kind: "value", bindingId: "d", typeToken: "typeTokens.tracked" }],
       { align: "center", overflow: "ellipsis" },
     );
     const canvas = canvasOf([object]);
     const globals = globalsWith({ letterSpacing: 0.8 });
-    applyObjectTypePresets(canvas, globals);
+    applyObjectTypeTokens(canvas, globals);
     const bindings = {
       date: [{ id: "d", semanticKey: "date.today", format: "DD MMMM" }],
     };
@@ -328,20 +329,22 @@ describe("the mixed-run limit", () => {
     // to learn their choice did nothing: the run editor's disclosure reads
     // exactly these two values to decide whether to warn.
     const globals: Globals = {
-      typePresets: {
+      typeTokens: {
         tracked: {
-          name: "Tracked",
-          value: { family: "Inter", size: 32, letterSpacing: 0.8 },
-        },
+          family: "Inter",
+          size: 32,
+          letterSpacing: 0.8,
+        } as unknown as TypeToken,
         other: {
-          name: "Other",
-          value: { family: "Inter", size: 32, letterSpacing: 4 },
-        },
+          family: "Inter",
+          size: 32,
+          letterSpacing: 4,
+        } as unknown as TypeToken,
       },
     };
     const runs = [
-      { kind: "literal", text: "CPU ", typePreset: "typePresets.tracked" },
-      { kind: "literal", text: "42%", typePreset: "typePresets.other" },
+      { kind: "literal", text: "CPU ", typeToken: "typeTokens.tracked" },
+      { kind: "literal", text: "42%", typeToken: "typeTokens.other" },
     ] as const;
 
     // Detectable: both values resolve, and the difference is reported.
@@ -363,7 +366,7 @@ describe("the mixed-run limit", () => {
     // deliberately absent from the globals the object is applied with, so this
     // is exactly the case where the object cannot honour the second run.
     const object = textbox("mixed", [...runs]);
-    applyObjectTypePresets(
+    applyObjectTypeTokens(
       canvasOf([object]),
       globalsWith({ letterSpacing: 0.8 }),
     );

@@ -489,7 +489,7 @@ function tokenGroupChange(
   return merged(changes);
 }
 
-const TOKEN_GROUPS = new Set(["palette", "typePresets"]);
+const TOKEN_GROUPS = new Set(["palette", "typeTokens"]);
 
 function globalsChange(
   before: unknown,

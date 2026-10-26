@@ -91,7 +91,7 @@ const envelope = {
         value: { kind: "solid" as const, color: "#e8e4da" },
       },
     },
-    typePresets: {},
+    typeTokens: {},
   },
   assets: [],
   scene: { version: "7.4.0" as const, objects: [] },

@@ -69,7 +69,7 @@ const envelope = (id: string) => ({
         value: { kind: "solid" as const, color: "rgba(255, 255, 255, 0.35)" },
       },
     },
-    typePresets: {},
+    typeTokens: {},
   },
   assets: [
     {

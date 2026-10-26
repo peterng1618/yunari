@@ -1,12 +1,12 @@
 import type { FabricGlobals } from "@yunari/renderer-core";
-import { starterTypePresets } from "./new-fabric-theme-globals.js";
+import { starterTypeTokens } from "./new-fabric-theme-globals.js";
 import { paletteTokenRole } from "./new-object-defaults.js";
 
 /**
  * What a card asks for, and what the document it is inserted into actually has.
  *
  * A card is authored against the starter's vocabulary — `palette.frost`,
- * `typePresets.90-600` — and a document is free to name its tokens anything
+ * `typeTokens.90-600` — and a document is free to name its tokens anything
  * (`vg-128`). The answer used to be a refusal, because an unresolved reference
  * reaches `snapshot`, which validates and throws: an author gets a canvas that
  * looks right and a save that fails for the rest of the session, told nothing.
@@ -38,7 +38,7 @@ import { paletteTokenRole } from "./new-object-defaults.js";
  *
  * `ref` is a reference this document can paint. `literal` is `true` when the
  * format has somewhere to put the card's own value and no token can answer —
- * a text run's `typePreset`, where the object already carries the size, weight
+ * a text run's `typeToken`, where the object already carries the size, weight
  * and face as plain Fabric fields and dropping the reference leaves exactly
  * the typography the card was authored with. Neither being set means this
  * document cannot express the reference at all, and the card is refused.
@@ -94,24 +94,24 @@ export function resolveCardToken(
           substitutedFor: `palette.${entry}`,
         };
   }
-  if (group !== "typePresets") {
+  if (group !== "typeTokens") {
     return { ref: undefined, literal: false, substitutedFor: undefined };
   }
   const preset = presetRoleMatch(entry, globals);
   if (preset !== undefined) {
     return {
-      ref: `typePresets.${preset}`,
+      ref: `typeTokens.${preset}`,
       literal: false,
-      substitutedFor: `typePresets.${entry}`,
+      substitutedFor: `typeTokens.${entry}`,
     };
   }
   // A text run's preset is the one reference with a literal home: the object
   // already carries `fontFamily`/`fontSize`/`fontWeight` as authored Fabric
-  // fields, and `validateTypePresetReference` passes a run that declares none.
+  // fields, and `validateTypeTokenReference` passes a run that declares none.
   return {
     ref: undefined,
     literal: true,
-    substitutedFor: `typePresets.${entry}`,
+    substitutedFor: `typeTokens.${entry}`,
   };
 }
 
@@ -155,7 +155,7 @@ function presetRoleMatch(
   entry: string,
   globals: FabricGlobals | undefined,
 ): string | undefined {
-  const candidates = Object.keys(globals?.typePresets ?? {});
+  const candidates = Object.keys(globals?.typeTokens ?? {});
   const role = trioRoleOf(entry);
   return (
     candidates.find((id) => trioRoleOf(id) === role && role !== undefined) ??
@@ -169,8 +169,9 @@ function presetRoleMatch(
  * disagree.
  */
 function trioRoleOf(id: string): string | undefined {
-  const value = starterTypePresets[id as keyof typeof starterTypePresets]
-    ?.value as { readonly trioRole?: string } | undefined;
+  const value = starterTypeTokens[id as keyof typeof starterTypeTokens] as
+    | { readonly trioRole?: string }
+    | undefined;
   return value?.trioRole;
 }
 
@@ -180,7 +181,6 @@ function carries(
   globals: FabricGlobals | undefined,
 ): boolean {
   if (group === "palette") return globals?.palette?.[entry] !== undefined;
-  if (group === "typePresets")
-    return globals?.typePresets?.[entry] !== undefined;
+  if (group === "typeTokens") return globals?.typeTokens?.[entry] !== undefined;
   return false;
 }

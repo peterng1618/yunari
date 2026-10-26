@@ -14,8 +14,8 @@ const GLOBALS = {
   palette: {
     ink: { name: "Ink", value: { kind: "solid" as const, color: "#102030" } },
   },
-  typePresets: {
-    body: { name: "Body", value: { family: "Inter", size: 16, weight: "600" } },
+  typeTokens: {
+    body: { family: "Inter", size: 16, weight: "600" },
   },
 };
 
@@ -88,8 +88,8 @@ const palette = {
       value: { kind: "solid" as const, color: "#0c0e13" },
     },
   },
-  typePresets: {
-    body: { name: "Body", value: { family: "Inter", size: 16 } },
+  typeTokens: {
+    body: { family: "Inter", size: 16 },
   },
 } as const;
 

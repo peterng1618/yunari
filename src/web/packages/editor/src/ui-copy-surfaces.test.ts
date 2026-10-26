@@ -812,7 +812,7 @@ async function mountLandedSurfaces(): Promise<{
         palette: {
           ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
         },
-        typePresets: {
+        typeTokens: {
           body: { name: "Body", value: { family: "Inter", size: 16 } },
         },
       } as never,

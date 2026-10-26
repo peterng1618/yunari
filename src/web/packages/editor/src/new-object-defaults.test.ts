@@ -41,11 +41,8 @@ const globals = {
     },
     ink: { name: "Ink", value: { kind: "solid" as const, color: "#102030" } },
   },
-  typePresets: {
-    body: {
-      name: "Body",
-      value: { family: "Inter", size: 16, weight: 500, lineHeight: 1.2 },
-    },
+  typeTokens: {
+    body: { family: "Inter", size: 16, weight: 500, lineHeight: 1.2 },
   },
 };
 
@@ -175,7 +172,7 @@ describe("new object defaults", () => {
         runs: [
           {
             text: "New text",
-            typePreset: "typePresets.body",
+            typeToken: "typeTokens.body",
             style: { color: { ref: "palette.ink" } },
           },
         ],
@@ -191,7 +188,7 @@ describe("new object defaults", () => {
         "New text",
         placement,
       ),
-    ).toThrow("type preset");
+    ).toThrow("type token");
   });
 
   it.each(["gauge", "line", "bar", "pie", "radar", "polarBar"] as const)(

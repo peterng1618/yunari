@@ -136,7 +136,7 @@ function textBox(
         {
           kind: "literal" as const,
           text: TEXT,
-          typePreset: "typePresets.40-400",
+          typeToken: "typeTokens.40-400",
           style: { color: { ref: "palette.ink" } },
         },
       ],
@@ -159,14 +159,11 @@ const ENVELOPE = {
   background: { color: { ref: "palette.bar" as const } },
   globals: {
     palette: PALETTE,
-    typePresets: {
+    typeTokens: {
       "40-400": {
-        name: "Measure",
-        value: {
-          family: "Segoe UI, system-ui, sans-serif",
-          size: FONT_SIZE,
-          weight: "400",
-        },
+        family: "Segoe UI, system-ui, sans-serif",
+
+        weight: "400",
       },
     },
   },

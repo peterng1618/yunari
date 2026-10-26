@@ -83,10 +83,10 @@ import { ShortcutManager } from "./shortcut-manager/index.js";
 import { createSnapManager, type SnapManager } from "./snap-manager/index.js";
 import type { ThemeLibraryClient } from "./theme-library-client.js";
 import {
-  createTypePresetPanel,
-  type TypePresetFontActions,
-  type TypePresetPanel,
-  type TypePresets,
+  createTypeTokenPanel,
+  type TypeTokenFontActions,
+  type TypeTokenPanel,
+  type TypeTokens,
 } from "./type-preset-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
 import { requestNormalizedVideo } from "./video-normalizer.js";
@@ -215,7 +215,7 @@ export class EditorSession {
   readonly #runtime: LiveRuntime;
   readonly #artboard: ArtboardPanel;
   readonly #palette: PalettePanel;
-  readonly #types: TypePresetPanel;
+  readonly #types: TypeTokenPanel;
   readonly #newObjects: NewObjectPanel;
   readonly #assetsPanel: { destroy(): void };
   readonly #selection: SelectionInspector;
@@ -372,7 +372,7 @@ export class EditorSession {
     // session for them: the Tokens pane's own controls and the selection
     // inspector's face field are the same owner answering the same question
     // (`vg-268`), so neither re-implements a face or trio write.
-    const fontActions: TypePresetFontActions = {
+    const fontActions: TypeTokenFontActions = {
       applyFace: async (id, face) => {
         await this.#document.runFontAction(() =>
           this.applyPresetFace(id, face),
@@ -382,7 +382,7 @@ export class EditorSession {
         await this.#document.runFontAction(() => this.applyFontTrio(id));
       },
     };
-    this.#types = createTypePresetPanel(
+    this.#types = createTypeTokenPanel(
       options.panelHosts.tokens,
       (presets) => this.#document.setTypes(presets),
       (id, replacement) => this.#deleteType(id, replacement),
@@ -395,7 +395,7 @@ export class EditorSession {
       options.tokenSelection,
     );
     this.#types.render(
-      this.#document.envelope.globals?.typePresets as TypePresets | undefined,
+      this.#document.envelope.globals?.typeTokens as TypeTokens | undefined,
     );
     // The chart owner, built before the inspector that renders its fields: the
     // inspector is published with both halves of the port at construction, so
@@ -483,7 +483,6 @@ export class EditorSession {
         // The same port the preset library is handed: one delete route, so the
         // reference reassignment and the token clear cannot disagree.
         onDelete: (id, replacement) => this.#deleteType(id, replacement),
-        setRole: (id, role) => this.#document.setPresetRole(id, role),
         unbindFace: (id) => this.#document.unbindPresetFace(id),
         // The package's own faces, so a bound preset's weight is chosen from
         // what it holds rather than typed into a fallback.
@@ -525,7 +524,7 @@ export class EditorSession {
       this.#selection.setSuppressed(token !== undefined);
       this.#tokenInspector.render(
         token,
-        (this.#document.envelope.globals?.typePresets ?? {}) as TypePresets,
+        (this.#document.envelope.globals?.typeTokens ?? {}) as TypeTokens,
         this.#document.envelope.globals,
       );
     };
@@ -874,7 +873,7 @@ export class EditorSession {
         "file" in source
           ? await this.#assets.importFont(source.file, metadata)
           : this.#assets.amendFont(source.assetId, metadata);
-      this.#document.addTypePresetFromLocalFont(asset, role);
+      this.#document.addTypeTokenFromLocalFont(asset, role);
       this.#document.addCredit({ ...credit, assetId: asset.id });
       this.#declarationsChanged();
       // Only a fresh import is an import; amending a declared face writes the
@@ -938,8 +937,8 @@ export class EditorSession {
    */
   #fontPickerBody(): ReactElement {
     const document = this.#document;
-    const presets = document.envelope.globals?.typePresets as
-      | TypePresets
+    const presets = document.envelope.globals?.typeTokens as
+      | TypeTokens
       | undefined;
     const selected = this.#options.selection?.get().selectionPresetId;
     const run = (action: () => Promise<unknown>): void => {
@@ -956,10 +955,10 @@ export class EditorSession {
         run(() => document.applyFontTrio(trio));
       },
       onAddTrioPresets: (trio) => {
-        run(() => document.addTypePresetsFromTrio(trio));
+        run(() => document.addTypeTokensFromTrio(trio));
       },
       onAddPreset: (cut, role, family) => {
-        run(() => document.addTypePresetFromCut(cut, role, family));
+        run(() => document.addTypeTokenFromCut(cut, role, family));
       },
       ...(selected === undefined
         ? {}
@@ -1211,8 +1210,8 @@ export class EditorSession {
    */
   #tokenExists(token: TokenRef): boolean {
     if (token.kind === "preset") {
-      const presets = (this.#document.envelope.globals?.typePresets ??
-        {}) as TypePresets;
+      const presets = (this.#document.envelope.globals?.typeTokens ??
+        {}) as TypeTokens;
       return presets[token.id] !== undefined;
     }
     return this.#document.envelope.globals?.palette?.[token.id] !== undefined;

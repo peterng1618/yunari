@@ -133,11 +133,11 @@ describe("the new Fabric document", () => {
     });
     expect(document_.artboard).toMatchObject(ARTBOARD);
     expect(document_.metadata?.themeLanguage).toBe("en");
-    expect(document_.globals?.typePresets).toMatchObject({
-      "36-500": { value: { trioRole: "heading" } },
-      "90-600": { value: { trioRole: "heading" } },
-      "24-400": { value: { trioRole: "body" } },
-      mono: { value: { trioRole: "mono" } },
+    expect(document_.globals?.typeTokens).toMatchObject({
+      "36-500": { trioRole: "heading" },
+      "90-600": { trioRole: "heading" },
+      "24-400": { trioRole: "body" },
+      mono: { trioRole: "mono" },
     });
     // **The backdrop is a declared media asset, and nothing paints over it.**
     // The gradient plate it replaced was a scene object sitting on the canvas
@@ -563,12 +563,12 @@ describe("the new Fabric document", () => {
     // a clock or a reading: a numeral's advance is a grid cell, and opening it up
     // breaks the column it sits in.
     const theme = createNewFabricTheme();
-    const presets = theme.globals?.typePresets as Record<
+    const presets = theme.globals?.typeTokens as unknown as Record<
       string,
-      { value: Readonly<Record<string, unknown>> }
+      Readonly<Record<string, unknown>>
     >;
     const spacingOf = (id: string): number | undefined => {
-      const value = presets[id]?.value["letterSpacing"];
+      const value = presets[id]?.["letterSpacing"];
       return typeof value === "number" ? value : undefined;
     };
 
@@ -592,10 +592,10 @@ describe("the new Fabric document", () => {
     // `ram-value` and the preset it uses is `60-600`.
     const tracked = fabricObjectsOf(canvas).filter((object) => {
       const authored = object.get("yunariText") as
-        | { readonly runs?: ReadonlyArray<{ typePreset?: string }> }
+        | { readonly runs?: ReadonlyArray<{ typeToken?: string }> }
         | undefined;
-      const ref = authored?.runs?.[0]?.typePreset;
-      const preset = ref?.slice("typePresets.".length);
+      const ref = authored?.runs?.[0]?.typeToken;
+      const preset = ref?.slice("typeTokens.".length);
       return preset !== undefined && spacingOf(preset) !== undefined;
     });
     // The fit check first, so an overflow is reported as an overflow rather than
@@ -620,9 +620,9 @@ describe("the new Fabric document", () => {
     // live bug — the editor applies presets at mount — but the starter is the
     // document every other task copies from.
     const theme = createNewFabricTheme();
-    const presets = theme.globals?.typePresets as Record<
+    const presets = theme.globals?.typeTokens as unknown as Record<
       string,
-      { value: Readonly<Record<string, unknown>> }
+      Readonly<Record<string, unknown>>
     >;
     const canvas = new StaticCanvas(undefined, {
       width: theme.artboard.width,
@@ -634,14 +634,13 @@ describe("the new Fabric document", () => {
     const absent: string[] = [];
     for (const object of fabricObjectsOf(canvas)) {
       const authored = object.get("yunariText") as
-        | { readonly runs?: ReadonlyArray<{ typePreset?: string }> }
+        | { readonly runs?: ReadonlyArray<{ typeToken?: string }> }
         | undefined;
-      const presetId = authored?.runs?.[0]?.typePreset?.slice(
-        "typePresets.".length,
+      const presetId = authored?.runs?.[0]?.typeToken?.slice(
+        "typeTokens.".length,
       );
       if (presetId === undefined) continue;
-      if (typeof presets[presetId]?.value["letterSpacing"] !== "number")
-        continue;
+      if (typeof presets[presetId]?.["letterSpacing"] !== "number") continue;
       const id = String(object.get("id"));
       const writtenValue = object.get("charSpacing") as number;
       if (typeof writtenValue === "number" && writtenValue !== 0)

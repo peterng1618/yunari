@@ -1,7 +1,7 @@
 import type { AssetResult, FontCut, FontTrioInfo } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { TypePresets } from "../type-preset-manager/panel.js";
+import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
 
 /** The trio's roles, in the order the card reads them: a trio that omits a
@@ -19,16 +19,16 @@ export type FontResult = AssetResult & {
   };
 };
 
-/** One preset entry, named as the scope row needs it. */
-type RolePreset = TypePresets[string];
+/** One token, in the shape the scope row needs it. */
+type RolePreset = TypeTokens[string];
 
 function rolePresets(
-  presets: TypePresets,
+  presets: TypeTokens,
   role: FontRole,
 ): readonly RolePreset[] {
-  return Object.values(presets).filter(
-    (entry) => entry.value.trioRole === role,
-  );
+  return Object.entries(presets)
+    .filter(([id]) => id === role)
+    .map(([, token]) => token);
 }
 
 export function cutsOf(selected: FontResult): readonly FontCut[] {
@@ -140,7 +140,7 @@ export function FontPreviewPanel({
   onApplyToSelected,
 }: {
   readonly selected: FontResult;
-  readonly presets: TypePresets;
+  readonly presets: TypeTokens;
   readonly onApplyTrio: ((trio: FontTrioInfo) => void) | undefined;
   readonly onAddTrioPresets: ((trio: FontTrioInfo) => void) | undefined;
   readonly onAddPreset:
@@ -424,8 +424,8 @@ export function FontPreviewPanel({
                       className="font-mono text-[10px] text-muted"
                     >
                       {copy.change(
-                        first.name,
-                        first.value.weight,
+                        first.family,
+                        first.weight,
                         after.family,
                         after.weight,
                       )}

@@ -39,8 +39,8 @@ import {
   YUNARI_PAINT_PROPERTY,
 } from "./object-paint.js";
 import {
-  applyObjectTypePresets,
-  reassignObjectTypePresetReferences,
+  applyObjectTypeTokens,
+  reassignObjectTypeTokenReferences,
 } from "./object-type.js";
 import { reassignObjectPaletteReferences } from "./palette-references.js";
 import type { SerialisedScene } from "./persist.js";
@@ -838,18 +838,13 @@ describe("identity survives a round trip", () => {
   it("reapplies a persisted text run type preset", () => {
     const text = new Textbox("CPU", { fontFamily: "Old", fontSize: 10 });
     text.set(YUNARI_TEXT_PROPERTY, {
-      runs: [
-        { kind: "literal", text: "CPU", typePreset: "typePresets.metric" },
-      ],
+      runs: [{ kind: "literal", text: "CPU", typeToken: "typeTokens.metric" }],
     });
     const canvas = canvasOf(text);
 
-    applyObjectTypePresets(canvas, {
-      typePresets: {
-        metric: {
-          name: "Metric",
-          value: { family: "Inter", size: 32, weight: 700, lineHeight: 1.1 },
-        },
+    applyObjectTypeTokens(canvas, {
+      typeTokens: {
+        metric: { family: "Inter", weight: 700 },
       },
     });
 
@@ -888,24 +883,21 @@ describe("identity survives a round trip", () => {
     const text = new Textbox("CPU 42%");
     text.set(YUNARI_TEXT_PROPERTY, {
       runs: [
-        { kind: "literal", text: "CPU ", typePreset: "typePresets.old" },
-        { kind: "literal", text: "42%", typePreset: "typePresets.old" },
+        { kind: "literal", text: "CPU ", typeToken: "typeTokens.old" },
+        { kind: "literal", text: "42%", typeToken: "typeTokens.old" },
       ],
     });
     const canvas = canvasOf(text);
 
     expect(
-      reassignObjectTypePresetReferences(
+      reassignObjectTypeTokenReferences(
         canvas,
-        "typePresets.old",
-        "typePresets.new",
+        "typeTokens.old",
+        "typeTokens.new",
       ),
     ).toBe(2);
     expect(text.get(YUNARI_TEXT_PROPERTY)).toMatchObject({
-      runs: [
-        { typePreset: "typePresets.new" },
-        { typePreset: "typePresets.new" },
-      ],
+      runs: [{ typeToken: "typeTokens.new" }, { typeToken: "typeTokens.new" }],
     });
   });
 

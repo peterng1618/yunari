@@ -48,7 +48,7 @@ import { uiCopy } from "./ui-copy.js";
  * across the eight cards, four of them the CPU card's, against its seven parts.
  * Inserted into a document whose part ids differ, or one an author has renamed,
  * every binding comes across as `null` and **no issue is raised** —
- * `unmapped-global` fires only on `palette.*` / `typePresets.*` string
+ * `unmapped-global` fires only on `palette.*` / `typeTokens.*` string
  * references, never on bindings. "A duplicated card is still a working card"
  * therefore holds for a starter-derived document, and the guarantee narrows to
  * ids everywhere else. The readings are the document's to carry, not this
@@ -435,7 +435,7 @@ function cardUnit(cardId: string): CardUnit {
  * `createNewFabricTheme` declares can ever come back carrying a reading. Any
  * other document — one whose parts carry different ids, or an author's renames
  * — gets bindings of `null` for every part, silently, because
- * `unmapped-global` inspects only `palette.*` and `typePresets.*` strings and
+ * `unmapped-global` inspects only `palette.*` and `typeTokens.*` strings and
  * has no view of bindings at all. The document's own bindings are the real
  * source and this function cannot reach them: `insertCard` passes them in to
  * mint *past*, and the copy has to be buildable without them. See the module
@@ -560,7 +560,7 @@ interface MappedCard {
  * that has to be kept in step with the first.
  *
  * **The invariant this exists to protect: no unresolved `palette.*` or
- * `typePresets.*` reference ever reaches the document.** An unresolved
+ * `typeTokens.*` reference ever reaches the document.** An unresolved
  * reference survives to `snapshot`, which validates and throws, so a card that
  * arrived anyway would leave the author with a canvas that looks right and a
  * save that fails for the rest of the session.
@@ -573,8 +573,7 @@ function mapGlobals(
   const unmappable: string[] = [];
   const resolve = (value: unknown): unknown => {
     if (typeof value === "string") {
-      if (!/^(?:palette|typePresets)\.[A-Za-z0-9_-]+$/.test(value))
-        return value;
+      if (!/^(?:palette|typeTokens)\.[A-Za-z0-9_-]+$/.test(value)) return value;
       const resolved = resolveCardToken(value, globals);
       if (resolved.ref !== undefined) {
         if (resolved.substitutedFor !== undefined) {

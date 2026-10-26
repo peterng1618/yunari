@@ -16,7 +16,7 @@ import {
   type ObjectTarget,
 } from "../object-actions.js";
 import { paletteTokenIds } from "../palette-manager/token-list.js";
-import { typePresetOf } from "../selection-inspector/appearance.js";
+import { typeTokenOf } from "../selection-inspector/appearance.js";
 import {
   BACKGROUND_LAYER_ID,
   backgroundRow,
@@ -268,9 +268,9 @@ export function createEditorShellBridge(input: {
   const snapshot = (): EditorShellSnapshot => {
     const active = activeObject();
     const identity = input.documentIdentity?.();
-    // The reference `typePresetOf` owns; the pane's keys are its tail, so the
+    // The reference `typeTokenOf` owns; the pane's keys are its tail, so the
     // prefix is dropped once here rather than at every reader of the field.
-    const presetRef = active === undefined ? undefined : typePresetOf(active);
+    const presetRef = active === undefined ? undefined : typeTokenOf(active);
     return {
       // Counted here, off the canvas, so the strip and the layer list read one
       // scene. The bridge only exists over a mounted document, so this reading
@@ -298,7 +298,7 @@ export function createEditorShellBridge(input: {
       documentName:
         identity === undefined ? undefined : documentNameOf(identity),
       releaseVersion: identity?.version,
-      selectionPresetId: presetRef?.slice("typePresets.".length),
+      selectionPresetId: presetRef?.slice("typeTokens.".length),
     };
   };
   const target = (): ObjectTarget => {

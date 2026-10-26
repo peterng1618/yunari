@@ -334,7 +334,7 @@ function legacyEnvelope(): FabricThemeEnvelope {
     {
       kind: "literal" as const,
       text,
-      typePreset: "typePresets.11-400",
+      typeToken: "typeTokens.11-400",
       style: { color: { ref: "palette.ink" as const } },
     },
   ];
@@ -360,11 +360,8 @@ function legacyEnvelope(): FabricThemeEnvelope {
           value: { kind: "solid", color: "rgb(232, 236, 243)" },
         },
       },
-      typePresets: {
-        "11-400": {
-          name: "Caption",
-          value: { family: "system-ui, sans-serif", size: 22, weight: "400" },
-        },
+      typeTokens: {
+        "11-400": { family: "system-ui, sans-serif", weight: "400" },
       },
     },
     assets: [],

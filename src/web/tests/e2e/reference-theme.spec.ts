@@ -889,11 +889,8 @@ test.describe("the reference composition, authored", () => {
       id: "e2e-undeclared-run",
       globals: {
         ...GLASS_ENVELOPE.globals,
-        typePresets: {
-          "40-400": {
-            name: "Reading",
-            value: { family: "Segoe UI, sans-serif", size: 40, weight: "400" },
-          },
+        typeTokens: {
+          "40-400": { family: "Segoe UI, sans-serif", weight: "400" },
         },
       },
       scene: {
@@ -922,7 +919,7 @@ test.describe("the reference composition, authored", () => {
                 {
                   kind: "value",
                   bindingId: "not-declared",
-                  typePreset: "typePresets.40-400",
+                  typeToken: "typeTokens.40-400",
                   style: { color: { ref: "palette.edge" } },
                 },
               ],
@@ -1126,11 +1123,8 @@ const FIXTURE_WITH_MEDIA = {
   id: "e2e-capture",
   globals: {
     ...GLASS_ENVELOPE.globals,
-    typePresets: {
-      "20-400": {
-        name: "Caption",
-        value: { family: "Segoe UI, sans-serif", size: 20, weight: "400" },
-      },
+    typeTokens: {
+      "20-400": { family: "Segoe UI, sans-serif", weight: "400" },
     },
   },
   assets: [
@@ -1180,7 +1174,7 @@ const FIXTURE_WITH_MEDIA = {
             {
               kind: "literal",
               text: "FROST",
-              typePreset: "typePresets.20-400",
+              typeToken: "typeTokens.20-400",
               style: { color: { ref: "palette.edge" } },
             },
           ],

@@ -1,4 +1,4 @@
-import type { FabricPalette, TypePreset } from "@yunari/renderer-core";
+import type { FabricPalette, TypeToken } from "@yunari/renderer-core";
 
 /**
  * The starter theme's palette, type presets and the two lookups the scene
@@ -49,9 +49,9 @@ export const newTokenPaint = "#ffffff";
  * it — so it sits with the starter presets' own family, and the surface that
  * seeds it carries no authored value of its own.
  */
-export const newPresetType: TypePreset = {
+export const newPresetType: TypeToken = {
   family: "Segoe UI, sans-serif",
-  size: 16,
+  weight: "400",
 };
 
 /**
@@ -173,149 +173,110 @@ export const solidOf: Readonly<Record<string, string>> = {
   frostInk: "#dbeafe",
 };
 
-export const starterTypePresets = {
+export const starterTypeTokens = {
   // Body first: `createNewTextDefaults` and the chart defaults take the first
   // preset as a new object's, so the order here is the editor's default face.
   "20-400": {
-    name: "Caption",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 20,
-      weight: "400",
-      lineHeight: 1.18,
-      trioRole: "body",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 20,
+    weight: "400",
+    lineHeight: 1.18,
+    trioRole: "body",
   },
   "17-400": {
-    name: "Overline",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 17,
-      weight: "400",
-      // Measured off the reference's "SYSTEM INSIGHTS": the six glyph advances
-      // across "SYSTEM" run 16px apart at a 12px cap height, which is 0.29 em of
-      // the 17px face once the letter's own advance is taken out.
-      letterSpacing: 6,
-      lineHeight: 1.18,
-      trioRole: "body",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 17,
+    weight: "400",
+    // Measured off the reference's "SYSTEM INSIGHTS": the six glyph advances
+    // across "SYSTEM" run 16px apart at a 12px cap height, which is 0.29 em of
+    // the 17px face once the letter's own advance is taken out.
+    letterSpacing: 6,
+    lineHeight: 1.18,
+    trioRole: "body",
   },
   "20-500": {
-    name: "Rate",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 20,
-      weight: "500",
-      lineHeight: 1.18,
-      trioRole: "body",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 20,
+    weight: "500",
+    lineHeight: 1.18,
+    trioRole: "body",
   },
   "24-400": {
-    name: "Card title",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 24,
-      weight: "400",
-      lineHeight: 1.18,
-      trioRole: "body",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 24,
+    weight: "400",
+    lineHeight: 1.18,
+    trioRole: "body",
   },
   "24-500": {
-    name: "Period",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 24,
-      weight: "500",
-      lineHeight: 1.18,
-      trioRole: "body",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 24,
+    weight: "500",
+    lineHeight: 1.18,
+    trioRole: "body",
   },
   "32-400": {
-    name: "Date",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 32,
-      weight: "400",
-      lineHeight: 1.18,
-      trioRole: "body",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 32,
+    weight: "400",
+    lineHeight: 1.18,
+    trioRole: "body",
   },
   "36-500": {
-    name: "Wordmark",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 36,
-      weight: "500",
-      // Measured off the reference, not judged by eye: the glyphs of "YUNARI"
-      // stand 26px cap height and the five advances between them average 45px
-      // at a 36px face, which is 0.78 em once each letter's own advance is out.
-      letterSpacing: 28,
-      lineHeight: 1.18,
-      trioRole: "heading",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 36,
+    weight: "500",
+    // Measured off the reference, not judged by eye: the glyphs of "YUNARI"
+    // stand 26px cap height and the five advances between them average 45px
+    // at a 36px face, which is 0.78 em once each letter's own advance is out.
+    letterSpacing: 28,
+    lineHeight: 1.18,
+    trioRole: "heading",
   },
   "44-600": {
-    name: "Share",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 44,
-      weight: "600",
-      lineHeight: 1.18,
-      trioRole: "heading",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 44,
+    weight: "600",
+    lineHeight: 1.18,
+    trioRole: "heading",
   },
   "46-600": {
-    name: "Ring unit",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 46,
-      weight: "600",
-      lineHeight: 1.18,
-      trioRole: "heading",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 46,
+    weight: "600",
+    lineHeight: 1.18,
+    trioRole: "heading",
   },
   "60-600": {
-    name: "Ring reading",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 60,
-      weight: "600",
-      lineHeight: 1.18,
-      trioRole: "heading",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 60,
+    weight: "600",
+    lineHeight: 1.18,
+    trioRole: "heading",
   },
   "90-600": {
-    name: "Card reading",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 90,
-      weight: "600",
-      // Untracked, for the reason the clock below gives.
-      lineHeight: 1.18,
-      trioRole: "heading",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 90,
+    weight: "600",
+    // Untracked, for the reason the clock below gives.
+    lineHeight: 1.18,
+    trioRole: "heading",
   },
   "108-300": {
-    name: "Clock",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 108,
-      weight: "300",
-      // Untracked, and so is every reading: a numeral's advance is a grid cell,
-      // and opening it up breaks the column it sits in.
-      lineHeight: 1.18,
-      trioRole: "heading",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 108,
+    weight: "300",
+    // Untracked, and so is every reading: a numeral's advance is a grid cell,
+    // and opening it up breaks the column it sits in.
+    lineHeight: 1.18,
+    trioRole: "heading",
   },
   mono: {
-    name: "Mono",
-    value: {
-      family: "Segoe UI, sans-serif",
-      size: 14,
-      weight: "400",
-      lineHeight: 1.18,
-      trioRole: "mono",
-    },
+    family: "Segoe UI, sans-serif",
+    size: 14,
+    weight: "400",
+    lineHeight: 1.18,
+    trioRole: "mono",
   },
 } as const;
 
@@ -327,7 +288,7 @@ export function charSpacingPx(
   // `as const` gives each preset its own literal type, and the untracked ones
   // have no `letterSpacing` key at all, so the lookup is widened to read one.
   const value = (
-    starterTypePresets[presetId as keyof typeof starterTypePresets]?.value as
+    starterTypeTokens[presetId as keyof typeof starterTypeTokens] as
       | { readonly letterSpacing?: number }
       | undefined
   )?.letterSpacing;

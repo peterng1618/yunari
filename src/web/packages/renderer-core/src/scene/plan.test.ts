@@ -9,6 +9,7 @@ import type { SampleSource } from "../data/source.js";
 import { emptySampleSource } from "../data/source.js";
 import { SampleStore } from "../data/store.js";
 import type { Artboard, Binding, Globals, TextRun } from "../theme/document.js";
+import { isTypeTokenRole, TYPE_TOKEN_ROLES } from "../theme/document.js";
 import { defaultGaugeSettings, type Sample } from "../types.js";
 import {
   buildChartPlan,
@@ -116,21 +117,9 @@ describe("type presets", () => {
   it("resolves each text run through its own preset and palette token", () => {
     const globals: Globals = {
       palette: { ink: { name: "Ink", value: "#ffffff" } },
-      typePresets: {
-        label: {
-          name: "Label",
-          value: {
-            family: "Inter",
-            size: 14,
-            weight: 500,
-            letterSpacing: 1.2,
-            lineHeight: 1.1,
-          },
-        },
-        value: {
-          name: "Value",
-          value: { family: "Inter", size: 32, weight: 700 },
-        },
+      typeTokens: {
+        label: { family: "Inter", weight: 500 },
+        value: { family: "Inter", weight: 700 },
       },
     };
 
@@ -140,10 +129,10 @@ describe("type presets", () => {
         {
           kind: "literal",
           text: "CPU ",
-          typePreset: "typePresets.label",
+          typeToken: "typeTokens.label",
           style: { color: { ref: "palette.ink" } },
         },
-        { kind: "literal", text: "48%", typePreset: "typePresets.value" },
+        { kind: "literal", text: "48%", typeToken: "typeTokens.value" },
       ],
       [],
       { source: emptySampleSource },
@@ -168,6 +157,23 @@ describe("type presets", () => {
         style: { fontFamily: "Inter", fontSize: 32, fontWeight: 700 },
       },
     ]);
+  });
+});
+
+describe("type token roles", () => {
+  it("names exactly the three roles", () => {
+    expect(TYPE_TOKEN_ROLES).toEqual(["heading", "body", "mono"]);
+  });
+
+  it("recognises a role id and nothing else", () => {
+    for (const role of TYPE_TOKEN_ROLES) {
+      expect(isTypeTokenRole(role)).toBe(true);
+    }
+    // A role is the whole id: a derived id, a prefix or a case variant is not
+    // a role, because the id is what a run's reference names.
+    for (const id of ["heading-2", "body16", "Heading", "", "custom"]) {
+      expect(isTypeTokenRole(id)).toBe(false);
+    }
   });
 });
 
@@ -722,17 +728,17 @@ describe("text (§89)", () => {
 
   it("resolves per-run styles independently", () => {
     const globals: Globals = {
-      typePresets: {
-        small: { name: "Small", value: { family: "Inter", size: 12 } },
-        large: { name: "Large", value: { family: "Inter", size: 48 } },
+      typeTokens: {
+        small: { family: "Inter" },
+        large: { family: "Inter" },
       },
     };
 
     const result = resolveTextSegments(
       "t",
       [
-        { kind: "literal", text: "a", typePreset: "typePresets.small" },
-        { kind: "literal", text: "b", typePreset: "typePresets.large" },
+        { kind: "literal", text: "a", typeToken: "typeTokens.small" },
+        { kind: "literal", text: "b", typeToken: "typeTokens.large" },
       ],
       [],
       { source: emptySampleSource },

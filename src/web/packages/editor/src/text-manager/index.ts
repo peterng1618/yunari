@@ -125,9 +125,9 @@ function keepTypedText(object: PlanTextObject): "written" | "refused" {
       {
         kind: "literal",
         text: object.text,
-        ...(first?.typePreset === undefined
+        ...(first?.typeToken === undefined
           ? {}
-          : { typePreset: first.typePreset }),
+          : { typeToken: first.typeToken }),
         ...(first?.style === undefined ? {} : { style: first.style }),
       },
     ],

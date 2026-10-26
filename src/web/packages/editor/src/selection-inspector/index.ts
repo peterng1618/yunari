@@ -24,7 +24,7 @@ import {
   objectAction,
 } from "../object-actions.js";
 import { OBJECT_LOCK_CHANGED_EVENT } from "../object-lock-manager/index.js";
-import type { TypePresetFontActions } from "../type-preset-manager/panel.js";
+import type { TypeTokenFontActions } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
 import { backgroundColumn, writeBackgroundField } from "./background-column.js";
 import { createSelectionColumnRoot } from "./column.js";
@@ -174,7 +174,7 @@ interface SelectionInspectorOptions {
    * field being absent, so the column is told the capability rather than handed
    * a port that swallows it.
    */
-  readonly fontActions?: TypePresetFontActions;
+  readonly fontActions?: TypeTokenFontActions;
   /**
    * The author's favourite trios, which the host keeps rather than the document.
    * Absent reads as none and stores none, which is the standalone editor's own

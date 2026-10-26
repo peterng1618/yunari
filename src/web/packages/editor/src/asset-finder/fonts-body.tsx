@@ -7,7 +7,7 @@ import type {
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
-import type { TypePresets } from "../type-preset-manager/panel.js";
+import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
 import { type ClientOptions, listSources, searchAssets } from "./client.js";
 import { FontGrid } from "./font-grid.js";
@@ -52,7 +52,7 @@ export function FontsBody(props: {
   /** The document's role presets, read only to name the preview's apply scope.
    *  Absent while the session has not wired the panel: every role then reads
    *  zero and Apply has nothing to rewrite. */
-  readonly presets?: TypePresets;
+  readonly presets?: TypeTokens;
   /** The preview panel's actions. Each is drawn only when the session supplies
    *  it; the body never applies one itself. */
   readonly onApplyTrio?: (trio: FontTrioInfo) => void;

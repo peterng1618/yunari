@@ -34,7 +34,7 @@ function paint(): Record<string, unknown> {
         value: { kind: "solid", color: SNAPPING_ACCENT },
       },
     },
-    typePresets: {
+    typeTokens: {
       body: {
         name: "Body",
         value: { family: "Segoe UI, sans-serif", size: 32 },
@@ -86,7 +86,7 @@ function source(
           {
             kind: "literal",
             text: "TEXT",
-            typePreset: "typePresets.body",
+            typeToken: "typeTokens.body",
             style: { color: { ref: "palette.accent" } },
           },
         ],

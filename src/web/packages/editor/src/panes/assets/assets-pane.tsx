@@ -683,7 +683,7 @@ export function AssetsPane({
       actions.push(
         <ControlIconButton
           key="preset"
-          label={uiCopy.panels.assetCard.createTypePreset}
+          label={uiCopy.panels.assetCard.createTypeToken}
           data={{ "data-yunari-font-open": "" }}
           onClick={() => openFontForm(asset)}
         >
