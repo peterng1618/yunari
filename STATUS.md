@@ -27,9 +27,8 @@ Place the live line on its data clock — axis at its newest reading, no delay o
 
 1. Merge locally to `main`; then plan B.
 2. Measure the 30 fps browser arm — `this-pc` is pinned to 1 fps and a fabricated record's stream stalled.
-3. Close `vg-753`'s row against this commit's sha.
-4. Resume the backlog-drain plan at Phase 0 after that merge.
-5. Triage the pre-existing browser reds recorded below.
+3. Resume the backlog-drain plan at Phase 0 after that merge.
+4. Triage the pre-existing browser reds recorded below.
 
 ## Blockers / unverified
 
