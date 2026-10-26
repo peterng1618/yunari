@@ -104,30 +104,20 @@ export function computeArtboardTransform(
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
 
-  // Rect: the rotated bounding box drives the contain/cover ratio. Circle: the
-  // artboard's diagonal is the disc's diameter, so the angle cannot change it.
+  // Rect: the rotated bounding box drives the contain/cover ratio. A circle
+  // ignores it and inscribes the artboard's diagonal in the disc instead.
   const boxWidth =
-    shape === "circle"
-      ? artboard.width
-      : Math.abs(artboard.width * cos) + Math.abs(artboard.height * sin);
+    Math.abs(artboard.width * cos) + Math.abs(artboard.height * sin);
   const boxHeight =
-    shape === "circle"
-      ? artboard.height
-      : Math.abs(artboard.width * sin) + Math.abs(artboard.height * cos);
+    Math.abs(artboard.width * sin) + Math.abs(artboard.height * cos);
 
-  let scale: number;
-  if (shape === "circle") {
-    scale =
-      Math.min(viewportWidth, viewportHeight) /
-      Math.hypot(artboard.width, artboard.height);
-  } else {
-    const ratioX = viewportWidth / boxWidth;
-    const ratioY = viewportHeight / boxHeight;
-    scale =
-      contentFit === "contain"
-        ? Math.min(ratioX, ratioY)
-        : Math.max(ratioX, ratioY);
-  }
+  const scale =
+    shape === "circle"
+      ? Math.min(viewportWidth, viewportHeight) /
+        Math.hypot(artboard.width, artboard.height)
+      : contentFit === "contain"
+        ? Math.min(viewportWidth / boxWidth, viewportHeight / boxHeight)
+        : Math.max(viewportWidth / boxWidth, viewportHeight / boxHeight);
 
   const a = scale * cos;
   const b = scale * sin;
@@ -136,11 +126,12 @@ export function computeArtboardTransform(
   const c = -scale * sin + 0;
   const d = scale * cos;
 
-  // Centre the composition's centre on the viewport's centre.
+  // Centre the composition's centre on the viewport's centre. The parenthesised
+  // sum is the brief's formula and keeps a quarter turn free of 1e-14 residue.
   const offsetX =
-    viewportWidth / 2 - (a * artboard.width) / 2 - (c * artboard.height) / 2;
+    viewportWidth / 2 - ((a * artboard.width) / 2 + (c * artboard.height) / 2);
   const offsetY =
-    viewportHeight / 2 - (b * artboard.width) / 2 - (d * artboard.height) / 2;
+    viewportHeight / 2 - ((b * artboard.width) / 2 + (d * artboard.height) / 2);
 
   const matrix: readonly [number, number, number, number, number, number] = [
     a,
@@ -156,7 +147,8 @@ export function computeArtboardTransform(
       scale,
       offsetX,
       offsetY,
-      contentFit,
+      // An inscribed disc never crops, so "cover" would state a crop that is zero.
+      contentFit: "contain",
       bars: { x: 0, y: 0 },
       crop: { x: 0, y: 0 },
       rotation,

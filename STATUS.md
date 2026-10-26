@@ -18,8 +18,8 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 ## Last completed change
 
 - **Task 1 of plan B:** `computeArtboardTransform` accepts `shape`/`rotation`, returns `rotation` and a 2×3 `matrix`; rotation 0 keeps today's fields exactly.
-- **Refusals:** rect takes quarter turns only, circle whole degrees 0–359; fractions, negatives and non-finite angles throw `RangeError`.
-- **Evidence:** 9 new tests red before the change (`matrix` undefined), 44/44 green after; typecheck exit 0.
+- **Refusals:** rect takes quarter turns only, circle whole degrees 0–359; fractions, negatives and non-finite angles throw `RangeError`; a circle reports `contentFit: "contain"`.
+- **Evidence:** 50/50 artboard tests green; each new assertion shown red with its behaviour disabled; typecheck exit 0.
 - **Decision note:** `docs/decisions/0124-a-display-carries-its-shape-and-the-transform-carries-a-matrix.md`.
 
 ## Next
