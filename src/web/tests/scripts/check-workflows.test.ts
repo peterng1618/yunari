@@ -18,11 +18,8 @@ import { checkWorkflows } from "../../../../scripts/check-workflows.mjs";
 const SHA = "11d5960a326750d5838078e36cf38b85af677262";
 const RELEASE_SHA = "45996ed1f6d02564a971a2fa1b5860e934307cf7";
 
-const GUARD = `      - name: Refuse a non-dry manual dispatch off a tag
-        run: |
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then
-            exit 1
-          fi
+const GUARD = `      - name: Refuse a non-dry dispatch off a tag
+        run: node scripts/assert-publish-ref.mjs
 `;
 
 const CLEAN: Record<string, string> = {
@@ -73,13 +70,6 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
 `,
 };
-
-/** A guard step whose run body is the given shell lines. */
-function guard(lines: string[]): string {
-  return `      - name: Refuse a non-dry manual dispatch off a tag\n        run: |\n${lines
-    .map((line) => `          ${line}`)
-    .join("\n")}\n`;
-}
 
 type Files = Record<string, string>;
 type Mutate = (files: Files) => void;
@@ -210,57 +200,6 @@ it("refuses flow-style permissions", () => {
   );
 });
 
-it("refuses a guard neutralised by a leading if false", () => {
-  withFixture(
-    (files) => {
-      files["publish.yml"] = files["publish.yml"].replace(
-        GUARD,
-        guard([
-          "if false; then",
-          '  echo "GITHUB_EVENT_NAME workflow_dispatch DRY_RUN true GITHUB_REF refs/tags/v*"',
-          "fi",
-          'if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then',
-          "  exit 1",
-          "fi",
-        ]),
-      );
-    },
-    ({ exitCode, lines }) => {
-      expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("neutralised by a leading if false");
-    },
-  );
-});
-
-it("refuses a comment-only guard", () => {
-  withFixture(
-    (files) => {
-      files["publish.yml"] = files["publish.yml"].replace(
-        GUARD,
-        guard([
-          "# GITHUB_EVENT_NAME workflow_dispatch DRY_RUN true GITHUB_REF refs/tags/v* exit 1",
-        ]),
-      );
-    },
-    ({ exitCode, lines }) => {
-      expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("comment-only");
-    },
-  );
-});
-
-it("refuses a first step with no run command", () => {
-  withFixture(
-    (files) => {
-      files["publish.yml"] = files["publish.yml"].replace(GUARD, "");
-    },
-    ({ exitCode, lines }) => {
-      expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("has no run: command");
-    },
-  );
-});
-
 it("refuses a third job with publish authority", () => {
   withFixture(
     (files) => {
@@ -375,152 +314,63 @@ it("refuses a publish job with no contents: write", () => {
   );
 });
 
-it("refuses a guard wrapped in an uncalled function", () => {
+it("refuses a guard run with one word added", () => {
   withFixture(
     (files) => {
       files["publish.yml"] = files["publish.yml"].replace(
-        GUARD,
-        guard([
-          "refuse() {",
-          '  if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then',
-          "    exit 1",
-          "  fi",
-          "}",
-        ]),
-      );
-    },
-    ({ exitCode, lines }) => {
-      expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("defines a function");
-    },
-  );
-});
-
-it("refuses a guard after an exit 0", () => {
-  withFixture(
-    (files) => {
-      files["publish.yml"] = files["publish.yml"].replace(
-        GUARD,
-        guard([
-          "exit 0",
-          'if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then',
-          "  exit 1",
-          "fi",
-        ]),
-      );
-    },
-    ({ exitCode, lines }) => {
-      expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("runs a command before the guard");
-    },
-  );
-});
-
-it("refuses a function-plus-call guard", () => {
-  withFixture(
-    (files) => {
-      files["publish.yml"] = files["publish.yml"].replace(
-        GUARD,
-        guard([
-          "refuse() {",
-          '  if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then',
-          "    exit 1",
-          "  fi",
-          "}",
-          "refuse",
-        ]),
-      );
-    },
-    ({ exitCode, lines }) => {
-      expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("defines a function");
-    },
-  );
-});
-
-it("refuses code after the guard's fi", () => {
-  withFixture(
-    (files) => {
-      files["publish.yml"] = files["publish.yml"].replace(
-        GUARD,
-        guard([
-          'if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then',
-          "  exit 1",
-          "fi",
-          "echo done",
-        ]),
-      );
-    },
-    ({ exitCode, lines }) => {
-      expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("runs code after fi");
-    },
-  );
-});
-
-it("refuses a nested construct inside the guard", () => {
-  withFixture(
-    (files) => {
-      files["publish.yml"] = files["publish.yml"].replace(
-        GUARD,
-        guard([
-          'if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then',
-          "  if false; then",
-          "    exit 1",
-          "  fi",
-          "fi",
-        ]),
-      );
-    },
-    ({ exitCode, lines }) => {
-      expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("contains a nested construct");
-    },
-  );
-});
-
-it("refuses a workflow_dispatchX literal", () => {
-  withFixture(
-    (files) => {
-      files["publish.yml"] = files["publish.yml"].replace(
-        '"workflow_dispatch"',
-        '"workflow_dispatchX"',
+        "run: node scripts/assert-publish-ref.mjs",
+        "run: node scripts/assert-publish-ref.mjs extra",
       );
     },
     ({ exitCode, lines }) => {
       expect(exitCode).toBe(1);
       expect(lines.join("\n")).toContain(
-        "does not test GITHUB_EVENT_NAME against workflow_dispatch",
+        'must run exactly "node scripts/assert-publish-ref.mjs"',
       );
     },
   );
 });
 
-it("refuses a trueX literal", () => {
-  withFixture(
-    (files) => {
-      files["publish.yml"] = files["publish.yml"].replace('"true"', '"trueX"');
-    },
-    ({ exitCode, lines }) => {
-      expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("does not test DRY_RUN against true");
-    },
-  );
-});
-
-it("refuses a refs/tags/v*X literal", () => {
+it("refuses the guard called from a ; chain", () => {
   withFixture(
     (files) => {
       files["publish.yml"] = files["publish.yml"].replace(
-        "refs/tags/v*",
-        "refs/tags/v*X",
+        "run: node scripts/assert-publish-ref.mjs",
+        "run: echo unsafe; node scripts/assert-publish-ref.mjs",
       );
     },
     ({ exitCode, lines }) => {
       expect(exitCode).toBe(1);
       expect(lines.join("\n")).toContain(
-        "does not test GITHUB_REF against refs/tags/v*",
+        'must run exactly "node scripts/assert-publish-ref.mjs"',
       );
+    },
+  );
+});
+
+it("refuses the guard moved to second place", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        `${GUARD}      - uses: actions/checkout@${SHA} # v4\n        with:\n          persist-credentials: false\n`,
+        `      - uses: actions/checkout@${SHA} # v4\n        with:\n          persist-credentials: false\n${GUARD}`,
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain("has no run: command");
+    },
+  );
+});
+
+it("refuses a deleted guard", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(GUARD, "");
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain("has no run: command");
     },
   );
 });

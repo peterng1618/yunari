@@ -81,13 +81,9 @@ jobs:
     steps:
       # First, so a non-dry manual dispatch off a tag spends nothing. `publish`
       # inherits the refusal through `needs`, which is why there is no copy
-      # there.
-      - name: Refuse a non-dry manual dispatch off a tag
-        run: |
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then
-            echo "a non-dry workflow_dispatch must run on a refs/tags/v* ref (got $GITHUB_REF)" >&2
-            exit 1
-          fi
+      # there. The decision is a tested function, not shell the checker parses.
+      - name: Refuse a non-dry dispatch off a tag
+        run: node scripts/assert-publish-ref.mjs
 
       # The gate dates licence rules by commit history, so a shallow clone
       # would make every rule read as written by its own citing commit.

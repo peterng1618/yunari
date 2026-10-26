@@ -21,12 +21,11 @@
  * key that is read as a scalar, and a bare list item where a mapping key is
  * expected. A workflow that needs a refused shape upgrades the reader then.
  *
- * The tag guard in `publish.yml` is held to a reachability rule: after
- * comments, blank lines and optional `set -…` lines, its `run` is exactly one
- * `if <tests>; then`, simple statements including an `exit <non-zero>`, one
- * `fi`, and nothing after it. A function definition, a command before the
- * `if`, a nested construct, `exit 0`, or code after `fi` means the guard can
- * not be proven to run, and is refused.
+ * The tag guard in `publish.yml` is compared, not parsed: the first `install`
+ * step's `run` must equal `node scripts/assert-publish-ref.mjs` once comments
+ * and blank lines are dropped. The decision itself is a tested function in
+ * `scripts/assert-publish-ref.mjs`, so a negation, continuation or heredoc
+ * changes the text and is refused.
  *
  * Exit: 0 clean, 1 rule violation (one line per violation), 2 unreadable input
  * or an unread shape.
@@ -472,112 +471,21 @@ function describePermissions(job) {
     : pairs.map(([key, value]) => `${key}: ${value}`).join(", ");
 }
 
-function stripShellComments(text) {
-  return text
-    .split("\n")
-    .map((line) => {
-      let quote = null;
-      for (let index = 0; index < line.length; index += 1) {
-        const character = line[index];
-        if (quote !== null) {
-          if (character === quote) quote = null;
-          continue;
-        }
-        if (character === '"' || character === "'") {
-          quote = character;
-          continue;
-        }
-        if (character === "#") return line.slice(0, index);
-      }
-      return line;
-    })
-    .join("\n");
-}
+const GUARD_COMMAND = "node scripts/assert-publish-ref.mjs";
 
 /**
- * The tag guard is a condition that can run, not a set of words. After
- * comments and blank lines are dropped, the step's `run` must be the literal
- * shape: optional `set -…` lines, one `if <tests>; then`, simple statements
- * including an `exit <non-zero>`, one `fi`, and nothing after it. A function
- * body — called or not — is refused: reachability is then a fact about the
- * shell's control flow, which this check does not model. Returns why the
- * first step does not refuse a non-dry manual dispatch off a tag, or
- * `undefined`.
+ * The first step must be exactly the one command; anything else — a negation,
+ * a `;` chain, a continuation, a heredoc — changes the text and is refused.
  */
 function guardProblem(run) {
   if (run === undefined) return "has no run: command";
-  const lines = stripShellComments(run)
+  const lines = run
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => stripTrailingComment(line).trim())
     .filter((line) => line !== "");
   if (lines.length === 0) return "is comment-only";
-
-  if (/^if\s+false\b/.test(lines[0])) {
-    return "is neutralised by a leading if false";
-  }
-  if (/^false\b/.test(lines[0])) {
-    return "is neutralised by a bare false";
-  }
-  if (lines.some((line) => /\|\|\s*true\b/.test(line))) {
-    return "is neutralised by a trailing || true";
-  }
-  if (lines.some((line) => /&&\s*false\b/.test(line))) {
-    return "is neutralised by an && false";
-  }
-  if (lines.some((line) => /^(?:[\w-]+\s*\(\s*\)\s*\{|function\s)/.test(line))) {
-    return "defines a function, so the guard is not proven to run";
-  }
-
-  let at = 0;
-  while (at < lines.length && /^set\s+-/.test(lines[at])) at += 1;
-  if (at >= lines.length) return "runs no command";
-
-  const opening = /^if\s+(?:\[\[(.*?)\]\]|\[(.*?)\])\s*;\s*then$/.exec(lines[at]);
-  if (opening === null) {
-    return lines[at].startsWith("if ")
-      ? "is not the literal if/exit/fi guard shape"
-      : "runs a command before the guard";
-  }
-
-  const test = opening[1] ?? opening[2];
-  const comparison = (name, operator, literal) => {
-    const reference = `["']?\\$\\{?${name}\\}?["']?`;
-    const value = `(?:"${literal}"|'${literal}'|${literal})`;
-    return new RegExp(
-      `${reference}\\s*(?:${operator})\\s*${value}(?=\\s*$|\\s*&&)`,
-    ).test(test);
-  };
-  if (!comparison("GITHUB_EVENT_NAME", "==?", "workflow_dispatch")) {
-    return "does not test GITHUB_EVENT_NAME against workflow_dispatch";
-  }
-  if (!comparison("DRY_RUN", "!=?", "true")) {
-    return "does not test DRY_RUN against true";
-  }
-  if (!comparison("GITHUB_REF", "!=?", "refs/tags/v\\*")) {
-    return "does not test GITHUB_REF against refs/tags/v*";
-  }
-
-  let cursor = at + 1;
-  let exited = false;
-  let closed = false;
-  while (cursor < lines.length) {
-    const line = lines[cursor];
-    if (line === "fi") {
-      closed = true;
-      cursor += 1;
-      break;
-    }
-    if (/^(?:if|for|while|until|case|else|elif|fi)\b|^[{(]/.test(line)) {
-      return "contains a nested construct that may never run";
-    }
-    if (/^exit\s+0\b/.test(line)) return "exits 0 inside the guard";
-    if (/^exit\s+[1-9]\d*$/.test(line)) exited = true;
-    cursor += 1;
-  }
-  if (!closed) return "has no closing fi";
-  if (!exited) return "does not exit non-zero";
-  if (cursor < lines.length) return "runs code after fi";
-  return undefined;
+  if (lines.length === 1 && lines[0] === GUARD_COMMAND) return undefined;
+  return `must run exactly "${GUARD_COMMAND}" (got "${lines.join(" / ")}")`;
 }
 
 function checkPublish(publish) {
