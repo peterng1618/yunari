@@ -123,9 +123,8 @@ The checks themselves are the probe: Task 8.1's test asserts a staged manifest
 contains `"culori": "x.y.z"` and no caret; Task 8.2's parser asserts every
 workflow `uses:` is a 40-character SHA and each job's permissions; Task 8.3
 requires `npm audit` clean or allowlisted and `npm ls --all` with no `missing:`
-line, every `invalid`/`extraneous` line explained by an override, a
-platform-optional package or a hoist choice; Task 8.4's fixture proves a
-wrong ffmpeg hash is refused.
+line, every `invalid`/`extraneous` line being an override or a platform-optional
+package; Task 8.4's fixture proves a wrong ffmpeg hash is refused.
 
 ## Rung 7 — build
 
@@ -156,11 +155,10 @@ vitest. A script with no fixture tree still carries a `--self-test` in
 5. `ffmpeg-static`'s binary is checked against a committed per-platform SHA-256
    manifest before execution; an unlisted platform refuses.
 6. `npm ls --all` has no `missing:` line, and every `invalid`/`extraneous` line
-   is an override resolved against the requester's pin, a platform-optional
-   package installed where its parents' gates exclude it, or npm's own hoist
-   choice where the named range is satisfied. Exit 0 is unachievable: an
-   override is by definition outside the requester's range, so npm reports it
-   `invalid`.
+   is an override resolved against the requester's pin or a platform-optional
+   package installed where its parents' gates exclude it. Exit 0 is
+   unachievable: an override is by definition outside the requester's range, so
+   npm reports it `invalid`.
 
 The reason is drift: every one of these facts was true when someone checked it
 and false later. A gate makes the fact a property of every build.

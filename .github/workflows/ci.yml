@@ -212,15 +212,16 @@ jobs:
         run: node ../../scripts/audit-policy.mjs
 
       - name: The dependency tree resolves
-        # `npm ls --all` cannot exit 0 on this tree and is not asked to. Every
-        # failure line must be one of three kinds: an override resolved against
-        # the requester's range (npm reports it `invalid`); a platform-optional
-        # package installed where its parents' gates exclude it (`extraneous`);
-        # or npm's own hoist choice where the named range is satisfied
-        # (`invalid`, but the version satisfies). A `missing:` line is never
-        # acceptable — the lockfile promises it and the install did not provide
-        # it — and neither is any npm error code other than ELSPROBLEMS, so a
-        # crash or an unreadable lockfile cannot pass as a tolerated tree.
+        # This step enforces exactly two things, not a reading of the tree:
+        # there is no `npm error missing:` line, and `ELSPROBLEMS` is the only
+        # npm error code. A missing dependency is one the lockfile promises and
+        # the install did not provide; any other code means the command itself
+        # failed (a crash, an unreadable lockfile), which must not pass as a
+        # tolerated tree. It cannot tell an override from a genuine mismatch —
+        # a wrong version installed against a manifest also prints `invalid:`
+        # with `ELSPROBLEMS` and passes. `npm ls --all` cannot exit 0 while
+        # overrides are in force, so the tolerated `invalid`/`extraneous` lines
+        # are accounted for by hand in docs/engineering/dependencies.md.
         run: |
           set -euo pipefail
           status=0

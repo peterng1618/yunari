@@ -118,37 +118,39 @@ requesters keep their upstream pins in the lock's dependency records:
 the override, so `npm ls` marks the resolved `undici`, `sharp` and `zod`
 `invalid`.
 
-`npm ls --all` is **not required to exit 0 and does not**. The invariant CI
-enforces (`ci.yml`, "The dependency tree resolves") is narrower and true of the
-tree as measured: **no `missing:` line**, and every `invalid`/`extraneous` line
-belongs to one of three classes —
+`npm ls --all` is **not required to exit 0 and does not**. What CI enforces
+(`ci.yml`, "The dependency tree resolves") is exactly two things: there is no
+`npm error missing:` line, and `ELSPROBLEMS` is the only npm error code. It
+cannot tell an override from a genuine mismatch — a wrong version installed
+against a manifest prints `invalid:` with `ELSPROBLEMS` and passes — so the
+class table below is a human account of the six lines on a lockfile-matching
+tree, not something the step checks.
 
-(a) an override resolved against the requester's pin (an override is by
-definition a version outside that range, so npm reports it `invalid`);
-(b) a platform-optional package installed on a platform its parents' gates
-exclude;
-(c) npm's own hoist/dedupe choice where the named range *is* satisfied.
+Measured after `npm ci`, so `node_modules` matches the lockfile: 3 `invalid`,
+3 `extraneous`, no `missing:`. A tree that has been reinstalled or pruned
+differently can report extra lines; reinstall with `npm ci` before comparing.
+The six lines fall into two classes:
 
-All eight lines on the current tree, by class:
+- **override against the requester's pin** — an override is by definition a
+  version outside that range, so npm reports it `invalid`;
+- **platform-optional install** — a platform-gated optional parent is skipped,
+  but its child carries no `os`/`cpu` gate and is installed anyway.
 
 | Line | Class | Cause |
 |---|---|---|
-| `invalid undici@7.30.1` | (a) | `miniflare` asks 7.29.0/7.29.1 |
-| `invalid sharp@0.35.5` | (a) | the store-worker's `miniflare` asks 0.35.2 |
-| `invalid zod@4.6.7` | (a) | `@cloudflare/vitest-pool-workers` asks 4.4.3 exactly |
-| `invalid estree-walker@3.0.3` | (c) | npm labels it `invalid: "^3.0.3"` while 3.0.3 satisfies that range; a nested 2.0.2 serves `@vue/compiler-core`/`@vue/compiler-sfc` |
-| `invalid magic-string@0.30.21` | (c) | labelled against `^0.30.21` though 0.30.21 satisfies it; a nested 1.4.4 serves `@vitest/mocker`'s `^1.4.3` |
-| `extraneous @img/sharp-wasm32@0.35.5` | (b) | sharp's optional parents `@img/sharp-freebsd-wasm32` (`os: [freebsd]`) and `@img/sharp-webcontainers-wasm32` (`cpu: [wasm32]`) are skipped here, but their dependency carries no `os`/`cpu` gate |
-| `extraneous @emnapi/runtime@1.11.3` | (b) | dependency of the package above |
-| `extraneous tslib@2.8.1` | (b) | dependency of `@emnapi/runtime` |
+| `invalid undici@7.30.1` | override | `miniflare` asks 7.29.0/7.29.1 |
+| `invalid sharp@0.35.5` | override | the store-worker's `miniflare` asks 0.35.2 |
+| `invalid zod@4.6.7` | override | `@cloudflare/vitest-pool-workers` asks 4.4.3 exactly |
+| `extraneous @img/sharp-wasm32@0.35.5` | platform-optional | sharp's optional parents `@img/sharp-freebsd-wasm32` (`os: [freebsd]`) and `@img/sharp-webcontainers-wasm32` (`cpu: [wasm32]`) are skipped here, but their dependency carries no `os`/`cpu` gate |
+| `extraneous @emnapi/runtime@1.11.3` | platform-optional | dependency of the package above |
+| `extraneous tslib@2.8.1` | platform-optional | dependency of `@emnapi/runtime` |
 
-The (a) class is explained by the requesters keeping their upstream pins; the
-suites in the table above are the proof the resolved versions run. The (c) class
-is npm 11.6.2 bookkeeping, present at `881633e4` and unrelated to any override.
-For the (b) class, `npm prune` followed by `npm install` does not remove the
-three packages, and removing the `sharp` override would reintroduce the highs on
-0.35.2. The sharp packages are a devDependency lattice, so nothing in the
-shipped host loads them.
+The override class is explained by the requesters keeping their upstream pins;
+the suites in the table above are the proof the resolved versions run. For the
+platform-optional class, `npm prune` followed by `npm install` does not remove
+the three packages, and removing the `sharp` override would reintroduce the
+highs on 0.35.2. The sharp packages are a devDependency lattice, so nothing in
+the shipped host loads them.
 
 Before task 8.3 the tree had the one line this invariant forbids:
 `@emnapi/runtime` was `missing` under the installed `@img/sharp-wasm32`. The

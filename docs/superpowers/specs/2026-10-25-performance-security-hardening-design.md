@@ -335,10 +335,9 @@ for an explicit loopback test origin.
 - `THIRD-PARTY-NOTICES.md` is generated/checked from installed package metadata
   for names, versions and licences, and the check runs in the gate.
 - The `npm ls --all` tree has no `missing:` line, and every `invalid`/`extraneous`
-  line is an override resolved against the requester's pin, a platform-optional
-  package, or npm's own hoist choice. Exit 0 is unachievable while an override
-  is in force: an override is by definition outside the requester's range, so
-  npm reports it `invalid`.
+  line is an override against the requester's pin or a platform-optional install.
+  A clean exit code is unachievable while an override is in force: an override
+  is by definition outside the requester's range, so npm reports it `invalid`.
 
 ### H — Secrets, sessions and the remaining host surfaces
 
