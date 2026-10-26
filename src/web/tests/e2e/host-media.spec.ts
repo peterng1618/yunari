@@ -1007,55 +1007,59 @@ test.describe("a paired display fetching a theme asset", () => {
       // The route and the content type the asset URL depends on, from an
       // address the host does not treat as its own.
       const asset = `/api/themes/e2e-media/assets/badge.svg`;
-      const unpaired = await request.get(`http://${lan}:${LAN_PORT}${asset}`);
+      const assetUrl = `http://${lan}:${LAN_PORT}${asset}`;
+      const unpaired = await request.get(assetUrl);
       expect(
         unpaired.status(),
         "an unpaired peer is refused the theme's bytes",
       ).toBe(403);
 
-      // By query, because that is the form a `<img>`/`<video>` src can carry.
-      const paired = await request.get(
-        `http://${lan}:${LAN_PORT}${asset}?session=${encodeURIComponent(token)}`,
+      // A query credential is no longer a credential: the token lives in the
+      // HttpOnly cookie now, and every route but the root refuses it in a URL.
+      const byQuery = await request.get(
+        `${assetUrl}?session=${encodeURIComponent(token)}`,
       );
+      expect(
+        byQuery.status(),
+        "a query token is refused, whichever URL shape carries it",
+      ).toBe(403);
+
+      // The pairing flow itself: the exchange sets the cookie on this origin,
+      // and the API context carries it on the request below.
+      const exchanged = await request.post(
+        `http://${lan}:${LAN_PORT}/api/session`,
+        { data: { token } },
+      );
+      expect(exchanged.ok(), "the token is exchanged for the cookie").toBe(
+        true,
+      );
+
+      const paired = await request.get(assetUrl);
       expect(paired.status(), "a paired peer is served the asset").toBe(200);
       expect(
         paired.headers()["content-type"],
         "served as its own type, or no browser will decode it",
       ).toBe("image/svg+xml");
       expect(await paired.text()).toContain("<svg");
-
-      // The token placement 75bff56 fixed: a query belongs at the end of the
-      // URL, so the declared path has to arrive whole ahead of it. The
-      // pre-fix shape appended the path *after* the query and 404s.
-      const malformed = await request.get(
-        `http://${lan}:${LAN_PORT}/api/themes/e2e-media/?session=${encodeURIComponent(token)}assets/badge.svg`,
-      );
-      expect(
-        malformed.status(),
-        "the pre-fix URL shape really does fail, so the passing one is not a coincidence",
-      ).not.toBe(200);
     } finally {
       host.kill();
     }
   });
 
-  test("a paired display's own player puts the token after the asset path", async ({
+  test("a paired display's own player asks for assets without a token in the URL", async ({
     page,
   }) => {
     // **The player's own resolver, measured in a browser.** The other test in
-    // this block proves the host answers a paired peer; this proves the player
-    // *asks* in the form the host answers, which is the half `75bff56` changed
-    // and which no test had measured.
+    // this block proves the host refuses a query credential and accepts the
+    // cookie; this proves the player no longer builds a credential into the
+    // asset URL at all, which is the property this change turns on.
     //
     // It runs over loopback on purpose. The URL the player builds is a property
     // of `createAssetResolver` and `withToken`, not of the network, and loopback
     // is the only way to read that URL out of a live player without the display
     // having to boot from the LAN — where the bundle itself is served, and the
-    // host refuses it to an unpaired address. Asserting the shape on loopback
-    // is the same assertion; going through a LAN host would add a second
-    // variable, not more evidence.
-    const session = "paired-display-token";
-    await page.goto(`${HOST}/?theme=e2e-media&session=${session}`);
+    // host refuses it to an unpaired address.
+    await page.goto(`${HOST}/?theme=e2e-media`);
     await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible();
     await expect
       .poll(() => decodedInk(page), { timeout: 20_000 })
@@ -1065,19 +1069,11 @@ test.describe("a paired display fetching a theme asset", () => {
       .locator("[data-yunari-background-media] img")
       .evaluate((element) => (element as HTMLImageElement).src);
 
-    // The declared path arrives whole, ahead of the query. Reverting the fix
-    // produces `…/e2e-media/?session=<token>assets/badge.svg` — measured, not
-    // assumed — which no route matches and no image decodes.
-    expect(
-      src,
-      "the session token rides the finished URL, after the declared path",
-    ).toBe(`${HOST}/api/themes/e2e-media/assets/badge.svg?session=${session}`);
-
-    // The path must not have been folded into the query, which is the shape the
-    // pre-fix code produced. Stated separately so a failure names the defect.
-    const query = src.slice(src.indexOf("?"));
-    expect(query, "nothing but the token is in the query string").toBe(
-      `?session=${session}`,
+    // The declared path arrives whole and the credential is absent: the
+    // same-origin cookie carries the request instead.
+    expect(src, "no session token rides the asset URL").toBe(
+      `${HOST}/api/themes/e2e-media/assets/badge.svg`,
     );
+    expect(src).not.toContain("session=");
   });
 });

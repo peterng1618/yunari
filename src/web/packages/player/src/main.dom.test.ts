@@ -14,7 +14,11 @@ import {
   type SampleSource,
 } from "@yunari/renderer-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PAIRING_STORAGE_KEY, readStoredPairing } from "./host-refind.js";
+import {
+  PAIRING_STORAGE_KEY,
+  readStoredPairing,
+  refindTarget,
+} from "./host-refind.js";
 import type { PageNavigation } from "./main.js";
 
 /**
@@ -178,7 +182,12 @@ describe("the player's re-find", () => {
 
   /** Mounts a paired display whose host has moved: every poll fails, so every
    *  tick reports it and the ladder runs. */
-  async function mountWithTheHostGone(): Promise<{ readonly asked: Asked[] }> {
+  async function mountWithTheHostGone(
+    options: {
+      readonly pageUrl?: string;
+      readonly host?: Record<string, unknown>;
+    } = {},
+  ): Promise<{ readonly asked: Asked[] }> {
     // The display this case mounts gets no frames: a minute of fake time is
     // ~1900 repaints at the chart loop's rate, and every one of them is work
     // this case is not about. `window`'s own pair, because the chart loop binds
@@ -193,7 +202,8 @@ describe("the player's re-find", () => {
     history.replaceState(
       {},
       "",
-      "/?theme=living-room&display=d1&theme-source=map&session=paired-token",
+      options.pageUrl ??
+        "/?theme=living-room&display=d1&theme-source=map&session=paired-token",
     );
     vi.stubGlobal("EventSource", SilentEventSource);
     vi.stubGlobal(
@@ -215,7 +225,9 @@ describe("the player's re-find", () => {
         asked.push({ url, init });
 
         if (url === "/api/host") {
-          return json({ id: "h1", name: "study-pc", port: 5227 });
+          return json(
+            options.host ?? { id: "h1", name: "study-pc", port: 5227 },
+          );
         }
         // The host has moved: every poll fails, so every tick reports it.
         if (url.startsWith("/api/published")) {
@@ -291,6 +303,29 @@ describe("the player's re-find", () => {
       .map(({ url }) => url);
 
     expect(offenders).toEqual([]);
+  });
+
+  it("learns its token from the host and keeps it for a re-find", async () => {
+    // A newly paired display: the cookie is HttpOnly and the URL carries no
+    // session, so `GET /api/host` is the only place it can read its own token.
+    await mountWithTheHostGone({
+      pageUrl: "/?theme=living-room&display=d1&theme-source=map",
+      host: {
+        id: "h1",
+        name: "study-pc",
+        port: 5227,
+        token: "paired-token",
+      },
+    });
+
+    const pairing = readStoredPairing(window.localStorage);
+    expect(pairing?.token).toBe("paired-token");
+
+    // A re-find lands on another origin, where this host's cookie is never
+    // sent: the stored token is the only thing that crosses that boundary.
+    expect(refindTarget("http://192.168.1.44:5227", pairing?.token)).toBe(
+      "http://192.168.1.44:5227/?session=paired-token",
+    );
   });
 });
 

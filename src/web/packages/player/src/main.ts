@@ -114,18 +114,22 @@ const REFIND_COOLDOWN_MS = 60_000;
  * there is no second place that could write an identity the URL does not carry
  * (R72).
  *
- * `/api/host` is unauthenticated and cross-origin readable, and this call is
- * same-origin, so it carries no credential — the identity is public and the
- * token is not. A loopback display has no token and an address that never
- * moves, so it keeps nothing.
+ * **The token comes from the host when the credential is a cookie.**
+ * `GET /api/host` answers a paired display its own token; the cookie is
+ * `HttpOnly` and the URL no longer carries one, so this is the only way a
+ * newly paired display can hold a readable credential. It is still stored
+ * because a re-find after an address change reaches a *different origin*,
+ * where this host's cookie is never sent — storage is the only thing that
+ * crosses that boundary. A loopback or unpaired caller is answered none, and
+ * an old link's URL token still wins as the fallback. `/api/host` is
+ * unauthenticated for an unpaired caller and cross-origin readable; a sweep's
+ * probe sends no credential and therefore learns no token.
  */
 async function rememberPairing(
   session: DisplaySessionToken,
   store: Storage | undefined,
 ): Promise<void> {
-  const token = session.token;
-
-  if (store === undefined || token === undefined) {
+  if (store === undefined) {
     return;
   }
 
@@ -140,6 +144,7 @@ async function rememberPairing(
       readonly id?: unknown;
       readonly name?: unknown;
       readonly port?: unknown;
+      readonly token?: unknown;
     };
 
     if (
@@ -147,6 +152,15 @@ async function rememberPairing(
       typeof body.name !== "string" ||
       typeof body.port !== "number"
     ) {
+      return;
+    }
+
+    const token =
+      typeof body.token === "string" && body.token.length > 0
+        ? body.token
+        : session.token;
+
+    if (token === undefined) {
       return;
     }
 

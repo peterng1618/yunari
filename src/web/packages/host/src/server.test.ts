@@ -3388,6 +3388,50 @@ describe("Host theme routes", () => {
       }
     });
 
+    it("answers a paired display its own token, and only to it", async () => {
+      build({ host: record, displays });
+
+      const kitchen = newToken();
+      const hallway = newToken();
+      await displays.create("Kitchen phone", kitchen);
+      await displays.create("Hallway phone", hallway);
+
+      // The cookie is HttpOnly and the URL carries no token, so this answer is
+      // what lets a newly paired display store a re-find credential.
+      const answered = await request(
+        hosted.server,
+        "GET",
+        "/api/host",
+        undefined,
+        {
+          remoteAddress: "192.168.1.50",
+          headers: asCookie(kitchen),
+        },
+      );
+
+      expect(answered.json()).toMatchObject({ token: kitchen });
+      // A different display's credential, and its hash, are not in the answer.
+      expect(answered.text()).not.toContain(hallway);
+      expect(answered.text()).not.toContain(hashToken(hallway));
+    });
+
+    it("answers no token to a loopback caller, even one carrying a header", async () => {
+      build({ host: record, displays });
+
+      const token = newToken();
+      await displays.create("Kitchen phone", token);
+
+      const answered = await request(
+        hosted.server,
+        "GET",
+        "/api/host",
+        undefined,
+        { headers: { "x-yunari-session": token } },
+      );
+
+      expect(answered.json()).not.toHaveProperty("token");
+    });
+
     it("answers the port it is actually listening on, not one it was given", async () => {
       // Two sources could be mistaken for the port — the binding's state and the
       // port the host was asked to take — so both are made to differ from the

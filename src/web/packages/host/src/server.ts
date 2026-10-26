@@ -1565,11 +1565,18 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // **The one route an unpaired client may read**, and the reason a display
     // that has lost its host's address can find it again: a re-find sweep asks
     // every host on the network who it is and keeps the one whose id it stored.
-    // So it answers before every gate below — the display guard in particular —
-    // and its body is fixed by that promise: the identity, the port, and nothing
-    // else this host holds. The name is one character from `/api/hosting`, the
-    // LAN on/off setting, deliberately and not by accident (R24). A host with no
-    // identity is not registered at all, for the reason the `host` option gives.
+    // So it answers before every gate below — the display guard in particular.
+    // The name is one character from `/api/hosting`, the LAN on/off setting,
+    // deliberately and not by accident (R24). A host with no identity is not
+    // registered at all, for the reason the `host` option gives.
+    //
+    // **A paired display also reads its own token here.** That is what keeps a
+    // re-find working after the cookie change: the cookie is HttpOnly and the
+    // URL carries no token, so a newly paired display has no readable
+    // credential — and a re-find reaches a *different origin*, where this
+    // host's cookie is never sent. Storage is the only thing that crosses that
+    // boundary, and the token is exactly what the display held before. Loopback
+    // and unpaired callers are answered no token, because they hold none.
     if (
       hostRecord !== undefined &&
       url.pathname === "/api/host" &&
@@ -1582,7 +1589,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // edit away from making every route in this file cross-origin readable,
       // and this route is meant to be the single deliberate exception (R25).
       // No `Access-Control-Allow-Credentials`: a sweep sends no credential, and
-      // a wildcard origin with credentials is refused by browsers anyway.
+      // a wildcard origin with credentials is refused by browsers anyway — so a
+      // foreign page can never present this display's cookie to read the token.
       response.setHeader("Access-Control-Allow-Origin", "*");
 
       // The port comes from the socket, never from an option or the binding: a
@@ -1591,11 +1599,18 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // honest absence `/api/hosting` reports.
       const address = server.address();
 
+      // Resolving the display authenticates the presented credential; the
+      // request is then answered its own token and never another's. The touch
+      // inside `displayFor` is a welcome sighting: this call is a load.
+      const record = await displayFor(request, displays);
+      const token = record === undefined ? undefined : tokenFor(request);
+
       sendJson(response, 200, {
         id: hostRecord.id,
         name: hostRecord.name,
         port:
           typeof address === "object" && address !== null ? address.port : null,
+        ...(token === undefined ? {} : { token }),
       });
       return;
     }
