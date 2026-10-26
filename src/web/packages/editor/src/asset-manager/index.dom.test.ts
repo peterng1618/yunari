@@ -4,7 +4,7 @@ import { setObjectAssetReference } from "@yunari/scene-fabric";
 import { Canvas, FabricImage, Group, Rect, type StaticCanvas } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
 import { fontTrio } from "../font-catalog.js";
-import { AssetManager, assetReferencedBy } from "./index.js";
+import { AssetManager, assetFileName, assetReferencedBy } from "./index.js";
 
 const PNG = new Uint8Array([137, 80, 78, 71]);
 
@@ -542,5 +542,27 @@ describe("assetReferencedBy", () => {
 
     expect(assetReferencedBy(canvas.getObjects(), "logo")).toBe(true);
     expect(assetReferencedBy(canvas.getObjects(), "absent")).toBe(false);
+  });
+});
+
+describe("assetFileName", () => {
+  /** A provider cut's packaged id is a byte address with the source's name in
+   *  it (`google-fonts-cut-bebas-neue-…`), so the card, the cleanup sheet and
+   *  the background list read the family and weight instead. */
+  it("names a face by its family and weight, and a file by its own name", () => {
+    expect(
+      assetFileName({
+        id: "google-fonts-cut-bebas-neue-40bc1f2e",
+        kind: "font",
+        path: "assets/google-fonts-cut-bebas-neue-40bc1f2e.woff2",
+        family: "Bebas Neue",
+        weight: 400,
+        style: "normal",
+        format: "woff2",
+      }),
+    ).toBe("Bebas Neue 400");
+    expect(
+      assetFileName({ id: "logo", kind: "image", path: "assets/logo.png" }),
+    ).toBe("logo.png");
   });
 });

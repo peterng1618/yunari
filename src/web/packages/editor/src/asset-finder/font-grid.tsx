@@ -1,7 +1,9 @@
-import type { AssetResult } from "@yunari/renderer-core";
+import type { AssetResult, FontCut } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { uiCopy } from "../ui-copy.js";
+import { faceStyle, useSpecimens } from "./font-preview-panel.js";
+import { SourceMark } from "./source-mark.js";
 
 /** The grid's own geometry: a result's column position is what makes Down and
  *  Up mean something, so the count lives here rather than in a class alone. */
@@ -13,7 +15,7 @@ const COLUMNS = 4;
  *  rows; the two must move together. A rem-based class would drift the moment
  *  the shell's root font-size is not 16px, and the window would land between
  *  two rows. */
-const ROW_HEIGHT = 112;
+const ROW_HEIGHT = 152;
 const ROW_GAP = 8;
 const ROW_PITCH = ROW_HEIGHT + ROW_GAP;
 
@@ -41,8 +43,31 @@ function trioFamilies(result: AssetResult): string {
   }).join(" · ");
 }
 
-/** One tile: a trio names its three families and a family names itself, with
- *  the provider badge every mixed grid carries. */
+/** The specimen sizes a trio's three roles are drawn at: heading largest,
+ *  mono smallest, so the thumbnail reads as the hierarchy the trio makes. */
+const SPECIMEN_SIZE: Readonly<Record<(typeof ROLES)[number], number>> = {
+  heading: 20,
+  body: 15,
+  mono: 12,
+};
+
+/** The cuts a card draws: a trio's three role faces in reading order, or the
+ *  family's first cut. Identity is memoised on the result, because the
+ *  specimen loader re-registers its faces whenever the list changes. */
+function specimenCuts(result: AssetResult): readonly FontCut[] {
+  const roles = result.font?.trio?.roles;
+  if (roles === undefined) {
+    const first = result.font?.cuts[0];
+    return first === undefined ? [] : [first];
+  }
+  return ROLES.flatMap((role) => {
+    const cut = roles[role];
+    return cut === undefined ? [] : [cut];
+  });
+}
+
+/** One card: the faces drawn in their own type, the result's name, and the
+ *  source that supplied it — the shape every other finder tab's grid uses. */
 function FontTile({
   result,
   selected,
@@ -68,6 +93,8 @@ function FontTile({
   const families = ROLES.filter(
     (role) => trio?.roles[role] !== undefined,
   ).length;
+  const specimen = useMemo(() => specimenCuts(result), [result]);
+  useSpecimens(specimen);
   return (
     <button
       ref={focus}
@@ -80,26 +107,38 @@ function FontTile({
       data-yunari-font-tile={result.id}
       data-yunari-font-kind={trio === undefined ? "family" : "trio"}
       data-selected={selected ? "" : undefined}
-      className={`relative flex min-h-[var(--font-tile-min-height)] min-w-0 flex-col items-center justify-center gap-[var(--space-4)] rounded-[var(--radius-md)] border bg-[var(--panel-2)] p-[var(--space-10)] text-center ${
+      className={`flex min-h-[var(--font-tile-min-height)] min-w-0 flex-col gap-[var(--space-4)] rounded-[var(--radius-md)] border bg-[var(--panel-2)] p-[var(--space-8)] text-left ${
         selected ? "border-accent ring-1 ring-accent" : "border-edge"
       }`}
     >
-      <span
-        data-yunari-font-provider={source}
-        className="absolute right-[var(--space-4)] top-[var(--space-4)] rounded-[var(--radius-sm)] border border-edge px-[var(--space-4)] text-[8px] text-faint"
-      >
-        {providers[source] ?? source}
-      </span>
-      {/* A specimen paper, not the family's own face: the editor never reads
-          font bytes, and loading them is the preview panel's job (Task 11). */}
+      {/* The provider's own specimen bytes, held while the card is mounted:
+          the editor reads no font bytes of its own, and a failed load leaves
+          the row on the fallback family rather than blanking the card. */}
       <span
         aria-hidden="true"
-        className="text-[length:var(--font-tile-glyph-size)] leading-none"
+        data-yunari-font-specimen=""
+        className="flex h-24 w-full flex-col items-center justify-center gap-[var(--space-4)] overflow-hidden rounded-[var(--radius-sm)] bg-[var(--bg)]"
       >
-        Aa
+        {specimen.map((cut, at) => (
+          <span
+            key={cut.id}
+            style={{
+              ...faceStyle(cut),
+              fontSize: SPECIMEN_SIZE[ROLES[at] ?? "body"],
+            }}
+            className="max-w-full truncate leading-none"
+          >
+            {cut.family}
+          </span>
+        ))}
       </span>
-      <span className="max-w-full truncate text-xs font-medium">
-        {trio === undefined ? result.name : trioFamilies(result)}
+      <span className="flex w-full min-w-0 items-center gap-[var(--space-6)]">
+        <span className="truncate text-xs font-medium">
+          {trio === undefined ? result.name : trioFamilies(result)}
+        </span>
+        <span className="ml-auto flex-none">
+          <SourceMark id={source} label={providers[source] ?? source} />
+        </span>
       </span>
       <span className="max-w-full truncate text-[10px] text-faint">
         {trio === undefined

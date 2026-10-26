@@ -160,8 +160,13 @@ function headings(host: HTMLElement): readonly (string | null)[] {
   return [...host.querySelectorAll("h3")].map((heading) => heading.textContent);
 }
 
-/** The card a file's name sits on, reached through the row's own select. */
+/** The card for `name`: a declaration's id, or the file name its title carries.
+ *  A face is titled by its family and weight, so its id is how a case names it. */
 function cardOf(host: HTMLElement, name: string): HTMLElement | null {
+  const byId = host.querySelector<HTMLElement>(
+    `[data-yunari-asset-card="${name}"]`,
+  );
+  if (byId !== null) return byId;
   const row = [...host.querySelectorAll("button")].find(
     (button) =>
       button.hasAttribute("data-yunari-asset-select") &&
@@ -237,16 +242,16 @@ describe("the Assets pane", () => {
       uiCopy.panels.assetCard.remove,
     ]);
     expect(actionNames(host, "logo.png")).toEqual([]);
-    expect(actionNames(host, "body.woff2")).toEqual([]);
+    expect(actionNames(host, "body")).toEqual([]);
   });
 
   it("shows an unused font without a preset as Unused", async () => {
     const { host } = mount([FONT]);
 
-    expect(badgeOf(host, "body.woff2")).toBe(uiCopy.panels.assetCard.unused);
+    expect(badgeOf(host, "body")).toBe(uiCopy.panels.assetCard.unused);
 
-    await selectCard(host, "body.woff2");
-    expect(actionNames(host, "body.woff2")).toContain(
+    await selectCard(host, "body");
+    expect(actionNames(host, "body")).toContain(
       uiCopy.panels.assetCard.createTypePreset,
     );
   });
@@ -316,10 +321,8 @@ describe("the Assets pane", () => {
     ).toBeNull();
 
     // A face has no preview here: the finder owns its specimen.
-    await selectCard(host, "body.woff2");
-    expect(
-      actionOf(host, "body.woff2", uiCopy.panels.assetCard.preview),
-    ).toBeNull();
+    await selectCard(host, "body");
+    expect(actionOf(host, "body", uiCopy.panels.assetCard.preview)).toBeNull();
   });
 });
 
@@ -709,7 +712,7 @@ describe("the Assets pane's import", () => {
     });
     expect(manager.declarations.map((asset) => asset.kind)).toEqual(["font"]);
     expect(host.querySelector("[data-yunari-font-details]")).toBeNull();
-    expect(cardOf(host, "body.woff2")).not.toBeNull();
+    expect(cardOf(host, "body")).not.toBeNull();
   });
 
   it("re-prefills the form from a second pick", async () => {
@@ -740,9 +743,13 @@ describe("the Assets pane's import", () => {
         format: "woff2",
       },
     ]);
-    await selectCard(host, "Manrope-Variable.woff2");
+    await selectCard(host, "heading");
 
-    const open = cardOf(host, "Manrope-Variable.woff2")?.querySelector(
+    // The card names the face by its family and weight: the path tail is the
+    // packaged id, which for a provider cut carries the source's name.
+    expect(cardOf(host, "heading")?.textContent).toContain("Manrope 700");
+
+    const open = cardOf(host, "heading")?.querySelector(
       "[data-yunari-font-open]",
     );
     if (open === null || open === undefined)
@@ -807,7 +814,7 @@ describe("the Assets pane's import", () => {
     // Review Focus 5: the list is the declarations, not the placed objects —
     // which is what keeps a font imported once removable. The card is reached
     // by its **file name**, never by the id the package keys it by.
-    expect(cardOf(host, "body.woff2")).not.toBeNull();
+    expect(cardOf(host, "body")).not.toBeNull();
   });
 
   it("leaves the author's card alone when a second file is imported", async () => {
@@ -820,7 +827,7 @@ describe("the Assets pane's import", () => {
     // Parity with the section this replaces: adding a file never moved the
     // chosen card off the asset the author was pointing at.
     expect(isChosen(host, "logo.png")).toBe(true);
-    expect(isChosen(host, "body.woff2")).toBe(false);
+    expect(isChosen(host, "body")).toBe(false);
   });
 
   it("drops a second pick while one import is in flight, and commits the first once", async () => {
@@ -1131,7 +1138,7 @@ describe("normalizing a declared video", () => {
     expect(normalizeControl(host)).toBeNull();
 
     await declareFont(host);
-    await selectCard(host, "body.woff2");
+    await selectCard(host, "body");
     expect(normalizeControl(host)).toBeNull();
 
     await importFile(host, VIDEO_FILE);

@@ -40,7 +40,7 @@ function cutsOf(selected: FontResult): readonly FontCut[] {
   });
 }
 
-function faceStyle(cut: FontCut | undefined): React.CSSProperties {
+export function faceStyle(cut: FontCut | undefined): React.CSSProperties {
   return cut === undefined
     ? {}
     : {
@@ -56,7 +56,7 @@ function faceStyle(cut: FontCut | undefined): React.CSSProperties {
  * The source is the provider's own CORS-open `previewUrl`; the editor declares
  * no Content-Security-Policy, so a remote font origin is allowed. A load that
  * fails leaves the card on its fallback family rather than blocking the panel. */
-function useSpecimens(cuts: readonly FontCut[]): void {
+export function useSpecimens(cuts: readonly FontCut[]): void {
   useEffect(() => {
     const fonts = typeof document === "undefined" ? undefined : document.fonts;
     if (fonts === undefined || typeof FontFace === "undefined")

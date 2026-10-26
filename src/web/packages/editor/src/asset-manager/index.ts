@@ -515,6 +515,12 @@ export type FontLoader = (
 /** The file name a declaration was made from, rather than the id the package
  *  keys it by. */
 export function assetFileName(asset: LocalAssetReference): string {
+  // A face's path tail is its packaged id, and a provider cut's id is a byte
+  // address with the source's name in it (`google-fonts-cut-bebas-neue-…`);
+  // the family and weight are the name an author reads everywhere else.
+  if ("family" in asset && typeof asset.family === "string") {
+    return `${asset.family} ${asset.weight}`.trim();
+  }
   const separator = asset.path.lastIndexOf("/");
   return separator < 0 ? asset.path : asset.path.slice(separator + 1);
 }

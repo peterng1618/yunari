@@ -558,8 +558,7 @@ body,
      preview has to read the same under every palette, so it cannot be a §4
      role. */
   --font-preview-width: 336px;
-  --font-tile-min-height: 112px;
-  --font-tile-glyph-size: 27px;
+  --font-tile-min-height: 152px;
   --font-specimen-glyph-size: 31px;
   --font-trio-specimen-height: 214px;
   --font-specimen-backdrop: linear-gradient(

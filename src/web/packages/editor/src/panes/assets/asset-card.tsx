@@ -36,6 +36,7 @@ export function AssetCard({
 }: AssetCardProps): React.JSX.Element {
   return (
     <div
+      data-yunari-asset-card={asset.id}
       className={`flex flex-col rounded-[var(--radius-md)] border ${
         chosen ? "border-accent" : "border-edge-2"
       } bg-panel`}
