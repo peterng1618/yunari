@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   SEGMENT_DIVISORS,
-  SEGMENT_GAP_RATIO,
+  SEGMENT_SPACING_PERCENT_DEFAULT,
   segmentCount,
   segmentDivisorOf,
+  segmentFillOf,
+  segmentSpacingPercentOf,
 } from "./segments.js";
 
 describe("the segment model", () => {
@@ -24,7 +26,17 @@ describe("the segment model", () => {
     expect(segmentDivisorOf({ segmentDivisor: 33 })).toBe(100);
   });
 
-  it("leaves a fifth of each segment as the gap", () => {
-    expect(SEGMENT_GAP_RATIO).toBe(0.2);
+  it("reads an absent spacing as the family default", () => {
+    expect(segmentSpacingPercentOf({})).toBe(SEGMENT_SPACING_PERCENT_DEFAULT);
+    expect(SEGMENT_SPACING_PERCENT_DEFAULT).toBe(2.5);
+    // Zero is authored, not absent: a band with no gap is a choice.
+    expect(segmentSpacingPercentOf({ segmentSpacingPercent: 0 })).toBe(0);
+  });
+
+  it("reads an absent fill mode as the family's own", () => {
+    expect(segmentFillOf({}, "whole")).toBe("whole");
+    expect(segmentFillOf({}, "partial")).toBe("partial");
+    expect(segmentFillOf({ segmentFill: "whole" }, "partial")).toBe("whole");
+    expect(segmentFillOf({ segmentFill: "partial" }, "whole")).toBe("partial");
   });
 });

@@ -452,4 +452,16 @@ describe("settings field", () => {
     // A descriptor with no condition is always a question.
     expect(isSettingVisible(setting, {})).toBe(true);
   });
+
+  it("asks a notEquals question only in an authored state that differs", () => {
+    const segmented = {
+      ...setting,
+      visibleWhen: { path: ["segmentDivisor"], notEquals: "100" },
+    } as typeof setting;
+
+    // Absent means continuous, which is not the state the field is about.
+    expect(isSettingVisible(segmented, {})).toBe(false);
+    expect(isSettingVisible(segmented, { segmentDivisor: 100 })).toBe(false);
+    expect(isSettingVisible(segmented, { segmentDivisor: 20 })).toBe(true);
+  });
 });

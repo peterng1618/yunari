@@ -10,9 +10,11 @@ import {
   resolveFlatColor,
 } from "./fill.js";
 import {
-  SEGMENT_GAP_RATIO,
+  gaugeGap,
+  type SegmentFill,
   segmentCount,
   segmentDivisorOf,
+  segmentFillOf,
 } from "./segments.js";
 
 // Preserved public export; implementation moved to fill.ts.
@@ -65,6 +67,7 @@ export function buildGaugeOption(
   sample: Sample | undefined,
   animate = true,
   palette?: FabricPalette,
+  drawnEdge?: number,
 ): GaugeOption {
   const plottable = hasPlottableValue(sample);
   const track = resolveChartPaint(settings.track, palette);
@@ -82,12 +85,17 @@ export function buildGaugeOption(
 
   // A segmented gauge draws the ring as colour bands and leaves `progress` out
   // entirely: two fills over the same arc cannot both own the slices.
+  const sweepDegrees = Math.abs(settings.endAngle - settings.startAngle);
+  const count = segmentCount(segmentDivisorOf(settings));
   const bands = segmentedBands(
-    segmentCount(segmentDivisorOf(settings)),
+    count,
     plottable && progress !== undefined,
     normalizePosition(displayValue, settings.min, settings.max),
     track,
     progress,
+    segmentFillOf(settings, "whole"),
+    gaugeGap(settings, sweepDegrees, count, drawnEdge),
+    sweepDegrees,
   );
 
   return {
@@ -153,9 +161,11 @@ export function toColorSegments(
  * divisor asks for one continuous arc.
  *
  * A band is filled when **its own end** reaches the reading, so a partial band
- * never draws half a slice: the boundary is a slice edge, not a percentage. The
- * reading stays out of the tick list entirely — `progress.show` is false — which
- * is what makes the slices independent of the arc's smooth fill.
+ * never draws half a slice: the boundary is a slice edge, not a percentage —
+ * unless the author chose `partial`, where the whole point is that the fill
+ * stops at the reading itself. Either way the reading stays out of the tick
+ * list (`progress.show` is false), which is what makes the slices independent of
+ * the arc's smooth fill.
  */
 function segmentedBands(
   count: number,
@@ -163,22 +173,62 @@ function segmentedBands(
   position: number,
   track: Fill | undefined,
   progress: Fill | undefined,
+  fill: SegmentFill,
+  gapDegrees: number,
+  sweepDegrees: number,
 ): ColorSegment[] | undefined {
   if (count <= 1) return undefined;
 
+  // The gap as a share of the sweep. A zero sweep has no arc to divide; the
+  // guard keeps the proportion finite rather than depending on an early return
+  // somewhere above.
+  const gap = sweepDegrees === 0 ? 0 : gapDegrees / sweepDegrees;
   const bands: ColorSegment[] = [];
+
   for (let index = 0; index < count; index += 1) {
+    const start = index / count;
     const end = (index + 1) / count;
-    const midpoint = (index + 0.5) / count;
-    const reaches = filled && end - SEGMENT_GAP_RATIO / count <= position;
-    const paint = reaches ? progress : track;
-    bands.push([
-      end - SEGMENT_GAP_RATIO / count,
-      bandColor(paint ?? NO_PAINT, reaches, position, midpoint),
-    ]);
+    const bandEnd = end - gap;
+
+    if (fill === "partial" && filled) {
+      if (position <= start) {
+        bands.push([
+          bandEnd,
+          bandColor(track ?? NO_PAINT, false, position, bandEnd),
+        ]);
+      } else if (position >= bandEnd) {
+        bands.push([
+          bandEnd,
+          bandColor(progress ?? NO_PAINT, true, position, bandEnd),
+        ]);
+      } else {
+        // The reading lands inside this band: progress up to it, track after.
+        bands.push([
+          position,
+          bandColor(progress ?? NO_PAINT, true, position, position),
+        ]);
+        bands.push([
+          bandEnd,
+          bandColor(
+            track ?? NO_PAINT,
+            false,
+            position,
+            (position + bandEnd) / 2,
+          ),
+        ]);
+      }
+    } else {
+      const reaches = filled && bandEnd <= position;
+      const paint = reaches ? progress : track;
+      bands.push([
+        bandEnd,
+        bandColor(paint ?? NO_PAINT, reaches, position, (start + bandEnd) / 2),
+      ]);
+    }
+
     // The gap belongs to the slice it follows, so the final band reaches the
     // ring's end rather than trailing an unpainted sliver.
-    if (index < count - 1) bands.push([end, "transparent"]);
+    if (index < count - 1 && gap > 0) bands.push([end, "transparent"]);
   }
   return bands;
 }

@@ -184,6 +184,15 @@ export type ChartPlanContext = Pick<
    * no trail to hide and every delayed reading would only be late.
    */
   readonly playbackDelayMs?: number;
+  /**
+   * The smaller edge of the chart's own drawn box, when the caller knows it.
+   *
+   * A gap measured in pixels — the clearance a round cap needs — cannot become
+   * an angle without the radius, and the adapters draw at `radius: "100%"` of
+   * this box. Absent means the caller has not measured it, and an adapter skips
+   * the term rather than guessing a size.
+   */
+  readonly drawnEdge?: number;
 };
 
 /**
@@ -553,6 +562,7 @@ export function buildChartPlan(
           applyTransform(sample, binding),
           animate,
           palette,
+          context.drawnEdge,
         ),
       };
     }

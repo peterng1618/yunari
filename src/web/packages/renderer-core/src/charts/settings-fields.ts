@@ -148,10 +148,18 @@ export interface SettingsFieldDescriptor {
    * The field is a question about one state of another, asked only in that
    * state — `total.value` applies when `total.kind` is `fixed`.
    */
-  readonly visibleWhen?: {
-    readonly path: readonly string[];
-    readonly equals: string;
-  };
+  readonly visibleWhen?:
+    | {
+        readonly path: readonly string[];
+        readonly equals: string;
+      }
+    | {
+        /** Asked when the state at `path` is **not** this value. An absent
+         *  setting is not the named state either, so a question about a mode
+         *  the document never opted into stays hidden. */
+        readonly path: readonly string[];
+        readonly notEquals: string;
+      };
   readonly min?: number;
   readonly max?: number;
   readonly step?: number;
@@ -186,6 +194,15 @@ export interface SettingsFieldDescriptor {
    * outside it — so the control, the loader and the adapters read one list.
    */
   readonly values?: readonly number[];
+  /**
+   * How many decimals the control shows. The stored value keeps its own
+   * precision; this is display only, so a share reads `2.5` rather than `2.50`
+   * or a bare `2`.
+   */
+  readonly decimals?: number;
+  /** The unit the number is measured in, written beside the control so a share
+   *  of the chart is not read as pixels or degrees. */
+  readonly suffix?: string;
 }
 
 /** Persisted chart paint settings; token choice is shared across editor surfaces. */
@@ -371,6 +388,31 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       values: SEGMENT_DIVISORS,
     },
     {
+      property: "segmentSpacingPercent",
+      label: "Segment spacing",
+      kind: "number",
+      section: "content",
+      optional: true,
+      hint: "How much of the chart's smaller edge is left empty between slices.",
+      min: 0,
+      max: 20,
+      decimals: 1,
+      suffix: "%",
+    },
+    {
+      property: "segmentFill",
+      label: "Fill",
+      kind: "select",
+      section: "content",
+      optional: true,
+      hint: "Whole lights the slice the reading reaches; partial stops the fill at the reading.",
+      visibleWhen: { path: ["segmentDivisor"], notEquals: "100" },
+      options: [
+        { value: "whole", label: "Whole segment" },
+        { value: "partial", label: "Partial segment" },
+      ],
+    },
+    {
       property: "gradientSegments",
       label: "Gradient segments",
       kind: "number",
@@ -552,6 +594,31 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       values: SEGMENT_DIVISORS,
     },
     {
+      property: "segmentSpacingPercent",
+      label: "Segment spacing",
+      kind: "number",
+      section: "content",
+      optional: true,
+      hint: "How much of the chart's smaller edge is left empty between slices.",
+      min: 0,
+      max: 20,
+      decimals: 1,
+      suffix: "%",
+    },
+    {
+      property: "segmentFill",
+      label: "Fill",
+      kind: "select",
+      section: "content",
+      optional: true,
+      hint: "Whole lights the slice the reading reaches; partial stops the fill at the reading.",
+      visibleWhen: { path: ["segmentDivisor"], notEquals: "100" },
+      options: [
+        { value: "whole", label: "Whole segment" },
+        { value: "partial", label: "Partial segment" },
+      ],
+    },
+    {
       property: "showAxes",
       label: "Show axes",
       kind: "boolean",
@@ -629,6 +696,18 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       min: 1,
       max: 100,
       values: SEGMENT_DIVISORS,
+    },
+    {
+      property: "segmentSpacingPercent",
+      label: "Segment spacing",
+      kind: "number",
+      section: "content",
+      optional: true,
+      hint: "How much of the chart's smaller edge is left empty between slices.",
+      min: 0,
+      max: 20,
+      decimals: 1,
+      suffix: "%",
     },
     {
       property: "total",

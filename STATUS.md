@@ -5,28 +5,28 @@ Branch: `main`
 
 ## Current objective
 
-Land the chart work and the type-and-asset rework: the chart [spec](docs/superpowers/specs/2026-10-25-chart-playback-and-segmented-fill-design.md) and the [fonts and assets spec](docs/superpowers/specs/2026-10-25-fonts-and-assets-design.md) are both merged into `main`, and the owner's tests are the remaining gate.
+Land the chart work and the type-and-asset rework: the chart [spec](docs/superpowers/specs/2026-10-25-chart-playback-and-segmented-fill-design.md), the segment [spacing spec](docs/superpowers/specs/2026-10-26-segment-spacing-and-fill-mode-design.md) and the [fonts and assets spec](docs/superpowers/specs/2026-10-25-fonts-and-assets-design.md) are all merged into `main`, and the owner's tests are the remaining gate.
 
 ## Active work
 
+- **Segment spacing landed:** plan [`2026-10-26-segment-spacing-and-fill-mode.md`](docs/superpowers/plans/2026-10-26-segment-spacing-and-fill-mode.md), decision [0120](docs/decisions/0120-segment-spacing-is-a-share-of-the-chart.md); gap is a share of the drawn edge, caps widen it, and gauge and bar carry a whole/partial fill.
 - **Fonts and assets landed:** spec landed, plan [archived](docs/superpowers/plans/archive/2026-10-25-fonts-and-assets.md), and `vg-737`–`vg-745` file the evidence gaps it closed with.
 - **Chart spec complete:** plans 1 (playback), 2 (segmented fill) and 3 (radar and polar bar) are all landed.
 - **Wallpaper Engine export landed:** `docs/superpowers/plans/2026-10-26-wallpaper-engine-mobile-export.md`, decision [0118](docs/decisions/0118-a-scene-is-exported-by-driving-the-engine-ui.md) claims the UI-driving boundary.
 - **No plan is running:** the queue resumes at `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 260 rows still `open`.
-- **Live-line policy:** the delay is two host cadences at 30 fps and zero at 1 fps; the line never smooths — Interpolation offers Linear and Step — and a stall holds the last reading to the edge.
 - **Nothing is pushed:** each plan merged locally into `main`; the owner tests after the sequence.
 
 ## Last completed change
 
-- **Fonts and assets merged into `main`:** two conflicts resolved as unions — the branch's credits cap rides main's `ChartRefreshRate` import, and the icon map keeps both `Radar` and `RefreshCw`.
-- **The fonts-and-assets plan is closed:** the spec now states the two facts the code settled (no `subset` field, no catalogue description) and the plan moved to `archive/`.
-- **Nine ledger carries are filed** as `vg-737`–`vg-745`, each re-verified at HEAD before writing — two carried claims were stale and dropped.
-- **Register and docs:** `npm run backlog:check` exit 0, 746 items across both registers, all valid; the branch's ADR renumbered to `0119` because main had taken `0116`, and `vg-746` files the older collisions (`0100` three times, `0101` twice).
-- **Evidence:** `npm run gate` exit 0 on the merged tree — unit 414 files / 6074 tests (1 skipped), worker 12 files / 73.
+- **Spacing is a share of the chart, not of the slot:** gauge, bar and pie all measure the gap against the smaller drawn edge, with the gauge's cap clearance widening it on a small chart and a 45% band clamp.
+- **Fill mode is authorable:** gauge and bar switch between whole and partial segments; partial stops the fill at the reading, and the defaults keep the look from before the change.
+- **Browser evidence:** the gauge at five bands keeps its gaps at half size, and switching to partial moves the fill edge; three captures under `C:/tmp/yunari-segment-spacing`.
+- **Gate green on the third run:** the first was red on biome formatting, the second on the known `store.test.ts` asset-bounds timeout (72/72 when run alone), the third passed.
+- **ADR renumbered to 0120** after main took 0119 for the fonts and assets note while this branch was open.
 
 ## Next
 
-1. Owner test of radar and polar bar in the editor, then phone performance and value-chart transition evidence.
+1. Owner test of the segment spacing and fill mode, then radar and polar bar, then phone performance and value-chart transition evidence.
 2. Owner test of one scene export end to end: press the button, save the package, import the video.
 3. Owner test of the fonts and assets rework: import a face, place a result, and clean up on save.
 4. Work `vg-724`'s art half and `vg-727`, `vg-728`, `vg-729`.
@@ -34,7 +34,7 @@ Land the chart work and the type-and-asset rework: the chart [spec](docs/superpo
 
 ## Blockers / unverified
 
-- **Owner tests pending:** the engine's Save click and the folder fallback are unverified live, phone performance is unmeasured, and no live fullscreen game check ran.
+- **Owner tests pending:** the segment spacing checkpoint, the engine's Save click and the folder fallback are unverified live, phone performance is unmeasured, and no live fullscreen game check ran.
 - **Chart evidence is thin:** value-chart transitions are not browser-verified, and polar bar uses one low reading (`cpu.load` 9.28).
 - **The publish path is unverified end to end:** no workflow dispatch, no trusted-publisher run and no first publish, which stays a one-time local token publish.
 - **Readers are fixture-tested only:** Epic, itch, Xbox and Store, both live Steam reads, and no real N−1 migration is exercised.

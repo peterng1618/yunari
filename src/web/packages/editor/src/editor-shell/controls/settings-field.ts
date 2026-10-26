@@ -47,11 +47,17 @@ export function isSettingVisible(
   settings: unknown,
 ): boolean {
   const condition = descriptor.visibleWhen;
+  if (condition === undefined) return true;
 
-  return (
-    condition === undefined ||
-    readSetting(settings, condition.path) === condition.equals
-  );
+  const value = readSetting(settings, condition.path);
+  if ("equals" in condition) return value === condition.equals;
+
+  // An absent setting is not the state the question is about — a chart with no
+  // authored divisor draws continuously, which is what `100` already means, so
+  // asking about the segmented state would offer a choice that draws nothing.
+  // The state is stringified because `segmentDivisor` is a number while the
+  // condition is written as the value's own name.
+  return value !== undefined && String(value) !== condition.notEquals;
 }
 
 export function settingsField(

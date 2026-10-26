@@ -130,10 +130,16 @@ export {
 } from "./charts/radar.js";
 export { chartReadingSignature } from "./charts/reading-signature.js";
 export {
+  barGapPx,
+  gaugeGap,
+  pieGap,
   SEGMENT_DIVISORS,
-  SEGMENT_GAP_RATIO,
+  SEGMENT_SPACING_PERCENT_DEFAULT,
+  type SegmentFill,
   segmentCount,
   segmentDivisorOf,
+  segmentFillOf,
+  segmentSpacingPercentOf,
 } from "./charts/segments.js";
 export {
   carriedPaintFor,

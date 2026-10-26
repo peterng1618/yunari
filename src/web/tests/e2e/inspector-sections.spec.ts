@@ -235,6 +235,79 @@ async function propertyOf(
  * `toEngineOption` and ECharts normalise it — the option builder's own output
  * rather than the settings object or the engine's merged view of it.
  */
+/**
+ * The page point for a scene point, through the live viewport transform.
+ *
+ * `rebuild-driver`'s own helper is private, and a blank document's artboard is
+ * not the starter's width, so the transform is read rather than assumed.
+ */
+async function sceneClient(
+  page: Page,
+  x: number,
+  y: number,
+): Promise<{ x: number; y: number }> {
+  return page.evaluate(
+    ([sceneX, sceneY]: readonly [number, number]) => {
+      const { canvas } = (
+        window as unknown as {
+          yunariEditorBridge: {
+            editor: {
+              canvas: {
+                upperCanvasEl: HTMLCanvasElement;
+                viewportTransform: readonly number[];
+              };
+            };
+          };
+        }
+      ).yunariEditorBridge.editor;
+      const rect = canvas.upperCanvasEl.getBoundingClientRect();
+      const [scaleX, , , scaleY, translateX, translateY] =
+        canvas.viewportTransform as readonly [
+          number,
+          number,
+          number,
+          number,
+          number,
+          number,
+        ];
+      return {
+        x: rect.left + translateX + sceneX * scaleX,
+        y: rect.top + translateY + sceneY * scaleY,
+      };
+    },
+    [x, y] as const,
+  );
+}
+
+/**
+ * The empty arc the gauge's first band leaves, in degrees.
+ *
+ * Read from the built option rather than measured in pixels: the claim is that
+ * the angle follows the chart's drawn size, and the option is where the
+ * adapter's own arithmetic lands.
+ */
+async function gaugeGapDegrees(page: Page, name: string): Promise<number> {
+  const option = (await builtOption(page, name)) as {
+    series: {
+      startAngle?: number;
+      endAngle?: number;
+      axisLine?: { lineStyle: { color: readonly [number, string][] } };
+    }[];
+  };
+  const series = option.series[0];
+  const colors = series?.axisLine?.lineStyle.color ?? [];
+  const sweep = Math.abs((series?.endAngle ?? 0) - (series?.startAngle ?? 0));
+  const count = (colors.length + 1) / 2;
+  return (1 / count - (colors[0]?.[0] ?? 0)) * sweep;
+}
+
+async function gaugeColorCount(page: Page, name: string): Promise<number> {
+  const option = (await builtOption(page, name)) as {
+    series: { axisLine?: { lineStyle: { color: readonly unknown[] } } }[];
+  };
+  return option.series[0]?.axisLine?.lineStyle.color.length ?? 0;
+}
+
 async function builtOption(page: Page, name: string): Promise<unknown> {
   return page.evaluate((wanted) => {
     type Chart = {
@@ -1308,6 +1381,118 @@ test.describe("the per-kind inspector column", () => {
     // the component without its series still fails.
     expect(await chartCanvasInk(page, "radar")).toBeGreaterThan(0.01);
     expect(await chartCanvasInk(page, "polar-bar")).toBeGreaterThan(0.1);
+  });
+
+  test("spaces the segmented gauge by its drawn size and fills whole or partial, read rendered", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    await page.goto(EDITOR);
+    await page.waitForFunction(() => "yunariEditorBridge" in window);
+    await openBlank(page);
+    await addChart(page, {
+      family: "Gauge",
+      name: "spacing",
+      x: 40,
+      y: 60,
+      // Large enough that the 2.5% share, not the cap clearance, sets the gap:
+      // the default 18px thickness needs a radius past 360px to hide behind it.
+      w: 1120,
+      h: 840,
+      series: ["cpu.load"],
+    });
+    // The fake reading is low against a 0–100 scale, and an all-track ring is
+    // nearly the artboard's own colour: a 0–20 scale puts the reading in the
+    // middle of the ring, where both fills are visible.
+    await typeIntoControl(
+      page,
+      page.locator('[data-yunari-chart-setting="max"]'),
+      20,
+    );
+
+    const slider = page.locator('[data-yunari-chart-setting="segmentDivisor"]');
+    const well = page.locator(
+      '[data-yunari-chart-setting-well="segmentDivisor"]',
+    );
+    await expect(slider).toBeVisible();
+    // 100 → 50 → 25 → 20: five bands, the count the defect was reported at
+    // (twenty *segments* is divisor five, but this is the list's own step).
+    for (let step = 0; step < 3; step += 1) await slider.press("ArrowLeft");
+    await expect(well).toHaveValue("20");
+
+    const canvas = page.locator("#yunari-fabric-editor canvas.lower-canvas");
+    await expect
+      .poll(() => chartCanvasInk(page, "spacing"))
+      .toBeGreaterThan(0.01);
+
+    const share = ((2 * 2.5) / 100) * (180 / Math.PI);
+    await expect
+      .poll(() => gaugeGapDegrees(page, "spacing"))
+      .toBeCloseTo(share, 1);
+    await selectLayer(page, "spacing");
+    await captureVisualReview(
+      page,
+      testInfo,
+      "editor-chart-gauge-spacing-large",
+      canvas,
+    );
+
+    // Half the width, by the same right-edge handle an author drags.
+    const box = (await readScene(page)).find(
+      (object) => object.name === "spacing",
+    );
+    if (box === undefined) throw new Error("the gauge is not in the scene");
+    const from = await sceneClient(
+      page,
+      box.left + box.width,
+      box.top + box.height / 2,
+    );
+    const to = await sceneClient(
+      page,
+      box.left + box.width / 2,
+      box.top + box.height / 2,
+    );
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 12 });
+    await page.mouse.up();
+
+    // The share is the same angle at any size; the clearance is not, so the
+    // smaller chart widens the gap rather than losing it.
+    await expect
+      .poll(() => gaugeGapDegrees(page, "spacing"))
+      .toBeGreaterThan(share);
+    await captureVisualReview(
+      page,
+      testInfo,
+      "editor-chart-gauge-spacing-small",
+      canvas,
+    );
+
+    // The fill toggle is a question about a segmented chart, and it changes the
+    // picture: whole lights the slice, partial stops at the reading.
+    const whole = await chartCanvasHash(page, "spacing");
+    await chooseIn(
+      page,
+      '[data-yunari-chart-setting="segmentFill"]',
+      "partial",
+    );
+    await expect(
+      await choiceOf(page.locator('[data-yunari-chart-setting="segmentFill"]')),
+    ).toBe("Partial segment");
+    // A partial fill adds the reading's own boundary inside its band, so the
+    // colour list is no longer one band and one gap per slice. The reading is
+    // live, so the option is awaited rather than read once.
+    await expect
+      .poll(() => gaugeColorCount(page, "spacing"))
+      .toBeGreaterThan(9);
+    await expect.poll(() => chartCanvasHash(page, "spacing")).not.toBe(whole);
+    await captureVisualReview(
+      page,
+      testInfo,
+      "editor-chart-gauge-fill-partial",
+      canvas,
+    );
   });
 
   test("gives every bounded number in the chart manager the pair, read rendered", async ({

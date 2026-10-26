@@ -17,8 +17,111 @@ export const SEGMENT_DIVISORS: readonly [1, 2, 4, 5, 10, 20, 25, 50, 100] = [
   1, 2, 4, 5, 10, 20, 25, 50, 100,
 ];
 
-/** The share of each slice left empty, so neighbours stay tellable apart. */
-export const SEGMENT_GAP_RATIO = 0.2;
+/**
+ * The gap an author who has not chosen one gets, as a share of the chart's
+ * smaller drawn edge.
+ *
+ * **A share of the slot is not a share of what is seen.** A gap proportional to
+ * a slice shrinks with the count twice over — more slices means both a smaller
+ * slot and a smaller gap — so a 20-slice gauge whose gaps looked right at one
+ * size lost them at half the size. A gap measured against the drawn edge is the
+ * same gap to the eye at every size (`ADR 0120`).
+ */
+export const SEGMENT_SPACING_PERCENT_DEFAULT = 2.5;
+
+/** The authored spacing, or the family's own when the document carries none. */
+export function segmentSpacingPercentOf(settings: {
+  readonly segmentSpacingPercent?: number;
+}): number {
+  return settings.segmentSpacingPercent ?? SEGMENT_SPACING_PERCENT_DEFAULT;
+}
+
+/**
+ * What the reading's fill does with the slice it lands in.
+ *
+ * `whole` lights the slice the reading reaches, the way a segmented gauge has
+ * always drawn; `partial` stops the fill at the reading itself, so the shape
+ * reads like a continuous bar that happens to carry gaps. Absent is the
+ * family's choice, not a third mode.
+ */
+export type SegmentFill = "whole" | "partial";
+
+/** The authored fill mode, or the family's own when the document carries none. */
+export function segmentFillOf(
+  settings: { readonly segmentFill?: SegmentFill },
+  fallback: SegmentFill,
+): SegmentFill {
+  return settings.segmentFill ?? fallback;
+}
+
+/**
+ * The empty arc an angular band leaves, in degrees.
+ *
+ * **The spacing term carries no `drawnEdge`.** A gap that is a share of the
+ * edge against a radius of half the edge is the same angle at every size, so
+ * cancelling the two is what makes the gap look identical on a large chart and a
+ * small one. The clearance term is the other half: a round cap extends each band
+ * end by `thickness / 2` pixels, and whether that is visible depends on how many
+ * pixels the ring has — so a smaller chart gets a wider angle, and a chart whose
+ * size is unknown skips the term rather than guessing one.
+ *
+ * Clamped to 45% of a band: past that the gap stops reading as a gap and starts
+ * eating the band, and no author choice should be able to do that.
+ */
+export function gaugeGap(
+  settings: {
+    readonly thickness: number;
+    readonly segmentSpacingPercent?: number;
+  },
+  sweepDegrees: number,
+  count: number,
+  drawnEdge: number | undefined,
+): number {
+  const bandSweep = Math.abs(sweepDegrees) / Math.max(1, count);
+  const spacing =
+    ((2 * segmentSpacingPercentOf(settings)) / 100) * (180 / Math.PI);
+  const clearance =
+    drawnEdge === undefined
+      ? 0
+      : (settings.thickness / Math.max(1, drawnEdge / 2)) * (180 / Math.PI);
+
+  return Math.min(Math.max(spacing, clearance), 0.45 * bandSweep);
+}
+
+/**
+ * The empty length a cartesian band leaves, in pixels.
+ *
+ * A bar draws in pixel space, so the share of the chart's smaller edge is
+ * already the gap — no angle and no radius. The 45% clamp is the same one the
+ * gauge applies: past it the gap stops reading as a gap.
+ */
+export function barGapPx(
+  edgePx: number,
+  bandPx: number,
+  spacingPercent: number,
+): number {
+  const share = (Math.max(0, spacingPercent) / 100) * Math.max(0, edgePx);
+  return Math.min(share, 0.45 * bandPx);
+}
+
+/**
+ * The empty angle a pie leaves between its sub-slices, in degrees.
+ *
+ * The edge cancels here exactly as it does in the gauge's spacing term: the gap
+ * is a share of the whole edge, the drawn radius is `outerRadiusPercent` of half
+ * of it, and the quotient is an angle. The pie does not draw at the full edge,
+ * so a smaller outer radius widens the gap — which is what keeps it looking the
+ * same thickness on a donut's narrower face.
+ */
+export function pieGap(settings: {
+  readonly outerRadiusPercent: number;
+  readonly segmentSpacingPercent?: number;
+}): number {
+  const outer = Math.min(100, Math.max(0, settings.outerRadiusPercent));
+  if (outer === 0) return 0;
+
+  return ((2 * segmentSpacingPercentOf(settings)) / outer) * (180 / Math.PI);
+}
 
 /**
  * How many slices a full measure is cut into.

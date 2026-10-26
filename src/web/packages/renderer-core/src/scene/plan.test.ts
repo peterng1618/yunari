@@ -793,6 +793,28 @@ describe("charts", () => {
     }
   });
 
+  it("reads the chart's drawn edge into a gauge's gaps", () => {
+    const firstGapOffset = (drawnEdge: number) => {
+      const issues: PlanIssue[] = [];
+      const chart = buildChartPlan(
+        "c",
+        {
+          family: "gauge",
+          settings: { ...defaultGaugeSettings, segmentDivisor: 10 },
+        },
+        [],
+        { source: emptySampleSource, nowMs: NOW, animate: false, drawnEdge },
+        issues,
+      );
+      if (chart.family !== "gauge") throw new Error("not a gauge");
+      return chart.option.series[0].axisLine.lineStyle.color[0]![0];
+    };
+
+    // A 200-unit chart cannot hide the caps behind a 2.5% share the way an
+    // 800-unit one can, so its band ends earlier and the gap is wider.
+    expect(firstGapOffset(200)).toBeLessThan(firstGapOffset(800));
+  });
+
   it("plans a radar from the bound latest readings", () => {
     const { chart } = chartPlan(
       { family: "radar", settings: defaultRadarSettings },

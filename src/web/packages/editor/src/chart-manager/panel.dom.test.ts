@@ -213,6 +213,16 @@ describe("a chart's bounded settings, as the owner hands them over", () => {
       min: -360,
       max: 360,
     });
+    // A chart share is authored, so an unauthored one shows the renderer's own
+    // 2.5% rather than a zero-track, and the well says it is a percentage.
+    expect(rowOf(charts[0]!, "segmentSpacingPercent")).toMatchObject({
+      control: "slider",
+      value: 2.5,
+      min: 0,
+      max: 20,
+      decimals: 1,
+      suffix: "%",
+    });
     // A slice gap's ceiling is a full turn, which is the unit's own bound.
     expect(rowOf(charts[3]!, "padAngle")).toMatchObject({
       control: "slider",
