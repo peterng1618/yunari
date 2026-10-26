@@ -73,6 +73,7 @@ function literal(value: string): string {
  * visible to the PowerShell parser, and would otherwise surface at export time.
  */
 export const CLICK_HELPER = `using System;
+using System.Text;
 using System.Runtime.InteropServices;
 public static class YunariWeClick {
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
@@ -100,6 +101,32 @@ public static class YunariWeClick {
     SendMessage(hWnd, 0x0010, IntPtr.Zero, IntPtr.Zero);
   }
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowW(string cls, string title);
+  public delegate bool EnumProc(IntPtr h, IntPtr lp);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr lp);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+
+  // A title-only walk, for the day the window class changes: the largest match
+  // wins, because every wallpaper's preview host carries the same title.
+  public static IntPtr FindByTitle(string title) {
+    IntPtr best = IntPtr.Zero;
+    long bestArea = 0;
+    EnumWindows(delegate(IntPtr h, IntPtr lp) {
+      StringBuilder text = new StringBuilder(256);
+      GetWindowTextW(h, text, 256);
+      if (text.ToString() != title) { return true; }
+      RECT r;
+      GetWindowRect(h, out r);
+      long area = (long)(r.Right - r.Left) * (r.Bottom - r.Top);
+      if (area > bestArea) { bestArea = area; best = h; }
+      return true;
+    }, IntPtr.Zero);
+    return best;
+  }
 }`;
 
 /**
@@ -142,6 +169,27 @@ function Find-Window([string]$name) {
     [System.Windows.Automation.AutomationElement]::NameProperty, $name
   )
   return $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $cond)
+}
+
+# The engine starts minimized to the tray when Steam launches it, and a window
+# that is not showing is absent from UI Automation's desktop children: the same
+# window is still a Win32 top-level window, so it is found there and restored.
+# The class is passed explicitly because FindWindow reads a null class as the
+# empty string and matches nothing.
+function Find-MainWindow() {
+  $found = Find-Window 'Wallpaper UI'
+  if ($null -ne $found) { return $found }
+
+  $handle = [YunariWeClick]::FindWindowW('WPEUI', 'Wallpaper UI')
+  if ($handle -eq [IntPtr]::Zero) {
+    $handle = [YunariWeClick]::FindByTitle('Wallpaper UI')
+  }
+  if ($handle -eq [IntPtr]::Zero) { return $null }
+
+  [YunariWeClick]::ShowWindow($handle, 9) | Out-Null
+  [YunariWeClick]::SetForegroundWindow($handle) | Out-Null
+  Start-Sleep -Milliseconds 900
+  return Find-Window 'Wallpaper UI'
 }
 
 function Find-Contains([string]$needle, [string]$type) {
@@ -279,7 +327,7 @@ function Search-Tile([string]$title) {
   return $found
 }
 
-$win = Find-Window 'Wallpaper UI'
+$win = Find-MainWindow
 if ($null -eq $win) {
   # The editor cannot be launched directly; Steam's own protocol starts the
   # main process, which is the window this script drives.
@@ -287,7 +335,8 @@ if ($null -eq $win) {
   $deadline = (Get-Date).AddSeconds(60)
   while ($null -eq $win -and (Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 750
-    $win = Find-Window 'Wallpaper UI'
+    # Steam starts the engine to the tray, so this also restores it.
+    $win = Find-MainWindow
   }
 }
 if ($null -eq $win) { Emit-Result 'fail' 'no-window' }

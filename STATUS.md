@@ -18,11 +18,10 @@ Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](d
 
 ## Last completed change
 
-- **Scene export drives the engine's own UI:** the host presses Send to Mobile Device → Export .mpkg, sets Keep original aspect ratio and Original, and leaves the Save dialog to the author.
-- **The saved package becomes a video:** the host watches Documents, reads `wallpaper.mp4` out of the `PKGM` table and drops it in `projects/temp`, where the existing watcher and importer take over.
-- **The PNG/MP4 guidance is gone:** that editor export exists only in debug builds, so a still scene exports as video too.
-- **Three fixes alongside:** web wallpapers hidden, the workshop preview copied on unpack so a project has a thumbnail, and "Open in Wallpaper Engine" starts the app through Steam instead of the refused `-project` flag.
-- **Live:** reached the Save dialog for `Tokyo` on 2.8.42; `npm run gate` green.
+- **The engine starts to the tray:** Steam's launch leaves the window hidden, and UI Automation does not list a hidden window, so every such export answered `no-window`.
+- **Restore before driving:** the script finds the window through Win32 (`WPEUI` / `Wallpaper UI`), restores it with `SW_RESTORE`, then hands it back to UI Automation.
+- **A null class is not "any class":** PowerShell passes `$null` as an empty string, so a class-less `FindWindowW` matched nothing; the class is named, with a largest-window title walk as the fallback.
+- **Verified by reproduction:** window hidden, UI Automation confirmed blind to it, and the export for `Tokyo` still reached the Save dialog.
 
 ## Next
 

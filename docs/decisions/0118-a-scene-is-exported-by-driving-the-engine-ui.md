@@ -120,6 +120,16 @@ Measured on Wallpaper Engine 2.8.42 (2026-10-26), this PC:
   `yunari-background` holds by its absolute `scene.json` path. The export route
   and folder membership are mutually exclusive in 2.8.42 unless the folder itself
   is visible in the filtered grid, and it was not.
+- The engine starts **minimized to the tray** when Steam launches it, and a window
+  that is not showing is absent from UI Automation's desktop children — the same
+  window is still a Win32 top-level window (class `WPEUI`, title `Wallpaper UI`).
+  A build that looked only through UI Automation answered `no-window` for every
+  launch Steam made. `FindWindowW` must be given the class: PowerShell turns a
+  `$null` argument into an empty string, and an empty class matches nothing
+  (measured: `FindWindowW($null, ...)` → 0, `FindWindowW('WPEUI', ...)` → the
+  window). Restoring with `SW_RESTORE` then makes it visible to UI Automation;
+  verified by hiding the window, confirming UI Automation no longer listed it, and
+  reaching the Save dialog for `Tokyo` from that state.
 - REA: Ghidra 12.1.4 + JDK 21 installed and healthy, but `rea inspect` on the
   12 MB `wallpaperui.exe` hit the 330 s provider timeout on `list_documents`.
   Runtime UIA evidence answered the question static analysis was opened for, so
