@@ -16,6 +16,7 @@ import { EditorDocument } from "./editor-document.js";
 import type { EditorShell } from "./editor-shell.js";
 import type { HistoryGlobalsPort } from "./history-manager/index.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
+import { serializeThemePackage } from "./persist.js";
 import { PersistenceManager } from "./persistence-manager/index.js";
 import { fontAssetId } from "./type-preset-apply.js";
 import type { TypePresets } from "./type-preset-manager/index.js";
@@ -283,6 +284,36 @@ describe("EditorDocument credits", () => {
   });
 });
 
+describe("EditorDocument asset truth", () => {
+  it("ships no declarations once the last one is pruned, and still packages", () => {
+    // An opened package's envelope carries its declarations; the manager is the
+    // live list. Spreading the envelope when the live list is empty resurrects
+    // the file the author just removed.
+    const photo: LocalAssetReference = {
+      ...imageAsset("photo"),
+      sha256: "0".repeat(64),
+    };
+    const assetManager = managerWith([photo]);
+    const document = documentWith(undefined, {
+      assetManager,
+      envelope: {
+        ...bareEnvelope(),
+        assets: [...assetManager.declarations],
+      } as unknown as FabricThemeEnvelopeInput,
+    });
+
+    document.pruneAssets([photo.id]);
+
+    expect(document.snapshot().assets).toEqual([]);
+    // The same serializer the save path uses: a stale declaration is exactly
+    // the refusal that left the files already in the Recycle Bin.
+    expect(serializeThemePackage(document.snapshot(), {})).toMatchObject({
+      ok: true,
+    });
+    document.destroy();
+  });
+});
+
 describe("EditorDocument save cleanup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -382,7 +413,10 @@ describe("EditorDocument save cleanup", () => {
     const save = vi
       .spyOn(PersistenceManager.prototype, "save")
       .mockResolvedValue(undefined);
-    const document = documentWith([linked, unlinked], { assetManager });
+    const document = documentWith([linked, unlinked], {
+      assetManager,
+      envelope: bareEnvelope(),
+    });
 
     await document.save();
 
@@ -395,6 +429,54 @@ describe("EditorDocument save cleanup", () => {
     const [current, assets] = save.mock.calls[0] ?? [];
     expect(current?.assets?.map((asset) => asset.id)).not.toContain("photo");
     expect(assets).toEqual({});
+    document.destroy();
+  });
+
+  it("refuses before trashing when the post-prune package would not build", async () => {
+    // A package the serializer refuses must cost nothing but the refusal: the
+    // trash move is ordered last, after the cleanup's own result is buildable.
+    const photo: LocalAssetReference = {
+      ...imageAsset("photo"),
+      sha256: "0".repeat(64),
+    };
+    const broken: LocalAssetReference = {
+      ...imageAsset("logo"),
+      sha256: "0".repeat(64),
+    };
+    const assetManager = new AssetManager();
+    // `logo` is still referenced and has no bytes; pruning the unused `photo`
+    // leaves a declaration the serializer cannot match.
+    assetManager.load(
+      { assets: [photo, broken] },
+      { "assets/photo.png": new Uint8Array([1]) },
+    );
+    const onError = vi.fn();
+    cleanupMock.mockResolvedValue("remove");
+    trashAssetsMock.mockResolvedValue({ ok: true });
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    const document = documentWith(undefined, {
+      assetManager,
+      objects: [placedObject("logo")],
+      envelope: bareEnvelope(),
+      onError,
+    });
+
+    await document.save();
+
+    expect(trashAssetsMock).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(
+      "Package assets must exactly match the theme declaration.",
+    );
+    expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
+      "photo",
+      "logo",
+    ]);
+    expect(assetManager.assets["assets/photo.png"]).toEqual(
+      new Uint8Array([1]),
+    );
     document.destroy();
   });
 
@@ -416,6 +498,7 @@ describe("EditorDocument save cleanup", () => {
       .mockResolvedValue(undefined);
     const document = documentWith([linked], {
       assetManager,
+      envelope: bareEnvelope(),
       onSaved,
       onError,
     });
@@ -555,6 +638,7 @@ describe("EditorDocument save cleanup", () => {
       .mockResolvedValue(undefined);
     const document = documentWith(undefined, {
       assetManager,
+      envelope: bareEnvelope(),
       unsaved: true,
       onError,
     });

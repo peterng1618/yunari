@@ -271,9 +271,11 @@ export class EditorDocument {
   snapshot(): FabricThemeEnvelope {
     return this.#shell.snapshot({
       ...this.#envelope,
-      ...(this.#assets.declarations.length === 0
-        ? {}
-        : { assets: this.#assets.declarations }),
+      // Always the manager's list, empty included: spreading the envelope would
+      // otherwise supply the declarations of the package this document opened
+      // from, so removing the last asset would resurrect it here — a document
+      // declaring bytes it no longer holds.
+      assets: this.#assets.declarations,
     });
   }
 
@@ -549,9 +551,10 @@ export class EditorDocument {
    *
    * Nothing unused means nothing to ask and the save runs unchanged. A
    * dismissal is a cancel, never a keep: closing the sheet is not permission to
-   * remove a file. `"remove"` moves the files to the host's trash first, and
-   * only a trash that succeeded prunes — a refusal stops the save with the
-   * host's own sentence, so nothing is removed and nothing is written.
+   * remove a file. `"remove"` proves the post-prune package buildable, and only
+   * a proof that passed moves the files to the host's trash; only a trash that
+   * succeeded prunes. A refusal stops the save with the host's or the
+   * serializer's own sentence, so nothing is removed and nothing is written.
    */
   async confirmAssetCleanup(
     title: string = uiCopy.file.savePackage,
@@ -584,6 +587,25 @@ export class EditorDocument {
     });
     if (answer === "cancel") return { proceed: false };
     if (answer === "keep") return { proceed: true };
+
+    // The trash move is ordered last, after the save is otherwise ready: a
+    // package the serializer would refuse must cost nothing but the refusal,
+    // not files already in the Recycle Bin. The candidate is the document this
+    // cleanup leaves behind, through the serializer `save` itself uses.
+    const unusedIds = new Set(unused.map((asset) => asset.id));
+    const unusedPaths = new Set(unused.map((asset) => asset.path));
+    const candidate = serializeThemePackage(
+      {
+        ...this.snapshot(),
+        assets: this.#assets.declarations.filter(
+          (asset) => !unusedIds.has(asset.id),
+        ),
+      },
+      Object.fromEntries(
+        Object.entries(assets).filter(([path]) => !unusedPaths.has(path)),
+      ),
+    );
+    if (!candidate.ok) return { proceed: false, message: candidate.message };
 
     const outcome = await trashAssets(
       unused.map((asset) => ({
