@@ -1,47 +1,58 @@
 import type * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ImportVideoModal } from "../panes/assets/import-video-modal.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   fetchWallpaperEngine,
+  type StartProjectAnswer,
   type WallpaperEngineAnswer,
   type WallpaperEngineClientOptions,
   type WallpaperEngineItem,
 } from "../wallpaper-engine/client.js";
-import {
-  ExportSheet,
-  type WallpaperExportOutcome,
-} from "../wallpaper-engine/export-sheet.js";
 import type { ImportOutcome } from "./actions.js";
+import {
+  WallpaperEngineCard,
+  type WallpaperEngineCardState,
+} from "./wallpaper-engine-card.js";
+import { WallpaperEngineGuide } from "./wallpaper-engine-guide.js";
 
-/** The finder's Wallpaper Engine body: this PC's library, not a search.
+interface CardStatus {
+  readonly state: WallpaperEngineCardState;
+  readonly message?: string;
+}
+
+/** The finder's Wallpaper Engine body: this PC's library as a card grid.
  *
- * The import itself is the session's — this body only says which item, because
- * the asset manager's caps and the credit are not something a row can own. A
- * scene row opens the export sheet in place of the list; the sheet's own import
- * goes through the same session transaction an image row's does. */
+ * The writes are the session's — this body only says which item. Each card's
+ * action state lives here, so a running import is never silent: one status line
+ * at the modal's bottom carries every card's outcome. The listing itself is a
+ * fetch, because this is a library rather than a search. */
 export function WallpaperEngineBody(props: {
-  readonly onImport: (item: WallpaperEngineItem) => Promise<ImportOutcome>;
-  readonly onImportExport: (
+  readonly onSetBackground: (
     item: WallpaperEngineItem,
+  ) => Promise<ImportOutcome>;
+  readonly onConvert: (
+    item: WallpaperEngineItem,
+  ) => Promise<StartProjectAnswer>;
+  readonly onImportPackage: (
     file: File,
-  ) => Promise<WallpaperExportOutcome>;
+    onStep: (step: "preparing" | "importing") => void,
+  ) => Promise<ImportOutcome>;
   readonly client?: WallpaperEngineClientOptions;
 }): React.JSX.Element {
-  const client = props.client;
-  const onImport = props.onImport;
-  const onImportExport = props.onImportExport;
+  const { onSetBackground, onConvert, onImportPackage, client } = props;
   const [answer, setAnswer] = useState<WallpaperEngineAnswer | undefined>();
-  const [refusals, setRefusals] = useState<Readonly<Record<string, string>>>(
-    {},
+  const [cards, setCards] = useState<ReadonlyMap<string, CardStatus>>(
+    new Map(),
   );
-  const [selected, setSelected] = useState<WallpaperEngineItem | undefined>();
+  const [status, setStatus] = useState("");
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [packageFile, setPackageFile] = useState<File | undefined>();
   /** §5.3's title search and kind filter. The listing is already in memory, so
    *  narrowing it is this body's own decision and no new route. */
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<WallpaperEngineItem["kind"] | "all">("all");
-  /** §4.1: said once, after a successful image or video import; a refusal and a
-   *  scene export never raise it. */
-  const [noticed, setNoticed] = useState(false);
+  const packageInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let live = true;
@@ -74,36 +85,65 @@ export function WallpaperEngineBody(props: {
     );
   }
 
-  // The sheet replaces the list while a scene is chosen: the export is the
-  // whole of that choice, and `onDone` is the way back to the library.
-  if (selected !== undefined) {
-    return (
-      <ExportSheet
-        item={selected}
-        onImportFile={(file) => onImportExport(selected, file)}
-        onImported={() => {
-          setSelected(undefined);
-        }}
-        onDone={() => {
-          setSelected(undefined);
-        }}
-        {...(client === undefined ? {} : { client })}
-      />
-    );
-  }
+  const copy = uiCopy.assets.wallpaperEngine;
 
-  const importItem = async (item: WallpaperEngineItem): Promise<void> => {
-    const outcome = await onImport(item);
-    setRefusals((current) => {
-      const next = { ...current };
-      if (outcome.ok) delete next[item.workshopId];
-      else next[item.workshopId] = outcome.message;
+  const setCard = (
+    item: WallpaperEngineItem,
+    state: WallpaperEngineCardState,
+    message?: string,
+  ): void => {
+    setCards((current) => {
+      const next = new Map(current);
+      next.set(item.workshopId, {
+        state,
+        ...(message === undefined ? {} : { message }),
+      });
       return next;
     });
-    if (outcome.ok) setNoticed(true);
   };
 
-  const copy = uiCopy.assets.wallpaperEngine;
+  /** A refusal is said once on the status line; the card goes back to idle so
+   *  the author can try again (spec R2's failure row). */
+  const clearCard = (item: WallpaperEngineItem): void => {
+    setCards((current) => {
+      const next = new Map(current);
+      next.delete(item.workshopId);
+      return next;
+    });
+  };
+
+  const setBackground = async (item: WallpaperEngineItem): Promise<void> => {
+    setCard(item, "running");
+    const outcome = await onSetBackground(item);
+    if (outcome.ok) {
+      setCard(item, "done");
+      setStatus(copy.backgroundSet(item.title));
+      return;
+    }
+    clearCard(item);
+    setStatus(outcome.message);
+  };
+
+  const convert = async (item: WallpaperEngineItem): Promise<void> => {
+    setCard(item, "running");
+    const project = await onConvert(item);
+    if (project.ok) {
+      setCard(item, "done");
+      setStatus(
+        project.reused
+          ? copy.projectReused(project.name)
+          : copy.projectReady(project.name),
+      );
+      return;
+    }
+    clearCard(item);
+    setStatus(copy.projectFailed(project.reason));
+  };
+
+  const act = (item: WallpaperEngineItem): void => {
+    void (item.kind === "video" ? setBackground(item) : convert(item));
+  };
+
   const needle = query.trim().toLowerCase();
   const shown = answer.items.filter(
     (item) =>
@@ -129,7 +169,7 @@ export function WallpaperEngineBody(props: {
         aria-label={copy.filterKind}
         className="flex flex-wrap gap-[var(--space-6)]"
       >
-        {(["all", "image", "video", "web", "scene"] as const).map((option) => (
+        {(["all", "video", "scene"] as const).map((option) => (
           <button
             key={option}
             type="button"
@@ -138,20 +178,46 @@ export function WallpaperEngineBody(props: {
             onClick={() => {
               setKind(option);
             }}
-            className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-xs"
+            className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-xs aria-pressed:border-accent aria-pressed:text-accent"
           >
             {option === "all" ? copy.filterAll : copy.kind[option]}
           </button>
         ))}
       </div>
-      {noticed ? (
-        <p
-          data-yunari-wallpaper-engine-image-notice=""
-          className="text-xs text-muted"
+      <div className="flex flex-wrap items-center gap-[var(--space-8)]">
+        <button
+          type="button"
+          data-yunari-wallpaper-engine-guide=""
+          onClick={() => {
+            setGuideOpen(true);
+          }}
+          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-xs"
         >
-          {copy.imageNotice}
-        </p>
-      ) : null}
+          {copy.guide}
+        </button>
+        <button
+          type="button"
+          data-yunari-wallpaper-engine-import-package=""
+          onClick={() => {
+            packageInput.current?.click();
+          }}
+          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-xs"
+        >
+          {copy.importPackage}
+        </button>
+        <input
+          ref={packageInput}
+          type="file"
+          accept=".mpkg"
+          data-yunari-wallpaper-engine-package-input=""
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file !== undefined) setPackageFile(file);
+          }}
+        />
+      </div>
       {shown.length === 0 ? (
         <p
           data-yunari-wallpaper-engine-no-matches=""
@@ -159,68 +225,52 @@ export function WallpaperEngineBody(props: {
         >
           {copy.noMatches}
         </p>
-      ) : null}
-      {shown.map((item) => {
-        const refusal = refusals[item.workshopId];
-        return (
-          <div
-            key={item.workshopId}
-            data-yunari-wallpaper-engine-item={item.workshopId}
-            className="flex items-center gap-[var(--space-10)] rounded-[var(--radius-md)] border border-edge bg-[var(--panel-2)] p-[var(--space-8)]"
-          >
-            {item.previewUrl === undefined ? null : (
-              <img
-                src={item.previewUrl}
-                alt=""
-                loading="lazy"
-                className="h-16 w-24 shrink-0 rounded-[var(--radius-sm)] object-cover"
+      ) : (
+        <div
+          data-yunari-asset-grid=""
+          className="grid content-start grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-[var(--space-8)]"
+        >
+          {shown.map((item) => {
+            const card = cards.get(item.workshopId);
+            return (
+              <WallpaperEngineCard
+                key={item.workshopId}
+                item={item}
+                state={card?.state ?? "idle"}
+                {...(card === undefined || card.message === undefined
+                  ? {}
+                  : { message: card.message })}
+                onAction={() => {
+                  act(item);
+                }}
               />
-            )}
-            <span className="flex min-w-0 flex-1 flex-col gap-[var(--space-2)]">
-              <span className="truncate text-sm">{item.title}</span>
-              <span className="text-xs text-muted">
-                {uiCopy.assets.wallpaperEngine.kind[item.kind]} ·{" "}
-                {uiCopy.assets.wallpaperEngine.size(item.filesize)}
-              </span>
-              {refusal === undefined ? null : (
-                <span
-                  data-yunari-wallpaper-engine-refusal=""
-                  className="text-xs text-muted"
-                >
-                  {refusal}
-                </span>
-              )}
-            </span>
-            {item.kind === "image" || item.kind === "video" ? (
-              <button
-                type="button"
-                data-yunari-wallpaper-engine-import=""
-                onClick={() => {
-                  void importItem(item);
-                }}
-                className="shrink-0 rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-sm"
-              >
-                {uiCopy.assets.wallpaperEngine.import}
-              </button>
-            ) : item.kind === "scene" ? (
-              <button
-                type="button"
-                data-yunari-wallpaper-engine-open=""
-                onClick={() => {
-                  setSelected(item);
-                }}
-                className="shrink-0 rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-sm"
-              >
-                {uiCopy.assets.wallpaperEngine.openScene}
-              </button>
-            ) : item.kind === "web" ? (
-              <span className="shrink-0 text-xs text-muted">
-                {uiCopy.assets.wallpaperEngine.webUnsupported}
-              </span>
-            ) : null}
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      )}
+      <p
+        role="status"
+        data-yunari-wallpaper-engine-status=""
+        className="min-h-[1em] text-xs text-muted"
+      >
+        {status}
+      </p>
+      <WallpaperEngineGuide
+        open={guideOpen}
+        onOpenChange={(next) => {
+          setGuideOpen(next);
+        }}
+      />
+      {packageFile === undefined ? null : (
+        <ImportVideoModal
+          file={packageFile}
+          package
+          onRun={(onStep) => onImportPackage(packageFile, onStep)}
+          onClose={() => {
+            setPackageFile(undefined);
+          }}
+        />
+      )}
     </div>
   );
 }

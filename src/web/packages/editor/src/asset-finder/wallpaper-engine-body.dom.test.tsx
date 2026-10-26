@@ -3,7 +3,11 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { uiCopy } from "../ui-copy.js";
-import type { WallpaperEngineItem } from "../wallpaper-engine/client.js";
+import type {
+  StartProjectAnswer,
+  WallpaperEngineItem,
+} from "../wallpaper-engine/client.js";
+import type { ImportOutcome } from "./actions.js";
 import { WallpaperEngineBody } from "./wallpaper-engine-body.js";
 
 (
@@ -13,13 +17,13 @@ import { WallpaperEngineBody } from "./wallpaper-engine-body.js";
 const items: readonly WallpaperEngineItem[] = [
   {
     workshopId: "201",
-    title: "Rain on glass",
-    kind: "image",
+    title: "Still lake",
+    kind: "scene",
     previewUrl: "/api/wallpaper-engine/item/201/preview",
-    filesize: 2_097_152,
+    filesize: 8_388_608,
     tags: [],
-    stillAtRest: undefined,
-    hasText: undefined,
+    stillAtRest: true,
+    hasText: false,
     attribution: undefined,
   },
   {
@@ -36,23 +40,23 @@ const items: readonly WallpaperEngineItem[] = [
   {
     workshopId: "203",
     title: "Clock page",
-    kind: "web",
+    kind: "scene",
     previewUrl: undefined,
-    filesize: 1_024,
+    filesize: 4_096,
     tags: [],
-    stillAtRest: undefined,
-    hasText: undefined,
+    stillAtRest: true,
+    hasText: true,
     attribution: undefined,
   },
   {
     workshopId: "204",
-    title: "Still lake",
-    kind: "scene",
+    title: "Rain glass",
+    kind: "video",
     previewUrl: undefined,
-    filesize: 8_388_608,
+    filesize: 2_097_152,
     tags: [],
-    stillAtRest: true,
-    hasText: false,
+    stillAtRest: undefined,
+    hasText: undefined,
     attribution: undefined,
   },
 ];
@@ -80,10 +84,33 @@ afterEach(async () => {
   });
   host?.remove();
   host = undefined;
+  document.body.replaceChildren();
 });
 
-function importExport() {
-  return vi.fn(async () => ({ ok: true as const, assetId: "a1" }));
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
+function idle(): Parameters<typeof WallpaperEngineBody>[0] {
+  return {
+    onSetBackground: vi.fn(async (): Promise<ImportOutcome> => ({ ok: true })),
+    onConvert: vi.fn(
+      async (item: WallpaperEngineItem): Promise<StartProjectAnswer> => ({
+        ok: true,
+        name: item.workshopId,
+        reused: false,
+      }),
+    ),
+    onImportPackage: vi.fn(async (): Promise<ImportOutcome> => ({ ok: true })),
+    client: { fetch: listingFetcher(available) },
+  };
 }
 
 async function render(
@@ -102,10 +129,27 @@ async function render(
   return host;
 }
 
+function cards(rendered: HTMLElement): readonly HTMLElement[] {
+  return [
+    ...rendered.querySelectorAll<HTMLElement>(
+      "[data-yunari-wallpaper-engine-card]",
+    ),
+  ];
+}
+
+function cardIds(rendered: HTMLElement): readonly (string | undefined)[] {
+  return cards(rendered).map((card) => card.dataset.yunariWallpaperEngineCard);
+}
+
+function actionOf(rendered: HTMLElement, id: string): HTMLButtonElement | null {
+  return rendered.querySelector<HTMLButtonElement>(
+    `[data-yunari-wallpaper-engine-card='${id}'] [data-yunari-wallpaper-engine-action]`,
+  );
+}
+
 it("renders the host's absence reason, not an empty grid", async () => {
   const rendered = await render({
-    onImport: vi.fn(async () => ({ ok: true as const })),
-    onImportExport: importExport(),
+    ...idle(),
     client: {
       fetch: listingFetcher({ available: false, reason: "no-library" }),
     },
@@ -114,146 +158,194 @@ it("renders the host's absence reason, not an empty grid", async () => {
   expect(rendered.textContent).toContain(
     uiCopy.assets.wallpaperEngine.reason["no-library"],
   );
-  expect(
-    rendered.querySelectorAll("[data-yunari-wallpaper-engine-item]"),
-  ).toHaveLength(0);
+  expect(cards(rendered)).toHaveLength(0);
 });
 
-it("draws one row per item with its kind and size", async () => {
-  const rendered = await render({
-    onImport: vi.fn(async () => ({ ok: true as const })),
-    onImportExport: importExport(),
-    client: { fetch: listingFetcher(available) },
-  });
+it("draws a card per item inside the finder's asset grid", async () => {
+  const rendered = await render(idle());
 
-  const rows = rendered.querySelectorAll<HTMLElement>(
-    "[data-yunari-wallpaper-engine-item]",
-  );
-  expect(rows).toHaveLength(4);
-  expect([...rows].map((row) => row.dataset.yunariWallpaperEngineItem)).toEqual(
-    ["201", "202", "203", "204"],
-  );
+  expect(cardIds(rendered)).toEqual(["201", "202", "203", "204"]);
+  expect(
+    rendered
+      .querySelector("[data-yunari-asset-grid]")
+      ?.contains(cards(rendered)[0] ?? null),
+  ).toBe(true);
 
-  const first = rows[0]?.textContent ?? "";
-  expect(first).toContain("Rain on glass");
-  expect(first).toContain(uiCopy.assets.wallpaperEngine.kind.image);
+  const first = cards(rendered)[0]?.textContent ?? "";
+  expect(first).toContain("Still lake");
+  expect(first).toContain(uiCopy.assets.wallpaperEngine.kind.scene);
   expect(first).toContain(
     uiCopy.assets.wallpaperEngine.size(items[0]?.filesize ?? 0),
   );
-  expect(rows[1]?.textContent).toContain(
+  expect(cards(rendered)[1]?.textContent).toContain(
     uiCopy.assets.wallpaperEngine.kind.video,
   );
 });
 
-it("imports an image item through the injected action", async () => {
-  const onImport = vi.fn(async () => ({ ok: true as const }));
-  const rendered = await render({
-    onImport,
-    onImportExport: importExport(),
-    client: { fetch: listingFetcher(available) },
+it("offers exactly all, video and scene as kind filters", async () => {
+  const rendered = await render(idle());
+
+  const filters = [
+    ...rendered.querySelectorAll<HTMLElement>(
+      "[data-yunari-wallpaper-engine-kind-filter]",
+    ),
+  ].map((button) => button.dataset.yunariWallpaperEngineKindFilter);
+  expect(filters).toEqual(["all", "video", "scene"]);
+});
+
+it("sets a video as the background and reports it on the status line", async () => {
+  const pending = deferred<ImportOutcome>();
+  const onSetBackground = vi.fn(() => pending.promise);
+  const rendered = await render({ ...idle(), onSetBackground });
+
+  const action = actionOf(rendered, "202");
+  expect(action?.getAttribute("aria-label")).toBe(
+    uiCopy.assets.wallpaperEngine.action.video.idle,
+  );
+
+  await act(async () => {
+    action?.click();
   });
+  expect(actionOf(rendered, "202")?.getAttribute("aria-label")).toBe(
+    uiCopy.assets.wallpaperEngine.action.video.running,
+  );
+
+  await act(async () => {
+    pending.resolve({ ok: true });
+    await pending.promise;
+  });
+  expect(actionOf(rendered, "202")?.getAttribute("aria-label")).toBe(
+    uiCopy.assets.wallpaperEngine.action.video.done,
+  );
+  expect(
+    rendered.querySelector("[data-yunari-wallpaper-engine-status]")
+      ?.textContent,
+  ).toContain(uiCopy.assets.wallpaperEngine.backgroundSet("Neon city"));
+});
+
+it("converts a scene and reports the project on the status line", async () => {
+  const pending = deferred<StartProjectAnswer>();
+  const onConvert = vi.fn(() => pending.promise);
+  const rendered = await render({ ...idle(), onConvert });
+
+  const action = actionOf(rendered, "201");
+  expect(action?.getAttribute("aria-label")).toBe(
+    uiCopy.assets.wallpaperEngine.action.scene.idle,
+  );
+
+  await act(async () => {
+    action?.click();
+  });
+  expect(actionOf(rendered, "201")?.getAttribute("aria-label")).toBe(
+    uiCopy.assets.wallpaperEngine.action.scene.running,
+  );
+
+  await act(async () => {
+    pending.resolve({ ok: true, name: "201", reused: false });
+    await pending.promise;
+  });
+  expect(actionOf(rendered, "201")?.getAttribute("aria-label")).toBe(
+    uiCopy.assets.wallpaperEngine.action.scene.done,
+  );
+  expect(
+    rendered.querySelector("[data-yunari-wallpaper-engine-status]")
+      ?.textContent,
+  ).toContain(uiCopy.assets.wallpaperEngine.projectReady("201"));
+});
+
+it("returns a failed convert to idle and names the reason on the status line", async () => {
+  const rendered = await render({
+    ...idle(),
+    onConvert: vi.fn(
+      async (): Promise<StartProjectAnswer> => ({
+        ok: false,
+        reason: "no-install",
+      }),
+    ),
+  });
+
+  await act(async () => {
+    actionOf(rendered, "201")?.click();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(actionOf(rendered, "201")?.getAttribute("aria-label")).toBe(
+    uiCopy.assets.wallpaperEngine.action.scene.idle,
+  );
+  const status = rendered.querySelector(
+    "[data-yunari-wallpaper-engine-status]",
+  )?.textContent;
+  expect(status).toContain("no-install");
+});
+
+it("opens the guide with the convert use case and the export steps", async () => {
+  const rendered = await render(idle());
+
+  const guide = rendered.querySelector<HTMLButtonElement>(
+    "[data-yunari-wallpaper-engine-guide]",
+  );
+  expect(guide?.textContent).toBe(uiCopy.assets.wallpaperEngine.guide);
+
+  await act(async () => {
+    guide?.click();
+    await Promise.resolve();
+  });
+
+  const dialog = document.querySelector(
+    "[data-yunari-wallpaper-engine-guide-dialog]",
+  );
+  expect(dialog).not.toBeNull();
+  expect(dialog?.textContent).toContain(
+    uiCopy.assets.wallpaperEngine.guideSections.convert.heading,
+  );
+  expect(dialog?.textContent).toContain("Send to Mobile Device");
+  expect(dialog?.textContent).toContain("Export .mpkg");
+  expect(dialog?.textContent).toContain("Keep original aspect ratio");
+});
+
+it("opens the video modal on a picked .mpkg", async () => {
+  const onImportPackage = vi.fn(() => new Promise<ImportOutcome>(() => {}));
+  const rendered = await render({ ...idle(), onImportPackage });
 
   const button = rendered.querySelector<HTMLButtonElement>(
-    "[data-yunari-wallpaper-engine-item='201'] [data-yunari-wallpaper-engine-import]",
+    "[data-yunari-wallpaper-engine-import-package]",
   );
-  expect(button).not.toBeNull();
+  expect(button?.textContent).toBe(uiCopy.assets.wallpaperEngine.importPackage);
 
+  const input = rendered.querySelector<HTMLInputElement>(
+    "[data-yunari-wallpaper-engine-package-input]",
+  );
+  expect(input?.accept).toBe(".mpkg");
+
+  const file = new File([new Uint8Array([1])], "night.mpkg");
   await act(async () => {
-    button?.click();
+    Object.defineProperty(input, "files", {
+      value: [file],
+      configurable: true,
+    });
+    input?.dispatchEvent(new Event("change", { bubbles: true }));
     await Promise.resolve();
   });
 
-  expect(onImport).toHaveBeenCalledWith(items[0]);
+  expect(
+    document.querySelector("[data-yunari-import-video-modal]"),
+  ).not.toBeNull();
+  expect(onImportPackage).toHaveBeenCalledWith(file, expect.any(Function));
 });
 
-it("renders a refusal beside the row it refused", async () => {
-  const rendered = await render({
-    onImport: vi.fn(async () => ({
-      ok: false as const,
-      message: "That video is over the cap.",
-    })),
-    onImportExport: importExport(),
-    client: { fetch: listingFetcher(available) },
-  });
+it("exposes one status line at the bottom of the body", async () => {
+  const rendered = await render(idle());
 
-  const button = rendered.querySelector<HTMLButtonElement>(
-    "[data-yunari-wallpaper-engine-item='202'] [data-yunari-wallpaper-engine-import]",
-  );
-  await act(async () => {
-    button?.click();
-    // One macrotask: the click's import settles through two awaits, and a
-    // microtask boundary is not enough for the refusal to be rendered.
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-
-  expect(rendered.textContent).toContain("That video is over the cap.");
-});
-
-it("offers no import for a web item, only its reason", async () => {
-  const rendered = await render({
-    onImport: vi.fn(async () => ({ ok: true as const })),
-    onImportExport: importExport(),
-    client: { fetch: listingFetcher(available) },
-  });
-
-  const row = rendered.querySelector<HTMLElement>(
-    "[data-yunari-wallpaper-engine-item='203']",
-  );
-  expect(row?.textContent).toContain(
-    uiCopy.assets.wallpaperEngine.webUnsupported,
-  );
-  expect(
-    row?.querySelector("[data-yunari-wallpaper-engine-import]"),
-  ).toBeNull();
-});
-
-it("opens a scene's export sheet in place of the list, and closes it back", async () => {
-  const rendered = await render({
-    onImport: vi.fn(async () => ({ ok: true as const })),
-    onImportExport: importExport(),
-    client: { fetch: listingFetcher(available) },
-  });
-
-  const row = rendered.querySelector<HTMLElement>(
-    "[data-yunari-wallpaper-engine-item='204']",
-  );
-  const open = row?.querySelector<HTMLButtonElement>(
-    "[data-yunari-wallpaper-engine-open]",
-  );
-  expect(open?.textContent).toBe(uiCopy.assets.wallpaperEngine.openScene);
-  expect(
-    row?.querySelector("[data-yunari-wallpaper-engine-import]"),
-  ).toBeNull();
-
-  await act(async () => {
-    open?.click();
-    await Promise.resolve();
-  });
-
-  expect(rendered.querySelector("[data-yunari-export-sheet]")).not.toBeNull();
-  expect(
-    rendered.querySelectorAll("[data-yunari-wallpaper-engine-item]"),
-  ).toHaveLength(0);
-
-  await act(async () => {
-    rendered
-      .querySelector<HTMLButtonElement>("[data-yunari-export-done]")
-      ?.click();
-    await Promise.resolve();
-  });
-
-  expect(rendered.querySelector("[data-yunari-export-sheet]")).toBeNull();
-  expect(
-    rendered.querySelectorAll("[data-yunari-wallpaper-engine-item]"),
-  ).toHaveLength(4);
+  const statuses = rendered.querySelectorAll("[role='status']");
+  expect(statuses).toHaveLength(1);
+  expect(statuses[0]?.parentElement?.lastElementChild).toBe(statuses[0]);
 });
 
 function rowIds(rendered: HTMLElement): readonly (string | undefined)[] {
-  return [
-    ...rendered.querySelectorAll<HTMLElement>(
-      "[data-yunari-wallpaper-engine-item]",
-    ),
-  ].map((row) => row.dataset.yunariWallpaperEngineItem);
+  return cardIds(rendered);
 }
 
 async function typeSearch(rendered: HTMLElement, text: string): Promise<void> {
@@ -269,12 +361,8 @@ async function typeSearch(rendered: HTMLElement, text: string): Promise<void> {
   });
 }
 
-it("narrows the rows to the titles the search term reaches, and back", async () => {
-  const rendered = await render({
-    onImport: vi.fn(async () => ({ ok: true as const })),
-    onImportExport: importExport(),
-    client: { fetch: listingFetcher(available) },
-  });
+it("narrows the cards to the titles the search term reaches, and back", async () => {
+  const rendered = await render(idle());
 
   await typeSearch(rendered, "NEON");
   expect(rowIds(rendered)).toEqual(["202"]);
@@ -283,12 +371,8 @@ it("narrows the rows to the titles the search term reaches, and back", async () 
   expect(rowIds(rendered)).toEqual(["201", "202", "203", "204"]);
 });
 
-it("narrows the rows to the chosen kind, and back to All", async () => {
-  const rendered = await render({
-    onImport: vi.fn(async () => ({ ok: true as const })),
-    onImportExport: importExport(),
-    client: { fetch: listingFetcher(available) },
-  });
+it("narrows the cards to the chosen kind, and back to All", async () => {
+  const rendered = await render(idle());
 
   await act(async () => {
     rendered
@@ -298,7 +382,7 @@ it("narrows the rows to the chosen kind, and back to All", async () => {
       ?.click();
     await Promise.resolve();
   });
-  expect(rowIds(rendered)).toEqual(["204"]);
+  expect(rowIds(rendered)).toEqual(["201", "203"]);
 
   await act(async () => {
     rendered
@@ -311,12 +395,8 @@ it("narrows the rows to the chosen kind, and back to All", async () => {
   expect(rowIds(rendered)).toEqual(["201", "202", "203", "204"]);
 });
 
-it("says so when the filters hide every row", async () => {
-  const rendered = await render({
-    onImport: vi.fn(async () => ({ ok: true as const })),
-    onImportExport: importExport(),
-    client: { fetch: listingFetcher(available) },
-  });
+it("says so when the filters hide every card", async () => {
+  const rendered = await render(idle());
 
   await typeSearch(rendered, "no such wallpaper");
 
@@ -324,57 +404,4 @@ it("says so when the filters hide every row", async () => {
   expect(rendered.textContent).toContain(
     uiCopy.assets.wallpaperEngine.noMatches,
   );
-});
-
-it("says the clock warning once after a successful image import", async () => {
-  const rendered = await render({
-    onImport: vi.fn(async () => ({ ok: true as const })),
-    onImportExport: importExport(),
-    client: { fetch: listingFetcher(available) },
-  });
-
-  expect(
-    rendered.querySelector("[data-yunari-wallpaper-engine-image-notice]"),
-  ).toBeNull();
-
-  await act(async () => {
-    rendered
-      .querySelector<HTMLButtonElement>(
-        "[data-yunari-wallpaper-engine-item='201'] [data-yunari-wallpaper-engine-import]",
-      )
-      ?.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-
-  const notices = rendered.querySelectorAll(
-    "[data-yunari-wallpaper-engine-image-notice]",
-  );
-  expect(notices).toHaveLength(1);
-  expect(notices[0]?.textContent).toBe(
-    uiCopy.assets.wallpaperEngine.imageNotice,
-  );
-});
-
-it("does not say the clock warning after a refused import", async () => {
-  const rendered = await render({
-    onImport: vi.fn(async () => ({
-      ok: false as const,
-      message: "That video is over the cap.",
-    })),
-    onImportExport: importExport(),
-    client: { fetch: listingFetcher(available) },
-  });
-
-  await act(async () => {
-    rendered
-      .querySelector<HTMLButtonElement>(
-        "[data-yunari-wallpaper-engine-item='202'] [data-yunari-wallpaper-engine-import]",
-      )
-      ?.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-
-  expect(
-    rendered.querySelector("[data-yunari-wallpaper-engine-image-notice]"),
-  ).toBeNull();
 });

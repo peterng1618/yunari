@@ -96,9 +96,9 @@ import {
   fetchItemAsset,
   mp4NameOf,
   prepareMobilePackage,
+  startProject,
   type WallpaperEngineItem,
 } from "./wallpaper-engine/client.js";
-import type { WallpaperExportOutcome } from "./wallpaper-engine/export-sheet.js";
 
 /** How much of the artboard's shorter edge an imported icon takes. An SVG's
  *  viewBox is its own unit (24 for Lucide, 512 for Font Awesome), so its size
@@ -724,8 +724,10 @@ export class EditorSession {
   }
 
   /**
-   * One Wallpaper Engine item's import: the host's payload bytes, then the
-   * shared transaction below.
+   * One Wallpaper Engine video's import: the host's payload bytes, through the
+   * normalizer, then the shared declaration. A scene is converted, not imported;
+   * `library.ts` never classifies an image or a web wallpaper, so a video is the
+   * only item this can receive.
    */
   async importWallpaperItem(item: WallpaperEngineItem): Promise<ImportOutcome> {
     const file = await fetchItemAsset(item);
@@ -738,53 +740,16 @@ export class EditorSession {
 
     // §15: a video crosses the host's envelope before the manager sees it, and
     // the normalizer's refusal — never a sentence composed here — is the
-    // authority. An image is imported as served.
-    if (item.kind !== "video")
-      return this.importWallpaperFile(item, file, "Copied unchanged");
-
+    // authority.
     const normalized = await normalizeWallpaperVideo(file);
     if (!normalized.ok) return { ok: false, message: normalized.message };
-    return this.importWallpaperFile(
-      item,
-      normalized.file,
-      normalized.reencoded
-        ? "Re-encoded to the publish envelope"
-        : "Copied unchanged",
-    );
-  }
-
-  /** A scene's exported file: a PNG is an image asset, and an MP4 crosses the
-   *  same normalizer a video item does (§8 step 6). */
-  async importWallpaperExport(
-    item: WallpaperEngineItem,
-    file: File,
-  ): Promise<WallpaperExportOutcome> {
-    const changes = uiCopy.assets.wallpaperEngine.scene.changes;
-    if (!isVideoFile(file))
-      return this.importWallpaperFile(item, file, changes);
-
-    const normalized = await normalizeWallpaperVideo(file);
-    if (!normalized.ok) return { ok: false, message: normalized.message };
-    return this.importWallpaperFile(
-      item,
-      normalized.file,
-      normalized.reencoded ? "Re-encoded to the publish envelope" : changes,
-    );
-  }
-
-  /**
-   * The one transaction both Wallpaper Engine imports run: the manager's caps
-   * and reference model, the credit, and the background consequence an image
-   * import has. The credit is written first, the same order `importAsset` uses
-   * — an import that places nothing still carries its attribution.
-   */
-  async importWallpaperFile(
-    item: WallpaperEngineItem,
-    file: File,
-    changes: string,
-  ): Promise<WallpaperExportOutcome> {
-    return this.#declareVideo(file, {
-      credit: { ...creditsEntryOf(item), changes },
+    return this.#declareVideo(normalized.file, {
+      credit: {
+        ...creditsEntryOf(item),
+        changes: normalized.reencoded
+          ? "Re-encoded to the publish envelope"
+          : "Copied unchanged",
+      },
     });
   }
 
@@ -846,7 +811,7 @@ export class EditorSession {
   async #declareVideo(
     file: File,
     options: { readonly credit?: ThemeCreditsEntry },
-  ): Promise<WallpaperExportOutcome> {
+  ): Promise<ImportOutcome> {
     const credit = options.credit;
     if (credit !== undefined && !this.#document.canAddCredit(credit)) {
       return { ok: false, message: uiCopy.assets.creditsFull };
@@ -864,7 +829,7 @@ export class EditorSession {
         },
       });
       this.#declarationsChanged();
-      return { ok: true, assetId: reference.id };
+      return { ok: true };
     } catch (error) {
       return {
         ok: false,
@@ -1043,13 +1008,15 @@ export class EditorSession {
       // `runFontAction`, and the selection-to-preset projection is the shell's.
       fontPickerBody: () => this.#fontPickerBody(),
       // The finder's Wallpaper Engine body. The listing is the body's own fetch
-      // — it is a library, not a search — so the session owns only the import a
-      // row triggers.
+      // — it is a library, not a search — so the session owns only the writes a
+      // card triggers: a video's background, a scene's local project, and a
+      // picked `.mpkg` through the same one-call import the Assets pane uses.
       wallpaperEngineBody: () =>
         createElement(WallpaperEngineBody, {
-          onImport: (item) => this.importWallpaperItem(item),
-          onImportExport: (item, file) =>
-            this.importWallpaperExport(item, file),
+          onSetBackground: (item) => this.importWallpaperItem(item),
+          onConvert: (item) => startProject(item.workshopId),
+          onImportPackage: (file, onStep) =>
+            this.importPickedVideo(file, { package: true, onStep }),
         }),
       // One finder row's action. The bytes come from the host, the manager
       // keeps its caps and sanitising, and the credit is written before the
@@ -1335,8 +1302,7 @@ export class EditorSession {
   }
 }
 
-/** One video, through the host's envelope. Used by both entries that take one:
- *  an item's payload and a scene's export. */
+/** One video item, through the host's envelope. */
 async function normalizeWallpaperVideo(
   file: File,
 ): Promise<
@@ -1361,10 +1327,4 @@ async function normalizeWallpaperVideo(
 /** A refusal's own words, or the value itself when it was not an `Error`. */
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/** The host's content type is the first answer; the name covers a host that
- *  served the export as octet-stream. */
-function isVideoFile(file: File): boolean {
-  return file.type.startsWith("video/") || /\.mp4$/i.test(file.name);
 }

@@ -1324,9 +1324,11 @@ export const uiCopy = {
       `Added ${colours} ${colours === 1 ? "colour" : "colours"}`,
     gradientAdded: "Added gradient",
     presetAlreadyStored: "Already in presets",
-    /** The Wallpaper Engine body. A local library is not a grid, so the host's
-     *  own absence reason is the sentence the tab draws — "not installed" and
-     *  "no library" are different problems for the person reading it. */
+    /** The Wallpaper Engine body. The host's own absence reason is the sentence
+     *  the tab draws — "not installed" and "no library" are different problems
+     *  for the person reading it. Each card carries one icon action; the
+     *  sentences for its running, done and failed states are the tooltip and
+     *  the one status line at the modal's bottom. */
     wallpaperEngine: {
       reason: {
         "not-installed": "Wallpaper Engine is not installed on this PC.",
@@ -1337,62 +1339,63 @@ export const uiCopy = {
         string
       >,
       kind: {
-        image: "Image",
         video: "Video",
-        web: "Web",
         scene: "Scene",
-      } satisfies Record<"image" | "video" | "web" | "scene", string>,
+      } satisfies Record<"video" | "scene", string>,
       size: fileSize,
-      import: "Set as background",
-      openScene: "Open in Wallpaper Engine",
       search: "Search titles",
       filterKind: "Kind",
       filterAll: "All",
+      guide: "Guide",
+      importPackage: "Import a .mpkg video",
       noMatches: "No wallpaper matches these filters.",
-      /** §4.1: an imported image or video carries whatever its author baked in,
-       *  so the one sentence an image import needs is that it cannot be undone. */
-      imageNotice:
-        "A clock or weather label already in this picture cannot be removed, so it should not be there.",
-      webUnsupported:
-        "A web wallpaper is a page, not a file Yunari can put in a theme.",
       empty: "This library holds no wallpapers Yunari can read.",
-      /** A scene's export sheet: one route, the engine's own mobile export, and
-       *  the two choices Yunari makes for the author. */
-      scene: {
-        title: (title: string): string => `Export “${title}”`,
-        back: "Back to the library",
-        mobileStep:
-          "Yunari asks Wallpaper Engine for a mobile export of this scene, then turns the package into a video. It keeps the crop at “Keep original aspect ratio” and the preset at “Original”.",
-        /** §4.1: a clock baked into the scene is a wrong time looping forever,
-         *  and Yunari draws its own either way. Said before the export, because
-         *  it is the author's edit to make in the engine's own editor. */
-        textStep:
-          "A clock or other dynamic text in this scene is rendered into the video. Delete it in Wallpaper Engine's editor first if it should not be there.",
-        mobile: "Export with Wallpaper Engine",
-        mobileRunning: "Asking Wallpaper Engine…",
-        mobileSave:
-          "Wallpaper Engine's Save dialog is open. Save the package in Documents, the folder it opens in, and the video appears here by itself.",
-        /** The one refusal the author can act on, and only by hand. */
-        mobileAgreement:
-          "The wallpaper's creator has not accepted the Steam Workshop subscriber agreement, so Wallpaper Engine will not export it. Open the project in Wallpaper Engine and export it there instead.",
-        mobileRefused: (reason: string): string =>
-          reason === "no-tile"
-            ? "Wallpaper Engine could not find this scene's project in its grid. Make sure “My Wallpapers” is checked in the grid's Source filter, then try again."
-            : `Wallpaper Engine could not export this scene: ${reason}`,
-        projectNotice:
-          "The unpack leaves a project in Wallpaper Engine's own project list.",
-        opening: "Opening…",
-        launched: (name: string): string =>
-          `Wallpaper Engine was started. Open the project “${name}” from its own project list if it is not already selected.`,
-        ready: (name: string): string =>
-          `The project “${name}” is ready, but Wallpaper Engine's editor did not start. Open it from Wallpaper Engine's own project list.`,
-        refused: (reason: string): string =>
-          `Wallpaper Engine could not unpack this scene: ${reason}`,
-        offer: (name: string): string =>
-          `Wallpaper Engine wrote ${name}. Import it as the background?`,
-        /** The credits entry's `changes` for a file this sheet imported. */
-        changes: "Pre-rendered by Wallpaper Engine's mobile export",
+      /** One action per kind, and the three states its button can wear. */
+      action: {
+        video: {
+          idle: "Set as background",
+          running: "Setting…",
+          done: "Background set",
+        },
+        scene: {
+          idle: "Convert to local project",
+          running: "Converting…",
+          done: "Converted",
+        },
+      } satisfies Record<
+        "video" | "scene",
+        {
+          readonly idle: string;
+          readonly running: string;
+          readonly done: string;
+        }
+      >,
+      backgroundSet: (title: string): string =>
+        `“${title}” is now the theme's background.`,
+      /** R2's success: the project, and where in Wallpaper Engine to find it. */
+      projectReady: (name: string): string =>
+        `The project “${name}” is ready in Wallpaper Engine's My Projects.`,
+      projectReused: (name: string): string =>
+        `The project “${name}” already existed in Wallpaper Engine's My Projects, so nothing was changed.`,
+      /** R2's failure names the host's reason code, so the author can tell a
+       *  missing install from an unreadable scene. */
+      projectFailed: (reason: string): string =>
+        `The scene could not be converted to a local project (${reason}).`,
+      /** R5's two sections: what a conversion is for, and the manual export that
+       *  follows it. The sequence is the engine's own menus, so a renamed item
+       *  costs a sentence rather than a broken run. */
+      guideSections: {
+        convert: {
+          heading: "Why convert to a local project",
+          body: "Wallpaper Engine exports only a project you can edit locally, not a subscribed scene. Converting unpacks the scene into a project under Wallpaper Engine's My Projects. Open that project in the engine's editor, and remove or disable any dynamic text element there — a clock or weather label would otherwise be rendered into the video.",
+        },
+        export: {
+          heading: "How to export a .mpkg",
+          body: "In Wallpaper Engine, select the scene or project, right-click it, then choose Send to Mobile Device, then Export .mpkg, then Keep original aspect ratio, then Original, then Save. Then use Import a .mpkg video here.",
+        },
       },
+      guideTitle: "Wallpaper Engine guide",
+      close: "Close",
     },
   },
   /** The prompt before a document is replaced, which the author reads on the

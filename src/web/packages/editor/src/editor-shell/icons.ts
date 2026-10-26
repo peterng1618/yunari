@@ -14,6 +14,7 @@ import {
   EyeOff,
   FileText,
   Folder,
+  FolderInput,
   FolderOpen,
   Gauge,
   Hexagon,
@@ -162,6 +163,15 @@ export const CHECK_GLYPH: LucideIcon = Check;
  *  follows the glyph, so this is a mark beside a sentence). */
 export const ERROR_GLYPH: LucideIcon = OctagonAlert;
 export const WARNING_GLYPH: LucideIcon = TriangleAlert;
+
+/** The Wallpaper Engine cards' one action per kind, and the states it wears
+ *  (spec R5). `FolderInput` says the scene is taken into a local project, which
+ *  is an import rather than the store's plain `Folder` for opening one. */
+export const CONVERT_SCENE_GLYPH: LucideIcon = FolderInput;
+export const SET_BACKGROUND_GLYPH: LucideIcon = Wallpaper;
+export const CONVERTED_GLYPH: LucideIcon = Check;
+export const SETTING_GLYPH: LucideIcon = LoaderCircle;
+export const ACTION_FAILED_GLYPH: LucideIcon = TriangleAlert;
 
 /** The six chart families the document can name. */
 export const CHART_GAUGE_GLYPH: LucideIcon = Gauge;

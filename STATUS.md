@@ -16,10 +16,10 @@ Execute [`the Wallpaper Engine import rework`](docs/superpowers/plans/2026-10-26
 
 ## Last completed change
 
-- **Import modal:** a picked `.mpkg` or video opens one modal, runs the host once, declares the video and sets it as background; a refusal stays open with the host's sentence.
-- **Assets pane:** both pickers accept `.mpkg`, video-shaped picks route to the session instead of the manager, and the manual Normalize control is gone.
-- **Session:** `importPickedVideo` shares one `declareVideo` transaction with the Wallpaper Engine imports; a package credit carries its title, licence `unknown`, and no source.
-- **Proof:** 91 focused tests and the full editor suite (2746) pass; the `assets-preview` browser spec's 4 cases pass.
+- **Finder cards:** Wallpaper Engine results draw as a card grid with all/video/scene filters, one icon action per card (video background, scene conversion) and one status line for every outcome.
+- **Guide and picker:** a Guide dialog holds why a scene is converted and the engine's manual `.mpkg` export sequence; an Import a `.mpkg video` picker runs the shared import modal.
+- **Removed:** the export sheet, the client's export calls, and the `image`/`web` kinds; a scene's `startProject` answer names `no-install`, `unreadable` or `refused`.
+- **Proof:** 12 finder DOM tests, the editor suite (2728) and the `wallpaper-engine` browser spec's 4 cases pass.
 
 ## Next
 

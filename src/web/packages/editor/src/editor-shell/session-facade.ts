@@ -25,7 +25,8 @@ export interface EditorActionFacade {
    *  writes are the session's; the shell only has somewhere to put it. */
   fontPickerBody?(): React.ReactNode;
   /** The finder's Wallpaper Engine body: this PC's library, and the session's
-   *  import transaction for the rows that have one. */
+   *  three writes a card offers — a video's background, a scene's local project
+   *  and a picked `.mpkg`. */
   wallpaperEngineBody?(): React.ReactNode;
   /** One finder row's action: the bytes, the declaration, the credit, and the
    *  kind's own consequence (place an icon, set an image as background). An
