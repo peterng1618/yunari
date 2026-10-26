@@ -88,6 +88,22 @@ export const HOST_BACKGROUND_EDGE_THEME_ID = "e2e-background-edge";
  */
 export const HOST_BACKGROUND_FLIP_THEME_ID = "e2e-background-flip";
 /**
+ * The same two-tone source, bound to the theme and to the display box.
+ *
+ * **Flat halves on purpose** (`#ff0000` left, `#0000ff` right): a flat field
+ * survives a zero blur, so a pixel reports which way a rotation turned the
+ * media without `ctx.filter` having to run. The rotation proof point is the
+ * half a screen point maps back to, and a blur would average both halves across
+ * the seam instead.
+ */
+export const TWO_TONE_THEME_BOUNDS = "e2e-two-tone-theme";
+/** The same source under `bounds: "display"`, on a disc: a panel straddles the
+ *  disc's edge and the picture is what shows inside it. */
+export const TWO_TONE_DISPLAY_BOUNDS = "e2e-two-tone-display";
+/** The same source bound to the theme, with one glass panel over each half and
+ *  a third over the lens between the artboard's right edge and the disc. */
+export const GLASS_TWO_TONE_THEME = "e2e-glass-two-tone";
+/**
  * A video background and **no glass** — the one cost whose answer depends on
  * the display the theme is given to, which is what the assignment's warning
  * table is read against. Nothing here is ever decoded: the cost is read from
@@ -426,6 +442,15 @@ const flipward = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200" 
 </svg>
 `;
 
+/** The two-tone source: the board's own ratio, left half red and right half
+ *  blue. At the board's scale `cover` is the identity, so an authored x of 320
+ *  is the seam at every theme-bounded placement. */
+const twoTone = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360">
+  <rect width="320" height="360" fill="#ff0000" />
+  <rect x="320" width="320" height="360" fill="#0000ff" />
+</svg>
+`;
+
 /** The ink colour the badge paints, kept as a constant so a media test counts
  *  pixels of the served bytes rather than of anything the theme draws. */
 export const BADGE_INK = { r: 232, g: 236, b: 243 } as const;
@@ -682,6 +707,245 @@ const backgroundFlipEnvelope = {
         evented: false,
         yunariPaint: { fill: "palette.panel", stroke: "palette.edge" },
         yunariGlass: { blurRadius: 16 },
+      },
+    ],
+  },
+};
+
+/** A two-tone source as the theme's own background, with nothing else drawing:
+ *  the panel-free half of the rotation proof. */
+const twoToneThemeBoundsEnvelope = {
+  schemaVersion: "2.0.0" as const,
+  fabricVersion: "7.4.0",
+  id: TWO_TONE_THEME_BOUNDS,
+  metadata: { name: "E2E two-tone theme bounds", themeLanguage: "en" },
+  artboard: {
+    width: 640,
+    height: 360,
+    contentFit: "contain" as const,
+  },
+  background: {
+    color: { ref: "palette.bar" as const },
+    media: { assetId: "two-tone", bounds: "theme" as const },
+  },
+  globals: {
+    palette: {
+      none: {
+        name: "None",
+        value: { kind: "solid" as const, color: "transparent" },
+      },
+      bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
+    },
+    typePresets: {},
+  },
+  assets: [
+    {
+      id: "two-tone",
+      kind: "svg" as const,
+      path: "assets/two-tone.svg",
+      license: { name: "MIT", attribution: "Yunari test fixture." },
+    },
+  ],
+  scene: { version: "7.4.0" as const, objects: [] },
+};
+
+/**
+ * The same source filling the display box, with a panel spanning the disc's
+ * edge on a circle presentation.
+ *
+ * Worked out rather than eyeballed: the board is inscribed in the disc, so its
+ * bottom-right corner `(640, 360)` is on the circle and the panel centred there
+ * straddles that edge — half of it outside the board, where the canvas's own
+ * artboard clip cuts it. The panel's inside-the-board quadrant is the part a
+ * pixel can read. The `(660, 180)` lens is outside the board and inside the
+ * disc, where a display-bounded layer shows the picture and a theme-bounded one
+ * the paint.
+ */
+const twoToneDisplayBoundsEnvelope = {
+  schemaVersion: "2.0.0" as const,
+  fabricVersion: "7.4.0",
+  id: TWO_TONE_DISPLAY_BOUNDS,
+  metadata: { name: "E2E two-tone display bounds", themeLanguage: "en" },
+  artboard: {
+    width: 640,
+    height: 360,
+    contentFit: "contain" as const,
+  },
+  background: {
+    color: { ref: "palette.bar" as const },
+    media: { assetId: "two-tone", bounds: "display" as const },
+  },
+  globals: {
+    palette: {
+      none: {
+        name: "None",
+        value: { kind: "solid" as const, color: "transparent" },
+      },
+      bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
+      panel: {
+        name: "Panel",
+        value: { kind: "solid" as const, color: "rgba(0, 0, 0, 0.35)" },
+      },
+      edge: {
+        name: "Edge",
+        value: { kind: "solid" as const, color: "rgba(255, 255, 255, 0.35)" },
+      },
+    },
+    typePresets: {},
+  },
+  assets: [
+    {
+      id: "two-tone",
+      kind: "svg" as const,
+      path: "assets/two-tone.svg",
+      license: { name: "MIT", attribution: "Yunari test fixture." },
+    },
+  ],
+  scene: {
+    version: "7.4.0" as const,
+    objects: [
+      {
+        type: "Rect" as const,
+        version: "7.4.0" as const,
+        originX: "left" as const,
+        originY: "top" as const,
+        left: 580,
+        top: 300,
+        width: 120,
+        height: 120,
+        rx: 16,
+        ry: 16,
+        fill: "rgba(0, 0, 0, 0.35)",
+        stroke: "rgba(255, 255, 255, 0.35)",
+        strokeWidth: 2,
+        id: "disc-edge-panel",
+        selectable: false,
+        evented: false,
+        yunariPaint: { fill: "palette.panel", stroke: "palette.edge" },
+        // Zero blur keeps a flat field flat: the read below is about where the
+        // sample maps, not about diffusion.
+        yunariGlass: { blurRadius: 0 },
+      },
+    ],
+  },
+};
+
+/**
+ * The two-tone source as the theme's background under three glass panels.
+ *
+ * - `tone-left` and `tone-right` sit over the source's red and blue halves, so
+ *   a pixel reports which half the sampler read after the composition turned.
+ * - `tone-lens` sits at authored `(650, 180)`, between the artboard's right
+ *   edge and the disc: the plate is the paint there, so it reports whether the
+ *   sampler stopped at the artboard's own rect.
+ *
+ * Zero blur on every panel on purpose: a flat field is what makes the half a
+ * screen point maps back to readable.
+ */
+const glassTwoToneEnvelope = {
+  schemaVersion: "2.0.0" as const,
+  fabricVersion: "7.4.0",
+  id: GLASS_TWO_TONE_THEME,
+  metadata: { name: "E2E glass two-tone", themeLanguage: "en" },
+  artboard: {
+    width: 640,
+    height: 360,
+    contentFit: "contain" as const,
+  },
+  background: {
+    color: { ref: "palette.bar" as const },
+    media: { assetId: "two-tone", bounds: "theme" as const },
+  },
+  globals: {
+    palette: {
+      none: {
+        name: "None",
+        value: { kind: "solid" as const, color: "transparent" },
+      },
+      bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
+      panel: {
+        name: "Panel",
+        value: { kind: "solid" as const, color: "rgba(0, 0, 0, 0.35)" },
+      },
+      edge: {
+        name: "Edge",
+        value: { kind: "solid" as const, color: "rgba(255, 255, 255, 0.35)" },
+      },
+    },
+    typePresets: {},
+  },
+  assets: [
+    {
+      id: "two-tone",
+      kind: "svg" as const,
+      path: "assets/two-tone.svg",
+      license: { name: "MIT", attribution: "Yunari test fixture." },
+    },
+  ],
+  scene: {
+    version: "7.4.0" as const,
+    objects: [
+      {
+        type: "Rect" as const,
+        version: "7.4.0" as const,
+        originX: "left" as const,
+        originY: "top" as const,
+        left: 100,
+        top: 120,
+        width: 120,
+        height: 120,
+        rx: 16,
+        ry: 16,
+        fill: "rgba(0, 0, 0, 0.35)",
+        stroke: "rgba(255, 255, 255, 0.35)",
+        strokeWidth: 2,
+        id: "tone-left",
+        selectable: false,
+        evented: false,
+        yunariPaint: { fill: "palette.panel", stroke: "palette.edge" },
+        yunariGlass: { blurRadius: 0 },
+      },
+      {
+        type: "Rect" as const,
+        version: "7.4.0" as const,
+        originX: "left" as const,
+        originY: "top" as const,
+        left: 420,
+        top: 120,
+        width: 120,
+        height: 120,
+        rx: 16,
+        ry: 16,
+        fill: "rgba(0, 0, 0, 0.35)",
+        stroke: "rgba(255, 255, 255, 0.35)",
+        strokeWidth: 2,
+        id: "tone-right",
+        selectable: false,
+        evented: false,
+        yunariPaint: { fill: "palette.panel", stroke: "palette.edge" },
+        yunariGlass: { blurRadius: 0 },
+      },
+      {
+        // Authored outside the board (x 620…680) and inside the disc, so the
+        // plate rather than the media is what a correct sample reads.
+        type: "Rect" as const,
+        version: "7.4.0" as const,
+        originX: "left" as const,
+        originY: "top" as const,
+        left: 620,
+        top: 150,
+        width: 60,
+        height: 60,
+        rx: 8,
+        ry: 8,
+        fill: "rgba(0, 0, 0, 0.35)",
+        stroke: "rgba(255, 255, 255, 0.35)",
+        strokeWidth: 2,
+        id: "tone-lens",
+        selectable: false,
+        evented: false,
+        yunariPaint: { fill: "palette.panel", stroke: "palette.edge" },
+        yunariGlass: { blurRadius: 0 },
       },
     ],
   },
@@ -1127,6 +1391,7 @@ export async function seedHostTheme(): Promise<void> {
     "assets/backdrop.svg": new TextEncoder().encode(backdrop),
     "assets/edge.svg": new TextEncoder().encode(edgeSource),
     "assets/flipward.svg": new TextEncoder().encode(flipward),
+    "assets/two-tone.svg": new TextEncoder().encode(twoTone),
     "assets/inter-400.woff2": await fontBytes(),
     // Declared by the video theme and never decoded by any test: the host's
     // warning table reads the declaration, and the library writer refuses a
@@ -1165,6 +1430,9 @@ export async function seedHostTheme(): Promise<void> {
     backgroundLayerEnvelope,
     backgroundEdgeEnvelope,
     backgroundFlipEnvelope,
+    twoToneThemeBoundsEnvelope,
+    twoToneDisplayBoundsEnvelope,
+    glassTwoToneEnvelope,
     videoEnvelope,
     chartEnvelope,
     overhangEnvelope,

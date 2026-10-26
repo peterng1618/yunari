@@ -5,28 +5,27 @@ Branch: `main`
 
 ## Current objective
 
-The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md) (per-display shape and rotation, [`spec B`](docs/superpowers/specs/2026-10-26-display-rotation-design.md)) is the next plan, and the queued backlog drain follows it.
+[`Plan B`](docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md) (per-display shape and rotation, [`spec B`](docs/superpowers/specs/2026-10-26-display-rotation-design.md)) is complete; the queued backlog drain is next.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md` — tasks 1–5 (transform, scene presentation, host record, pair page, delivery and Host controls) are implemented; Task 6 (browser proof and gate) remains.
+- **Plan B complete:** `docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md` — tasks 1–6 landed; local merge to `main` and the spec close-out remain for the controller.
+- **Backlog drain is next:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, starting at a reproduction pass.
 - **Preview lens landed:** scene-anchored display box, shell stage, theme letterbox, guide frame, circle lens, ratio catalogue and Previews settings tab.
-- **Display presentation in plan B:** per-record shape and rotation, rotated/inscribed playback, pair-page choice, Host controls.
 - **Audit, chart, spacing and fonts work is on `main`:** revision gating, memoised dirty reading, chart animation and the fonts/assets rework are landed.
-- **Backlog drain stays queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, after plan B.
 
 ## Last completed change
 
-- **Player follows the host's glass:** the publish poll reports a validated shape and whole-degree angle only when it moves, refusing out-of-range, fractional and string angles; `main.ts` hands it to `updatePresentation`.
-- **Host controls:** a selected paired display gets Rect/Circle and a rotation track (quarter turns for rect, whole degrees for circle) with the degree mark on both.
-- **The row is the host's answer:** a write is never drawn optimistically, and a refused write leaves the row on its previous value.
-- **No borrowed sentence:** `this-pc` and the default say why they have no controls; an empty or failed display read renders no body.
-- **Evidence:** 147 cases across the five affected suites pass; the follower's guards, snap, neutral-row replacement, refusal, degree mark and absence gating were each shown red with the behaviour disabled; typecheck exit 0.
+- **Record:** a display stores `shape` and whole-degree `rotation`, rect quarter turns only, circle 0–359; a refused write is a 400 in the store's words.
+- **Rotated fit:** the artboard transform turns the composition, letterboxes the turned bounding box, and inscribes the board in a circle's disc.
+- **Circle presentation:** the canvas is clipped to the disc, a display-bounded media fills it, and theme-bounded media turns with the composition.
+- **Delivery and Host controls:** the publish poll carries shape and rotation to `updatePresentation`, and the selected display's row edits both against the host's answer.
+- **Evidence:** 12 new browser cases pass on desktop and phone; each case was shown red with its behaviour disabled; `npm run gate` exit 0.
 
 ## Next
 
-1. Execute plan B with subagent-driven development; local merge to `main` on completion.
-2. Resume the backlog-drain plan at Phase 0 after that merge.
+1. Local merge of plan B into `main`, then close the plan and spec in `.superpowers/sdd/`.
+2. Resume the backlog-drain plan at Phase 0.
 3. Triage the pre-existing browser reds recorded below.
 4. Owner tests remain: segment spacing and fill, radar and polar bar, scene export, fonts and assets rework.
 
