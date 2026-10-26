@@ -384,6 +384,8 @@ describe("credentials", () => {
     expect(await store.read()).toEqual({ legacy: stored });
   });
 
+  // 520 encrypted file operations on a temp directory: alone this runs in
+  // 7.5 s, and a full gate saturated the box past the 20 s default.
   it("caps the retired set at the newest 256 ids", async () => {
     for (let index = 0; index < 260; index += 1) {
       await store.write(`id${index}`, "value", savedAt);
@@ -398,7 +400,7 @@ describe("credentials", () => {
     expect(ids).toHaveLength(256);
     expect(ids[0]).toBe("id4");
     expect(ids.at(-1)).toBe("id259");
-  });
+  }, 120_000);
 
   it("throws when the retired set will not decrypt", async () => {
     await store.write("one", "value-one", savedAt);
