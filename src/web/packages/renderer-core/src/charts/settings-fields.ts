@@ -40,7 +40,7 @@ import { SEGMENT_DIVISORS } from "./segments.js";
  * `path` names where a field writes when it is not the top-level `property`, and
  * `visibleWhen` asks it only in the state it applies to. Both exist for exactly
  * two settings — `PieSettings.total.value` and the optional `AnimationSettings`
- * block on all four families — which is why ADR-0028 chose a path over a nested
+ * block on every family — which is why ADR-0028 chose a path over a nested
  * descriptor tree. A surface reads and writes them through `settings-path.ts`,
  * so the write path is the renderer's read path.
  *
@@ -226,6 +226,11 @@ const ORIENTATION = [
   { value: "vertical", label: "Vertical" },
 ] as const;
 
+const RADAR_SHAPE = [
+  { value: "polygon", label: "Polygon" },
+  { value: "circle", label: "Circle" },
+] as const;
+
 /** Every easing named for an author; a `Record` so a new one must be named too. */
 const EASING_LABELS: Readonly<Record<AnimationEasing, string>> = {
   linear: "Linear",
@@ -295,7 +300,7 @@ const ANIMATION_FIELDS: readonly SettingsFieldDescriptor[] = [
 /**
  * Every scalar setting, per family.
  *
- * Keyed by `ChartFamily` as a `Record`, so a fifth family is a compile error
+ * Keyed by `ChartFamily` as a `Record`, so a new family is a compile error
  * until it gains a row — the same mechanism the capability matrix uses.
  *
  * Array order is the likelihood order: the fields an author reaches for most sit
@@ -649,6 +654,165 @@ export const CHART_SETTINGS_FIELDS: Readonly<
     },
     ...ANIMATION_FIELDS,
   ],
+  radar: [
+    {
+      property: "min",
+      label: "Minimum",
+      kind: "number",
+      section: "content",
+      hint: "The value the centre stands for; a lower reading draws at the centre.",
+    },
+    {
+      property: "max",
+      label: "Maximum",
+      kind: "number",
+      section: "content",
+      hint: "The value the outer edge stands for, shared by every spoke. Readings in different units must be normalised through the series.",
+    },
+    {
+      property: "shape",
+      label: "Shape",
+      kind: "select",
+      section: "content",
+      hint: "Joins the spokes with straight edges or draws the frame as a circle.",
+      options: RADAR_SHAPE,
+    },
+    {
+      property: "splitNumber",
+      label: "Split rings",
+      kind: "number",
+      section: "content",
+      advanced: true,
+      hint: "How many rings divide the scale from the centre to the edge.",
+      min: 1,
+      max: 10,
+    },
+    {
+      property: "lineWidth",
+      label: "Line width",
+      kind: "number",
+      section: "content",
+      hint: "How thick the polygon's outline is drawn, in pixels.",
+      min: 0,
+      bound: "drawnBox",
+    },
+    {
+      property: "showMarkers",
+      label: "Show markers",
+      kind: "boolean",
+      section: "content",
+      hint: "Draws a dot at each reading on the polygon.",
+    },
+    {
+      property: "markerSize",
+      label: "Marker size",
+      kind: "number",
+      section: "content",
+      advanced: true,
+      hint: "How large each reading's dot is, in pixels.",
+      min: 0,
+      bound: "drawnBox",
+    },
+    {
+      property: "showAxes",
+      label: "Show axes",
+      kind: "boolean",
+      section: "content",
+      hint: "Draws the spokes, the rings and the split area behind the polygon.",
+    },
+    ...ANIMATION_FIELDS,
+  ],
+  polarBar: [
+    {
+      property: "startAngle",
+      label: "Start angle",
+      kind: "number",
+      section: "content",
+      hint: "Where the first category begins, in degrees — 90 is twelve o'clock and bars run clockwise.",
+      min: -360,
+      max: 360,
+    },
+    {
+      property: "innerRadiusPercent",
+      label: "Inner radius %",
+      kind: "number",
+      section: "content",
+      hint: "How far from the centre the bars begin; anything above zero leaves a hole.",
+      min: 0,
+      max: 100,
+    },
+    {
+      property: "outerRadiusPercent",
+      label: "Outer radius %",
+      kind: "number",
+      section: "content",
+      hint: "How far out a full bar reaches; 100 fills the available space.",
+      min: 0,
+      max: 100,
+    },
+    {
+      property: "min",
+      label: "Minimum",
+      kind: "number",
+      section: "content",
+      hint: "The value the inner edge stands for; a lower reading draws as an empty bar.",
+    },
+    {
+      property: "max",
+      label: "Maximum",
+      kind: "number",
+      section: "content",
+      hint: "The value a bar reaching the outer edge stands for; a higher reading draws full rather than rescaling.",
+    },
+    {
+      property: "barWidth",
+      label: "Bar width",
+      kind: "number",
+      section: "content",
+      optional: true,
+      hint: "How many degrees wide each bar is; empty lets the category gap size it.",
+      min: 0,
+      max: 360,
+    },
+    {
+      property: "categoryGapPercent",
+      label: "Category gap %",
+      kind: "number",
+      section: "content",
+      advanced: true,
+      hint: "How much of each angle slot is left as space between bars.",
+      min: 0,
+      max: 100,
+    },
+    {
+      property: "cornerRadius",
+      label: "Corner radius",
+      kind: "number",
+      section: "content",
+      hint: "How much each bar's own corners are rounded, in pixels.",
+      min: 0,
+      bound: "halfDrawnBox",
+    },
+    {
+      property: "trackCornerRadius",
+      label: "Track corner radius",
+      kind: "number",
+      section: "content",
+      optional: true,
+      advanced: true,
+      hint: "The unfilled track's own rounding, beside the bar's. Empty leaves it square.",
+      min: 0,
+      bound: "halfDrawnBox",
+    },
+    {
+      property: "showAxes",
+      label: "Show axes",
+      kind: "boolean",
+      section: "content",
+      hint: "Draws the angle and radius axes with their gridlines, without labels.",
+    },
+    ...ANIMATION_FIELDS,
+  ],
 };
 
 /** The editable scalar settings for one family. */
@@ -723,6 +887,34 @@ export const CHART_PAINT_FIELDS: Readonly<
       section: "paint",
       hint: "One colour per slice, cycled when there are more slices than entries.",
       multiple: true,
+    },
+  ],
+  radar: [
+    {
+      property: "stroke",
+      label: "Outline paint",
+      section: "paint",
+      hint: "The polygon's outline. One polygon cannot carry a colour per spoke, so a threshold takes its top band.",
+    },
+    {
+      property: "area",
+      label: "Fill paint",
+      section: "paint",
+      hint: "The area inside the polygon; empty draws the outline alone.",
+    },
+  ],
+  polarBar: [
+    {
+      property: "fill",
+      label: "Fill paint",
+      section: "paint",
+      hint: "The ink each bar is drawn in.",
+    },
+    {
+      property: "track",
+      label: "Track paint",
+      section: "paint",
+      hint: "The unfilled track behind each bar; giving one turns the bars into progress bars.",
     },
   ],
 };

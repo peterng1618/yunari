@@ -11,6 +11,8 @@ import {
   computeComposition,
   defaultPieSettings,
 } from "./pie.js";
+import { defaultPolarBarSettings } from "./polar-bar.js";
+import { defaultRadarSettings } from "./radar.js";
 import { settingsFieldsFor } from "./settings-fields.js";
 import { readSetting, writeSetting } from "./settings-path.js";
 
@@ -240,6 +242,8 @@ describe("Review Focus 3 — the nested write round-trips through the option bui
       line: defaultLineSettings,
       bar: defaultBarSettings,
       pie: defaultPieSettings,
+      radar: defaultRadarSettings,
+      polarBar: defaultPolarBarSettings,
     };
 
     for (const family of CHART_FAMILIES) {

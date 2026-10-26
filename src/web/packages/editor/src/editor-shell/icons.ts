@@ -22,6 +22,7 @@ import {
   Layers2,
   Link,
   LoaderCircle,
+  LoaderPinwheel,
   Lock,
   LogIn,
   LogOut,
@@ -33,6 +34,7 @@ import {
   Pencil,
   Pipette,
   Plus,
+  Radar,
   Scan,
   Search,
   Settings,
@@ -149,11 +151,13 @@ export const CHECK_GLYPH: LucideIcon = Check;
 export const ERROR_GLYPH: LucideIcon = OctagonAlert;
 export const WARNING_GLYPH: LucideIcon = TriangleAlert;
 
-/** The four chart families the document can name. */
+/** The six chart families the document can name. */
 export const CHART_GAUGE_GLYPH: LucideIcon = Gauge;
 export const CHART_LINE_GLYPH: LucideIcon = ChartLine;
 export const CHART_BAR_GLYPH: LucideIcon = ChartColumn;
 export const CHART_PIE_GLYPH: LucideIcon = ChartPie;
+export const CHART_RADAR_GLYPH: LucideIcon = Radar;
+export const CHART_POLAR_BAR_GLYPH: LucideIcon = LoaderPinwheel;
 
 /**
  * One glyph per primitive the Add pane offers, keyed by `ShapeKind`, so a
@@ -264,7 +268,7 @@ export const RAIL_GLYPHS: Readonly<Record<RailSlot, LucideIcon>> = {
  * (`SHAPE_GLYPHS`, falling back to this map's generic `Shapes` for a shape whose
  * kind the build does not know); and `chart` answers a different question — the
  * *family* — through `chartFamilyGlyph`, so `chart` here is the kind's generic
- * mark rather than the one four chart rows wear.
+ * mark rather than the one the family rows wear.
  *
  * **`chart` is `ChartNoAxesCombined`, and it used to be `CHART_BAR_GLYPH`**
  * (`vg-489`). A chart whose family this build cannot name falls back here, and

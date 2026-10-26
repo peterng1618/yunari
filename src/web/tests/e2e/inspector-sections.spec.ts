@@ -303,6 +303,49 @@ async function chartCanvasHash(page: Page, name: string): Promise<string> {
   }, name);
 }
 
+/**
+ * The fraction of the chart's own backing canvas that is painted at all.
+ *
+ * A hash of a blank canvas is the string `"0"`, and `"0"` is truthy — the check
+ * above could not tell a drawn chart from one ECharts never rendered. Ink is
+ * the fraction of pixels with any alpha, and a family the engine has not
+ * registered paints none of it.
+ */
+async function chartCanvasInk(page: Page, name: string): Promise<number> {
+  return page.evaluate((wanted) => {
+    type Chart = {
+      get(name: string): unknown;
+      getObjects?(): readonly Chart[];
+      _element?: HTMLCanvasElement;
+    };
+    const roots = (
+      window as unknown as {
+        yunariEditorBridge: {
+          editor: { canvas: { getObjects(): readonly Chart[] } };
+        };
+      }
+    ).yunariEditorBridge.editor.canvas.getObjects();
+    const find = (objects: readonly Chart[]): Chart | undefined => {
+      for (const object of objects) {
+        if (object.get("name") === wanted) return object;
+        const found = find(object.getObjects?.() ?? []);
+        if (found !== undefined) return found;
+      }
+      return undefined;
+    };
+    const canvas = find(roots)?._element;
+    const data = canvas
+      ?.getContext("2d")
+      ?.getImageData(0, 0, canvas.width, canvas.height).data;
+    if (data === undefined) return 0;
+    let painted = 0;
+    for (let index = 3; index < data.length; index += 4) {
+      if ((data[index] ?? 0) > 0) painted += 1;
+    }
+    return painted / (data.length / 4);
+  }, name);
+}
+
 /** The persisted settings the object carries, for the claim that a write
     landed rather than only that a field kept its text. */
 async function chartSettings(page: Page, name: string): Promise<unknown> {
@@ -1159,6 +1202,112 @@ test.describe("the per-kind inspector column", () => {
         expect(restored.series[0]?.data).toHaveLength(1);
       }
     }
+  });
+
+  test("offers radar and polar bar from the Add pane, read rendered", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    await page.goto(EDITOR);
+    await page.waitForFunction(() => "yunariEditorBridge" in window);
+    await openBlank(page);
+
+    await addChart(page, {
+      family: "Radar",
+      name: "radar",
+      x: 40,
+      y: 60,
+      w: 320,
+      h: 300,
+      series: ["cpu.load", "gpu.load", "ram.used", "cpu.temp"],
+    });
+    await addChart(page, {
+      family: "Radar",
+      name: "radar-fewer",
+      x: 420,
+      y: 60,
+      w: 320,
+      h: 300,
+      series: ["cpu.load", "gpu.load"],
+    });
+    await addChart(page, {
+      family: "Polar bar",
+      name: "polar-bar",
+      x: 800,
+      y: 60,
+      w: 320,
+      h: 300,
+      series: ["cpu.load"],
+    });
+
+    // Each capture is the canvas with that chart selected, because the column
+    // shows whichever chart is selected and three columns would be the same
+    // controls three times. A chart paints a frame after its option lands, so
+    // waiting for ink first is what stops the evidence being an empty canvas.
+    const canvas = page.locator("#yunari-fabric-editor canvas.lower-canvas");
+    for (const name of ["radar", "radar-fewer", "polar-bar"]) {
+      await expect
+        .poll(() => chartCanvasInk(page, name))
+        .toBeGreaterThan(0.001);
+    }
+    await selectLayer(page, "radar");
+    await captureVisualReview(
+      page,
+      testInfo,
+      "editor-chart-radar-four-readings",
+      canvas,
+    );
+    await selectLayer(page, "radar-fewer");
+    await captureVisualReview(
+      page,
+      testInfo,
+      "editor-chart-radar-two-readings",
+      canvas,
+    );
+    await selectLayer(page, "polar-bar");
+    await captureVisualReview(page, testInfo, "editor-chart-polar-bar", canvas);
+
+    // The palette the blank document carries: one spoke per bound series, on
+    // the settings' shared scale, and one category around the polar axis.
+    const radar = (await builtOption(page, "radar")) as {
+      radar: { indicator: { name: string }[]; axisName: { show: boolean } };
+      series: { type: string; data: { value: number[] }[] }[];
+    };
+    expect(radar.radar.indicator.map((spoke) => spoke.name)).toEqual([
+      "cpu.load",
+      "gpu.load",
+      "ram.used",
+      "cpu.temp",
+    ]);
+    expect(radar.radar.axisName.show).toBe(false);
+    expect(radar.series[0]?.type).toBe("radar");
+    expect(radar.series[0]?.data[0]?.value).toHaveLength(4);
+
+    // Fewer than three spokes leaves the frame and draws no polygon: never a
+    // polygon closed on a reading nobody took (§D1).
+    const fewer = (await builtOption(page, "radar-fewer")) as {
+      series: { data: readonly unknown[] }[];
+    };
+    expect(fewer.series[0]?.data).toEqual([]);
+
+    const polar = (await builtOption(page, "polar-bar")) as {
+      angleAxis: { data: string[]; axisLabel: { show: boolean } };
+      series: { type: string; coordinateSystem: string }[];
+    };
+    expect(polar.angleAxis.data).toEqual(["cpu.load"]);
+    expect(polar.angleAxis.axisLabel.show).toBe(false);
+    expect(polar.series[0]).toMatchObject({
+      type: "bar",
+      coordinateSystem: "polar",
+    });
+
+    // The option says what was built; the backing canvas says it reached the
+    // glass rather than stopping at an option nobody drew. The floors are
+    // measured: the four-spoke polygon covers 4.9% and the polar bar's 216°
+    // sector 26.7%, while an empty frame is 0.16% — high enough that registering
+    // the component without its series still fails.
+    expect(await chartCanvasInk(page, "radar")).toBeGreaterThan(0.01);
+    expect(await chartCanvasInk(page, "polar-bar")).toBeGreaterThan(0.1);
   });
 
   test("gives every bounded number in the chart manager the pair, read rendered", async ({

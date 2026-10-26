@@ -643,7 +643,7 @@ export async function addChart(
     // A line's data colour is its *series* paint, one entry per series; a
     // gauge's and a bar's is a single field. `chartPaintFieldsFor` is what says
     // which, and the panel's own attribute is what the author clicks.
-    const family = chart.family.toLowerCase();
+    const family = chart.family.toLowerCase().replaceAll(" ", "");
     const key =
       family === "line" || family === "pie"
         ? `palette.${index}`
@@ -672,4 +672,6 @@ export async function addChart(
 const PAINT_KEY: Readonly<Record<string, string>> = {
   gauge: "progress",
   bar: "fill",
+  radar: "stroke",
+  polarbar: "fill",
 };

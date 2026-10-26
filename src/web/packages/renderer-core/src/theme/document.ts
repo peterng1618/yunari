@@ -1,6 +1,8 @@
 import type { BarSettings } from "../charts/bar.js";
 import type { LineSettings } from "../charts/line.js";
 import type { PieSettings } from "../charts/pie.js";
+import type { PolarBarSettings } from "../charts/polar-bar.js";
+import type { RadarSettings } from "../charts/radar.js";
 import type { GaugeSettings } from "../types.js";
 import { isCatalogueId } from "./catalogue-index.js";
 
@@ -106,7 +108,14 @@ export const NODE_TYPES = [
 ] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
 
-export const CHART_FAMILIES = ["gauge", "line", "bar", "pie"] as const;
+export const CHART_FAMILIES = [
+  "gauge",
+  "line",
+  "bar",
+  "pie",
+  "radar",
+  "polarBar",
+] as const;
 export type ChartFamily = (typeof CHART_FAMILIES)[number];
 
 export type GlobalRef = `${GlobalGroupName}.${string}`;
@@ -288,7 +297,9 @@ export type ChartContent =
   | { readonly family: "gauge"; readonly settings: GaugeSettings }
   | { readonly family: "line"; readonly settings: LineSettings }
   | { readonly family: "bar"; readonly settings: BarSettings }
-  | { readonly family: "pie"; readonly settings: PieSettings };
+  | { readonly family: "pie"; readonly settings: PieSettings }
+  | { readonly family: "radar"; readonly settings: RadarSettings }
+  | { readonly family: "polarBar"; readonly settings: PolarBarSettings };
 
 /** The unit a card was authored as, on the starter and on a copy; not a live
  * library link. */

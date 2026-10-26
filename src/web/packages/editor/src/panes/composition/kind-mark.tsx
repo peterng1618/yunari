@@ -3,6 +3,8 @@ import {
   CHART_GAUGE_GLYPH,
   CHART_LINE_GLYPH,
   CHART_PIE_GLYPH,
+  CHART_POLAR_BAR_GLYPH,
+  CHART_RADAR_GLYPH,
   Glyph,
   KIND_GLYPHS,
   type LucideIcon,
@@ -25,12 +27,14 @@ const CHART_ICONS: Readonly<Record<string, LucideIcon>> = {
   line: CHART_LINE_GLYPH,
   bar: CHART_BAR_GLYPH,
   pie: CHART_PIE_GLYPH,
+  radar: CHART_RADAR_GLYPH,
+  polarBar: CHART_POLAR_BAR_GLYPH,
 };
 
 /**
  * The glyph a chart family wears, wherever one is drawn.
  *
- * One owner, because two surfaces draw these four: the layer row's mark and the
+ * One owner, because two surfaces draw each family: the layer row's mark and the
  * Add pane's tile. A family that wore a gauge in the row and a column on the
  * tile would be two answers to one question, and the author would have to learn
  * both.

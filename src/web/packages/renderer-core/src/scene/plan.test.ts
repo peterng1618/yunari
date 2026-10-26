@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { defaultBarSettings } from "../charts/bar.js";
 import { defaultLineSettings } from "../charts/line.js";
+import { defaultPolarBarSettings } from "../charts/polar-bar.js";
+import { defaultRadarSettings } from "../charts/radar.js";
 import { LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS } from "../data/live-source.js";
 import type { SemanticKeyDescriptor } from "../data/semantic-keys.js";
 import type { SampleSource } from "../data/source.js";
@@ -788,6 +790,40 @@ describe("charts", () => {
 
     if (chart.family === "gauge") {
       expect(chart.option.series[0].data[0]!.value).toBeCloseTo(42);
+    }
+  });
+
+  it("plans a radar from the bound latest readings", () => {
+    const { chart } = chartPlan(
+      { family: "radar", settings: defaultRadarSettings },
+      [
+        { id: "a", semanticKey: "cpu.load.total" },
+        { id: "b", semanticKey: "gpu.load.total" },
+        { id: "c", semanticKey: "ram.used" },
+      ],
+      storeWith({
+        "cpu.load.total": ok(70),
+        "gpu.load.total": ok(40, "", "gpu.load.total"),
+        "ram.used": ok(55, "", "ram.used"),
+      }),
+    );
+
+    expect(chart.family).toBe("radar");
+    if (chart.family === "radar") {
+      expect(chart.option.series[0]!.data).toEqual([{ value: [70, 40, 55] }]);
+    }
+  });
+
+  it("plans a polar bar from the bound latest readings", () => {
+    const { chart } = chartPlan(
+      { family: "polarBar", settings: defaultPolarBarSettings },
+      [{ id: "a", semanticKey: "cpu.load.total" }],
+      storeWith({ "cpu.load.total": ok(70) }),
+    );
+
+    expect(chart.family).toBe("polarBar");
+    if (chart.family === "polarBar") {
+      expect(chart.option.series[0]!.type).toBe("bar");
     }
   });
 

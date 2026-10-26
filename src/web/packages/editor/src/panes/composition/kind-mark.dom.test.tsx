@@ -15,7 +15,7 @@ import {
 } from "../../editor-shell/icons.js";
 import type { LayerMark } from "../../editor-shell/layer-tree.js";
 import { SHAPE_KINDS } from "../../new-object-defaults.js";
-import { KindMark } from "./kind-mark.js";
+import { chartFamilyGlyph, KindMark } from "./kind-mark.js";
 
 // React only flushes work scheduled inside `act` when it has been told it is in
 // a test; without this, `act` warns and the update lands after the assertion.
@@ -158,6 +158,15 @@ it("gives each kind a mark that says which kind it is", () => {
       '[data-yunari-layer-mark="group"] svg',
     ),
   ).not.toBeNull();
+
+  // The two newer families wear their own marks, not the generic chart glyph:
+  // a row that cannot tell a radar from a column is the defect this column
+  // exists to answer.
+  for (const family of ["radar", "polarBar"] as const) {
+    const glyph = armGlyph({ kind: "chart", family });
+    expect(glyph, family).toBe(lucideClass(chartFamilyGlyph(family)));
+    expect(glyph, family).not.toBe(lucideClass(KIND_GLYPHS.chart));
+  }
 });
 
 /** A mark's own words, so a failure names the pair that shared rather than two
