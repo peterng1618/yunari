@@ -10,6 +10,7 @@ import { NO_INK, resolveChartPaint } from "./chart-paint.js";
 import { type EngineColor, resolveFlatColor } from "./fill.js";
 import {
   SEGMENT_GAP_RATIO,
+  SEGMENT_SPACING_PERCENT_DEFAULT,
   segmentCount,
   segmentDivisorOf,
 } from "./segments.js";
@@ -33,6 +34,8 @@ export interface PieSettings {
   readonly cornerRadius: number;
   /** How many slices each part's fill is cut into; 100 is continuous. */
   readonly segmentDivisor: number;
+  /** Gap between slices, as a share of the chart's smaller drawn edge. */
+  readonly segmentSpacingPercent?: number;
   readonly total: PieTotal;
   /** Drawn only for fixed totals, where the remainder is measurable. */
   readonly remainderFill?: ChartPaint;
@@ -47,6 +50,7 @@ export const defaultPieSettings: PieSettings = {
   padAngle: 2,
   cornerRadius: 4,
   segmentDivisor: 100,
+  segmentSpacingPercent: SEGMENT_SPACING_PERCENT_DEFAULT,
   total: { kind: "sum" },
   palette: [
     { kind: "solid", color: "#00b8d9" },

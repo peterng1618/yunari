@@ -18,6 +18,8 @@ import {
 import { type CartesianGrid, cartesianGrid } from "./grid.js";
 import {
   SEGMENT_GAP_RATIO,
+  SEGMENT_SPACING_PERCENT_DEFAULT,
+  type SegmentFill,
   segmentCount,
   segmentDivisorOf,
 } from "./segments.js";
@@ -51,6 +53,10 @@ export interface BarSettings {
   readonly trackCornerRadius?: number;
   /** How many slices the fill is cut into; 100 is one continuous bar. */
   readonly segmentDivisor: number;
+  /** Gap between slices, as a share of the chart's smaller drawn edge. */
+  readonly segmentSpacingPercent?: number;
+  /** Whether the reading lights a whole slice or stops at its own value. */
+  readonly segmentFill?: SegmentFill;
   readonly showAxes: boolean;
   readonly animation?: AnimationSettings;
 }
@@ -68,6 +74,11 @@ export const defaultBarSettings: BarSettings = {
   // it is its own value, so a theme can round one and not the other.
   trackCornerRadius: 7,
   segmentDivisor: 100,
+  segmentSpacingPercent: SEGMENT_SPACING_PERCENT_DEFAULT,
+  // A bar's reading already maps to a distance along it, so stopping the fill
+  // where the reading lands is what a bar means; a gauge's reading has no such
+  // length and lights its whole slice.
+  segmentFill: "partial",
   showAxes: false,
 };
 

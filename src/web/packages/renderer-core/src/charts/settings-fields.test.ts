@@ -106,6 +106,8 @@ const GAUGE_COVERAGE: Record<keyof GaugeSettings, "setting" | "paint"> = {
   progress: "paint",
   roundCap: "setting",
   segmentDivisor: "setting",
+  segmentSpacingPercent: "setting",
+  segmentFill: "setting",
   gradientSegments: "setting",
   animation: "setting",
 };
@@ -139,6 +141,8 @@ const BAR_COVERAGE: Record<keyof BarSettings, "setting" | "paint"> = {
   track: "paint",
   trackCornerRadius: "setting",
   segmentDivisor: "setting",
+  segmentSpacingPercent: "setting",
+  segmentFill: "setting",
   showAxes: "setting",
   animation: "setting",
 };
@@ -151,6 +155,7 @@ const PIE_COVERAGE: Record<keyof PieSettings, "setting" | "paint"> = {
   padAngle: "setting",
   cornerRadius: "setting",
   segmentDivisor: "setting",
+  segmentSpacingPercent: "setting",
   total: "setting",
   remainderFill: "paint",
   palette: "paint",
@@ -414,6 +419,8 @@ describe("descriptor order is the likelihood order", () => {
       "thickness",
       "roundCap",
       "segmentDivisor",
+      "segmentSpacingPercent",
+      "segmentFill",
       "gradientSegments",
       ...ANIMATION_PROPERTIES,
     ],
@@ -440,6 +447,8 @@ describe("descriptor order is the likelihood order", () => {
       "cornerRadius",
       "trackCornerRadius",
       "segmentDivisor",
+      "segmentSpacingPercent",
+      "segmentFill",
       "showAxes",
       ...ANIMATION_PROPERTIES,
     ],
@@ -451,6 +460,7 @@ describe("descriptor order is the likelihood order", () => {
       "padAngle",
       "cornerRadius",
       "segmentDivisor",
+      "segmentSpacingPercent",
       "total",
       "total.value",
       ...ANIMATION_PROPERTIES,
@@ -535,6 +545,28 @@ describe("the two settings one level down", () => {
     expect(value?.visibleWhen).toEqual({
       path: ["total", "kind"],
       equals: "fixed",
+    });
+  });
+
+  it("declares the spacing as a share of the chart and the fill as a mode", () => {
+    const spacing = settingsFieldsFor("gauge").find(
+      (field) => field.property === "segmentSpacingPercent",
+    );
+    expect(spacing?.kind).toBe("number");
+    expect(spacing?.min).toBe(0);
+    expect(spacing?.max).toBe(20);
+
+    const fill = settingsFieldsFor("bar").find(
+      (field) => field.property === "segmentFill",
+    );
+    expect(fill?.kind).toBe("select");
+    expect(fill?.options?.map((option) => option.value)).toEqual([
+      "whole",
+      "partial",
+    ]);
+    expect(fill?.visibleWhen).toEqual({
+      path: ["segmentDivisor"],
+      notEquals: "100",
     });
   });
 

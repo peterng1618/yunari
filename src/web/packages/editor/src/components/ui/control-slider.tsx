@@ -70,6 +70,11 @@ export function ControlSlider(
      * it; the list itself belongs to the setting's owner.
      */
     readonly values?: readonly number[];
+    /** How many decimals the well shows; the stored value keeps its precision. */
+    readonly decimals?: number;
+    /** What the number is a share of, written beside the well and spoken by the
+     *  track — a bare `2.5` beside a width in degrees reads as degrees too. */
+    readonly suffix?: string;
     /** The owner can take the key away again — an absent optional setting. The
      *  track has no empty state, so the well is where that act lives. */
     readonly onClear?: () => void;
@@ -110,6 +115,8 @@ export function ControlSlider(
     integer,
     step,
     values,
+    decimals,
+    suffix,
     onClear,
     unauthored,
     onPreview,
@@ -167,6 +174,17 @@ export function ControlSlider(
       : (dragging ?? (selected === -1 ? trackMax : selected));
   const shownValue =
     values === undefined ? shown : (values[trackShown] ?? value);
+  // What a screen reader hears. A discrete track speaks its member, which the
+  // thumb's numeric value cannot; a measured one speaks the number with the
+  // unit it is measured in.
+  const spoken =
+    values === undefined
+      ? `${
+          decimals === undefined
+            ? String(shownValue)
+            : shownValue.toFixed(decimals)
+        }${suffix ?? ""}`
+      : String(shownValue);
   /** What a track position commits: the value itself, or its list member. */
   const valueAt = (position: number): number =>
     values === undefined ? position : (values[position] ?? value);
@@ -340,9 +358,9 @@ export function ControlSlider(
             aria-labelledby={ids.label}
             // The track's number is an index; a screen reader has to hear the
             // setting's own value, which is the list member at that index.
-            {...(values === undefined
+            {...(values === undefined && suffix === undefined
               ? {}
-              : { "aria-valuetext": String(shownValue) })}
+              : { "aria-valuetext": spoken })}
             // The hint and the refusal are the two notes the row owns, and the
             // range input is the element a screen reader reaches: a hint that
             // stayed on the wrapper would reach nobody (§5.3 keeps a refusal out
@@ -378,6 +396,8 @@ export function ControlSlider(
           max={max}
           {...(values === undefined ? {} : { oneOf: values })}
           {...(integer === undefined ? {} : { integer })}
+          {...(decimals === undefined ? {} : { decimals })}
+          {...(suffix === undefined ? {} : { unit: suffix })}
           {...(density === undefined ? {} : { density })}
           {...(onClear === undefined ? {} : { onClear })}
           // The well is the half that reads the document, so it is described by

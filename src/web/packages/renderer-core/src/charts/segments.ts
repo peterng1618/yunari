@@ -21,6 +21,44 @@ export const SEGMENT_DIVISORS: readonly [1, 2, 4, 5, 10, 20, 25, 50, 100] = [
 export const SEGMENT_GAP_RATIO = 0.2;
 
 /**
+ * The gap an author who has not chosen one gets, as a share of the chart's
+ * smaller drawn edge.
+ *
+ * **A share of the slot is not a share of what is seen.** `SEGMENT_GAP_RATIO`
+ * shrinks with the count twice over — more slices means both a smaller slot and
+ * a gap proportional to it — so a 20-slice gauge whose gaps looked right at one
+ * size lost them at half the size. A gap measured against the drawn edge is the
+ * same gap to the eye at every size, and the count only has to say how much of
+ * the slot is left (`ADR 0119`).
+ */
+export const SEGMENT_SPACING_PERCENT_DEFAULT = 2.5;
+
+/** The authored spacing, or the family's own when the document carries none. */
+export function segmentSpacingPercentOf(settings: {
+  readonly segmentSpacingPercent?: number;
+}): number {
+  return settings.segmentSpacingPercent ?? SEGMENT_SPACING_PERCENT_DEFAULT;
+}
+
+/**
+ * What the reading's fill does with the slice it lands in.
+ *
+ * `whole` lights the slice the reading reaches, the way a segmented gauge has
+ * always drawn; `partial` stops the fill at the reading itself, so the shape
+ * reads like a continuous bar that happens to carry gaps. Absent is the
+ * family's choice, not a third mode.
+ */
+export type SegmentFill = "whole" | "partial";
+
+/** The authored fill mode, or the family's own when the document carries none. */
+export function segmentFillOf(
+  settings: { readonly segmentFill?: SegmentFill },
+  fallback: SegmentFill,
+): SegmentFill {
+  return settings.segmentFill ?? fallback;
+}
+
+/**
  * How many slices a full measure is cut into.
  *
  * A divisor the list does not carry draws continuously: it cannot come from a

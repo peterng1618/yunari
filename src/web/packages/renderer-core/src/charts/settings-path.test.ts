@@ -196,19 +196,20 @@ describe("Review Focus 1 — a descriptor that writes nowhere must fail", () => 
       (f) => f.property === "total.value",
     );
 
-    if (field?.visibleWhen === undefined) {
-      throw new Error("total.value declares no visibleWhen");
+    const condition = field?.visibleWhen;
+    if (condition === undefined || !("equals" in condition)) {
+      throw new Error("total.value declares no equality visibleWhen");
     }
 
-    expect(readSetting(defaultPieSettings, field.visibleWhen.path)).not.toBe(
-      field.visibleWhen.equals,
+    expect(readSetting(defaultPieSettings, condition.path)).not.toBe(
+      condition.equals,
     );
     expect(
       readSetting(
         writeField(defaultPieSettings, "pie", "total", "fixed"),
-        field.visibleWhen.path,
+        condition.path,
       ),
-    ).toBe(field.visibleWhen.equals);
+    ).toBe(condition.equals);
   });
 });
 

@@ -19,7 +19,7 @@ import type { EngineColor } from "./fill.js";
 
 export type PolarBarSettings = Omit<
   BarSettings,
-  "orientation" | "segmentDivisor"
+  "orientation" | "segmentDivisor" | "segmentSpacingPercent" | "segmentFill"
 > & {
   readonly startAngle: number;
   readonly innerRadiusPercent: number;
@@ -29,6 +29,8 @@ export type PolarBarSettings = Omit<
 const {
   orientation: _orientation,
   segmentDivisor: _segmentDivisor,
+  segmentSpacingPercent: _segmentSpacingPercent,
+  segmentFill: _segmentFill,
   // A polar bar's width is an angle, not the cartesian bar's pixel default:
   // leaving it unset is what lets `categoryGapPercent` size the bar (§E1).
   barWidth: _barWidth,

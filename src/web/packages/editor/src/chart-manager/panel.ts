@@ -273,6 +273,8 @@ function settingRows(
           min: values[0] ?? 1,
           max: values.at(-1) ?? 1,
           values,
+          ...(field.decimals === undefined ? {} : { decimals: field.decimals }),
+          ...(field.suffix === undefined ? {} : { suffix: field.suffix }),
           clearable: false,
         });
         continue;
@@ -296,6 +298,8 @@ function settingRows(
             bound.min,
           min: bound.min,
           max: bound.max,
+          ...(field.decimals === undefined ? {} : { decimals: field.decimals }),
+          ...(field.suffix === undefined ? {} : { suffix: field.suffix }),
           clearable: field.optional === true,
         });
         continue;

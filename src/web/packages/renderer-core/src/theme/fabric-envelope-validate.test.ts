@@ -787,6 +787,39 @@ describe("Fabric theme envelope validation", () => {
     );
   });
 
+  it("refuses a spacing outside its share and a fill mode it does not offer", () => {
+    const spacing = issuesOf(
+      validateFabricThemeEnvelope(
+        chartEnvelope("gauge", { segmentSpacingPercent: 30 }),
+      ),
+    );
+    expect(spacing).toContainEqual(
+      expect.objectContaining({
+        code: "out-of-range",
+        path: "/scene/objects/0/settings/segmentSpacingPercent",
+      }),
+    );
+
+    const fill = issuesOf(
+      validateFabricThemeEnvelope(
+        chartEnvelope("bar", { segmentFill: "half" }),
+      ),
+    );
+    expect(fill).toContainEqual(
+      expect.objectContaining({
+        code: "invalid-enum",
+        path: "/scene/objects/0/settings/segmentFill",
+      }),
+    );
+    expect(
+      issuesOf(
+        validateFabricThemeEnvelope(
+          chartEnvelope("bar", { segmentFill: "partial" }),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
   it("refuses a crossed pair the family's own descriptors own", () => {
     const gauge = validateFabricThemeEnvelope(
       chartEnvelope("gauge", { min: 10, max: 1 }),

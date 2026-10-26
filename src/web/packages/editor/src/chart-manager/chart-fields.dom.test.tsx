@@ -425,6 +425,29 @@ describe("a setting one level down", () => {
     expect(written.barWidth).toBe(30);
   });
 
+  it("shows a chart share as a percentage with one decimal", async () => {
+    const { stage } = over(gauge);
+
+    const track = pick<HTMLInputElement>(
+      stage.host,
+      'data-yunari-chart-setting="segmentSpacingPercent"',
+    );
+    expect(track.type).toBe("range");
+    expect([track.min, track.max]).toEqual(["0", "20"]);
+    // A bare `2.5` beside a bar width that means degrees would read as the same
+    // unit, so both routes say what the number is a share of.
+    expect(track.getAttribute("aria-valuetext")).toBe("2.5%");
+
+    const well = pick<HTMLInputElement>(
+      stage.host,
+      'data-yunari-chart-setting-well="segmentSpacingPercent"',
+    );
+    // The field stays a number so it can be typed into; the suffix sits beside
+    // it rather than inside the draft it has to parse back.
+    expect(well.value).toBe("2.5");
+    expect(well.parentElement?.textContent).toContain("%");
+  });
+
   it("clears an optional setting back to the renderer's own choice", async () => {
     const { stage, calls } = over({
       ...pie,

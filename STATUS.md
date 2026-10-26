@@ -1,15 +1,15 @@
 # Yunari status
 
 Updated: 2026-10-26
-Branch: `main`
+Branch: `peterng1618/improve-charts`
 
 ## Current objective
 
-Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](docs/superpowers/specs/2026-10-25-chart-playback-and-segmented-fill-design.md): plans 1 (playback), 2 (segmented fill) and 3 (radar and polar bar) are all landed; the owner's test is the remaining gate.
+Land [`2026-10-26-segment-spacing-and-fill-mode-design.md`](docs/superpowers/specs/2026-10-26-segment-spacing-and-fill-mode-design.md): segment spacing becomes a share of the chart's drawn size, round caps stop swallowing the gap, and gauge and bar gain a whole/partial fill toggle.
 
 ## Active work
 
-- **Chart spec complete:** `docs/superpowers/plans/2026-10-25-radar-and-polar-bar.md` merged locally into `main`; no queued plan.
+- **Active plan:** `docs/superpowers/plans/2026-10-26-segment-spacing-and-fill-mode.md` — spacing, cap clearance and fill mode for gauge, bar and pie.
 - **Wallpaper Engine export landed:** `docs/superpowers/plans/2026-10-26-wallpaper-engine-mobile-export.md`; decision [0118](docs/decisions/0118-a-scene-is-exported-by-driving-the-engine-ui.md) claims the UI-driving boundary.
 - **Segmented-fill plan landed:** divisor setting, discrete slider, gauge bands, pie spacers and bar custom series.
 - **Live-line policy:** the delay is two host cadences at 30 fps and zero at 1 fps; the line never smooths — Interpolation offers Linear and Step — and a stall holds the last reading to the edge and steps at the next batch.
@@ -18,10 +18,10 @@ Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](d
 
 ## Last completed change
 
-- **The engine starts to the tray:** Steam's launch leaves the window hidden, and UI Automation does not list a hidden window, so every such export answered `no-window`.
-- **Restore before driving:** the script finds the window through Win32 (`WPEUI` / `Wallpaper UI`), restores it with `SW_RESTORE`, then hands it back to UI Automation.
-- **A null class is not "any class":** PowerShell passes `$null` as an empty string, so a class-less `FindWindowW` matched nothing; the class is named, with a largest-window title walk as the fallback.
-- **Verified by reproduction:** window hidden, UI Automation confirmed blind to it, and the export for `Tokyo` still reached the Save dialog.
+- **Spacing and fill are authored settings:** gauge, bar and pie carry `segmentSpacingPercent`, gauge and bar carry `segmentFill`, and each family's defaults object owns the values.
+- **One descriptor table decides both:** the fill question appears only when the divisor is not 100, through a new `notEquals` visibility rule.
+- **The spacing track reads as a share:** one decimal and a `%` suffix, owned by the descriptor rather than hard-coded in the panel.
+- **Decision [0119](docs/decisions/0119-segment-spacing-is-a-share-of-the-chart.md) claims the mechanism boundary** for spacing and cap clearance.
 
 ## Next
 
