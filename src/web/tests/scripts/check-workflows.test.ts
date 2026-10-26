@@ -21,6 +21,7 @@ const SETUP_SHA = "49933ea5288caeca8642d1e84afbd3f7d6820020";
 
 const CHECKOUT = `      - uses: actions/checkout@${SHA} # v4
         with:
+          fetch-depth: 0
           persist-credentials: false
 `;
 const SETUP_NODE = `      - uses: actions/setup-node@${SETUP_SHA} # v4
@@ -29,6 +30,9 @@ const SETUP_NODE = `      - uses: actions/setup-node@${SETUP_SHA} # v4
 `;
 const GUARD = `      - name: Refuse a non-dry dispatch off a tag
         run: node scripts/assert-publish-ref.mjs
+`;
+const RUN_STEP = `      - name: Install the workspace
+        run: npm ci
 `;
 
 const CLEAN: Record<string, string> = {
@@ -40,6 +44,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      STAGE: stage
+      ASSETS: assets
+      SMOKE: smoke
     steps:
 ${CHECKOUT}${GUARD}${SETUP_NODE}  publish:
     needs: install
@@ -294,13 +302,83 @@ it("refuses a checkout that persists credentials", () => {
   withFixture(
     (files) => {
       files["publish.yml"] = files["publish.yml"].replace(
-        "        with:\n          persist-credentials: false\n",
+        "persist-credentials: false",
+        "persist-credentials: true",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      const out = lines.join("\n");
+      expect(out).toContain('"persist-credentials" must be "false"');
+      expect(out).toContain('(got "true")');
+    },
+  );
+});
+
+it("refuses a checkout with a shallow fetch depth", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "fetch-depth: 0",
+        "fetch-depth: 1",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      const out = lines.join("\n");
+      expect(out).toContain('"fetch-depth" must be "0"');
+      expect(out).toContain('(got "1")');
+    },
+  );
+});
+
+it("refuses a checkout with no with: block", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "        with:\n          fetch-depth: 0\n          persist-credentials: false\n",
         "",
       );
     },
     ({ exitCode, lines }) => {
       expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("persist-credentials: false");
+      const out = lines.join("\n");
+      expect(out).toContain('with is missing "fetch-depth"');
+      expect(out).toContain('with is missing "persist-credentials"');
+    },
+  );
+});
+
+it("refuses an if: on the checkout step", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        `- uses: actions/checkout@${SHA} # v4\n`,
+        `- uses: actions/checkout@${SHA} # v4\n        if: false\n`,
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      const out = lines.join("\n");
+      expect(out).toContain('only "uses" and "with"');
+      expect(out).toContain('found "if"');
+    },
+  );
+});
+
+it("refuses an extra key in the checkout's with: map", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "          fetch-depth: 0\n",
+        "          fetch-depth: 0\n          cache: npm\n",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      const out = lines.join("\n");
+      expect(out).toContain("checkout with must set only");
+      expect(out).toContain('found "cache"');
     },
   );
 });
@@ -354,7 +432,7 @@ it("refuses the guard called from a ; chain", () => {
   );
 });
 
-it("refuses the guard not directly after the checkout", () => {
+it("refuses the guard last instead of directly after the checkout", () => {
   withFixture(
     (files) => {
       files["publish.yml"] = files["publish.yml"].replace(
@@ -364,7 +442,45 @@ it("refuses the guard not directly after the checkout", () => {
     },
     ({ exitCode, lines }) => {
       expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("second step has no run: command");
+      expect(lines.join("\n")).toContain(
+        "the step after the checkout must be the publish guard (node scripts/assert-publish-ref.mjs)",
+      );
+    },
+  );
+});
+
+it("refuses the guard at index 2 in a longer job", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        `${CHECKOUT}${GUARD}${SETUP_NODE}`,
+        `${CHECKOUT}${SETUP_NODE}${GUARD}${RUN_STEP}`,
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain(
+        "the step after the checkout must be the publish guard (node scripts/assert-publish-ref.mjs)",
+      );
+    },
+  );
+});
+
+it("refuses a legitimate step inserted between the checkout and the guard", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        `${CHECKOUT}${GUARD}`,
+        `${CHECKOUT}${RUN_STEP}${GUARD}`,
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      const out = lines.join("\n");
+      expect(out).toContain(
+        "the step after the checkout must be the publish guard (node scripts/assert-publish-ref.mjs)",
+      );
+      expect(out).not.toContain("has no run: command");
     },
   );
 });
@@ -391,7 +507,26 @@ it("refuses a deleted guard", () => {
     },
     ({ exitCode, lines }) => {
       expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("second step has no run: command");
+      expect(lines.join("\n")).toContain(
+        "the step after the checkout must be the publish guard (node scripts/assert-publish-ref.mjs)",
+      );
+    },
+  );
+});
+
+it("refuses a job with no step after the checkout", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        `${CHECKOUT}${GUARD}${SETUP_NODE}`,
+        CHECKOUT,
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain(
+        "the step after the checkout must be the publish guard (node scripts/assert-publish-ref.mjs); install job has no step there",
+      );
     },
   );
 });
@@ -409,7 +544,95 @@ it("refuses a comment-only guard run", () => {
     },
     ({ exitCode, lines }) => {
       expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain("second step is comment-only");
+      const out = lines.join("\n");
+      expect(out).toContain(
+        "the step after the checkout must be the publish guard (node scripts/assert-publish-ref.mjs)",
+      );
+      expect(out).toContain("is comment-only");
+    },
+  );
+});
+
+it("refuses DRY_RUN in the install job's env", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "      SMOKE: smoke\n",
+        '      SMOKE: smoke\n      DRY_RUN: "true"\n',
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      const out = lines.join("\n");
+      expect(out).toContain(
+        "install job's env may only define STAGE, ASSETS, SMOKE",
+      );
+      expect(out).toContain('found "DRY_RUN"');
+    },
+  );
+});
+
+it("refuses any other name in the install job's env", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "      SMOKE: smoke\n",
+        "      SMOKE: smoke\n      EXTRA: value\n",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain('found "EXTRA"');
+    },
+  );
+});
+
+it("refuses a missing staging variable in the install job's env", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "      STAGE: stage\n",
+        "",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain(
+        'install job\'s env is missing "STAGE"',
+      );
+    },
+  );
+});
+
+it("refuses defaults: on the install job", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "    steps:\n",
+        "    defaults:\n      run:\n        shell: bash\n    steps:\n",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      const out = lines.join("\n");
+      expect(out).toContain('must not declare "defaults:"');
+    },
+  );
+});
+
+it("refuses a workflow-level defaults:", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "jobs:\n",
+        "defaults:\n  run:\n    shell: bash\njobs:\n",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain(
+        'workflow-level "defaults:" is not allowed',
+      );
     },
   );
 });

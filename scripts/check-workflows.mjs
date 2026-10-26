@@ -31,6 +31,15 @@
  * overriding `DRY_RUN`, `shell:`, `working-directory:`) is refused even when
  * the command still reads the same.
  *
+ * Every other key that can change what the guard sees or whether its exit code
+ * survives is constrained the same way. `install`'s `env` is exactly its three
+ * staging variables, and its `defaults:`, a shell wrapper over every run, is
+ * absent; a workflow-level `defaults:` is refused too. The checkout before the
+ * guard declares only `uses` and `with`, and `with` is exactly `fetch-depth: 0`
+ * and `persist-credentials: false`: an `if:` there skips the checkout the guard
+ * needs, and a missing `fetch-depth` silently misdates the licence gate.
+ * Anything else in those places is a refusal naming the key.
+ *
  * Exit: 0 clean, 1 rule violation (one line per violation), 2 unreadable input
  * or an unread shape.
  */
@@ -67,6 +76,15 @@ const STEP_KEYS = new Set([
   "env",
   "working-directory",
   "shell",
+]);
+
+/** The three staging variables `install` is allowed to set for its steps. */
+const INSTALL_ENV_KEYS = ["STAGE", "ASSETS", "SMOKE"];
+
+/** The checkout before the guard must set exactly these, with these values. */
+const CHECKOUT_WITH = new Map([
+  ["fetch-depth", "0"],
+  ["persist-credentials", "false"],
 ]);
 
 /** A key spelling the reader knows is not the shape it has to read. */
@@ -447,6 +465,7 @@ function parseWorkflow(text) {
   const jobs = new Map();
   const uses = [];
   let sawJobs = false;
+  let defaultsLine;
   let index = 0;
   while (index < tokens.length) {
     const token = tokens[index];
@@ -458,9 +477,15 @@ function parseWorkflow(text) {
       index = parsed.next;
       continue;
     }
+    // A workflow-level `defaults:` is not read by any rule, so it is recorded
+    // here and refused by the publish rules: its shell wrapper reaches every
+    // run, the guard included.
+    if (token.indent === 0 && !token.isItem && token.key === "defaults") {
+      defaultsLine ??= token.line;
+    }
     index += 1;
   }
-  return { jobs, uses };
+  return { jobs, uses, defaultsLine };
 }
 
 /** `permissions:` entries as pairs, or `[]` when absent. */
@@ -497,6 +522,70 @@ function guardProblem(step) {
   if (lines.length === 0) return "is comment-only";
   if (lines.length === 1 && lines[0] === GUARD_COMMAND) return undefined;
   return `must run exactly "${GUARD_COMMAND}" (got "${lines.join(" / ")}")`;
+}
+
+/**
+ * The checkout's own keys. Anything outside the exact key set or `with` map
+ * can change what the guard or the licence date sees — `if:` skips the checkout
+ * the guard needs, a missing `fetch-depth` misdates every licence rule — so
+ * each offending key is named once.
+ */
+function checkoutProblems(name, step) {
+  const problems = [];
+  for (const key of step.keys) {
+    if (key !== "uses" && key !== "with") {
+      problems.push(
+        `${name} job's checkout must declare only "uses" and "with" (found "${key}")`,
+      );
+    }
+  }
+  for (const [key, required] of CHECKOUT_WITH) {
+    if (!step.with.has(key)) {
+      problems.push(
+        `${name} job's checkout with is missing "${key}" (required: "${required}")`,
+      );
+    } else if (step.with.get(key) !== required) {
+      problems.push(
+        `${name} job's checkout with "${key}" must be "${required}" (got "${step.with.get(key)}")`,
+      );
+    }
+  }
+  for (const key of step.with.keys()) {
+    if (!CHECKOUT_WITH.has(key)) {
+      problems.push(
+        `${name} job's checkout with must set only "fetch-depth" and "persist-credentials" (found "${key}")`,
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * The install job's own keys around the guard. A job `env` can override
+ * DRY_RUN for the guard alone while `publish` keeps the workflow value, and a
+ * job `defaults` shell wrapper makes every `run` in the job return 0.
+ */
+function installProblems(install) {
+  const problems = [];
+  const env = install.env ?? new Map();
+  for (const key of env.keys()) {
+    if (!INSTALL_ENV_KEYS.includes(key)) {
+      problems.push(
+        `install job's env may only define ${INSTALL_ENV_KEYS.join(", ")} (found "${key}")`,
+      );
+    }
+  }
+  for (const key of INSTALL_ENV_KEYS) {
+    if (!env.has(key)) {
+      problems.push(`install job's env is missing "${key}"`);
+    }
+  }
+  if (install.defaults !== undefined) {
+    problems.push(
+      'install job must not declare "defaults:": its run shell applies to the guard too',
+    );
+  }
+  return problems;
 }
 
 function checkPublish(publish) {
@@ -537,37 +626,55 @@ function checkPublish(publish) {
     violations.push('publish job lacks "id-token: write"');
   }
 
-  // Rule 3: a checkout keeps no credential in the tree.
+  // A workflow-level defaults: is a shell wrapper over every run; the guard is
+  // one of them.
+  if (publish.defaultsLine !== undefined) {
+    violations.push(
+      'workflow-level "defaults:" is not allowed: its run shell applies to every run, the publish guard included',
+    );
+  }
+
+  // Rule 3: the checkout declares only what the guard and the licence date
+  // depend on, with exactly their values.
   for (const [name, job] of publish.jobs) {
     for (const step of job.steps) {
-      if (
-        step.uses?.startsWith("actions/checkout@") === true &&
-        step.with.get("persist-credentials") !== "false"
-      ) {
+      if (step.uses?.startsWith("actions/checkout@") === true) {
+        violations.push(...checkoutProblems(name, step));
+      }
+    }
+  }
+
+  // Rule 4: install's env and defaults cannot change what the guard sees or
+  // whether its exit code survives.
+  if (install !== undefined) {
+    violations.push(...installProblems(install));
+  }
+
+  // Rule 5: the checkout is first — the guard is a repository script, so the
+  // file must exist before it runs — and the non-dry manual dispatch off a tag
+  // is refused in the step right after it, before any other work, so
+  // `needs: install` covers publish too.
+  if (install !== undefined) {
+    if (install.steps[0]?.uses?.startsWith("actions/checkout@") !== true) {
+      violations.push(
+        "install job's first step must be actions/checkout, before the publish guard, because the guard is a repository script that has to be checked out first",
+      );
+    }
+    if (install.steps[1] === undefined) {
+      violations.push(
+        "the step after the checkout must be the publish guard (node scripts/assert-publish-ref.mjs); install job has no step there",
+      );
+    } else {
+      const problem = guardProblem(install.steps[1]);
+      if (problem !== undefined) {
         violations.push(
-          `${name} job's checkout must set persist-credentials: false`,
+          `the step after the checkout must be the publish guard (node scripts/assert-publish-ref.mjs); install job has a different step there: ${problem}`,
         );
       }
     }
   }
 
-  // Rule 4: the checkout is first — the guard is a repository script, so the
-  // file must exist before it runs — and the non-dry manual dispatch off a tag
-  // is refused in install's second step, before any other work, so
-  // `needs: install` covers publish too.
-  if (install !== undefined) {
-    if (install.steps[0]?.uses?.startsWith("actions/checkout@") !== true) {
-      violations.push(
-        "install job's first step must be actions/checkout: the guard is a repository script that has to be checked out before it can run",
-      );
-    }
-    const problem = guardProblem(install.steps[1]);
-    if (problem !== undefined) {
-      violations.push(`install job's second step ${problem}`);
-    }
-  }
-
-  // Rule 5: only publish may write contents, and only publish may take the
+  // Rule 6: only publish may write contents, and only publish may take the
   // OIDC token.
   if (
     publishJob !== undefined &&
@@ -579,7 +686,7 @@ function checkPublish(publish) {
     violations.push('install job must not request "id-token"');
   }
 
-  // Rule 6: publish runs only after a successful install.
+  // Rule 7: publish runs only after a successful install.
   if (publishJob !== undefined && !publishJob.needs.includes("install")) {
     violations.push(
       'publish job must declare "needs: install" so a failed install stops the publish',
