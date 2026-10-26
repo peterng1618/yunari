@@ -133,23 +133,22 @@
 - Modify: `src/web/packages/editor/src/wallpaper-engine/client.test.ts`
 - Modify: `src/web/packages/editor/src/video-normalizer.ts`
 - Modify: `src/web/packages/editor/src/video-normalizer.dom.test.ts` (create if absent)
-- Modify: `src/web/packages/editor/src/editor-session.ts` (imports only)
 
 **Interfaces:**
-- Changes: `WallpaperEngineItem["kind"]` is `"video" | "scene"`.
+- Keeps until Task 5: `WallpaperEngineItem["kind"]` still includes `"image" | "web"`, so the body, copy and their tests keep compiling; Task 5 narrows the union with the grid rewrite.
 - Produces: `startProject(workshopId, options?) => Promise<{ ok: true; name: string; reused: boolean } | { ok: false; reason: string }>`.
 - Produces: `prepareMobilePackage(file: File, options?) => Promise<{ ok: true; file: File; title?: string; workshopId?: string; reencoded: boolean } | { ok: false; message: string }>`.
 - Produces: `fetchAuthorName(steamId: string, options?) => Promise<string | undefined>`.
-- Changes: `requestNormalizedVideo(file: File) => Promise<NormalizeOutcome>` posts the file as a raw body.
+- Changes: `requestNormalizedVideo(source: File | Uint8Array) => Promise<NormalizeOutcome>` posts the source as a raw body; the union keeps the Assets pane compiling until Task 4 removes its call.
 - Keeps until Task 5: `StartMobileExportAnswer`, `ExportFile`, `EXPORT_POLL_MS`, `startMobileExport`, `findExports`, `fetchExport` — Task 3 must not break the export sheet before Task 5 deletes it.
-- Removes now: the `"image" | "web"` arms of `KINDS` and their copy branches.
+- Keeps until Task 5: the `"image" | "web"` arms of `KINDS` and their copy branches.
 
 - [ ] **Step 1: Write the failing client tests**
-  - `itemOf` accepts `video` and `scene` and rejects `image` and `web` rows.
+  - `itemOf` still parses `video`, `scene`, `image` and `web` rows; Task 5 narrows the union.
   - `startProject` parses `{ ok: true, name, reused }` and ignores an unexpected `launched`.
   - `prepareMobilePackage` POSTs the file bytes to `/api/wallpaper-engine/mpkg`, names the returned File `<title or stem>.mp4` with `type: "video/mp4"`, and maps `{ ok: false, message }`.
   - `fetchAuthorName` answers the name, and `undefined` for a non-OK response or malformed body.
-  - `requestNormalizedVideo` sends `content-type: application/octet-stream` and the file's bytes, and still parses `{ ok, bytesBase64, reencoded }`.
+  - `requestNormalizedVideo` accepts a `File` and a `Uint8Array`, sends `content-type: application/octet-stream` and the bytes, and still parses `{ ok, bytesBase64, reencoded }`.
 
 - [ ] **Step 2: Run the tests to verify they fail**
   Run: `npx vitest run packages/editor/src/wallpaper-engine/client.test.ts packages/editor/src/video-normalizer.dom.test.ts`
