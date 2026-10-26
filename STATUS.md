@@ -1,39 +1,36 @@
 # Yunari status
 
-Updated: 2026-10-26
-Branch: `main`
+Updated: 2026-10-27
+Branch: `peterng1618/fix-font-trio` (worktree `fix-font-trio`)
 
 ## Current objective
 
-The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md) (per-display shape and rotation, [`spec B`](docs/superpowers/specs/2026-10-26-display-rotation-design.md)) is the next plan, and the queued backlog drain follows it.
+The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design.md) is the active plan: a token names a face — family, weight, declared face — while size, line height and tracking belong to the element. Phase 1 is under way.
 
 ## Active work
 
-- **No plan is running:** plan A is merged; plan B is queued and no other plan runs.
-- **Preview lens landed:** scene-anchored display box, shell stage, theme letterbox, guide frame, circle lens, ratio catalogue and Previews settings tab.
-- **Display presentation waits on plan B:** per-record shape and rotation, rotated/inscribed playback, pair-page choice, Host controls.
-- **Audit, chart, spacing and fonts work is on `main`:** revision gating, memoised dirty reading, chart animation and the fonts/assets rework are landed.
-- **Backlog drain stays queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, after plan B.
+- **Active plan:** `docs/superpowers/plans/2026-10-27-type-token-model.md` — ledger at `.superpowers/sdd/2026-10-27-type-token-model/progress.md`.
+- **Phase 1 tasks 1.1 and 1.2 are complete:** the shape, the keys and the starter theme speak `typeTokens`.
+- **Task 1.2 absorbed Tasks 3.1 and 3.2:** the strict rules and the starter rewrite had to land together, or the app would refuse its own new theme.
+- **Remaining Phase 1:** `defaultTypeSize` from the artboard (1.3), then the published JSON schema (1.4).
+- **Queued after Phase 1:** `unicode-range` subsets, cards and fixtures, the token inspector, the element inspector and canvas resize.
 
 ## Last completed change
 
-- **A family is drawn and applied by its lead face:** `leadCutOf` reads the cut id behind the row's `<source>:` prefix, not `cuts[0]` — the non-Latin subset that rendered as a serif.
-- **A cut's subset is named when weight and style repeat** (`400 · latin`), and the chips use the panel's own face, not the specimen's.
-- **An import brings the lead subset's weights:** Apply / Add as preset adopts every weight and style of the family's lead subset, and the Assets pane draws one card per family listing them; an already-declared face is never re-downloaded.
-- **A bound preset's weight is a list of the faces the package holds,** not free text that would fall back to the browser font; an unbound preset keeps its editable family and weight.
-- **Proof:** editor/document/assets suites pass, `npm run typecheck` exit 0; a browser run presses the latin cut, requests `latin-400` and `latin-700` (not `vietnamese`), and the bound preset's weight opens as a list of exactly `400` and `700`.
+- **A theme speaks `typeTokens`:** `TypeToken` is `{family, weight?, face?}`, role is the token id (`heading`/`body`/`mono`), and a run references `typeTokens.<id>`.
+- **The validator refuses the old shape by its keys:** `typePresets` is an unknown global group, and a token admits only family/weight/face — `size`, leading, tracking and `trioRole` are refused with the key named.
+- **The starter theme is three role tokens** (Segoe UI 600/400, Consolas 400); each starter run carries its old size, line height and tracking in its own style.
+- **Proof:** focused validator suites 136/136, `npm run typecheck` exit 0, Biome clean; ten red files remain, each owned by a later task (1.3, 1.4, 3.3, 3.4, 4.1, 5.4) and mapped in `task-1.2-review.md`.
 
 ## Next
 
-1. Execute plan B with subagent-driven development; local merge to `main` on completion.
-2. Resume the backlog-drain plan at Phase 0 after that merge.
-3. Triage the pre-existing browser reds recorded below.
-4. Owner tests remain: segment spacing and fill, radar and polar bar, scene export, fonts and assets rework.
+1. Task 1.3 — `defaultTypeSize` and a token that contributes no size; then 1.4, the published schema.
+2. Phase 2 — persist the subset, register by `unicode-range`, and let one apply bring the whole family.
+3. Local merge to `main` at the Phase 1 boundary, so the face-only token can be tested.
 
 ## Blockers / unverified
 
-- **Browser reds, all pre-existing:** `host-walkthrough`'s field case, publish-loop's edit-in-`own-host` run and host-player's round-trip reproduce identically at merge-base `a32b7728`.
-- **`store-worker/src/auth/return-page.ts` hands a one-time token to any loopback port** — closing it needs a nonce or pinned-port binding, a design decision.
-- **No live GitHub Actions run:** `publish.yml`'s triggers, artifact hand-off and the `npm ls` step are syntax-checked only.
-- **No real phone, Linux or macOS host** was exercised; PWA, keyring and ffmpeg pairs are read or mocked rather than measured.
-- **Plan A's deferrals are filed:** `vg-746`–`vg-751` in `docs/product/backlog.jsonl`.
+- **Ten test files are red on purpose,** each owned by a later task; the review mapped every one.
+- **`new-object-defaults.ts` still reads `size`/`trioRole` off tokens,** so the body-token preference is dead until Task 5.4.
+- **`card-token-mapping.ts` `trioRoleOf` reads a removed field,** so role matching falls to the first candidate until Task 3.3.
+- **This branch's status supersedes the plan-B text on `main`** until the branch merges.
