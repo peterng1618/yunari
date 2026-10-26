@@ -213,10 +213,10 @@ describe("the new-document chooser", () => {
     // A display answers what the theme is *for*; the ratio, orientation and
     // resolution answer how it is measured. The second is not a corner of the
     // first any more — both are always there.
-    expect(customQuestion().hidden).toBe(false);
+    expect(technicalQuestion().hidden).toBe(false);
 
     await chooseIn("display", "");
-    expect(customQuestion().hidden).toBe(false);
+    expect(technicalQuestion().hidden).toBe(false);
     expect(read("display"), "the control took Fit").toBe("");
   });
 
@@ -584,12 +584,13 @@ function read(marker: string): string {
   );
 }
 
-function customQuestion(): HTMLElement {
-  const custom = document.querySelector<HTMLElement>(
-    "[data-yunari-new-document-custom]",
+function technicalQuestion(): HTMLElement {
+  const technical = document.querySelector<HTMLElement>(
+    "[data-yunari-new-document-technical]",
   );
-  if (custom === null) throw new Error("the chooser has no Custom question");
-  return custom;
+  if (technical === null)
+    throw new Error("the chooser has no technical question");
+  return technical;
 }
 
 /** What the readout says. */

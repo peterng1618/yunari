@@ -651,17 +651,19 @@ export async function mountEditorShell({
       guide.style.height = `${board.height}px`;
       const id = editor.viewport.display();
       const lens = id === undefined ? undefined : resolveLens(id);
-      // **A frame less than one artboard unit from the board is noise.** The
-      // starter is 1672 × 941 — 16:9 to two decimals, not to sixteen — so an
-      // exact aspect comparison drew the guide on the default view. One unit
-      // is the smallest authored distance, and a real mismatch (4:3, 19.5:9,
-      // a circle) is hundreds of units.
+      // **One artboard unit on either edge of the lens box is noise.** The
+      // starter is 1672 × 941 — 16:9 to the eye, not to an exact aspect — so an
+      // exact comparison drew the guide on the default view. One unit is the
+      // smallest authored distance, and a real mismatch (4:3, 19.5:9, a circle)
+      // is hundreds of units. The spec's ruling is a tolerance on the box, not
+      // an epsilon on its aspect.
+      const ONE_ARTBOARD_UNIT = 1;
       const box =
         lens === undefined ? undefined : lensBox(lens, currentArtboard);
       const coincident =
         box !== undefined &&
-        Math.abs(box.width - currentArtboard.width) <= 1 &&
-        Math.abs(box.height - currentArtboard.height) <= 1;
+        Math.abs(box.width - currentArtboard.width) <= ONE_ARTBOARD_UNIT &&
+        Math.abs(box.height - currentArtboard.height) <= ONE_ARTBOARD_UNIT;
       guide.hidden = lens === undefined || coincident;
     };
     editor.viewport.onChange(placeScreen);

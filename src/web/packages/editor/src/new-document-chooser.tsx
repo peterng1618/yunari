@@ -154,7 +154,7 @@ export function NewDocumentChooser({
             the accessibility tree, and a size behind a choice is a size the
             author loses by making an unrelated one. */}
         <div
-          data-yunari-new-document-custom=""
+          data-yunari-new-document-technical=""
           className="flex flex-col gap-[var(--space-8)]"
         >
           <ControlSelect

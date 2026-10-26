@@ -147,10 +147,10 @@ export function DisplaySwitch({
         <Menu.Portal keepMounted>
           <Menu.Positioner className="editor-shell-positioner">
             <Menu.Popup className="editor-shell-menu-popup">
-              {/* Fit and the three displays are one radio group because they are
-                one fact: what the stage looks through. Split into checkable
-                and plain items, `Fit` could sit unselected while a display
-                stayed ticked — a menu holding two answers to one question.
+              {/* Fit and the catalogue's lenses are one radio group because
+                they are one fact: what the stage looks through. Split into
+                checkable and plain items, `Fit` could sit unselected while a
+                lens stayed ticked — a menu holding two answers to one question.
 
                 The tick is read off the camera, not off the display alone:
                 `display()` answers "which window", and Fit is a camera

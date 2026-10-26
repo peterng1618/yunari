@@ -1,7 +1,47 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { lensBox } from "../../packages/editor/src/display-lens.js";
 import { uiCopy } from "../../packages/editor/src/ui-copy.js";
 import { chooseIn } from "./control-set.js";
-import { openPane } from "./editor-rail.js";
+import {
+  addRatio,
+  artboardPageBox,
+  aspect,
+  BLUE_PNG,
+  type Bridge,
+  boxOf,
+  CHOOSER_DISPLAY,
+  canvasInkBox,
+  chooseDisplay,
+  chooserSize,
+  closeSettings,
+  corners,
+  createBlankTheme,
+  displayMenuItems,
+  EDITOR,
+  fillDisplayBounds,
+  freezeClock,
+  importBackground,
+  isColour,
+  labelOffsets,
+  MEDIA,
+  measure,
+  mediaGeometry,
+  openAssets,
+  openMenu,
+  openNewDocument,
+  openSettings,
+  panCamera,
+  pickPreview,
+  pixelAt,
+  RED_PNG,
+  ratioRows,
+  removeRatio,
+  resetRatios,
+  SCREEN,
+  STARTER,
+  solidPng,
+  stageBackground,
+} from "./editor-stage.js";
 import { isDesktopSurface } from "./surface.js";
 
 /**
@@ -17,449 +57,6 @@ import { isDesktopSurface } from "./surface.js";
  * wrong-shaped artboard and pass every "is something drawn here" check —
  * which is why the bars are asserted as bars and not as emptiness.
  */
-
-/** The editor preview every editor spec in this suite drives, named outright.
- *
- *  Relative (`"/"`) would resolve against `baseURL`, which is 4173 — the
- *  *player* — and the whole file would wait for `#yunari-fabric-editor` that
- *  is not there. That is what an exclusion list would have papered over
- *  instead: the spec would stay out of the default gate rather than join it. */
-const EDITOR = "http://127.0.0.1:4174/";
-
-/** The starter's artboard, as the theme declares it. */
-const STARTER = { width: 1672, height: 941 } as const;
-
-type Bridge = {
-  editor: {
-    artboard(): { readonly width: number; readonly height: number };
-    /** Fabric's canvas, read for the plate's paint and the viewport transform —
-     *  the drawing itself rather than a summary of it. */
-    canvas: unknown;
-    viewport: {
-      zoom(): number;
-      display(): string | undefined;
-      displayScreenRect():
-        | {
-            left: number;
-            top: number;
-            width: number;
-            height: number;
-          }
-        | undefined;
-      artboardScreenRect(): {
-        left: number;
-        top: number;
-        width: number;
-        height: number;
-      };
-      panBy(deltaX: number, deltaY: number): void;
-    };
-  };
-  selectLayer(id: string): void;
-};
-
-type Measured = {
-  readonly display: string | undefined;
-  readonly screen: { left: number; top: number; width: number; height: number };
-  readonly board: { left: number; top: number; width: number; height: number };
-  /** The lower canvas' own box in page coordinates. */
-  readonly stage: { x: number; y: number; width: number; height: number };
-};
-
-/** The camera's own geometry, plus the stage it is measured against. */
-async function measure(page: Page): Promise<Measured> {
-  return page.evaluate(() => {
-    const bridge = (window as unknown as { yunariEditorBridge: Bridge })
-      .yunariEditorBridge;
-    const screen = bridge.editor.viewport.displayScreenRect();
-    if (screen === undefined) {
-      throw new Error(
-        "no display screen: the stage is showing the bare window",
-      );
-    }
-    const canvas = document.querySelector<HTMLCanvasElement>(
-      "#yunari-fabric-editor canvas.lower-canvas",
-    );
-    if (canvas === null) throw new Error("no lower canvas in the editor");
-    const box = canvas.getBoundingClientRect();
-    return {
-      display: bridge.editor.viewport.display(),
-      screen,
-      board: bridge.editor.viewport.artboardScreenRect(),
-      stage: { x: box.x, y: box.y, width: box.width, height: box.height },
-    };
-  });
-}
-
-const aspect = (r: { width: number; height: number }): number =>
-  r.width / r.height;
-
-/** The four corners of a box, in the same coordinates it was read in. */
-function corners(r: {
-  readonly left: number;
-  readonly top: number;
-  readonly width: number;
-  readonly height: number;
-}): { readonly x: number; readonly y: number }[] {
-  return [
-    { x: r.left, y: r.top },
-    { x: r.left + r.width, y: r.top },
-    { x: r.left, y: r.top + r.height },
-    { x: r.left + r.width, y: r.top + r.height },
-  ];
-}
-
-/** The Assets pane, where a picture is declared and the background is set. */
-async function openAssets(page: Page): Promise<void> {
-  await openPane(page, "Assets");
-}
-
-/** Pins `Date.now` for the page, so the starter's live readings stop moving.
- *
- *  The editor samples a waveform at wall-clock time, so two scene reads a
- *  second apart differ in the *text* of every card — measured here: `51%`
- *  became `64%` with nothing but time between them. Anything comparing a
- *  document across reads has to remove that, or it measures the clock.
- *
- *  `addInitScript` only reaches documents loaded *after* it is registered, so
- *  this is called before `goto` in `beforeEach` rather than inside the test
- *  that needs it — registering it later left the page already loaded, and the
- *  first version of this file failed on the very readings it was meant to
- *  remove. */
-async function freezeClock(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const fixed = 1_760_000_000_000;
-    Date.now = () => fixed;
-  });
-}
-
-/** Picks a display through the stage's own control, by its visible name. */
-async function chooseDisplay(page: Page, name: string): Promise<void> {
-  await page.locator("[data-yunari-zoom]").click();
-  await page.getByRole("menuitemradio", { name }).click();
-}
-
-/** The chooser's display control, by the hook the control itself carries. It is
- *  a `ControlSelect` now, so the list is a Base UI popup rather than a native
- *  `<select>` — `chooseIn` scopes to the popup the trigger's own `aria-controls`
- *  names. **Not a bare `[data-yunari-option]` lookup**: the display list and
- *  the ratio list are both keyed by aspect ratio, so an unscoped `9:19.5`
- *  resolves to two rows once either has been opened. */
-const CHOOSER_DISPLAY = "[data-yunari-new-document-display]";
-
-/** Where each menu label sits, in page px, measured on the live menu.
- *
- *  The label is a text node inside the item, so it is measured through a
- *  `Range` rather than a bounding box of its own. */
-async function labelOffsets(page: Page): Promise<Record<string, number>> {
-  return page.evaluate(() => {
-    const offsets: Record<string, number> = {};
-    for (const item of document.querySelectorAll('[role="menuitemradio"]')) {
-      const name = item.getAttribute("aria-label") ?? "";
-      const label = [...item.childNodes].find(
-        (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
-      );
-      if (label === undefined) continue;
-      const range = document.createRange();
-      range.selectNodeContents(label);
-      offsets[name] = range.getBoundingClientRect().left;
-    }
-    return offsets;
-  });
-}
-
-/** Opens the display menu on the trigger, leaving the current choice ticked. */
-async function openMenu(page: Page): Promise<void> {
-  await page.locator("[data-yunari-zoom]").click();
-  await expect(page.getByRole("menu")).toBeVisible();
-}
-
-const STAGE = ".editor-shell-stage";
-const SCREEN = "[data-yunari-display-screen]";
-const MEDIA = "[data-yunari-background-media]";
-
-/** Solid 8×8 PNGs, generated once: a media layer whose painted colour is known
- *  is what turns "the media is on top" into a pixel reading rather than a
- *  stacking-order assertion that the screen could satisfy while painted over. */
-const RED_PNG =
-  "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAEklEQVR4nGP4z8DwHx9mGBkKAMLXf4EvceABAAAAAElFTkSuQmCC";
-const BLUE_PNG =
-  "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAEUlEQVR4nGNgYPj/Hz8eEQoAQ1d/gZtbdTsAAAAASUVORK5CYII=";
-
-const solidPng = (name: string, base64: string) => ({
-  name,
-  mimeType: "image/png",
-  buffer: Buffer.from(base64, "base64"),
-});
-
-/** One element's page box, or a failure naming what was not drawn. */
-async function boxOf(
-  page: Page,
-  selector: string,
-): Promise<{
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}> {
-  const box = await page.locator(selector).boundingBox();
-  if (box === null) throw new Error(`${selector} was not drawn`);
-  return box;
-}
-
-/** The media layer's box, in canvas coordinates beside the camera's zoom. */
-async function mediaGeometry(page: Page): Promise<{
-  readonly left: number;
-  readonly top: number;
-  readonly width: number;
-  readonly height: number;
-  readonly zoom: number;
-}> {
-  return page.evaluate(() => {
-    const bridge = (window as unknown as { yunariEditorBridge: Bridge })
-      .yunariEditorBridge;
-    const layer = document.querySelector("[data-yunari-background-media]");
-    const canvas = document.querySelector(
-      "#yunari-fabric-editor canvas.lower-canvas",
-    );
-    if (layer === null || canvas === null)
-      throw new Error("the media layer or its canvas was not mounted");
-    const media = layer.getBoundingClientRect();
-    const host = canvas.getBoundingClientRect();
-    return {
-      left: media.left - host.left,
-      top: media.top - host.top,
-      width: media.width,
-      height: media.height,
-      zoom: bridge.editor.viewport.zoom(),
-    };
-  });
-}
-
-/** Moves the camera the way a drag does, through the camera's own writer. */
-async function panCamera(page: Page, dx: number, dy: number): Promise<void> {
-  await page.evaluate(
-    ([deltaX, deltaY]) => {
-      const bridge = (window as unknown as { yunariEditorBridge: Bridge })
-        .yunariEditorBridge;
-      bridge.editor.viewport.panBy(deltaX ?? 0, deltaY ?? 0);
-    },
-    [dx, dy] as const,
-  );
-}
-
-/** The stage's own painted background, as the browser computes it. */
-async function stageBackground(page: Page): Promise<string> {
-  return page.locator(STAGE).evaluate((node) => {
-    return getComputedStyle(node).backgroundImage;
-  });
-}
-
-/** Opens Settings on one tab, the way the rail's gear does. */
-async function openSettings(page: Page, tab: string): Promise<void> {
-  await page.locator(".editor-shell-rail-settings").click();
-  const dialog = page.getByRole("dialog", { name: uiCopy.settings.title });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("tab", { name: tab }).click();
-}
-
-async function closeSettings(page: Page): Promise<void> {
-  await page.keyboard.press("Escape");
-  await expect(
-    page.getByRole("dialog", { name: uiCopy.settings.title }),
-  ).toBeHidden();
-}
-
-async function addRatio(page: Page, ratio: string): Promise<void> {
-  await page.locator("[data-yunari-preview-ratio-input]").fill(ratio);
-  await page.locator("[data-yunari-preview-ratio-add]").click();
-}
-
-/** Removes one stored token. The button is keyed by the token, so a row of
- *  `7:3` removes `7:3` once — its `3:7` twin is derived, not a second entry. */
-async function removeRatio(page: Page, token: string): Promise<void> {
-  await page.locator(`[data-yunari-preview-ratio-remove="${token}"]`).click();
-}
-
-async function ratioRows(page: Page): Promise<readonly string[]> {
-  return page
-    .locator("[data-yunari-preview-ratio]")
-    .evaluateAll((rows) =>
-      rows.map((row) => row.getAttribute("data-yunari-preview-ratio") ?? ""),
-    );
-}
-
-/** Reset is a return to the defaults, and at the defaults it is disabled: a
- *  disabled button is already the state this asks for, not a skipped step. */
-async function resetRatios(page: Page): Promise<void> {
-  const reset = page.locator("[data-yunari-preview-ratio-reset]");
-  await expect(reset).toBeVisible();
-  if (await reset.isEnabled()) await reset.click();
-}
-
-/** Every radio item in the display menu, by its accessible name, in order. */
-async function displayMenuItems(page: Page): Promise<readonly string[]> {
-  await page.locator("[data-yunari-zoom]").click();
-  const items = page.getByRole("menuitemradio");
-  await expect(items.first()).toBeVisible();
-  const labels = await items.evaluateAll((nodes) =>
-    nodes.map((node) => node.getAttribute("aria-label") ?? ""),
-  );
-  await page.keyboard.press("Escape");
-  return labels;
-}
-
-/** Creates a blank theme — the plate is painted, and no media is declared. */
-async function createBlankTheme(page: Page): Promise<void> {
-  await page.keyboard.press("Control+n");
-  const chooser = page.locator('[role="dialog"]');
-  await expect(chooser).toBeVisible();
-  await chooser.locator("[data-yunari-new-document-create]").click();
-  const prompt = page.locator('[role="dialog"]');
-  await prompt
-    .waitFor({ state: "visible", timeout: 3_000 })
-    .then(() =>
-      prompt.getByRole("button", { name: "Discard", exact: true }).click(),
-    )
-    .catch(() => undefined);
-  await expect(page.locator("#status-message")).toHaveText("New theme");
-}
-
-/** Opens the new-theme chooser and returns the size it currently shows. */
-async function openNewDocument(page: Page): Promise<string> {
-  await page.keyboard.press("Control+n");
-  const chooser = page.locator('[role="dialog"]', {
-    hasText: uiCopy.newDocument.chooseSize,
-  });
-  await expect(chooser).toBeVisible();
-  return chooser.locator("[data-yunari-new-document-size]").innerText();
-}
-
-async function pickPreview(page: Page, lens: string): Promise<void> {
-  await chooseIn(page, CHOOSER_DISPLAY, lens);
-}
-
-async function chooserSize(page: Page): Promise<string> {
-  return page
-    .locator('[role="dialog"]')
-    .locator("[data-yunari-new-document-size]")
-    .innerText();
-}
-
-/** Imports a picture through the Assets pane's own background action, which is
- *  the one path that changes the background asset and so remounts the layer. */
-async function importBackground(
-  page: Page,
-  file: { name: string; mimeType: string; buffer: Buffer },
-): Promise<void> {
-  // `count()` first: `getAttribute` on a locator that matches nothing waits for
-  // the whole test timeout before it answers, which is how this call spent its
-  // 30 s before the first picture existed.
-  const images = page.locator(`${MEDIA} img`);
-  const before =
-    (await images.count()) === 0 ? null : await images.getAttribute("src");
-  const chooser = page.waitForEvent("filechooser");
-  await page.locator("[data-yunari-asset-import-background]").click();
-  await (await chooser).setFiles(file);
-  await expect
-    .poll(
-      () =>
-        page
-          .locator(`${MEDIA} img`)
-          .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("src")))
-          .then((sources) => sources[0] ?? null),
-      { message: "the background media was replaced" },
-    )
-    .not.toBe(before);
-  await expect
-    .poll(() =>
-      page.locator(`${MEDIA} img`).evaluateAll((nodes) =>
-        nodes.some((node) => {
-          const image = node as HTMLImageElement;
-          return image.complete && image.naturalWidth > 0;
-        }),
-      ),
-    )
-    .toBe(true);
-}
-
-/** Selects the background row and asks it to fill the display rather than the
- *  theme — the bounds control the inspector already owns. */
-async function fillDisplayBounds(page: Page): Promise<void> {
-  // `$background` is `BACKGROUND_LAYER_ID`; naming it here rather than importing
-  // the layer tree keeps Fabric out of the e2e process.
-  await page.evaluate(() => {
-    const bridge = (window as unknown as { yunariEditorBridge: Bridge })
-      .yunariEditorBridge;
-    bridge.selectLayer("$background");
-  });
-  const bounds = page.locator("[data-yunari-background-bounds]");
-  await expect(bounds).toBeVisible();
-  await chooseIn(page, bounds, "display");
-}
-
-/** One rendered pixel, read from a 1×1 screenshot so it is the page's paint
- *  rather than an element's claim about itself. */
-async function pixelAt(
-  page: Page,
-  x: number,
-  y: number,
-): Promise<readonly number[]> {
-  const shot = await page.screenshot({
-    clip: { x: Math.round(x), y: Math.round(y), width: 1, height: 1 },
-  });
-  return page.evaluate(async (base64) => {
-    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
-    const bitmap = await createImageBitmap(
-      new Blob([bytes], { type: "image/png" }),
-    );
-    const canvas = new OffscreenCanvas(1, 1);
-    const context = canvas.getContext("2d");
-    if (context === null) throw new Error("no 2d context for the sample");
-    context.drawImage(bitmap, 0, 0);
-    const data = context.getImageData(0, 0, 1, 1).data;
-    return [data[0] ?? 0, data[1] ?? 0, data[2] ?? 0, data[3] ?? 0];
-  }, shot.toString("base64"));
-}
-
-/** Whether a sampled pixel is the colour a solid picture was made of. */
-function isColour(
-  sample: readonly number[],
-  want: readonly [number, number, number],
-  tolerance = 24,
-): boolean {
-  return want.every(
-    (channel, index) => Math.abs((sample[index] ?? 0) - channel) <= tolerance,
-  );
-}
-
-/** The board's page box, read through Fabric's own viewport transform rather
- *  than the camera helper the guide is written from — two paths to one box. */
-async function artboardPageBox(page: Page): Promise<{
-  readonly left: number;
-  readonly top: number;
-  readonly width: number;
-  readonly height: number;
-}> {
-  return page.evaluate(() => {
-    const bridge = (window as unknown as { yunariEditorBridge: Bridge })
-      .yunariEditorBridge;
-    const canvas = bridge.editor.canvas as unknown as {
-      viewportTransform: number[];
-      lowerCanvasEl: HTMLCanvasElement;
-    };
-    const transform = canvas.viewportTransform;
-    const host = canvas.lowerCanvasEl.getBoundingClientRect();
-    const board = bridge.editor.artboard();
-    const scale = transform[0] ?? 1;
-    return {
-      left: host.left + (transform[4] ?? 0),
-      top: host.top + (transform[5] ?? 0),
-      width: board.width * scale,
-      height: board.height * (transform[3] ?? scale),
-    };
-  });
-}
 
 test.describe("the stage looks through a display", () => {
   test.beforeEach(async ({ page }) => {
@@ -1119,7 +716,7 @@ test.describe("the stage looks through a display", () => {
     ).toEqual(restedBox);
   });
 
-  test("the stage is the shell's and the letterbox is the theme's", async ({
+  test("the stage paints its own texture, not the theme's", async ({
     page,
   }) => {
     // The stage's own texture is the palette's, and it is a paint on the stage
@@ -1159,12 +756,38 @@ test.describe("the stage looks through a display", () => {
     expect(panned.top - zoomed.top).toBeCloseTo(-20, 1);
   });
 
-  test("the guide frame marks a mismatched artboard", async ({ page }) => {
+  test("the guide frame marks a mismatched artboard, and leaves a near-match alone", async ({
+    page,
+  }) => {
     await chooseDisplay(page, "1:1");
     const guide = page.locator("[data-yunari-theme-guide]");
     await expect(guide).toBeVisible();
+
+    // The starter is 1672 × 941 — 16:9 to the eye and not to an exact aspect
+    // comparison. The guide is hidden here because the 16:9 lens box is within
+    // **one artboard unit** of the board on either edge, which is the rule the
+    // spec states; an exact match would have drawn a second frame over the board.
+    const board = await page.evaluate(() => {
+      const bridge = (window as unknown as { yunariEditorBridge: Bridge })
+        .yunariEditorBridge;
+      return bridge.editor.artboard();
+    });
+    const fitted = lensBox({ aspect: 16 / 9, shape: "rect" }, board);
+    const drift = Math.max(
+      Math.abs(fitted.width - board.width),
+      Math.abs(fitted.height - board.height),
+    );
+    expect(drift, "the fitted box is not exactly the board").toBeGreaterThan(0);
+    expect(
+      drift,
+      "but it is within one artboard unit on either edge",
+    ).toBeLessThanOrEqual(1);
+
     await chooseDisplay(page, "16:9");
-    await expect(guide).toBeHidden();
+    await expect(
+      guide,
+      "one unit is noise, so the frame stays hidden",
+    ).toBeHidden();
   });
 
   test("the guide sits on the board's Fabric-projected box through zoom and pan", async ({
@@ -1214,18 +837,32 @@ test.describe("the stage looks through a display", () => {
   test("a circle lens puts the artboard corners on the disc", async ({
     page,
   }) => {
+    await createBlankTheme(page);
     await chooseDisplay(page, "Circle");
-    const { board, screen } = await measure(page);
-    const centre = {
-      x: screen.left + screen.width / 2,
-      y: screen.top + screen.height / 2,
-    };
-    const radius = screen.width / 2;
+
+    const screen = page.locator(SCREEN);
+    await expect(screen, "the screen is a disc").toHaveCSS(
+      "border-radius",
+      "50%",
+    );
+    // The disc is the screen element's **rendered** box, and the board is the
+    // canvas' own painted extent: two independently-measured drawings, not two
+    // reads of one camera transform that a wrong fit would move together.
+    const disc = await boxOf(page, SCREEN);
+    expect(disc.width, "the disc's box is square").toBeCloseTo(disc.height, 1);
+    const board = await canvasInkBox(page);
+
+    const centre = { x: disc.x + disc.width / 2, y: disc.y + disc.height / 2 };
+    const radius = disc.width / 2;
     for (const corner of corners(board)) {
       const distance = Math.hypot(corner.x - centre.x, corner.y - centre.y);
-      expect(distance).toBeCloseTo(radius, 0);
+      // 1px: the ink box is quantised to the canvas' backing-store pixels, and
+      // the plate's antialiased edge adds up to one more.
+      expect(
+        Math.abs(distance - radius),
+        "each board corner sits on the disc",
+      ).toBeLessThanOrEqual(1);
     }
-    await expect(page.locator(SCREEN)).toHaveCSS("border-radius", "50%");
   });
 
   test("a circle lens clips the media to its disc, and a rect lens clears it", async ({
@@ -1392,8 +1029,14 @@ test.describe("the stage looks through a display", () => {
         throw new Error("the blank theme drew no artboard plate");
       // The plate's **painted** colour, not a token read a second time: the
       // probe normalises whatever Fabric holds into the same computed form the
-      // screen reports.
-      const fill = typeof plate.fill === "string" ? plate.fill : "";
+      // screen reports. A non-string fill is a failure, not an empty colour
+      // compared against an empty one: a silently skipped read would let a
+      // black plate pass against a black screen.
+      const fill = plate.fill;
+      if (typeof fill !== "string" || fill.length === 0)
+        throw new Error(
+          `the artboard plate's fill is not a plain colour: ${String(fill)}`,
+        );
       const probe = document.createElement("span");
       probe.style.color = fill;
       document.body.append(probe);
