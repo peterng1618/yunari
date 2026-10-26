@@ -215,11 +215,15 @@ Defaults: `16:9`, `19.5:9`, `4:3`, `1:1`, and `Circle`.
 
 A ratio derives:
 
-- a **landscape** lens `{ id: "W:H", aspect: W/H, orientation: "landscape",
-  shape }` when `W ≥ H` (a square or circle files here, per
-  `artboardOrientation`'s "a square is not taller, so it reads landscape");
-- a **portrait** lens `{ id: "H:W", aspect: H/W, orientation: "portrait",
-  shape }` when `W > H` (a square or circle does not duplicate).
+- a **landscape** lens `{ id: <gcd-normalised id>, aspect: W/H, orientation:
+  "landscape", shape }` when `W ≥ H` (a square or circle files here, per
+  `artboardOrientation`'s "a square is not taller, so it reads landscape"),
+  plus the portrait twin below when `W > H`;
+- a **portrait twin** `{ id: "H:W", aspect: H/W, orientation: "portrait",
+  shape }` when `W > H` (a square or circle does not duplicate);
+- a **portrait** lens `{ id: <gcd-normalised id as typed>, aspect: W/H,
+  orientation: "portrait", shape }` when `W < H` — the tall spelling is not
+  swapped into a landscape id.
 
 `DisplayLensId` becomes `string`. `uiCopy.display.displays` is deleted; a lens's
 label is its id, which is the same rule the current table states ("each name is

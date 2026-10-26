@@ -71,7 +71,14 @@ export function parsePreviewRatio(input: string): PreviewRatio {
   }
   const width = Number(rawWidth);
   const height = Number(rawHeight);
-  if (width <= 0 || height <= 0) {
+  // The regex admits an arbitrarily long digit string, which `Number` turns
+  // into `Infinity`; a non-finite edge is no more a ratio than a negative one.
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
     throw new RangeError(`preview ratio edges must be positive, not ${input}`);
   }
 

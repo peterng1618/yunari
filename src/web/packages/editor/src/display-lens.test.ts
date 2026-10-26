@@ -63,6 +63,7 @@ describe("a preview ratio is a token in a closed vocabulary", () => {
     "0x10:9",
     "1e2:9",
     "+16:9",
+    "1".repeat(400) + ":9",
   ])("refuses %s", (input) =>
     expect(() => parsePreviewRatio(input)).toThrow(RangeError),
   );
