@@ -9,7 +9,7 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 6; Tasks 1–17 complete, Task 18 (trash asset bytes on the host) next.
+- **Active plan:** `docs/superpowers/plans/2026-10-25-fonts-and-assets.md` — executing Phase 7; Tasks 1–19 complete, Task 20 (asset preview modal) in flight.
 - **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 244 rows still `open`.
 - **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
 - **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
@@ -18,10 +18,10 @@ Build the type-and-asset authoring rework: the queued [`spec`](docs/superpowers/
 
 ## Last completed change
 
-- **Task 17 landed:** `asset-manager/unused.ts` is the one reachability owner — an asset survives only through `holdsAsset` or `assetReferencedBy`, never through a credit.
-- **`pruneAssets(ids)`** re-reads reachability instead of trusting the caller's list, then removes each declared id through `AssetManager.remove` and drops its linked credit; an unlinked credit stays.
-- **`canAddCredit`'s stale claim is gone:** its comment now says a prune frees a slot only with the asset that credit attributes.
-- **Evidence:** focused files 21 passed, `packages/editor/src` 187 files / 2581 tests passed, `tsc -p packages/editor`/biome/design-tokens exit 0; dead-selectors still exits 1 with the same 16 pre-existing findings, none naming a changed file.
+- **Task 18 landed:** `POST /api/assets/trash` stages the bytes under a temp root and moves them to the OS trash in one process per platform; the body limit derives from the store's total cap.
+- **Task 19 landed:** both saves and the replacement save ask one owner — nothing unused saves unchanged, the checkbox is off by default, and only a successful trash prunes.
+- **A cancelled cleanup saves nothing and a cancelled release announces nothing**; the dialog carries the card's own marks and the document's name.
+- **Evidence:** editor 188 files / 2601 tests, host 23 files / 600, typecheck/biome/design-tokens exit 0; `vg-734` filed and closed for the dead Linux trash fallthrough.
 
 ## Next
 
