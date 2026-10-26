@@ -3976,6 +3976,34 @@ test.describe("a paired display and the theme it is given", () => {
     await waitForRotation(page, 90);
 
     const reading = await readPresentation(page);
+
+    // **The board's own paint, at points only a turn puts there.** The
+    // quarter-turned 640x360 board is 360x640, scaled to the host height and
+    // centred, so these two screen points are authored (200, 90) in the red
+    // half and (360, 270) in the blue half. An unturned board is the upright
+    // 600x337.5 band, where the same points read the other half — blue and
+    // red — so a canvas that reports a turn without drawing one fails here,
+    // which the matrix alone cannot show.
+    await settleBackgroundMedia(page);
+    const scale = reading.host.height / 640;
+    const left = reading.host.left + (reading.host.width - 360 * scale) / 2;
+    const turned = (x: number, y: number) => ({
+      x: left + (360 - y) * scale,
+      y: reading.host.top + x * scale,
+    });
+    const [redHalf, blueHalf] = await sampleScreenPixels(page, [
+      turned(200, 90),
+      turned(360, 270),
+    ]);
+    expect(
+      colourDistance(redHalf!, { r: 255, g: 0, b: 0 }),
+      `the upper half is not the board's red: ${JSON.stringify(redHalf)}`,
+    ).toBeLessThan(25);
+    expect(
+      colourDistance(blueHalf!, { r: 0, g: 0, b: 255 }),
+      `the lower half is not the board's blue: ${JSON.stringify(blueHalf)}`,
+    ).toBeLessThan(25);
+
     const [a, b, c, d, e, f] = reading.matrix;
     const corners = [
       [0, 0],
