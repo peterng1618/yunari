@@ -1072,6 +1072,28 @@ describe("Fabric theme envelope validation", () => {
     ).toMatchObject({ ok: true });
   });
 
+  it("requires the three roles even when typeTokens is absent", () => {
+    const theme = envelope();
+
+    // Only the opt-in requires roles; an ordinary theme without a token bag is
+    // not refused for this reason.
+    expect(validateFabricThemeEnvelope(theme)).toMatchObject({ ok: true });
+
+    const refused = validateFabricThemeEnvelope(theme, {
+      requireTrioRoles: true,
+    });
+    expect(refused.ok).toBe(false);
+    if (refused.ok) throw new Error("expected the missing roles to be refused");
+    for (const role of ["heading", "body", "mono"] as const) {
+      expect(refused.issues).toContainEqual(
+        expect.objectContaining({
+          path: `/globals/typeTokens/${role}`,
+          message: expect.stringContaining(role),
+        }),
+      );
+    }
+  });
+
   it("validates exact declared font faces and shared trio roles", () => {
     expect(
       validateFabricThemeEnvelope(envelopeWithFontRoles(), {

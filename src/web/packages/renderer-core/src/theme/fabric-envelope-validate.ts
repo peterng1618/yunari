@@ -10,6 +10,7 @@ import {
   CHART_FAMILIES,
   type ChartFamily,
   isSemanticVersion,
+  isTypeTokenRole,
   MAX_ARTBOARD_DIMENSION,
   MAX_NODE_COUNT,
   MAX_NODE_DEPTH,
@@ -320,8 +321,10 @@ function fontPresetFaces(
   requireTrioRoles: boolean,
   issues: ValidationIssue[],
 ): void {
-  if (!isRecord(globals) || !isRecord(globals["typeTokens"])) return;
-  const presets = globals["typeTokens"];
+  const presets =
+    isRecord(globals) && isRecord(globals["typeTokens"])
+      ? globals["typeTokens"]
+      : undefined;
   const fontAssets = new Map<string, Record<string, unknown>>();
   if (Array.isArray(assets)) {
     for (const asset of assets) {
@@ -333,7 +336,7 @@ function fontPresetFaces(
         fontAssets.set(asset["id"], asset);
     }
   }
-  for (const [id, entry] of Object.entries(presets)) {
+  for (const [id, entry] of Object.entries(presets ?? {})) {
     const value = isRecord(entry) ? entry : undefined;
     if (value === undefined) continue;
     const face = isRecord(value["face"]) ? value["face"] : undefined;
@@ -358,8 +361,11 @@ function fontPresetFaces(
     }
   }
   if (requireTrioRoles) {
+    // An absent or malformed bag has no roles either, so it is refused the same
+    // way an empty one is rather than skipping the requirement.
+    const roles = new Set(Object.keys(presets ?? {}).filter(isTypeTokenRole));
     for (const role of TYPE_TOKEN_ROLES) {
-      if (presets[role] !== undefined) continue;
+      if (roles.has(role)) continue;
       issues.push(
         issue(
           "missing-field",
