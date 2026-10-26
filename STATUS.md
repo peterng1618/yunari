@@ -5,11 +5,11 @@ Branch: `main`
 
 ## Current objective
 
-Plan B is complete, reviewed and gated; the local merge to `main` is this branch's last act, and the queued backlog drain is next.
+Plan B and plan A are merged into `main`; the queued backlog drain is next, starting at a reproduction pass.
 
 ## Active work
 
-- **No plan is running:** plan A and plan B are complete, archived, and their specs marked landed; the fast-forward of `main` is this branch's last step.
+- **No plan is running:** plan A and plan B are merged into `main`, archived, and their specs marked landed.
 - **Backlog drain is next:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, starting at a reproduction pass over the register.
 - **Preview lens landed:** scene-anchored display box, shell stage, theme letterbox, guide frame, circle lens, ratio catalogue and Previews settings tab.
 - **The live line no longer corrects at its right edge:** `liveTail` derives the hold and step from every sample gap, so the batch after a stall no longer slopes a flat stretch already painted.
@@ -25,11 +25,11 @@ Plan B is complete, reviewed and gated; the local merge to `main` is this branch
 
 ## Next
 
-1. Fast-forward `main` to this branch, then close plan B's SDD workspace.
-2. Resume the backlog-drain plan at Phase 0 after that merge.
-3. Owner test of the live line's right edge, in the editor and on a phone, with machine sensors.
-4. Decide whether the 2 s delay should follow the received cadence: the host drops every other batch under backpressure (`vg-753`).
-5. Triage the pre-existing browser reds recorded below.
+1. Resume the backlog-drain plan at Phase 0, a reproduction pass over the register.
+2. Owner test of the live line's right edge, in the editor and on a phone, with machine sensors.
+3. Decide whether the 2 s delay should follow the received cadence: the host drops every other batch under backpressure (`vg-753`).
+4. Triage the pre-existing browser reds recorded below.
+5. Owner tests listed below remain: segment spacing and fill, radar and polar bar, scene export.
 
 ## Blockers / unverified
 
