@@ -297,7 +297,8 @@ it("draws a family's lead face, not the first cut the provider listed", async ()
     cut("google-fonts", "Water Brush", 700),
   ];
   const listedFirstIsNotLead: AssetResult = {
-    id: cuts[1]?.id ?? "",
+    // Search prefixes the row id once; the rest is the cut's own id.
+    id: `google-fonts:${cuts[1]?.id ?? ""}`,
     name: "Water Brush",
     kind: "font",
     preview: "",

@@ -49,13 +49,18 @@ export function cutsOf(selected: FontResult): readonly FontCut[] {
  * own text in the browser fallback (a serif), while the row's own id names the
  * cut the host chose as the family's lead: this reads that id rather than an
  * array position.
+ *
+ * Search namespaces a row as `<source>:<entry id>`, and the entry id is the
+ * cut's own id, so the prefix comes off before the comparison.
  */
 export function leadCutOf(selected: {
   readonly id: string;
   readonly font?: { readonly cuts: readonly FontCut[] } | undefined;
 }): FontCut | undefined {
   const cuts = selected.font?.cuts ?? [];
-  return cuts.find((cut) => cut.id === selected.id) ?? cuts[0];
+  const at = selected.id.indexOf(":");
+  const entryId = at === -1 ? selected.id : selected.id.slice(at + 1);
+  return cuts.find((cut) => cut.id === entryId) ?? cuts[0];
 }
 
 export function faceStyle(cut: FontCut | undefined): React.CSSProperties {
@@ -249,7 +254,6 @@ export function FontPreviewPanel({
                     onClick={() => {
                       setCutId(cut.id);
                     }}
-                    style={faceStyle(cut)}
                     className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-6)] py-[var(--space-2)] text-[10px] text-muted aria-pressed:border-accent aria-pressed:text-accent"
                   >
                     {copy.cutLabel(

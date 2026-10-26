@@ -308,7 +308,9 @@ it("applies the face the family's id names, not the first cut listed", () => {
   const lead = family.font.cuts[1]!;
   const reordered = {
     ...family,
-    id: lead.id,
+    // Search namespaces the row (`<source>:<entry id>`), so the id it carries
+    // is the cut's own id behind the source prefix.
+    id: `google-fonts:${lead.id}`,
     font: { cuts: [listed, lead] },
   };
   const onApplyToSelected = vi.fn();
@@ -342,6 +344,13 @@ it("names the subset when cuts share a weight, rather than drawing three 400s", 
       (chip) => chip.textContent,
     ),
   ).toEqual(["400 · vietnamese", "400 · latin-ext", "400 · latin"]);
+  // The chips are controls, not specimens: a face illegible at 10px must not
+  // take the label with it.
+  for (const chip of document.querySelectorAll<HTMLElement>(
+    "[data-yunari-font-cut]",
+  )) {
+    expect(chip.style.fontFamily).toBe("");
+  }
 });
 
 it("releases every face it added when the panel unmounts", () => {
