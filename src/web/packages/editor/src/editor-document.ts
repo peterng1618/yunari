@@ -458,6 +458,10 @@ export class EditorDocument {
       );
       this.setMetadata({ ...this.#envelope.metadata, version });
       await this.save();
+      // `save()` owns its own errors and a cancelled cleanup returns without
+      // writing, so the release is reported only if the document actually
+      // stopped being dirty — the same re-read the mode switch makes.
+      if (this.isDirty()) return;
       options.onSaved(`Released ${version}`);
     } catch (error) {
       options.onError?.(error instanceof Error ? error.message : String(error));
@@ -556,16 +560,25 @@ export class EditorDocument {
     if (unused.length === 0) return { proceed: true };
 
     const assets = this.#assets.assets;
-    const files: SaveCleanupFile[] = unused.map((asset) => ({
-      name: assetFileName(asset),
-      kind: asset.kind,
-      // A declaration with no bytes is already broken; it contributes nothing
-      // to either size rather than inventing one.
-      sizeBytes: assets[asset.path]?.byteLength ?? 0,
-      reason: uiCopy.saveCleanup.reason[asset.kind],
-    }));
+    const files: SaveCleanupFile[] = unused.map((asset) => {
+      const previewUrl =
+        asset.kind === "image" || asset.kind === "svg"
+          ? this.#assets.previewUrl(asset.id)
+          : undefined;
+      return {
+        name: assetFileName(asset),
+        kind: asset.kind,
+        // A declaration with no bytes is already broken; it contributes nothing
+        // to either size rather than inventing one.
+        sizeBytes: assets[asset.path]?.byteLength ?? 0,
+        reason: uiCopy.saveCleanup.reason[asset.kind],
+        ...(previewUrl === undefined ? {} : { previewUrl }),
+      };
+    });
+    const documentName = this.#envelope.metadata?.name;
     const answer = await confirmSaveCleanup({
       title,
+      ...(documentName === undefined ? {} : { documentName }),
       files,
       themeBytes: this.#themeBytes(unused),
     });

@@ -59,6 +59,7 @@ function documentWith(
     readonly assetManager?: AssetManager;
     readonly objects?: readonly FabricObject[];
     readonly unsaved?: boolean;
+    readonly envelope?: FabricThemeEnvelopeInput;
     readonly onSaved?: (message?: string) => void;
     readonly onError?: (message: string) => void;
   } = {},
@@ -74,7 +75,9 @@ function documentWith(
           canvas: { getObjects: () => seams.objects ?? [] },
         },
       } as unknown as EditorShell,
-      envelope: createNewFabricTheme() as unknown as FabricThemeEnvelopeInput,
+      envelope:
+        seams.envelope ??
+        (createNewFabricTheme() as unknown as FabricThemeEnvelopeInput),
       assetManager: seams.assetManager ?? new AssetManager(),
       ...(credits === undefined ? {} : { credits }),
       ...(seams.unsaved === true ? { unsaved: true } : {}),
@@ -83,7 +86,10 @@ function documentWith(
       onSaved: seams.onSaved ?? (() => {}),
       ...(seams.onError === undefined ? {} : { onError: seams.onError }),
     },
-    consumers: {} as never,
+    consumers: {
+      runtime: () => ({ setThemeLanguage: () => {} }),
+      selection: () => ({ setLocale: () => {} }),
+    } as never,
   });
 }
 
@@ -298,18 +304,22 @@ describe("EditorDocument save cleanup", () => {
 
     await document.save();
 
-    expect(cleanupMock).toHaveBeenCalledWith({
-      title: uiCopy.file.savePackage,
-      files: [
-        {
-          name: "photo.png",
-          kind: "image",
-          sizeBytes: 1,
-          reason: uiCopy.saveCleanup.reason.image,
-        },
-      ],
-      themeBytes: expect.any(Number),
-    });
+    expect(cleanupMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: uiCopy.file.savePackage,
+        documentName: "System dashboard",
+        files: [
+          expect.objectContaining({
+            name: "photo.png",
+            kind: "image",
+            sizeBytes: 1,
+            reason: uiCopy.saveCleanup.reason.image,
+            previewUrl: expect.stringMatching(/^blob:/),
+          }),
+        ],
+        themeBytes: expect.any(Number),
+      }),
+    );
     expect(save).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
     expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
@@ -411,6 +421,50 @@ describe("EditorDocument save cleanup", () => {
     document.destroy();
   });
 
+  it("does not announce a release whose cleanup was cancelled", async () => {
+    // A valid declaration, so the release's own export check passes and the
+    // cancelled cleanup is the only thing that stops the write.
+    const valid: LocalAssetReference = {
+      id: "photo",
+      kind: "image",
+      path: "assets/photo.png",
+      sha256: "a".repeat(64),
+    };
+    const assetManager = managerWith([valid]);
+    // The starter's background and its own declarations are dropped: the
+    // release's export check reads reachability, and this case is about the
+    // cleanup question rather than the starter.
+    const starter = createNewFabricTheme() as unknown as Record<
+      string,
+      unknown
+    >;
+    const { background: _background, assets: _assets, ...bare } = starter;
+    const onSaved = vi.fn();
+    const onError = vi.fn();
+    cleanupMock.mockResolvedValue("cancel");
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    vi.spyOn(window, "prompt").mockReturnValue("patch");
+    const document = documentWith(undefined, {
+      assetManager,
+      envelope: bare as unknown as FabricThemeEnvelopeInput,
+      onSaved,
+      onError,
+    });
+    // The version bump alone makes it dirty, so the state before the release is
+    // the control: the guard must not report a release that never wrote.
+    expect(document.isDirty()).toBe(false);
+
+    await document.release();
+
+    expect(onError.mock.calls).toEqual([]);
+    expect(save).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(document.isDirty()).toBe(true);
+    document.destroy();
+  });
+
   it("a replacement's save asks too, and a cancel aborts the replacement", async () => {
     const assetManager = managerWith([imageAsset("photo")]);
     const onError = vi.fn();
@@ -427,18 +481,22 @@ describe("EditorDocument save cleanup", () => {
 
     expect(await document.confirmReplacement()).toBe(false);
 
-    expect(cleanupMock).toHaveBeenCalledWith({
-      title: uiCopy.file.savePackage,
-      files: [
-        {
-          name: "photo.png",
-          kind: "image",
-          sizeBytes: 1,
-          reason: uiCopy.saveCleanup.reason.image,
-        },
-      ],
-      themeBytes: expect.any(Number),
-    });
+    expect(cleanupMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: uiCopy.file.savePackage,
+        documentName: "System dashboard",
+        files: [
+          expect.objectContaining({
+            name: "photo.png",
+            kind: "image",
+            sizeBytes: 1,
+            reason: uiCopy.saveCleanup.reason.image,
+            previewUrl: expect.stringMatching(/^blob:/),
+          }),
+        ],
+        themeBytes: expect.any(Number),
+      }),
+    );
     expect(save).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
     expect(assetManager.declarations.map((asset) => asset.id)).toEqual([

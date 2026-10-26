@@ -1,5 +1,6 @@
 import { createElement, useState } from "react";
 import type { LocalAssetReference } from "../asset-manager/index.js";
+import { AssetMark } from "../panes/assets/asset-card.js";
 import { uiCopy } from "../ui-copy.js";
 import { ACTION_BUTTON, Dialog } from "./ui/dialog.js";
 import { type ModalSettle, openModal } from "./ui/modal-host.js";
@@ -15,6 +16,9 @@ export interface SaveCleanupFile {
   /** Why nothing holds it: "not on the canvas", "no type preset refers to it",
    *  "not the background". One sentence per kind, from one owner. */
   readonly reason: string;
+  /** The manager's own blob URL, so a picture wears the same thumbnail here as
+   *  on its Assets card. */
+  readonly previewUrl?: string;
 }
 
 /** The one place a byte count becomes a reading. */
@@ -26,11 +30,15 @@ function formatBytes(bytes: number): string {
 
 function SaveCleanupDialog({
   title,
+  documentName,
   files,
   themeBytes,
   settle,
 }: {
   readonly title: string;
+  /** The document being saved; absent for a document that never named itself,
+   *  in which case the line is not drawn at all. */
+  readonly documentName?: string;
   readonly files: readonly SaveCleanupFile[];
   readonly themeBytes: number;
   readonly settle: ModalSettle<SaveCleanupAnswer>;
@@ -49,6 +57,11 @@ function SaveCleanupDialog({
       label={title}
     >
       <p className="editor-shell-dialog-lead">{title}</p>
+      {documentName === undefined ? null : (
+        <p className="mb-[var(--space-8)] text-2xs text-muted">
+          {`${documentName} · ${title}`}
+        </p>
+      )}
       <div className="mb-[var(--space-6)] flex items-baseline gap-[var(--space-8)]">
         <span className="text-2xs font-semibold tracking-[0.11em] text-faint uppercase">
           {uiCopy.saveCleanup.heading}
@@ -64,12 +77,12 @@ function SaveCleanupDialog({
             key={`${file.name}\n${file.kind}`}
             className="flex items-center gap-[var(--space-8)] rounded-[var(--radius-sm)] border border-edge-2 bg-panel-2 p-[var(--space-6)]"
           >
-            <span
-              aria-hidden="true"
-              className="flex size-[var(--asset-thumbnail-size)] flex-none items-center justify-center rounded-[var(--radius-sm)] border border-edge-2 bg-panel text-base text-text"
-            >
-              {file.kind === "font" ? "Aa" : null}
-            </span>
+            <AssetMark
+              kind={file.kind}
+              {...(file.previewUrl === undefined
+                ? {}
+                : { previewUrl: file.previewUrl })}
+            />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-xs text-text">{file.name}</span>
               <span className="truncate font-mono text-[10px] text-muted">
@@ -139,6 +152,9 @@ export async function confirmSaveCleanup(input: {
   /** The save the author pressed: `uiCopy`'s own "Save to library" or
    *  "Save package". */
   readonly title: string;
+  /** The document's name, drawn under the save's title; absent when it has
+   *  none. */
+  readonly documentName?: string;
   readonly files: readonly SaveCleanupFile[];
   /** The size of the theme being saved, without the unused files. */
   readonly themeBytes: number;

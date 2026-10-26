@@ -3,6 +3,7 @@ import {
   assetFileName,
   type LocalAssetReference,
 } from "../../asset-manager/index.js";
+import { Glyph, VIDEO_GLYPH } from "../../editor-shell/icons.js";
 import { uiCopy } from "../../ui-copy.js";
 
 /**
@@ -47,7 +48,7 @@ export function AssetCard({
         className="flex min-h-[26px] items-center gap-[var(--space-8)] p-[var(--space-6)] text-left"
       >
         <AssetMark
-          asset={asset}
+          kind={asset.kind}
           {...(previewUrl === undefined ? {} : { previewUrl })}
         />
         <span className="flex min-w-0 flex-1 flex-col gap-[var(--space-4)]">
@@ -78,19 +79,18 @@ export function AssetCard({
   );
 }
 
-/** The card's mark: the manager's own preview for a picture, `Aa` for a face,
- *  and an empty well for a video, which no declared preview can show. */
-function AssetMark({
-  asset,
+/** The mark a declared file wears: the manager's own preview for a picture,
+ *  `Aa` for a face, and the play mark for a video, which no declared preview
+ *  can show. Shared with the save cleanup sheet so the same file wears the same
+ *  mark wherever it is listed. */
+export function AssetMark({
+  kind,
   previewUrl,
 }: {
-  readonly asset: LocalAssetReference;
+  readonly kind: LocalAssetReference["kind"];
   readonly previewUrl?: string;
 }): React.JSX.Element {
-  if (
-    previewUrl !== undefined &&
-    (asset.kind === "image" || asset.kind === "svg")
-  ) {
+  if (previewUrl !== undefined && (kind === "image" || kind === "svg")) {
     return (
       <img
         src={previewUrl}
@@ -105,7 +105,8 @@ function AssetMark({
       aria-hidden="true"
       className="flex size-[var(--asset-thumbnail-size)] flex-none items-center justify-center rounded-[var(--radius-sm)] border border-edge-2 bg-panel-2 text-base text-text"
     >
-      {asset.kind === "font" ? "Aa" : null}
+      {kind === "font" ? "Aa" : null}
+      {kind === "video" ? <Glyph icon={VIDEO_GLYPH} size={13} /> : null}
     </span>
   );
 }

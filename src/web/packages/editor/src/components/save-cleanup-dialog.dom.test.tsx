@@ -62,6 +62,7 @@ const FILES: readonly SaveCleanupFile[] = [
     kind: "image",
     sizeBytes: 840 * KB,
     reason: uiCopy.saveCleanup.reason.image,
+    previewUrl: "blob:studio",
   },
   {
     name: "loop-alt.webm",
@@ -74,6 +75,7 @@ const FILES: readonly SaveCleanupFile[] = [
 function open(
   input: {
     readonly title?: string;
+    readonly documentName?: string;
     readonly files?: readonly SaveCleanupFile[];
     readonly themeBytes?: number;
   } = {},
@@ -82,6 +84,9 @@ function open(
   act(() => {
     pending = confirmSaveCleanup({
       title: input.title ?? TITLE,
+      ...(input.documentName === undefined
+        ? {}
+        : { documentName: input.documentName }),
       files: input.files ?? FILES,
       themeBytes: input.themeBytes ?? 2.1 * 1024 * KB,
     });
@@ -123,12 +128,15 @@ async function press(button: HTMLButtonElement): Promise<void> {
 
 describe("the save cleanup sheet", () => {
   it("names the save's title and each file's kind, size and reason", () => {
-    void open();
+    void open({ documentName: "System dashboard" });
 
     expect(opened().getAttribute("aria-label")).toBe(TITLE);
     expect(
       opened().querySelector(".editor-shell-dialog-lead")?.textContent,
     ).toBe(TITLE);
+    // The document's own name under the save that was pressed; the sheet has
+    // no name of its own to invent.
+    expect(opened().textContent).toContain(`System dashboard · ${TITLE}`);
 
     const rows = [...opened().querySelectorAll("li")].map(
       (row) => row.textContent,
@@ -142,6 +150,19 @@ describe("the save cleanup sheet", () => {
     expect(rows[2]).toContain("Video · 2.5 MB · not the background");
     expect(opened().textContent).toContain("3 files · 3.4 MB");
     expect(opened().textContent).toContain("2.1 MB theme · 3.4 MB unused");
+  });
+
+  it("draws an image's own thumbnail and a video's play mark", () => {
+    void open();
+
+    const rows = [...opened().querySelectorAll("li")];
+    // The same mark the Assets pane draws for the same file.
+    expect(rows[1]?.querySelector("img")?.getAttribute("src")).toBe(
+      "blob:studio",
+    );
+    expect(rows[2]?.querySelector("svg")).not.toBeNull();
+    // No name was given, so no line is drawn for one.
+    expect(opened().textContent).not.toContain("System dashboard");
   });
 
   it("defaults the checkbox off", () => {

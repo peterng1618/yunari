@@ -33,6 +33,7 @@ import {
   Palette,
   Pencil,
   Pipette,
+  Play,
   Plus,
   RefreshCw,
   Scan,
@@ -129,6 +130,11 @@ export const STACK_GLYPH: LucideIcon = Layers2;
 /** The background row's mark. It is the page's wallpaper rather than the image
  *  kind's picture, so a background and an image layer never wear one glyph. */
 export const BACKGROUND_GLYPH: LucideIcon = Wallpaper;
+
+/** A video declaration's mark: a declared movie has no preview the pane can
+ *  draw, so its card and the cleanup sheet use the control every player
+ *  carries. */
+export const VIDEO_GLYPH: LucideIcon = Play;
 
 /** §7.2's page, the Document slot. */
 export const PAGE_GLYPH: LucideIcon = FileText;
