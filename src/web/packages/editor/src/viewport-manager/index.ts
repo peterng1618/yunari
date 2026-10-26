@@ -208,7 +208,9 @@ export function createViewportManager({
    * camera framed, because a fit is the transform that puts it there.
    */
   const displayScreenRect = (): ScreenRect | undefined => {
-    if (lens === undefined) return undefined;
+    // An unlaid-out host measures 0 and the canvas still carries the identity
+    // transform, so a rect reported now is one the shell draws a paint early.
+    if (lens === undefined || viewportSize() === undefined) return undefined;
     const active = resolveLens(lens);
     if (active === undefined) return undefined;
     const box = lensBox(active, artboard());
