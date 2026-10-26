@@ -206,7 +206,7 @@
 - [ ] **Step 5: Implement pane routing and session import**
   - `ASSET_FILE_ACCEPT` appends `.mpkg`; both inputs use it.
   - In `importFile`, `.mpkg` and video extensions set the modal state instead of importing; images/fonts keep today's path. Remove the normalize button, its state, preview, confirmation and their tests; delete the now-unused imports.
-  - `importPickedVideo`: package → `prepareMobilePackage` (already normalized on the host) → declare/set background/credit; video → `requestNormalizedVideo` → declare/set background, no credit. Extract a private `declareVideo(file, options: { credit?: ThemeCreditsEntry; license?: AssetLicense; sourceUrl?: string }): Promise<ImportOutcome>` from `importWallpaperFile` so all three paths share the cap check, declaration, credit and background consequence.
+  - `importPickedVideo`: package → `prepareMobilePackage` (already normalized on the host) → declare/set background/credit; video → `requestNormalizedVideo` → declare/set background, no credit. Extract a private `declareVideo(file, options: { credit?: ThemeCreditsEntry }): Promise<ImportOutcome>` from `importWallpaperFile` so all three paths share the cap check, declaration, credit and background consequence. Declaration metadata (`license`, `sourceUrl`) is Task 6's; this task writes only the credit.
   - Wire `onImportVideo` from `editor-session.ts:544`'s pane props.
 
 - [ ] **Step 6: Run the tests to verify they pass**
@@ -303,7 +303,7 @@
   Expected: FAIL.
 
 - [ ] **Step 3: Implement**
-  Thread the optional metadata through `import` into the `reference` literal. In `importWallpaperItem`/`importWallpaperFile`, fetch the author name only when `attribution.steamId` exists; pass metadata and the credit descriptor through. Update `creditsEntryOf` to accept `authorName?: string` and include `name` only when present. Package imports keep their title-only credit from Task 4.
+  Thread the optional metadata through `import` into the `reference` literal. In `importWallpaperItem`/`importWallpaperFile`, fetch the author name only when `attribution.steamId` exists; pass metadata and the credit descriptor through. Update `creditsEntryOf` to accept `authorName?: string` and include `name` only when present. Package imports keep their title-only credit from Task 4, and this task adds their declaration metadata: `declareVideo` passes `license: { name: "unknown" }` with no source.
 
 - [ ] **Step 4: Run the tests to verify they pass**
   Run the command from Step 2.

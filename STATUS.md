@@ -1,18 +1,17 @@
 # Yunari status
 
-Updated: 2026-10-26
+Updated: 2026-10-27
 Branch: `main`
 
 ## Current objective
 
-The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md) (per-display shape and rotation, [`spec B`](docs/superpowers/specs/2026-10-26-display-rotation-design.md)) is the next plan, and the queued backlog drain follows it.
+Execute [`the Wallpaper Engine import rework`](docs/superpowers/plans/2026-10-26-wallpaper-engine-import-rework.md) with subagent-driven development: remove UI automation, convert scenes to local projects, import `.mpkg`/video through a modal, and draw the library as cards.
 
 ## Active work
 
-- **No plan is running:** plan A is merged; plan B is queued and no other plan runs.
-- **Preview lens landed:** scene-anchored display box, shell stage, theme letterbox, guide frame, circle lens, ratio catalogue and Previews settings tab.
-- **Display presentation waits on plan B:** per-record shape and rotation, rotated/inscribed playback, pair-page choice, Host controls.
-- **Audit, chart, spacing and fonts work is on `main`:** revision gating, memoised dirty reading, chart animation and the fonts/assets rework are landed.
+- **One plan runs:** the import rework is active in its Orca worktree; plan B is queued behind it, and no other plan runs.
+- **Plan shape:** eight tasks — host removal and routes, editor client, import modal, card grid, credits, skeletons, docs and gate.
+- **Plan B waits:** per-display shape and rotation stays queued.
 - **Backlog drain stays queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, after plan B.
 
 ## Last completed change
@@ -25,9 +24,9 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Next
 
-1. Execute plan B with subagent-driven development; local merge to `main` on completion.
-2. Resume the backlog-drain plan at Phase 0 after that merge.
-3. Triage the pre-existing browser reds recorded below.
+1. Execute the import-rework plan task by task; local merge to `main` on completion.
+2. Execute plan B after that merge.
+3. Resume the backlog-drain plan at Phase 0.
 4. Owner tests remain: segment spacing and fill, radar and polar bar, scene export, fonts and assets rework.
 
 ## Blockers / unverified
