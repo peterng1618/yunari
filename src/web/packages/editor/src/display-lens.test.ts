@@ -1,113 +1,186 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
-  ARTBOARD_ORIENTATIONS,
-  ARTBOARD_RATIOS,
-  artboardOrientation,
-  artboardSize,
-  DEFAULT_ARTBOARD_PRESET,
-} from "./artboard-presets.js";
-import {
-  DEFAULT_DISPLAY_LENS,
-  DISPLAY_LENSES,
-  displayLens,
+  activePreviewLenses,
+  activePreviewRatioTokens,
+  DEFAULT_PREVIEW_RATIO_TOKENS,
+  defaultPreviewLens,
   displayLensGroups,
-  displayLensIdForShape,
+  lensBox,
+  lensMatching,
+  normalisePreviewRatioTokens,
+  parsePreviewRatio,
+  previewCatalogueKey,
+  previewLenses,
+  readPreviewRatioTokens,
+  resolveLens,
+  screenRect,
+  setActivePreviewRatios,
+  subscribeLenses,
 } from "./display-lens.js";
 
-/**
- * The list is `ARTBOARD_RATIOS` × `ARTBOARD_ORIENTATIONS`, not a second one.
- *
- * A lens written here alone is a number nothing else can check it against, and
- * the portrait id is the one place that is easy to get wrong: `9:19.5` is not
- * an `ArtboardRatioId`, so it is the reciprocal of `19.5:9` and has to be
- * derived rather than typed. Both are measured against the owner rather than
- * against a list repeated here.
- */
-describe("the display lenses are the presets' shapes, each way up", () => {
-  it("is the ratios crossed with the orientations", () => {
-    expect(
-      DISPLAY_LENSES.map((lens) => [lens.shape.ratio, lens.shape.orientation]),
-    ).toEqual(
-      ARTBOARD_ORIENTATIONS.flatMap((orientation) =>
-        ARTBOARD_RATIOS.map((entry) => [entry.id, orientation]),
-      ),
-    );
-    expect(
-      DISPLAY_LENSES.length,
-      "a portrait theme is not left with no preview to look through",
-    ).toBe(ARTBOARD_RATIOS.length * ARTBOARD_ORIENTATIONS.length);
-  });
+const storageReturning = (value: string): Storage =>
+  ({ getItem: () => value }) as unknown as Storage;
 
-  it("frames the shape it names, at the aspect the presets build that shape", () => {
-    for (const lens of DISPLAY_LENSES) {
-      const size = artboardSize(
-        lens.shape.ratio,
-        "1080p",
-        lens.shape.orientation,
-      );
-      expect(lens.aspect, `${lens.id} frames its own shape`).toBeCloseTo(
-        size.width / size.height,
-        12,
-      );
-    }
-  });
+/** The live list is module state, so a test that changes it puts the defaults
+ *  back rather than leaving a later test reading a catalogue it did not set. */
+afterEach(() => setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS));
 
-  it("names a landscape lens by its ratio and a portrait one by the reciprocal", () => {
-    // The reciprocal is the wrinkle: a portrait id is not an `ArtboardRatioId`,
-    // so it is derived from the landscape one rather than written beside it.
-    expect(
-      DISPLAY_LENSES.filter(
-        (lens) => lens.shape.orientation === "landscape",
-      ).map((lens) => lens.id),
-    ).toEqual(ARTBOARD_RATIOS.map((entry) => entry.id));
-
-    for (const lens of DISPLAY_LENSES.filter(
-      (l) => l.shape.orientation === "portrait",
-    )) {
-      const [wide, tall] = lens.shape.ratio.split(":");
-      expect(lens.id, `${lens.shape.ratio} turned`).toBe(`${tall}:${wide}`);
-      expect(
-        ARTBOARD_RATIOS.some((entry) => entry.id === lens.id),
-        `${lens.id} is deliberately not an ArtboardRatioId`,
-      ).toBe(false);
-    }
-  });
-
-  it("resolves a shape to the lens that frames it", () => {
-    for (const lens of DISPLAY_LENSES) {
-      expect(displayLensIdForShape(lens.shape)).toBe(lens.id);
-      expect(displayLens(lens.id).aspect).toBe(lens.aspect);
-    }
-  });
-
-  it("still opens on the shape a new theme opens at", () => {
-    // The starter is 1672 × 941, which is 16:9. The default is that lens by
-    // lookup, so widening the list must not move it to the first entry, nor to
-    // whatever entry now sits where the old default was.
-    expect(DEFAULT_DISPLAY_LENS).toBe("16:9");
-    expect(displayLens(DEFAULT_DISPLAY_LENS).shape).toEqual({
-      ratio: DEFAULT_ARTBOARD_PRESET.ratio,
-      orientation: DEFAULT_ARTBOARD_PRESET.orientation,
+describe("a preview ratio is a token in a closed vocabulary", () => {
+  it("parses integer pairs into a reduced id", () => {
+    expect(parsePreviewRatio("32:18")).toMatchObject({
+      id: "16:9",
+      width: 16,
+      height: 9,
     });
+  });
+
+  it("keeps a decimal edge as typed", () => {
+    expect(parsePreviewRatio(" 19.5:9 ")).toMatchObject({
+      id: "19.5:9",
+      width: 19.5,
+      height: 9,
+    });
+  });
+
+  it("parses Circle as a 1:1 disc", () => {
+    expect(parsePreviewRatio("Circle")).toEqual({
+      id: "Circle",
+      width: 1,
+      height: 1,
+      shape: "circle",
+    });
+  });
+
+  it.each(["", "16", "16:0", "-1:9", "a:b", "1:2:3", "NaN:9", "16:9:extra"])(
+    "refuses %s",
+    (input) => expect(() => parsePreviewRatio(input)).toThrow(RangeError),
+  );
+
+  it("drops invalid entries and keeps the first duplicate", () => {
+    expect(
+      normalisePreviewRatioTokens(["16:9", "nope", "16:9", "Circle", 7]),
+    ).toEqual(["16:9", "Circle"]);
+  });
+
+  it("reads defaults when the key is absent or unreadable", () => {
+    expect(readPreviewRatioTokens(undefined)).toEqual(
+      DEFAULT_PREVIEW_RATIO_TOKENS,
+    );
+    expect(readPreviewRatioTokens(storageReturning("not json"))).toEqual(
+      DEFAULT_PREVIEW_RATIO_TOKENS,
+    );
+  });
+
+  it("keeps an authored empty list as empty", () => {
+    expect(readPreviewRatioTokens(storageReturning("[]"))).toEqual([]);
   });
 });
 
-describe("the groups lead with the artboard's own orientation", () => {
-  it.each([
-    { width: 2340, height: 1080 },
-    { width: 1080, height: 2340 },
-    // A square is not taller than wide, so it takes landscape — the owner's
-    // ruling, kept because it keeps the logic to one comparison.
-    { width: 1000, height: 1000 },
-  ])("leads with %o, and always offers the other half too", (size) => {
-    const groups = displayLensGroups(artboardOrientation(size));
-
-    expect(groups[0]?.orientation).toBe(artboardOrientation(size));
-    expect(groups).toHaveLength(ARTBOARD_ORIENTATIONS.length);
-    // Nothing is filtered out: the previews are what a theme can be *seen*
-    // through, not the shapes it may be.
-    expect(groups.flatMap((group) => group.lenses)).toHaveLength(
-      DISPLAY_LENSES.length,
-    );
+describe("a ratio derives its lenses", () => {
+  it("derives one landscape lens and a portrait twin only for a wide ratio", () => {
+    const lenses = previewLenses(["16:9", "1:1", "Circle"]);
+    expect(lenses.map((lens) => lens.id)).toEqual([
+      "16:9",
+      "9:16",
+      "1:1",
+      "Circle",
+    ]);
   });
+
+  it("marks only Circle as a disc", () => {
+    expect(previewLenses(["1:1", "Circle"]).map((lens) => lens.shape)).toEqual([
+      "rect",
+      "circle",
+    ]);
+  });
+});
+
+describe("the live catalogue is module state with a revision", () => {
+  it("notifies once per real change and not for a repeated list", () => {
+    let calls = 0;
+    const unsubscribe = subscribeLenses(() => {
+      calls += 1;
+    });
+
+    setActivePreviewRatios(["16:9"]);
+    const changed = previewCatalogueKey();
+    setActivePreviewRatios(["16:9"]);
+    expect(calls).toBe(1);
+    expect(previewCatalogueKey()).toBe(changed);
+
+    setActivePreviewRatios(["Circle"]);
+    expect(calls).toBe(2);
+    expect(previewCatalogueKey()).not.toBe(changed);
+
+    unsubscribe();
+    setActivePreviewRatios([]);
+    expect(calls).toBe(2);
+  });
+
+  it("opens on the first landscape lens and finds a lens by id", () => {
+    setActivePreviewRatios(["1:1", "19.5:9"]);
+    expect(defaultPreviewLens()?.id).toBe("1:1");
+    expect(resolveLens("9:19.5")?.aspect).toBeCloseTo(9 / 19.5, 12);
+    expect(resolveLens("nope")).toBeUndefined();
+    expect(activePreviewRatioTokens()).toEqual(["1:1", "19.5:9"]);
+    expect(activePreviewLenses().length).toBe(3);
+  });
+
+  it("finds a rect lens for an artboard shape, or nothing", () => {
+    setActivePreviewRatios(["16:9", "Circle"]);
+    expect(lensMatching({ ratio: "16:9", orientation: "portrait" })?.id).toBe(
+      "9:16",
+    );
+    expect(
+      lensMatching({ ratio: "4:3", orientation: "landscape" }),
+    ).toBeUndefined();
+  });
+
+  it("groups the lenses by orientation, leading with the given one", () => {
+    setActivePreviewRatios(["16:9", "4:3"]);
+    expect(
+      displayLensGroups("portrait").map((group) => group.orientation),
+    ).toEqual(["portrait", "landscape"]);
+    setActivePreviewRatios(["1:1"]);
+    expect(displayLensGroups("portrait")).toEqual([
+      {
+        orientation: "landscape",
+        lenses: [expect.objectContaining({ id: "1:1" })],
+      },
+    ]);
+  });
+});
+
+describe("the display box is measured in artboard units", () => {
+  it("boxes the artboard in a lens of the lens aspect", () => {
+    expect(
+      lensBox({ aspect: 1, shape: "rect" }, { width: 1600, height: 900 }),
+    ).toEqual({ left: 0, top: -350, width: 1600, height: 1600 });
+  });
+
+  it("boxes a circle lens at the artboard diagonal", () => {
+    const side = Math.hypot(1600, 900);
+    const box = lensBox(
+      { aspect: 1, shape: "circle" },
+      { width: 1600, height: 900 },
+    );
+    expect(box.width).toBeCloseTo(side, 9);
+    expect(box.left).toBeCloseTo((1600 - side) / 2, 9);
+  });
+
+  it("refuses a non-positive lens aspect", () => {
+    expect(() =>
+      lensBox({ aspect: 0, shape: "rect" }, { width: 1600, height: 900 }),
+    ).toThrow(RangeError);
+  });
+});
+
+describe("the window rect refuses an impossible aspect", () => {
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses %s",
+    (aspect) =>
+      expect(() => screenRect({ width: 800, height: 600 }, aspect)).toThrow(
+        RangeError,
+      ),
+  );
 });

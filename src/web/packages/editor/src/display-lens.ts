@@ -1,217 +1,362 @@
 import {
   ARTBOARD_ORIENTATIONS,
-  ARTBOARD_RATIOS,
   type ArtboardOrientation,
-  type ArtboardRatioId,
   type ArtboardShape,
-  DEFAULT_ARTBOARD_PRESET,
 } from "./artboard-presets.js";
 
-/** A ratio's own name stood on its side — `19.5:9` as `9:19.5`. A type rather
- *  than a list, because the portrait names are nowhere written down: they are
- *  the landscape ones, read the other way up. */
-type Upright<Id extends string> = Id extends `${infer W}:${infer H}`
-  ? `${H}:${W}`
-  : never;
-
 /**
- * The displays a theme can be seen through, and the lens the stage looks
- * through to show it.
+ * The preview ratios an author can look through: a stored list of `W:H` tokens
+ * plus `Circle`, parsed into the lenses the display menu and the camera use.
  *
- * **The lens, never the document.** Choosing one changes what the camera looks
- * at and at what shape; the artboard keeps whatever dimensions the author gave
- * it. A theme at 3:1 and one at 4000×4000 both author in the same stage, and
- * each is only ever *shown* through one of these.
+ * **A catalogue, not a derived table.** The presets used to be the list, so an
+ * author could not add, remove or reset a preview and there was no square or
+ * round display. The stored vocabulary stays closed (`W:H` or `Circle`) and is
+ * validated once on read, so a hand-edited preference cannot frame the stage at
+ * a ratio nobody chose.
  *
- * Named `Display` rather than `Device` because `device` already means a sensor
- * here — `host/src/settings/devices.ts`, and the theme's own device readings —
- * and a lens that framed *those* would be a different idea. The word the spec
- * uses is the display, and this is the same thing.
- *
- * **Each lens is named by the aspect it frames.** "Phone" and "wall panel" say
- * where a screen happens to hang and mean different things to different people;
- * the ratio is the fact the lens actually holds, so it is the only name here
- * that cannot be argued with.
- *
- * **A portrait id is the reciprocal, not a second ratio id.** `ArtboardRatioId`
- * holds landscape ratios only, so `9:19.5` is deliberately not one — widening
- * that type would put six shapes into the artboard presets', the chooser's and
- * the validator's vocabulary, and the persisted shape list is not what needs a
- * portrait name. The number still comes from the landscape entry through
- * `ratioOf`, so nothing writes a ratio twice.
+ * **Browser-local and camera state.** The list lives under `yunari.editor.*`
+ * and never enters the theme envelope (§67): choosing a preview changes what
+ * the camera looks at, not what the document holds.
  */
-export type DisplayLensId = ArtboardRatioId | Upright<ArtboardRatioId>;
 
-export interface DisplayLens {
-  readonly id: DisplayLensId;
-  /** Width ÷ height of the display's screen. */
-  readonly aspect: number;
-  /** The artboard shape this display is measured in, and what a new theme
-   *  arrives at when the author says which display it is for.
-   *
-   *  **A shape, never a size.** No resolution: a display says what shape the
-   *  screen is, and a resolution is the author's later choice in the panel.
-   *  Fixing one here would be the redesign's own failure — silently settling
-   *  a second thing nobody asked about. */
-  readonly shape: ArtboardShape;
+export type PreviewShape = "rect" | "circle";
+
+export interface PreviewRatio {
+  readonly id: string;
+  readonly width: number;
+  readonly height: number;
+  readonly shape: PreviewShape;
 }
 
-/**
- * A ratio's number, from the one owner of artboard ratios.
- *
- * Read rather than restated: `19.5:9` written here as well as there is a
- * number that can drift, and a lens whose id and aspect quietly disagree is
- * invisible until somebody measures it.
- *
- * A missing id throws rather than defaulting, for the reason `artboardSize`
- * does: a default would frame the stage at a shape nobody chose, and the
- * frame is the only thing saying which shape that is.
- */
-function ratioOf(id: ArtboardRatioId): number {
-  const found = ARTBOARD_RATIOS.find((entry) => entry.id === id);
-  if (found === undefined) {
-    throw new RangeError(`no artboard ratio named ${id}`);
+/** What an author gets before they change anything: the common screens, a
+ *  square panel and a round one. */
+export const DEFAULT_PREVIEW_RATIO_TOKENS: readonly string[] = [
+  "16:9",
+  "19.5:9",
+  "4:3",
+  "1:1",
+  "Circle",
+];
+
+export const PREVIEW_RATIO_STORAGE_KEY = "yunari.editor.preview-ratios";
+
+/** A ratio's normalised id, or a refusal. Two integer edges are divided by
+ *  their greatest common divisor (`32:18` is `16:9`); an edge with a decimal is
+ *  kept as typed, because `19.5:9` is the spelling its author knows and
+ *  dividing a decimal would rename a ratio nobody edited. */
+export function parsePreviewRatio(input: string): PreviewRatio {
+  const text = input.trim();
+  if (text.toLowerCase() === "circle") {
+    return { id: "Circle", width: 1, height: 1, shape: "circle" };
   }
-  return found.ratio;
-}
 
-/** A lens's aspect, read from the shape it names rather than written beside
- *  it — the same reason `ratioOf` exists, one step further on. Portrait is the
- *  same display turned, so one ratio covers both orientations and the two
- *  cannot drift apart, which is also why `artboardSize` swaps its edges.
- *
- *  The id comes out of the shape for the same reason: a lens named `9:19.5` is
- *  a second spelling of `19.5:9`, and two spellings of one number is the drift
- *  `ratioOf` exists to prevent. */
-function lens(shape: ArtboardShape): DisplayLens {
-  const wide = ratioOf(shape.ratio);
-  const upright = shape.orientation === "portrait";
+  const parts = text.split(":");
+  const [rawWidth, rawHeight] = parts;
+  if (parts.length !== 2 || rawWidth === undefined || rawHeight === undefined) {
+    throw new RangeError(`a preview ratio is W:H, not ${input}`);
+  }
+  const width = Number(rawWidth);
+  const height = Number(rawHeight);
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    throw new RangeError(`preview ratio edges must be positive, not ${input}`);
+  }
+
+  if (!Number.isInteger(width) || !Number.isInteger(height)) {
+    return {
+      id: `${rawWidth.trim()}:${rawHeight.trim()}`,
+      width,
+      height,
+      shape: "rect",
+    };
+  }
+  const divisor = gcd(width, height);
   return {
-    id: upright ? turned(shape.ratio) : shape.ratio,
-    shape,
-    aspect: upright ? 1 / wide : wide,
+    id: `${width / divisor}:${height / divisor}`,
+    width: width / divisor,
+    height: height / divisor,
+    shape: "rect",
   };
 }
 
-/** A ratio's own id turned on its side — the name the portrait lens of the same
- *  shape carries. Split from the id rather than written out, so a ratio added
- *  to the presets brings its upright id with it instead of needing a second
- *  entry here that can disagree with the first. The split is a pair because
- *  every `ArtboardRatioId` holds exactly one colon. */
-function turned(id: ArtboardRatioId): Upright<ArtboardRatioId> {
-  const [wide, tall] = id.split(":") as [string, string];
-  return `${tall}:${wide}` as Upright<ArtboardRatioId>;
+/** The stored list as the tokens that can be parsed, first duplicate winning.
+ *  Anything unreadable is not an author choice, so it becomes the defaults. */
+export function normalisePreviewRatioTokens(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) return DEFAULT_PREVIEW_RATIO_TOKENS;
+
+  const tokens: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== "string") continue;
+    let ratio: PreviewRatio;
+    try {
+      ratio = parsePreviewRatio(entry);
+    } catch {
+      continue;
+    }
+    if (seen.has(ratio.id)) continue;
+    seen.add(ratio.id);
+    tokens.push(ratio.id);
+  }
+  return tokens;
 }
 
-/**
- * Every shape the artboard presets name, each way up: `ARTBOARD_RATIOS` crossed
- * with `ARTBOARD_ORIENTATIONS`, six lenses derived rather than written.
- *
- * **Derived, so a lens cannot name a shape the presets cannot build.** A fourth
- * ratio in `artboard-presets.ts` is a fourth pair of previews here with nothing
- * to add to this file — and a lens whose ratio was written here alone would be
- * a number nothing else can check it against, which is the whole argument for
- * `ratioOf` above.
- *
- * **The cross product is not a constraint on the artboard.** These are the
- * common device shapes to *look through*, offered because an author whose theme
- * is for a phone wants the phone's proportions; a super thin strip and a square
- * are not in the table and are not the less authorable for it. The panel's
- * width and height fields and its Custom size are untouched, and nothing here
- * is ever written into the document (§67).
- */
-export const DISPLAY_LENSES: readonly DisplayLens[] =
-  ARTBOARD_ORIENTATIONS.flatMap((orientation) =>
-    ARTBOARD_RATIOS.map((entry) => lens({ ratio: entry.id, orientation })),
-  );
+/** The stored list, or the defaults where there is none or it cannot be read.
+ *  `Storage` is absent in a private window and throws when refused, so the
+ *  reader never lets a preference break the editor. */
+export function readPreviewRatioTokens(
+  storage: Storage | undefined,
+): readonly string[] {
+  if (storage === undefined) return DEFAULT_PREVIEW_RATIO_TOKENS;
+  let raw: string | null;
+  try {
+    raw = storage.getItem(PREVIEW_RATIO_STORAGE_KEY);
+  } catch {
+    return DEFAULT_PREVIEW_RATIO_TOKENS;
+  }
+  if (raw === null) return DEFAULT_PREVIEW_RATIO_TOKENS;
+  try {
+    return normalisePreviewRatioTokens(JSON.parse(raw));
+  } catch {
+    return DEFAULT_PREVIEW_RATIO_TOKENS;
+  }
+}
 
-/** One orientation's previews, under the label the pickers head them with. */
+export function writePreviewRatioTokens(
+  storage: Storage | undefined,
+  tokens: readonly string[],
+): void {
+  try {
+    storage?.setItem(PREVIEW_RATIO_STORAGE_KEY, JSON.stringify(tokens));
+  } catch {
+    // The author's list still lives for the session; only persistence failed.
+  }
+}
+
+/** Removing the key is "the defaults again", the same absence-means-default
+ *  rule `palette.ts` uses. */
+export function clearPreviewRatioTokens(storage: Storage | undefined): void {
+  try {
+    storage?.removeItem(PREVIEW_RATIO_STORAGE_KEY);
+  } catch {
+    // Nothing to undo: the key was never cleared, and the defaults still apply.
+  }
+}
+
+export interface DisplayLens {
+  readonly id: string;
+  /** Width ÷ height of the display's screen. */
+  readonly aspect: number;
+  /** The orientation this lens is offered under. A square or circle files as
+   *  landscape, per `artboardOrientation`'s "a square is not taller". */
+  readonly orientation: ArtboardOrientation;
+  readonly shape: PreviewShape;
+}
+
+/** A ratio derives a landscape lens, and a wide one a portrait twin as well.
+ *  A square or a circle is 1:1 and does not duplicate. */
+export function previewLenses(
+  tokens: readonly string[],
+): readonly DisplayLens[] {
+  const lenses: DisplayLens[] = [];
+  for (const token of tokens) {
+    const ratio = parsePreviewRatio(token);
+    lenses.push({
+      id: ratio.id,
+      aspect: ratio.width / ratio.height,
+      orientation: "landscape",
+      shape: ratio.shape,
+    });
+    if (ratio.width > ratio.height) {
+      lenses.push({
+        id: `${ratio.height}:${ratio.width}`,
+        aspect: ratio.height / ratio.width,
+        orientation: "portrait",
+        shape: ratio.shape,
+      });
+    }
+  }
+  return lenses;
+}
+
+let activeTokens: readonly string[] = DEFAULT_PREVIEW_RATIO_TOKENS;
+let active: readonly DisplayLens[] = previewLenses(
+  DEFAULT_PREVIEW_RATIO_TOKENS,
+);
+let revision = 0;
+const listeners = new Set<() => void>();
+
+/** The live lenses. The **same array reference** between changes, because
+ *  `useSyncExternalStore` compares snapshots. */
+export function activePreviewLenses(): readonly DisplayLens[] {
+  return active;
+}
+
+export function activePreviewRatioTokens(): readonly string[] {
+  return activeTokens;
+}
+
+/** Written by the shell and the settings tab; replaces the list only when it
+ *  actually differs, so a re-render or a repeated write does not bump the
+ *  revision every consumer keys on. */
+export function setActivePreviewRatios(tokens: readonly string[]): void {
+  const nextTokens = normalisePreviewRatioTokens(tokens);
+  const nextLenses = previewLenses(nextTokens);
+  if (sameTokens(activeTokens, nextTokens) && sameLenses(active, nextLenses)) {
+    return;
+  }
+  activeTokens = nextTokens;
+  active = nextLenses;
+  revision += 1;
+  for (const listener of listeners) listener();
+}
+
+export function subscribeLenses(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+export function previewCatalogueKey(): string {
+  return String(revision);
+}
+
+/** The catalogue's first landscape lens, or Fit when the catalogue is empty.
+ *  Resolved from the live list rather than a module constant, because the list
+ *  is the author's. */
+export function defaultPreviewLens(): DisplayLens | undefined {
+  return active.find((lens) => lens.orientation === "landscape");
+}
+
+export function resolveLens(id: string): DisplayLens | undefined {
+  return active.find((lens) => lens.id === id);
+}
+
+/** The rect lens framing `shape`, or `undefined` — a user-managed list cannot
+ *  guarantee every artboard shape a preview, so this never throws. */
+export function lensMatching(shape: ArtboardShape): DisplayLens | undefined {
+  let ratio: PreviewRatio;
+  try {
+    ratio = parsePreviewRatio(shape.ratio);
+  } catch {
+    return undefined;
+  }
+  const aspect =
+    shape.orientation === "portrait"
+      ? ratio.height / ratio.width
+      : ratio.width / ratio.height;
+  return active.find(
+    (lens) =>
+      lens.shape === "rect" &&
+      lens.orientation === shape.orientation &&
+      lens.aspect === aspect,
+  );
+}
+
 interface DisplayLensGroup {
   readonly orientation: ArtboardOrientation;
   readonly lenses: readonly DisplayLens[];
 }
 
-/**
- * The lenses by orientation, the artboard's own orientation first.
- *
- * **One list, grouped once, for both pickers.** The display menu and the
- * new-theme chooser ask the same question — which previews suit this theme — and
- * either building its own groups would be a second answer to it. Landscape and
- * portrait are two labels rather than one run of six, because an author reading
- * a list of ratios cannot see at a glance which four of them will not help.
- *
- * **Ordered by the artboard through the predicate that already exists.** Both
- * callers read the orientation with `artboardOrientation` — the very function
- * `nearestArtboardPreset` reads its own through — so a portrait theme leads
- * with the portrait previews and the two cannot come to disagree about what a
- * size is. A square is not taller than wide and leads with landscape: the
- * owner's ruling, kept because it keeps the logic to one comparison.
- */
+/** The lenses by orientation, the artboard's own orientation first. A group
+ *  with no lens is omitted rather than headed and empty. */
 export function displayLensGroups(
   leading: ArtboardOrientation,
 ): readonly DisplayLensGroup[] {
+  const order: readonly ArtboardOrientation[] = [
+    leading,
+    ...ARTBOARD_ORIENTATIONS.filter((orientation) => orientation !== leading),
+  ];
   const groups: DisplayLensGroup[] = [];
-  for (const group of groupedLenses) {
-    if (group.orientation === leading) groups.unshift(group);
-    else groups.push(group);
+  for (const orientation of order) {
+    const lenses = active.filter((lens) => lens.orientation === orientation);
+    if (lenses.length > 0) groups.push({ orientation, lenses });
   }
   return groups;
 }
 
-/** Built once from the list above; `displayLensGroups` only reorders it. */
-const groupedLenses: readonly DisplayLensGroup[] = ARTBOARD_ORIENTATIONS.map(
-  (orientation) => ({
-    orientation,
-    lenses: DISPLAY_LENSES.filter(
-      (entry) => entry.shape.orientation === orientation,
-    ),
-  }),
-);
-
-/**
- * The lens the editor opens on: the shape a new document opens at, read out of
- * `DEFAULT_ARTBOARD_PRESET` rather than written here.
- *
- * **The starter is what makes that shape the right one.** It is 1672 × 941 —
- * 1.7768, which is 16:9 — so the 16:9 lens frames the reference composition
- * edge to edge the moment the editor opens, and a 19.5:9 lens would spend about
- * 18 % of a 1600 px stage on bars around it. The default used to claim a 19.5:9
- * lens, on the stated grounds that the starter is drawn in one; it is not, and
- * the claim cost the stage 287 px of nothing.
- *
- * Resolved rather than typed, for the reason `ratioOf` exists: a second number
- * here is a second answer to the same question, and the two had already
- * drifted apart. A shape no lens frames throws, exactly as a missing ratio
- * does — a default would frame the stage at a shape nobody chose.
- */
-export const DEFAULT_DISPLAY_LENS: DisplayLensId = displayLensIdForShape({
-  ratio: DEFAULT_ARTBOARD_PRESET.ratio,
-  orientation: DEFAULT_ARTBOARD_PRESET.orientation,
-});
-
-/** The lens showing `shape`, or a throw rather than the nearest one. Also the
- *  answer `DEFAULT_DISPLAY_LENS` is built from, so a shape the table cannot
- *  frame is refused where the table is read rather than by each caller. */
-export function displayLensIdForShape(shape: ArtboardShape): DisplayLensId {
-  const found = DISPLAY_LENSES.find(
-    (entry) =>
-      entry.shape.ratio === shape.ratio &&
-      entry.shape.orientation === shape.orientation,
-  );
-  if (found === undefined) {
-    throw new RangeError(
-      `no display lens shows a ${shape.orientation} ${shape.ratio} artboard`,
-    );
-  }
-  return found.id;
+/** A box in **artboard units**, not host pixels: the camera transforms it, so
+ *  the frame, its letterbox and display-bounded media move with the artwork. */
+export interface LensBox {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
 }
 
-export function displayLens(id: DisplayLensId): DisplayLens {
-  const found = DISPLAY_LENSES.find((entry) => entry.id === id);
-  if (found === undefined) {
-    throw new RangeError(`no display lens named ${id}`);
+/** The smallest rect of the lens's aspect that contains the artboard, centred.
+ *  A circle lens is a disc whose bounding square is the artboard's diagonal, so
+ *  the artboard's four corners lie on it. */
+export function lensBox(
+  lens: Pick<DisplayLens, "aspect" | "shape">,
+  artboard: { readonly width: number; readonly height: number },
+): LensBox {
+  if (!Number.isFinite(lens.aspect) || lens.aspect <= 0) {
+    throw new RangeError(
+      `a display aspect must be positive and finite, not ${lens.aspect}`,
+    );
   }
-  return found;
+  if (lens.shape === "circle") {
+    const side = Math.hypot(artboard.width, artboard.height);
+    return {
+      left: (artboard.width - side) / 2,
+      top: (artboard.height - side) / 2,
+      width: side,
+      height: side,
+    };
+  }
+  return lens.aspect >= artboard.width / artboard.height
+    ? {
+        left: (artboard.width - artboard.height * lens.aspect) / 2,
+        top: 0,
+        width: artboard.height * lens.aspect,
+        height: artboard.height,
+      }
+    : {
+        left: 0,
+        top: (artboard.height - artboard.width / lens.aspect) / 2,
+        width: artboard.width,
+        height: artboard.width / lens.aspect,
+      };
+}
+
+function gcd(a: number, b: number): number {
+  let x = a;
+  let y = b;
+  while (y !== 0) {
+    const remainder = x % y;
+    x = y;
+    y = remainder;
+  }
+  return x;
+}
+
+function sameTokens(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((token, index) => token === b[index]);
+}
+
+function sameLenses(
+  a: readonly DisplayLens[],
+  b: readonly DisplayLens[],
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every((lens, index) => {
+      const other = b[index];
+      return (
+        other !== undefined &&
+        lens.id === other.id &&
+        lens.aspect === other.aspect &&
+        lens.orientation === other.orientation &&
+        lens.shape === other.shape
+      );
+    })
+  );
 }
 
 /**
