@@ -1,5 +1,13 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { type TrashRoute, trashPlan } from "./trash.js";
+import {
+  runTrashRoutes,
+  type TrashRoute,
+  type TrashTarget,
+  trashPlan,
+} from "./trash.js";
 
 /**
  * What each platform's trash is reached by, without running any of them. The
@@ -10,9 +18,10 @@ describe("trashPlan", () => {
   const folder = "/home/ada/.yunari/themes/living-room";
   const routesOf = (
     platform: NodeJS.Platform,
-    at = folder,
+    at: string | readonly string[] = folder,
+    kind?: TrashTarget,
   ): readonly TrashRoute[] => {
-    const plan = trashPlan(platform, at);
+    const plan = trashPlan(platform, at, kind);
     if (!plan.ok) throw new Error(`${platform} has no trash route`);
     return plan.routes;
   };
@@ -36,6 +45,137 @@ describe("trashPlan", () => {
     expect(statements).toHaveLength(2);
     expect(statements[1]).toContain("DeleteDirectory(");
     expect(statements[1]).toContain(folder);
+  });
+
+  it("builds a file trash route per platform", () => {
+    // The folder route's `DeleteDirectory` is wrong for a file: the VisualBasic
+    // call names the kind it takes, and the other two platforms already take
+    // either. This is the one platform fact a file adds.
+    const [windows] = routesOf("win32", "C:/yunari/inter-400.woff2", "file");
+    const script = windows?.args.at(-1) ?? "";
+    expect(script).toContain("DeleteFile(");
+    expect(script).not.toContain("DeleteDirectory(");
+
+    const [mac] = routesOf("darwin", "/home/ada/inter-400.woff2", "file");
+    expect(mac?.args).toContain(
+      'tell application "Finder" to delete POSIX file "/home/ada/inter-400.woff2"',
+    );
+
+    const linuxRoutes = routesOf("linux", "/home/ada/inter-400.woff2", "file");
+    expect(linuxRoutes.map((route) => route.command)).toEqual([
+      "gio",
+      "trash-put",
+    ]);
+  });
+
+  it("sends a list of files as one route per platform", () => {
+    // One invocation for the whole list: a refusal on the second file must not
+    // leave the first already moved, with the caller never pruning its own
+    // declarations.
+    const files = ["/home/ada/a.woff2", "/home/ada/b.woff2"];
+    const [windows] = routesOf("win32", files, "file");
+    const script = windows?.args.at(-1) ?? "";
+    expect(script.match(/DeleteFile\(/g)).toHaveLength(2);
+    expect(script).toContain("/home/ada/a.woff2");
+    expect(script).toContain("/home/ada/b.woff2");
+    // The one `Add-Type` statement, then one statement per file.
+    expect(script.split(";")).toHaveLength(3);
+
+    const [mac] = routesOf("darwin", files, "file");
+    expect(mac?.args.at(-1)).toBe(
+      'tell application "Finder" to delete {POSIX file "/home/ada/a.woff2", POSIX file "/home/ada/b.woff2"}',
+    );
+
+    const linuxRoutes = routesOf("linux", files, "file");
+    expect(linuxRoutes[0]?.args).toEqual(["trash", ...files]);
+    expect(linuxRoutes[1]?.args).toEqual(["--", ...files]);
+  });
+
+  it("writes a long Windows list to a file instead of the command line", () => {
+    // 200 paths, past the store's own 128-asset cap for good measure. Inline
+    // they measured ~55,000 characters against Windows' 32,767 limit, so
+    // `execFile` would throw `spawn ENAMETOOLONG` and a full theme's cleanup
+    // would fail. The paths travel one per line in a file the runner writes.
+    const files = Array.from(
+      { length: 200 },
+      (_unused, index) => `C:/yunari/assets/file-${index}.woff2`,
+    );
+    const [route] = routesOf("win32", files, "file");
+    const script = route?.args.at(-1) ?? "";
+
+    for (const arg of route?.args ?? []) {
+      expect(arg.length).toBeLessThan(4_000);
+    }
+    expect(script).toContain("Get-Content -Encoding UTF8 -LiteralPath");
+    expect(script).toContain(route?.listPath ?? "\u0000");
+    for (const file of files) expect(script).not.toContain(file);
+    expect(route?.list).toEqual(files);
+  });
+
+  it("tries the next route when a command is not installed", async () => {
+    // The runner is injected because "is gio installed" is not something a test
+    // can arrange. Only `ENOENT` may advance: a plain refusal must stop here.
+    const calls: string[] = [];
+    const routes: readonly TrashRoute[] = [
+      { command: "gio", args: ["trash", "/a"] },
+      { command: "trash-put", args: ["--", "/a"] },
+    ];
+
+    await runTrashRoutes(routes, "file", async (route) => {
+      calls.push(route.command);
+      if (route.command === "gio") {
+        throw Object.assign(new Error("spawn gio ENOENT"), { code: "ENOENT" });
+      }
+    });
+
+    expect(calls).toEqual(["gio", "trash-put"]);
+  });
+
+  it("keeps the missing-command code through the real runner", async () => {
+    // The Linux fallback was dead because `run()` rebuilt the rejection as a
+    // plain Error and lost `code`; then every missing command looked like a
+    // refusal. This is the real executor, so a dropped code reddens it.
+    const routes: readonly TrashRoute[] = [
+      { command: "yunari-definitely-not-a-trash-command", args: [] },
+      { command: process.execPath, args: ["-e", ""] },
+    ];
+
+    await expect(runTrashRoutes(routes, "file")).resolves.toBeUndefined();
+  });
+
+  it("does not read a list-file write failure as a missing command", async () => {
+    // The write fails because its parent is a file — `EEXIST` on this box,
+    // `ENOENT` where the parent is absent instead. What matters is that the
+    // rewrapped error carries no code, so the route loop cannot read it as a
+    // missing command and answer "This PC has no trash command": that is a
+    // different, wrong sentence.
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-list-"));
+    const blocker = path.join(directory, "blocker");
+    await fs.writeFile(blocker, "");
+
+    try {
+      const routes: readonly TrashRoute[] = [
+        {
+          command: "yunari-definitely-not-a-trash-command",
+          args: [],
+          list: ["/a"],
+          listPath: path.join(blocker, "paths.txt"),
+        },
+        { command: process.execPath, args: ["-e", ""] },
+      ];
+
+      const failure = await runTrashRoutes(routes, "file").then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).toContain(
+        "trash list file could not be written",
+      );
+      expect((failure as NodeJS.ErrnoException).code).toBeUndefined();
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("escapes an apostrophe in the path for PowerShell's single-quoted literal", () => {

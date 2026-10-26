@@ -121,15 +121,15 @@ const BINDS_HOOK = /const\s+(\w+)\s*=\s*useDraftCommit\s*\(/;
  */
 const EXEMPT: readonly (readonly [string, string])[] = [
   [
-    "font-picker/font-picker.tsx",
-    'a `type="search"` filter and a checkbox: neither holds an authored value',
+    "components/save-cleanup-dialog.tsx",
+    "a native checkbox: an on/off answer, with no draft to compose or commit",
   ],
   [
     "host-settings-mode/region.tsx",
     "a copy: its own Enter and blur commit, with no Escape and no composing guard",
   ],
   [
-    "panes/add/file-section.tsx",
+    "panes/assets/assets-pane.tsx",
     'two hidden `type="file"` inputs, driven by their own buttons',
   ],
   [
@@ -156,6 +156,14 @@ const EXEMPT: readonly (readonly [string, string])[] = [
   [
     "host-settings-mode/source-form.tsx",
     "the source form's fields are committed by the form's own Save button, never on blur or Enter",
+  ],
+  [
+    "asset-finder/fonts-body.tsx",
+    "the type=search field filters the host's font listing as you type; nothing is authored to commit or cancel",
+  ],
+  [
+    "asset-finder/font-preview-panel.tsx",
+    "the sample is transient preview text applied on every keystroke and reset by its own button; nothing is written to the theme, so there is no commit or cancel to take",
   ],
 ];
 

@@ -1,38 +1,41 @@
 # Yunari status
 
 Updated: 2026-10-26
-Branch: `main`
+Branch: `peterng1618/fix-font-trio`
 
 ## Current objective
 
-Land the chart spec [`2026-10-25-chart-playback-and-segmented-fill-design.md`](docs/superpowers/specs/2026-10-25-chart-playback-and-segmented-fill-design.md): plans 1 (playback), 2 (segmented fill) and 3 (radar and polar bar) are all landed; the owner's test is the remaining gate.
+Build the type-and-asset authoring rework: the [`spec`](docs/superpowers/specs/2026-10-25-fonts-and-assets-design.md) and [`plan`](docs/superpowers/plans/archive/2026-10-25-fonts-and-assets.md) add the Assets rail pane, host font sources, the finder preview, explicit preset actions and opt-in cleanup — all landed.
 
 ## Active work
 
-- **Chart spec complete:** `docs/superpowers/plans/2026-10-25-radar-and-polar-bar.md` merged locally into `main`; no queued plan.
-- **Wallpaper Engine export landed:** `docs/superpowers/plans/2026-10-26-wallpaper-engine-mobile-export.md`; decision [0118](docs/decisions/0118-a-scene-is-exported-by-driving-the-engine-ui.md) claims the UI-driving boundary.
-- **Segmented-fill plan landed:** divisor setting, discrete slider, gauge bands, pie spacers and bar custom series.
-- **Live-line policy:** the delay is two host cadences at 30 fps and zero at 1 fps; the line never smooths — Interpolation offers Linear and Step — and a stall holds the last reading to the edge and steps at the next batch.
-- **Owner testing follows the run:** each plan merges locally into `main`; nothing is pushed, and the owner tests after the sequence.
-- **Decision note:** [0116](docs/decisions/0116-chart-motion-is-the-engines-and-the-line-is-a-clock.md) claims the chart mechanism boundaries.
+- **No plan is running:** `2026-10-25-fonts-and-assets` is complete and archived; `superpowers:finishing-a-development-branch` owns the merge and push, which need the owner.
+- **Queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, with 259 rows still `open`.
+- **Release readiness is closed:** spec `2026-10-25-release-readiness-design.md` is landed, plan archived, and nothing in it waits on a task.
+- **Game identity is closed:** [`spec`](docs/superpowers/specs/2026-10-24-game-identity-and-display-catalogue-design.md), plan archived, decision [0110](docs/decisions/0110-game-identity-is-a-local-catalogue-match.md).
+- **System tray merged:** [`spec`](docs/superpowers/specs/2026-10-25-systray-design.md) and plan are landed; the rows, clicks and the staged Linux binary still need a live run.
+- **`vg-724` is open for art only:** naming for Steam, Epic, GOG, itch, Xbox and GDK Store packages landed; catalogue-matched non-Steam titles still report no artwork.
 
 ## Last completed change
 
-- **The export leaves the author's library alone:** the grid's Source filter is persisted in the engine's own config and is never touched; its rows ignore synthetic clicks, so the old `Set-Local-Source` was a no-op and is gone.
-- **A click needs the foreground and the current layout:** the engine is taken to the foreground through `AttachThreadInput` and maximised to force the web layer to reflow, then restored on every exit, failures included.
-- **The local project is picked by its authoring note:** a workshop item that shares the title has none, and `no-tile` now names the Source filter.
-- **Verified live:** `Tokyo` reached the engine's Save dialog through the real runner, and the config's `sourcetags` were identical before and after.
+- **The fonts-and-assets plan is closed:** the spec now states the two facts the code settled (no `subset` field, no catalogue description) and the plan moved to `archive/`.
+- **Nine ledger carries are filed** as `vg-737`–`vg-745`, each re-verified at HEAD before writing — two carried claims were stale and dropped.
+- **Register and docs:** `npm run backlog:check` exit 0, 745 items across both registers, all valid; spec header cites the archived plan.
+- **Evidence:** `npm run gate` exit 0 on the final tree — unit 414 files / 6074 tests (1 skipped), worker 12 files / 73.
+- **Captures:** three registered store captures recaptured and inspected; the eleven beside the drawings are stale and filed as `vg-745`.
 
 ## Next
 
-1. Owner test of radar and polar bar in the editor, then phone performance and value-chart transition evidence.
-2. Owner test of one scene export end to end: press the button, save the package, import the video.
-3. Keep every checkpoint local; no push until the owner asks.
+1. Run `superpowers:finishing-a-development-branch` on `peterng1618/fix-font-trio`: the merge into `develop` and any push are the owner's call.
+2. A live tray run by the owner: inspect the menu's rows, toggle Auto start, open each editor surface, start RTSS, and Exit.
+3. Run the staged Linux tray binary on a Linux desktop session; it was never executed here.
+4. Work `vg-724`'s art half and `vg-727`, `vg-728`, `vg-729`.
+5. Resume the backlog-drain plan at Phase 0 now that nothing else is running.
 
 ## Blockers / unverified
 
-- **The Save click is unverified end to end:** the harvest is unit-tested against a Documents fixture, not against a package the engine wrote after a real Save.
-- **The folder fallback is unverified live:** a project filed into a Wallpaper Engine folder is absent from the root grid, and the route that enters `yunari-background` first has not run against a filed project.
-- **Phone performance is unmeasured:** thirty applications per second across several charts is unproven on the phone that reported the defect.
-- **Value-chart engine transitions are not browser-verified:** the gate proves the option flag and signature, not motion across frames.
-- **Polar bar evidence uses one low reading:** `cpu.load` is 9.28 on a 0–100 scale, so the sector sits at the inner radius (26.7% of the canvas); legibility at realistic 40–80% readings is unverified.
+- **The publish path is unverified end to end:** no workflow dispatch, no trusted-publisher run and no first publish, which stays a one-time local token publish; the release-token choice is open.
+- **No real N−1 migration is exercised:** at `2.0.0` the only older shape is the legacy integer; the dispatcher is a forward obligation.
+- **No live fullscreen game check:** window evidence is unit-tested through injected readings and a fixed foreground seam.
+- **Epic, itch, Xbox and Store readers are fixture-tested only**, and both live Steam reads stay fixture-tested.
+- **Two dependency deviations remain:** `ffmpeg-static` installs with scripts but no playback was exercised, and `npm ls` marks the overridden edges `invalid`.

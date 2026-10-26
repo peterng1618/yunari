@@ -1,5 +1,7 @@
 /**
- * The document `paint-list.dom.test.tsx` drives the Tokens pane with.
+ * The documents the Tokens pane and its inspector are driven with:
+ * `paint-list.dom.test.tsx`, `paint-fields.dom.test.tsx` and
+ * `token-inspector.dom.test.tsx`.
  *
  * Every colour here is a *document* value — a paint an author typed into the
  * document's own palette, or one this suite types into the field — rather than
@@ -64,6 +66,28 @@ export const FROSTED_PANEL: FabricPalette = {
   frost: {
     name: "Frosted panel",
     value: { kind: "solid", color: FROST_PAINT },
+  },
+};
+
+/** The palette the token inspector's paint section is mounted over: a solid to
+ *  read, a second solid to reassign to, and a gradient for the branch a solid
+ *  does not render. */
+export const PAINT_INSPECTOR_PALETTE: FabricPalette = {
+  background: {
+    name: "Background",
+    value: { kind: "solid", color: BACKGROUND_PAINT },
+  },
+  accent: { name: "Accent", value: { kind: "solid", color: ACCENT_PAINT } },
+  glow: {
+    name: "Glow",
+    value: {
+      kind: "gradient",
+      angle: 45,
+      stops: [
+        { offset: 0, color: BACKGROUND_PAINT },
+        { offset: 1, color: ACCENT_PAINT },
+      ],
+    },
   },
 };
 

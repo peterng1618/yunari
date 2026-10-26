@@ -1,6 +1,9 @@
 # The editor's design language, and the React rewrite under it
 
-- **Status:** draft
+- **Status:** draft; §5.2, §5.3 and §7.2 are amended by
+  [`2026-10-25-fonts-and-assets-design.md`](2026-10-25-fonts-and-assets-design.md)
+  — the Assets pane returns as a fifth rail slot, Add loses its file section,
+  and type-preset properties move to the inspector.
 - **Supersedes in part:** [`2026-10-03-dashboard-authoring-design.md`](2026-10-03-dashboard-authoring-design.md)
   §4, §8, §9 and the Sequencing table — see §11. Its §N markers are not renumbered.
 - **Normative companion:** [`../../design/design-language.md`](../../design/design-language.md)
@@ -167,7 +170,8 @@ that separates §3.1 from §7.
 ### 3.2 The rail
 
 A 46px vertical glyph strip with the settings gear pinned to the foot, holding
-**four slots** — Composition, Add, Tokens, Document — with an expanding pane.
+**five slots** — Composition, Add, Assets, Tokens, Document — with an expanding
+pane.
 
 - **The horizontal pane bar is deleted.** Two stacked horizontal navigation bars
   make the first read as chrome rather than as a choice.
@@ -175,7 +179,7 @@ A 46px vertical glyph strip with the settings gear pinned to the foot, holding
   occupies the layout track beside the rail. The existing refit-on-toggle
   behaviour stays: available stage space may change, authored coordinates do
   not. No new overlay may obscure artwork or stage controls.
-- **The gear is the fifth thing on the rail but is not a slot:** it opens a
+- **The gear is the sixth thing on the rail but is not a slot:** it opens a
   modal settings surface (§7), not a pane, because it is not part of the
   document.
 
@@ -258,18 +262,20 @@ a fixed set of eight, so depicting a unit is honest. A group on the canvas is
 arbitrary, so depicting it is not. The distinction is the rule, not an
 inconsistency.
 
-**This pane absorbs the Assets pane** (`vg-154`). Placed images and SVGs become
-layers, but declared fonts, videos and unplaced files still need a library. Keep
-that declared-asset list, previews, byte replacement and reference-safe removal
-inside Add. The import path, `assetReferencedBy` and document-level references
-must survive the move, or a file the theme still uses becomes removable.
+**The Assets pane is its own slot, not part of Add.** `vg-154` was decided the
+other way once: placed images and SVGs become layers, so this pane inserts,
+while declared fonts, videos and unplaced files still need a library. That
+library is the rail's Assets slot — the declared-file list, the preview, byte
+replacement, reference-safe removal and the finder link — and Add keeps only
+what it inserts. The import path, `assetReferencedBy` and document-level
+references live there; the
+[fonts and assets spec](2026-10-25-fonts-and-assets-design.md) is the binding
+one.
 
 **Byte replacement is not selection replacement.** Swapping a declared asset's
 bytes changes every use of that asset; re-pointing one selected image changes
-one use. This rewrite preserves the former. The latter remains `vg-154`'s
+one use. This rewrite preserves the former and leaves the latter `vg-154`'s
 explicit unmet capability, not a shipped claim or a reason to close the row.
-The footer says "Import a file" where fonts/videos are accepted; placeable
-images/SVGs may additionally be placed through the manager's existing path.
 
 ### 5.3 Tokens
 
@@ -287,6 +293,13 @@ be bound to the selection.** Today it is constructed with no canvas and no
 selection and defaults to the first declared preset, so an author who sets a run
 to `24-400` and opens the panel to see what that preset *is* finds `20-400`
 selected and cannot tell a default from an answer.
+
+**A preset can be made from a file.** A local font is imported as a declared
+asset first — its family, weight, style, format and licence read from the file
+and confirmed before anything is declared — and the preset it creates names that
+face, so the bytes stay reachable and the file cannot be removed while the
+preset refers to it. The form is not this pane's own concern; the
+[fonts and assets spec](2026-10-25-fonts-and-assets-design.md) owns it.
 
 ### 5.4 Document
 

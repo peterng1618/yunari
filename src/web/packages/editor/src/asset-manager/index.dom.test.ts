@@ -119,6 +119,72 @@ describe("AssetManager", () => {
     );
   });
 
+  it("amends a face's licence name without dropping its URL", async () => {
+    const manager = new AssetManager();
+    const face = fontTrio("minimal")!.faces[0]!;
+    expect(face.license.url).toBeDefined();
+    await manager.adoptFont(face, new Uint8Array([0, 1, 2]));
+
+    const amended = manager.amendFont(face.id, {
+      family: face.family,
+      weight: 500,
+      style: "normal",
+      licence: "SIL OFL 1.1",
+    });
+
+    expect(amended.license).toEqual({
+      ...face.license,
+      name: "SIL OFL 1.1",
+    });
+    expect(amended.weight).toBe(500);
+  });
+
+  it("imports a ttf and writes a local reference without a sourceUrl", async () => {
+    const manager = new AssetManager();
+
+    const asset = await manager.importFont(
+      file(new Uint8Array([0, 1, 2]), "Inter-Bold.ttf", "font/ttf"),
+      { family: "Inter", weight: 700, style: "normal", licence: "unknown" },
+      async () => undefined,
+    );
+
+    expect(asset).toMatchObject({
+      id: "Inter-Bold",
+      kind: "font",
+      path: "assets/Inter-Bold.ttf",
+      family: "Inter",
+      weight: 700,
+      style: "normal",
+      format: "ttf",
+      license: { name: "unknown" },
+    });
+    // A local file names no origin; an absent URL is not an empty one.
+    expect(asset.sourceUrl).toBeUndefined();
+    expect(manager.assets["assets/Inter-Bold.ttf"]).toEqual(
+      new Uint8Array([0, 1, 2]),
+    );
+  });
+
+  it("refuses a file whose bytes do not parse as a font", async () => {
+    const manager = new AssetManager();
+    const loadFace = vi.fn(async () => {
+      throw new Error("not a font");
+    });
+
+    await expect(
+      manager.importFont(
+        file(new Uint8Array([0, 1, 2]), "Inter-Bold.ttf", "font/ttf"),
+        { family: "Inter", weight: 700, style: "normal", licence: "unknown" },
+        loadFace,
+      ),
+    ).rejects.toThrow("not a font the browser can read");
+
+    expect(loadFace).toHaveBeenCalledTimes(1);
+    // The refusal happens before the declaration, so nothing is left behind.
+    expect(manager.declarations).toEqual([]);
+    expect(manager.assets).toEqual({});
+  });
+
   it("rejects a MIME type that does not match a WebM extension", async () => {
     const manager = new AssetManager();
 
@@ -351,7 +417,7 @@ describe("AssetManager.placeImage", () => {
           image: new FabricImage(document.createElement("img")),
         })),
       },
-      canvas: { setActiveObject: vi.fn() },
+      canvas: { setActiveObject: vi.fn(), centerObject: vi.fn() },
     } as never;
 
     await manager.placeImage(editor, source, declared);
@@ -368,12 +434,32 @@ describe("AssetManager.placeImage", () => {
           image: new FabricImage(document.createElement("img")),
         })),
       },
-      canvas: { setActiveObject: vi.fn() },
+      canvas: { setActiveObject: vi.fn(), centerObject: vi.fn() },
     } as never;
 
     await manager.placeImage(editor, file(PNG, "solo.png", "image/png"));
 
     expect(manager.declarations).toHaveLength(1);
+  });
+
+  it("places an imported image at the canvas centre", async () => {
+    // R3: an import's one automatic placement is the canvas centre. Fabric owns
+    // the operation, so the proof is that the declared object is handed to it
+    // after it becomes active — reverting the call leaves the image at its
+    // default origin and reds this case.
+    const manager = new AssetManager();
+    const image = new FabricImage(document.createElement("img"));
+    const centerObject = vi.fn();
+    const editor = {
+      imageManager: {
+        importImage: vi.fn(async () => ({ image })),
+      },
+      canvas: { setActiveObject: vi.fn(), centerObject },
+    } as never;
+
+    await manager.placeImage(editor, file(PNG, "centred.png", "image/png"));
+
+    expect(centerObject).toHaveBeenCalledWith(image);
   });
 });
 

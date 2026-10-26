@@ -59,6 +59,34 @@ describe("parseAssetSearchRequest", () => {
     });
   });
 
+  it("carries a named body through to the host", () => {
+    expect(
+      parseAssetSearchRequest(
+        { query: "inter", enabled: ["font"], body: "font-picker" },
+        ["font"],
+      ),
+    ).toEqual({
+      query: "inter",
+      enabled: ["font"],
+      pages: {},
+      body: "font-picker",
+    });
+  });
+
+  it("drops a body this host does not name, leaving the grid default", () => {
+    // A stale browser preference is not a reason to fail a search, as with an
+    // unknown source id.
+    expect(
+      parseAssetSearchRequest(
+        { query: "inter", enabled: [], body: "wallpaper-engine" },
+        [],
+      ),
+    ).toEqual({ query: "inter", enabled: [], pages: {} });
+    expect(
+      parseAssetSearchRequest({ query: "inter", enabled: [], body: 7 }, []),
+    ).toEqual({ query: "inter", enabled: [], pages: {} });
+  });
+
   it("answers no pages when the field is absent or not an object", () => {
     expect(parseAssetSearchRequest({ query: "", enabled: [] }, [])).toEqual({
       query: "",

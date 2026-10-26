@@ -3,11 +3,11 @@ import { useControlTooltip } from "../components/ui/control-icon-button.js";
 import { uiCopy } from "../ui-copy.js";
 import { Glyph, RAIL_GLYPHS, SETTINGS_GLYPH } from "./icons.js";
 
-/** The rail's four slots (DESIGN.md §7.2). Named here rather than in
+/** The rail's five slots (DESIGN.md §7.2). Named here rather than in
  *  `shell-layout.tsx` because the rail is what enumerates them — two owners of
  *  "which slots there are" would drift. The settings gear is deliberately not
  *  one of them: it opens a modal, never a pane, so it is outside this set. */
-export type RailSlot = "composition" | "add" | "tokens" | "document";
+export type RailSlot = "composition" | "add" | "assets" | "tokens" | "document";
 
 /** The gear's own id, so the modal it opens can return focus to it on close.
  *  The gear is the one rail control with a surface outside the rail, so its id
@@ -20,6 +20,7 @@ export const SETTINGS_TRIGGER_ID = "editor-shell-settings-trigger";
 export const RAIL_SLOTS: readonly RailSlot[] = [
   "composition",
   "add",
+  "assets",
   "tokens",
   "document",
 ];
@@ -37,7 +38,7 @@ export const RAIL_SLOTS: readonly RailSlot[] = [
  *
  *  **`aria-pressed` is the whole of a slot's own state, and there is no
  *  `aria-expanded` beside it.** Whether the pane column is out is a fact about
- *  the shell, not about a slot: put on all four it read `true` on a slot whose
+ *  the shell, not about a slot: put on every slot it read `true` on one whose
  *  pane was `hidden` behind another's, and put on each slot it would be a
  *  second attribute restating what `aria-pressed` already decides. The shell
  *  publishes that one fact once, on the rail.
@@ -113,8 +114,8 @@ function SettingsGear({
  *  hides the ones that are not showing — and it decides nothing: asking for
  *  the slot already open is a collapse, and the shell is what turns the
  *  gesture into a close (its `choosePane`), because the rail cannot tell a
- *  swap from a close. The gear is not a slot and opens no pane; it is the
- *  fifth thing on the rail and the only one whose surface is a modal. */
+ *  swap from a close. The gear is not a slot and opens no pane; it is the one
+ *  thing on the rail whose surface is a modal. */
 export function Rail(props: {
   readonly slot: RailSlot;
   readonly collapsed: boolean;

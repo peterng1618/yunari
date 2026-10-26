@@ -462,6 +462,25 @@ describe("new object panel", () => {
     expect(editor.canvas.add).not.toHaveBeenCalled();
   });
 
+  it("draws no file section in the Add pane", () => {
+    // Local files belong to the Assets pane (DESIGN.md §7.2): the Add pane is
+    // insertion-only, so neither an import control nor a finder link lives here.
+    const { root } = createNewObjectPanel(
+      document.body,
+      editorStub() as never,
+      palette as never,
+    );
+
+    for (const selector of [
+      "[data-yunari-asset-import]",
+      "[data-yunari-asset-import-background]",
+      "[data-yunari-find-assets]",
+      "[data-yunari-asset-select]",
+    ]) {
+      expect(root.querySelector(selector), selector).toBeNull();
+    }
+  });
+
   it("arms the session's text route instead of constructing at the click", () => {
     // The pointer, not the menu, decides what the text is and where it lands.
     // A tile that constructed here would make the placement gesture a second,

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Yunari editor — assets pane</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b0e12; font: 12px system-ui, -apple-system, 'Segoe UI', sans-serif; }
+</style>
+</head>
+<body>
+<!-- The Assets rail slot and its pane. The pane is the theme's asset library:
+     every declared file, grouped by kind, with the import controls that write
+     into it. Import is not placement — an import declares bytes and then
+     performs its kind's one automatic placement (image/SVG to the canvas,
+     video to background media, a font only to the metadata form). The row's
+     actions are the explicit alternatives, shown only while it is chosen and as
+     §5's 26px glyph squares, each carrying its own accessible name.
+
+     The rail is the five-slot rail: Composition, Assets, Add, Tokens,
+     Document. The Add pane no longer carries a file section; inserting an
+     object and adding an asset are different acts. -->
+<div style="--bg:#0b0e12;--hdr:#12161c;--panel:#12161c;--panel2:#171c23;--edge:#242b34;--edge2:#1b212a;
+            --text:#e8ecf3;--muted:#8a97ab;--faint:#5a6675;--accent:#72e0c0;--hot:#ff7e6e;--warn:#f3aa64;
+            width:1180px;height:900px;position:relative;overflow:hidden;background:var(--bg);color:var(--text);display:flex;flex-direction:column">
+
+  <!-- header -->
+  <div style="height:42px;flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:0 12px;background:var(--hdr);border-bottom:1px solid var(--edge)">
+    <span style="font:700 13px/1.3 system-ui;letter-spacing:.02em">Yunari</span>
+    <span style="width:1px;height:18px;background:var(--edge);margin:0 4px"></span>
+    <span style="display:flex;gap:4px;padding:4px;background:var(--panel2);border:1px solid var(--edge);border-radius:6px">
+      <span style="padding:4px 10px;font:500 12px/1.4 system-ui;border-radius:4px;background:var(--bg)">Editor</span>
+      <span style="padding:4px 10px;font:500 12px/1.4 system-ui;border-radius:4px;color:var(--muted)">Themes</span>
+      <span style="padding:4px 10px;font:500 12px/1.4 system-ui;border-radius:4px;color:var(--muted)">This PC</span>
+    </span>
+    <span style="flex:1"></span>
+    <span style="display:flex;gap:14px;font:400 12px/1.4 system-ui;color:var(--muted)">File&nbsp;&nbsp;Edit&nbsp;&nbsp;View</span>
+    <span style="font:400 11px/1.4 ui-monospace,Menlo,monospace;color:var(--faint)">Saved</span>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0">
+
+    <!-- rail: five slots, the gear at the foot -->
+    <div style="width:46px;box-sizing:border-box;flex:0 0 auto;background:#0e1217;border-right:1px solid var(--edge);display:flex;flex-direction:column;align-items:center;padding:8px 0 8px 1px;gap:4px">
+      <span style="width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.7"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 13 9 5 9-5"/></svg></span>
+      <span style="width:36px;height:36px;border-radius:8px;background:#182430;display:flex;align-items:center;justify-content:center;position:relative">
+        <span style="position:absolute;right:-5px;top:6px;bottom:6px;width:2px;border-radius:2px;background:var(--accent)"></span>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="9" cy="13" r="1.6"/><path d="m5.5 18 4-4 3 3 2-2 4 4"/></svg></span>
+      <span style="width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.7"><path d="M12 5v14"/><path d="M5 12h14"/></svg></span>
+      <span style="width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.3" fill="var(--faint)" stroke="none"/><circle cx="14" cy="14" r="1.3" fill="var(--faint)" stroke="none"/></svg></span>
+      <span style="width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.7"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg></span>
+      <span style="flex:1"></span>
+      <span style="width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></span>
+    </div>
+
+    <!-- Assets pane -->
+    <div style="width:246px;flex:0 0 auto;background:var(--panel);border-right:1px solid var(--edge);display:flex;flex-direction:column;min-height:0">
+      <div style="height:38px;flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:0 10px 0 12px;border-bottom:1px solid var(--edge)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <span style="font:600 12px/1.4 system-ui">Assets</span><span style="flex:1"></span><span style="font:400 10px/1.2 ui-monospace,Menlo,monospace;color:var(--faint)">7 files</span>
+      </div>
+
+      <div style="flex:1;overflow:auto;padding:10px 10px 14px">
+
+        <!-- the two import intents. The picker cannot say which one the author
+             means, so the pane does: Import routes by kind, As background
+             forces image/video into the artboard's media. -->
+        <div style="display:flex;gap:6px">
+          <span style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px 8px;border:1px solid var(--accent);border-radius:6px;background:rgba(114,224,192,.09);font:600 11px/1.3 system-ui;color:var(--accent)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.9"><path d="M12 16V4M8 8l4-4 4 4"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>
+            Import
+          </span>
+          <span style="display:flex;align-items:center;justify-content:center;gap:5px;padding:7px 8px;border:1px solid var(--edge);border-radius:6px;font:500 11px/1.3 system-ui;color:var(--muted)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 15 5-4 4 4 3-3 6 5"/></svg>
+            As background
+          </span>
+        </div>
+        <div style="margin-top:6px;padding:6px 8px;border:1px solid var(--edge);border-radius:6px;display:flex;align-items:center;gap:7px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+          <span style="font:400 11px/1.3 system-ui;color:var(--muted)">Find assets…</span>
+          <span style="flex:1"></span>
+          <span style="font:400 9px/1.3 ui-monospace,Menlo,monospace;color:var(--faint)">Ctrl Shift A</span>
+        </div>
+
+        <!-- Fonts -->
+        <div style="font:600 10px/1.2 system-ui;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);margin:14px 0 6px;display:flex">FONTS <span style="flex:1"></span>3</div>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 8px;border:1px solid var(--edge);border-radius:7px;background:var(--panel2);margin-bottom:5px">
+          <span style="width:38px;height:38px;flex:0 0 auto;border-radius:6px;background:#1d2733;display:flex;align-items:center;justify-content:center;font:600 16px/1 Georgia,serif;color:#cfd9e6">Aa</span>
+          <span style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px">
+            <span style="display:flex;align-items:center;gap:6px"><span style="font:500 12px/1.3 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Manrope 700</span></span>
+            <span style="font:400 10px/1.3 ui-monospace,Menlo,monospace;color:var(--muted)">woff2 · 17 KB · Heading</span>
+          </span>
+          <span style="flex:0 0 auto;padding:2px 5px;border:1px solid #2e5f52;border-radius:4px;font:500 9px/1.3 system-ui;color:var(--accent)">In use</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 8px;border:1px solid var(--edge2);border-radius:7px;background:var(--panel);margin-bottom:5px">
+          <span style="width:38px;height:38px;flex:0 0 auto;border-radius:6px;background:#1d2733;display:flex;align-items:center;justify-content:center;font:400 16px/1 'Segoe UI',sans-serif;color:#cfd9e6">Aa</span>
+          <span style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px">
+            <span style="font:500 12px/1.3 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">DM Sans 400</span>
+            <span style="font:400 10px/1.3 ui-monospace,Menlo,monospace;color:var(--muted)">woff2 · 21 KB · Body</span>
+          </span>
+          <span style="flex:0 0 auto;padding:2px 5px;border:1px solid var(--edge);border-radius:4px;font:500 9px/1.3 system-ui;color:var(--faint)">Unused</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 8px;border:1px solid var(--edge2);border-radius:7px;background:var(--panel)">
+          <span style="width:38px;height:38px;flex:0 0 auto;border-radius:6px;background:#1d2733;display:flex;align-items:center;justify-content:center;font:400 15px/1 ui-monospace,Menlo,monospace;color:#cfd9e6">Aa</span>
+          <span style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px">
+            <span style="font:500 12px/1.3 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Fira Code 400</span>
+            <span style="font:400 10px/1.3 ui-monospace,Menlo,monospace;color:var(--muted)">woff2 · 28 KB · Mono</span>
+          </span>
+          <span style="flex:0 0 auto;padding:2px 5px;border:1px solid #2e5f52;border-radius:4px;font:500 9px/1.3 system-ui;color:var(--accent)">In use</span>
+        </div>
+
+        <!-- Images -->
+        <div style="font:600 10px/1.2 system-ui;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);margin:14px 0 6px;display:flex">IMAGES <span style="flex:1"></span>2</div>
+        <div style="border:1px solid var(--accent);border-radius:7px;background:#182430;margin-bottom:5px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:9px;padding:7px 8px">
+            <span style="width:38px;height:38px;flex:0 0 auto;border-radius:6px;background:linear-gradient(140deg,#3d3242,#241f2c);border:1px solid #2b3a45"></span>
+            <span style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px">
+              <span style="font:500 12px/1.3 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">studio.png</span>
+              <span style="font:400 10px/1.3 ui-monospace,Menlo,monospace;color:var(--muted)">2400×1600 · 840 KB</span>
+            </span>
+            <span style="flex:0 0 auto;padding:2px 5px;border:1px solid var(--edge);border-radius:4px;font:500 9px/1.3 system-ui;color:var(--faint)">Unused</span>
+          </div>
+          <!-- actions appear only on the chosen row: Lucide glyphs in §5's 26px
+               square, each naming itself as its accessible name -->
+          <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;padding:1px 8px 8px">
+            <span title="Preview" style="width:26px;height:26px;border:1px solid var(--edge);border-radius:6px;display:flex;align-items:center;justify-content:center">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </span>
+            <span title="Place on canvas" style="width:26px;height:26px;border:1px solid var(--edge);border-radius:6px;display:flex;align-items:center;justify-content:center">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>
+            </span>
+            <span title="Set as background" style="width:26px;height:26px;border:1px solid var(--edge);border-radius:6px;display:flex;align-items:center;justify-content:center">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m3 15 5-4 4 4 3-3 6 5"/></svg>
+            </span>
+            <span title="Replace" style="width:26px;height:26px;border:1px solid var(--edge);border-radius:6px;display:flex;align-items:center;justify-content:center">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+            </span>
+            <span title="Remove" style="width:26px;height:26px;border:1px solid var(--edge);border-radius:6px;display:flex;align-items:center;justify-content:center">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--hot)" stroke-width="1.8"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/><path d="M10 11v5M14 11v5"/></svg>
+            </span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 8px;border:1px solid var(--edge2);border-radius:7px;background:var(--panel)">
+          <span style="width:38px;height:38px;flex:0 0 auto;border-radius:6px;background:linear-gradient(140deg,#27404b,#1b2b38 55%,#365a4d);border:1px solid #2b3a45"></span>
+          <span style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px">
+            <span style="font:500 12px/1.3 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">backdrop.jpg</span>
+            <span style="font:400 10px/1.3 ui-monospace,Menlo,monospace;color:var(--muted)">1920×1080 · 1.2 MB · Background</span>
+          </span>
+          <span style="flex:0 0 auto;padding:2px 5px;border:1px solid #2e5f52;border-radius:4px;font:500 9px/1.3 system-ui;color:var(--accent)">In use</span>
+        </div>
+
+        <!-- Icons -->
+        <div style="font:600 10px/1.2 system-ui;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);margin:14px 0 6px;display:flex">ICONS <span style="flex:1"></span>1</div>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 8px;border:1px solid var(--edge2);border-radius:7px;background:var(--panel)">
+          <span style="width:38px;height:38px;flex:0 0 auto;border-radius:6px;background:#1d2733;display:flex;align-items:center;justify-content:center">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#cfd9e6" stroke-width="1.7"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>
+          </span>
+          <span style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px">
+            <span style="font:500 12px/1.3 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">cpu.svg</span>
+            <span style="font:400 10px/1.3 ui-monospace,Menlo,monospace;color:var(--muted)">SVG · 2 KB</span>
+          </span>
+          <span style="flex:0 0 auto;padding:2px 5px;border:1px solid #2e5f52;border-radius:4px;font:500 9px/1.3 system-ui;color:var(--accent)">In use</span>
+        </div>
+
+        <!-- Videos -->
+        <div style="font:600 10px/1.2 system-ui;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);margin:14px 0 6px;display:flex">VIDEOS <span style="flex:1"></span>1</div>
+        <div style="display:flex;align-items:center;gap:9px;padding:7px 8px;border:1px solid var(--edge2);border-radius:7px;background:var(--panel)">
+          <span style="width:38px;height:38px;flex:0 0 auto;border-radius:6px;background:linear-gradient(140deg,#2a3340,#171d25);border:1px solid #2b3a45;display:flex;align-items:center;justify-content:center">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="#8a97ab" stroke="none"><path d="M8 5v14l11-7z"/></svg>
+          </span>
+          <span style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px">
+            <span style="font:500 12px/1.3 system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">loop.mp4</span>
+            <span style="font:400 10px/1.3 ui-monospace,Menlo,monospace;color:var(--muted)">MP4 · 4.1 MB · Background</span>
+          </span>
+          <span style="flex:0 0 auto;padding:2px 5px;border:1px solid #2e5f52;border-radius:4px;font:500 9px/1.3 system-ui;color:var(--accent)">In use</span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- stage -->
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,#10151c,#0d1117);position:relative">
+      <div style="width:520px;height:320px;border:1px solid var(--edge);border-radius:8px;background:linear-gradient(135deg,#16202b,#101820 60%,#0e141b);padding:22px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;gap:8px;font:500 10px/1.3 ui-monospace,Menlo,monospace;letter-spacing:.12em;color:var(--faint)">SYSTEM INSIGHTS <span style="flex:1"></span>12:48</div>
+        <div style="font:700 30px/1.12 Georgia,serif;letter-spacing:-.01em">Runtime at a glance</div>
+        <div style="font:400 12px/1.55 'Segoe UI',sans-serif;color:var(--muted);max-width:380px">A quiet read on the machine while it works — the readings that matter, at the sizes that make them legible across the room.</div>
+        <div style="display:flex;gap:26px;margin-top:auto;font:400 13px/1.3 ui-monospace,Menlo,monospace;color:#c4d1df">
+          <span>CPU&nbsp;&nbsp;64%</span><span>GPU&nbsp;&nbsp;41%</span><span>RAM&nbsp;&nbsp;12.4 GB</span>
+        </div>
+      </div>
+      <span style="position:absolute;left:50%;bottom:26px;transform:translateX(-50%);font:400 10px/1.3 ui-monospace,Menlo,monospace;color:var(--faint)">1600 × 1000 · 84%</span>
+    </div>
+
+    <!-- inspector, nothing selected -->
+    <div style="width:272px;flex:0 0 auto;border-left:1px solid var(--edge);background:var(--panel);display:flex;flex-direction:column">
+      <div style="height:38px;flex:0 0 auto;display:flex;align-items:center;padding:0 12px;border-bottom:1px solid var(--edge);font:600 12px/1.4 system-ui">Inspector</div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:400 11px/1.5 system-ui;color:var(--faint)">Nothing selected</div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

@@ -2,7 +2,6 @@ import { expect, type Page, test } from "@playwright/test";
 import { shortcutLabel } from "../../packages/editor/src/shortcut-manager/display.js";
 import { SHORTCUT_LABELS } from "../../packages/editor/src/shortcut-manager/reference.js";
 import { uiCopy } from "../../packages/editor/src/ui-copy.js";
-import { chooseIn } from "./control-set.js";
 import { captureVisualReview, enterLayer } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
 import {
@@ -489,7 +488,7 @@ test("the palette picker lands beside its trigger, and its tracks answer the arr
   // the picker belongs to a **solid** token — a gradient's editor is a different
   // surface, which is why the token is named rather than left at the default.
   await openPane(page, "Tokens");
-  await chooseIn(page, "[data-yunari-palette-token]", "background");
+  await page.locator('[data-yunari-palette-token-row="background"]').click();
 
   const trigger = page.getByTestId("picker-trigger");
   await expect(trigger).toBeVisible();

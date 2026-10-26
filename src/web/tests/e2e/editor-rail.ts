@@ -1,4 +1,4 @@
-import { type Locator, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 /** §7.7's scroller, and `vg-208`'s ruling: the showing pane's **body**, not the
  *  column around it — the column clips, so reading it would pass whatever the
@@ -56,4 +56,29 @@ export async function openPane(page: Page, name: string): Promise<void> {
       .getAttribute("data-collapsed")) === "false";
   if (showing) return;
   await slot.click();
+}
+
+/** One declared file's card in the Assets pane, addressed by the file name the
+ *  author chose — the name the card prints.
+ *
+ *  A card is a choose button (`data-yunari-asset-select`) carrying `aria-pressed`
+ *  rather than a popup select, so there is no option pair and no committed
+ *  `data-yunari-value` to read here; the file's name is the only handle an
+ *  author has on the row, and the pressed state is what says it is chosen. */
+export function assetCard(page: Page, fileName: string): Locator {
+  return page.locator(
+    '[data-yunari-panel="assets"] [data-yunari-asset-select]',
+    { hasText: fileName },
+  );
+}
+
+/** Chooses the declared file whose card prints `fileName`. */
+export async function chooseAssetCard(
+  page: Page,
+  fileName: string,
+): Promise<void> {
+  const card = assetCard(page, fileName);
+  await expect(card).toHaveCount(1);
+  await card.click();
+  await expect(card).toHaveAttribute("aria-pressed", "true");
 }

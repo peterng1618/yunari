@@ -15,6 +15,7 @@ import {
   type SemanticFamily,
 } from "@yunari/renderer-core";
 import type { VersionLevel } from "@yunari/theme-package";
+import type { LocalAssetReference } from "./asset-manager/index.js";
 import type { DisplayLensId } from "./display-lens.js";
 import type { AssignableGroup } from "./host-settings-mode/client.js";
 import type { ShortcutPrefix } from "./shortcut-manager/display.js";
@@ -86,9 +87,15 @@ const MEGABYTE = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 1,
 });
 
+/** One byte count as a reading, shared by the two surfaces that print one. */
+const fileSize = (bytes: number): string =>
+  bytes < 1024 * 1024
+    ? KILOBYTE.format(bytes / 1024)
+    : MEGABYTE.format(bytes / (1024 * 1024));
+
 export const uiCopy = {
   brand: "Yunari",
-  /** The rail's four slots. A slot's word is both its tooltip and its
+  /** The rail's five slots. A slot's word is both its tooltip and its
    *  accessible name: the slot is icon-only, so it has no text of its own, and
    *  a glyph stored as a translatable string would be announced as a word and
    *  could not inherit a shell colour. One word per slot, from the one owner
@@ -100,6 +107,8 @@ export const uiCopy = {
     slots: {
       composition: "Composition",
       add: "Add",
+      /** Every declared file, its import and placement, and the finder link. */
+      assets: "Assets",
       tokens: "Tokens",
       /** The artboard, background, metadata and reference panels — one pane,
        *  because they are the document's own settings. */
@@ -965,6 +974,16 @@ export const uiCopy = {
      *  and why `kind` is the seam"). */
     item: {
       close: "Close",
+      /** The four commands' short words, **for this surface only**: the panel
+       *  foot is four boxes a little over 100px wide, and the cell's long words
+       *  (`cell.actions`) do not fit (`store-detail.html`). Keyed by
+       *  `CellAction`, so an action added to the union fails to compile. */
+      actions: {
+        open: "Edit",
+        assign: "Assign",
+        export: "Export",
+        delete: "Delete",
+      } satisfies Record<CellAction, string>,
       /** The credit a remixed item carries. The name is the snapshot the
        *  document recorded, so the sentence is stable whether or not the parent
        *  is still in the index. */
@@ -1166,11 +1185,105 @@ export const uiCopy = {
       `${label} needs a key this host does not have.`,
     connectionsAction: "Open Connections",
     openFontPicker: "Browse the font catalogue",
+    /** The Fonts body's own search and filter row (spec R5). The old picker's
+     *  facet vocabulary and rule sentence die with it in Task 13. */
+    fontSearch: "Search trios and font names",
+    fontResults: "Font results",
+    fontFilterLabel: "Filter results",
+    fontFilter: { all: "All", trio: "Trios", family: "Fonts" },
+    fontSortLabel: "Sort",
+    fontSort: { name: "A–Z", provider: "Provider" },
+    fontSourcesLabel: "Font sources",
+    fontEmptyQuery: "Type a font name to find a trio or a family.",
+    fontSearching: "Searching fonts…",
+    fontTrioMeta: (families: number): string =>
+      `${families} ${families === 1 ? "family" : "families"}`,
+    fontFamilyMeta: (cuts: number): string =>
+      `${cuts} ${cuts === 1 ? "cut" : "cuts"}`,
+    fontLoadMore: "Load more",
+    /** The preview panel beside the grid (spec R6, R7, R9). The sample line is
+     *  the author's own words, so its default is copy rather than a value the
+     *  panel invents; the scope and change lines read the document's presets
+     *  without the panel ever opening one. */
+    fontPreview: {
+      trioTitle: "Trio preview",
+      familyTitle: "Font family",
+      sampleLabel: "Sample text",
+      sampleDefault: "Runtime at a glance",
+      sampleReset: "Reset",
+      glyphs: "Aa Bb Cc Dd Ee Ff Gg 0123456789",
+      appliesTo: "Applies to",
+      addsMissingRoles: "adds missing roles",
+      roleLabel: "Role",
+      role: { heading: "Heading", body: "Body", mono: "Mono" },
+      roleCount: (count: number): string =>
+        `${count} ${count === 1 ? "preset" : "presets"}`,
+      scopeCount: (role: string, count: number): string => `${role} × ${count}`,
+      willBeCreated: "will be created",
+      /** `Clock 108 · 300 → Manrope 700`: the preset's own name and weight
+       *  before the trio's family and weight after. */
+      change: (
+        name: string,
+        weight: string | number | undefined,
+        family: string,
+        newWeight: string | number,
+      ): string =>
+        weight === undefined
+          ? `${name} → ${family} ${newWeight}`
+          : `${name} · ${weight} → ${family} ${newWeight}`,
+      rolelessReason:
+        "No preset carries a role, so Apply to theme has nothing to rewrite.",
+      applyToTheme: "Apply to theme",
+      addThreePresets: "Add 3 presets",
+      cuts: "Cuts",
+      cutLabel: (weight: string | number, italic: boolean): string =>
+        italic ? `${weight} italic` : String(weight),
+      newPreset: "New type preset",
+      newPresetSummary: (role: string, family: string): string =>
+        `${role} — ${family} · adds one`,
+      addAsPreset: "Add as type preset",
+      applyToSelected: "Apply to selected preset",
+      trioNote:
+        "Apply rewrites every role preset and adds any role the theme does not have. Add 3 presets leaves the theme as it is.",
+      familyNote:
+        "Cuts are fetched when you add or apply one. A family you only look at costs nothing.",
+    },
     remoteHostNotice: (hosts: string): string =>
       `Search terms go to ${hosts}. Nothing else leaves this computer.`,
     /** An image's second action: the theme's background is one thing an author
      *  wants, a picture on the canvas is another, and both are one press. */
     placeOnCanvas: "Place on canvas",
+    /** The asset preview (`assets-preview.html`), opened from a card's Preview.
+     *  One surface for an image, an SVG and a video; a font has no preview here
+     *  because the finder owns a face's specimen. Its kind and In use words are
+     *  the card's own, so the two surfaces cannot disagree. */
+    preview: {
+      close: "Close",
+      file: "File",
+      shape: "Shape",
+      attribution: "Attribution",
+      /** Where the declaration came from: the Assets pane declares local files
+       *  only, so this is the one origin the surface can name. */
+      localFile: "Local file",
+      noneRecorded: "None recorded",
+      /** The caption's verb, without a measurement this build could not read. */
+      fit: "fit",
+      statusUnused:
+        "A local file. No object, background or type preset refers to it.",
+      statusUsed:
+        "The artboard's background, an object on the canvas, or a type preset refers to it.",
+      usedByNothing: "Used by nothing",
+      /** The drawing says `Used by N objects`; the manager's reachability
+       *  answer is a boolean, so the line names the routes rather than a count
+       *  nobody measured. */
+      usedBySome: "Used by the artboard background, an object or a type preset",
+      recycleNote: "Remove goes to the Recycle Bin on save",
+      /** The two commands the card's words do not fit: its Replace and Remove
+       *  are reused, and these are the one-word forms the 2×2 foot draws. */
+      background: "Background",
+      place: "Place",
+      size: fileSize,
+    },
     pager: {
       pages: "Pages",
       previous: "Previous page",
@@ -1208,10 +1321,7 @@ export const uiCopy = {
         web: "Web",
         scene: "Scene",
       } satisfies Record<"image" | "video" | "web" | "scene", string>,
-      size: (bytes: number): string =>
-        bytes < 1024 * 1024
-          ? KILOBYTE.format(bytes / 1024)
-          : MEGABYTE.format(bytes / (1024 * 1024)),
+      size: fileSize,
       import: "Set as background",
       openScene: "Open in Wallpaper Engine",
       search: "Search titles",
@@ -1272,6 +1382,30 @@ export const uiCopy = {
     discard: "Discard",
     cancel: "Cancel",
   },
+  /** The cleanup offered before either save: the files nothing holds, which
+   *  the author may send to the platform's trash in the same press. The save's
+   *  own title is the one it was pressed with (`file.saveLibrary` /
+   *  `file.savePackage`), so it is not repeated here. */
+  saveCleanup: {
+    heading: "Unused files",
+    count: (count: number, size: string): string =>
+      `${count} ${count === 1 ? "file" : "files"} · ${size}`,
+    /** Why nothing holds each file, in one owner keyed by kind. */
+    reason: {
+      image: "not on the canvas",
+      svg: "not on the canvas",
+      video: "not the background",
+      font: "no type preset refers to it",
+    } satisfies Record<LocalAssetReference["kind"], string>,
+    note: "Nothing on the canvas, the background, or a type preset refers to these files. Their attribution goes with them.",
+    removeAfterSave: (count: number): string =>
+      `Remove these ${count} ${count === 1 ? "file" : "files"} after saving`,
+    warning:
+      "Moves them to the Recycle Bin. The theme itself is saved either way.",
+    cancel: "Cancel",
+    sizes: (theme: string, unused: string): string =>
+      `${theme} theme · ${unused} unused`,
+  },
   /** The prompt after the editor stopped with work unsaved (`vg-040`). The lead
    *  is the dialog's own visible name, so it names what is at stake — the theme
    *  and the moment the copy was written — rather than asking about "recovery",
@@ -1313,6 +1447,9 @@ export const uiCopy = {
       `${count} ${count === 1 ? "unit" : "units"}`,
     tokens: (count: number): string =>
       `${count} ${count === 1 ? "token" : "tokens"}`,
+    /** The Assets pane's list, which is the asset manager's declarations. */
+    files: (count: number): string =>
+      `${count} ${count === 1 ? "file" : "files"}`,
   },
   /** The publish surface. §145: plain LAN HTTP has no confidentiality, so the
    *  words that turn it on have to say what it is. */
@@ -1595,30 +1732,64 @@ export const uiCopy = {
     cards: "Card",
     shapes: "Shape",
     charts: "Chart",
-    /** The Add pane's file path: the declared-asset library the Assets pane
-        used to be. `import` and `replace` are the two actions the section can
-        take on a local file, so they are named as actions; the select is
-        labelled by what it lists rather than by the pane. An author imports a
-        *file* — the extension is what decides whether it becomes a layer or is
-        only declared — and replaces or removes the *asset* it became. */
+    /** The Assets pane's two import paths. An author imports a *file* — the
+        extension is what decides whether it becomes a layer or is only
+        declared — and the second control forces the file into background
+        media instead of the kind's automatic placement. */
     importFile: "Import a file",
-    replaceAsset: "Replace asset",
-    assetList: "Asset",
+    /** The import that skips the kind's automatic placement: an image would
+        otherwise land on the canvas, and the author wanted it as the board's
+        background. */
+    importAsBackground: "Import as background",
+    /** The Assets pane's cards. `kind` is the metadata line's word, a total map
+     *  over the manager's kinds so a fifth kind fails to compile here rather
+     *  than drawing a card with no kind word. */
+    assetCard: {
+      kind: {
+        image: "Image",
+        svg: "SVG",
+        video: "Video",
+        font: "Font",
+      } satisfies Record<LocalAssetReference["kind"], string>,
+      inUse: "In use",
+      unused: "Unused",
+      preview: "Preview",
+      replace: "Replace",
+      remove: "Remove",
+      createTypePreset: "Create type preset",
+    },
+    /** The inline form a chosen font expands to: the facts the file cannot
+     *  answer for itself, and the one write that binds it to a preset. */
+    fontDetails: "Font details",
+    licence: "Licence",
+    sourceUrl: "Source URL",
+    role: "Role",
+    fontStyle: { normal: "Normal", italic: "Italic" },
+    /** A face is a package declaration, not a canvas object — said where the
+     *  author presses the button that writes one. */
+    fontDeclaredNote:
+      "A font is declared in the package; it is not placed on the canvas.",
     /** Shown when a chosen file is not a readable image, video or font the
         package accepts. The author's other work is untouched. */
     assetImportFailed: "That file could not be imported.",
     /** Shown when an import declared the file and put it on the canvas. */
     assetPlaced: "Imported and placed on the canvas.",
-    /** Shown when an import declared the file and did not place it, because a
-        video is not a canvas object. The pane says which of the two happened
-        rather than leaving the canvas's silence to say it. */
-    assetDeclaredVideo:
-      "Imported and declared. A video is not placed on the canvas.",
+    /** Shown when an import declared the file and wrote it as the artboard's
+        background media — the automatic choice for a video, and the forced one
+        for Import as background. */
+    assetBackgroundSet: "Imported and set as the background.",
+    /** Shown when Import as background is given a font: a face has no
+        background form, and the file is not declared either. */
+    assetBackgroundFontRefused: "A font cannot be set as the background.",
     assetDeclaredFont:
       "Imported and declared. A font is not placed on the canvas.",
+    /** Shown when the kind's automatic placement had no callback to run — a
+        pane mounted without a document can declare the file but place nothing. */
+    assetDeclaredOnly: "Imported and declared.",
     /** Shown when a removal is refused because something still points at it. */
     assetReferenced: "That asset is in use and cannot be removed.",
-    removeAsset: "Remove asset",
+    /** Shown when the declaration the row drew is gone from the manager. */
+    assetRemoveFailed: "That file could not be removed.",
     /** Bringing a declared video into the publish envelope keeps the whole
         frame: cropping is the background layer's job at render time, where it is
         reversible and has the pixels to pan with. The host answers with a held
@@ -1770,6 +1941,9 @@ export const uiCopy = {
     colourUnpaintable: (value: string) =>
       `Not a colour the browser can paint: "${value}". Hex, rgb(), hsl() or a CSS colour name.`,
     family: "Family",
+    /** The font form's own label; the panel vocabulary had no style word. */
+    style: "Style",
+    cancel: "Cancel",
     size: "Size",
     /** The three controls that choose an artboard size. They choose it
         together; the width and height boxes stay because an author who wants a
@@ -1795,42 +1969,10 @@ export const uiCopy = {
     lineHeight: "Line height",
     letterSpacing: "Letter spacing",
     /** The curated face a preset adopts, and the trio whose faces are written
-        across the presets. Named "Font face"/"Font trio" so the two adoption
-        controls are told apart from the Font picker's own trio chooser
-        (`trio`), which is a different control on a different surface. */
+        across the presets. */
     fontFace: "Font face",
     fontTrioAdopt: "Font trio",
-    trio: "Trio",
-    /** The picker's own search and filter row. */
-    fontSearch: "Search fonts",
-    /** The three facet kinds by what an author chooses between — `mood`,
-     *  `useCase` and `superfamily` are the words a `CatalogQuery` is keyed on,
-     *  and none of them is a word an author reads. Keyed by that same field
-     *  name, so a fourth kind cannot be added to the query without a word for
-     *  it appearing here. */
-    fontFacetKinds: {
-      mood: "Mood",
-      useCase: "Use",
-      superfamily: "Superfamily",
-    },
-    /** One active facet is all a `CatalogQuery` holds, so choosing a second
-     *  kind silently drops the first. The author cannot see that from three
-     *  selects that each look independent, so the picker says the rule rather
-     *  than letting them discover it by clicking. */
-    fontFacetRule: "Filters are exclusive: choosing one clears the other two.",
-    fontSort: "Sort",
-    fontSortName: "Name",
-    fontSortFamily: "Family",
-    fontFavoritesOnly: "Favourites only",
-    fontFavorite: "Add to favourites",
-    fontUnfavorite: "Remove from favourites",
-    fontTrios: "Trios",
-    /** Shown on a face row whose weight is the nearest the family ships, so the
-     *  number the row shows is the number the apply will write. */
-    fontClamped: "nearest available",
     fontBound: "Bound to a packaged face",
     unbindFont: "Unbind",
-    noFontMatches: "No font matches this search.",
-    loadingFont: "Loading font…",
   },
 } as const;

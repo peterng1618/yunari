@@ -1440,7 +1440,7 @@ test.describe("the per-kind inspector column", () => {
     await expect(page.locator("[data-yunari-panel-fill]")).toHaveCount(0);
 
     // An image: the one kind that can crop, and not a panel either.
-    await openPane(page, "Add");
+    await openPane(page, "Assets");
     await chooseAssetFile(page, "import", {
       name: "logo.png",
       mimeType: "image/png",

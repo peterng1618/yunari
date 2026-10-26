@@ -1,6 +1,11 @@
 # Font catalog and trio picker
 
-- **Status:** draft for review. Plan: not yet written.
+- **Status:** superseded in part by
+  [`2026-10-25-fonts-and-assets-design.md`](2026-10-25-fonts-and-assets-design.md):
+  the generated catalogue, pinned faces, bound presets and Unbind stand; its face
+  picker, facet selects, favourites-only filter, trio select and type-preset
+  panel sections do not. Its plan predates the replacement and must not be
+  executed for those sections.
 - **Supersedes:** the curated-font slice of
   [`2026-09-20-packaged-fonts.md`](../plans/archive/2026-09-20-packaged-fonts.md) <!-- doc-ref-ok: never migrated into plans/; its source at .agents/plans/ is gone (04dc86dd) -->
   Task 3, which was never completed.

@@ -157,6 +157,7 @@ function wiredSession(envelope: typeof BLANK = BLANK): Wired {
     envelope,
     panelHosts: {
       add: document.body,
+      assets: document.body,
       tokens: document.body,
       document: document.body,
       selection: document.body,

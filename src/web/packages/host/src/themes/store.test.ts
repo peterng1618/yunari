@@ -12,6 +12,8 @@ import { bootTheme } from "../../../editor/src/boot-theme.js";
 import {
   createThemeStore,
   isValidThemeId,
+  MAX_ASSET_BYTES,
+  MAX_TRASH_UPLOAD_BYTES,
   ThemeAssetLimitError,
   ThemeConflictError,
   type ThemeContent,
@@ -114,6 +116,17 @@ async function scratchNames(library: string, id: string, kind: string) {
     (name) => name.startsWith(`.${kind}-`) && name.endsWith(`.${id}`),
   );
 }
+
+describe("the trash request bound", () => {
+  it("fits one asset at its own cap on the base64 wire", () => {
+    // The trash route reads this as its body limit. At the shared 96 MiB
+    // request cap an 80 MiB asset encoded to ~107 MiB and was always refused
+    // as a body, so the per-file 413 could never fire in production.
+    expect(MAX_TRASH_UPLOAD_BYTES).toBeGreaterThan(
+      4 * Math.ceil(MAX_ASSET_BYTES / 3),
+    );
+  });
+});
 
 describe("ThemeStore", () => {
   let tmpDir: string;
@@ -1974,7 +1987,14 @@ describe("ThemeStore asset bounds", () => {
     }
   });
 
-  it("holds read and write to the same asset count", async () => {
+  // Half a thousand small files across four writes and two hand-placed
+  // themes, on this box's tmp dir and under the suite's parallel workers: the
+  // case crossed Vitest's 20s default on two full-suite runs while passing
+  // alone every time, so the limit here is the harness's, not a claim the case
+  // makes. The bound it proves is still 128/129.
+  it("holds read and write to the same asset count", {
+    timeout: 60_000,
+  }, async () => {
     await expect(
       store.write("at-bound", themeOfCount("at-bound", 128)),
     ).resolves.toMatchObject({ id: "at-bound" });

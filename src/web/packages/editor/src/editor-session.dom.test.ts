@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 
-import type { FabricThemeEnvelope } from "@yunari/renderer-core";
+import type { FabricPalette, FabricThemeEnvelope } from "@yunari/renderer-core";
+import {
+  MAX_CREDITS_ENTRIES,
+  type ThemeCreditsEntry,
+} from "@yunari/theme-package";
 import { IText } from "fabric/es";
+import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { presetLibrary } from "./preset-library/index.js";
 import { installReadableFile } from "./readable-file.fixture.js";
 import type { TextPlacementPort } from "./text-manager/index.js";
+import { uiCopy } from "./ui-copy.js";
 
 installReadableFile();
 
@@ -20,8 +26,19 @@ const dirtyMock = vi.hoisted(() => vi.fn(() => false));
 const replaceMock = vi.hoisted(() => vi.fn(async () => "discard"));
 /** The finder's client, mocked: the session's import path asks the host for
  *  bytes, and no test here reaches a real host. */
-const assetClientMock = vi.hoisted(() => ({ assetBytes: vi.fn() }));
+const assetClientMock = vi.hoisted(() => ({
+  assetBytes: vi.fn(),
+  trashAssets: vi.fn(async () => ({ ok: true })),
+}));
 vi.mock("./asset-finder/client.js", () => assetClientMock);
+/** The cleanup sheet has no jsdom implementation here; a save keeps the files
+ *  unless a case is about the dialog, which its own suite drives. */
+const cleanupMock = vi.hoisted(() =>
+  vi.fn(async (): Promise<"remove" | "keep" | "cancel"> => "keep"),
+);
+vi.mock("./components/save-cleanup-dialog.js", () => ({
+  confirmSaveCleanup: cleanupMock,
+}));
 /** The last artboard panel a session built, so a case can read what it was
  *  told to list. */
 const panels = vi.hoisted(() => ({ last: undefined as unknown }));
@@ -45,9 +62,28 @@ vi.mock("./theme-library-dialog.js", () => ({
 vi.mock("./artboard-panel.js", () => ({
   createArtboardPanel: () => (panels.last = panel()),
 }));
-vi.mock("./palette-manager/index.js", () => ({
-  createPalettePanel: () => panel(),
+/** The palette pane's change port, held for the same reason as the type-preset
+ *  panel's: the panel is a double, so a test drives a globals write the way its
+ *  Add action does. */
+const palettePortMock = vi.hoisted(() => ({
+  change: undefined as ((palette: FabricPalette) => void) | undefined,
 }));
+vi.mock("./palette-manager/index.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./palette-manager/index.js")>();
+  return {
+    // Only the panel is doubled. The usage walk stays the real one, because the
+    // token inspector's paint section calls it whether or not a pane renders.
+    ...actual,
+    createPalettePanel: (
+      _host: unknown,
+      change: (palette: FabricPalette) => void,
+    ) => {
+      palettePortMock.change = change;
+      return panel();
+    },
+  };
+});
 /** The panel's two ports are held so a test can drive a rename the way the
  *  panel's own field does — the panel is a double here, so nothing else
  *  reaches `EditorDocument.setTypes`. */
@@ -55,17 +91,24 @@ const typePresetPortMock = vi.hoisted(() => ({
   change: undefined as ((presets: Record<string, unknown>) => void) | undefined,
   remove: undefined as ((id: string, replacement: string) => void) | undefined,
 }));
-vi.mock("./type-preset-manager/index.js", () => ({
-  createTypePresetPanel: (
-    _host: unknown,
-    change: (presets: Record<string, unknown>) => void,
-    remove: (id: string, replacement: string) => void,
-  ) => {
-    typePresetPortMock.change = change;
-    typePresetPortMock.remove = remove;
-    return panel();
-  },
-}));
+vi.mock("./type-preset-manager/index.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./type-preset-manager/index.js")>();
+  return {
+    // Only the panel is doubled. `reassignTypePresetToken` is the document's
+    // delete path and stays the real one, so a delete case exercises it.
+    ...actual,
+    createTypePresetPanel: (
+      _host: unknown,
+      change: (presets: Record<string, unknown>) => void,
+      remove: (id: string, replacement: string) => void,
+    ) => {
+      typePresetPortMock.change = change;
+      typePresetPortMock.remove = remove;
+      return panel();
+    },
+  };
+});
 /** The actions the last Add pane was handed, so a test can drive a tile the
  *  way the pane does without mounting the pane's React tree. */
 const newObjectActionsMock = vi.hoisted(() => ({
@@ -118,7 +161,12 @@ vi.mock("./shortcut-manager/index.js", () => ({
 }));
 
 import { AssetManager } from "./asset-manager/index.js";
+import { EditorDocument } from "./editor-document.js";
 import { EditorSession } from "./editor-session.js";
+import {
+  SelectionStore,
+  TokenSelectionStore,
+} from "./editor-shell/shell-stores.js";
 import { fontTrio } from "./font-catalog.js";
 import { idleCrop } from "./selection-inspector/idle-crop.test-stage.js";
 import { ThemeConflictError } from "./theme-library-client.js";
@@ -193,6 +241,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -269,6 +318,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -325,6 +375,7 @@ describe("EditorSession", () => {
         envelope,
         panelHosts: {
           add: document.body,
+          assets: document.body,
           document: document.body,
           tokens: document.body,
           selection: document.body,
@@ -383,6 +434,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -440,6 +492,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -497,6 +550,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -536,6 +590,7 @@ describe("EditorSession", () => {
   it("adopts a trio and replaces every assigned preset face", async () => {
     const fetch = vi.fn(async () => new Response(new Uint8Array([1, 2, 3])));
     vi.stubGlobal("fetch", fetch);
+    const onAssetCountChange = vi.fn();
     const shell = {
       editor: {
         canvas: {
@@ -591,6 +646,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -598,9 +654,17 @@ describe("EditorSession", () => {
       onNew: vi.fn(),
       onNewFromStarter: vi.fn(),
       onSaved: vi.fn(),
+      onAssetCountChange,
     });
 
+    expect(onAssetCountChange).toHaveBeenLastCalledWith(0);
     const result = await extensions.applyFontTrio("minimal");
+    // The trio adopted one declaration per face, so the count the Assets pane's
+    // title draws moved with the declarations — a trio applied from Tokens must
+    // not leave a stale number beside the new font cards.
+    expect(onAssetCountChange).toHaveBeenLastCalledWith(
+      fontTrio("minimal")!.faces.length,
+    );
     const heading = fontTrio("minimal")!.faces[0]!;
 
     expect(fetch).toHaveBeenCalledTimes(3);
@@ -682,6 +746,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -771,6 +836,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -853,6 +919,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -910,6 +977,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -977,6 +1045,7 @@ describe("EditorSession", () => {
       },
       scene: {},
       snapshot: vi.fn((input) => ({ ...envelope, ...input })),
+      setBackground: vi.fn(),
       setBackgroundMedia: vi.fn(),
       setGlobals: vi.fn(),
       refreshGlass: vi.fn(),
@@ -991,6 +1060,7 @@ describe("EditorSession", () => {
       envelope: { ...envelope, globals: { typePresets: presets("Body") } },
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: documentHost,
         tokens: document.body,
         selection: selectionHost,
@@ -1012,6 +1082,160 @@ describe("EditorSession", () => {
 
     expect(printed()).toBe("Body Renamed");
     extensions.destroy();
+  });
+
+  it("gives the selected token its own column, and gives the object column back", () => {
+    // The right column has one owner at a time (spec, Tokens pane). The session
+    // owns both halves — the token panel's mounts and the suppression — because
+    // it already owns the document the token fields write through; a panel built
+    // by `shell-layout` would need a second copy of it.
+    const selectionHost = document.createElement("div");
+    document.body.append(selectionHost);
+    const tokenSelection = new TokenSelectionStore(new SelectionStore());
+    const presets = {
+      body: { name: "Body", value: { family: "Inter", size: 16 } },
+      caption: { name: "Caption", value: { family: "Inter", size: 12 } },
+    };
+    const paints = {
+      background: {
+        name: "Background",
+        value: { kind: "solid" as const, color: "#102030" },
+      },
+      accent: {
+        name: "Accent",
+        value: { kind: "solid" as const, color: "#00b8d9" },
+      },
+    };
+    const shell = {
+      editor: {
+        canvas: {
+          on: vi.fn(),
+          off: vi.fn(),
+          getActiveObject: () => undefined,
+          getObjects: () => [],
+          requestRenderAll: vi.fn(),
+          fire: vi.fn(),
+        },
+        clipboardManager: { setImageImporter: vi.fn(), setBindings: vi.fn() },
+        textManager: {
+          addText: vi.fn(),
+          setAuthoringView: vi.fn(),
+          setRepaint: vi.fn(),
+        },
+        cropManager: idleCrop(),
+        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+        errorManager: { warn: vi.fn(), error: vi.fn() },
+      },
+      scene: {},
+      snapshot: vi.fn((input) => ({ ...envelope, ...input })),
+      setBackground: vi.fn(),
+      setBackgroundMedia: vi.fn(),
+      setGlobals: vi.fn(),
+      refreshGlass: vi.fn(),
+    };
+    const extensions = new EditorSession({
+      assetManager: new AssetManager(),
+      shell: shell as never,
+      source: {} as never,
+      envelope: {
+        ...envelope,
+        globals: { typePresets: presets, palette: paints },
+      },
+      panelHosts: {
+        add: document.body,
+        assets: document.body,
+        document: document.body,
+        tokens: document.body,
+        selection: selectionHost,
+      },
+      tokenSelection,
+      onNew: vi.fn(),
+      onNewFromStarter: vi.fn(),
+      onSaved: vi.fn(),
+    });
+
+    const objectColumn = selectionHost.querySelector<HTMLElement>(
+      '[data-yunari-panel="selection"]',
+    );
+    const tokenColumn = selectionHost.querySelector<HTMLElement>(
+      "[data-yunari-token-inspector]",
+    );
+    expect(objectColumn).not.toBeNull();
+    expect(tokenColumn).not.toBeNull();
+    expect(objectColumn?.style.display).toBe("");
+
+    tokenSelection.set({ kind: "preset", id: "body" });
+    expect(objectColumn?.style.display).toBe("none");
+    expect(
+      tokenColumn?.querySelector("[data-yunari-token-name]"),
+    ).not.toBeNull();
+
+    tokenSelection.clear();
+    expect(objectColumn?.style.display).toBe("");
+    expect(tokenColumn?.textContent).toBe("");
+
+    // Deleting the preset the token names clears the token too: the column must
+    // show the object selection again rather than staying suppressed over a
+    // preset the document no longer has. The replacement is the other preset.
+    tokenSelection.set({ kind: "preset", id: "body" });
+    expect(objectColumn?.style.display).toBe("none");
+    // A plain click: the token panel renders through `flushSync`, so the
+    // document write and the suppression it causes land synchronously. Wrapping
+    // it in `act` would need `IS_REACT_ACT_ENVIRONMENT`, which this suite does
+    // not set, and React warns once per run when it is missing.
+    tokenColumn
+      ?.querySelector<HTMLButtonElement>("[data-yunari-token-delete]")
+      ?.click();
+    expect(tokenSelection.get()).toBeUndefined();
+    expect(objectColumn?.style.display).toBe("");
+    expect(tokenColumn?.textContent).toBe("");
+
+    // The same rule for a paint token: deleting the paint the inspector names
+    // must give the object column back rather than leave it suppressed over a
+    // token the palette no longer has. The replacement is the other paint.
+    tokenSelection.set({ kind: "paint", id: "background" });
+    expect(objectColumn?.style.display).toBe("none");
+    expect(
+      tokenColumn?.querySelector("[data-yunari-palette-name]"),
+    ).not.toBeNull();
+    tokenColumn
+      ?.querySelector<HTMLButtonElement>("[data-yunari-palette-delete]")
+      ?.click();
+    expect(tokenSelection.get()).toBeUndefined();
+    expect(objectColumn?.style.display).toBe("");
+    expect(tokenColumn?.textContent).toBe("");
+
+    // The token can also vanish without either delete route: an undo of Add
+    // restores the globals captured before it, and a load replaces them whole.
+    // A held ref there would keep the object column suppressed over a blank
+    // section, so the render drops the ref when the document no longer declares
+    // the token — once per kind.
+    tokenSelection.set({ kind: "preset", id: "caption" });
+    expect(objectColumn?.style.display).toBe("none");
+    expect(
+      tokenColumn?.querySelector("[data-yunari-token-name]"),
+    ).not.toBeNull();
+    typePresetPortMock.change?.({});
+    expect(tokenSelection.get()).toBeUndefined();
+    expect(objectColumn?.style.display).toBe("");
+    expect(tokenColumn?.textContent).toBe("");
+
+    tokenSelection.set({ kind: "paint", id: "accent" });
+    expect(objectColumn?.style.display).toBe("none");
+    expect(
+      tokenColumn?.querySelector("[data-yunari-palette-name]"),
+    ).not.toBeNull();
+    palettePortMock.change?.({ background: paints.background });
+    expect(tokenSelection.get()).toBeUndefined();
+    expect(objectColumn?.style.display).toBe("");
+    expect(tokenColumn?.textContent).toBe("");
+
+    extensions.destroy();
+    // The duplicate-pane defect `4ede5585` fixed for the Assets pane: a panel
+    // whose `destroy()` is never called leaves its section in the host.
+    expect(
+      selectionHost.querySelector("[data-yunari-token-inspector]"),
+    ).toBeNull();
   });
 
   it("falls back to the shipped thumbnail when a capture fails, on both save paths", async () => {
@@ -1065,6 +1289,7 @@ describe("EditorSession", () => {
       thumbnail,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -1135,6 +1360,7 @@ describe("opening a theme over a document that has unsaved changes", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -1374,6 +1600,7 @@ describe("a save the host refused", () => {
 
   const panelHosts = {
     add: document.body,
+    assets: document.body,
     document: document.body,
     tokens: document.body,
     selection: document.body,
@@ -1676,6 +1903,7 @@ describe("a save that carries only what changed", () => {
 
   const panelHosts = {
     add: document.body,
+    assets: document.body,
     document: document.body,
     tokens: document.body,
     selection: document.body,
@@ -1693,7 +1921,7 @@ describe("a save that carries only what changed", () => {
   };
   const storedBadge = {
     id: "badge",
-    kind: "image" as const,
+    kind: "svg" as const,
     path: "assets/badge.svg",
     sha256: "b".repeat(64),
   };
@@ -1955,6 +2183,7 @@ describe("the Wallpaper Engine import transaction", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -2240,6 +2469,298 @@ describe("the Wallpaper Engine import transaction", () => {
   });
 });
 
+describe("the local font import", () => {
+  beforeEach(() => {
+    saveMock.mockReset();
+    document.body.replaceChildren();
+  });
+
+  /** A session whose Assets pane is the real one, over a real manager. */
+  function fontSession(
+    manager: AssetManager,
+    credits?: readonly ThemeCreditsEntry[],
+  ): EditorSession {
+    return new EditorSession({
+      assetManager: manager,
+      ...(credits === undefined ? {} : { credits }),
+      shell: {
+        editor: {
+          canvas: {
+            on: vi.fn(),
+            off: vi.fn(),
+            getActiveObject: () => undefined,
+            getObjects: () => [],
+            requestRenderAll: vi.fn(),
+          },
+          clipboardManager: { setImageImporter: vi.fn(), setBindings: vi.fn() },
+          textManager: {
+            addText: vi.fn(),
+            setAuthoringView: vi.fn(),
+            setRepaint: vi.fn(),
+          },
+          cropManager: idleCrop(),
+          historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+        },
+        scene: {},
+        snapshot: vi.fn((input) => ({ ...envelope, ...input })),
+        setBackground: vi.fn(),
+        setBackgroundMedia: vi.fn(),
+        // The preset write runs the globals fan-out, which the shell owns.
+        setGlobals: vi.fn(),
+      } as never,
+      source: {} as never,
+      envelope,
+      panelHosts: {
+        add: document.body,
+        assets: document.body,
+        document: document.body,
+        tokens: document.body,
+        selection: document.body,
+      },
+      onNew: vi.fn(),
+      onNewFromStarter: vi.fn(),
+      onSaved: vi.fn(),
+    });
+  }
+
+  /** Lets the pane's commit and the manager's byte hash settle. */
+  async function settle(): Promise<void> {
+    for (let round = 0; round < 5; round += 1)
+      await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  /** jsdom has no parser; the declaration path is what these cases prove. */
+  function stubFontParser(): void {
+    vi.stubGlobal(
+      "FontFace",
+      class {
+        load(): Promise<this> {
+          return Promise.resolve(this);
+        }
+      },
+    );
+  }
+
+  function fontFile(): File {
+    const bytes = new TextEncoder().encode("ttf");
+    return Object.assign(
+      new File([bytes as unknown as BlobPart], "Inter-Bold.ttf", {
+        type: "font/ttf",
+      }),
+      {
+        arrayBuffer: async () =>
+          bytes.buffer.slice(
+            bytes.byteOffset,
+            bytes.byteOffset + bytes.byteLength,
+          ),
+      },
+    );
+  }
+
+  /** Picks the file through the pane's own control. */
+  async function pickFont(): Promise<void> {
+    const input = document.body.querySelector<HTMLInputElement>(
+      "[data-yunari-asset-import-input]",
+    );
+    if (input === null) throw new Error("no import input");
+    Object.defineProperty(input, "files", {
+      value: [fontFile()],
+      configurable: true,
+    });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      await settle();
+    });
+  }
+
+  it("creates one preset and one credit carrying the assetId", async () => {
+    stubFontParser();
+    const manager = new AssetManager();
+    const extensions = fontSession(manager);
+    const addCredit = vi.spyOn(EditorDocument.prototype, "addCredit");
+    await pickFont();
+
+    // The pick is not a declaration; Create type preset is the one write.
+    expect(manager.declarations).toEqual([]);
+    const create = document.body.querySelector<HTMLButtonElement>(
+      "[data-yunari-font-create]",
+    );
+    if (create === null) throw new Error("no Create type preset control");
+    await act(async () => {
+      create.click();
+      await settle();
+    });
+
+    expect(manager.declarations).toMatchObject([
+      { kind: "font", family: "Inter", weight: 700, format: "ttf" },
+    ]);
+    expect(addCredit).toHaveBeenCalledTimes(1);
+
+    await extensions.actionFacade().savePackage();
+    const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
+    const presets =
+      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typePresets ??
+      {};
+    expect(Object.values(presets)).toHaveLength(1);
+    expect(Object.values(presets)[0]).toMatchObject({
+      value: { family: "Inter", weight: 700, face: { assetId: "Inter-Bold" } },
+    });
+    expect(saveMock).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      expect.objectContaining({
+        entries: [
+          expect.objectContaining({
+            kind: "font",
+            title: "Inter",
+            license: "unknown",
+            assetId: "Inter-Bold",
+          }),
+        ],
+      }),
+    );
+
+    extensions.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it("declares a cancelled pick and writes neither a preset nor a credit", async () => {
+    stubFontParser();
+    const manager = new AssetManager();
+    const extensions = fontSession(manager);
+    const addCredit = vi.spyOn(EditorDocument.prototype, "addCredit");
+    await pickFont();
+    expect(manager.declarations).toEqual([]);
+
+    const cancel = document.body.querySelector<HTMLButtonElement>(
+      "[data-yunari-font-cancel]",
+    );
+    if (cancel === null) throw new Error("no Cancel control");
+    await act(async () => {
+      cancel.click();
+      await settle();
+    });
+
+    // Cancel keeps the file the author gave us, and nothing else.
+    expect(manager.declarations).toMatchObject([
+      { kind: "font", family: "Inter", weight: 700, format: "ttf" },
+    ]);
+    expect(addCredit).not.toHaveBeenCalled();
+    await extensions.actionFacade().savePackage();
+    const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
+    expect(
+      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typePresets,
+    ).toBeUndefined();
+    expect(saved?.[3]).toBeUndefined();
+
+    extensions.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it("refuses a fresh import at the cap even when a legacy credit shares its title", async () => {
+    stubFontParser();
+    const manager = new AssetManager();
+    const extensions = fontSession(manager);
+    // A pre-assetId credit with the same title would make `canAddCredit` treat
+    // the new one as a replacement; the list is still full.
+    vi.spyOn(EditorDocument.prototype, "credits").mockReturnValue([
+      {
+        kind: "font",
+        title: "Inter",
+        license: "unknown",
+        changes: "Imported unchanged",
+      },
+      ...Array.from({ length: MAX_CREDITS_ENTRIES - 1 }, (_, index) => ({
+        kind: "font",
+        title: `legacy-${index}`,
+        license: "unknown",
+        changes: "Imported unchanged",
+      })),
+    ]);
+    await pickFont();
+
+    const create = document.body.querySelector<HTMLButtonElement>(
+      "[data-yunari-font-create]",
+    );
+    if (create === null) throw new Error("no Create type preset control");
+    await act(async () => {
+      create.click();
+      await settle();
+    });
+
+    // Refused before the declaration: the file the author picked is not kept.
+    expect(manager.declarations).toEqual([]);
+    expect(document.body.textContent).toContain(uiCopy.assets.creditsFull);
+
+    extensions.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it("replaces a declared face's own credit at the cap instead of refusing", async () => {
+    const manager = new AssetManager();
+    const face = fontTrio("minimal")!.faces[0]!;
+    await manager.adoptFont(face, new Uint8Array([1, 2, 3]));
+    // The card's own credit, already at the cap: re-creating its preset
+    // replaces this entry rather than growing the list.
+    const own: ThemeCreditsEntry = {
+      kind: "font",
+      title: face.family,
+      license: face.license.name,
+      changes: "Imported unchanged",
+      source: { url: face.sourceUrl },
+      assetId: face.id,
+    };
+    const credits: ThemeCreditsEntry[] = [
+      own,
+      ...Array.from({ length: MAX_CREDITS_ENTRIES - 1 }, (_, index) => ({
+        kind: "font",
+        title: `legacy-${index}`,
+        license: "unknown",
+        changes: "Imported unchanged",
+      })),
+    ];
+    const extensions = fontSession(manager, credits);
+
+    const open = document.body.querySelector<HTMLButtonElement>(
+      "[data-yunari-font-open]",
+    );
+    if (open === null) throw new Error("no Create type preset control");
+    await act(async () => {
+      open.click();
+      await settle();
+    });
+    const create = document.body.querySelector<HTMLButtonElement>(
+      "[data-yunari-font-create]",
+    );
+    if (create === null) throw new Error("no Create type preset control");
+    await act(async () => {
+      create.click();
+      await settle();
+    });
+
+    await extensions.actionFacade().savePackage();
+    const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
+    const presets =
+      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typePresets ??
+      {};
+    expect(Object.values(presets)).toHaveLength(1);
+    expect(Object.values(presets)[0]).toMatchObject({
+      value: { face: { assetId: face.id } },
+    });
+    const shipped = saved?.[3] as
+      | { readonly entries: readonly ThemeCreditsEntry[] }
+      | undefined;
+    expect(shipped?.entries).toHaveLength(MAX_CREDITS_ENTRIES);
+    expect(
+      shipped?.entries.filter((entry) => entry.assetId === face.id),
+    ).toHaveLength(1);
+    expect(document.body.textContent).not.toContain(uiCopy.assets.creditsFull);
+
+    extensions.destroy();
+  });
+});
+
 describe("arming a text placement from every surface", () => {
   /** The globals a successful construction needs, in the same shape the Add
    *  pane's own fixtures use: one paintable token and one type preset. */
@@ -2304,6 +2825,7 @@ describe("arming a text placement from every surface", () => {
       envelope: theme,
       panelHosts: {
         add: document.body,
+        assets: document.body,
         document: document.body,
         tokens: document.body,
         selection: document.body,
@@ -2430,6 +2952,84 @@ describe("arming a text placement from every surface", () => {
     expect(wired.addText).toHaveBeenCalledOnce();
     expect(wired.saveState).not.toHaveBeenCalled();
     wired.session.destroy();
+  });
+});
+
+/**
+ * A session's React roots are its disposal path's, not the document's.
+ *
+ * The pane hosts outlive a document replacement — a new session mounts into the
+ * same node — so a root the old session does not unmount is still attached
+ * beside the new one, and the Assets panel draws twice. The browser specs read
+ * that as a strict-mode duplicate rather than as a layout accident.
+ */
+describe("the session's disposal", () => {
+  function build(assets: HTMLElement): EditorSession {
+    return new EditorSession({
+      assetManager: new AssetManager(),
+      shell: {
+        editor: {
+          canvas: {
+            on: vi.fn(),
+            off: vi.fn(),
+            getActiveObject: () => undefined,
+            getObjects: () => [],
+            requestRenderAll: vi.fn(),
+          },
+          clipboardManager: {
+            setImageImporter: vi.fn(),
+            setBindings: vi.fn(),
+          },
+          textManager: {
+            addText: vi.fn(),
+            setAuthoringView: vi.fn(),
+            setRepaint: vi.fn(),
+          },
+          cropManager: idleCrop(),
+          historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+        },
+        scene: {},
+        snapshot: vi.fn(() => envelope),
+        setArtboard: vi.fn(),
+        setBackground: vi.fn(),
+        setBackgroundMedia: vi.fn(),
+      } as never,
+      source: {} as never,
+      envelope,
+      panelHosts: {
+        add: document.body,
+        assets,
+        document: document.body,
+        tokens: document.body,
+        selection: document.body,
+      },
+      onNew: vi.fn(),
+      onNewFromStarter: vi.fn(),
+      onSaved: vi.fn(),
+    });
+  }
+
+  it("unmounts the Assets pane, so the next session does not draw it twice", () => {
+    const assets = document.createElement("div");
+    document.body.append(assets);
+
+    const first = build(assets);
+    expect(assets.querySelector("[data-yunari-asset-import]")).not.toBeNull();
+    first.destroy();
+    // The root, not only its content: React is released only by `unmount`.
+    expect(assets.childElementCount, "the pane's root is still attached").toBe(
+      0,
+    );
+
+    // The user-visible consequence: File -> New reuses the host, so a stranded
+    // root is a second Assets panel on screen.
+    const second = build(assets);
+    expect(
+      assets.querySelectorAll("[data-yunari-asset-import]"),
+      "the previous session's pane is still drawn",
+    ).toHaveLength(1);
+    second.destroy();
+    assets.remove();
   });
 });
 

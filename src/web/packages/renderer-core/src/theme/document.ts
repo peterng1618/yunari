@@ -328,14 +328,19 @@ export interface AssetReference {
   readonly license?: AssetLicense;
 }
 
+/** The local file formats a packaged face may be written in. The extension of
+ *  a font asset's path must equal its format, so this is also the path's tail. */
+export const FONT_ASSET_FORMATS = ["woff2", "woff", "ttf", "otf"] as const;
+export type FontAssetFormat = (typeof FONT_ASSET_FORMATS)[number];
+
 export interface FontAssetReference extends AssetReference {
   readonly kind: "font";
   readonly family: string;
   readonly weight: string | number;
   readonly style: "normal" | "italic";
-  readonly format: "woff2";
-  readonly sourceUrl: string;
-  readonly license: AssetLicense;
+  readonly format: FontAssetFormat;
+  readonly sourceUrl?: string;
+  readonly license?: AssetLicense;
 }
 
 export interface ThemeMetadata {

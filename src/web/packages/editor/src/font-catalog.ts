@@ -17,7 +17,8 @@ export interface CuratedFontFace {
   readonly format: "woff2";
   readonly subset: string;
   readonly sourceUrl: string;
-  readonly license: { readonly name: string; readonly url: string };
+  /** A provider cut names its licence only; the URL is the catalogue's own. */
+  readonly license: { readonly name: string; readonly url?: string };
   /** True when the weight is the nearest the family ships, not the family's own
    * cut. A pairing's request, so read it off a trio's face: a standalone face in
    * `GENERATED_FACES` carries whichever pairing reached it first. */

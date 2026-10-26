@@ -25,11 +25,10 @@ afterEach(() => {
 });
 
 /**
- * The field's whole contract since the picker moved into the finder's Fonts
- * body: it is a button, it mounts no picker of its own, and pressing it asks
- * for the surface that now owns the catalogue.
+ * The field's whole contract: it is a button, and pressing it asks for the
+ * finder that owns the catalogue.
  */
-it("is a button that asks for the finder, not a mounted picker", async () => {
+it("is a button that asks for the finder", async () => {
   const onOpenFontPicker = vi.fn();
   host = document.createElement("div");
   document.body.append(host);
@@ -44,8 +43,6 @@ it("is a button that asks for the finder, not a mounted picker", async () => {
       />,
     );
   });
-
-  expect(host.querySelector("[data-yunari-font-picker]")).toBeNull();
 
   const button = host.querySelector<HTMLButtonElement>(
     "[data-yunari-open-font-picker]",

@@ -34,6 +34,30 @@ const MAX_ENTRIES = 128;
 const MAX_ENTRY_BYTES = 80 * 1024 * 1024;
 const MAX_EXPANDED_BYTES = 180 * 1024 * 1024;
 
+/** The one refusal every package member must pass before it is written: the
+ *  byte map is exactly the declared paths, each carrying bytes, under `assets/`.
+ *  Exported so a caller that must not compress a package asks the writer's own
+ *  question rather than restating it. */
+export function checkDeclaredAssets(
+  envelope: Pick<FabricThemeEnvelope, "assets">,
+  assets: Readonly<Record<string, Uint8Array>>,
+): { readonly ok: true } | { readonly ok: false; readonly message: string } {
+  const paths = new Set(envelope.assets?.map((asset) => asset.path) ?? []);
+  if (
+    Object.keys(assets).length !== paths.size ||
+    [...paths].some((path) => assets[path] === undefined) ||
+    // The reader admits assets only under `assets/`, and `thumbnail.png` is a
+    // slot of its own now: a declaration naming either would write a package
+    // that cannot be opened, or a picture that is really theme media.
+    [...paths].some((path) => !path.startsWith("assets/"))
+  )
+    return {
+      ok: false,
+      message: "Package assets must exactly match the theme declaration.",
+    };
+  return { ok: true };
+}
+
 export type ThemePackageResult =
   | {
       readonly ok: true;
@@ -80,21 +104,8 @@ export function writeThemePackage(input: {
       ok: false,
       message: `A theme package carries at most ${MAX_CREDITS_ENTRIES} credits.`,
     };
-  const paths = new Set(
-    input.envelope.assets?.map((asset) => asset.path) ?? [],
-  );
-  if (
-    Object.keys(input.assets).length !== paths.size ||
-    [...paths].some((path) => input.assets[path] === undefined) ||
-    // The reader admits assets only under `assets/`, and `thumbnail.png` is a
-    // slot of its own now: a declaration naming either would write a package
-    // that cannot be opened, or a picture that is really theme media.
-    [...paths].some((path) => !path.startsWith("assets/"))
-  )
-    return {
-      ok: false,
-      message: "Package assets must exactly match the theme declaration.",
-    };
+  const assetsCheck = checkDeclaredAssets(input.envelope, input.assets);
+  if (!assetsCheck.ok) return assetsCheck;
   // The same rule the reader applies, so the writer cannot author the package
   // it would refuse to open.
   const thumbnail = carryable(input.thumbnail);

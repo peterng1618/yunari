@@ -31,6 +31,10 @@ export interface ThemeCreditsEntry {
   readonly source?: ThemeCreditsSource;
   readonly license: string;
   readonly changes: string;
+  /** The asset this credit attributes, when the entry arrived with one. Absent
+   *  on credits written before assets could be credited; absent reads as
+   *  "nothing to prune" rather than as an unknown asset. */
+  readonly assetId?: string;
 }
 
 export interface ThemeCredits {
@@ -76,7 +80,7 @@ function asSource(value: unknown): ThemeCreditsSource | undefined {
 function asEntry(value: unknown): ThemeCreditsEntry | undefined {
   if (!isObject(value)) return undefined;
 
-  const { kind, title, author, source, license, changes } = value;
+  const { kind, title, author, source, license, changes, assetId } = value;
   if (
     typeof kind !== "string" ||
     typeof title !== "string" ||
@@ -95,12 +99,14 @@ function asEntry(value: unknown): ThemeCreditsEntry | undefined {
     source?: ThemeCreditsSource;
     license: string;
     changes: string;
+    assetId?: string;
   } = { kind, title, license, changes };
 
   const parsedAuthor = asAuthor(author);
   if (parsedAuthor !== undefined) entry.author = parsedAuthor;
   const parsedSource = asSource(source);
   if (parsedSource !== undefined) entry.source = parsedSource;
+  if (typeof assetId === "string" && assetId !== "") entry.assetId = assetId;
 
   return entry;
 }

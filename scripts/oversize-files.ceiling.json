@@ -9,7 +9,6 @@
   "src/web/packages/editor/src/editor-shell/layer-panel.dom.test.tsx",
   "src/web/packages/editor/src/editor-shell/layer-tree.test.ts",
   "src/web/packages/editor/src/editor-shell/shell-layout.dom.test.tsx",
-  "src/web/packages/editor/src/font-picker/font-picker.dom.test.tsx",
   "src/web/packages/editor/src/new-fabric-theme.test.ts",
   "src/web/packages/editor/src/new-object-defaults.test.ts",
   "src/web/packages/editor/src/selection-inspector/index.dom.test.ts",

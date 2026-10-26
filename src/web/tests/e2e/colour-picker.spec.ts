@@ -160,7 +160,7 @@ test.describe("the colour picker and the gradient track", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await openTokens(page);
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     const before = paletteOf(await saveEnvelope(page)).background?.value;
 
     await openPicker(page);
@@ -217,7 +217,7 @@ test.describe("the colour picker and the gradient track", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await openTokens(page);
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
 
     const seeded = paletteOf(await saveEnvelope(page)).background?.value;
@@ -280,7 +280,7 @@ test.describe("the colour picker and the gradient track", () => {
     expect(added.stops).toHaveLength(countBefore + 1);
   });
 
-  test("edits a gradient stop's keys without nudging or deleting the selected object", async ({
+  test("keeps a gradient stop's keys out of the window keyboard dispatcher", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -289,49 +289,39 @@ test.describe("the colour picker and the gradient track", () => {
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
-    // Selected through the bridge, so focus starts on the page rather than on a
-    // layer row — the keys below have to be the stop's own.
+
+    // Every key that reaches a `window` bubble listener. The shell's shortcut
+    // dispatcher listens there, so a key the stop handles must never arrive.
+    // The arrivals are the measurement because a token press clears the canvas
+    // selection (the two selections are exclusive): there is no selected object
+    // left for a leaked arrow or Delete to act on, so a scene comparison would
+    // pass whichever way the stop behaved.
+    type KeyRecorder = { yunariStopKeys?: string[] };
     await page.evaluate(() => {
-      (
-        window as unknown as {
-          yunariEditorBridge: { selectLayer(id: string): void };
-        }
-      ).yunariEditorBridge.selectLayer("time-rule");
-    });
-    const active = (): Promise<{
-      readonly id: string | undefined;
-      readonly left: number;
-      readonly top: number;
-    }> =>
-      page.evaluate(() => {
-        const object = (
-          window as unknown as {
-            yunariEditorBridge: {
-              editor: {
-                canvas: {
-                  getActiveObject():
-                    | { id?: string; left?: number; top?: number }
-                    | undefined;
-                };
-              };
-            };
-          }
-        ).yunariEditorBridge.editor.canvas.getActiveObject();
-        if (object?.left === undefined || object.top === undefined) {
-          throw new Error("The test needs a selected object to stay selected.");
-        }
-        return { id: object.id, left: object.left, top: object.top };
+      const recorder = window as unknown as KeyRecorder;
+      recorder.yunariStopKeys = [];
+      window.addEventListener("keydown", (event) => {
+        recorder.yunariStopKeys?.push(event.key);
       });
-    const before = await active();
+    });
+    const keys = (): Promise<string[]> =>
+      page.evaluate(
+        () => (window as unknown as KeyRecorder).yunariStopKeys ?? [],
+      );
 
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
     // Three stops, so Delete has one to remove while the two-stop floor holds.
     await page.getByTestId("gradient-add").click();
     const stop = page.getByTestId("gradient-stop-1");
     await stop.click();
     await expect(stop).toBeFocused();
+
+    // A key the stop does not handle proves the recorder is listening; without
+    // it the two refusals below could be an empty recorder.
+    await page.keyboard.press("Shift");
+    expect(await keys(), "the recorder saw a plain key").toContain("Shift");
 
     const offset = Number(
       await page.getByTestId("gradient-offset").inputValue(),
@@ -341,19 +331,18 @@ test.describe("the colour picker and the gradient track", () => {
       "aria-valuenow",
       String(Math.round(offset) + 1),
     );
-    // The dispatcher is a window bubble listener. Before the control stopped
-    // its keys, the same arrow also nudged the selected group by one pixel.
-    expect(await active(), "the arrow belonged to the stop").toEqual(before);
+    expect(await keys(), "the arrow belonged to the stop").not.toContain(
+      "ArrowRight",
+    );
 
     const stops = page.locator('[data-testid^="gradient-stop-"]');
     await expect(stops).toHaveCount(3);
     await page.keyboard.press("Delete");
     await expect(stops, "Delete removed the stop").toHaveCount(2);
-    // And it removed *the stop*, not the selected object the dispatcher would
-    // also have deleted.
-    expect(await active(), "Delete removed the stop, not the object").toEqual(
-      before,
-    );
+    expect(
+      await keys(),
+      "Delete removed the stop, not an object",
+    ).not.toContain("Delete");
   });
 
   test("applies a gradient preset from the library's fifteen seeds", async ({
@@ -362,7 +351,7 @@ test.describe("the colour picker and the gradient track", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await openTokens(page);
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
 
     // The row is the library's, so its size is the evidence that the seeds
@@ -391,7 +380,7 @@ test.describe("the colour picker and the gradient track", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await openTokens(page);
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await openPicker(page);
 
     const doomed = page.getByTestId("picker-preset-default-colour-slate-900");
@@ -410,7 +399,7 @@ test.describe("the colour picker and the gradient track", () => {
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await openPicker(page);
 
     await expect(
@@ -437,7 +426,9 @@ test.describe("the colour picker and the gradient track", () => {
     for (const palette of PALETTES) {
       await choosePalette(page, palette);
       await openPane(page, "Tokens");
-      await chooseIn(page, "[data-yunari-palette-token]", "background");
+      await page
+        .locator('[data-yunari-palette-token-row="background"]')
+        .click();
       await openPicker(page);
 
       const area = page.getByTestId("picker-area");
@@ -514,7 +505,7 @@ test.describe("the colour picker and the gradient track", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await openTokens(page);
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await openPicker(page);
     await page.getByTestId("picker-preset-default-colour-blue").click();
     const blue = storedColour("rgb(59 130 246)");
@@ -535,7 +526,7 @@ test.describe("the colour picker and the gradient track", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await openTokens(page);
-    await chooseIn(page, "[data-yunari-palette-token]", "background");
+    await page.locator('[data-yunari-palette-token-row="background"]').click();
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
     await page
       .getByTestId("gradient-preset-default-gradient-vital-ocean")

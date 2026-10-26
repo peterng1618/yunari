@@ -1,14 +1,18 @@
 import {
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
+  type FontCut,
   type SampleSource,
   SEMANTIC_KEYS,
   type SemanticKeyDescriptor,
 } from "@yunari/renderer-core";
 import { type ChartRefreshRate, sceneBoxesOf } from "@yunari/scene-fabric";
-import type { ThemeCreditsEntry } from "@yunari/theme-package";
+import {
+  MAX_CREDITS_ENTRIES,
+  type ThemeCreditsEntry,
+} from "@yunari/theme-package";
 import { ActiveSelection, type FabricObject } from "fabric/es";
-import { createElement } from "react";
+import { createElement, type ReactElement } from "react";
 import { applyArrange, canArrange } from "./arrange.js";
 import { type ArtboardPanel, createArtboardPanel } from "./artboard-panel.js";
 import {
@@ -18,7 +22,7 @@ import {
   importFinderResult,
 } from "./asset-finder/actions.js";
 import { assetBytes } from "./asset-finder/client.js";
-import { FontsBodyHost } from "./asset-finder/fonts-body.js";
+import { FontsBody } from "./asset-finder/fonts-body.js";
 import {
   iconObject,
   iconShapes,
@@ -34,10 +38,13 @@ import {
 import { ChartManager } from "./chart-manager/index.js";
 import { EditorDocument } from "./editor-document.js";
 import type { EditorActionFacade } from "./editor-shell/session-facade.js";
+import type {
+  TokenRef,
+  TokenSelectionStore,
+} from "./editor-shell/shell-stores.js";
 import { type EditorShell } from "./editor-shell.js";
 import type { FavoritesClient } from "./favorites-client.js";
 import { type CuratedFontFace } from "./font-catalog.js";
-import { previewFontFace, releaseFontPreview } from "./font-preview.js";
 import {
   createIndicatorManager,
   type IndicatorManager,
@@ -55,15 +62,22 @@ import {
 import {
   createPalettePanel,
   type PalettePanel,
+  type PaletteTokenUse,
   paletteTokenUsage,
 } from "./palette-manager/index.js";
+import {
+  createAssetsPane,
+  type FontCommitInput,
+} from "./panes/assets/assets-pane.js";
 import type { PresetSelection } from "./panes/tokens/preset-list.js";
-import { typePresetOf } from "./selection-inspector/appearance.js";
+import {
+  createTokenInspectorPanel,
+  type TokenInspectorPanel,
+} from "./panes/tokens/token-inspector.js";
 import {
   createSelectionInspector,
   type SelectionInspector,
 } from "./selection-inspector/index.js";
-import { isTextObject } from "./selection-inspector/view.js";
 import type { SensorCatalogue } from "./sensor-catalogue.js";
 import { ShortcutManager } from "./shortcut-manager/index.js";
 import { createSnapManager, type SnapManager } from "./snap-manager/index.js";
@@ -90,8 +104,10 @@ import type { WallpaperExportOutcome } from "./wallpaper-engine/export-sheet.js"
 const IMPORTED_ICON_SHARE = 0.12;
 
 interface EditorPanelHosts {
-  /** Text and chart creation, and the declared-asset library at its foot. */
+  /** Text and chart creation, and the card library. */
   readonly add: HTMLElement;
+  /** The declared files, their import and placement, in the Assets pane. */
+  readonly assets: HTMLElement;
   /** The theme's own paints and type presets, in the Tokens pane. */
   readonly tokens: HTMLElement;
   /** The document's own panels, in the Document pane: the artboard and the
@@ -121,6 +137,9 @@ interface EditorSessionOptions {
   /** The picture the opened package carried, if it carried one. A save that
    *  cannot render one of its own keeps this rather than losing it. */
   readonly thumbnail?: Uint8Array;
+  /** The package's attribution member, when the session opens one: the
+   *  collection every later import is added to. */
+  readonly credits?: readonly ThemeCreditsEntry[];
   readonly panelHosts: EditorPanelHosts;
   readonly libraryClient?: ThemeLibraryClient;
   /** The readings the editor's pickers offer, from the host's sensor wire. A
@@ -163,9 +182,16 @@ interface EditorSessionOptions {
    *  without a shell's chrome simply has no publish chord. */
   readonly onPublishSurface?: () => void;
   /** The shell's own projection of the selection, handed to the preset list so
-   *  its chooser opens on the preset the selection is set in rather than on the
-   *  first declared one (`vg-094`). Optional for the same reason as above. */
+   *  it says what the canvas selection is set in rather than showing the first
+   *  declared preset (`vg-094`). Optional for the same reason as above. */
   readonly selection?: PresetSelection;
+  /** The shell's token selection, handed to the preset list so a row press
+   *  reaches the store the inspector reads. Optional, like `selection`. */
+  readonly tokenSelection?: TokenSelectionStore;
+  /** The Assets pane's title count. The store is the shell chrome's, so the
+   *  session reports the manager's declaration count rather than the shell
+   *  reaching for a manager it does not hold. */
+  readonly onAssetCountChange?: (count: number) => void;
   readonly onOpenTheme?: (
     envelope: FabricThemeEnvelope,
     assets: Readonly<Record<string, Uint8Array>>,
@@ -191,7 +217,15 @@ export class EditorSession {
   readonly #palette: PalettePanel;
   readonly #types: TypePresetPanel;
   readonly #newObjects: NewObjectPanel;
+  readonly #assetsPanel: { destroy(): void };
   readonly #selection: SelectionInspector;
+  /** The selected token's own column, a sibling section of the object
+   *  inspector's under the same host. */
+  readonly #tokenInspector: TokenInspectorPanel;
+  /** Releases the token-selection subscription the inspector follows. */
+  #unsubscribeTokenSelection: (() => void) | undefined;
+  /** Releases the document-change subscription the inspector re-renders on. */
+  #unsubscribeTokenDocument: (() => void) | undefined;
   readonly #snapping: SnapManager;
   readonly #indicators: IndicatorManager;
   readonly #assets: AssetManager;
@@ -309,21 +343,28 @@ export class EditorSession {
       this.#document.envelope.artboard,
       this.#document.envelope.metadata,
     );
+    // The one walk behind both the figure beside a token and the users list in
+    // the inspector, so the two cannot disagree about the scene.
+    const paletteUsage = (): Readonly<
+      Record<string, readonly PaletteTokenUse[]>
+    > =>
+      paletteTokenUsage(
+        options.shell.editor.canvas,
+        this.#document.envelope.globals?.palette ?? {},
+      );
     this.#palette = createPalettePanel(
       options.panelHosts.tokens,
       (palette) => this.#document.setPalette(palette),
-      (id, replacement) => this.#document.deletePalette(id, replacement),
       {
         // The same walk the delete uses, so the figure beside a token and the
         // references a deletion will move cannot disagree about the scene.
-        usage: () =>
-          paletteTokenUsage(
-            options.shell.editor.canvas,
-            this.#document.envelope.globals?.palette ?? {},
-          ),
+        usage: paletteUsage,
         // Live edits publish on every sample; the history entry is made once,
         // when the picker says the gesture ended.
         onSettled: () => options.shell.editor.historyManager.saveState(),
+        // A row press hands the token to the inspector; the store owns the
+        // canvas clear (ruling 2), so the pane never reaches Fabric.
+        tokenSelection: options.tokenSelection,
       },
     );
     this.#palette.render(this.#document.envelope.globals?.palette);
@@ -332,29 +373,26 @@ export class EditorSession {
     // inspector's face field are the same owner answering the same question
     // (`vg-268`), so neither re-implements a face or trio write.
     const fontActions: TypePresetFontActions = {
-      preview: async (face) => {
-        await this.#document.runFontAction(() => previewFontFace(face));
-      },
       applyFace: async (id, face) => {
         await this.#document.runFontAction(() =>
-          this.#document.applyPresetFace(id, face),
+          this.applyPresetFace(id, face),
         );
       },
       applyTrio: async (id) => {
-        await this.#document.runFontAction(() =>
-          this.#document.applyFontTrio(id),
-        );
+        await this.#document.runFontAction(() => this.applyFontTrio(id));
       },
     };
     this.#types = createTypePresetPanel(
       options.panelHosts.tokens,
       (presets) => this.#document.setTypes(presets),
-      (id, replacement) => this.#document.deleteType(id, replacement),
+      (id, replacement) => this.#deleteType(id, replacement),
       fontActions,
-      // The shell's own selection projection, so the list's chooser opens on
-      // what the selection is set in. Pulled from the live snapshot rather than
-      // a copy held here, because the selection is Fabric's.
+      // The shell's own selection projection, so the list says what the canvas
+      // selection is set in. Pulled from the live snapshot rather than a copy
+      // held here, because the selection is Fabric's.
       options.selection,
+      // The token a row press selects, which the inspector will read.
+      options.tokenSelection,
     );
     this.#types.render(
       this.#document.envelope.globals?.typePresets as TypePresets | undefined,
@@ -433,6 +471,56 @@ export class EditorSession {
     this.#unsubscribeSelection = options.selection?.subscribe(() =>
       this.#selection.render(),
     );
+    // The selected token's own properties, in the same host as the object
+    // column — exactly one of the two draws. The session owns both halves: the
+    // document's writes (which reach history through `setTypes`) and the
+    // suppression the token selection drives. A new surface built in
+    // `shell-layout` would need a second copy of the document.
+    this.#tokenInspector = createTokenInspectorPanel(
+      options.panelHosts.selection,
+      {
+        onChange: (presets) => this.#document.setTypes(presets),
+        // The same port the preset library is handed: one delete route, so the
+        // reference reassignment and the token clear cannot disagree.
+        onDelete: (id, replacement) => this.#deleteType(id, replacement),
+        setRole: (id, role) => this.#document.setPresetRole(id, role),
+        unbindFace: (id) => this.#document.unbindPresetFace(id),
+        // The paint half: the selected paint token's fields write through the
+        // same document and history ports as the pane's rows once did.
+        paints: {
+          palette: () => this.#document.envelope.globals?.palette ?? {},
+          onChange: (palette) => this.#document.setPalette(palette),
+          onSettled: () => options.shell.editor.historyManager.saveState(),
+          onDelete: (id, replacement) => this.#deletePalette(id, replacement),
+          usage: paletteUsage,
+        },
+      },
+    );
+    const renderTokenInspector = (): void => {
+      const held = options.tokenSelection?.get();
+      // A token the document no longer declares keeps the object column
+      // suppressed over a blank section — the shape an undo of Add leaves, not
+      // only the delete routes. Dropping the ref here re-enters through the
+      // store's subscription with no token and gives the column back.
+      if (held !== undefined && !this.#tokenExists(held)) {
+        options.tokenSelection?.clear();
+      }
+      const token = options.tokenSelection?.get();
+      this.#selection.setSuppressed(token !== undefined);
+      this.#tokenInspector.render(
+        token,
+        (this.#document.envelope.globals?.typePresets ?? {}) as TypePresets,
+        this.#document.envelope.globals,
+      );
+    };
+    // A canvas selection clears the token store, which notifies here; a type
+    // edit announces through the document, which re-renders the fields with the
+    // value just written.
+    this.#unsubscribeTokenSelection =
+      options.tokenSelection?.subscribe(renderTokenInspector);
+    this.#unsubscribeTokenDocument =
+      this.#document.subscribeDocumentChange(renderTokenInspector);
+    renderTokenInspector();
     // Entering inline editing asks the runtime for the authoring view: the
     // shell built the text manager before this session existed, so the
     // dependency is installed here rather than passed in.
@@ -452,22 +540,29 @@ export class EditorSession {
         addChart: (family) => this.charts.addChart(family),
         insertCard: (cardId) => this.#document.insertCard(cardId),
       },
-      // The file path travels in the Add pane rather than beside it (`§5.2`),
-      // so the manager, the reference check and the re-resolve are handed to
-      // the panel that already owns the pane's body.
-      {
-        manager: this.#assets,
-        changed: () => {
-          // The background column offers the declared pictures, so a picture
-          // that lands while the background is selected is offered then rather
-          // than at the next selection change.
-          this.#selection.render();
-          this.#document.refreshBackgroundMedia();
-        },
-        isReferenced: (assetId) => this.#document.holdsAsset(assetId),
-        onFindAssets: () => options.onFindAssets?.(),
-      },
     );
+    this.#assetsPanel = createAssetsPane(options.panelHosts.assets, {
+      manager: this.#assets,
+      editor: options.shell.editor,
+      isReferenced: (assetId) => this.#document.holdsAsset(assetId),
+      subscribeDocumentChange: (listener) =>
+        this.#document.subscribeDocumentChange(listener),
+      onChanged: () => this.#declarationsChanged(),
+      onFindAssets: () => options.onFindAssets?.(),
+      onFontCommit: (input) => this.#commitFont(input),
+      onBackground: (asset) => {
+        const background = this.#document.envelope.background;
+        this.#document.setBackground({
+          ...background,
+          media: {
+            assetId: asset.id,
+            bounds: background?.media?.bounds ?? "theme",
+          },
+        });
+        this.#document.refreshBackgroundMedia();
+      },
+    });
+    this.#announceAssetCount();
     this.#source = options.source;
     this.#runtime = new LiveRuntime({
       canvas: options.shell.editor.canvas,
@@ -487,9 +582,11 @@ export class EditorSession {
     // path saves a document whose image is a handle into this session's memory
     // and is gone from every other tab, every other browser and every reload —
     // silently, because the save succeeds.
-    options.shell.editor.clipboardManager.setImageImporter((file) =>
-      this.#assets.placeImage(options.shell.editor, file),
-    );
+    options.shell.editor.clipboardManager.setImageImporter(async (file) => {
+      const placed = await this.#assets.placeImage(options.shell.editor, file);
+      this.#declarationsChanged();
+      return placed;
+    });
     // Same reason, same shape: a pasted or duplicated object is given a new id
     // by the clipboard, and a binding is keyed by the object that shows it, so
     // the copy's readings have to be re-keyed by whoever owns the envelope.
@@ -697,7 +794,7 @@ export class EditorSession {
           bounds: background?.media?.bounds ?? "theme",
         },
       });
-      this.#document.refreshBackgroundMedia();
+      this.#declarationsChanged();
       return { ok: true, assetId: reference.id };
     } catch (error) {
       return {
@@ -705,6 +802,90 @@ export class EditorSession {
         message: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  /**
+   * The one font commit the Assets pane reports: a fresh file or a declared
+   * face, with or without the preset.
+   *
+   * The cap is checked before anything is declared, because nothing removes a
+   * credit and the package writer refuses an over-cap list at the next save.
+   * A fresh file has no id until it is declared (and `import` never dedupes),
+   * so its question is the list's length, asked directly: `canAddCredit`'s
+   * duplicate-key arm would let a legacy pre-assetId credit of the same title
+   * mask a full list. A declared face's real id lets `canAddCredit` answer,
+   * because re-creating that face's preset replaces its own credit rather than
+   * growing the list. Cancel declares the file and writes neither the preset
+   * nor the credit.
+   */
+  async #commitFont(
+    input: FontCommitInput,
+  ): Promise<
+    | { readonly ok: true; readonly message: string }
+    | { readonly ok: false; readonly message: string }
+  > {
+    const { source, metadata, role, withPreset } = input;
+    if (!withPreset) {
+      try {
+        if (!("file" in source))
+          throw new Error("A declared font has nothing to import.");
+        await this.#assets.importFont(source.file, metadata);
+        this.#declarationsChanged();
+        return { ok: true, message: uiCopy.panels.assetDeclaredFont };
+      } catch (error) {
+        return { ok: false, message: messageOf(error) };
+      }
+    }
+
+    const credit: ThemeCreditsEntry = {
+      kind: "font",
+      title: metadata.family,
+      license: metadata.licence,
+      changes: "Imported unchanged",
+      ...(metadata.sourceUrl === undefined
+        ? {}
+        : { source: { url: metadata.sourceUrl } }),
+      ...("assetId" in source ? { assetId: source.assetId } : {}),
+    };
+    const full =
+      "file" in source
+        ? this.#document.credits().length >= MAX_CREDITS_ENTRIES
+        : !this.#document.canAddCredit(credit);
+    if (full) return { ok: false, message: uiCopy.assets.creditsFull };
+
+    try {
+      const asset =
+        "file" in source
+          ? await this.#assets.importFont(source.file, metadata)
+          : this.#assets.amendFont(source.assetId, metadata);
+      this.#document.addTypePresetFromLocalFont(asset, role);
+      this.#document.addCredit({ ...credit, assetId: asset.id });
+      this.#declarationsChanged();
+      // Only a fresh import is an import; amending a declared face writes the
+      // preset, which the Tokens pane shows.
+      return {
+        ok: true,
+        message: "file" in source ? uiCopy.panels.assetDeclaredFont : "",
+      };
+    } catch (error) {
+      return { ok: false, message: messageOf(error) };
+    }
+  }
+
+  /**
+   * The declarations moved: the Assets pane's title count, the background
+   * column's picture list and the bytes the artboard resolves all read them, so
+   * one method serves every path that adds or drops one.
+   */
+  #declarationsChanged(): void {
+    this.#selection.render();
+    this.#document.refreshBackgroundMedia();
+    this.#announceAssetCount();
+  }
+
+  /** The initial count, before anything has moved. */
+  #announceAssetCount(): void {
+    this.#options.onAssetCountChange?.(this.#assets.declarations.length);
   }
 
   /**
@@ -732,8 +913,50 @@ export class EditorSession {
     });
   }
 
+  /**
+   * The finder's Fonts body with the preview panel's actions wired. Every
+   * action is the document's write; the panel only reports a press. Apply to
+   * selected preset travels only when the shell's own projection names a
+   * preset, because the panel draws that button on the callback's presence
+   * (R9).
+   */
+  #fontPickerBody(): ReactElement {
+    const document = this.#document;
+    const presets = document.envelope.globals?.typePresets as
+      | TypePresets
+      | undefined;
+    const selected = this.#options.selection?.get().selectionPresetId;
+    const run = (action: () => Promise<unknown>): void => {
+      void document.runFontAction(async () => {
+        await action();
+        // An adopted face is a declaration, so the Assets count and the
+        // background column re-resolve as they do after an import.
+        this.#declarationsChanged();
+      });
+    };
+    return createElement(FontsBody, {
+      ...(presets === undefined ? {} : { presets }),
+      onApplyTrio: (trio) => {
+        run(() => document.applyFontTrio(trio));
+      },
+      onAddTrioPresets: (trio) => {
+        run(() => document.addTypePresetsFromTrio(trio));
+      },
+      onAddPreset: (cut, role) => {
+        run(() => document.addTypePresetFromCut(cut, role));
+      },
+      ...(selected === undefined
+        ? {}
+        : {
+            onApplyToSelected: (cut: FontCut) => {
+              run(() => document.applyCutToPreset(selected, cut));
+            },
+          }),
+    });
+  }
+
   /** Reachability only: the shell menus dispatch through the existing owners,
-   * including the private document actions the panel section used to call. */
+   *  including the private document actions the panel section used to call. */
   actionFacade(): EditorActionFacade {
     const options = this.#options;
     const editor = options.shell.editor;
@@ -746,29 +969,10 @@ export class EditorSession {
       savePackage: () => this.#document.save(),
       releasePackage: () => this.#document.release(),
       openLibrary: () => this.#document.openLibrary(),
-      // The finder's Fonts body. The catalogue's data and the two writes are
-      // the session's already; the shell only has somewhere to put the body.
-      // A face applies to the preset the selected text is set in — the same
-      // reading the inspector's own field performed before the picker moved.
-      fontPickerBody: () =>
-        createElement(FontsBodyHost, {
-          ...(options.favoritesClient === undefined
-            ? {}
-            : { favoritesClient: options.favoritesClient }),
-          onApplyFace: (face) => {
-            const active = editor.canvas.getActiveObject();
-            const ref =
-              active !== undefined && isTextObject(active)
-                ? typePresetOf(active)
-                : undefined;
-            if (ref !== undefined) {
-              void this.applyPresetFace(ref.slice("typePresets.".length), face);
-            }
-          },
-          onApplyTrio: (trioId) => {
-            void this.applyFontTrio(trioId);
-          },
-        }),
+      // The finder's Fonts body, wired to the document's writes. The panel is
+      // presentational: every refusal reaches the author through
+      // `runFontAction`, and the selection-to-preset projection is the shell's.
+      fontPickerBody: () => this.#fontPickerBody(),
       // The finder's Wallpaper Engine body. The listing is the body's own fetch
       // — it is a library, not a search — so the session owns only the import a
       // row triggers.
@@ -882,10 +1086,9 @@ export class EditorSession {
           },
         });
         if (outcome.ok === true) {
-          // A finder import makes a declaration just as the Add pane's own file
-          // does, and a declared asset is what the background layer resolves its
-          // bytes through.
-          this.#document.refreshBackgroundMedia();
+          // A finder import makes a declaration just as the Assets pane's own
+          // file does, so the pane's title and the background column re-resolve.
+          this.#declarationsChanged();
         }
         return outcome.ok
           ? { ok: true as const }
@@ -966,30 +1169,85 @@ export class EditorSession {
     await this.#assets.hydrate(shell.editor.canvas);
   }
 
-  applyFontTrio(id: string): Promise<FabricThemeEnvelope> {
-    return this.#document.applyFontTrio(id);
+  async applyFontTrio(id: string): Promise<FabricThemeEnvelope> {
+    const envelope = await this.#document.applyFontTrio(id);
+    // The trio adopted three declarations, so the Assets pane's count moves
+    // here as it does for an import.
+    this.#declarationsChanged();
+    return envelope;
   }
 
-  applyPresetFace(
+  async applyPresetFace(
     id: string,
     face: CuratedFontFace,
   ): Promise<FabricThemeEnvelope> {
-    return this.#document.applyPresetFace(id, face);
+    const envelope = await this.#document.applyPresetFace(id, face);
+    this.#declarationsChanged();
+    return envelope;
+  }
+
+  /**
+   * Whether the document still declares the token a ref names.
+   *
+   * Read at render time rather than tracked: the document is the one owner of
+   * its globals, and an undo, a load or a panel write can drop an entry without
+   * either delete route running.
+   */
+  #tokenExists(token: TokenRef): boolean {
+    if (token.kind === "preset") {
+      const presets = (this.#document.envelope.globals?.typePresets ??
+        {}) as TypePresets;
+      return presets[token.id] !== undefined;
+    }
+    return this.#document.envelope.globals?.palette?.[token.id] !== undefined;
+  }
+
+  /**
+   * The one type-preset delete route, handed to both the preset library and the
+   * token inspector.
+   *
+   * The document re-points the references; a token selection still naming the
+   * deleted preset is cleared here, so the object column comes back rather than
+   * the right column staying suppressed over a token that no longer exists.
+   */
+  #deleteType(id: string, replacement: string): void {
+    this.#document.deleteType(id, replacement);
+    const selection = this.#options.tokenSelection;
+    const token = selection?.get();
+    if (token?.kind === "preset" && token.id === id) selection?.clear();
+  }
+
+  /**
+   * The one paint-token delete route, handed to the palette pane and the token
+   * inspector.
+   *
+   * The document re-points the references; a token selection still naming the
+   * deleted paint is cleared here, so the object column comes back rather than
+   * the right column staying suppressed over a token that no longer exists.
+   */
+  #deletePalette(id: string, replacement: string): void {
+    this.#document.deletePalette(id, replacement);
+    const selection = this.#options.tokenSelection;
+    const token = selection?.get();
+    if (token?.kind === "paint" && token.id === id) selection?.clear();
   }
 
   destroy(): void {
     this.#unsubscribeSelection?.();
+    this.#unsubscribeTokenSelection?.();
+    this.#unsubscribeTokenDocument?.();
     this.#shortcuts.destroy();
     this.#nudge.dispose();
     this.#document.destroy();
     this.#assets.destroy();
-    releaseFontPreview();
     this.charts.destroy();
     this.#selection.root.remove();
+    this.#tokenInspector.destroy();
     this.#artboard.destroy();
     this.#palette.destroy();
     this.#types.destroy();
     this.#newObjects.destroy();
+    this.#assetsPanel.destroy();
     this.#snapping.destroy();
     this.#indicators.destroy();
   }
@@ -1029,6 +1287,11 @@ async function normalizeWallpaperVideo(
     ),
     reencoded: normalized.reencoded,
   };
+}
+
+/** A refusal's own words, or the value itself when it was not an `Error`. */
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /** The host's content type is the first answer; the name covers a host that

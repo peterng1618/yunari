@@ -200,14 +200,24 @@ not watch the grid change shape. It is fixed by the drawing
 from, and the grid is `repeat(auto-fill, minmax(272px, 1fr))`: the column count
 follows the width, so no breakpoint is invented for it.
 
-**The store's item modal is 960px wide and its stage is 420px tall.** Both are the
-drawing's (`docs/design/mockups/current/store-detail.html`). The width is not the
-settings modal's: 560 is a text sheet's box and this one's subject is a picture —
-960 against 560, with the stage flush to the box's edges rather than inset by the
-sheet's padding. **The stage is one height for every item** and the theme is
+**The store's item modal is 960 × 760, and its facts sit in a 270px right
+panel.** Both numbers are the drawing's
+(`docs/design/mockups/current/store-detail.html`). The width is not the settings
+modal's: 560 is a text sheet's box and this one's subject is a picture — 960
+against 560, with the stage flush to the box's edges rather than inset by the
+sheet's padding. **The stage is one height for every item**: the box's height
+less its border, with the panel beside it rather than below, and the theme
 contained in it at its own ratio, letterboxed against a ground darker than the
-modal's own surface; a stage sized to the item would make the modal change height
-as a person steps between items, which is the one thing a viewer must not do.
+modal's own surface. A stage sized to the item would make the modal change
+height as a person steps between items, which is the one thing a viewer must
+not do. **A short viewport caps the box at 90vh**, so the foot stays on screen
+on a laptop.
+
+**The asset preview is the Finder's box, with the same 270px panel.** Its
+ceiling is `min(1132px, 100vw − 48px) × min(852px, 100vh − 48px)` from
+`assets-preview.html`, because its subject is the file at the size it will be
+used. The panel's width is the store viewer's, so the facts sit where a person
+already looks and only the stage changes between the two surfaces.
 
 ### The header
 
@@ -244,12 +254,13 @@ paid on every use.
 <!-- §7.2 -->
 
 A 46px vertical strip of glyph slots at the window's left edge, with the
-settings gear pinned to the foot. **Four slots:**
+settings gear pinned to the foot. **Five slots:**
 
 | Slot | Glyph | Holds |
 |---|---|---|
 | Composition | stack | The scene tree, and the object actions that act on it |
-| Add | plus | Everything insertable, and placing a file |
+| Add | plus | Everything insertable |
+| Assets | folder | Every declared file, its import and placement, and the finder link |
 | Tokens | palette | The theme's paints and type presets — created and edited here |
 | Document | page | Artboard, metadata |
 
@@ -493,7 +504,7 @@ The vocabulary is closed. A control is one of these, or it is not a control.
 | **Segmented** | A `--panel-2` well holding 2–4 labels, the active one lifted to `--stage` | A small exclusive choice where both options must be readable |
 | **Icon button** | A 26–30px square at `--radius-md`, glyph only | An action whose glyph is unambiguous |
 | **Labelled button** | A label in `--text-sm` on the `--yunari-control-bg` fill, 1px `--edge`, `--radius-md`, `6px 12px` padding | You can answer the surface that raised it; it is chrome around an answer, not a control in a panel |
-| **Rail slot** | A 36px square at `--radius-lg`, glyph only | One of §7.2's four panes; at most one is open |
+| **Rail slot** | A 36px square at `--radius-lg`, glyph only | One of §7.2's slots; at most one pane is open |
 | **Choice row** | A `--radius-md` row at `--panel-2` carrying a swatch and a name; the chosen row is lifted to `--stage` with the accent border | One member of a closed set where each member has its own colour |
 | **Preset chip** | A 24px rounded square at `--radius-sm` carrying only a swatch; the chosen one takes the accent border and §4's accent halo, its name staying the programmatic label | One member of a swatch library, where the swatch is what the author recognises |
 | **Checkbox choice row** | The choice row, with a 14px box and a count in place of the swatch; the chosen row is lifted to `--stage` with a `--text` check | One member of a set you may choose **several** of |

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CATALOGUE_ID_PATTERN } from "./catalogue-index.js";
 import {
   BACKGROUND_MEDIA_BOUNDS,
+  FONT_ASSET_FORMATS,
   MAX_BACKGROUND_OFFSET,
   MAX_TAGS,
   MIN_BACKGROUND_OFFSET,
@@ -300,10 +301,14 @@ describe("published Fabric theme schema", () => {
     });
   });
 
-  it("discriminates fully declared WOFF2 font assets from other assets", () => {
+  it("publishes the local font formats, their path extensions and no remote-only requirement", () => {
     const document = schema();
     const asset = document.$defs["assetReference"]!;
     const font = document.$defs["fontAssetReference"]!;
+    const properties = font["properties"] as Record<
+      string,
+      Record<string, unknown>
+    >;
 
     expect(asset["oneOf"]).toHaveLength(2);
     expect(font["required"]).toEqual([
@@ -314,12 +319,13 @@ describe("published Fabric theme schema", () => {
       "weight",
       "style",
       "format",
-      "sourceUrl",
-      "license",
     ]);
-    expect(font["properties"]).toMatchObject({
-      kind: { const: "font" },
-      format: { const: "woff2" },
-    });
+    expect(properties["kind"]).toEqual({ const: "font" });
+    expect(properties["format"]).toEqual({ enum: [...FONT_ASSET_FORMATS] });
+    expect(properties["path"]!["pattern"]).toBe(
+      `^assets/[A-Za-z0-9._/-]{1,200}\\.(${FONT_ASSET_FORMATS.join("|")})$`,
+    );
+    const license = properties["license"] as Record<string, unknown>;
+    expect(license["required"]).toBeUndefined();
   });
 });

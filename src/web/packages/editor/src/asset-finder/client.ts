@@ -4,6 +4,7 @@ import type {
   AssetSearchRequest,
   AssetSourceListing,
 } from "@yunari/renderer-core";
+import { base64Of } from "../video-normalizer.js";
 
 /**
  * The finder's half of the host routes, fetch-only.
@@ -123,5 +124,45 @@ export async function assetBytes(
     };
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * Moves copies of these files to the platform's trash, through the host.
+ *
+ * A refusal is a sentence, not a throw, because the save dialog has to print
+ * it — and a caller that needs the save to abort reads `ok: false` and stops.
+ * The host's own words are the reason: only it can say which platform route
+ * refused.
+ */
+export async function trashAssets(
+  files: readonly { readonly name: string; readonly bytes: Uint8Array }[],
+  options?: ClientOptions,
+): Promise<
+  { readonly ok: true } | { readonly ok: false; readonly message: string }
+> {
+  const { fetcher, url } = request(options);
+
+  try {
+    const response = await fetcher(url("/api/assets/trash"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files: files.map((file) => ({
+          name: file.name,
+          bytes: base64Of(file.bytes),
+        })),
+      }),
+    });
+
+    if (response.ok) return { ok: true };
+
+    const reason = (await response.text()).trim();
+    return {
+      ok: false,
+      message: reason === "" ? `The host answered ${response.status}.` : reason,
+    };
+  } catch (error: unknown) {
+    return { ok: false, message: messageOf(error) };
   }
 }

@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
-import { chooseIn, typeIntoControl } from "./control-set.js";
+import { typeIntoControl } from "./control-set.js";
 import { captureVisualReview, clientOfScene } from "./editor-canvas.js";
 import { storedColour } from "./editor-fixture.js";
 import { openPane } from "./editor-rail.js";
@@ -397,7 +397,7 @@ test.describe("authoring frosted glass through the inspector", () => {
     // treatment has to survive, with the backdrop still visible behind it. The
     // palette panel is the Tokens pane's, so it is in the Tokens pane.
     await openPane(page, "Tokens");
-    await chooseIn(page, "[data-yunari-palette-token]", "edge");
+    await page.locator('[data-yunari-palette-token-row="edge"]').click();
     // The pane has one trigger and the exact-value field lives in its popover.
     await page.locator("[data-yunari-palette-picker]").click();
     const colour = page.locator("[data-yunari-palette-color]");
