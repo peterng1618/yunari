@@ -1389,7 +1389,9 @@ git commit -m "chore(release): pin staged versions and check notices"
 - Modify: `.github/workflows/release.yml`
 - Modify: `.github/workflows/ci.yml`
 - Modify: `.github/workflows/visual-evidence.yml`
-- Create: `scripts/check-workflows.mjs` (with `--self-test`)
+- Create: `scripts/check-workflows.mjs`
+- Create: `src/web/tests/scripts/check-workflows.test.ts` — its cases, beside
+  `check-third-party.test.ts`, for the reason Task 8.1 gives
 - Modify: `src/web/package.json` (the `workflows:check` script and its gate wiring)
 
 **Interfaces:**
@@ -1401,16 +1403,16 @@ A parser test asserts, for every file under `.github/workflows/`: that no `uses:
 
 - [ ] **Step 2: Verify it fails**
 
-Run: `node scripts/check-workflows.mjs`
+Run from `src/web`: `npm run workflows:check`
 Expected: FAIL.
 
 - [ ] **Step 3: Resolve and pin action SHAs**
 
-Run: `gh api repos/actions/checkout/git/ref/tags/v4`, `gh api repos/actions/setup-node/git/ref/tags/v4`, `gh api repos/actions/upload-artifact/git/ref/tags/v4`, `gh api repos/googleapis/release-please-action/git/ref/tags/v5` and resolve each to its commit SHA. Pin all actions, naming the tag in a trailing comment so the pin stays readable.
+Run: `gh api repos/actions/checkout/git/ref/tags/v4`, `gh api repos/actions/setup-node/git/ref/tags/v4`, `gh api repos/actions/upload-artifact/git/ref/tags/v4`, `gh api repos/actions/download-artifact/git/ref/tags/v4`, `gh api repos/googleapis/release-please-action/git/ref/tags/v5` and resolve each to its commit SHA. Pin all actions, naming the tag in a trailing comment so the pin stays readable.
 
 - [ ] **Step 4: Implement the workflow split and tag guard**
 
-Run: `node scripts/check-workflows.mjs`
+Run from `src/web`: `npm run workflows:check`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
