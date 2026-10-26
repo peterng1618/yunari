@@ -4124,14 +4124,12 @@ test.describe("a paired display and the theme it is given", () => {
       return authored.map((point) => clientPoint(reading, point.x, point.y));
     }
 
-    // Every panel is off the board's horizontal centreline: on that line a
-    // quarter turn of a horizontal offset stays on the source's same half, so a
-    // sampler that dropped the media's angle would read the right colour by
-    // accident. Authored centres are (160, 90) red, (480, 270) blue and
-    // (600, 60) blue near the board's top-right corner.
+    // Every panel is off the board's horizontal centreline, so the 90/270 arms
+    // cannot read the right half by accident. Authored centres are (160, 90)
+    // red, (480, 270) blue and (300, 60) red.
     const LEFT = { x: 160, y: 90 } as const;
     const RIGHT = { x: 480, y: 270 } as const;
-    const CORNER = { x: 600, y: 60 } as const;
+    const TURN = { x: 300, y: 60 } as const;
 
     // 90 and 270 on a rect display. The panel's screen position turns with the
     // composition, so a sampler that ignored the media's angle reads the wrong
@@ -4171,9 +4169,11 @@ test.describe("a paired display and the theme it is given", () => {
     }
 
     // A circle at 45: a non-quarter angle, where the disc's inscribed scale is
-    // not the turned bounding box's. The three panels read their authored
-    // halves; `CORNER` is inside the board, so the blue it reads is the media's
-    // tint and untinted plate paint cannot pass.
+    // not the turned bounding box's. `TURN` is the discriminating point: the
+    // composition puts it over the red half, while a sampler that dropped the
+    // 45 degree media angle reads the same screen pixel as authored
+    // (390.7, 81) — past the seam, in the blue half. `LEFT` and `RIGHT` would
+    // pass either way at 45, so they assert the correct halves only.
     const circle = await pairDisplay(request, "Glass circle 45", {
       shape: "circle",
       rotation: 45,
@@ -4190,7 +4190,7 @@ test.describe("a paired display and the theme it is given", () => {
       "the media did not turn with a 45 degree circle",
     ).toBe("rotate(45deg)");
 
-    const [red, blue, corner] = await panelPoints(page, [LEFT, RIGHT, CORNER]);
+    const [red, blue, turned] = await panelPoints(page, [LEFT, RIGHT, TURN]);
     await expectPanelTint(
       page,
       red!,
@@ -4205,18 +4205,18 @@ test.describe("a paired display and the theme it is given", () => {
     );
     await expectPanelTint(
       page,
-      corner!,
-      TINT.blue,
-      "the corner panel at 45 is not the media's blue half",
+      turned!,
+      TINT.red,
+      "the turned panel at 45 did not sample the media's red half",
     );
-    const pixels = await sampleScreenPixels(page, [red!, blue!, corner!]);
+    const pixels = await sampleScreenPixels(page, [red!, blue!, turned!]);
     expect(colourDistance(pixels[0]!, TINT.blue)).toBeGreaterThan(80);
     expect(colourDistance(pixels[1]!, TINT.red)).toBeGreaterThan(80);
     expect(
-      colourDistance(pixels[2]!, TINT.bar),
-      "the corner panel read the plate, so the sampler stopped at the board's edge",
+      colourDistance(pixels[2]!, TINT.blue),
+      "the turned panel sampled the blue half, so the sampler dropped the 45 degree angle",
     ).toBeGreaterThan(80);
-    expect(colourDistance(pixels[2]!, TINT.red)).toBeGreaterThan(80);
+    expect(colourDistance(pixels[2]!, TINT.bar)).toBeGreaterThan(80);
   });
 
   test("a panel straddling a circle display's edge reads the picture inside the disc and black outside", async ({

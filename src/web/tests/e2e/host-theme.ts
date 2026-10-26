@@ -833,16 +833,16 @@ const twoToneDisplayBoundsEnvelope = {
 /**
  * The two-tone source as the theme's background under three glass panels.
  *
- * - `tone-left`, `tone-right` and `tone-corner` sit over the source's red and
+ * - `tone-left`, `tone-right` and `tone-turn` sit over the source's red and
  *   blue halves, so a pixel reports which half the sampler read after the
  *   composition turned.
  * - All three are **off the board's horizontal centreline**. On that line a
- *   sampler that dropped the media's angle still lands on the correct half
- *   (a quarter turn of a horizontal offset is vertical, and the source splits
- *   left/right), which would make the case pass for the wrong reason.
- * - `tone-corner` sits at the board's top-right, so a quarter turn of its
- *   offset leaves the board and the plate's paint is what a dropped angle
- *   reads.
+ *   90 degree turn of a horizontal offset stays on the correct half (the
+ *   source splits left/right), which would make the rect arms pass for the
+ *   wrong reason.
+ * - `tone-turn` is the point that also discriminates at 45 degrees: correct,
+ *   it is over the red half; with the media angle dropped, the same screen
+ *   point maps back to authored `(390.7, 81)`, on the blue side of the seam.
  *
  * Zero blur on every panel on purpose: a flat field is what makes the half a
  * screen point maps back to readable.
@@ -934,15 +934,16 @@ const glassTwoToneEnvelope = {
         yunariGlass: { blurRadius: 0 },
       },
       {
-        // Centre authored (600, 60): inside the board and near its top-right
-        // corner, so a correct sample is the blue media (a tint untinted paint
-        // cannot match) while a dropped angle leaves the board and reads the
-        // plate instead.
+        // Centre authored (300, 60): correct composition puts this panel over
+        // the red half. A sampler that dropped the media's 45 degree angle
+        // reads the same screen point as authored (390.7, 81) — across the
+        // seam, in the blue half — so this point, unlike the other two, makes
+        // the 45 degree arm discriminate.
         type: "Rect" as const,
         version: "7.4.0" as const,
         originX: "left" as const,
         originY: "top" as const,
-        left: 540,
+        left: 240,
         top: 0,
         width: 120,
         height: 120,
@@ -951,7 +952,7 @@ const glassTwoToneEnvelope = {
         fill: "rgba(0, 0, 0, 0.35)",
         stroke: "rgba(255, 255, 255, 0.35)",
         strokeWidth: 2,
-        id: "tone-corner",
+        id: "tone-turn",
         selectable: false,
         evented: false,
         yunariPaint: { fill: "palette.panel", stroke: "palette.edge" },
