@@ -614,6 +614,26 @@ describe("the display lens", () => {
     resetPreviewRatios();
   });
 
+  it("zooms about the framing box when a board has no area", () => {
+    // A zero-area board derives an empty lens box, whose on-screen centre is
+    // the artboard's origin rather than the framing box's. Guarded, the pivot
+    // is the framing box's centre (400, 300): 400 - (400 - 300) * 2 = 200 and
+    // 300 - (300 - 250) * 2 = 200. Unguarded it is the empty box's origin,
+    // which leaves the translate at 300/250.
+    const camera = createCamera({
+      width: 800,
+      height: 600,
+      artboard: { width: 0, height: 0 },
+    });
+    camera.showDisplay("16:9");
+    camera.zoomToFit();
+    camera.panBy(-100, -50);
+    camera.zoomBy(2);
+    const board = camera.artboardScreenRect();
+    expect(board.left).toBe(200);
+    expect(board.top).toBe(200);
+  });
+
   it("opens on the first landscape lens or Fit", () => {
     setActivePreviewRatios(["9:16"]);
     expect(
