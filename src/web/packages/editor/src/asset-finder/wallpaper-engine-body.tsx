@@ -70,9 +70,26 @@ export function WallpaperEngineBody(props: {
 
   const copy = uiCopy.assets.wallpaperEngine;
 
+  /** The modal's run, wrapped so a success reaches the one status line as well
+   *  as the surface that is about to close. */
+  const importPackage = async (
+    file: File,
+    onStep: (step: VideoImportStep) => void,
+  ): Promise<ImportOutcome> => {
+    setStatus("");
+    const outcome = await onImportPackage(file, onStep);
+    if (outcome.ok) setStatus(copy.packageImported);
+    return outcome;
+  };
+
   /** The two controls that need no listing: the workflow guide, and the `.mpkg`
    *  a scene exported on another machine already produced. Both stay reachable
-   *  when this PC has no library of its own. */
+   *  when this PC has no library of its own.
+   *
+   *  **One root, one fixed position.** React reconciles by position, so a modal
+   *  drawn under the loaded listing but beside the skeleton under load would
+   *  unmount when the listing lands — resetting `started` and running the
+   *  import a second time. Only the listing region below varies. */
   const guideAndPackage = (
     <>
       <div className="flex flex-wrap items-center gap-[var(--space-8)]">
@@ -119,7 +136,7 @@ export function WallpaperEngineBody(props: {
         <ImportVideoModal
           file={packageFile}
           package
-          onRun={(onStep) => onImportPackage(packageFile, onStep)}
+          onRun={(onStep) => importPackage(packageFile, onStep)}
           onClose={() => {
             setPackageFile(undefined);
           }}
@@ -127,40 +144,6 @@ export function WallpaperEngineBody(props: {
       )}
     </>
   );
-
-  if (answer === undefined) {
-    // The wait is the grid that is coming; the guide and the `.mpkg` import
-    // need no library, so they stay reachable while the host answers.
-    return (
-      <div className="flex flex-col gap-[var(--space-8)]">
-        {guideAndPackage}
-        <CardGridSkeleton />
-      </div>
-    );
-  }
-
-  if (answer.available === false) {
-    return (
-      <div className="flex flex-col gap-[var(--space-8)]">
-        {guideAndPackage}
-        <p
-          data-yunari-wallpaper-engine-unavailable=""
-          className="text-sm text-muted"
-        >
-          {copy.reason[answer.reason]}
-        </p>
-      </div>
-    );
-  }
-
-  if (answer.items.length === 0) {
-    return (
-      <div className="flex flex-col gap-[var(--space-8)]">
-        {guideAndPackage}
-        <p className="text-sm text-muted">{copy.empty}</p>
-      </div>
-    );
-  }
 
   const setCard = (
     item: WallpaperEngineItem,
@@ -180,6 +163,7 @@ export function WallpaperEngineBody(props: {
   /** A refusal stays on the card as its tooltip and on the status line; the
    *  card is still pressable, so a retry runs the action again. */
   const setBackground = async (item: WallpaperEngineItem): Promise<void> => {
+    setStatus("");
     setCard(item, "running");
     const outcome = await onSetBackground(item);
     if (outcome.ok) {
@@ -192,6 +176,7 @@ export function WallpaperEngineBody(props: {
   };
 
   const convert = async (item: WallpaperEngineItem): Promise<void> => {
+    setStatus("");
     setCard(item, "running");
     const project = await onConvert(item);
     if (project.ok) {
@@ -213,76 +198,100 @@ export function WallpaperEngineBody(props: {
   };
 
   const needle = query.trim().toLowerCase();
-  const shown = answer.items.filter(
-    (item) =>
-      (kind === "all" || item.kind === kind) &&
-      (needle === "" || item.title.toLowerCase().includes(needle)),
-  );
+
+  let listing: React.JSX.Element;
+  if (answer === undefined) {
+    // The wait is the grid that is coming; the guide and the `.mpkg` import
+    // need no library, so they stay reachable while the host answers.
+    listing = <CardGridSkeleton />;
+  } else if (answer.available === false) {
+    listing = (
+      <p
+        data-yunari-wallpaper-engine-unavailable=""
+        className="text-sm text-muted"
+      >
+        {copy.reason[answer.reason]}
+      </p>
+    );
+  } else if (answer.items.length === 0) {
+    listing = <p className="text-sm text-muted">{copy.empty}</p>;
+  } else {
+    const shown = answer.items.filter(
+      (item) =>
+        (kind === "all" || item.kind === kind) &&
+        (needle === "" || item.title.toLowerCase().includes(needle)),
+    );
+    listing = (
+      <>
+        <input
+          type="text"
+          data-yunari-wallpaper-engine-search=""
+          aria-label={copy.search}
+          placeholder={copy.search}
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+          }}
+          className="rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-8)] py-[var(--space-6)] text-sm"
+        />
+        <div
+          role="group"
+          aria-label={copy.filterKind}
+          className="flex flex-wrap gap-[var(--space-6)]"
+        >
+          {(["all", "video", "scene"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              data-yunari-wallpaper-engine-kind-filter={option}
+              aria-pressed={kind === option}
+              onClick={() => {
+                setKind(option);
+              }}
+              className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-xs aria-pressed:border-accent aria-pressed:text-accent"
+            >
+              {option === "all" ? copy.filterAll : copy.kind[option]}
+            </button>
+          ))}
+        </div>
+        {shown.length === 0 ? (
+          <p
+            data-yunari-wallpaper-engine-no-matches=""
+            className="text-sm text-muted"
+          >
+            {copy.noMatches}
+          </p>
+        ) : (
+          <div
+            data-yunari-asset-grid=""
+            className="grid content-start grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-[var(--space-8)]"
+          >
+            {shown.map((item) => {
+              const card = cards.get(item.workshopId);
+              return (
+                <WallpaperEngineCard
+                  key={item.workshopId}
+                  item={item}
+                  state={card?.state ?? "idle"}
+                  {...(card === undefined || card.message === undefined
+                    ? {}
+                    : { message: card.message })}
+                  onAction={() => {
+                    act(item);
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-[var(--space-8)]">
-      <input
-        type="text"
-        data-yunari-wallpaper-engine-search=""
-        aria-label={copy.search}
-        placeholder={copy.search}
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value);
-        }}
-        className="rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-8)] py-[var(--space-6)] text-sm"
-      />
-      <div
-        role="group"
-        aria-label={copy.filterKind}
-        className="flex flex-wrap gap-[var(--space-6)]"
-      >
-        {(["all", "video", "scene"] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            data-yunari-wallpaper-engine-kind-filter={option}
-            aria-pressed={kind === option}
-            onClick={() => {
-              setKind(option);
-            }}
-            className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-xs aria-pressed:border-accent aria-pressed:text-accent"
-          >
-            {option === "all" ? copy.filterAll : copy.kind[option]}
-          </button>
-        ))}
-      </div>
       {guideAndPackage}
-      {shown.length === 0 ? (
-        <p
-          data-yunari-wallpaper-engine-no-matches=""
-          className="text-sm text-muted"
-        >
-          {copy.noMatches}
-        </p>
-      ) : (
-        <div
-          data-yunari-asset-grid=""
-          className="grid content-start grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-[var(--space-8)]"
-        >
-          {shown.map((item) => {
-            const card = cards.get(item.workshopId);
-            return (
-              <WallpaperEngineCard
-                key={item.workshopId}
-                item={item}
-                state={card?.state ?? "idle"}
-                {...(card === undefined || card.message === undefined
-                  ? {}
-                  : { message: card.message })}
-                onAction={() => {
-                  act(item);
-                }}
-              />
-            );
-          })}
-        </div>
-      )}
+      {listing}
       <p
         role="status"
         data-yunari-wallpaper-engine-status=""

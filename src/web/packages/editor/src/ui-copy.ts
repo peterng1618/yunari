@@ -1383,6 +1383,10 @@ export const uiCopy = {
        *  missing install from an unreadable scene. */
       projectFailed: (reason: string): string =>
         `The scene could not be converted to a local project (${reason}).`,
+      /** A package import closes its own modal on success, so the body's one
+       *  status line is where the outcome survives. */
+      packageImported:
+        "The .mpkg package is imported and set as the theme's background.",
       /** R5's two sections: what a conversion is for, and the manual export that
        *  follows it. The sequence is the engine's own menus, so a renamed item
        *  costs a sentence rather than a broken run. */
@@ -1814,6 +1818,10 @@ export const uiCopy = {
       preparingPackage: "Extracting and preparing the video…",
       preparingVideo: "Preparing the video…",
       importing: "Importing the video…",
+      /** The export guide's author step, restated where a hand-exported file is
+       *  imported: a package can only be checked for what is already in it. */
+      dynamicText:
+        "A clock or other dynamic text already in the video cannot be removed by Yunari and will loop as-is.",
     },
     /** Shown when a normalize press produced no answer the pane can read — a
         host refusal arrives in its own words and is never replaced by this. */

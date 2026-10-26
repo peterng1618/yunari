@@ -179,26 +179,63 @@ it("stays open with the host's sentence when the import fails", async () => {
   expect(onClose).not.toHaveBeenCalled();
 });
 
-it("closes on a dismiss press without starting a second run", async () => {
+it("warns that baked-in dynamic text loops as-is, for a package and a video", async () => {
+  await mount({ package: true, onRun: deferredRun().onRun });
+  expect(modalOf()?.textContent).toContain(uiCopy.panels.importVideo.dynamicText);
+  expect(uiCopy.panels.importVideo.dynamicText).toContain("clock");
+
+  const first = root;
+  root = undefined;
+  await act(async () => first?.unmount());
+  document.body.replaceChildren();
+
+  await mount({ package: false, onRun: deferredRun().onRun });
+  expect(modalOf()?.textContent).toContain(uiCopy.panels.importVideo.dynamicText);
+});
+
+it("refuses every dismissal while the run is live", async () => {
   const run = deferredRun();
   const { onClose } = await mount({ package: true, onRun: run.onRun });
+
+  // No close affordance is drawn at all while the host and the encoder run.
+  expect(document.querySelector(".editor-shell-dialog-close")).toBeNull();
+
+  await act(async () => {
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    await flush();
+  });
+
+  expect(onClose).not.toHaveBeenCalled();
+  expect(modalOf()).not.toBeNull();
+  expect(run.onRun).toHaveBeenCalledTimes(1);
+});
+
+it("dismisses once the run has settled, and closes only once", async () => {
+  const run = deferredRun();
+  const { onClose } = await mount({ package: true, onRun: run.onRun });
+
+  await act(async () => {
+    run.finish({ ok: false, message: "No video in this package." });
+    await flush();
+  });
 
   const close = document.querySelector<HTMLButtonElement>(
     ".editor-shell-dialog-close",
   );
-  if (close === null) throw new Error("the modal drew no way out");
+  if (close === null) throw new Error("the settled modal drew no way out");
   await act(async () => {
     close.click();
     await flush();
   });
 
   expect(onClose).toHaveBeenCalledTimes(1);
-  expect(run.onRun).toHaveBeenCalledTimes(1);
-
-  // A run that lands after the author left must not close a second time.
+  // A run that landed before the dismissal cannot close a second time.
   await act(async () => {
     run.finish({ ok: false, message: "late" });
     await flush();
   });
   expect(onClose).toHaveBeenCalledTimes(1);
 });
+

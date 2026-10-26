@@ -259,8 +259,16 @@ it("sets a video as the background and reports it on the status line", async () 
     uiCopy.assets.wallpaperEngine.action.video.done,
   );
   // Done is final for the modal session: a second press would declare a
-  // duplicate asset and spend another credit slot.
-  expect(actionOf(rendered, "202")?.disabled).toBe(true);
+  // duplicate asset and spend another credit slot. It is `aria-disabled`
+  // rather than natively disabled so the tooltip naming the state stays
+  // reachable, and the guarded press is what prevents the second run.
+  expect(actionOf(rendered, "202")?.getAttribute("aria-disabled")).toBe("true");
+  expect(actionOf(rendered, "202")?.disabled).toBe(false);
+  await act(async () => {
+    actionOf(rendered, "202")?.click();
+    await Promise.resolve();
+  });
+  expect(onSetBackground).toHaveBeenCalledTimes(1);
   expect(onSetBackground).toHaveBeenCalledWith(items[1]);
   expect(
     rendered.querySelector("[data-yunari-wallpaper-engine-status]")
@@ -414,6 +422,92 @@ it("opens the video modal on a picked .mpkg", async () => {
     document.querySelector("[data-yunari-import-video-modal]"),
   ).not.toBeNull();
   expect(onImportPackage).toHaveBeenCalledWith(file, expect.any(Function));
+});
+
+it("keeps the one import modal mounted when the listing lands", async () => {
+  const pending = deferred<Response>();
+  const run = deferred<ImportOutcome>();
+  const onImportPackage = vi.fn(() => run.promise);
+  const rendered = await render({
+    ...idle(),
+    onImportPackage,
+    client: {
+      fetch: (async () => pending.promise) as unknown as typeof fetch,
+    },
+  });
+
+  const input = rendered.querySelector<HTMLInputElement>(
+    "[data-yunari-wallpaper-engine-package-input]",
+  );
+  const file = new File([new Uint8Array([1])], "night.mpkg");
+  await act(async () => {
+    Object.defineProperty(input, "files", {
+      value: [file],
+      configurable: true,
+    });
+    input?.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+  });
+
+  const modal = document.querySelector("[data-yunari-import-video-modal]");
+  expect(modal).not.toBeNull();
+  expect(onImportPackage).toHaveBeenCalledTimes(1);
+
+  // The listing landing must not move the modal: React reconciles by position,
+  // so a branch that draws it beside another element remounts it and re-runs
+  // the import — a second host call, a second asset and a second credit.
+  await act(async () => {
+    pending.resolve(new Response(JSON.stringify(available), { status: 200 }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(cardIds(rendered)).toEqual(["201", "202", "203", "204"]);
+  expect(onImportPackage).toHaveBeenCalledTimes(1);
+  expect(document.querySelector("[data-yunari-import-video-modal]")).toBe(modal);
+});
+
+it("reports a successful package import and clears the line when a card action starts", async () => {
+  const run = deferred<ImportOutcome>();
+  const background = deferred<ImportOutcome>();
+  const onImportPackage = vi.fn(() => run.promise);
+  const onSetBackground = vi.fn(() => background.promise);
+  const rendered = await render({
+    ...idle(),
+    onImportPackage,
+    onSetBackground,
+  });
+
+  const input = rendered.querySelector<HTMLInputElement>(
+    "[data-yunari-wallpaper-engine-package-input]",
+  );
+  const file = new File([new Uint8Array([1])], "night.mpkg");
+  await act(async () => {
+    Object.defineProperty(input, "files", {
+      value: [file],
+      configurable: true,
+    });
+    input?.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    run.resolve({ ok: true });
+    await run.promise;
+  });
+  expect(
+    rendered.querySelector("[data-yunari-wallpaper-engine-status]")
+      ?.textContent,
+  ).toContain(uiCopy.assets.wallpaperEngine.packageImported);
+
+  await act(async () => {
+    actionOf(rendered, "202")?.click();
+    await Promise.resolve();
+  });
+  expect(
+    rendered.querySelector("[data-yunari-wallpaper-engine-status]")
+      ?.textContent,
+  ).toBe("");
 });
 
 it("exposes one status line at the bottom of the body", async () => {

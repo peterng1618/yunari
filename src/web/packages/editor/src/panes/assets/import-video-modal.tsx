@@ -73,17 +73,27 @@ export function ImportVideoModal({
     <Dialog
       open
       onOpenChange={(next) => {
-        if (!next) close();
+        // A dismissal while the host and the encoder run cannot stop the run,
+        // so it must not be offered: Escape, a backdrop press and the close
+        // control all refuse until the run settles (R3).
+        if (!next && !running) close();
       }}
       label={copy.title}
-      closeLabel={copy.close}
-      closeIcon
+      {...(running ? {} : { closeLabel: copy.close, closeIcon: true })}
     >
       <div
         data-yunari-import-video-modal=""
         className="flex w-[var(--import-dialog-width)] flex-col gap-[var(--space-8)]"
       >
         <span className="truncate text-xs text-muted">{file.name}</span>
+        {/* The one warning a video-shaped import cannot discharge: only the
+            author's export can leave a dynamic text object out. */}
+        <p
+          data-yunari-import-video-dynamic-text=""
+          className="text-xs text-muted"
+        >
+          {copy.dynamicText}
+        </p>
         {/* A settled run has no step: on failure the host sentence below is the
             only status, so the stale "preparing" line cannot sit beside it. */}
         {running ? (

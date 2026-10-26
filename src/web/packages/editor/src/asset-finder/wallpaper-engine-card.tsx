@@ -24,6 +24,7 @@ function actionOf(
   readonly icon: LucideIcon;
   readonly label: string;
   readonly disabled: boolean;
+  readonly ariaDisabled?: boolean;
 } {
   const copy = uiCopy.assets.wallpaperEngine.action[item.kind];
   switch (state) {
@@ -31,8 +32,15 @@ function actionOf(
       return { icon: SETTING_GLYPH, label: copy.running, disabled: true };
     case "done":
       // Final for the modal session: a second press would declare a duplicate
-      // asset and spend another credit slot.
-      return { icon: CONVERTED_GLYPH, label: copy.done, disabled: true };
+      // asset and spend another credit slot. `aria-disabled` rather than native
+      // `disabled`, so the tooltip naming the state is reachable; the guarded
+      // press in `ControlIconButton` is what refuses the second run.
+      return {
+        icon: CONVERTED_GLYPH,
+        label: copy.done,
+        disabled: false,
+        ariaDisabled: true,
+      };
     case "failed":
       return {
         icon: ACTION_FAILED_GLYPH,
@@ -87,6 +95,7 @@ export function WallpaperEngineCard(props: {
           <ControlIconButton
             label={action.label}
             disabled={action.disabled}
+            {...(action.ariaDisabled === true ? { ariaDisabled: true } : {})}
             data={{ "data-yunari-wallpaper-engine-action": "" }}
             onClick={onAction}
           >
