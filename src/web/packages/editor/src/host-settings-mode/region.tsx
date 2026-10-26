@@ -29,8 +29,8 @@ import {
 } from "./client.js";
 import { DeviceNameRow } from "./device-name-row.js";
 import {
-  DisplayPresentationSection,
   type DisplayPresentation,
+  DisplayPresentationSection,
 } from "./display-presentation-section.js";
 import { Group } from "./section-group.js";
 import { createSourcesClient, type SourcesClient } from "./sources-client.js";

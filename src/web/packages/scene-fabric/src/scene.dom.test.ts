@@ -3,8 +3,8 @@
 import type { Background } from "@yunari/renderer-core";
 import { Group, Rect } from "fabric/es";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { host, plan, resizeHost } from "./scene-test-fixtures.js";
 import { type FabricSceneHandle, mountFabricScene } from "./scene.js";
+import { host, plan, resizeHost } from "./scene-test-fixtures.js";
 
 /** jsdom has no video frame callbacks, and the cases below patch them on the
  *  prototype. Restored after every case, so one case's patch is never the next

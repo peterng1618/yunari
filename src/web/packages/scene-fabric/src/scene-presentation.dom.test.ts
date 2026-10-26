@@ -4,8 +4,8 @@ import type { DisplayPresentation, ScenePlan } from "@yunari/renderer-core";
 import { viewportToDocument } from "@yunari/renderer-core";
 import { Rect } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
-import { host, plan, resizeHost } from "./scene-test-fixtures.js";
 import { mountFabricScene } from "./scene.js";
+import { host, plan, resizeHost } from "./scene-test-fixtures.js";
 
 describe("mountFabricScene's display presentation", () => {
   /** The scene as its host mounted it: the handle is the record, and `host` is

@@ -84,16 +84,16 @@ import type {
   DisplaySettings,
   DisplaySettingsStore,
 } from "./settings/display.js";
+import {
+  DisplaySettingError,
+  normalizePresentation,
+} from "./settings/display-presentation.js";
 import type {
   DisplayKind,
   DisplayPatch,
   DisplayRecord,
   DisplayStore,
 } from "./settings/displays.js";
-import {
-  DisplaySettingError,
-  normalizePresentation,
-} from "./settings/display-presentation.js";
 import {
   chartFpsFor,
   DEFAULT_DISPLAY,
