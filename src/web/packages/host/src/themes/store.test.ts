@@ -1987,7 +1987,12 @@ describe("ThemeStore asset bounds", () => {
     }
   });
 
-  it("holds read and write to the same asset count", async () => {
+  // Half a thousand small files across four writes and two hand-placed
+  // themes, on this box's tmp dir and under the suite's parallel workers: the
+  // case crossed Vitest's 20s default on two full-suite runs while passing
+  // alone every time, so the limit here is the harness's, not a claim the case
+  // makes. The bound it proves is still 128/129.
+  it("holds read and write to the same asset count", { timeout: 60_000 }, async () => {
     await expect(
       store.write("at-bound", themeOfCount("at-bound", 128)),
     ).resolves.toMatchObject({ id: "at-bound" });
