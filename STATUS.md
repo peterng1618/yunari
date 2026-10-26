@@ -9,7 +9,7 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md` — tasks 1–4 (transform, scene presentation, host record, pair page) are implemented; later tasks remain.
+- **Active plan:** `docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md` — tasks 1–5 (transform, scene presentation, host record, pair page, delivery and Host controls) are implemented; Task 6 (browser proof and gate) remains.
 - **Preview lens landed:** scene-anchored display box, shell stage, theme letterbox, guide frame, circle lens, ratio catalogue and Previews settings tab.
 - **Display presentation in plan B:** per-record shape and rotation, rotated/inscribed playback, pair-page choice, Host controls.
 - **Audit, chart, spacing and fonts work is on `main`:** revision gating, memoised dirty reading, chart animation and the fonts/assets rework are landed.
@@ -17,10 +17,11 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Last completed change
 
-- **Pair page:** `pair.html` asks for screen shape (Rect/Circle) and starting rotation, sends both in the claim body; the number's min/max/step follow the shape.
-- **Snap named:** switching to Rect moves a free angle to the nearest quarter, and a note keeps the angle the author typed visible beside the one sent.
-- **Startup race fixed:** the banner reuses a live pairing code instead of minting over one the route already issued, so a claim is no longer refused after a read.
-- **Evidence:** static page case and the live circle-at-45 Playwright pairing pass on both host projects; the snap case shown red with snapping disabled; host typecheck exit 0.
+- **Player follows the host's glass:** the publish poll reports a validated shape and whole-degree angle only when it moves, and `main.ts` hands it to `updatePresentation`.
+- **Host controls:** a selected paired display gets Rect/Circle and a rotation track (quarter turns for rect, whole degrees for circle); a shape change snaps the angle into one write.
+- **This PC says why:** `this-pc` and the default draw no control; the section states the reason instead.
+- **Rows read the host's answer:** each display row carries its shape, and a write replaces the row from the record rather than optimistically.
+- **Evidence:** 142 cases across the five affected suites pass; the follower's quarter-turn guard, the snap, the controls and the PATCH method were each shown red with the behaviour disabled; typecheck exit 0.
 
 ## Next
 

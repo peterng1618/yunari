@@ -517,6 +517,10 @@ async function startHostedTheme(
       chartRate = rate;
       chartRefresh.setRate(rate);
     },
+    // The scene re-fits and re-clips itself from the host's answer. The follower
+    // has already refused a shape or angle the rule cannot hold, so this cannot
+    // throw for a payload `updatePresentation` would reject.
+    onPresentationChange: (next) => handle.updatePresentation(next),
   });
   const observer = new ResizeObserver(() => handle.resize());
   observer.observe(host);

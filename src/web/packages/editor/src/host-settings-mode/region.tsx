@@ -2,14 +2,17 @@ import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import {
   DEFAULT_UNIT_PREFERENCES,
+  type DisplayShape,
   type UnitPreferences,
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { ControlSegmented } from "../components/ui/control-segmented.js";
 import {
   type ControlOption,
   ControlSelect,
 } from "../components/ui/control-select.js";
+import { ControlSlider } from "../components/ui/control-slider.js";
 import {
   ControlRow,
   ControlWell,
@@ -18,6 +21,7 @@ import {
 import type { ShellMode } from "../editor-shell/shell-layout.js";
 import {
   createThemeLibraryClient,
+  DEFAULT_DISPLAY_KEY,
   type ThemedDisplay,
   type ThemeLibraryClient,
   type ThemeLibraryEntry,
@@ -64,6 +68,13 @@ function shownTheme(
   fallback: string | null,
 ): string | null {
   return display?.theme ?? fallback;
+}
+
+/** A circle's free angle snapped into the rect rule the store will enforce:
+ *  `Math.round(rotation / 90) * 90 mod 360`, so 37 reads upright and 350 wraps
+ *  to 0 rather than to a 360 the record refuses. */
+function snapQuarterTurn(rotation: number): number {
+  return (((Math.round(rotation / 90) * 90) % 360) + 360) % 360;
 }
 
 /**
@@ -471,6 +482,52 @@ function HostSettings(props: {
 
   const asked = unanswered(questions?.required ?? [], questions?.answers ?? {});
 
+  /** This PC is the machine and the default is a theme key, not a record: both
+   *  answer `rect`/0 but neither has a record a write could land on. */
+  const editableDisplay =
+    selectedRow !== undefined &&
+    selectedRow.id !== "this-pc" &&
+    selectedRow.id !== DEFAULT_DISPLAY_KEY
+      ? selectedRow
+      : undefined;
+
+  /** **The row is replaced from the host's answer**, never optimistically: the
+   *  store decides the pair together, and a snapped angle it refused must not
+   *  stand on the row as though it had been stored. */
+  const savePresentation = (
+    display: ThemedDisplay,
+    next: { readonly shape: DisplayShape; readonly rotation: number },
+  ): void => {
+    write(async () => {
+      const saved = await settings.updateDisplayPresentation(display.id, next);
+      if (mounted.current) {
+        setMap((current) =>
+          current === undefined
+            ? current
+            : {
+                ...current,
+                displays: current.displays.map((row) =>
+                  row.id === display.id
+                    ? { ...row, shape: saved.shape, rotation: saved.rotation }
+                    : row,
+                ),
+              },
+        );
+      }
+      return uiCopy.hostSettings.displays.savedPresentation;
+    });
+  };
+
+  /** A shape change and the angle it snaps to are one write, because the new
+   *  shape is what decides the rule the angle has to satisfy. */
+  const changeShape = (display: ThemedDisplay, shape: DisplayShape): void => {
+    savePresentation(display, {
+      shape,
+      rotation:
+        shape === "rect" ? snapQuarterTurn(display.rotation) : display.rotation,
+    });
+  };
+
   return (
     // **No status strip of its own.** §7.6's bar is the shell's, drawn once as a
     // sibling of every mode's region, and this mode's line reaches it through
@@ -507,6 +564,7 @@ function HostSettings(props: {
                       key={display.id}
                       value={display.id}
                       data-yunari-host-display={display.id}
+                      data-shape={display.shape}
                       className="flex items-center gap-[var(--space-12)] rounded-lg border border-edge bg-panel-2 px-[var(--space-10)] py-[var(--space-8)] text-left data-[pressed]:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                     >
                       <span className="min-w-0 flex-1 text-xs text-text">
@@ -536,6 +594,64 @@ function HostSettings(props: {
                   );
                 })}
               </ToggleGroup>
+            )}
+          </Group>
+
+          {/* **The words below the rows speak for the chosen display**, so the
+              controls here edit only the record the rows above selected. This
+              PC and the default have no record: the section says why rather
+              than drawing controls that could not write. */}
+          <Group
+            testId="presentation"
+            name={uiCopy.hostSettings.displays.presentation}
+            hint={uiCopy.hostSettings.displays.rotationSnapHint}
+          >
+            {editableDisplay === undefined ? (
+              <p className="text-xs text-muted">
+                {uiCopy.hostSettings.displays.presentationAbsent}
+              </p>
+            ) : (
+              <>
+                <ControlSegmented
+                  id="yunari-host-display-shape"
+                  label={uiCopy.hostSettings.displays.shape}
+                  data={{ "data-yunari-host-display-shape": "" }}
+                  value={editableDisplay.shape}
+                  options={[
+                    {
+                      id: "rect",
+                      name: uiCopy.hostSettings.displays.shapeRect,
+                    },
+                    {
+                      id: "circle",
+                      name: uiCopy.hostSettings.displays.shapeCircle,
+                    },
+                  ]}
+                  onChange={(shape) => changeShape(editableDisplay, shape)}
+                />
+                {/* A rect display's track is its four quarter turns; a circle's
+                    is every whole degree. Both commit through the value well,
+                    which applies the same rule the store will. */}
+                <ControlSlider
+                  id="yunari-host-display-rotation"
+                  label={uiCopy.hostSettings.displays.rotation}
+                  data={{ "data-yunari-host-display-rotation": "" }}
+                  value={editableDisplay.rotation}
+                  {...(editableDisplay.shape === "rect"
+                    ? {
+                        min: 0,
+                        max: 270,
+                        values: [0, 90, 180, 270],
+                      }
+                    : { min: 0, max: 359, integer: true })}
+                  onCommit={(rotation) =>
+                    savePresentation(editableDisplay, {
+                      shape: editableDisplay.shape,
+                      rotation,
+                    })
+                  }
+                />
+              </>
             )}
           </Group>
 

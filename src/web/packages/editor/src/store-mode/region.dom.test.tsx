@@ -1167,8 +1167,20 @@ function twoDisplays(): ActiveThemeHost {
     answer: {
       default: null,
       displays: [
-        { id: "this-pc", label: "This PC", theme: null },
-        { id: "kitchen-tablet", label: "Kitchen tablet", theme: null },
+        {
+          id: "this-pc",
+          label: "This PC",
+          theme: null,
+          shape: "rect",
+          rotation: 0,
+        },
+        {
+          id: "kitchen-tablet",
+          label: "Kitchen tablet",
+          theme: null,
+          shape: "rect",
+          rotation: 0,
+        },
       ],
     },
   });
@@ -1212,8 +1224,20 @@ it("offers the default beside the displays rather than as one of them", async ()
       // key, because that is what `assign` takes.
       default: "porch-strip",
       displays: [
-        { id: "this-pc", label: "This PC", theme: null },
-        { id: "kitchen-tablet", label: "Kitchen tablet", theme: null },
+        {
+          id: "this-pc",
+          label: "This PC",
+          theme: null,
+          shape: "rect",
+          rotation: 0,
+        },
+        {
+          id: "kitchen-tablet",
+          label: "Kitchen tablet",
+          theme: null,
+          shape: "rect",
+          rotation: 0,
+        },
       ],
     },
   });
@@ -1242,7 +1266,13 @@ it("reports the host's refusal in the host's own words", async () => {
     answer: {
       default: null,
       displays: [
-        { id: "kitchen-tablet", label: "Kitchen tablet", theme: null },
+        {
+          id: "kitchen-tablet",
+          label: "Kitchen tablet",
+          theme: null,
+          shape: "rect",
+          rotation: 0,
+        },
       ],
     },
     writeRefusal: { status: 404, body: "No such display." },
@@ -1297,7 +1327,15 @@ it("reads the displays each time the choice opens rather than keeping a list", a
   const host = hostServing({
     answer: {
       default: null,
-      displays: [{ id: "this-pc", label: "This PC", theme: null }],
+      displays: [
+        {
+          id: "this-pc",
+          label: "This PC",
+          theme: null,
+          shape: "rect",
+          rotation: 0,
+        },
+      ],
     },
   });
   await mountOver(host);
@@ -1314,8 +1352,20 @@ it("reads the displays each time the choice opens rather than keeping a list", a
   host.answer = {
     default: null,
     displays: [
-      { id: "this-pc", label: "This PC", theme: null },
-      { id: "kitchen-tablet", label: "Kitchen tablet", theme: null },
+      {
+        id: "this-pc",
+        label: "This PC",
+        theme: null,
+        shape: "rect",
+        rotation: 0,
+      },
+      {
+        id: "kitchen-tablet",
+        label: "Kitchen tablet",
+        theme: null,
+        shape: "rect",
+        rotation: 0,
+      },
     ],
   };
 
@@ -1340,8 +1390,20 @@ it("reports where the theme already is as the choice's own value", async () => {
     answer: {
       default: null,
       displays: [
-        { id: "this-pc", label: "This PC", theme: "porch-strip" },
-        { id: "kitchen-tablet", label: "Kitchen tablet", theme: "living-room" },
+        {
+          id: "this-pc",
+          label: "This PC",
+          theme: "porch-strip",
+          shape: "rect",
+          rotation: 0,
+        },
+        {
+          id: "kitchen-tablet",
+          label: "Kitchen tablet",
+          theme: "living-room",
+          shape: "rect",
+          rotation: 0,
+        },
       ],
     },
   });
@@ -1367,7 +1429,15 @@ it("tells a theme no display holds apart from the theme that is the default", as
   const host = hostServing({
     answer: {
       default: null,
-      displays: [{ id: "this-pc", label: "This PC", theme: null }],
+      displays: [
+        {
+          id: "this-pc",
+          label: "This PC",
+          theme: null,
+          shape: "rect",
+          rotation: 0,
+        },
+      ],
     },
   });
   await mountOver(host);
@@ -1383,7 +1453,15 @@ it("tells a theme no display holds apart from the theme that is the default", as
   // The host's own answer now names this theme as the default.
   host.answer = {
     default: "living-room",
-    displays: [{ id: "this-pc", label: "This PC", theme: null }],
+    displays: [
+      {
+        id: "this-pc",
+        label: "This PC",
+        theme: null,
+        shape: "rect",
+        rotation: 0,
+      },
+    ],
   };
   await openAssign("living-room");
   expect(

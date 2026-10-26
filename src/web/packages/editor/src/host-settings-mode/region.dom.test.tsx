@@ -21,6 +21,7 @@
  * follows (`docs/design/mockups/current/host-settings.html`) is read by its own
  * gate, not by this file.
  */
+import type { DisplayShape } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -169,6 +170,10 @@ interface Written {
   readonly asked: { readonly display: string; readonly theme: string }[];
   readonly weather: WeatherSettings[];
   readonly searches: string[];
+  readonly presentation: {
+    readonly id: string;
+    readonly next: { readonly shape: DisplayShape; readonly rotation: number };
+  }[];
 }
 
 function library(fixture: Fixture): ThemeLibraryClient {
@@ -210,6 +215,7 @@ function hostSettings(
     asked: [],
     weather: [],
     searches: [],
+    presentation: [],
   };
   const devices: DeviceSettings = fixture.devices ?? {
     available: { gpus: [], disks: [] },
@@ -264,6 +270,10 @@ function hostSettings(
       searchPlaces: async (query) => {
         wrote.searches.push(query);
         return fixture.places ?? [];
+      },
+      updateDisplayPresentation: async (id, next) => {
+        wrote.presentation.push({ id, next });
+        return next;
       },
     },
   };
@@ -329,8 +339,20 @@ function sourcesClient(fixture: Fixture): {
 const TWO_DISPLAYS: Fixture = {
   fallback: "kitchen-strip",
   displays: [
-    { id: "this-pc", label: "This PC", theme: null },
-    { id: "hallway", label: "Hallway panel", theme: "hallway-clock" },
+    {
+      id: "this-pc",
+      label: "This PC",
+      theme: null,
+      shape: "rect",
+      rotation: 0,
+    },
+    {
+      id: "hallway",
+      label: "Hallway panel",
+      theme: "hallway-clock",
+      shape: "rect",
+      rotation: 0,
+    },
   ],
   themes: [
     { id: "kitchen-strip", name: "Kitchen strip" },
@@ -421,6 +443,37 @@ function shownOn(row: HTMLElement): string {
 /** Whether a row says the display follows this PC rather than holding its own. */
 function follows(row: HTMLElement): boolean {
   return row.querySelector("[data-yunari-host-display-follows]") !== null;
+}
+
+/** One segment of the screen-shape control, by the word it prints. */
+function shapeSegment(container: HTMLElement, name: string): HTMLElement {
+  const segment = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-yunari-host-display-shape]"),
+  ).find((candidate) => candidate.textContent === name);
+  return must(segment ?? null, `the ${name} shape segment`);
+}
+
+async function chooseShape(
+  container: HTMLElement,
+  name: string,
+): Promise<void> {
+  await act(async () => shapeSegment(container, name).click());
+}
+
+/** Commits a rotation through the control's own value well, the way a typed
+ *  number is committed. */
+async function commitRotation(
+  container: HTMLElement,
+  degrees: number,
+): Promise<void> {
+  const well = must(
+    container.querySelector<HTMLInputElement>(
+      "[data-yunari-host-display-rotation-well]",
+    ),
+    "the rotation control's value well",
+  );
+  await type(well, String(degrees));
+  await enter(well);
 }
 
 /** One device's name field. */
@@ -581,6 +634,70 @@ it("names each display, and the default for the ones with none", async () => {
     statusLine(published).status,
     "the line published does not rest on the page's own sentence",
   ).toBe(uiCopy.hostSettings.status.ready);
+});
+
+/**
+ * The plan's first case: **a rectangular display's quarter-turn rotation is
+ * written with its shape**, and the row is replaced from the host's answer
+ * rather than optimistically.
+ */
+it("writes a rect display's quarter-turn rotation", async () => {
+  const { container, wrote } = await mountHost({
+    displays: [
+      { id: "tv", label: "TV", theme: null, shape: "rect", rotation: 0 },
+    ],
+  });
+  await act(async () => displayRow(container, "tv").click());
+  await commitRotation(container, 90);
+
+  expect(wrote.presentation).toEqual([
+    { id: "tv", next: { shape: "rect", rotation: 90 } },
+  ]);
+  expect(displayRow(container, "tv").getAttribute("data-shape")).toBe("rect");
+});
+
+/** A circle's free angle is snapped into the rect rule when the shape changes,
+ *  in the one write that sends both fields. */
+it("snaps a circle angle when the shape becomes rect", async () => {
+  const { container, wrote } = await mountHost({
+    displays: [
+      {
+        id: "round",
+        label: "Round",
+        theme: null,
+        shape: "circle",
+        rotation: 37,
+      },
+    ],
+  });
+  await act(async () => displayRow(container, "round").click());
+  await chooseShape(container, "Rect");
+
+  expect(wrote.presentation).toEqual([
+    { id: "round", next: { shape: "rect", rotation: 0 } },
+  ]);
+});
+
+/** This PC is the machine, not a paired screen: it has no record to present, so
+ *  the section says why rather than drawing a disabled control. */
+it("draws no presentation controls for this-pc", async () => {
+  const { container } = await mountHost({
+    displays: [
+      {
+        id: "this-pc",
+        label: "This PC",
+        theme: null,
+        shape: "rect",
+        rotation: 0,
+      },
+    ],
+  });
+  expect(
+    container.querySelector("[data-yunari-host-display-shape]"),
+  ).toBeNull();
+  expect(container.textContent).toContain(
+    uiCopy.hostSettings.displays.presentationAbsent,
+  );
 });
 
 /**
