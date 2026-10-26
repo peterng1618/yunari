@@ -249,12 +249,77 @@ it("asks the font body and draws trios and families in one grid", async () => {
   expect(
     tiles("family").map((tile) => tile.getAttribute("data-yunari-font-tile")),
   ).toEqual([manrope.id]);
-  // One badge per tile, named by the host's own label for the source.
-  expect(tiles("trio")[0]?.textContent).toContain("Curated fonts");
-  expect(tiles("family")[0]?.textContent).toContain("Google Fonts");
+  // One mark per tile, named by the host's own label for the source.
+  expect(
+    tiles("trio")[0]
+      ?.querySelector("[data-yunari-asset-source]")
+      ?.getAttribute("aria-label"),
+  ).toBe("Curated fonts");
+  expect(
+    tiles("family")[0]
+      ?.querySelector("[data-yunari-asset-source]")
+      ?.getAttribute("aria-label"),
+  ).toBe("Google Fonts");
 
   press(`[data-yunari-font-tile="${interTrio.id}"]`);
   expect(tiles("trio")[0]?.getAttribute("aria-selected")).toBe("true");
+});
+
+it("draws a card's specimen rows in the result's own faces", async () => {
+  searchAssets.mockResolvedValue({
+    pages: [
+      page("curated-fonts", [interTrio]),
+      page("google-fonts", [manrope]),
+    ],
+  });
+  await render();
+
+  await type("Inter");
+  await settle();
+
+  const rowsOf = (kind: "trio" | "family"): readonly (string | null)[] =>
+    [
+      ...(tiles(kind)[0]?.querySelectorAll(
+        "[data-yunari-font-specimen] > span",
+      ) ?? []),
+    ].map((row) => row.textContent);
+  // The trio's three roles, in reading order; a family has one face to draw.
+  expect(rowsOf("trio")).toEqual(["Inter", "Poppins", "Fira Code"]);
+  expect(rowsOf("family")).toEqual(["Manrope"]);
+});
+
+it("draws a family's lead face, not the first cut the provider listed", async () => {
+  // A Google family lists every weight × subset, so position 0 is often a
+  // subset with no Latin glyphs: drawn, the name falls back to a serif. The
+  // row's own id names the face the host picked as the family's lead.
+  const cuts = [
+    cut("google-fonts", "Water Brush", 400),
+    cut("google-fonts", "Water Brush", 700),
+  ];
+  const listedFirstIsNotLead: AssetResult = {
+    // Search prefixes the row id once; the rest is the cut's own id.
+    id: `google-fonts:${cuts[1]?.id ?? ""}`,
+    name: "Water Brush",
+    kind: "font",
+    preview: "",
+    subtitle: "handwriting · 2 cuts",
+    licence: "OFL-1.1",
+    sourceUrl: cuts[1]?.sourceUrl ?? "",
+    font: { cuts },
+  };
+  searchAssets.mockResolvedValue({
+    pages: [page("google-fonts", [listedFirstIsNotLead])],
+  });
+  await render();
+
+  await type("Water");
+  await settle();
+
+  const row = tiles("family")[0]?.querySelector<HTMLElement>(
+    "[data-yunari-font-specimen] > span",
+  );
+  expect(row?.textContent).toBe("Water Brush");
+  expect(row?.style.fontWeight).toBe("700");
 });
 
 it("opens the preview panel on the pressed tile", async () => {

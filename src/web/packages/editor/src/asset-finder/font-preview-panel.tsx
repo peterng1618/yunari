@@ -31,7 +31,7 @@ function rolePresets(
   );
 }
 
-function cutsOf(selected: FontResult): readonly FontCut[] {
+export function cutsOf(selected: FontResult): readonly FontCut[] {
   const trio = selected.font.trio;
   if (trio === undefined) return selected.font.cuts;
   return ROLES.flatMap((role) => {
@@ -40,7 +40,46 @@ function cutsOf(selected: FontResult): readonly FontCut[] {
   });
 }
 
-function faceStyle(cut: FontCut | undefined): React.CSSProperties {
+/**
+ * The face a family row is addressed by.
+ *
+ * A family's cuts are every published file — weight × subset — so position 0 is
+ * whatever the provider listed first, which for a Google family is often a
+ * subset with no Latin glyphs. Drawn or adopted, that face leaves the author's
+ * own text in the browser fallback (a serif), while the row's own id names the
+ * cut the host chose as the family's lead: this reads that id rather than an
+ * array position.
+ *
+ * Search namespaces a row as `<source>:<entry id>`, and the entry id is the
+ * cut's own id, so the prefix comes off before the comparison.
+ */
+export function leadCutOf(selected: {
+  readonly id: string;
+  readonly font?: { readonly cuts: readonly FontCut[] } | undefined;
+}): FontCut | undefined {
+  const cuts = selected.font?.cuts ?? [];
+  const at = selected.id.indexOf(":");
+  const entryId = at === -1 ? selected.id : selected.id.slice(at + 1);
+  return cuts.find((cut) => cut.id === entryId) ?? cuts[0];
+}
+
+/** The faces an import brings with the chosen cut: every weight and style of
+ *  the family's lead subset, so the preset's weight field has a face to draw at
+ *  each weight, plus the chosen cut when the author picked another subset. */
+export function familyCutsOf(
+  selected: FontResult,
+  chosen: FontCut,
+): readonly FontCut[] {
+  const lead = leadCutOf(selected) ?? chosen;
+  const sameSubset = selected.font.cuts.filter(
+    (cut) => cut.family === lead.family && cut.subset === lead.subset,
+  );
+  return sameSubset.some((cut) => cut.id === chosen.id)
+    ? sameSubset
+    : [...sameSubset, chosen];
+}
+
+export function faceStyle(cut: FontCut | undefined): React.CSSProperties {
   return cut === undefined
     ? {}
     : {
@@ -56,7 +95,7 @@ function faceStyle(cut: FontCut | undefined): React.CSSProperties {
  * The source is the provider's own CORS-open `previewUrl`; the editor declares
  * no Content-Security-Policy, so a remote font origin is allowed. A load that
  * fails leaves the card on its fallback family rather than blocking the panel. */
-function useSpecimens(cuts: readonly FontCut[]): void {
+export function useSpecimens(cuts: readonly FontCut[]): void {
   useEffect(() => {
     const fonts = typeof document === "undefined" ? undefined : document.fonts;
     if (fonts === undefined || typeof FontFace === "undefined")
@@ -104,8 +143,12 @@ export function FontPreviewPanel({
   readonly presets: TypePresets;
   readonly onApplyTrio: ((trio: FontTrioInfo) => void) | undefined;
   readonly onAddTrioPresets: ((trio: FontTrioInfo) => void) | undefined;
-  readonly onAddPreset: ((cut: FontCut, role: FontRole) => void) | undefined;
-  readonly onApplyToSelected: ((cut: FontCut) => void) | undefined;
+  readonly onAddPreset:
+    | ((cut: FontCut, role: FontRole, family: readonly FontCut[]) => void)
+    | undefined;
+  readonly onApplyToSelected:
+    | ((cut: FontCut, family: readonly FontCut[]) => void)
+    | undefined;
 }): React.JSX.Element {
   const copy = uiCopy.assets.fontPreview;
   const trio = selected.font.trio;
@@ -115,9 +158,23 @@ export function FontPreviewPanel({
 
   const cuts = useMemo(() => cutsOf(selected), [selected]);
   useSpecimens(cuts);
+  /** Cuts that share a weight and style: their labels would read the same, so
+   *  the subset is what names the difference between them. */
+  const shared = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const cut of selected.font.cuts) {
+      const key = `${cut.weight}|${cut.style}`;
+      seen.set(key, (seen.get(key) ?? 0) + 1);
+    }
+    return new Set(
+      selected.font.cuts
+        .filter((cut) => (seen.get(`${cut.weight}|${cut.style}`) ?? 0) > 1)
+        .map((cut) => cut.id),
+    );
+  }, [selected]);
 
   const selectedCut =
-    selected.font.cuts.find((cut) => cut.id === cutId) ?? selected.font.cuts[0];
+    selected.font.cuts.find((cut) => cut.id === cutId) ?? leadCutOf(selected);
   // No role-tagged preset means Apply has nothing to rewrite; only trio panels
   // draw that button, and only with it does the reason have a subject.
   const roleless = ROLES.every(
@@ -217,10 +274,13 @@ export function FontPreviewPanel({
                     onClick={() => {
                       setCutId(cut.id);
                     }}
-                    style={faceStyle(cut)}
                     className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-6)] py-[var(--space-2)] text-[10px] text-muted aria-pressed:border-accent aria-pressed:text-accent"
                   >
-                    {copy.cutLabel(cut.weight, cut.style === "italic")}
+                    {copy.cutLabel(
+                      cut.weight,
+                      cut.style === "italic",
+                      shared.has(cut.id) ? cut.subset : undefined,
+                    )}
                   </button>
                 );
               })}
@@ -262,7 +322,11 @@ export function FontPreviewPanel({
                 type="button"
                 data-yunari-font-add-preset=""
                 onClick={() => {
-                  onAddPreset(selectedCut, role);
+                  onAddPreset(
+                    selectedCut,
+                    role,
+                    familyCutsOf(selected, selectedCut),
+                  );
                 }}
                 className="rounded-[var(--radius-sm)] border border-accent px-[var(--space-12)] py-[var(--space-4)] text-xs text-accent"
               >
@@ -275,7 +339,10 @@ export function FontPreviewPanel({
                 type="button"
                 data-yunari-font-apply=""
                 onClick={() => {
-                  onApplyToSelected(selectedCut);
+                  onApplyToSelected(
+                    selectedCut,
+                    familyCutsOf(selected, selectedCut),
+                  );
                 }}
                 className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-12)] py-[var(--space-4)] text-xs text-muted"
               >

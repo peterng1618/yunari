@@ -954,11 +954,17 @@ export class EditorDocument {
   ): Promise<void> {
     if (entries.length === 0)
       throw new Error("That font names no cut to import.");
+    // A face already declared is not asked for again: applying a second preset
+    // from the same family must not re-download what the package already holds.
+    const declared = new Set(
+      this.#assets.declarations.map((asset) => asset.id),
+    );
     const read: {
       readonly face: CuratedFontFace;
       readonly bytes: Uint8Array;
     }[] = [];
     for (const entry of entries) {
+      if (declared.has(fontAssetId(entry.cut))) continue;
       const face = faceOfCut(entry.cut, entry.role);
       const answer = await assetBytes(entry.cut.source, entry.cut.id);
       if (answer === undefined)
@@ -1021,8 +1027,16 @@ export class EditorDocument {
   async addTypePresetFromCut(
     cut: FontCut,
     role: FontTrioRole | null,
+    /** The family's other faces to bring with it — every weight of the subset
+     *  — so the preset's weight field has a face to draw. */
+    family: readonly FontCut[] = [],
   ): Promise<string> {
-    await this.#adoptCuts([{ cut, role: role ?? "body" }]);
+    await this.#adoptCuts([
+      { cut, role: role ?? "body" },
+      ...family
+        .filter((other) => other.id !== cut.id)
+        .map((other) => ({ cut: other, role: role ?? "body" })),
+    ]);
     const presets = this.#typePresets();
     const id = freePresetId(role ?? "body", presets);
     this.setTypes({ ...presets, [id]: rolePreset(role, cut) });
@@ -1058,11 +1072,21 @@ export class EditorDocument {
 
   /** Rewrites one named preset with a finder cut — the explicit target the
    *  Apply to selected preset action names. */
-  async applyCutToPreset(id: string, cut: FontCut): Promise<void> {
+  async applyCutToPreset(
+    id: string,
+    cut: FontCut,
+    family: readonly FontCut[] = [],
+  ): Promise<void> {
     const presets = this.#typePresets();
     const preset = presets[id];
     if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
-    await this.#adoptCuts([{ cut, role: preset.value.trioRole ?? "body" }]);
+    const role = preset.value.trioRole ?? "body";
+    await this.#adoptCuts([
+      { cut, role },
+      ...family
+        .filter((other) => other.id !== cut.id)
+        .map((other) => ({ cut: other, role })),
+    ]);
     const latest = this.#typePresets();
     const current = latest[id] ?? preset;
     this.setTypes({

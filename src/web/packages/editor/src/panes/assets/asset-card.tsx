@@ -22,6 +22,10 @@ export interface AssetCardProps {
   readonly referenced: boolean;
   /** The manager's own blob URL, where the kind has one to draw. */
   readonly previewUrl?: string;
+  /** A grouped card — a font family — is titled by the family and lists what
+   *  it holds, where a single file is titled by its own name and metadata. */
+  readonly label?: string;
+  readonly detail?: string;
   readonly onChoose: () => void;
   readonly actions?: React.ReactNode;
 }
@@ -31,11 +35,14 @@ export function AssetCard({
   chosen,
   referenced,
   previewUrl,
+  label,
+  detail,
   onChoose,
   actions,
 }: AssetCardProps): React.JSX.Element {
   return (
     <div
+      data-yunari-asset-card={asset.id}
       className={`flex flex-col rounded-[var(--radius-md)] border ${
         chosen ? "border-accent" : "border-edge-2"
       } bg-panel`}
@@ -53,10 +60,10 @@ export function AssetCard({
         />
         <span className="flex min-w-0 flex-1 flex-col gap-[var(--space-4)]">
           <span className="truncate text-xs text-text">
-            {assetFileName(asset)}
+            {label ?? assetFileName(asset)}
           </span>
           <span className="truncate font-mono text-[10px] text-muted">
-            {metadataOf(asset)}
+            {detail ?? metadataOf(asset)}
           </span>
         </span>
         <span

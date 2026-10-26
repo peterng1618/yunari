@@ -29,6 +29,7 @@ import {
   startDraftAutosave,
 } from "./draft-store.js";
 import { createFavoritesClient } from "./favorites-client.js";
+import { watchDeclaredFontFaces } from "./font-face-registration.js";
 import { createEditorSource } from "./live-source.js";
 import type { NewDocumentAnswer } from "./new-document-chooser.js";
 import {
@@ -48,6 +49,9 @@ type ActiveEditor = {
   readonly shell: Awaited<ReturnType<typeof mountEditorShell>>;
   readonly extensions: EditorSession;
   readonly releaseFonts: () => void;
+  /** Stops watching for faces declared after the mount and releases the ones
+   *  it registered; runs before `releaseFonts`. */
+  readonly stopFontWatch: () => void;
   readonly bridge: EditorShellBridge;
   source: EditorSource;
 };
@@ -272,6 +276,15 @@ async function start(): Promise<void> {
       releaseFonts();
       throw error;
     }
+    // The mount's own faces are registered above; this is the same owner for
+    // the ones the author adopts or imports while the document is open.
+    const stopFontWatch = watchDeclaredFontFaces({
+      manager: assetManager,
+      canvas: shell.editor.canvas,
+      onError: (message) => {
+        status.textContent = message;
+      },
+    });
     const options = {
       shell,
       source: source.source,
@@ -410,8 +423,9 @@ async function start(): Promise<void> {
     active?.extensions.destroy();
     active?.shell.destroy();
     active?.source.close();
+    active?.stopFontWatch();
     active?.releaseFonts();
-    active = { shell, extensions, source, releaseFonts, bridge };
+    active = { shell, extensions, source, releaseFonts, stopFontWatch, bridge };
     /** e2e drives a rename through the same bridge the layer panel calls, so the
      * global is published only after the previous document's is torn down. */
     (window as unknown as Record<string, unknown>).yunariEditorBridge = bridge;
