@@ -189,8 +189,12 @@ turns it in place without growing or shrinking the composition.
   paints it with the theme's background colour and clips the canvas and the
   media layers to `border-radius: 50%`; the area outside the disc is black (on
   a round panel it is outside the screen).
-- The artboard plate rotates with the canvas because it is a Fabric background
-  inside it.
+- **The artboard plate does not rotate.** It is not a Fabric background: the
+  preview-lens plan made one paint serve the board's fill and the bars behind
+  it, and that paint is CSS on the host (rect) or on the disc (circle). Only the
+  composition, a theme-bounded media layer and glass sampling turn. A gradient
+  plate therefore stays screen-fixed under a turned composition; `vg-759` owns
+  that open question.
 - **A theme-bounded media layer rotates with the artboard.** Its box is the
   unrotated artboard rect, placed at the artboard centre and rotated about that
   centre; the layer's clip is the rotated artboard. `MediaBox` gains an optional

@@ -21,7 +21,7 @@ Plan B (per-display shape and rotation) is complete on the branch and merges int
 - **The register's ids collided again:** main minted `vg-753`/`vg-754`, so plan B's three rows became `vg-756`–`vg-758` with their content unchanged.
 - **Per-display shape and rotation:** a display stores `shape` and whole-degree `rotation` — rect quarter turns, circle 0–359 — and a refused write is a 400 in the store's words.
 - **Turned fit and circle presentation:** the transform rotates then fits, letterboxing the turned bounding box; a circle inscribes the board and the canvas is clipped to the disc.
-- **Delivery and Host controls:** the publish poll carries shape and rotation to `updatePresentation`, and the selected display's row edits both against the host's answer; eight new browser cases pass on desktop and phone.
+- **Delivery and Host controls:** the publish poll carries shape and rotation to `updatePresentation`, and the selected display's row edits both against the host's answer; ten new browser cases cover the branch.
 
 ## Next
 
@@ -37,4 +37,4 @@ Plan B (per-display shape and rotation) is complete on the branch and merges int
 - **`store-worker/src/auth/return-page.ts` hands a one-time token to any loopback port** — closing it needs a nonce or pinned-port binding, a design decision.
 - **No live GitHub Actions run:** `publish.yml`'s triggers, artifact hand-off and the `npm ls` step are syntax-checked only.
 - **No real phone, Linux or macOS host** was exercised; PWA, keyring and ffmpeg pairs are read or mocked rather than measured.
-- **Deferrals are filed:** `vg-746`–`vg-751` from plan A and `vg-756`–`vg-758` from plan B in `docs/product/backlog.jsonl`.
+- **Deferrals are filed:** `vg-746`–`vg-751` from plan A; `vg-756`–`vg-760` from plan B, including the screen-fixed gradient plate and the quarter-turn rule written in six places.

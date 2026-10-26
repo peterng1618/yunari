@@ -99,6 +99,12 @@ Unit measurements, not a browser:
 - The disc is the canvas element's `clip-path`, with its paint on a DOM div
   behind the media layer and black outside it. A display-bounded media layer
   keeps `border-radius`, because it is a real DOM box that fills the host.
+- **The artboard plate is not turned.** One paint fills the board and the bars
+  behind it (the preview-lens plan), and it is CSS on the host (rect) or on the
+  disc (circle), so there is nothing inside the canvas to turn; the spec's
+  earlier sentence assumed a Fabric background that does not exist. Cost if
+  wrong: a gradient plate stays screen-fixed under a turned composition
+  (`vg-759`).
 - The media layer is placed at the transform's own `offsetX/offsetY` and turned
   with `transform-origin: 0 0`, so its CSS transform is the canvas matrix's
   rotational part rather than a second, centre-based mapping.
