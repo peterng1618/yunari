@@ -42,7 +42,8 @@ stays the shell's stage.
 - **Virtual display** — the box a chosen preview ratio stands for: a rect in
   **artboard units**, contained on one axis and centred, whose aspect is the
   ratio. The camera transforms it like any scene geometry. A **circle** lens is
-  the same box with a circular clip: a round screen, always 1:1.
+  a disc whose bounding square is the artboard's diagonal, so the artboard's
+  four corners lie on the circle.
 - **Letterbox** — the part of the virtual display outside the artboard. Painted
   with the theme's background colour, as the player's letterbox is.
 - **Guide frame** — an outline at the artboard's real bounds, shown under a lens
@@ -90,6 +91,15 @@ units is the smallest rect of aspect `a` that contains the artboard, centred:
 if a >= w/h:  box = { width: h*a, height: h, left: (w - h*a)/2, top: 0 }
 else:         box = { width: w, height: w/a, left: 0, top: (h - w/a)/2 }
 ```
+
+A **circle** lens takes the same square box a `1:1` lens would, then sizes the
+disc to the artboard's diagonal instead of to the square's edge: in artboard
+units the disc's bounding square is `hypot(w, h) × hypot(w, h)` centred on the
+artboard. Its fit scale is therefore `diameter / hypot(w, h)`, not
+`min(box.w / w, box.h / h)`; the difference is exactly what puts the four
+corners on the circle rather than leaving them outside a contain-fit square.
+`fitScaleFor` and `zoomToFit` branch on the lens's shape: a rect lens contains,
+a circle lens inscribes.
 
 `displayScreenRect()` becomes the camera transform of that box:
 
@@ -143,9 +153,10 @@ A circle lens is the same scene-anchored box with a circular display:
   is a disc;
 - a display-bounded media layer takes the same radius and clips its media to the
   disc (`setBounds`'s `shape`);
-- the artboard and the guide frame stay rectangular — a 16:9 theme in a circle
-  lens is a landscape card letterboxed inside a disc, which is what a round
-  screen shows;
+- the artboard and the guide frame stay rectangular, and the artboard is scaled
+  so its four corners lie on the disc — a 16:9 theme in a circle lens is a
+  landscape card whose corners touch the circle, with the theme's colour
+  between the card's edges and the disc;
 - everything outside the disc is the shell stage, as for a rectangular lens.
 
 ## The stage and the letterbox
@@ -315,9 +326,10 @@ A fifth tab, `previews`, between `appearance` and `keyboard`:
    visible at the artboard's bounds and moves with it; it is absent under Fit
    and when the aspects match.
 5. `1:1` and `Circle` both appear in the display menu by default; `1:1` frames
-   the artboard in a square virtual display, and `Circle` frames the same box
-   with a circular display — a display-bounded background is clipped to the
-   disc, and the stage outside the disc is still the shell's.
+   the artboard in a square virtual display, and `Circle` frames it in a disc
+   whose four artboard corners lie on the circle (measured from the rendered
+   rects) — a display-bounded background is clipped to the disc, and the stage
+   outside the disc is still the shell's.
 6. Settings → Previews adds `21:9`, offers `21:9` and `9:21` in the display
    menu, removes them again and resets to `16:9`, `19.5:9`, `4:3`, `1:1`,
    `Circle`.
