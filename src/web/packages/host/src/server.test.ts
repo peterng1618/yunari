@@ -9847,9 +9847,10 @@ describe("The host's secure origin", () => {
 
     try {
       const answer = await request(hosted.server, "GET", CA_CERTIFICATE_PATH);
-      // Of the bytes the route actually served, not of a value the test chose:
-      // a header holding something else would pass a comparison with itself.
-      const fingerprint = certificateFingerprintSha256(answer.text());
+      // The body is the origin's root (checked by the case above), and the
+      // header has to be the fingerprint of exactly those bytes.
+      expect(answer.text()).toBe(origin.certificate);
+      const fingerprint = certificateFingerprintSha256(origin.certificate);
 
       expect(answer.headers["x-yunari-ca-sha256"]).toBe(fingerprint);
       expect(answer.headers["content-type"]).toBe("application/x-x509-ca-cert");

@@ -144,7 +144,7 @@ import {
   decodeThemeSave,
   encodeThemeContent,
 } from "./themes/wire.js";
-import { certificateFingerprintSha256 } from "./tls/authority.js";
+import { certificateFingerprintSha256, type RootPem } from "./tls/authority.js";
 import { SseConnection } from "./transport/sse.js";
 import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
 
@@ -347,8 +347,9 @@ export interface HostServerOptions {
   /** The root a display installs, served at `CA_CERTIFICATE_PATH`. Omitted when
    *  the host has none to offer, and the route then says so. Only the PEM is
    *  taken: the header's fingerprint is computed from these bytes, so the pair
-   *  a caller cannot get wrong is the pair it never supplies. */
-  readonly caCertificate?: string;
+   *  a caller cannot get wrong is the pair it never supplies. `RootPem` rather
+   *  than a string, so a chain or a leaf is a compile error here. */
+  readonly caCertificate?: RootPem;
   /** Which host this app folder is (§ "Finding the host after its address
    *  changes"), answered by `GET /api/host`. Omitted when this host has no
    *  identity: the route is then not registered at all, because an id minted to

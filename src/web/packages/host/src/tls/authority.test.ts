@@ -141,18 +141,33 @@ describe("the host's own certificate authority", () => {
 
     // One directory mints one root, so a second certificate has to be a
     // different one — otherwise this would pass on a constant.
-    expect(
-      certificateFingerprintSha256(legacyAuthority().certificate),
-    ).not.toBe(fingerprint);
+    const otherDirectory = path.join(directory, "other");
+    const other = await createSecureOrigin(
+      otherDirectory,
+      NAMES,
+      createSecretStore(otherDirectory, createFakeProtector()),
+    );
+    expect(certificateFingerprintSha256(other.certificate)).not.toBe(
+      fingerprint,
+    );
 
     // The startup lines are built here, from these bytes: the launcher has no
     // certificate to pass, so it cannot print a line belonging to another one.
     expect(origin.certificateLines.join("\n")).toContain(
       `SHA-256: ${fingerprint}`,
     );
-    expect(origin.certificateLines.join("\n")).not.toContain(
-      certificateFingerprintSha256(origin.chain),
-    );
+  });
+
+  it("types the root as its own PEM, not as any string", () => {
+    // The assertion is the directive: if `RootPem` ever loosens to `string`,
+    // this suppression becomes unused and the build fails. The call is typed,
+    // never run — a chain or a leaf PEM is also a string, and hashing one would
+    // publish a value describing a different certificate.
+    const hashAPlainString = (): string =>
+      // @ts-expect-error — a plain string is not a root certificate.
+      certificateFingerprintSha256("-----BEGIN CERTIFICATE-----");
+
+    expect(hashAPlainString).toBeTypeOf("function");
   });
 
   it("follows the bytes of a root regenerated after a corrupt certificate", async () => {

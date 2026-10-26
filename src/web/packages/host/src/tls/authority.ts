@@ -47,9 +47,24 @@ const CA_KEY_SECRET = "ca-key";
 const LEGACY_CA_KEY_FILE = "ca.key";
 const CA_COMMON_NAME = "Yunari Local CA";
 
+/**
+ * A root certificate, as PEM. Its own type because a leaf or a chain is also a
+ * string: the fingerprint of a chain is the first certificate's, the leaf's, so
+ * a plain string lets the served header describe one certificate while the
+ * startup block prints another. Minted only here, where the authority reads the
+ * certificate; runtime shape stays a string, so no call site casts.
+ */
+export type RootPem = string & { readonly __rootCertificate: unique symbol };
+
+/** The one conversion to `RootPem`, for the certificate this authority loaded
+ *  or minted. Not exported: nothing else can claim the brand. */
+function rootPem(pem: string): RootPem {
+  return pem as RootPem;
+}
+
 export interface SecureOrigin {
   /** The root, PEM — what a display installs to trust this host. */
-  readonly certificate: string;
+  readonly certificate: RootPem;
   /** Where the root lives, so the console can name a file rather than a shape. */
   readonly certificatePath: string;
   /** The startup lines publishing `certificate`'s fingerprint, built here from
@@ -111,7 +126,7 @@ export async function createSecureOrigin(
  * is not a certificate throws — `X509Certificate` parses and refuses it — which
  * is the check, rather than a second one here.
  */
-export function certificateFingerprintSha256(pem: string): string {
+export function certificateFingerprintSha256(pem: RootPem): string {
   return createHash("sha256")
     .update(new X509Certificate(pem).raw)
     .digest("hex");
@@ -123,7 +138,7 @@ export function certificateFingerprintSha256(pem: string): string {
  * compares is read off the certificate being served rather than carried beside
  * it where it could drift.
  */
-export function certificateStepLines(pem: string): readonly string[] {
+export function certificateStepLines(pem: RootPem): readonly string[] {
   const fingerprint = certificateFingerprintSha256(pem);
 
   return [
@@ -217,7 +232,7 @@ async function loadOrCreateAuthority(
   directory: string,
   secrets: SecretStore,
 ): Promise<{
-  readonly certificate: string;
+  readonly certificate: RootPem;
   readonly key: string;
   readonly certificatePath: string;
 }> {
@@ -246,7 +261,7 @@ async function loadOrCreateAuthority(
         new X509Certificate(existingCertificate).verify(createPublicKey(key))
       ) {
         return {
-          certificate: existingCertificate,
+          certificate: rootPem(existingCertificate),
           key,
           certificatePath,
         };
@@ -293,7 +308,11 @@ async function loadOrCreateAuthority(
 
   await writeFile(certificatePath, certificate, "utf8");
 
-  return { certificate, key: keys.privateKey, certificatePath };
+  return {
+    certificate: rootPem(certificate),
+    key: keys.privateKey,
+    certificatePath,
+  };
 }
 
 function issueLeaf(
