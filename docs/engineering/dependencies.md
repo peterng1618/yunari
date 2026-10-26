@@ -53,6 +53,18 @@ declares. The closure half is this file's own **Release rule** below.
 | `vitest` (nested, `packages/store-worker`) | 4.1.12 | MIT | devDependency: the pool peers on `^4.1.0`; the workspace runs 5.0.5 |
 | `tsx` | 4.23.15 | MIT | devDependency: runs `src/web/scripts/*.mjs` that import workspace TypeScript packages |
 
+`ffmpeg-static` 5.3.0 downloads its platform binary in a postinstall script, so
+npm's tarball integrity covers only the package's JavaScript.
+`ffmpeg-static-hashes.json` records the SHA-256 of the decompressed binary for
+`darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64` and `win32-x64`, and
+both `node scripts/verify-ffmpeg.mjs` (in the gate as `npm run ffmpeg:check`)
+and the host's spawn gate refuse bytes the file does not describe. Each digest
+was computed from the downloaded `b6.1.1` release asset and agrees with that
+release's published asset `digest`; `win32-arm64` is absent because upstream
+publishes no asset for it and the package's own platform table does not list
+it, so that pair is refused rather than skipped. Updating the package is a
+visible edit to this file (decision 0122).
+
 `node-forge` 1.4.0 was added on 2026-10-18 with `docs/decisions/0070`. Its
 licence is dual, `(BSD-3-Clause OR GPL-2.0)`, verified from the installed
 package's `package.json`; **BSD-3-Clause is the one taken**, which is permissive

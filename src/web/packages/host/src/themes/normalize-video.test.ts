@@ -26,6 +26,9 @@ function runWriting(output: Uint8Array) {
   });
 }
 
+/** The spawn gate's seam: a fake encoder has no digest recorded for it. */
+const acceptHash = (): { ok: true } => ({ ok: true });
+
 describe("normalizeVideo", () => {
   it("returns the same bytes object for a conforming input", async () => {
     const bytes = fixture("conforming.mp4");
@@ -58,6 +61,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
+      verify: acceptHash,
     });
 
     expect(result.ok).toBe(true);
@@ -80,6 +84,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("audio.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
+      verify: acceptHash,
     });
 
     expect(result.ok).toBe(true);
@@ -97,6 +102,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("nofaststart.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
+      verify: acceptHash,
     });
 
     expect(result.ok).toBe(true);
@@ -114,6 +120,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
+      verify: acceptHash,
     });
 
     expect(result.ok).toBe(false);
@@ -136,6 +143,7 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run,
+      verify: acceptHash,
     });
 
     expect(result.ok).toBe(false);
@@ -155,6 +163,7 @@ describe("normalizeVideo", () => {
       aspect: { width: 16, height: 9 },
       ffmpegPath: "ffmpeg-stub",
       run,
+      verify: acceptHash,
     });
 
     expect(result.ok).toBe(true);
@@ -192,12 +201,34 @@ describe("normalizeVideo", () => {
     const result = await normalizeVideo(fixture("wide.mp4"), {
       ffmpegPath: "ffmpeg-stub",
       run: async () => ({ code: 1, stderr: "ENCODER INTERNAL DETAIL" }),
+      verify: acceptHash,
     });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.message).toContain("code 1");
     expect(result.message).not.toContain("ENCODER INTERNAL DETAIL");
+  });
+
+  it("refuses a binary whose hash does not match, without spawning it", async () => {
+    const run = vi.fn(async () => ({ code: 0, stderr: "" }));
+
+    const result = await normalizeVideo(fixture("wide.mp4"), {
+      ffmpegPath: "ffmpeg-stub",
+      run,
+      verify: () => ({
+        ok: false,
+        message: "ffmpeg-static 5.3.0 win32-x64: expected aa, got bb.",
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.message).toBe(
+      "The bundled ffmpeg does not match the hash recorded for this platform, " +
+        "so the video was not re-encoded.",
+    );
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("names the missing encoder when the module supplied none", async () => {

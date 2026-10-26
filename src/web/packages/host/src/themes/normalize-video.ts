@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -9,6 +10,8 @@ import {
   videoRefusals,
 } from "@yunari/theme-package";
 import ffmpegStatic from "ffmpeg-static";
+import ffmpegHashes from "../../../../../../ffmpeg-static-hashes.json";
+import { verifyFfmpeg } from "./ffmpeg-hash.mjs";
 
 /**
  * Brings a source video inside the publish envelope, or copies it untouched.
@@ -29,9 +32,40 @@ const USAGE = "usage: yunari normalize-video <input.mp4> <output.mp4>";
  *  not outgrow the child-process buffer. */
 const MAX_STDERR_BYTES = 4 * 1024 * 1024;
 
+/** The installed package's own version. The hash file is keyed by it, so a bump
+ *  refuses rather than verifying against digests for some other build. */
+const FFMPEG_STATIC_VERSION: string = createRequire(import.meta.url)(
+  "ffmpeg-static/package.json",
+).version;
+
+/** Any verification failure earns this sentence: the expected and actual
+ *  digest belongs in the CLI's output, not in a user's error toast. */
+const HASH_REFUSAL =
+  "The bundled ffmpeg does not match the hash recorded for this platform, " +
+  "so the video was not re-encoded.";
+
+/** The executable does not change under a running host, so one answer per path
+ *  is enough and the digest is read once. */
+const verificationCache = new Map<string, boolean>();
+
 type Run = (
   args: readonly string[],
 ) => Promise<{ code: number; stderr: string }>;
+
+/**
+ * Test seam: the cases that spawn a fake executable supply one, so a fixture
+ * does not need a digest recorded for it.
+ */
+export type Verify = (input: {
+  readonly binaryPath: string;
+  readonly version: string;
+  readonly platform: string;
+  readonly arch: string;
+  readonly hashes: {
+    readonly version: string;
+    readonly sha256: Readonly<Record<string, string>>;
+  };
+}) => { readonly ok: true } | { readonly ok: false; readonly message: string };
 
 export type NormalizeResult =
   | {
@@ -54,6 +88,7 @@ export async function normalizeVideo(
     readonly aspect?: NormalizeAspect;
     readonly ffmpegPath?: string;
     readonly run?: Run;
+    readonly verify?: Verify;
   } = {},
 ): Promise<NormalizeResult> {
   const facts = readVideoFacts(bytes);
@@ -95,6 +130,10 @@ export async function normalizeVideo(
       message:
         "No ffmpeg encoder is available on this host, so the video cannot be re-encoded.",
     };
+  // The bytes this host is about to execute come from an install-time download
+  // that npm's tarball integrity does not cover; nothing else checks them.
+  if (!verified(executable, options.verify))
+    return { ok: false, message: HASH_REFUSAL };
   const run = options.run ?? encoderRun(executable);
 
   // A directory per run, under the OS temp root: two normalizations at once
@@ -301,6 +340,25 @@ function validAspect(
 
 function evenAtMost(value: number): number {
   return Math.max(2, Math.floor(value / 2) * 2);
+}
+
+/** The spawn gate. A supplied `verify` bypasses the cache so two cases using
+ *  the same stub path cannot inherit each other's answer. */
+function verified(executable: string, verify: Verify | undefined): boolean {
+  const check = (): boolean =>
+    (verify ?? verifyFfmpeg)({
+      binaryPath: executable,
+      version: FFMPEG_STATIC_VERSION,
+      platform: process.platform,
+      arch: process.arch,
+      hashes: ffmpegHashes,
+    }).ok;
+  if (verify !== undefined) return check();
+  const cached = verificationCache.get(executable);
+  if (cached !== undefined) return cached;
+  const accepted = check();
+  verificationCache.set(executable, accepted);
+  return accepted;
 }
 
 function encoderRun(executable: string): Run {
