@@ -5,32 +5,33 @@ Branch: `peterng1618/fix-font-trio` (worktree `fix-font-trio`)
 
 ## Current objective
 
-The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design.md) is the active plan: a token names a face — family, weight, declared face — while size, line height and tracking belong to the element. Phase 1 is under way.
+The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design.md) is the active plan: a token names a face — family, weight, declared face — while size, line height and tracking belong to the element. Phase 1 is complete; Phase 2 (faces and subsets) is next.
 
 ## Active work
 
 - **Active plan:** `docs/superpowers/plans/2026-10-27-type-token-model.md` — ledger at `.superpowers/sdd/2026-10-27-type-token-model/progress.md`.
-- **Phase 1 tasks 1.1–1.3 are complete:** the shape, the keys, the starter theme and the role default all speak `typeTokens`.
+- **Phase 1 complete:** the shape, the keys, the starter theme, the role default and the published schema all speak `typeTokens`.
 - **Task 1.2 absorbed Tasks 3.1 and 3.2:** the strict rules and the starter rewrite had to land together, or the app would refuse its own new theme.
-- **Remaining Phase 1:** the published JSON schema (1.4), which still names `typePresets`.
-- **Queued after Phase 1:** `unicode-range` subsets, cards and fixtures, the token inspector, the element inspector and canvas resize.
+- **Phase 2 now:** persist the face's subset, register faces by `unicode-range`, and let one apply bring the whole family.
+- **Queued after that:** cards and fixtures, the token inspector, the element inspector and canvas resize.
 
 ## Last completed change
 
-- **A run with no size takes its role's default:** `defaultTypeSize(id, artboardHeight)` gives heading 72 / body 16 / mono 14 at 1080, unroled takes body, never below 1.
-- **The token contributes no size:** run style resolves after it, so an authored `fontSize` wins and the role default fills only the absent case.
-- **The apply layer paints object-level type from the first run:** `applyAuthoredText`/`refreshBoundText` carry size, leading and `charSpacing`; editor and player pass the artboard height.
-- **Proof:** the four red files owned here are green (151 tests across five touched files), `npm run typecheck` exit 0, Biome clean; six red files remain.
+- **The published schema describes the new shape:** `typeTokens` with `family`/`weight`/`face`, `typePresets` gone, and a run's style admits size, leading and tracking; a document carrying `typePresets` fails it.
+- **A run with no size takes its role's default:** heading 72 / body 16 / mono 14 at a 1080 artboard, unroled takes body, never below 1.
+- **The role default reaches every repaint,** including the textbox release gesture, pinned by a test that goes red when the artboard height is dropped.
+- **Proof:** theme suites 285/285, `typecheck` exit 0, `design:check` exit 0; the full suite is 4 failed files / 7 tests, every one owned by Task 4.1 or 5.4.
 
 ## Next
 
-1. Task 1.4 — the published schema, then close Phase 1.
-2. Phase 2 — persist the subset, register by `unicode-range`, and let one apply bring the whole family.
-3. Local merge to `main` at the Phase 1 boundary, so the face-only token can be tested.
+1. Phase 2 — `subset` on the declaration, `unicode-range` registration, one apply per family.
+2. Phases 3–5 — cards and fixtures, the token inspector, the element inspector and canvas resize.
+3. Local merge to `main` once the token inspector no longer writes removed fields (Task 4.1), so the branch is testable rather than save-blocking.
 
 ## Blockers / unverified
 
-- **Six test files are red on purpose,** owned by 1.4, Phase 4 and 5.4; the reviews map every one.
+- **Four test files are red on purpose,** owned by Task 4.1 (renamed-token fixture, runs tracking, token inspector) and Task 5.4 (new-object defaults).
 - **`new-object-defaults.ts` still reads `size`/`trioRole` off tokens,** so the body-token preference is dead until Task 5.4.
 - **`card-token-mapping.ts` `trioRoleOf` reads a removed field,** so role matching falls to the first candidate until Task 3.3.
-- **This branch's status supersedes the plan-B text on `main`** until the branch merges.
+- **The token inspector still offers size, leading and tracking fields** the validator now refuses; Task 4.1–4.3 replace them.
+- **The full unit suite was not a green gate at this boundary** — 7 failures, all mapped above; no e2e run yet.
