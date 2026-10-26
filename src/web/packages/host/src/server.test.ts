@@ -260,6 +260,12 @@ function createPackageWithAsset(
   return { envelope, assets };
 }
 
+/** The cookie a paired display carries, in the shape `POST /api/session` sets
+ *  it and a browser sends it back. */
+const asCookie = (token: string): Record<string, string> => ({
+  cookie: `yunari_session=${encodeURIComponent(token)}`,
+});
+
 function request(
   server: ListenableServer,
   method: string,
@@ -439,6 +445,7 @@ function streamStatus(
   server: ListenableServer,
   urlPath: string,
   remoteAddress = "192.168.1.50",
+  headers: Record<string, string> = {},
 ): Promise<{ status: number; headers: Record<string, unknown> }> {
   return new Promise((resolve) => {
     const req = new Readable({
@@ -448,7 +455,7 @@ function streamStatus(
     }) as unknown as http.IncomingMessage;
     req.method = "GET";
     req.url = urlPath;
-    req.headers = {};
+    req.headers = headers;
     (req as { socket: { remoteAddress: string } }).socket = { remoteAddress };
 
     const res = new Writable({
@@ -521,6 +528,7 @@ function sampleStream(
   remoteAddress = "127.0.0.1",
   /** Called as each write lands, which is the moment a tick reached this stream. */
   onFrame: () => void = () => undefined,
+  headers: Record<string, string> = {},
 ): {
   readonly frames: () => string;
   /** Whether the host has ended this stream. */
@@ -536,7 +544,7 @@ function sampleStream(
   }) as unknown as http.IncomingMessage;
   req.method = "GET";
   req.url = urlPath;
-  req.headers = {};
+  req.headers = headers;
   (req as { socket: { remoteAddress: string } }).socket = { remoteAddress };
 
   const res = new Writable({
@@ -2957,7 +2965,7 @@ describe("Host theme routes", () => {
       ).toBe(403);
     });
 
-    it("accepts a LAN display holding a live credential, by header or query", async () => {
+    it("accepts a LAN display holding a live credential, by header or cookie", async () => {
       const token = await pair();
       const lan = { remoteAddress: "192.168.1.50" };
 
@@ -2970,20 +2978,99 @@ describe("Host theme routes", () => {
         ).status,
       ).toBe(200);
 
-      // The stream is gated by the same check, so a query credential is accepted
-      // (EventSource cannot set headers) and a missing one is refused. The
-      // accepted stream is never awaited: it stays open by design.
+      expect(
+        (
+          await request(paired.server, "GET", "/api/themes", undefined, {
+            ...lan,
+            headers: asCookie(token),
+          })
+        ).status,
+      ).toBe(200);
+
+      // The stream is gated by the same check. A cookie is what an EventSource
+      // carries by itself, so it opens; a query credential is refused, because
+      // that is the form this change exists to remove. The accepted stream is
+      // never awaited: it stays open by design.
+      expect(
+        (
+          await streamStatus(
+            paired.server,
+            "/ws?keys=cpu.load",
+            lan.remoteAddress,
+            asCookie(token),
+          )
+        ).status,
+      ).toBe(200);
       expect(
         (
           await streamStatus(
             paired.server,
             `/ws?keys=cpu.load&session=${encodeURIComponent(token)}`,
+            lan.remoteAddress,
           )
         ).status,
-      ).toBe(200);
+      ).toBe(403);
       expect(
         (await streamStatus(paired.server, "/ws?keys=cpu.load")).status,
       ).toBe(403);
+    });
+
+    it("exchanges a live token for an HttpOnly cookie and no token in the URL", async () => {
+      const token = await pair();
+      const lan = { remoteAddress: "192.168.1.50" };
+
+      const answer = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        JSON.stringify({ token }),
+        lan,
+      );
+
+      expect(answer.status).toBe(302);
+      expect(answer.headers.location).toBe("/");
+      const cookie = String(answer.headers["set-cookie"]);
+      expect(cookie).toContain(`yunari_session=${encodeURIComponent(token)}`);
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("SameSite=Strict");
+      expect(cookie).toContain("Path=/");
+      expect(JSON.stringify(answer.body)).not.toContain(token);
+    });
+
+    it("answers 401 and sets no cookie for a token no display holds", async () => {
+      const answer = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        JSON.stringify({ token: newToken() }),
+        { remoteAddress: "192.168.1.50" },
+      );
+
+      expect(answer.status).toBe(401);
+      expect(answer.headers["set-cookie"]).toBeUndefined();
+    });
+
+    it("refuses a query credential on the poll and accepts the cookie", async () => {
+      const token = await pair();
+      const lan = { remoteAddress: "192.168.1.50" };
+
+      const query = await request(
+        paired.server,
+        "GET",
+        `/api/published?session=${encodeURIComponent(token)}`,
+        undefined,
+        lan,
+      );
+      expect(query.status).toBe(403);
+
+      const cookie = await request(
+        paired.server,
+        "GET",
+        "/api/published",
+        undefined,
+        { ...lan, headers: asCookie(token) },
+      );
+      expect(cookie.status).toBe(200);
     });
 
     it("lets a paired display read this PC's preferences, not change them", async () => {
@@ -6375,8 +6462,10 @@ describe("The assignment a display is served", () => {
       here: sampleStream(hosted.server, `${SAMPLE_STREAM_PATH}?keys=gpu.temp`),
       there: sampleStream(
         hosted.server,
-        `${SAMPLE_STREAM_PATH}?keys=gpu.temp&session=${encodeURIComponent(token)}`,
+        `${SAMPLE_STREAM_PATH}?keys=gpu.temp`,
         LAN.remoteAddress,
+        undefined,
+        asCookie(token),
       ),
     };
   }
@@ -6495,8 +6584,10 @@ describe("The assignment a display is served", () => {
     );
     const three = sampleStream(
       hosted.server,
-      `${SAMPLE_STREAM_PATH}?keys=gpu.temp&session=${encodeURIComponent(token)}`,
+      `${SAMPLE_STREAM_PATH}?keys=gpu.temp`,
       LAN.remoteAddress,
+      undefined,
+      asCookie(token),
     );
 
     // Every display served before any gap is read: a tick that has not yet seen
@@ -6900,8 +6991,10 @@ describe("One tick at a time", () => {
     for (const token of tokens) {
       sampleStream(
         host.server,
-        `${SAMPLE_STREAM_PATH}?keys=gpu.temp&session=${encodeURIComponent(token)}`,
+        `${SAMPLE_STREAM_PATH}?keys=gpu.temp`,
         "192.168.1.50",
+        undefined,
+        asCookie(token),
       );
     }
 
@@ -7036,8 +7129,7 @@ describe("The sample stream is bounded", () => {
     return token;
   }
 
-  const streamFor = (token: string): string =>
-    `${SAMPLE_STREAM_PATH}?keys=cpu.load&session=${encodeURIComponent(token)}`;
+  const STREAM = `${SAMPLE_STREAM_PATH}?keys=cpu.load`;
 
   beforeEach(async () => {
     dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-stream-cap-"));
@@ -7106,7 +7198,13 @@ describe("The sample stream is bounded", () => {
       ) {
         // Each display is a LAN client, so its credential is what resolves it;
         // a loopback stream would resolve to this PC and share one slot count.
-        sampleStream(hosted.server, streamFor(token), "192.168.1.50");
+        sampleStream(
+          hosted.server,
+          STREAM,
+          "192.168.1.50",
+          undefined,
+          asCookie(token),
+        );
       }
       // Sixty-four sockets open against a loaded box; the 1 s default expires
       // a few connects short and reports a cap failure that is not one.
@@ -7120,9 +7218,16 @@ describe("The sample stream is bounded", () => {
     }
 
     expect(hosted.connectionCount).toBe(MAX_STREAM_CONNECTIONS);
-    expect((await streamStatus(hosted.server, streamFor(ninth))).status).toBe(
-      429,
-    );
+    expect(
+      (
+        await streamStatus(
+          hosted.server,
+          STREAM,
+          "192.168.1.50",
+          asCookie(ninth),
+        )
+      ).status,
+    ).toBe(429);
   });
 
   it("refuses one display's ninth stream while another display may still open one", async () => {
@@ -7136,7 +7241,13 @@ describe("The sample stream is bounded", () => {
     ) {
       // A LAN client, so the credential resolves the display these are counted
       // against rather than resolving every one to this PC.
-      sampleStream(hosted.server, streamFor(busy), "192.168.1.50");
+      sampleStream(
+        hosted.server,
+        STREAM,
+        "192.168.1.50",
+        undefined,
+        asCookie(busy),
+      );
     }
     await waitFor(
       () =>
@@ -7144,15 +7255,29 @@ describe("The sample stream is bounded", () => {
       { timeout: 15_000 },
     );
 
-    expect((await streamStatus(hosted.server, streamFor(busy))).status).toBe(
-      429,
-    );
+    expect(
+      (
+        await streamStatus(
+          hosted.server,
+          STREAM,
+          "192.168.1.50",
+          asCookie(busy),
+        )
+      ).status,
+    ).toBe(429);
 
     // The per-display cap is separate from the total: one display cannot take
     // every slot, and refusing it must not refuse anyone else.
-    expect((await streamStatus(hosted.server, streamFor(other))).status).toBe(
-      200,
-    );
+    expect(
+      (
+        await streamStatus(
+          hosted.server,
+          STREAM,
+          "192.168.1.50",
+          asCookie(other),
+        )
+      ).status,
+    ).toBe(200);
     expect(hosted.connectionCount).toBe(MAX_STREAM_CONNECTIONS_PER_DISPLAY + 1);
   });
 });
@@ -8853,7 +8978,7 @@ describe("The root page resolves the display that asked", () => {
    *  caller's own parameters ride along, so the theme is picked out of them. */
   async function root(
     urlPath = "/",
-    options?: { remoteAddress?: string },
+    options?: { remoteAddress?: string; headers?: Record<string, string> },
   ): Promise<string | undefined> {
     const answer = await request(
       hosted.server,
@@ -8898,7 +9023,7 @@ describe("The root page resolves the display that asked", () => {
     await activeTheme.write("kitchen-tablet", "studio");
 
     expect(await root()).toBe("living-room");
-    expect(await root(`/?session=${encodeURIComponent(token)}`, LAN)).toBe(
+    expect(await root("/", { ...LAN, headers: asCookie(token) })).toBe(
       "studio",
     );
   });
@@ -8910,7 +9035,7 @@ describe("The root page resolves the display that asked", () => {
     // Paired, so it is served; never assigned a theme of its own.
     const token = await pair();
 
-    expect(await root(`/?session=${encodeURIComponent(token)}`, LAN)).toBe(
+    expect(await root("/", { ...LAN, headers: asCookie(token) })).toBe(
       "living-room",
     );
   });
@@ -8922,9 +9047,51 @@ describe("The root page resolves the display that asked", () => {
 
     const token = await pair();
 
-    expect(await root(`/?session=${encodeURIComponent(token)}`, LAN)).toBe(
+    expect(await root("/", { ...LAN, headers: asCookie(token) })).toBe(
       "living-room",
     );
+  });
+
+  it("exchanges a root ?session= for the cookie and redirects it away", async () => {
+    await library();
+    const token = await pair();
+
+    // A pairing link or a re-find target still carries the token; the root
+    // route is the one place that reads it, and it does not write it back out.
+    const answer = await request(
+      hosted.server,
+      "GET",
+      `/?session=${encodeURIComponent(token)}`,
+      undefined,
+      LAN,
+    );
+
+    expect(answer.status).toBe(302);
+    expect(answer.headers.location).toBe("/");
+    const cookie = String(answer.headers["set-cookie"]);
+    expect(cookie).toContain(`yunari_session=${encodeURIComponent(token)}`);
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("SameSite=Strict");
+
+    // A link that named a theme keeps it: only the token is dropped.
+    const themed = await request(
+      hosted.server,
+      "GET",
+      `/?theme=studio&session=${encodeURIComponent(token)}`,
+      undefined,
+      LAN,
+    );
+    expect(themed.headers.location).toBe("/?theme=studio");
+  });
+
+  it("serves the page with no cookie for a root ?session= no display holds", async () => {
+    // No themes, so the page is the first-run document rather than a redirect:
+    // the refusal is the absence of a cookie, not a status the caller can use
+    // to probe which tokens exist.
+    const answer = await request(hosted.server, "GET", "/?session=bogus");
+
+    expect(answer.status).toBe(200);
+    expect(answer.headers["set-cookie"]).toBeUndefined();
   });
 
   it("lets an explicit ?theme= outrank the assignment", async () => {
@@ -9002,10 +9169,10 @@ describe("The root page resolves the display that asked", () => {
     await activeTheme.write("kitchen-tablet", "living-room");
 
     expect(
-      await root(
-        `/?display=left-screen&session=${encodeURIComponent(token)}`,
-        LAN,
-      ),
+      await root("/?display=left-screen", {
+        ...LAN,
+        headers: asCookie(token),
+      }),
     ).toBe("living-room");
   });
 
@@ -9026,8 +9193,11 @@ describe("The root page resolves the display that asked", () => {
       deviceName: "\\\\.\\DISPLAY2",
     });
 
-    const message = (remoteAddress: string): http.IncomingMessage =>
-      ({ socket: { remoteAddress }, headers: {} }) as http.IncomingMessage;
+    const message = (
+      remoteAddress: string,
+      headers: Record<string, string> = {},
+    ): http.IncomingMessage =>
+      ({ socket: { remoteAddress }, headers }) as http.IncomingMessage;
 
     expect(
       await displayKeyFor(
@@ -9047,8 +9217,8 @@ describe("The root page resolves the display that asked", () => {
 
     expect(
       await displayKeyFor(
-        message("192.168.1.50"),
-        new URL(`http://host/?session=${encodeURIComponent(token)}`),
+        message("192.168.1.50", asCookie(token)),
+        new URL("http://host/"),
         displays,
       ),
     ).toBe("kitchen-tablet");

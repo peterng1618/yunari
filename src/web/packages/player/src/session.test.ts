@@ -56,7 +56,7 @@ describe("display session token", () => {
     expect(init?.method).toBe("GET");
   });
 
-  it("appends the token to a stream URL, because EventSource cannot set headers", () => {
+  it("carries no session parameter on a stream URL: the cookie is sent anyway", () => {
     const session = displaySession(
       "http://192.168.1.10:5227/?session=abc123",
       fetch,
@@ -67,11 +67,11 @@ describe("display session token", () => {
       new URLSearchParams({ keys: "cpu.load,ram.used" }),
     );
 
-    expect(url).toContain("keys=cpu.load%2Cram.used");
-    expect(url).toContain("session=abc123");
+    expect(url).toBe("/ws?keys=cpu.load%2Cram.used");
+    expect(url).not.toContain("session=");
   });
 
-  it("appends the token to URLs a header-less loader fetches", () => {
+  it("returns a loader's URL unchanged, token or not", () => {
     const paired = displaySession(
       "http://192.168.1.10:5227/?session=abc123",
       fetch,
@@ -79,12 +79,11 @@ describe("display session token", () => {
     const loopback = displaySession("http://127.0.0.1:5227/", fetch);
 
     expect(paired.withToken("/api/themes/living-room/")).toBe(
-      "/api/themes/living-room/?session=abc123",
+      "/api/themes/living-room/",
     );
     expect(paired.withToken("/api/themes/x/assets/a.png?v=1")).toBe(
-      "/api/themes/x/assets/a.png?v=1&session=abc123",
+      "/api/themes/x/assets/a.png?v=1",
     );
-    // An unpaired display's URLs stay exactly what they were.
     expect(loopback.withToken("/api/themes/living-room/")).toBe(
       "/api/themes/living-room/",
     );
@@ -103,8 +102,8 @@ describe("what a load reads, and what it writes", () => {
     expect(first.token).toBe("abc");
 
     // The record `rememberPairing` writes, and the only thing that makes the
-    // second half of this case meaningful: the host's own redirect keeps the
-    // query, but a URL that arrives without one is still this display.
+    // second half of this case meaningful: a fresh pairing arrives with no
+    // token in its URL once the host has exchanged it for a cookie.
     storePairing(storage, {
       hostId: "h1",
       hostName: "study-pc",
@@ -120,10 +119,10 @@ describe("what a load reads, and what it writes", () => {
 
   it("writes no pairing of its own", () => {
     // The identity comes from `GET /api/host` and nowhere else: `pair.html`
-    // navigates to `/?session=<token>` and nothing in the repo emits `host=`,
-    // `name=` or `port=` (R72). A second writer here could only produce a record
-    // with an empty `hostId`, which would overwrite a good one on any load where
-    // `/api/host` failed.
+    // exchanges its claimed token for a cookie and navigates to `/`, and
+    // nothing in the repo emits `host=`, `name=` or `port=` (R72). A second
+    // writer here could only produce a record with an empty `hostId`, which
+    // would overwrite a good one on any load where `/api/host` failed.
     //
     // Asserted on the **raw key**, not through `readStoredPairing`: that reads
     // through `isPairedHost`, which refuses a blank `hostId`, so a reintroduced

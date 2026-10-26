@@ -173,9 +173,21 @@
           }
 
           const { token } = await answer.json();
-          // The credential rides in the URL because the stream a display opens
-          // cannot set a header; the player keeps it from its first visit on.
-          location.replace(`/?session=${encodeURIComponent(token)}`);
+          // The token is exchanged once for an HttpOnly cookie, so it never
+          // reaches the address bar or a screenshot of it. The host answers
+          // the exchange with a redirect the browser follows to the display.
+          const exchanged = await fetch("/api/session", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ token }),
+          });
+
+          if (!exchanged.ok) {
+            say((await exchanged.text()).trim() || "That did not pair.");
+            return;
+          }
+
+          location.replace("/");
         } catch {
           say("The host did not answer.");
         } finally {

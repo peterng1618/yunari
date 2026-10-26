@@ -1,5 +1,5 @@
-/** A paired display carries its host session in the page URL, because
- * `EventSource` cannot set request headers. Loopback displays carry none. */
+/** A paired display carries its host session in an HttpOnly cookie, which the
+ * browser sends for every same-origin request. Loopback displays carry none. */
 
 import { readStoredPairing } from "./host-refind.js";
 
@@ -8,13 +8,16 @@ export interface DisplaySessionToken {
   /** The page this display is on, which is where its own display and the origin
    * of its theme are read from: a poll has to name the display that asked. */
   readonly pageUrl: string;
-  /** Adds the token to a fetch, which can use the header form. */
+  /** Adds the token to a fetch, which can use the header form. The host's own
+   * tooling and the player's fetches authenticate this way; the browser cookie
+   * covers everything that cannot set a header. */
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
-  /** Appends the token to a stream URL, which cannot. */
+  /** The stream URL. An `EventSource` cannot set a header, so it carries no
+   * credential at all: the browser attaches the same-origin cookie by itself. */
   streamUrl(path: string, parameters: URLSearchParams): string;
-  /** Appends the token to a URL handed to a loader that sets no headers, such
-   * as Fabric's image fetch. A no-op with no token, so loopback URLs stay
-   * exactly as they were. */
+  /** Unchanged. A loader that sets no headers, such as Fabric's image fetch,
+   * sends the cookie too, so appending a token would only put the credential
+   * back into a URL. Kept as a named no-op so callers read as they did. */
   withToken(url: string): string;
 }
 
@@ -51,20 +54,10 @@ export function displaySession(
       return fetcher(input, { ...init, headers });
     },
     streamUrl(path, parameters) {
-      const query = new URLSearchParams(parameters);
-      if (token !== undefined) {
-        query.set("session", token);
-      }
-      return `${path}?${query.toString()}`;
+      return `${path}?${parameters.toString()}`;
     },
     withToken(url) {
-      if (token === undefined) {
-        return url;
-      }
-
-      const query = new URLSearchParams({ session: token });
-      const separator = url.includes("?") ? "&" : "?";
-      return `${url}${separator}${query.toString()}`;
+      return url;
     },
   };
 }

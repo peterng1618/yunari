@@ -152,6 +152,10 @@ import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
 /** Non-loopback displays present this header; loopback never needs to. */
 const SESSION_HEADER = "x-yunari-session";
 
+/** The cookie a paired display keeps instead of a token in its URL. Never
+ *  readable by a script: the display only has to carry it. */
+const SESSION_COOKIE = "yunari_session";
+
 /** One refusal for every way a code can fail — unknown, expired, spent or
  *  simply wrong. A caller that could tell them apart could search the space. */
 const NO_PAIRING_CODE =
@@ -555,12 +559,52 @@ export function isForeignOrigin(request: http.IncomingMessage): boolean {
   }
 }
 
-/** A request's credential, from a header (fetch) or query (EventSource cannot
- *  set request headers, so the stream carries it in the URL). */
-function tokenFor(request: http.IncomingMessage, url: URL): string | undefined {
+/** One named value from a request's cookie header, or nothing. */
+function cookieValue(
+  cookie: string | undefined,
+  name: string,
+): string | undefined {
+  if (cookie === undefined) return undefined;
+
+  for (const part of cookie.split(";")) {
+    const [key, ...rest] = part.trim().split("=");
+
+    if (key !== name) continue;
+
+    try {
+      return decodeURIComponent(rest.join("="));
+    } catch {
+      // A malformed escape is a caller's typo, not a reason to fail the request.
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * A request's credential: the header (the host's own tooling, then the player's
+ * fetches), the cookie (what a browser carries by itself), or nothing.
+ *
+ * **A query token is deliberately absent.** It is read only by the root route,
+ * which exchanges it for the cookie and redirects it out of the address bar.
+ * Refusing it everywhere else keeps a credential out of logs and history.
+ */
+function tokenFor(request: http.IncomingMessage): string | undefined {
   const header = request.headers[SESSION_HEADER];
   const fromHeader = Array.isArray(header) ? header[0] : header;
-  return fromHeader ?? url.searchParams.get("session") ?? undefined;
+  return fromHeader ?? cookieValue(request.headers.cookie, SESSION_COOKIE);
+}
+
+/**
+ * The `Set-Cookie` value that makes a display's token a credential the browser
+ * carries for it. `Secure` only over TLS: on plain http the browser would drop
+ * the cookie and the display would never pair.
+ */
+function sessionCookie(token: string, request: http.IncomingMessage): string {
+  const secure = (request.socket as { encrypted?: boolean }).encrypted === true;
+
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/${secure ? "; Secure" : ""}`;
 }
 
 /** A display as a surface may see it. */
@@ -576,12 +620,11 @@ function peerOf(record: DisplayRecord): HostingPeer {
  * **Loopback answers `undefined` on purpose.** It is trusted admin and never
  * paired, and the reserved `this-pc` has no record to return (spec § "One map"):
  * the *key* is minted where a key is needed, not fabricated here with a
- * `createdAt` nobody wrote. A `?session=` value matching no display is
- * `undefined` too, and the caller refuses it as it refuses a missing credential.
+ * `createdAt` nobody wrote. A credential matching no display is `undefined`
+ * too, and the caller refuses it as it refuses a missing credential.
  */
 export async function displayFor(
   request: http.IncomingMessage,
-  url: URL,
   displays: DisplayStore | undefined,
 ): Promise<DisplayRecord | undefined> {
   if (
@@ -591,7 +634,7 @@ export async function displayFor(
     return undefined;
   }
 
-  const token = tokenFor(request, url);
+  const token = tokenFor(request);
 
   if (token === undefined) {
     return undefined;
@@ -655,7 +698,7 @@ export async function displayKeyFor(
     return LOCAL_DISPLAY_ID;
   }
 
-  return (await displayFor(request, url, displays))?.id ?? DEFAULT_DISPLAY;
+  return (await displayFor(request, displays))?.id ?? DEFAULT_DISPLAY;
 }
 
 /** A BCP-47-shaped tag, bounded: enough for `de`, `de-DE`, `zh-Hant-TW`. */
@@ -1334,15 +1377,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
   }
 
   /** Loopback is trusted admin; anything else must present a live credential. */
-  async function allowed(
-    request: http.IncomingMessage,
-    url: URL,
-  ): Promise<boolean> {
+  async function allowed(request: http.IncomingMessage): Promise<boolean> {
     if (isLoopbackRemote(request.socket.remoteAddress)) {
       return true;
     }
 
-    return (await displayFor(request, url, displays)) !== undefined;
+    return (await displayFor(request, displays)) !== undefined;
   }
 
   /**
@@ -1557,6 +1597,60 @@ export function createHostServer(options: HostServerOptions): HostServer {
         port:
           typeof address === "object" && address !== null ? address.port : null,
       });
+      return;
+    }
+
+    // The one-time exchange a display makes after claiming a token, so the
+    // credential leaves the address bar and becomes a cookie the browser sends
+    // by itself. **Not behind the pairing block's loopback gate**: the pairing
+    // page runs on the display, which is off this PC, and the request is
+    // same-origin there — so it needs no CORS surface and no credential of its
+    // own, only the token it just minted.
+    if (url.pathname === "/api/session" && request.method === "POST") {
+      if (displays === undefined) {
+        sendText(response, 404, "Pairing is not enabled on this host.");
+        return;
+      }
+
+      let offered: unknown;
+
+      try {
+        const parsed: unknown = JSON.parse(await readBody(request));
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          Array.isArray(parsed)
+        ) {
+          throw new Error("That is not a session request.");
+        }
+        offered = (parsed as { readonly token?: unknown }).token;
+      } catch (error) {
+        sendText(
+          response,
+          400,
+          error instanceof Error ? error.message : String(error),
+        );
+        return;
+      }
+
+      if (typeof offered !== "string" || offered === "") {
+        sendText(response, 400, "A token is required.");
+        return;
+      }
+
+      // The store owns what a live token is; a token it does not hold is
+      // answered as the credential it is — refused, with no cookie set.
+      if ((await displays.authenticate(offered)) === undefined) {
+        sendText(response, 401, "That token is not one this host issued.");
+        return;
+      }
+
+      response.writeHead(302, {
+        location: "/",
+        "set-cookie": sessionCookie(offered, request),
+        "cache-control": "no-store",
+      });
+      response.end();
       return;
     }
 
@@ -1965,7 +2059,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     if (url.pathname === SAMPLE_STREAM_PATH) {
-      if (!(await allowed(request, url))) {
+      if (!(await allowed(request))) {
         sendText(response, 403, "This display is not paired with the host.");
         return;
       }
@@ -2038,7 +2132,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       if (request.method === "GET") {
         if (
           !isLoopbackRemote(request.socket.remoteAddress) &&
-          !(await allowed(request, url))
+          !(await allowed(request))
         ) {
           sendText(response, 403, "This display is not paired with the host.");
           return;
@@ -2242,7 +2336,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     if (url.pathname === "/api/published") {
       if (
         !isLoopbackRemote(request.socket.remoteAddress) &&
-        !(await allowed(request, url))
+        !(await allowed(request))
       ) {
         sendText(response, 403, "This display is not paired with the host.");
         return;
@@ -2290,7 +2384,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       if (request.method === "GET") {
         if (
           !isLoopbackRemote(request.socket.remoteAddress) &&
-          !(await allowed(request, url))
+          !(await allowed(request))
         ) {
           sendText(response, 403, "This display is not paired with the host.");
           return;
@@ -2770,7 +2864,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       if (
         !isLoopbackRemote(request.socket.remoteAddress) &&
-        (await displayFor(request, url, displays)) === undefined
+        (await displayFor(request, displays)) === undefined
       ) {
         sendText(response, 403, "This display is not paired with the host.");
         return;
@@ -2817,7 +2911,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       if (
         !isLoopbackRemote(request.socket.remoteAddress) &&
-        (await displayFor(request, url, displays)) === undefined
+        (await displayFor(request, displays)) === undefined
       ) {
         sendText(response, 403, "This display is not paired with the host.");
         return;
@@ -2875,7 +2969,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       if (
         !isLoopbackRemote(request.socket.remoteAddress) &&
-        (await displayFor(request, url, displays)) === undefined
+        (await displayFor(request, displays)) === undefined
       ) {
         sendText(response, 403, "This display is not paired with the host.");
         return;
@@ -3042,15 +3136,46 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
+    // **The one route that still reads a query token**, and only to retire it.
+    // An old pairing link or a re-find target carries `?session=`; the root
+    // exchanges it for the cookie and redirects it out of the address bar. It
+    // sits ahead of the display guard below because that guard is what the
+    // query token cannot pass — the cookie is the credential from here on.
+    // A token no display holds sets no cookie and falls through, so the caller
+    // is served exactly what it was before this route existed.
+    if (url.pathname === "/" && !url.searchParams.has("data")) {
+      const offered = url.searchParams.get("session");
+
+      if (offered !== null) {
+        const record = await displays?.authenticate(offered);
+
+        if (record !== undefined) {
+          // The next request carries the cookie instead, so the display's own
+          // `lastSeenAt` is paid there rather than twice here. Everything else
+          // the link named — a theme, a local display — rides along; only the
+          // token leaves the address bar.
+          url.searchParams.delete("session");
+          const query = url.searchParams.toString();
+          response.writeHead(302, {
+            location: query === "" ? "/" : `/?${query}`,
+            "set-cookie": sessionCookie(offered, request),
+            "cache-control": "no-store",
+          });
+          response.end();
+          return;
+        }
+      }
+    }
+
     // **The bundle is not dashboard content**, and it comes before this guard
-    // because a credential cannot reach it. A credential rides in the query
-    // string — `fetch` and `EventSource` carry one and `<script src>` cannot — so
-    // a paired phone was served the document and then refused its own scripts
-    // with a blank page. The bundle is the same bytes any loopback visitor
-    // already has: no reading, no theme, no device in it. Everything this guard
-    // exists to protect stays behind it — `/api/themes/**`, the sample stream,
-    // `/api/display` — and `/editor` keeps its own loopback guard.
-    // See `docs/decisions/0019`.
+    // because the browser fetches some of it itself: the favicon probe, the
+    // install's manifest and its worker script. A credential rides in the
+    // cookie now, but those requests are not the display's own and a paired
+    // phone refused them was served the document with a blank page. The bundle
+    // is the same bytes any loopback visitor already has: no reading, no theme,
+    // no device in it. Everything this guard exists to protect stays behind it —
+    // `/api/themes/**`, the sample stream, `/api/display` — and `/editor` keeps
+    // its own loopback guard. See `docs/decisions/0019`.
     const isBundleAsset =
       url.pathname.startsWith("/assets/") ||
       // The browser probes this unprompted and without a token, and the repo
@@ -3070,7 +3195,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     if (
       !isBundleAsset &&
       !isLoopbackRemote(request.socket.remoteAddress) &&
-      !(await allowed(request, url))
+      !(await allowed(request))
     ) {
       sendText(response, 403, "This display is not paired with the host.");
       return;
@@ -3382,7 +3507,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
           key = named;
         } else {
-          const record = await displayFor(request, url, displays);
+          const record = await displayFor(request, displays);
 
           if (record === undefined) {
             sendText(
