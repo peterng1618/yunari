@@ -9,19 +9,18 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Active work
 
-- **No plan is running:** plan A is merged; plan B is queued and no other plan runs.
+- **Active plan:** `docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md` — task 1 (transform rotation and inscribed circle) is implemented; later tasks remain.
 - **Preview lens landed:** scene-anchored display box, shell stage, theme letterbox, guide frame, circle lens, ratio catalogue and Previews settings tab.
-- **Display presentation waits on plan B:** per-record shape and rotation, rotated/inscribed playback, pair-page choice, Host controls.
+- **Display presentation in plan B:** per-record shape and rotation, rotated/inscribed playback, pair-page choice, Host controls.
 - **Audit, chart, spacing and fonts work is on `main`:** revision gating, memoised dirty reading, chart animation and the fonts/assets rework are landed.
 - **Backlog drain stays queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, after plan B.
 
 ## Last completed change
 
-- **Plan A merged into `main`:** 26 commits; the display is a scene-anchored lens frame painted by the shell stage over the theme's own letterbox.
-- **One catalogue in both pickers:** the display menu and the new-document chooser list the active ratios by id, with Fit alone when the list is empty.
-- **Browser proof:** stage texture, letterbox layer order, guide geometry through zoom/pan/Fit, circle clipping and media remounts.
-- **Merge conflicts:** `STATUS.md` and the backlog register only; the preview-lens ADR was renumbered to 0123 because three notes already held 0119.
-- **Gate on the merged tree:** `npm run gate` exit 0 — 434 files / 6658 passed, 2 skipped; Worker 13 / 130.
+- **Task 1 of plan B:** `computeArtboardTransform` accepts `shape`/`rotation`, returns `rotation` and a 2×3 `matrix`; rotation 0 keeps today's fields exactly.
+- **Refusals:** rect takes quarter turns only, circle whole degrees 0–359; fractions, negatives and non-finite angles throw `RangeError`.
+- **Evidence:** 9 new tests red before the change (`matrix` undefined), 44/44 green after; typecheck exit 0.
+- **Decision note:** `docs/decisions/0124-a-display-carries-its-shape-and-the-transform-carries-a-matrix.md`.
 
 ## Next
 

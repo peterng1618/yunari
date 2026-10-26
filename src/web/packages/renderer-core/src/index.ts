@@ -7,6 +7,8 @@ export type {
   ArtboardTransform,
   ComputeArtboardTransformInput,
   ContentFit,
+  DisplayPresentation,
+  DisplayShape,
   Point,
   ViewportSize,
 } from "./artboard.js";
