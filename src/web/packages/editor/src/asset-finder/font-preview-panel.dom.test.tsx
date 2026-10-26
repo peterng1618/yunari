@@ -321,6 +321,29 @@ it("applies the face the family's id names, not the first cut listed", () => {
   expect(onApplyToSelected).toHaveBeenCalledWith(lead);
 });
 
+it("names the subset when cuts share a weight, rather than drawing three 400s", () => {
+  // Water Brush publishes 400 in three subsets: labelled by weight alone the
+  // chips read as a mistake, and the subset is the only difference there is.
+  const subset = (name: string) => ({
+    ...cut("Water Brush", 400),
+    id: `cut:water-brush-${name}`,
+    subset: name,
+  });
+  const shared = {
+    ...family,
+    font: {
+      cuts: [subset("vietnamese"), subset("latin-ext"), subset("latin")],
+    },
+  };
+  mount(panel({ selected: shared, onApplyToSelected: () => {} }));
+
+  expect(
+    [...document.querySelectorAll<HTMLElement>("[data-yunari-font-cut]")].map(
+      (chip) => chip.textContent,
+    ),
+  ).toEqual(["400 · vietnamese", "400 · latin-ext", "400 · latin"]);
+});
+
 it("releases every face it added when the panel unmounts", () => {
   const fonts = stubFonts();
 

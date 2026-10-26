@@ -1257,8 +1257,16 @@ export const uiCopy = {
       applyToTheme: "Apply to theme",
       addThreePresets: "Add 3 presets",
       cuts: "Cuts",
-      cutLabel: (weight: string | number, italic: boolean): string =>
-        italic ? `${weight} italic` : String(weight),
+      /** `400 · latin`: the subset is named only when it is what tells two cuts
+       *  apart, since weight and style alone can repeat across subsets. */
+      cutLabel: (
+        weight: string | number,
+        italic: boolean,
+        subset?: string,
+      ): string => {
+        const face = italic ? `${weight} italic` : String(weight);
+        return subset === undefined ? face : `${face} · ${subset}`;
+      },
       newPreset: "New type preset",
       newPresetSummary: (role: string, family: string): string =>
         `${role} — ${family} · adds one`,

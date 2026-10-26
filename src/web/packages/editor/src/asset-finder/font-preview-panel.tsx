@@ -133,6 +133,20 @@ export function FontPreviewPanel({
 
   const cuts = useMemo(() => cutsOf(selected), [selected]);
   useSpecimens(cuts);
+  /** Cuts that share a weight and style: their labels would read the same, so
+   *  the subset is what names the difference between them. */
+  const shared = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const cut of selected.font.cuts) {
+      const key = `${cut.weight}|${cut.style}`;
+      seen.set(key, (seen.get(key) ?? 0) + 1);
+    }
+    return new Set(
+      selected.font.cuts
+        .filter((cut) => (seen.get(`${cut.weight}|${cut.style}`) ?? 0) > 1)
+        .map((cut) => cut.id),
+    );
+  }, [selected]);
 
   const selectedCut =
     selected.font.cuts.find((cut) => cut.id === cutId) ?? leadCutOf(selected);
@@ -238,7 +252,11 @@ export function FontPreviewPanel({
                     style={faceStyle(cut)}
                     className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-6)] py-[var(--space-2)] text-[10px] text-muted aria-pressed:border-accent aria-pressed:text-accent"
                   >
-                    {copy.cutLabel(cut.weight, cut.style === "italic")}
+                    {copy.cutLabel(
+                      cut.weight,
+                      cut.style === "italic",
+                      shared.has(cut.id) ? cut.subset : undefined,
+                    )}
                   </button>
                 );
               })}
