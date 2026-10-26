@@ -5,35 +5,31 @@ Branch: `main`
 
 ## Current objective
 
-Fix every finding in the 2026-10-25 performance and security audit, plus anything found while implementing: 30 security and 23 performance findings across the host, player, editor, Worker and release path.
+The 2026-10-25 performance and security audit is implemented and closed; the next objective is the queued backlog drain.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-25-performance-security-hardening.md` — Phases 0–7 complete; Phase 8 is next.
-- **Spec:** [`2026-10-25-performance-security-hardening-design.md`](docs/superpowers/specs/2026-10-25-performance-security-hardening-design.md) is approved and all findings are marked Fix.
-- **Decision notes 0116–0120 are landed** for the request boundary, chart repaint, store upload, provenance checks and secrets at rest.
-- **Backlog drain is queued behind this plan:** [`spec`](docs/superpowers/specs/2026-10-12-the-backlog-drain-design.md) and [`plan`](docs/superpowers/plans/2026-10-12-the-backlog-drain.md) start after this closes.
-- **No finding is filed to the backlog:** the user's ruling is fix all, file none.
+- **No plan is running:** the hardening plan is closed and archived, and the backlog-drain plan is queued next rather than started.
+- **Nothing was filed:** the ruling held — every audit finding and everything found while implementing it was fixed inside the plan.
+- **Unverified paths:** no live GitHub run of `publish.yml`, and no real phone, Linux or macOS host in this session.
 
 ## Last completed change
 
-- **Phase 7 is complete:** one OS-wrapped key encrypts credentials, the store session and the CA key, each migrated off its plaintext file once and only when the whole legacy document validated.
-- **A cleared credential stays cleared** through a `credentials-retired` tombstone set, which the legacy merge honours and an explicit save lifts.
-- **The display token left the URL:** `POST /api/session` sets an `HttpOnly; SameSite=Strict` cookie with a 400-day lifetime, the root exchanges a `?session=` once, and every other route refuses a query token.
-- **The host prints its CA's SHA-256 fingerprint** and serves the same value on the certificate route, from the certificate itself rather than a copy beside it.
-- **Gate:** `npm run gate` exit 0 — 416 files / 6250 passed (1 skipped), Worker 13 / 130; two host waits that assumed the newest frame or a 20 s budget were wrong, and both were fixed at the premise.
+- **Phase 8 landed:** staged npm versions are exact and `THIRD-PARTY-NOTICES.md` is checked against the lockfile, the manifests and each licence.
+- **The publish workflow is least privilege and pinned:** install and publish are separate jobs, every action is a 40-hex SHA, and a non-dry dispatch off a tag runs a tested pure-function guard.
+- **Advisories are covered:** zod is overridden with a named `@google/design.md` exception, the allowlist reasons were checked against the code, and the `npm ls` invariant is a CI step.
+- **ffmpeg is verified before every spawn** against five recorded digests, and the rule is typechecked from its own `tsconfig.checkjs.json`.
+- **Close found one regression of ours and fixed it:** a display URL carrying `data=live` never exchanged `?session=` for the cookie and got a 403; the exchange now runs and `host-pwa` is 3/3.
 
 ## Next
 
-1. Run Phase 8: staged-version pinning and notice checks, least-privilege SHA-pinned workflows, advisories, and the ffmpeg hash check.
-2. Then the Phase 8 close: full gate, browser set, red-proof audit, STATUS and spec closure, plan archived.
-3. Then the final whole-branch review on the most capable model.
-4. Then `superpowers:finishing-a-development-branch`.
+1. Start the backlog-drain plan with a reproduction pass, not a fix pass.
+2. Triage the browser reds recorded below on `main`: walkthrough field, publish-loop in `own-host`, host-player round-trip.
 
 ## Blockers / unverified
 
-- **No live pairing run:** the cookie exchange and the printed fingerprint are covered by unit and e2e tests, not by a real phone installing the root and comparing the value.
-- **The store upload proxy is unverified live:** Worker tests and the host client are the evidence until a real upload runs.
-- **No Linux secret-store probe:** `secret-tool` is absent on this Windows host; the keyring branch is exercised against a mocked child process only.
-- **Phases 1–2 visible behaviour has no browser proof:** their suites assert objects and geometry; rebuild and inspect before the final review.
-- **The launcher's startup print is unexecuted by any test:** the value it prints is proven at the authority, not through `run()`.
+- **Browser reds, all pre-existing:** `host-walkthrough`'s field case, publish-loop's edit-in-`own-host` run and host-player's round-trip reproduce identically at merge-base `a32b7728`; no branch regression is established.
+- **No live GitHub Actions run:** `publish.yml`'s artifact hand-off and the `npm ls` step are syntax-checked only.
+- **`src/web/tests/scripts/*.test.ts` is outside every tsconfig** — pre-existing, so those files are transpiled without typechecking.
+- **`scripts/oversize-files.mjs` exits 1** on 31 pre-existing `src/web` files over the 800 stop; its live run is in neither the gate nor `ci.yml`.
+- **No real phone, Linux or macOS host** was exercised; the PWA, keyring and 32-bit refusals are read or mocked rather than measured.

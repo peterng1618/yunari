@@ -1,7 +1,10 @@
 # Performance and security hardening — design
 
 - **Date:** 2026-10-25
-- **Status:** active 2026-10-25.
+- **Status:** closed 2026-10-26 — every finding is fixed, and the plan that
+  carried them (`2026-10-25-performance-security-hardening.md`, now under
+  `plans/archive/`) closed with the full gate green. The browser set's remaining
+  reds reproduce at the branch's merge-base and are not this spec's.
 - **Register:** no row yet. This is a requested audit and remediation, not a
   defect against one shipped behaviour. Every finding fixes here; new findings
   discovered during implementation join this plan rather than the register.
