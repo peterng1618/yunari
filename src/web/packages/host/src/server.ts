@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import {
   CATALOGUE_ORIGIN,
   createBatch,
+  type DisplayPresentation,
+  type DisplayShape,
   formatSseEvent,
   knownTimeZones,
   readFabricThemeEnvelope,
@@ -91,11 +93,13 @@ import type {
 import {
   chartFpsFor,
   DEFAULT_DISPLAY,
+  DisplaySettingError,
   LOCAL_DISPLAY_ID,
   MonitorAlreadyHeldError,
   mintedDisplayId,
   normalizeMonitor,
   normalizePatch,
+  normalizePresentation,
 } from "./settings/displays.js";
 import type { FontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
@@ -178,6 +182,9 @@ interface ActiveDisplay {
   readonly label: string;
   readonly kind: DisplayKind;
   readonly theme: string | null;
+  /** The glass and mounting angle; `this-pc` answers rect/0, as the spec says. */
+  readonly shape: DisplayShape;
+  readonly rotation: number;
 }
 
 /**
@@ -771,6 +778,29 @@ async function chartFpsForDisplay(
   return chartFpsFor(
     record ?? { kind: key === DEFAULT_DISPLAY ? "paired" : "local" },
   );
+}
+
+/**
+ * The glass and mounting angle of the display behind a key.
+ *
+ * The same split as `chartFpsForDisplay`: `this-pc` and `default` are not
+ * records, so each answers the upright rectangle the spec gives them, and every
+ * other key is a record whose own presentation wins. A stored upright angle is
+ * answered as `0` because the record omits it.
+ */
+async function presentationForDisplay(
+  key: string,
+  displays: DisplayStore | undefined,
+): Promise<{ readonly shape: DisplayShape; readonly rotation: number }> {
+  const record =
+    key === LOCAL_DISPLAY_ID || key === DEFAULT_DISPLAY
+      ? undefined
+      : await displays?.find(key);
+
+  return {
+    shape: record?.shape ?? "rect",
+    rotation: record?.rotation ?? 0,
+  };
 }
 
 /**
@@ -1479,12 +1509,16 @@ export function createHostServer(options: HostServerOptions): HostServer {
           label: LOCAL_DISPLAY_LABEL,
           kind: "local",
           theme: holds[LOCAL_DISPLAY_ID] ?? null,
+          shape: "rect",
+          rotation: 0,
         },
         ...records.map((record) => ({
           id: record.id,
           label: record.label,
           kind: record.kind,
           theme: holds[record.id] ?? null,
+          shape: record.shape,
+          rotation: record.rotation ?? 0,
         })),
       ],
     };
@@ -1758,7 +1792,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
-        let asked: { readonly code?: unknown; readonly label?: unknown };
+        let asked: {
+          readonly code?: unknown;
+          readonly label?: unknown;
+          readonly shape?: unknown;
+          readonly rotation?: unknown;
+        };
 
         try {
           const parsed: unknown = JSON.parse(await readBody(request));
@@ -1772,6 +1811,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
           asked = parsed as {
             readonly code?: unknown;
             readonly label?: unknown;
+            readonly shape?: unknown;
+            readonly rotation?: unknown;
           };
         } catch (error) {
           sendText(
@@ -1795,8 +1836,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // The store's own label→id rule, asked **before** the code is claimed:
         // a name it would refuse is the caller's to fix, and claiming first
         // would spend the window on a name nobody could have used.
+        let presentation: DisplayPresentation;
+
         try {
           mintedDisplayId(asked.label);
+          // The record's own presentation rule, for the same reason and at the
+          // same point: a shape or angle it would refuse must not spend the code.
+          presentation = normalizePresentation(asked.shape, asked.rotation);
         } catch (error) {
           sendText(
             response,
@@ -1820,7 +1866,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // secret in this exchange, and what it buys lasts until the owner
         // removes the client by name.
         const token = newToken();
-        const display = await displays.create(asked.label, token);
+        const display = await displays.create(asked.label, token, presentation);
         sendJson(response, 200, { displayId: display.id, token });
         return;
       }
@@ -1958,7 +2004,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // A local monitor: the host's own screen, so it is specified rather than
       // paired and has no credential to answer with.
       if (url.pathname === "/api/displays" && request.method === "POST") {
-        let body: { readonly label: string; readonly monitor: unknown };
+        let body: {
+          readonly label: string;
+          readonly monitor: unknown;
+          readonly shape?: unknown;
+          readonly rotation?: unknown;
+        };
 
         try {
           const parsed: unknown = JSON.parse(await readBody(request));
@@ -1972,6 +2023,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
           body = parsed as {
             readonly label: string;
             readonly monitor: unknown;
+            readonly shape?: unknown;
+            readonly rotation?: unknown;
           };
         } catch (error) {
           sendText(
@@ -1998,8 +2051,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // The label's own rule, asked before the write: a name the store would
         // refuse is the caller's to fix, and the catch below keeps only the
         // store's failures, whose words name this machine's files.
+        let presentation: DisplayPresentation;
+
         try {
           mintedDisplayId(body.label);
+          presentation = normalizePresentation(body.shape, body.rotation);
         } catch (error) {
           sendText(
             response,
@@ -2012,7 +2068,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
         let display: DisplayRecord;
 
         try {
-          display = await displays.createLocal(body.label, monitor);
+          display = await displays.createLocal(
+            body.label,
+            monitor,
+            presentation,
+          );
         } catch (error) {
           // A monitor a local display already holds is the request conflicting
           // with what this host holds, not a body the store would not read —
@@ -2083,7 +2143,20 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
-        const updated = await displays.update(id, patch);
+        let updated: DisplayRecord | undefined;
+
+        try {
+          updated = await displays.update(id, patch);
+        } catch (error) {
+          // A patch that names both fields is decided against the final shape,
+          // which only the record knows — and that refusal is the caller's, not
+          // the host's. Anything else came from the store's own file.
+          if (error instanceof DisplaySettingError) {
+            sendText(response, 400, error.message);
+            return;
+          }
+          throw error;
+        }
 
         if (updated === undefined) {
           sendText(response, 404, "No such display.");
@@ -2460,9 +2533,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       const live = published.read();
       const display = await displayKeyFor(request, url, displays);
-      // The player reads its refresh rate from this poll rather than from a
-      // route of its own: it is the request a display already makes.
+      // The player reads its refresh rate, its glass and its mounting angle from
+      // this poll rather than from routes of its own: it is the request a
+      // display already makes.
       const chartFps = await chartFpsForDisplay(display, displays);
+      const presentation = await presentationForDisplay(display, displays);
       let theme: string | null = null;
 
       // A request that named a theme is on a link, and the link is the person's
@@ -2478,7 +2553,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
       sendJson(response, 200, {
         id: live?.id ?? null,
         revision: published.revision(),
-        display: { id: display, theme, chartFps },
+        display: {
+          id: display,
+          theme,
+          chartFps,
+          shape: presentation.shape,
+          rotation: presentation.rotation,
+        },
       });
       return;
     }

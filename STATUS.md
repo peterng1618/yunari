@@ -1,6 +1,6 @@
 # Yunari status
 
-Updated: 2026-10-26
+Updated: 2026-10-27
 Branch: `main`
 
 ## Current objective
@@ -9,7 +9,7 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md` — tasks 1–2 (transform, then scene presentation) are implemented; later tasks remain.
+- **Active plan:** `docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md` — tasks 1–3 (transform, scene presentation, host record) are implemented; later tasks remain.
 - **Preview lens landed:** scene-anchored display box, shell stage, theme letterbox, guide frame, circle lens, ratio catalogue and Previews settings tab.
 - **Display presentation in plan B:** per-record shape and rotation, rotated/inscribed playback, pair-page choice, Host controls.
 - **Audit, chart, spacing and fonts work is on `main`:** revision gating, memoised dirty reading, chart animation and the fonts/assets rework are landed.
@@ -17,11 +17,11 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 
 ## Last completed change
 
-- **Task 2 of plan B:** the scene presents a display shape and angle; rect stays upright, a circle is clipped to its disc with `clip-path`.
-- **Media:** a theme-bounded layer turns with the artboard from its own origin; a display-bounded one fills the host box and never turns.
-- **Glass:** the sampler turns its scratch about the mapped rect centre; a display-bounded backdrop reports `screenRect` and is exempt.
-- **Evidence:** 30 scene-fabric files green (427 tests), focused four 90/90; each new case shown red with its behaviour disabled; typecheck exit 0.
-- **Decision note:** `docs/decisions/0125-a-presentation-is-a-clip-a-mirrored-matrix-and-a-turned-sample.md`.
+- **Task 3 of plan B:** the display record carries `shape` and an omitted-when-zero `rotation`; one `normalizePresentation` refuses what the shape cannot hold.
+- **Writes:** claim and local POST validate before spending the pairing code; PATCH answers `DisplaySettingError` as 400 with the store's own sentence.
+- **Reads:** `/api/themes/active` rows and the publish poll answer shape and rotation; `this-pc` and `default` answer `rect`/0.
+- **Evidence:** host focused suite 404/404; each new case shown red with its behaviour disabled; host typecheck exit 0.
+- **Decision note:** `0124` extended with the host paths and why the rule lives in the store rather than the routes.
 
 ## Next
 

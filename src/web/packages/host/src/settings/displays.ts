@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { DisplayPresentation, DisplayShape } from "@yunari/renderer-core";
 import type { ChartRefreshRate } from "@yunari/scene-fabric";
 import { DEVICE_ID_PATTERN } from "./devices.js";
 
@@ -36,6 +37,15 @@ export type DisplayKind = "paired" | "local";
 export class MonitorAlreadyHeldError extends Error {}
 
 /**
+ * A presentation a display cannot hold, refused with the store's own words.
+ *
+ * A type rather than a message, because the routes have to *answer* it: a shape
+ * or angle the store would refuse is the caller's typo (400), not a host fault
+ * (500), and a silent default would render a theme nobody asked for.
+ */
+export class DisplaySettingError extends Error {}
+
+/**
  * What identifies the physical screen behind a local display.
  *
  * A monitor has no name a person would recognise, so both halves are hints: the
@@ -57,18 +67,32 @@ export interface DisplayRecord {
   readonly tokenHash?: string;
   readonly monitor?: MonitorHint;
   readonly chartFps?: ChartRefreshRate;
+  /** The glass: a rectangular panel or a round one. Never absent in a record. */
+  readonly shape: DisplayShape;
+  /** Whole degrees clockwise; omitted when upright, which every reader answers as 0. */
+  readonly rotation?: number;
 }
 
-/** The two things a person edits. Neither may touch the id. */
+/** The things a person edits. None may touch the id. */
 export interface DisplayPatch {
   readonly label?: string;
   readonly chartFps?: ChartRefreshRate;
+  readonly shape?: DisplayShape;
+  readonly rotation?: number;
 }
 
 export interface DisplayStore {
   list(): Promise<readonly DisplayRecord[]>;
-  create(label: string, token: string): Promise<DisplayRecord>;
-  createLocal(label: string, monitor: MonitorHint): Promise<DisplayRecord>;
+  create(
+    label: string,
+    token: string,
+    presentation?: DisplayPresentation,
+  ): Promise<DisplayRecord>;
+  createLocal(
+    label: string,
+    monitor: MonitorHint,
+    presentation?: DisplayPresentation,
+  ): Promise<DisplayRecord>;
   find(id: string): Promise<DisplayRecord | undefined>;
   authenticate(token: string): Promise<DisplayRecord | undefined>;
   rotate(id: string, token: string): Promise<DisplayRecord | undefined>;
@@ -239,6 +263,89 @@ function sameHint(first: MonitorHint, second: MonitorHint): boolean {
 }
 
 /**
+ * A whole mounting angle: `360` is a full turn and reads as upright, anything
+ * outside `0..360` is refused rather than wrapped.
+ *
+ * Whole degrees only, because the record stores what a person set and a fraction
+ * is a request the control cannot reproduce.
+ */
+function wholeDegrees(value: unknown): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > 360
+  ) {
+    throw new DisplaySettingError(
+      `A display rotation must be a whole number of degrees from 0 to 359, not ${String(value)}.`,
+    );
+  }
+
+  return value % 360;
+}
+
+function displayShape(value: unknown): DisplayShape {
+  if (value !== "rect" && value !== "circle") {
+    throw new DisplaySettingError(
+      `A display shape must be "rect" or "circle", not ${String(value)}.`,
+    );
+  }
+
+  return value;
+}
+
+/** Where a stored angle lands once a shape's rule is applied to it. */
+export function snapRotation(shape: DisplayShape, rotation: number): number {
+  return shape === "circle"
+    ? rotation % 360
+    : (Math.round(rotation / 90) * 90) % 360;
+}
+
+/**
+ * The presentation a write may store, or a refusal in the store's own words.
+ *
+ * The one rule for every write — a claim, a local monitor, a patch — so no route
+ * can store a record this file's reader would drop on the next start. Absent
+ * shape is rectangular and absent rotation is upright; an unknown shape is
+ * refused rather than defaulted, and a rectangle turns in quarters only.
+ */
+export function normalizePresentation(
+  shape: unknown,
+  rotation: unknown,
+): DisplayPresentation {
+  const resolved = shape === undefined ? "rect" : displayShape(shape);
+
+  if (rotation === undefined) return { shape: resolved };
+
+  const angle = wholeDegrees(rotation);
+
+  if (resolved === "rect" && angle % 90 !== 0) {
+    throw new DisplaySettingError(
+      `A rectangular display turns in quarter turns, not ${String(rotation)} degrees.`,
+    );
+  }
+
+  return { shape: resolved, ...(angle === 0 ? {} : { rotation: angle }) };
+}
+
+/** A stored angle the shape can hold, or nothing — the record then plays upright. */
+function storedRotation(
+  shape: DisplayShape,
+  value: unknown,
+): number | undefined {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value <= 0 ||
+    value >= 360
+  ) {
+    return undefined;
+  }
+
+  return shape === "rect" && value % 90 !== 0 ? undefined : value;
+}
+
+/**
  * Keeps only records something else will accept. A hand-edited file must not be
  * able to introduce a display nothing else accepts, so an unusable id, a label
  * that is not a name, an unknown kind or a duplicate id drops the record.
@@ -275,6 +382,11 @@ function normalizeRecord(input: unknown): DisplayRecord | undefined {
 
   const monitor = normalizeMonitor(raw["monitor"]);
   const chartFps = raw["chartFps"];
+  // An unreadable shape is a rectangular screen rather than a dropped record:
+  // the display then plays upright, as an unreadable rate falls back to its
+  // kind's default. A rotation the shape cannot hold is dropped with it.
+  const shape: DisplayShape = raw["shape"] === "circle" ? "circle" : "rect";
+  const rotation = storedRotation(shape, raw["rotation"]);
 
   return {
     id,
@@ -282,6 +394,8 @@ function normalizeRecord(input: unknown): DisplayRecord | undefined {
     kind,
     createdAt,
     lastSeenAt,
+    shape,
+    ...(rotation === undefined ? {} : { rotation }),
     ...(typeof tokenHash === "string" ? { tokenHash } : {}),
     ...(monitor !== undefined ? { monitor } : {}),
     // A rate the player cannot run is dropped rather than carried, so the
@@ -377,10 +491,18 @@ export function normalizePatch(patch: DisplayPatch): DisplayPatch {
     patch.label === undefined ? undefined : normalizeLabel(patch.label);
   const chartFps =
     patch.chartFps === undefined ? undefined : rateOrThrow(patch.chartFps);
+  // Only membership and a whole angle here: this has no record, so the patch's
+  // own shape deciding the rule is `update`'s job once the final shape is known.
+  const shape =
+    patch.shape === undefined ? undefined : displayShape(patch.shape);
+  const rotation =
+    patch.rotation === undefined ? undefined : wholeDegrees(patch.rotation);
 
   return {
     ...(label === undefined ? {} : { label }),
     ...(chartFps === undefined ? {} : { chartFps }),
+    ...(shape === undefined ? {} : { shape }),
+    ...(rotation === undefined ? {} : { rotation }),
   };
 }
 
@@ -480,6 +602,7 @@ export function createDisplayStore(
       readonly tokenHash?: string;
       readonly monitor?: MonitorHint;
     },
+    presentation: DisplayPresentation,
   ): Promise<DisplayRecord> => {
     const name = normalizeLabel(label);
     const displays = await readOrThrow();
@@ -499,6 +622,10 @@ export function createDisplayStore(
       label: name,
       createdAt: at,
       lastSeenAt: at,
+      shape: presentation.shape,
+      ...(presentation.rotation === undefined
+        ? {}
+        : { rotation: presentation.rotation }),
       ...fields,
     };
 
@@ -511,9 +638,13 @@ export function createDisplayStore(
       return (await readDisplays(file)).displays;
     },
 
-    create(label, token): Promise<DisplayRecord> {
+    create(label, token, presentation): Promise<DisplayRecord> {
       return writeExclusively(() =>
-        add(label, { kind: "paired", tokenHash: hashToken(token) }),
+        add(
+          label,
+          { kind: "paired", tokenHash: hashToken(token) },
+          normalizePresentation(presentation?.shape, presentation?.rotation),
+        ),
       );
     },
 
@@ -527,7 +658,7 @@ export function createDisplayStore(
      * is the repair; keying the launcher by hint instead would leave the second
      * record in the list for ever with no window and no explanation.
      */
-    createLocal(label, monitor): Promise<DisplayRecord> {
+    createLocal(label, monitor, presentation): Promise<DisplayRecord> {
       return writeExclusively(async () => {
         const displays = await readOrThrow();
         const held = displays.some(
@@ -543,7 +674,11 @@ export function createDisplayStore(
           );
         }
 
-        return add(label, { kind: "local", monitor });
+        return add(
+          label,
+          { kind: "local", monitor },
+          normalizePresentation(presentation?.shape, presentation?.rotation),
+        );
       });
     },
 
@@ -599,11 +734,30 @@ export function createDisplayStore(
             ? found.chartFps
             : rateOrThrow(patch.chartFps);
 
+        // The patch's fields are applied as one: the final shape decides the
+        // rule the final rotation must satisfy. A new shape with no angle named
+        // snaps the stored angle into the new rule — a round screen's free angle
+        // cannot survive becoming rectangular, and snapping names that.
+        const shape = patch.shape ?? found.shape;
+        const rotation =
+          patch.rotation ??
+          (patch.shape !== undefined && patch.shape !== found.shape
+            ? snapRotation(shape, found.rotation ?? 0)
+            : (found.rotation ?? 0));
+        const presentation = normalizePresentation(shape, rotation);
+
         // The id, the creation time and the monitor are not patchable: everything
         // else is keyed by the id, so a rename that moved it would orphan them.
+        // `rotation` is taken out of the spread because omitting it must clear
+        // the stored one rather than leave the found record's angle behind.
+        const { rotation: _old, ...rest } = found;
         const record: DisplayRecord = {
-          ...found,
+          ...rest,
           label,
+          shape: presentation.shape,
+          ...(presentation.rotation === undefined
+            ? {}
+            : { rotation: presentation.rotation }),
           ...(chartFps === undefined ? {} : { chartFps }),
         };
 

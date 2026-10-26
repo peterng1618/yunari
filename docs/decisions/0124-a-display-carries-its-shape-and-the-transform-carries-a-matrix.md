@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-26
 - **Status:** accepted
-- **Paths:** `src/web/packages/renderer-core/src/artboard.ts`, `src/web/packages/renderer-core/src/artboard.test.ts`, `src/web/packages/renderer-core/src/index.ts`
+- **Paths:** `src/web/packages/renderer-core/src/artboard.ts`, `src/web/packages/renderer-core/src/artboard.test.ts`, `src/web/packages/renderer-core/src/index.ts`, `src/web/packages/host/src/settings/displays.ts`, `src/web/packages/host/src/server.ts`
 
 ## The problem
 
@@ -111,3 +111,10 @@ Rotation is validated at the display record (its owner); the transform only
 refuses a number that cannot be a whole degree in the display's allowed set,
 because silently clamping an invalid angle would render a theme nobody asked
 for and hide the defect.
+
+The host keeps that same owner: `settings/displays.ts`'s `normalizePresentation`
+is the one rule the claim route, the local-display route and a patch all ask,
+and the routes only translate its refusal into a 400 with the store's own
+sentence. The rule lives in the store rather than in a route because the file is
+what a reader normalises on the next start; a rule owned per route would let one
+path write a record the store's own reader then drops.

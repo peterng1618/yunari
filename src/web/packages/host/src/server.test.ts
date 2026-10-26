@@ -4233,6 +4233,46 @@ describe("The pairing routes mint, rotate, rename and remove displays (ruling 12
     expect((await displays.find("office-tv"))?.chartFps).toBe(1);
   });
 
+  it("refuses a patch rotation the record's own shape cannot hold", async () => {
+    await mint("Office TV");
+
+    // The rotation range is one rule and the shape's quarter-turn rule is
+    // another, decided against the *final* shape — so this reaches the store,
+    // and the route has to answer its refusal as the caller's 400 rather than
+    // the wrapper's 500.
+    const refused = await request(
+      hosted.server,
+      "PATCH",
+      "/api/displays/office-tv",
+      json({ rotation: 45 }),
+    );
+    expect(refused.status).toBe(400);
+    expect(refused.text()).toBe(
+      "A rectangular display turns in quarter turns, not 45 degrees.",
+    );
+    expect((await displays.find("office-tv"))?.rotation).toBeUndefined();
+
+    // The same angle on a round screen is a whole degree and lands.
+    const rounded = await request(
+      hosted.server,
+      "PATCH",
+      "/api/displays/office-tv",
+      json({ shape: "circle" }),
+    );
+    expect(rounded.status).toBe(200);
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PATCH",
+          "/api/displays/office-tv",
+          json({ rotation: 45 }),
+        )
+      ).status,
+    ).toBe(200);
+    expect((await displays.find("office-tv"))?.rotation).toBe(45);
+  });
+
   it("sets a chart rate the player can run, and answers the redacted record", async () => {
     const { token } = await mint("Office TV");
 
@@ -4509,6 +4549,25 @@ describe("A local monitor is specified rather than paired", () => {
     expect(await listed()).toEqual([
       expect.objectContaining({ id: "left-screen", kind: "local" }),
     ]);
+  });
+
+  it("adds a local monitor with the shape and rotation it was given", async () => {
+    const answer = await request(
+      hosted.server,
+      "POST",
+      "/api/displays",
+      json({
+        label: "Round panel",
+        monitor: { deviceName: "\\\\.\\DISPLAY2" },
+        shape: "circle",
+        rotation: 45,
+      }),
+    );
+    expect(answer.status).toBe(201);
+    expect(await displays.find("round-panel")).toMatchObject({
+      shape: "circle",
+      rotation: 45,
+    });
   });
 
   it("refuses a body the file's own reader would drop", async () => {
@@ -4842,6 +4901,8 @@ describe("A local monitor is specified rather than paired", () => {
         // A local display, so the poll also carries the rate its charts repaint
         // at: this monitor is in front of the person using it.
         chartFps: 1,
+        shape: "rect",
+        rotation: 0,
       });
 
       const seen = await store.find("left-screen");
@@ -5050,6 +5111,66 @@ describe("A display with no camera pairs by typing the one-time code", () => {
         (row) => row.id,
       ),
     ).toEqual(["kitchen-tablet"]);
+  });
+
+  it("claims a paired display with its shape and rotation", async () => {
+    const code = await shown();
+    const answer = await claim({
+      code,
+      label: "Round",
+      shape: "circle",
+      rotation: 45,
+    });
+    expect(answer.status).toBe(200);
+
+    const [record] = await displays.list();
+    expect(record).toMatchObject({ shape: "circle", rotation: 45 });
+  });
+
+  it("refuses a claim with a bad rotation before spending the code", async () => {
+    const code = await shown();
+    const answer = await claim({
+      code,
+      label: "Tablet",
+      shape: "rect",
+      rotation: 45,
+    });
+    expect(answer.status).toBe(400);
+    expect(await displays.list()).toHaveLength(0);
+
+    // The window is intact: a refused body must not cost the owner their code.
+    expect((await claim({ code, label: "Tablet" })).status).toBe(200);
+  });
+
+  it("answers shape and rotation in the active map and the poll", async () => {
+    const themed = host({ activeTheme: createActiveThemeStore(dir) });
+    try {
+      const record = await displays.create("Round", "token", {
+        shape: "circle",
+        rotation: 45,
+      });
+
+      const active = await request(themed.server, "GET", "/api/themes/active");
+      expect(
+        (
+          active.json() as { displays: readonly { id: string }[] }
+        ).displays.find((row) => row.id === record.id),
+      ).toMatchObject({ shape: "circle", rotation: 45 });
+
+      const poll = await request(
+        themed.server,
+        "GET",
+        "/api/published",
+        undefined,
+        { ...LAN, headers: { "x-yunari-session": "token" } },
+      );
+      expect((poll.json() as { display: unknown }).display).toMatchObject({
+        shape: "circle",
+        rotation: 45,
+      });
+    } finally {
+      await themed.close();
+    }
   });
 
   it("answers one refusal for every way a code can fail", async () => {
@@ -5531,12 +5652,21 @@ describe("The display map", () => {
     // never asked of the store: it has no record to take a label from.
     expect(res.status).toBe(200);
     expect(body.displays).toEqual([
-      { id: "this-pc", label: "This PC", kind: "local", theme: null },
+      {
+        id: "this-pc",
+        label: "This PC",
+        kind: "local",
+        theme: null,
+        shape: "rect",
+        rotation: 0,
+      },
       {
         id: "kitchen-tablet",
         label: "Kitchen tablet",
         kind: "paired",
         theme: "kitchen-strip",
+        shape: "rect",
+        rotation: 0,
       },
     ]);
     expect(body.default).toBeNull();
@@ -5570,6 +5700,8 @@ describe("The display map", () => {
       label: "Kitchen tablet",
       kind: "paired",
       theme: "kitchen-strip",
+      shape: "rect",
+      rotation: 0,
     });
     expect(await activeTheme.read("kitchen-tablet", async () => true)).toBe(
       "kitchen-strip",
@@ -8669,6 +8801,8 @@ describe("The publish route", () => {
         id: LOCAL_DISPLAY_ID,
         theme: "living-room",
         chartFps: 1,
+        shape: "rect",
+        rotation: 0,
       });
     } finally {
       await hosted.close();
@@ -8950,7 +9084,13 @@ describe("The published overlay", () => {
         revision: 0,
         // `this-pc` is this machine's own monitor, so it repaints at the rate a
         // local display defaults to rather than the paired 30.
-        display: { id: LOCAL_DISPLAY_ID, theme: null, chartFps: 1 },
+        display: {
+          id: LOCAL_DISPLAY_ID,
+          theme: null,
+          chartFps: 1,
+          shape: "rect",
+          rotation: 0,
+        },
       });
     } finally {
       await hosted.close();
@@ -8995,6 +9135,8 @@ describe("The published overlay", () => {
         id: "kitchen-tablet",
         theme: "studio",
         chartFps: 30,
+        shape: "rect",
+        rotation: 0,
       });
 
       // A display nobody assigned a theme of its own is an unpaired client, and
@@ -9016,6 +9158,8 @@ describe("The published overlay", () => {
         id: "hallway-phone",
         theme: "living-room",
         chartFps: 30,
+        shape: "rect",
+        rotation: 0,
       });
     } finally {
       await hosted.close();
@@ -9099,6 +9243,8 @@ describe("The published overlay", () => {
         id: "kitchen-tablet",
         theme: null,
         chartFps: 30,
+        shape: "rect",
+        rotation: 0,
       });
 
       // The same display without one is answered its assignment, so the null
@@ -9117,6 +9263,8 @@ describe("The published overlay", () => {
         id: "kitchen-tablet",
         theme: "studio",
         chartFps: 30,
+        shape: "rect",
+        rotation: 0,
       });
     } finally {
       await hosted.close();
@@ -9162,6 +9310,8 @@ describe("The published overlay", () => {
         id: "kitchen-tablet",
         theme: "studio",
         chartFps: 30,
+        shape: "rect",
+        rotation: 0,
       });
       // One `theme.json` for the id the display is assigned — not a directory
       // read plus one document per theme, on a poll that runs every two seconds.
