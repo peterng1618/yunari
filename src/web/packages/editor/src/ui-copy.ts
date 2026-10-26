@@ -1396,7 +1396,7 @@ export const uiCopy = {
       video: "not the background",
       font: "no type preset refers to it",
     } satisfies Record<LocalAssetReference["kind"], string>,
-    note: "Nothing on the canvas and no type preset refers to these files. Their attribution goes with them.",
+    note: "Nothing on the canvas, the background, or a type preset refers to these files. Their attribution goes with them.",
     removeAfterSave: (count: number): string =>
       `Remove these ${count} ${count === 1 ? "file" : "files"} after saving`,
     warning:
