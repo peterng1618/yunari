@@ -191,7 +191,11 @@ black plate and letterbox.
 
 A second DOM sibling, `[data-yunari-theme-guide]`, positioned at
 `artboardScreenRect()` and restyled on every camera change. Shown only when a
-lens is active **and** `|lens.aspect − artboardAspect|` exceeds `1e-6`.
+lens is active **and** its lens box differs from the artboard by more than one
+artboard unit on either edge. The tolerance is on the box rather than on
+`|lens.aspect − artboardAspect|`, because an authored board is a rounded pixel
+size: `1672×941` is the same shape as `16:9` to the eye but not to a `1e-6`
+aspect epsilon, which would draw a guide over a board the lens already frames.
 
 - The lens frame stays a solid 1px `--yunari-subdued` outline.
 - The guide frame is a dashed 1px outline at reduced opacity; it never fills,
@@ -328,7 +332,7 @@ A fifth tab, `previews`, between `appearance` and `keyboard`:
    position after a zoom equals the transformed scene box.
 4. Under a lens whose aspect differs from the artboard's, the guide frame is
    visible at the artboard's bounds and moves with it; it is absent under Fit
-   and when the aspects match.
+   and when the lens already frames the board within one artboard unit.
 5. `1:1` and `Circle` both appear in the display menu by default; `1:1` frames
    the artboard in a square virtual display, and `Circle` frames it in a disc
    whose four artboard corners lie on the circle (measured from the rendered

@@ -336,7 +336,7 @@ Expected: FAIL — the host still carries `rgb(255, 0, 0)`; no guide element exi
 - Delete `host.style.background = cssArtboardPaint(paint) ?? "#000"` from `applyArtboardPaint`.
 - Declare `let screen: HTMLElement | undefined` before `paintArtboard`; in `paintArtboard`, after resolving, set `if (screen !== undefined) screen.style.background = cssArtboardPaint(artboardPaint) ?? "#000";`.
 - Create the screen as today; set its radius from `editor.viewport.displayShape() === "circle" ? "50%" : ""` in `placeScreen`, and repaint its background there from the kept `artboardPaint`.
-- Create a guide element `data-yunari-theme-guide`, append it to `container`, and in `placeScreen` position it at `artboardScreenRect()`; hide it when `display() === undefined` or `Math.abs(lens.aspect - board.width / board.height) <= 1e-6`.
+- Create a guide element `data-yunari-theme-guide`, append it to `container`, and in `placeScreen` position it at `artboardScreenRect()`; hide it when `display() === undefined` or the lens box differs from the artboard by at most one artboard unit on either edge.
 - `placeMedia`: pass `display` only when `displayScreenRect()` is defined, and set `radius: "circle"` on that box when `displayShape() === "circle"`. Under Fit pass only `artboard`.
 
 `background-media.ts`:
