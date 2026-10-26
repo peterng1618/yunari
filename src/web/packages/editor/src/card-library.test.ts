@@ -666,6 +666,13 @@ describe("the type tokens a shipped card names", () => {
         origin: { left: 0, top: 0 },
       });
       expect(copied.issues, `${entry.id} does not insert`).toEqual([]);
+      // Every card names a role the theme always has, so nothing is swapped:
+      // a substitution here would mean a card fell back to the theme's first
+      // token and the author was told about a swap that should not exist.
+      expect(
+        copied.substitutions,
+        `${entry.id} substituted a reference`,
+      ).toEqual([]);
       for (const run of runsOf(copied.card)) {
         refs.push(String(run["typeToken"]));
       }
