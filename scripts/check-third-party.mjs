@@ -5,23 +5,29 @@
  * `src/web` workspace manifest declares in `dependencies` or `devDependencies`,
  * `@yunari/` excluded. A row that states a version or licence the installed
  * tree no longer has is worse than no row, so this check compares each
- * declaration against the lockfile and the installed package's own
- * `package.json`. Scope stays direct dependencies; the closure is the release
- * rule in `docs/engineering/dependencies.md`, not this check.
+ * declaration against the lockfile and the installed package's own manifest,
+ * and rejects a row no declaration consumes. Scope stays direct dependencies;
+ * the closure is the release rule in `docs/engineering/dependencies.md`.
  *
  * `node scripts/check-third-party.mjs [--self-test]`
  *
- * Exit: 0 clean, 1 drift (one line per drift), 2 unreadable input.
+ * Exit: 0 clean, 1 drift (one line per drift), 2 unreadable input or an
+ * incomplete install.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const WEB = join(ROOT, "src/web");
-const NOTICES = join(ROOT, "THIRD-PARTY-NOTICES.md");
-const LOCKFILE = join(WEB, "package-lock.json");
 
 function readJson(file) {
   try {
@@ -83,8 +89,8 @@ export function directDependencies(web) {
 }
 
 /** The lockfile key a declaration resolves to: its workspace's own copy first,
- *  then the hoisted one — npm's lookup order, and what `runtimeDependencies`
- *  reads for the staged manifest. */
+ *  then the hoisted one — npm's lookup order. The staged manifest reads only
+ *  the hoisted copy, so a nested dependency is checked here but not staged. */
 export function resolveDependency(packages, workspace, name) {
   const own = `${workspace === "" ? "" : `${workspace}/`}node_modules/${name}`;
   if (packages[own] !== undefined) return own;
@@ -102,15 +108,178 @@ export function normaliseLicence(value) {
 }
 
 /**
- * One drift string per disagreement, naming the package and what disagrees.
- * Declarations are deduplicated by resolved package, so a package the editor
- * and renderer-core both declare is checked once.
+ * Title lines a `LICENSE` may begin with, mapped exactly. A title the table does
+ * not name is a drift: guessing from the body would let a file that merely
+ * mentions another licence pass as that licence.
  */
-export function evaluateNotices({ dependencies, packages, rows, licenceOf }) {
+const LICENCE_TITLES = new Map([
+  ["apache license version 2.0", "Apache-2.0"],
+  ["apache 2.0", "Apache-2.0"],
+  ["apache-2.0", "Apache-2.0"],
+  ["mit", "MIT"],
+  ["isc", "ISC"],
+  ["bsd 3-clause", "BSD-3-Clause"],
+  ["bsd-3-clause", "BSD-3-Clause"],
+  ["modified bsd", "BSD-3-Clause"],
+  ["bsd 2-clause", "BSD-2-Clause"],
+  ["bsd-2-clause", "BSD-2-Clause"],
+  ["simplified bsd", "BSD-2-Clause"],
+]);
+
+/** The licence a title line names, or `undefined` when the table cannot map it. */
+export function titleLicence(line) {
+  const title = line
+    .trim()
+    .replace(/^[#>*_\s"'`([{]+/, "")
+    .replace(/^The\s+/i, "")
+    .replace(/\s+licen[cs]e\s*[.:;!?]?\s*$/i, "")
+    .replace(/[)"'`*_.:,;!?\]]+$/, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+  return LICENCE_TITLES.get(title);
+}
+
+/** Non-empty lines of a LICENSE file, trimmed, in order. */
+function nonEmptyLines(text) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+}
+
+/**
+ * The licence the file's title block names. The title may wrap — Apache's file
+ * starts `Apache License` and continues `Version 2.0, January 2004` — so the
+ * second line is read only as part of the title, never as body text.
+ */
+function licenceFromTitle(text) {
+  const lines = nonEmptyLines(text);
+  if (lines.length === 0) return undefined;
+  const first = titleLicence(lines[0]);
+  if (first !== undefined) return first;
+  if (lines.length < 2) return undefined;
+  return titleLicence(`${lines[0]} ${lines[1].replace(/,\s*.*$/, "")}`);
+}
+
+/**
+ * What is installed at a lockfile key. A missing manifest is the caller's
+ * prerequisite failure; a manifest with no licence field falls back to the
+ * title of its own `LICENSE` file.
+ */
+function installedFacts(dir) {
+  let manifest;
+  try {
+    manifest = readJson(join(dir, "package.json"));
+  } catch {
+    return { missing: true };
+  }
+
+  let licence;
+  if (typeof manifest.license === "string" && manifest.license.trim() !== "") {
+    licence = manifest.license;
+  } else if (Array.isArray(manifest.licenses)) {
+    const types = manifest.licenses
+      .map((entry) => (typeof entry === "string" ? entry : entry?.type))
+      .filter((type) => typeof type === "string");
+    if (types.length > 0) licence = types.join(" OR ");
+  }
+
+  let problem;
+  if (licence === undefined) {
+    const file = ["LICENSE", "LICENSE.txt", "LICENSE.md"]
+      .map((name) => join(dir, name))
+      .find(existsSync);
+    if (file === undefined) {
+      problem = "no declared licence field and no LICENSE file";
+    } else {
+      const text = readFileSync(file, "utf8");
+      const title = nonEmptyLines(text)[0] ?? "";
+      licence = licenceFromTitle(text);
+      if (licence === undefined) {
+        problem = `no declared licence field, and its LICENSE begins "${title}", which the check cannot map`;
+      }
+    }
+  }
+
+  return { version: manifest.version, licence, problem };
+}
+
+/**
+ * Every check the gate runs, against the tree rooted at `root`. Returns the
+ * exit code and the lines to print, so the self-test can assert on both without
+ * the process exiting.
+ */
+export function checkTree(root) {
+  const web = join(root, "src/web");
+  const lockfile = join(web, "package-lock.json");
+  const noticesFile = join(root, "THIRD-PARTY-NOTICES.md");
+
+  let packages;
+  let rows;
+  let dependencies;
+  try {
+    packages = readJson(lockfile).packages ?? {};
+    rows = parseNotices(readFileSync(noticesFile, "utf8"));
+    dependencies = directDependencies(web);
+  } catch (error) {
+    return { exitCode: 2, lines: [`third-party: ${error.message}`] };
+  }
+
+  const declarations = dependencies.map((dependency) => ({
+    ...dependency,
+    key: resolveDependency(packages, dependency.workspace, dependency.name),
+  }));
+
+  // An incomplete install is a prerequisite, not a drift: the check cannot
+  // judge a package it cannot read.
+  const installed = new Map();
+  for (const { name, key } of declarations) {
+    if (key === undefined || installed.has(key)) continue;
+    const facts = installedFacts(join(web, key));
+    if (facts.missing) {
+      return {
+        exitCode: 2,
+        lines: [
+          `third-party: prerequisite: ${name} is not installed at ${key}; run npm install`,
+        ],
+      };
+    }
+    installed.set(key, facts);
+  }
+
   const drifts = [];
+
+  // Every row must be consumed by exactly one resolved declaration; a row that
+  // no workspace resolves is stale, and a second row for the same id is a
+  // duplicate.
+  const resolved = declarations.filter(({ key }) => key !== undefined);
+  const resolvedIds = new Set(
+    resolved.map(({ name, key }) => `${name}@${packages[key].version}`),
+  );
+  const resolvedNames = new Set(resolved.map(({ name }) => name));
+  const seen = new Set();
+  for (const row of rows) {
+    const id = `${row.package}@${row.version}`;
+    if (seen.has(id)) {
+      drifts.push(`duplicate ${row.package} ${row.version}`);
+      continue;
+    }
+    seen.add(id);
+    if (resolvedIds.has(id)) continue;
+    if (resolvedNames.has(row.package)) {
+      drifts.push(
+        `stale ${row.package} ${row.version}: THIRD-PARTY-NOTICES.md has a row, but no workspace resolves that version`,
+      );
+    } else {
+      drifts.push(
+        `stale ${row.package}: THIRD-PARTY-NOTICES.md has a row, but no workspace declares it`,
+      );
+    }
+  }
+
   const checked = new Set();
-  for (const { workspace, name } of dependencies) {
-    const key = resolveDependency(packages, workspace, name);
+  for (const { workspace, name, key } of declarations) {
     if (key === undefined) {
       const id = `${name}@unresolved`;
       if (checked.has(id)) continue;
@@ -125,6 +294,13 @@ export function evaluateNotices({ dependencies, packages, rows, licenceOf }) {
     if (checked.has(id)) continue;
     checked.add(id);
 
+    const facts = installed.get(key);
+    if (facts.version !== version) {
+      drifts.push(
+        `installed ${name}: lockfile resolves ${version}, node_modules holds ${facts.version}`,
+      );
+    }
+
     const named = rows.filter((row) => row.package === name);
     if (named.length === 0) {
       drifts.push(`missing ${name}: no row in THIRD-PARTY-NOTICES.md`);
@@ -137,169 +313,285 @@ export function evaluateNotices({ dependencies, packages, rows, licenceOf }) {
       );
       continue;
     }
-    const installed = licenceOf(key);
-    if (installed === undefined) {
-      drifts.push(
-        `licence ${name} ${version}: the installed package declares no licence`,
-      );
+    if (facts.problem !== undefined) {
+      drifts.push(`licence ${name} ${version}: ${facts.problem}`);
       continue;
     }
-    if (normaliseLicence(row.licence) !== normaliseLicence(installed)) {
+    if (normaliseLicence(row.licence) !== normaliseLicence(facts.licence)) {
       drifts.push(
-        `licence ${name} ${version}: notices states ${row.licence}, installed package.json declares ${installed}`,
+        `licence ${name} ${version}: notices states ${row.licence}, installed package declares ${facts.licence}`,
       );
     }
   }
-  return drifts;
+
+  if (drifts.length > 0) {
+    return {
+      exitCode: 1,
+      lines: [
+        ...drifts.map((drift) => `third-party: ${drift}`),
+        `third-party: ${drifts.length} drift(s)`,
+      ],
+    };
+  }
+  return {
+    exitCode: 0,
+    lines: ["third-party: every direct dependency matches its notice"],
+  };
 }
 
-/** The installed package's own licence: its manifest field, or — for a package
- *  that ships none (`@google/design.md`) — the text beside it. */
-function installedLicence(web, key) {
-  const dir = join(web, key);
-  let manifest;
+/** Runs the check against the repository this script lives in. */
+export function main() {
+  const { exitCode, lines } = checkTree(ROOT);
+  const stream = exitCode === 0 ? process.stdout : process.stderr;
+  for (const line of lines) stream.write(`${line}\n`);
+  return exitCode;
+}
+
+const ROWS_HEADER = "| Package | Version | Licence |\n|---|---|---|\n";
+const NOTICES_CLEAN =
+  `${ROWS_HEADER}` +
+  "| `alpha` | 1.0.0 | MIT |\n" +
+  "| `beta` | 2.0.0 | MIT |\n" +
+  "| `gamma` | 3.0.0 | BSD-3-Clause |\n";
+
+/**
+ * A workspace tree small enough to read, shaped like the real one: a root
+ * manifest listing two workspaces, a lockfile with three hoisted packages, and
+ * installed manifests. `gamma` deliberately declares no licence field and ships
+ * a LICENSE whose title is BSD 3-Clause while its body mentions the MIT License.
+ */
+function writeFixture(root, mutate = () => {}) {
+  const files = new Map();
+  const web = join(root, "src/web");
+  files.set(join(web, "package.json"), {
+    name: "fixture",
+    private: true,
+    workspaces: ["packages/a", "packages/b"],
+  });
+  files.set(join(web, "packages/a/package.json"), {
+    name: "@yunari/a",
+    version: "0.0.0",
+    dependencies: { alpha: "1.0.0", beta: "2.0.0" },
+  });
+  files.set(join(web, "packages/b/package.json"), {
+    name: "@yunari/b",
+    version: "0.0.0",
+    dependencies: { alpha: "1.0.0", gamma: "3.0.0" },
+  });
+  files.set(join(web, "package-lock.json"), {
+    lockfileVersion: 3,
+    packages: {
+      "node_modules/alpha": { version: "1.0.0" },
+      "node_modules/beta": { version: "2.0.0" },
+      "node_modules/gamma": { version: "3.0.0" },
+    },
+  });
+  files.set(join(web, "node_modules/alpha/package.json"), {
+    name: "alpha",
+    version: "1.0.0",
+    license: "MIT",
+  });
+  files.set(join(web, "node_modules/beta/package.json"), {
+    name: "beta",
+    version: "2.0.0",
+    license: "MIT",
+  });
+  files.set(join(web, "node_modules/gamma/package.json"), {
+    name: "gamma",
+    version: "3.0.0",
+  });
+  files.set(
+    join(web, "node_modules/gamma/LICENSE"),
+    "BSD 3-Clause License\n\nRedistribution and use is permitted.\nThis product includes software licensed under the MIT License.\n",
+  );
+  files.set(join(root, "THIRD-PARTY-NOTICES.md"), NOTICES_CLEAN);
+
+  mutate({ files, web, root });
+
+  for (const [file, body] of files) {
+    mkdirSync(join(file, ".."), { recursive: true });
+    writeFileSync(file, typeof body === "string" ? body : `${JSON.stringify(body, null, 2)}\n`);
+  }
+}
+
+/** Runs one fixture case in its own tree and removes it afterwards. */
+function withFixture(mutate, assert) {
+  const root = mkdtempSync(join(tmpdir(), "third-party-self-test-"));
   try {
-    manifest = readJson(join(dir, "package.json"));
-  } catch {
-    return undefined;
+    writeFixture(root, mutate);
+    const result = checkTree(root);
+    return assert(result);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
-  if (typeof manifest.license === "string" && manifest.license.trim() !== "") {
-    return manifest.license;
-  }
-  if (Array.isArray(manifest.licenses)) {
-    const types = manifest.licenses
-      .map((entry) => (typeof entry === "string" ? entry : entry?.type))
-      .filter((type) => typeof type === "string");
-    if (types.length > 0) return types.join(" OR ");
-  }
-  for (const file of ["LICENSE", "LICENSE.txt", "LICENSE.md"]) {
-    const at = join(dir, file);
-    if (!existsSync(at)) continue;
-    const text = readFileSync(at, "utf8");
-    if (/Apache License\s+Version 2\.0/i.test(text)) return "Apache-2.0";
-    if (/MIT License/i.test(text)) return "MIT";
-  }
-  return undefined;
 }
 
 function selfTest() {
-  const packages = {
-    "node_modules/dep-a": { version: "1.0.0" },
-    "packages/worker/node_modules/dep-b": { version: "2.0.0" },
-    "node_modules/dep-b": { version: "9.9.9" },
-  };
-  const dependencies = [
-    { workspace: "", name: "dep-a" },
-    { workspace: "packages/worker", name: "dep-b" },
-  ];
-  const licenceOf = () => "MIT";
-  const rows = [
-    { package: "dep-a", version: "1.0.0", licence: "MIT" },
-    { package: "dep-b", version: "2.0.0", licence: "MIT" },
-  ];
-  const driftsFor = (fixtureRows) =>
-    evaluateNotices({ dependencies, packages, rows: fixtureRows, licenceOf });
-
   const cases = [
     [
-      "passes a clean inventory",
-      () => driftsFor(rows).length === 0,
+      "passes a clean tree",
+      () =>
+        withFixture(undefined, ({ exitCode, lines }) => {
+          return (
+            exitCode === 0 &&
+            lines.every((line) => !line.includes("drift"))
+          );
+        }),
     ],
     [
-      "names a missing entry",
-      () => {
-        const drifts = driftsFor(rows.filter((row) => row.package !== "dep-a"));
-        return drifts.length === 1 && drifts[0].startsWith("missing dep-a");
-      },
+      "names a dependency with no row",
+      () =>
+        withFixture(
+          ({ files, root }) =>
+            files.set(
+              join(root, "THIRD-PARTY-NOTICES.md"),
+              NOTICES_CLEAN.replace(/^\| `alpha` \|.*\n/m, ""),
+            ),
+          ({ exitCode, lines }) =>
+            exitCode === 1 && lines.some((line) => line.includes("missing alpha")),
+        ),
     ],
     [
       "names a version the lockfile does not resolve",
-      () => {
-        const drifts = driftsFor([
-          { package: "dep-a", version: "0.9.0", licence: "MIT" },
-          rows[1],
-        ]);
-        return drifts.some(
-          (drift) =>
-            drift.startsWith("version dep-a") &&
-            drift.includes("0.9.0") &&
-            drift.includes("1.0.0"),
-        );
-      },
-    ],
-    [
-      "names a licence the installed package does not declare",
-      () => {
-        const drifts = driftsFor([
-          { package: "dep-a", version: "1.0.0", licence: "Apache-2.0" },
-          rows[1],
-        ]);
-        return drifts.some(
-          (drift) =>
-            drift.startsWith("licence dep-a") &&
-            drift.includes("Apache-2.0") &&
-            drift.includes("MIT"),
-        );
-      },
-    ],
-    [
-      "resolves a workspace's own copy before the hoisted one",
       () =>
-        resolveDependency(packages, "packages/worker", "dep-b") ===
-        "packages/worker/node_modules/dep-b",
+        withFixture(
+          ({ files, root }) =>
+            files.set(
+              join(root, "THIRD-PARTY-NOTICES.md"),
+              NOTICES_CLEAN.replace("| `alpha` | 1.0.0 |", "| `alpha` | 0.9.0 |"),
+            ),
+          ({ exitCode, lines }) =>
+            exitCode === 1 &&
+            lines.some(
+              (line) =>
+                line.includes("version alpha") &&
+                line.includes("0.9.0") &&
+                line.includes("1.0.0"),
+            ),
+        ),
+    ],
+    [
+      "names a licence the manifest does not declare",
+      () =>
+        withFixture(
+          ({ files, root }) =>
+            files.set(
+              join(root, "THIRD-PARTY-NOTICES.md"),
+              NOTICES_CLEAN.replace("| `beta` | 2.0.0 | MIT |", "| `beta` | 2.0.0 | Apache-2.0 |"),
+            ),
+          ({ exitCode, lines }) =>
+            exitCode === 1 &&
+            lines.some(
+              (line) =>
+                line.includes("licence beta") &&
+                line.includes("Apache-2.0") &&
+                line.includes("MIT"),
+            ),
+        ),
+    ],
+    [
+      "names an installed version that is not the lockfile's",
+      () =>
+        withFixture(
+          ({ files, web }) =>
+            files.set(join(web, "node_modules/alpha/package.json"), {
+              name: "alpha",
+              version: "9.9.9",
+              license: "MIT",
+            }),
+          ({ exitCode, lines }) =>
+            exitCode === 1 &&
+            lines.some(
+              (line) =>
+                line.includes("installed alpha") &&
+                line.includes("1.0.0") &&
+                line.includes("9.9.9"),
+            ),
+        ),
+    ],
+    [
+      "refuses an incomplete install as a prerequisite",
+      () =>
+        withFixture(
+          ({ files, web }) => {
+            const beta = join(web, "node_modules/beta");
+            for (const [file] of files) {
+              if (file.startsWith(beta)) files.delete(file);
+            }
+          },
+          ({ exitCode, lines }) =>
+            exitCode === 2 &&
+            lines.some(
+              (line) => line.includes("prerequisite:") && line.includes("beta"),
+            ),
+        ),
+    ],
+    [
+      "names a stale row for a package no workspace declares",
+      () =>
+        withFixture(
+          ({ files, root }) =>
+            files.set(
+              join(root, "THIRD-PARTY-NOTICES.md"),
+              `${NOTICES_CLEAN}| \`delta\` | 9.9.9 | MIT |\n`,
+            ),
+          ({ exitCode, lines }) =>
+            exitCode === 1 && lines.some((line) => line.includes("stale delta")),
+        ),
+    ],
+    [
+      "names a duplicate row",
+      () =>
+        withFixture(
+          ({ files, root }) =>
+            files.set(
+              join(root, "THIRD-PARTY-NOTICES.md"),
+              `${NOTICES_CLEAN}| \`alpha\` | 1.0.0 | MIT |\n`,
+            ),
+          ({ exitCode, lines }) =>
+            exitCode === 1 &&
+            lines.some((line) => line.includes("duplicate alpha 1.0.0")),
+        ),
+    ],
+    [
+      "does not read a licence out of a LICENSE body",
+      () =>
+        withFixture(
+          ({ files, root }) =>
+            files.set(
+              join(root, "THIRD-PARTY-NOTICES.md"),
+              NOTICES_CLEAN.replace("| `gamma` | 3.0.0 | BSD-3-Clause |", "| `gamma` | 3.0.0 | MIT |"),
+            ),
+          ({ exitCode, lines }) =>
+            exitCode === 1 && lines.some((line) => line.includes("licence gamma")),
+        ),
+    ],
+    [
+      "maps the LICENSE title to its licence",
+      () =>
+        withFixture(undefined, ({ exitCode }) => exitCode === 0),
     ],
   ];
 
   let failed = 0;
-  for (const [name, passes] of cases) {
-    const ok = passes();
+  for (const [name, run] of cases) {
+    const ok = run();
     if (!ok) failed += 1;
     process.stdout.write(`${ok ? "ok  " : "FAIL"} ${name}\n`);
   }
   if (failed > 0) {
-    process.stderr.write(
-      `third-party self-test: ${failed} case(s) wrong\n`,
-    );
-    process.exit(1);
+    process.stderr.write(`third-party self-test: ${failed} case(s) wrong\n`);
+    return 1;
   }
   process.stdout.write(
     `third-party self-test: all ${cases.length} cases behave\n`,
   );
-  process.exit(0);
-}
-
-function main() {
-  if (process.argv.includes("--self-test")) selfTest();
-
-  try {
-    const packages = readJson(LOCKFILE).packages ?? {};
-    const drifts = evaluateNotices({
-      dependencies: directDependencies(WEB),
-      packages,
-      rows: parseNotices(readFileSync(NOTICES, "utf8")),
-      licenceOf: (key) => installedLicence(WEB, key),
-    });
-
-    if (drifts.length > 0) {
-      for (const drift of drifts) {
-        process.stderr.write(`third-party: ${drift}\n`);
-      }
-      process.stderr.write(`third-party: ${drifts.length} drift(s)\n`);
-      process.exit(1);
-    }
-    process.stdout.write(
-      "third-party: every direct dependency matches its notice\n",
-    );
-    process.exit(0);
-  } catch (error) {
-    process.stderr.write(`third-party: ${error.message}\n`);
-    process.exit(2);
-  }
+  return 0;
 }
 
 if (
   process.argv[1] !== undefined &&
   pathToFileURL(resolve(process.argv[1])).href === import.meta.url
 ) {
-  main();
+  process.exit(process.argv.includes("--self-test") ? selfTest() : main());
 }

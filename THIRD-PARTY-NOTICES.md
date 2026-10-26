@@ -11,7 +11,8 @@ package's own dependencies has no entry here, and its absence is not a missing
 notice; the closure is enumerated at release time, by the release rule in
 [`docs/engineering/dependencies.md`](docs/engineering/dependencies.md). Every
 direct dependency is a row in one of the two tables below, with the version the
-lockfile resolves and the licence its installed `package.json` declares;
+lockfile resolves and the licence its installed `package.json` declares — or,
+where that manifest declares none, the licence named by its `LICENSE` title;
 `npm run third-party:check` (`scripts/check-third-party.mjs`) compares every
 row against both and names each drift. The prose sections that follow are
 provenance, not notice rows.
