@@ -295,8 +295,14 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
   act(() => {
     button("[data-yunari-font-apply]").click();
   });
-  expect(onAddPreset).toHaveBeenCalledWith(family.font.cuts[1], "heading");
-  expect(onApplyToSelected).toHaveBeenCalledWith(family.font.cuts[1]);
+  expect(onAddPreset).toHaveBeenCalledWith(family.font.cuts[1], "heading", [
+    family.font.cuts[0],
+    family.font.cuts[1],
+  ]);
+  expect(onApplyToSelected).toHaveBeenCalledWith(family.font.cuts[1], [
+    family.font.cuts[0],
+    family.font.cuts[1],
+  ]);
   expect(chips[1]?.getAttribute("aria-pressed")).toBe("true");
 });
 
@@ -320,7 +326,7 @@ it("applies the face the family's id names, not the first cut listed", () => {
     button("[data-yunari-font-apply]").click();
   });
 
-  expect(onApplyToSelected).toHaveBeenCalledWith(lead);
+  expect(onApplyToSelected).toHaveBeenCalledWith(lead, [listed, lead]);
 });
 
 it("names the subset when cuts share a weight, rather than drawing three 400s", () => {
@@ -351,6 +357,34 @@ it("names the subset when cuts share a weight, rather than drawing three 400s", 
   )) {
     expect(chip.style.fontFamily).toBe("");
   }
+});
+
+it("brings the lead subset's weights, not another subset's faces", () => {
+  // Applying a Latin face must give the preset every Latin weight; a
+  // Vietnamese cut is a different face and is not imported unasked.
+  const latin400 = cut("Manrope", 400);
+  const latin700 = cut("Manrope", 700);
+  const vietnamese = {
+    ...cut("Manrope", 400),
+    id: "cut:manrope-vietnamese",
+    subset: "vietnamese",
+  };
+  const withSubsets = {
+    ...family,
+    id: `google-fonts:${latin400.id}`,
+    font: { cuts: [vietnamese, latin400, latin700] },
+  };
+  const onApplyToSelected = vi.fn();
+  mount(panel({ selected: withSubsets, onApplyToSelected }));
+
+  act(() => {
+    button("[data-yunari-font-apply]").click();
+  });
+
+  expect(onApplyToSelected).toHaveBeenCalledWith(latin400, [
+    latin400,
+    latin700,
+  ]);
 });
 
 it("releases every face it added when the panel unmounts", () => {

@@ -63,6 +63,22 @@ export function leadCutOf(selected: {
   return cuts.find((cut) => cut.id === entryId) ?? cuts[0];
 }
 
+/** The faces an import brings with the chosen cut: every weight and style of
+ *  the family's lead subset, so the preset's weight field has a face to draw at
+ *  each weight, plus the chosen cut when the author picked another subset. */
+export function familyCutsOf(
+  selected: FontResult,
+  chosen: FontCut,
+): readonly FontCut[] {
+  const lead = leadCutOf(selected) ?? chosen;
+  const sameSubset = selected.font.cuts.filter(
+    (cut) => cut.family === lead.family && cut.subset === lead.subset,
+  );
+  return sameSubset.some((cut) => cut.id === chosen.id)
+    ? sameSubset
+    : [...sameSubset, chosen];
+}
+
 export function faceStyle(cut: FontCut | undefined): React.CSSProperties {
   return cut === undefined
     ? {}
@@ -127,8 +143,12 @@ export function FontPreviewPanel({
   readonly presets: TypePresets;
   readonly onApplyTrio: ((trio: FontTrioInfo) => void) | undefined;
   readonly onAddTrioPresets: ((trio: FontTrioInfo) => void) | undefined;
-  readonly onAddPreset: ((cut: FontCut, role: FontRole) => void) | undefined;
-  readonly onApplyToSelected: ((cut: FontCut) => void) | undefined;
+  readonly onAddPreset:
+    | ((cut: FontCut, role: FontRole, family: readonly FontCut[]) => void)
+    | undefined;
+  readonly onApplyToSelected:
+    | ((cut: FontCut, family: readonly FontCut[]) => void)
+    | undefined;
 }): React.JSX.Element {
   const copy = uiCopy.assets.fontPreview;
   const trio = selected.font.trio;
@@ -302,7 +322,11 @@ export function FontPreviewPanel({
                 type="button"
                 data-yunari-font-add-preset=""
                 onClick={() => {
-                  onAddPreset(selectedCut, role);
+                  onAddPreset(
+                    selectedCut,
+                    role,
+                    familyCutsOf(selected, selectedCut),
+                  );
                 }}
                 className="rounded-[var(--radius-sm)] border border-accent px-[var(--space-12)] py-[var(--space-4)] text-xs text-accent"
               >
@@ -315,7 +339,10 @@ export function FontPreviewPanel({
                 type="button"
                 data-yunari-font-apply=""
                 onClick={() => {
-                  onApplyToSelected(selectedCut);
+                  onApplyToSelected(
+                    selectedCut,
+                    familyCutsOf(selected, selectedCut),
+                  );
                 }}
                 className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-12)] py-[var(--space-4)] text-xs text-muted"
               >

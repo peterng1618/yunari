@@ -942,14 +942,14 @@ export class EditorSession {
       onAddTrioPresets: (trio) => {
         run(() => document.addTypePresetsFromTrio(trio));
       },
-      onAddPreset: (cut, role) => {
-        run(() => document.addTypePresetFromCut(cut, role));
+      onAddPreset: (cut, role, family) => {
+        run(() => document.addTypePresetFromCut(cut, role, family));
       },
       ...(selected === undefined
         ? {}
         : {
-            onApplyToSelected: (cut: FontCut) => {
-              run(() => document.applyCutToPreset(selected, cut));
+            onApplyToSelected: (cut: FontCut, family: readonly FontCut[]) => {
+              run(() => document.applyCutToPreset(selected, cut, family));
             },
           }),
     });
