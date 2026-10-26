@@ -578,6 +578,24 @@ describe("the display lens", () => {
     resetPreviewRatios();
   });
 
+  it("stops re-framing after destroy", () => {
+    const camera = createCamera({
+      width: 800,
+      height: 600,
+      artboard: { width: 1000, height: 1000 },
+    });
+    camera.showDisplay("16:9");
+    expect(camera.zoom()).toBeCloseTo(0.45, 6);
+    camera.destroy();
+
+    // Removing the lens the camera held is the catalogue edit that would make
+    // a live subscriber refit. A destroyed camera must not still answer it.
+    setActivePreviewRatios(["4:3"]);
+    expect(camera.zoom(), "the transform is untouched").toBeCloseTo(0.45, 6);
+    expect(camera.display()).toBe("16:9");
+    resetPreviewRatios();
+  });
+
   it("opens on the first landscape lens or Fit", () => {
     setActivePreviewRatios(["9:16"]);
     expect(
