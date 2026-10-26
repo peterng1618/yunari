@@ -289,6 +289,31 @@ describe("token inspector", () => {
     panel.destroy();
   });
 
+  it("prints the weight list in the order the producer gave it", async () => {
+    // `facesOf` already answers lightest first, `italic` after `normal`. A sort
+    // here would put `700 italic` before `700` and discard that order.
+    const write = actions(undefined, () => [
+      { assetId: "manrope-400", weight: 400, style: "normal" },
+      { assetId: "manrope-700", weight: 700, style: "normal" },
+      { assetId: "manrope-700-italic", weight: 700, style: "italic" },
+    ]);
+    const panel = createTokenInspectorPanel(document.body, write);
+    panel.render({ kind: "preset", id: "bound" }, PRESETS, {
+      typeTokens: PRESETS,
+    });
+
+    await click(
+      panel.root.querySelector("[data-yunari-token-weight]") as HTMLElement,
+    );
+
+    expect(
+      [...document.querySelectorAll('[role="option"]')].map((option) =>
+        option.textContent?.trim(),
+      ),
+    ).toEqual(["400", "700", "700 italic"]);
+    panel.destroy();
+  });
+
   it("makes family and weight editable after Unbind", async () => {
     const write = actions();
     const panel = createTokenInspectorPanel(document.body, write);

@@ -173,15 +173,11 @@ function PresetFields(props: {
   const put = (next: TypeToken): void => {
     actions.onChange({ ...presets, [id]: next });
   };
-  // Lightest first: a weight list reads 400, 500, 700, not declaration order.
+  // The producer owns the order: `facesOf` answers one entry per weight and
+  // style, lightest first. Re-sorting here would put `italic` before `normal`
+  // at the same weight and discard that.
   const faces =
-    value.face === undefined
-      ? []
-      : [...(actions.facesOf?.(value.family) ?? [])].sort(
-          (a, b) =>
-            Number(a.weight) - Number(b.weight) ||
-            a.style.localeCompare(b.style),
-        );
+    value.face === undefined ? [] : (actions.facesOf?.(value.family) ?? []);
   const selectedFaceId =
     faces.find((face) => face.assetId === value.face?.assetId)?.assetId ??
     faces[0]?.assetId ??
