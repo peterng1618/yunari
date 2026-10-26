@@ -7,7 +7,7 @@ import type {
 import { setObjectAssetReference } from "@yunari/scene-fabric";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import { type FabricObject, Rect } from "fabric/es";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AssetManager,
   type LocalAssetReference,
@@ -16,12 +16,35 @@ import { EditorDocument } from "./editor-document.js";
 import type { EditorShell } from "./editor-shell.js";
 import type { HistoryGlobalsPort } from "./history-manager/index.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
+import { PersistenceManager } from "./persistence-manager/index.js";
 import { fontAssetId } from "./type-preset-apply.js";
 import type { TypePresets } from "./type-preset-manager/index.js";
+import { uiCopy } from "./ui-copy.js";
 
-/** The host's byte route, mocked: no document test reaches a real host. */
+/** The host's byte and trash routes, mocked: no document test reaches a real
+ *  host. */
 const assetBytesMock = vi.hoisted(() => vi.fn());
-vi.mock("./asset-finder/client.js", () => ({ assetBytes: assetBytesMock }));
+const trashAssetsMock = vi.hoisted(() => vi.fn());
+vi.mock("./asset-finder/client.js", () => ({
+  assetBytes: assetBytesMock,
+  trashAssets: trashAssetsMock,
+}));
+
+/** The cleanup sheet is a React surface with its own suite; here it is the one
+ *  answer a save reads. */
+const cleanupMock = vi.hoisted(() => vi.fn());
+vi.mock("./components/save-cleanup-dialog.js", () => ({
+  confirmSaveCleanup: cleanupMock,
+}));
+
+/** The replacement question is a modal too, so its answer is injected and the
+ *  manager stays the real one. */
+const replacementMock = vi.hoisted(() => vi.fn());
+vi.mock("./persistence-manager/index.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./persistence-manager/index.js")>();
+  return { ...actual, confirmDocumentReplacement: replacementMock };
+});
 
 /**
  * The document's credits collection: what an import adds, what the package it
@@ -35,12 +58,16 @@ function documentWith(
   seams: {
     readonly assetManager?: AssetManager;
     readonly objects?: readonly FabricObject[];
+    readonly unsaved?: boolean;
+    readonly onSaved?: (message?: string) => void;
+    readonly onError?: (message: string) => void;
   } = {},
 ): EditorDocument {
   return new EditorDocument({
     source: {
       shell: {
         snapshot: (value: unknown) => value,
+        backdrop: () => undefined,
         editor: {
           errorManager: { report: () => {} },
           historyManager: { attachGlobals: () => {} },
@@ -50,9 +77,11 @@ function documentWith(
       envelope: createNewFabricTheme() as unknown as FabricThemeEnvelopeInput,
       assetManager: seams.assetManager ?? new AssetManager(),
       ...(credits === undefined ? {} : { credits }),
+      ...(seams.unsaved === true ? { unsaved: true } : {}),
       onNew: async () => {},
       onNewFromStarter: async () => {},
-      onSaved: () => {},
+      onSaved: seams.onSaved ?? (() => {}),
+      ...(seams.onError === undefined ? {} : { onError: seams.onError }),
     },
     consumers: {} as never,
   });
@@ -227,6 +256,222 @@ describe("EditorDocument credits", () => {
     ]);
     expect(assetManager.assets["assets/logo.png"]).toEqual(new Uint8Array([1]));
     expect(changed).not.toHaveBeenCalled();
+    document.destroy();
+  });
+});
+
+describe("EditorDocument save cleanup", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("does not ask when there is nothing unused", async () => {
+    // A cleanup answer that would stop the save, so a save that wrote anyway is
+    // the proof the question was never asked.
+    cleanupMock.mockResolvedValue("cancel");
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    const onSaved = vi.fn();
+    const document = documentWith(undefined, { onSaved });
+
+    await document.save();
+
+    expect(cleanupMock).not.toHaveBeenCalled();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledWith("Theme package saved");
+    document.destroy();
+  });
+
+  it("cancel writes nothing and keeps the file", async () => {
+    const assetManager = managerWith([imageAsset("photo")]);
+    const onSaved = vi.fn();
+    cleanupMock.mockResolvedValue("cancel");
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    const document = documentWith(undefined, { assetManager, onSaved });
+
+    await document.save();
+
+    expect(cleanupMock).toHaveBeenCalledWith({
+      title: uiCopy.file.savePackage,
+      files: [
+        {
+          name: "photo.png",
+          kind: "image",
+          sizeBytes: 1,
+          reason: uiCopy.saveCleanup.reason.image,
+        },
+      ],
+      themeBytes: expect.any(Number),
+    });
+    expect(save).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
+      "photo",
+    ]);
+    document.destroy();
+  });
+
+  it("keep saves and keeps the assets and their credits", async () => {
+    const assetManager = managerWith([imageAsset("photo")]);
+    const linked: ThemeCreditsEntry = {
+      ...entry("photo", "https://example.test/photo"),
+      assetId: "photo",
+    };
+    cleanupMock.mockResolvedValue("keep");
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    const document = documentWith([linked], { assetManager });
+
+    await document.save();
+
+    expect(save).toHaveBeenCalledTimes(1);
+    const [current, assets] = save.mock.calls[0] ?? [];
+    expect(current?.assets?.map((asset) => asset.id)).toEqual(["photo"]);
+    expect(Object.keys(assets ?? {})).toEqual(["assets/photo.png"]);
+    expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
+      "photo",
+    ]);
+    expect(document.credits()).toEqual([linked]);
+    document.destroy();
+  });
+
+  it("remove trashes then prunes, and saves without the file", async () => {
+    const assetManager = managerWith([imageAsset("photo")]);
+    const linked: ThemeCreditsEntry = {
+      ...entry("photo", "https://example.test/photo"),
+      assetId: "photo",
+    };
+    const unlinked = entry("house", "https://lucide.dev/icons/house");
+    cleanupMock.mockResolvedValue("remove");
+    trashAssetsMock.mockResolvedValue({ ok: true });
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    const document = documentWith([linked, unlinked], { assetManager });
+
+    await document.save();
+
+    expect(trashAssetsMock).toHaveBeenCalledWith([
+      { name: "photo.png", bytes: new Uint8Array([1]) },
+    ]);
+    expect(assetManager.declarations).toEqual([]);
+    expect(document.credits()).toEqual([unlinked]);
+    expect(save).toHaveBeenCalledTimes(1);
+    const [current, assets] = save.mock.calls[0] ?? [];
+    expect(current?.assets?.map((asset) => asset.id)).not.toContain("photo");
+    expect(assets).toEqual({});
+    document.destroy();
+  });
+
+  it("a refused trash aborts the save and reports the host's own sentence", async () => {
+    const assetManager = managerWith([imageAsset("photo")]);
+    const linked: ThemeCreditsEntry = {
+      ...entry("photo", "https://example.test/photo"),
+      assetId: "photo",
+    };
+    const onSaved = vi.fn();
+    const onError = vi.fn();
+    cleanupMock.mockResolvedValue("remove");
+    trashAssetsMock.mockResolvedValue({
+      ok: false,
+      message: "The Recycle Bin is not available on this machine.",
+    });
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    const document = documentWith([linked], {
+      assetManager,
+      onSaved,
+      onError,
+    });
+
+    await document.save();
+
+    expect(onError).toHaveBeenCalledWith(
+      "The Recycle Bin is not available on this machine.",
+    );
+    expect(save).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    // Nothing pruned: the declaration, its bytes and its credit are all there.
+    expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
+      "photo",
+    ]);
+    expect(assetManager.assets["assets/photo.png"]).toEqual(
+      new Uint8Array([1]),
+    );
+    expect(document.credits()).toEqual([linked]);
+    document.destroy();
+  });
+
+  it("a replacement's save asks too, and a cancel aborts the replacement", async () => {
+    const assetManager = managerWith([imageAsset("photo")]);
+    const onError = vi.fn();
+    replacementMock.mockResolvedValue("save");
+    cleanupMock.mockResolvedValue("cancel");
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    const document = documentWith(undefined, {
+      assetManager,
+      unsaved: true,
+      onError,
+    });
+
+    expect(await document.confirmReplacement()).toBe(false);
+
+    expect(cleanupMock).toHaveBeenCalledWith({
+      title: uiCopy.file.savePackage,
+      files: [
+        {
+          name: "photo.png",
+          kind: "image",
+          sizeBytes: 1,
+          reason: uiCopy.saveCleanup.reason.image,
+        },
+      ],
+      themeBytes: expect.any(Number),
+    });
+    expect(save).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
+      "photo",
+    ]);
+    document.destroy();
+  });
+
+  it("a refused trash aborts a replacement's save", async () => {
+    const assetManager = managerWith([imageAsset("photo")]);
+    const onError = vi.fn();
+    replacementMock.mockResolvedValue("save");
+    cleanupMock.mockResolvedValue("remove");
+    trashAssetsMock.mockResolvedValue({
+      ok: false,
+      message: "The Recycle Bin refused it.",
+    });
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    const document = documentWith(undefined, {
+      assetManager,
+      unsaved: true,
+      onError,
+    });
+
+    expect(await document.confirmReplacement()).toBe(false);
+
+    expect(onError).toHaveBeenCalledWith("The Recycle Bin refused it.");
+    expect(save).not.toHaveBeenCalled();
+    expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
+      "photo",
+    ]);
     document.destroy();
   });
 });

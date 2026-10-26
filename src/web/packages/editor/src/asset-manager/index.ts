@@ -66,6 +66,20 @@ export class AssetManager {
   #assets: Record<string, Uint8Array> = {};
   #declarations: LocalAssetReference[] = [];
   #previewUrls = new Map<string, string>();
+  #changeListeners = new Set<() => void>();
+
+  /** Told after every declaration mutation. The pane used to redraw only from
+   *  its own presses, so a prune made by a save left its cards stale. */
+  subscribe(listener: () => void): () => void {
+    this.#changeListeners.add(listener);
+    return () => {
+      this.#changeListeners.delete(listener);
+    };
+  }
+
+  #changed(): void {
+    for (const listener of this.#changeListeners) listener();
+  }
 
   get assets(): Readonly<Record<string, Uint8Array>> {
     return { ...this.#assets };
@@ -144,6 +158,7 @@ export class AssetManager {
         ),
       );
     }
+    this.#changed();
     return reference;
   }
 
@@ -170,6 +185,7 @@ export class AssetManager {
     if (existing >= 0) this.#declarations.splice(existing, 1, reference);
     else this.#declarations.push(reference);
     this.#assets[path] = new Uint8Array(bytes);
+    this.#changed();
     return reference;
   }
 
@@ -237,6 +253,7 @@ export class AssetManager {
         : { sourceUrl: checked.sourceUrl }),
     };
     this.#declarations.splice(index, 1, next);
+    this.#changed();
     return next;
   }
 
@@ -246,6 +263,7 @@ export class AssetManager {
     const [asset] = this.#declarations.splice(index, 1);
     if (asset !== undefined) delete this.#assets[asset.path];
     this.#revoke(assetId);
+    this.#changed();
     return true;
   }
 
@@ -286,6 +304,7 @@ export class AssetManager {
         ),
       );
     }
+    this.#changed();
     return next;
   }
 
@@ -315,6 +334,7 @@ export class AssetManager {
     // The preview URL is a blob of the old bytes; keeping it would leave the
     // pane showing the picture the author just replaced.
     this.#revoke(assetId);
+    this.#changed();
     return next;
   }
 
@@ -336,6 +356,7 @@ export class AssetManager {
         new Uint8Array(bytes),
       ]),
     );
+    this.#changed();
   }
 
   async hydrate(canvas: StaticCanvas): Promise<void> {
@@ -458,6 +479,13 @@ export type FontLoader = (
   family: string,
   bytes: Uint8Array,
 ) => Promise<unknown>;
+
+/** The file name a declaration was made from, rather than the id the package
+ *  keys it by. */
+export function assetFileName(asset: LocalAssetReference): string {
+  const separator = asset.path.lastIndexOf("/");
+  return separator < 0 ? asset.path : asset.path.slice(separator + 1);
+}
 
 function loadWithFontFace(family: string, bytes: Uint8Array): Promise<unknown> {
   return new FontFace(family, bytes as unknown as BufferSource).load();

@@ -107,6 +107,7 @@ function managerStub(
     replace: vi.fn(),
     hydrate: vi.fn(),
     remove: vi.fn(() => true),
+    subscribe: vi.fn(() => () => {}),
   } as unknown as AssetManager;
 }
 
@@ -847,6 +848,20 @@ describe("the behaviours the file section carried", () => {
     expect(cardOf(host, "logo.png")).toBeNull();
     expect(alert(host).textContent).toBe("");
     expect(changed).toHaveBeenCalled();
+  });
+
+  it("repaints when the manager's declarations move outside the pane", async () => {
+    // A save's cleanup prunes without a press here; the cards follow because
+    // the manager itself is the notifier.
+    const { host, manager } = await mountWithManager();
+    await importFile(host, IMAGE_FILE);
+    expect(cardOf(host, "logo.png")).not.toBeNull();
+
+    act(() => {
+      manager.remove("logo");
+    });
+
+    expect(cardOf(host, "logo.png")).toBeNull();
   });
 
   it("keeps replace as the chosen asset's own byte swap, which is what it always meant", async () => {

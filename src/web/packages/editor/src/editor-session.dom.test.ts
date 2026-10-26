@@ -26,8 +26,19 @@ const dirtyMock = vi.hoisted(() => vi.fn(() => false));
 const replaceMock = vi.hoisted(() => vi.fn(async () => "discard"));
 /** The finder's client, mocked: the session's import path asks the host for
  *  bytes, and no test here reaches a real host. */
-const assetClientMock = vi.hoisted(() => ({ assetBytes: vi.fn() }));
+const assetClientMock = vi.hoisted(() => ({
+  assetBytes: vi.fn(),
+  trashAssets: vi.fn(async () => ({ ok: true })),
+}));
 vi.mock("./asset-finder/client.js", () => assetClientMock);
+/** The cleanup sheet has no jsdom implementation here; a save keeps the files
+ *  unless a case is about the dialog, which its own suite drives. */
+const cleanupMock = vi.hoisted(() =>
+  vi.fn(async (): Promise<"remove" | "keep" | "cancel"> => "keep"),
+);
+vi.mock("./components/save-cleanup-dialog.js", () => ({
+  confirmSaveCleanup: cleanupMock,
+}));
 /** The last artboard panel a session built, so a case can read what it was
  *  told to list. */
 const panels = vi.hoisted(() => ({ last: undefined as unknown }));

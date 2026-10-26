@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import {
   ASSET_FILE_EXTENSIONS,
   type AssetManager,
+  assetFileName,
   assetReferencedBy,
   type LocalAssetReference,
   mimeOf,
@@ -22,7 +23,7 @@ import {
 import type { FontTrioRole } from "../../type-preset-apply.js";
 import { uiCopy } from "../../ui-copy.js";
 import { requestNormalizedVideo } from "../../video-normalizer.js";
-import { AssetCard, assetFileName } from "./asset-card.js";
+import { AssetCard } from "./asset-card.js";
 import {
   type FontMetadata,
   FontMetadataForm,
@@ -159,8 +160,11 @@ export function AssetsPane({
   const [font, setFont] = useState<FontDraft | undefined>();
   const [fontBusy, setFontBusy] = useState(false);
   // The manager's declarations are live external state, so a mutation is
-  // followed by a render rather than by a state copy that could go stale.
+  // followed by a render rather than by a state copy that could go stale. A
+  // save's prune is one of those mutations and never passes through this pane,
+  // which is why the manager tells it rather than the local actions alone.
   const [, render] = useReducer((count: number) => count + 1, 0);
+  useEffect(() => manager.subscribe(render), [manager, render]);
 
   const declarations = manager.declarations;
   const chosen =

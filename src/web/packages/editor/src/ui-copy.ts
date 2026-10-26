@@ -1337,6 +1337,30 @@ export const uiCopy = {
     discard: "Discard",
     cancel: "Cancel",
   },
+  /** The cleanup offered before either save: the files nothing holds, which
+   *  the author may send to the platform's trash in the same press. The save's
+   *  own title is the one it was pressed with (`file.saveLibrary` /
+   *  `file.savePackage`), so it is not repeated here. */
+  saveCleanup: {
+    heading: "Unused files",
+    count: (count: number, size: string): string =>
+      `${count} ${count === 1 ? "file" : "files"} · ${size}`,
+    /** Why nothing holds each file, in one owner keyed by kind. */
+    reason: {
+      image: "not on the canvas",
+      svg: "not on the canvas",
+      video: "not the background",
+      font: "no type preset refers to it",
+    } satisfies Record<LocalAssetReference["kind"], string>,
+    note: "Nothing on the canvas and no type preset refers to these files. Their attribution goes with them.",
+    removeAfterSave: (count: number): string =>
+      `Remove these ${count} ${count === 1 ? "file" : "files"} after saving`,
+    warning:
+      "Moves them to the Recycle Bin. The theme itself is saved either way.",
+    cancel: "Cancel",
+    sizes: (theme: string, unused: string): string =>
+      `${theme} theme · ${unused} unused`,
+  },
   /** The prompt after the editor stopped with work unsaved (`vg-040`). The lead
    *  is the dialog's own visible name, so it names what is at stake — the theme
    *  and the moment the copy was written — rather than asking about "recovery",

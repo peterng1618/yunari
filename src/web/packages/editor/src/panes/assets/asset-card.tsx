@@ -1,5 +1,8 @@
 import type * as React from "react";
-import type { LocalAssetReference } from "../../asset-manager/index.js";
+import {
+  assetFileName,
+  type LocalAssetReference,
+} from "../../asset-manager/index.js";
 import { uiCopy } from "../../ui-copy.js";
 
 /**
@@ -116,10 +119,4 @@ function metadataOf(asset: LocalAssetReference): string {
   return "format" in asset
     ? `${kind} · ${asset.format} · ${asset.weight} ${asset.style}`
     : kind;
-}
-
-/** The file an author chose, not the id the package keys it by. */
-export function assetFileName(asset: LocalAssetReference): string {
-  const separator = asset.path.lastIndexOf("/");
-  return separator < 0 ? asset.path : asset.path.slice(separator + 1);
 }

@@ -542,6 +542,7 @@ function mountPanels(): { root: HTMLElement } {
       })),
       replace: vi.fn(async () => undefined),
       hydrate: vi.fn(async () => undefined),
+      subscribe: vi.fn(() => () => {}),
     } as never,
     isReferenced: () => false,
     onFontCommit: async () => ({ ok: true, message: "" }),

@@ -121,6 +121,10 @@ const BINDS_HOOK = /const\s+(\w+)\s*=\s*useDraftCommit\s*\(/;
  */
 const EXEMPT: readonly (readonly [string, string])[] = [
   [
+    "components/save-cleanup-dialog.tsx",
+    "a native checkbox: an on/off answer, with no draft to compose or commit",
+  ],
+  [
     "host-settings-mode/region.tsx",
     "a copy: its own Enter and blur commit, with no Escape and no composing guard",
   ],

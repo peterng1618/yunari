@@ -17,14 +17,19 @@ import {
   type ThemeCreditsEntry,
 } from "@yunari/theme-package";
 import type { ArtboardPanel } from "./artboard-panel.js";
-import { assetBytes } from "./asset-finder/client.js";
-import type {
-  AssetManager,
-  LocalAssetReference,
+import { assetBytes, trashAssets } from "./asset-finder/client.js";
+import {
+  type AssetManager,
+  assetFileName,
+  type LocalAssetReference,
 } from "./asset-manager/index.js";
 import { unusedAssets as computeUnusedAssets } from "./asset-manager/unused.js";
 import { insertCard } from "./card-library.js";
 import type { ChartManager } from "./chart-manager/index.js";
+import {
+  confirmSaveCleanup,
+  type SaveCleanupFile,
+} from "./components/save-cleanup-dialog.js";
 import type { EditorShell } from "./editor-shell.js";
 import {
   applyFontTrio as applyCatalogTrio,
@@ -65,6 +70,13 @@ import {
   type TypePresetPanel,
   type TypePresets,
 } from "./type-preset-manager/index.js";
+import { uiCopy } from "./ui-copy.js";
+
+/** Whether a save may go on. `message` is a host refusal the author must
+ *  read; a cancel carries none. */
+export type CleanupAnswer =
+  | { readonly proceed: true }
+  | { readonly proceed: false; readonly message?: string };
 
 /**
  * What the document needs of whoever is editing it, which is the session's own
@@ -227,6 +239,9 @@ export class EditorDocument {
       announceChange: this.announceChange,
       errors: source.shell.editor.errorManager,
       confirmReplacement: () => this.confirmReplacement(),
+      // The title is the save the author pressed; the library's own is the one
+      // this port carries, and the package save passes its own.
+      confirmCleanup: () => this.confirmAssetCleanup(uiCopy.file.saveLibrary),
       onSaved: source.onSaved,
       onNewFromStarter: source.onNewFromStarter,
       ...(source.libraryBase === undefined ? {} : { base: source.libraryBase }),
@@ -318,6 +333,13 @@ export class EditorDocument {
   async save(): Promise<void> {
     const options = this.#source;
     try {
+      // Asked before anything is built, so a refused trash or a cancel leaves
+      // no package and no write behind it.
+      const cleanup = await this.confirmAssetCleanup();
+      if (!cleanup.proceed) {
+        if (cleanup.message !== undefined) options.onError?.(cleanup.message);
+        return;
+      }
       const current = this.snapshot();
       // The package carries the theme's picture so whoever receives the file
       // can see the look without installing anything.
@@ -392,8 +414,18 @@ export class EditorDocument {
 
       if (choice === "cancel") return false;
       if (choice === "save") {
+        // A replacement's save asks the same cleanup question, and a cleanup
+        // that stops there stops the replacement too: a save the author
+        // cancelled must not go on to discard the document behind it.
+        const cleanup = await this.confirmAssetCleanup();
+        if (!cleanup.proceed) {
+          if (cleanup.message !== undefined) {
+            this.#source.onError?.(cleanup.message);
+          }
+          return false;
+        }
         await this.#persistence.save(
-          current,
+          this.snapshot(),
           this.#assets.assets,
           undefined,
           this.#creditsPackage(),
@@ -506,6 +538,64 @@ export class EditorDocument {
     // Not a history write: the manager's own Remove is not undoable either,
     // and this only announces so the unsaved marker and panels re-read.
     this.announceChange();
+  }
+
+  /**
+   * The one owner of the cleanup question both saves ask.
+   *
+   * Nothing unused means nothing to ask and the save runs unchanged. A
+   * dismissal is a cancel, never a keep: closing the sheet is not permission to
+   * remove a file. `"remove"` moves the files to the host's trash first, and
+   * only a trash that succeeded prunes — a refusal stops the save with the
+   * host's own sentence, so nothing is removed and nothing is written.
+   */
+  async confirmAssetCleanup(
+    title: string = uiCopy.file.savePackage,
+  ): Promise<CleanupAnswer> {
+    const unused = this.unusedAssets();
+    if (unused.length === 0) return { proceed: true };
+
+    const assets = this.#assets.assets;
+    const files: SaveCleanupFile[] = unused.map((asset) => ({
+      name: assetFileName(asset),
+      kind: asset.kind,
+      // A declaration with no bytes is already broken; it contributes nothing
+      // to either size rather than inventing one.
+      sizeBytes: assets[asset.path]?.byteLength ?? 0,
+      reason: uiCopy.saveCleanup.reason[asset.kind],
+    }));
+    const answer = await confirmSaveCleanup({
+      title,
+      files,
+      themeBytes: this.#themeBytes(unused),
+    });
+    if (answer === "cancel") return { proceed: false };
+    if (answer === "keep") return { proceed: true };
+
+    const outcome = await trashAssets(
+      unused.map((asset) => ({
+        name: assetFileName(asset),
+        bytes: assets[asset.path] ?? new Uint8Array(),
+      })),
+    );
+    if (!outcome.ok) return { proceed: false, message: outcome.message };
+    this.pruneAssets(unused.map((asset) => asset.id));
+    return { proceed: true };
+  }
+
+  /** The theme's own size, without the files the cleanup is about: the
+   *  envelope as JSON plus the bytes still referenced. */
+  #themeBytes(unused: readonly LocalAssetReference[]): number {
+    const unusedIds = new Set(unused.map((asset) => asset.id));
+    const assets = this.#assets.assets;
+    let bytes = new TextEncoder().encode(
+      JSON.stringify(this.snapshot()),
+    ).byteLength;
+    for (const asset of this.#assets.declarations) {
+      if (unusedIds.has(asset.id)) continue;
+      bytes += assets[asset.path]?.byteLength ?? 0;
+    }
+    return bytes;
   }
 
   /**
