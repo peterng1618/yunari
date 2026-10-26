@@ -15,7 +15,7 @@
   },
   "scripts": {
     "build": "vite build",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.checkjs.json",
     "vendor:lhm": "node ./scripts/vendor-lhm.mjs",
     "vendor:presentmon": "node ./scripts/vendor-presentmon.mjs",
     "vendor:tray": "node ./scripts/vendor-tray.mjs",

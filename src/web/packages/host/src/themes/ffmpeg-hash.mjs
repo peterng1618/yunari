@@ -1,4 +1,3 @@
-// @ts-check
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
