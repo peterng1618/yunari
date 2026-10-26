@@ -257,4 +257,17 @@ describe("the Wallpaper Engine source", () => {
     expect(result).toEqual({ ok: true, name: "201", reused: false });
     expect(result).not.toHaveProperty("launched");
   });
+
+  it("resolves an author once and answers the cache afterwards", async () => {
+    let calls = 0;
+    const fetchImpl = (() => {
+      calls += 1;
+      return Promise.resolve(new Response("<steamID>Ada</steamID>"));
+    }) as typeof fetch;
+    const source = createWallpaperEngineSource({ locate, fetchImpl });
+
+    expect(await source.authorName("76561198000000001")).toBe("Ada");
+    expect(await source.authorName("76561198000000001")).toBe("Ada");
+    expect(calls).toBe(1);
+  });
 });

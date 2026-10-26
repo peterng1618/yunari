@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import { contentTypeFor } from "../serve/static-path.js";
+import { fetchAuthorName } from "./author.js";
 import { readSceneFacts, type SceneFacts } from "./classify.js";
 import { type LibraryItem, scanLibrary } from "./library.js";
 import { locateInstall, type WallpaperEngineInstall } from "./locate.js";
@@ -37,6 +38,7 @@ export interface WallpaperEngineSource {
     { readonly bytes: Uint8Array; readonly contentType: string } | undefined
   >;
   readonly project: (workshopId: string) => Promise<ProjectResult>;
+  readonly authorName: (steamId: string) => Promise<string | undefined>;
 }
 
 async function readOrUndefined(file: string): Promise<Uint8Array | undefined> {
@@ -59,10 +61,12 @@ export function createWallpaperEngineSource(
   options: {
     readonly locate?: typeof locateInstall;
     readonly classify?: typeof readSceneFacts;
+    readonly fetchImpl?: typeof fetch;
   } = {},
 ): WallpaperEngineSource {
   const locate = options.locate ?? locateInstall;
   const classify = options.classify ?? readSceneFacts;
+  const fetchImpl = options.fetchImpl;
   // The real locator answers `undefined` on every non-Windows platform, which
   // is a different answer from "not installed". An injected locator is a
   // fixture, so the platform it runs on says nothing about the library.
@@ -203,5 +207,23 @@ export function createWallpaperEngineSource(
     return unpackScene(install, item);
   }
 
-  return { listing, bytesOf, project };
+  /** Answers a Steam persona name, remembering it for this process — including
+   *  the absent answer, so a profile that refused is asked once rather than
+   *  once per credit the editor writes. */
+  const authors = new Map<string, string | undefined>();
+
+  async function authorName(steamId: string): Promise<string | undefined> {
+    if (authors.has(steamId)) {
+      return authors.get(steamId);
+    }
+
+    const name = await fetchAuthorName(
+      steamId,
+      fetchImpl === undefined ? {} : { fetchImpl },
+    );
+    authors.set(steamId, name);
+    return name;
+  }
+
+  return { listing, bytesOf, project, authorName };
 }

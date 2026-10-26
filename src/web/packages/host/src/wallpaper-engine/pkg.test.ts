@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { memberBytes, mobileVideo, readPackage } from "./pkg.js";
+import { memberBytes, mobilePackage, mobileVideo, readPackage } from "./pkg.js";
 
 const encoder = new TextEncoder();
 
@@ -149,5 +149,49 @@ describe("mobile package", () => {
 
   it("answers nothing for something that is not a package", () => {
     expect(mobileVideo(encoder.encode("not a package"))).toBeUndefined();
+  });
+});
+
+describe("mobile package import", () => {
+  const VIDEO = encoder.encode("mp4");
+  const PROJECT = encoder.encode(
+    JSON.stringify({
+      title: "Aurora",
+      package: { workshopId: 12345 },
+    }),
+  );
+
+  it("answers the video with the metadata project.json carries", () => {
+    const bytes = buildPackage(
+      [
+        ["project.json", PROJECT],
+        ["wallpaper.mp4", VIDEO],
+      ],
+      "PKGM0014",
+    );
+
+    expect(mobilePackage(bytes)).toEqual({
+      video: VIDEO,
+      title: "Aurora",
+      workshopId: "12345",
+    });
+  });
+
+  it("answers nothing for a table with no video", () => {
+    const bytes = buildPackage([["project.json", PROJECT]], "PKGM0014");
+
+    expect(mobilePackage(bytes)).toBeUndefined();
+  });
+
+  it("still answers the video when project.json does not parse", () => {
+    const bytes = buildPackage(
+      [
+        ["project.json", encoder.encode("{ not json")],
+        ["wallpaper.mp4", VIDEO],
+      ],
+      "PKGM0014",
+    );
+
+    expect(mobilePackage(bytes)).toEqual({ video: VIDEO });
   });
 });

@@ -49,6 +49,7 @@ import {
   MAX_STREAM_KEY_BYTES,
   MAX_STREAM_KEYS,
   MAX_THEME_UPLOAD_BYTES,
+  MAX_VIDEO_SOURCE_BYTES,
   resolveStoreOrigin,
   type SourceRouteOptions,
 } from "./server.js";
@@ -1993,14 +1994,13 @@ describe("Host theme routes", () => {
       expect(res.status).toBe(403);
     });
 
-    it("answers 413 to a body over the upload cap", async () => {
-      // One byte past the cap the import route uses; the body is refused
-      // before it is parsed or decoded.
+    it("answers 413 to a body over the source cap", async () => {
+      // One byte past the source cap; the body is refused before it is parsed.
       const res = await request(
         normalizing.server,
         "POST",
         "/api/themes/normalize-video",
-        new Uint8Array(MAX_THEME_UPLOAD_BYTES + 1),
+        new Uint8Array(MAX_VIDEO_SOURCE_BYTES + 1),
       );
 
       expect(res.status).toBe(413);
@@ -2008,8 +2008,8 @@ describe("Host theme routes", () => {
 
     it("answers with the same bytes for a video that already conforms", async () => {
       // The real route, the real parser, and a committed fixture: no encoder
-      // is spawned for a conforming file, so this also pins `fit`/`aspect`
-      // parsing and the `bytesBase64` answer shape.
+      // is spawned for a conforming file, so this also pins the raw-body read
+      // and the `bytesBase64` answer shape.
       const bytes = await fs.readFile(
         fileURLToPath(
           new URL(
@@ -2022,11 +2022,7 @@ describe("Host theme routes", () => {
         normalizing.server,
         "POST",
         "/api/themes/normalize-video",
-        JSON.stringify({
-          bytesBase64: bytes.toString("base64"),
-          fit: "cover",
-          aspect: { width: 16, height: 9 },
-        }),
+        new Uint8Array(bytes),
       );
 
       expect(res.status).toBe(200);
@@ -10039,6 +10035,63 @@ describe("Host Wallpaper Engine routes", () => {
     reused: false,
   };
 
+  /** A mobile export package, in the container `pkg.test.ts` describes. */
+  function mobilePackageBytes(
+    members: readonly (readonly [string, Uint8Array])[],
+  ): Uint8Array {
+    const names = members.map(([name]) => encoder.encode(name));
+    const namesSize = names.reduce(
+      (total, name) => total + 4 + name.length + 8,
+      0,
+    );
+    const dataSize = members.reduce(
+      (total, [, data]) => total + data.length,
+      0,
+    );
+    const dataStart = 16 + namesSize;
+    const out = new Uint8Array(dataStart + dataSize);
+    const view = new DataView(out.buffer);
+
+    view.setUint32(0, 8, true);
+    out.set(encoder.encode("PKGM0014"), 4);
+    view.setUint32(12, members.length, true);
+
+    let cursor = 16;
+    let offset = 0;
+    members.forEach(([, data], index) => {
+      const name = names[index]!;
+      view.setUint32(cursor, name.length, true);
+      cursor += 4;
+      out.set(name, cursor);
+      cursor += name.length;
+      view.setUint32(cursor, offset, true);
+      view.setUint32(cursor + 4, data.length, true);
+      cursor += 8;
+      offset += data.length;
+    });
+
+    let dataCursor = dataStart;
+    for (const [, data] of members) {
+      out.set(data, dataCursor);
+      dataCursor += data.length;
+    }
+
+    return out;
+  }
+
+  async function conformingVideo(): Promise<Uint8Array> {
+    return new Uint8Array(
+      await fs.readFile(
+        fileURLToPath(
+          new URL(
+            "../../theme-package/test-fixtures/conforming.mp4",
+            import.meta.url,
+          ),
+        ),
+      ),
+    );
+  }
+
   function fakeSource(): WallpaperEngineSource {
     return {
       listing: () => Promise.resolve(listingAnswer),
@@ -10058,6 +10111,8 @@ describe("Host Wallpaper Engine routes", () => {
             ? unpacked
             : { ok: false as const, reason: "refused" as const },
         ),
+      authorName: (steamId) =>
+        Promise.resolve(steamId === "76561198000000001" ? "Ada" : undefined),
     };
   }
 
@@ -10270,6 +10325,274 @@ describe("Host Wallpaper Engine routes", () => {
     } finally {
       await hosted.close();
     }
+  });
+
+  describe("The mpkg route", () => {
+    it("refuses a GET, a non-loopback caller, and a foreign origin", async () => {
+      const hosted = host(fakeSource());
+
+      try {
+        expect(
+          (await request(hosted.server, "GET", "/api/wallpaper-engine/mpkg"))
+            .status,
+        ).toBe(405);
+
+        // A paired LAN display reads dashboards, not this PC's files.
+        expect(
+          (
+            await request(
+              hosted.server,
+              "POST",
+              "/api/wallpaper-engine/mpkg",
+              new Uint8Array(),
+              {
+                remoteAddress: "192.168.1.50",
+                headers: { host: "192.168.1.50:5173" },
+              },
+            )
+          ).status,
+        ).toBe(403);
+
+        // A loopback peer is not the same origin: any page can POST here.
+        expect(
+          (
+            await request(
+              hosted.server,
+              "POST",
+              "/api/wallpaper-engine/mpkg",
+              new Uint8Array(),
+              {
+                headers: {
+                  origin: "https://evil.example",
+                  host: "127.0.0.1:5173",
+                },
+              },
+            )
+          ).status,
+        ).toBe(403);
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("answers 413 to a body over the source cap", async () => {
+      const hosted = host(fakeSource());
+
+      try {
+        const answer = await request(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+          new Uint8Array(MAX_VIDEO_SOURCE_BYTES + 1),
+        );
+
+        expect(answer.status).toBe(413);
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("refuses a second package while one is still arriving", async () => {
+      const hosted = host(fakeSource());
+
+      try {
+        const first = pendingRequest(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+        );
+        await first.started;
+
+        const second = await request(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+          new Uint8Array(),
+        );
+        expect(second.status).toBe(429);
+
+        // The one byte the first sent is not a package, which is its own
+        // answer rather than a 429, and frees the slot.
+        first.release();
+        expect((await first.answered).status).toBe(200);
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("extracts a conforming video with the metadata project.json carries", async () => {
+      const hosted = host(fakeSource());
+      const video = await conformingVideo();
+
+      try {
+        const answer = await request(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+          mobilePackageBytes([
+            [
+              "project.json",
+              encoder.encode(
+                JSON.stringify({
+                  title: "Aurora",
+                  package: { workshopId: "12345" },
+                }),
+              ),
+            ],
+            ["wallpaper.mp4", video],
+          ]),
+        );
+
+        expect(answer.status).toBe(200);
+        expect(answer.json()).toEqual({
+          ok: true,
+          videoBase64: Buffer.from(video).toString("base64"),
+          reencoded: false,
+          title: "Aurora",
+          workshopId: "12345",
+        });
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("answers ok:false for a table with no video", async () => {
+      const hosted = host(fakeSource());
+
+      try {
+        const answer = await request(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+          mobilePackageBytes([
+            [
+              "project.json",
+              encoder.encode(JSON.stringify({ title: "Aurora" })),
+            ],
+          ]),
+        );
+
+        expect(answer.status).toBe(200);
+        expect((answer.json() as { ok: boolean }).ok).toBe(false);
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("imports a package larger than the output cap when its video fits", async () => {
+      // The package may exceed 96 MB as long as the video it yields does not:
+      // the source and output caps are different ceilings.
+      const hosted = host(fakeSource());
+      const video = await conformingVideo();
+
+      try {
+        const answer = await request(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+          mobilePackageBytes([
+            ["pad.bin", new Uint8Array(MAX_THEME_UPLOAD_BYTES)],
+            ["wallpaper.mp4", video],
+          ]),
+        );
+
+        expect(answer.status).toBe(200);
+        expect(answer.json()).toMatchObject({
+          ok: true,
+          reencoded: false,
+          videoBase64: Buffer.from(video).toString("base64"),
+        });
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("answers ok:false when the normalized output exceeds the theme cap", async () => {
+      const hosted = host(fakeSource());
+      const base = await conformingVideo();
+      // A conforming video padded with a `free` box past the output cap: the
+      // parser still reads it, so the route's own check is what refuses it.
+      const padded = new Uint8Array(MAX_THEME_UPLOAD_BYTES + 1);
+      padded.set(base, 0);
+      const freeStart = base.length;
+      const payload = padded.length - freeStart - 8;
+      const view = new DataView(padded.buffer);
+      view.setUint32(freeStart, 8 + payload, false);
+      padded.set(encoder.encode("free"), freeStart + 4);
+
+      try {
+        const answer = await request(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+          mobilePackageBytes([["wallpaper.mp4", padded]]),
+        );
+
+        expect(answer.status).toBe(200);
+        expect((answer.json() as { ok: boolean }).ok).toBe(false);
+      } finally {
+        await hosted.close();
+      }
+    });
+  });
+
+  describe("The author route", () => {
+    it("refuses a POST and a non-loopback caller", async () => {
+      const hosted = host(fakeSource());
+
+      try {
+        expect(
+          (
+            await request(
+              hosted.server,
+              "POST",
+              "/api/wallpaper-engine/author/76561198000000001",
+            )
+          ).status,
+        ).toBe(405);
+
+        expect(
+          (
+            await request(
+              hosted.server,
+              "GET",
+              "/api/wallpaper-engine/author/76561198000000001",
+              undefined,
+              {
+                remoteAddress: "192.168.1.50",
+                headers: { host: "192.168.1.50:5173" },
+              },
+            )
+          ).status,
+        ).toBe(403);
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("answers a resolved name, and nothing for an unresolved one", async () => {
+      const hosted = host(fakeSource());
+
+      try {
+        const known = await request(
+          hosted.server,
+          "GET",
+          "/api/wallpaper-engine/author/76561198000000001",
+        );
+        expect(known.status).toBe(200);
+        expect(known.json()).toEqual({ name: "Ada" });
+
+        const absent = await request(
+          hosted.server,
+          "GET",
+          "/api/wallpaper-engine/author/76561198000000002",
+        );
+        expect(absent.status).toBe(200);
+        expect(absent.json()).toEqual({});
+      } finally {
+        await hosted.close();
+      }
+    });
   });
 });
 

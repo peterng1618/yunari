@@ -123,10 +123,7 @@ import {
   installCatalogueItem,
   parseInstallRequest,
 } from "./themes/install.js";
-import {
-  type NormalizeAspect,
-  normalizeVideo,
-} from "./themes/normalize-video.js";
+import { normalizeVideo } from "./themes/normalize-video.js";
 import {
   createThemeStore,
   isValidThemeId,
@@ -146,6 +143,7 @@ import {
 } from "./themes/wire.js";
 import { certificateFingerprintSha256, type RootPem } from "./tls/authority.js";
 import { SseConnection } from "./transport/sse.js";
+import { mobilePackage } from "./wallpaper-engine/pkg.js";
 import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
 
 /** HTTP routing for bundles, discovery, sample streaming, and theme packages. */
@@ -418,6 +416,10 @@ const WEATHER_ICON_DIR = path.join(
 /** A save is JSON with base64 assets, so the wire is a third larger than the
  *  archive it replaced; the store enforces its own bounds on the decoded side. */
 export const MAX_THEME_UPLOAD_BYTES = 96 * 1024 * 1024;
+/** A source video or `.mpkg` is normalized after it arrives, so the author may
+ *  bring a file larger than the theme it becomes. This is the source ceiling;
+ *  `MAX_THEME_UPLOAD_BYTES` is the one the normalized output must still fit. */
+export const MAX_VIDEO_SOURCE_BYTES = 512 * 1024 * 1024;
 /** A dashboard screenshot; the store enforces the same bound. */
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 
@@ -795,23 +797,6 @@ async function knownDisplayKey(
 ): Promise<boolean> {
   if (key === DEFAULT_DISPLAY || key === LOCAL_DISPLAY_ID) return true;
   return ((await displays?.list()) ?? []).some((record) => record.id === key);
-}
-
-/** `undefined` when absent, `null` when present but not two positive numbers. */
-function parseAspect(value: unknown): NormalizeAspect | undefined | null {
-  if (value === undefined) return undefined;
-  if (typeof value !== "object" || value === null) return null;
-  const { width, height } = value as { width?: unknown; height?: unknown };
-  if (
-    typeof width !== "number" ||
-    typeof height !== "number" ||
-    !Number.isFinite(width) ||
-    !Number.isFinite(height) ||
-    width <= 0 ||
-    height <= 0
-  )
-    return null;
-  return { width, height };
 }
 
 /** Bounded JSON body for admin writes; a runaway body must not be buffered. */
@@ -3487,6 +3472,117 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
+    // A mobile export the author saved by hand (decision 0124): the host reads
+    // the package, extracts its video and normalizes it. Needs no install.
+    if (url.pathname === "/api/wallpaper-engine/mpkg") {
+      if (request.method !== "POST") {
+        sendText(response, 405, "Only POST is supported.");
+        return;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Wallpaper Engine imports are available on this PC only.",
+        );
+        return;
+      }
+      // Normalizing spawns the encoder, and any page can POST to loopback.
+      if (isForeignOrigin(request)) {
+        sendText(response, 403, "That request is from another origin.");
+        return;
+      }
+
+      let source: Uint8Array;
+      try {
+        source = await largeBody.run(() =>
+          readBytes(request, MAX_VIDEO_SOURCE_BYTES),
+        );
+      } catch (error) {
+        if (error instanceof LargeBodyBusyError) {
+          sendText(response, 429, LARGE_BODY_BUSY);
+          return;
+        }
+        sendText(response, 413, "That package is too large to import.");
+        return;
+      }
+
+      const pkg = mobilePackage(source);
+      if (pkg === undefined) {
+        sendJson(response, 200, {
+          ok: false,
+          message:
+            "That file is not a Wallpaper Engine mobile package with a video.",
+        });
+        return;
+      }
+
+      const normalized = await normalizeVideo(pkg.video);
+      if (!normalized.ok) {
+        // The normalizer's own sentence, as the export route answers it.
+        sendJson(response, 200, { ok: false, message: normalized.message });
+        return;
+      }
+      // The source and the theme have different ceilings: a package may exceed
+      // 96 MB, but what the theme carries may not.
+      if (normalized.bytes.byteLength > MAX_THEME_UPLOAD_BYTES) {
+        sendJson(response, 200, {
+          ok: false,
+          message:
+            "That package's video is larger than the 96 MB a theme may carry; " +
+            "re-encode it and try again.",
+        });
+        return;
+      }
+
+      sendJson(response, 200, {
+        ok: true,
+        videoBase64: Buffer.from(normalized.bytes).toString("base64"),
+        reencoded: normalized.reencoded,
+        ...(pkg.title === undefined ? {} : { title: pkg.title }),
+        ...(pkg.workshopId === undefined ? {} : { workshopId: pkg.workshopId }),
+      });
+      return;
+    }
+
+    // The persona name behind a Steam id, so the editor can credit an item.
+    // A read, so loopback-only like the listing; the global origin guard above
+    // already refuses another page's request.
+    const wallpaperEngineAuthor = url.pathname.match(
+      /^\/api\/wallpaper-engine\/author\/([^/]+)$/,
+    );
+    if (wallpaperEngineAuthor) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Wallpaper Engine is available on this PC only.",
+        );
+        return;
+      }
+
+      let steamId: string;
+      try {
+        steamId = decodeURIComponent(wallpaperEngineAuthor[1] ?? "");
+      } catch {
+        sendText(response, 404, "No such author.");
+        return;
+      }
+
+      const name =
+        wallpaperEngine === undefined
+          ? undefined
+          : await wallpaperEngine.authorName(steamId);
+
+      // An absent name is absence, not a key holding undefined.
+      sendJson(response, 200, name === undefined ? {} : { name });
+      return;
+    }
+
     // Which theme each display shows: one map, read by the host's pages and
     // written one entry at a time.
     //
@@ -3881,10 +3977,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
-      let raw: string;
+      let source: Uint8Array;
       try {
-        raw = await largeBody.run(() =>
-          readBody(request, MAX_THEME_UPLOAD_BYTES),
+        source = await largeBody.run(() =>
+          readBytes(request, MAX_VIDEO_SOURCE_BYTES),
         );
       } catch (error) {
         if (error instanceof LargeBodyBusyError) {
@@ -3895,44 +3991,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
-      let body: { bytesBase64?: unknown; fit?: unknown; aspect?: unknown };
-      try {
-        body = JSON.parse(raw) as {
-          bytesBase64?: unknown;
-          fit?: unknown;
-          aspect?: unknown;
-        };
-      } catch {
-        sendText(response, 400, "That normalize request is not JSON.");
-        return;
-      }
-      if (typeof body.bytesBase64 !== "string") {
-        sendText(response, 400, "A normalize needs bytesBase64.");
-        return;
-      }
-      const fit =
-        body.fit === undefined
-          ? undefined
-          : body.fit === "cover" || body.fit === "contain"
-            ? body.fit
-            : null;
-      if (fit === null) {
-        sendText(response, 400, "fit must be cover or contain.");
-        return;
-      }
-      const aspect = parseAspect(body.aspect);
-      if (aspect === null) {
-        sendText(response, 400, "aspect must be a positive width and height.");
-        return;
-      }
-
-      const normalized = await normalizeVideo(
-        new Uint8Array(Buffer.from(body.bytesBase64, "base64")),
-        {
-          ...(fit === undefined ? {} : { fit }),
-          ...(aspect === undefined ? {} : { aspect }),
-        },
-      );
+      const normalized = await normalizeVideo(source);
       if (!normalized.ok) {
         // The normalizer's own sentence: it names which rule was broken, and a
         // sentence composed here would lose that.

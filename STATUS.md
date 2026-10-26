@@ -16,10 +16,10 @@ Execute [`the Wallpaper Engine import rework`](docs/superpowers/plans/2026-10-26
 
 ## Last completed change
 
-- **The engine is converted to, not driven:** decision 0124 removes the UI-automation export, its three routes and the export watcher; nothing on the host starts Wallpaper Engine.
-- **Unpack-only conversion:** a fresh project's descriptor is titled `[yunari] <title>` (never doubled), and a reused project keeps a hand-edited title.
-- **`WallpaperEngineSource` is listing, bytes and project:** `project()` answers `{ ok, name, reused }` with no `launched`, and the injected `launch` is never called.
-- **Focused proof:** 376 tests pass across `unpack.test.ts`, `source.test.ts` and `server.test.ts`; host typecheck and biome clean.
+- **`.mpkg` imports on the host:** `mobilePackage` reads the video with `project.json`'s title and workshop id; `POST /api/wallpaper-engine/mpkg` normalizes it and accepts a source up to 512 MiB while refusing an output over 96 MB.
+- **Author lookup:** `fetchAuthorName` reads Steam's profile XML with a 5 s timeout and a 17-digit id guard, and the source caches each answer; `GET /api/wallpaper-engine/author/:steamId` is loopback-only.
+- **Normalize takes bytes:** `POST /api/themes/normalize-video` reads a raw binary body at `MAX_VIDEO_SOURCE_BYTES` and keeps its JSON answer shape.
+- **Focused proof:** 392 tests pass across `pkg.test.ts`, `author.test.ts`, `source.test.ts` and `server.test.ts`; host typecheck and biome clean.
 
 ## Next
 
