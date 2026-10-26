@@ -374,3 +374,170 @@ it("refuses a publish job with no contents: write", () => {
     },
   );
 });
+
+it("refuses a guard wrapped in an uncalled function", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        GUARD,
+        guard([
+          "refuse() {",
+          '  if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then',
+          "    exit 1",
+          "  fi",
+          "}",
+        ]),
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain("defines a function");
+    },
+  );
+});
+
+it("refuses a guard after an exit 0", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        GUARD,
+        guard([
+          "exit 0",
+          'if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then',
+          "  exit 1",
+          "fi",
+        ]),
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain("runs a command before the guard");
+    },
+  );
+});
+
+it("refuses a function-plus-call guard", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        GUARD,
+        guard([
+          "refuse() {",
+          '  if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then',
+          "    exit 1",
+          "  fi",
+          "}",
+          "refuse",
+        ]),
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain("defines a function");
+    },
+  );
+});
+
+it("refuses code after the guard's fi", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        GUARD,
+        guard([
+          'if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then',
+          "  exit 1",
+          "fi",
+          "echo done",
+        ]),
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain("runs code after fi");
+    },
+  );
+});
+
+it("refuses a nested construct inside the guard", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        GUARD,
+        guard([
+          'if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then',
+          "  if false; then",
+          "    exit 1",
+          "  fi",
+          "fi",
+        ]),
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain("contains a nested construct");
+    },
+  );
+});
+
+it("refuses a workflow_dispatchX literal", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        '"workflow_dispatch"',
+        '"workflow_dispatchX"',
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain(
+        "does not test GITHUB_EVENT_NAME against workflow_dispatch",
+      );
+    },
+  );
+});
+
+it("refuses a trueX literal", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace('"true"', '"trueX"');
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain("does not test DRY_RUN against true");
+    },
+  );
+});
+
+it("refuses a refs/tags/v*X literal", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "refs/tags/v*",
+        "refs/tags/v*X",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain(
+        "does not test GITHUB_REF against refs/tags/v*",
+      );
+    },
+  );
+});
+
+it("names permissions: read-all as a scalar and the required shape", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "    permissions:\n      contents: read",
+        "    permissions: read-all",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain(
+        'declares permissions as the scalar "read-all"; it must declare exactly "contents: read"',
+      );
+    },
+  );
+});

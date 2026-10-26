@@ -95,11 +95,12 @@ upload. `publish` installs nothing and builds nothing.
    `THIRD-PARTY-NOTICES.md`.
 7. Install the packed tarball into a fresh directory with no workspace above it,
    require `yunari --version` to equal the tag version, boot the host with
-   `--no-browser`, and require `/api/health`, `/editor` and `/` to answer 200.
+   `--no-browser`, and require `/api/health`, `/editor`, `/` and
+   `/api/weather/icon/clear-day.svg` to answer 200.
 
-Step 7's tarball, and a `yunari-X.Y.Z.zip` of the staged directory, upload as
-the workflow artifact `yunari-release-assets`. That artifact is how the built
-tree reaches `publish`, which never rebuilds it.
+The tarball packed in step 6, and a `yunari-X.Y.Z.zip` of the staged directory,
+upload as the workflow artifact `yunari-release-assets`. That artifact is how
+the built tree reaches `publish`, which never rebuilds it.
 
 `publish`:
 
