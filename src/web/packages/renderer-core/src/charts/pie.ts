@@ -9,7 +9,7 @@ import {
 import { NO_INK, resolveChartPaint } from "./chart-paint.js";
 import { type EngineColor, resolveFlatColor } from "./fill.js";
 import {
-  SEGMENT_GAP_RATIO,
+  pieGap,
   SEGMENT_SPACING_PERCENT_DEFAULT,
   segmentCount,
   segmentDivisorOf,
@@ -239,7 +239,9 @@ export function buildPieOption(
         labelLine: { show: false },
         // Preserve authored order; composition order can carry meaning.
         avoidLabelOverlap: false,
-        data: segmented ? toSegmentedPieData(data, count, padAngle) : data,
+        data: segmented
+          ? toSegmentedPieData(data, count, padAngle, pieGap(settings))
+          : data,
         silent: true,
       },
     ],
@@ -256,33 +258,47 @@ export function buildPieOption(
  * series pad is therefore zero here and the gaps are items: `NO_INK`, no
  * rounding, and a value chosen to take the angle each gap should occupy.
  *
- * A piece's value is inflated by `k` so the visible pieces still fill the share
- * the slice had; the internal gaps take `SEGMENT_GAP_RATIO` of a piece, and the
- * boundary gap takes the value that draws the authored `padAngle` once the
- * inflated total and the spacers' own values are accounted for.
+ * A piece's share still sums with its siblings to the slice's authored value,
+ * so the composition reads exactly as it did. Every spacer takes the **same**
+ * angle: the internal ones `gapDegrees`, the boundary ones the authored
+ * `padAngle`. The real items are scaled by the one denominator that fits both,
+ * which is what preserves the shares rather than renormalising them around the
+ * gaps.
  */
 export function toSegmentedPieData(
   items: readonly PieDataItem[],
   count: number,
   padAngle: number,
+  gapDegrees: number,
 ): PieDataItem[] {
   const segments = Math.max(1, Math.floor(count));
   const total = items.reduce((sum, item) => sum + item.value, 0);
-  const internalShare = (SEGMENT_GAP_RATIO * (segments - 1)) / segments;
-  const inflation = 1 + internalShare;
-  const denominator = 1 - (items.length * padAngle) / 360;
-  const boundary =
-    denominator > 0
-      ? ((inflation * total) / denominator) * (padAngle / 360)
-      : 0;
+  if (items.length === 0 || total <= 0) return [];
+
+  const internal = items.length * (segments - 1);
+  // Gaps may not take the ring: at least a tenth of it stays real, whatever the
+  // author asked for, because a pie with no slices left is not a pie.
+  const boundaryShare = Math.min(
+    0.9,
+    (items.length * Math.max(0, padAngle)) / 360,
+  );
+  const gapShare =
+    internal === 0
+      ? 0
+      : Math.min(
+          Math.max(0, gapDegrees) / 360,
+          (0.9 - boundaryShare) / internal,
+        );
+  const boundary = boundaryShare / items.length;
+  const scale = (1 - boundaryShare - internal * gapShare) / total;
 
   const data: PieDataItem[] = [];
   for (const item of items) {
-    const piece = (inflation * item.value) / segments;
+    const piece = (scale * item.value) / segments;
     for (let index = 0; index < segments; index += 1) {
       data.push({ ...item, value: piece });
       if (index < segments - 1) {
-        data.push(spacer(SEGMENT_GAP_RATIO * piece));
+        data.push(spacer(gapShare));
       }
     }
     data.push(spacer(boundary));

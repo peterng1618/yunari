@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   SEGMENT_DIVISORS,
-  SEGMENT_GAP_RATIO,
   SEGMENT_SPACING_PERCENT_DEFAULT,
   segmentCount,
   segmentDivisorOf,
@@ -25,10 +24,6 @@ describe("the segment model", () => {
     expect(segmentDivisorOf({})).toBe(100);
     expect(segmentDivisorOf({ segmentDivisor: 10 })).toBe(10);
     expect(segmentDivisorOf({ segmentDivisor: 33 })).toBe(100);
-  });
-
-  it("leaves a fifth of each segment as the gap", () => {
-    expect(SEGMENT_GAP_RATIO).toBe(0.2);
   });
 
   it("reads an absent spacing as the family default", () => {

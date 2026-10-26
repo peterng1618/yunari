@@ -12,26 +12,20 @@
  * their own copy of it.
  */
 
-import type { GaugeSettings } from "../types.js";
-
 /** Every divisor an author can choose, ascending, ending at continuous. */
 export const SEGMENT_DIVISORS: readonly [1, 2, 4, 5, 10, 20, 25, 50, 100] = [
   1, 2, 4, 5, 10, 20, 25, 50, 100,
 ];
 
-/** The share of each slice left empty, so neighbours stay tellable apart. */
-export const SEGMENT_GAP_RATIO = 0.2;
-
 /**
  * The gap an author who has not chosen one gets, as a share of the chart's
  * smaller drawn edge.
  *
- * **A share of the slot is not a share of what is seen.** `SEGMENT_GAP_RATIO`
- * shrinks with the count twice over — more slices means both a smaller slot and
- * a gap proportional to it — so a 20-slice gauge whose gaps looked right at one
+ * **A share of the slot is not a share of what is seen.** A gap proportional to
+ * a slice shrinks with the count twice over — more slices means both a smaller
+ * slot and a smaller gap — so a 20-slice gauge whose gaps looked right at one
  * size lost them at half the size. A gap measured against the drawn edge is the
- * same gap to the eye at every size, and the count only has to say how much of
- * the slot is left (`ADR 0119`).
+ * same gap to the eye at every size (`ADR 0119`).
  */
 export const SEGMENT_SPACING_PERCENT_DEFAULT = 2.5;
 
@@ -75,7 +69,10 @@ export function segmentFillOf(
  * eating the band, and no author choice should be able to do that.
  */
 export function gaugeGap(
-  settings: GaugeSettings,
+  settings: {
+    readonly thickness: number;
+    readonly segmentSpacingPercent?: number;
+  },
   sweepDegrees: number,
   count: number,
   drawnEdge: number | undefined,
@@ -105,6 +102,25 @@ export function barGapPx(
 ): number {
   const share = (Math.max(0, spacingPercent) / 100) * Math.max(0, edgePx);
   return Math.min(share, 0.45 * bandPx);
+}
+
+/**
+ * The empty angle a pie leaves between its sub-slices, in degrees.
+ *
+ * The edge cancels here exactly as it does in the gauge's spacing term: the gap
+ * is a share of the whole edge, the drawn radius is `outerRadiusPercent` of half
+ * of it, and the quotient is an angle. The pie does not draw at the full edge,
+ * so a smaller outer radius widens the gap — which is what keeps it looking the
+ * same thickness on a donut's narrower face.
+ */
+export function pieGap(settings: {
+  readonly outerRadiusPercent: number;
+  readonly segmentSpacingPercent?: number;
+}): number {
+  const outer = Math.min(100, Math.max(0, settings.outerRadiusPercent));
+  if (outer === 0) return 0;
+
+  return ((2 * segmentSpacingPercentOf(settings)) / outer) * (180 / Math.PI);
 }
 
 /**

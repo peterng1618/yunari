@@ -18,9 +18,9 @@ Land [`2026-10-26-segment-spacing-and-fill-mode-design.md`](docs/superpowers/spe
 
 ## Last completed change
 
-- **Bar bands measure the gap off the render API's own box:** a share of the smaller edge, clamped to 45% of a band.
-- **Whole mode lights a band only once the reading completes it;** partial keeps the reading's own fraction, so the two modes are visibly different at the same value.
-- **The segmented renderer's API surface gained `getWidth`/`getHeight`,** which is where the chart's drawn size reaches pixel-space geometry.
+- **Pie gaps are a target angle:** the share converts at the authored outer radius, and every internal spacer draws that same angle.
+- **Composition shares survive the gaps:** one denominator scales the real pieces, so a wider spacing changes the gap and nothing else.
+- **`SEGMENT_GAP_RATIO` is gone:** no adapter reads a share of a slot any more, so the constant and its test left with the rule.
 
 ## Next
 
