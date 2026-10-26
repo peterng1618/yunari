@@ -15,9 +15,11 @@ The 2026-10-25 performance and security audit is closed and `main` is merged int
 
 ## Last completed change
 
-- **`origin/main` is merged into the audit branch:** thirteen conflicts resolved, with main's animation, spacing, fonts and asset work kept alongside the audit's fixes.
+- **`origin/main` is merged into the audit branch and back into `main`:** thirteen conflicts resolved, with main's animation, spacing, fonts and asset work kept alongside the audit's fixes.
+- **The gate is green on the merged tree:** biome 1098 files; 434 files / 6601 passed, 1 skipped; Worker 13 / 130.
 - **The player repaints per chart reading,** so an engine transition finishes instead of restarting every frame, while bound text, images and the notice still wait for a sample.
 - **The editor's dirty answer is one reading per change,** bumped synchronously so a read straight after a change is never stale, with the listener flush still coalesced into one microtask.
+- **`woff`, `ttf` and `otf` are declarable again:** the shared media-type table and the editor's extension policy carry what the theme format and the schema admit.
 
 ## Next
 
