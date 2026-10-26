@@ -47,6 +47,22 @@ vi.mock("./persistence-manager/index.js", async (importOriginal) => {
   return { ...actual, confirmDocumentReplacement: replacementMock };
 });
 
+/** The package writer, recorded without changing what it writes: a cleanup
+ *  that only checks its candidate must not compress a package. */
+const writeThemePackageMock = vi.hoisted(() => vi.fn());
+vi.mock("@yunari/theme-package", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@yunari/theme-package")>();
+  return {
+    ...actual,
+    writeThemePackage: (
+      input: Parameters<typeof actual.writeThemePackage>[0],
+    ) => {
+      writeThemePackageMock();
+      return actual.writeThemePackage(input);
+    },
+  };
+});
+
 /**
  * The document's credits collection: what an import adds, what the package it
  * opened seeded, and the one rule that makes it a collection rather than a log.
@@ -426,6 +442,9 @@ describe("EditorDocument save cleanup", () => {
     expect(assetManager.declarations).toEqual([]);
     expect(document.credits()).toEqual([unlinked]);
     expect(save).toHaveBeenCalledTimes(1);
+    // A valid candidate used to be compressed only to be discarded; the check
+    // answers the asset rule without the writer ever running.
+    expect(writeThemePackageMock).not.toHaveBeenCalled();
     const [current, assets] = save.mock.calls[0] ?? [];
     expect(current?.assets?.map((asset) => asset.id)).not.toContain("photo");
     expect(assets).toEqual({});

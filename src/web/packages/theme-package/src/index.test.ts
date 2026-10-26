@@ -1,7 +1,11 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { readThemePackage, writeThemePackage } from "./index.js";
+import {
+  checkDeclaredAssets,
+  readThemePackage,
+  writeThemePackage,
+} from "./index.js";
 
 const envelope = {
   schemaVersion: "2.0.0" as const,
@@ -388,6 +392,22 @@ describe("a package's thumbnail", () => {
         assets: { "thumbnail.png": png(7) },
       }),
     ).toMatchObject({ ok: false });
+  });
+
+  it("checks the writer's asset rule without writing, with the writer's answer", () => {
+    // Missing bytes for a declared asset: the pre-trash cleanup asks this
+    // rather than compressing the package, so both must refuse identically.
+    const missing = { envelope, assets: {} };
+    expect(checkDeclaredAssets(missing.envelope, missing.assets)).toEqual(
+      writeThemePackage(missing),
+    );
+    expect(checkDeclaredAssets(missing.envelope, missing.assets)).toEqual({
+      ok: false,
+      message: "Package assets must exactly match the theme declaration.",
+    });
+    expect(
+      checkDeclaredAssets(envelope, { "assets/logo.png": png(1) }),
+    ).toEqual({ ok: true });
   });
 });
 

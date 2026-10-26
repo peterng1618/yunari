@@ -12,6 +12,7 @@ import {
   type FontTrioInfo,
 } from "@yunari/renderer-core";
 import {
+  checkDeclaredAssets,
   MAX_CREDITS_ENTRIES,
   type ThemeCredits,
   type ThemeCreditsEntry,
@@ -589,14 +590,17 @@ export class EditorDocument {
     if (answer === "keep") return { proceed: true };
 
     // The trash move is ordered last, after the save is otherwise ready: a
-    // package the serializer would refuse must cost nothing but the refusal,
-    // not files already in the Recycle Bin. The candidate is the document this
-    // cleanup leaves behind, through the serializer `save` itself uses.
+    // package the writer would refuse must cost nothing but the refusal, not
+    // files already in the Recycle Bin. The candidate asks the writer's own
+    // asset check rather than building a package it would throw away.
+    // Declarations and bytes only: the credits cap is the one writer refusal
+    // this cannot reproduce — unreachable while `canAddCredit` and the credits
+    // reader bound the list, reachable from a hand-edited package that seeds
+    // `#credits` past it.
     const unusedIds = new Set(unused.map((asset) => asset.id));
     const unusedPaths = new Set(unused.map((asset) => asset.path));
-    const candidate = serializeThemePackage(
+    const candidate = checkDeclaredAssets(
       {
-        ...this.snapshot(),
         assets: this.#assets.declarations.filter(
           (asset) => !unusedIds.has(asset.id),
         ),
