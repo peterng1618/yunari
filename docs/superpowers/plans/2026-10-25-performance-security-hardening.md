@@ -1384,14 +1384,17 @@ git commit -m "chore(release): pin staged versions and check notices"
 **Files:**
 - Modify: `.github/workflows/publish.yml`
 - Modify: `.github/workflows/release.yml`
-- Test: `scripts/check-workflows.mjs` (new self-test)
+- Modify: `.github/workflows/ci.yml`
+- Modify: `.github/workflows/visual-evidence.yml`
+- Create: `scripts/check-workflows.mjs` (with `--self-test`)
+- Modify: `src/web/package.json` (the `workflows:check` script and its gate wiring)
 
 **Interfaces:**
-- Produces: `permissions: contents: read` on install/gate; a publish job with `id-token: write`; `persist-credentials: false`; non-dry dispatch refused unless `github.ref` starts with `refs/tags/v`; every `uses:` pinned to a 40-character SHA.
+- Produces: `permissions: contents: read` on install/gate; a publish job with `id-token: write`; `persist-credentials: false`; non-dry dispatch refused unless `github.ref` starts with `refs/tags/v`; every `uses:` in every workflow pinned to a 40-character SHA.
 
 - [ ] **Step 1: Write the failing check**
 
-A parser test asserts each workflow's job permissions, the checkout options, the tag guard and that no `uses:` names a mutable tag.
+A parser test asserts, for every file under `.github/workflows/`: that no `uses:` names a mutable tag; and for `publish.yml`, the job permissions, the checkout options and the tag guard.
 
 - [ ] **Step 2: Verify it fails**
 
@@ -1400,7 +1403,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Resolve and pin action SHAs**
 
-Run: `gh api repos/actions/checkout/git/ref/tags/v4`, `gh api repos/actions/setup-node/git/ref/tags/v4`, `gh api repos/googleapis/release-please-action/git/ref/tags/v5` and resolve each to its commit SHA. Pin all actions.
+Run: `gh api repos/actions/checkout/git/ref/tags/v4`, `gh api repos/actions/setup-node/git/ref/tags/v4`, `gh api repos/actions/upload-artifact/git/ref/tags/v4`, `gh api repos/googleapis/release-please-action/git/ref/tags/v5` and resolve each to its commit SHA. Pin all actions, naming the tag in a trailing comment so the pin stays readable.
 
 - [ ] **Step 4: Implement the workflow split and tag guard**
 
@@ -1410,7 +1413,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .github/workflows/publish.yml .github/workflows/release.yml scripts/check-workflows.mjs
+git add .github/workflows/publish.yml .github/workflows/release.yml .github/workflows/ci.yml .github/workflows/visual-evidence.yml scripts/check-workflows.mjs src/web/package.json
 git commit -m "ci(release): least-privilege publish and SHA-pinned actions"
 ```
 
