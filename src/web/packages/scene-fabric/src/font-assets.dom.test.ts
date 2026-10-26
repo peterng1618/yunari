@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { FontAssetReference } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { loadFontAssets } from "./font-assets.js";
 
@@ -17,6 +18,30 @@ const asset = {
     url: "https://openfontlicense.org/",
   },
 };
+
+const LATIN_RANGE =
+  "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD";
+const VIETNAMESE_RANGE =
+  "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB";
+
+/** A declaration whose face resolves in a named cut. */
+function subsetAsset(
+  subset: string,
+  overrides: Partial<FontAssetReference> = {},
+): FontAssetReference {
+  return {
+    ...asset,
+    id: `inter-${subset}`,
+    path: `assets/inter-${subset}.woff2`,
+    subset,
+    ...overrides,
+  };
+}
+
+/** A locally imported face: no published cut, so no range. */
+function rangelessAsset(id: string): FontAssetReference {
+  return { ...asset, id, path: `assets/${id}.woff2` };
+}
 
 describe("packaged font assets", () => {
   it("loads declared font bytes before rendering and releases only loaded faces", async () => {
@@ -47,7 +72,12 @@ describe("packaged font assets", () => {
     const release = await loadFontAssets({
       assets: [
         asset,
-        { ...asset, id: "inter-700", path: "assets/inter-700.woff2" },
+        {
+          ...asset,
+          id: "inter-700",
+          path: "assets/inter-700.woff2",
+          weight: 700,
+        },
       ],
       bytes: {
         [asset.path]: new Uint8Array([1]),
@@ -98,5 +128,130 @@ describe("packaged font assets", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(fonts.delete).toHaveBeenCalledWith(face);
+  });
+
+  it("registers each subset of one family with its own unicode range", async () => {
+    const latin = subsetAsset("latin");
+    const vietnamese = subsetAsset("vietnamese");
+    const latinFace = { load: vi.fn().mockResolvedValue(undefined) };
+    const vietnameseFace = { load: vi.fn().mockResolvedValue(undefined) };
+    const fonts = { add: vi.fn(), delete: vi.fn() };
+    const createFontFace = vi
+      .fn()
+      .mockReturnValueOnce(latinFace)
+      .mockReturnValueOnce(vietnameseFace);
+
+    await loadFontAssets({
+      assets: [latin, vietnamese],
+      bytes: {
+        [latin.path]: new Uint8Array([1]),
+        [vietnamese.path]: new Uint8Array([2]),
+      },
+      fonts,
+      createFontFace,
+      onError: vi.fn(),
+    });
+
+    expect(fonts.add).toHaveBeenCalledTimes(2);
+    expect(createFontFace).toHaveBeenNthCalledWith(
+      1,
+      "Inter",
+      expect.any(ArrayBuffer),
+      { weight: "400", style: "normal", unicodeRange: LATIN_RANGE },
+    );
+    expect(createFontFace).toHaveBeenNthCalledWith(
+      2,
+      "Inter",
+      expect.any(ArrayBuffer),
+      { weight: "400", style: "normal", unicodeRange: VIETNAMESE_RANGE },
+    );
+  });
+
+  it("registers an unknown subset without a unicode range", async () => {
+    const unknown = subsetAsset("klingon");
+    const face = { load: vi.fn().mockResolvedValue(undefined) };
+    const fonts = { add: vi.fn(), delete: vi.fn() };
+    const createFontFace = vi.fn(
+      (
+        _family: string,
+        _source: ArrayBuffer,
+        _descriptors: FontFaceDescriptors,
+      ) => face,
+    );
+
+    await loadFontAssets({
+      assets: [unknown],
+      bytes: { [unknown.path]: new Uint8Array([1]) },
+      fonts,
+      createFontFace,
+      onError: vi.fn(),
+    });
+
+    expect(fonts.add).toHaveBeenCalledWith(face);
+    const descriptors = createFontFace.mock.calls[0]?.[2];
+    expect(descriptors).toEqual({ weight: "400", style: "normal" });
+    expect(descriptors).not.toHaveProperty("unicodeRange");
+  });
+
+  it("registers ranged faces before a rangeless face of the same family", async () => {
+    // Declaration order puts the rangeless face first; it must still be added
+    // last, or it would cover every codepoint and shadow the ranged faces.
+    const rangeless = rangelessAsset("inter-local");
+    const latin = subsetAsset("latin");
+    const fonts = { add: vi.fn(), delete: vi.fn() };
+    const createFontFace = vi.fn(
+      (
+        _family: string,
+        _source: ArrayBuffer,
+        descriptors: FontFaceDescriptors,
+      ) => ({ load: vi.fn().mockResolvedValue(undefined), descriptors }),
+    );
+
+    await loadFontAssets({
+      assets: [rangeless, latin],
+      bytes: {
+        [rangeless.path]: new Uint8Array([1]),
+        [latin.path]: new Uint8Array([2]),
+      },
+      fonts,
+      createFontFace,
+      onError: vi.fn(),
+    });
+
+    const addedRanges = fonts.add.mock.calls.map(
+      (call) => (call[0] as { descriptors: FontFaceDescriptors }).descriptors,
+    );
+    expect(addedRanges.map((descriptors) => descriptors.unicodeRange)).toEqual([
+      LATIN_RANGE,
+      undefined,
+    ]);
+  });
+
+  it("registers only the first rangeless face of one family, weight and style", async () => {
+    const first = rangelessAsset("inter-local");
+    const second = rangelessAsset("inter-other");
+    const firstFace = { load: vi.fn().mockResolvedValue(undefined) };
+    const secondFace = { load: vi.fn().mockResolvedValue(undefined) };
+    const fonts = { add: vi.fn(), delete: vi.fn() };
+    const onError = vi.fn();
+    const createFontFace = vi
+      .fn()
+      .mockReturnValueOnce(firstFace)
+      .mockReturnValueOnce(secondFace);
+
+    await loadFontAssets({
+      assets: [first, second],
+      bytes: {
+        [first.path]: new Uint8Array([1]),
+        [second.path]: new Uint8Array([2]),
+      },
+      fonts,
+      createFontFace,
+      onError,
+    });
+
+    expect(fonts.add).toHaveBeenCalledTimes(1);
+    expect(fonts.add).toHaveBeenCalledWith(firstFace);
+    expect(onError).not.toHaveBeenCalled();
   });
 });
