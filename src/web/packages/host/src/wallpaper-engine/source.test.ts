@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { WallpaperEngineInstall } from "./locate.js";
 import { createWallpaperEngineSource } from "./source.js";
 
@@ -250,13 +250,11 @@ describe("the Wallpaper Engine source", () => {
   it("unpacks a project without starting anything", async () => {
     await fixture();
     await fs.mkdir(install.myProjects, { recursive: true });
-    const launch = vi.fn(async () => true);
-    const source = createWallpaperEngineSource({ locate, launch });
+    const source = createWallpaperEngineSource({ locate });
 
     const result = await source.project("201");
 
     expect(result).toEqual({ ok: true, name: "201", reused: false });
     expect(result).not.toHaveProperty("launched");
-    expect(launch).not.toHaveBeenCalled();
   });
 });

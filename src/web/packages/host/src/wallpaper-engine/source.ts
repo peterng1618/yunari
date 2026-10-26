@@ -59,9 +59,6 @@ export function createWallpaperEngineSource(
   options: {
     readonly locate?: typeof locateInstall;
     readonly classify?: typeof readSceneFacts;
-    /** Accepted and ignored, so a caller written before the engine stopped
-     *  being driven still compiles. Nothing here starts a process. */
-    readonly launch?: () => Promise<boolean>;
   } = {},
 ): WallpaperEngineSource {
   const locate = options.locate ?? locateInstall;
