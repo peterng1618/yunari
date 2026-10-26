@@ -365,3 +365,88 @@ it("names the SEE LICENSE IN file it could not map", () => {
     },
   );
 });
+
+/** Adds `delta` 4.0.0 as an optional dependency of workspace `a`. */
+function withOptionalDelta(fixture: Fixture, installed: boolean): void {
+  const { files, web, root } = fixture;
+  files.set(path.join(web, "packages/a/package.json"), {
+    name: "@yunari/a",
+    version: "0.0.0",
+    dependencies: { alpha: "1.0.0", beta: "2.0.0" },
+    optionalDependencies: { delta: "4.0.0" },
+  });
+  const lock = files.get(path.join(web, "package-lock.json")) as {
+    packages: Record<string, unknown>;
+  };
+  lock.packages["node_modules/delta"] = { version: "4.0.0" };
+  if (installed) {
+    files.set(path.join(web, "node_modules/delta/package.json"), {
+      name: "delta",
+      version: "4.0.0",
+      license: "MIT",
+    });
+  }
+  files.set(
+    path.join(root, "THIRD-PARTY-NOTICES.md"),
+    `${NOTICES_CLEAN}| \`delta\` | 4.0.0 | MIT |\n`,
+  );
+}
+
+it("compares an optional dependency's licence when it is installed", () => {
+  withFixture(
+    (fixture) => {
+      withOptionalDelta(fixture, true);
+      // The installed manifest disagrees with the row, which is the same drift
+      // a regular dependency would answer.
+      fixture.files.set(
+        path.join(fixture.web, "node_modules/delta/package.json"),
+        { name: "delta", version: "4.0.0", license: "Apache-2.0" },
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain("licence delta 4.0.0");
+    },
+  );
+});
+
+it("names an optional dependency with no row", () => {
+  withFixture(
+    (fixture) => {
+      withOptionalDelta(fixture, true);
+      fixture.files.set(
+        path.join(fixture.root, "THIRD-PARTY-NOTICES.md"),
+        NOTICES_CLEAN,
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain("missing delta");
+    },
+  );
+});
+
+it("requires an uninstalled optional dependency's row and says its licence was not read", () => {
+  withFixture(
+    (fixture) => withOptionalDelta(fixture, false),
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(0);
+      const output = lines.join("\n");
+      expect(output).toContain("delta 4.0.0");
+      expect(output).toContain("not read here");
+    },
+  );
+});
+
+it("leaves peerDependencies out of the inventory", () => {
+  withFixture(
+    ({ files, web }) =>
+      files.set(path.join(web, "packages/a/package.json"), {
+        name: "@yunari/a",
+        version: "0.0.0",
+        dependencies: { alpha: "1.0.0", beta: "2.0.0" },
+        peerDependencies: { peer: "1.0.0" },
+      }),
+    ({ exitCode }) => expect(exitCode).toBe(0),
+  );
+});

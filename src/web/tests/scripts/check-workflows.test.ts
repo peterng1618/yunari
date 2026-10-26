@@ -37,6 +37,15 @@ const RUN_STEP = `      - name: Install the workspace
 
 const CLEAN: Record<string, string> = {
   "publish.yml": `name: Publish
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Run without publishing
+        type: boolean
+        default: true
 env:
   DRY_RUN: "false"
 jobs:
@@ -393,7 +402,98 @@ it("refuses a publish job with no contents: write", () => {
     },
     ({ exitCode, lines }) => {
       expect(exitCode).toBe(1);
-      expect(lines.join("\n")).toContain('publish job lacks "contents: write"');
+      expect(lines.join("\n")).toContain(
+        'publish job must declare exactly "contents: write" and "id-token: write"',
+      );
+    },
+  );
+});
+
+it("refuses an extra permission on the publish job", () => {
+  // The publish job's two permissions are the whole privilege split; a third
+  // widens the token a publish run carries.
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "      id-token: write\n",
+        "      id-token: write\n      actions: write\n",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      const out = lines.join("\n");
+      expect(out).toContain(
+        'publish job must declare exactly "contents: write" and "id-token: write"',
+      );
+      expect(out).toContain("actions: write");
+    },
+  );
+});
+
+it("refuses an if: on the publish job", () => {
+  // `if: always()` runs publish after a failed install, so `needs:` stops
+  // being the thing that gates it.
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "  publish:\n",
+        "  publish:\n    if: always()\n",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain('publish job must not declare "if:"');
+    },
+  );
+});
+
+it("refuses a tag push trigger on publish", () => {
+  // A tag push runs with GITHUB_EVENT_NAME=push, which makes the workflow's
+  // DRY_RUN expression false, so the publish path runs without a dispatch.
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "on:\n",
+        "on:\n  push:\n    tags: ['v*']\n",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain('on: trigger "push" is not allowed');
+    },
+  );
+});
+
+it("refuses a release trigger that names another type", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "types: [published]",
+        "types: [created]",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain(
+        'on: release "types:" must be "[published]"',
+      );
+    },
+  );
+});
+
+it("refuses a workflow_dispatch input other than dry_run", () => {
+  withFixture(
+    (files) => {
+      files["publish.yml"] = files["publish.yml"].replace(
+        "      dry_run:\n",
+        "      publish_now:\n        type: boolean\n      dry_run:\n",
+      );
+    },
+    ({ exitCode, lines }) => {
+      expect(exitCode).toBe(1);
+      expect(lines.join("\n")).toContain(
+        'on: workflow_dispatch input "publish_now" is not allowed',
+      );
     },
   );
 });

@@ -21,6 +21,15 @@
  * key that is read as a scalar, and a bare list item where a mapping key is
  * expected. A workflow that needs a refused shape upgrades the reader then.
  *
+ * `publish.yml`'s `on:` is read too, because the trigger decides whether the
+ * workflow's `DRY_RUN` expression can publish: a `push:` run has no dispatch
+ * input, so the expression evaluates `false` and the publish path runs without
+ * one. Exactly two triggers are accepted — `release: types: [published]` and
+ * `workflow_dispatch` with at most its `dry_run` input, typed boolean and
+ * defaulting to true so an omitted input stays a dry run. Any other trigger
+ * name, shape or extra key is a violation naming it. Other workflows' `on:`
+ * blocks are not constrained.
+ *
  * The tag guard in `publish.yml` is compared, not parsed: `install`'s first
  * step is the checkout, because the guard is a repository script and the file
  * is not on the runner before it; its second step runs only
@@ -86,6 +95,16 @@ const CHECKOUT_WITH = new Map([
   ["fetch-depth", "0"],
   ["persist-credentials", "false"],
 ]);
+
+/** The publish job's two permissions, and the whole privilege split. */
+const PUBLISH_PERMISSIONS = [
+  ["contents", "write"],
+  ["id-token", "write"],
+];
+
+/** The one sentence every trigger violation ends with. */
+const PUBLISH_TRIGGERS =
+  "publish.yml may only run on release: types: [published] and workflow_dispatch with its dry_run input";
 
 /** A key spelling the reader knows is not the shape it has to read. */
 class UnreadShape extends Error {
@@ -384,6 +403,7 @@ function parseJob(tokens, start, job, uses) {
     if (token.key === undefined) refuse(token, "job key is not read");
     const key = token.key;
     if (!JOB_KEYS.has(key)) refuse(token, `job key "${key}" is not read`);
+    job.keys.add(key);
 
     if (key === "steps") {
       if (token.value !== "" || token.block !== undefined) refuseFlow(token, "steps");
@@ -451,6 +471,7 @@ function parseJobs(tokens, start, jobs, uses) {
       permissionsScalar: undefined,
       needs: [],
       steps: [],
+      keys: new Set(),
       line: token.line,
     };
     jobs.set(token.key, job);
@@ -459,13 +480,47 @@ function parseJobs(tokens, start, jobs, uses) {
   return { jobs, uses, next: index };
 }
 
+/**
+ * `on:` as a tree of block mappings and scalar values. Flow values such as
+ * `[published]` are kept as written and judged by `triggerProblems`; only an
+ * unreadable indentation or a sequence where a key goes is an exit-2 refusal.
+ */
+function readTriggerTree(tokens, start, ownerIndent, label) {
+  const value = new Map();
+  let index = start;
+  while (index < tokens.length && tokens[index].indent > ownerIndent) {
+    const token = tokens[index];
+    if (token.isItem) {
+      refuse(token, `${label} must be a block mapping, not a sequence`);
+    }
+    if (token.indent !== ownerIndent + 2) {
+      refuse(token, `${label}: shape is not read at indent ${token.indent}`);
+    }
+    if (token.key === undefined) refuse(token, `${label}: entry is not read`);
+    if (token.block !== undefined) {
+      refuse(token, `${label} "${token.key}" must be a scalar or a block mapping`);
+    }
+    if (token.value !== "") {
+      value.set(token.key, token.value);
+      index += 1;
+      continue;
+    }
+    const nested = readTriggerTree(tokens, index + 1, token.indent, label);
+    value.set(token.key, nested.value);
+    index = nested.next;
+  }
+  return { value, next: index };
+}
+
 /** The rule-relevant parts of one workflow; throws `UnreadShape` on anything else. */
-function parseWorkflow(text) {
+function parseWorkflow(text, { publishTriggers = false } = {}) {
   const tokens = tokenize(text);
   const jobs = new Map();
   const uses = [];
   let sawJobs = false;
   let defaultsLine;
+  let onLine;
+  let on;
   let index = 0;
   while (index < tokens.length) {
     const token = tokens[index];
@@ -477,6 +532,26 @@ function parseWorkflow(text) {
       index = parsed.next;
       continue;
     }
+    if (
+      publishTriggers &&
+      token.indent === 0 &&
+      !token.isItem &&
+      token.key === "on"
+    ) {
+      if (onLine !== undefined) refuse(token, "duplicate on: block");
+      onLine = token.line;
+      if (token.block !== undefined) {
+        refuse(token, 'on: must be a block mapping, not a block scalar');
+      }
+      if (token.value !== "") {
+        on = { scalar: token.value, line: token.line };
+      } else {
+        const parsed = readTriggerTree(tokens, index + 1, 0, "on");
+        on = { mapping: parsed.value, line: token.line };
+        index = parsed.next;
+        continue;
+      }
+    }
     // A workflow-level `defaults:` is not read by any rule, so it is recorded
     // here and refused by the publish rules: its shell wrapper reaches every
     // run, the guard included.
@@ -485,7 +560,7 @@ function parseWorkflow(text) {
     }
     index += 1;
   }
-  return { jobs, uses, defaultsLine };
+  return { jobs, uses, defaultsLine, on };
 }
 
 /** `permissions:` entries as pairs, or `[]` when absent. */
@@ -588,6 +663,130 @@ function installProblems(install) {
   return problems;
 }
 
+/** The `dry_run` input's own keys and values: a non-dry default would publish. */
+function dryRunProblems(dryRun, problems) {
+  for (const key of dryRun.keys()) {
+    if (!["description", "type", "default"].includes(key)) {
+      problems.push(
+        `on: workflow_dispatch input "dry_run" key "${key}" is not read; it may only declare description, type and default`,
+      );
+    }
+  }
+  if (dryRun.get("type") !== "boolean") {
+    problems.push(
+      'on: workflow_dispatch input "dry_run" must declare "type: boolean"',
+    );
+  }
+  if (dryRun.get("default") !== "true") {
+    problems.push(
+      'on: workflow_dispatch input "dry_run" must declare "default: true", so a dispatch that omits it stays a dry run',
+    );
+  }
+}
+
+function dispatchProblems(dispatch, problems) {
+  for (const key of dispatch.keys()) {
+    if (key !== "inputs") {
+      problems.push(
+        `on: workflow_dispatch key "${key}" is not allowed; a manual dispatch may only name its "dry_run" input`,
+      );
+    }
+  }
+  const inputs = dispatch.get("inputs");
+  if (inputs === undefined) return;
+  if (!isMapping(inputs)) {
+    problems.push(
+      'on: workflow_dispatch "inputs:" must be a block mapping with at most a "dry_run" entry',
+    );
+    return;
+  }
+  for (const name of inputs.keys()) {
+    if (name !== "dry_run") {
+      problems.push(
+        `on: workflow_dispatch input "${name}" is not allowed; only "dry_run" is read`,
+      );
+    }
+  }
+  const dryRun = inputs.get("dry_run");
+  if (dryRun === undefined) return;
+  if (!isMapping(dryRun)) {
+    problems.push(
+      'on: workflow_dispatch input "dry_run" must declare "type: boolean" and "default: true"',
+    );
+    return;
+  }
+  dryRunProblems(dryRun, problems);
+}
+
+/**
+ * Rule 0: the trigger decides what `DRY_RUN` evaluates to, so a trigger the
+ * dispatch guard does not know is a way round it.
+ */
+function triggerProblems(on) {
+  if (on === undefined) {
+    return [`on: is missing; ${PUBLISH_TRIGGERS}`];
+  }
+  if (on.scalar !== undefined) {
+    return [
+      `on: must be a block mapping, not the scalar "${on.scalar}"; ${PUBLISH_TRIGGERS}`,
+    ];
+  }
+  const problems = [];
+  const triggers = on.mapping;
+  for (const name of triggers.keys()) {
+    if (name !== "release" && name !== "workflow_dispatch") {
+      problems.push(
+        `on: trigger "${name}" is not allowed; ${PUBLISH_TRIGGERS}`,
+      );
+    }
+  }
+
+  const release = triggers.get("release");
+  if (release === undefined) {
+    problems.push(`on: is missing "release: types: [published]"`);
+  } else if (!isMapping(release)) {
+    problems.push(
+      `on: "release:" must be a block mapping with "types: [published]", not the scalar "${release}"`,
+    );
+  } else {
+    for (const key of release.keys()) {
+      if (key !== "types") {
+        problems.push(
+          `on: release key "${key}" is not allowed; it may only declare "types: [published]"`,
+        );
+      }
+    }
+    const types = release.get("types");
+    if (
+      typeof types !== "string" ||
+      types.replace(/\s+/g, "") !== "[published]"
+    ) {
+      problems.push(
+        `on: release "types:" must be "[published]" (got ${types === undefined ? "nothing" : `"${types}"`})`,
+      );
+    }
+  }
+
+  const dispatch = triggers.get("workflow_dispatch");
+  if (dispatch === undefined) {
+    problems.push(
+      'on: is missing "workflow_dispatch:" for the manual release path',
+    );
+  } else if (!isMapping(dispatch)) {
+    problems.push(
+      `on: "workflow_dispatch:" must be a block mapping naming at most its "dry_run" input, not the scalar "${dispatch}"`,
+    );
+  } else {
+    dispatchProblems(dispatch, problems);
+  }
+  return problems;
+}
+
+/** Whether a value is a nested mapping (`Map`) rather than a scalar. */
+function isMapping(value) {
+  return value instanceof Map;
+}
+
 function checkPublish(publish) {
   const violations = [];
   const install = publish.jobs.get("install");
@@ -622,9 +821,8 @@ function checkPublish(publish) {
       );
     }
   }
-  if (publishJob !== undefined && publishJob.permissions?.get("id-token") !== "write") {
-    violations.push('publish job lacks "id-token: write"');
-  }
+  // The trigger decides `DRY_RUN`; see `triggerProblems`.
+  violations.push(...triggerProblems(publish.on));
 
   // A workflow-level defaults: is a shell wrapper over every run; the guard is
   // one of them.
@@ -674,13 +872,28 @@ function checkPublish(publish) {
     }
   }
 
-  // Rule 6: only publish may write contents, and only publish may take the
-  // OIDC token.
-  if (
-    publishJob !== undefined &&
-    publishJob.permissions?.get("contents") !== "write"
-  ) {
-    violations.push('publish job lacks "contents: write"');
+  // Rule 6: publish holds exactly the two permissions the publish path needs —
+  // the OIDC token for provenance and the contents write for the release
+  // upload — and install holds neither. A third permission on publish is the
+  // same widening as an extra one on install.
+  if (publishJob !== undefined) {
+    if (publishJob.permissionsScalar !== undefined) {
+      violations.push(
+        `publish job declares permissions as the scalar "${publishJob.permissionsScalar}"; it must declare exactly "contents: write" and "id-token: write"`,
+      );
+    } else {
+      const pairs = permissionPairs(publishJob);
+      const exact =
+        pairs.length === PUBLISH_PERMISSIONS.length &&
+        PUBLISH_PERMISSIONS.every(
+          ([key, value]) => publishJob.permissions?.get(key) === value,
+        );
+      if (!exact) {
+        violations.push(
+          `publish job must declare exactly "contents: write" and "id-token: write" (got ${describePermissions(publishJob)})`,
+        );
+      }
+    }
   }
   if (install?.permissions?.has("id-token") === true) {
     violations.push('install job must not request "id-token"');
@@ -690,6 +903,15 @@ function checkPublish(publish) {
   if (publishJob !== undefined && !publishJob.needs.includes("install")) {
     violations.push(
       'publish job must declare "needs: install" so a failed install stops the publish',
+    );
+  }
+
+  // A job-level condition on publish makes `needs:` non-binding: `if:
+  // always()` runs it after a failed install, and the comment claiming
+  // otherwise stops being true.
+  if (publishJob?.keys.has("if") === true) {
+    violations.push(
+      'publish job must not declare "if:": a job-level condition makes "needs: install" non-binding',
     );
   }
 
@@ -735,7 +957,9 @@ export function checkWorkflows(root) {
 
     let workflow;
     try {
-      workflow = parseWorkflow(text);
+      workflow = parseWorkflow(text, {
+        publishTriggers: file === "publish.yml",
+      });
     } catch (error) {
       if (error instanceof UnreadShape) {
         return {

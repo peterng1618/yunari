@@ -334,7 +334,9 @@ for an explicit loopback test origin.
   `>=4.6.6` is added and the Worker suite proves it.
 - Every GitHub action is pinned to its resolved commit SHA.
 - `ffmpeg-static`'s downloaded binary is verified against a committed SHA-256
-  manifest for each supported platform before the host can execute it.
+  manifest before the host can execute it. A pair the package supports but the
+  manifest does not list is refused for want of a digest, and a pair the package
+  does not support is refused earlier, as a missing binary.
 - `THIRD-PARTY-NOTICES.md` is generated/checked from installed package metadata
   for names, versions and licences, and the check runs in the gate.
 - The `npm ls --all` tree has no `missing:` line, and every `invalid`/`extraneous`

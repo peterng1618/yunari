@@ -2,12 +2,18 @@
 
 /**
  * `THIRD-PARTY-NOTICES.md` is the direct-dependency inventory: every package a
- * `src/web` workspace manifest declares in `dependencies` or `devDependencies`,
- * `@yunari/` excluded. A row that states a version or licence the installed
- * tree no longer has is worse than no row, so this check compares each
- * declaration against the lockfile and the installed package's own manifest,
- * and rejects a row no declaration consumes. Scope stays direct dependencies;
- * the closure is the release rule in `docs/engineering/dependencies.md`.
+ * `src/web` workspace manifest declares in `dependencies`, `devDependencies` or
+ * `optionalDependencies`, `@yunari/` excluded. `peerDependencies` stays out: a
+ * peer is a requirement this project states about someone else's dependency
+ * tree, not a package this project installs and ships. A row that states a
+ * version or licence the installed tree no longer has is worse than no row, so
+ * this check compares each declaration against the lockfile and the installed
+ * package's own manifest, and rejects a row no declaration consumes. A
+ * platform-optional package is installed on its own platform only: its row and
+ * lockfile version are still required, and its licence is compared where it is
+ * installed, with the check saying in its output when it could not be read
+ * here. Scope stays direct dependencies; the closure is the release rule in
+ * `docs/engineering/dependencies.md`.
  *
  * `node scripts/check-third-party.mjs`
  *
@@ -72,10 +78,18 @@ function directDependencies(web) {
   const dependencies = [];
   for (const workspace of workspaces) {
     const manifest = readJson(join(web, workspace, "package.json"));
-    for (const field of ["dependencies", "devDependencies"]) {
+    for (const field of [
+      "dependencies",
+      "devDependencies",
+      "optionalDependencies",
+    ]) {
       for (const name of Object.keys(manifest[field] ?? {})) {
         if (name.startsWith("@yunari/")) continue;
-        dependencies.push({ workspace, name });
+        dependencies.push({
+          workspace,
+          name,
+          optional: field === "optionalDependencies",
+        });
       }
     }
   }
@@ -287,12 +301,23 @@ export function checkTree(root) {
   }));
 
   // An incomplete install is a prerequisite, not a drift: the check cannot
-  // judge a package it cannot read.
+  // judge a package it cannot read. A platform-optional package is expected to
+  // be absent on another platform, so it is only unreadable, never fatal —
+  // unless the same key is also a required declaration somewhere.
+  const optionalByKey = new Map();
+  for (const { key, optional } of declarations) {
+    if (key === undefined) continue;
+    optionalByKey.set(key, (optionalByKey.get(key) ?? true) && optional);
+  }
   const installed = new Map();
   for (const { name, key } of declarations) {
     if (key === undefined || installed.has(key)) continue;
     const facts = installedFacts(join(web, key));
     if (facts.missing) {
+      if (optionalByKey.get(key) === true) {
+        installed.set(key, facts);
+        continue;
+      }
       return {
         exitCode: 2,
         lines: [
@@ -304,6 +329,8 @@ export function checkTree(root) {
   }
 
   const drifts = [];
+  /** Optional packages installed on another platform: row checked, licence not. */
+  const unreadable = [];
 
   // Every row must be consumed by exactly one resolved declaration; a row that
   // no workspace resolves is stale, and a second row for the same id is a
@@ -350,11 +377,6 @@ export function checkTree(root) {
     checked.add(id);
 
     const facts = installed.get(key);
-    if (facts.version !== version) {
-      drifts.push(
-        `installed ${name}: lockfile resolves ${version}, node_modules holds ${facts.version}`,
-      );
-    }
 
     const named = rows.filter((row) => row.package === name);
     if (named.length === 0) {
@@ -367,6 +389,17 @@ export function checkTree(root) {
         `version ${name}: notices states ${named.map((row) => row.version).join(", ")}, lockfile resolves ${version}`,
       );
       continue;
+    }
+    if (facts.missing) {
+      // The row and the lockfile version are all this platform can check: the
+      // package is the optional binding for another OS.
+      unreadable.push(`${name} ${version}`);
+      continue;
+    }
+    if (facts.version !== version) {
+      drifts.push(
+        `installed ${name}: lockfile resolves ${version}, node_modules holds ${facts.version}`,
+      );
     }
     if (facts.problem !== undefined) {
       drifts.push(`licence ${name} ${version}: ${facts.problem}`);
@@ -390,7 +423,14 @@ export function checkTree(root) {
   }
   return {
     exitCode: 0,
-    lines: ["third-party: every direct dependency matches its notice"],
+    lines: [
+      "third-party: every direct dependency matches its notice",
+      ...(unreadable.length === 0
+        ? []
+        : [
+            `third-party: licence not read here for ${unreadable.join(", ")} (optional package for another platform)`,
+          ]),
+    ],
   };
 }
 

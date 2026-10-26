@@ -5,8 +5,11 @@ inventory, not a release-grade transitive audit. Provenance:
 [`docs/engineering/dependencies.md`](docs/engineering/dependencies.md).
 
 **Scope: direct dependencies only — the packages a workspace `package.json`
-declares in `dependencies` or `devDependencies`, `@yunari/` workspace packages
-excluded — never the installed closure.** A package reached only through another
+declares in `dependencies`, `devDependencies` or `optionalDependencies`,
+`@yunari/` workspace packages excluded — never the installed closure.
+`peerDependencies` are not an inventory: a peer states a requirement on a
+package this project does not itself install or ship, so it is not a direct
+dependency.** A package reached only through another
 package's own dependencies has no entry here, and its absence is not a missing
 notice; the closure is enumerated at release time, by the release rule in
 [`docs/engineering/dependencies.md`](docs/engineering/dependencies.md). Every
@@ -14,8 +17,11 @@ direct dependency is a row in one of the two tables below, with the version the
 lockfile resolves and the licence its installed `package.json` declares — or,
 where that manifest declares none, the licence named by its `LICENSE` title;
 `npm run third-party:check` (`scripts/check-third-party.mjs`) compares every
-row against both and names each drift. The prose sections that follow are
-provenance, not notice rows.
+row against both and names each drift. A platform-optional package is installed
+only on the platform it serves: its row and lockfile version are required
+everywhere, its licence is compared where it is installed, and the check says
+in its output when it could not read one here. The prose sections that follow
+are provenance, not notice rows.
 
 ## Runtime/editor
 
@@ -118,6 +124,8 @@ its own nested copy of a name already listed above.
 | `@google/design.md` | 0.4.0 | Apache-2.0 | lints `DESIGN.md` in the design gate |
 | `@playwright/mcp` | 0.0.83 | Apache-2.0 | the Playwright MCP server used as an agent tool |
 | `@playwright/test` | 1.63.0 | Apache-2.0 | browser tests |
+| `@tailwindcss/oxide-linux-x64-gnu` | 4.3.3 | MIT | editor dev: Tailwind's native binding for the Linux CI runner (optional; installed there only) |
+| `@tailwindcss/oxide-win32-x64-msvc` | 4.3.3 | MIT | editor dev: Tailwind's native binding for Windows (optional; installed there only) |
 | `@tailwindcss/vite` | 4.3.3 | MIT | editor dev |
 | `@types/culori` | 4.0.1 | MIT | types for culori 4, which ships none |
 | `@types/node` | 22.20.5 | MIT | types |
