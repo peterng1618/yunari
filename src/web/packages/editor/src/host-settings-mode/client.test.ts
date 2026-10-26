@@ -271,8 +271,10 @@ it("keeps the place and cadence when the host names an unknown provider", async 
  * reads as `0` rather than as no angle.
  */
 it("writes a display's shape and rotation and answers the record's reading", async () => {
+  let body: unknown;
   const { fetch, calls } = host((_url, init) => {
     expect(init?.method).toBe("PATCH");
+    body = JSON.parse(String(init?.body));
     return json({ id: "tv", shape: "circle", rotation: 45 });
   });
 
@@ -281,6 +283,9 @@ it("writes a display's shape and rotation and answers the record's reading", asy
   }).updateDisplayPresentation("tv", { shape: "circle", rotation: 45 });
 
   expect(calls).toEqual(["PATCH /api/displays/tv"]);
+  // Both fields and nothing else: the route reads a patch, so a field it does
+  // not own would be a value this seam invented.
+  expect(body).toEqual({ shape: "circle", rotation: 45 });
   expect(saved).toEqual({ shape: "circle", rotation: 45 });
 });
 
