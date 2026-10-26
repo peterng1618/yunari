@@ -616,9 +616,23 @@ export function createGlass(options: GlassOptions): GlassHandle {
       screenRect === undefined
         ? deviceRectOf(media.rect, plane, Math.hypot(plane[0], plane[1]))
         : screenDevice(screenRect, retina);
+    // A round display clips its layer to the disc in the DOM
+    // (`border-radius: 50%`), so the sampler clips the same box: outside it the
+    // reader sees the plate's black, not the media's edge.
+    const disc =
+      screenRect?.radius === "circle"
+        ? screenDevice(screenRect, retina)
+        : undefined;
     let painted: boolean;
     if (angle === 0) {
-      painted = media.paint(context, region, device);
+      if (disc === undefined) {
+        painted = media.paint(context, region, device);
+      } else {
+        context.save();
+        clipDisc(context, disc, region);
+        painted = media.paint(context, region, device);
+        context.restore();
+      }
     } else {
       // The media draws in its own upright frame; turning the scratch about the
       // rect's mapped centre puts it where the composition actually is. The
@@ -743,6 +757,23 @@ function screenDevice(rect: DeviceRect, retina: number): DeviceRect {
     width: rect.width * retina,
     height: rect.height * retina,
   };
+}
+
+/** Clips the region-sized surface to a disc stated in surface pixels. */
+function clipDisc(
+  ctx: CanvasRenderingContext2D,
+  disc: DeviceRect,
+  region: DeviceRect,
+): void {
+  ctx.beginPath();
+  ctx.arc(
+    disc.left + disc.width / 2 - region.left,
+    disc.top + disc.height / 2 - region.top,
+    Math.min(disc.width, disc.height) / 2,
+    0,
+    Math.PI * 2,
+  );
+  ctx.clip();
 }
 
 /**

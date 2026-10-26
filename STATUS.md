@@ -20,7 +20,7 @@ The preview-lens/stage work is merged; [`plan B`](docs/superpowers/plans/2026-10
 - **Task 2 of plan B:** the scene presents a display shape and angle; rect stays upright, a circle is clipped to its disc with `clip-path`.
 - **Media:** a theme-bounded layer turns with the artboard from its own origin; a display-bounded one fills the host box and never turns.
 - **Glass:** the sampler turns its scratch about the mapped rect centre; a display-bounded backdrop reports `screenRect` and is exempt.
-- **Evidence:** 30 scene-fabric files green (425 tests), focused four 88/88; each new case shown red with its behaviour disabled; typecheck exit 0.
+- **Evidence:** 30 scene-fabric files green (427 tests), focused four 90/90; each new case shown red with its behaviour disabled; typecheck exit 0.
 - **Decision note:** `docs/decisions/0125-a-presentation-is-a-clip-a-mirrored-matrix-and-a-turned-sample.md`.
 
 ## Next

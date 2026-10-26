@@ -558,6 +558,99 @@ describe("glass composition", () => {
     });
   });
 
+  it("clips a display-bounded media to the disc, as its own border-radius does", () => {
+    // On screen the layer is a `border-radius: 50%` box, so a panel near the
+    // disc's edge shows black outside the circle. An unclipped sampler paints
+    // the media across the whole box and shows image colour there instead.
+    const disc = {
+      left: 50,
+      top: 50,
+      width: 100,
+      height: 100,
+      radius: "circle" as const,
+    };
+    const backdrop = artboardBackdrop({
+      background: "#ff0000",
+      width: 200,
+      height: 200,
+      media: {
+        rect: { left: 0, top: 0, width: 200, height: 200 },
+        screenRect: disc,
+        paint(ctx, region) {
+          ctx.fillStyle = "#ff0000";
+          ctx.fillRect(0, 0, region.width, region.height);
+          return true;
+        },
+      },
+      surface: { shape: "circle", box: disc },
+    });
+    const s = stage({ texture: false, backdrop: () => backdrop });
+    s.canvas.add(
+      panel({
+        left: 130,
+        top: 80,
+        width: 40,
+        height: 40,
+        fill: "transparent",
+        yunariGlass: { blurRadius: 0 },
+      }),
+    );
+    s.canvas.renderAll();
+
+    // (140, 100) is 40px from the disc's centre: inside. (160, 100) is 60px:
+    // outside the 50px radius, where the display shows black.
+    const inside = s.pixel(140, 100);
+    const outside = s.pixel(160, 100);
+    expect(inside[0], "inside the disc is the media").toBeGreaterThan(200);
+    expect(outside[0], "outside it the DOM is black").toBeLessThan(60);
+    expect(outside[1]).toBeLessThan(60);
+  });
+
+  it("maps a theme-bounded device box by its mapped centre under a turned plane", () => {
+    // The plane is a 45-degree clockwise rotation with no translation:
+    // [cos45, sin45, -sin45, cos45, 0, 0]. The media rect is the 200x200 board,
+    // so its centre maps to (0, 141.42) and a centre-built device box is
+    // {-100, 41.42, 200, 200}. A corner-built box (mapping the rect's top-left)
+    // would be {0, 0, 200, 200}.
+    //
+    // The panel is placed so the surface point (50, 100) is sampled. In the
+    // centre box that point is 150 of 200 across: the two-tone media's right
+    // (blue) half. In the corner box it is 50 of 200 across: the left (red)
+    // half. Same pixel, opposite colours, so the assertion tells the two
+    // mappings apart.
+    const s = stage({ texture: false, backdrop: () => twoTone(0) });
+    // Fabric culls an object it judges off-screen; under this rotated viewport
+    // it judges this one so and never fires `before:render`, so the fixture
+    // turns culling off to reach the sampler at all.
+    (s.canvas as unknown as { skipOffscreen: boolean }).skipOffscreen = false;
+    s.canvas.setViewportTransform([
+      Math.SQRT1_2,
+      Math.SQRT1_2,
+      -Math.SQRT1_2,
+      Math.SQRT1_2,
+      0,
+      0,
+    ]);
+    s.canvas.add(
+      panel({
+        left: 86,
+        top: 15,
+        width: 40,
+        height: 40,
+        fill: "transparent",
+        yunariGlass: { blurRadius: 0 },
+      }),
+    );
+    s.canvas.renderAll();
+
+    const pixel = s.pixel(50, 100);
+    expect(
+      pixel[2],
+      "the mapped centre puts it in the right half",
+    ).toBeGreaterThan(200);
+    expect(pixel[0], "not the corner's left half").toBeLessThan(60);
+  });
+
   it("walks a display-filled layer from its own box to the device rect", () => {
     // 0075's three numbers in one place: the box the layer sits on, the rect the
     // media reports for it in artboard units, and the device rect the sampler
