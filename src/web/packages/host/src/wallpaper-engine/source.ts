@@ -94,8 +94,8 @@ export function createWallpaperEngineSource(
     if (install === undefined) {
       return { available: false, reason: "not-installed" };
     }
-    // Kept before the library check: the unpack and export routes need the
-    // install's own paths even when it holds no library.
+    // Kept before the library check: the project route needs the install's own
+    // paths even when it holds no library.
     located = install;
     if (install.libraries.length === 0) {
       return { available: false, reason: "no-library" };

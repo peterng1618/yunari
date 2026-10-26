@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { memberBytes, mobilePackage, mobileVideo, readPackage } from "./pkg.js";
+import { memberBytes, mobilePackage, readPackage } from "./pkg.js";
 
 const encoder = new TextEncoder();
 
@@ -120,38 +120,6 @@ describe("scene package container", () => {
   });
 });
 
-describe("mobile package", () => {
-  const VIDEO = new Uint8Array([
-    0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
-  ]);
-
-  it("reads the video out of a PKGM export", () => {
-    const bytes = buildPackage(
-      [
-        ["nopreview.jpg", THUMBNAIL],
-        ["project.json", encoder.encode("{}")],
-        ["wallpaper.mp4", VIDEO],
-      ],
-      "PKGM0014",
-    );
-
-    expect(mobileVideo(bytes)).toEqual(VIDEO);
-  });
-
-  it("answers nothing for a mobile package with no video", () => {
-    const bytes = buildPackage(
-      [["project.json", encoder.encode("{}")]],
-      "PKGM0014",
-    );
-
-    expect(mobileVideo(bytes)).toBeUndefined();
-  });
-
-  it("answers nothing for something that is not a package", () => {
-    expect(mobileVideo(encoder.encode("not a package"))).toBeUndefined();
-  });
-});
-
 describe("mobile package import", () => {
   const VIDEO = encoder.encode("mp4");
   const PROJECT = encoder.encode(
@@ -181,6 +149,19 @@ describe("mobile package import", () => {
     const bytes = buildPackage([["project.json", PROJECT]], "PKGM0014");
 
     expect(mobilePackage(bytes)).toBeUndefined();
+  });
+
+  it("answers nothing for an empty video member", () => {
+    const bytes = buildPackage(
+      [["wallpaper.mp4", new Uint8Array()]],
+      "PKGM0014",
+    );
+
+    expect(mobilePackage(bytes)).toBeUndefined();
+  });
+
+  it("answers nothing for something that is not a package", () => {
+    expect(mobilePackage(encoder.encode("not a package"))).toBeUndefined();
   });
 
   it("still answers the video when project.json does not parse", () => {

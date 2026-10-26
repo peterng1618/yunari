@@ -153,6 +153,23 @@ describe("unpacking a scene theme", () => {
     expect(written.title).toBe("[yunari] Cache Scene");
   });
 
+  it("leaves a title that already carries the prefix single-prefixed", async () => {
+    await fs.writeFile(
+      path.join(item.directory, "project.json"),
+      JSON.stringify({ ...descriptor, title: "[yunari] Cache Scene" }),
+    );
+
+    await unpackScene(install, item);
+
+    const written = JSON.parse(
+      await fs.readFile(
+        path.join(install.myProjects, "201", "project.json"),
+        "utf8",
+      ),
+    );
+    expect(written.title).toBe("[yunari] Cache Scene");
+  });
+
   it("answers reused for an existing directory and rewrites nothing", async () => {
     expect(await unpackScene(install, item)).toMatchObject({ reused: false });
 

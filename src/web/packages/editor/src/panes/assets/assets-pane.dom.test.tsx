@@ -1114,10 +1114,12 @@ describe("the behaviours the file section carried", () => {
     // **The accept rule, derived rather than restated.** Both pickers carry the
     // manager's own extension list, so adding an extension to `TYPES` moves the
     // string and this case with it; a hand-kept second list could widen only by
-    // drifting silently.
+    // drifting silently. The Replace picker takes that list alone: a `.mpkg` is
+    // a container the import path intercepts, never a declared asset.
     expect(ACCEPT).not.toBe("");
     expect(importInput.accept).toBe(ACCEPT);
-    expect(replaceInput.accept).toBe(ACCEPT);
+    expect(replaceInput.accept).toBe(ASSET_ACCEPT);
+    expect(replaceInput.accept).not.toContain(".mpkg");
 
     const opened = [
       vi.spyOn(importInput, "click"),
@@ -1154,4 +1156,5 @@ describe("the removed manual normalize control", () => {
  *  `.mpkg` the pane intercepts before the manager sees it — derived here so an
  *  extension added to `TYPES` and not offered, or offered and not readable, is
  *  red. */
-const ACCEPT = `${ASSET_FILE_EXTENSIONS.map((ext) => `.${ext}`).join(",")},.mpkg`;
+const ASSET_ACCEPT = ASSET_FILE_EXTENSIONS.map((ext) => `.${ext}`).join(",");
+const ACCEPT = `${ASSET_ACCEPT},.mpkg`;

@@ -123,14 +123,9 @@ const MOBILE_VIDEO = "wallpaper.mp4";
 /** The descriptor a mobile export carries beside its video. */
 const MOBILE_PROJECT = "project.json";
 
-/** The MP4 out of an `.mpkg`, or `undefined` for a package that is not the
- *  mobile shape. A still-at-rest scene exports as a video too, so this is the
- *  only payload the export route produces. */
-export function mobileVideo(bytes: Uint8Array): Uint8Array | undefined {
-  const pkg = readPackage(bytes);
-  return pkg === undefined ? undefined : memberBytes(pkg, MOBILE_VIDEO);
-}
-
+/** What an import can take from a mobile package: the MP4, and whatever credit
+ *  `project.json` can offer. A still-at-rest scene exports as a video too, so
+ *  this is the only payload the route produces. */
 export interface MobilePackage {
   readonly video: Uint8Array;
   readonly title?: string;
