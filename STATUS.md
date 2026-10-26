@@ -9,18 +9,18 @@ Land the preview-lens/stage and per-display shape/rotation work: [`spec A`](docs
 
 ## Active work
 
-- **Active plan:** `2026-10-26-preview-lens-and-stage`; plan B is queued behind it, and no other plan runs.
+- **Active plan:** `docs/superpowers/plans/2026-10-26-display-shape-and-rotation.md` (plan B) is next; plan A is complete and awaits merge, and no other plan runs.
 - **Preview lens:** scene-anchored display box, shell stage, theme letterbox, guide frame, circle lens, ratio catalogue and settings tab.
 - **Display presentation:** per-record shape and rotation, rotated/inscribed playback, pair-page choice, Host controls.
 - **Backlog drain stays queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, 259 rows open.
 
 ## Last completed change
 
-- **Previews settings tab:** a fifth tab between Appearance and Keyboard lists one row per stored ratio with its derived lens ids and a Remove control whose name includes them.
-- **Add and refuse:** Rect/Circle shape, a `W:H` field for Rect that refuses a typed `Circle`, GCD-normalised ids, duplicates checked by derived lens count; every refusal is a `role="alert"` from `uiCopy`.
-- **Reset and session:** reset deletes the stored key and sets the defaults explicitly, disabled at defaults; a browser with no store keeps the list for the session.
-- **Boot load:** `createShellLayout` reads `yunari.editor.preview-ratios` once before any editor mounts, proven by boot tests for a stored list, an absent key and a reset reload; ADR-0119 records that sentence.
-- **Verified:** focused settings DOM 37/37, related catalogue/shell files 119/119, biome exit 0; typecheck still red only in Task 5 menu/chooser surfaces.
+- **Plan A complete:** the display is a scene-anchored lens frame, painted by the shell stage over the theme's own letterbox.
+- **One catalogue in both pickers:** the display menu and the new-document chooser list the active ratios, named by id, with Fit alone when the list is empty.
+- **Visible proof:** stage texture, letterbox layer order, guide geometry through zoom/pan/Fit, circle clipping and media remounts asserted in a real browser.
+- **Independence:** the chooser's preview and size are separate answers, so picking a lens no longer rewrites the artboard.
+- **Verified:** unit suite 6251 passed, both Playwright projects green, `npm run gate` exit 0.
 
 ## Next
 
