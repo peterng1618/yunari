@@ -1065,6 +1065,9 @@ describe("EditorSession", () => {
           requestRenderAll: vi.fn(),
           fire: vi.fn(),
         },
+        // The run editor reads the artboard for a role default size; this is
+        // the frame the fixture's envelope declares.
+        artboard: () => ({ width: 100, height: 100 }),
         clipboardManager: { setImageImporter: vi.fn(), setBindings: vi.fn() },
         textManager: {
           addText: vi.fn(),
@@ -1109,12 +1112,13 @@ describe("EditorSession", () => {
         .querySelector('[data-yunari-run-preset="0"] [data-yunari-value]')
         ?.textContent?.trim() ?? "";
 
-    expect(printed()).toBe("Inter 600");
+    // The trigger prints the computed name, role first: the id is the role.
+    expect(printed()).toBe("[Body] Inter 600");
 
     // The panel's own field writes the whole map, which is what a face edit is.
     typeTokenPortMock.change?.(presets("Manrope"));
 
-    expect(printed()).toBe("Manrope 600");
+    expect(printed()).toBe("[Body] Manrope 600");
     extensions.destroy();
   });
 
