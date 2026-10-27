@@ -181,7 +181,9 @@ it("stays open with the host's sentence when the import fails", async () => {
 
 it("warns that baked-in dynamic text loops as-is, for a package and a video", async () => {
   await mount({ package: true, onRun: deferredRun().onRun });
-  expect(modalOf()?.textContent).toContain(uiCopy.panels.importVideo.dynamicText);
+  expect(modalOf()?.textContent).toContain(
+    uiCopy.panels.importVideo.dynamicText,
+  );
   expect(uiCopy.panels.importVideo.dynamicText).toContain("clock");
 
   const first = root;
@@ -190,7 +192,9 @@ it("warns that baked-in dynamic text loops as-is, for a package and a video", as
   document.body.replaceChildren();
 
   await mount({ package: false, onRun: deferredRun().onRun });
-  expect(modalOf()?.textContent).toContain(uiCopy.panels.importVideo.dynamicText);
+  expect(modalOf()?.textContent).toContain(
+    uiCopy.panels.importVideo.dynamicText,
+  );
 });
 
 it("refuses every dismissal while the run is live", async () => {
@@ -238,4 +242,3 @@ it("dismisses once the run has settled, and closes only once", async () => {
   });
   expect(onClose).toHaveBeenCalledTimes(1);
 });
-

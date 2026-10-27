@@ -145,9 +145,9 @@ const SECTIONS: readonly { readonly id: SectionId; readonly label: string }[] =
 const ASSET_FILE_ACCEPT = `${ASSET_FILE_EXTENSIONS.map((ext) => `.${ext}`).join(",")},.mpkg`;
 /** A replacement is a declared asset's own byte swap, so a container the import
  *  path intercepts (`.mpkg`) has no place here. */
-const REPLACE_FILE_ACCEPT = ASSET_FILE_EXTENSIONS.map(
-  (ext) => `.${ext}`,
-).join(",");
+const REPLACE_FILE_ACCEPT = ASSET_FILE_EXTENSIONS.map((ext) => `.${ext}`).join(
+  ",",
+);
 
 /** The package is intercepted before the manager sees it: a `.mpkg` is a
  *  container the host reads, never a declared asset. */

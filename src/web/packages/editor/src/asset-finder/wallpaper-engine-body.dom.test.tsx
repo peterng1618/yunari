@@ -464,7 +464,9 @@ it("keeps the one import modal mounted when the listing lands", async () => {
 
   expect(cardIds(rendered)).toEqual(["201", "202", "203", "204"]);
   expect(onImportPackage).toHaveBeenCalledTimes(1);
-  expect(document.querySelector("[data-yunari-import-video-modal]")).toBe(modal);
+  expect(document.querySelector("[data-yunari-import-video-modal]")).toBe(
+    modal,
+  );
 });
 
 it("reports a successful package import and clears the line when a card action starts", async () => {
