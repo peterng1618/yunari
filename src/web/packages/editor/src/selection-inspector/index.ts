@@ -200,6 +200,14 @@ interface SelectionInspectorOptions {
   /** Opens the finder on Fonts, where the catalogue now lives. Absent in a
    *  panel built without the shell's finder. */
   readonly onOpenFontPicker?: () => void;
+  /** Opens that same finder from a run's token list. Separate from the field's
+   *  port above so the run editor's action row can be wired without the face
+   *  field's presence deciding it. */
+  readonly openFontFinder?: () => void;
+  /** Imports a local font and hands back the token the commit produced or
+   *  adopted, so the run that asked can point itself at it. Absent where the
+   *  session has no import dialog behind the column. */
+  readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
 }
 
 /** The geometry keys the funnel writes directly; every other id is a shape's
@@ -773,6 +781,12 @@ export function createSelectionInspector(
     writeLayout: (patch) => runEdit((t) => writeTextLayout(t, patch)),
     addRun: () => runEdit(appendRun),
     removeRun: (index) => runEdit((t) => dropRun(t, index)),
+    ...(options.openFontFinder === undefined
+      ? {}
+      : { openFontFinder: options.openFontFinder }),
+    ...(options.importLocalFont === undefined
+      ? {}
+      : { importLocalFont: options.importLocalFont }),
   };
 
   /**

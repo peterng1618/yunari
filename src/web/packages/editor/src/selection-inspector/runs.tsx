@@ -27,6 +27,7 @@ import {
   useControlIds,
 } from "../components/ui/control-well.js";
 import { Glyph, PLUS_GLYPH } from "../editor-shell/icons.js";
+import { orderedTokens, tokenName } from "../type-token-manager/name.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   authoredContentOf,
@@ -93,7 +94,7 @@ function describeRun(run: TextRun): string {
  * The palette tokens a run's colour may reference, each under its stored
  * reference and the name its author gave it.
  *
- * The name, not the id, for the reason `presetOptions` gives: the palette panel,
+ * The name, not the id, for the reason `tokenOptions` gives: the palette panel,
  * `panel.ts` and `chart-manager` all print the authored name, and printing `cpu`
  * here put the same tokens in the run editor under a second vocabulary.
  */
@@ -108,20 +109,41 @@ function paletteOptions(globals: FabricGlobals | undefined): readonly {
 }
 
 /**
- * The type tokens a run may reference, each under its stored reference and its
- * computed name.
+ * The type tokens a run may reference, each under its stored reference and the
+ * computed name the Tokens pane and the token inspector also print.
  *
- * The name, not the id, because every other reference picker in the editor names
- * what it offers — printing `24-400` here put thirteen tokens in the inspector
- * under one vocabulary and the same thirteen, one field lower, under another.
+ * The order is `orderedTokens`' — the three roles first, then the unroled by
+ * computed name — because a second ordering here is a second answer to the same
+ * question.
  */
-function presetOptions(
+function tokenOptions(
   globals: FabricGlobals | undefined,
 ): readonly RunOptionView[] {
-  return Object.entries(globals?.typeTokens ?? {}).map(([id, token]) => ({
-    id: `typeTokens.${id}`,
-    name: `${token.family}${token.weight === undefined ? "" : ` ${token.weight}`}`,
-  }));
+  return orderedTokens({ typeTokens: globals?.typeTokens ?? {} }).map(
+    ({ id, token }) => ({
+      id: `typeTokens.${id}`,
+      name: tokenName(id, token),
+    }),
+  );
+}
+
+/** Sentinel ids in the token list, the same two the token inspector's family
+ *  list uses. A token can never carry one, so a press is a command rather than
+ *  a reference. */
+const IMPORT_LOCAL_FONT_ID = "@yunari:import-local-font";
+const FONT_FINDER_ID = "@yunari:font-finder";
+
+/** The action rows that end the token list, each drawn only where its port
+ *  exists: a press that did nothing is worse than an absent row. */
+function fontActionOptions(edits: RunEdits): readonly RunOptionView[] {
+  return [
+    ...(edits.importLocalFont === undefined
+      ? []
+      : [{ id: IMPORT_LOCAL_FONT_ID, name: uiCopy.panels.importLocalFont }]),
+    ...(edits.openFontFinder === undefined
+      ? []
+      : [{ id: FONT_FINDER_ID, name: uiCopy.panels.fontFinder }]),
+  ];
 }
 
 /**
@@ -205,7 +227,7 @@ export function projectRuns(
   if (content === undefined) return undefined;
 
   const runs = textRunsOf(object);
-  const presets = presetOptions(context.globals);
+  const presets = tokenOptions(context.globals);
   const palettes = paletteOptions(context.globals);
   const bindable = nodeId.length > 0;
   const bindings = bindable ? (context.nodeBindings?.(nodeId) ?? []) : [];
@@ -489,6 +511,26 @@ function RunRow(props: {
   const { row, view, edits, onRemove } = props;
   const index = row.index;
 
+  /**
+   * Picking a token writes that run; picking an action row runs it instead.
+   * Neither action writes the run's reference by itself — the import points the
+   * run only once its commit names the token it produced, and the finder writes
+   * its own target.
+   */
+  const chooseToken = (ref: string): void => {
+    if (ref === IMPORT_LOCAL_FONT_ID) {
+      edits.importLocalFont?.((tokenId) =>
+        edits.setRunPreset(index, `typeTokens.${tokenId}`),
+      );
+      return;
+    }
+    if (ref === FONT_FINDER_ID) {
+      edits.openFontFinder?.();
+      return;
+    }
+    edits.setRunPreset(index, ref);
+  };
+
   return (
     // A row group, not a `<section>`: the inspector's section rule sets
     // `display: block` on every section in the panel and would flatten the gap.
@@ -511,8 +553,8 @@ function RunRow(props: {
         label={uiCopy.inspectorFields.runToken}
         data={{ "data-yunari-run-preset": String(index) }}
         value={row.typeToken}
-        options={view.presets}
-        onChange={(ref) => edits.setRunPreset(index, ref)}
+        options={[...view.presets, ...fontActionOptions(edits)]}
+        onChange={chooseToken}
       />
 
       <ControlSwatch

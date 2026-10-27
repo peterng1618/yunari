@@ -387,6 +387,14 @@ export interface RunEdits {
   readonly writeLayout: (patch: TextLayoutPatch) => boolean;
   readonly addRun: () => boolean;
   readonly removeRun: (index: number) => boolean;
+  /**
+   * The two action rows the token list ends with. Neither is a run write: the
+   * finder writes wherever its own target says, and the import hands back the
+   * token it produced so the row can point its own run at it. Absent where the
+   * column has no catalogue behind it, and the row is then not drawn.
+   */
+  readonly openFontFinder?: () => void;
+  readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
 }
 
 /** The text layout keys the run editor writes, whichever are present. */

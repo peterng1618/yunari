@@ -5,10 +5,13 @@ import { uiCopy } from "../ui-copy.js";
 import { Dialog } from "./ui/dialog.js";
 import { type ModalSettle, openModal } from "./ui/modal-host.js";
 
-/** What a commit answered: a refusal keeps the form open with its words. */
+/** What a commit answered: a refusal keeps the form open with its words. A
+ *  preset-creating commit names the token it produced or adopted, which is what
+ *  a caller that asked for the import points its own reference at. */
 export interface FontImportOutcome {
   readonly ok: boolean;
   readonly message: string;
+  readonly tokenId?: string;
 }
 
 export type FontImportCommit = (
@@ -28,6 +31,12 @@ export function FontImportDialog(props: {
   readonly initial: FontMetadata;
   readonly onCommit: FontImportCommit;
   readonly onCancel: FontImportCommit;
+  /**
+   * The token a successful commit produced or adopted. Called only on that
+   * path: a cancelled import declares the file and names no token, and a
+   * refused one produced nothing.
+   */
+  readonly onCommitted?: (tokenId: string) => void;
   readonly settle: ModalSettle<void>;
 }): React.JSX.Element {
   const { filename, initial, onCommit, onCancel, settle } = props;
@@ -47,6 +56,10 @@ export function FontImportDialog(props: {
         setMessage(outcome.message);
         return;
       }
+      // The caller's own reference is pointed at what this committed before the
+      // dialog goes: a commit answer with no token (the Cancel half) says
+      // nothing, so nothing is pointed.
+      if (outcome.tokenId !== undefined) props.onCommitted?.(outcome.tokenId);
       // The dialog is unmounted by this call; nothing may write state after it.
       closed = true;
       settle.close(undefined);
@@ -100,6 +113,7 @@ export async function openFontImportDialog(input: {
   readonly initial: FontMetadata;
   readonly onCommit: FontImportCommit;
   readonly onCancel: FontImportCommit;
+  readonly onCommitted?: (tokenId: string) => void;
 }): Promise<void> {
   await openModal<void>((settle) =>
     createElement(FontImportDialog, { ...input, settle }),

@@ -95,6 +95,7 @@ function open(
   input: {
     readonly onCommit?: () => Promise<FontImportOutcome>;
     readonly onCancel?: () => Promise<FontImportOutcome>;
+    readonly onCommitted?: (tokenId: string) => void;
   } = {},
 ): Promise<unknown> {
   let pending: Promise<unknown> | undefined;
@@ -105,6 +106,9 @@ function open(
         initial={initial}
         onCommit={input.onCommit ?? (async () => ok)}
         onCancel={input.onCancel ?? (async () => ok)}
+        {...(input.onCommitted === undefined
+          ? {}
+          : { onCommitted: input.onCommitted })}
         settle={settle}
       />
     ));
@@ -190,6 +194,44 @@ describe("the font import dialog", () => {
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("names the token a commit produced, and nothing on a cancel or a refusal", async () => {
+    const onCommitted = vi.fn();
+    const committed = open({
+      onCommitted,
+      onCommit: async () => ({
+        ok: true,
+        message: "",
+        tokenId: "caption",
+      }),
+    });
+
+    await press("[data-yunari-font-create]");
+    await committed;
+    expect(onCommitted).toHaveBeenCalledWith("caption");
+
+    // Cancel declares the file and creates no token, so nothing is named.
+    const cancelled = vi.fn();
+    const cancelPending = open({
+      onCommitted: cancelled,
+      onCancel: async () => ok,
+    });
+    await press("[data-yunari-font-cancel]");
+    await cancelPending;
+    expect(cancelled).not.toHaveBeenCalled();
+
+    // A refused commit produced nothing either, and its form stays open.
+    const refused = vi.fn();
+    const refusedPending = open({
+      onCommitted: refused,
+      onCommit: async () => ({ ok: false, message: "Credits are full." }),
+    });
+    await press("[data-yunari-font-create]");
+    // The refusal lands on the microtask queue after the press.
+    await act(async () => {});
+    expect(refused).not.toHaveBeenCalled();
+    void refusedPending;
   });
 
   it("dismisses without committing when the dialog is escaped", async () => {

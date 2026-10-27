@@ -105,6 +105,9 @@ export function mountRunEditor(options: {
   readonly kind?: "text" | "textbox";
   /** The catalogue the picker offers; absent keeps the built-in table. */
   readonly descriptors?: () => readonly SemanticKeyDescriptor[];
+  /** The token list's action ports; absent leaves its action rows off. */
+  readonly openFontFinder?: () => void;
+  readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
 }): RunEditorStage {
   // A popup renders into `document.body`, not the host, so a case that failed
   // before disposing would leave its list open for the next one to pick an
@@ -191,6 +194,12 @@ export function mountRunEditor(options: {
     writeLayout: (patch) => apply((t) => writeTextLayout(t, patch)),
     addRun: () => apply(appendRun),
     removeRun: (index) => apply((t) => dropRun(t, index)),
+    ...(options.openFontFinder === undefined
+      ? {}
+      : { openFontFinder: options.openFontFinder }),
+    ...(options.importLocalFont === undefined
+      ? {}
+      : { importLocalFont: options.importLocalFont }),
   };
 
   render();

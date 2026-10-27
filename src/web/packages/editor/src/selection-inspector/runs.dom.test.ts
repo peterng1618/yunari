@@ -6,7 +6,9 @@ import {
   SEMANTIC_KEYS,
   type SemanticKeyDescriptor,
 } from "@yunari/renderer-core";
+import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { uiCopy } from "../ui-copy.js";
 import {
   blur,
   choose,
@@ -630,20 +632,20 @@ describe("which type preset a run is set in", () => {
     },
   } as unknown as FabricGlobals;
 
-  it("lists each preset under the label the type preset panel lists it by", async () => {
+  it("lists each token under the name the token inspector shows", async () => {
     // Two dropdowns, thirteen presets, one document — and the run editor printed
     // the ids (`24-400`) where every other reference picker in the editor prints
-    // the token's own label (`Inter 400`). An author who read one could not find
-    // the same preset in the other, a field apart.
+    // the token's own name (`Inter 400`). A role token carries its role in that
+    // name, which is why `mono` here reads `[Mono] Fira Code` and sorts first.
     const box = mountRunEditor({
       runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.24-400" }],
       globals,
     });
 
     expect(await optionsOf(box.host, 'data-yunari-run-preset="0"')).toEqual([
+      "[Mono] Fira Code",
       "Inter 400",
       "Inter 600",
-      "Fira Code",
     ]);
     return box.dispose();
   });
@@ -672,6 +674,118 @@ describe("which type preset a run is set in", () => {
     // what the run carries. What an author could not do was read the option it
     // had landed on and match it against the list beside it.
     expect(valueText(box.host, 'data-yunari-run-preset="0"')).toBe("Inter 600");
+    return box.dispose();
+  });
+});
+
+describe("the token list's roles and action rows", () => {
+  const trio = {
+    typeTokens: {
+      mono: { family: "Fira Code" },
+      "24-400": { family: "Inter", weight: 400 },
+      heading: { family: "Manrope", weight: 600 },
+      "20-300": { family: "IBM Plex Sans", weight: 300 },
+      body: { family: "Inter", weight: 400 },
+    },
+  } as unknown as FabricGlobals;
+
+  const onHeading: readonly TextRun[] = [
+    { kind: "literal", text: "Hi", typeToken: "typeTokens.heading" },
+  ];
+
+  it("offers the roles first, then the unroled tokens, then the two actions", async () => {
+    const box = mountRunEditor({
+      runs: onHeading,
+      globals: trio,
+      openFontFinder: () => {},
+      importLocalFont: () => {},
+    });
+
+    expect(await optionsOf(box.host, 'data-yunari-run-preset="0"')).toEqual([
+      "[Heading] Manrope 600",
+      "[Body] Inter 400",
+      "[Mono] Fira Code",
+      "IBM Plex Sans 300",
+      "Inter 400",
+      uiCopy.panels.importLocalFont,
+      uiCopy.panels.fontFinder,
+    ]);
+    return box.dispose();
+  });
+
+  it("rewrites only the run's token, leaving the token records alone", async () => {
+    const before = JSON.stringify(trio);
+    const box = mountRunEditor({ runs: onHeading, globals: trio });
+
+    await choose(box.host, 'data-yunari-run-preset="0"', "IBM Plex Sans 300");
+
+    // The reference is the run's own; the token table it names is not edited.
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.20-300");
+    expect(box.runs()[0]).toMatchObject({ kind: "literal", text: "Hi" });
+    expect(JSON.stringify(trio)).toBe(before);
+    return box.dispose();
+  });
+
+  it("opens the finder once and changes no token", async () => {
+    const openFontFinder = vi.fn();
+    const box = mountRunEditor({
+      runs: onHeading,
+      globals: trio,
+      openFontFinder,
+    });
+
+    await choose(
+      box.host,
+      'data-yunari-run-preset="0"',
+      uiCopy.panels.fontFinder,
+    );
+
+    expect(openFontFinder).toHaveBeenCalledTimes(1);
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.heading");
+    return box.dispose();
+  });
+
+  it("points the run at the token an import reports", async () => {
+    let imported: ((tokenId: string) => void) | undefined;
+    const box = mountRunEditor({
+      runs: onHeading,
+      globals: trio,
+      importLocalFont: (onImported) => {
+        imported = onImported;
+      },
+    });
+
+    await choose(
+      box.host,
+      'data-yunari-run-preset="0"',
+      uiCopy.panels.importLocalFont,
+    );
+    // Choosing the row asks for the import; it does not move the run itself.
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.heading");
+
+    await act(async () => {
+      imported?.("20-300");
+    });
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.20-300");
+    return box.dispose();
+  });
+
+  it("leaves the run alone when the import reports no token", async () => {
+    const box = mountRunEditor({
+      runs: onHeading,
+      globals: trio,
+      // The commit that answers with no token — a cancelled import — calls
+      // nothing, so the run keeps the reference it had.
+      importLocalFont: () => {},
+    });
+
+    await choose(
+      box.host,
+      'data-yunari-run-preset="0"',
+      uiCopy.panels.importLocalFont,
+    );
+
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.heading");
     return box.dispose();
   });
 });

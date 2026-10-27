@@ -478,6 +478,13 @@ export class EditorSession {
       ...(options.onFindFontPicker === undefined
         ? {}
         : { onOpenFontPicker: options.onFindFontPicker }),
+      // The run row's two action entries. The finder is the same shell port the
+      // face field uses; the import opens the same dialog and names its token
+      // back so the run that asked can point itself at it.
+      ...(options.onFindFontPicker === undefined
+        ? {}
+        : { openFontFinder: () => options.onFindFontPicker?.() }),
+      importLocalFont: (onImported) => this.#pickFontFile(onImported),
     });
     this.#selection.setLocale(this.#document.envelope.metadata?.themeLanguage);
     // Selecting the background row is a shell selection with no Fabric object:
@@ -867,7 +874,7 @@ export class EditorSession {
   async #commitFont(
     input: FontCommitInput,
   ): Promise<
-    | { readonly ok: true; readonly message: string }
+    | { readonly ok: true; readonly message: string; readonly tokenId?: string }
     | { readonly ok: false; readonly message: string }
   > {
     const { source, metadata, role, withPreset } = input;
@@ -904,7 +911,7 @@ export class EditorSession {
         "file" in source
           ? await this.#assets.importFont(source.file, metadata)
           : this.#assets.amendFont(source.assetId, metadata);
-      this.#document.addTypeTokenFromLocalFont(asset, role);
+      const tokenId = this.#document.addTypeTokenFromLocalFont(asset, role);
       this.#document.addCredit({ ...credit, assetId: asset.id });
       this.#declarationsChanged();
       // Only a fresh import is an import; amending a declared face writes the
@@ -912,6 +919,9 @@ export class EditorSession {
       return {
         ok: true,
         message: "file" in source ? uiCopy.panels.assetDeclaredFont : "",
+        // The token this commit created or adopted, so a caller that asked for
+        // the import can point its own reference at it.
+        tokenId,
       };
     } catch (error) {
       return { ok: false, message: messageOf(error) };
@@ -919,12 +929,13 @@ export class EditorSession {
   }
 
   /**
-   * The token inspector's import row: the OS picker, then the metadata dialog.
+   * The import row: the OS picker, then the metadata dialog.
    *
    * A dismissed picker declares nothing, and the input is removed either way so
-   * a second press starts from an empty pick.
+   * a second press starts from an empty pick. `onImported` is the run row's:
+   * the dialog names the token its commit produced, and that caller acts on it.
    */
-  #pickFontFile(): void {
+  #pickFontFile(onImported?: (tokenId: string) => void): void {
     const input = document.createElement("input");
     input.type = "file";
     input.hidden = true;
@@ -934,7 +945,7 @@ export class EditorSession {
     input.addEventListener("change", () => {
       const file = input.files?.[0];
       dispose();
-      if (file !== undefined) this.#openFontImport(file);
+      if (file !== undefined) this.#openFontImport(file, onImported);
     });
     // Fired by a browser that reports a cancelled picker; without it the input
     // would stay on the body until the next pick.
@@ -947,7 +958,7 @@ export class EditorSession {
    * The dialog answers with the same two commits the Assets pane makes, minus
    * the role: this import may never rewrite a role token.
    */
-  #openFontImport(file: File): void {
+  #openFontImport(file: File, onImported?: (tokenId: string) => void): void {
     void openFontImportDialog({
       filename: file.name,
       initial: fontMetadataFromFilename(file.name),
@@ -965,6 +976,7 @@ export class EditorSession {
           role: null,
           withPreset: false,
         }),
+      ...(onImported === undefined ? {} : { onCommitted: onImported }),
     });
   }
 
