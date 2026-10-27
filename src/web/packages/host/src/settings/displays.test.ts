@@ -14,6 +14,8 @@ import {
   hashToken,
   normalizeLabel,
   normalizeMonitor,
+  normalizePanel,
+  PanelAlreadyHeldError,
 } from "./displays.js";
 import { createThemeSettingsStore } from "./theme-settings.js";
 
@@ -308,6 +310,13 @@ describe("createDisplayStore", () => {
       store.createLocal("Left screen", { deviceName: "\\\\.\\DISPLAY2" }),
     ).rejects.toThrow(FILE);
     await expect(
+      store.createPanel("Strip", {
+        vendorId: 0x1cbe,
+        productId: 0xa092,
+        model: "lianli-9-2",
+      }),
+    ).rejects.toThrow(FILE);
+    await expect(
       store.update("kitchen-tablet", { label: "Kitchen" }),
     ).rejects.toThrow(FILE);
     await expect(store.rotate("kitchen-tablet", "tok")).rejects.toThrow(FILE);
@@ -475,6 +484,166 @@ describe("createDisplayStore", () => {
     await expect(
       store.createLocal("this pc", { deviceName: "\\\\.\\DISPLAY2" }),
     ).rejects.toThrow(/reserved/);
+  });
+
+  // A USB panel is a display with no credential and a hardware identity, and
+  // that identity is what the runner re-finds it by.
+  it("mints a panel display that carries its hardware and no token", async () => {
+    const panel = await store.createPanel("Strip", {
+      vendorId: 0x1cbe,
+      productId: 0xa092,
+      model: "lianli-9-2",
+    });
+
+    expect(panel).toMatchObject({
+      id: "strip",
+      kind: "panel",
+      panel: { vendorId: 0x1cbe, productId: 0xa092, model: "lianli-9-2" },
+    });
+    expect(panel.tokenHash).toBeUndefined();
+    expect(await store.authenticate("")).toBeUndefined();
+    // A credentialless display has no token to rotate, panel or local.
+    expect(await store.rotate(panel.id, "new")).toBeUndefined();
+  });
+
+  it("refuses a second panel display for a device one already holds", async () => {
+    await store.createPanel("Strip", {
+      vendorId: 0x1cbe,
+      productId: 0xa092,
+      model: "lianli-9-2",
+      serial: "PANEL0001",
+    });
+
+    // The serial is the identity when both ends have one, so the same panel in
+    // another port is refused — and a second panel with its own serial is a
+    // second device, not a collision.
+    await expect(
+      store.createPanel("Strip again", {
+        vendorId: 0x1cbe,
+        productId: 0xa092,
+        model: "lianli-9-2",
+        serial: "PANEL0001",
+      }),
+    ).rejects.toBeInstanceOf(PanelAlreadyHeldError);
+    expect(await store.list()).toHaveLength(1);
+    expect(
+      await store.createPanel("Strip two", {
+        vendorId: 0x1cbe,
+        productId: 0xa092,
+        model: "lianli-9-2",
+        serial: "PANEL0002",
+      }),
+    ).toBeDefined();
+
+    // A different product is a different panel, and a local record holds no USB
+    // device, so neither is refused.
+    expect(
+      await store.createPanel("Small strip", {
+        vendorId: 0x1cbe,
+        productId: 0xa088,
+        model: "lianli-8-8",
+      }),
+    ).toBeDefined();
+    expect(
+      await store.createLocal("Left screen", { deviceName: "\\\\.\\DISPLAY2" }),
+    ).toBeDefined();
+    expect(await store.list()).toHaveLength(4);
+  });
+
+  it("refuses to mint a panel display for a reserved id", async () => {
+    await expect(
+      store.createPanel("default", {
+        vendorId: 0x1cbe,
+        productId: 0xa092,
+        model: "lianli-9-2",
+      }),
+    ).rejects.toThrow(/reserved/);
+  });
+
+  it("drops a panel record with no usable hardware, and a non-panel carrying some", async () => {
+    // There is no such panel: a record with no hardware is one the manager
+    // cannot open and cannot explain, and hardware on a paired or local record
+    // is a credentialless display pretending to own a USB device.
+    await writeFile(
+      path.join(directory, FILE),
+      JSON.stringify({
+        displays: [
+          {
+            id: "bare",
+            label: "Bare",
+            kind: "panel",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            lastSeenAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "zeroed",
+            label: "Zeroed",
+            kind: "panel",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            lastSeenAt: "2026-01-01T00:00:00.000Z",
+            panel: { vendorId: 0, productId: 0xa092, model: "lianli-9-2" },
+          },
+          {
+            id: "smuggled",
+            label: "Smuggled",
+            kind: "paired",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            lastSeenAt: "2026-01-01T00:00:00.000Z",
+            tokenHash: hashToken("tok"),
+            panel: { vendorId: 0x1cbe, productId: 0xa092, model: "lianli-9-2" },
+          },
+          {
+            id: "good",
+            label: "Good",
+            kind: "panel",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            lastSeenAt: "2026-01-01T00:00:00.000Z",
+            panel: {
+              vendorId: 0x1cbe,
+              productId: 0xa092,
+              model: "lianli-9-2",
+              serial: "  PANEL0001 ",
+            },
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    expect((await store.list()).map((display) => display.id)).toEqual(["good"]);
+    expect((await store.find("good"))?.panel).toEqual({
+      vendorId: 0x1cbe,
+      productId: 0xa092,
+      model: "lianli-9-2",
+      serial: "PANEL0001",
+    });
+    expect(await store.authenticate("tok")).toBeUndefined();
+  });
+
+  it("reads a panel's identity the way the driver reports it", () => {
+    expect(
+      normalizePanel({ vendorId: 0x1cbe, productId: 0xa092, model: "m" }),
+    ).toStrictEqual({ vendorId: 0x1cbe, productId: 0xa092, model: "m" });
+    // Absence is absence: a blank serial is no serial, and 0 is no USB id.
+    expect(
+      normalizePanel({
+        vendorId: 0x1cbe,
+        productId: 0xa092,
+        model: "m",
+        serial: "  ",
+      }),
+    ).toStrictEqual({ vendorId: 0x1cbe, productId: 0xa092, model: "m" });
+
+    for (const bad of [
+      { vendorId: 0, productId: 0xa092, model: "m" },
+      { vendorId: 0x1cbe, productId: 0x1_0000, model: "m" },
+      { vendorId: 0x1cbe, productId: 0xa092 + 0.5, model: "m" },
+      { vendorId: 0x1cbe, productId: 0xa092, model: "" },
+      { vendorId: 0x1cbe, productId: 0xa092 },
+      { vendorId: "7358", productId: 0xa092, model: "m" },
+    ]) {
+      expect(normalizePanel(bad), JSON.stringify(bad)).toBeUndefined();
+    }
   });
 
   it("loads a record written before the rate setting existed", async () => {

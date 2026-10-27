@@ -1,39 +1,36 @@
 # Yunari status
 
-Updated: 2026-10-27
-Branch: `peterng1618/fix-font-trio` (worktree `fix-font-trio`)
+Updated: 2026-10-28
+Branch: `peterng1618/lian-li-9.2-monitor-support` (worktree `lian-li-9.2-monitor-support`)
 
 ## Current objective
 
-Two plans are complete — the type-token model and the display's own motion — and local `main` at `1d0b9b9` carries both; next is the backlog drain.
+USB panel support: a Lian Li 9.2" LCD (`1CBE:A092`) driven by the host from the product's own player page, behind a `PanelDevice` port so another panel is a table row (decision `0130`).
 
 ## Active work
 
-- **No plan is running:** the type-token plan's six phases and the display-animation plan's seven tasks are done; `main` (at `b3a2b98`) is merged in here, and local `main` now points at this branch's tip.
-- **The type-token model is in:** a token names a face whereas size, line height and tracking belong to each run (`0128`).
-- **Display motion is in:** one fixed 30 fps `startSceneRefresh` loop, a transition pump in `YunariChart`, skip-unchanged bound text, and no chart-rate setting anywhere (`0129`).
-- **The type-token final review is discharged:** its one blocking defect is fixed and re-reviewed FIXED (`a84f7d90`), and its should-fix is filed as `vg-772`.
-- **Preview lens and display presentation landed:** scene-anchored box, letterbox, guide frame, circle lens, ratio catalogue, per-record shape and rotation.
-- **The live line is placed by its data:** axis at its newest reading, no delay or hold, missing readings skipped, sample frames queued at the transport (0124).
+- **Panel support lands in this worktree, not on `main`:** the protocol, `usb` transport, devtools rasteriser, frame runner and panel manager live in `host/src/panels/`, plus a `"panel"` display kind.
+- **Proven on the real device:** the host's own runtime opened `1CBE:A092` and logged `sent a 464x1920 frame`, and a second claimant is refused while it holds the interface.
+- **Geometry settled at 464×1920 portrait**, not the product page's 1920×462: two hardware-tested drivers agree, and rendered geometry measures to the authored pixel.
+- **The renderer is the real player**, not a second scene tree: a hidden Chrome screenshots the player page over the devtools protocol with no added dependency.
+- **Only the glass is untested:** the frame was sent, never seen, because L-Connect was stopped for the probe and the panel is not a desktop display.
 
 ## Last completed change
 
-- **`main` (b3a2b98) is merged into this branch:** its 13 commits bring the display animation, and this file was the only conflict.
-- **A new text now paints its role default before the first edit:** `addText` paints through the session's authoring-view port, so the canvas shows 16 (body at 1080) rather than Fabric's 40 for the whole first edit (`a84f7d90`).
-- **Red-proved 40 → 16:** the paint is a no-op for objects with no authored runs and for a manager with no port installed.
-- **The final review's should-fix is filed, not fixed:** a whole-family import binds one face, so save-cleanup offers the other declared weights and subsets for removal (`vg-772`).
-- **Proof:** `npm run gate` exit 0 on the merged tree — 447 files / 6,885 passed + 1 skipped, browser 13 files / 130 passed.
+- **Panels are a third display kind driven behind a device port:** `PanelDevice`, the TUR USB protocol, the `usb` transport, a devtools rasteriser, a runner that skips identical frames, and a manager owning one interval per panel.
+- **The record owns the hardware identity:** `createPanel` refuses a second record for the same serial or USB ids, and the reader drops a panel record with no usable hardware and hardware smuggled onto another kind.
+- **Protocol measured, not assumed:** `getVersion` answered `lianli92_0001_2026041401`, and DES-CBC runs through `node-forge` at 504 bytes because `node:crypto` refuses it.
+- **Recording:** decision `0130`, and `usb` 3.2.1 (MIT) in the notices and dependency docs.
+- **Proof:** `npm run gate` exit 0 — 64 panel and display tests pass, and the host suite is 129 files / 2191 passed.
 
 ## Next
 
-1. Resume the backlog-drain plan at Phase 0, a reproduction pass over the register.
-2. Verify the retargeted `editor.spec.ts` cases when preview port 4174 frees.
-3. Owner test of a gauge mid-transition on a real display.
+1. Look at the panel and confirm the picture appears, and in which orientation.
+2. Add the Host settings surface for choosing an attached panel.
+3. Resume the backlog-drain plan at Phase 0.
 
 ## Blockers / unverified
 
-- **Browser arm unverified for both plans:** port 4174 is held by `background-media-becomes-a-layer`'s preview; nothing was killed and no port was moved.
-- **The transition pump is unit-proven only:** no capture shows a gauge mid-transition on a real display.
-- **The import flow has never run in a real browser on the type-token branch:** its chooser, dialog and Create steps match the dom test only.
-- **Open rows:** `vg-770`, `vg-762`, `vg-771`, `vg-772`; starter role weights stay read-only while `Segoe UI` and `Consolas` are undeclared.
-- **`vg-756` and the store-worker token handoff:** run specs via `node node_modules/@playwright/test/cli.js`, and closing `return-page.ts` needs a nonce or pinned-port decision.
+- **The frame on the glass is unverified:** frames were sent and acked, but no eye confirmed the picture, and orientation is the one thing a driver table cannot prove.
+- **Panel cost is unmeasured:** one frame is ~10 KB and one capture ~45 ms, but no sustained run was profiled.
+- **L-Connect holds the panel:** it must be closed, or its services stopped, before the host can claim the device.

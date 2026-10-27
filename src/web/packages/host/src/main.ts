@@ -11,6 +11,10 @@ import {
   openBrowser,
   waitUntilReachable,
 } from "./cli/net.js";
+import {
+  createPanelManager,
+  type PanelManager,
+} from "./panels/panel-manager.js";
 import { ClockSensorProvider } from "./providers/clock.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { presentMonAdapter } from "./providers/frame/presentmon.js";
@@ -334,6 +338,11 @@ export async function run(argv: readonly string[]): Promise<number> {
   // `hosting` is one.
   let launcher: Launcher | undefined;
 
+  // The USB panels this host drives. The page a panel renders is this host's
+  // player at the port the socket actually took, so this is a getter for the
+  // same reason `launcher` is.
+  let panels: PanelManager | undefined;
+
   // The tray, once it exists. The stop path closes it first, so a click on Exit
   // does not leave an icon behind; undefined until the server is reachable.
   let tray: TrayController | undefined;
@@ -357,6 +366,10 @@ export async function run(argv: readonly string[]): Promise<number> {
     // The host's own windows on its local monitors (§ "The host's own monitors").
     get launcher() {
       return launcher;
+    },
+    // The USB panels, for the same reason: a panel's page names the port.
+    get panels() {
+      return panels;
     },
     // One entry at sign-in covers every local monitor, including one added
     // later. Registering writes the hidden entry, so this only ever asks; a
@@ -477,6 +490,21 @@ export async function run(argv: readonly string[]): Promise<number> {
   // which is the whole of the restart behaviour.
   launcher = createDisplayLauncher({ displays, port: bound });
   await launcher.reconcile();
+
+  // After the server answers for the same reason, and per panel: the page a
+  // panel renders is this host's own player, so there is nothing to show until
+  // the socket is listening. A panel that cannot be opened — L-Connect holding
+  // it is the usual one — is reported and left out rather than taking the host
+  // down with it.
+  panels = createPanelManager({
+    displays,
+    pageFor: (displayId) =>
+      `http://127.0.0.1:${bound}/?display=${encodeURIComponent(displayId)}`,
+    onError: (displayId, message) => {
+      console.error(`Panel ${displayId}: ${message}`);
+    },
+  });
+  await panels.reconcile();
 
   const displayHost =
     initialHost === "0.0.0.0" || initialHost === "::"
@@ -669,6 +697,9 @@ export async function run(argv: readonly string[]): Promise<number> {
         // The windows close with the host: one left behind is one the next run
         // cannot see, and it would put a second window on that monitor.
         launcher?.stop();
+        // And the panels: a browser left running has nothing to capture, and a
+        // claimed interface outlives the host that claimed it.
+        void panels?.stopAll();
       } finally {
         // A throwing stop must not leave the server listening with no tray.
         void hosted.close().then(resolve, resolve);

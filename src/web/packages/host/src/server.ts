@@ -25,6 +25,8 @@ import { handleSubmitRoute } from "./catalogue/submit.js";
 import { DEFAULT_THEMES_DIR } from "./cli/args.js";
 import type { HostBinding } from "./cli/hosting.js";
 import type { ListenableServer } from "./cli/net.js";
+import type { PanelManager } from "./panels/panel-manager.js";
+import { attachedPanels, panelModelFor } from "./panels/tur-usb-panel.js";
 import type {
   CustomSourceStatus,
   SourceTestResult,
@@ -99,7 +101,9 @@ import {
   MonitorAlreadyHeldError,
   mintedDisplayId,
   normalizeMonitor,
+  normalizePanel,
   normalizePatch,
+  PanelAlreadyHeldError,
 } from "./settings/displays.js";
 import type { FontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
@@ -322,6 +326,12 @@ export interface HostServerOptions {
    *  actually took, so `main` hands over a getter read per request — the same
    *  reason `hosting` is one. */
   readonly launcher?: Launcher | undefined;
+  /** The USB panels this host drives. Omitted when this host drives none: the
+   *  `panels` routes are then 404, and a panel record is written without a
+   *  runner rather than with one nothing owns. **Included as `undefined`
+   *  explicitly** for the reason `launcher` is: the panel's page is the port
+   *  its own socket took, so `main` hands over a manager built per request. */
+  readonly panels?: PanelManager | undefined;
   /** Registers this host to start at sign-in, so every local monitor comes back
    *  after a reboot. Omitted when this host cannot register itself: the route
    *  then says so rather than reporting a registration that did not happen. */
@@ -653,6 +663,11 @@ function peerOf(record: DisplayRecord): HostingPeer {
   return peer;
 }
 
+/** A USB id as the form every device tool prints it, for a refusal's message. */
+function usbId(value: number): string {
+  return value.toString(16).padStart(4, "0");
+}
+
 /**
  * The display a request is, or `undefined` when it is not one — the single place
  * a request becomes a display, so the credential is checked once.
@@ -726,7 +741,13 @@ export async function displayKeyFor(
     const named = url.searchParams.get("display");
     const record = named === null ? undefined : await displays?.find(named);
 
-    if (record !== undefined && record.kind === "local") {
+    // A credentialless display: the host's own monitor, or a panel the host
+    // drives. Both are reached only from this PC, which is what makes naming one
+    // an admin act rather than a client claiming an identity.
+    if (
+      record !== undefined &&
+      (record.kind === "local" || record.kind === "panel")
+    ) {
       // A refused write is dropped, as it is in `displayFor`: bookkeeping must
       // not fail the request it rode in on.
       await displays
@@ -2161,10 +2182,117 @@ export function createHostServer(options: HostServerOptions): HostServer {
         await activeTheme?.clear(id);
 
         // The window goes with the record, and only a window this host opened
-        // is the host's to close.
+        // is the host's to close. A panel is the same act one layer down: its
+        // runner is stopped, because a record nothing points at is a panel
+        // still showing a theme nobody assigned it.
         options.launcher?.close(id);
+        options.panels?.stop(id);
 
         sendJson(response, 200, { ok: true });
+        return;
+      }
+
+      // The panels attached right now, for the owner to pick from. A panel is
+      // found rather than admitted, so this is the same shape as `monitors`:
+      // what the hardware says is here, and no record implied by it.
+      if (url.pathname === "/api/displays/panels" && request.method === "GET") {
+        sendJson(response, 200, { panels: await attachedPanels() });
+        return;
+      }
+      // A USB panel: driven by this host rather than served a page, so it is
+      // specified like a local monitor and has no credential either.
+      if (
+        url.pathname === "/api/displays/panels" &&
+        request.method === "POST"
+      ) {
+        let body: {
+          readonly label: string;
+          readonly panel: unknown;
+          readonly shape?: unknown;
+          readonly rotation?: unknown;
+        };
+
+        try {
+          const parsed: unknown = JSON.parse(await readBody(request));
+          if (
+            typeof parsed !== "object" ||
+            parsed === null ||
+            Array.isArray(parsed)
+          ) {
+            throw new Error("That is not a display setting.");
+          }
+          body = parsed as typeof body;
+        } catch (error) {
+          sendText(
+            response,
+            400,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+
+        // The record's own rule, from the store that has to read it back.
+        const panel = normalizePanel(body.panel);
+
+        if (panel === undefined) {
+          sendText(
+            response,
+            400,
+            "A panel display needs the device it drives.",
+          );
+          return;
+        }
+
+        // A model this host has no driver for is the caller's to fix, and it is
+        // refused *before* the write: a record nothing can open would be a row
+        // in the list that never shows anything and cannot say why.
+        const model = panelModelFor(panel.vendorId, panel.productId);
+
+        if (model === undefined) {
+          sendText(
+            response,
+            400,
+            `No driver on this host claims ${usbId(panel.vendorId)}:${usbId(panel.productId)}.`,
+          );
+          return;
+        }
+
+        let presentation: DisplayPresentation;
+
+        try {
+          mintedDisplayId(body.label);
+          presentation = normalizePresentation(body.shape, body.rotation);
+        } catch (error) {
+          sendText(
+            response,
+            400,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+
+        let display: DisplayRecord;
+
+        try {
+          display = await displays.createPanel(body.label, panel, presentation);
+        } catch (error) {
+          if (error instanceof PanelAlreadyHeldError) {
+            sendText(response, 409, error.message);
+            return;
+          }
+
+          console.error(error);
+          sendText(response, 500, "The host could not add that display.");
+          return;
+        }
+
+        // The panel is driven now rather than on the next reconcile: a display
+        // the owner just added is the one case a background pass cannot speak
+        // for, because its first frame is the whole difference between a
+        // configured panel and a black screen.
+        await options.panels?.start(display.id);
+
+        sendJson(response, 201, { display: peerOf(display) });
         return;
       }
 
@@ -2175,11 +2303,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
           ? "GET"
           : url.pathname === "/api/displays/autostart"
             ? "POST"
-            : url.pathname === "/api/displays"
-              ? "POST"
-              : id === undefined
-                ? undefined
-                : "PATCH and DELETE";
+            : url.pathname === "/api/displays/panels"
+              ? "GET and POST"
+              : url.pathname === "/api/displays"
+                ? "POST"
+                : id === undefined
+                  ? undefined
+                  : "PATCH and DELETE";
 
       if (supported !== undefined) {
         sendText(response, 405, `This path supports ${supported}.`);

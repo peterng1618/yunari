@@ -30,7 +30,7 @@ export const LOCAL_DISPLAY_ID = "this-pc";
 /** The display an unpaired client is served as. Never minted. */
 export const DEFAULT_DISPLAY = "default";
 
-export type DisplayKind = "paired" | "local";
+export type DisplayKind = "paired" | "local" | "panel";
 
 /**
  * A local display already holds the monitor this record would claim.
@@ -41,6 +41,15 @@ export type DisplayKind = "paired" | "local";
  * apart here rather than by matching on words.
  */
 export class MonitorAlreadyHeldError extends Error {}
+
+/**
+ * A panel display already holds the hardware this record would claim.
+ *
+ * A type for the same reason as `MonitorAlreadyHeldError`: two records for one
+ * panel are two runners on one interface, which is a conflict with what the
+ * host holds (409) rather than a body it would not read (400).
+ */
+export class PanelAlreadyHeldError extends Error {}
 
 /**
  * What identifies the physical screen behind a local display.
@@ -54,6 +63,24 @@ export interface MonitorHint {
   readonly deviceName: string;
 }
 
+/**
+ * What identifies a physical USB panel, for a record and for re-finding it
+ * after a reboot.
+ *
+ * A bus address moves when a cable does; the IDs and the serial do not. The
+ * model is carried rather than derived, because a record is read on a machine
+ * whose table may have gained or lost one, and a record that could not say
+ * which panel it is would be a wall screen nobody could ask about.
+ */
+export interface PanelHardware {
+  readonly vendorId: number;
+  readonly productId: number;
+  /** The panel model's own id from the host's table, e.g. `lianli-9-2`. */
+  readonly model: string;
+  /** Empty when the firmware reports none — the IDs are then all there is. */
+  readonly serial?: string;
+}
+
 export interface DisplayRecord {
   readonly id: string;
   readonly label: string;
@@ -63,6 +90,8 @@ export interface DisplayRecord {
   /** Absent for a local display: it is this machine, so it has nothing to prove. */
   readonly tokenHash?: string;
   readonly monitor?: MonitorHint;
+  /** A USB panel's hardware identity. Absent for every other kind. */
+  readonly panel?: PanelHardware;
   /** The glass: a rectangular panel or a round one. Never absent in a record. */
   readonly shape: DisplayShape;
   /** Whole degrees clockwise; omitted when upright, which every reader answers as 0. */
@@ -86,6 +115,11 @@ export interface DisplayStore {
   createLocal(
     label: string,
     monitor: MonitorHint,
+    presentation?: DisplayPresentation,
+  ): Promise<DisplayRecord>;
+  createPanel(
+    label: string,
+    panel: PanelHardware,
     presentation?: DisplayPresentation,
   ): Promise<DisplayRecord>;
   find(id: string): Promise<DisplayRecord | undefined>;
@@ -245,6 +279,64 @@ function sameHint(first: MonitorHint, second: MonitorHint): boolean {
 }
 
 /**
+ * A panel's hardware identity, or nothing when any half is unusable.
+ *
+ * Refused rather than repaired: an id of zero, a model name nothing knows and a
+ * fractional or out-of-range id are all values where absence was meant, and a
+ * record carrying one would be a panel the manager cannot open and cannot
+ * explain (`vg-616`'s class).
+ */
+export function normalizePanel(input: unknown): PanelHardware | undefined {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return undefined;
+  }
+
+  const raw = input as Record<string, unknown>;
+  const vendorId = raw["vendorId"];
+  const productId = raw["productId"];
+  const model = raw["model"];
+
+  if (!isUsbId(vendorId) || !isUsbId(productId)) return undefined;
+  if (typeof model !== "string" || model.length === 0) return undefined;
+
+  const rawSerial = raw["serial"];
+  const serial = reportedSerial(
+    typeof rawSerial === "string" ? rawSerial : undefined,
+  );
+
+  return {
+    vendorId,
+    productId,
+    model,
+    ...(serial === undefined ? {} : { serial }),
+  };
+}
+
+/** A USB id is a whole number in 16 bits, and 0 is no id at all. */
+function isUsbId(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= 0xffff
+  );
+}
+
+/** Whether two hardware identities name the same panel, by the monitor rule:
+ *  the serial is the identity when both ends have one — a panel moved to another
+ *  port keeps its serial — and the IDs are all either end has otherwise. */
+function samePanel(first: PanelHardware, second: PanelHardware): boolean {
+  const serial = reportedSerial(first.serial);
+  const other = reportedSerial(second.serial);
+
+  if (serial !== undefined && other !== undefined) return serial === other;
+
+  return (
+    first.vendorId === second.vendorId && first.productId === second.productId
+  );
+}
+
+/**
  * Keeps only records something else will accept. A hand-edited file must not be
  * able to introduce a display nothing else accepts, so an unusable id, a label
  * that is not a name, an unknown kind or a duplicate id drops the record.
@@ -265,13 +357,15 @@ function normalizeRecord(input: unknown): DisplayRecord | undefined {
   if (label.length < 1 || label.length > MAX_LABEL_LENGTH) return undefined;
 
   const kind = raw["kind"];
-  if (kind !== "paired" && kind !== "local") return undefined;
+  if (kind !== "paired" && kind !== "local" && kind !== "panel")
+    return undefined;
 
   const tokenHash = raw["tokenHash"];
   // A paired record with no hash is a display nothing can authenticate as; a
-  // local record carrying one is a credentialless display pretending otherwise.
+  // local or panel record carrying one is a credentialless display pretending
+  // otherwise.
   if (kind === "paired" && typeof tokenHash !== "string") return undefined;
-  if (kind === "local" && tokenHash !== undefined) return undefined;
+  if (kind !== "paired" && tokenHash !== undefined) return undefined;
 
   const createdAt = raw["createdAt"];
   const lastSeenAt = raw["lastSeenAt"];
@@ -280,6 +374,13 @@ function normalizeRecord(input: unknown): DisplayRecord | undefined {
   }
 
   const monitor = normalizeMonitor(raw["monitor"]);
+  // A panel's hardware identity is what finds it again, so a panel record with
+  // no usable one is a record nothing can drive and is dropped rather than
+  // kept as a screen that never appears.
+  const panel = normalizePanel(raw["panel"]);
+  if (kind === "panel" && panel === undefined) return undefined;
+  if (kind !== "panel" && panel !== undefined) return undefined;
+
   // An unreadable shape is a rectangular screen rather than a dropped record:
   // the display then plays upright. A rotation the shape cannot hold is
   // dropped with it.
@@ -296,6 +397,7 @@ function normalizeRecord(input: unknown): DisplayRecord | undefined {
     ...(rotation === undefined ? {} : { rotation }),
     ...(typeof tokenHash === "string" ? { tokenHash } : {}),
     ...(monitor !== undefined ? { monitor } : {}),
+    ...(panel !== undefined ? { panel } : {}),
   };
 }
 
@@ -488,6 +590,7 @@ export function createDisplayStore(
       readonly kind: DisplayKind;
       readonly tokenHash?: string;
       readonly monitor?: MonitorHint;
+      readonly panel?: PanelHardware;
     },
     presentation: DisplayPresentation,
   ): Promise<DisplayRecord> => {
@@ -564,6 +667,39 @@ export function createDisplayStore(
         return add(
           label,
           { kind: "local", monitor },
+          normalizePresentation(presentation?.shape, presentation?.rotation),
+        );
+      });
+    },
+
+    /**
+     * A USB panel, refused when one already holds that piece of hardware.
+     *
+     * The same reasoning as `createLocal`, and the same failure: two records for
+     * one panel are two runners claiming one interface, so one loses every frame
+     * and neither explains why. The serial is the identity when the firmware
+     * reports one, because a panel plugged into a different port is the same
+     * panel; the IDs are all there is otherwise.
+     */
+    createPanel(label, panel, presentation): Promise<DisplayRecord> {
+      return writeExclusively(async () => {
+        const displays = await readOrThrow();
+        const held = displays.some(
+          (record) =>
+            record.kind === "panel" &&
+            record.panel !== undefined &&
+            samePanel(record.panel, panel),
+        );
+
+        if (held) {
+          throw new PanelAlreadyHeldError(
+            "A panel display already holds that device.",
+          );
+        }
+
+        return add(
+          label,
+          { kind: "panel", panel },
           normalizePresentation(presentation?.shape, presentation?.rotation),
         );
       });
