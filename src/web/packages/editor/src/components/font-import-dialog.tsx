@@ -39,15 +39,26 @@ export function FontImportDialog(props: {
     commit: FontImportCommit,
   ): Promise<void> => {
     setBusy(true);
-    const outcome = await commit(metadata);
-    if (!outcome.ok) {
-      // The form stays open, so the values it refuses can be repaired.
-      setMessage(outcome.message);
-      setBusy(false);
-      return;
+    let closed = false;
+    try {
+      const outcome = await commit(metadata);
+      if (!outcome.ok) {
+        // The form stays open, so the values it refuses can be repaired.
+        setMessage(outcome.message);
+        return;
+      }
+      // The dialog is unmounted by this call; nothing may write state after it.
+      closed = true;
+      settle.close(undefined);
+    } catch (error) {
+      // A commit that rejects is a refusal too: the form stays open and says
+      // why, rather than sitting busy over an answer that never arrived.
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      // A rejecting commit must not leave the form busy forever; a closed one
+      // must not be written to at all.
+      if (!closed) setBusy(false);
     }
-    // The dialog is unmounted by this call; nothing may write state after it.
-    settle.close(undefined);
   };
 
   return (

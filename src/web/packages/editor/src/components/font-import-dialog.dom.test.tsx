@@ -163,6 +163,24 @@ describe("the font import dialog", () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
+  it("re-enables the form with the reason when a commit rejects", async () => {
+    const onCommit = vi.fn(async () => {
+      throw new Error("The host refused the file.");
+    });
+    void open({ onCommit });
+
+    await press("[data-yunari-font-create]");
+    // The rejection arrives on the microtask queue after the press.
+    await act(async () => {});
+
+    expect(opened().querySelector('[role="alert"]')?.textContent).toBe(
+      "The host refused the file.",
+    );
+    // Busy is released, so the author can try again rather than facing a
+    // disabled form over an answer that never arrived.
+    expect(button("[data-yunari-font-create]").disabled).toBe(false);
+  });
+
   it("cancels through the form's own Cancel", async () => {
     const onCancel = vi.fn(async () => ok);
     const pending = open({ onCancel });

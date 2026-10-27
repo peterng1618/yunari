@@ -356,13 +356,14 @@ function familyOptions(
   family: string,
   actions: TokenInspectorActions,
 ): readonly ControlOption[] {
-  const declared = (actions.familiesOf?.() ?? []).filter(
-    (candidate) =>
-      candidate !== IMPORT_LOCAL_FONT_ID && candidate !== FONT_FINDER_ID,
-  );
-  const wanted = family.trim().toLowerCase();
+  const declared = (actions.familiesOf?.() ?? []).filter((candidate) => {
+    const name = candidate.trim();
+    return name !== IMPORT_LOCAL_FONT_ID && name !== FONT_FINDER_ID;
+  });
+  const trimmed = family.trim();
+  const wanted = trimmed.toLowerCase();
   const isActionId =
-    family === IMPORT_LOCAL_FONT_ID || family === FONT_FINDER_ID;
+    trimmed === IMPORT_LOCAL_FONT_ID || trimmed === FONT_FINDER_ID;
   const held = declared.some(
     (candidate) => candidate.trim().toLowerCase() === wanted,
   );

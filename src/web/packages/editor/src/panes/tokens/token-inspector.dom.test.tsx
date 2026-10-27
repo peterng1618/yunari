@@ -437,6 +437,36 @@ describe("token inspector", () => {
     panel.destroy();
   });
 
+  it("appends no reading when the token's own family is a sentinel id", async () => {
+    // A token authored with an action's id must not also be offered as a
+    // family: that would put two options with the same id in the list.
+    const importLocalFont = vi.fn();
+    const write: TokenInspectorActions = {
+      ...actions(),
+      familiesOf: () => ["Inter"],
+      importLocalFont,
+    };
+    const panel = createTokenInspectorPanel(document.body, write);
+    const presets: TypeTokens = {
+      caption: { family: "@yunari:import-local-font" },
+    };
+    panel.render({ kind: "preset", id: "caption" }, presets, {
+      typeTokens: presets,
+    });
+
+    await click(
+      panel.root.querySelector("[data-yunari-token-family]") as HTMLElement,
+    );
+
+    expect(optionNames()).toEqual(["Inter", uiCopy.panels.importLocalFont]);
+    expect(
+      document.querySelectorAll(
+        '[role="option"][data-yunari-option="@yunari:import-local-font"]',
+      ),
+    ).toHaveLength(1);
+    panel.destroy();
+  });
+
   it("appends the current family only when the package does not declare it, ignoring case", async () => {
     // The producer deduplicates families case-insensitively, so `inter` and
     // `Inter` are one family: appending the reading here would offer the same
