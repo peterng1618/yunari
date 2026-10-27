@@ -214,8 +214,13 @@ test.describe("the settings panels name every control", () => {
     // The weight is drawn as a reading in this scenario, not skipped: the fresh
     // theme declares no faces for the minted token's family, so the row prints
     // the seeded weight rather than a select (the comment on PRESET_CONTROLS).
-    // A silent `count === 0` skip would let the row vanish unmeasured.
-    await expect(page.locator("[data-yunari-token-weight]")).toHaveText("300");
+    // A silent `count === 0` skip would let the row vanish unmeasured. The
+    // element is named a span because that is what makes it a reading: a select
+    // would put the same hook on a button's trigger, where this fails and a bare
+    // `toHaveText` on the hook would still pass.
+    await expect(page.locator("span[data-yunari-token-weight]")).toHaveText(
+      "300",
+    );
     await openPane(page, "Document");
     await audit(DOCUMENT_CONTROLS);
     // The background's controls are the selection inspector's, which renders

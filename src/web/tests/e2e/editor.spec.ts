@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import {
   expect,
   type Locator,
@@ -7,10 +8,16 @@ import {
 } from "@playwright/test";
 import { type FabricThemeEnvelope, facetRecordOf } from "@yunari/renderer-core";
 import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
+import {
+  FONT_FINDER_ID,
+  IMPORT_LOCAL_FONT_ID,
+} from "../../packages/editor/src/type-token-manager/font-actions.js";
+import { uiCopy } from "../../packages/editor/src/ui-copy.js";
 import { installFixedClock } from "./clock.js";
 import {
   choiceOf,
   chooseIn,
+  optionPairs,
   optionsOf,
   sectionExpanded,
   typeIntoControl,
@@ -87,6 +94,16 @@ async function insertShape(page: Page, name: string): Promise<void> {
 }
 
 const EDITOR = "http://127.0.0.1:4174/";
+
+/**
+ * The one real face the suite keeps on disk, cached by the host fixture before
+ * any worker starts (`global-setup.ts` → `seedHostTheme` → `fontBytes`). The
+ * token inspector's import refuses bytes the browser cannot parse, so a
+ * synthetic buffer is not a stand-in here.
+ */
+const FONT_FIXTURE = fileURLToPath(
+  new URL("../../.e2e-font-cache/inter-400.woff2", import.meta.url),
+);
 
 /**
  * The starter scene's artboard width. Every helper that turns a scene x into a
@@ -2222,12 +2239,43 @@ test.describe("Fabric editor route", () => {
     await openPane(page, "Tokens");
     await page.locator('[data-yunari-type-preset-row="heading"]').click();
     const family = page.locator("[data-yunari-token-family]");
-    await family.fill("Georgia, serif");
-    await family.press("Tab");
-    await expect(family).toHaveValue("Georgia, serif");
+    await expect(family).toBeVisible();
+
+    // A token's family is a list, not a field. The starter theme declares no
+    // font asset, so the token's own family is a disabled reading and the two
+    // action rows are the only pressable entries. The labels are the control's
+    // own copy, read from the app rather than restated here.
+    expect(await optionPairs(page, family)).toEqual([
+      {
+        id: "Segoe UI, sans-serif",
+        label: "Segoe UI, sans-serif (not in package)",
+      },
+      { id: IMPORT_LOCAL_FONT_ID, label: uiCopy.panels.importLocalFont },
+      { id: FONT_FINDER_ID, label: uiCopy.panels.fontFinder },
+    ]);
+
+    // Declaring a face is the one route that gives the list a real choice, and
+    // the import is where it lives. The dialog's family field is written before
+    // Create because the fixture's file name would declare it `inter`.
+    const chooser = page.waitForEvent("filechooser");
+    await chooseIn(page, family, IMPORT_LOCAL_FONT_ID);
+    await (await chooser).setFiles(FONT_FIXTURE);
+    const fontFamily = page.locator("[data-yunari-font-family]");
+    await fontFamily.fill("Inter");
+    await fontFamily.press("Tab");
+    await page.locator("[data-yunari-font-create]").click();
+    await expect(page.locator("[data-yunari-font-create]")).toHaveCount(0);
+
+    // The declared family is a choice now; the token's own family stays a
+    // reading until one is picked.
+    await chooseIn(page, family, "Inter");
+    expect(await choiceOf(family)).toBe("Inter");
+
+    // The imported face is 400 and the token keeps its 600, so the weight is a
+    // list whose shown value is a disabled reading: a family change keeps the
+    // weight rather than adopting the lightest face.
     const weight = page.locator("[data-yunari-token-weight]");
-    await weight.fill("600");
-    await weight.press("Tab");
+    expect(await choiceOf(weight)).toBe("600 (not in package)");
 
     const saved = await savePackage(page);
     await openThemeFromStore(page, storedThemeOfPackage(saved.bytes));
@@ -2242,21 +2290,23 @@ test.describe("Fabric editor route", () => {
       };
     };
     expect(reopened.globals.typeTokens["heading"]).toMatchObject({
-      family: "Georgia, serif",
+      family: "Inter",
       weight: "600",
     });
-    await page
-      .locator("[data-yunari-token-letter-spacing]")
-      .scrollIntoViewIfNeeded();
+    // The declaration survives the package: the reopened list prints the plain
+    // family, not the not-in-package reading.
+    expect(await choiceOf(page.locator("[data-yunari-token-family]"))).toBe(
+      "Inter",
+    );
     await captureVisualReview(page, testInfo, "editor-type-preset");
   });
 
-  test("paints a preset's tracking into the rendered wordmark", async ({
+  test("paints a run's tracking into the rendered wordmark", async ({
     page,
   }, testInfo) => {
     // The one assertion the unit tests cannot make: that ink actually moves.
-    // `applyObjectTypeTokens` could set `charSpacing` correctly and the canvas
-    // could still not show it.
+    // The runtime could set `charSpacing` correctly and the canvas could still
+    // not show it.
     //
     // Measured as pixels rather than as the object's `width`, because the
     // wordmark is a `Textbox` — its width is the authored box, which tracking
@@ -2264,9 +2314,12 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    await openPane(page, "Tokens");
-    await page.locator('[data-yunari-type-preset-row="heading"]').click();
-    const tracking = page.locator("[data-yunari-token-letter-spacing]");
+    // Tracking is the run's own value (0128), not the token's: the row lives in
+    // the selection inspector's runs section, so the case selects the object
+    // that wears it. The wordmark is the starter's first run.
+    await selectLayer(page, "wordmark");
+    const tracking = page.locator('[data-yunari-run-letter-spacing="0"]');
+    await expect(tracking).toBeVisible();
 
     await tracking.fill("0");
     await tracking.press("Tab");

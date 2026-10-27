@@ -1508,6 +1508,10 @@ export async function seedHostTheme(): Promise<void> {
     "assets/backdrop.svg": new TextEncoder().encode(backdrop),
     "assets/edge.svg": new TextEncoder().encode(edgeSource),
     "assets/flipward.svg": new TextEncoder().encode(flipward),
+    // Three envelopes declare this one, and `writeThemePackage` refuses a
+    // declaration with no file beside it — without this line the host fixture
+    // cannot be seeded at all.
+    "assets/two-tone.svg": new TextEncoder().encode(twoTone),
     "assets/inter-400.woff2": await fontBytes(),
     // Declared by the video theme and never decoded by any test: the host's
     // warning table reads the declaration, and the library writer refuses a
