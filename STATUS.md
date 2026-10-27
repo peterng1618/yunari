@@ -5,37 +5,36 @@ Branch: `peterng1618/fix-font-trio` (worktree `fix-font-trio`)
 
 ## Current objective
 
-The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design.md) is the active plan: a token names a face — family, weight, declared face — while size, line height and tracking belong to the element. Phases 1–5 are complete; Phase 6 (close-out) is next.
+The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design.md) plan is complete: a token names a face, and each run owns its size, line height and tracking. What remains is the final whole-branch review and moving local `main` so the user can test.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-27-type-token-model.md` — ledger at `.superpowers/sdd/2026-10-27-type-token-model/progress.md`.
-- **Phases 1–3 complete:** the token shape and validation, role default sizes, `unicode-range` subsets, the whole family on one apply, and every fixture generator rewritten.
-- **Phase 4 complete:** the token inspector edits a face only — computed `[Role] Family Weight` names, role-first order, non-removable roles, a family dropdown ending in `Import local font…` / `Font finder…`, and one weight dropdown.
-- **Phase 5 complete:** each run has its own size, line-height and tracking rows; a canvas resize commits each run's painted size and resets the object's scale; a new text writes no size, so the role default shows.
-- **The composition renders its authored sizes again:** 46 / 17 / 108 come from run styles, not from tokens.
-- **The branch carries `main`:** the local merge is committed here, so the next boundary action is moving local `main` to it for the user to test.
+- **Active plan:** `docs/superpowers/plans/2026-10-27-type-token-model.md` — all six phases done; ledger at `.superpowers/sdd/2026-10-27-type-token-model/progress.md`.
+- **The branch carries main:** its 69 commits are merged in, and the merged tree typechecks and passes the full suite.
+- **The gate is green as one run:** `npm run gate` exit 0 at `79d5140b` — biome, self-tests, status, docs, design, typecheck and both suites.
+- **Docs are current:** the decision note is `0128` (main owns `0124`), and `DESIGN.md` §2 plus the architecture map name the token model.
+- **Local `main` trails the branch by four documentation and test commits:** a fast-forward after the final review puts it in the user's hands.
 
 ## Last completed change
 
-- **A new text takes the role default:** `createNewTextDefaults` writes no `fontSize` or `lineHeight`; `firstTypeToken` is the first entry, body first by producer order.
-- **The first-entry rule is pinned:** a `{ mono, body }` fixture fails under the old body-preferring rule.
-- **A canvas resize commits each run's size:** painted size × `scaleY`, both scales reset, and one undo restores size and scale together.
-- **Boundary suite green:** 6821 passed / 2 skipped of 446 files, exit 0, after repairing a stale `editor-session.dom.test.ts` fixture (49/49).
-- **Unverified:** no Playwright run — port 4174 is held elsewhere (`vg-756`).
+- **The two stale e2e cases describe the controls that exist:** the token case imports a real face and round-trips it, tracking is driven on the run row, and the weight reading is pinned to a span.
+- **A real fixture bug was found at the base:** three envelopes declared `two-tone.svg` with no bytes, so Playwright's global setup threw before any test.
+- **The gate was red before this task:** eight pre-existing biome errors, fixed mechanically in a separate commit with no behaviour change.
+- **Proof:** gate exit 0; an independent `npx vitest run` at `79d5140b` gives 447 files, 6890 passed, 1 skipped; typecheck, `design:check` and `status:check` exit 0.
+- **Unverified:** the browser arm — port 4174 is another worktree's preview, and `reuseExistingServer` would measure that bundle.
 
 ## Next
 
-1. Local merge to main so the user can test the type-token editor.
-2. Task 6.1 — docs, ADR and ownership close-out; sweep the surviving `preset` identifiers.
-3. Task 6.2 — full gate, browser proof, rewrite the stale e2e cases.
-4. Final whole-branch review on the most capable model.
-5. Finish the branch.
+1. Final whole-branch review on the most capable model.
+2. Apply its findings with one fix round and a scoped re-review.
+3. Fast-forward local `main` so the user can test the type-token editor.
+4. Finish the branch; pushing and opening a PR need the user.
+5. If port 4174 frees, run the editor browser projects and record the visual proof here.
 
 ## Blockers / unverified
 
-- **`tests/e2e/editor.spec.ts` and `panel-labels.spec.ts` are stale:** typechecked only; Task 6.2 rewrites them.
-- **No browser proof since Phase 3:** port 4174 is owned by another process (`vg-756`), so every visible claim is object-level only.
-- **Main is merged into the branch:** 69 commits of chart, display and wallpaper work are in; the branch now has to pass the full gate again before `main` moves.
-- **Starter role weights are read-only:** `Segoe UI, sans-serif` and `Consolas, monospace` are undeclared, so a weight changes only after picking a declared family.
-- **Open rows:** `vg-770` (a corner-scaled Textbox keeps its width) and `vg-762` (a `{ref}` fontSize reads as absent in the row).
+- **Browser arm unverified:** port 4174 is held by `background-media-becomes-a-layer`'s `vite preview`; nothing was killed and no port was moved.
+- **The import flow has never run in a real browser on this branch:** its filechooser, dialog and Create steps match the dom test only.
+- **Starter role weights are read-only:** `Segoe UI, sans-serif` and `Consolas, monospace` are undeclared, so a weight changes only after choosing a declared family.
+- **Open rows from this plan:** `vg-770` (a corner-scaled Textbox keeps its width), `vg-762` (a `{ref}` fontSize reads as absent), `vg-771` (no production caller requires the three roles).
+- **`vg-756`:** the e2e scripts still resolve the Playwright alpha through `.bin`; run specs via `node node_modules/@playwright/test/cli.js`.
