@@ -412,6 +412,7 @@ export function refreshBoundText(
   themeLanguage?: string,
   descriptors?: readonly SemanticKeyDescriptor[],
 ): void {
+  let changed = false;
   const refresh = (objects: readonly object[]): void => {
     for (const object of objects) {
       if (isTextObject(object)) {
@@ -442,6 +443,12 @@ export function refreshBoundText(
           const shape = textShapeFor(segments, {}, (value) =>
             object.graphemeSplit(value),
           );
+          // **Only a change to the rendered string repaints.** A clock sampled
+          // once a second paints its seconds once a second, but a minutes or
+          // days clock paints only when its own text moves — the sample cadence
+          // is the host's, not the author's.
+          if (object.text === shape.text) continue;
+          changed = true;
           guardBoxWidth(object);
           // Measured by the `set` itself, for the reason given in
           // `applyAuthoredText` above.
@@ -460,7 +467,7 @@ export function refreshBoundText(
   };
 
   refresh(canvas.getObjects());
-  canvas.requestRenderAll();
+  if (changed) canvas.requestRenderAll();
 }
 
 /** Reapply stored authored layout after runtime text changes. */

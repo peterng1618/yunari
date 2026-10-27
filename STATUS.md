@@ -18,9 +18,8 @@ away and every chart's transition is blitted while it runs.
 
 ## Last completed change
 
-- **A transition is visible:** `YunariChart` arms a pending transition on an animated `setOption`, blits one canvas render per engine frame at most 30/s, and disarms on `finished` with one final blit for the last frame (0128).
-- **Static charts never arm:** an option whose settings disable animation leaves the pump off, so a still chart is still rendered only by the call that changed it.
-- **Proof:** 3 pump tests failed first, 38 pass in the chart-object suites; typecheck and biome exit 0.
+- **A clock paints on its own granularity:** `refreshBoundText` skips the set, the layout and the render request when the resolved string is identical, so a minutes clock repaints once a minute and a date once a day.
+- **Proof:** the unchanged-reading test failed first (1 of 21), 21 pass in the text suite and 603 across `scene-fabric` and `player`; typecheck and biome exit 0.
 
 ## Next
 
