@@ -61,7 +61,7 @@ shell count.
 | Frosted-glass control | `refusalOf`, and the blur landing on `MAX_GLASS_BLUR_RADIUS` asked of the owner | `selection-inspector/glass.ts`, bound owned by `renderer-core/src/theme/glass.ts` |
 | Glass lifecycle re-resolve | `EditorShell.refreshGlass` | `editor-shell.ts:587` |
 | Palette-token authoring and reassignment | `reassignPaletteToken` / `paletteTokenUsage` | `palette-manager/index.ts` |
-| Type-preset authoring and reassignment | `reassignTypePresetToken` | `type-preset-manager/index.ts` |
+| Type-token authoring and reassignment | `reassignTypePresetToken` | `type-preset-manager/index.ts` |
 | Theme download | `documentKey`'s authored-only strip and `serializeThemePackage`'s `!result.ok` throw | `persistence-manager/index.ts` |
 | Authoring-time value-run tokens | `runPlaceholder` / `toAuthoringSegments` | `run-placeholder.ts` |
 | The languages an author may pick | `THEME_LANGUAGES` and `languageLabel` | `theme-languages.ts` |

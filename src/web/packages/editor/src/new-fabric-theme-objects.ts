@@ -179,7 +179,7 @@ export interface Run {
 
 /**
  * How a run is worn: size, leading and the measured tracking, authored on the
- * run rather than on the token it names (docs/decisions/0124).
+ * run rather than on the token it names (docs/decisions/0128).
  */
 function runStyle(run: Run): Record<string, unknown> {
   const letterSpacing = starterTracking[run.size];

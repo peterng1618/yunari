@@ -151,6 +151,12 @@ Weights: `400` body, `500` emphasis inside a row, `600` titles and eyebrows,
 `650`–`700` only for the brand mark and a primary button. Nothing is bolder than
 `700`.
 
+The persisted model is a **type token** that names a face: family, weight and an
+optional declared face asset. Size, line height and tracking live on the run's
+own style, so one face worn at two sizes needs one token, not two. The three
+roles are the token ids — `heading`, `body`, `mono` — and the theme always
+carries all three (`docs/decisions/0128`).
+
 ## Layout
 
 <!-- §7 -->
@@ -261,7 +267,7 @@ settings gear pinned to the foot. **Five slots:**
 | Composition | stack | The scene tree, and the object actions that act on it |
 | Add | plus | Everything insertable |
 | Assets | folder | Every declared file, its import and placement, and the finder link |
-| Tokens | palette | The theme's paints and type presets — created and edited here |
+| Tokens | palette | The theme's paints and type tokens — created and edited here |
 | Document | page | Artboard, metadata |
 
 **At most one slot is open at a time.** Asking for the open slot closes it;

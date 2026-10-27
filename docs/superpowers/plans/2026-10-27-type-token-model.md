@@ -21,7 +21,7 @@
 - Every dropdown in the product lists role tokens first, then unroled tokens by name.
 - Both the family dropdown and the token dropdown end with action rows `Import local font…` and `Font finder…`; an action never changes the value.
 - A role token is never rewritten by an import; a face that already has a token is adopted, not duplicated.
-- Decision note `docs/decisions/0124-*.md` lands before the first write to `renderer-core/src/theme/` or `editor-session.ts`.
+- Decision note `docs/decisions/0128-*.md` lands before the first write to `renderer-core/src/theme/` or `editor-session.ts`.
 
 ---
 
@@ -93,7 +93,7 @@ Outcome: a declared face remembers its subset, registration selects by `unicode-
 
 - A table maps the Google subset names we import (`latin`, `latin-ext`, `vietnamese`, `cyrillic`, `cyrillic-ext`, `greek`, `greek-ext`, …) to their `unicode-range` strings.
 - `loadFontAssets` passes `unicodeRange` in the `FontFace` descriptors when the declaration has a subset the table knows; an unknown subset registers without one.
-- **Ordering is load-bearing** (ADR 0124, rung 3): a face without a range covers everything and shadows the ranged faces of the same family, and manually added faces are matched in insertion order. Register ranged faces first and the rangeless one last, and never register more than one rangeless face per family.
+- **Ordering is load-bearing** (ADR 0128, rung 3): a face without a range covers everything and shadows the ranged faces of the same family, and manually added faces are matched in insertion order. Register ranged faces first and the rangeless one last, and never register more than one rangeless face per family.
 - The registration key already includes the path, so two subsets of one family coexist.
 
 **Acceptance:** a test registers a family twice (latin + vietnamese) and shows two faces, each with its range; an unknown subset yields a face with no `unicodeRange`.
@@ -252,7 +252,7 @@ Outcome: size, line height and spacing are element properties, and the canvas ag
 
 ### Task 6.1 — Docs and decision note
 
-**Owners:** `docs/decisions/0124-*.md`, `docs/DESIGN.md` (§ markers stable; a new or amended § cites the model), `docs/architecture/ownership.md`, `docs/README.md` if the map moves.
+**Owners:** `docs/decisions/0128-*.md`, `DESIGN.md` (§ markers stable; a new or amended § cites the model), `docs/architecture/ownership.md`, `docs/README.md` if the map moves.
 
 **Acceptance:** `npm run docs:check` and `npm run design:check` pass; no doc still says type preset as the persisted noun.
 

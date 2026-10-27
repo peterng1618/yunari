@@ -1,4 +1,4 @@
-# 0124 — A type token names the face; size, leading and tracking belong to the run
+# 0128 — A type token names the face; size, leading and tracking belong to the run
 
 - **Date:** 2026-10-27
 - **Status:** accepted

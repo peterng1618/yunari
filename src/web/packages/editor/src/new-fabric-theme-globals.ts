@@ -182,7 +182,7 @@ export const solidOf: Readonly<Record<string, string>> = {
  * Body first because `createNewTextDefaults` and the chart defaults take the
  * first token as a new object's, so the order here is the editor's default face.
  * A token names a face only: the size, leading and tracking a run wears are the
- * run's own `style` (docs/decisions/0124).
+ * run's own `style` (docs/decisions/0128).
  */
 export const starterTypeTokens = {
   body: { family: "Segoe UI, sans-serif", weight: "400" },

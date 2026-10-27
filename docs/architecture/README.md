@@ -111,7 +111,7 @@ parallel simplified scene tree.
 runtime mismatch is refused before revival. Runtime samples, ECharts options and
 render scale are never persisted.
 
-The v2 **scene ownership** and palette/type-preset semantics are implemented.
+The v2 **scene ownership** and palette/type-token semantics are implemented.
 Envelope validation rejects legacy global groups and local paint/type values. No
 external compatibility promise exists before the first release.
 

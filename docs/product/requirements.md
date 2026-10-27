@@ -133,7 +133,7 @@ as opacity and geometry remain local.
 ## §75 — References and identity
 
 Compatible authored styles resolve through stable global keys; typography resolves
-through named type presets and paint resolves through palette tokens. Globals also
+through named type tokens and paint resolves through palette tokens. Globals also
 have editable display names. Deleting a referenced global requires reassignment.
 Scene objects have one stable Yunari id.
 
@@ -391,7 +391,7 @@ Design: [editor UI polish](../superpowers/specs/2026-09-25-editor-ui-polish.md).
 The editor is a professional authoring surface used for extended sessions. Its
 own chrome favours information density and a consistent row rhythm over spacious
 marketing-page layout, and follows Figma UI3 as its reference where Yunari has
-no domain-specific answer of its own. Palette tokens, type presets and value runs
+no domain-specific answer of its own. Palette tokens, type tokens and value runs
 are Yunari concepts and keep their own shape rather than being bent to fit it.
 
 Motion is restrained and functional: short transitions on interaction feedback
