@@ -18,9 +18,9 @@ away and every chart's transition is blitted while it runs.
 
 ## Last completed change
 
-- **Animation is a family rule:** `chartAnimationFor(family)` returns false only for the line; the rate argument and the editor's `refreshRate`/`chartRefreshRate` plumbing into charts are gone (0128).
-- **The pump is decided:** decision note 0128 records the transition-scoped blit, its final-frame requirement and the rejected permanent loop.
-- **Proof:** 5 tests failed first, 6 pass in `chart-animation`; 108 pass across the three touched suites; typecheck, biome, reuse gate and docs check exit 0.
+- **A transition is visible:** `YunariChart` arms a pending transition on an animated `setOption`, blits one canvas render per engine frame at most 30/s, and disarms on `finished` with one final blit for the last frame (0128).
+- **Static charts never arm:** an option whose settings disable animation leaves the pump off, so a still chart is still rendered only by the call that changed it.
+- **Proof:** 3 pump tests failed first, 38 pass in the chart-object suites; typecheck and biome exit 0.
 
 ## Next
 

@@ -490,6 +490,114 @@ describe("a reading update changes the value, not the chart", () => {
   });
 });
 
+describe("a chart blits its own transition frames", () => {
+  /** A mounted gauge, a spy on its canvas render, and manual frame time. */
+  function mounted() {
+    let nowMs = 1_000;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => nowMs);
+    const chart = new YunariChart(
+      chartOptions({
+        family: "gauge",
+        settings: defaultGaugeSettings,
+        option: buildGaugeOption(defaultGaugeSettings, sample(10), false),
+      }),
+    );
+    const canvas = new StaticCanvas(undefined, { width: 400, height: 300 });
+    canvas.add(chart);
+    const render = vi
+      .spyOn(canvas, "requestRenderAll")
+      .mockImplementation(() => undefined as never);
+    const engine = chart as unknown as {
+      _onEngineRendered(): void;
+      _onEngineFinished(): void;
+    };
+    const advance = (ms: number) => {
+      nowMs += ms;
+    };
+    const finish = () => {
+      clock.mockRestore();
+      chart.dispose();
+    };
+    return { chart, render, engine, advance, finish };
+  }
+
+  const animated = () =>
+    buildGaugeOption(defaultGaugeSettings, sample(20), true);
+  const still = () => buildGaugeOption(defaultGaugeSettings, sample(40), false);
+
+  it("blits a transition frame, then stops until the next transition", () => {
+    const { chart, render, engine, advance, finish } = mounted();
+
+    chart.setOption(animated());
+    render.mockClear();
+
+    advance(50);
+    engine._onEngineRendered();
+    expect(render, "a transition frame was not blitted").toHaveBeenCalled();
+
+    engine._onEngineFinished();
+    render.mockClear();
+    advance(50);
+    engine._onEngineRendered();
+    expect(
+      render,
+      "a finished transition kept blitting",
+    ).not.toHaveBeenCalled();
+    finish();
+  });
+
+  it("blits the final frame when the engine finishes", () => {
+    // ECharts binds its `rendered` handler at init and this object binds later,
+    // so `finished` fires before the final frame's own `rendered` listener. The
+    // last painted frame reaches Fabric only because `finished` asks for it.
+    const { chart, render, engine, finish } = mounted();
+
+    chart.setOption(animated());
+    render.mockClear();
+
+    engine._onEngineFinished();
+    expect(render, "the final frame was never blitted").toHaveBeenCalledTimes(
+      1,
+    );
+    finish();
+  });
+
+  it("blits at most once per transition frame", () => {
+    const { chart, render, engine, advance, finish } = mounted();
+
+    chart.setOption(animated());
+    advance(50);
+    render.mockClear();
+
+    engine._onEngineRendered();
+    expect(render).toHaveBeenCalledTimes(1);
+
+    render.mockClear();
+    engine._onEngineRendered();
+    expect(
+      render,
+      "two frames inside one 1/30 s were blitted",
+    ).not.toHaveBeenCalled();
+
+    advance(34);
+    engine._onEngineRendered();
+    expect(render).toHaveBeenCalledTimes(1);
+    finish();
+  });
+
+  it("never arms when the settings disable animation", () => {
+    const { chart, render, engine, advance, finish } = mounted();
+
+    chart.setOption(still());
+    render.mockClear();
+
+    advance(50);
+    engine._onEngineRendered();
+    expect(render, "a static chart armed the pump").not.toHaveBeenCalled();
+    finish();
+  });
+});
+
 describe("disposal", () => {
   it("is idempotent and refuses further work", () => {
     // Whatever owns the canvas must call this: `canvas.remove()` does not.

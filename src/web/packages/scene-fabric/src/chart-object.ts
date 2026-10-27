@@ -16,6 +16,27 @@ import { clampRenderScale, DEFAULT_RENDER_SCALE } from "./render-scale.js";
  * caches are invalidated too.
  */
 
+/** One transition frame; the scene never blits an engine repaint faster. */
+const TRANSITION_FRAME_MS = 1000 / 30;
+
+/**
+ * Whether this option asks the engine to animate.
+ *
+ * The builders put the animation block at the option's top level, except the
+ * gauge, whose block travels on its single series.
+ */
+function allowsAnimation(option: ChartOption): boolean {
+  const engine = toEngineOption(option) as {
+    readonly animation?: boolean;
+    readonly series?: readonly { readonly animation?: boolean }[];
+  };
+
+  return (
+    engine.animation === true ||
+    (engine.series?.some((series) => series.animation === true) ?? false)
+  );
+}
+
 /** Authored chart properties persisted beyond Fabric's own state. */
 export const CHART_SERIALISED_KEYS = [
   "family",
@@ -72,6 +93,11 @@ export class YunariChart extends FabricObject {
   private _chart: echarts.ECharts | undefined;
 
   private _disposed = false;
+
+  /** True from an animated `setOption` until the engine reports `finished`. */
+  private _pumping = false;
+
+  private _lastPumpMs = Number.NEGATIVE_INFINITY;
 
   public constructor(options: YunariChartOptions) {
     // Match Fabric subclass order: base defaults, subclass defaults, caller options.
@@ -152,6 +178,8 @@ export class YunariChart extends FabricObject {
     }
 
     this._resizeBackingCanvas();
+    this._pumping = allowsAnimation(option);
+    this._lastPumpMs = Number.NEGATIVE_INFINITY;
     this._chart?.setOption(
       toEngineOption(option),
       options.replace === true
@@ -200,6 +228,7 @@ export class YunariChart extends FabricObject {
 
     this._disposed = true;
     this._chart?.getZr().off("rendered", this._onEngineRendered);
+    this._chart?.off("finished", this._onEngineFinished);
     this._chart?.dispose();
     this._chart = undefined;
 
@@ -243,6 +272,10 @@ export class YunariChart extends FabricObject {
    * whole document — including repaints this object did not cause — and with a
    * refresh loop driving `setOption` that was every chart, every frame (vg-107).
    * `set` is what propagates the invalidation to an enclosing group's cache.
+   *
+   * The one exception is a transition the reader should see (0128): while one
+   * is running, each frame is blitted — at most one per `TRANSITION_FRAME_MS` —
+   * because an option's transition paints frames the `setOption` call cannot.
    */
   private readonly _onEngineRendered = (): void => {
     if (this._disposed) {
@@ -250,6 +283,35 @@ export class YunariChart extends FabricObject {
     }
 
     this.set("dirty", true);
+
+    if (!this._pumping) {
+      return;
+    }
+
+    const nowMs = performance.now();
+    if (nowMs - this._lastPumpMs < TRANSITION_FRAME_MS) {
+      return;
+    }
+
+    this._lastPumpMs = nowMs;
+    this._requestCanvasRender();
+  };
+
+  /**
+   * The transition is over; blit its last frame.
+   *
+   * ECharts fires `finished` from the same zrender `rendered` dispatch, and its
+   * listener was bound at init — before this object's — so the final frame's
+   * `rendered` sees the pump already disarmed. Without this blit the chart
+   * would rest one frame short of its value.
+   */
+  private readonly _onEngineFinished = (): void => {
+    if (this._disposed || !this._pumping) {
+      return;
+    }
+
+    this._pumping = false;
+    this._requestCanvasRender();
   };
 
   /** Blit the pixels this object just repainted. One request per change, not per engine event. */
@@ -274,6 +336,7 @@ export class YunariChart extends FabricObject {
     });
 
     this._chart.getZr().on("rendered", this._onEngineRendered);
+    this._chart.on("finished", this._onEngineFinished);
     this.setOption(this._option);
   }
 
