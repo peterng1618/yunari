@@ -129,11 +129,13 @@ export class YunariChart extends FabricObject {
   /**
    * Apply an option before Fabric blits it.
    *
-   * The default merges: replacing only the series keeps the axes, grid and
-   * visual map while still dropping a series the new option no longer has — the
-   * frame loop's own path. `replace` is for an authored change, because a merge
-   * never deletes a key the new option omits and the builders omit `visualMap`
-   * and `yAxis.min`/`max` when the author removes them.
+   * The default is a plain merge — the frame loop's own path. It keeps each
+   * series *model*, which is what lets the engine's data differ see an update
+   * and animate the value; `replaceMerge` matches a series only by `id`, and
+   * the builders give none, so every reading arrived as a brand-new series and
+   * replayed its appear animation (0126). `replace` is for an authored change:
+   * it is the only path that can change the series shape, and a merge never
+   * deletes a key the new option omits, such as `visualMap` or `yAxis.min`.
    */
   public setOption(
     option: ChartOption | undefined,
@@ -154,7 +156,7 @@ export class YunariChart extends FabricObject {
       toEngineOption(option),
       options.replace === true
         ? { notMerge: true, lazyUpdate: false }
-        : { notMerge: false, replaceMerge: ["series"], lazyUpdate: false },
+        : { notMerge: false, lazyUpdate: false },
     );
     this._requestCanvasRender();
   }

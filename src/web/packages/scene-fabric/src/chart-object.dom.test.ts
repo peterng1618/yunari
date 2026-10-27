@@ -409,6 +409,87 @@ describe("a gauge crossing from no value to a value", () => {
   });
 });
 
+describe("a reading update changes the value, not the chart", () => {
+  /** The engine's series models, in the order the option declared them. */
+  function seriesModels(chart: YunariChart): readonly unknown[] {
+    const engine = (
+      chart as unknown as {
+        _chart: { getModel(): { getSeries(): readonly unknown[] } };
+      }
+    )._chart;
+    return engine.getModel().getSeries();
+  }
+
+  /**
+   * ECharts matches a series by `id` and then by index. A match is merged, so
+   * the data differ sees the same elements and animates the value over
+   * `animationDurationUpdate`. A rebuild is a brand-new series: the engine
+   * replays the appear animation instead, so a bar grows from zero, a pie
+   * sweeps from nothing and a needle starts at its minimum — every tick.
+   */
+  it("reuses the bar series model for the next reading", () => {
+    const bar = (value: number) =>
+      buildBarOption(
+        defaultBarSettings,
+        [{ sensorId: "cpu.load", sample: sample(value) }],
+        false,
+      );
+    const chart = new YunariChart(
+      chartOptions({
+        family: "bar",
+        settings: defaultBarSettings,
+        option: bar(10),
+      }),
+    );
+
+    const before = seriesModels(chart)[0];
+    chart.setOption(bar(20));
+
+    expect(seriesModels(chart)[0], "the bar was rebuilt").toBe(before);
+    chart.dispose();
+  });
+
+  it("reuses the pie series model for the next reading", () => {
+    const pie = (value: number) =>
+      buildPieOption(
+        defaultPieSettings,
+        [{ sensorId: "cpu.load", sample: sample(value) }],
+        false,
+      );
+    const chart = new YunariChart(
+      chartOptions({
+        family: "pie",
+        settings: defaultPieSettings,
+        option: pie(10),
+      }),
+    );
+
+    const before = seriesModels(chart)[0];
+    chart.setOption(pie(20));
+
+    expect(seriesModels(chart)[0], "the pie was rebuilt").toBe(before);
+    chart.dispose();
+  });
+
+  it("reuses the gauge series model for the next reading", () => {
+    const gauge = (value: number) =>
+      buildGaugeOption(defaultGaugeSettings, sample(value), false);
+    const chart = new YunariChart(
+      chartOptions({
+        family: "gauge",
+        settings: defaultGaugeSettings,
+        option: gauge(10),
+      }),
+    );
+
+    const before = seriesModels(chart)[0];
+    chart.setOption(gauge(20));
+
+    expect(seriesModels(chart)[0], "the gauge was rebuilt").toBe(before);
+    chart.dispose();
+  });
+});
+
 describe("disposal", () => {
   it("is idempotent and refuses further work", () => {
     // Whatever owns the canvas must call this: `canvas.remove()` does not.

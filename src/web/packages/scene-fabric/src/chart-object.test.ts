@@ -189,18 +189,16 @@ describe("how an option reaches the engine", () => {
 
   it("merges the series and flushes before Fabric blits", () => {
     // `notMerge: true` threw away every component the previous option carried,
-    // so a repaint rebuilt the whole chart. `replaceMerge` on the series alone
-    // keeps the axes, grid and visual map while still dropping a series the
-    // new option no longer has.
+    // so a repaint rebuilt the whole chart. `replaceMerge` was meant to keep the
+    // axes while replacing the series, but it matches a series only by `id` —
+    // and the builders give none — so every update was a rebuild too (0126). A
+    // plain merge keeps the series model and with it the update transition.
     const { instance, calls } = recording();
 
     instance.setOption({ series: [{ type: "line" }] } as never);
 
     expect(calls).toEqual([
-      [
-        { series: [{ type: "line" }] },
-        { notMerge: false, replaceMerge: ["series"], lazyUpdate: false },
-      ],
+      [{ series: [{ type: "line" }] }, { notMerge: false, lazyUpdate: false }],
     ]);
   });
 

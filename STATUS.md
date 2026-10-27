@@ -18,11 +18,9 @@ at a reproduction pass over the register.
 
 ## Last completed change
 
-- **Import modal:** one stable mount across the WE body's branches (no second host call), dismissal refused while a run is in flight, and the baked-in-clock warning shown in the modal.
-- **Caps:** both video routes refuse output over the store's 80 MiB per-asset bound; both specs and the plan now say 512 MiB source / 80 MiB asset / 90 MiB total.
-- **Polish:** the done card keeps its tooltip reachable via `aria-disabled`, a WE package import reports on the status line, and Replace no longer offers `.mpkg`.
-- **Hygiene:** dead `mobileVideo` removed, three orphaned capture PNGs deleted, the double-prefix guard tested, and the spec marked implemented.
-- **Merge:** `--no-ff` into `main`; branch gate exit 0, and the full unit suite (437 files / 6,671 tests) and worker suite (130) passed before the merge.
+- **Series models survive a reading:** the update path merges instead of `replaceMerge: ["series"]`, which matched only by `id` and so rebuilt every bar, pie and gauge and replayed its appear animation each tick (0126).
+- **Proof:** three DOM tests pin the series-model identity across a reading (red before, green after); 34 chart-object and 65 player/editor chart tests passed, typecheck and reuse gate exit 0.
+- **Unverified:** no browser capture of the corrected value transition.
 
 ## Next
 
