@@ -2,7 +2,6 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, type Page, type Request, test } from "@playwright/test";
-import { LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS } from "@yunari/renderer-core";
 import { HOST_PORT } from "./host-theme.js";
 
 /**
@@ -32,8 +31,16 @@ import { HOST_PORT } from "./host-theme.js";
  *
  * ```
  * YUNARI_EDGE_PROBE=1 YUNARI_PROBE_TAG=my-run \
- *   npx playwright test --project=phone-host tests/e2e/live-chart-edge.spec.ts
+ *   npx playwright test --project=phone-host live-chart-edge.spec.ts
  * ```
+ *
+ * The reading is `this-pc` at 1 fps, which is what that display's kind pins it
+ * to.
+ *
+ * The file name is relative to `testDir`, not to the repository root. And run
+ * `@playwright/test`'s own CLI: `@playwright/mcp`'s `playwright` dependency
+ * hoists a different minor over `node_modules/.bin/playwright`, and the alpha
+ * runner cannot collect a spec that imported the pinned one.
  */
 
 const HOST = `http://127.0.0.1:${HOST_PORT}`;
@@ -51,11 +58,6 @@ const OUT = path.join(
   tmpdir(),
   "yunari-live-edge",
   `${process.env["YUNARI_PROBE_TAG"] ?? "reading"}.json`,
-);
-
-test.skip(
-  process.env["YUNARI_EDGE_PROBE"] === undefined,
-  "a measurement, not a check: set YUNARI_EDGE_PROBE to collect it",
 );
 
 /**
@@ -89,6 +91,13 @@ async function saveStarterThroughTheHost(page: Page): Promise<string> {
 }
 
 test.describe("the live line chart's edge", () => {
+  // The conditional form is only valid inside a describe or a test; at file
+  // scope Playwright threw "No tests found" instead of skipping.
+  test.skip(
+    process.env["YUNARI_EDGE_PROBE"] === undefined,
+    "a measurement, not a check: set YUNARI_EDGE_PROBE to collect it",
+  );
+
   test("a per-frame reading of the axis window, the series and the rect", async ({
     page,
   }, testInfo) => {
@@ -198,6 +207,15 @@ test.describe("the live line chart's edge", () => {
       };
 
       const tick = (): void => {
+        // The reading is one interval long, and a frame loop left running after
+        // it holds the renderer at 100% while Playwright tears the context
+        // down — measured, a ten-minute hang after the file was written.
+        if (
+          (window as unknown as { __yunariEdgeStop?: boolean })
+            .__yunariEdgeStop === true
+        ) {
+          return;
+        }
         try {
           const canvas = globals.yunari?.handle?.canvas;
           if (canvas !== undefined) walk(canvas.getObjects());
@@ -210,6 +228,9 @@ test.describe("the live line chart's edge", () => {
     });
 
     const themeId = await saveStarterThroughTheHost(page);
+    // `this-pc`, whose kind pins it to 1 fps (`chartFpsFor`). The 30 fps arm is
+    // not reachable here: the host refuses to mint a record for this PC, and a
+    // fabricated local record's stream delivered two batches before stalling.
     await page.goto(`${HOST}/?theme=${themeId}&data=live`);
     await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible();
     await expect
@@ -229,11 +250,18 @@ test.describe("the live line chart's edge", () => {
 
     await page.waitForTimeout(RUN_MS);
 
-    const frames = await page.evaluate(() =>
-      (
-        (window as unknown as { __yunariEdge?: unknown[] }).__yunariEdge ?? []
-      ).slice(),
-    );
+    const frames = await page.evaluate(() => {
+      const probe = window as unknown as {
+        __yunariEdge?: unknown[];
+        __yunariEdgeStop?: boolean;
+      };
+      // Stop the beat and release the page's copy: the array crossing the
+      // boundary is the only one that needs to exist (see `tick`).
+      probe.__yunariEdgeStop = true;
+      const captured = (probe.__yunariEdge ?? []).slice();
+      if (probe.__yunariEdge !== undefined) probe.__yunariEdge.length = 0;
+      return captured;
+    });
 
     mkdirSync(path.dirname(OUT), { recursive: true });
     writeFileSync(
@@ -262,7 +290,7 @@ test.describe("the live line chart's edge", () => {
       canvasWidth: number;
       visibleWidth: number;
       pxMax: number;
-      readings: { last: number | null }[];
+      readings: { last: number | null; nulls: number }[];
       rect: { left: number; top: number; width: number; height: number };
     };
     const live = (frames as Frame[]).filter(
@@ -273,36 +301,51 @@ test.describe("the live line chart's edge", () => {
     );
     expect(live.length, `readings written to ${OUT}`).toBeGreaterThan(100);
 
+    // Counted, not asserted per frame. A `expect` per reading is ~10⁵ matcher
+    // constructions on this reading, and that synchronous block outlived the
+    // 240 s timeout: the run wrote its file and then hung with no verdict.
+    let widths = 0;
+    let pixels = 0;
     for (const frame of live) {
-      expect(frame.canvasWidth).toBe(frame.visibleWidth);
-      expect(frame.pxMax).toBeGreaterThanOrEqual(0);
-      expect(frame.pxMax).toBeLessThanOrEqual(frame.canvasWidth);
+      if (frame.canvasWidth !== frame.visibleWidth) widths += 1;
+      if (frame.pxMax < 0 || frame.pxMax > frame.canvasWidth) pixels += 1;
     }
 
-    // Each line's own edge never moves backwards, and never runs ahead of the
-    // one playback delay. A read between two repaints legitimately lags.
+    // Each line's axis ends at its newest reading and never moves backwards;
+    // nothing may be held past it, and no reading may be dropped as a null
+    // (0124).
     const lines = new Map<string, Frame[]>();
     for (const frame of live) {
       if (frame.family !== "line") continue;
       const key = `${frame.rect.left},${frame.rect.top},${frame.rect.width},${frame.rect.height}`;
       lines.set(key, [...(lines.get(key) ?? []), frame]);
     }
-    expect(lines.size).toBeGreaterThan(0);
+    let nulls = 0;
+    let edgesOff = 0;
+    let backwards = 0;
     for (const framesOfLine of lines.values()) {
-      for (const frame of framesOfLine) {
-        const lag =
-          frame.at - frame.axisMax - LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS;
-        expect(lag).toBeGreaterThanOrEqual(-50);
-        expect(lag).toBeLessThanOrEqual(1_200);
-      }
-      for (let index = 1; index < framesOfLine.length; index += 1) {
-        expect(framesOfLine[index]!.axisMax).toBeGreaterThanOrEqual(
-          framesOfLine[index - 1]!.axisMax,
-        );
-        expect(framesOfLine[index]!.readings[0]!.last!).toBeGreaterThanOrEqual(
-          framesOfLine[index - 1]!.readings[0]!.last!,
-        );
+      for (let index = 0; index < framesOfLine.length; index += 1) {
+        const frame = framesOfLine[index]!;
+        for (const reading of frame.readings) {
+          nulls += reading.nulls;
+          if (reading.last !== null && frame.axisMax !== reading.last) {
+            edgesOff += 1;
+          }
+        }
+        if (index === 0) continue;
+        const previous = framesOfLine[index - 1]!;
+        if (frame.axisMax < previous.axisMax) backwards += 1;
+        if (frame.readings[0]!.last! < previous.readings[0]!.last!) {
+          backwards += 1;
+        }
       }
     }
+
+    expect(lines.size, `readings written to ${OUT}`).toBeGreaterThan(0);
+    expect(widths, "every canvas is its authored box").toBe(0);
+    expect(pixels, "the axis edge stays on the canvas").toBe(0);
+    expect(nulls, "no reading is dropped as a null").toBe(0);
+    expect(edgesOff, "every axis ends at its newest reading").toBe(0);
+    expect(backwards, "no edge moves backwards").toBe(0);
   });
 });

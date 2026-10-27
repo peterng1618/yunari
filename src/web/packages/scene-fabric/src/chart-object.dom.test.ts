@@ -80,7 +80,6 @@ describe("constructing a chart", () => {
       NOW_MS,
       false,
       undefined,
-      1_000,
     );
     const chart = new YunariChart(chartOptions({ option }));
     const element = (chart as unknown as { _element: HTMLCanvasElement })

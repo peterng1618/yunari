@@ -41,7 +41,7 @@ export {
   isHostRelativeImageUrl,
   refreshBoundImages,
 } from "./bound-image.js";
-export { chartAnimationFor, chartPlaybackDelayFor } from "./chart-animation.js";
+export { chartAnimationFor } from "./chart-animation.js";
 export type {
   ChartSerialisedKey,
   YunariChartOptions,

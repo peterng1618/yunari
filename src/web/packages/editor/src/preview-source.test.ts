@@ -1,9 +1,4 @@
-import {
-  buildChartPlan,
-  defaultLineSettings,
-  LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
-  type SampleSource,
-} from "@yunari/renderer-core";
+import { buildChartPlan, defaultLineSettings } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import { createPreviewSource } from "./preview-source.js";
 
@@ -11,10 +6,6 @@ describe("createPreviewSource", () => {
   it("generates deterministic, bounded samples only for requested semantic keys", () => {
     let now = 0;
     const preview = createPreviewSource({ keys: ["cpu.load"], now: () => now });
-
-    expect(preview.source.chartPlaybackDelayMs).toBe(
-      LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
-    );
 
     const first = preview.source.latest("cpu.load");
     now += 1_000;
@@ -49,32 +40,23 @@ describe("createPreviewSource", () => {
     expect(preview.source.latest("cpu.load")).not.toEqual(tick);
   });
 
-  it("draws a line straight, the same as the player, with or without a delay", () => {
+  it("draws a line straight, the same as the player", () => {
     // The editor must show what the player will draw. Smoothing is not an
     // authorable choice, so neither surface can disagree about it (0116).
     const now = 60_000;
     const preview = createPreviewSource({ keys: ["cpu.load"], now: () => now });
-    const undelayed: SampleSource = {
-      revision: 0,
-      latest: (key) => preview.source.latest(key),
-      history: (key, seconds) => preview.source.history(key, seconds),
-    };
-    const smooth = (source: SampleSource): boolean => {
-      const chart = buildChartPlan(
-        "line",
-        {
-          family: "line",
-          settings: { ...defaultLineSettings, interpolation: "linear" },
-        },
-        [{ id: "b", semanticKey: "cpu.load" }],
-        { source, nowMs: now },
-        [],
-      );
-      if (chart.family !== "line") throw new Error("expected a line chart");
-      return chart.option.series[0]!.smooth;
-    };
+    const chart = buildChartPlan(
+      "line",
+      {
+        family: "line",
+        settings: { ...defaultLineSettings, interpolation: "linear" },
+      },
+      [{ id: "b", semanticKey: "cpu.load" }],
+      { source: preview.source, nowMs: now },
+      [],
+    );
+    if (chart.family !== "line") throw new Error("expected a line chart");
 
-    expect(smooth(preview.source)).toBe(false);
-    expect(smooth(undelayed)).toBe(false);
+    expect(chart.option.series[0]!.smooth).toBe(false);
   });
 });
