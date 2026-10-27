@@ -107,16 +107,14 @@ afterEach(() => {
   setActiveShortcuts(PRODUCT_SHORTCUTS);
 });
 
-/** The View menu's controls. The shell only reads and writes these three, so a
- *  stub with every member is the whole of what the menu can reach. */
+/** The View menu's controls. The shell only reads and writes these, so a stub
+ *  with every member is the whole of what the menu can reach. */
 function viewStub(
   overrides: Partial<EditorViewControls> = {},
 ): EditorViewControls {
   return {
     sourceMode: () => "preview",
     setSourceMode: vi.fn(),
-    chartRefreshRate: () => 30,
-    setChartRefreshRate: vi.fn(),
     ...overrides,
   };
 }
@@ -1109,7 +1107,7 @@ it("keeps a chart's fields in the Design column, with no Data tab to reach for",
   layout.destroy();
 });
 
-it("opens every View setting's choices instead of toggling on a bare click", async () => {
+it("opens the View menu's one setting's choices instead of toggling on a bare click", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
   const view = viewStub();
@@ -1125,44 +1123,36 @@ it("opens every View setting's choices instead of toggling on a bare click", asy
   const triggers = menuItems().filter(
     (item) => item.getAttribute("aria-haspopup") === "menu",
   );
-  // Each setting must say it opens something. A row that toggles on click while
-  // claiming to be a setting is what left `Chart refresh` one mis-click from a
-  // 1 FPS preview that reads as a hung editor.
+  // The setting must say it opens something, and it must keep naming the
+  // current value: the state is legible without opening anything.
   expect(triggers.map((item) => item.textContent)).toEqual([
     `${uiCopy.view.dataSource}: ${uiCopy.view.preview}`,
-    `${uiCopy.view.chartRefresh}: ${uiCopy.view.fps30}`,
   ]);
-
-  // The trigger keeps naming the current value, so the state is legible without
-  // opening anything — the zoom badge's idiom, which shows `100 %` on the badge
-  // and the three commands inside.
   for (const trigger of triggers)
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
 
-  // Open the refresh submenu and read the choices as the accessibility tree
-  // does. `aria-checked` is the half no sighted reader needs and every screen
-  // reader does: without it the two states are indistinguishable announcements.
-  const refresh = triggers[1];
-  if (refresh === undefined) throw new Error("No chart refresh setting.");
-  refresh.click();
+  // Read the choices as the accessibility tree does. `aria-checked` is the half
+  // no sighted reader needs and every screen reader does.
+  const source = triggers[0];
+  if (source === undefined) throw new Error("No readings setting.");
+  source.click();
   await Promise.resolve();
   const submenu = openPopups().find(
     (popup) => popup.querySelector("[role=menuitemradio]") !== null,
   );
   expect(submenu).not.toBeUndefined();
   expect(openRadioItems(submenu!)).toEqual([
-    [uiCopy.view.fps30, "true"],
-    [uiCopy.view.fps1, "false"],
+    [uiCopy.view.preview, "true"],
+    [uiCopy.view.live, "false"],
   ]);
 
-  // Picking is explicit: only the chosen value reaches the owner, so the
-  // thirty-fold step is a decision rather than a mis-click.
+  // Picking is explicit: only the chosen value reaches the owner.
   const items = Array.from(
     submenu!.querySelectorAll<HTMLElement>("[role=menuitemradio]"),
   );
-  items.find((item) => item.textContent?.trim() === uiCopy.view.fps1)?.click();
+  items.find((item) => item.textContent?.trim() === uiCopy.view.live)?.click();
   await Promise.resolve();
-  expect(view.setChartRefreshRate).toHaveBeenCalledWith(1);
+  expect(view.setSourceMode).toHaveBeenCalledWith("live");
 
   layout.destroy();
 });

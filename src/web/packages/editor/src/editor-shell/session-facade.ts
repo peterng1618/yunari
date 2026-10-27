@@ -76,6 +76,4 @@ export interface EditorActionFacade {
 export interface EditorViewControls {
   readonly sourceMode: () => "preview" | "live";
   setSourceMode(mode: "preview" | "live"): void;
-  readonly chartRefreshRate: () => 1 | 30;
-  setChartRefreshRate(rate: 1 | 30): void;
 }

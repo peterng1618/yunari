@@ -34,9 +34,6 @@ import { HOST_PORT } from "./host-theme.js";
  *   npx playwright test --project=phone-host live-chart-edge.spec.ts
  * ```
  *
- * The reading is `this-pc` at 1 fps, which is what that display's kind pins it
- * to.
- *
  * The file name is relative to `testDir`, not to the repository root. And run
  * `@playwright/test`'s own CLI: `@playwright/mcp`'s `playwright` dependency
  * hoists a different minor over `node_modules/.bin/playwright`, and the alpha
@@ -228,9 +225,10 @@ test.describe("the live line chart's edge", () => {
     });
 
     const themeId = await saveStarterThroughTheHost(page);
-    // `this-pc`, whose kind pins it to 1 fps (`chartFpsFor`). The 30 fps arm is
-    // not reachable here: the host refuses to mint a record for this PC, and a
-    // fabricated local record's stream delivered two batches before stalling.
+    // `this-pc`: the host refuses to mint a record for this PC, so this is the
+    // display the page is served as. The scene cadence is the same 30 fps for
+    // every display now (0129), so the rate no longer decides what is measured
+    // here — the line's edge does.
     await page.goto(`${HOST}/?theme=${themeId}&data=live`);
     await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible();
     await expect

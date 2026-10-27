@@ -9,7 +9,7 @@ import type {
 } from "@yunari/renderer-core";
 import { emptySampleSource } from "@yunari/renderer-core";
 import { Canvas, IText, Rect, Textbox } from "fabric/es";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   applyAuthoredText,
   authoredAlignment,
@@ -443,20 +443,75 @@ describe("what one text pass costs", () => {
     await canvas.dispose();
   });
 
-  it("measures a bound object once in the sample pass, not twice", async () => {
+  /** A readout whose value run is bound to `cpu.load`. */
+  function readout(): {
+    canvas: Canvas;
+    object: Textbox;
+    bindings: { label: { id: string; semanticKey: string }[] };
+    source: (value: number) => Parameters<typeof refreshBoundText>[2];
+  } {
     const { canvas, object } = stage();
+    object.set(YUNARI_TEXT_PROPERTY, {
+      runs: [
+        { kind: "literal", text: "CPU " },
+        { kind: "value", bindingId: "load" },
+      ],
+      align: "left",
+    });
+    return {
+      canvas,
+      object,
+      bindings: { label: [{ id: "load", semanticKey: "cpu.load" }] },
+      source: (value) => ({
+        revision: 0,
+        latest: () => ({
+          sensorId: "cpu.load",
+          timestamp: "",
+          status: "ok" as const,
+          value,
+        }),
+        history: () => [],
+      }),
+    };
+  }
+
+  it("measures a bound object once in the sample pass, not twice", async () => {
+    const { canvas, object, bindings, source } = readout();
 
     expect(
-      measures(() =>
-        refreshBoundText(
-          canvas,
-          { label: [{ id: "load", semanticKey: "cpu.load" }] },
-          { revision: 0, latest: () => undefined, history: () => [] },
-          undefined,
-        ),
-      ),
+      measures(() => refreshBoundText(canvas, bindings, source(62), undefined)),
     ).toBe(1);
+    expect(object.text).toBe("CPU 62");
     expect(object.width).toBeGreaterThan(0);
+    await canvas.dispose();
+  });
+
+  it("does not repaint a reading whose text did not change", async () => {
+    const { canvas, object, bindings, source } = readout();
+    refreshBoundText(canvas, bindings, source(48), undefined);
+    const render = vi.spyOn(canvas, "requestRenderAll");
+
+    // A minutes clock is sampled every second; only its own string decides
+    // whether it is painted again.
+    const count = measures(() =>
+      refreshBoundText(canvas, bindings, source(48), undefined),
+    );
+
+    expect(count, "an unchanged reading was re-measured").toBe(0);
+    expect(render, "an unchanged reading repainted").not.toHaveBeenCalled();
+    expect(object.text).toBe("CPU 48");
+    await canvas.dispose();
+  });
+
+  it("repaints when the reading changes", async () => {
+    const { canvas, object, bindings, source } = readout();
+    refreshBoundText(canvas, bindings, source(48), undefined);
+    const render = vi.spyOn(canvas, "requestRenderAll");
+
+    refreshBoundText(canvas, bindings, source(55), undefined);
+
+    expect(object.text).toBe("CPU 55");
+    expect(render).toHaveBeenCalled();
     await canvas.dispose();
   });
 });

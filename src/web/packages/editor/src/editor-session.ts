@@ -7,7 +7,7 @@ import {
   SEMANTIC_KEYS,
   type SemanticKeyDescriptor,
 } from "@yunari/renderer-core";
-import { type ChartRefreshRate, sceneBoxesOf } from "@yunari/scene-fabric";
+import { sceneBoxesOf } from "@yunari/scene-fabric";
 import {
   MAX_CREDITS_ENTRIES,
   type ThemeCreditsEntry,
@@ -143,8 +143,6 @@ interface EditorPanelHosts {
 interface EditorSessionOptions {
   readonly shell: EditorShell;
   readonly source: SampleSource;
-  /** The author's chart refresh rate; absent keeps the 30 fps default. */
-  readonly chartRefreshRate?: () => ChartRefreshRate;
   readonly envelope: FabricThemeEnvelopeInput;
   /**
    * The document's declared assets and their bytes, already loaded.
@@ -429,7 +427,6 @@ export class EditorSession {
       scene: options.shell.scene,
       source: options.source,
       descriptors,
-      refreshRate: options.chartRefreshRate ?? (() => 30),
       ...(this.#document.envelope.bindings === undefined
         ? {}
         : { bindings: this.#document.envelope.bindings }),

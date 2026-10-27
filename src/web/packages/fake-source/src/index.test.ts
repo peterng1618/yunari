@@ -1,3 +1,4 @@
+import { SEMANTIC_KEYS } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
   FakeSampleSource,
@@ -280,5 +281,50 @@ describe("failure simulation", () => {
     });
 
     expect(source.latest("gpu.temp")?.status).toBe("ok");
+  });
+});
+
+describe("the semantic dictionary", () => {
+  it("answers every key with the kind its descriptor declares", () => {
+    const source = new FakeSampleSource(T0);
+
+    for (const descriptor of SEMANTIC_KEYS) {
+      const sample = source.sampleAt(descriptor.key, T0);
+      const where = descriptor.key;
+
+      expect(sample.status, where).toBe("ok");
+      if (descriptor.instant !== undefined) {
+        expect(sample.textValue, where).toMatch(/^\d{4}-\d\d-\d\dT/);
+      } else if (descriptor.valueKind === "text") {
+        expect(typeof sample.textValue, where).toBe("string");
+        // An image reading is a host-relative URL, which a synthetic sample
+        // must not fabricate; the preview shows a placeholder instead.
+        if (descriptor.mediaKind === "image") {
+          expect(sample.textValue?.startsWith("/"), where).toBe(false);
+        }
+      } else if (descriptor.valueKind === "boolean") {
+        expect(typeof sample.booleanValue, where).toBe("boolean");
+      } else {
+        expect(typeof sample.value, where).toBe("number");
+        if (descriptor.unit !== undefined) {
+          expect(sample.unit, where).toBe(descriptor.unit);
+        }
+      }
+    }
+  });
+
+  it("keeps a capacity total constant", () => {
+    const source = new FakeSampleSource(T0);
+
+    for (const key of [
+      "ram.total",
+      "vram.total",
+      "disk.total",
+      "disk.data.total",
+    ]) {
+      expect(source.sampleAt(key, T0).value, key).toBe(
+        source.sampleAt(key, T0 + 60_000).value,
+      );
+    }
   });
 });

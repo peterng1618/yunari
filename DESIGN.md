@@ -250,8 +250,8 @@ shows nothing beside the switch. The editor's own body is hidden, not unmounted,
 while another mode shows — a mode switch never loses an unsaved document, and it
 asks before it leaves a dirty one (`docs/decisions/0074`).
 
-Why `View` stays: the things in it — preview/source, chart refresh, run display
-— are changed *while* designing, many times a session. Settings is for
+Why `View` stays: the things in it — preview/source, run display — are
+changed *while* designing, many times a session. Settings is for
 once-in-a-while choices. A frequently changed control one level deeper is a tax
 paid on every use.
 

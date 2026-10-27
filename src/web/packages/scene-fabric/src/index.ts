@@ -50,7 +50,7 @@ export {
   CHART_SERIALISED_KEYS,
   YunariChart,
 } from "./chart-object.js";
-export { type ChartRefreshRate, startChartRefresh } from "./chart-refresh.js";
+export { startSceneRefresh } from "./chart-refresh.js";
 export type { UnsupportedReporter } from "./fabric-nodes.js";
 export {
   applyAuthoredText,

@@ -22,7 +22,6 @@
  */
 
 import type { DisplayPresentation, DisplayShape } from "@yunari/renderer-core";
-import type { ChartRefreshRate } from "@yunari/scene-fabric";
 
 interface PublishFollowerSession {
   readonly pageUrl: string;
@@ -35,13 +34,6 @@ interface PublishFollowerOptions {
   /** The theme the host now says this display should be showing. Called only
    *  for a page the host resolved itself, and only when the answer moves. */
   readonly onThemeChange?: (theme: string | null) => void;
-  /** The rate the host now says this display's charts should repaint at. A
-   *  number that is not `1 | 30` is refused here rather than passed on: it
-   *  arrives as JSON, and `setRate` stores it raw and divides by it, so a `0`
-   *  makes the cadence comparison `< Infinity` and the display stops refreshing
-   *  with nothing logged (R64). A refused value is not a rate change, so the
-   *  loop keeps the rate it has. */
-  readonly onRateChange?: (rate: ChartRefreshRate) => void;
   /** The glass and mounting angle the host now says this display is. Reported
    *  only when the answer moves, including the first answer — a page that has
    *  just loaded is already wearing what the host last resolved, so the first
@@ -153,25 +145,14 @@ export function followPublished(
           revision?: unknown;
           display?: {
             theme?: unknown;
-            chartFps?: unknown;
             shape?: unknown;
             rotation?: unknown;
           };
         };
 
-        // Every display has a rate, not only a page the map resolved: the host
-        // answers it for whatever display asked. Reported ahead of the two
-        // reloads below, because a rate is a fact about this display rather
-        // than a policy about the page it is on.
-        const chartFps = body.display?.chartFps;
-
-        if (chartFps === 1 || chartFps === 30) {
-          options.onRateChange?.(chartFps);
-        }
-
-        // The glass is reported ahead of the two reloads for the same reason the
-        // rate is: it is a fact about this display, and the reload a publish
-        // move triggers is a new page that will report it again anyway.
+        // The glass is reported ahead of the two reloads: it is a fact about
+        // this display, and the reload a publish move triggers is a new page
+        // that will report it again anyway.
         const shape = body.display?.shape;
         const rotation = body.display?.rotation;
 

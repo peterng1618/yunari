@@ -8,8 +8,8 @@ import { LiveRuntime } from "./live-runtime.js";
 /**
  * What the refresh loop costs, counted.
  *
- * The loop runs at the author's chart rate — 30 fps by default — and it used to
- * run both text passes on every tick over every object in the document. A
+ * The loop runs at a fixed 30 fps (0129) and it used to run both text passes on
+ * every tick over every object in the document. A
  * percentage of blocked main thread is the wrong thing to assert: it moves with
  * the machine, the build, and whatever else is running. How many times a text
  * object was re-measured in a fixed interval is not, so that is what these

@@ -60,11 +60,11 @@ const checkSlot = (state: {
 
 /** One View setting as a submenu of its own values.
  *
- *  These were three items that flipped a boolean on click, which read as
- *  settings and behaved as switches: nothing on screen said the other value
- *  existed, `Chart refresh` moved 30 FPS to 1 FPS on one mis-click with nothing
- *  to explain the preview that then looked hung, and no `aria-checked` meant a
- *  screen reader heard a plain menu item and never which state was current.
+ *  These were items that flipped a boolean on click, which read as settings
+ *  and behaved as switches: nothing on screen said the other value existed, one
+ *  mis-click replaced the preview with a reading that then looked hung, and no
+ *  `aria-checked` meant a screen reader heard a plain menu item and never which
+ *  state was current.
  *  The zoom badge beside them is the idiom already in this shell — a trigger
  *  naming the current value, a popup listing every one — and the trigger's
  *  `aria-haspopup` is what now distinguishes the two.
@@ -175,11 +175,9 @@ export function ShellMenuBar({
   const noObject = noSelection || kind === "background";
   const session = store.bridge?.session;
   const [source, setSource] = useState<"preview" | "live">("preview");
-  const [rate, setRate] = useState<1 | 30>(30);
 
   useEffect(() => {
     setSource(getView()?.sourceMode() ?? "preview");
-    setRate(getView()?.chartRefreshRate() ?? 30);
   }, [getView, selection.selectedCount]);
 
   const item = (
@@ -263,18 +261,6 @@ export function ShellMenuBar({
           onChange={(next) => {
             getView()?.setSourceMode(next);
             setSource(next);
-          }}
-        />
-        <ViewSetting
-          label={uiCopy.view.chartRefresh}
-          value={rate}
-          options={[
-            [30, uiCopy.view.fps30],
-            [1, uiCopy.view.fps1],
-          ]}
-          onChange={(next) => {
-            getView()?.setChartRefreshRate(next);
-            setRate(next);
           }}
         />
       </MenuGroup>

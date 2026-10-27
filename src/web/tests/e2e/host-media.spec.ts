@@ -522,11 +522,11 @@ async function recordPerFrameWebm(page: Page): Promise<Uint8Array> {
  * which is a named gap, not a claim here.)
  *
  * The **player** is different, and this is the measurement rather than the
- * expectation. Both of its mount paths start `startChartRefresh(tick, 30)` on
- * `requestAnimationFrame`, so it already repaints on every animation frame the
- * compositor offers — and a video frame is presented *as* an animation frame,
- * so the callback's `requestRenderAll` lands in a frame that already has one
- * and Fabric coalesces the two into a single render. Counted over three
+ * expectation. It starts `startSceneRefresh(tick)` on `requestAnimationFrame`,
+ * so it wakes on every animation frame the compositor offers, and it asks the
+ * canvas to render when a reading moved — a video frame is presented *as* an
+ * animation frame, so the callback's `requestRenderAll` lands in the same frame
+ * and Fabric coalesces the requests into a single render. Counted over three
  * seconds on this machine, against the per-frame clip above:
  *
  * ```
@@ -714,12 +714,11 @@ test.describe("the video frame callback on the real player", () => {
     ).toBe(0);
     // **The claim.** The display keeps repainting on its own cadence, so the
     // render count does not collapse to the frames' — it falls back to the
-    // loop's. **The two counts are not the same kind of number**: this page is
-    // served to loopback, which resolves to the machine's own display, whose
-    // rate is 1 fps by default (`chartFpsFor`), while phase A also renders once
-    // per delivered video frame (~30/s). Comparing a ratio would measure the
-    // video's cadence, not the loop's. Three seconds at 1 fps owes about three
-    // renders; `>= 2` is that budget with one window of slack.
+    // sample cadence. **The two counts are not the same kind of number**: this
+    // page is served to loopback, while phase A also renders once per delivered
+    // video frame (~30/s). Comparing a ratio would measure the video's cadence,
+    // not the display's. Three seconds of a host reporting once a second owes
+    // about three renders; `>= 2` is that budget with one window of slack.
     expect(
       idle.renders,
       `the player still repaints with no video frames delivered (${idle.renders} against ${armed.renders} armed)`,

@@ -13,7 +13,6 @@ import {
   seriesPaintFor,
 } from "@yunari/renderer-core";
 import {
-  type ChartRefreshRate,
   chartAnimationFor,
   type SceneAdapter,
   YunariChart,
@@ -179,17 +178,16 @@ export class ChartManager {
   /** The readings a series may name, pulled at projection time so a catalogue
       refreshed after mount is offered on the next render. */
   readonly #descriptors: () => readonly SemanticKeyDescriptor[];
-  readonly #refreshRate: () => ChartRefreshRate;
 
   /**
    * The reading each chart last drew with, keyed by object id.
    *
-   * The frame loop calls `refresh` at the author's chart rate, which makes that
-   * rate the ceiling on how often a chart *may* re-apply — not a promise that
-   * every tick draws every chart. Re-applying an option the chart already has
-   * made ECharts repaint, and Fabric redraw the whole document, thirty times a
-   * second for an identical picture (vg-107). A chart absent from this map has
-   * never been drawn by this manager and is drawn.
+   * The scene loop calls `refresh` at a fixed 30 fps, which makes that cadence
+   * the ceiling on how often a chart *may* re-apply — not a promise that every
+   * tick draws every chart. Re-applying an option the chart already has made
+   * ECharts repaint, and Fabric redraw the whole document, thirty times a second
+   * for an identical picture (vg-107). A chart absent from this map has never
+   * been drawn by this manager and is drawn.
    */
   readonly #drawnReading = new Map<string, string>();
 
@@ -254,7 +252,6 @@ export class ChartManager {
     readonly globals?: FabricGlobals;
     /** The available readings; absent keeps the built-in vocabulary. */
     readonly descriptors?: () => readonly SemanticKeyDescriptor[];
-    readonly refreshRate?: () => ChartRefreshRate;
     readonly onBindingsChange?: (
       id: string,
       bindings: readonly Binding[],
@@ -266,7 +263,6 @@ export class ChartManager {
     this.#bindings = options.bindings ?? {};
     this.#globals = options.globals;
     this.#descriptors = options.descriptors ?? (() => SEMANTIC_KEYS);
-    this.#refreshRate = options.refreshRate ?? (() => 30);
     this.#onBindingsChange = options.onBindingsChange;
     this.#editor.canvas.on("object:modified", this.#rerasterizeScaledChart);
     this.#editor.canvas.on(
@@ -618,7 +614,7 @@ export class ChartManager {
         {
           source: this.#source,
           nowMs: options.nowMs ?? Date.now(),
-          animate: chartAnimationFor(chart.family, this.#refreshRate()),
+          animate: chartAnimationFor(chart.family),
           // The canvas the caps are measured against: the backing edge, which
           // is the scene box times the chart's render scale.
           ...drawnEdgePxOf(chart),

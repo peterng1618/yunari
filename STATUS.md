@@ -5,34 +5,36 @@ Branch: `peterng1618/fix-font-trio` (worktree `fix-font-trio`)
 
 ## Current objective
 
-The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design.md) is complete: a token names a face, and each run owns its size, line height and tracking. The final whole-branch review's one blocking defect is fixed and re-reviewed; local `main` carries it so the user can test.
+Two plans are complete — the type-token model and the display's own motion — and this tree carries both; local `main` takes it next, then the backlog drain.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-27-type-token-model.md` — all six phases done plus one final-review fix; ledger at `.superpowers/sdd/2026-10-27-type-token-model/progress.md`.
-- **The branch carries main:** its 70 commits are merged in, and the merged tree typechecks and passes the full suite.
-- **The gate is green as one run:** `npm run gate` exit 0 at `a84f7d90` — biome, self-tests, status, docs, design, typecheck, 447 test files (6891 passed, 1 skipped) and the store-worker suite.
-- **Final review discharged:** verdict FIXED on a scoped re-review, no blocking or should-fix findings; one low recorded with no fix needed.
-- **Local `main` is at this branch's tip:** the user can test the type-token editor while the branch is finished.
+- **No plan is running:** the type-token plan's six phases and the display-animation plan's seven tasks are done; `main` (at `b3a2b98`) is merged in here and this branch merges back next.
+- **The type-token model is in:** a token names a face whereas size, line height and tracking belong to each run (`0128`).
+- **Display motion is in:** one fixed 30 fps `startSceneRefresh` loop, a transition pump in `YunariChart`, skip-unchanged bound text, and no chart-rate setting anywhere (`0129`).
+- **The type-token final review is discharged:** its one blocking defect is fixed and re-reviewed FIXED (`a84f7d90`), and its should-fix is filed as `vg-772`.
+- **Preview lens and display presentation landed:** scene-anchored box, letterbox, guide frame, circle lens, ratio catalogue, per-record shape and rotation.
+- **The live line is placed by its data:** axis at its newest reading, no delay or hold, missing readings skipped, sample frames queued at the transport (0124).
 
 ## Last completed change
 
-- **A new text now paints its role default before the author types:** `addText` asks the session's authoring-view port to paint the object before returning, so the canvas shows 16 (body at 1080) instead of Fabric's 40 for the whole first edit.
-- **Red-proved:** with the paint line removed the new case reads 40, restored it reads 16; the line is a no-op for objects with no authored runs and for a manager with no port installed.
-- **The review's should-fix is filed, not fixed:** a whole-family import binds one face, so save-cleanup offers the other declared weights and subsets for removal (`vg-772`, from the commit trailer).
-- **Proof:** gate exit 0 at `a84f7d90`; scoped re-review re-ran focused suites, typecheck, biome and `backlog-check` (772 items) at 0.
-- **Unverified:** the browser arm — port 4174 is another worktree's preview, and `reuseExistingServer` would measure that bundle.
+- **`main` (b3a2b98) is merged into this branch:** its 13 commits bring the display animation, and this file was the only conflict.
+- **A new text now paints its role default before the first edit:** `addText` paints through the session's authoring-view port, so the canvas shows 16 (body at 1080) rather than Fabric's 40 for the whole first edit (`a84f7d90`).
+- **Red-proved 40 → 16:** the paint is a no-op for objects with no authored runs and for a manager with no port installed.
+- **The final review's should-fix is filed, not fixed:** a whole-family import binds one face, so save-cleanup offers the other declared weights and subsets for removal (`vg-772`).
+- **Proof:** `npm run gate` exit 0 on the merged tree — 447 files / 6,885 passed + 1 skipped, browser 13 files / 130 passed.
 
 ## Next
 
-1. Finish the branch; pushing and opening a PR need the user.
-2. If port 4174 frees, run the editor browser projects and record the visual proof here.
-3. Drain `vg-772` (font-family reachability) when the register is next worked.
+1. Fast-forward local `main` to this merge so the user can test both.
+2. Resume the backlog-drain plan at Phase 0, a reproduction pass over the register.
+3. Verify the retargeted `editor.spec.ts` cases when preview port 4174 frees.
+4. Owner test of a gauge mid-transition on a real display.
 
 ## Blockers / unverified
 
-- **Browser arm unverified:** port 4174 is held by `background-media-becomes-a-layer`'s `vite preview`; nothing was killed and no port was moved.
-- **The import flow has never run in a real browser on this branch:** its filechooser, dialog and Create steps match the dom test only.
-- **Starter role weights are read-only:** `Segoe UI, sans-serif` and `Consolas, monospace` are undeclared, so a weight changes only after choosing a declared family.
-- **Open rows from this plan:** `vg-770`, `vg-762`, `vg-771`, `vg-772`.
-- **`vg-756`:** the e2e scripts still resolve the Playwright alpha through `.bin`; run specs via `node node_modules/@playwright/test/cli.js`.
+- **Browser arm unverified for both plans:** port 4174 is held by `background-media-becomes-a-layer`'s preview; nothing was killed and no port was moved.
+- **The transition pump is unit-proven only:** no capture shows a gauge mid-transition on a real display.
+- **The import flow has never run in a real browser on the type-token branch:** its chooser, dialog and Create steps match the dom test only.
+- **Open rows:** `vg-770`, `vg-762`, `vg-771`, `vg-772`; starter role weights stay read-only while `Segoe UI` and `Consolas` are undeclared.
+- **`vg-756` and the store-worker token handoff:** run specs via `node node_modules/@playwright/test/cli.js`, and closing `return-page.ts` needs a nonce or pinned-port decision.

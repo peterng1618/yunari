@@ -453,6 +453,7 @@ export function refreshBoundText(
   descriptors?: readonly SemanticKeyDescriptor[],
   artboardHeight?: number,
 ): void {
+  let changed = false;
   const refresh = (objects: readonly object[]): void => {
     for (const object of objects) {
       if (isTextObject(object)) {
@@ -484,11 +485,29 @@ export function refreshBoundText(
           const shape = textShapeFor(segments, {}, (value) =>
             object.graphemeSplit(value),
           );
+          const paint = runTypePaint(segments[0]?.style);
+          // **Only a change to what it paints repaints.** A clock sampled once a
+          // second paints its seconds once a second, but a minutes or days clock
+          // paints only when its own text moves — the sample cadence is the
+          // host's, not the author's. The run's type is compared too: a role
+          // default can change while the string stays the same (0128).
+          if (
+            object.text === shape.text &&
+            (authored.align === undefined ||
+              object.textAlign === authored.align) &&
+            Object.entries(paint).every(
+              ([key, value]) =>
+                (object as unknown as Record<string, unknown>)[key] === value,
+            )
+          ) {
+            continue;
+          }
+          changed = true;
           guardBoxWidth(object);
           // Measured by the `set` itself, for the reason given in
           // `applyAuthoredText` above.
           object.set({
-            ...runTypePaint(segments[0]?.style),
+            ...paint,
             text: shape.text,
             styles: shape.styles,
             ...(authored.align === undefined
@@ -503,7 +522,7 @@ export function refreshBoundText(
   };
 
   refresh(canvas.getObjects());
-  canvas.requestRenderAll();
+  if (changed) canvas.requestRenderAll();
 }
 
 /** Reapply stored authored layout after runtime text changes. */

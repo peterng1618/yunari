@@ -4,9 +4,8 @@ import {
 } from "@yunari/renderer-core";
 import {
   assertFabricThemeEnvelopeCompatible,
-  type ChartRefreshRate,
   loadFontAssets,
-  startChartRefresh,
+  startSceneRefresh,
 } from "@yunari/scene-fabric";
 import { AssetManager } from "./asset-manager/index.js";
 import { EditorSession } from "./editor-session.js";
@@ -74,7 +73,6 @@ async function start(): Promise<void> {
   void sensors.refresh();
   let mode: "preview" | "live" = "preview";
   let active: ActiveEditor | undefined;
-  let chartRefreshRate: ChartRefreshRate = 30;
 
   const layout = createShellLayout(root);
   const host = layout.hosts.canvas;
@@ -131,12 +129,11 @@ async function start(): Promise<void> {
   // freeze the very preview the drag exists to produce. The loop's cost went
   // down instead — see `LiveRuntime.tick` — rather than away during a gesture.
   const gesture = { down: false };
-  const chartRefresh = startChartRefresh(
+  const chartRefresh = startSceneRefresh(
     () => {
       if (gesture.down) return;
       active?.extensions.tick();
     },
-    chartRefreshRate,
     undefined,
     // The session is mounted later, so the report is routed through whatever is
     // current; a throw before one exists is still logged.
@@ -149,19 +146,12 @@ async function start(): Promise<void> {
     },
   );
   /** Document actions come from the session once it exists; the View menu's
-   * source/refresh controls are owned here and only dispatch through it. */
+   * source control is owned here and only dispatches through it. */
   const viewControls: EditorViewControls = {
     sourceMode: () => mode,
     setSourceMode: (next) => {
       mode = next;
       replaceSource();
-    },
-    chartRefreshRate: () => chartRefreshRate,
-    // The loop is the only owner of cadence: the charts draw when their data
-    // moves, so a rate change is a rate change here and nothing downstream.
-    setChartRefreshRate: (rate) => {
-      chartRefreshRate = rate;
-      chartRefresh.setRate(rate);
     },
   };
 
@@ -288,7 +278,6 @@ async function start(): Promise<void> {
     const options = {
       shell,
       source: source.source,
-      chartRefreshRate: () => chartRefreshRate,
       envelope: next.input,
       // The package's own picture, so a theme keeps the look its author saw
       // even where this machine cannot render one.

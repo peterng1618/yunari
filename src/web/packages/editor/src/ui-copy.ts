@@ -1567,12 +1567,9 @@ export const uiCopy = {
    *  have no row: their token is the *editing* view and ends with the edit. */
   view: {
     dataSource: "Readings from",
-    chartRefresh: "Chart refresh",
     preview: "The theme's sensors",
     live: "This machine",
     previewDetail: "every sensor this theme names",
-    fps30: "30 FPS",
-    fps1: "1 FPS",
   },
   actions: {
     duplicate: "Duplicate",
