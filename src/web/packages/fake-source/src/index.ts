@@ -58,6 +58,37 @@ const CAPACITY_TOTALS: Readonly<
 > = {
   "ram.total": { value: 32, unit: "GB" },
   "vram.total": { value: 24, unit: "GB" },
+  "disk.total": { value: 2_000, unit: "GB" },
+  "disk.data.total": { value: 2_000, unit: "GB" },
+};
+
+/**
+ * Recognisable preview text for the sensors a theme most often shows.
+ *
+ * Every other text key falls back to its descriptor's label, so a key added to
+ * the vocabulary previews without being taught here.
+ */
+const TEXT_VALUES: Readonly<Record<string, string>> = {
+  "cpu.manufacturer": "Yunari",
+  "cpu.brand": "Yunari Dev",
+  "cpu.model": "Yunari Dev CPU",
+  "gpu.name": "Reference GPU",
+  "disk.name": "System",
+  "battery.state": "Discharging",
+  "system.hostname": "studio-pc",
+  "system.os": "Windows 11",
+  "wifi.ssid": "Home network",
+  "weather.location": "Local",
+  "weather.condition": "Partly cloudy",
+  "weather.attribution": "Synthetic weather",
+  "media.title": "Sample track",
+  "media.artist": "Sample artist",
+  "media.album": "Sample album",
+  "media.state": "Playing",
+  "media.app": "Music",
+  "frame.app": "sample.exe",
+  "game.name": "Sample Game",
+  "game.app": "sample.exe",
 };
 
 /** Deterministic outage rule for exercising gap rendering. */
@@ -173,15 +204,35 @@ export class FakeSampleSource implements SampleSource {
       };
     }
 
+    const descriptor = describeSemanticKey(semanticKey);
+
     // A key the vocabulary declares as an instant is the time this sample is
     // for, so a clock previews in the editor and in a fixture theme exactly as
     // the host would report it.
-    if (describeSemanticKey(semanticKey)?.instant !== undefined) {
+    if (descriptor?.instant !== undefined) {
       return {
         sensorId: semanticKey,
         timestamp,
         status: "ok",
         textValue: instantIn(timeMs),
+      };
+    }
+
+    if (descriptor?.valueKind === "boolean") {
+      return {
+        sensorId: semanticKey,
+        timestamp,
+        status: "ok",
+        booleanValue: stableHash(semanticKey) % 2 === 0,
+      };
+    }
+
+    if (descriptor?.valueKind === "text") {
+      return {
+        sensorId: semanticKey,
+        timestamp,
+        status: "ok",
+        textValue: TEXT_VALUES[semanticKey] ?? descriptor.label,
       };
     }
 
@@ -203,7 +254,10 @@ export class FakeSampleSource implements SampleSource {
       timestamp,
       status: "ok",
       value: waveform(semanticKey, timeMs, profile, this.#seed),
-      unit: profile.unit,
+      // The descriptor names the unit the reading is reported in; the profile's
+      // is the waveform's own fiction and only fills a key the vocabulary
+      // leaves unitless.
+      unit: descriptor?.unit ?? profile.unit,
     };
   }
 

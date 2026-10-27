@@ -18,8 +18,8 @@ away and every chart's transition is blitted while it runs.
 
 ## Last completed change
 
-- **A clock paints on its own granularity:** `refreshBoundText` skips the set, the layout and the render request when the resolved string is identical, so a minutes clock repaints once a minute and a date once a day.
-- **Proof:** the unchanged-reading test failed first (1 of 21), 21 pass in the text suite and 603 across `scene-fabric` and `player`; typecheck and biome exit 0.
+- **The preview answers the whole dictionary:** `FakeSampleSource` emits `textValue` for text keys (a small table, then the descriptor's label), `booleanValue` for boolean keys, an ISO instant for time keys, and the descriptor's unit for numbers; `disk.total`/`disk.data.total` join the constants.
+- **Proof:** the dictionary invariant failed first on units and disk totals; 30 pass in `fake-source`, 34 across the preview-source suites; typecheck and biome exit 0.
 
 ## Next
 
