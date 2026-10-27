@@ -1971,6 +1971,13 @@ export const uiCopy = {
     colourUnpaintable: (value: string) =>
       `Not a colour the browser can paint: "${value}". Hex, rgb(), hsl() or a CSS colour name.`,
     family: "Family",
+    /** The family list's trailing action rows: the two ways into the package
+        without leaving the token. */
+    importLocalFont: "Import local font…",
+    fontFinder: "Font finder…",
+    /** The reading for a family the package does not declare, appended to the
+        family list as a choice the control will not commit. */
+    notInPackage: "(not in package)",
     /** The font form's own label; the panel vocabulary had no style word. */
     style: "Style",
     cancel: "Cancel",

@@ -8,7 +8,10 @@ import type * as React from "react";
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { ControlSelect } from "../../components/ui/control-select.js";
+import {
+  type ControlOption,
+  ControlSelect,
+} from "../../components/ui/control-select.js";
 import { ControlText } from "../../components/ui/control-text.js";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
 import type { TokenRef } from "../../editor-shell/shell-stores.js";
@@ -66,6 +69,38 @@ export interface FaceChoice {
   readonly style: string;
 }
 
+/** Sentinel ids in the family list. A declared family equal to one is filtered
+ *  out rather than allowed to masquerade as an action. */
+const IMPORT_LOCAL_FONT_ID = "@yunari:import-local-font";
+const FONT_FINDER_ID = "@yunari:font-finder";
+
+/** The family list's trailing rows, each drawn only where its port exists. */
+function fontActionOptions(
+  actions: TokenInspectorActions,
+): readonly ControlOption[] {
+  return [
+    ...(actions.importLocalFont === undefined
+      ? []
+      : [{ id: IMPORT_LOCAL_FONT_ID, name: uiCopy.panels.importLocalFont }]),
+    ...(actions.openFontFinder === undefined
+      ? []
+      : [{ id: FONT_FINDER_ID, name: uiCopy.panels.fontFinder }]),
+  ];
+}
+
+/** Runs an action row. Answers false for a family, which the caller writes. */
+function runFontAction(id: string, actions: TokenInspectorActions): boolean {
+  if (id === IMPORT_LOCAL_FONT_ID) {
+    actions.importLocalFont?.();
+    return true;
+  }
+  if (id === FONT_FINDER_ID) {
+    actions.openFontFinder?.();
+    return true;
+  }
+  return false;
+}
+
 export interface TokenInspectorActions {
   readonly onChange: (presets: TypeTokens) => void;
   readonly onDelete: (id: string, replacement: string) => void;
@@ -74,6 +109,12 @@ export interface TokenInspectorActions {
    *  the weights the package actually holds rather than free text that would
    *  fall back to the browser font. */
   readonly facesOf?: (family: string) => readonly FaceChoice[];
+  /** The package's declared families, in the order the list offers them. */
+  readonly familiesOf?: () => readonly string[];
+  /** Declares a picked file as a token's family. Drawn only when supplied. */
+  readonly importLocalFont?: () => void;
+  /** Opens the font finder. Drawn only when supplied, like the picker above. */
+  readonly openFontFinder?: () => void;
   /** The paint half: the palette the ref names, its document writes and its
    *  users walk. Absent when the mount has no palette behind it. */
   readonly paints:
@@ -216,12 +257,14 @@ function TokenFields(props: {
       </span>
       {value.face === undefined ? (
         <>
-          <ControlText
+          <ControlSelect
             label={uiCopy.panels.family}
             data={{ "data-yunari-token-family": "" }}
             value={value.family}
-            onCommit={(next) => {
-              const trimmed = next.trim();
+            options={familyOptions(value.family, actions)}
+            onChange={(id) => {
+              if (runFontAction(id, actions)) return;
+              const trimmed = id.trim();
               if (trimmed === "") return;
               put({ ...value, family: trimmed });
             }}
@@ -285,12 +328,71 @@ function TokenFields(props: {
           >
             {uiCopy.panels.unbindFont}
           </button>
+          {/* The face owns the family, so there is no family list to hold these
+              rows; they stay the same two actions, as buttons. */}
+          <FontActionRows actions={actions} />
         </div>
       )}
       {isTypeTokenRole(id) ? null : (
         <Deletion id={id} presets={presets} actions={actions} />
       )}
     </div>
+  );
+}
+
+/**
+ * The family list: the package's declared families in the producer's order, the
+ * token's own family appended as a reading when the package does not declare it,
+ * then the action rows.
+ *
+ * The current family is `disabled` rather than omitted, so it still prints as
+ * the trigger's value while staying out of the keyboard model.
+ */
+function familyOptions(
+  family: string,
+  actions: TokenInspectorActions,
+): readonly ControlOption[] {
+  const declared = (actions.familiesOf?.() ?? []).filter(
+    (candidate) =>
+      candidate !== IMPORT_LOCAL_FONT_ID && candidate !== FONT_FINDER_ID,
+  );
+  return [
+    ...declared.map((candidate) => ({ id: candidate, name: candidate })),
+    ...(declared.includes(family)
+      ? []
+      : [
+          {
+            id: family,
+            name: `${family} ${uiCopy.panels.notInPackage}`,
+            disabled: true,
+          },
+        ]),
+    ...fontActionOptions(actions),
+  ];
+}
+
+/** The two action rows where no family list exists to carry them. */
+function FontActionRows(props: {
+  readonly actions: TokenInspectorActions;
+}): React.JSX.Element | null {
+  const options = fontActionOptions(props.actions);
+  if (options.length === 0) return null;
+  return (
+    <>
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          data-yunari-token-action={option.id}
+          onClick={() => {
+            runFontAction(option.id, props.actions);
+          }}
+          className={plainButtonClasses}
+        >
+          {option.name}
+        </button>
+      ))}
+    </>
   );
 }
 

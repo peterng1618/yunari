@@ -36,6 +36,7 @@ import {
   stepFor,
 } from "./canvas-nudge.js";
 import { ChartManager } from "./chart-manager/index.js";
+import { openFontImportDialog } from "./components/font-import-dialog.js";
 import { EditorDocument } from "./editor-document.js";
 import type { EditorActionFacade } from "./editor-shell/session-facade.js";
 import type {
@@ -69,6 +70,7 @@ import {
   createAssetsPane,
   type FontCommitInput,
 } from "./panes/assets/assets-pane.js";
+import { fontMetadataFromFilename } from "./panes/assets/font-metadata-form.js";
 import {
   createTokenInspectorPanel,
   type TokenInspectorPanel,
@@ -505,6 +507,13 @@ export class EditorSession {
                 : [],
             ),
           ),
+        // The package's families for the family list, and the two action rows:
+        // each is drawn only where its port exists.
+        familiesOf: () => declaredFamilies(options.assetManager.declarations),
+        importLocalFont: () => this.#pickFontFile(),
+        ...(options.onFindFontPicker === undefined
+          ? {}
+          : { openFontFinder: () => options.onFindFontPicker?.() }),
         // The paint half: the selected paint token's fields write through the
         // same document and history ports as the pane's rows once did.
         paints: {
@@ -891,6 +900,56 @@ export class EditorSession {
     } catch (error) {
       return { ok: false, message: messageOf(error) };
     }
+  }
+
+  /**
+   * The token inspector's import row: the OS picker, then the metadata dialog.
+   *
+   * A dismissed picker declares nothing, and the input is removed either way so
+   * a second press starts from an empty pick.
+   */
+  #pickFontFile(): void {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.hidden = true;
+    input.accept = ".woff,.woff2,.ttf,.otf,font/*";
+    input.dataset["yunariTokenFontImport"] = "";
+    const dispose = (): void => input.remove();
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      dispose();
+      if (file !== undefined) this.#openFontImport(file);
+    });
+    // Fired by a browser that reports a cancelled picker; without it the input
+    // would stay on the body until the next pick.
+    input.addEventListener("cancel", dispose);
+    document.body.append(input);
+    input.click();
+  }
+
+  /**
+   * The dialog answers with the same two commits the Assets pane makes, minus
+   * the role: this import may never rewrite a role token.
+   */
+  #openFontImport(file: File): void {
+    void openFontImportDialog({
+      filename: file.name,
+      initial: fontMetadataFromFilename(file.name),
+      onCommit: (metadata) =>
+        this.#commitFont({
+          source: { file },
+          metadata,
+          role: null,
+          withPreset: true,
+        }),
+      onCancel: (metadata) =>
+        this.#commitFont({
+          source: { file },
+          metadata,
+          role: null,
+          withPreset: false,
+        }),
+    });
   }
 
   /**
@@ -1313,6 +1372,25 @@ async function normalizeWallpaperVideo(
 /** A refusal's own words, or the value itself when it was not an `Error`. */
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * The package's declared font families, one entry per family, sorted the way a
+ * reader scans a list rather than the order the files arrived in. A family
+ * differing only in case is the same family, so the first spelling is kept.
+ */
+function declaredFamilies(
+  declarations: AssetManager["declarations"],
+): readonly string[] {
+  const held = new Map<string, string>();
+  for (const asset of declarations) {
+    if (asset.kind !== "font" || !("family" in asset)) continue;
+    const key = asset.family.toLowerCase();
+    if (!held.has(key)) held.set(key, asset.family);
+  }
+  return [...held.values()].sort((left, right) =>
+    left.localeCompare(right, "en", { sensitivity: "base" }),
+  );
 }
 
 /** The host's content type is the first answer; the name covers a host that

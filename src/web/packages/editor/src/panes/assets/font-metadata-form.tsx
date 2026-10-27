@@ -127,8 +127,19 @@ export function FontMetadataForm(props: {
     role: FontTrioRole | null,
   ) => void;
   readonly onCancel: (metadata: FontMetadata) => void;
+  /** The role select is the Assets pane's: an import from the token inspector
+   *  may never rewrite a role, so that caller draws the form without it and its
+   *  commit reports `null`. */
+  readonly showRole?: boolean;
 }): React.JSX.Element {
-  const { filename, initial, busy, onCommit, onCancel } = props;
+  const {
+    filename,
+    initial,
+    busy,
+    onCommit,
+    onCancel,
+    showRole = true,
+  } = props;
   const [family, setFamily] = useState(initial.family);
   const [weight, setWeight] = useState<number | undefined>(initial.weight);
   const [style, setStyle] = useState<"normal" | "italic">(initial.style);
@@ -208,15 +219,17 @@ export function FontMetadataForm(props: {
         disabled={busy}
         onCommit={setSourceUrl}
       />
-      <ControlSelect
-        label={uiCopy.panels.role}
-        data={{ "data-yunari-font-role": "" }}
-        value={role ?? "none"}
-        options={ROLE_OPTIONS}
-        onChange={(next) =>
-          setRole(next === "none" ? null : (next as FontTrioRole))
-        }
-      />
+      {showRole ? (
+        <ControlSelect
+          label={uiCopy.panels.role}
+          data={{ "data-yunari-font-role": "" }}
+          value={role ?? "none"}
+          options={ROLE_OPTIONS}
+          onChange={(next) =>
+            setRole(next === "none" ? null : (next as FontTrioRole))
+          }
+        />
+      ) : null}
       <p className="text-2xs text-faint">{uiCopy.panels.fontDeclaredNote}</p>
       {refusal === undefined ? null : (
         <p role="alert" className="text-xs text-warn">

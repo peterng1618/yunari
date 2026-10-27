@@ -96,6 +96,22 @@ function field(host: HTMLElement, selector: string): HTMLInputElement {
   return input;
 }
 
+/** The id a control commits, read from the element that prints it. */
+function valueOf(host: HTMLElement, selector: string): string | null {
+  return (
+    host
+      .querySelector(`${selector} [data-yunari-value]`)
+      ?.getAttribute("data-yunari-value") ?? null
+  );
+}
+
+/** The labels a list offers, in the order it offers them. */
+function optionNames(): readonly (string | null | undefined)[] {
+  return [...document.querySelectorAll('[role="option"]')].map((option) =>
+    option.textContent?.trim(),
+  );
+}
+
 /** A real edit, as React sees one: the value goes through the prototype's
  *  setter because React replaces `value` on the node with a tracker, and `blur`
  *  is what commits a plan-1 field. */
@@ -193,7 +209,7 @@ describe("token inspector", () => {
       expect(panel.root.querySelector(selector), selector).toBeNull();
     }
 
-    expect(field(panel.root, "[data-yunari-token-family]").value).toBe("Inter");
+    expect(valueOf(panel.root, "[data-yunari-token-family]")).toBe("Inter");
     expect(field(panel.root, "[data-yunari-token-weight]").value).toBe("600");
     panel.destroy();
   });
@@ -349,6 +365,147 @@ describe("token inspector", () => {
     panel.destroy();
   });
 
+  it("offers declared families, a not-in-package reading, then the actions", async () => {
+    // The family list: the package's own families in the producer's order, the
+    // token's family appended as a reading when the package does not declare it,
+    // then the two action rows.
+    const importLocalFont = vi.fn();
+    const openFontFinder = vi.fn();
+    const write: TokenInspectorActions = {
+      ...actions(),
+      familiesOf: () => ["Inter", "Manrope"],
+      importLocalFont,
+      openFontFinder,
+    };
+    const panel = createTokenInspectorPanel(document.body, write);
+    const presets: TypeTokens = {
+      caption: { family: "Custom Sans", weight: "600" },
+    };
+    panel.render({ kind: "preset", id: "caption" }, presets, {
+      typeTokens: presets,
+    });
+
+    expect(valueOf(panel.root, "[data-yunari-token-family]")).toBe(
+      "Custom Sans",
+    );
+    await click(
+      panel.root.querySelector("[data-yunari-token-family]") as HTMLElement,
+    );
+    expect(optionNames()).toEqual([
+      "Inter",
+      "Manrope",
+      "Custom Sans (not in package)",
+      uiCopy.panels.importLocalFont,
+      uiCopy.panels.fontFinder,
+    ]);
+    // The family the package does not hold is a reading, not a choice.
+    const reading = document.querySelector(
+      '[role="option"][data-yunari-option="Custom Sans"]',
+    );
+    expect(
+      reading?.getAttribute("aria-disabled") === "true" ||
+        reading?.hasAttribute("data-disabled") === true,
+    ).toBe(true);
+    panel.destroy();
+  });
+
+  it("writes only the family when one is chosen", async () => {
+    const write: TokenInspectorActions = {
+      ...actions(),
+      familiesOf: () => ["Inter", "Manrope"],
+      importLocalFont: vi.fn(),
+      openFontFinder: vi.fn(),
+    };
+    const panel = createTokenInspectorPanel(document.body, write);
+    const presets: TypeTokens = {
+      caption: { family: "Inter", weight: "600" },
+    };
+    panel.render({ kind: "preset", id: "caption" }, presets, {
+      typeTokens: presets,
+    });
+
+    await chooseIn(panel.root, "[data-yunari-token-family]", "Manrope");
+
+    expect(write.onChange).toHaveBeenCalledTimes(1);
+    expect(write.onChange).toHaveBeenCalledWith({
+      ...presets,
+      caption: { family: "Manrope", weight: "600" },
+    });
+    panel.destroy();
+  });
+
+  it("dispatches each action row once and writes nothing", async () => {
+    const importLocalFont = vi.fn();
+    const openFontFinder = vi.fn();
+    const write: TokenInspectorActions = {
+      ...actions(),
+      familiesOf: () => ["Inter"],
+      importLocalFont,
+      openFontFinder,
+    };
+    const panel = createTokenInspectorPanel(document.body, write);
+    const presets: TypeTokens = { caption: { family: "Inter" } };
+    panel.render({ kind: "preset", id: "caption" }, presets, {
+      typeTokens: presets,
+    });
+
+    await chooseIn(
+      panel.root,
+      "[data-yunari-token-family]",
+      "@yunari:import-local-font",
+    );
+    expect(importLocalFont).toHaveBeenCalledTimes(1);
+    // The token record is the one it was: an action changes nothing.
+    expect(write.onChange).not.toHaveBeenCalled();
+    expect(valueOf(panel.root, "[data-yunari-token-family]")).toBe("Inter");
+    // The control still prints the token's family, not the action it ran.
+    expect(
+      panel.root.querySelector("[data-yunari-token-family]")?.textContent,
+    ).toContain("Inter");
+
+    await chooseIn(
+      panel.root,
+      "[data-yunari-token-family]",
+      "@yunari:font-finder",
+    );
+    expect(openFontFinder).toHaveBeenCalledTimes(1);
+    expect(importLocalFont).toHaveBeenCalledTimes(1);
+    expect(write.onChange).not.toHaveBeenCalled();
+    panel.destroy();
+  });
+
+  it("keeps a bound token's family read-only and still draws both actions", async () => {
+    const importLocalFont = vi.fn();
+    const openFontFinder = vi.fn();
+    const write: TokenInspectorActions = {
+      ...actions(),
+      familiesOf: () => ["Manrope"],
+      importLocalFont,
+      openFontFinder,
+    };
+    const panel = createTokenInspectorPanel(document.body, write);
+    panel.render({ kind: "preset", id: "bound" }, PRESETS, {
+      typeTokens: PRESETS,
+    });
+
+    // The face owns the family: no list to change it from, but both actions.
+    expect(panel.root.querySelector("[data-yunari-token-family]")).toBeNull();
+    const importRow = panel.root.querySelector(
+      '[data-yunari-token-action="@yunari:import-local-font"]',
+    );
+    expect(importRow?.textContent).toBe(uiCopy.panels.importLocalFont);
+    await click(importRow as HTMLElement);
+    expect(importLocalFont).toHaveBeenCalledTimes(1);
+    await click(
+      panel.root.querySelector(
+        '[data-yunari-token-action="@yunari:font-finder"]',
+      ) as HTMLElement,
+    );
+    expect(openFontFinder).toHaveBeenCalledTimes(1);
+    expect(write.onChange).not.toHaveBeenCalled();
+    panel.destroy();
+  });
+
   it("makes family and weight editable after Unbind", async () => {
     const write = actions();
     const panel = createTokenInspectorPanel(document.body, write);
@@ -371,9 +528,9 @@ describe("token inspector", () => {
       typeTokens: freed,
     });
 
-    const family = field(panel.root, "[data-yunari-token-family]");
+    const family = valueOf(panel.root, "[data-yunari-token-family]");
     const weight = field(panel.root, "[data-yunari-token-weight]");
-    expect(family.value).toBe("Manrope");
+    expect(family).toBe("Manrope");
     expect(weight.value).toBe("700");
 
     await edit(weight, "600");
@@ -422,11 +579,6 @@ describe("token inspector", () => {
 });
 
 describe("the paint section", () => {
-  const valueOf = (host: HTMLElement, selector: string): string | null =>
-    host
-      .querySelector(`${selector} [data-yunari-value]`)
-      ?.getAttribute("data-yunari-value") ?? null;
-
   it("shows a paint token's name, kind and value", () => {
     const panel = createTokenInspectorPanel(
       document.body,
