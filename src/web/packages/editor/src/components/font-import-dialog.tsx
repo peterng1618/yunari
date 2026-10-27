@@ -39,17 +39,15 @@ export function FontImportDialog(props: {
     commit: FontImportCommit,
   ): Promise<void> => {
     setBusy(true);
-    try {
-      const outcome = await commit(metadata);
-      if (!outcome.ok) {
-        // The form stays open, so the values it refuses can be repaired.
-        setMessage(outcome.message);
-        return;
-      }
-      settle.close(undefined);
-    } finally {
+    const outcome = await commit(metadata);
+    if (!outcome.ok) {
+      // The form stays open, so the values it refuses can be repaired.
+      setMessage(outcome.message);
       setBusy(false);
+      return;
     }
+    // The dialog is unmounted by this call; nothing may write state after it.
+    settle.close(undefined);
   };
 
   return (
@@ -68,6 +66,7 @@ export function FontImportDialog(props: {
         initial={initial}
         busy={busy}
         showRole={false}
+        onEdit={() => setMessage("")}
         onCommit={(metadata) => {
           void submit(metadata, onCommit);
         }}

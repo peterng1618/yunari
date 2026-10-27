@@ -1,6 +1,7 @@
 import {
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
+  FONT_ASSET_FORMATS,
   type FontCut,
   type SampleSource,
   SEMANTIC_KEYS,
@@ -29,7 +30,11 @@ import {
   placeIcon,
 } from "./asset-finder/icon-shape.js";
 import { WallpaperEngineBody } from "./asset-finder/wallpaper-engine-body.js";
-import { type AssetManager, mimeOf } from "./asset-manager/index.js";
+import {
+  ASSET_FILE_EXTENSIONS,
+  type AssetManager,
+  mimeOf,
+} from "./asset-manager/index.js";
 import {
   type CanvasNudge,
   createCanvasNudge,
@@ -105,6 +110,15 @@ import type { WallpaperExportOutcome } from "./wallpaper-engine/export-sheet.js"
  *  says nothing about the frame it lands on; this is the one share every
  *  imported icon gets, which also makes two sources' glyphs comparable. */
 const IMPORTED_ICON_SHARE = 0.12;
+
+/** The font formats the manager packages, so the picker offers no file the
+ *  importer refuses. A `font/*` pattern would offer `.ttc` and every other face
+ *  format the package cannot carry. */
+const FONT_FILE_ACCEPT = ASSET_FILE_EXTENSIONS.filter((extension) =>
+  (FONT_ASSET_FORMATS as readonly string[]).includes(extension),
+)
+  .map((extension) => `.${extension}`)
+  .join(",");
 
 interface EditorPanelHosts {
   /** Text and chart creation, and the card library. */
@@ -912,7 +926,7 @@ export class EditorSession {
     const input = document.createElement("input");
     input.type = "file";
     input.hidden = true;
-    input.accept = ".woff,.woff2,.ttf,.otf,font/*";
+    input.accept = FONT_FILE_ACCEPT;
     input.dataset["yunariTokenFontImport"] = "";
     const dispose = (): void => input.remove();
     input.addEventListener("change", () => {

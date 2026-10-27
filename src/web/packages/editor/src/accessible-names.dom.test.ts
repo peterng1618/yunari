@@ -241,9 +241,10 @@ describe("editor panels", () => {
       "INPUT[type=][aria-hidden]", // Orientation
       "INPUT[type=][aria-hidden]", // Resolution
       // The selected type token's inspector, mounted after the palette pane:
-      // its reassignment chooser, a `ControlSelect`'s value carrier. The
-      // palette's own chooser is gone with the field set it browsed, so the
-      // Tokens pane contributes none of these any more.
+      // its family chooser and its reassignment chooser, each a `ControlSelect`'s
+      // value carrier. The palette's own chooser is gone with the field set it
+      // browsed, so the Tokens pane contributes none of these any more.
+      "INPUT[type=][aria-hidden]", // Family (token)
       "INPUT[type=][aria-hidden]", // Reassign (token)
       // The paint section of the same inspector, after the preset section: its
       // kind switch, the gradient editor's fifteen preset rows (each a Base UI

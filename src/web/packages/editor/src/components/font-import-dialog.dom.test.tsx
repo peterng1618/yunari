@@ -68,6 +68,26 @@ async function press(selector: string): Promise<void> {
   });
 }
 
+/** A field edit as React sees one: the value goes through the prototype's
+ *  setter, and blur is what commits a plan-1 field. */
+async function edit(selector: string, value: string): Promise<void> {
+  const input = opened().querySelector<HTMLInputElement>(selector);
+  if (input === null) throw new Error(`the form draws no ${selector}`);
+  await act(async () => {
+    input.focus();
+    const setter = Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(input) as HTMLInputElement,
+      "value",
+    )?.set;
+    if (setter === undefined) input.value = value;
+    else setter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    input.blur();
+  });
+}
+
 const ok: FontImportOutcome = { ok: true, message: "Font declared." };
 
 /** Opens the dialog and answers the promise it settles. */
@@ -133,6 +153,9 @@ describe("the font import dialog", () => {
     expect(opened().querySelector('[role="alert"]')?.textContent).toBe(
       "Credits are full.",
     );
+    // An edit means the refused values are gone, so the refusal is too.
+    await edit("[data-yunari-font-family]", "Manrope Sans");
+    expect(opened().querySelector('[role="alert"]')).toBeNull();
     // The form stays, so the answer can be retried rather than lost.
     await press("[data-yunari-font-create]");
     await pending;

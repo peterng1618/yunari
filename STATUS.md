@@ -16,8 +16,8 @@ The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design
 
 ## Last completed change
 
-- **Family list with action rows:** the inspector's family is a `ControlSelect` over the declared families, with the current family appended as a not-in-package reading and `Import local font…` / `Font finder…` as trailing options that dispatch their port and write nothing; a bound token keeps its read-only family plus both rows as buttons.
-- **One import surface:** the import row picks a file through a hidden input, then opens `components/font-import-dialog.tsx` through `openModal`, drawing `FontMetadataForm` with `showRole={false}`.
+- **Family list with action rows:** the inspector's family is a `ControlSelect` over the declared families, appending the current family as a not-in-package reading only when no declared family matches it case-insensitively (the producer's own rule), with `Import local font…` / `Font finder…` as trailing options that dispatch their port and write nothing; a bound token keeps its read-only family plus both rows as buttons.
+- **One import surface:** the import row picks a file through a hidden input filtered to the manager's font formats, then opens `components/font-import-dialog.tsx` through `openModal`, drawing `FontMetadataForm` with `showRole={false}`.
 - **Commit reuses `#commitFont`:** Create declares the file with an unroled token and its credit, Cancel declares the file with neither; a role token is never rewritten and a repeated family+weight reuses its token.
 - **Ports:** `familiesOf` deduplicates and sorts the declared families case-insensitively, and `openFontFinder` goes through `options.onFindFontPicker`.
 - **Proof:** three focused vitest files green (32 tests) plus `editor-session.dom.test.ts` (49), `typecheck` exit 0, Biome clean; two new cases red-proved (see the task report); Playwright not run (port 4174, `vg-756`).

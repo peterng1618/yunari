@@ -131,6 +131,9 @@ export function FontMetadataForm(props: {
    *  may never rewrite a role, so that caller draws the form without it and its
    *  commit reports `null`. */
   readonly showRole?: boolean;
+  /** A field moved: the caller's own message about the last attempt no longer
+   *  describes what is on the form. */
+  readonly onEdit?: () => void;
 }): React.JSX.Element {
   const {
     filename,
@@ -139,6 +142,7 @@ export function FontMetadataForm(props: {
     onCommit,
     onCancel,
     showRole = true,
+    onEdit,
   } = props;
   const [family, setFamily] = useState(initial.family);
   const [weight, setWeight] = useState<number | undefined>(initial.weight);
@@ -188,36 +192,54 @@ export function FontMetadataForm(props: {
         data={{ "data-yunari-font-family": "" }}
         value={family}
         disabled={busy}
-        onCommit={setFamily}
+        onCommit={(next) => {
+          onEdit?.();
+          setFamily(next);
+        }}
       />
       <ControlNumber
         label={uiCopy.panels.weight}
         data={{ "data-yunari-font-weight": "" }}
         value={weight}
         disabled={busy}
-        onCommit={setWeight}
-        onClear={() => setWeight(undefined)}
+        onCommit={(next) => {
+          onEdit?.();
+          setWeight(next);
+        }}
+        onClear={() => {
+          onEdit?.();
+          setWeight(undefined);
+        }}
       />
       <ControlSelect
         label={uiCopy.panels.style}
         data={{ "data-yunari-font-style": "" }}
         value={style}
         options={STYLE_OPTIONS}
-        onChange={(next) => setStyle(next === "italic" ? "italic" : "normal")}
+        onChange={(next) => {
+          onEdit?.();
+          setStyle(next === "italic" ? "italic" : "normal");
+        }}
       />
       <ControlText
         label={uiCopy.panels.licence}
         data={{ "data-yunari-font-licence": "" }}
         value={licence}
         disabled={busy}
-        onCommit={setLicence}
+        onCommit={(next) => {
+          onEdit?.();
+          setLicence(next);
+        }}
       />
       <ControlText
         label={uiCopy.panels.sourceUrl}
         data={{ "data-yunari-font-source-url": "" }}
         value={sourceUrl}
         disabled={busy}
-        onCommit={setSourceUrl}
+        onCommit={(next) => {
+          onEdit?.();
+          setSourceUrl(next);
+        }}
       />
       {showRole ? (
         <ControlSelect
@@ -225,9 +247,10 @@ export function FontMetadataForm(props: {
           data={{ "data-yunari-font-role": "" }}
           value={role ?? "none"}
           options={ROLE_OPTIONS}
-          onChange={(next) =>
-            setRole(next === "none" ? null : (next as FontTrioRole))
-          }
+          onChange={(next) => {
+            onEdit?.();
+            setRole(next === "none" ? null : (next as FontTrioRole));
+          }}
         />
       ) : null}
       <p className="text-2xs text-faint">{uiCopy.panels.fontDeclaredNote}</p>

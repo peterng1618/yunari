@@ -346,7 +346,11 @@ function TokenFields(props: {
  * then the action rows.
  *
  * The current family is `disabled` rather than omitted, so it still prints as
- * the trigger's value while staying out of the keyboard model.
+ * the trigger's value while staying out of the keyboard model. The comparison is
+ * case-insensitive because the producer deduplicates that way: `inter` and
+ * `Inter` are one family, and appending both would put the same family twice in
+ * the list. A family literally equal to a sentinel id is appended as neither a
+ * choice nor a reading — that id belongs to an action row.
  */
 function familyOptions(
   family: string,
@@ -356,9 +360,15 @@ function familyOptions(
     (candidate) =>
       candidate !== IMPORT_LOCAL_FONT_ID && candidate !== FONT_FINDER_ID,
   );
+  const wanted = family.trim().toLowerCase();
+  const isActionId =
+    family === IMPORT_LOCAL_FONT_ID || family === FONT_FINDER_ID;
+  const held = declared.some(
+    (candidate) => candidate.trim().toLowerCase() === wanted,
+  );
   return [
     ...declared.map((candidate) => ({ id: candidate, name: candidate })),
-    ...(declared.includes(family)
+    ...(held || isActionId
       ? []
       : [
           {

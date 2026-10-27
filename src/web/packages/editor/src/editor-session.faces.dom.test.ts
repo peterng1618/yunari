@@ -248,7 +248,8 @@ async function flush(): Promise<void> {
   }
 }
 
-/** Picks a file as the OS picker reports one. */
+/** Picks a file as the OS picker reports one. The picker is removed whatever
+ *  the answer, so a second press starts from an empty pick. */
 async function pick(filename: string): Promise<void> {
   inspectorPort.importLocalFont?.();
   const input = fontPicker();
@@ -260,6 +261,7 @@ async function pick(filename: string): Promise<void> {
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await flush();
+  expect(input.isConnected).toBe(false);
 }
 
 function dialog(): HTMLElement {
@@ -317,6 +319,55 @@ function stubImportFont(): void {
 }
 
 describe("the session's font import", () => {
+  it("opens nothing and removes the picker when the OS picker is dismissed", async () => {
+    const assetManager = new AssetManager();
+    const session = createSession(assetManager);
+    stubImportFont();
+
+    inspectorPort.importLocalFont?.();
+    const input = fontPicker();
+    // The picker offers the manager's own font formats — no `font/*`, which
+    // would offer `.ttc` and every other face the importer refuses.
+    expect(input.accept).toBe(".woff2,.woff,.ttf,.otf");
+    // A dismissed picker reports a change with no file rather than none at all.
+    // jsdom reports a listener's exception as a window error instead of throwing
+    // through `dispatchEvent`, so the throw is collected rather than missed.
+    const failures: unknown[] = [];
+    const onError = (event: Event): void => {
+      failures.push(event);
+    };
+    window.addEventListener("error", onError);
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    window.removeEventListener("error", onError);
+    await flush();
+
+    expect(failures).toHaveLength(0);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(input.isConnected).toBe(false);
+    expect(assetManager.declarations).toHaveLength(0);
+
+    session.destroy();
+  });
+
+  it("removes the picker when the browser cancels it", async () => {
+    const assetManager = new AssetManager();
+    const session = createSession(assetManager);
+
+    inspectorPort.importLocalFont?.();
+    const input = fontPicker();
+    await act(async () => {
+      input.dispatchEvent(new Event("cancel"));
+    });
+
+    expect(input.isConnected).toBe(false);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(assetManager.declarations).toHaveLength(0);
+
+    session.destroy();
+  });
+
   it("commits one unroled token and leaves the three roles untouched", async () => {
     const assetManager = new AssetManager();
     const session = createSession(assetManager);

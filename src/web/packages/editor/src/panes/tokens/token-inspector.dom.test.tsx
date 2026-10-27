@@ -409,6 +409,57 @@ describe("token inspector", () => {
     panel.destroy();
   });
 
+  it("never lets a declared family stand in for an action row", async () => {
+    // A family whose name is a sentinel id would render a second option with
+    // that id, and the trigger could not say which one it commits.
+    const importLocalFont = vi.fn();
+    const write: TokenInspectorActions = {
+      ...actions(),
+      familiesOf: () => ["Inter", "@yunari:import-local-font"],
+      importLocalFont,
+    };
+    const panel = createTokenInspectorPanel(document.body, write);
+    const presets: TypeTokens = { caption: { family: "Inter" } };
+    panel.render({ kind: "preset", id: "caption" }, presets, {
+      typeTokens: presets,
+    });
+
+    await click(
+      panel.root.querySelector("[data-yunari-token-family]") as HTMLElement,
+    );
+
+    expect(optionNames()).toEqual(["Inter", uiCopy.panels.importLocalFont]);
+    expect(
+      document.querySelectorAll(
+        '[role="option"][data-yunari-option="@yunari:import-local-font"]',
+      ),
+    ).toHaveLength(1);
+    panel.destroy();
+  });
+
+  it("appends the current family only when the package does not declare it, ignoring case", async () => {
+    // The producer deduplicates families case-insensitively, so `inter` and
+    // `Inter` are one family: appending the reading here would offer the same
+    // family twice.
+    const write: TokenInspectorActions = {
+      ...actions(),
+      familiesOf: () => ["inter"],
+      importLocalFont: vi.fn(),
+    };
+    const panel = createTokenInspectorPanel(document.body, write);
+    const presets: TypeTokens = { caption: { family: "Inter" } };
+    panel.render({ kind: "preset", id: "caption" }, presets, {
+      typeTokens: presets,
+    });
+
+    await click(
+      panel.root.querySelector("[data-yunari-token-family]") as HTMLElement,
+    );
+
+    expect(optionNames()).toEqual(["inter", uiCopy.panels.importLocalFont]);
+    panel.destroy();
+  });
+
   it("writes only the family when one is chosen", async () => {
     const write: TokenInspectorActions = {
       ...actions(),
