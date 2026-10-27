@@ -2,7 +2,7 @@ import type { TextRun } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import { scaledRuns } from "./scale-runs.js";
 
-const BOARD = { globals: undefined, artboardHeight: 1080 } as const;
+const BOARD = 1080;
 
 function literal(
   size: number | undefined,

@@ -10,8 +10,9 @@ import { GUIDE_COLOR, GUIDE_WIDTH } from "../snap-manager/constants.js";
 import { uiCopy } from "../ui-copy.js";
 import { scaledRuns } from "./scale-runs.js";
 
-/** How close to 1 a handle scale must read as untouched: a corner drag leaves
- *  float dust on a scale the author never changed. */
+/** How close to 1 a handle scale must read as untouched. Fabric derives the
+ *  scale from the pointer's geometry against the transform origin, so a drag
+ *  released back at its start comes out a hair either side of 1. */
 const SCALE_UNITY_EPSILON = 1e-4;
 
 /**
@@ -344,6 +345,10 @@ export function createTextManager(
    * did not absorb the gesture would paint smaller the moment the scale reset.
    * Only the target's authored runs are written — a sibling naming the same
    * token keeps painting from the role default.
+   *
+   * A non-unit `scaleX` alone still resets: the model has no stretched text, so
+   * leaving it would paint stretched glyphs while the row reported the authored
+   * size. `scaleY` alone decides the size; a horizontal drag writes none.
    */
   const commitScale = (target: IText): void => {
     if (
@@ -354,17 +359,16 @@ export function createTextManager(
     }
     const authored = authoredOf(target);
     if (authored === undefined || authored.runs.length === 0) return;
+    if (!Number.isFinite(target.scaleY) || target.scaleY <= 0) return;
 
-    const runs = scaledRuns(authored.runs, target.scaleY, {
-      // A role's size comes from the token's id, never from the corpus.
-      globals: undefined,
-      artboardHeight: artboardHeight(),
-    });
-    // The scale was not a multiplier the commit could use (a width-only drag,
-    // for instance): leaving the object alone is the whole answer.
-    if (runs === authored.runs) return;
-
-    target.set(YUNARI_TEXT_PROPERTY, { ...authored, runs });
+    // Float dust around 1 is a horizontal drag, not a size: reading it as the
+    // scale would pin every size for a gesture that changed none.
+    const sizeScale =
+      Math.abs(target.scaleY - 1) <= SCALE_UNITY_EPSILON ? 1 : target.scaleY;
+    const runs = scaledRuns(authored.runs, sizeScale, artboardHeight());
+    if (runs !== authored.runs) {
+      target.set(YUNARI_TEXT_PROPERTY, { ...authored, runs });
+    }
     target.set({ scaleX: 1, scaleY: 1 });
     repaint(target);
     canvas.requestRenderAll();

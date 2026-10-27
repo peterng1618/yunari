@@ -120,6 +120,16 @@ export type RunStyleKey = "fontSize" | "lineHeight" | "letterSpacing";
 /** The floor for `fontSize` alone: a zero-size run paints nothing. */
 const MIN_RUN_STYLE = 1;
 
+/**
+ * A run's size as it is stored: whole, never below the floor.
+ *
+ * The inspector refuses a draft below the floor while the canvas clamps a
+ * gesture that lands there, so both call this rather than restating the rule.
+ */
+export function roundedRunSize(value: number): number {
+  return Math.max(MIN_RUN_STYLE, Math.round(value));
+}
+
 /** Two decimals, so `1.18` survives the round trip a leading must not collapse under. */
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -141,7 +151,7 @@ function acceptedStyleValue(
 ): number | undefined {
   if (!Number.isFinite(value)) return undefined;
   if (key === "fontSize") {
-    return value < MIN_RUN_STYLE ? undefined : Math.round(value);
+    return value < MIN_RUN_STYLE ? undefined : roundedRunSize(value);
   }
   if (key === "lineHeight") {
     // Round before the bound: `0.004` would pass a `> 0` test and then round to

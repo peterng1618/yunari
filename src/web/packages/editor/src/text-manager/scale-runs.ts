@@ -1,8 +1,6 @@
-import type { FabricGlobals, TextRun } from "@yunari/renderer-core";
+import type { TextRun } from "@yunari/renderer-core";
 import { defaultTypeSize } from "@yunari/renderer-core";
-
-/** The painter's floor: a size below one is a glyph nothing can draw. */
-const MIN_SIZE = 1;
+import { roundedRunSize } from "../selection-inspector/run-edits.js";
 
 /** The type token's id, which is what carries the role. No token takes the
  *  body ratio, as the renderer's own reader does. */
@@ -32,20 +30,14 @@ function paintedSize(run: TextRun, artboardHeight: number): number {
  * paint smaller the moment the reset landed. That is what committing a size
  * means — a resized text no longer follows the artboard's role default.
  *
- * `globals` is part of the contract but not read: the role comes from the
- * token's id, exactly as the renderer's `defaultRunTypeSize` derives it.
- *
  * A scale that is not a usable multiplier — non-finite, zero, negative, or
- * exactly 1 — returns the input itself, which is the caller's signal that the
- * gesture committed nothing.
+ * exactly 1 — returns the input itself, which is the caller's signal that no
+ * size was written.
  */
 export function scaledRuns(
   runs: readonly TextRun[],
   scaleY: number,
-  context: {
-    readonly globals: FabricGlobals | undefined;
-    readonly artboardHeight: number;
-  },
+  artboardHeight: number,
 ): readonly TextRun[] {
   if (!Number.isFinite(scaleY) || scaleY <= 0 || scaleY === 1) return runs;
   return runs.map((run) => ({
@@ -53,10 +45,7 @@ export function scaledRuns(
     style: {
       ...run.style,
       fontSize: {
-        value: Math.max(
-          MIN_SIZE,
-          Math.round(paintedSize(run, context.artboardHeight) * scaleY),
-        ),
+        value: roundedRunSize(paintedSize(run, artboardHeight) * scaleY),
       },
     },
   }));
