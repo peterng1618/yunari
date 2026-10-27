@@ -710,12 +710,11 @@ test.describe("the video frame callback on the real player", () => {
     ).toBe(0);
     // **The claim.** The display keeps repainting on its own cadence, so the
     // render count does not collapse to the frames' — it falls back to the
-    // loop's. **The two counts are not the same kind of number**: this page is
-    // served to loopback, which resolves to the machine's own display, whose
-    // rate is 1 fps by default (`chartFpsFor`), while phase A also renders once
-    // per delivered video frame (~30/s). Comparing a ratio would measure the
-    // video's cadence, not the loop's. Three seconds at 1 fps owes about three
-    // renders; `>= 2` is that budget with one window of slack.
+    // sample cadence. **The two counts are not the same kind of number**: this
+    // page is served to loopback, while phase A also renders once per delivered
+    // video frame (~30/s). Comparing a ratio would measure the video's cadence,
+    // not the display's. Three seconds of a host reporting once a second owes
+    // about three renders; `>= 2` is that budget with one window of slack.
     expect(
       idle.renders,
       `the player still repaints with no video frames delivered (${idle.renders} against ${armed.renders} armed)`,

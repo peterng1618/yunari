@@ -16,7 +16,6 @@ import {
   SAMPLE_STREAM_PATH,
   themeAssetContentType,
 } from "@yunari/renderer-core";
-import type { ChartRefreshRate } from "@yunari/scene-fabric";
 import { type AssetRouteOptions, handleAssetRoutes } from "./assets/routes.js";
 import {
   createPendingStates,
@@ -95,7 +94,6 @@ import type {
   DisplayStore,
 } from "./settings/displays.js";
 import {
-  chartFpsFor,
   DEFAULT_DISPLAY,
   LOCAL_DISPLAY_ID,
   MonitorAlreadyHeldError,
@@ -770,34 +768,12 @@ function streamLanguage(url: URL): string | undefined {
 }
 
 /**
- * The rate the display behind a key repaints its charts at.
- *
- * The key is not always a record. `this-pc` is this machine's own monitor and
- * `default` is an unpaired client, and neither is ever minted — so each answers
- * the default its own kind would carry, which is the one thing `chartFpsFor` is
- * for. Everything else is a record id, and the record's own rate wins.
- */
-async function chartFpsForDisplay(
-  key: string,
-  displays: DisplayStore | undefined,
-): Promise<ChartRefreshRate> {
-  const record =
-    key === LOCAL_DISPLAY_ID || key === DEFAULT_DISPLAY
-      ? undefined
-      : await displays?.find(key);
-
-  return chartFpsFor(
-    record ?? { kind: key === DEFAULT_DISPLAY ? "paired" : "local" },
-  );
-}
-
-/**
  * The glass and mounting angle of the display behind a key.
  *
- * The same split as `chartFpsForDisplay`: `this-pc` and `default` are not
- * records, so each answers the upright rectangle the spec gives them, and every
- * other key is a record whose own presentation wins. A stored upright angle is
- * answered as `0` because the record omits it.
+ * `this-pc` and `default` are not records, so each answers the upright
+ * rectangle the spec gives them, and every other key is a record whose own
+ * presentation wins. A stored upright angle is answered as `0` because the
+ * record omits it.
  */
 async function presentationForDisplay(
   key: string,
@@ -2527,10 +2503,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       const live = published.read();
       const display = await displayKeyFor(request, url, displays);
-      // The player reads its refresh rate, its glass and its mounting angle from
-      // this poll rather than from routes of its own: it is the request a
-      // display already makes.
-      const chartFps = await chartFpsForDisplay(display, displays);
+      // The player reads its glass and its mounting angle from this poll rather
+      // than from routes of its own: it is the request a display already makes.
       const presentation = await presentationForDisplay(display, displays);
       let theme: string | null = null;
 
@@ -2550,7 +2524,6 @@ export function createHostServer(options: HostServerOptions): HostServer {
         display: {
           id: display,
           theme,
-          chartFps,
           shape: presentation.shape,
           rotation: presentation.rotation,
         },

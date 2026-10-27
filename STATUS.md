@@ -18,8 +18,9 @@ away and every chart's transition is blitted while it runs.
 
 ## Last completed change
 
-- **The preview answers the whole dictionary:** `FakeSampleSource` emits `textValue` for text keys (a small table, then the descriptor's label), `booleanValue` for boolean keys, an ISO instant for time keys, and the descriptor's unit for numbers; `disk.total`/`disk.data.total` join the constants.
-- **Proof:** the dictionary invariant failed first on units and disk totals; 30 pass in `fake-source`, 34 across the preview-source suites; typecheck and biome exit 0.
+- **The rate leaves the host:** `chartFps` is gone from the display record, the patch and the poll, with `chartFpsFor` and the patch's rate rule; a record written with one still loads and plays.
+- **The player stops following a rate:** `onRateChange` and the player's `chartRate` go; the loop starts at 30 and is never re-rated.
+- **Proof:** the legacy-record test fails on the old store and passes now; 452 pass in the four touched suites, 2,337 across host and player; typecheck and biome exit 0.
 
 ## Next
 

@@ -1,7 +1,6 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ChartRefreshRate } from "@yunari/scene-fabric";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createActiveThemeStore } from "./active-theme.js";
 import {
@@ -9,7 +8,6 @@ import {
   normalizePresentation,
 } from "./display-presentation.js";
 import {
-  chartFpsFor,
   createDisplayStore,
   type DisplayStore,
   displayIdFrom,
@@ -479,30 +477,10 @@ describe("createDisplayStore", () => {
     ).rejects.toThrow(/reserved/);
   });
 
-  // The rate is per display, defaulted by kind (ruling, 2026-10-18).
-  it("defaults the rate by kind and lets a record override it", () => {
-    expect(chartFpsFor({ kind: "local" })).toBe(1);
-    expect(chartFpsFor({ kind: "paired" })).toBe(30);
-    expect(chartFpsFor({ kind: "local", chartFps: 30 })).toBe(30);
-    expect(chartFpsFor({ kind: "paired", chartFps: 1 })).toBe(1);
-  });
-
-  it("keeps a stored rate and refuses one that is not 1 or 30", async () => {
+  it("loads a record written before the rate setting existed", async () => {
+    // The setting is gone (0128); a file the owner already has must still load
+    // and play, with the field ignored rather than carried or refused.
     const record = await store.create("Kitchen tablet", "tok");
-    expect((await store.update(record.id, { chartFps: 1 }))?.chartFps).toBe(1);
-    expect(
-      (await createDisplayStore(directory).find(record.id))?.chartFps,
-    ).toBe(1);
-
-    // Untrusted input — a request body, a hand-edited file — is refused, not
-    // coerced to the kind's default.
-    await expect(
-      store.update(record.id, { chartFps: 7 as ChartRefreshRate }),
-    ).rejects.toThrow(/rate/);
-    expect((await store.find(record.id))?.chartFps).toBe(1);
-
-    // A rate the file cannot carry is dropped on read, so the kind's default
-    // answers instead of a rate the player cannot run.
     await writeFile(
       path.join(directory, FILE),
       JSON.stringify({
@@ -514,7 +492,7 @@ describe("createDisplayStore", () => {
             createdAt: record.createdAt,
             lastSeenAt: record.createdAt,
             tokenHash: hashToken("tok"),
-            chartFps: 7,
+            chartFps: 1,
           },
         ],
       }),
@@ -522,9 +500,9 @@ describe("createDisplayStore", () => {
     );
 
     const stored = await createDisplayStore(directory).find(record.id);
-    if (stored === undefined) throw new Error("the record was dropped");
-    expect(stored.chartFps).toBeUndefined();
-    expect(chartFpsFor(stored)).toBe(30);
+
+    expect(stored).toBeDefined();
+    expect(stored).not.toHaveProperty("chartFps");
   });
 
   // A display's glass and its mounting angle: stored with the record, because

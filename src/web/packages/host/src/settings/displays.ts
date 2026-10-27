@@ -2,7 +2,6 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { DisplayPresentation, DisplayShape } from "@yunari/renderer-core";
-import type { ChartRefreshRate } from "@yunari/scene-fabric";
 import { DEVICE_ID_PATTERN } from "./devices.js";
 import {
   displayShape,
@@ -64,7 +63,6 @@ export interface DisplayRecord {
   /** Absent for a local display: it is this machine, so it has nothing to prove. */
   readonly tokenHash?: string;
   readonly monitor?: MonitorHint;
-  readonly chartFps?: ChartRefreshRate;
   /** The glass: a rectangular panel or a round one. Never absent in a record. */
   readonly shape: DisplayShape;
   /** Whole degrees clockwise; omitted when upright, which every reader answers as 0. */
@@ -74,7 +72,6 @@ export interface DisplayRecord {
 /** The things a person edits. None may touch the id. */
 export interface DisplayPatch {
   readonly label?: string;
-  readonly chartFps?: ChartRefreshRate;
   readonly shape?: DisplayShape;
   readonly rotation?: number;
 }
@@ -102,19 +99,6 @@ export interface DisplayStore {
 const FILE = "display-clients.json";
 const MAX_LABEL_LENGTH = 64;
 const MAX_ID_LENGTH = 64;
-
-/**
- * The rate a display's charts repaint at: its own choice, else the kind's.
- *
- * One function, so no caller re-decides the default. A local screen is in front
- * of the person using it and repaints every frame; a paired one is usually
- * across the room and redrawing it thirty times a second is heat nobody sees.
- */
-export function chartFpsFor(
-  record: Pick<DisplayRecord, "kind" | "chartFps">,
-): ChartRefreshRate {
-  return record.chartFps ?? (record.kind === "local" ? 1 : 30);
-}
 
 /**
  * The name a person sees and edits: trimmed, and refused if that leaves nothing
@@ -296,10 +280,9 @@ function normalizeRecord(input: unknown): DisplayRecord | undefined {
   }
 
   const monitor = normalizeMonitor(raw["monitor"]);
-  const chartFps = raw["chartFps"];
   // An unreadable shape is a rectangular screen rather than a dropped record:
-  // the display then plays upright, as an unreadable rate falls back to its
-  // kind's default. A rotation the shape cannot hold is dropped with it.
+  // the display then plays upright. A rotation the shape cannot hold is
+  // dropped with it.
   const shape: DisplayShape = raw["shape"] === "circle" ? "circle" : "rect";
   const rotation = storedRotation(shape, raw["rotation"]);
 
@@ -313,9 +296,6 @@ function normalizeRecord(input: unknown): DisplayRecord | undefined {
     ...(rotation === undefined ? {} : { rotation }),
     ...(typeof tokenHash === "string" ? { tokenHash } : {}),
     ...(monitor !== undefined ? { monitor } : {}),
-    // A rate the player cannot run is dropped rather than carried, so the
-    // kind's default answers instead.
-    ...(chartFps === 1 || chartFps === 30 ? { chartFps } : {}),
   };
 }
 
@@ -385,11 +365,6 @@ async function readDisplays(file: string): Promise<DisplayFileRead> {
   return { displays };
 }
 
-function rateOrThrow(value: unknown): ChartRefreshRate {
-  if (value === 1 || value === 30) return value;
-  throw new Error(`A chart rate must be 1 or 30, not "${String(value)}".`);
-}
-
 /**
  * A patch with both fields checked, refused with the store's own words when
  * either cannot be one.
@@ -397,15 +372,13 @@ function rateOrThrow(value: unknown): ChartRefreshRate {
  * Exported for the same reason `mintedDisplayId` is: the route has to *answer* a
  * patch the store would refuse rather than let it throw — a rejected request
  * handler is an uncaught exception in Node, and the wrapper's 500 tells a caller
- * who sent `chartFps: 5` that the host failed. A second copy of either rule in
- * the route would be a second thing to keep true, so both rules are asked here,
- * in one call.
+ * who sent an impossible label that the host failed. A second copy of either
+ * rule in the route would be a second thing to keep true, so both rules are
+ * asked here, in one call.
  */
 export function normalizePatch(patch: DisplayPatch): DisplayPatch {
   const label =
     patch.label === undefined ? undefined : normalizeLabel(patch.label);
-  const chartFps =
-    patch.chartFps === undefined ? undefined : rateOrThrow(patch.chartFps);
   // Only membership and a whole angle here: this has no record, so the patch's
   // own shape deciding the rule is `update`'s job once the final shape is known.
   const shape =
@@ -415,7 +388,6 @@ export function normalizePatch(patch: DisplayPatch): DisplayPatch {
 
   return {
     ...(label === undefined ? {} : { label }),
-    ...(chartFps === undefined ? {} : { chartFps }),
     ...(shape === undefined ? {} : { shape }),
     ...(rotation === undefined ? {} : { rotation }),
   };
@@ -644,10 +616,6 @@ export function createDisplayStore(
 
         const label =
           patch.label === undefined ? found.label : normalizeLabel(patch.label);
-        const chartFps =
-          patch.chartFps === undefined
-            ? found.chartFps
-            : rateOrThrow(patch.chartFps);
 
         // The patch's fields are applied as one: the final shape decides the
         // rule the final rotation must satisfy. A new shape with no angle named
@@ -673,7 +641,6 @@ export function createDisplayStore(
           ...(presentation.rotation === undefined
             ? {}
             : { rotation: presentation.rotation }),
-          ...(chartFps === undefined ? {} : { chartFps }),
         };
 
         displays[index] = record;

@@ -15,7 +15,6 @@ import {
 } from "@yunari/renderer-core";
 import {
   applyAuthoredText,
-  type ChartRefreshRate,
   chartAnimationFor,
   loadFontAssets,
   mountFabricScene,
@@ -313,9 +312,6 @@ async function startHostedTheme(
   // The reading each chart last drew with. Unchanged readings skip `setOption`
   // so an engine transition can finish instead of restarting every frame.
   const drawnReadings = new WeakMap<object, string>();
-  // The host's rate arrives on the poll below, so the first frame uses the
-  // paired default and is re-rated in place.
-  let chartRate: ChartRefreshRate = 30;
   const refresh = (): void => {
     const revision = liveHandle.source.revision;
     const sampleChanged = revision !== lastRevision;
@@ -497,10 +493,7 @@ async function startHostedTheme(
           onError: (message) => showConnectionState("refused", 0, message),
         })
       : undefined;
-  // The display's own rate arrives on the poll below, so the loop starts on the
-  // paired default and is re-rated in place the moment an answer lands: a rate
-  // change is a `setRate` on the loop that exists, not a second loop.
-  const chartRefresh = startChartRefresh(refresh, chartRate, undefined, {
+  const chartRefresh = startChartRefresh(refresh, 30, undefined, {
     onError: reportRepaintError,
   });
   const stopFollowing = followPublished(session, reResolve, {
@@ -511,10 +504,6 @@ async function startHostedTheme(
     // `refind` decides whether this display has an identity to match and
     // whether the last sweep is far enough behind it to run another.
     onUnreachable: () => void refind(),
-    onRateChange: (rate) => {
-      chartRate = rate;
-      chartRefresh.setRate(rate);
-    },
     // The scene re-fits and re-clips itself from the host's answer. The follower
     // has already refused a shape or angle the rule cannot hold, so this cannot
     // throw for a payload `updatePresentation` would reject.

@@ -4238,34 +4238,6 @@ describe("The pairing routes mint, rotate, rename and remove displays (ruling 12
     ]);
   });
 
-  it("refuses a chart rate the player cannot run, and leaves the stored one alone", async () => {
-    await mint("Office TV");
-    expect(
-      (
-        await request(
-          hosted.server,
-          "PATCH",
-          "/api/displays/office-tv",
-          json({ chartFps: 1 }),
-        )
-      ).status,
-    ).toBe(200);
-
-    const refused = await request(
-      hosted.server,
-      "PATCH",
-      "/api/displays/office-tv",
-      json({ chartFps: 5 }),
-    );
-    // The caller's typo and not a host fault: the wrapper's 500 would tell them
-    // "the host could not answer that request", which is not what happened.
-    expect(refused.status).toBe(400);
-    // The store's own words, so a caller reads their own mistake rather than
-    // the wrapper's "the host could not answer that request".
-    expect(refused.text()).toBe('A chart rate must be 1 or 30, not "5".');
-    expect((await displays.find("office-tv"))?.chartFps).toBe(1);
-  });
-
   it("refuses a patch rotation the record's own shape cannot hold", async () => {
     await mint("Office TV");
 
@@ -4317,28 +4289,6 @@ describe("The pairing routes mint, rotate, rename and remove displays (ruling 12
       ).status,
     ).toBe(200);
     expect((await displays.find("office-tv"))?.rotation).toBe(45);
-  });
-
-  it("sets a chart rate the player can run, and answers the redacted record", async () => {
-    const { token } = await mint("Office TV");
-
-    const answered = await request(
-      hosted.server,
-      "PATCH",
-      "/api/displays/office-tv",
-      json({ chartFps: 30 }),
-    );
-    expect(answered.status).toBe(200);
-
-    const body = answered.json() as { id: string; chartFps: number };
-    expect(body.id).toBe("office-tv");
-    expect(body.chartFps).toBe(30);
-    expect((await displays.find("office-tv"))?.chartFps).toBe(30);
-
-    // The answer is a record a surface repaints from, so it goes through the
-    // same redaction every other route that could echo a record does.
-    expect(answered.text()).not.toContain(hashToken(token));
-    expect(body).not.toHaveProperty("tokenHash");
   });
 
   it("refuses an empty label rather than storing it", async () => {
@@ -4963,9 +4913,6 @@ describe("A local monitor is specified rather than paired", () => {
       expect((poll.json() as { display: unknown }).display).toEqual({
         id: "left-screen",
         theme: null,
-        // A local display, so the poll also carries the rate its charts repaint
-        // at: this monitor is in front of the person using it.
-        chartFps: 1,
         shape: "rect",
         rotation: 0,
       });
@@ -8907,7 +8854,6 @@ describe("The publish route", () => {
       expect((polled.json() as { display: unknown }).display).toEqual({
         id: LOCAL_DISPLAY_ID,
         theme: "living-room",
-        chartFps: 1,
         shape: "rect",
         rotation: 0,
       });
@@ -9189,12 +9135,9 @@ describe("The published overlay", () => {
       expect(here.json()).toEqual({
         id: null,
         revision: 0,
-        // `this-pc` is this machine's own monitor, so it repaints at the rate a
-        // local display defaults to rather than the paired 30.
         display: {
           id: LOCAL_DISPLAY_ID,
           theme: null,
-          chartFps: 1,
           shape: "rect",
           rotation: 0,
         },
@@ -9241,7 +9184,6 @@ describe("The published overlay", () => {
       expect((own.json() as { display: unknown }).display).toEqual({
         id: "kitchen-tablet",
         theme: "studio",
-        chartFps: 30,
         shape: "rect",
         rotation: 0,
       });
@@ -9264,47 +9206,9 @@ describe("The published overlay", () => {
       expect((fallback.json() as { display: unknown }).display).toEqual({
         id: "hallway-phone",
         theme: "living-room",
-        chartFps: 30,
         shape: "rect",
         rotation: 0,
       });
-    } finally {
-      await hosted.close();
-      await fs.rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("carries the display's own rate on the poll the player already makes", async () => {
-    // The rate the player runs its refresh loop at, answered on the poll it
-    // already makes rather than on a route of its own. A local display is in
-    // front of the person using it and repaints every second; the record's own
-    // rate wins once a person sets one.
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-published-"));
-    const displays = createDisplayStore(dir);
-    const hosted = createHostServer({
-      registry: new ProviderRegistry([]),
-      bundles: { player: dir, editor: dir },
-      themeStore: createThemeStore(dir),
-      displays,
-    });
-
-    try {
-      const local = await displays.createLocal("Desk monitor", {
-        deviceName: "DELL U2720Q",
-      });
-      const publishedFor = async (
-        id: string,
-      ): Promise<{ display: { chartFps: unknown } }> =>
-        (
-          await request(hosted.server, "GET", `/api/published?display=${id}`)
-        ).json() as { display: { chartFps: unknown } };
-
-      const before = await publishedFor(local.id);
-      expect(before.display.chartFps).toBe(1);
-
-      await displays.update(local.id, { chartFps: 30 });
-      const after = await publishedFor(local.id);
-      expect(after.display.chartFps).toBe(30);
     } finally {
       await hosted.close();
       await fs.rm(dir, { recursive: true, force: true });
@@ -9349,7 +9253,6 @@ describe("The published overlay", () => {
       expect((linked.json() as { display: unknown }).display).toEqual({
         id: "kitchen-tablet",
         theme: null,
-        chartFps: 30,
         shape: "rect",
         rotation: 0,
       });
@@ -9369,7 +9272,6 @@ describe("The published overlay", () => {
       expect((assigned.json() as { display: unknown }).display).toEqual({
         id: "kitchen-tablet",
         theme: "studio",
-        chartFps: 30,
         shape: "rect",
         rotation: 0,
       });
@@ -9416,7 +9318,6 @@ describe("The published overlay", () => {
       expect((answer.json() as { display: unknown }).display).toEqual({
         id: "kitchen-tablet",
         theme: "studio",
-        chartFps: 30,
         shape: "rect",
         rotation: 0,
       });
