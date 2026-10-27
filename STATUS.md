@@ -13,7 +13,7 @@ The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design
 - **The branch carries main:** its 69 commits are merged in, and the merged tree typechecks and passes the full suite.
 - **The gate is green as one run:** `npm run gate` exit 0 at `79d5140b` — biome, self-tests, status, docs, design, typecheck and both suites.
 - **Docs are current:** the decision note is `0128` (main owns `0124`), and `DESIGN.md` §2 plus the architecture map name the token model.
-- **Local `main` trails the branch by four documentation and test commits:** a fast-forward after the final review puts it in the user's hands.
+- **Local `main` is at this branch's tip (`7016f85`):** the user can test the type-token editor while the final review runs.
 
 ## Last completed change
 
@@ -27,7 +27,7 @@ The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design
 
 1. Final whole-branch review on the most capable model.
 2. Apply its findings with one fix round and a scoped re-review.
-3. Fast-forward local `main` so the user can test the type-token editor.
+3. Re-run the gate and fast-forward local `main` if the review lands fixes.
 4. Finish the branch; pushing and opening a PR need the user.
 5. If port 4174 frees, run the editor browser projects and record the visual proof here.
 
