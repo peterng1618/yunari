@@ -244,6 +244,8 @@ describe("the finder's apply target", () => {
     session.destroy();
   });
 
+  // Reds on: dropping the token-store read (heading is never written) or a
+  // write that carries another token along (the untouched list changes).
   it("rewrites the named role token and no other", async () => {
     const assetManager = new AssetManager();
     // Declared up front so the write adopts no bytes and asks no host.

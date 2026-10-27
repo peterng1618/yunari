@@ -1012,11 +1012,12 @@ export class EditorSession {
   /**
    * The finder's Fonts body with the preview panel's actions wired. Every
    * action is the document's write; the panel only reports a press. Apply to
-   * selected preset travels only when a store names a type token, because the
+   * selected token travels only when a store names a type token, because the
    * panel draws that button on the callback's presence (R9). The inspector's
    * token wins, else the shell's canvas projection; a paint is not a type
-   * target. Read at draw time, never held: the two stores are exclusive and a
-   * stale target must not outlive its store.
+   * target. Read when the body is built and closed over until the next build:
+   * safe because the finder is modal and nothing can move either store while
+   * it is open — a non-modal finder would need the read moved into the action.
    */
   #fontPickerBody(): ReactElement {
     const document = this.#document;
