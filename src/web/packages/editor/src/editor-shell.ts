@@ -345,14 +345,24 @@ function createNativeEditor(input: {
   });
   history.reset();
   const save = (): void => history.save();
-  /** A completed mouse-driven move/scale/rotate needs the same history entry
-   * explicit actions get; Fabric only reports it after the gesture ends. */
-  canvas.on("object:modified", save);
   const deletion = createDeletionManager(canvas, save);
   const images = createImageManager(canvas, save);
-  const text = createTextManager(canvas, save, (message) =>
-    errors.warn("controls", message),
+  const text = createTextManager(
+    canvas,
+    save,
+    (message) => errors.warn("controls", message),
+    // The board, not the viewport: a scaled run with no authored size takes a
+    // share of the frame it was authored on.
+    () => input.artboard().height,
   );
+  /** A completed mouse-driven move/scale/rotate needs the same history entry
+   * explicit actions get; Fabric only reports it after the gesture ends.
+   *
+   * Registered after the text manager, whose own commit pins a scaled text's
+   * run sizes and resets the scale: this save then sees that state and dedupes,
+   * so a scale gesture is one entry. Registered first, it would record the
+   * interim scaled state and leave the reset to a second, near-identical undo. */
+  canvas.on("object:modified", save);
   const objectLockManager = createObjectLockManager(canvas, save);
 
   const grouping = createGroupingManager({

@@ -8,6 +8,11 @@ import {
 import { type Canvas, IText, Textbox } from "fabric/es";
 import { GUIDE_COLOR, GUIDE_WIDTH } from "../snap-manager/constants.js";
 import { uiCopy } from "../ui-copy.js";
+import { scaledRuns } from "./scale-runs.js";
+
+/** How close to 1 a handle scale must read as untouched: a corner drag leaves
+ *  float dust on a scale the author never changed. */
+const SCALE_UNITY_EPSILON = 1e-4;
 
 /**
  * Pointer travel, in CSS pixels, that turns a placement press into a drag.
@@ -192,6 +197,10 @@ export function createTextManager(
   save: () => void,
   /** How a refused edit reaches the author; the shell's diagnostics own it. */
   warn?: (message: string) => void,
+  /** The authored frame's height, which is what a role default is a share of.
+   *  The canvas is only a viewport onto that frame, so a harness with no board
+   *  falls back to its own height. */
+  artboardHeight: () => number = () => canvas.getHeight(),
 ): TextManager {
   let showAuthoringView: (object: IText) => void = () => {};
   /** Repaints the authored runs, so a refused edit does not leave un-authored
@@ -326,10 +335,48 @@ export function createTextManager(
     adoptResizedBox(event);
   };
 
-  const onModified = (event: { target?: unknown }): void => {
-    if (event.target instanceof IText) {
-      save();
+  /**
+   * A handle drag scales the object through `scaleX`/`scaleY`. Committing it
+   * means the size each run was painted at becomes its own, so the canvas and
+   * the size row agree and the reset below loses nothing.
+   *
+   * Every run is pinned, not only those without a size: a run whose own size
+   * did not absorb the gesture would paint smaller the moment the scale reset.
+   * Only the target's authored runs are written — a sibling naming the same
+   * token keeps painting from the role default.
+   */
+  const commitScale = (target: IText): void => {
+    if (
+      Math.abs(target.scaleX - 1) <= SCALE_UNITY_EPSILON &&
+      Math.abs(target.scaleY - 1) <= SCALE_UNITY_EPSILON
+    ) {
+      return;
     }
+    const authored = authoredOf(target);
+    if (authored === undefined || authored.runs.length === 0) return;
+
+    const runs = scaledRuns(authored.runs, target.scaleY, {
+      // A role's size comes from the token's id, never from the corpus.
+      globals: undefined,
+      artboardHeight: artboardHeight(),
+    });
+    // The scale was not a multiplier the commit could use (a width-only drag,
+    // for instance): leaving the object alone is the whole answer.
+    if (runs === authored.runs) return;
+
+    target.set(YUNARI_TEXT_PROPERTY, { ...authored, runs });
+    target.set({ scaleX: 1, scaleY: 1 });
+    repaint(target);
+    canvas.requestRenderAll();
+  };
+
+  const onModified = (event: { target?: unknown }): void => {
+    const target = event.target;
+    if (!(target instanceof IText)) return;
+    // Before the save, so the entry holds the pinned size and the reset scale
+    // together: one undo returns to the pre-gesture state.
+    commitScale(target);
+    save();
   };
 
   /** The armed placement gesture, if any. One-shot: every outcome disarms it. */
