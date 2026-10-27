@@ -6,9 +6,9 @@ import { writeRunStyle } from "./run-edits.js";
 
 /**
  * A run's own size, leading and tracking are style writes, and the boundary is
- * the rule that holds whichever control sent the draft: a finite value at least
- * 1 is rounded and written, `undefined` removes the key, and anything else is
- * refused without touching the object.
+ * the rule that holds whichever control sent the draft. The three keys are not
+ * one rule: a size is a positive whole unit, a leading is a positive decimal
+ * multiplier, and tracking is any finite number — negative tightens.
  */
 
 const PLAIN: TextRun = {
@@ -64,10 +64,22 @@ describe("writing a run's own style", () => {
     }
   });
 
-  it("rounds a finite value at least 1", () => {
+  it("rounds a size to a whole unit and a leading to two decimals", () => {
+    const size = targetWith(PLAIN);
+    expect(writeRunStyle(size.target, 0, "fontSize", 46.6)).toBe(true);
+    expect(styleValue(size.written(), "fontSize")).toBe(47);
+
+    // 1.18 is the starter theme's own leading: flooring it at 1 would collapse
+    // the leading the author chose, and rounding to an integer would too.
+    const leading = targetWith(PLAIN);
+    expect(writeRunStyle(leading.target, 0, "lineHeight", 1.18)).toBe(true);
+    expect(styleValue(leading.written(), "lineHeight")).toBe(1.18);
+  });
+
+  it("keeps tracking negative, rounded to two decimals", () => {
     const { target, written } = targetWith(PLAIN);
-    expect(writeRunStyle(target, 0, "fontSize", 46.6)).toBe(true);
-    expect(styleValue(written(), "fontSize")).toBe(47);
+    expect(writeRunStyle(target, 0, "letterSpacing", -0.555)).toBe(true);
+    expect(styleValue(written(), "letterSpacing")).toBe(-0.56);
   });
 
   it("removes the key when cleared", () => {
@@ -77,11 +89,36 @@ describe("writing a run's own style", () => {
     expect(written()[0]?.style?.["fontSize"]).toBeUndefined();
   });
 
-  it("refuses zero, negative, NaN and Infinity without writing", () => {
-    const { target, written } = targetWith(PLAIN);
-    for (const value of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect(writeRunStyle(target, 0, "fontSize", value)).toBe(false);
-      expect(styleValue(written(), "fontSize")).toBeUndefined();
+  it("refuses a size below 1, a leading at or below 0, and any non-finite value", () => {
+    const refusals: readonly (readonly [
+      "fontSize" | "lineHeight" | "letterSpacing",
+      number,
+    ])[] = [
+      ["fontSize", 0],
+      ["fontSize", -5],
+      ["fontSize", Number.NaN],
+      ["fontSize", Number.POSITIVE_INFINITY],
+      ["lineHeight", 0],
+      ["lineHeight", -1],
+      ["lineHeight", Number.NaN],
+      ["lineHeight", Number.POSITIVE_INFINITY],
+      ["letterSpacing", Number.NaN],
+      ["letterSpacing", Number.NEGATIVE_INFINITY],
+    ];
+    for (const [key, value] of refusals) {
+      const { target, written } = targetWith(PLAIN);
+      expect(writeRunStyle(target, 0, key, value), `${key} ${value}`).toBe(
+        false,
+      );
+      expect(styleValue(written(), key)).toBeUndefined();
     }
+  });
+
+  it("answers no change when clearing a key the run never authored", () => {
+    const { target, written } = targetWith(PLAIN);
+    expect(writeRunStyle(target, 0, "fontSize", undefined)).toBe(false);
+    // No write at all: the run object is the one the object already held, so a
+    // history entry and a repaint are not spent on it.
+    expect(written()[0]).toBe(PLAIN);
   });
 });

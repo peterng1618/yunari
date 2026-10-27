@@ -467,16 +467,16 @@ describe("what a run cannot carry", () => {
   });
 
   it("names each run whose tracking the object cannot carry", async () => {
-    // The note used to name a preset, so two runs sharing one produced one
-    // note. It names the run now, so two tracked runs are two facts.
+    // Deduped by the run, not by the note: two later runs saying the same text
+    // are still two runs the object cannot carry separately.
     const box = mountRunEditor({
-      runs: [trackedRun("CPU "), trackedRun("48", 4), trackedRun(" %", 4)],
+      runs: [trackedRun("CPU "), trackedRun("42%", 4), trackedRun("42%", 4)],
     });
 
     const notes = box.notes();
     expect(notes).toHaveLength(2);
-    expect(notes[0]).toContain("48");
-    expect(notes[1]).toContain("%");
+    expect(notes[0]).toContain("42%");
+    expect(notes[1]).toContain("42%");
     return box.dispose();
   });
 
@@ -528,6 +528,72 @@ describe("a run's own size", () => {
     expect(
       box.pick<HTMLInputElement>('[data-yunari-run-size="0"]').value,
     ).toBe("46");
+    return box.dispose();
+  });
+});
+
+describe("a run's own leading and tracking", () => {
+  it("shows a blank leading and tracking when the run authors neither, then writes them", async () => {
+    const box = mountRunEditor({ runs: [trackedRun("Hi")] });
+
+    const leading = box.pick<HTMLInputElement>(
+      '[data-yunari-run-line-height="0"]',
+    );
+    const tracking = box.pick<HTMLInputElement>(
+      '[data-yunari-run-letter-spacing="0"]',
+    );
+    expect(leading.value).toBe("");
+    expect(tracking.value).toBe("");
+
+    // The starter theme's own leading survives: it is a multiplier, not a size.
+    await typeInto(leading, "1.18");
+    await blur(leading);
+    expect(box.runs()[0]?.style?.["lineHeight"]).toEqual({ value: 1.18 });
+
+    // Negative tracking tightens and is a value the row takes.
+    await typeInto(tracking, "-0.5");
+    await blur(tracking);
+    expect(box.runs()[0]?.style?.["letterSpacing"]).toEqual({ value: -0.5 });
+    return box.dispose();
+  });
+
+  it("clears a leading and a tracking back to blank", async () => {
+    const box = mountRunEditor({
+      runs: [
+        {
+          kind: "literal",
+          text: "Hi",
+          typeToken: "typeTokens.plain",
+          style: {
+            lineHeight: { value: 1.18 },
+            letterSpacing: { value: -0.5 },
+          },
+        },
+      ],
+    });
+
+    const leading = box.pick<HTMLInputElement>(
+      '[data-yunari-run-line-height="0"]',
+    );
+    // Shown as authored, not as a rounded copy.
+    expect(leading.value).toBe("1.18");
+    await typeInto(leading, "");
+    await blur(leading);
+    expect(box.runs()[0]?.style?.["lineHeight"]).toBeUndefined();
+
+    const tracking = box.pick<HTMLInputElement>(
+      '[data-yunari-run-letter-spacing="0"]',
+    );
+    await typeInto(tracking, "");
+    await blur(tracking);
+    expect(box.runs()[0]?.style?.["letterSpacing"]).toBeUndefined();
+
+    expect(
+      box.pick<HTMLInputElement>('[data-yunari-run-line-height="0"]').value,
+    ).toBe("");
+    expect(
+      box.pick<HTMLInputElement>('[data-yunari-run-letter-spacing="0"]').value,
+    ).toBe("");
     return box.dispose();
   });
 });

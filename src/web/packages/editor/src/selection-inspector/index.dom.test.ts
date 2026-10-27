@@ -126,8 +126,11 @@ function setup(
     readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
     /** Overrides the fixture's globals, which predate the type-token split. */
     readonly globals?: FabricGlobals;
+    /** The artboard the run rows' unauthored size falls back from. */
+    readonly artboardHeight?: number;
   } = {},
 ) {
+  const { artboardHeight = 1080, ...inspectorOptions } = options;
   const history = { saveState: vi.fn() };
   // Attached: nothing is focusable while it is detached, and a plan-1 control
   // commits on blur — which jsdom fires only for an element that can hold
@@ -139,7 +142,7 @@ function setup(
     historyManager: history,
     errorManager: { warn: vi.fn(), error: vi.fn() },
     cropManager: idleCrop(),
-    artboard: () => ({ width: 1920, height: 1080 }),
+    artboard: () => ({ width: 1920, height: artboardHeight }),
   };
   const inspector = createSelectionInspector(host, {
     editor: editor as never,
@@ -155,7 +158,7 @@ function setup(
       },
     } as never,
     refreshGlass: vi.fn(),
-    ...options,
+    ...inspectorOptions,
   });
   return { inspector, host, history, editor };
 }
@@ -1976,6 +1979,28 @@ describe("the size a run is set in", () => {
     expect(authored.runs[0]?.style?.["fontSize"]).toEqual({ value: 40 });
     expect(history.saveState).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(typeTokens)).toBe(before);
+  });
+
+  it("shows the default from the artboard the editor is drawing on", () => {
+    // The projection must read the editor's artboard, not a fixed 1080: a
+    // heading is 144 on a 2160 artboard, and the canvas paints the same rule.
+    const text = new Textbox("Hi", {
+      left: 0,
+      top: 0,
+      width: 40,
+      id: "run-2",
+    });
+    text.set("yunariText", {
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.heading" }],
+    });
+    const { host } = setup(text, {
+      globals: { typeTokens: { heading: { family: "Inter" } } } as FabricGlobals,
+      artboardHeight: 2160,
+    });
+
+    expect(
+      host.querySelector<HTMLInputElement>('[data-yunari-run-size="0"]')?.value,
+    ).toBe("144");
   });
 });
 

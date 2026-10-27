@@ -117,17 +117,46 @@ export function writeRunPreset(
 /** The numeric style keys a run carries. Tracking's style key is `letterSpacing`. */
 export type RunStyleKey = "fontSize" | "lineHeight" | "letterSpacing";
 
-/** The fewest units any one of the three may take: a zero-size run paints nothing. */
+/** The floor for `fontSize` alone: a zero-size run paints nothing. */
 const MIN_RUN_STYLE = 1;
+
+/** Two decimals, so `1.18` survives the round trip a leading must not collapse under. */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * What the run may store for one style key, or `undefined` when the draft is
+ * refused.
+ *
+ * The three keys are not one rule: a size is an absolute measurement, so it is
+ * positive and whole; a leading is a multiplier (the starter theme authors
+ * `1.18`), so rounding or flooring it at 1 would collapse it; tracking is a
+ * spacing that legitimately tightens, so negative is valid. Only `fontSize`
+ * takes `MIN_RUN_STYLE`.
+ */
+function acceptedStyleValue(
+  key: RunStyleKey,
+  value: number,
+): number | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  if (key === "fontSize") {
+    return value < MIN_RUN_STYLE ? undefined : Math.round(value);
+  }
+  if (key === "lineHeight") {
+    return value > 0 ? round2(value) : undefined;
+  }
+  return round2(value);
+}
 
 /**
  * One of a run's own size, leading or tracking values, in the style map.
  *
  * `undefined` removes the key, which is how a row returns to its fallback —
- * the role's default size, or no value at all for the other two. Anything else
- * must be a finite number at least 1; a draft that is neither is refused rather
- * than coerced, because `0` would make the run vanish and `NaN` would paint
- * nothing while looking authored.
+ * the role's default size, or no value at all for the other two. A draft the
+ * key refuses is refused rather than coerced, and clearing a key the run never
+ * authored is no change at all: it answers `false` so no history entry and no
+ * repaint is recorded for a write that wrote nothing.
  */
 export function writeRunStyle(
   target: RunTarget,
@@ -135,16 +164,18 @@ export function writeRunStyle(
   key: RunStyleKey,
   value: number | undefined,
 ): boolean {
-  if (
-    value !== undefined &&
-    (!Number.isFinite(value) || value < MIN_RUN_STYLE)
-  ) {
-    return false;
-  }
+  const accepted =
+    value === undefined ? undefined : acceptedStyleValue(key, value);
+  if (value !== undefined && accepted === undefined) return false;
+
+  const previous = authoredRunsOf(target.object)[index];
+  if (previous === undefined) return false;
+  if (value === undefined && previous.style?.[key] === undefined) return false;
+
   return rewriteRun(target, index, (run) => {
     const style = { ...run.style };
-    if (value === undefined) delete style[key];
-    else style[key] = { value: Math.round(value) };
+    if (accepted === undefined) delete style[key];
+    else style[key] = { value: accepted };
     return { ...run, style };
   });
 }

@@ -155,12 +155,16 @@ function presetGaps(runs: readonly TextRun[]): readonly string[] {
     styleNumber(run, "letterSpacing") ?? 0;
   const first = runs[0];
   const painted = first === undefined ? 0 : spacingOf(first);
-  const gaps = new Set<string>();
+  const gaps: string[] = [];
+  // Deduped by the run, not by the note: two later runs may say the same text
+  // and are still two runs the object cannot carry separately.
+  const seen = new Set<TextRun>();
   for (const run of runs.slice(1)) {
-    if (spacingOf(run) === painted) continue;
-    gaps.add(uiCopy.inspectorFields.runTrackingNotSeparate(describeRun(run)));
+    if (seen.has(run) || spacingOf(run) === painted) continue;
+    seen.add(run);
+    gaps.push(uiCopy.inspectorFields.runTrackingNotSeparate(describeRun(run)));
   }
-  return [...gaps];
+  return gaps;
 }
 
 /**
@@ -595,7 +599,6 @@ function RunRow(props: {
         label={uiCopy.panels.lineHeight}
         data={{ "data-yunari-run-line-height": String(index) }}
         value={row.lineHeight}
-        min={1}
         onCommit={(value) => edits.setRunLineHeight(index, value)}
         onClear={() => edits.setRunLineHeight(index, undefined)}
       />
@@ -604,7 +607,6 @@ function RunRow(props: {
         label={uiCopy.panels.letterSpacing}
         data={{ "data-yunari-run-letter-spacing": String(index) }}
         value={row.tracking}
-        min={1}
         onCommit={(value) => edits.setRunTracking(index, value)}
         onClear={() => edits.setRunTracking(index, undefined)}
       />
