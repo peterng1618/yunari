@@ -625,6 +625,11 @@ export function createTextManager(
       canvas.add(text);
       canvas.setActiveObject(text);
       save();
+      // A constructed text carries Fabric's own 40px default until an authored
+      // pass runs, and an inserted text enters editing on the next frame, where
+      // both passes skip it — so the role default would not arrive until the
+      // edit ended. Paint now, while the object is still the canvas's.
+      showAuthoringView(text);
       return text;
     },
     beginPlacement(port) {

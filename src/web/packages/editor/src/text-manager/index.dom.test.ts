@@ -2,6 +2,7 @@
 import { applyAuthoredText, YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
 import { Canvas, IText, Textbox } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
+import { LiveRuntime } from "../live-runtime.js";
 import {
   createTextManager,
   PLACEMENT_DRAG_THRESHOLD,
@@ -155,6 +156,48 @@ describe("TextManager", () => {
       (text.get(YUNARI_TEXT_PROPERTY) as { box?: { width: number } }).box
         ?.width,
     ).toBe(200);
+  });
+
+  it("paints a new text's role default before the first edit", async () => {
+    // A constructed text carries Fabric's 40px default and an inserted one
+    // enters editing on the next frame, where both authored passes skip it.
+    // Without the paint in `addText` the canvas shows 40 while the inspector
+    // says 16 for the whole first edit.
+    const canvas = new Canvas(document.createElement("canvas"));
+    const runtime = new LiveRuntime({
+      canvas,
+      source: { revision: 0, latest: () => undefined, history: () => [] },
+      globals: {
+        palette: {
+          ink: { name: "Ink", value: { kind: "solid", color: "#102030" } },
+        },
+        typeTokens: { body: { family: "Inter" } },
+      },
+      artboardHeight: () => 1080,
+    });
+    const manager = createTextManager(canvas, vi.fn());
+    manager.setAuthoringView((object) => runtime.showAuthoringView(object));
+
+    const text = manager.addText({
+      text: "New text",
+      yunariText: {
+        runs: [
+          {
+            kind: "literal",
+            text: "New text",
+            typeToken: "typeTokens.body",
+            style: { color: { ref: "palette.ink" } },
+          },
+        ],
+      },
+    });
+
+    // `defaultTypeSize("body", 1080)`: 1/67.5 of the frame.
+    expect(text.fontSize).toBe(16);
+    text.enterEditing();
+    expect(text.fontSize).toBe(16);
+    manager.destroy();
+    await canvas.dispose();
   });
 
   it("refuses a box it could not draw, before constructing anything", () => {
