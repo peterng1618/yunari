@@ -176,7 +176,7 @@ and ignored.
 
 ### Packaged fonts
 
-`renderer-core/src/theme/` owns font-face declarations and preset validation;
+`renderer-core/src/theme/` owns font-face declarations and token validation;
 `editor/src/font-catalog.ts` and `editor/src/font-preview.ts` own curated
 metadata and transient previews; the existing type-token/asset boundaries own
 adoption; `scene-fabric/src/font-assets.ts` owns loaded-face lifecycle. The UI

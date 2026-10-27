@@ -125,7 +125,7 @@ migration blocker unless explicitly retained after review.
 
 ## §73 — Theme globals
 
-Named typed globals cover palette, typography presets, spacing and assets.
+Named typed globals cover palette, typography tokens, spacing and assets.
 Palette values include CSS-compatible solids and gradients. All authored paint,
 including `fill`, resolves through the palette; only non-paint properties such
 as opacity and geometry remain local.

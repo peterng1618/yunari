@@ -62,7 +62,7 @@ const KNOWN_KEYS = {
   ],
   globalEntry: ["name", "value"],
   // A token names a face only. Size, leading, tracking and role belong to the
-  // run that wears it (docs/decisions/0124).
+  // run that wears it (docs/decisions/0128).
   typeToken: ["family", "weight", "face"],
   fontFaceReference: ["assetId"],
 } as const satisfies Record<string, readonly string[]>;

@@ -151,9 +151,9 @@ Weights: `400` body, `500` emphasis inside a row, `600` titles and eyebrows,
 `650`–`700` only for the brand mark and a primary button. Nothing is bolder than
 `700`.
 
-The persisted model is a **type token** that names a face: family, weight and an
-optional declared face asset. Size, line height and tracking live on the run's
-own style, so one face worn at two sizes needs one token, not two. The three
+The persisted model is a **type token** that names a face: family, an optional
+weight and an optional declared face asset. Size, line height and tracking live
+on the run's own style, so one face worn at two sizes needs one token, not two. The three
 roles are the token ids — `heading`, `body`, `mono` — and the theme always
 carries all three (`docs/decisions/0128`).
 

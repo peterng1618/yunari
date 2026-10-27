@@ -75,7 +75,7 @@ export async function loadFontAssets(
   );
   // A rangeless face covers every codepoint and shadows the ranged faces of
   // its family, and manually added faces are matched in insertion order, so
-  // ranged faces register first (ADR 0124, rung 3).
+  // ranged faces register first (ADR 0128, rung 3).
   const ranged = declared.filter(
     (asset) => unicodeRangeForSubset(asset.subset) !== undefined,
   );
