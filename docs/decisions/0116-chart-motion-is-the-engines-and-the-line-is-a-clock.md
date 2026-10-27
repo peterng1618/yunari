@@ -1,8 +1,8 @@
 # 0116 — Chart motion is the engine's; the line's is a clock
 
 - **Date:** 2026-10-25
-- **Status:** superseded by 0124 for the line's placement; the value families'
-  engine transitions are unchanged
+- **Status:** superseded by 0124 for the line's placement and by 0127 for the
+  line's `smooth` removal; the value families' engine transitions are unchanged
 - **Paths:** `src/web/packages/renderer-core/src/charts/bar.ts`
   `src/web/packages/renderer-core/src/charts/line.ts`
   `src/web/packages/renderer-core/src/charts/pie.ts`

@@ -736,24 +736,27 @@ describe("Fabric theme envelope validation", () => {
     ]);
   });
 
-  it("refuses an interpolation the line no longer offers", () => {
-    // `smooth` was removed rather than silently straightened: a theme asking
-    // for it is authored data the renderer cannot honour (0116).
-    const accepted = validateFabricThemeEnvelope(
-      chartEnvelope("line", { interpolation: "step" }),
-    );
+  it("accepts the interpolations the line offers and refuses a stranger", () => {
+    // `smooth` is an authored curve again (0127). An unknown value is still
+    // authored data the renderer cannot honour, so it is refused at load time
+    // rather than silently straightened (0116's enforcement, kept).
+    for (const interpolation of ["linear", "step", "smooth"] as const) {
+      expect(
+        validateFabricThemeEnvelope(chartEnvelope("line", { interpolation })),
+      ).toMatchObject({ ok: true });
+    }
+
     const refused = issuesOf(
       validateFabricThemeEnvelope(
-        chartEnvelope("line", { interpolation: "smooth" }),
+        chartEnvelope("line", { interpolation: "cubic" }),
       ),
     );
 
-    expect(accepted).toMatchObject({ ok: true });
     expect(refused).toEqual([
       {
         code: "invalid-enum",
         path: "/scene/objects/0/settings/interpolation",
-        message: "interpolation must be one of linear, step.",
+        message: "interpolation must be one of linear, step, smooth.",
       },
     ]);
   });

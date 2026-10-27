@@ -20,7 +20,7 @@ export type { EngineColor, LinearGradientColor };
  * line-only exception to §83 (0124). A missing reading is still never zero.
  */
 
-export type Interpolation = "linear" | "step";
+export type Interpolation = "linear" | "step" | "smooth";
 type DashPattern = "solid" | "dashed" | "dotted";
 export type SeriesPoint = readonly [number, number | null];
 
@@ -256,12 +256,12 @@ export function buildLineOption(
       data: toSeriesPoints(input.samples, settings, endMs, windowStart),
       showSymbol: settings.showMarkers,
       symbolSize: settings.markerSize,
-      // **Never smoothed.** ECharts draws a smooth segment from the points
-      // either side of it, so the stretch a stall holds flat would bend as the
-      // edge advances and bend again when the next batch arrives: the history a
-      // reader has seen would move. Linear and step segments depend only on
-      // their own endpoints, so smoothing is not an authorable choice (0116).
-      smooth: false as const,
+      // **Smoothing is authored, never implied.** ECharts draws a smooth
+      // segment from the points either side of it, so a sample bends its
+      // neighbour segments once; with the data clock (0124) nothing is held at
+      // an advancing edge, so that is the only reshape (0127). Linear and step
+      // depend only on their own endpoints.
+      smooth: settings.interpolation === "smooth",
       step:
         settings.interpolation === "step" ? ("end" as const) : (false as const),
       connectNulls: false as const,

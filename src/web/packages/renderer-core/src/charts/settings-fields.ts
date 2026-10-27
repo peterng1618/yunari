@@ -228,11 +228,12 @@ export interface ChartPaintFieldDescriptor {
   readonly multiple?: true;
 }
 
-/** No `smooth`: a smoothed segment is bent by the points either side of it, so
-    a live line's painted history would move on every batch (0116). */
+/** `smooth` is authored geometry: a smoothed segment bends once when a sample
+    lands, which the data clock makes the only reshape (0127). */
 const INTERPOLATION = [
   { value: "linear", label: "Linear" },
   { value: "step", label: "Step" },
+  { value: "smooth", label: "Smooth" },
 ] as const;
 
 const DASH = [
@@ -449,7 +450,7 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       label: "Interpolation",
       kind: "select",
       section: "content",
-      hint: "How samples are joined: straight segments or steps.",
+      hint: "How samples are joined: straight, stepped or smoothed segments.",
       options: INTERPOLATION,
     },
     {

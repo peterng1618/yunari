@@ -158,21 +158,24 @@ describe("the axis is placed by the data (0124)", () => {
     }
   });
 
-  it("never smooths, because a smooth segment depends on its neighbours", () => {
-    // ECharts draws a smooth segment from the points either side of it, so the
-    // stretch already painted would bend when the next batch arrives.
+  it("smooths only when the author asks for it", () => {
+    // 0116 removed the choice because a wall-clock edge kept extending the last
+    // segment, so a held stretch bent while the reader was looking at it. 0124
+    // deleted that edge: the line moves only when a sample arrives, so the
+    // remaining cost is one reshape per sample — the authored curve's own.
     const samples = Array.from({ length: 5 }, (_, index) =>
       at(index, 40 + index),
     );
-
-    for (const interpolation of ["linear", "step"] as const) {
-      const option = buildLineOption(
+    const smoothOf = (interpolation: Interpolation) =>
+      buildLineOption(
         { ...defaultLineSettings, interpolation },
         [{ sensorId: "a", samples }],
         T0 + 4_000,
-      );
-      expect(option.series[0]!.smooth, interpolation).toBe(false);
-    }
+      ).series[0]!.smooth;
+
+    expect(smoothOf("smooth")).toBe(true);
+    expect(smoothOf("linear")).toBe(false);
+    expect(smoothOf("step")).toBe(false);
   });
 });
 
@@ -373,17 +376,18 @@ describe("buildLineOption", () => {
     expect("renderOverscanRightMs" in option).toBe(false);
   });
 
-  it.each<[Interpolation, "end" | false]>([
-    ["linear", false],
-    ["step", "end"],
-  ])("maps %s interpolation", (interpolation, step) => {
+  it.each<[Interpolation, boolean, "end" | false]>([
+    ["linear", false, false],
+    ["step", false, "end"],
+    ["smooth", true, false],
+  ])("maps %s interpolation", (interpolation, smooth, step) => {
     const option = buildLineOption(
       { ...defaultLineSettings, interpolation },
       [{ sensorId: "a", samples: [] }],
       NOW,
     );
 
-    expect(option.series[0]!.smooth).toBe(false);
+    expect(option.series[0]!.smooth).toBe(smooth);
     expect(option.series[0]!.step).toBe(step);
   });
 

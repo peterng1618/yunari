@@ -797,7 +797,7 @@ function chartScalars(
     const where = `${path}/settings/${field.join("/")}`;
 
     // A select's options are the document's bound, not only the picker's: a
-    // removed choice (smoothing, 0116) must be refused rather than loaded and
+    // choice the field does not offer must be refused rather than loaded and
     // drawn as something else.
     if (descriptor.kind === "select") {
       const allowed = (descriptor.options ?? []).map((option) => option.value);

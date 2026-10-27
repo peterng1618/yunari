@@ -18,9 +18,10 @@ at a reproduction pass over the register.
 
 ## Last completed change
 
-- **Series models survive a reading:** the update path merges instead of `replaceMerge: ["series"]`, which matched only by `id` and so rebuilt every bar, pie and gauge and replayed its appear animation each tick (0126).
-- **Proof:** three DOM tests pin the series-model identity across a reading (red before, green after); 34 chart-object and 65 player/editor chart tests passed, typecheck and reuse gate exit 0.
-- **Unverified:** no browser capture of the corrected value transition.
+- **Smoothing is authored again:** line `interpolation` is `linear | step | smooth`, the field offers Smooth, and the validator accepts it while still refusing unknown values (0127).
+- **The line still does not animate:** `chartAnimationFor` keeps the line at `animate: false`, so the chart has one kind of motion and the curve only reshapes when a sample lands.
+- **Proof:** 4 tests failed first; 188 pass in the three touched suites, 896 across renderer-core and chart-object, 47 in the editor field tests; typecheck, biome, reuse gate and docs check exit 0.
+- **Unverified:** no browser capture of the curved line.
 
 ## Next
 
