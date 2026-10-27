@@ -86,6 +86,13 @@ The final-frame blit is not cosmetic: `finished` fires from the same zrender
 handler at init, the chart binds later), so without it the last painted frame
 would never reach Fabric and the chart would rest one frame short of its value.
 
+What the probes measured (2026-10-27): the pump cases failed first
+(3 failed, 20 passed) and pass after the implementation; the static-option case
+passes both before and after, because it is a guard on an option the pump never
+sees. The 30 fps test needed a 34 ms advance rather than exactly `1000/30`,
+because float addition of the interval lands a hair under it — the production
+comparison is unchanged.
+
 ## Rung 7 — build
 
 No new dependency; the pump lives in `YunariChart` beside the existing engine

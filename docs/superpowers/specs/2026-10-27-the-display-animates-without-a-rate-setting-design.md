@@ -1,7 +1,7 @@
 # The display animates without a chart rate setting
 
 - **Date:** 2026-10-27
-- **Status:** design, awaiting review
+- **Status:** implemented 2026-10-27
 - **Objective:** remove the per-display chart refresh-rate setting and make every chart's own motion visible on the display, while samples still arrive on the host's cadence.
 
 ## The problem
