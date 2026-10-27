@@ -5,13 +5,13 @@ Branch: `main`
 
 ## Current objective
 
-The live line is on its data clock; the queued backlog drain is next, starting
-at a reproduction pass over the register.
+The display animates on its own motion: the per-display chart rate setting goes
+away and every chart's transition is blitted while it runs.
 
 ## Active work
 
-- **No plan is running:** plan A, plan B, the live line's data clock and the Wallpaper Engine import rework are merged into `main`; their specs are landed and their plans archived.
-- **Backlog drain is next:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md`, starting at a reproduction pass over the register.
+- **Active plan:** `docs/superpowers/plans/2026-10-27-the-display-animates-without-a-rate-setting.md`, implementing the spec of the same name; seven tasks in three phases.
+- **Backlog drain is queued:** `docs/superpowers/plans/2026-10-12-the-backlog-drain.md` resumes only after this plan closes.
 - **Preview lens landed:** scene-anchored display box, shell stage, theme letterbox, guide frame, circle lens, ratio catalogue and Previews settings tab.
 - **Display presentation landed:** per-record shape and rotation, rotated/inscribed playback, pair-page choice and Host controls.
 - **The live line is placed by its data:** axis at its newest reading, no delay or hold, missing readings skipped, and sample frames queued at the transport (0124).
@@ -25,10 +25,10 @@ at a reproduction pass over the register.
 
 ## Next
 
-1. Resume the backlog-drain plan at Phase 0, a reproduction pass over the register.
-2. Measure the 30 fps browser arm — `this-pc` is pinned to 1 fps and a fabricated record's stream stalled.
-3. Owner test of the live line's right edge, in the editor and on a phone, with machine sensors.
-4. Triage the pre-existing browser reds recorded below.
+1. Execute the display-animation plan, Task 1 first: the family-only animation rule and decision note 0128.
+2. Read Task 2's pump and Task 3's clock skip together; they share the 30 fps loop's assumptions.
+3. Check the preview source against every `SEMANTIC_KEYS` entry (Task 4's invariant test).
+4. Run `npm run gate` at the plan's merge boundary, then merge locally to `main`.
 
 ## Blockers / unverified
 
