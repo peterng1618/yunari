@@ -475,15 +475,16 @@ export class EditorSession {
       ...(options.favoritesClient === undefined
         ? {}
         : { favoritesClient: options.favoritesClient }),
+      // Both finder ports are the shell's one port: the face field's row and the
+      // run row's action entry open the same finder. The import opens Task 4.2's
+      // dialog and names its token back so the run that asked can point itself
+      // at it.
       ...(options.onFindFontPicker === undefined
         ? {}
-        : { onOpenFontPicker: options.onFindFontPicker }),
-      // The run row's two action entries. The finder is the same shell port the
-      // face field uses; the import opens the same dialog and names its token
-      // back so the run that asked can point itself at it.
-      ...(options.onFindFontPicker === undefined
-        ? {}
-        : { openFontFinder: () => options.onFindFontPicker?.() }),
+        : {
+            onOpenFontPicker: options.onFindFontPicker,
+            openFontFinder: options.onFindFontPicker,
+          }),
       importLocalFont: (onImported) => this.#pickFontFile(onImported),
     });
     this.#selection.setLocale(this.#document.envelope.metadata?.themeLanguage);

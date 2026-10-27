@@ -5,6 +5,7 @@ import type {
   Binding,
   ChartContent,
   ChartFamily,
+  FabricGlobals,
 } from "@yunari/renderer-core";
 import {
   defaultGaugeSettings,
@@ -48,7 +49,7 @@ import {
   type SelectionKind,
   selectionKindOf,
 } from "./per-kind-column.js";
-import { click, slide } from "./runs.test-stage.js";
+import { choose, click, slide } from "./runs.test-stage.js";
 
 // jsdom has never had a `PointerEvent`, and Base UI re-dispatches a click
 // through one to carry modifier state; a toggle click throws without it.
@@ -121,6 +122,10 @@ function setup(
     readonly background?: () => Background | undefined;
     readonly assets?: () => readonly AssetReference[];
     readonly onBackgroundChange?: (next: Background | undefined) => void;
+    /** The run row's import port, so the selection-moved guard can be driven. */
+    readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
+    /** Overrides the fixture's globals, which predate the type-token split. */
+    readonly globals?: FabricGlobals;
   } = {},
 ) {
   const history = { saveState: vi.fn() };
@@ -1811,6 +1816,88 @@ describe("the class the inspector states", () => {
       host.querySelector<HTMLInputElement>('[data-yunari-geometry="width"]')
         ?.readOnly,
     ).toBe(true);
+  });
+});
+
+describe("the token a run is set in", () => {
+  /** A text box with one authored run, so the token picker is present. */
+  function labelled(): Textbox {
+    const text = new Textbox("Hi", { left: 0, top: 0, width: 40, id: "run-1" });
+    text.set("yunariText", {
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
+    });
+    return text;
+  }
+
+  it("records exactly one history entry and changes no token record", async () => {
+    const text = labelled();
+    const typeTokens = {
+      heading: { family: "Manrope", weight: 600 },
+      body: { family: "Inter", weight: 400 },
+    };
+    const before = JSON.stringify(typeTokens);
+    const { host, history } = setup(text, {
+      globals: { typeTokens } as FabricGlobals,
+    });
+
+    await choose(host, 'data-yunari-run-preset="0"', "[Heading] Manrope 600");
+
+    const authored = text.get("yunariText") as {
+      readonly runs: readonly { readonly typeToken?: string }[];
+    };
+    // The run names the token; the token table itself is not written.
+    expect(authored.runs[0]?.typeToken).toBe("typeTokens.heading");
+    expect(history.saveState).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(typeTokens)).toBe(before);
+  });
+
+  it("refuses the token when the selection moved before the import answered", async () => {
+    const first = labelled();
+    const second = new Textbox("Hi", {
+      left: 0,
+      top: 0,
+      width: 40,
+      id: "run-2",
+    });
+    second.set("yunariText", {
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
+    });
+    let active: FabricObject = first;
+    let report: ((tokenId: string) => void) | undefined;
+    const { host, inspector } = setup(() => active, {
+      globals: {
+        typeTokens: {
+          heading: { family: "Manrope", weight: 600 },
+          body: { family: "Inter", weight: 400 },
+        },
+      } as FabricGlobals,
+      importLocalFont: (onImported) => {
+        report = onImported;
+      },
+    });
+
+    await choose(
+      host,
+      'data-yunari-run-preset="0"',
+      uiCopy.panels.importLocalFont,
+    );
+    // The dialog's modal is unlikely to lose the selection, not unable to: the
+    // index it would write names a run on the object that asked, so another
+    // object must not receive it.
+    active = second;
+    inspector.render();
+    await act(async () => {
+      report?.("heading");
+    });
+
+    const runOf = (text: FabricObject): string | undefined =>
+      (
+        text.get("yunariText") as {
+          readonly runs: readonly { readonly typeToken?: string }[];
+        }
+      ).runs[0]?.typeToken;
+    expect(runOf(second)).toBe("typeTokens.body");
+    expect(runOf(first)).toBe("typeTokens.body");
   });
 });
 

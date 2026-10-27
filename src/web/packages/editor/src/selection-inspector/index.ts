@@ -200,9 +200,9 @@ interface SelectionInspectorOptions {
   /** Opens the finder on Fonts, where the catalogue now lives. Absent in a
    *  panel built without the shell's finder. */
   readonly onOpenFontPicker?: () => void;
-  /** Opens that same finder from a run's token list. Separate from the field's
-   *  port above so the run editor's action row can be wired without the face
-   *  field's presence deciding it. */
+  /** Opens that same finder from a run's token list. The session passes the
+   *  same shell port as `onOpenFontPicker`; two ports because the two surfaces
+   *  ask separately, not because the answers differ. */
   readonly openFontFinder?: () => void;
   /** Imports a local font and hands back the token the commit produced or
    *  adopted, so the run that asked can point itself at it. Absent where the
@@ -786,7 +786,19 @@ export function createSelectionInspector(
       : { openFontFinder: options.openFontFinder }),
     ...(options.importLocalFont === undefined
       ? {}
-      : { importLocalFont: options.importLocalFont }),
+      : {
+          importLocalFont: (onImported) => {
+            // The object that opened the dialog, not whichever one happens to be
+            // selected when its commit answers: a run index means nothing on
+            // another object, so a selection that moved means the token goes
+            // nowhere rather than into the wrong run.
+            const opened = described;
+            options.importLocalFont?.((tokenId) => {
+              if (opened === undefined || described !== opened) return;
+              onImported(tokenId);
+            });
+          },
+        }),
   };
 
   /**

@@ -27,6 +27,11 @@ import {
   useControlIds,
 } from "../components/ui/control-well.js";
 import { Glyph, PLUS_GLYPH } from "../editor-shell/icons.js";
+import {
+  FONT_FINDER_ID,
+  fontActionOptions,
+  IMPORT_LOCAL_FONT_ID,
+} from "../type-token-manager/font-actions.js";
 import { orderedTokens, tokenName } from "../type-token-manager/name.js";
 import { uiCopy } from "../ui-copy.js";
 import {
@@ -125,25 +130,6 @@ function tokenOptions(
       name: tokenName(id, token),
     }),
   );
-}
-
-/** Sentinel ids in the token list, the same two the token inspector's family
- *  list uses. A token can never carry one, so a press is a command rather than
- *  a reference. */
-const IMPORT_LOCAL_FONT_ID = "@yunari:import-local-font";
-const FONT_FINDER_ID = "@yunari:font-finder";
-
-/** The action rows that end the token list, each drawn only where its port
- *  exists: a press that did nothing is worse than an absent row. */
-function fontActionOptions(edits: RunEdits): readonly RunOptionView[] {
-  return [
-    ...(edits.importLocalFont === undefined
-      ? []
-      : [{ id: IMPORT_LOCAL_FONT_ID, name: uiCopy.panels.importLocalFont }]),
-    ...(edits.openFontFinder === undefined
-      ? []
-      : [{ id: FONT_FINDER_ID, name: uiCopy.panels.fontFinder }]),
-  ];
 }
 
 /**

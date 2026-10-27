@@ -16,6 +16,11 @@ import { plainButtonClasses } from "../../components/ui/control-well.js";
 import type { TokenRef } from "../../editor-shell/shell-stores.js";
 import type { PaletteTokenUse } from "../../palette-manager/panel.js";
 import type { TypeTokens } from "../../type-preset-manager/panel.js";
+import {
+  FONT_FINDER_ID,
+  fontActionOptions,
+  IMPORT_LOCAL_FONT_ID,
+} from "../../type-token-manager/font-actions.js";
 import { orderedTokens, tokenName } from "../../type-token-manager/name.js";
 import { uiCopy } from "../../ui-copy.js";
 import { PaintFields } from "./paint-fields.js";
@@ -68,28 +73,10 @@ export interface FaceChoice {
   readonly style: string;
 }
 
-/** Sentinel ids in the family list. A declared family equal to one is filtered
- *  out rather than allowed to masquerade as an action. */
-const IMPORT_LOCAL_FONT_ID = "@yunari:import-local-font";
-const FONT_FINDER_ID = "@yunari:font-finder";
 /** The unheld weight reading's option id. Namespaced for the same reason the
  *  family sentinels are: an id shared with a declared face would make the
  *  trigger and a press disagree about which entry they mean. */
 const WEIGHT_READING_ID = "@yunari:weight-not-in-package:";
-
-/** The family list's trailing rows, each drawn only where its port exists. */
-function fontActionOptions(
-  actions: TokenInspectorActions,
-): readonly ControlOption[] {
-  return [
-    ...(actions.importLocalFont === undefined
-      ? []
-      : [{ id: IMPORT_LOCAL_FONT_ID, name: uiCopy.panels.importLocalFont }]),
-    ...(actions.openFontFinder === undefined
-      ? []
-      : [{ id: FONT_FINDER_ID, name: uiCopy.panels.fontFinder }]),
-  ];
-}
 
 /** Runs an action row. Answers false for a family, which the caller writes. */
 function runFontAction(id: string, actions: TokenInspectorActions): boolean {
