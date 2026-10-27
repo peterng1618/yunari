@@ -120,10 +120,75 @@ export function memberBytes(
 /** The one member a mobile export's video lives in. */
 const MOBILE_VIDEO = "wallpaper.mp4";
 
-/** The MP4 out of an `.mpkg`, or `undefined` for a package that is not the
- *  mobile shape. A still-at-rest scene exports as a video too, so this is the
- *  only payload the export route produces. */
-export function mobileVideo(bytes: Uint8Array): Uint8Array | undefined {
+/** The descriptor a mobile export carries beside its video. */
+const MOBILE_PROJECT = "project.json";
+
+/** What an import can take from a mobile package: the MP4, and whatever credit
+ *  `project.json` can offer. A still-at-rest scene exports as a video too, so
+ *  this is the only payload the route produces. */
+export interface MobilePackage {
+  readonly video: Uint8Array;
+  readonly title?: string;
+  readonly workshopId?: string;
+}
+
+/** The video and whatever credit `project.json` can offer, or `undefined` when
+ *  the container is malformed or carries no video. A descriptor this code
+ *  cannot parse costs the metadata, never the video. */
+export function mobilePackage(bytes: Uint8Array): MobilePackage | undefined {
   const pkg = readPackage(bytes);
-  return pkg === undefined ? undefined : memberBytes(pkg, MOBILE_VIDEO);
+  if (pkg === undefined) {
+    return undefined;
+  }
+
+  const video = memberBytes(pkg, MOBILE_VIDEO);
+  if (video === undefined || video.length === 0) {
+    return undefined;
+  }
+
+  const project = memberBytes(pkg, MOBILE_PROJECT);
+  const metadata =
+    project === undefined
+      ? undefined
+      : readProjectMetadata(new TextDecoder().decode(project));
+
+  return {
+    video,
+    ...(metadata?.title === undefined ? {} : { title: metadata.title }),
+    ...(metadata?.workshopId === undefined
+      ? {}
+      : { workshopId: metadata.workshopId }),
+  };
+}
+
+/** The two credit fields a mobile export's descriptor may carry. The descriptor
+ *  is third-party content: a number it cannot represent safely becomes no id
+ *  rather than a rounded one. */
+function readProjectMetadata(
+  text: string,
+): { readonly title?: string; readonly workshopId?: string } | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return undefined;
+  }
+
+  const project = parsed as {
+    readonly title?: unknown;
+    readonly package?: { readonly workshopId?: unknown };
+  };
+  const workshopId = project.package?.workshopId;
+
+  return {
+    ...(typeof project.title === "string" ? { title: project.title } : {}),
+    ...(typeof workshopId === "string"
+      ? { workshopId }
+      : typeof workshopId === "number" && Number.isSafeInteger(workshopId)
+        ? { workshopId: String(workshopId) }
+        : {}),
+  };
 }

@@ -1,4 +1,6 @@
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
+import { uiCopy } from "../ui-copy.js";
+import { bytesFromBase64 } from "../video-normalizer.js";
 
 /**
  * The finder's Wallpaper Engine body, fetch-only.
@@ -12,7 +14,7 @@ import type { ThemeCreditsEntry } from "@yunari/theme-package";
 export interface WallpaperEngineItem {
   readonly workshopId: string;
   readonly title: string;
-  readonly kind: "image" | "video" | "web" | "scene";
+  readonly kind: "video" | "scene";
   readonly previewUrl: string | undefined;
   readonly filesize: number;
   readonly tags: readonly string[];
@@ -47,7 +49,7 @@ const REASONS = [
 
 type Reason = (typeof REASONS)[number];
 
-const KINDS = ["image", "video", "web", "scene"] as const;
+const KINDS = ["video", "scene"] as const;
 
 /** The payload's real extension, read from the served content type. The asset
  *  route reports no filename today, so the item's title is what names the
@@ -256,15 +258,25 @@ export async function fetchItemPreview(
 
 /** The attribution an imported item carries. Wallpaper Engine themes declare no
  *  licence, so the entry says it does not know rather than borrowing one. */
-export function creditsEntryOf(item: WallpaperEngineItem): ThemeCreditsEntry {
+export function creditsEntryOf(
+  item: WallpaperEngineItem,
+  authorName?: string,
+): ThemeCreditsEntry {
   const attribution = item.attribution;
   const workshopUrl = attribution?.workshopUrl;
   const steamId = attribution?.steamId;
+  const author =
+    steamId === undefined && authorName === undefined
+      ? undefined
+      : {
+          ...(steamId === undefined ? {} : { steamId }),
+          ...(authorName === undefined ? {} : { name: authorName }),
+        };
 
   return {
     kind: "wallpaper",
     title: item.title,
-    ...(steamId === undefined ? {} : { author: { steamId } }),
+    ...(author === undefined ? {} : { author }),
     // The id is known whenever the item is, so it is recorded even when no
     // workshop URL was cached; only the link itself is allowed to go missing.
     source: {
@@ -276,57 +288,13 @@ export function creditsEntryOf(item: WallpaperEngineItem): ThemeCreditsEntry {
   };
 }
 
-/** A scene's unpack answer. `launched` false means the project exists but no
- *  editor process started; the caller names the project rather than retrying. */
+/** A scene's unpack answer. The project is written; no editor process starts. */
 export type StartProjectAnswer =
-  | {
-      readonly ok: true;
-      readonly name: string;
-      readonly reused: boolean;
-      readonly launched: boolean;
-    }
+  | { readonly ok: true; readonly name: string; readonly reused: boolean }
   | { readonly ok: false; readonly reason: string };
 
-/** One file Wallpaper Engine wrote into a watched export directory. */
-export interface ExportFile {
-  readonly name: string;
-  readonly format: "png" | "mp4";
-  readonly modified: number;
-  readonly size: number;
-}
-
-/** How often the sheet asks the host for a newer export. */
-export const EXPORT_POLL_MS = 2000;
-
-const EXPORT_FORMATS = ["png", "mp4"] as const;
-
-function exportFileOf(value: unknown): ExportFile | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
-  const record = value as Record<string, unknown>;
-  const name = stringAt(record, "name");
-  const format = Object.hasOwn(record, "format") ? record.format : undefined;
-  const modified = Object.hasOwn(record, "modified")
-    ? record.modified
-    : undefined;
-  const size = Object.hasOwn(record, "size") ? record.size : undefined;
-
-  if (
-    name === undefined ||
-    !EXPORT_FORMATS.includes(format as (typeof EXPORT_FORMATS)[number]) ||
-    typeof modified !== "number" ||
-    !Number.isFinite(modified) ||
-    typeof size !== "number" ||
-    !Number.isFinite(size) ||
-    size < 0
-  ) {
-    return undefined;
-  }
-
-  return { name, format: format as ExportFile["format"], modified, size };
-}
-
-/** Unpack the item and launch Wallpaper Engine's editor on it. The write is the
- *  host's; a refusal is an answer, never a throw. */
+/** Unpack the item into a local project. The write is the host's; no editor
+ *  process starts, and a refusal is an answer, never a throw. */
 export async function startProject(
   workshopId: string,
   options?: WallpaperEngineClientOptions,
@@ -351,12 +319,7 @@ export async function startProject(
       const name = stringAt(answer, "name");
       return name === undefined
         ? refused
-        : {
-            ok: true,
-            name,
-            reused: answer.reused === true,
-            launched: answer.launched === true,
-          };
+        : { ok: true, name, reused: answer.reused === true };
     }
 
     const reason = stringAt(answer, "reason");
@@ -366,93 +329,100 @@ export async function startProject(
   }
 }
 
-/** The engine's own mobile export answer. `ok` means its Save dialog is open and
- *  the author's click finishes the export; the file arrives through the export
- *  watcher, not this answer. */
-export type StartMobileExportAnswer =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly reason: string };
+/** The normalizer answers MP4, so a name from a package's title or the picked
+ *  file's stem carries the extension the manager validates. Shared with the
+ *  session's video import, which names its declared file the same way. */
+export function mp4NameOf(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return `${dot <= 0 ? name : name.slice(0, dot)}.mp4`;
+}
 
-/** Unpack the item and drive Wallpaper Engine to its `.mpkg` export dialog.
- *  Long: the engine unpacks, scans and checks before the dialog appears. */
-export async function startMobileExport(
-  workshopId: string,
+/** A host-prepared package video, ready to declare as an asset. */
+export type PrepareMobilePackageAnswer =
+  | {
+      readonly ok: true;
+      readonly file: File;
+      readonly title?: string;
+      readonly workshopId?: string;
+      readonly reencoded: boolean;
+    }
+  | { readonly ok: false; readonly message: string };
+
+/** The host reads the author's `.mpkg` and normalizes its video; the editor
+ *  never parses the package. The returned `File` is what the asset manager
+ *  declares, named from the package's title when it carries one. */
+export async function prepareMobilePackage(
+  file: File,
   options?: WallpaperEngineClientOptions,
-): Promise<StartMobileExportAnswer> {
+): Promise<PrepareMobilePackageAnswer> {
   const { fetcher, url } = request(options);
-  const refused: StartMobileExportAnswer = { ok: false, reason: "refused" };
+  const failed = (message: string): PrepareMobilePackageAnswer => ({
+    ok: false,
+    message,
+  });
 
   try {
-    const response = await fetcher(
-      url(
-        `/api/wallpaper-engine/item/${encodeURIComponent(workshopId)}/mobile-export`,
-      ),
-      { method: "POST" },
-    );
-    if (!response.ok) return refused;
+    const response = await fetcher(url("/api/wallpaper-engine/mpkg"), {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream" },
+      body: file,
+    });
+    if (!response.ok) {
+      // The host's sentence names the rule the package broke; a transport
+      // refusal with no body keeps the pane's own words.
+      const reason = await response.text().catch(() => "");
+      return failed(
+        reason.trim() === "" ? uiCopy.panels.assetImportFailed : reason.trim(),
+      );
+    }
 
     const body = (await response.json()) as unknown;
-    if (typeof body !== "object" || body === null) return refused;
+    if (typeof body !== "object" || body === null)
+      return failed(uiCopy.panels.assetImportFailed);
     const answer = body as Record<string, unknown>;
 
-    if (answer.ok === true) return { ok: true };
-    return { ok: false, reason: stringAt(answer, "reason") ?? "refused" };
+    if (answer.ok !== true)
+      return failed(
+        stringAt(answer, "message") ?? uiCopy.panels.assetImportFailed,
+      );
+    if (typeof answer.videoBase64 !== "string")
+      return failed(uiCopy.panels.assetImportFailed);
+
+    const title = stringAt(answer, "title");
+    const workshopId = stringAt(answer, "workshopId");
+    return {
+      ok: true,
+      file: new File(
+        [bytesFromBase64(answer.videoBase64) as unknown as BlobPart],
+        title === undefined ? mp4NameOf(file.name) : `${title}.mp4`,
+        { type: "video/mp4" },
+      ),
+      ...(title === undefined ? {} : { title }),
+      ...(workshopId === undefined ? {} : { workshopId }),
+      reencoded: answer.reencoded === true,
+    };
   } catch {
-    return refused;
+    return failed(uiCopy.panels.assetImportFailed);
   }
 }
 
-/** The exports written since the sheet opened, newest first. A host that
- *  refuses answers nothing rather than inventing a file. */
-export async function findExports(
-  since: number,
+/** The Steam persona behind an item's author id. A read that fails — offline,
+ *  refused, or malformed — is absence, never a fabricated name. */
+export async function fetchAuthorName(
+  steamId: string,
   options?: WallpaperEngineClientOptions,
-): Promise<readonly ExportFile[]> {
-  if (!Number.isSafeInteger(since) || since < 0) return [];
+): Promise<string | undefined> {
   const { fetcher, url } = request(options);
 
   try {
     const response = await fetcher(
-      url(`/api/wallpaper-engine/exports?since=${since}`),
-    );
-    if (!response.ok) return [];
-
-    const body = (await response.json()) as unknown;
-    if (typeof body !== "object" || body === null) return [];
-    const files = Object.hasOwn(body, "files")
-      ? (body as Record<string, unknown>).files
-      : undefined;
-    if (!Array.isArray(files)) return [];
-
-    return files
-      .map(exportFileOf)
-      .filter((file): file is ExportFile => file !== undefined);
-  } catch {
-    return [];
-  }
-}
-
-/** One export's bytes, named by the host's header and otherwise by the name the
- *  listing gave — which already carries the format's extension. */
-export async function fetchExport(
-  name: string,
-  options?: WallpaperEngineClientOptions,
-): Promise<File | undefined> {
-  const { fetcher, url } = request(options);
-
-  try {
-    const response = await fetcher(
-      url(`/api/wallpaper-engine/export?name=${encodeURIComponent(name)}`),
+      url(`/api/wallpaper-engine/author/${encodeURIComponent(steamId)}`),
     );
     if (!response.ok) return undefined;
 
-    const contentType = response.headers.get("content-type");
-    const served = response.headers.get("x-yunari-filename");
-    return new File(
-      [new Uint8Array(await response.arrayBuffer()) as unknown as BlobPart],
-      served === null || served === "" ? name : served,
-      { type: contentType?.split(";")[0]?.trim().toLowerCase() ?? "" },
-    );
+    const body = (await response.json()) as unknown;
+    if (typeof body !== "object" || body === null) return undefined;
+    return stringAt(body as Record<string, unknown>, "name");
   } catch {
     return undefined;
   }

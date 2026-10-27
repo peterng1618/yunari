@@ -542,6 +542,11 @@ body,
   --dialog-min-width: 340px;
   --dialog-max-width: 560px;
   --dialog-max-height: 720px;
+  /* The Wallpaper Engine guide, and the finder's import modal (shared with the
+     Assets pane), size themselves inside that box: the guide holds two short
+     sections, the import modal one progress block. */
+  --guide-dialog-width: 420px;
+  --import-dialog-width: 360px;
   --settings-tabs-width: 150px;
   --field-label-width: 72px;
   --layer-rename-min-height: 22px;
@@ -1527,9 +1532,7 @@ body,
 .editor-shell-panel [data-yunari-asset-import],
 .editor-shell-panel [data-yunari-asset-replace],
 .editor-shell-panel [data-yunari-asset-remove],
-.editor-shell-panel [data-yunari-asset-normalize],
-.editor-shell-panel [data-yunari-asset-fill],
-.editor-shell-panel [data-yunari-asset-use-normalized] {
+.editor-shell-panel [data-yunari-asset-fill] {
   max-width: 100%;
   min-height: 30px;
   margin: 4px 4px 4px 0;
@@ -1607,9 +1610,7 @@ body,
 .editor-shell-panel [data-yunari-asset-import]:hover,
 .editor-shell-panel [data-yunari-asset-replace]:hover,
 .editor-shell-panel [data-yunari-asset-remove]:hover,
-.editor-shell-panel [data-yunari-asset-normalize]:hover,
-.editor-shell-panel [data-yunari-asset-fill]:hover,
-.editor-shell-panel [data-yunari-asset-use-normalized]:hover {
+.editor-shell-panel [data-yunari-asset-fill]:hover {
   border-color: var(--shell-accent);
   color: var(--shell-accent);
 }

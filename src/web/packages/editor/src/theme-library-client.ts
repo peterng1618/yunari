@@ -1,4 +1,5 @@
 import type {
+  DisplayShape,
   FabricThemeEnvelope,
   FacetRecord,
   ThemeRemix,
@@ -138,6 +139,11 @@ export interface ThemedDisplay {
   /** The theme this display holds, or `null` for one holding none of its own —
    *  which is not the same as showing the default. */
   readonly theme: string | null;
+  /** The glass this display is. The host answers `rect` for this PC and for any
+   *  record whose shape it could not read. */
+  readonly shape: DisplayShape;
+  /** Whole degrees clockwise; the host answers `0` for an absent record value. */
+  readonly rotation: number;
 }
 
 export interface ThemeLibraryClient {
@@ -209,6 +215,31 @@ function readContent(json: unknown): ThemeLibraryContent {
     // A host that reports no base leaves the content without one, so the save
     // that follows is ungated rather than refused for a reason it cannot fix.
     ...(typeof body?.base === "string" ? { base: body.base } : {}),
+  };
+}
+
+/** The shape and angle the host's record would read from two wire values.
+ *
+ *  **The one owner of that reading**, shared with the Host settings client: an
+ *  unknown shape is a rectangular screen rather than a dropped row, and an
+ *  angle its shape cannot hold reads as upright rather than as a number a
+ *  control could then write back. */
+export function readDisplayPresentation(
+  shapeValue: unknown,
+  rotationValue: unknown,
+): { readonly shape: DisplayShape; readonly rotation: number } {
+  const shape: DisplayShape = shapeValue === "circle" ? "circle" : "rect";
+  if (
+    typeof rotationValue !== "number" ||
+    !Number.isInteger(rotationValue) ||
+    rotationValue < 0 ||
+    rotationValue >= 360
+  ) {
+    return { shape, rotation: 0 };
+  }
+  return {
+    shape,
+    rotation: shape === "rect" && rotationValue % 90 !== 0 ? 0 : rotationValue,
   };
 }
 
@@ -408,7 +439,12 @@ export function createThemeLibraryClient(options?: {
         default: typeof body?.default === "string" ? body.default : null,
         displays: Array.isArray(body?.displays)
           ? (body.displays as readonly ThemedDisplay[]).map(
-              ({ id, label, theme }) => ({ id, label, theme }),
+              ({ id, label, theme, shape, rotation }) => ({
+                id,
+                label,
+                theme,
+                ...readDisplayPresentation(shape, rotation),
+              }),
             )
           : [],
       };

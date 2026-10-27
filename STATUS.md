@@ -14,7 +14,7 @@ The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design
 - **Phase 4 complete:** the token inspector edits a face only — computed `[Role] Family Weight` names, role-first order, non-removable roles, a family dropdown ending in `Import local font…` / `Font finder…`, and one weight dropdown.
 - **Phase 5 complete:** each run has its own size, line-height and tracking rows; a canvas resize commits each run's painted size and resets the object's scale; a new text writes no size, so the role default shows.
 - **The composition renders its authored sizes again:** 46 / 17 / 108 come from run styles, not from tokens.
-- **Local merge to main is the next boundary action:** this is the first point where the user can test the feature without a role-default regression.
+- **The branch carries `main`:** the local merge is committed here, so the next boundary action is moving local `main` to it for the user to test.
 
 ## Last completed change
 
@@ -36,6 +36,6 @@ The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design
 
 - **`tests/e2e/editor.spec.ts` and `panel-labels.spec.ts` are stale:** typechecked only; Task 6.2 rewrites them.
 - **No browser proof since Phase 3:** port 4174 is owned by another process (`vg-756`), so every visible claim is object-level only.
-- **Main is 69 commits ahead:** its chart and editor refactors must be merged in and the full gate re-run before the branch lands.
+- **Main is merged into the branch:** 69 commits of chart, display and wallpaper work are in; the branch now has to pass the full gate again before `main` moves.
 - **Starter role weights are read-only:** `Segoe UI, sans-serif` and `Consolas, monospace` are undeclared, so a weight changes only after picking a declared family.
-- **Open rows:** `vg-761` (a corner-scaled Textbox keeps its width) and `vg-762` (a `{ref}` fontSize reads as absent in the row).
+- **Open rows:** `vg-770` (a corner-scaled Textbox keeps its width) and `vg-762` (a `{ref}` fontSize reads as absent in the row).

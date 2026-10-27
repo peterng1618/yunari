@@ -161,10 +161,7 @@ result, not merely a mounted editor.
 | Assets | Search Icons across two sources and read the mixed grid | `editor-finder-icons` / `captures the finder's mixed icon grid` |
 | Assets | Read a source's failure beside the other source's rows | `editor-finder-failure` / `captures the finder's failed source` |
 | Assets | Read the Connections tab's provider row | `editor-finder-connections` / `captures the Connections tab's provider row` |
-| Assets | Normalize a declared video and read the host's refusal beside it | `editor-video-normalize` / `normalizes a declared video without replacing its master` |
-| Assets | Browse this PC's Wallpaper Engine library and read each kind's own action | `editor-finder-wallpaper-engine` / `captures the finder on Wallpaper Engine` |
-| Assets | Open a still scene and read the PNG settings and the text step | `editor-finder-scene-still` / `captures a still scene's export sheet` |
-| Assets | Open an animated scene and read the five-second MP4 settings | `editor-finder-scene-animated` / `captures an animated scene's export sheet` |
+| Assets | Browse this PC's Wallpaper Engine library as a card grid and read each kind's own icon action | `editor-finder-wallpaper-engine` / `captures the finder on Wallpaper Engine` |
 | Palette | Edit or reassign a palette token | `editor-palette-solid` or `editor-palette-reassignment` / `edits an artboard palette token|reassigns palette references` |
 | Palette | Open the colour picker and commit a picked colour | `editor-colour-picker` / `picks a palette colour in the picker` |
 | Palette | Edit a gradient stop by drag and by number | `editor-gradient-editor` / `builds a gradient with a drag and a number` |

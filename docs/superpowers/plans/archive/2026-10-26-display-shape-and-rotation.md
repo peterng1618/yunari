@@ -90,7 +90,7 @@ it("rotates then contain-fits a 90 degree rect display", () => {
   expect(t.matrix[2]).toBeCloseTo(-0.5, 9);
   expect(t.matrix[3]).toBeCloseTo(0, 9);
   expect(t.matrix[5]).toBeCloseTo(0, 9);
-  expect(t.bars.x).toBeCloseTo(0, 9);
+  expect(t.bars.x).toBeCloseTo(75, 9);
 });
 
 it("inscribes every artboard corner on a circle display", () => {

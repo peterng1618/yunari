@@ -297,6 +297,79 @@ describe("followPublished's rate report", () => {
   });
 });
 
+describe("followPublished's presentation report", () => {
+  /** One follower whose host answers the same body every tick. */
+  const sessionReturning = (body: unknown) => ({
+    pageUrl: MAP_PAGE,
+    fetch: answer(body),
+  });
+
+  it("reports a shape and rotation from the poll", async () => {
+    const seen: unknown[] = [];
+    const stop = followPublished(
+      sessionReturning({ display: { shape: "circle", rotation: 45 } }),
+      () => {},
+      {
+        intervalMs: 5,
+        onPresentationChange: (next) => seen.push(next),
+      },
+    );
+    await settle(20);
+    stop();
+    expect(seen).toEqual([{ shape: "circle", rotation: 45 }]);
+  });
+
+  it("refuses a rect rotation that is not a quarter turn", async () => {
+    const seen: unknown[] = [];
+    const stop = followPublished(
+      sessionReturning({ display: { shape: "rect", rotation: 45 } }),
+      () => {},
+      {
+        intervalMs: 5,
+        onPresentationChange: (next) => seen.push(next),
+      },
+    );
+    await settle(20);
+    stop();
+    expect(seen).toEqual([]);
+  });
+
+  it.each([
+    ["an angle past a circle's range", 400],
+    ["a fractional angle", 90.5],
+    ["a string angle", "90"],
+  ])("refuses %s rather than defaulting it", async (_what, rotation) => {
+    const seen: unknown[] = [];
+    const stop = followPublished(
+      sessionReturning({ display: { shape: "circle", rotation } }),
+      () => {},
+      {
+        intervalMs: 5,
+        onPresentationChange: (next) => seen.push(next),
+      },
+    );
+    await settle(20);
+    stop();
+    expect(seen).toEqual([]);
+  });
+
+  it("reports only when the presentation moves", async () => {
+    const seen: unknown[] = [];
+    const stop = followPublished(
+      sessionReturning({ display: { shape: "circle", rotation: 45 } }),
+      () => {},
+      {
+        intervalMs: 5,
+        onPresentationChange: (next) => seen.push(next),
+      },
+    );
+    await settle(20);
+    await settle(20);
+    stop();
+    expect(seen).toHaveLength(1);
+  });
+});
+
 describe("followPublished's unreachable report", () => {
   it("reports an unreachable host rather than swallowing it", async () => {
     // Today this error is discarded (`publish-follower.ts`'s `catch`), which is

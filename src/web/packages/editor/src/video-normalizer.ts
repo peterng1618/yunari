@@ -19,15 +19,15 @@ export type NormalizeOutcome =
  * with no sentence at all falls back to the pane's words.
  */
 export async function requestNormalizedVideo(
-  bytes: Uint8Array,
+  source: File | Uint8Array,
 ): Promise<NormalizeOutcome> {
   let response: Response;
   try {
     response = await fetch(VIDEO_NORMALIZE_PATH, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      // No `fit`: the host's `contain` path keeps the source's own shape.
-      body: JSON.stringify({ bytesBase64: base64Of(bytes) }),
+      headers: { "content-type": "application/octet-stream" },
+      // A File is already a body; a Uint8Array is sent as its bytes.
+      body: source as BodyInit,
     });
   } catch {
     return { ok: false, message: uiCopy.panels.videoNormalizeFailed };

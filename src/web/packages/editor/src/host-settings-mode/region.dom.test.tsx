@@ -21,6 +21,7 @@
  * follows (`docs/design/mockups/current/host-settings.html`) is read by its own
  * gate, not by this file.
  */
+import type { DisplayShape } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -150,6 +151,8 @@ interface Fixture {
   readonly sourceTest?: TestResult;
   /** What a delete answers about a credential it no longer sees referenced. */
   readonly sourceRemoval?: RemovalAnswer;
+  /** The sentence a presentation write fails with, or `undefined`. */
+  readonly refusePresentation?: string;
   /** The sentence a delete fails with, or `undefined` for a landed delete. */
   readonly sourceRemoveFailure?: string;
 }
@@ -169,6 +172,10 @@ interface Written {
   readonly asked: { readonly display: string; readonly theme: string }[];
   readonly weather: WeatherSettings[];
   readonly searches: string[];
+  readonly presentation: {
+    readonly id: string;
+    readonly next: { readonly shape: DisplayShape; readonly rotation: number };
+  }[];
 }
 
 function library(fixture: Fixture): ThemeLibraryClient {
@@ -210,6 +217,7 @@ function hostSettings(
     asked: [],
     weather: [],
     searches: [],
+    presentation: [],
   };
   const devices: DeviceSettings = fixture.devices ?? {
     available: { gpus: [], disks: [] },
@@ -264,6 +272,19 @@ function hostSettings(
       searchPlaces: async (query) => {
         wrote.searches.push(query);
         return fixture.places ?? [];
+      },
+      updateDisplayPresentation: async (id, next) => {
+        wrote.presentation.push({ id, next });
+        if (fixture.refusePresentation !== undefined) {
+          throw new Error(fixture.refusePresentation);
+        }
+        // **Deliberately not the request.** The store decides the pair, so an
+        // optimistic row would stand on a value the answer never carried and
+        // these cases would pass without the replacement being exercised.
+        return {
+          shape: next.shape,
+          rotation: next.shape === "rect" ? 180 : 45,
+        };
       },
     },
   };
@@ -329,8 +350,20 @@ function sourcesClient(fixture: Fixture): {
 const TWO_DISPLAYS: Fixture = {
   fallback: "kitchen-strip",
   displays: [
-    { id: "this-pc", label: "This PC", theme: null },
-    { id: "hallway", label: "Hallway panel", theme: "hallway-clock" },
+    {
+      id: "this-pc",
+      label: "This PC",
+      theme: null,
+      shape: "rect",
+      rotation: 0,
+    },
+    {
+      id: "hallway",
+      label: "Hallway panel",
+      theme: "hallway-clock",
+      shape: "rect",
+      rotation: 0,
+    },
   ],
   themes: [
     { id: "kitchen-strip", name: "Kitchen strip" },
@@ -421,6 +454,50 @@ function shownOn(row: HTMLElement): string {
 /** Whether a row says the display follows this PC rather than holding its own. */
 function follows(row: HTMLElement): boolean {
   return row.querySelector("[data-yunari-host-display-follows]") !== null;
+}
+
+/** One segment of the screen-shape control, by the word it prints. */
+function shapeSegment(container: HTMLElement, name: string): HTMLElement {
+  const segment = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-yunari-host-display-shape]"),
+  ).find((candidate) => candidate.textContent === name);
+  return must(segment ?? null, `the ${name} shape segment`);
+}
+
+async function chooseShape(
+  container: HTMLElement,
+  name: string,
+): Promise<void> {
+  await act(async () => shapeSegment(container, name).click());
+}
+
+/** The rotation control's value well. */
+function rotationWell(container: HTMLElement): HTMLInputElement {
+  return must(
+    container.querySelector<HTMLInputElement>(
+      "[data-yunari-host-display-rotation-well]",
+    ),
+    "the rotation control's value well",
+  );
+}
+
+/** What the rotation control's well prints, the degree mark included: the value
+ *  alone would read as a bare number and not as an angle. The mark is a sibling
+ *  of the input, so an input's `textContent` alone would miss it. */
+function rotationMark(container: HTMLElement): string {
+  const well = rotationWell(container);
+  return `${well.value}${well.parentElement?.textContent ?? ""}`;
+}
+
+/** Commits a rotation through the control's own value well, the way a typed
+ *  number is committed. */
+async function commitRotation(
+  container: HTMLElement,
+  degrees: number,
+): Promise<void> {
+  const well = rotationWell(container);
+  await type(well, String(degrees));
+  await enter(well);
 }
 
 /** One device's name field. */
@@ -581,6 +658,125 @@ it("names each display, and the default for the ones with none", async () => {
     statusLine(published).status,
     "the line published does not rest on the page's own sentence",
   ).toBe(uiCopy.hostSettings.status.ready);
+});
+
+/**
+ * The plan's first case: **a rectangular display's quarter-turn rotation is
+ * written with its shape**, and the row is replaced from the host's answer
+ * rather than optimistically.
+ */
+it("writes a rect display's quarter-turn rotation", async () => {
+  const { container, wrote } = await mountHost({
+    displays: [
+      { id: "tv", label: "TV", theme: null, shape: "rect", rotation: 0 },
+    ],
+  });
+  await act(async () => displayRow(container, "tv").click());
+  // The snap note belongs to the controls it describes: an editable display
+  // reads it, a recordless selection does not (see the this-pc case).
+  expect(container.textContent).toContain(
+    uiCopy.hostSettings.displays.rotationSnapHint,
+  );
+  await commitRotation(container, 90);
+
+  expect(wrote.presentation).toEqual([
+    { id: "tv", next: { shape: "rect", rotation: 90 } },
+  ]);
+  // The row shows the host's answer (180), not the request (90): a write is
+  // never drawn from what was sent.
+  expect(displayRow(container, "tv").getAttribute("data-shape")).toBe("rect");
+  expect(displayRow(container, "tv").getAttribute("data-rotation")).toBe("180");
+  // The well prints the angle with its degree mark, and the answer's number.
+  expect(rotationMark(container)).toBe("180°");
+});
+
+/** A circle's free angle is snapped into the rect rule when the shape changes,
+ *  in the one write that sends both fields. */
+it("snaps a circle angle when the shape becomes rect", async () => {
+  const { container, wrote } = await mountHost({
+    displays: [
+      {
+        id: "round",
+        label: "Round",
+        theme: null,
+        shape: "circle",
+        rotation: 37,
+      },
+    ],
+  });
+  await act(async () => displayRow(container, "round").click());
+  // A circle's angle is shown as degrees too, with the degree mark beside it.
+  expect(rotationMark(container)).toBe("37°");
+  await chooseShape(container, "Rect");
+
+  expect(wrote.presentation).toEqual([
+    { id: "round", next: { shape: "rect", rotation: 0 } },
+  ]);
+  expect(
+    displayRow(container, "round").getAttribute("data-rotation"),
+    "the row did not take the answer's snapped angle",
+  ).toBe("180");
+});
+
+/** A refused write leaves the row on the value the host last answered. */
+it("keeps the row's previous presentation when the write is refused", async () => {
+  const refusal = "That angle is not a quarter turn.";
+  const { container, published } = await mountHost({
+    displays: [
+      { id: "tv", label: "TV", theme: null, shape: "rect", rotation: 90 },
+    ],
+    refusePresentation: refusal,
+  });
+  await act(async () => displayRow(container, "tv").click());
+  await commitRotation(container, 0);
+
+  expect(
+    displayRow(container, "tv").getAttribute("data-rotation"),
+    "a refused write moved the row to the value it sent",
+  ).toBe("90");
+  expect(statusLine(published).status).toBe(
+    uiCopy.hostSettings.status.failed(refusal),
+  );
+});
+
+/** No row has been read, so no display is the selection: the absence sentence
+ *  states a fact about `this-pc` and would be a claim nobody made. */
+it("says nothing about presentation while no display has been read", async () => {
+  const empty = await mountHost({ displays: [] });
+  expect(empty.container.textContent).not.toContain(
+    uiCopy.hostSettings.displays.presentationAbsent,
+  );
+
+  const failed = await mountHost({ ...TWO_DISPLAYS, refuseDisplays: true });
+  expect(failed.container.textContent).not.toContain(
+    uiCopy.hostSettings.displays.presentationAbsent,
+  );
+});
+
+/** This PC is the machine, not a paired screen: it has no record to present, so
+ *  the section says why rather than drawing a disabled control. */
+it("draws no presentation controls for this-pc", async () => {
+  const { container } = await mountHost({
+    displays: [
+      {
+        id: "this-pc",
+        label: "This PC",
+        theme: null,
+        shape: "rect",
+        rotation: 0,
+      },
+    ],
+  });
+  expect(
+    container.querySelector("[data-yunari-host-display-shape]"),
+  ).toBeNull();
+  expect(container.textContent).toContain(
+    uiCopy.hostSettings.displays.presentationAbsent,
+  );
+  expect(
+    container.textContent,
+    "a display with no controls still reads the snap note",
+  ).not.toContain(uiCopy.hostSettings.displays.rotationSnapHint);
 });
 
 /**

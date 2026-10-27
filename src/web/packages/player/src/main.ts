@@ -17,7 +17,6 @@ import {
   applyAuthoredText,
   type ChartRefreshRate,
   chartAnimationFor,
-  chartPlaybackDelayFor,
   loadFontAssets,
   mountFabricScene,
   refreshBoundImages,
@@ -519,6 +518,10 @@ async function startHostedTheme(
       chartRate = rate;
       chartRefresh.setRate(rate);
     },
+    // The scene re-fits and re-clips itself from the host's answer. The follower
+    // has already refused a shape or angle the rule cannot hold, so this cannot
+    // throw for a payload `updatePresentation` would reject.
+    onPresentationChange: (next) => handle.updatePresentation(next),
   });
   const observer = new ResizeObserver(() => handle.resize());
   observer.observe(host);
@@ -612,10 +615,6 @@ function hydrateCharts(
   const issues: PlanIssue[] = [];
   let changed = false;
   const nowMs = Date.now();
-  const playbackDelayMs = chartPlaybackDelayFor(
-    rate,
-    source.chartPlaybackDelayMs,
-  );
   for (const object of objects) {
     if (object instanceof YunariChart) {
       const id = object.get("id");
@@ -637,9 +636,7 @@ function hydrateCharts(
           content,
           chartBindings,
           source,
-          nowMs,
           palette,
-          playbackDelayMs,
           geometry.drawnEdgePx,
         );
         if (drawnReadings.get(object) === reading) continue;
@@ -651,7 +648,6 @@ function hydrateCharts(
             source,
             nowMs,
             animate: chartAnimationFor(content.family, rate),
-            playbackDelayMs,
             ...geometry,
           },
           issues,

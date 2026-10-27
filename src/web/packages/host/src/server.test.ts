@@ -49,6 +49,7 @@ import {
   MAX_STREAM_KEY_BYTES,
   MAX_STREAM_KEYS,
   MAX_THEME_UPLOAD_BYTES,
+  MAX_VIDEO_SOURCE_BYTES,
   resolveStoreOrigin,
   type SourceRouteOptions,
 } from "./server.js";
@@ -91,6 +92,7 @@ import {
 } from "./settings/weather.js";
 import {
   createThemeStore,
+  MAX_ASSET_BYTES,
   type ThemeContent,
   ThemeTooLargeError,
 } from "./themes/store.js";
@@ -1989,14 +1991,13 @@ describe("Host theme routes", () => {
       expect(res.status).toBe(403);
     });
 
-    it("answers 413 to a body over the upload cap", async () => {
-      // One byte past the cap the import route uses; the body is refused
-      // before it is parsed or decoded.
+    it("answers 413 to a body over the source cap", async () => {
+      // One byte past the source cap; the body is refused before it is parsed.
       const res = await request(
         normalizing.server,
         "POST",
         "/api/themes/normalize-video",
-        new Uint8Array(MAX_THEME_UPLOAD_BYTES + 1),
+        new Uint8Array(MAX_VIDEO_SOURCE_BYTES + 1),
       );
 
       expect(res.status).toBe(413);
@@ -2004,8 +2005,8 @@ describe("Host theme routes", () => {
 
     it("answers with the same bytes for a video that already conforms", async () => {
       // The real route, the real parser, and a committed fixture: no encoder
-      // is spawned for a conforming file, so this also pins `fit`/`aspect`
-      // parsing and the `bytesBase64` answer shape.
+      // is spawned for a conforming file, so this also pins the raw-body read
+      // and the `bytesBase64` answer shape.
       const bytes = await fs.readFile(
         fileURLToPath(
           new URL(
@@ -2018,11 +2019,7 @@ describe("Host theme routes", () => {
         normalizing.server,
         "POST",
         "/api/themes/normalize-video",
-        JSON.stringify({
-          bytesBase64: bytes.toString("base64"),
-          fit: "cover",
-          aspect: { width: 16, height: 9 },
-        }),
+        new Uint8Array(bytes),
       );
 
       expect(res.status).toBe(200);
@@ -2034,6 +2031,42 @@ describe("Host theme routes", () => {
       expect(answer.ok).toBe(true);
       expect(answer.reencoded).toBe(false);
       expect(Buffer.from(answer.bytesBase64, "base64")).toEqual(bytes);
+    });
+
+    it("refuses a normalized output above the store's per-asset bound", async () => {
+      // The route had no output check at all, so a conforming video the writer
+      // would refuse above 80 MiB crossed here and failed only at save. The
+      // size is also below the 96 MB whole-theme ceiling, which is the gap.
+      expect(MAX_ASSET_BYTES).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
+      const base = new Uint8Array(
+        await fs.readFile(
+          fileURLToPath(
+            new URL(
+              "../../theme-package/test-fixtures/conforming.mp4",
+              import.meta.url,
+            ),
+          ),
+        ),
+      );
+      const size = MAX_ASSET_BYTES + 1;
+      expect(size).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
+      const padded = new Uint8Array(size);
+      padded.set(base, 0);
+      const freeStart = base.length;
+      const payload = padded.length - freeStart - 8;
+      new DataView(padded.buffer).setUint32(freeStart, 8 + payload, false);
+      padded.set(new TextEncoder().encode("free"), freeStart + 4);
+
+      const res = await request(
+        normalizing.server,
+        "POST",
+        "/api/themes/normalize-video",
+        padded,
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.json()).toMatchObject({ ok: false });
+      expect((res.json() as { message: string }).message).toContain("80 MB");
     });
   });
 
@@ -4229,6 +4262,59 @@ describe("The pairing routes mint, rotate, rename and remove displays (ruling 12
     expect((await displays.find("office-tv"))?.chartFps).toBe(1);
   });
 
+  it("refuses a patch rotation the record's own shape cannot hold", async () => {
+    await mint("Office TV");
+
+    // The rotation range is one rule and the shape's quarter-turn rule is
+    // another, decided against the *final* shape — so this reaches the store,
+    // and the route has to answer its refusal as the caller's 400 rather than
+    // the wrapper's 500.
+    const refused = await request(
+      hosted.server,
+      "PATCH",
+      "/api/displays/office-tv",
+      json({ rotation: 45 }),
+    );
+    expect(refused.status).toBe(400);
+    expect(refused.text()).toBe(
+      "A rectangular display turns in quarter turns, not 45 degrees.",
+    );
+    expect((await displays.find("office-tv"))?.rotation).toBeUndefined();
+
+    // A full turn is upright on a circle, not a quarter turn on a rectangle.
+    const fullTurn = await request(
+      hosted.server,
+      "PATCH",
+      "/api/displays/office-tv",
+      json({ rotation: 360 }),
+    );
+    expect(fullTurn.status).toBe(400);
+    expect(fullTurn.text()).toBe(
+      "A rectangular display turns in quarter turns, not 360 degrees.",
+    );
+    expect((await displays.find("office-tv"))?.rotation).toBeUndefined();
+
+    // The same angle on a round screen is a whole degree and lands.
+    const rounded = await request(
+      hosted.server,
+      "PATCH",
+      "/api/displays/office-tv",
+      json({ shape: "circle" }),
+    );
+    expect(rounded.status).toBe(200);
+    expect(
+      (
+        await request(
+          hosted.server,
+          "PATCH",
+          "/api/displays/office-tv",
+          json({ rotation: 45 }),
+        )
+      ).status,
+    ).toBe(200);
+    expect((await displays.find("office-tv"))?.rotation).toBe(45);
+  });
+
   it("sets a chart rate the player can run, and answers the redacted record", async () => {
     const { token } = await mint("Office TV");
 
@@ -4505,6 +4591,44 @@ describe("A local monitor is specified rather than paired", () => {
     expect(await listed()).toEqual([
       expect.objectContaining({ id: "left-screen", kind: "local" }),
     ]);
+  });
+
+  it("adds a local monitor with the shape and rotation it was given", async () => {
+    const answer = await request(
+      hosted.server,
+      "POST",
+      "/api/displays",
+      json({
+        label: "Round panel",
+        monitor: { deviceName: "\\\\.\\DISPLAY2" },
+        shape: "circle",
+        rotation: 45,
+      }),
+    );
+    expect(answer.status).toBe(201);
+    expect(await displays.find("round-panel")).toMatchObject({
+      shape: "circle",
+      rotation: 45,
+    });
+  });
+
+  it("refuses a full turn on a rectangular local monitor", async () => {
+    const answer = await request(
+      hosted.server,
+      "POST",
+      "/api/displays",
+      json({
+        label: "Square panel",
+        monitor: { deviceName: "\\\\.\\DISPLAY2" },
+        shape: "rect",
+        rotation: 360,
+      }),
+    );
+    expect(answer.status).toBe(400);
+    expect(answer.text()).toBe(
+      "A rectangular display turns in quarter turns, not 360 degrees.",
+    );
+    expect(await displays.list()).toEqual([]);
   });
 
   it("refuses a body the file's own reader would drop", async () => {
@@ -4838,6 +4962,8 @@ describe("A local monitor is specified rather than paired", () => {
         // A local display, so the poll also carries the rate its charts repaint
         // at: this monitor is in front of the person using it.
         chartFps: 1,
+        shape: "rect",
+        rotation: 0,
       });
 
       const seen = await store.find("left-screen");
@@ -5046,6 +5172,98 @@ describe("A display with no camera pairs by typing the one-time code", () => {
         (row) => row.id,
       ),
     ).toEqual(["kitchen-tablet"]);
+  });
+
+  it("claims a paired display with its shape and rotation", async () => {
+    const code = await shown();
+    const answer = await claim({
+      code,
+      label: "Round",
+      shape: "circle",
+      rotation: 45,
+    });
+    expect(answer.status).toBe(200);
+
+    const [record] = await displays.list();
+    expect(record).toMatchObject({ shape: "circle", rotation: 45 });
+  });
+
+  it("refuses a claim with a bad rotation before spending the code", async () => {
+    const code = await shown();
+    const answer = await claim({
+      code,
+      label: "Tablet",
+      shape: "rect",
+      rotation: 45,
+    });
+    expect(answer.status).toBe(400);
+    expect(await displays.list()).toHaveLength(0);
+
+    // The window is intact: a refused body must not cost the owner their code.
+    expect((await claim({ code, label: "Tablet" })).status).toBe(200);
+  });
+
+  it("refuses 360 on a rectangular claim, and stores it upright on a circle", async () => {
+    // The wrap is the circle's alone: a rectangle accepts 0/90/180/270 exactly,
+    // so 360 must not slip through as 0.
+    const rectCode = await shown();
+    const refused = await claim({
+      code: rectCode,
+      label: "Tablet",
+      shape: "rect",
+      rotation: 360,
+    });
+    expect(refused.status).toBe(400);
+    expect(refused.text()).toBe(
+      "A rectangular display turns in quarter turns, not 360 degrees.",
+    );
+    expect(await displays.list()).toHaveLength(0);
+
+    const circleCode = await shown();
+    expect(
+      (
+        await claim({
+          code: circleCode,
+          label: "Round",
+          shape: "circle",
+          rotation: 360,
+        })
+      ).status,
+    ).toBe(200);
+    const records = await displays.list();
+    expect(records[0]).toMatchObject({ shape: "circle" });
+    expect(records[0]?.rotation).toBeUndefined();
+  });
+
+  it("answers shape and rotation in the active map and the poll", async () => {
+    const themed = host({ activeTheme: createActiveThemeStore(dir) });
+    try {
+      const record = await displays.create("Round", "token", {
+        shape: "circle",
+        rotation: 45,
+      });
+
+      const active = await request(themed.server, "GET", "/api/themes/active");
+      expect(
+        (
+          active.json() as { displays: readonly { id: string }[] }
+        ).displays.find((row) => row.id === record.id),
+      ).toMatchObject({ shape: "circle", rotation: 45 });
+
+      const poll = await request(
+        themed.server,
+        "GET",
+        "/api/published",
+        undefined,
+        { ...LAN, headers: { "x-yunari-session": "token" } },
+      );
+      expect((poll.json() as { display: unknown }).display).toMatchObject({
+        shape: "circle",
+        rotation: 45,
+      });
+    } finally {
+      await themed.close();
+    }
   });
 
   it("answers one refusal for every way a code can fail", async () => {
@@ -5527,12 +5745,21 @@ describe("The display map", () => {
     // never asked of the store: it has no record to take a label from.
     expect(res.status).toBe(200);
     expect(body.displays).toEqual([
-      { id: "this-pc", label: "This PC", kind: "local", theme: null },
+      {
+        id: "this-pc",
+        label: "This PC",
+        kind: "local",
+        theme: null,
+        shape: "rect",
+        rotation: 0,
+      },
       {
         id: "kitchen-tablet",
         label: "Kitchen tablet",
         kind: "paired",
         theme: "kitchen-strip",
+        shape: "rect",
+        rotation: 0,
       },
     ]);
     expect(body.default).toBeNull();
@@ -5566,6 +5793,8 @@ describe("The display map", () => {
       label: "Kitchen tablet",
       kind: "paired",
       theme: "kitchen-strip",
+      shape: "rect",
+      rotation: 0,
     });
     expect(await activeTheme.read("kitchen-tablet", async () => true)).toBe(
       "kitchen-strip",
@@ -5780,6 +6009,16 @@ describe("The pages a consumer lands on", () => {
     // product name beside real model numbers misreports what is in use.
     expect(html).not.toContain("First card found (default)");
     expect(html).toContain("Automatic (the first card this PC reports)");
+  });
+
+  it("serves a pair page that asks for the screen shape and rotation", async () => {
+    const page = await request(hosted.server, "GET", "/pair");
+    const html = page.text();
+
+    expect(page.status).toBe(200);
+    expect(html).toContain('id="shape"');
+    expect(html).toContain('id="rotation"');
+    expect(html).toContain("shape: shape.value");
   });
 });
 
@@ -8665,6 +8904,8 @@ describe("The publish route", () => {
         id: LOCAL_DISPLAY_ID,
         theme: "living-room",
         chartFps: 1,
+        shape: "rect",
+        rotation: 0,
       });
     } finally {
       await hosted.close();
@@ -8946,7 +9187,13 @@ describe("The published overlay", () => {
         revision: 0,
         // `this-pc` is this machine's own monitor, so it repaints at the rate a
         // local display defaults to rather than the paired 30.
-        display: { id: LOCAL_DISPLAY_ID, theme: null, chartFps: 1 },
+        display: {
+          id: LOCAL_DISPLAY_ID,
+          theme: null,
+          chartFps: 1,
+          shape: "rect",
+          rotation: 0,
+        },
       });
     } finally {
       await hosted.close();
@@ -8991,6 +9238,8 @@ describe("The published overlay", () => {
         id: "kitchen-tablet",
         theme: "studio",
         chartFps: 30,
+        shape: "rect",
+        rotation: 0,
       });
 
       // A display nobody assigned a theme of its own is an unpaired client, and
@@ -9012,6 +9261,8 @@ describe("The published overlay", () => {
         id: "hallway-phone",
         theme: "living-room",
         chartFps: 30,
+        shape: "rect",
+        rotation: 0,
       });
     } finally {
       await hosted.close();
@@ -9095,6 +9346,8 @@ describe("The published overlay", () => {
         id: "kitchen-tablet",
         theme: null,
         chartFps: 30,
+        shape: "rect",
+        rotation: 0,
       });
 
       // The same display without one is answered its assignment, so the null
@@ -9113,6 +9366,8 @@ describe("The published overlay", () => {
         id: "kitchen-tablet",
         theme: "studio",
         chartFps: 30,
+        shape: "rect",
+        rotation: 0,
       });
     } finally {
       await hosted.close();
@@ -9158,6 +9413,8 @@ describe("The published overlay", () => {
         id: "kitchen-tablet",
         theme: "studio",
         chartFps: 30,
+        shape: "rect",
+        rotation: 0,
       });
       // One `theme.json` for the id the display is assigned — not a directory
       // read plus one document per theme, on a poll that runs every two seconds.
@@ -10033,8 +10290,77 @@ describe("Host Wallpaper Engine routes", () => {
     ok: true as const,
     name: "201",
     reused: false,
-    launched: true,
   };
+
+  /** A mobile export package, in the container `pkg.test.ts` describes. */
+  function mobilePackageBytes(
+    members: readonly (readonly [string, Uint8Array])[],
+  ): Uint8Array {
+    const names = members.map(([name]) => encoder.encode(name));
+    const namesSize = names.reduce(
+      (total, name) => total + 4 + name.length + 8,
+      0,
+    );
+    const dataSize = members.reduce(
+      (total, [, data]) => total + data.length,
+      0,
+    );
+    const dataStart = 16 + namesSize;
+    const out = new Uint8Array(dataStart + dataSize);
+    const view = new DataView(out.buffer);
+
+    view.setUint32(0, 8, true);
+    out.set(encoder.encode("PKGM0014"), 4);
+    view.setUint32(12, members.length, true);
+
+    let cursor = 16;
+    let offset = 0;
+    members.forEach(([, data], index) => {
+      const name = names[index]!;
+      view.setUint32(cursor, name.length, true);
+      cursor += 4;
+      out.set(name, cursor);
+      cursor += name.length;
+      view.setUint32(cursor, offset, true);
+      view.setUint32(cursor + 4, data.length, true);
+      cursor += 8;
+      offset += data.length;
+    });
+
+    let dataCursor = dataStart;
+    for (const [, data] of members) {
+      out.set(data, dataCursor);
+      dataCursor += data.length;
+    }
+
+    return out;
+  }
+
+  async function conformingVideo(): Promise<Uint8Array> {
+    return new Uint8Array(
+      await fs.readFile(
+        fileURLToPath(
+          new URL(
+            "../../theme-package/test-fixtures/conforming.mp4",
+            import.meta.url,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /** A conforming video padded with a `free` box to an exact size: the MP4
+   *  parser still reads it, so a route's own output check must be what refuses
+   *  it. */
+  function paddedVideo(base: Uint8Array, size: number): Uint8Array {
+    const out = new Uint8Array(size);
+    out.set(base, 0);
+    const freeStart = base.length;
+    const payload = out.length - freeStart - 8;
+    new DataView(out.buffer).setUint32(freeStart, 8 + payload, false);
+    out.set(encoder.encode("free"), freeStart + 4);
+    return out;
+  }
 
   function fakeSource(): WallpaperEngineSource {
     return {
@@ -10055,27 +10381,8 @@ describe("Host Wallpaper Engine routes", () => {
             ? unpacked
             : { ok: false as const, reason: "refused" as const },
         ),
-      mobileExport: (workshopId) =>
-        Promise.resolve(
-          workshopId === "201"
-            ? { ok: true as const }
-            : { ok: false as const, reason: "refused" as const },
-        ),
-      exportsSince: (since) =>
-        Promise.resolve([
-          {
-            name: `shot-${since}.png`,
-            format: "png" as const,
-            modified: since + 1,
-            size: 9,
-          },
-        ]),
-      exportBytes: (name) =>
-        Promise.resolve(
-          name === "shot.png"
-            ? { bytes: encoder.encode("png"), contentType: "image/png" }
-            : undefined,
-        ),
+      authorName: (steamId) =>
+        Promise.resolve(steamId === "76561198000000001" ? "Ada" : undefined),
     };
   }
 
@@ -10131,8 +10438,6 @@ describe("Host Wallpaper Engine routes", () => {
         "/api/wallpaper-engine",
         "/api/wallpaper-engine/item/201/preview",
         "/api/wallpaper-engine/item/201/asset",
-        "/api/wallpaper-engine/exports?since=1700000000000",
-        "/api/wallpaper-engine/export?name=shot.png",
       ]) {
         const answer = await request(hosted.server, "GET", route, undefined, {
           remoteAddress: "192.168.1.50",
@@ -10270,134 +10575,295 @@ describe("Host Wallpaper Engine routes", () => {
     }
   });
 
-  it("starts the mobile export on POST /mobile-export and refuses that path on GET", async () => {
+  it("answers the removed export routes as unknown paths", async () => {
+    // The engine is never driven (docs/decisions/0124): no route starts it, and
+    // no route serves what it would have written.
     const hosted = host(fakeSource());
 
     try {
-      const answer = await request(
-        hosted.server,
-        "POST",
-        "/api/wallpaper-engine/item/201/mobile-export",
-      );
-      expect(answer.status).toBe(200);
-      expect(answer.json()).toEqual({ ok: true });
-
-      expect(
-        (
-          await request(
-            hosted.server,
-            "GET",
-            "/api/wallpaper-engine/item/201/mobile-export",
-          )
-        ).status,
-      ).toBe(405);
-
-      expect(
-        (
-          await request(
-            hosted.server,
-            "POST",
-            "/api/wallpaper-engine/item/999/mobile-export",
-          )
-        ).json(),
-      ).toEqual({ ok: false, reason: "refused" });
-    } finally {
-      await hosted.close();
-    }
-  });
-
-  it("answers no-install on POST /mobile-export when the host has no source", async () => {
-    const hosted = host();
-
-    try {
-      const answer = await request(
-        hosted.server,
-        "POST",
-        "/api/wallpaper-engine/item/201/mobile-export",
-      );
-      expect(answer.json()).toEqual({ ok: false, reason: "no-install" });
-    } finally {
-      await hosted.close();
-    }
-  });
-
-  it("requires an integer since on the exports listing", async () => {
-    const hosted = host(fakeSource());
-
-    try {
-      const answer = await request(
-        hosted.server,
-        "GET",
-        "/api/wallpaper-engine/exports?since=1700000000000",
-      );
-      expect(answer.status).toBe(200);
-      expect(answer.json()).toEqual({
-        files: [
-          {
-            name: "shot-1700000000000.png",
-            format: "png",
-            modified: 1700000000001,
-            size: 9,
-          },
-        ],
-      });
-
-      // A missing since would offer every old file on the machine, so absence
-      // is a refusal rather than a default epoch.
-      for (const query of [
-        "",
-        "?since=",
-        "?since=abc",
-        "?since=1.5",
-        "?since=-1",
-        "?since=1e3",
-      ]) {
-        const refused = await request(
-          hosted.server,
-          "GET",
-          `/api/wallpaper-engine/exports${query}`,
-        );
-        expect(refused.status, query).toBe(400);
+      // A GET that names no route is the static 404; a POST reaching the tail
+      // is refused as a method the tail does not serve. Neither answers a
+      // route's own status any more.
+      for (const [method, route, status] of [
+        ["POST", "/api/wallpaper-engine/item/201/mobile-export", 405],
+        ["GET", "/api/wallpaper-engine/exports?since=1700000000000", 404],
+        ["GET", "/api/wallpaper-engine/export?name=shot.png", 404],
+      ] as const) {
+        const answer = await request(hosted.server, method, route);
+        expect(answer.status, `${method} ${route}`).toBe(status);
       }
     } finally {
       await hosted.close();
     }
   });
 
-  it("serves an export by name and 404s every other name", async () => {
-    const hosted = host(fakeSource());
+  describe("The mpkg route", () => {
+    it("refuses a GET, a non-loopback caller, and a foreign origin", async () => {
+      const hosted = host(fakeSource());
 
-    try {
-      const answer = await request(
-        hosted.server,
-        "GET",
-        "/api/wallpaper-engine/export?name=shot.png",
-      );
-      expect(answer.status).toBe(200);
-      expect(answer.headers["content-type"]).toBe("image/png");
-      expect(answer.headers["cache-control"]).toBe("no-store");
-      expect(answer.body.toString()).toBe("png");
+      try {
+        expect(
+          (await request(hosted.server, "GET", "/api/wallpaper-engine/mpkg"))
+            .status,
+        ).toBe(405);
 
-      // The query is decoded first, so `x%2e%2e/y.png` is the traversal the
-      // source has to refuse, not one it never sees.
-      for (const query of [
-        "",
-        "?name=",
-        "?name=../project.json",
-        "?name=a%2Fb.png",
-        "?name=x%2e%2e%2Fy.png",
-        "?name=x.jpg",
-      ]) {
-        const refused = await request(
+        // A paired LAN display reads dashboards, not this PC's files.
+        expect(
+          (
+            await request(
+              hosted.server,
+              "POST",
+              "/api/wallpaper-engine/mpkg",
+              new Uint8Array(),
+              {
+                remoteAddress: "192.168.1.50",
+                headers: { host: "192.168.1.50:5173" },
+              },
+            )
+          ).status,
+        ).toBe(403);
+
+        // A loopback peer is not the same origin: any page can POST here.
+        expect(
+          (
+            await request(
+              hosted.server,
+              "POST",
+              "/api/wallpaper-engine/mpkg",
+              new Uint8Array(),
+              {
+                headers: {
+                  origin: "https://evil.example",
+                  host: "127.0.0.1:5173",
+                },
+              },
+            )
+          ).status,
+        ).toBe(403);
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("answers 413 to a body over the source cap", async () => {
+      const hosted = host(fakeSource());
+
+      try {
+        const answer = await request(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+          new Uint8Array(MAX_VIDEO_SOURCE_BYTES + 1),
+        );
+
+        expect(answer.status).toBe(413);
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("refuses a second package while one is still arriving", async () => {
+      const hosted = host(fakeSource());
+
+      try {
+        const first = pendingRequest(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+        );
+        await first.started;
+
+        const second = await request(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+          new Uint8Array(),
+        );
+        expect(second.status).toBe(429);
+
+        // The one byte the first sent is not a package, which is its own
+        // answer rather than a 429, and frees the slot.
+        first.release();
+        expect((await first.answered).status).toBe(200);
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("extracts a conforming video with the metadata project.json carries", async () => {
+      const hosted = host(fakeSource());
+      const video = await conformingVideo();
+
+      try {
+        const answer = await request(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+          mobilePackageBytes([
+            [
+              "project.json",
+              encoder.encode(
+                JSON.stringify({
+                  title: "Aurora",
+                  package: { workshopId: "12345" },
+                }),
+              ),
+            ],
+            ["wallpaper.mp4", video],
+          ]),
+        );
+
+        expect(answer.status).toBe(200);
+        expect(answer.json()).toEqual({
+          ok: true,
+          videoBase64: Buffer.from(video).toString("base64"),
+          reencoded: false,
+          title: "Aurora",
+          workshopId: "12345",
+        });
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("answers ok:false for a table with no video", async () => {
+      const hosted = host(fakeSource());
+
+      try {
+        const answer = await request(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+          mobilePackageBytes([
+            [
+              "project.json",
+              encoder.encode(JSON.stringify({ title: "Aurora" })),
+            ],
+          ]),
+        );
+
+        expect(answer.status).toBe(200);
+        expect((answer.json() as { ok: boolean }).ok).toBe(false);
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("imports a package larger than the output cap when its video fits", async () => {
+      // The package may exceed the output cap as long as the video it yields
+      // does not: the source and output caps are different ceilings.
+      const hosted = host(fakeSource());
+      const video = await conformingVideo();
+
+      try {
+        const answer = await request(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+          mobilePackageBytes([
+            ["pad.bin", new Uint8Array(MAX_THEME_UPLOAD_BYTES)],
+            ["wallpaper.mp4", video],
+          ]),
+        );
+
+        expect(answer.status).toBe(200);
+        expect(answer.json()).toMatchObject({
+          ok: true,
+          reencoded: false,
+          videoBase64: Buffer.from(video).toString("base64"),
+        });
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("refuses a normalized output above the store's per-asset bound", async () => {
+      // The old check used the 96 MB whole-theme ceiling, so a video between
+      // 80 and 96 MB imported and then could not be saved. The bound is now
+      // the writer's own `MAX_ASSET_BYTES`, which is lower.
+      expect(MAX_ASSET_BYTES).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
+      const size = MAX_ASSET_BYTES + 1;
+      expect(size).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
+
+      const hosted = host(fakeSource());
+      const padded = paddedVideo(await conformingVideo(), size);
+
+      try {
+        const answer = await request(
+          hosted.server,
+          "POST",
+          "/api/wallpaper-engine/mpkg",
+          mobilePackageBytes([["wallpaper.mp4", padded]]),
+        );
+
+        expect(answer.status).toBe(200);
+        expect(answer.json()).toMatchObject({ ok: false });
+        expect((answer.json() as { message: string }).message).toContain(
+          "80 MB",
+        );
+      } finally {
+        await hosted.close();
+      }
+    });
+  });
+
+  describe("The author route", () => {
+    it("refuses a POST and a non-loopback caller", async () => {
+      const hosted = host(fakeSource());
+
+      try {
+        expect(
+          (
+            await request(
+              hosted.server,
+              "POST",
+              "/api/wallpaper-engine/author/76561198000000001",
+            )
+          ).status,
+        ).toBe(405);
+
+        expect(
+          (
+            await request(
+              hosted.server,
+              "GET",
+              "/api/wallpaper-engine/author/76561198000000001",
+              undefined,
+              {
+                remoteAddress: "192.168.1.50",
+                headers: { host: "192.168.1.50:5173" },
+              },
+            )
+          ).status,
+        ).toBe(403);
+      } finally {
+        await hosted.close();
+      }
+    });
+
+    it("answers a resolved name, and nothing for an unresolved one", async () => {
+      const hosted = host(fakeSource());
+
+      try {
+        const known = await request(
           hosted.server,
           "GET",
-          `/api/wallpaper-engine/export${query}`,
+          "/api/wallpaper-engine/author/76561198000000001",
         );
-        expect(refused.status, query).toBe(404);
+        expect(known.status).toBe(200);
+        expect(known.json()).toEqual({ name: "Ada" });
+
+        const absent = await request(
+          hosted.server,
+          "GET",
+          "/api/wallpaper-engine/author/76561198000000002",
+        );
+        expect(absent.status).toBe(200);
+        expect(absent.json()).toEqual({});
+      } finally {
+        await hosted.close();
       }
-    } finally {
-      await hosted.close();
-    }
+    });
   });
 });
 

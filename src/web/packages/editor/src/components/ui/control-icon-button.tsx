@@ -59,6 +59,9 @@ export function ControlIconButton(
   props: ControlProps & {
     readonly destructive?: boolean;
     readonly shortcut?: { readonly printed: string; readonly spoken: string };
+    /** A press that does nothing, without native `disabled`: the control keeps
+     *  its focus and its tooltip, so the state it names stays reachable. */
+    readonly ariaDisabled?: boolean;
     readonly onClick: () => void;
     readonly children: React.ReactNode;
   },
@@ -68,6 +71,7 @@ export function ControlIconButton(
     id,
     disabled,
     refused,
+    ariaDisabled,
     describedById,
     data,
     destructive,
@@ -76,7 +80,7 @@ export function ControlIconButton(
     children,
   } = props;
   const ids = useControlIds(id);
-  const blocked = isBlocked({ disabled, refused });
+  const blocked = isBlocked({ disabled, refused }) || ariaDisabled === true;
   const ref = useRef<HTMLButtonElement>(null);
   useControlTooltip(ref, label, shortcut);
 
@@ -94,7 +98,9 @@ export function ControlIconButton(
         id={ids.control}
         type="button"
         aria-label={label}
-        aria-disabled={refused === undefined ? undefined : true}
+        aria-disabled={
+          ariaDisabled === true || refused !== undefined ? true : undefined
+        }
         // The pane's own note first, then the row's refusal, in `describedBy`'s
         // reading order. `describedById` is the one route a note the control
         // cannot mint reaches a screen reader by, and this button is the one

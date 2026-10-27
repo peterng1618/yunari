@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { mountBackgroundMedia } from "./background-media.js";
+import {
+  type MediaBounds,
+  type MediaBox,
+  mountBackgroundMedia,
+} from "./background-media.js";
 
 const ARTBOARD = { width: 400, height: 200 } as const;
 const HERO = { id: "hero", kind: "image", path: "assets/hero.png" } as const;
@@ -417,6 +421,92 @@ describe("background media", () => {
       'Background media asset "hero" has no readable bytes.',
     );
     handle.destroy();
+  });
+});
+
+describe("background media on a turned display", () => {
+  const box = (
+    left: number,
+    top: number,
+    width: number,
+    height: number,
+    extra: { readonly radius?: "circle"; readonly angle?: number } = {},
+  ): MediaBox => ({ left, top, width, height, ...extra });
+
+  /** A mounted layer on one of the two boxes, with the role its media declares. */
+  function mountLayer(
+    bounds: MediaBounds,
+    role: "theme" | "display",
+  ): { handle: ReturnType<typeof mountBackgroundMedia>; layer: HTMLElement } {
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: { media: { assetId: "hero", bounds: role } },
+      artboard: ARTBOARD,
+      assets: [HERO],
+      resolveAsset: () => ({ url: "blob:hero" }),
+    });
+    handle.setBounds(bounds);
+    const layer = host.querySelector<HTMLElement>(
+      "[data-yunari-background-media]",
+    );
+    if (layer === null) throw new Error("the layer did not mount");
+    return { handle, layer };
+  }
+
+  it("rotates a theme-bounded layer and not a display-bounded one", () => {
+    const theme = mountLayer(
+      { artboard: box(0, 0, 100, 50, { angle: 90 }) },
+      "theme",
+    );
+    expect(theme.layer.style.transform).toBe("rotate(90deg)");
+    // The box is placed at the artboard's own origin, which is the corner the
+    // canvas matrix maps it from; rotating about the element's default centre
+    // would move a turned board off the composition.
+    expect(theme.layer.style.transformOrigin).toBe("0 0");
+
+    const display = mountLayer(
+      {
+        artboard: box(0, 0, 100, 50),
+        display: { ...box(0, 0, 50, 50), radius: "circle" },
+      },
+      "display",
+    );
+    expect(display.layer.style.transform).toBe("");
+    expect(display.layer.style.borderRadius).toBe("50%");
+
+    theme.handle.destroy();
+    display.handle.destroy();
+  });
+
+  it("tells the sampler a theme's angle and a display's own box", () => {
+    // Two different samplers: a theme layer turns with the composition, while a
+    // display layer fills the host and must not turn with it.
+    const theme = mountLayer(
+      { artboard: box(0, 0, 100, 50, { angle: 180 }) },
+      "theme",
+    );
+    expect(theme.handle.backdrop()?.angle).toBe(180);
+    expect(theme.handle.backdrop()?.screenRect).toBeUndefined();
+
+    const display = mountLayer(
+      {
+        artboard: box(0, 0, 100, 50),
+        display: { ...box(0, 0, 50, 50), radius: "circle" },
+      },
+      "display",
+    );
+    expect(display.handle.backdrop()?.screenRect).toEqual({
+      left: 0,
+      top: 0,
+      width: 50,
+      height: 50,
+      radius: "circle",
+    });
+    expect(display.handle.backdrop()?.angle).toBeUndefined();
+
+    theme.handle.destroy();
+    display.handle.destroy();
   });
 });
 

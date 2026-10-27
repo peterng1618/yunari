@@ -55,6 +55,23 @@ describe("the chart settings declaration", () => {
     }
   });
 
+  it("offers the line three interpolations, smoothing included", () => {
+    const field = settingsFieldsFor("line").find(
+      (row) => row.property === "interpolation",
+    );
+
+    expect(field?.options?.map((option) => option.value)).toEqual([
+      "linear",
+      "step",
+      "smooth",
+    ]);
+    expect(field?.options?.map((option) => option.label)).toEqual([
+      "Linear",
+      "Step",
+      "Smooth",
+    ]);
+  });
+
   it("declares no default values — the default*Settings objects own those", () => {
     // A default repeated here would be a fifth home for a number that is only
     // correct in one place.

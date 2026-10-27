@@ -5,6 +5,10 @@ import type { ChartRefreshRate } from "@yunari/scene-fabric";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createActiveThemeStore } from "./active-theme.js";
 import {
+  DisplaySettingError,
+  normalizePresentation,
+} from "./display-presentation.js";
+import {
   chartFpsFor,
   createDisplayStore,
   type DisplayStore,
@@ -521,5 +525,133 @@ describe("createDisplayStore", () => {
     if (stored === undefined) throw new Error("the record was dropped");
     expect(stored.chartFps).toBeUndefined();
     expect(chartFpsFor(stored)).toBe(30);
+  });
+
+  // A display's glass and its mounting angle: stored with the record, because
+  // both are properties of the screen rather than of the theme it shows.
+  it("stores shape and omits a zero rotation", async () => {
+    const record = await store.create("Tablet", "token", {
+      shape: "circle",
+      rotation: 0,
+    });
+    expect(record).toMatchObject({ shape: "circle" });
+    expect(record.rotation).toBeUndefined();
+
+    // Absent presentation is a rectangular, upright screen.
+    const plain = await store.create("Plain", "token");
+    expect(plain.shape).toBe("rect");
+    expect(plain.rotation).toBeUndefined();
+  });
+
+  it("refuses a quarter turn that is not a quarter", async () => {
+    await expect(
+      store.create("Tablet", "token", { shape: "rect", rotation: 45 }),
+    ).rejects.toBeInstanceOf(DisplaySettingError);
+    // 360 is a full turn and upright on a circle; a rectangle takes 0/90/180/270
+    // exactly, so the wrap is the circle's and not a licence for a rect.
+    await expect(
+      store.create("Tablet", "token", { shape: "rect", rotation: 360 }),
+    ).rejects.toBeInstanceOf(DisplaySettingError);
+    expect(await store.list()).toEqual([]);
+  });
+
+  it("refuses a rotation that is not a whole degree in range", async () => {
+    // Untrusted input — a request body, a hand-edited file — is refused, never
+    // clamped or coerced to upright.
+    for (const rotation of [
+      45.5,
+      -90,
+      361,
+      Number.NaN,
+      "90",
+    ] as unknown as number[]) {
+      await expect(
+        store.create("Tablet", "token", { shape: "circle", rotation }),
+      ).rejects.toBeInstanceOf(DisplaySettingError);
+    }
+    expect(() => normalizePresentation("round", 0)).toThrow(
+      DisplaySettingError,
+    );
+    expect(await store.list()).toEqual([]);
+  });
+
+  it("accepts any whole degree on a circle and normalises 360", async () => {
+    const record = await store.create("Round", "token", {
+      shape: "circle",
+      rotation: 360,
+    });
+    expect(record.rotation).toBeUndefined();
+    const free = await store.create("Tilted", "token", {
+      shape: "circle",
+      rotation: 37,
+    });
+    expect(free.rotation).toBe(37);
+  });
+
+  it("snaps a stored free angle when the shape becomes rect", async () => {
+    const record = await store.create("Round", "token", {
+      shape: "circle",
+      rotation: 37,
+    });
+    const updated = await store.update(record.id, { shape: "rect" });
+    expect(updated).toMatchObject({ shape: "rect" });
+    expect(updated?.rotation).toBeUndefined();
+  });
+
+  it("refuses a patch rotation the final shape cannot hold", async () => {
+    const record = await store.create("Tablet", "token", { shape: "rect" });
+    await expect(
+      store.update(record.id, { rotation: 45 }),
+    ).rejects.toBeInstanceOf(DisplaySettingError);
+    expect((await store.find(record.id))?.rotation).toBeUndefined();
+
+    // Both fields in one patch are applied as one: the new shape decides the
+    // rule the new rotation must satisfy.
+    await expect(
+      store.update(record.id, { shape: "circle", rotation: 45.5 }),
+    ).rejects.toBeInstanceOf(DisplaySettingError);
+    expect(
+      (await store.update(record.id, { shape: "circle", rotation: 45 }))
+        ?.rotation,
+    ).toBe(45);
+    expect((await store.find(record.id))?.shape).toBe("circle");
+  });
+
+  it("reads an invalid stored shape as rect and drops its rotation", async () => {
+    await writeFile(
+      path.join(directory, FILE),
+      JSON.stringify({
+        displays: [
+          {
+            id: "odd",
+            label: "Odd",
+            kind: "paired",
+            createdAt: "2026-10-18T00:00:00.000Z",
+            lastSeenAt: "2026-10-18T00:00:00.000Z",
+            tokenHash: hashToken("tok"),
+            shape: "round",
+            rotation: 45,
+          },
+          {
+            id: "square",
+            label: "Square",
+            kind: "paired",
+            createdAt: "2026-10-18T00:00:00.000Z",
+            lastSeenAt: "2026-10-18T00:00:00.000Z",
+            tokenHash: hashToken("tok2"),
+            shape: "rect",
+            rotation: 45,
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    const stored = await store.list();
+    for (const record of stored) {
+      expect(record.shape).toBe("rect");
+      expect(record.rotation).toBeUndefined();
+    }
+    expect(stored).toHaveLength(2);
   });
 });

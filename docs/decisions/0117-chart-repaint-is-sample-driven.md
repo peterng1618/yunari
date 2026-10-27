@@ -1,7 +1,8 @@
 # 0117 — Chart repaint is sample-driven, not frame-driven
 
 - **Date:** 2026-10-25
-- **Status:** accepted 2026-10-25
+- **Status:** accepted 2026-10-25; the update merge is superseded by 0126
+  (`replaceMerge: ["series"]` rebuilt every series because it matches by `id`)
 - **Paths:** `src/web/packages/scene-fabric/src/chart-object.ts`,
   `src/web/packages/scene-fabric/src/chart-refresh.ts`,
   `src/web/packages/scene-fabric/src/scene.ts`,

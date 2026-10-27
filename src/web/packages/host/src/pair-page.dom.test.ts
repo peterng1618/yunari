@@ -104,4 +104,49 @@ describe("pairing a display", () => {
 
     expect(localStorage.getItem(PAIRING_STORAGE_KEY)).toBeNull();
   });
+
+  it("names the quarter turn a rectangle snaps a free angle to", async () => {
+    document.body.innerHTML = BODY_HTML;
+    // No submit here: this case is the shape control alone, and the page's
+    // claim does not fire until the form is sent.
+    await new AsyncFunction("fetch", "location", SCRIPT)(
+      vi.fn(async () => json({})),
+      { search: "", replace: () => {} },
+    );
+
+    const shape = document.querySelector("#shape") as HTMLSelectElement;
+    const rotation = document.querySelector("#rotation") as HTMLInputElement;
+    const note = document.querySelector("#rotation-note") as HTMLElement;
+
+    // Typed under the default Rect and then moved to Circle: this is the state
+    // the circle branch receives, so a branch that rewrote the field would be
+    // caught below rather than passing because the value arrived after it ran.
+    rotation.value = "45";
+
+    shape.value = "circle";
+    shape.dispatchEvent(new Event("change"));
+
+    // Circle keeps the free angle untouched and has nothing to explain; Rect is
+    // where the angle is lost.
+    expect(rotation.value).toBe("45");
+    expect(note.hidden).toBe(true);
+
+    shape.value = "rect";
+    shape.dispatchEvent(new Event("change"));
+
+    // The field carries what the host validates, and the note keeps the number
+    // the author typed visible rather than losing it silently (spec § "Pairing
+    // and the pair page": the destructive part is named in the control).
+    expect(rotation.step).toBe("90");
+    expect(rotation.value).toBe("90");
+    expect(note.hidden).toBe(false);
+    expect(note.textContent).toContain("45");
+    expect(note.textContent).toContain("90");
+
+    // A later edit makes that sentence stale, so typing clears it rather than
+    // leaving it beside a value it no longer describes.
+    rotation.value = "180";
+    rotation.dispatchEvent(new Event("input"));
+    expect(note.hidden).toBe(true);
+  });
 });

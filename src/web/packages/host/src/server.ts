@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import {
   CATALOGUE_ORIGIN,
   createBatch,
+  type DisplayPresentation,
+  type DisplayShape,
   formatSseEvent,
   knownTimeZones,
   readFabricThemeEnvelope,
@@ -82,6 +84,10 @@ import type {
   DisplaySettings,
   DisplaySettingsStore,
 } from "./settings/display.js";
+import {
+  DisplaySettingError,
+  normalizePresentation,
+} from "./settings/display-presentation.js";
 import type {
   DisplayKind,
   DisplayPatch,
@@ -123,13 +129,11 @@ import {
   installCatalogueItem,
   parseInstallRequest,
 } from "./themes/install.js";
-import {
-  type NormalizeAspect,
-  normalizeVideo,
-} from "./themes/normalize-video.js";
+import { normalizeVideo } from "./themes/normalize-video.js";
 import {
   createThemeStore,
   isValidThemeId,
+  MAX_ASSET_BYTES,
   ThemeAssetLimitError,
   ThemeConflictError,
   type ThemeStore,
@@ -146,6 +150,7 @@ import {
 } from "./themes/wire.js";
 import { certificateFingerprintSha256, type RootPem } from "./tls/authority.js";
 import { SseConnection } from "./transport/sse.js";
+import { mobilePackage } from "./wallpaper-engine/pkg.js";
 import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
 
 /** HTTP routing for bundles, discovery, sample streaming, and theme packages. */
@@ -178,6 +183,9 @@ interface ActiveDisplay {
   readonly label: string;
   readonly kind: DisplayKind;
   readonly theme: string | null;
+  /** The glass and mounting angle; `this-pc` answers rect/0, as the spec says. */
+  readonly shape: DisplayShape;
+  readonly rotation: number;
 }
 
 /**
@@ -416,8 +424,18 @@ const WEATHER_ICON_DIR = path.join(
   "weather-icons",
 );
 /** A save is JSON with base64 assets, so the wire is a third larger than the
- *  archive it replaced; the store enforces its own bounds on the decoded side. */
+ *  archive it replaced; the store enforces its own bounds on the decoded side.
+ *  This is the whole-theme upload ceiling, not one asset's. */
 export const MAX_THEME_UPLOAD_BYTES = 96 * 1024 * 1024;
+/** A source video or `.mpkg` is normalized after it arrives, so the author may
+ *  bring a file larger than the theme it becomes. This is the source ceiling;
+ *  the normalized output must fit the store's `MAX_ASSET_BYTES` instead. */
+export const MAX_VIDEO_SOURCE_BYTES = 512 * 1024 * 1024;
+/** The one sentence both video import routes answer over the store's per-asset
+ *  bound. The save route's base64 body is a separate ceiling (vg-753). */
+const VIDEO_OVER_ASSET_BOUND = `That video is larger than the ${
+  MAX_ASSET_BYTES / (1024 * 1024)
+} MB one theme asset may carry; re-encode it and try again.`;
 /** A dashboard screenshot; the store enforces the same bound. */
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 
@@ -774,6 +792,29 @@ async function chartFpsForDisplay(
 }
 
 /**
+ * The glass and mounting angle of the display behind a key.
+ *
+ * The same split as `chartFpsForDisplay`: `this-pc` and `default` are not
+ * records, so each answers the upright rectangle the spec gives them, and every
+ * other key is a record whose own presentation wins. A stored upright angle is
+ * answered as `0` because the record omits it.
+ */
+async function presentationForDisplay(
+  key: string,
+  displays: DisplayStore | undefined,
+): Promise<{ readonly shape: DisplayShape; readonly rotation: number }> {
+  const record =
+    key === LOCAL_DISPLAY_ID || key === DEFAULT_DISPLAY
+      ? undefined
+      : await displays?.find(key);
+
+  return {
+    shape: record?.shape ?? "rect",
+    rotation: record?.rotation ?? 0,
+  };
+}
+
+/**
  * Whether a key a loopback request named is one this host can hold a theme or a
  * set of answers for.
  *
@@ -795,23 +836,6 @@ async function knownDisplayKey(
 ): Promise<boolean> {
   if (key === DEFAULT_DISPLAY || key === LOCAL_DISPLAY_ID) return true;
   return ((await displays?.list()) ?? []).some((record) => record.id === key);
-}
-
-/** `undefined` when absent, `null` when present but not two positive numbers. */
-function parseAspect(value: unknown): NormalizeAspect | undefined | null {
-  if (value === undefined) return undefined;
-  if (typeof value !== "object" || value === null) return null;
-  const { width, height } = value as { width?: unknown; height?: unknown };
-  if (
-    typeof width !== "number" ||
-    typeof height !== "number" ||
-    !Number.isFinite(width) ||
-    !Number.isFinite(height) ||
-    width <= 0 ||
-    height <= 0
-  )
-    return null;
-  return { width, height };
 }
 
 /** Bounded JSON body for admin writes; a runaway body must not be buffered. */
@@ -1479,12 +1503,16 @@ export function createHostServer(options: HostServerOptions): HostServer {
           label: LOCAL_DISPLAY_LABEL,
           kind: "local",
           theme: holds[LOCAL_DISPLAY_ID] ?? null,
+          shape: "rect",
+          rotation: 0,
         },
         ...records.map((record) => ({
           id: record.id,
           label: record.label,
           kind: record.kind,
           theme: holds[record.id] ?? null,
+          shape: record.shape,
+          rotation: record.rotation ?? 0,
         })),
       ],
     };
@@ -1758,7 +1786,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
-        let asked: { readonly code?: unknown; readonly label?: unknown };
+        let asked: {
+          readonly code?: unknown;
+          readonly label?: unknown;
+          readonly shape?: unknown;
+          readonly rotation?: unknown;
+        };
 
         try {
           const parsed: unknown = JSON.parse(await readBody(request));
@@ -1772,6 +1805,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
           asked = parsed as {
             readonly code?: unknown;
             readonly label?: unknown;
+            readonly shape?: unknown;
+            readonly rotation?: unknown;
           };
         } catch (error) {
           sendText(
@@ -1795,8 +1830,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // The store's own label→id rule, asked **before** the code is claimed:
         // a name it would refuse is the caller's to fix, and claiming first
         // would spend the window on a name nobody could have used.
+        let presentation: DisplayPresentation;
+
         try {
           mintedDisplayId(asked.label);
+          // The record's own presentation rule, for the same reason and at the
+          // same point: a shape or angle it would refuse must not spend the code.
+          presentation = normalizePresentation(asked.shape, asked.rotation);
         } catch (error) {
           sendText(
             response,
@@ -1820,7 +1860,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // secret in this exchange, and what it buys lasts until the owner
         // removes the client by name.
         const token = newToken();
-        const display = await displays.create(asked.label, token);
+        const display = await displays.create(asked.label, token, presentation);
         sendJson(response, 200, { displayId: display.id, token });
         return;
       }
@@ -1958,7 +1998,12 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // A local monitor: the host's own screen, so it is specified rather than
       // paired and has no credential to answer with.
       if (url.pathname === "/api/displays" && request.method === "POST") {
-        let body: { readonly label: string; readonly monitor: unknown };
+        let body: {
+          readonly label: string;
+          readonly monitor: unknown;
+          readonly shape?: unknown;
+          readonly rotation?: unknown;
+        };
 
         try {
           const parsed: unknown = JSON.parse(await readBody(request));
@@ -1972,6 +2017,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
           body = parsed as {
             readonly label: string;
             readonly monitor: unknown;
+            readonly shape?: unknown;
+            readonly rotation?: unknown;
           };
         } catch (error) {
           sendText(
@@ -1998,8 +2045,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // The label's own rule, asked before the write: a name the store would
         // refuse is the caller's to fix, and the catch below keeps only the
         // store's failures, whose words name this machine's files.
+        let presentation: DisplayPresentation;
+
         try {
           mintedDisplayId(body.label);
+          presentation = normalizePresentation(body.shape, body.rotation);
         } catch (error) {
           sendText(
             response,
@@ -2012,7 +2062,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
         let display: DisplayRecord;
 
         try {
-          display = await displays.createLocal(body.label, monitor);
+          display = await displays.createLocal(
+            body.label,
+            monitor,
+            presentation,
+          );
         } catch (error) {
           // A monitor a local display already holds is the request conflicting
           // with what this host holds, not a body the store would not read —
@@ -2083,7 +2137,20 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
-        const updated = await displays.update(id, patch);
+        let updated: DisplayRecord | undefined;
+
+        try {
+          updated = await displays.update(id, patch);
+        } catch (error) {
+          // A patch that names both fields is decided against the final shape,
+          // which only the record knows — and that refusal is the caller's, not
+          // the host's. Anything else came from the store's own file.
+          if (error instanceof DisplaySettingError) {
+            sendText(response, 400, error.message);
+            return;
+          }
+          throw error;
+        }
 
         if (updated === undefined) {
           sendText(response, 404, "No such display.");
@@ -2460,9 +2527,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       const live = published.read();
       const display = await displayKeyFor(request, url, displays);
-      // The player reads its refresh rate from this poll rather than from a
-      // route of its own: it is the request a display already makes.
+      // The player reads its refresh rate, its glass and its mounting angle from
+      // this poll rather than from routes of its own: it is the request a
+      // display already makes.
       const chartFps = await chartFpsForDisplay(display, displays);
+      const presentation = await presentationForDisplay(display, displays);
       let theme: string | null = null;
 
       // A request that named a theme is on a link, and the link is the person's
@@ -2478,7 +2547,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
       sendJson(response, 200, {
         id: live?.id ?? null,
         revision: published.revision(),
-        display: { id: display, theme, chartFps },
+        display: {
+          id: display,
+          theme,
+          chartFps,
+          shape: presentation.shape,
+          rotation: presentation.rotation,
+        },
       });
       return;
     }
@@ -3446,9 +3521,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
-    // The one write in this surface (R8): unpack the item and start the editor
-    // on it. The item id is the whole request — there is no body — so the
-    // selection itself is the trigger.
+    // The one write in this surface (R8): unpack the item into an editable
+    // project and stop. The item id is the whole request — there is no body —
+    // so the selection itself is the trigger.
     const wallpaperEngineProject = url.pathname.match(
       /^\/api\/wallpaper-engine\/item\/([^/]+)\/project$/,
     );
@@ -3458,8 +3533,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
-      // Creating a directory and launching a program is admin work, and a page
-      // in another origin can reach a loopback route without a credential.
+      // Creating a directory is admin work, and a page in another origin can
+      // reach a loopback route without a credential.
       if (!isLoopbackRemote(request.socket.remoteAddress)) {
         sendText(response, 403, "Unpacking is available on this PC only.");
         return;
@@ -3487,84 +3562,82 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
-    // The engine's own mobile export: unpack the item, then press its Send to
-    // Mobile Device → Export .mpkg controls and leave the Save dialog to the
-    // author (docs/decisions/0118). Same guards as the project route below.
-    const wallpaperEngineMobileExport = url.pathname.match(
-      /^\/api\/wallpaper-engine\/item\/([^/]+)\/mobile-export$/,
-    );
-    if (wallpaperEngineMobileExport) {
+    // A mobile export the author saved by hand (decision 0124): the host reads
+    // the package, extracts its video and normalizes it. Needs no install.
+    if (url.pathname === "/api/wallpaper-engine/mpkg") {
       if (request.method !== "POST") {
         sendText(response, 405, "Only POST is supported.");
         return;
       }
       if (!isLoopbackRemote(request.socket.remoteAddress)) {
-        sendText(response, 403, "Exporting is available on this PC only.");
-        return;
-      }
-      if (isForeignOrigin(request)) {
-        sendText(response, 403, "Exporting is not available to another page.");
-        return;
-      }
-
-      let workshopId: string;
-      try {
-        workshopId = decodeURIComponent(wallpaperEngineMobileExport[1] ?? "");
-      } catch {
-        sendText(response, 404, "No such wallpaper.");
-        return;
-      }
-
-      sendJson(
-        response,
-        200,
-        wallpaperEngine === undefined
-          ? { ok: false, reason: "no-install" }
-          : await wallpaperEngine.mobileExport(workshopId),
-      );
-      return;
-    }
-
-    // The files the export step watches, never a walk of the profile.
-    if (url.pathname === "/api/wallpaper-engine/exports") {
-      if (request.method !== "GET") {
-        sendText(response, 405, "Only GET is supported.");
-        return;
-      }
-      if (!isLoopbackRemote(request.socket.remoteAddress)) {
         sendText(
           response,
           403,
-          "Wallpaper Engine is available on this PC only.",
+          "Wallpaper Engine imports are available on this PC only.",
         );
         return;
       }
+      // Normalizing spawns the encoder, and any page can POST to loopback.
+      if (isForeignOrigin(request)) {
+        sendText(response, 403, "That request is from another origin.");
+        return;
+      }
 
-      const asked = url.searchParams.get("since");
-      // A missing or non-integer `since` would offer every old media file on
-      // the machine, so absence is refused rather than read as the epoch.
-      const since =
-        asked !== null && /^[0-9]+$/.test(asked) ? Number(asked) : undefined;
-
-      if (since === undefined || !Number.isSafeInteger(since)) {
-        sendText(
-          response,
-          400,
-          "since must be an integer epoch in milliseconds.",
+      let source: Uint8Array;
+      try {
+        source = await largeBody.run(() =>
+          readBytes(request, MAX_VIDEO_SOURCE_BYTES),
         );
+      } catch (error) {
+        if (error instanceof LargeBodyBusyError) {
+          sendText(response, 429, LARGE_BODY_BUSY);
+          return;
+        }
+        sendText(response, 413, "That package is too large to import.");
+        return;
+      }
+
+      const pkg = mobilePackage(source);
+      if (pkg === undefined) {
+        sendJson(response, 200, {
+          ok: false,
+          message:
+            "That file is not a Wallpaper Engine mobile package with a video.",
+        });
+        return;
+      }
+
+      const normalized = await normalizeVideo(pkg.video);
+      if (!normalized.ok) {
+        // The normalizer's own sentence, as the export route answers it.
+        sendJson(response, 200, { ok: false, message: normalized.message });
+        return;
+      }
+      // The source and the theme have different ceilings: a package may exceed
+      // the whole-theme upload bound, but the video the theme carries must fit
+      // the store's per-asset bound or the save would refuse it later.
+      if (normalized.bytes.byteLength > MAX_ASSET_BYTES) {
+        sendJson(response, 200, { ok: false, message: VIDEO_OVER_ASSET_BOUND });
         return;
       }
 
       sendJson(response, 200, {
-        files:
-          wallpaperEngine === undefined
-            ? []
-            : await wallpaperEngine.exportsSince(since),
+        ok: true,
+        videoBase64: Buffer.from(normalized.bytes).toString("base64"),
+        reencoded: normalized.reencoded,
+        ...(pkg.title === undefined ? {} : { title: pkg.title }),
+        ...(pkg.workshopId === undefined ? {} : { workshopId: pkg.workshopId }),
       });
       return;
     }
 
-    if (url.pathname === "/api/wallpaper-engine/export") {
+    // The persona name behind a Steam id, so the editor can credit an item.
+    // A read, so loopback-only like the listing; the global origin guard above
+    // already refuses another page's request.
+    const wallpaperEngineAuthor = url.pathname.match(
+      /^\/api\/wallpaper-engine\/author\/([^/]+)$/,
+    );
+    if (wallpaperEngineAuthor) {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
         return;
@@ -3578,22 +3651,21 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
-      const name = url.searchParams.get("name");
-      const bytes =
-        name === null || wallpaperEngine === undefined
-          ? undefined
-          : await wallpaperEngine.exportBytes(name);
-
-      if (bytes === undefined) {
-        sendText(response, 404, "No such export.");
+      let steamId: string;
+      try {
+        steamId = decodeURIComponent(wallpaperEngineAuthor[1] ?? "");
+      } catch {
+        sendText(response, 404, "No such author.");
         return;
       }
 
-      response.writeHead(200, {
-        "content-type": bytes.contentType,
-        "cache-control": "no-store",
-      });
-      response.end(bytes.bytes);
+      const name =
+        wallpaperEngine === undefined
+          ? undefined
+          : await wallpaperEngine.authorName(steamId);
+
+      // An absent name is absence, not a key holding undefined.
+      sendJson(response, 200, name === undefined ? {} : { name });
       return;
     }
 
@@ -3991,10 +4063,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
-      let raw: string;
+      let source: Uint8Array;
       try {
-        raw = await largeBody.run(() =>
-          readBody(request, MAX_THEME_UPLOAD_BYTES),
+        source = await largeBody.run(() =>
+          readBytes(request, MAX_VIDEO_SOURCE_BYTES),
         );
       } catch (error) {
         if (error instanceof LargeBodyBusyError) {
@@ -4005,48 +4077,17 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
-      let body: { bytesBase64?: unknown; fit?: unknown; aspect?: unknown };
-      try {
-        body = JSON.parse(raw) as {
-          bytesBase64?: unknown;
-          fit?: unknown;
-          aspect?: unknown;
-        };
-      } catch {
-        sendText(response, 400, "That normalize request is not JSON.");
-        return;
-      }
-      if (typeof body.bytesBase64 !== "string") {
-        sendText(response, 400, "A normalize needs bytesBase64.");
-        return;
-      }
-      const fit =
-        body.fit === undefined
-          ? undefined
-          : body.fit === "cover" || body.fit === "contain"
-            ? body.fit
-            : null;
-      if (fit === null) {
-        sendText(response, 400, "fit must be cover or contain.");
-        return;
-      }
-      const aspect = parseAspect(body.aspect);
-      if (aspect === null) {
-        sendText(response, 400, "aspect must be a positive width and height.");
-        return;
-      }
-
-      const normalized = await normalizeVideo(
-        new Uint8Array(Buffer.from(body.bytesBase64, "base64")),
-        {
-          ...(fit === undefined ? {} : { fit }),
-          ...(aspect === undefined ? {} : { aspect }),
-        },
-      );
+      const normalized = await normalizeVideo(source);
       if (!normalized.ok) {
         // The normalizer's own sentence: it names which rule was broken, and a
         // sentence composed here would lose that.
         sendJson(response, 200, { ok: false, message: normalized.message });
+        return;
+      }
+      // The store refuses an asset over its per-asset bound at save, so the
+      // import path refuses it first rather than declaring what cannot persist.
+      if (normalized.bytes.byteLength > MAX_ASSET_BYTES) {
+        sendJson(response, 200, { ok: false, message: VIDEO_OVER_ASSET_BOUND });
         return;
       }
       sendJson(response, 200, {

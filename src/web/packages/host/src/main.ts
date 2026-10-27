@@ -598,7 +598,12 @@ export async function run(argv: readonly string[]): Promise<number> {
     // printed again and minting a display per run leaves a record for a link
     // nobody used, so what this prints is the one secret that can be made again
     // — and it pairs nothing until somebody claims it (R9).
-    const code = pairingCodes.mint();
+    //
+    // **`current()` first.** This line runs after the server already answers, so
+    // a page that read `/api/pairing/code` in between minted its own; minting
+    // here would replace it and refuse the claim that follows (R16: a read never
+    // moves the live code).
+    const code = pairingCodes.current() ?? pairingCodes.mint();
     console.log(style("2", "\n  This host is reachable on this network at:"));
     console.log(`  ${networkSecure}/`);
     console.log(

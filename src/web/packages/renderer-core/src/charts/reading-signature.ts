@@ -2,7 +2,6 @@ import type { SampleSource } from "../data/source.js";
 import type { Binding, ChartContent } from "../theme/document.js";
 import type { FabricPalette } from "../theme/fabric-envelope.js";
 import { chartPaintReferences } from "./chart-paint.js";
-import { lineHistorySeconds } from "./line.js";
 
 /**
  * What a chart's own plan would draw, as one string.
@@ -13,11 +12,9 @@ import { lineHistorySeconds } from "./line.js";
  * same window the plan builder asks for, because a shorter one would miss a
  * sample that arrived late with an older timestamp.
  *
- * **A line's signature carries `nowMs`, because a line draws a window placed
- * from the clock.** Two frames with one sample between them draw two different
- * pictures; gating on the sample alone held a trends chart at its data's
- * cadence. Value families read `latest` and are clock-independent, so an idle
- * one is still skipped.
+ * **A line's picture is placed by its data, so only the data moves it.** Its
+ * axis ends at its newest reading; no frame clock is an input (0124). Value
+ * families read `latest` and move with their newest reading too.
  *
  * A chart with no bindings draws a fixed placeholder, so its reading never
  * moves and it is drawn once.
@@ -33,9 +30,6 @@ import { lineHistorySeconds } from "./line.js";
  * part of what the chart would draw; a token the chart does not name is not.
  * Without that, a live palette sample forced every chart to redraw.
  *
- * Pass `playbackDelayMs` when the display's cadence overrides the source's
- * delay, so the signature asks for the history that will actually be drawn.
- *
  * **The drawn box is an input, because a gauge's gap is measured against it.**
  * A chart's option now depends on the canvas it is drawn into — the cap
  * clearance is a share of its radius — so a resize that leaves the reading still
@@ -46,21 +40,15 @@ export function chartReadingSignature(
   content: ChartContent,
   bindings: readonly Binding[],
   source: SampleSource,
-  nowMs: number,
   palette?: FabricPalette,
-  playbackDelayMs?: number,
   drawnEdgePx?: number,
 ): string {
-  const delayMs = playbackDelayMs ?? source.chartPlaybackDelayMs;
   const readings = bindings
     .map((binding) => {
       const sample =
         content.family === "line"
           ? source
-              .history(
-                binding.semanticKey,
-                lineHistorySeconds(content.settings.windowSeconds, delayMs),
-              )
+              .history(binding.semanticKey, content.settings.windowSeconds)
               .at(-1)
           : source.latest(binding.semanticKey);
       return `${binding.id}:${sample?.status ?? "-"}:${
@@ -68,10 +56,8 @@ export function chartReadingSignature(
       }:${sample?.value ?? sample?.textValue ?? "-"}`;
     })
     .join("|");
-  const drawn =
-    content.family === "line" ? `${readings}|now:${nowMs}` : readings;
   const edge = drawnEdgePx === undefined ? "-" : String(drawnEdgePx);
-  return `${inkSignature(content.settings, palette)}|${drawn}|edge:${edge}`;
+  return `${inkSignature(content.settings, palette)}|${readings}|edge:${edge}`;
 }
 
 /** The palette values the chart's own settings name, as one comparable string. */

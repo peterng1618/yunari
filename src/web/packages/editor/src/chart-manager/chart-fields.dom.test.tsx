@@ -503,7 +503,7 @@ describe("a setting one level down", () => {
     const { stage } = over(line);
     expect(
       await optionsOf(stage.host, 'data-yunari-chart-setting="interpolation"'),
-    ).toEqual(["Linear", "Step"]);
+    ).toEqual(["Linear", "Step", "Smooth"]);
   });
 });
 

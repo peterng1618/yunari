@@ -263,3 +263,39 @@ it("keeps the place and cadence when the host names an unknown provider", async 
     pollIntervalMs: 120000,
   });
 });
+
+/**
+ * A display's glass and mounting angle travel together: a shape change decides
+ * the rule the angle must satisfy, so the store decides the pair. The answer is
+ * the record's own reading, and its absent `rotation` for an upright screen
+ * reads as `0` rather than as no angle.
+ */
+it("writes a display's shape and rotation and answers the record's reading", async () => {
+  let body: unknown;
+  const { fetch, calls } = host((_url, init) => {
+    expect(init?.method).toBe("PATCH");
+    body = JSON.parse(String(init?.body));
+    return json({ id: "tv", shape: "circle", rotation: 45 });
+  });
+
+  const saved = await createHostSettingsClient({
+    fetch,
+  }).updateDisplayPresentation("tv", { shape: "circle", rotation: 45 });
+
+  expect(calls).toEqual(["PATCH /api/displays/tv"]);
+  // Both fields and nothing else: the route reads a patch, so a field it does
+  // not own would be a value this seam invented.
+  expect(body).toEqual({ shape: "circle", rotation: 45 });
+  expect(saved).toEqual({ shape: "circle", rotation: 45 });
+});
+
+it("reads an upright display's absent rotation as zero", async () => {
+  const { fetch } = host(() => json({ id: "tv", shape: "rect" }));
+
+  expect(
+    await createHostSettingsClient({ fetch }).updateDisplayPresentation("tv", {
+      shape: "rect",
+      rotation: 0,
+    }),
+  ).toEqual({ shape: "rect", rotation: 0 });
+});

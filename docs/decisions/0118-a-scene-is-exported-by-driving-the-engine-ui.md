@@ -1,7 +1,7 @@
 # 0118 — A scene is exported by driving the running engine's own UI
 
 - **Date:** 2026-10-26
-- **Status:** accepted
+- **Status:** superseded by [0124](0124-the-engine-is-converted-to-not-driven.md)
 - **Paths:** `src/web/packages/host/src/server.ts`,
   `src/web/packages/editor/src/editor-session.ts`,
   `scripts/`

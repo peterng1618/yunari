@@ -3,7 +3,6 @@ import { defaultBarSettings } from "../charts/bar.js";
 import { defaultLineSettings } from "../charts/line.js";
 import { defaultPolarBarSettings } from "../charts/polar-bar.js";
 import { defaultRadarSettings } from "../charts/radar.js";
-import { LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS } from "../data/live-source.js";
 import type { SemanticKeyDescriptor } from "../data/semantic-keys.js";
 import type { SampleSource } from "../data/source.js";
 import { emptySampleSource } from "../data/source.js";
@@ -1038,7 +1037,7 @@ describe("charts", () => {
     }
   });
 
-  it("keeps the next live segment outside the line viewport", () => {
+  it("ends the line's axis at the newest sample's own timestamp", () => {
     const store = new SampleStore();
     store.ingest(
       [
@@ -1069,26 +1068,25 @@ describe("charts", () => {
       ],
       NOW,
     );
-    const source = Object.assign(store, { chartPlaybackDelayMs: 1_000 });
-
     const { chart } = chartPlan(
       { family: "line", settings: defaultLineSettings },
       [{ id: "b", semanticKey: "cpu.load.total" }],
-      source,
+      store,
     );
 
     if (chart.family === "line") {
+      // The reading's own clock, not the browser's receive time: the axis and
+      // the points both end at `timestamp` (0124).
       expect(chart.option.xAxis.max).toBe(NOW - 1_000);
       expect("renderOverscanRightMs" in chart.option).toBe(false);
-      expect(chart.option.series[0]!.data.at(-1)).toEqual([NOW, 30]);
+      expect(chart.option.series[0]!.data.at(-1)).toEqual([NOW - 1_000, 30]);
     }
   });
 
-  it("requests the delayed line viewport's left-edge predecessor", () => {
+  it("requests the line's own window", () => {
     const windows: number[] = [];
     const source = {
       revision: 0,
-      chartPlaybackDelayMs: 1_000,
       latest: () => undefined,
       history: (_key: string, windowSeconds: number) => {
         windows.push(windowSeconds);
@@ -1104,51 +1102,20 @@ describe("charts", () => {
       [],
     );
 
-    // The axis window plus one playback delay: the source now returns the
-    // sample before its cutoff, so the two-delay compensation is gone.
-    expect(windows).toEqual([defaultLineSettings.windowSeconds + 1]);
-  });
-
-  it("drops the source's delay when the caller's cadence does not need one", () => {
-    // A 1 fps display draws once a second, so a delayed edge only makes every
-    // reading late: the caller passes 0 and both the history request and the
-    // axis edge follow it.
-    const windows: number[] = [];
-    const source = {
-      revision: 0,
-      chartPlaybackDelayMs: LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
-      latest: () => undefined,
-      history: (_key: string, windowSeconds: number) => {
-        windows.push(windowSeconds);
-        return [];
-      },
-    };
-
-    const chart = buildChartPlan(
-      "line",
-      { family: "line", settings: defaultLineSettings },
-      [{ id: "b", semanticKey: "cpu.load.total" }],
-      { source, nowMs: NOW, animate: false, playbackDelayMs: 0 },
-      [],
-    );
-
+    // The source returns the sample before the cutoff as well, so the request
+    // is the axis window and nothing more (0124).
     expect(windows).toEqual([defaultLineSettings.windowSeconds]);
-    if (chart.family === "line") {
-      expect(chart.option.xAxis.max).toBe(NOW);
-    }
   });
 
   /**
-   * **The quantisation, not a duration.** A source answers a trailing window at
-   * its own cadence, so the oldest sample it returns sits somewhere inside the
-   * first cadence above the cutoff it was handed — and the axis slides under a
-   * frame clock while the series advances a whole batch at a time. The line
-   * therefore has to be drawn to its window's left edge on *every* frame of a
-   * cadence, for any cadence the source's own delay allows, not merely for one
-   * whose samples happen to line up with the cutoff (`vg-571`).
+   * **The picture is the data's, not the frame's.** A source answers a trailing
+   * window at its own cadence, so the oldest sample it returns sits inside the
+   * first cadence above the cutoff it was handed. The axis is placed by the
+   * newest reading (0124), so every frame between two batches must draw exactly
+   * the same picture — and still reach its window's left edge (`vg-571`).
    */
   it.each([700, 950, 1_018])(
-    "draws the line to its window's left edge at every frame of a %i ms cadence",
+    "draws the same line at every frame of a %i ms cadence",
     (cadenceMs) => {
       const store = new SampleStore();
       const start = Date.parse("2026-01-01T00:10:00Z");
@@ -1173,14 +1140,14 @@ describe("charts", () => {
       }
       const source = {
         revision: store.revision,
-        chartPlaybackDelayMs: LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
         latest: (key: string) => store.latest(key),
         history: (key: string, windowSeconds: number) =>
           store.history(key, windowSeconds),
       };
 
       // Every frame of one whole cadence measured from the newest batch, as
-      // the display's 30 fps loop walks it.
+      // the display's 30 fps loop walks it. None may differ.
+      let first: unknown;
       for (let frame = 0; frame <= 30; frame += 1) {
         const nowMs = start + lastElapsed + (frame * cadenceMs) / 30;
         const chart = buildChartPlan(
@@ -1191,13 +1158,23 @@ describe("charts", () => {
           [],
         );
         if (chart.family !== "line") throw new Error("expected a line chart");
-        const data = chart.option.series[0]!.data;
+        const drawn = {
+          axis: chart.option.xAxis,
+          data: chart.option.series[0]!.data,
+        };
 
-        expect(data.length).toBeGreaterThan(0);
+        expect(drawn.data.length).toBeGreaterThan(0);
         expect(
-          data[0]![0],
+          drawn.data[0]![0],
           `frame ${frame}: the series starts after the axis does, so the line begins inside the plot`,
-        ).toBeLessThanOrEqual(chart.option.xAxis.min);
+        ).toBeLessThanOrEqual(drawn.axis.min);
+
+        if (first === undefined) first = drawn;
+        else
+          expect(
+            drawn,
+            `frame ${frame} draws a different picture from frame 0`,
+          ).toEqual(first);
       }
     },
   );

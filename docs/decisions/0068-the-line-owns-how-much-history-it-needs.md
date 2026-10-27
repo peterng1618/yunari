@@ -1,7 +1,8 @@
 # 0068 — The line owns how much history it needs, and it needs one cadence more than its axis
 
 - **Date:** 2026-10-18
-- **Status:** accepted
+- **Status:** amended by 0124 (the playback-delay term is gone; the line asks
+  for its window, and the source still returns the predecessor)
 - **Paths:** `src/web/packages/renderer-core/src/charts/line.ts`
 
 ## The problem

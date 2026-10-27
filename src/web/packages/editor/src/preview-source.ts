@@ -1,8 +1,5 @@
 import { FakeSampleSource } from "@yunari/fake-source";
-import {
-  LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
-  type SampleSource,
-} from "@yunari/renderer-core";
+import type { SampleSource } from "@yunari/renderer-core";
 
 const PREVIEW_HISTORY_SECONDS = 300;
 
@@ -16,7 +13,6 @@ export function createPreviewSource(options: {
   return {
     source: {
       revision: 0,
-      chartPlaybackDelayMs: LIVE_SOURCE_CHART_PLAYBACK_DELAY_MS,
       latest(key) {
         if (!keys.has(key)) return undefined;
         const now = options.now();

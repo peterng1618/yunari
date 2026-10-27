@@ -11,8 +11,6 @@ import type { Sample } from "../types.js";
 export interface SampleSource {
   /** Increments once per accepted ingest; a reader uses it to skip unchanged data. */
   readonly revision: number;
-  /** Intentional chart viewport lag; retained samples remain unmodified. */
-  readonly chartPlaybackDelayMs?: number;
   /** The newest sample for a semantic key, or undefined when nothing is mapped. */
   latest(semanticKey: string): Sample | undefined;
   /**

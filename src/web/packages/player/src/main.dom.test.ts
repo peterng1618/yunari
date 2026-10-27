@@ -372,23 +372,13 @@ describe("the rate the display repaints at", () => {
     for (const callback of due) callback(clock);
   }
 
-  /** The gap, on that clock, between the loop's next two repaints. It repaints
-   *  on the first frame at or past `1000 / rate`, so the gap is that interval
-   *  rounded up to a frame. */
-  function refreshCadenceMs(repaints: () => number): number {
-    let seen = repaints();
-    let first: number | undefined;
-
-    for (let frame = 0; frame < 5_000; frame += 1) {
-      driveFrame();
-      const total = repaints();
-      if (total === seen) continue;
-      seen = total;
-      if (first === undefined) first = clock;
-      else return clock - first;
-    }
-
-    throw new Error("the loop repainted fewer than twice in 5000 frames");
+  /** The chart loop's own pending timer, if it has one. At 1 fps its wake is a
+   *  timer; at 30 fps it requests a frame instead and arms no timer at all. The
+   *  publish poll's 2 s timer is excluded by interval (`vg-107`, 0124). */
+  function chartTimerDelays(): number[] {
+    return [...pendingTimers.values()]
+      .map((timer) => timer.delayMs)
+      .filter((delay) => delay <= 1_000);
   }
 
   /** How many self-re-arming wakes the page keeps alive — frames and timers
@@ -497,6 +487,10 @@ describe("the rate the display repaints at", () => {
       }),
     });
     vi.spyOn(console, "warn").mockImplementation(() => {});
+    // The page's repaint now follows its live data and its text cadence, not a
+    // per-frame line redraw (0124); the synthetic frame clock is the wall
+    // clock, or nothing would ever be due.
+    vi.spyOn(Date, "now").mockImplementation(() => clock);
 
     await import("./main.js");
     await vi.waitFor(() => {
@@ -528,26 +522,43 @@ describe("the rate the display repaints at", () => {
     };
   }
 
-  it("runs at the rate the host answered, not the 30 it used to hardcode", async () => {
-    const { repaints } = await mountAt(
+  it("sleeps on a 1 s timer at the rate the host answered, not 30 fps", async () => {
+    // The canvas is no longer the observable: a line redraws with its data, so
+    // a display with no arrivals repaints nothing between them (0124). The
+    // loop's own wake kind is what the host's rate changes.
+    await mountAt(
       "?theme=living-room&display=d1&theme-source=map&session=paired-token",
     );
 
-    await vi.waitFor(() => expect(refreshCadenceMs(repaints)).toBe(1_000));
+    await vi.waitFor(() => {
+      driveFrame();
+      expect(chartTimerDelays(), "the loop sleeps between wakes").toHaveLength(
+        1,
+      );
+    });
   });
 
   it("follows a rate change without a reload and without a second loop", async () => {
-    const { repaints } = await mountAt(
+    await mountAt(
       "?theme=living-room&display=d1&theme-source=map&session=paired-token",
     );
-    await vi.waitFor(() => expect(refreshCadenceMs(repaints)).toBe(1_000));
+    await vi.waitFor(() => {
+      driveFrame();
+      expect(chartTimerDelays()).toHaveLength(1);
+    });
     const loopsBefore = refreshLoopsStarted();
 
     chartFps = 30;
-    // The follower polls every two seconds, so the wait is for a poll rather
-    // than for a frame.
+    // A 1 s timer armed before the answer has to fire once; stepping past it
+    // is what lets the re-rated loop arm a frame instead (`setRate` does not
+    // clear a wake already scheduled).
     await vi.waitFor(
-      () => expect(refreshCadenceMs(repaints)).toBe(Math.ceil(1_000 / 30)),
+      () => {
+        driveFrame(1_001);
+        expect(chartTimerDelays(), "the loop switched to frames").toHaveLength(
+          0,
+        );
+      },
       { timeout: 5_000 },
     );
 
@@ -637,9 +648,9 @@ describe("a display whose page is hidden", () => {
     }
   }
 
-  /** Mounts a line display, whose option is rebuilt on every refresh, so its
-   *  repaints are the loop's own cadence. Returns the handle's media calls as
-   *  spies: `main.ts` holds the same handle object. */
+  /** Mounts a line display. Its line redraws with its data (0124), so a
+   *  visible repaint is the text pass on the loop's clock. Returns the handle's
+   *  media calls as spies: `main.ts` holds the same handle object. */
   async function mountLine(envelope: unknown = lineEnvelope()): Promise<{
     readonly pause: ReturnType<typeof vi.spyOn>;
     readonly resume: ReturnType<typeof vi.spyOn>;
@@ -687,6 +698,10 @@ describe("a display whose page is hidden", () => {
       }),
     });
     vi.spyOn(console, "warn").mockImplementation(() => {});
+    // The synthetic frame clock is the wall clock: a line redraws with its
+    // data, so the repaint that proves the loop is alive is the text pass
+    // (0124).
+    vi.spyOn(Date, "now").mockImplementation(() => frameTime);
 
     await import("./main.js");
     await vi.waitFor(() =>
@@ -718,42 +733,37 @@ describe("a display whose page is hidden", () => {
   }
 
   it("stops the loop and pauses media while hidden, and restores both", async () => {
-    const { pause, resume, repaints } = await mountLine();
-    driveFrames(10);
-    expect(repaints(), "the loop is repainting while visible").toBeGreaterThan(
-      0,
-    );
-    const before = repaints();
+    const { pause, resume } = await mountLine();
+    // The loop's wake is a requested frame at 30 fps, not a repaint: a line
+    // draws with its data and no sample arrives here (0124).
+    driveFrames(1);
+    expect(frames.size, "the loop is armed while visible").toBeGreaterThan(0);
 
     setHidden(true);
     window.dispatchEvent(new Event("visibilitychange"));
 
     expect(pause, "the media was paused").toHaveBeenCalledTimes(1);
-    // The line's own engine keeps a frame of its own, so the loop's wake cannot
-    // be singled out of the pending map; what proves it stopped is that driving
-    // the driver repaints nothing.
     driveFrames(30);
-    expect(repaints(), "nothing repainted while hidden").toBe(before);
+    expect(frames.size, "nothing is armed while hidden").toBe(0);
 
     setHidden(false);
     window.dispatchEvent(new Event("visibilitychange"));
 
     expect(resume, "the media was resumed").toHaveBeenCalledTimes(1);
-    driveFrames(10);
-    expect(repaints(), "the loop restarted").toBeGreaterThan(before);
+    expect(frames.size, "the loop restarted").toBeGreaterThan(0);
   });
 
   it("does not revive a loop a pagehide has disposed", async () => {
-    const { resume, repaints } = await mountLine();
+    const { resume } = await mountLine();
     window.dispatchEvent(new Event("pagehide"));
-    const before = repaints();
+    driveFrames(10);
 
     setHidden(false);
     window.dispatchEvent(new Event("visibilitychange"));
     driveFrames(10);
 
     expect(resume, "a torn-down page resumed nothing").not.toHaveBeenCalled();
-    expect(repaints(), "and repainted nothing").toBe(before);
+    expect(frames.size, "and armed nothing").toBe(0);
   });
 
   /** A line display with a video backdrop, so the media pause at mount is
@@ -776,12 +786,11 @@ describe("a display whose page is hidden", () => {
       .mockImplementation(() => {});
     setHidden(true);
 
-    const { repaints } = await mountLine(videoEnvelope());
+    await mountLine(videoEnvelope());
 
     expect(paused, "the media was paused at mount").toHaveBeenCalledTimes(1);
-    const before = repaints();
     driveFrames(30);
-    expect(repaints(), "and no refresh wake was armed").toBe(before);
+    expect(frames.size, "and no refresh wake was armed").toBe(0);
   });
 
   it("reloads for a persisted pageshow and ignores a fresh one", async () => {
@@ -1912,7 +1921,7 @@ describe("the work one refresh frame does", () => {
     ).length;
   }
 
-  it("repaints the line every frame and the rest once per revision", async () => {
+  it("redraws the line once per revision, like the rest", async () => {
     const { setOption, set } = await mount(revisionsEnvelope(true));
     streams[0]!.emit("samples", batch(42, "2026-01-01T00:00:10.000Z"));
     await vi.waitFor(() => expect(liveRevision()).toBe(1));
@@ -1924,8 +1933,8 @@ describe("the work one refresh frame does", () => {
     );
     expect(
       setOptionCalls(setOption, "line"),
-      "the line repainted every frame",
-    ).toBe(30);
+      "the line repainted once, not every frame",
+    ).toBe(1);
     expect(textWrites(set), "the bound text repainted once").toBe(1);
 
     // A second accepted ingest is a second revision: every family updates once.
@@ -1934,7 +1943,7 @@ describe("the work one refresh frame does", () => {
     driveFrame();
 
     expect(setOptionCalls(setOption, "gauge")).toBe(2);
-    expect(setOptionCalls(setOption, "line")).toBe(31);
+    expect(setOptionCalls(setOption, "line")).toBe(2);
     expect(textWrites(set)).toBe(2);
   });
 

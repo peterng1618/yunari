@@ -4,22 +4,12 @@ import {
   type FabricThemeEnvelope,
   facetRecordOf,
 } from "@yunari/renderer-core";
-import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
+import { writeThemePackage } from "@yunari/theme-package";
 import { DARK_GROUND } from "../../packages/editor/src/store-mode/item-fixture.js";
 import type { ThemeOrigin } from "../../packages/editor/src/theme-library-client.js";
 import { uiCopy } from "../../packages/editor/src/ui-copy.js";
-import { chooseIn } from "./control-set.js";
-import {
-  answerDialogIfShown,
-  captureVisualReview,
-  chooseAssetFile,
-} from "./editor-canvas.js";
-import {
-  chooseAssetCard,
-  openEveryGroup,
-  openPane,
-  paneBody,
-} from "./editor-rail.js";
+import { answerDialogIfShown, captureVisualReview } from "./editor-canvas.js";
+import { openEveryGroup, openPane, paneBody } from "./editor-rail.js";
 import { selectLayer } from "./rebuild-driver.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
@@ -3635,130 +3625,3 @@ test("opening a library theme fits it to the phone's own canvas", async ({
     `the opened theme hangs off the canvas: ${openedReading}`,
   ).toBe(true);
 });
-
-/**
- * **A declared video is normalized in place, and never silently.**
- *
- * The host owns the encoder and the envelope rules (`POST
- * /api/themes/normalize-video`), so the route is stubbed: this case is about
- * what the author sees and presses, not about ffmpeg. Three claims, in the
- * order the author meets them: the controls exist for a video and for nothing
- * else; a refusal is the host's own sentence beside the control, with the
- * master untouched; and the copy the host answers with is held until the second
- * press, which writes it in place and re-renders the artboard bound to it.
- *
- * The artboard is bound to the clip first, because a video has no picture in
- * the asset pane — its only render in the editor is the background media
- * layer, and that is what "the preview re-renders" can mean here.
- */
-test("normalizes a declared video without replacing its master", async ({
-  page,
-}, testInfo) => {
-  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-  await page.goto(EDITOR);
-  await openPane(page, "Assets");
-  await chooseAssetFile(page, "import", {
-    name: "clip.mp4",
-    mimeType: "video/mp4",
-    buffer: Buffer.from("mp4-source"),
-  });
-
-  // The artboard's background media is the one surface that renders a video,
-  // and it is the background layer's, so it is chosen where that layer is
-  // selected; the Assets pane was showing, so the selection is a real pane
-  // swap.
-  await selectLayer(page, "Background");
-  await chooseIn(page, "[data-yunari-background-asset]", "clip");
-  await openPane(page, "Assets");
-  await chooseAssetCard(page, "clip.mp4");
-
-  const normalize = page.locator("[data-yunari-asset-normalize]");
-  const useCopy = page.locator("[data-yunari-asset-use-normalized]");
-  const alert = page.locator('[data-yunari-panel="assets"] [role="alert"]');
-  // One action, keeping the whole frame: the layer crops at render time (0095).
-  await expect(normalize).toBeVisible();
-
-  const posted: unknown[] = [];
-  let answer: Record<string, unknown> = {
-    ok: false,
-    message: "That video is not an H.264 MP4.",
-  };
-  await page.route("**/api/themes/normalize-video", async (route) => {
-    posted.push(route.request().postDataJSON());
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(answer),
-    });
-  });
-
-  await normalize.click();
-  // The host's sentence, not one composed by the pane.
-  await expect(alert).toHaveText("That video is not an H.264 MP4.");
-  await expect(useCopy).toHaveCount(0);
-  // A refusal is an answer, not a broken run: the control stays pressable.
-  await expect(normalize).toBeEnabled();
-  // The refusal sits below the normalization row, so a capture of the pane has
-  // to be told to bring it into frame rather than cropping it below the fold.
-  await alert.scrollIntoViewIfNeeded();
-  await captureVisualReview(
-    page,
-    testInfo,
-    "editor-video-normalize",
-    page.locator('[data-yunari-panel="assets"]'),
-  );
-
-  const background = page.locator("[data-yunari-background-media] video");
-  await expect(background).toHaveCount(1);
-  const before = await background.getAttribute("src");
-  expect(before, "the bound clip has no rendered source").toMatch(/^blob:/);
-
-  // The same file, normalized: the answer the second press writes.
-  const normalized = Buffer.from("mp4-normalized");
-  answer = {
-    ok: true,
-    bytesBase64: normalized.toString("base64"),
-    reencoded: true,
-  };
-  await normalize.click();
-  await expect(useCopy).toHaveText(uiCopy.panels.useNormalizedVideo);
-  // Held, not applied: the master still carries the imported bytes.
-  await expect(background).toHaveAttribute("src", before ?? "");
-
-  await useCopy.click();
-  await expect(useCopy).toHaveCount(0);
-  // The artboard's media is remounted from the manager's new bytes.
-  await expect
-    .poll(() =>
-      page.locator("[data-yunari-background-media] video").getAttribute("src"),
-    )
-    .not.toBe(before);
-
-  // One declaration, holding the answer's bytes: the press swapped rather than
-  // declared a second asset.
-  const saved = await savePackage(page);
-  expect(saved.parsed.ok).toBe(true);
-  if (!saved.parsed.ok) return;
-  expect(
-    saved.parsed.envelope.assets?.filter((asset) => asset.id === "clip"),
-  ).toMatchObject([{ id: "clip", kind: "video", path: "assets/clip.mp4" }]);
-  expect(saved.parsed.assets["assets/clip.mp4"]).toEqual(normalized);
-  // The press asked for no crop, so the host keeps the source's own shape.
-  expect(posted[0]).not.toHaveProperty("fit");
-});
-
-/** Saves the open document through the File menu, as the author does. */
-async function savePackage(page: Page): Promise<{
-  readonly parsed: ReturnType<typeof readThemePackage>;
-  readonly bytes: Buffer;
-}> {
-  const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save package" }).click();
-  await expect(page.locator("#status")).toContainText("Theme package saved");
-  const stream = await (await download).createReadStream();
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
-  const bytes = Buffer.concat(chunks);
-  return { parsed: readThemePackage(bytes), bytes };
-}

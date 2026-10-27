@@ -9,6 +9,7 @@ import {
   type StaticCanvas,
   Triangle,
 } from "fabric/es";
+import type { MediaBox } from "./background-media.js";
 import { Arc, sectorPath, Wedge } from "./sector-object.js";
 
 /**
@@ -50,9 +51,36 @@ export interface ArtboardRect {
  * exact, survives a `toCanvasElement` capture, and cannot disagree with what the
  * caller happened to measure in CSS.
  */
+/** The surface behind the canvas — what a panel sees wherever the media is
+ *  absent or transparent. It is the display's own paint: the host rect for a
+ *  rect display, the disc for a circle, in host CSS pixels. Both are DOM
+ *  surfaces, so **neither turns with the composition**. */
+export interface BackdropPlate {
+  /** The surface's own box, in host CSS pixels. */
+  readonly screenRect: MediaBox;
+  /** Paints it across `region`, behind whatever is already there; `device` is
+   *  `screenRect` in the context's pixels. The caller sets `destination-over`,
+   *  so a kept media frame is never overwritten. */
+  paint(
+    ctx: CanvasRenderingContext2D,
+    region: DeviceRect,
+    device: DeviceRect,
+  ): void;
+}
+
 export interface BackdropMedia {
   /** The media layer's rect, in artboard units. */
   readonly rect: ArtboardRect;
+  /** Whole degrees clockwise the composition is turned, when this media turns
+   *  with it. Omitted is upright. */
+  readonly angle?: number;
+  /** A display-bounded layer's own box, in host CSS pixels. Present only for a
+   *  layer that fills the display: it does not turn with the composition, so its
+   *  device rect is this box rather than a mapping of `rect`. */
+  readonly screenRect?: MediaBox;
+  /** The display's own surface, painted under the media. Absent when the media
+   *  is the whole backdrop, as in the glass tests' stubs. */
+  readonly plate?: BackdropPlate;
   /** Paints the media over `region` of `ctx`, with `device` its rect in `ctx`'s
    *  own pixels. False when the source has decoded no pixels yet. */
   paint(
@@ -577,13 +605,60 @@ export function createGlass(options: GlassOptions): GlassHandle {
     const unmoved = sameRegion(panel.backdropRegion, region);
     if (!unmoved) context.clearRect(0, 0, region.width, region.height);
 
-    const painted = media.paint(context, region, {
-      left: plane[4] + media.rect.left * plane[0],
-      top: plane[5] + media.rect.top * plane[3],
-      width: media.rect.width * plane[0],
-      height: media.rect.height * plane[3],
-    });
-    if (painted) {
+    const screenRect = media.screenRect;
+    // A display-bounded layer fills the host box and does not turn with the
+    // composition, while a theme-bounded one is the composition's own rect. The
+    // uniform scale is the matrix's equal-area root, so it is the scale of a
+    // turned plane as well as an upright one.
+    const angle = screenRect === undefined ? (media.angle ?? 0) : 0;
+    const retina = canvas.getRetinaScaling();
+    const device =
+      screenRect === undefined
+        ? deviceRectOf(media.rect, plane, Math.hypot(plane[0], plane[1]))
+        : screenDevice(screenRect, retina);
+    // A round display clips its layer to the disc in the DOM
+    // (`border-radius: 50%`), so the sampler clips the same box: outside it the
+    // reader sees the plate's black, not the media's edge.
+    const disc =
+      screenRect?.radius === "circle"
+        ? screenDevice(screenRect, retina)
+        : undefined;
+    let painted: boolean;
+    if (angle === 0) {
+      if (disc === undefined) {
+        painted = media.paint(context, region, device);
+      } else {
+        context.save();
+        clipDisc(context, disc, region);
+        painted = media.paint(context, region, device);
+        context.restore();
+      }
+    } else {
+      // The media draws in its own upright frame; turning the scratch about the
+      // rect's mapped centre puts it where the composition actually is. The
+      // `save`/`restore` is what keeps the rotation off every later panel.
+      const pivotX = device.left + device.width / 2 - region.left;
+      const pivotY = device.top + device.height / 2 - region.top;
+      context.save();
+      context.translate(pivotX, pivotY);
+      context.rotate((angle * Math.PI) / 180);
+      context.translate(-pivotX, -pivotY);
+      painted = media.paint(context, region, device);
+      context.restore();
+    }
+    // **The plate is a different surface from the media** (0125). A media-less
+    // theme, or a transparent frame, shows the host's background on a rect
+    // display and the disc on a circle — both DOM boxes the composition turns
+    // *inside*, never with. It goes under whatever the media painted, so a kept
+    // frame is not overwritten, and it is never turned.
+    const plate = media.plate;
+    if (plate !== undefined) {
+      context.save();
+      context.globalCompositeOperation = "destination-over";
+      plate.paint(context, region, screenDevice(plate.screenRect, retina));
+      context.restore();
+    }
+    if (painted || plate !== undefined) {
       panel.backdropRegion = region;
       return element;
     }
@@ -671,6 +746,57 @@ function planeMatrix(canvas: StaticCanvas): Matrix {
     view[4] * retina,
     view[5] * retina,
   ];
+}
+
+/** A box stated in host CSS pixels, in the surface's own pixels. Host pixels
+ *  are what the DOM paints, so only the device ratio is missing. */
+function screenDevice(rect: DeviceRect, retina: number): DeviceRect {
+  return {
+    left: rect.left * retina,
+    top: rect.top * retina,
+    width: rect.width * retina,
+    height: rect.height * retina,
+  };
+}
+
+/** Clips the region-sized surface to a disc stated in surface pixels. */
+function clipDisc(
+  ctx: CanvasRenderingContext2D,
+  disc: DeviceRect,
+  region: DeviceRect,
+): void {
+  ctx.beginPath();
+  ctx.arc(
+    disc.left + disc.width / 2 - region.left,
+    disc.top + disc.height / 2 - region.top,
+    Math.min(disc.width, disc.height) / 2,
+    0,
+    Math.PI * 2,
+  );
+  ctx.clip();
+}
+
+/**
+ * A rect in artboard units as the surface's own pixels, **centred on its mapped
+ * centre** and scaled by the plane's uniform scale. The centre is what survives
+ * a turned plane: an axis-aligned box built from a mapped corner would be the
+ * unrotated corner, which is not where the composition put it.
+ */
+function deviceRectOf(
+  rect: ArtboardRect,
+  plane: Matrix,
+  scale: number,
+): DeviceRect {
+  const centreX = rect.left + rect.width / 2;
+  const centreY = rect.top + rect.height / 2;
+  const mappedX = plane[0] * centreX + plane[2] * centreY + plane[4];
+  const mappedY = plane[1] * centreX + plane[3] * centreY + plane[5];
+  return {
+    left: mappedX - (rect.width * scale) / 2,
+    top: mappedY - (rect.height * scale) / 2,
+    width: rect.width * scale,
+    height: rect.height * scale,
+  };
 }
 
 type Matrix = readonly [number, number, number, number, number, number];

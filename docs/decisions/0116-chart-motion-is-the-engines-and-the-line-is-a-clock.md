@@ -1,7 +1,8 @@
 # 0116 — Chart motion is the engine's; the line's is a clock
 
 - **Date:** 2026-10-25
-- **Status:** accepted
+- **Status:** superseded by 0124 for the line's placement and by 0127 for the
+  line's `smooth` removal; the value families' engine transitions are unchanged
 - **Paths:** `src/web/packages/renderer-core/src/charts/bar.ts`
   `src/web/packages/renderer-core/src/charts/line.ts`
   `src/web/packages/renderer-core/src/charts/pie.ts`
@@ -119,7 +120,9 @@ edge, and the batch that ends a stall, must not reshape anything the reader has
 already seen, and ECharts can only promise that for straight segments. **At
 1 fps the delay is zero:** that mode redraws once a second, so the delay cannot
 keep its edge inside a segment and would only make each reading two seconds
-late. Segmented fill uses custom cartesian bars,
+late. **Superseded by 0124 (2026-10-27):** the wall-clock edge and the delay it
+needed are gone; the line's axis now ends at its newest reading, so it moves
+only when a sample arrives. `smooth: false` and the no-revision rule stand. Segmented fill uses custom cartesian bars,
 native gauge bands and pie spacer items. Radar and polar bar are families, radar
 with one shared scale and polar bar with no segmentation. The reason is the
 probes: each chosen mechanism already owns the geometry and corner behaviour,

@@ -1,4 +1,5 @@
 import {
+  type AssetLicense,
   type AssetReference,
   type FabricThemeEnvelope,
   FONT_ASSET_FORMATS,
@@ -77,6 +78,14 @@ export const ASSET_FILE_EXTENSIONS = Object.keys(
 export type LocalAssetReference =
   | (AssetReference & { readonly kind: AssetKind })
   | FontAssetReference;
+
+/** What a caller knows about where an imported file came from. Only the
+ *  Wallpaper Engine import paths pass it today; every other pick has no origin
+ *  to record. */
+export interface AssetImportMetadata {
+  readonly sourceUrl?: string;
+  readonly license?: AssetLicense;
+}
 /** The kinds a canvas image can be bound to; a video or a font is packaged
     without ever becoming an object. */
 export type PlacedAssetReference = AssetReference & {
@@ -164,7 +173,10 @@ export class AssetManager {
     return imported.image;
   }
 
-  async import(file: File): Promise<LocalAssetReference> {
+  async import(
+    file: File,
+    metadata?: AssetImportMetadata,
+  ): Promise<LocalAssetReference> {
     const extension = extensionOf(file.name);
     if (extension === undefined)
       throw new Error("Unsupported asset file type.");
@@ -180,6 +192,10 @@ export class AssetManager {
       kind: type.kind,
       path,
       sha256: await sha256(bytes),
+      ...(metadata?.sourceUrl === undefined
+        ? {}
+        : { sourceUrl: metadata.sourceUrl }),
+      ...(metadata?.license === undefined ? {} : { license: metadata.license }),
     };
 
     this.#assets[path] = bytes;

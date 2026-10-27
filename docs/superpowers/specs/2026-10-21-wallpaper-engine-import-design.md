@@ -1,5 +1,11 @@
 # Wallpaper Engine as a source of Yunari background media — design
 
+**Superseded 2026-10-27** for the scene route and every UI-automation claim by
+[the 2026-10-26 rework design](2026-10-26-wallpaper-engine-import-rework-design.md)
+and [decision 0124](../../decisions/0124-the-engine-is-converted-to-not-driven.md).
+§8 now records the shipped route; the measurements below stay as the evidence
+that ruling was taken on.
+
 - **Date:** 2026-10-21
 - **Status:** implemented 2026-10-23 (plan archived; decision `0097`)
 - **Author:** investigation on Wallpaper Engine 2.8.42, build `2026-06-29 14:36:02`
@@ -11,12 +17,12 @@
 
 **This is** an importer that reads the Wallpaper Engine library already sitting
 on the author's disk and produces Yunari assets: images directly, videos through
-the shared media normalizer, and a driven export for scene themes that uses
-Wallpaper Engine's own mobile export to produce the video.
+the shared media normalizer, and a conversion for scene themes into an editable
+local project the author exports as a video by hand.
 
 **This is not** a reimplementation of Wallpaper Engine's renderer. That was
-investigated and closed; the evidence is below. Nor is it a patch of the app: the
-one UI route it drives is the shipped one, over Windows UI Automation (§2, §8).
+investigated and closed; the evidence is below. Nor is it a patch of the app: it
+writes one project directory of its own and never drives the app's UI (§8).
 
 ## Rulings taken 2026-10-21
 
@@ -24,15 +30,16 @@ These were decided during the investigation and this spec does not re-open them.
 
 **R1 — Yunari never injects into or patches Wallpaper Engine.** The vendor
 removed the only supported automation surface on purpose (§2). The importer reads
-the library, writes one project directory of its own (§8), and starts the app.
+the library, writes one project directory of its own (§8), and starts nothing.
 It never edits the app's configuration and never touches the app's own files.
-**Narrowed 2026-10-26:** the host does drive the running UI over Windows UI
-Automation to reach the engine's own mobile export, because no other shipped
-path exists ([decision
-0118](../../decisions/0118-a-scene-is-exported-by-driving-the-engine-ui.md)).
-That presses the same controls a person presses — no DLL injection, no patch, no
-remote-debugging argument, no configuration write — so every vendor refusal above
-stands.
+**Narrowed 2026-10-26, then withdrawn 2026-10-27:** decision
+[0118](../../decisions/0118-a-scene-is-exported-by-driving-the-engine-ui.md)
+briefly had the host drive the running UI over Windows UI Automation to reach the
+engine's own mobile export. Decision
+[0124](../../decisions/0124-the-engine-is-converted-to-not-driven.md) removed
+that route after measuring that the native Save dialog is unreachable from the
+host's child process; no DLL injection, patch, remote-debugging argument or
+configuration write is used.
 
 **R2 — Yunari does not render Wallpaper Engine scenes.** 98% of the local
 library's parsed scenes carry a particle system, an animation layer, a text
@@ -185,12 +192,12 @@ A CLI path would require injecting a DLL or patching `wallpaperui.exe`. That is
 fragile across every Wallpaper Engine update, and it contradicts an explicit,
 vendor-enforced refusal.
 
-This table is about a **command line**, and it still holds: there is none. It
-does not say the UI cannot be driven. §8 and
-[decision 0118](../../decisions/0118-a-scene-is-exported-by-driving-the-engine-ui.md)
-drive it over Windows UI Automation — the same controls a person presses, with
-no DLL injection, no patch, and no remote-debugging argument. The vendor's
-refusal above is specific to those three, and none of them is used.
+This table is about a **command line**, and it still holds: there is none. A
+later attempt drove the UI over Windows UI Automation (decision 0118) and was
+withdrawn by [decision 0124](../../decisions/0124-the-engine-is-converted-to-not-driven.md):
+the Save dialog it ends at is unreachable from the host's child process, which
+made the author's click irreducible. The vendor's refusal above is specific to
+DLL injection, patching and remote debugging, and none of them is used.
 
 ## 3. Why Yunari does not render scenes
 
@@ -285,9 +292,10 @@ burnt-in one is at best a duplicate and at worst a wrong time, looping the same
 minute forever. So the export carries one required author step, named before it
 happens rather than after: **delete the dynamic text objects in the editor** —
 clock, weather, media label — and export without them. The classifier reports
-whether the scene carries text (§5.2) so the sheet knows when to say it; an
-imported image or video item gets the same sentence as guidance, because its
-clock is already baked in and cannot be checked for.
+whether the scene carries text (§5.2), and the guide always states the step; a
+video or `.mpkg` import warns in its own modal that a clock or other dynamic
+text already in the video cannot be removed by Yunari and will loop as-is,
+because it is already baked in and cannot be checked for.
 
 This changes nothing about the classification: a scene with a clock and no
 particles is still a still-at-rest theme. It changes what goes into the frame.
@@ -327,9 +335,8 @@ src/web/packages/host/src/wallpaper-engine/
   pkg.ts         the scene.pkg table reader, shared by classify and unpack
   classify.ts    the still-at-rest test (§4.1)
   unpack.ts      scene.pkg → an editable project under projects/myprojects/
-  export-mobile.ts  the UI-Automation script that drives the engine's own
-                 mobile export (decision 0118)
-  source.ts      the routes' one surface: scan, bytes, project, export, harvest
+  author.ts      Steam id → persona display name, cached, timed out
+  source.ts      the routes' one surface: scan, bytes, project, author
   wire.ts        the JSON the browser receives
 ```
 
@@ -354,30 +361,26 @@ GET /api/wallpaper-engine/item/<workshopId>/asset
 
 POST /api/wallpaper-engine/item/<workshopId>/project
   → { ok: true, name, reused } after unpacking into projects/myprojects/<name>/
-    and starting the engine through Steam
+    with a "[yunari] " descriptor-title prefix; nothing is launched
   → { ok: false, reason: "no-install" | "unreadable" | "refused" }
 
-POST /api/wallpaper-engine/item/<workshopId>/mobile-export
-  → { ok: true } once the engine's own Save dialog is open; the saved package is
-    harvested in the background into projects/temp (§8)
-  → { ok: false, reason: "no-install" | "refused" | "agreement" | "no-window" |
-      "no-tile" | "no-modal" | "no-save" | "failed" }
+GET /api/wallpaper-engine/author/<steamId>
+  → { name } when Steam answers, {} otherwise; cached, 5 s timeout
 
-GET /api/wallpaper-engine/exports?since=<epochMs>
-  → { files: [ { name, format ("png" | "mp4"), modified, size } … ] }
-    newest first; only the three scoped directories (§8, step 6) are read
+POST /api/wallpaper-engine/mpkg
+  → raw binary body; { ok: true, videoBase64, reencoded, title?, workshopId? }
+  → { ok: false, message } for a non-PKGM table or a missing/empty video
 
-GET /api/wallpaper-engine/export?name=<name>
-  → the bytes with their content type, or 404
-    `name` is resolved against the three scoped directories and refused if it
-    holds a separator, `..`, or any extension other than `.png` / `.mp4`
+POST /api/themes/normalize-video
+  → raw binary body, up to 512 MiB of source; { ok, bytesBase64, reencoded }
+  → { ok: false, message } when the normalized output exceeds 80 MiB
 ```
 ```
 
 `StoredItem` carries what the editor's list needs and nothing more:
 
 ```
-workshopId, title, kind (image | video | web | scene),
+workshopId, title, kind (video | scene),
 previewUrl?, filesize, tags[], properties (read-only),
 stillAtRest?,                       // scene items only; absent when unclassified
 hasText?,                           // scene items only: the text-removal step
@@ -388,12 +391,12 @@ The payload's absolute path stays in the host. The browser addresses an item by
 `workshopId`, which is stable across Steam library moves; a path is not.
 
 The one write is `/project`, which creates one directory named by the workshop id
-under `myprojects/` and then launches the editor on it. The name is the id, not
-the title, so a second item cannot collide with the first and the author is never
-asked to invent one. `mkdir` is the existence test: if the directory is already
-there it is that item's earlier unpack, the route launches it and reports
-`reused: true`, and it writes nothing. A failure after the `mkdir` removes the
-directory this run created and answers with the reason; it never touches a
+under `myprojects/` and stops there. The name is the id, not the title, so a
+second item cannot collide with the first and the author is never asked to invent
+one. `mkdir` is the existence test: if the directory is already there it is that
+item's earlier unpack, the route reports `reused: true`, and it writes nothing
+except a preview the earlier unpack left out. A failure after the `mkdir` removes
+the directory this run created and answers with the reason; it never touches a
 directory it did not make. There is no import-side route: the editor fetches the
 asset bytes and hands them to the existing asset manager, which already owns the
 size caps and the reference model.
@@ -403,13 +406,11 @@ size caps and the reference model.
 The background-media picker gains a source: **From Wallpaper Engine**. **The
 placement is now the asset finder's** ([`2026-10-21-asset-finder-design.md`](2026-10-21-asset-finder-design.md)):
 the library is registered there as the one local source, and this section
-describes what that source shows. It shows
-a list — thumbnail, title, kind, size — filtered by kind, with a search field
-over the title. Selecting an `image` or `video` item fetches its asset and calls
-`manager.import(file)`, then sets it as the artboard background, saying once
-that a clock or weather label baked into it cannot be removed and should not be
-there (§4.1). A `scene` item starts the flow in §8. A `web` item shows why it is
-unavailable.
+describes what that source shows. It shows a **card grid** — preview, title,
+`kind · size` and, where cached, the source line — filtered by kind
+(all / video / scene) with a search field over the title. Each card carries one
+icon action: a `video` offers **Set as background**, and a `scene` offers
+**Convert to local project** (§8). `image` and `web` are not listed.
 
 When the host answers `available: false` the source is not drawn at all — the
 Add pane looks exactly as it does today on a machine without Wallpaper Engine.
@@ -510,69 +511,79 @@ license   "unknown"
 changes   the normalizer's reported profile, or "Copied unchanged"
 ```
 
-No author display name is written, because none is available offline (§1.4). The
-credits UI renders the workshop URL as the attribution link; a display name is a
-future addition that needs a Steam Web API key, and is out of scope here.
+The host's cache holds no author display name (§1.4), but the editor looks one
+up whenever the item carries a `steamId`: `GET /api/wallpaper-engine/author/<steamId>`
+fetches the public Steam community XML — no API key — and the name is written on
+the credit when it resolves. A refusal or timeout omits `author.name`, so a
+missing name is absence rather than a guessed value. The credits UI renders the
+workshop URL as the attribution link.
 
-## 8. Scene themes: the guided export
+## 8. Scene themes: convert, export by hand, import
 
-A scene cannot be imported; the author must render it once with the tool that
-can. The flow reduces that to a sequence of clicks, and Yunari does every part
-of it that does not need the author's hands.
+A scene cannot be imported, and the engine's UI cannot be driven to completion
+from the host (decision 0124). The shipped route is two Yunari actions and two
+the author takes in Wallpaper Engine's own window.
 
-1. **The author selects the theme as a background.** That is the trigger. There
-   is no separate "import a Wallpaper Engine theme" errand, and no confirmation
-   before the unpack (R8).
-2. **Yunari unpacks it, silently.** The host extracts `scene.pkg` into
-   `projects/myprojects/<workshopId>/` and writes the item's `project.json`
-   beside the members with its one packed-only field rewritten: `file` becomes
-   `scene.json`. A subscribed descriptor names `scene.json` too (measured
-   2026-10-23; the earlier sample recorded `scene.pkg`), but the directory beside
-   it carries only `scene.pkg`; a source project carries the editable
-   `scene.json` itself. The unpack writes the package's members — `scene.json`
-   included — beside the descriptor, which is the source shape the editor opens;
-   a downloaded theme cannot be opened without it (§8.1). The workshop's own
-   preview file is copied beside it as well: it is not a package member, and
-   without it the local project has no thumbnail. If the directory is already
-   there, it is an earlier unpack of the same item: nothing is rewritten except
-   the preview if it is missing, and the flow goes straight on (R8).
-3. **Yunari drives the engine's own mobile export** (decision 0118). The
-   editor's PNG/MP4 export dialog exists only in the vendor's debug builds, so
-   the shipped route is the one a person takes by hand: right-click the tile →
-   **Send to Mobile Device** → **Export .mpkg**. The host's UI Automation script
-   - starts the main UI through Steam (`steam://run/431960`) when it is not
-     open — a direct `wallpaperui.exe -project` start is refused as an improper
-     start, so **Open in Wallpaper Engine** uses the same launch and the author
-     picks the project;
-   - narrows Source to **My Wallpapers**, because a workshop item can carry the
-     same title and exporting that one raises the agreement modal instead;
-   - finds the tile by the unpacked project's own `title`, opens the context
-     menu, and presses the two menu items;
-   - sets **Keep original aspect ratio** (which makes the Video Preset
-     **Original**) and confirms.
-4. **The author saves.** The engine opens its own **Save As** dialog on
-   Documents. Its controls are not reachable from the host's child process, so
-   this is one click the flow does not take (decision 0118, Rung 3), and the
-   sheet says so. The package is left where the author saved it.
-5. **The host harvests the package.** It watches Documents for an `.mpkg`
-   written since the export started, waits for a size that holds across one poll
-   — the engine writes the package as it encodes — reads `wallpaper.mp4` out of
-   the `PKGM` table, and writes it to `<install>/projects/temp/yunari-<id>-
-   <startedAt>.mp4`.
-6. **The sheet watches for the result.** While it is open it polls the host for
-   files modified since it opened — `.png` or `.mp4` — in
-   `<install>/projects/temp/`, `<install>/projects/myprojects/`, and the Windows
-   `Videos` folder only. The newest is offered as the import. The polling scope
-   is fixed and small on purpose; Yunari does not roam the author's profile.
-7. **The asset arrives through the ordinary path.** The MP4 goes through the
-   shared media normalizer (§6) and becomes a video asset, which is then set as
-   the artboard's background media — where the author started.
-8. **The two refusals have their own sentences.** A creator who has not
-   accepted the current Steam Workshop subscriber agreement gets "mobile usage
-   permission required" instead of the export modal; the sheet names that and
-   points at opening the project in the engine by hand. A run that reaches no
-   tile, no window or no Save dialog answers with its own reason rather than a
-   generic failure.
+1. **Convert to a local project.** The scene card's one action asks the host to
+   unpack `scene.pkg` into `projects/myprojects/<workshopId>/` and stop. There is
+   no launch, no process and no watcher. The route answers
+   `{ ok, name, reused }`; the card swaps its glyph `FolderInput` →
+   `LoaderCircle` → `Check` and the status line names the project and points at
+   Wallpaper Engine's **My Projects**. A reused directory is reported as already
+   existing and nothing is rewritten except a missing preview.
+2. **The unpacked project is marked as Yunari's.** Its `project.json` gets the
+   title prefix `"[yunari] "` (one space, only when the title is not already
+   prefixed), so it is distinguishable from the workshop item it came from. The
+   directory keeps the workshop id. The members are written byte-identically
+   beside a descriptor whose `file` reads `scene.json` (§8.1).
+3. **The author opens it in Wallpaper Engine and edits it.** The guide's first
+   section says why: the engine exports a project, and a dynamic text element —
+   clock, weather label — rendered into the video must be removed or disabled
+   there first. The guide's second section gives the export sequence.
+4. **The author exports the video by hand.** In Wallpaper Engine: select the
+   scene or project → right-click → **Send to Mobile Device** → **Export
+   .mpkg** → **Keep original aspect ratio** → **Original** → **Save**. The Save
+   dialog is the author's click; a host child process could not reach its
+   controls, which is why decision 0118's automation was withdrawn.
+5. **The author imports the package.** The Wallpaper Engine tab's **Import a
+   .mpkg video** control, or either import input in the Assets pane, opens one
+   modal and runs it automatically. The author never lands in a separate export
+   sheet: picking an `.mpkg` or a video *is* the action.
+6. **The host reads, extracts and normalizes in one call.** The modal POSTs the
+   file as a raw binary body to `/api/wallpaper-engine/mpkg`, which walks the
+   `PKGM` table, extracts `wallpaper.mp4`, normalizes it and answers
+   `{ ok, videoBase64, reencoded, title?, workshopId? }`. A package with no
+   video, a malformed table or a foreign container answers `{ ok: false,
+   message }` with the host's own sentence, and the modal stays open showing it.
+   The host needs no Wallpaper Engine install for this step.
+7. **Three size bounds, split by side.** Up to **512 MiB of source** may be
+   picked; the normalized video must fit the theme writer's **per-asset bound of
+   80 MiB**, and the theme's assets together must fit **90 MiB** or the save
+   refuses it. The normalizer's capped-CRF ladder is what meets the per-asset
+   bound, and a host that still produces more than 80 MiB refuses rather than
+   importing an asset the package writer would reject. The source size is not
+   the envelope.
+8. **The asset arrives with attribution.** A grid video import writes a theme
+   credit and sets the asset's licence to `unknown` plus a source: the workshop
+   URL when cached, otherwise the Steam profile URL from the id. When the item
+   has an author Steam id the editor resolves the persona through
+   `GET /api/wallpaper-engine/author/<steamId>` — host-fetched from Steam's
+   community XML, cached per id, 5 s timeout — and writes the name when it
+   answers. A refusal or timeout omits the name and never fails the import. A
+   picked `.mpkg` writes a title-only credit (§7.3).
+9. **The tab is a card grid.** The finder draws the library like its other grids
+   (`repeat(auto-fill, minmax(140px, 1fr))`), with **all / video / scene**
+   filters. Each card has one lucide icon action — **Set as background** for a
+   video, **Convert to local project** for a scene — carrying its full name as
+   the accessible label and tooltip. Running, success and failure swap the glyph
+   and the tooltip; success persists for the modal session. A single
+   `role="status"` line under the grid carries the outcome of every action, the
+   **Guide** dialog holds the two sections above, and the grid skeleton covers
+   the first load.
+
+There is no engine launch, no UI automation, no Save-dialog watcher, no export
+folder scan and no mobile-export route: the host converts, and the author
+exports.
 
 ### 8.1 Why the editor cannot open it, and why unpacking is ours to do
 
@@ -608,13 +619,13 @@ precisely why unpacking fixes the editor but does not fix §4.1's image import.
 
 One consequence worth naming: the unpacked copy becomes a local wallpaper in the
 author's Installed tab, so the flow leaves something behind on their machine.
-The sheet says so once, where it lists the export steps, rather than asking
-before it starts (R8).
+The guide says so once, in its export section, rather than asking before the
+conversion starts (R8).
 
 Element removal is a **step the author takes and Yunari only names** (§8, step
 3): no scene is edited by the importer, and nothing about the removal is data
 Yunari stores. The author's own Wallpaper Engine property values (§1.3) are what
-the render reads.
+the engine's export reads.
 
 ## 9. What already exists, and must not be rebuilt
 
@@ -652,9 +663,10 @@ text format; `.pkg` is a simple table-then-blob container. No native API adds
 anything.
 
 **Rung 4 — ecosystem.** Searched for prior art on automating Wallpaper Engine's
-export. Found only screen-capture tools and UI automations, all of which the
-author's own vendor blocks (§2). No project has solved "render a WE scene
-headlessly", which is consistent with §3: it would be an engine port.
+export. Found only screen-capture tools and UI automations, and no project
+exports headlessly — consistent with §3, which makes it an engine port. Other
+tools consume an `.mpkg` a human exported. Decision 0124 took the manual export
+as the shipped route and removed the automation this rung was opened for.
 
 **Rung 5 — comparison.** The remaining choices are where the flow lives
 (host vs editor vs new package) and whether the asset arrives as bytes over a
@@ -682,23 +694,27 @@ are tens of lines each against formats already decoded here.
 | Item directory unreadable | item omitted from the list, counted in a `skipped` figure the host reports |
 | Preset item | never listed (§1.2) |
 | Cache row missing for a directory | listed, with attribution absent |
-| `scene.pkg` missing or unreadable | listed as `scene`, `stillAtRest` absent — an unclassified scene is exported as unchanged video, never guessed still |
-| `project` route finds the directory already there | not a failure: `ok: true, reused: true`; nothing is written and the editor opens on the existing project |
+| `scene.pkg` missing, or the package has no `scene.json` | a scene with no payload file is dropped before listing, so no card exists; a package without a `scene.json` member refuses conversion as `unreadable`, removing the directory this run created |
+| `project` route finds the directory already there | not a failure: `ok: true, reused: true`; nothing is written and the card reports it already existed |
 | `scene.pkg` table runs past the file's end, or a member write fails | the directory this run created is removed and the route answers `unreadable`; an existing directory is never touched |
-| `myprojects` not writable | `ok: false, reason: "refused"`; the flow stops and says why |
-| `-project` does not select the project | the editor still opens; the sheet names the project to pick |
-| Video over the ceiling | listed with the reason; import disabled until the normalizer can meet it (R6a) |
-| Web item | listed as unsupported with the reason |
-| Export watcher finds nothing after the sheet is closed | no error; the sheet simply closes |
+| `myprojects` not writable | `ok: false, reason: "refused"`; the card returns to idle and the status line says why |
+| Conversion fails | the status line names `no-install` / `unreadable` / `refused`; the card's button returns to idle |
+| Video over the output ceiling | a source up to 512 MiB is accepted; a normalized output still over 80 MiB is refused with the host's sentence |
+| Web item | never listed: a page is not a file Yunari can put in a theme |
+| `.mpkg` is not a Wallpaper Engine container, or holds no video | the import modal stays open with the host's own sentence |
 
-No failure is silent. Every refusal names the item and the reason, in the editor.
+No failure that reaches a card or the modal is silent: every such refusal names
+the item and the reason, in the editor. A scene dropped before listing is counted
+in the library's `skipped` total instead, because it has no card to carry a
+sentence.
 
 ## 12. What this does not decide
 
 - Whether a Yunari theme can be *published* with a Wallpaper Engine derivative
   in it. The credits file records provenance; the legal question is not answered
   here.
-- Author display names (§7.3).
+- Author display names for a profile Steam declines to describe; the import
+  proceeds with the Steam id alone (§8, step 8).
 - Web wallpapers (§4).
 - Rendering scenes (R2).
 - Where the unpacked project goes if the author's `myprojects` is on another
@@ -719,16 +735,16 @@ No failure is silent. Every refusal names the item and the reason, in the editor
    `models/*.json` for particle, animation-layer and keyframe keys, and reporting
    `hasText` for the removal step. Fixtures: a particle scene, a clock scene, a
    keyframed-property scene, a sprite-sheet model, and an unreadable package.
-3. **Editor source** — the list, the image and video paths, the refusal states.
-   Its surface is the asset finder's modal, so it lands with that spec or after
-   it, as a registry entry rather than a section of its own.
+3. **Editor source** — the card grid, the two kind actions, the guide and the
+   refusal states. Its surface is the asset finder's modal, so it lands with
+   that spec or after it, as a registry entry rather than a section of its own.
 4. **Credits member** — `theme-package` change, the importer writing entries, the
    credits surface in the theme's details.
 5. **Video path** — joins the media normalizer when it lands; before that, the
    pass-through-inside-budget behaviour of §6.
-6. **The flow** — the unpacker and its `POST` route, the mobile-export route and
-   its PowerShell script, the sheet, the watcher, and setting the result as the
-   artboard background.
+6. **The flow** — the unpacker and its `POST` route, the `.mpkg` and
+   normalize-video routes, the import modal, and the card grid. No launch, no
+   UI automation, no watcher.
 
 Phases 1–2 are independently testable and land without any Wallpaper Engine
 interaction. Phases 5 and 6 are the only ones that depend on other plans. The
@@ -740,15 +756,17 @@ the file's end, and to reuse — not rewrite — a directory that already exists
 
 1. **Does `wallpaperui.exe -project <path>` select the project in the editor?**
    Answered (2026-10-26, 2.8.42): it does not. A direct start is refused as
-   "UI improperly started", so the launch is Steam's own protocol
-   (`steam://run/431960`) and the project is listed under My Wallpapers like any
-   other local project. Decision 0118.
-2. **Where does Wallpaper Engine's editor export dialog default to?** Answered
-   for the mobile export: Documents, and it is where the host harvests the
-   saved package (§8, step 5).
+   "UI improperly started". Decision 0124 removed the launch entirely, so the
+   author opens the converted project under **My Projects**; nothing starts the
+   engine from Yunari.
+2. **Where does Wallpaper Engine's export dialog default to?** Answered for the
+   mobile export: Documents. The host no longer watches or harvests it; the
+   author saves the `.mpkg` wherever they choose and imports it through the
+   modal (§8, step 5).
 3. **The one scene package of 225 that has no `scene.json` member.** The
-   container read fine; the member is absent. It stays unclassified and routes to
-   the video export (§11), which costs only a longer export. One item is a
+   container read fine; the member is absent. It stays unclassified, and it
+   cannot be converted: the unpack refuses it as `unreadable`, so no card action
+   can produce a project or a video under the shipped route. One item is a
    bounded gap, not a measured zero.
 
 ## 15. Acceptance
@@ -759,42 +777,39 @@ the file's end, and to reuse — not rewrite — a directory that already exists
   theme, so they are neither listed nor counted as refusals. Zero items resolve
   to image here; that path is proven by fixture.
 - Every listed item has a `kind`; no listed item has `kind: "unknown"`.
-- An image item imports through the asset manager and appears as an asset with
-  its bytes unchanged (byte-for-byte comparison).
-- A video item under 32 MiB imports through the normalizer and plays in the
-  player with `loop` and no audio.
-- A video item over 32 MiB is listed with a reason and cannot be imported.
-- A scene item starts the flow and never offers "Import".
+- A video card's action imports the video through the modal and sets it as the
+  theme's background.
+- A source over **512 MiB** is refused in the modal with the host's sentence; a
+  normalized output still over **80 MiB** is refused rather than imported.
+- A scene card offers **Convert to local project** and never an import action.
 - The still test returns **true** for a fixture with text, sound, parallax and a
   mouse-interactive layer, and **false** for one with a particle object, an
   animation layer, or a property carrying `animation` keyframes. A
   sprite-animated model in a referenced `models/*.json` also returns false.
 - The classifier reports `hasText` for a scene with a text object and omits it
   otherwise.
-- Selecting a scene unpacks and launches without an intervening confirmation, and
-  writes every member byte-identically into `projects/myprojects/<workshopId>/`
-  beside a `project.json` whose `file` reads `scene.json`, plus the workshop's
-  own preview file.
-- Selecting the same scene twice writes nothing the second time, answers
-  `reused: true`, launches the existing project, and fills in a preview the
-  earlier unpack left out.
+- Converting a scene unpacks without an intervening confirmation and writes every
+  member byte-identically into `projects/myprojects/<workshopId>/` beside a
+  `project.json` whose `file` reads `scene.json` and whose title carries one
+  `"[yunari] "` prefix, plus the workshop's own preview file. Nothing is
+  launched.
+- Converting the same scene twice writes nothing the second time, answers
+  `reused: true`, and fills in only a preview the earlier unpack left out.
 - A package whose table runs past the file's end leaves no directory behind and
   answers `unreadable`; a directory that was already there is unchanged
   (byte comparison before and after).
-- The mobile export sets "Keep original aspect ratio" and "Original", and its
-  package's `wallpaper.mp4` reaches the sheet as a video asset.
-- The export routes read only the three scoped directories, and a `name` holding a
-  path separator, `..`, or an extension other than `.png` / `.mp4` is refused.
+- An author's `.mpkg` import extracts `wallpaper.mp4` through the host and sets
+  it as a video asset; a package holding no video leaves the modal open with the
+  host's own sentence.
 - A preset item is not listed.
 - With Wallpaper Engine absent, the Add pane is byte-identical to today's,
   proven by the existing DOM test passing unchanged.
 - `credits.json` round-trips through package create → validate → import, and a
   package carrying an undeclared credits file is refused.
-- A fixture item whose `project.file` is `.png` resolves to `image` and imports
-  byte-for-byte.
-- The launch starts Wallpaper Engine through Steam's own protocol and then does
-  nothing further to it; every input it sends belongs to the export route (§8,
-  R1). A failed launch is reported, not retried silently.
+- A fixture item whose `project.file` is `.png` resolves to `image` in the host;
+  the finder lists only videos and scenes.
+- Nothing starts Wallpaper Engine: no route spawns a process, opens a window or
+  writes the app's configuration.
 
 ## 16. Measurements, reproducible
 

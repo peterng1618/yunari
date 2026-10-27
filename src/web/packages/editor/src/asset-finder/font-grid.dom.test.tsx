@@ -451,9 +451,9 @@ it("does not send an empty term", async () => {
   expect(searchAssets).not.toHaveBeenCalled();
 });
 
-it("says the first search is out rather than drawing an empty grid", async () => {
+it("draws a text skeleton while the first search is out, then its results", async () => {
   // The host has not answered yet: an empty listbox would read as a broken
-  // body, so the body says the question is out.
+  // body, so the body waits with a skeleton instead.
   const answer = deferred<AssetSearchAnswer>();
   searchAssets.mockReturnValueOnce(answer.promise);
   await render();
@@ -464,7 +464,38 @@ it("says the first search is out rather than drawing an empty grid", async () =>
   });
 
   expect(document.querySelector("[data-yunari-font-grid]")).toBeNull();
-  expect(document.body.textContent).toContain(uiCopy.assets.fontSearching);
+  expect(document.querySelector("[data-yunari-skeleton-text]")).not.toBeNull();
+
+  await act(async () => {
+    void answer.resolve({
+      pages: [
+        page("curated-fonts", [interTrio]),
+        page("google-fonts", [manrope]),
+      ],
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(document.querySelector("[data-yunari-skeleton-text]")).toBeNull();
+  expect(document.querySelector("[data-yunari-font-grid]")).not.toBeNull();
+  expect(tiles()).toHaveLength(2);
+});
+
+it("says the first search is out rather than drawing an empty grid", async () => {
+  // The host has not answered yet: an empty listbox would read as a broken
+  // body, so the body waits with a skeleton.
+  const answer = deferred<AssetSearchAnswer>();
+  searchAssets.mockReturnValueOnce(answer.promise);
+  await render();
+  await type("Inter");
+  await act(async () => {
+    vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
+    await Promise.resolve();
+  });
+
+  expect(document.querySelector("[data-yunari-font-grid]")).toBeNull();
+  expect(document.querySelector("[data-yunari-skeleton-text]")).not.toBeNull();
 
   // Every source failed: the failure lines are the answer, and neither an
   // empty listbox nor "no results" is drawn.
@@ -484,6 +515,7 @@ it("says the first search is out rather than drawing an empty grid", async () =>
   });
 
   expect(document.querySelector("[data-yunari-font-grid]")).toBeNull();
+  expect(document.querySelector("[data-yunari-skeleton-text]")).toBeNull();
   expect(document.querySelectorAll("[data-yunari-font-failure]")).toHaveLength(
     2,
   );
