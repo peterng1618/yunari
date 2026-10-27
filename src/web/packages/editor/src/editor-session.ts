@@ -1012,16 +1012,22 @@ export class EditorSession {
   /**
    * The finder's Fonts body with the preview panel's actions wired. Every
    * action is the document's write; the panel only reports a press. Apply to
-   * selected preset travels only when the shell's own projection names a
-   * preset, because the panel draws that button on the callback's presence
-   * (R9).
+   * selected preset travels only when a store names a type token, because the
+   * panel draws that button on the callback's presence (R9). The inspector's
+   * token wins, else the shell's canvas projection; a paint is not a type
+   * target. Read at draw time, never held: the two stores are exclusive and a
+   * stale target must not outlive its store.
    */
   #fontPickerBody(): ReactElement {
     const document = this.#document;
     const presets = document.envelope.globals?.typeTokens as
       | TypeTokens
       | undefined;
-    const selected = this.#options.selection?.get().selectionPresetId;
+    const token = this.#options.tokenSelection?.get();
+    const selected =
+      token?.kind === "preset"
+        ? token.id
+        : this.#options.selection?.get().selectionPresetId;
     const run = (action: () => Promise<unknown>): void => {
       void document.runFontAction(async () => {
         await action();
