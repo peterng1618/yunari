@@ -434,18 +434,72 @@ describe("token inspector", () => {
       typeTokens: presets,
     });
 
-    expect(valueOf(panel.root, "[data-yunari-token-weight]")).toBe("600");
+    expect(valueOf(panel.root, "[data-yunari-token-weight]")).toBe(
+      "@yunari:weight-not-in-package:600",
+    );
+    expect(
+      panel.root.querySelector("[data-yunari-token-weight]")?.textContent,
+    ).toContain("600 (not in package)");
     await click(
       panel.root.querySelector("[data-yunari-token-weight]") as HTMLElement,
     );
     expect(optionNames()).toEqual(["400", "700", "600 (not in package)"]);
+
+    // The reading is a value, not a choice: pressing it writes nothing.
     const reading = document.querySelector(
-      '[role="option"][data-yunari-option="600"]',
+      '[role="option"][data-yunari-option="@yunari:weight-not-in-package:600"]',
     );
     expect(
       reading?.getAttribute("aria-disabled") === "true" ||
         reading?.hasAttribute("data-disabled") === true,
     ).toBe(true);
+    await pointerDown(reading as HTMLElement);
+    await click(reading as HTMLElement);
+    expect(write.onChange).not.toHaveBeenCalled();
+
+    // A held face is still choosable while the reading is the shown value.
+    const held = document.querySelector(
+      '[role="option"][data-yunari-option="manrope-700"]',
+    );
+    await pointerDown(held as HTMLElement);
+    await click(held as HTMLElement);
+    expect(write.onChange).toHaveBeenCalledTimes(1);
+    expect(write.onChange).toHaveBeenCalledWith({
+      caption: {
+        family: "Manrope",
+        weight: 700,
+        face: { assetId: "manrope-700" },
+      },
+    });
+    panel.destroy();
+  });
+
+  it("keeps the weight reading apart from a face whose asset id is that number", async () => {
+    // A local file named `300.woff2` declares the asset id `300`. Sharing an id
+    // with the reading would let the trigger resolve to that face's label and a
+    // press write it, so the reading is namespaced and its own label is shown.
+    const presets: TypeTokens = {
+      caption: { family: "Manrope", weight: 300 },
+    };
+    const write = actions(undefined, () => [
+      { assetId: "300", weight: 700, style: "normal" },
+      { assetId: "manrope-400", weight: 400, style: "normal" },
+    ]);
+    const panel = createTokenInspectorPanel(document.body, write);
+    panel.render({ kind: "preset", id: "caption" }, presets, {
+      typeTokens: presets,
+    });
+
+    expect(valueOf(panel.root, "[data-yunari-token-weight]")).toBe(
+      "@yunari:weight-not-in-package:300",
+    );
+    expect(
+      panel.root.querySelector("[data-yunari-token-weight]")?.textContent,
+    ).toContain("300 (not in package)");
+    await click(
+      panel.root.querySelector("[data-yunari-token-weight]") as HTMLElement,
+    );
+    expect(optionNames()).toEqual(["700", "400", "300 (not in package)"]);
     panel.destroy();
   });
 

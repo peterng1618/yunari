@@ -16,10 +16,10 @@ The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design
 
 ## Last completed change
 
-- **Weight is a list on both branches:** the inspector's weight is a `ControlSelect` over `facesOf(family)` for a bound or unbound token alike, and a `ReadOnlyPair` when the family declares no faces; a weight the family does not hold is a disabled `(not in package)` reading, as the family list draws an undeclared family.
+- **Weight is a list on both branches:** the inspector's weight is a `ControlSelect` over `facesOf(family)` for a bound or unbound token alike, and a `ReadOnlyPair` when the family declares no faces; a weight the family does not hold is a disabled `(not in package)` reading with a namespaced id, so a face whose asset id equals that number cannot collide with it.
 - **One write per choice:** choosing a face writes `weight` and `face.assetId` in one `onChange`, so `setTypes` records one history entry; `facesOf` matches the family case-insensitively, as `familiesOf` deduplicates it.
 - **Audit moved with the control:** the Playwright label audit now asserts the seeded weight as a reading instead of auditing it as a control; the unit census gains the weight select's value carrier.
-- **Proof:** six focused vitest files green (103 tests), `typecheck` exit 0 (e2e tsconfig included), Biome clean; three new cases red-proved; Playwright not run (port 4174, `vg-756`), so `panel-labels.spec.ts` is typechecked but unverified.
+- **Proof:** five focused vitest files green (55 tests), `typecheck` exit 0 (e2e tsconfig included), Biome clean; three cases red-proved; Playwright not run (port 4174, `vg-756`), so `panel-labels.spec.ts` is typechecked but unverified.
 
 ## Next
 

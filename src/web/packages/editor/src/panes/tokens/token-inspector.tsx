@@ -72,6 +72,10 @@ export interface FaceChoice {
  *  out rather than allowed to masquerade as an action. */
 const IMPORT_LOCAL_FONT_ID = "@yunari:import-local-font";
 const FONT_FINDER_ID = "@yunari:font-finder";
+/** The unheld weight reading's option id. Namespaced for the same reason the
+ *  family sentinels are: an id shared with a declared face would make the
+ *  trigger and a press disagree about which entry they mean. */
+const WEIGHT_READING_ID = "@yunari:weight-not-in-package:";
 
 /** The family list's trailing rows, each drawn only where its port exists. */
 function fontActionOptions(
@@ -348,8 +352,15 @@ function WeightField(props: {
     String(props.weight).trim() !== ""
       ? String(props.weight)
       : undefined;
+  // Namespaced, never the weight itself: a declared face's asset id can equal a
+  // weight (a local `300.woff2`), and two options sharing an id let Base UI
+  // resolve the trigger to the wrong label and a press write that face.
+  const missingWeightId =
+    missingWeight === undefined
+      ? undefined
+      : `${WEIGHT_READING_ID}${missingWeight}`;
   const selected =
-    heldAssetId ?? missingWeight ?? props.faces[0]?.assetId ?? "";
+    heldAssetId ?? missingWeightId ?? props.faces[0]?.assetId ?? "";
   return (
     <ControlSelect
       label={uiCopy.panels.weight}
@@ -360,11 +371,11 @@ function WeightField(props: {
           id: face.assetId,
           name: `${face.weight}${face.style === "italic" ? " italic" : ""}`,
         })),
-        ...(missingWeight === undefined
+        ...(missingWeight === undefined || missingWeightId === undefined
           ? []
           : [
               {
-                id: missingWeight,
+                id: missingWeightId,
                 name: `${missingWeight} ${uiCopy.panels.notInPackage}`,
                 disabled: true,
               },
