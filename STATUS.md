@@ -5,11 +5,11 @@ Branch: `peterng1618/fix-font-trio` (worktree `fix-font-trio`)
 
 ## Current objective
 
-Two plans are complete — the type-token model and the display's own motion — and this tree carries both; local `main` takes it next, then the backlog drain.
+Two plans are complete — the type-token model and the display's own motion — and local `main` at `1d0b9b9` carries both; next is the backlog drain.
 
 ## Active work
 
-- **No plan is running:** the type-token plan's six phases and the display-animation plan's seven tasks are done; `main` (at `b3a2b98`) is merged in here and this branch merges back next.
+- **No plan is running:** the type-token plan's six phases and the display-animation plan's seven tasks are done; `main` (at `b3a2b98`) is merged in here, and local `main` now points at this branch's tip.
 - **The type-token model is in:** a token names a face whereas size, line height and tracking belong to each run (`0128`).
 - **Display motion is in:** one fixed 30 fps `startSceneRefresh` loop, a transition pump in `YunariChart`, skip-unchanged bound text, and no chart-rate setting anywhere (`0129`).
 - **The type-token final review is discharged:** its one blocking defect is fixed and re-reviewed FIXED (`a84f7d90`), and its should-fix is filed as `vg-772`.
@@ -26,10 +26,9 @@ Two plans are complete — the type-token model and the display's own motion —
 
 ## Next
 
-1. Fast-forward local `main` to this merge so the user can test both.
-2. Resume the backlog-drain plan at Phase 0, a reproduction pass over the register.
-3. Verify the retargeted `editor.spec.ts` cases when preview port 4174 frees.
-4. Owner test of a gauge mid-transition on a real display.
+1. Resume the backlog-drain plan at Phase 0, a reproduction pass over the register.
+2. Verify the retargeted `editor.spec.ts` cases when preview port 4174 frees.
+3. Owner test of a gauge mid-transition on a real display.
 
 ## Blockers / unverified
 
