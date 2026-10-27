@@ -18,9 +18,9 @@ away and every chart's transition is blitted while it runs.
 
 ## Last completed change
 
-- **The rate leaves the host:** `chartFps` is gone from the display record, the patch and the poll, with `chartFpsFor` and the patch's rate rule; a record written with one still loads and plays.
-- **The player stops following a rate:** `onRateChange` and the player's `chartRate` go; the loop starts at 30 and is never re-rated.
-- **Proof:** the legacy-record test fails on the old store and passes now; 452 pass in the four touched suites, 2,337 across host and player; typecheck and biome exit 0.
+- **One cadence:** `startSceneRefresh(refresh, frames?, options?)` replaces `startChartRefresh`; the `ChartRefreshRate` type, `setRate`, the 1 fps timer branch and `setTimer`/`clearTimer` are gone.
+- **The setting leaves the editor:** the View menu's rate row, the three copy strings, `EditorViewControls.chartRefreshRate`/`setChartRefreshRate` and `editor-main`'s rate state go with it; the source toggle remains.
+- **Proof:** 11 rewritten loop tests failed first, 71 pass in the touched suites and 3,357 across scene-fabric, editor and player; all workspace typechecks and biome exit 0.
 
 ## Next
 
@@ -33,6 +33,6 @@ away and every chart's transition is blitted while it runs.
 
 - **Browser reds, all pre-existing:** `host-walkthrough`'s field case, publish-loop's edit-in-`own-host` run and host-player's round-trip reproduce identically at merge-base `a32b7728`; host-player's theme-chooser case is `vg-758`.
 - **`store-worker/src/auth/return-page.ts` hands a one-time token to any loopback port** — closing it needs a nonce or pinned-port binding, a design decision.
-- **The 30 fps browser arm is unmeasured:** `this-pc` is 1 fps by kind and cannot hold a rate; only the unit cadence case covers rate-independence.
+- **The transition pump is unit-proven, not browser-proven:** `chart-object.dom.test.ts` drives the engine's events by hand; no capture shows a gauge mid-transition on a real display.
 - **No live GitHub Actions run and no real device:** `publish.yml`'s triggers, artifact hand-off and `npm ls` step are syntax-checked only, and no real phone, Linux or macOS host was exercised.
 - **Playwright alpha shadows the runner (`vg-756`) and the importer's save-wire residual is `vg-761`:** run specs through `node node_modules/@playwright/test/cli.js`, and keep a video under about 72 MiB until the save route's base64 bound is fixed.

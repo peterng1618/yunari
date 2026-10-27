@@ -1,36 +1,36 @@
-export type ChartRefreshRate = 1 | 30;
-
 type FrameDriver = {
   readonly requestFrame: (callback: FrameRequestCallback) => number;
   readonly cancelFrame: (frame: number) => void;
-  /** Wakes the loop without a browser frame, so the 1 fps cadence sleeps
-      instead of requesting a frame every 16 ms and discarding it. */
-  readonly setTimer: (callback: () => void, delayMs: number) => number;
-  readonly clearTimer: (id: number) => void;
 };
 
 const browserFrames: FrameDriver = {
   requestFrame: (callback) => window.requestAnimationFrame(callback),
   cancelFrame: (frame) => window.cancelAnimationFrame(frame),
-  setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
-  clearTimer: (id) => window.clearTimeout(id),
 };
 
-interface ChartRefreshOptions {
+/** The scene's one cadence: fast enough for a transition, bounded for a display. */
+const FRAME_INTERVAL_MS = 1_000 / 30;
+
+interface SceneRefreshOptions {
   /** Reports a refresh that threw, once per distinct message. A refresh that
       throws still reschedules, so one bad chart degrades the cadence instead of
       stopping the scene from repainting at all. */
   readonly onError?: (message: string) => void;
 }
 
-/** Repaints charts at a capped browser-frame rate without changing telemetry cadence. */
-export function startChartRefresh(
+/**
+ * Repaints the scene at 30 fps without changing telemetry cadence.
+ *
+ * There is no rate to set. A chart asks for its own repaint when its pixels
+ * change (0128), and this loop is the ceiling on how often the scene as a whole
+ * may be redrawn: a sample pass that finds nothing new does no work, and a
+ * minute clock paints once a minute however often this wakes.
+ */
+export function startSceneRefresh(
   refresh: () => void,
-  initialRate: ChartRefreshRate,
   frames: FrameDriver = browserFrames,
-  options: ChartRefreshOptions = {},
+  options: SceneRefreshOptions = {},
 ): {
-  setRate(rate: ChartRefreshRate): void;
   /** Stops repainting until `start()`: the page is going away. */
   stop(): void;
   /** Re-arms a stopped loop. Idempotent, because `pageshow` fires on the first
@@ -39,12 +39,10 @@ export function startChartRefresh(
   /** Ends the loop for good. `start()` after this does nothing. */
   dispose(): void;
 } {
-  let rate = initialRate;
-  // The time the next repaint is due, rather than the last one: at 1 fps the
-  // loop has to know how long it may sleep before asking for a frame at all.
+  // The time the next repaint is due, rather than the last one, so a wake that
+  // lands between two animation frames keeps the cadence instead of costing one.
   let nextDueMs: number | undefined;
   let frame: number | undefined;
-  let timer: number | undefined;
   // Three lifetimes, not two. The page's own (`stop`/`start`) is separate from
   // the editor's, because a page frozen into the back/forward cache comes back
   // — and a loop that could only be stopped came back dead (vg-510).
@@ -55,26 +53,6 @@ export function startChartRefresh(
   const clearWake = (): void => {
     if (frame !== undefined) frames.cancelFrame(frame);
     frame = undefined;
-    if (timer !== undefined) frames.clearTimer(timer);
-    timer = undefined;
-  };
-
-  // Exactly one wake at a time. At 30 fps that is a frame; at 1 fps it is a
-  // timer for the remainder, because a frame requested only to be discarded
-  // costs the same repaint budget as one that paints.
-  const armWake = (nowMs: number): void => {
-    if (rate === 1 && nextDueMs !== undefined) {
-      timer = frames.setTimer(
-        () => {
-          timer = undefined;
-          if (state !== "running") return;
-          frame = frames.requestFrame(tick);
-        },
-        Math.max(0, nextDueMs - nowMs),
-      );
-      return;
-    }
-    frame = frames.requestFrame(tick);
   };
 
   const tick = (nowMs: number): void => {
@@ -83,22 +61,23 @@ export function startChartRefresh(
     // The first wake has no due time: refresh immediately, then fall into the
     // cadence from now.
     const due = nextDueMs === undefined || nowMs >= nextDueMs;
-    if (nextDueMs === undefined) nextDueMs = nowMs + 1_000 / rate;
+    if (nextDueMs === undefined) nextDueMs = nowMs + FRAME_INTERVAL_MS;
     else if (nowMs >= nextDueMs) {
       // A wake late by less than one interval keeps the original cadence, so a
       // due time falling between two 60 Hz frames does not cost a frame. One
       // interval late or more re-anchors — exactly one would otherwise put the
       // next due at `now`, a second repaint on the very next frame — and is
       // also how a stall's backlog is dropped.
-      const interval = 1_000 / rate;
       nextDueMs =
-        nowMs - nextDueMs >= interval ? nowMs + interval : nextDueMs + interval;
+        nowMs - nextDueMs >= FRAME_INTERVAL_MS
+          ? nowMs + FRAME_INTERVAL_MS
+          : nextDueMs + FRAME_INTERVAL_MS;
     }
     // **Scheduled before the refresh, not after.** A refresh that throws would
     // otherwise end the loop, and because every repaint in the scene goes
     // through this one function — charts, bound text, the clock — the whole
     // display would stop updating for good, with only the first failure logged.
-    armWake(nowMs);
+    frame = frames.requestFrame(tick);
     if (!due) return;
     try {
       refresh();
@@ -115,9 +94,6 @@ export function startChartRefresh(
   frame = frames.requestFrame(tick);
 
   return {
-    setRate(nextRate: ChartRefreshRate): void {
-      rate = nextRate;
-    },
     stop(): void {
       if (state !== "running") return;
       state = "stopped";

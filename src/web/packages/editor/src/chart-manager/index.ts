@@ -182,12 +182,12 @@ export class ChartManager {
   /**
    * The reading each chart last drew with, keyed by object id.
    *
-   * The frame loop calls `refresh` at the author's chart rate, which makes that
-   * rate the ceiling on how often a chart *may* re-apply — not a promise that
-   * every tick draws every chart. Re-applying an option the chart already has
-   * made ECharts repaint, and Fabric redraw the whole document, thirty times a
-   * second for an identical picture (vg-107). A chart absent from this map has
-   * never been drawn by this manager and is drawn.
+   * The scene loop calls `refresh` at a fixed 30 fps, which makes that cadence
+   * the ceiling on how often a chart *may* re-apply — not a promise that every
+   * tick draws every chart. Re-applying an option the chart already has made
+   * ECharts repaint, and Fabric redraw the whole document, thirty times a second
+   * for an identical picture (vg-107). A chart absent from this map has never
+   * been drawn by this manager and is drawn.
    */
   readonly #drawnReading = new Map<string, string>();
 

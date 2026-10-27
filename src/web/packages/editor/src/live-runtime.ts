@@ -139,12 +139,11 @@ export class LiveRuntime {
    * The refresh loop's own call.
    *
    * Separate from `refresh` only in *when* it runs, never in what it does. The
-   * loop runs at the author's chart rate — 30 fps by default — and a chart that
-   * is animating does not make a clock's seconds change any faster, so the
-   * repaint is on the reading's cadence instead, and the canvas is not asked to
-   * render at all until then: an unchanged scene re-rendered is thirty identical
-   * pictures a second, and the charts request their own render when they move
-   * (`chart-manager/index.ts:456`).
+   * scene loop is a fixed 30 fps (0128), and a chart that is animating does not
+   * make a clock's seconds change any faster, so the repaint is on the reading's
+   * cadence instead, and the canvas is not asked to render at all until then: an
+   * unchanged scene re-rendered is thirty identical pictures a second, and the
+   * charts request their own render when they move (`chart-manager/index.ts`).
    *
    * **One interval, not two.** `applyAuthoredText` repaints every object from
    * its authored runs, and a value run with no sample resolves to its

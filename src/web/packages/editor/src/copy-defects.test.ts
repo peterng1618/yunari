@@ -302,9 +302,10 @@ it("states a missing reading as a gap rather than a zero or a dash", async () =>
  * `publish-indicator.dom.test.tsx`). The diagnostics pair leads its message,
  * asserted by `diagnostic-message.dom.test.tsx`.
  *
- * **Two readings, both proven.** The View menu carries `chartRefresh` and
- * `dataSource`. `shell-layout.dom.test.tsx` opens each submenu, picks a value
- * and asserts the owner was called, so this case does not open the menu again
+ * **One reading, proven.** The View menu carries `dataSource`, and the chart
+ * rate row is gone with the setting itself (0128). `shell-layout.dom.test.tsx`
+ * opens the submenu, picks the other value and asserts the owner was called, so
+ * this case does not open the menu again
  * (50–90s per jsdom open, `vg-135`). The value-runs setting is gone: a value
  * run's token is the editing view and has no standing mode.
  */

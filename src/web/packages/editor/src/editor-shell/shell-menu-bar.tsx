@@ -175,11 +175,9 @@ export function ShellMenuBar({
   const noObject = noSelection || kind === "background";
   const session = store.bridge?.session;
   const [source, setSource] = useState<"preview" | "live">("preview");
-  const [rate, setRate] = useState<1 | 30>(30);
 
   useEffect(() => {
     setSource(getView()?.sourceMode() ?? "preview");
-    setRate(getView()?.chartRefreshRate() ?? 30);
   }, [getView, selection.selectedCount]);
 
   const item = (
@@ -263,18 +261,6 @@ export function ShellMenuBar({
           onChange={(next) => {
             getView()?.setSourceMode(next);
             setSource(next);
-          }}
-        />
-        <ViewSetting
-          label={uiCopy.view.chartRefresh}
-          value={rate}
-          options={[
-            [30, uiCopy.view.fps30],
-            [1, uiCopy.view.fps1],
-          ]}
-          onChange={(next) => {
-            getView()?.setChartRefreshRate(next);
-            setRate(next);
           }}
         />
       </MenuGroup>

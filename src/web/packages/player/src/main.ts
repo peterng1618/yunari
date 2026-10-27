@@ -21,7 +21,7 @@ import {
   refreshBoundImages,
   refreshBoundText,
   reviveThemeEnvelope,
-  startChartRefresh,
+  startSceneRefresh,
   YunariChart,
 } from "@yunari/scene-fabric";
 import { Group } from "fabric/es";
@@ -493,7 +493,7 @@ async function startHostedTheme(
           onError: (message) => showConnectionState("refused", 0, message),
         })
       : undefined;
-  const chartRefresh = startChartRefresh(refresh, 30, undefined, {
+  const chartRefresh = startSceneRefresh(refresh, undefined, {
     onError: reportRepaintError,
   });
   const stopFollowing = followPublished(session, reResolve, {

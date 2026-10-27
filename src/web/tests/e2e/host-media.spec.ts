@@ -518,9 +518,8 @@ async function recordPerFrameWebm(page: Page): Promise<Uint8Array> {
  * which is a named gap, not a claim here.)
  *
  * The **player** is different, and this is the measurement rather than the
- * expectation. Both of its mount paths start `startChartRefresh(tick, 30)` on
- * `requestAnimationFrame`, so it already repaints on every animation frame the
- * compositor offers — and a video frame is presented *as* an animation frame,
+ * expectation. It starts `startSceneRefresh(tick)` on `requestAnimationFrame`,
+ * so it already repaints on every animation frame the compositor offers — and a video frame is presented *as* an animation frame,
  * so the callback's `requestRenderAll` lands in a frame that already has one
  * and Fabric coalesces the two into a single render. Counted over three
  * seconds on this machine, against the per-frame clip above:
