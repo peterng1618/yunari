@@ -417,6 +417,38 @@ describe("token inspector", () => {
     panel.destroy();
   });
 
+  it("draws a weight the family does not hold as a reading in the list", async () => {
+    // Changing family keeps the weight, so a weight the new family does not
+    // hold is reachable. It stays the token's weight and is marked as not in
+    // the package, like the family list's own reading, rather than opening on
+    // the lightest face and printing a weight the token does not have.
+    const presets: TypeTokens = {
+      caption: { family: "Manrope", weight: 600 },
+    };
+    const write = actions(undefined, () => [
+      { assetId: "manrope-400", weight: 400, style: "normal" },
+      { assetId: "manrope-700", weight: 700, style: "normal" },
+    ]);
+    const panel = createTokenInspectorPanel(document.body, write);
+    panel.render({ kind: "preset", id: "caption" }, presets, {
+      typeTokens: presets,
+    });
+
+    expect(valueOf(panel.root, "[data-yunari-token-weight]")).toBe("600");
+    await click(
+      panel.root.querySelector("[data-yunari-token-weight]") as HTMLElement,
+    );
+    expect(optionNames()).toEqual(["400", "700", "600 (not in package)"]);
+    const reading = document.querySelector(
+      '[role="option"][data-yunari-option="600"]',
+    );
+    expect(
+      reading?.getAttribute("aria-disabled") === "true" ||
+        reading?.hasAttribute("data-disabled") === true,
+    ).toBe(true);
+    panel.destroy();
+  });
+
   it("prints the weight list in the order the producer gave it", async () => {
     // `facesOf` already answers lightest first, `italic` after `normal`. A sort
     // here would put `700 italic` before `700` and discard that order.

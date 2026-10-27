@@ -215,6 +215,29 @@ describe("EditorSession weight list", () => {
     session.destroy();
   });
 
+  it("matches the family case-insensitively, as the family list does", async () => {
+    // `familiesOf` deduplicates case-insensitively, so `inter` and `Inter` are
+    // one family. A token kept as `manrope` must still see the declared
+    // `Manrope` faces, or its weight row goes read-only for a case difference.
+    const assetManager = new AssetManager();
+    for (const face of FACES) {
+      await assetManager.adoptFont(face, new Uint8Array([1]));
+    }
+    const session = createSession(assetManager);
+
+    // An upper-case spelling of the declared `Manrope`: both sides of the
+    // comparison have to be lowered, not just the declaration.
+    expect(
+      (inspectorPort.facesOf?.("MANROPE") ?? []).map((face) => face.assetId),
+    ).toEqual([
+      "manrope-latin-400",
+      "manrope-latin-700",
+      "manrope-latin-700-italic",
+    ]);
+
+    session.destroy();
+  });
+
   it("records one history entry for a chosen weight and its face", async () => {
     // The panel writes both halves in one `onChange`; the session half is one
     // `setTypes`, so history records the choice once rather than an

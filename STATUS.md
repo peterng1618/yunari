@@ -16,9 +16,10 @@ The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design
 
 ## Last completed change
 
-- **Weight is a list on both branches:** the inspector's weight is a `ControlSelect` over `facesOf(family)` for a bound or unbound token alike, and a `ReadOnlyPair` when the family declares no faces; the free-text weight row is gone.
-- **One write per choice:** choosing a face writes `weight` and `face.assetId` in one `onChange`, so `setTypes` records one history entry; the list opens on the bound face, else the face matching the token's weight.
-- **Proof:** four focused vitest files green (52 tests) plus `editor-session.dom.test.ts` (49), `typecheck` exit 0; three new cases red-proved (see the task report); Playwright not run (port 4174, `vg-756`).
+- **Weight is a list on both branches:** the inspector's weight is a `ControlSelect` over `facesOf(family)` for a bound or unbound token alike, and a `ReadOnlyPair` when the family declares no faces; a weight the family does not hold is a disabled `(not in package)` reading, as the family list draws an undeclared family.
+- **One write per choice:** choosing a face writes `weight` and `face.assetId` in one `onChange`, so `setTypes` records one history entry; `facesOf` matches the family case-insensitively, as `familiesOf` deduplicates it.
+- **Audit moved with the control:** the Playwright label audit now asserts the seeded weight as a reading instead of auditing it as a control; the unit census gains the weight select's value carrier.
+- **Proof:** six focused vitest files green (103 tests), `typecheck` exit 0 (e2e tsconfig included), Biome clean; three new cases red-proved; Playwright not run (port 4174, `vg-756`), so `panel-labels.spec.ts` is typechecked but unverified.
 
 ## Next
 
@@ -31,5 +32,4 @@ The [type-token model](docs/superpowers/specs/2026-10-27-type-token-model-design
 - **Two unit files are red on purpose:** `new-object-defaults.test.ts` (Task 5.4) and `selection-inspector/runs.dom.test.ts` (Task 5.2).
 - **The rebuilt composition falls back to role defaults** (28 runs, none with `style.fontSize`) until Task 5.2 adds the size row; the authored 46/17/108 return then.
 - **`new-object-defaults.ts` still reads `size`/`trioRole` off tokens** until Task 5.4.
-- **The rewritten e2e reassignment case is unverified:** Playwright's main config could not run (port 4174 owned elsewhere, `vg-756`).
-- **`tests/e2e/editor.spec.ts`'s type-token case is stale:** it fills `[data-yunari-token-family]` and `[data-yunari-token-weight]` as text and a removed `[data-yunari-token-letter-spacing]` row; the phase-close e2e pass must rewrite it.
+- **Three Playwright cases are unverified or stale:** the rewritten reassignment case and `panel-labels.spec.ts`'s weight reading could not run (port 4174, `vg-756`); `editor.spec.ts`'s type-token case still fills family and weight as text and scrolls to the removed `letter-spacing` row, and the phase-close e2e pass must rewrite it.

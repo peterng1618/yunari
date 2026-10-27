@@ -318,8 +318,10 @@ function TokenFields(props: {
  *
  * The list shows the bound face when there is one, else the face whose weight
  * the token already names, so an unbound token opens on its own weight. A
- * weight the family does not hold has no entry; the list then opens on the
- * lightest face, and the record keeps its weight until one is chosen.
+ * weight the family does not hold — reachable by changing family, which keeps
+ * the weight — is offered as a disabled reading, as the family list draws a
+ * family the package does not declare, rather than pretending the lightest
+ * face is the choice.
  */
 function WeightField(props: {
   readonly faces: readonly FaceChoice[];
@@ -336,21 +338,38 @@ function WeightField(props: {
       />
     );
   }
-  const selected =
+  const heldAssetId =
     props.faces.find((face) => face.assetId === props.boundAssetId)?.assetId ??
     props.faces.find((face) => String(face.weight) === String(props.weight))
-      ?.assetId ??
-    props.faces[0]?.assetId ??
-    "";
+      ?.assetId;
+  const missingWeight =
+    heldAssetId === undefined &&
+    props.weight !== undefined &&
+    String(props.weight).trim() !== ""
+      ? String(props.weight)
+      : undefined;
+  const selected =
+    heldAssetId ?? missingWeight ?? props.faces[0]?.assetId ?? "";
   return (
     <ControlSelect
       label={uiCopy.panels.weight}
       data={{ "data-yunari-token-weight": "" }}
       value={selected}
-      options={props.faces.map((face) => ({
-        id: face.assetId,
-        name: `${face.weight}${face.style === "italic" ? " italic" : ""}`,
-      }))}
+      options={[
+        ...props.faces.map((face) => ({
+          id: face.assetId,
+          name: `${face.weight}${face.style === "italic" ? " italic" : ""}`,
+        })),
+        ...(missingWeight === undefined
+          ? []
+          : [
+              {
+                id: missingWeight,
+                name: `${missingWeight} ${uiCopy.panels.notInPackage}`,
+                disabled: true,
+              },
+            ]),
+      ]}
       onChange={(assetId) => {
         const face = props.faces.find(
           (candidate) => candidate.assetId === assetId,

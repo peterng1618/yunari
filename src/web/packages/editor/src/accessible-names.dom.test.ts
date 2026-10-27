@@ -91,8 +91,9 @@ const FIELDS = "input,select,textarea";
  *
  * A carrier is hidden by `clip-path`, not by `[hidden]`, so it is in the markup
  * and in no accessibility tree: unfocusable and unannounced, exactly what the
- * file pickers are. The Tokens pane's five selects — the palette's three and the
- * token inspector's role and reassignment choosers — the run
+ * file pickers are. The Tokens pane's five selects — the paint section's kind
+ * and reassignment, and the selected type token's family, weight and
+ * reassignment choosers — the run
  * editor's five — its
  * four selects and its swatch, which is `SelectControl` with an adornment — the
  * inspector's three paint selects and its three toggles are what this exclusion is

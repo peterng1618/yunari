@@ -57,14 +57,19 @@ const PAINT_CONTROLS = [
  *  now: one pressable row per token and the add action. The chooser and the
  *  field set that went with it are the token inspector's, so they are measured
  *  there — after a token row press replaces the paint section. The computed
- *  name is a reading rather than a control, so it is not audited here. */
+ *  name is a reading rather than a control, so it is not audited here.
+ *
+ *  The weight is not a control in this scenario: the token the add mints is on
+ *  `Segoe UI, sans-serif`, a family the fresh theme declares no faces for, so
+ *  the weight renders as a reading. It is asserted below rather than audited
+ *  as a control; the weight select's name is covered by
+ *  `accessible-names.dom.test.ts`, whose fixture supplies a declared face. */
 const PRESET_CONTROLS = [
   "[data-yunari-type-preset-row]",
   "[data-yunari-type-preset-add]",
   // `unbind` renders only for a token bound to a packaged face, and the added
   // token is free, so that selector is audited when a scenario binds one.
   "[data-yunari-token-family]",
-  "[data-yunari-token-weight]",
   "[data-yunari-token-unbind]",
   // The delete pair renders only for an unroled token, so the audit selects
   // the token the add mints rather than one of the three roles.
@@ -206,6 +211,11 @@ test.describe("the settings panels name every control", () => {
     await expect(presetRow).toBeVisible();
     await presetRow.click();
     await audit(PRESET_CONTROLS);
+    // The weight is drawn as a reading in this scenario, not skipped: the fresh
+    // theme declares no faces for the minted token's family, so the row prints
+    // the seeded weight rather than a select (the comment on PRESET_CONTROLS).
+    // A silent `count === 0` skip would let the row vanish unmeasured.
+    await expect(page.locator("[data-yunari-token-weight]")).toHaveText("300");
     await openPane(page, "Document");
     await audit(DOCUMENT_CONTROLS);
     // The background's controls are the selection inspector's, which renders

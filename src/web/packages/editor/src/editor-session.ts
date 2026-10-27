@@ -504,13 +504,15 @@ export class EditorSession {
         // The package's own faces, so a bound preset's weight is chosen from
         // what it holds rather than typed into a fallback. A packaged family
         // declares one face per subset, so the list collapses each
-        // weight-and-style group to one entry before the control sees it.
+        // weight-and-style group to one entry before the control sees it. The
+        // family is compared case-insensitively, as `familiesOf` deduplicates
+        // it: a token kept as `inter` is still on the declared `Inter`.
         facesOf: (family) =>
           weightChoices(
             options.assetManager.declarations.flatMap((asset) =>
               asset.kind === "font" &&
               "family" in asset &&
-              asset.family === family
+              asset.family.toLowerCase() === family.toLowerCase()
                 ? [
                     {
                       assetId: asset.id,
