@@ -158,15 +158,13 @@ describe("new object defaults", () => {
     expect(defaults).toMatchObject({ originX: "left", originY: "top" });
   });
 
-  it("derives per-run palette and type-preset references for new text", () => {
+  it("derives per-run palette and type-token references for new text", () => {
     const defaults = createNewTextDefaults(globals, "New text", placement);
 
     expect(defaults).toMatchObject({
       fill: "#102030",
       fontFamily: "Inter",
-      fontSize: 16,
       fontWeight: 500,
-      lineHeight: 1.2,
       [YUNARI_PAINT_PROPERTY]: { fill: "palette.ink" },
       [YUNARI_TEXT_PROPERTY]: {
         runs: [
@@ -178,6 +176,22 @@ describe("new object defaults", () => {
         ],
       },
     });
+    // The token names the face; the run wears the size, and an unauthored one
+    // takes the renderer's role default rather than a value baked into the
+    // scene at insert time.
+    expect(defaults).not.toHaveProperty("fontSize");
+    expect(defaults).not.toHaveProperty("lineHeight");
+  });
+
+  it("omits a weight the chosen token does not carry", () => {
+    const defaults = createNewTextDefaults(
+      { ...globals, typeTokens: { body: { family: "Inter" } } },
+      "New text",
+      placement,
+    );
+
+    expect(defaults).not.toHaveProperty("fontWeight");
+    expect(defaults.fontFamily).toBe("Inter");
   });
 
   it("refuses to invent local paint or type values when references are unavailable", () => {

@@ -50,9 +50,7 @@ interface NewTextDefaults extends NewPaintDefaults {
   readonly originX: "left";
   readonly originY: "top";
   readonly fontFamily: string;
-  readonly fontSize: number;
   readonly fontWeight?: string | number;
-  readonly lineHeight?: number;
   readonly [YUNARI_TEXT_PROPERTY]: {
     readonly runs: readonly [
       {
@@ -556,13 +554,7 @@ export function createNewTextDefaults(
     ...placed(placement),
     ...(box === undefined ? {} : { box }),
     fontFamily: preset.family,
-    // ponytail: the legacy starter size stands in until Task 1.3 lands
-    // `defaultTypeSize`; a token without one seeds a body-sized run.
-    fontSize: preset.size ?? 16,
     ...(preset.weight === undefined ? {} : { fontWeight: preset.weight }),
-    ...(preset.lineHeight === undefined
-      ? {}
-      : { lineHeight: preset.lineHeight }),
     [YUNARI_TEXT_PROPERTY]: {
       runs: [
         { kind: "literal", text, typeToken, style: { color: { ref: color } } },
@@ -766,58 +758,22 @@ function firstPalette(
 }
 
 /**
- * The preset a new text object uses. Not simply the first entry: presets are
- * conventionally ordered smallest first, so the first is usually a caption too
- * small to inspect comfortably.
+ * The token a new text object takes: the first entry, in insertion order.
  *
- * A body-role preset is preferred, the largest of them, with the largest
- * remaining preset as the fallback. Heading presets are excluded: a 70px clock
- * face is not a sensible default for a fresh text object.
+ * The producer orders the roles body first, so the first token is the editor's
+ * default face. A new text carries no size of its own — size, leading and
+ * tracking are the run's `style`, and an unauthored one takes the renderer's
+ * role default (`defaultTypeSize`). A document with no tokens has no face to
+ * write, so insertion refuses by name.
  */
 function firstTypeToken(
   globals: FabricGlobals | undefined,
-): readonly [string, LegacySizedToken] {
-  let body: readonly [string, LegacySizedToken] | undefined;
-  let largest: readonly [string, LegacySizedToken] | undefined;
+): readonly [string, TypeToken] {
+  const first = Object.entries(globals?.typeTokens ?? {})[0];
 
-  for (const [id, entry] of Object.entries(globals?.typeTokens ?? {})) {
-    const token = entry as LegacySizedToken;
-    if (!isTypeToken(token)) continue;
-    const size = token.size ?? 0;
-
-    if (largest === undefined || size > (largest[1].size ?? 0)) {
-      largest = [id, token];
-    }
-
-    if (token.trioRole !== "body") continue;
-
-    if (body === undefined || size > (body[1].size ?? 0)) {
-      body = [id, token];
-    }
-  }
-
-  const chosen = body ?? largest;
-
-  if (chosen === undefined) {
+  if (first === undefined) {
     throw new Error("New text requires a type token.");
   }
 
-  return chosen;
-}
-
-/** The starter tokens still carry the size and role their ids were named for
- *  until Task 3.2 moves each onto its run. ponytail: a read-time bridge; delete
- *  once no shipped token carries either field. */
-type LegacySizedToken = TypeToken & {
-  readonly size?: number;
-  readonly trioRole?: string;
-  readonly lineHeight?: number;
-};
-
-function isTypeToken(value: unknown): value is TypeToken {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as Record<string, unknown>)["family"] === "string"
-  );
+  return first;
 }

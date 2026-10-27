@@ -12,7 +12,7 @@ import {
   instantIn,
   MAX_OBJECT_NAME_LENGTH,
 } from "@yunari/renderer-core";
-import { Wedge, YunariChart } from "@yunari/scene-fabric";
+import { Wedge, YUNARI_TEXT_PROPERTY, YunariChart } from "@yunari/scene-fabric";
 import {
   ActiveSelection,
   Canvas,
@@ -37,6 +37,7 @@ import {
   chartContentView,
   chartPaintView,
 } from "../chart-manager/panel.js";
+import { createNewTextDefaults } from "../new-object-defaults.js";
 import { createObjectLockManager } from "../object-lock-manager/index.js";
 import { uiCopy } from "../ui-copy.js";
 import { idleCrop } from "./idle-crop.test-stage.js";
@@ -1981,6 +1982,51 @@ describe("the size a run is set in", () => {
     expect(JSON.stringify(typeTokens)).toBe(before);
   });
 
+  it("shows the role default for a created heading that authors no size", () => {
+    // The pair Task 5.4 is about: `createNewTextDefaults` writes the face and
+    // the run's token, and no size at all — so the row reads the renderer's
+    // role default (72 for a heading at 1080) while the authored run stays
+    // sizeless.
+    const globals = {
+      palette: {
+        ink: {
+          name: "Ink",
+          value: { kind: "solid" as const, color: "#e8ecf3" },
+        },
+      },
+      typeTokens: { heading: { family: "Inter", weight: 600 } },
+    };
+    const defaults = createNewTextDefaults(
+      globals,
+      "Hi",
+      { left: 0, top: 0 },
+      { width: 240, height: 96 },
+    );
+    const text = new Textbox("Hi", {
+      ...defaults,
+      id: "created-heading",
+    } as never);
+    text.set(YUNARI_TEXT_PROPERTY, defaults[YUNARI_TEXT_PROPERTY]);
+    const { host } = setup(text, {
+      globals: globals as FabricGlobals,
+      artboardHeight: 1080,
+    });
+
+    // Nothing at insert time carries a size…
+    expect(defaults).not.toHaveProperty("fontSize");
+    expect(defaults).not.toHaveProperty("lineHeight");
+    // …and the run's own style still has none, while the row shows the default.
+    const authored = text.get("yunariText") as {
+      readonly runs: readonly {
+        readonly style?: Readonly<Record<string, unknown>>;
+      }[];
+    };
+    expect(authored.runs[0]?.style).not.toHaveProperty("fontSize");
+    expect(
+      host.querySelector<HTMLInputElement>('[data-yunari-run-size="0"]')?.value,
+    ).toBe("72");
+  });
+
   it("shows the default from the artboard the editor is drawing on", () => {
     // The projection must read the editor's artboard, not a fixed 1080: a
     // heading is 144 on a 2160 artboard, and the canvas paints the same rule.
@@ -1994,7 +2040,9 @@ describe("the size a run is set in", () => {
       runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.heading" }],
     });
     const { host } = setup(text, {
-      globals: { typeTokens: { heading: { family: "Inter" } } } as FabricGlobals,
+      globals: {
+        typeTokens: { heading: { family: "Inter" } },
+      } as FabricGlobals,
       artboardHeight: 2160,
     });
 

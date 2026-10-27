@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import { CHART_FAMILIES } from "@yunari/renderer-core";
-import { YUNARI_PAINT_PROPERTY } from "@yunari/scene-fabric";
+import {
+  YUNARI_PAINT_PROPERTY,
+  YUNARI_TEXT_PROPERTY,
+} from "@yunari/scene-fabric";
 import { Ellipse, Line, Path, Polygon, Polyline, Rect } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
 import { CARD_LIBRARY } from "./card-library.js";
@@ -15,7 +18,7 @@ const GLOBALS = {
     ink: { name: "Ink", value: { kind: "solid" as const, color: "#102030" } },
   },
   typeTokens: {
-    body: { family: "Inter", size: 16, weight: "600" },
+    body: { family: "Inter", weight: "600" },
   },
 };
 
@@ -89,7 +92,7 @@ const palette = {
     },
   },
   typeTokens: {
-    body: { family: "Inter", size: 16 },
+    body: { family: "Inter" },
   },
 } as const;
 
@@ -538,6 +541,34 @@ describe("new object panel", () => {
     expect(options.name).toBe(uiCopy.panels.text);
     expect("box" in options).toBe(false);
     expect(editor.textManager.addText).toHaveBeenCalledOnce();
+  });
+
+  it("inserts a text with no size of its own, only the run's token", () => {
+    // A fresh run has no size: the token names the face, and the renderer's
+    // role default is the size until the author picks one. A size written here
+    // would be a second answer to a question the run owns.
+    const editor = editorStub();
+
+    insertNewText(editor as never, GLOBALS as never, { left: 120, top: 80 });
+
+    const options = editor.textManager.addText.mock.calls[0]?.[0] as {
+      fontSize?: unknown;
+      lineHeight?: unknown;
+      [YUNARI_TEXT_PROPERTY]: {
+        readonly runs: readonly {
+          readonly typeToken?: string;
+          readonly style?: Readonly<Record<string, unknown>>;
+        }[];
+      };
+    };
+    expect(options).not.toHaveProperty("fontSize");
+    expect(options).not.toHaveProperty("lineHeight");
+    expect(options[YUNARI_TEXT_PROPERTY].runs[0]?.typeToken).toBe(
+      "typeTokens.body",
+    );
+    expect(options[YUNARI_TEXT_PROPERTY].runs[0]?.style).not.toHaveProperty(
+      "fontSize",
+    );
   });
 
   it("inserts a Text box with the rectangle the drag drew", () => {
