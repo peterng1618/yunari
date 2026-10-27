@@ -146,6 +146,9 @@ it("leaves the mounted panels with no copy of their own", async () => {
     onChange: () => undefined,
     onDelete: () => undefined,
     unbindFace: () => undefined,
+    // A declared face, so the weight row is a labelled select rather than the
+    // read-only fallback.
+    facesOf: () => [{ assetId: "inter-400", weight: 400, style: "normal" }],
     paints: undefined,
   }).render({ kind: "preset", id: "caption" }, tokenPresets, {
     typeTokens: tokenPresets,

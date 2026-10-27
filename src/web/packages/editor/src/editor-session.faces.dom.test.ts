@@ -22,6 +22,9 @@ type FaceEntries = readonly {
 
 /** The ports the panel would have been handed. */
 const inspectorPort = vi.hoisted(() => ({
+  onChange: undefined as
+    | ((presets: Record<string, unknown>) => void)
+    | undefined,
   facesOf: undefined as ((family: string) => FaceEntries) | undefined,
   familiesOf: undefined as (() => readonly string[]) | undefined,
   importLocalFont: undefined as (() => void) | undefined,
@@ -32,12 +35,14 @@ vi.mock("./panes/tokens/token-inspector.js", () => ({
   createTokenInspectorPanel: (
     host: HTMLElement,
     actions: {
+      readonly onChange: (presets: Record<string, unknown>) => void;
       readonly facesOf?: (family: string) => FaceEntries;
       readonly familiesOf?: () => readonly string[];
       readonly importLocalFont?: () => void;
       readonly openFontFinder?: () => void;
     },
   ) => {
+    inspectorPort.onChange = actions.onChange;
     inspectorPort.facesOf = actions.facesOf;
     inspectorPort.familiesOf = actions.familiesOf;
     inspectorPort.importLocalFont = actions.importLocalFont;
@@ -130,8 +135,17 @@ const FACES: readonly CuratedFontFace[] = [
 
 function createSession(
   assetManager: AssetManager,
-  extras: { readonly onFindFontPicker?: () => void } = {},
+  extras: {
+    readonly onFindFontPicker?: () => void;
+    readonly saveState?: () => void;
+    readonly envelope?: FabricThemeEnvelope;
+  } = {},
 ): EditorSession {
+  const {
+    saveState = vi.fn(),
+    envelope: documentEnvelope = envelope,
+    ...sessionExtras
+  } = extras;
   return new EditorSession({
     assetManager,
     shell: {
@@ -151,18 +165,18 @@ function createSession(
           setRepaint: vi.fn(),
         },
         cropManager: idleCrop(),
-        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+        historyManager: { attachGlobals: () => {}, saveState },
         errorManager: { warn: vi.fn(), error: vi.fn() },
       },
       scene: {},
-      snapshot: vi.fn((input) => ({ ...envelope, ...input })),
+      snapshot: vi.fn((input) => ({ ...documentEnvelope, ...input })),
       setBackground: vi.fn(),
       setBackgroundMedia: vi.fn(),
       setGlobals: vi.fn(),
       refreshGlass: vi.fn(),
     } as never,
     source: {} as never,
-    envelope,
+    envelope: documentEnvelope,
     panelHosts: {
       add: document.body,
       assets: document.body,
@@ -173,7 +187,7 @@ function createSession(
     onNew: vi.fn(),
     onNewFromStarter: vi.fn(),
     onSaved: vi.fn(),
-    ...extras,
+    ...sessionExtras,
   });
 }
 
@@ -197,6 +211,45 @@ describe("EditorSession weight list", () => {
     expect(faces.find((face) => face.weight === 400)?.assetId).toBe(
       "manrope-latin-400",
     );
+
+    session.destroy();
+  });
+
+  it("records one history entry for a chosen weight and its face", async () => {
+    // The panel writes both halves in one `onChange`; the session half is one
+    // `setTypes`, so history records the choice once rather than an
+    // intermediate weight without a face.
+    const assetManager = new AssetManager();
+    for (const face of FACES) {
+      await assetManager.adoptFont(face, new Uint8Array([1]));
+    }
+    const saveState = vi.fn();
+    const tokens = { ...ROLES, heading: { family: "Manrope", weight: 400 } };
+    const session = createSession(assetManager, {
+      saveState,
+      envelope: { ...envelope, globals: { typeTokens: tokens } },
+    });
+    saveState.mockClear();
+
+    const face = (inspectorPort.facesOf?.("Manrope") ?? []).find(
+      (candidate) => candidate.assetId === "manrope-latin-700",
+    );
+    if (face === undefined) throw new Error("the family declares no 700 face");
+    inspectorPort.onChange?.({
+      ...tokens,
+      heading: {
+        family: "Manrope",
+        weight: face.weight,
+        face: { assetId: face.assetId },
+      },
+    });
+
+    expect(saveState).toHaveBeenCalledTimes(1);
+    expect(session.envelope.globals?.typeTokens?.["heading"]).toEqual({
+      family: "Manrope",
+      weight: 700,
+      face: { assetId: "manrope-latin-700" },
+    });
 
     session.destroy();
   });

@@ -12,7 +12,6 @@ import {
   type ControlOption,
   ControlSelect,
 } from "../../components/ui/control-select.js";
-import { ControlText } from "../../components/ui/control-text.js";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
 import type { TokenRef } from "../../editor-shell/shell-stores.js";
 import type { PaletteTokenUse } from "../../palette-manager/panel.js";
@@ -224,13 +223,15 @@ function TokenFields(props: {
   };
   // The producer owns the order: `facesOf` answers one entry per weight and
   // style, lightest first. Re-sorting here would put `italic` before `normal`
-  // at the same weight and discard that.
-  const faces =
-    value.face === undefined ? [] : (actions.facesOf?.(value.family) ?? []);
-  const selectedFaceId =
-    faces.find((face) => face.assetId === value.face?.assetId)?.assetId ??
-    faces[0]?.assetId ??
-    "";
+  // at the same weight and discard that. Both branches read the same list: an
+  // unbound token's family can hold faces too, and a weight it does not hold
+  // would draw in the browser fallback.
+  const faces = actions.facesOf?.(value.family) ?? [];
+  // One write, one history entry: a weight without its face would draw from a
+  // file the family may not hold.
+  const chooseWeight = (face: FaceChoice): void => {
+    put({ ...value, weight: face.weight, face: { assetId: face.assetId } });
+  };
 
   return (
     <div
@@ -269,17 +270,11 @@ function TokenFields(props: {
               put({ ...value, family: trimmed });
             }}
           />
-          <ControlText
-            label={uiCopy.panels.weight}
-            data={{ "data-yunari-token-weight": "" }}
-            value={String(value.weight ?? "")}
-            onCommit={(next) => {
-              // An emptied optional field removes its key: an empty string is a
-              // weight the renderer cannot use.
-              const { weight: _weight, ...rest } = value;
-              const trimmed = next.trim();
-              put(trimmed === "" ? rest : { ...rest, weight: trimmed });
-            }}
+          <WeightField
+            faces={faces}
+            weight={value.weight}
+            boundAssetId={undefined}
+            onChoose={chooseWeight}
           />
         </>
       ) : (
@@ -289,37 +284,12 @@ function TokenFields(props: {
         >
           <p className="m-0 text-xs text-muted">{uiCopy.panels.fontBound}</p>
           <ReadOnlyPair label={uiCopy.panels.family} value={value.family} />
-          {/* The face owns the family, but not the weight: the package may hold
-              several, and a weight it does not hold would draw in the browser
-              fallback. Absent a declared face list, the bound weight stays
-              read-only rather than inventing one. */}
-          {faces.length === 0 ? (
-            <ReadOnlyPair
-              label={uiCopy.panels.weight}
-              value={String(value.weight ?? "")}
-            />
-          ) : (
-            <ControlSelect
-              label={uiCopy.panels.weight}
-              data={{ "data-yunari-token-weight": "" }}
-              value={selectedFaceId}
-              options={faces.map((face) => ({
-                id: face.assetId,
-                name: `${face.weight}${face.style === "italic" ? " italic" : ""}`,
-              }))}
-              onChange={(assetId) => {
-                const face = faces.find(
-                  (candidate) => candidate.assetId === assetId,
-                );
-                if (face === undefined) return;
-                put({
-                  ...value,
-                  weight: face.weight,
-                  face: { assetId: face.assetId },
-                });
-              }}
-            />
-          )}
+          <WeightField
+            faces={faces}
+            weight={value.weight}
+            boundAssetId={value.face.assetId}
+            onChoose={chooseWeight}
+          />
           <button
             type="button"
             data-yunari-token-unbind=""
@@ -337,6 +307,57 @@ function TokenFields(props: {
         <Deletion id={id} presets={presets} actions={actions} />
       )}
     </div>
+  );
+}
+
+/**
+ * The weight row, drawn the same way on both branches: the family's declared
+ * faces as a list, or a reading when the package declares none. There is no
+ * free-text weight — a typed weight the package does not hold would draw in the
+ * browser fallback, which the token model exists to stop.
+ *
+ * The list shows the bound face when there is one, else the face whose weight
+ * the token already names, so an unbound token opens on its own weight. A
+ * weight the family does not hold has no entry; the list then opens on the
+ * lightest face, and the record keeps its weight until one is chosen.
+ */
+function WeightField(props: {
+  readonly faces: readonly FaceChoice[];
+  readonly weight: string | number | undefined;
+  readonly boundAssetId: string | undefined;
+  readonly onChoose: (face: FaceChoice) => void;
+}): React.JSX.Element {
+  if (props.faces.length === 0) {
+    return (
+      <ReadOnlyPair
+        label={uiCopy.panels.weight}
+        value={String(props.weight ?? "")}
+        valueData={{ "data-yunari-token-weight": "" }}
+      />
+    );
+  }
+  const selected =
+    props.faces.find((face) => face.assetId === props.boundAssetId)?.assetId ??
+    props.faces.find((face) => String(face.weight) === String(props.weight))
+      ?.assetId ??
+    props.faces[0]?.assetId ??
+    "";
+  return (
+    <ControlSelect
+      label={uiCopy.panels.weight}
+      data={{ "data-yunari-token-weight": "" }}
+      value={selected}
+      options={props.faces.map((face) => ({
+        id: face.assetId,
+        name: `${face.weight}${face.style === "italic" ? " italic" : ""}`,
+      }))}
+      onChange={(assetId) => {
+        const face = props.faces.find(
+          (candidate) => candidate.assetId === assetId,
+        );
+        if (face !== undefined) props.onChoose(face);
+      }}
+    />
   );
 }
 

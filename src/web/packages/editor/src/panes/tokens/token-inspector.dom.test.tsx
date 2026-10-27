@@ -210,7 +210,15 @@ describe("token inspector", () => {
     }
 
     expect(valueOf(panel.root, "[data-yunari-token-family]")).toBe("Inter");
-    expect(field(panel.root, "[data-yunari-token-weight]").value).toBe("600");
+    // No declared face list here, so the weight is a reading rather than a
+    // typed field: a typed weight the package does not hold would draw in the
+    // browser fallback.
+    expect(
+      panel.root.querySelector("input[data-yunari-token-weight]"),
+    ).toBeNull();
+    expect(
+      panel.root.querySelector("[data-yunari-token-weight]")?.textContent,
+    ).toBe("600");
     panel.destroy();
   });
 
@@ -248,9 +256,16 @@ describe("token inspector", () => {
       typeTokens: PRESETS,
     });
 
-    // No editable family or weight: the face owns both while it is bound.
+    // No editable family or weight: the face owns both while it is bound. With
+    // no declared face list the weight is a reading, and it prints the token's
+    // own weight rather than a list entry.
     expect(panel.root.querySelector("[data-yunari-token-family]")).toBeNull();
-    expect(panel.root.querySelector("[data-yunari-token-weight]")).toBeNull();
+    expect(
+      panel.root.querySelector("input[data-yunari-token-weight]"),
+    ).toBeNull();
+    expect(
+      panel.root.querySelector("[data-yunari-token-weight]")?.textContent,
+    ).toBe("700");
     expect(
       panel.root.querySelector("[data-yunari-token-face-bound]")?.textContent,
     ).toContain("Manrope");
@@ -337,6 +352,68 @@ describe("token inspector", () => {
         face: { assetId: "manrope-latin-700" },
       },
     });
+    panel.destroy();
+  });
+
+  it("offers an unbound token's family weights and writes the face with the weight", async () => {
+    // The family holds faces even when nothing is bound: the same list and the
+    // same one write. The trigger names the token's own weight rather than the
+    // lightest entry, so the list does not disagree with the record.
+    const presets: TypeTokens = {
+      caption: { family: "Manrope", weight: 400 },
+    };
+    const write = actions(undefined, () => [
+      { assetId: "manrope-700", weight: 700, style: "normal" },
+      { assetId: "manrope-400", weight: 400, style: "normal" },
+      { assetId: "manrope-700-italic", weight: 700, style: "italic" },
+    ]);
+    const panel = createTokenInspectorPanel(document.body, write);
+    panel.render({ kind: "preset", id: "caption" }, presets, {
+      typeTokens: presets,
+    });
+
+    // The trigger commits the face it names, so it points at the token's own
+    // weight rather than the lightest entry.
+    expect(valueOf(panel.root, "[data-yunari-token-weight]")).toBe(
+      "manrope-400",
+    );
+
+    await chooseIn(panel.root, "[data-yunari-token-weight]", "manrope-700");
+    expect(write.onChange).toHaveBeenCalledTimes(1);
+    expect(write.onChange).toHaveBeenCalledWith({
+      caption: {
+        family: "Manrope",
+        weight: 700,
+        face: { assetId: "manrope-700" },
+      },
+    });
+
+    // The producer's order, unsorted — the same list the bound branch draws.
+    await click(
+      panel.root.querySelector("[data-yunari-token-weight]") as HTMLElement,
+    );
+    expect(optionNames()).toEqual(["700", "400", "700 italic"]);
+    panel.destroy();
+  });
+
+  it("draws an unbound weight as a reading when the family declares no faces", () => {
+    // The free-text weight is gone: a weight the package does not hold would
+    // draw in the browser fallback.
+    const presets: TypeTokens = {
+      caption: { family: "Inter", weight: 600 },
+    };
+    const write = actions(undefined, () => []);
+    const panel = createTokenInspectorPanel(document.body, write);
+    panel.render({ kind: "preset", id: "caption" }, presets, {
+      typeTokens: presets,
+    });
+
+    expect(
+      panel.root.querySelector("input[data-yunari-token-weight]"),
+    ).toBeNull();
+    expect(
+      panel.root.querySelector("[data-yunari-token-weight]")?.textContent,
+    ).toBe("600");
     panel.destroy();
   });
 
@@ -588,7 +665,13 @@ describe("token inspector", () => {
   });
 
   it("makes family and weight editable after Unbind", async () => {
-    const write = actions();
+    // Freed of its face, the token goes back to the family list and the
+    // family's weight list; a choice writes the new face with its weight.
+    const write = actions(undefined, () => [
+      { assetId: "manrope-400", weight: 400, style: "normal" },
+      { assetId: "manrope-600", weight: 600, style: "normal" },
+      { assetId: "manrope-700", weight: 700, style: "normal" },
+    ]);
     const panel = createTokenInspectorPanel(document.body, write);
     panel.render({ kind: "preset", id: "bound" }, PRESETS, {
       typeTokens: PRESETS,
@@ -609,15 +692,19 @@ describe("token inspector", () => {
       typeTokens: freed,
     });
 
-    const family = valueOf(panel.root, "[data-yunari-token-family]");
-    const weight = field(panel.root, "[data-yunari-token-weight]");
-    expect(family).toBe("Manrope");
-    expect(weight.value).toBe("700");
+    expect(valueOf(panel.root, "[data-yunari-token-family]")).toBe("Manrope");
+    expect(valueOf(panel.root, "[data-yunari-token-weight]")).toBe(
+      "manrope-700",
+    );
 
-    await edit(weight, "600");
+    await chooseIn(panel.root, "[data-yunari-token-weight]", "manrope-600");
     expect(write.onChange).toHaveBeenCalledWith({
       ...freed,
-      bound: { family: "Manrope", weight: "600" },
+      bound: {
+        family: "Manrope",
+        weight: 600,
+        face: { assetId: "manrope-600" },
+      },
     });
     panel.destroy();
   });
