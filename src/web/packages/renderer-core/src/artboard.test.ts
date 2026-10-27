@@ -344,4 +344,175 @@ describe("toCssTransform", () => {
 
     expect(toCssTransform(t)).toBe("translate(0px, 270px) scale(0.5)");
   });
+
+  it("rotates after translating when the display is turned", () => {
+    // `transform-origin: 0 0`: the artboard is placed by the translation, then
+    // turned about the viewport origin, so the matrix it emits is the matrix
+    // the CSS applies.
+    const t = computeArtboardTransform({
+      artboard: { width: 1600, height: 900 },
+      viewport: { width: 600, height: 800 },
+      rotation: 90,
+    });
+
+    expect(toCssTransform(t)).toBe(
+      "translate(525px, 0px) rotate(90deg) scale(0.5)",
+    );
+  });
+});
+
+describe("computeArtboardTransform — rotation and shape", () => {
+  it("keeps today's numbers at rotation 0", () => {
+    const t = computeArtboardTransform({
+      artboard: { width: 1600, height: 900 },
+      viewport: { width: 800, height: 600 },
+    });
+
+    expect(t.matrix).toEqual([0.5, 0, 0, 0.5, 0, 75]);
+    expect(t.rotation).toBe(0);
+  });
+
+  it("rotates then contain-fits a 90 degree rect display", () => {
+    const t = computeArtboardTransform({
+      artboard: { width: 1600, height: 900 },
+      viewport: { width: 600, height: 800 },
+      rotation: 90,
+    });
+
+    expect(t.scale).toBeCloseTo(0.5, 9);
+    expect(t.matrix[0]).toBeCloseTo(0, 9);
+    expect(t.matrix[1]).toBeCloseTo(0.5, 9);
+    expect(t.matrix[2]).toBeCloseTo(-0.5, 9);
+    expect(t.matrix[3]).toBeCloseTo(0, 9);
+    expect(t.matrix[5]).toBeCloseTo(0, 9);
+    // 900x1600 rotated box scaled to 450x800 in a 600x800 viewport: the
+    // letterbox is left and right, as the spec's acceptance case states.
+    expect(t.bars.x).toBeCloseTo(75, 9);
+    expect(t.bars.y).toBeCloseTo(0, 9);
+  });
+
+  it("inscribes every artboard corner on a circle display", () => {
+    const t = computeArtboardTransform({
+      artboard: { width: 1600, height: 900 },
+      viewport: { width: 600, height: 800 },
+      shape: "circle",
+      rotation: 45,
+    });
+
+    const radius = 300;
+    for (const [x, y] of [
+      [0, 0],
+      [1600, 0],
+      [1600, 900],
+      [0, 900],
+    ] as const) {
+      const p = documentToViewport(t, { x, y });
+      expect(Math.hypot(p.x - 300, p.y - 400)).toBeCloseTo(radius, 6);
+    }
+  });
+
+  it("keeps the circle scale independent of its angle", () => {
+    const at = (rotation: number) =>
+      computeArtboardTransform({
+        artboard: { width: 1600, height: 900 },
+        viewport: { width: 600, height: 800 },
+        shape: "circle",
+        rotation,
+      }).scale;
+    expect(at(0)).toBeCloseTo(at(45), 12);
+    expect(at(0)).toBeCloseTo(600 / Math.hypot(1600, 900), 12);
+  });
+
+  it("turns a circle's composition without changing its scale", () => {
+    const at = (rotation: number) =>
+      computeArtboardTransform({
+        artboard: { width: 1600, height: 900 },
+        viewport: { width: 600, height: 800 },
+        shape: "circle",
+        rotation,
+      });
+    const upright = documentToViewport(at(0), { x: 0, y: 0 });
+    const turned = documentToViewport(at(45), { x: 0, y: 0 });
+
+    expect(at(45).scale).toBeCloseTo(at(0).scale, 12);
+    // Scale 600/hypot(1600,900), turned 45° about the viewport centre.
+    expect(turned.x).toBeCloseTo(219.111, 3);
+    expect(turned.y).toBeCloseTo(111.111, 3);
+    expect(Math.hypot(turned.x - upright.x, turned.y - upright.y)).toBeCloseTo(
+      229.61,
+      1,
+    );
+  });
+
+  it("returns an inscribed circle as contain, never cover", () => {
+    const t = computeArtboardTransform({
+      artboard: { width: 1600, height: 900 },
+      viewport: { width: 600, height: 800 },
+      shape: "circle",
+      rotation: 45,
+      contentFit: "cover",
+    });
+
+    // A disc inscribes: there is no cropped region a "cover" could describe.
+    expect(t.contentFit).toBe("contain");
+    expect(t.crop).toEqual({ x: 0, y: 0 });
+  });
+
+  it.each([
+    ["rect 45", { rotation: 45 }],
+    ["rect 360", { rotation: 360 }],
+    ["negative", { rotation: -90 }],
+    ["fraction", { rotation: 90.5 }],
+    ["circle 360", { shape: "circle" as const, rotation: 360 }],
+  ])("refuses %s", (_name, extra) => {
+    expect(() =>
+      computeArtboardTransform({
+        artboard: { width: 1600, height: 900 },
+        viewport: { width: 600, height: 800 },
+        ...extra,
+      }),
+    ).toThrow(RangeError);
+  });
+
+  it("round-trips a rotated point", () => {
+    const t = computeArtboardTransform({
+      artboard: { width: 1600, height: 900 },
+      viewport: { width: 600, height: 800 },
+      rotation: 90,
+    });
+    const point = { x: 123, y: 456 };
+    expect(viewportToDocument(t, documentToViewport(t, point))).toEqual(point);
+  });
+
+  it.each([180, 270])("round-trips points at %i degrees", (rotation) => {
+    const t = computeArtboardTransform({
+      artboard: { width: 1600, height: 900 },
+      viewport: { width: 600, height: 800 },
+      rotation,
+    });
+
+    for (const point of [
+      { x: 0, y: 0 },
+      { x: 1600, y: 900 },
+      { x: 123, y: 456 },
+      { x: -50, y: 1234 },
+    ]) {
+      const back = viewportToDocument(t, documentToViewport(t, point));
+      expect(back.x).toBeCloseTo(point.x, 9);
+      expect(back.y).toBeCloseTo(point.y, 9);
+    }
+  });
+
+  it("keeps the rotation and a zero matrix on a degenerate viewport", () => {
+    const t = computeArtboardTransform({
+      artboard: { width: 1600, height: 900 },
+      viewport: { width: 0, height: 0 },
+      shape: "circle",
+      rotation: 45,
+    });
+
+    expect(t.isDegenerate).toBe(true);
+    expect(t.rotation).toBe(45);
+    expect(t.matrix).toEqual([0, 0, 0, 0, 0, 0]);
+  });
 });

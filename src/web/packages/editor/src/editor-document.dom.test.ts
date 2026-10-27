@@ -1124,6 +1124,42 @@ describe("EditorDocument preset actions", () => {
     document.destroy();
   });
 
+  it("brings the family's other weights with the chosen cut", async () => {
+    const authored: TypePresets = {
+      metric: {
+        name: "Metric",
+        value: {
+          family: "Segoe UI",
+          size: 32,
+          weight: "500",
+          trioRole: "body",
+        },
+      },
+    };
+    const { document } = presetDocument(authored);
+    const light = cutFor("body", "Manrope", 400);
+    const bold = cutFor("body", "Manrope", 700);
+    assetBytesMock.mockResolvedValue({
+      bytes: new Uint8Array([7]),
+      filename: "manrope.woff2",
+    });
+
+    await document.applyCutToPreset("metric", light, [light, bold]);
+
+    // Both faces are declared, so the preset's weight field can draw either;
+    // the preset itself keeps the weight the author picked.
+    expect(assetBytesMock).toHaveBeenCalledTimes(2);
+    expect(presetsOf(document).metric?.value).toMatchObject({
+      family: "Manrope",
+      weight: 400,
+    });
+
+    assetBytesMock.mockClear();
+    await document.applyCutToPreset("metric", bold, [light, bold]);
+    expect(assetBytesMock).not.toHaveBeenCalled();
+    document.destroy();
+  });
+
   it("unbinding leaves family and weight editable", async () => {
     const { document } = presetDocument({
       heading: {

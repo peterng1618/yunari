@@ -97,12 +97,16 @@ function paintActions(
   };
 }
 
-function actions(paints?: PaintPort): TokenInspectorActions {
+function actions(
+  paints?: PaintPort,
+  facesOf?: TokenInspectorActions["facesOf"],
+): TokenInspectorActions {
   return {
     onChange: vi.fn<(presets: TypePresets) => void>(),
     onDelete: vi.fn<(id: string, replacement: string) => void>(),
     setRole: vi.fn<(id: string, role: FontTrioRole | null) => void>(),
     unbindFace: vi.fn<(id: string) => void>(),
+    ...(facesOf === undefined ? {} : { facesOf }),
     paints,
   };
 }
@@ -226,6 +230,51 @@ describe("token inspector", () => {
     expect(
       panel.root.querySelector("[data-yunari-token-unbind]")?.textContent,
     ).toBe(uiCopy.panels.unbindFont);
+    panel.destroy();
+  });
+
+  it("offers only the weights the family's package holds", async () => {
+    // A weight the package does not hold would draw in the browser fallback, so
+    // the bound weight is a list of the declared faces, lightest first.
+    const write = actions(undefined, () => [
+      { assetId: "manrope-700", weight: 700, style: "normal" },
+      { assetId: "manrope-400", weight: 400, style: "normal" },
+      { assetId: "manrope-700-italic", weight: 700, style: "italic" },
+    ]);
+    const panel = createTokenInspectorPanel(document.body, write);
+    panel.render({ kind: "preset", id: "bound" }, PRESETS, {
+      typePresets: PRESETS,
+    });
+
+    await chooseIn(panel.root, "[data-yunari-token-weight]", "manrope-400");
+    expect(write.onChange).toHaveBeenCalledWith({
+      ...PRESETS,
+      bound: {
+        name: "Bound",
+        value: {
+          ...PRESETS["bound"]!.value,
+          weight: 400,
+          face: { assetId: "manrope-400" },
+        },
+      },
+    });
+
+    // The italic face is a different option, not folded into its weight.
+    await chooseIn(
+      panel.root,
+      "[data-yunari-token-weight]",
+      "manrope-700-italic",
+    );
+    expect(write.onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        bound: expect.objectContaining({
+          value: expect.objectContaining({
+            weight: 700,
+            face: { assetId: "manrope-700-italic" },
+          }),
+        }),
+      }),
+    );
     panel.destroy();
   });
 

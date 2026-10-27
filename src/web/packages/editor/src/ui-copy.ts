@@ -433,6 +433,21 @@ export const uiCopy = {
       follows: "Follows this PC",
       /** Neither a theme of its own nor a default: nothing falls back to. */
       nothing: "No theme",
+      /** The section that edits the selected display's glass and mounting angle. */
+      presentation: "Screen shape and rotation",
+      shape: "Shape",
+      shapeRect: "Rect",
+      shapeCircle: "Circle",
+      rotation: "Rotation",
+      /** What the section says about the two rules they write under. */
+      rotationSnapHint:
+        "A round display turns by any whole degree; a rectangular one turns in quarter turns. Changing the shape snaps the angle to the new rule.",
+      /** This PC has no record to present, and the unpaired default is served
+       *  rather than owned: the section says why instead of drawing a control
+       *  that cannot write. */
+      presentationAbsent:
+        "This PC's screen has no shape or rotation to set. Pair a display to choose its glass and mounting angle.",
+      savedPresentation: "Saved the display's shape and rotation.",
     },
     devices: {
       heading: "Devices on this PC",
@@ -1259,8 +1274,16 @@ export const uiCopy = {
       applyToTheme: "Apply to theme",
       addThreePresets: "Add 3 presets",
       cuts: "Cuts",
-      cutLabel: (weight: string | number, italic: boolean): string =>
-        italic ? `${weight} italic` : String(weight),
+      /** `400 · latin`: the subset is named only when it is what tells two cuts
+       *  apart, since weight and style alone can repeat across subsets. */
+      cutLabel: (
+        weight: string | number,
+        italic: boolean,
+        subset?: string,
+      ): string => {
+        const face = italic ? `${weight} italic` : String(weight);
+        return subset === undefined ? face : `${face} · ${subset}`;
+      },
       newPreset: "New type preset",
       newPresetSummary: (role: string, family: string): string =>
         `${role} — ${family} · adds one`,

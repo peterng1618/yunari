@@ -58,8 +58,15 @@ export function FontsBody(props: {
    *  it; the body never applies one itself. */
   readonly onApplyTrio?: (trio: FontTrioInfo) => void;
   readonly onAddTrioPresets?: (trio: FontTrioInfo) => void;
-  readonly onAddPreset?: (cut: FontCut, role: FontRole) => void;
-  readonly onApplyToSelected?: (cut: FontCut) => void;
+  readonly onAddPreset?: (
+    cut: FontCut,
+    role: FontRole,
+    family: readonly FontCut[],
+  ) => void;
+  readonly onApplyToSelected?: (
+    cut: FontCut,
+    family: readonly FontCut[],
+  ) => void;
 }): React.JSX.Element {
   const client = props.client;
   const [sources, setSources] = useState<

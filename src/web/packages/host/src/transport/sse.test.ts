@@ -85,7 +85,7 @@ describe("SseConnection", () => {
     expect(fake.ends()).toBe(1);
   });
 
-  it("keeps only the newest frame that was waiting on a drain", () => {
+  it("delivers every frame that waited on a drain, in order", () => {
     let writable = false;
     const fake = fakeResponse(() => writable);
     const connection = new SseConnection(fake.response, ["gpu.temp"], "living");
@@ -94,14 +94,16 @@ describe("SseConnection", () => {
     connection.offer("second");
     connection.offer("third");
 
-    // The socket refused "first" and has not drained, so "third" replaced
-    // "second" rather than queueing behind it.
+    // The socket refused "first" and has not drained, so the other two wait
+    // rather than replacing each other: each frame carries its own batch of
+    // readings (0124).
     expect(fake.writes.at(-1)).toBe("first");
-    expect(connection.droppedCount).toBe(1);
+    expect(connection.droppedCount).toBe(0);
 
     writable = true;
     fake.drain();
 
-    expect(fake.writes.at(-1)).toBe("third");
+    // The constructor's `: connected` header is the first write.
+    expect(fake.writes.slice(1)).toEqual(["first", "second", "third"]);
   });
 });

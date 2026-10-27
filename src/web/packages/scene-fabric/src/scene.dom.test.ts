@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import type { Background, ScenePlan } from "@yunari/renderer-core";
+import type { Background } from "@yunari/renderer-core";
 import { Group, Rect } from "fabric/es";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type FabricSceneHandle, mountFabricScene } from "./scene.js";
+import { host, plan, resizeHost } from "./scene-test-fixtures.js";
 
 /** jsdom has no video frame callbacks, and the cases below patch them on the
  *  prototype. Restored after every case, so one case's patch is never the next
@@ -23,47 +24,6 @@ afterEach(() => {
     else videoPrototype[name] = original;
   }
 });
-
-function plan(artboard: Partial<ScenePlan["artboard"]> = {}): ScenePlan {
-  return {
-    artboard: {
-      width: 400,
-      height: 300,
-      contentFit: "contain",
-      background: "#000",
-      ...artboard,
-    },
-    nodes: [],
-    issues: [],
-  };
-}
-
-function host(): HTMLElement {
-  const element = document.createElement("div");
-  Object.defineProperty(element, "clientWidth", {
-    configurable: true,
-    value: 400,
-  });
-  Object.defineProperty(element, "clientHeight", {
-    configurable: true,
-    value: 300,
-  });
-  document.body.append(element);
-  return element;
-}
-
-/** The host's measurable size, which is all `resize()` reads to decide whether
- *  it has anything to do. */
-function resizeHost(element: HTMLElement, width: number, height: number): void {
-  Object.defineProperty(element, "clientWidth", {
-    configurable: true,
-    value: width,
-  });
-  Object.defineProperty(element, "clientHeight", {
-    configurable: true,
-    value: height,
-  });
-}
 
 /** A background bag naming one media, which is all the scene reads of it. */
 function backgroundWith(assetId: string): Background {

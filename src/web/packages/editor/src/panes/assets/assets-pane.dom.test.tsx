@@ -745,6 +745,42 @@ describe("the Assets pane's import", () => {
     ).toBe("300");
   });
 
+  it("draws one card for a family's weights and removes them together", async () => {
+    // Six weights imported from a finder are one font to the author; the
+    // weight is a preset's choice, so six cards would bury the list.
+    const face = (weight: number): LocalAssetReference => ({
+      id: `manrope-${weight}`,
+      kind: "font",
+      path: `assets/manrope-${weight}.woff2`,
+      family: "Manrope",
+      weight,
+      style: "normal",
+      format: "woff2",
+    });
+    const { host, manager } = mount([face(400), face(700)]);
+
+    const cards = [
+      ...host.querySelectorAll<HTMLElement>("[data-yunari-asset-card]"),
+    ];
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.textContent).toContain("Manrope");
+    expect(cards[0]?.textContent).toContain("400 normal");
+    expect(cards[0]?.textContent).toContain("700 normal");
+
+    await selectCard(host, "Manrope");
+    const remove = host.querySelector<HTMLElement>(
+      "[data-yunari-asset-remove]",
+    );
+    if (remove === null) throw new Error("no remove control.");
+    await act(async () =>
+      remove.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+
+    // Removing the family removes every face it holds, not the 400 alone.
+    expect(manager.remove).toHaveBeenCalledWith("manrope-400");
+    expect(manager.remove).toHaveBeenCalledWith("manrope-700");
+  });
+
   it("opens the form on a declared face from the card's Create type preset", async () => {
     const { host } = await mount([
       {
@@ -759,9 +795,11 @@ describe("the Assets pane's import", () => {
     ]);
     await selectCard(host, "heading");
 
-    // The card names the face by its family and weight: the path tail is the
-    // packaged id, which for a provider cut carries the source's name.
-    expect(cardOf(host, "heading")?.textContent).toContain("Manrope 700");
+    // The card names the family once and lists the faces it holds: the path
+    // tail is the packaged id, which for a provider cut carries the source's
+    // name.
+    expect(cardOf(host, "heading")?.textContent).toContain("Manrope");
+    expect(cardOf(host, "heading")?.textContent).toContain("700 normal");
 
     const open = cardOf(host, "heading")?.querySelector(
       "[data-yunari-font-open]",

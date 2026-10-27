@@ -295,9 +295,96 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
   act(() => {
     button("[data-yunari-font-apply]").click();
   });
-  expect(onAddPreset).toHaveBeenCalledWith(family.font.cuts[1], "heading");
-  expect(onApplyToSelected).toHaveBeenCalledWith(family.font.cuts[1]);
+  expect(onAddPreset).toHaveBeenCalledWith(family.font.cuts[1], "heading", [
+    family.font.cuts[0],
+    family.font.cuts[1],
+  ]);
+  expect(onApplyToSelected).toHaveBeenCalledWith(family.font.cuts[1], [
+    family.font.cuts[0],
+    family.font.cuts[1],
+  ]);
   expect(chips[1]?.getAttribute("aria-pressed")).toBe("true");
+});
+
+it("applies the face the family's id names, not the first cut listed", () => {
+  // A family lists every weight × subset. Position 0 is often a subset with no
+  // Latin glyphs, and adopting it left the author's text in the browser
+  // fallback; the row's id names the lead face the host chose.
+  const listed = family.font.cuts[0]!;
+  const lead = family.font.cuts[1]!;
+  const reordered = {
+    ...family,
+    // Search namespaces the row (`<source>:<entry id>`), so the id it carries
+    // is the cut's own id behind the source prefix.
+    id: `google-fonts:${lead.id}`,
+    font: { cuts: [listed, lead] },
+  };
+  const onApplyToSelected = vi.fn();
+  mount(panel({ selected: reordered, onApplyToSelected }));
+
+  act(() => {
+    button("[data-yunari-font-apply]").click();
+  });
+
+  expect(onApplyToSelected).toHaveBeenCalledWith(lead, [listed, lead]);
+});
+
+it("names the subset when cuts share a weight, rather than drawing three 400s", () => {
+  // Water Brush publishes 400 in three subsets: labelled by weight alone the
+  // chips read as a mistake, and the subset is the only difference there is.
+  const subset = (name: string) => ({
+    ...cut("Water Brush", 400),
+    id: `cut:water-brush-${name}`,
+    subset: name,
+  });
+  const shared = {
+    ...family,
+    font: {
+      cuts: [subset("vietnamese"), subset("latin-ext"), subset("latin")],
+    },
+  };
+  mount(panel({ selected: shared, onApplyToSelected: () => {} }));
+
+  expect(
+    [...document.querySelectorAll<HTMLElement>("[data-yunari-font-cut]")].map(
+      (chip) => chip.textContent,
+    ),
+  ).toEqual(["400 · vietnamese", "400 · latin-ext", "400 · latin"]);
+  // The chips are controls, not specimens: a face illegible at 10px must not
+  // take the label with it.
+  for (const chip of document.querySelectorAll<HTMLElement>(
+    "[data-yunari-font-cut]",
+  )) {
+    expect(chip.style.fontFamily).toBe("");
+  }
+});
+
+it("brings the lead subset's weights, not another subset's faces", () => {
+  // Applying a Latin face must give the preset every Latin weight; a
+  // Vietnamese cut is a different face and is not imported unasked.
+  const latin400 = cut("Manrope", 400);
+  const latin700 = cut("Manrope", 700);
+  const vietnamese = {
+    ...cut("Manrope", 400),
+    id: "cut:manrope-vietnamese",
+    subset: "vietnamese",
+  };
+  const withSubsets = {
+    ...family,
+    id: `google-fonts:${latin400.id}`,
+    font: { cuts: [vietnamese, latin400, latin700] },
+  };
+  const onApplyToSelected = vi.fn();
+  mount(panel({ selected: withSubsets, onApplyToSelected }));
+
+  act(() => {
+    button("[data-yunari-font-apply]").click();
+  });
+
+  expect(onApplyToSelected).toHaveBeenCalledWith(latin400, [
+    latin400,
+    latin700,
+  ]);
 });
 
 it("releases every face it added when the panel unmounts", () => {

@@ -21,6 +21,7 @@
  * existing mount instead of reloading.
  */
 
+import type { DisplayPresentation, DisplayShape } from "@yunari/renderer-core";
 import type { ChartRefreshRate } from "@yunari/scene-fabric";
 
 interface PublishFollowerSession {
@@ -41,6 +42,17 @@ interface PublishFollowerOptions {
    *  with nothing logged (R64). A refused value is not a rate change, so the
    *  loop keeps the rate it has. */
   readonly onRateChange?: (rate: ChartRefreshRate) => void;
+  /** The glass and mounting angle the host now says this display is. Reported
+   *  only when the answer moves, including the first answer — a page that has
+   *  just loaded is already wearing what the host last resolved, so the first
+   *  answer is the baseline rather than news. A shape the host could not have
+   *  stored, or an angle its own rule refuses, is ignored rather than defaulted:
+   *  this is a guard against a payload, not a user path, and inventing `rect`/0
+   *  here would move a round display the host never asked to move. */
+  readonly onPresentationChange?: (next: {
+    readonly shape: DisplayShape;
+    readonly rotation: number;
+  }) => void;
   /** The host did not answer this tick. Reported every time it does not — a
    *  fact, not a policy: how often the caller may act on it is the caller's
    *  business, because only the caller knows what it costs. Latching here was
@@ -122,6 +134,7 @@ export function followPublished(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let last: number | undefined;
   let lastTheme: string | null | undefined;
+  let lastPresentation: DisplayPresentation | undefined;
 
   const tick = async (): Promise<void> => {
     if (stopped) return;
@@ -138,7 +151,12 @@ export function followPublished(
       if (response.ok) {
         const body = (await response.json()) as {
           revision?: unknown;
-          display?: { theme?: unknown; chartFps?: unknown };
+          display?: {
+            theme?: unknown;
+            chartFps?: unknown;
+            shape?: unknown;
+            rotation?: unknown;
+          };
         };
 
         // Every display has a rate, not only a page the map resolved: the host
@@ -149,6 +167,30 @@ export function followPublished(
 
         if (chartFps === 1 || chartFps === 30) {
           options.onRateChange?.(chartFps);
+        }
+
+        // The glass is reported ahead of the two reloads for the same reason the
+        // rate is: it is a fact about this display, and the reload a publish
+        // move triggers is a new page that will report it again anyway.
+        const shape = body.display?.shape;
+        const rotation = body.display?.rotation;
+
+        if (
+          (shape === "rect" || shape === "circle") &&
+          typeof rotation === "number" &&
+          Number.isInteger(rotation) &&
+          rotation >= 0 &&
+          rotation < 360 &&
+          (shape === "circle" || rotation % 90 === 0)
+        ) {
+          if (
+            lastPresentation === undefined ||
+            lastPresentation.shape !== shape ||
+            lastPresentation.rotation !== rotation
+          ) {
+            lastPresentation = { shape, rotation };
+            options.onPresentationChange?.({ shape, rotation });
+          }
         }
 
         if (typeof body.revision === "number") {

@@ -1,7 +1,8 @@
 # Per-display shape and rotation — design
 
 - **Date:** 2026-10-26
-- **Status:** draft
+- **Status:** landed 2026-10-27 — host records, player presentation and the Host's controls ship; plan at
+  [`archive/2026-10-26-display-shape-and-rotation.md`](../plans/archive/2026-10-26-display-shape-and-rotation.md).
 - **Related:** [`2026-10-18-per-display-themes-design.md`](2026-10-18-per-display-themes-design.md),
   [`2026-10-26-preview-lens-and-stage-design.md`](2026-10-26-preview-lens-and-stage-design.md),
   [`docs/architecture/ownership.md`](../../architecture/ownership.md),
@@ -189,8 +190,12 @@ turns it in place without growing or shrinking the composition.
   paints it with the theme's background colour and clips the canvas and the
   media layers to `border-radius: 50%`; the area outside the disc is black (on
   a round panel it is outside the screen).
-- The artboard plate rotates with the canvas because it is a Fabric background
-  inside it.
+- **The artboard plate does not rotate.** It is not a Fabric background: the
+  preview-lens plan made one paint serve the board's fill and the bars behind
+  it, and that paint is CSS on the host (rect) or on the disc (circle). Only the
+  composition, a theme-bounded media layer and glass sampling turn. A gradient
+  plate therefore stays screen-fixed under a turned composition; `vg-759` owns
+  that open question.
 - **A theme-bounded media layer rotates with the artboard.** Its box is the
   unrotated artboard rect, placed at the artboard centre and rotated about that
   centre; the layer's clip is the rotated artboard. `MediaBox` gains an optional

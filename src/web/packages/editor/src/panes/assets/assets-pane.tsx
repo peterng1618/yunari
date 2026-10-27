@@ -159,6 +159,79 @@ function isVideoFile(file: File): boolean {
   return mimeOf(file.name)?.startsWith("video/") === true;
 }
 
+/** One card, and every declaration it stands for. A font family is one card:
+ *  its weights are a choice a preset makes, not files the author picked, so
+ *  importing six weights must not draw six cards. */
+interface AssetRow {
+  readonly key: string;
+  /** The face the card's actions act on: weight 400 where the family has it. */
+  readonly asset: LocalAssetReference;
+  readonly ids: readonly string[];
+  readonly label?: string;
+  readonly detail?: string;
+}
+
+function isFace(asset: LocalAssetReference): asset is LocalAssetReference & {
+  readonly family: string;
+  readonly weight: string | number;
+  readonly style: string;
+  readonly format: string;
+} {
+  return "family" in asset && typeof asset.family === "string";
+}
+
+/** `font · woff2 · 400 normal · 700 normal`: what a family card holds. */
+function faceDetail(faces: readonly LocalAssetReference[]): string {
+  const parts = faces.flatMap((face) =>
+    isFace(face) ? [`${face.weight} ${face.style}`] : [],
+  );
+  const format = faces
+    .map((face) => (isFace(face) ? face.format : ""))
+    .find((value) => value !== "");
+  return [
+    uiCopy.panels.assetCard.kind.font,
+    ...(format === undefined ? [] : [format]),
+    ...parts,
+  ].join(" · ");
+}
+
+function rowsOf(assets: readonly LocalAssetReference[]): readonly AssetRow[] {
+  const families = new Map<string, LocalAssetReference[]>();
+  for (const asset of assets) {
+    if (!isFace(asset)) continue;
+    const faces = families.get(asset.family);
+    if (faces === undefined) families.set(asset.family, [asset]);
+    else faces.push(asset);
+  }
+  const seen = new Set<string>();
+  const rows: AssetRow[] = [];
+  for (const asset of assets) {
+    if (!isFace(asset)) {
+      rows.push({ key: asset.id, asset, ids: [asset.id] });
+      continue;
+    }
+    // A family's card sits where its first face was declared.
+    if (seen.has(asset.family)) continue;
+    seen.add(asset.family);
+    const faces = families.get(asset.family) ?? [asset];
+    const lead =
+      faces.find(
+        (face) =>
+          isFace(face) &&
+          Number(face.weight) === 400 &&
+          face.style === "normal",
+      ) ?? faces[0]!;
+    rows.push({
+      key: `font:${asset.family}`,
+      asset: lead,
+      ids: faces.map((face) => face.id),
+      label: asset.family,
+      detail: faceDetail(faces),
+    });
+  }
+  return rows;
+}
+
 export function AssetsPane({
   manager,
   editor,
@@ -459,12 +532,19 @@ export function AssetsPane({
     editor.canvas.requestRenderAll();
   };
 
-  const remove = async (asset: LocalAssetReference): Promise<void> => {
-    if (referenced(asset.id)) {
+  const remove = async (
+    asset: LocalAssetReference,
+    ids: readonly string[] = [asset.id],
+  ): Promise<void> => {
+    if (ids.some((id) => referenced(id))) {
       setMessage(uiCopy.panels.assetReferenced);
       return;
     }
-    if (manager.remove(asset.id)) {
+    let removed = false;
+    for (const id of ids) {
+      removed = manager.remove(id) || removed;
+    }
+    if (removed) {
       setMessage("");
       setChosenId(undefined);
       onChanged?.();
@@ -525,7 +605,10 @@ export function AssetsPane({
   /** The actions a chosen card draws. The two canvas writes are absent where
    *  the kind cannot perform them; Create type preset is a face's own. Preview
    *  is absent for a face too: the finder owns a font's specimen. */
-  const actionsFor = (asset: LocalAssetReference): React.JSX.Element => {
+  const actionsFor = (
+    asset: LocalAssetReference,
+    ids: readonly string[] = [asset.id],
+  ): React.JSX.Element => {
     const actions: React.JSX.Element[] = [];
     if (isPreviewable(asset)) {
       actions.push(
@@ -579,7 +662,7 @@ export function AssetsPane({
         label={uiCopy.panels.assetCard.remove}
         data={{ "data-yunari-asset-remove": "" }}
         destructive
-        onClick={() => void submit(() => remove(asset))}
+        onClick={() => void submit(() => remove(asset, ids))}
       >
         <Glyph icon={DELETE_ITEM_GLYPH} size={13} />
       </ControlIconButton>,
@@ -658,28 +741,35 @@ export function AssetsPane({
               {section.label}
             </h3>
             <ul className="flex flex-col gap-[var(--space-4)]">
-              {assets.map((asset) => {
+              {rowsOf(assets).map((row) => {
+                const asset = row.asset;
                 const previewUrl = manager.previewUrl(asset.id);
+                const rowChosen =
+                  chosen !== undefined && row.ids.includes(chosen.id);
                 return (
-                  <li key={asset.id}>
+                  <li key={row.key}>
                     <AssetCard
                       asset={asset}
-                      chosen={asset.id === chosen?.id}
-                      referenced={referenced(asset.id)}
+                      chosen={rowChosen}
+                      referenced={row.ids.some(referenced)}
                       {...(previewUrl === undefined ? {} : { previewUrl })}
+                      {...(row.label === undefined ? {} : { label: row.label })}
+                      {...(row.detail === undefined
+                        ? {}
+                        : { detail: row.detail })}
                       onChoose={() => {
                         setChosenId(asset.id);
                         // An open form belongs to the card it was opened on.
                         setFont(undefined);
                         setMessage("");
                       }}
-                      {...(asset.id === chosen?.id
-                        ? { actions: actionsFor(asset) }
+                      {...(rowChosen
+                        ? { actions: actionsFor(asset, row.ids) }
                         : {})}
                     />
                     {font !== undefined &&
                       "assetId" in font &&
-                      font.assetId === asset.id && (
+                      row.ids.includes(font.assetId) && (
                         <FontMetadataForm
                           filename={assetFileName(asset)}
                           initial={font.metadata}

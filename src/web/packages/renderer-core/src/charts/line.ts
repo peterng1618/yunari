@@ -15,8 +15,9 @@ import { type CartesianGrid, cartesianGrid } from "./grid.js";
 export type { EngineColor, LinearGradientColor };
 
 /**
- * Line/area/sparkline adapter. Missing samples are explicit `null` points and
- * `connectNulls` stays false so outages remain visible (§83).
+ * Line/area/sparkline adapter. A missing reading is skipped and the readings
+ * either side are joined, so a line has no break and no blank edge — the
+ * line-only exception to §83 (0124). A missing reading is still never zero.
  */
 
 export type Interpolation = "linear" | "step";
@@ -69,32 +70,6 @@ export interface SeriesInput {
   readonly sensorId: string;
   readonly samples: readonly Sample[];
   readonly label?: string;
-}
-
-/** Validated renderer-only delay; samples themselves are never held back. */
-export function linePlaybackDelayMs(delayMs: number | undefined): number {
-  return typeof delayMs === "number" &&
-    Number.isFinite(delayMs) &&
-    delayMs > 0 &&
-    delayMs <= 5_000
-    ? delayMs
-    : 0;
-}
-
-/**
- * Seconds of history a line must be handed, for the axis this file draws.
- *
- * **The axis window plus one playback delay.** The axis ends at the delayed
- * render clock and begins one window earlier, while `toSeriesPoints` keeps the
- * sample before that start. The source now returns that predecessor itself, so
- * the request is the axis window plus the delay that moves the clock — no
- * second delay to compensate for a missing sample (`vg-571`).
- */
-export function lineHistorySeconds(
-  windowSeconds: number,
-  chartPlaybackDelayMs: number | undefined,
-): number {
-  return windowSeconds + linePlaybackDelayMs(chartPlaybackDelayMs) / 1000;
 }
 
 /** Local emitted shape keeps raw engine options out of the theme model (§87). */
@@ -150,30 +125,36 @@ export interface LineOption extends EngineAnimation {
   };
 }
 
-/** Window, sort and cap samples while preserving missing-data gaps. */
+/**
+ * Window, sort and cap a series' readings.
+ *
+ * A reading that is not `ok` and numeric is skipped, not carried as `null`: the
+ * line joins the readings either side and has no break (§83 line exception,
+ * 0124). The axis window is `[windowStart, endMs]`, and the sample just before
+ * it is kept so the line reaches its left edge (`vg-571`).
+ */
 export function toSeriesPoints(
   samples: readonly Sample[],
   settings: Pick<LineSettings, "windowSeconds" | "maxPoints">,
-  nowMs: number,
-  windowStart = nowMs - settings.windowSeconds * 1000,
+  endMs: number,
+  windowStart = endMs - settings.windowSeconds * 1000,
 ): SeriesPoint[] {
-  const points: SeriesPoint[] = [];
-
   const parsed = samples
+    .filter(hasPlottableValue)
     .map((sample) => ({ sample, t: sampleTimeMs(sample) }))
-    .filter(({ t }) => Number.isFinite(t) && t <= nowMs)
+    .filter(({ t }) => Number.isFinite(t) && t <= endMs)
     .sort((a, b) => a.t - b.t);
+
   const firstVisible = parsed.findIndex(({ t }) => t >= windowStart);
   if (firstVisible < 0) return [];
-  const hasPredecessor = firstVisible > 0;
 
   const first = Math.max(0, firstVisible - 1);
-  for (const { sample, t } of parsed.slice(first)) {
-    points.push([t, hasPlottableValue(sample) ? sample.value : null]);
-  }
+  const points: SeriesPoint[] = parsed
+    .slice(first)
+    .map(({ sample, t }) => [t, sample.value]);
 
   if (points.length > settings.maxPoints) {
-    if (!hasPredecessor || settings.maxPoints === 1) {
+    if (first === 0 || settings.maxPoints === 1) {
       return points.slice(-settings.maxPoints);
     }
     return [points[0]!, ...points.slice(-(settings.maxPoints - 1))];
@@ -182,65 +163,43 @@ export function toSeriesPoints(
   return points;
 }
 
-/**
- * The display's continuity policy for a live line.
- *
- * Between batches the axis clock moves while the newest sample stays where it
- * arrived, so the edge can run past it. Holding the last reading to the edge
- * keeps the line continuous, and it holds for as long as the stall lasts: a
- * gap is more jarring than a flat stretch, and the last reading is still the
- * last thing measured.
- *
- * **A stall that ends must not revise the stretch it painted.** When the next
- * batch arrives after the edge has passed the previous sample, the previous
- * reading is repeated at the new sample's arrival, so the line runs flat to
- * that instant and then changes there — a step for a reading, a break for a
- * reported gap. Everything left of the current edge is then exactly what the
- * previous frame drew. The threshold is the playback delay: the edge can only
- * have passed the sample when the gap is longer than it.
- *
- * A trailing `null` is a reported gap, not a late tick: it is never held
- * forward (§83), but the flat stretch before it is still preserved. A
- * zero-delay source cannot hold or step, because its edge never runs ahead of
- * its data.
- */
-export function liveTail(
-  points: readonly SeriesPoint[],
-  renderNowMs: number,
-  delayMs: number,
-): readonly SeriesPoint[] {
-  const last = points.at(-1);
-  if (last === undefined) return points;
+/** The newest plottable reading across a chart's series, if any. */
+export function lineEndMs(series: readonly SeriesInput[]): number | undefined {
+  let end: number | undefined;
 
-  let tail: readonly SeriesPoint[] = points;
-  const previous = tail.at(-2);
-  if (
-    delayMs > 0 &&
-    previous !== undefined &&
-    previous[1] !== null &&
-    last[0] - previous[0] > delayMs
-  ) {
-    tail = [...tail.slice(0, -1), [last[0], previous[1]], last];
+  for (const input of series) {
+    for (const sample of input.samples) {
+      if (!hasPlottableValue(sample)) continue;
+      const t = sampleTimeMs(sample);
+      if (Number.isFinite(t) && (end === undefined || t > end)) end = t;
+    }
   }
 
-  if (last[1] === null || delayMs === 0 || renderNowMs <= last[0]) {
-    return tail;
-  }
-  return [...tail, [renderNowMs, last[1]]];
+  return end;
 }
 
+/**
+ * Draw a line with its axis placed by its data (0124).
+ *
+ * **The axis ends at the newest reading, not at the clock.** Between batches
+ * nothing moves; when a batch lands the whole picture shifts left by the gap it
+ * covers. That is what makes the right edge exact at every refresh rate and
+ * whenever a batch is late or dropped — the old wall clock needed a playback
+ * delay larger than the worst gap, and no layer declares that gap.
+ *
+ * `nowMs` is only the empty-chart fallback: a line with no plottable reading
+ * has no data clock to follow.
+ */
 export function buildLineOption(
   settings: LineSettings,
   series: readonly SeriesInput[],
   nowMs: number,
   animate = true,
   palette?: FabricPalette,
-  chartPlaybackDelayMs?: number,
 ): LineOption {
   const windowMs = settings.windowSeconds * 1000;
-  const delayMs = linePlaybackDelayMs(chartPlaybackDelayMs);
-  const renderNowMs = nowMs - delayMs;
-  const windowStart = renderNowMs - windowMs;
+  const endMs = lineEndMs(series) ?? nowMs;
+  const windowStart = endMs - windowMs;
   const sampling =
     settings.sampling && settings.sampling !== "none"
       ? settings.sampling
@@ -279,9 +238,10 @@ export function buildLineOption(
       type: "time",
       show: settings.showAxes,
       axisLabel: { show: false },
-      // Preview history reveals left-to-right; live data fills from render start.
+      // The window is placed behind the newest reading, so its right end is
+      // always painted (0124).
       min: windowStart,
-      max: renderNowMs,
+      max: endMs,
     },
     yAxis: {
       type: "value",
@@ -293,11 +253,7 @@ export function buildLineOption(
     series: series.map((input, index) => ({
       type: "line" as const,
       name: input.label ?? input.sensorId,
-      data: liveTail(
-        toSeriesPoints(input.samples, settings, nowMs, windowStart),
-        renderNowMs,
-        delayMs,
-      ),
+      data: toSeriesPoints(input.samples, settings, endMs, windowStart),
       showSymbol: settings.showMarkers,
       symbolSize: settings.markerSize,
       // **Never smoothed.** ECharts draws a smooth segment from the points
@@ -384,8 +340,16 @@ function thresholdBands(
   }));
 }
 
+/**
+ * The reading's own clock, not the browser's receive time.
+ *
+ * A queued batch can be delivered minutes after it was sampled; placing it by
+ * its arrival would collapse every reading in the burst onto one x. A constant
+ * skew between the host's clock and the display's cancels, because the axis is
+ * anchored to the same samples (0124).
+ */
 function sampleTimeMs(sample: Sample): number {
-  return Date.parse(sample.presentationTimestamp ?? sample.timestamp);
+  return Date.parse(sample.timestamp);
 }
 
 /** Palette entry for one series, falling back to `stroke`. */

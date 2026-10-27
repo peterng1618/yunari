@@ -1,7 +1,8 @@
 # The preview lens and the stage — design
 
 - **Date:** 2026-10-26
-- **Status:** draft
+- **Status:** landed 2026-10-27 — the lens, stage, letterbox and Previews tab ship; plan at
+  [`archive/2026-10-26-preview-lens-and-stage.md`](../plans/archive/2026-10-26-preview-lens-and-stage.md).
 - **Related:** [`2026-10-23-background-layer-design.md`](2026-10-23-background-layer-design.md),
   [`docs/architecture/ownership.md`](../../architecture/ownership.md),
   [`docs/decisions/0075-a-background-fills-one-of-two-boxes.md`](../../decisions/0075-a-background-fills-one-of-two-boxes.md),

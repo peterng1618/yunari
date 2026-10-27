@@ -1,10 +1,12 @@
 import {
+  type DisplayShape,
   isMeasurementSystem,
   isTimeZoneName,
   type MeasurementSystem,
   normalizeUnitPreferences,
   type UnitPreferences,
 } from "@yunari/renderer-core";
+import { readDisplayPresentation } from "../theme-library-client.js";
 
 /**
  * The editor's seam to the host's own settings: which hardware this PC reports,
@@ -160,6 +162,13 @@ export interface HostSettingsClient {
     theme: string,
     answers: ThemeAnswers,
   ): Promise<ThemeAnswers>;
+  /** Writes a paired display's glass and mounting angle, and answers the
+   *  record's own reading of them. Both fields travel: a shape change decides
+   *  the rule the angle has to satisfy, so the store decides the pair together. */
+  updateDisplayPresentation(
+    id: string,
+    next: { readonly shape: DisplayShape; readonly rotation: number },
+  ): Promise<{ readonly shape: DisplayShape; readonly rotation: number }>;
 }
 
 /** A device a provider reported, kept only where it has the shape one reads. */
@@ -534,6 +543,25 @@ export function createHostSettingsClient(options?: {
       }
       const body = (await response.json()) as { readonly answers?: unknown };
       return readAssigned(body?.answers);
+    },
+
+    async updateDisplayPresentation(id, next) {
+      const response = await fetcher(
+        `${baseUrl}/api/displays/${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ shape: next.shape, rotation: next.rotation }),
+        },
+      );
+      if (!response.ok) {
+        throw await refusal(response, "Could not save the display's shape");
+      }
+      const body = (await response.json()) as {
+        readonly shape?: unknown;
+        readonly rotation?: unknown;
+      };
+      return readDisplayPresentation(body?.shape, body?.rotation);
     },
   };
 }

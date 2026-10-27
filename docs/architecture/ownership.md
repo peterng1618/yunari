@@ -253,7 +253,7 @@ adapter does not own catalog, preview or adoption semantics.
 | WebGradients gradient presets, with their own angles and stops | `host/src/assets/gradients/webgradients.ts` |
 | **The host's first-run page, and the route that serves it** — the page a fresh install reads | `host/src/server.ts` (`firstRunPage`) |
 | Static-path safety | `host/src/serve/static-path.ts` |
-| SSE connection/keep-latest | `host/src/transport/` |
+| SSE connection and its bounded frame queue | `host/src/transport/` |
 | Provider scheduling/failure isolation/fallback | `host/src/providers/registry.ts` |
 | Device assignment and display names | `host/src/settings/devices.ts` |
 | A theme's own device answers | `host/src/settings/theme-settings.ts` |

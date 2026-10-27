@@ -155,6 +155,11 @@ tracks, thresholds, labels, axes/ranges, angles/thickness, spacing and line/area
 options where the family supports them. Missing/non-`ok` samples render gaps,
 never zero.
 
+**Line-only exception (0124):** a line series skips a missing reading and joins
+the readings either side, so it has no break and no blank edge; other families
+still draw the gap. The prohibition that matters is unchanged — a missing
+reading is never drawn as zero.
+
 ## §85 — Engine gap rule
 
 A supported setting needs a property control, persisted authored representation

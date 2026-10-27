@@ -2,7 +2,7 @@ import type { AssetResult, FontCut } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { uiCopy } from "../ui-copy.js";
-import { faceStyle, useSpecimens } from "./font-preview-panel.js";
+import { faceStyle, leadCutOf, useSpecimens } from "./font-preview-panel.js";
 import { SourceMark } from "./source-mark.js";
 
 /** The grid's own geometry: a result's column position is what makes Down and
@@ -52,13 +52,14 @@ const SPECIMEN_SIZE: Readonly<Record<(typeof ROLES)[number], number>> = {
 };
 
 /** The cuts a card draws: a trio's three role faces in reading order, or the
- *  family's first cut. Identity is memoised on the result, because the
+ *  family's lead face — the one its own id names, never the first cut the
+ *  provider happened to list. Identity is memoised on the result, because the
  *  specimen loader re-registers its faces whenever the list changes. */
 function specimenCuts(result: AssetResult): readonly FontCut[] {
   const roles = result.font?.trio?.roles;
   if (roles === undefined) {
-    const first = result.font?.cuts[0];
-    return first === undefined ? [] : [first];
+    const lead = leadCutOf(result);
+    return lead === undefined ? [] : [lead];
   }
   return ROLES.flatMap((role) => {
     const cut = roles[role];

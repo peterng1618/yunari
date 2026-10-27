@@ -461,14 +461,24 @@ describe("ThemeLibraryClient", () => {
     // The route's own shape, unchanged: this PC first, a display holding nothing
     // of its own reading as `null`, and the default as its own field rather than
     // as a row — "what an unassigned display shows" is a theme id, not a display.
+    // An answer with no shape reads as a rectangular, upright screen, which is
+    // the store's own default for a record that cannot hold one.
     await expect(client.listDisplays()).resolves.toEqual({
       default: "living-room",
       displays: [
-        { id: "this-pc", label: "This PC", theme: null },
+        {
+          id: "this-pc",
+          label: "This PC",
+          theme: null,
+          shape: "rect",
+          rotation: 0,
+        },
         {
           id: "kitchen-tablet",
           label: "Kitchen Tablet",
           theme: "kitchen-strip",
+          shape: "rect",
+          rotation: 0,
         },
       ],
     });

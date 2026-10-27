@@ -493,6 +493,22 @@ export class EditorSession {
         onDelete: (id, replacement) => this.#deleteType(id, replacement),
         setRole: (id, role) => this.#document.setPresetRole(id, role),
         unbindFace: (id) => this.#document.unbindPresetFace(id),
+        // The package's own faces, so a bound preset's weight is chosen from
+        // what it holds rather than typed into a fallback.
+        facesOf: (family) =>
+          options.assetManager.declarations.flatMap((asset) =>
+            asset.kind === "font" &&
+            "family" in asset &&
+            asset.family === family
+              ? [
+                  {
+                    assetId: asset.id,
+                    weight: asset.weight,
+                    style: asset.style,
+                  },
+                ]
+              : [],
+          ),
         // The paint half: the selected paint token's fields write through the
         // same document and history ports as the pane's rows once did.
         paints: {
@@ -1006,14 +1022,14 @@ export class EditorSession {
       onAddTrioPresets: (trio) => {
         run(() => document.addTypePresetsFromTrio(trio));
       },
-      onAddPreset: (cut, role) => {
-        run(() => document.addTypePresetFromCut(cut, role));
+      onAddPreset: (cut, role, family) => {
+        run(() => document.addTypePresetFromCut(cut, role, family));
       },
       ...(selected === undefined
         ? {}
         : {
-            onApplyToSelected: (cut: FontCut) => {
-              run(() => document.applyCutToPreset(selected, cut));
+            onApplyToSelected: (cut: FontCut, family: readonly FontCut[]) => {
+              run(() => document.applyCutToPreset(selected, cut, family));
             },
           }),
     });

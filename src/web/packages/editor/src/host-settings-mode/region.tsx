@@ -10,11 +10,6 @@ import {
   type ControlOption,
   ControlSelect,
 } from "../components/ui/control-select.js";
-import {
-  ControlRow,
-  ControlWell,
-  useControlIds,
-} from "../components/ui/control-well.js";
 import type { ShellMode } from "../editor-shell/shell-layout.js";
 import {
   createThemeLibraryClient,
@@ -32,6 +27,11 @@ import {
   type HostSettingsClient,
   type ThemeAnswers,
 } from "./client.js";
+import { DeviceNameRow } from "./device-name-row.js";
+import {
+  type DisplayPresentation,
+  DisplayPresentationSection,
+} from "./display-presentation-section.js";
 import { Group } from "./section-group.js";
 import { createSourcesClient, type SourcesClient } from "./sources-client.js";
 import { SourcesSection } from "./sources-section.js";
@@ -471,6 +471,28 @@ function HostSettings(props: {
 
   const asked = unanswered(questions?.required ?? [], questions?.answers ?? {});
 
+  /** **The row is replaced from the host's answer**, never optimistically: the
+   *  store decides the pair together, and a snapped angle it refused must not
+   *  stand on the row as though it had been stored. */
+  const replacePresentation = (
+    id: string,
+    saved: DisplayPresentation,
+  ): void => {
+    if (!mounted.current) return;
+    setMap((current) =>
+      current === undefined
+        ? current
+        : {
+            ...current,
+            displays: current.displays.map((row) =>
+              row.id === id
+                ? { ...row, shape: saved.shape, rotation: saved.rotation }
+                : row,
+            ),
+          },
+    );
+  };
+
   return (
     // **No status strip of its own.** §7.6's bar is the shell's, drawn once as a
     // sibling of every mode's region, and this mode's line reaches it through
@@ -507,6 +529,8 @@ function HostSettings(props: {
                       key={display.id}
                       value={display.id}
                       data-yunari-host-display={display.id}
+                      data-shape={display.shape}
+                      data-rotation={display.rotation}
                       className="flex items-center gap-[var(--space-12)] rounded-lg border border-edge bg-panel-2 px-[var(--space-10)] py-[var(--space-8)] text-left data-[pressed]:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                     >
                       <span className="min-w-0 flex-1 text-xs text-text">
@@ -538,6 +562,13 @@ function HostSettings(props: {
               </ToggleGroup>
             )}
           </Group>
+
+          <DisplayPresentationSection
+            display={selectedRow}
+            write={write}
+            save={settings.updateDisplayPresentation}
+            onSaved={replacePresentation}
+          />
 
           <Group
             testId="devices"
@@ -592,7 +623,7 @@ function HostSettings(props: {
                   {uiCopy.hostSettings.devices.namesHint}
                 </p>
                 {everyDevice(devices).map((device) => (
-                  <NameRow
+                  <DeviceNameRow
                     key={device.id}
                     device={device}
                     value={devices.names[device.id] ?? ""}
@@ -732,53 +763,5 @@ function HostSettings(props: {
         </div>
       </div>
     </div>
-  );
-}
-
-/**
- * One device's name, as a draft that commits on the way out.
- *
- * **A keystroke writes a draft and not the setting.** The host rewrites the
- * whole settings file on a write, so committing per character would be one
- * rewrite per letter — and `change` is the moment the page this absorbs commits
- * on. Enter commits by leaving the field, which is the same act.
- */
-function NameRow(props: {
-  readonly device: AvailableDevice;
-  readonly value: string;
-  readonly onCommit: (name: string) => void;
-}): React.JSX.Element {
-  const ids = useControlIds(`yunari-host-name-${props.device.id}`);
-  const [draft, setDraft] = useState(props.value);
-
-  // The stored name is what the field shows: the host trims it and caps it at
-  // 48 characters, so a save that came back different has to reach the field
-  // rather than leave the untrimmed text standing.
-  useEffect(() => setDraft(props.value), [props.value]);
-
-  const commit = (): void => {
-    if (draft !== props.value) props.onCommit(draft);
-  };
-
-  return (
-    <ControlRow ids={ids} label={props.device.name} labelFor={ids.control}>
-      <ControlWell>
-        <input
-          id={ids.control}
-          type="text"
-          data-yunari-host-name={props.device.id}
-          placeholder={uiCopy.hostSettings.devices.namePlaceholder}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            commit();
-          }}
-          className="h-full w-full bg-transparent text-sm text-text outline-none"
-        />
-      </ControlWell>
-    </ControlRow>
   );
 }

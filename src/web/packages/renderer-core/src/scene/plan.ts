@@ -5,7 +5,6 @@ import { buildGaugeOption } from "../charts/gauge.js";
 import {
   buildLineOption,
   type LineSettings,
-  lineHistorySeconds,
   type SeriesInput,
 } from "../charts/line.js";
 import { buildPieOption, type PieSliceInput } from "../charts/pie.js";
@@ -179,12 +178,6 @@ export type ChartPlanContext = Pick<
   PlanInputs,
   "source" | "nowMs" | "animate"
 > & {
-  /**
-   * The delay the caller's cadence allows, when it differs from the source's
-   * own. `0` drops the delay — what a once-a-second redraw needs, since it has
-   * no trail to hide and every delayed reading would only be late.
-   */
-  readonly playbackDelayMs?: number;
   /**
    * The smaller edge of the canvas ECharts draws into, in backing pixels, when
    * the caller knows it.
@@ -563,8 +556,6 @@ export function buildChartPlan(
   palette?: import("../theme/fabric-envelope.js").FabricPalette,
 ): PlanChart {
   const animate = context.animate ?? true;
-  const playbackDelayMs =
-    context.playbackDelayMs ?? context.source.chartPlaybackDelayMs;
 
   collectChartIssues(
     nodeId,
@@ -602,7 +593,6 @@ export function buildChartPlan(
         bindings,
         content.settings,
         context.source,
-        playbackDelayMs,
       );
 
       return {
@@ -615,7 +605,6 @@ export function buildChartPlan(
           context.nowMs,
           animate,
           palette,
-          playbackDelayMs,
         ),
       };
     }
@@ -726,30 +715,19 @@ function reportUnresolvedChartPaint(
 /**
  * The line branch's history read, transformed per binding.
  *
- * A line's option is rebuilt every frame because its window slides with the
- * clock, but its points only move when a sample does — so a caller holding a
- * source's revision can cache this and rebuild the option from it.
+ * The axis is placed by the newest reading (0124), so the source is asked for
+ * the chart's own window; it returns the sample before that window as well, so
+ * the line still reaches its left edge (`vg-571`).
  */
 export function buildLinePoints(
   bindings: readonly Binding[],
   settings: LineSettings,
   source: SampleSource,
-  playbackDelayMs: number | undefined = source.chartPlaybackDelayMs,
 ): readonly SeriesInput[] {
-  // The line owns how much history it needs, including the one sample its left
-  // edge is drawn from; asking for less starts the line inside the plot
-  // (vg-571). The caller's delay is the one the option is drawn with, so a
-  // display whose cadence overrides the source's asks for the same window the
-  // axis will show.
-  const historySeconds = lineHistorySeconds(
-    settings.windowSeconds,
-    playbackDelayMs,
-  );
-
   return bindings.map((binding) => ({
     sensorId: binding.semanticKey,
     samples: source
-      .history(binding.semanticKey, historySeconds)
+      .history(binding.semanticKey, settings.windowSeconds)
       .map((sample) => transformSample(sample, binding)),
   }));
 }
