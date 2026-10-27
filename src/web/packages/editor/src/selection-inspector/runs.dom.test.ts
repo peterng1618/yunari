@@ -416,7 +416,10 @@ describe("binding a text run to a sensor", () => {
 });
 
 describe("what a run cannot carry", () => {
-  const mixedRuns: readonly TextRun[] = [trackedRun("CPU "), trackedRun("42%", 4)];
+  const mixedRuns: readonly TextRun[] = [
+    trackedRun("CPU "),
+    trackedRun("42%", 4),
+  ];
 
   it("says a second run's tracking is not shown separately", async () => {
     // The defect this covers is a control that does nothing: the author sets
@@ -481,7 +484,9 @@ describe("what a run cannot carry", () => {
   });
 
   it("says nothing when no run tracks", async () => {
-    const box = mountRunEditor({ runs: [trackedRun("CPU "), trackedRun("42%")] });
+    const box = mountRunEditor({
+      runs: [trackedRun("CPU "), trackedRun("42%")],
+    });
 
     expect(box.notes()).toEqual([]);
     return box.dispose();
@@ -500,14 +505,16 @@ describe("a run's own size", () => {
     // The composition's heading is 72 at a 1080 artboard; the row must read the
     // same rule the canvas paints from, not a second copy of the ratio.
     const box = mountRunEditor({
-      runs: [{ kind: "literal", text: "Title", typeToken: "typeTokens.heading" }],
+      runs: [
+        { kind: "literal", text: "Title", typeToken: "typeTokens.heading" },
+      ],
       globals: roles,
       artboardHeight: 1080,
     });
 
-    expect(
-      box.pick<HTMLInputElement>('[data-yunari-run-size="0"]').value,
-    ).toBe("72");
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-size="0"]').value).toBe(
+      "72",
+    );
     return box.dispose();
   });
 
@@ -525,9 +532,9 @@ describe("a run's own size", () => {
       artboardHeight: 1080,
     });
 
-    expect(
-      box.pick<HTMLInputElement>('[data-yunari-run-size="0"]').value,
-    ).toBe("46");
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-size="0"]').value).toBe(
+      "46",
+    );
     return box.dispose();
   });
 });

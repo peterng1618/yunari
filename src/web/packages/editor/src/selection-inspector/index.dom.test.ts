@@ -2037,7 +2037,9 @@ describe("the size a run is set in", () => {
       runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.heading" }],
     });
     const { host } = setup(text, {
-      globals: { typeTokens: { heading: { family: "Inter" } } } as FabricGlobals,
+      globals: {
+        typeTokens: { heading: { family: "Inter" } },
+      } as FabricGlobals,
       artboardHeight: 2160,
     });
 

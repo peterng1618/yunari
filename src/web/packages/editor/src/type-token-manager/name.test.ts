@@ -94,7 +94,11 @@ describe("tokenIdOfFace", () => {
 
   it("answers undefined when no token carries the face", () => {
     expect(
-      tokenIdOfFace({ body: { family: "Inter", weight: 400 } }, "Segoe UI", 600),
+      tokenIdOfFace(
+        { body: { family: "Inter", weight: 400 } },
+        "Segoe UI",
+        600,
+      ),
     ).toBeUndefined();
   });
 });

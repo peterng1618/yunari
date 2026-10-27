@@ -307,8 +307,12 @@ it("draws no role-replacement hint when the theme has no such role", () => {
 it("gates the hint on the chosen role, not on any role existing", () => {
   // Only `heading` exists here: a condition keyed on "the theme has some role"
   // would draw the hint under Body too and promise a rewrite that cannot happen.
-  const headingOnly: TypeTokens = { heading: { family: "Yaldevi", weight: 300 } };
-  mount(panel({ selected: family, presets: headingOnly, onAddPreset: vi.fn() }));
+  const headingOnly: TypeTokens = {
+    heading: { family: "Yaldevi", weight: 300 },
+  };
+  mount(
+    panel({ selected: family, presets: headingOnly, onAddPreset: vi.fn() }),
+  );
 
   expect(document.querySelector("[data-yunari-font-role-replaces]")).toBeNull();
   expect(document.body.textContent).toContain("Body — Manrope · adds one");
@@ -325,7 +329,9 @@ it("gates the hint on the chosen role, not on any role existing", () => {
     role?.dispatchEvent(new Event("change", { bubbles: true }));
   });
 
-  expect(document.querySelector("[data-yunari-font-role-replaces]")).not.toBeNull();
+  expect(
+    document.querySelector("[data-yunari-font-role-replaces]"),
+  ).not.toBeNull();
   expect(document.body.textContent).toContain(
     "Heading — Manrope · replaces its face",
   );

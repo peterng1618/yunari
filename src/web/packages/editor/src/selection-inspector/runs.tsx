@@ -6,8 +6,8 @@ import type {
   TextRun,
 } from "@yunari/renderer-core";
 import {
-  describeSemanticKey,
   defaultTypeSize,
+  describeSemanticKey,
   formatInstant,
   groupDescriptorsByFamily,
   instantIn,
@@ -289,10 +289,7 @@ export function projectRuns(
       // shows the role default the canvas would paint it at.
       size:
         styleNumber(run, "fontSize") ??
-        defaultTypeSize(
-          tokenIdOf(run.typeToken ?? ""),
-          context.artboardHeight,
-        ),
+        defaultTypeSize(tokenIdOf(run.typeToken ?? ""), context.artboardHeight),
       lineHeight: styleNumber(run, "lineHeight"),
       tracking: styleNumber(run, "letterSpacing"),
       // The binding the run names, as the note's own hook carried it before the

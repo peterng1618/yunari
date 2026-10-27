@@ -627,8 +627,7 @@ function validateFontAsset(
   }
   if (
     asset["subset"] !== undefined &&
-    (typeof asset["subset"] !== "string" ||
-      asset["subset"].trim().length === 0)
+    (typeof asset["subset"] !== "string" || asset["subset"].trim().length === 0)
   ) {
     issues.add(
       "wrong-type",
