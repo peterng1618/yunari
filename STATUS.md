@@ -18,10 +18,9 @@ away and every chart's transition is blitted while it runs.
 
 ## Last completed change
 
-- **Smoothing is authored again:** line `interpolation` is `linear | step | smooth`, the field offers Smooth, and the validator accepts it while still refusing unknown values (0127).
-- **The line still does not animate:** `chartAnimationFor` keeps the line at `animate: false`, so the chart has one kind of motion and the curve only reshapes when a sample lands.
-- **Proof:** 4 tests failed first; 188 pass in the three touched suites, 896 across renderer-core and chart-object, 47 in the editor field tests; typecheck, biome, reuse gate and docs check exit 0.
-- **Unverified:** no browser capture of the curved line.
+- **Animation is a family rule:** `chartAnimationFor(family)` returns false only for the line; the rate argument and the editor's `refreshRate`/`chartRefreshRate` plumbing into charts are gone (0128).
+- **The pump is decided:** decision note 0128 records the transition-scoped blit, its final-frame requirement and the rejected permanent loop.
+- **Proof:** 5 tests failed first, 6 pass in `chart-animation`; 108 pass across the three touched suites; typecheck, biome, reuse gate and docs check exit 0.
 
 ## Next
 

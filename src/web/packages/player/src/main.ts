@@ -324,7 +324,6 @@ async function startHostedTheme(
       theme.bindings ?? {},
       liveHandle.source,
       theme.globals?.palette,
-      chartRate,
       drawnReadings,
     );
     if (sampleChanged) {
@@ -607,7 +606,6 @@ function hydrateCharts(
   bindings: Readonly<Record<string, readonly Binding[]>>,
   source: SampleSource,
   palette: FabricPalette | undefined,
-  rate: ChartRefreshRate,
   drawnReadings: WeakMap<object, string>,
 ): boolean {
   const issues: PlanIssue[] = [];
@@ -645,7 +643,7 @@ function hydrateCharts(
           {
             source,
             nowMs,
-            animate: chartAnimationFor(content.family, rate),
+            animate: chartAnimationFor(content.family),
             ...geometry,
           },
           issues,
@@ -672,7 +670,6 @@ function hydrateCharts(
           bindings,
           source,
           palette,
-          rate,
           drawnReadings,
         )
       ) {

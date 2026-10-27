@@ -13,7 +13,6 @@ import {
   seriesPaintFor,
 } from "@yunari/renderer-core";
 import {
-  type ChartRefreshRate,
   chartAnimationFor,
   type SceneAdapter,
   YunariChart,
@@ -179,7 +178,6 @@ export class ChartManager {
   /** The readings a series may name, pulled at projection time so a catalogue
       refreshed after mount is offered on the next render. */
   readonly #descriptors: () => readonly SemanticKeyDescriptor[];
-  readonly #refreshRate: () => ChartRefreshRate;
 
   /**
    * The reading each chart last drew with, keyed by object id.
@@ -254,7 +252,6 @@ export class ChartManager {
     readonly globals?: FabricGlobals;
     /** The available readings; absent keeps the built-in vocabulary. */
     readonly descriptors?: () => readonly SemanticKeyDescriptor[];
-    readonly refreshRate?: () => ChartRefreshRate;
     readonly onBindingsChange?: (
       id: string,
       bindings: readonly Binding[],
@@ -266,7 +263,6 @@ export class ChartManager {
     this.#bindings = options.bindings ?? {};
     this.#globals = options.globals;
     this.#descriptors = options.descriptors ?? (() => SEMANTIC_KEYS);
-    this.#refreshRate = options.refreshRate ?? (() => 30);
     this.#onBindingsChange = options.onBindingsChange;
     this.#editor.canvas.on("object:modified", this.#rerasterizeScaledChart);
     this.#editor.canvas.on(
@@ -618,7 +614,7 @@ export class ChartManager {
         {
           source: this.#source,
           nowMs: options.nowMs ?? Date.now(),
-          animate: chartAnimationFor(chart.family, this.#refreshRate()),
+          animate: chartAnimationFor(chart.family),
           // The canvas the caps are measured against: the backing edge, which
           // is the scene box times the chart's render scale.
           ...drawnEdgePxOf(chart),
