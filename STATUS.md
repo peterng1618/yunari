@@ -17,11 +17,8 @@ USB panel support: a Lian Li 9.2" LCD (`1CBE:A092`) driven by the host from the 
 
 ## Last completed change
 
-- **Panels are a third display kind driven behind a device port:** `PanelDevice`, the TUR USB protocol, the `usb` transport, a devtools rasteriser, a runner that skips identical frames, and a manager owning one interval per panel.
-- **The record owns the hardware identity:** `createPanel` refuses a second record for the same serial or USB ids, and the reader drops a panel record with no usable hardware and hardware smuggled onto another kind.
-- **Protocol measured, not assumed:** `getVersion` answered `lianli92_0001_2026041401`, and DES-CBC runs through `node-forge` at 504 bytes because `node:crypto` refuses it.
-- **Recording:** decision `0130`, and `usb` 3.2.1 (MIT) in the notices and dependency docs.
-- **Proof:** `npm run gate` exit 0 — 64 panel and display tests pass, and the host suite is 129 files / 2191 passed.
+- **The panel routes are tested:** `GET/POST /api/displays/panels` — attached list, add-and-start, unknown model refused before the write, duplicate hardware 409, delete stops the runner, and 404 on a host with no manager.
+- **A host with no panel manager refuses the route:** it would otherwise write a record nothing can drive, and `attachedPanels` is injectable so a case holds a fixture rather than this machine's USB.
 
 ## Next
 

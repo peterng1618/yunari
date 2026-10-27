@@ -1,4 +1,4 @@
-import type { PanelDevice, PanelGeometry } from "./panel-device.js";
+import type { PanelDevice } from "./panel-device.js";
 import type { Rasterizer } from "./panel-raster.js";
 
 /**
@@ -105,9 +105,4 @@ function sameBytes(first: Uint8Array, second: Uint8Array): boolean {
   }
 
   return true;
-}
-
-/** A panel's own name for itself, for a log line that names which one failed. */
-export function describePanel(geometry: PanelGeometry): string {
-  return `${geometry.width}x${geometry.height}`;
 }

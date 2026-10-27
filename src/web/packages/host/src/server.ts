@@ -25,6 +25,7 @@ import { handleSubmitRoute } from "./catalogue/submit.js";
 import { DEFAULT_THEMES_DIR } from "./cli/args.js";
 import type { HostBinding } from "./cli/hosting.js";
 import type { ListenableServer } from "./cli/net.js";
+import type { PanelHint } from "./panels/panel-device.js";
 import type { PanelManager } from "./panels/panel-manager.js";
 import { attachedPanels, panelModelFor } from "./panels/tur-usb-panel.js";
 import type {
@@ -332,6 +333,10 @@ export interface HostServerOptions {
    *  explicitly** for the reason `launcher` is: the panel's page is the port
    *  its own socket took, so `main` hands over a manager built per request. */
   readonly panels?: PanelManager | undefined;
+  /** The panels attached right now, for the owner to pick from. Omitted uses
+   *  the real USB enumeration; supplied so a case can hold a fixture rather
+   *  than this machine's hardware. */
+  readonly attachedPanels?: () => Promise<readonly PanelHint[]>;
   /** Registers this host to start at sign-in, so every local monitor comes back
    *  after a reboot. Omitted when this host cannot register itself: the route
    *  then says so rather than reporting a registration that did not happen. */
@@ -1284,6 +1289,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   let lastUnmapped: readonly string[] = [];
   const displays = options.displays;
   const monitors = options.monitors ?? listMonitors;
+  const panelsAttached = options.attachedPanels ?? attachedPanels;
   const pairingCodes = options.pairingCodes ?? createPairingCodeStore();
   const saved = options.rememberLan;
   const devices = options.devices;
@@ -2196,7 +2202,16 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // found rather than admitted, so this is the same shape as `monitors`:
       // what the hardware says is here, and no record implied by it.
       if (url.pathname === "/api/displays/panels" && request.method === "GET") {
-        sendJson(response, 200, { panels: await attachedPanels() });
+        if (options.panels === undefined) {
+          sendText(
+            response,
+            404,
+            "Panel management is not enabled on this host.",
+          );
+          return;
+        }
+
+        sendJson(response, 200, { panels: await panelsAttached() });
         return;
       }
       // A USB panel: driven by this host rather than served a page, so it is
@@ -2205,6 +2220,18 @@ export function createHostServer(options: HostServerOptions): HostServer {
         url.pathname === "/api/displays/panels" &&
         request.method === "POST"
       ) {
+        // Refused before the body is read: a host with no panel manager would
+        // write a record nothing can drive, which is a row in the list that
+        // never shows anything and cannot say why.
+        if (options.panels === undefined) {
+          sendText(
+            response,
+            404,
+            "Panel management is not enabled on this host.",
+          );
+          return;
+        }
+
         let body: {
           readonly label: string;
           readonly panel: unknown;

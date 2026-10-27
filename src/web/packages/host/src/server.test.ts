@@ -28,6 +28,7 @@ import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
 import { type ListenableServer, listenWithFallback } from "./cli/net.js";
+import type { PanelManager } from "./panels/panel-manager.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { MAX_BOX_ART_BYTES } from "./providers/game/box-art.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
@@ -4817,6 +4818,186 @@ describe("A local monitor is specified rather than paired", () => {
     );
     expect(autostart.status).toBe(405);
     expect(autostart.text()).toBe("This path supports POST.");
+  });
+
+  describe("a USB panel", () => {
+    const STRIP = { vendorId: 0x1cbe, productId: 0xa092, model: "lianli-9-2" };
+    const ATTACHED_PANELS = [
+      { vendorId: 0x1cbe, productId: 0xa092, serial: "PANEL0001" },
+    ];
+
+    /** A manager that starts and stops records without opening anything: what
+     *  these cases need is which routes reach it. */
+    function managerOver(started: string[], stopped: string[]): PanelManager {
+      return {
+        start: (id) => {
+          started.push(id);
+          return Promise.resolve();
+        },
+        stop: (id) => {
+          stopped.push(id);
+        },
+        reconcile: () => Promise.resolve(),
+        running: () => [],
+        stopAll: () => Promise.resolve(),
+      };
+    }
+
+    function panelHost(
+      started: string[] = [],
+      stopped: string[] = [],
+    ): ReturnType<typeof host> {
+      return host({
+        panels: managerOver(started, stopped),
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+      });
+    }
+
+    it("answers what is attached, and adds one the host drives", async () => {
+      const started: string[] = [];
+      const hosting = panelHost(started);
+
+      try {
+        const attached = await request(
+          hosting.server,
+          "GET",
+          "/api/displays/panels",
+        );
+        expect(attached.status).toBe(200);
+        expect(attached.json()).toEqual({ panels: ATTACHED_PANELS });
+
+        const added = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        expect(added.status).toBe(201);
+        expect(await listed(hosting)).toEqual([
+          expect.objectContaining({ id: "strip", kind: "panel", panel: STRIP }),
+        ]);
+        // Driven now, not on the next reconcile: the first frame is the whole
+        // difference between a configured panel and a black one.
+        expect(started).toEqual(["strip"]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("refuses a model no driver claims, before writing a record", async () => {
+      // A record nothing can open would be a row in the list that never shows
+      // anything and cannot say why.
+      const hosting = panelHost();
+
+      try {
+        const refused = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({
+            label: "Strip",
+            panel: { vendorId: 0x1c8e, productId: 0xa092, model: "lianli-9-2" },
+          }),
+        );
+        expect(refused.status).toBe(400);
+        expect(refused.text()).toBe("No driver on this host claims 1c8e:a092.");
+        expect(await listed(hosting)).toEqual([]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("refuses a body with no usable hardware", async () => {
+      const hosting = panelHost();
+
+      try {
+        const refused = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: { vendorId: 0, productId: 0xa092 } }),
+        );
+        expect(refused.status).toBe(400);
+        expect(refused.text()).toBe(
+          "A panel display needs the device it drives.",
+        );
+        expect(await listed(hosting)).toEqual([]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("refuses a second display for a panel one already holds", async () => {
+      const hosting = panelHost();
+
+      try {
+        const first = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        expect(first.status).toBe(201);
+
+        const second = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip again", panel: STRIP }),
+        );
+        expect(second.status).toBe(409);
+        expect(second.text()).toMatch(/already holds/);
+        expect(await listed(hosting)).toHaveLength(1);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("stops a panel's runner when its record is removed", async () => {
+      const stopped: string[] = [];
+      const hosting = panelHost([], stopped);
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        expect(
+          (await request(hosting.server, "DELETE", "/api/displays/strip"))
+            .status,
+        ).toBe(200);
+        expect(stopped).toEqual(["strip"]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("is absent from a host with no panel manager", async () => {
+      // Omitted means this host drives no panels, so naming one is not a
+      // request it can honour — and it says so rather than enumerating USB.
+      const answer = await request(
+        hosted.server,
+        "GET",
+        "/api/displays/panels",
+      );
+      expect(answer.status).toBe(404);
+      expect(answer.text()).toBe(
+        "Panel management is not enabled on this host.",
+      );
+      expect(
+        (
+          await request(
+            hosted.server,
+            "POST",
+            "/api/displays/panels",
+            json({ label: "Strip", panel: STRIP }),
+          )
+        ).status,
+      ).toBe(404);
+      expect(await listed()).toEqual([]);
+    });
   });
 
   it("refuses a second local display for a monitor one already holds", async () => {

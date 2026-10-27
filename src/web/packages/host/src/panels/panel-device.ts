@@ -31,19 +31,3 @@ export interface PanelDevice {
   present(jpeg: Uint8Array): Promise<void>;
   close(): Promise<void>;
 }
-
-/**
- * One panel model: what it is called, what it looks like, and how to drive one.
- *
- * `matches` is by hardware, not by name — a panel is found rather than
- * admitted, so its identity is the IDs the firmware reports.
- */
-export interface PanelModel {
-  readonly id: string;
-  readonly label: string;
-  readonly vendorId: number;
-  readonly productId: number;
-  readonly geometry: PanelGeometry;
-  /** Opens the first attached panel of this model. */
-  open(): Promise<PanelDevice>;
-}
