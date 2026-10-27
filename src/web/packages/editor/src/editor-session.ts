@@ -537,7 +537,7 @@ export class EditorSession {
         importLocalFont: () => this.#pickFontFile(),
         ...(options.onFindFontPicker === undefined
           ? {}
-          : { openFontFinder: () => options.onFindFontPicker?.() }),
+          : { openFontFinder: options.onFindFontPicker }),
         // The paint half: the selected paint token's fields write through the
         // same document and history ports as the pane's rows once did.
         paints: {

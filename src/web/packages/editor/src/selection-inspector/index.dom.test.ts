@@ -1851,6 +1851,41 @@ describe("the token a run is set in", () => {
     expect(JSON.stringify(typeTokens)).toBe(before);
   });
 
+  it("points the run at the imported token when the selection stayed", async () => {
+    const text = labelled();
+    let report: ((tokenId: string) => void) | undefined;
+    const { host, history } = setup(text, {
+      globals: {
+        typeTokens: {
+          heading: { family: "Manrope", weight: 600 },
+          body: { family: "Inter", weight: 400 },
+        },
+      } as FabricGlobals,
+      importLocalFont: (onImported) => {
+        report = onImported;
+      },
+    });
+
+    await choose(
+      host,
+      'data-yunari-run-preset="0"',
+      uiCopy.panels.importLocalFont,
+    );
+    expect(history.saveState).not.toHaveBeenCalled();
+
+    // The commit answered with the token it created; the object that asked is
+    // still the described one, so its run takes the reference.
+    await act(async () => {
+      report?.("heading");
+    });
+
+    const authored = text.get("yunariText") as {
+      readonly runs: readonly { readonly typeToken?: string }[];
+    };
+    expect(authored.runs[0]?.typeToken).toBe("typeTokens.heading");
+    expect(history.saveState).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses the token when the selection moved before the import answered", async () => {
     const first = labelled();
     const second = new Textbox("Hi", {
