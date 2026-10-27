@@ -83,7 +83,10 @@
       "type": "object", "additionalProperties": false,
       "properties": {
         "palette": { "$ref": "#/$defs/paletteGroup" },
-        "typePresets": { "$ref": "#/$defs/typePresetGroup" }
+        "typeTokens": {
+          "description": "The theme's named faces, keyed by token id. The ids `heading`, `body` and `mono` must all exist and role is the id, so no record carries a role tag; that is a runtime rule of the validator, which JSON Schema cannot state here without also making every token one of the three.",
+          "$ref": "#/$defs/typeTokenGroup"
+        }
       }
     },
     "paletteGroup": {
@@ -99,23 +102,17 @@
         "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 120 }, "value": { "$ref": "#/$defs/palettePaint" } }
       }
     },
-    "typePresetGroup": {
+    "typeTokenGroup": {
       "type": "object", "propertyNames": { "$ref": "#/$defs/stableId" },
-      "additionalProperties": {
-        "type": "object", "additionalProperties": false, "required": ["name", "value"],
-        "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 120 }, "value": { "$ref": "#/$defs/typePreset" } }
-      }
+      "additionalProperties": { "$ref": "#/$defs/typeToken" }
     },
-    "typePreset": {
-      "type": "object", "additionalProperties": false, "required": ["family", "size", "face"],
+    "typeToken": {
+      "description": "A named face, and nothing about how it is worn: size, leading and tracking belong to the run that references it.",
+      "type": "object", "additionalProperties": false, "required": ["family"],
       "properties": {
         "family": { "type": "string", "minLength": 1 },
-        "size": { "type": "number", "exclusiveMinimum": 0 },
         "weight": { "oneOf": [{ "type": "string" }, { "type": "number" }] },
-        "letterSpacing": { "type": "number" },
-        "lineHeight": { "type": "number", "exclusiveMinimum": 0 },
-        "face": { "$ref": "#/$defs/fontFaceReference" },
-        "trioRole": { "enum": ["heading", "body", "mono"] }
+        "face": { "$ref": "#/$defs/fontFaceReference" }
       }
     },
     "fontFaceReference": { "type": "object", "additionalProperties": false, "required": ["assetId"], "properties": { "assetId": { "$ref": "#/$defs/stableId" } } },
@@ -151,6 +148,7 @@
         "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "family": { "type": "string", "minLength": 1 }, "weight": { "oneOf": [{ "type": "string" }, { "type": "number" }] },
         "style": { "enum": ["normal", "italic"] }, "format": { "enum": ["woff2", "woff", "ttf", "otf"] },
+        "subset": { "type": "string", "minLength": 1 },
         "sourceUrl": { "type": "string", "format": "uri" },
         "license": { "type": "object", "additionalProperties": false, "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 200 }, "url": { "type": "string", "format": "uri" }, "attribution": { "type": "string", "maxLength": 500 } } }
       }

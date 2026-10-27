@@ -60,95 +60,43 @@ describe("curated font trios", () => {
     expect(faces).toHaveLength(261);
   });
 
-  it("updates every role preset without changing its treatment or custom presets", () => {
+  it("updates every role token without changing its treatment or custom tokens", () => {
     const heading = trio.faces.find((face) => face.role === "heading")!;
     const body = trio.faces.find((face) => face.role === "body")!;
     const mono = trio.faces.find((face) => face.role === "mono")!;
     const presets = {
-      heading: {
-        name: "Heading",
-        value: {
-          family: "Segoe UI",
-          size: 32,
-          weight: "500",
-          lineHeight: 1.2,
-          trioRole: "heading" as const,
-        },
-      },
-      // A second heading preset, distinguished only by its tracking. Two
-      // presets sharing one role is what exercises per-preset spread: the face
-      // is replaced for both, and every other authored value survives.
-      metric: {
-        name: "Metric",
-        value: {
-          family: "Segoe UI",
-          size: 70,
-          weight: "300",
-          letterSpacing: 2,
-          trioRole: "heading" as const,
-        },
-      },
-      body: {
-        name: "Body",
-        value: { family: "Segoe UI", size: 14, trioRole: "body" as const },
-      },
-      mono: {
-        name: "Code",
-        value: { family: "Segoe UI", size: 12, trioRole: "mono" as const },
-      },
-      custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+      heading: { family: "Segoe UI", weight: "500" },
+      // Not a role id, so the role rule does not touch it.
+      metric: { family: "Segoe UI", weight: "300" },
+      body: { family: "Segoe UI" },
+      mono: { family: "Segoe UI" },
+      custom: { family: "Georgia" },
     };
 
     expect(applyFontTrio(presets, trio)).toEqual({
       heading: {
-        name: "Heading",
-        value: {
-          family: heading.family,
-          size: 32,
-          weight: heading.weight,
-          lineHeight: 1.2,
-          trioRole: "heading",
-          face: { assetId: heading.id },
-        },
+        family: heading.family,
+        weight: heading.weight,
+        face: { assetId: heading.id },
       },
-      metric: {
-        name: "Metric",
-        value: {
-          family: heading.family,
-          size: 70,
-          weight: heading.weight,
-          letterSpacing: 2,
-          trioRole: "heading",
-          face: { assetId: heading.id },
-        },
-      },
+      metric: { family: "Segoe UI", weight: "300" },
       body: {
-        name: "Body",
-        value: {
-          family: body.family,
-          size: 14,
-          weight: body.weight,
-          trioRole: "body",
-          face: { assetId: body.id },
-        },
+        family: body.family,
+        weight: body.weight,
+        face: { assetId: body.id },
       },
       mono: {
-        name: "Code",
-        value: {
-          family: mono.family,
-          size: 12,
-          weight: mono.weight,
-          trioRole: "mono",
-          face: { assetId: mono.id },
-        },
+        family: mono.family,
+        weight: mono.weight,
+        face: { assetId: mono.id },
       },
-      custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+      custom: { family: "Georgia" },
     });
   });
 
-  it("leaves a preset with no trio role untouched", () => {
+  it("leaves a token with no trio role untouched", () => {
     const custom = {
-      only: { name: "Only", value: { family: "Georgia", size: 19 } },
+      only: { family: "Georgia" },
     };
     expect(applyFontTrio(custom, trio)).toEqual(custom);
   });

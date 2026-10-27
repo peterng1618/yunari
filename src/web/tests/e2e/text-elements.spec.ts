@@ -334,8 +334,11 @@ function legacyEnvelope(): FabricThemeEnvelope {
     {
       kind: "literal" as const,
       text,
-      typePreset: "typePresets.11-400",
-      style: { color: { ref: "palette.ink" as const } },
+      typeToken: "typeTokens.body",
+      style: {
+        color: { ref: "palette.ink" as const },
+        fontSize: { value: 22 },
+      },
     },
   ];
   return {
@@ -360,11 +363,10 @@ function legacyEnvelope(): FabricThemeEnvelope {
           value: { kind: "solid", color: "rgb(232, 236, 243)" },
         },
       },
-      typePresets: {
-        "11-400": {
-          name: "Caption",
-          value: { family: "system-ui, sans-serif", size: 22, weight: "400" },
-        },
+      typeTokens: {
+        heading: { family: "system-ui, sans-serif", weight: "600" },
+        body: { family: "system-ui, sans-serif", weight: "400" },
+        mono: { family: "ui-monospace, monospace", weight: "400" },
       },
     },
     assets: [],

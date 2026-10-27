@@ -1,7 +1,11 @@
 import type { FontCut, FontTrioInfo } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
-import { applyFontTrio, fontAssetId } from "./type-preset-apply.js";
-import type { TypePresets } from "./type-preset-manager/index.js";
+import {
+  applyFontTrio,
+  fontAssetId,
+  freePresetId,
+} from "./type-preset-apply.js";
+import type { TypeTokens } from "./type-preset-manager/index.js";
 
 function cut(
   role: "heading" | "body" | "mono",
@@ -39,100 +43,43 @@ const bodyId = fontAssetId(trio.roles.body!);
 const monoId = fontAssetId(trio.roles.mono!);
 
 describe("applyFontTrio", () => {
-  it("rewrites every role preset and creates the missing roles", () => {
-    const presets = {
-      heading: {
-        name: "Heading",
-        value: {
-          family: "Segoe UI",
-          size: 32,
-          weight: "500",
-          lineHeight: 1.2,
-          trioRole: "heading" as const,
-        },
-      },
-      // A second heading preset, distinguished by its tracking: two presets
-      // sharing a role is what proves every authored value survives the spread.
-      metric: {
-        name: "Metric",
-        value: {
-          family: "Segoe UI",
-          size: 70,
-          weight: "300",
-          letterSpacing: 2,
-          trioRole: "heading" as const,
-        },
-      },
-      body: {
-        name: "Body",
-        value: { family: "Segoe UI", size: 14, trioRole: "body" as const },
-      },
-      custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+  it("rewrites every role token and creates the missing roles", () => {
+    const presets: TypeTokens = {
+      heading: { family: "Segoe UI", weight: "500" },
+      // Not a role id, so the role rule does not touch it.
+      metric: { family: "Segoe UI", weight: "300" },
+      body: { family: "Segoe UI" },
+      custom: { family: "Georgia" },
     };
 
     expect(applyFontTrio(presets, trio)).toEqual({
       heading: {
-        name: "Heading",
-        value: {
-          family: "Manrope",
-          size: 32,
-          weight: 700,
-          lineHeight: 1.2,
-          trioRole: "heading",
-          face: { assetId: headingId },
-        },
+        family: "Manrope",
+        weight: 700,
+        face: { assetId: headingId },
       },
-      metric: {
-        name: "Metric",
-        value: {
-          family: "Manrope",
-          size: 70,
-          weight: 700,
-          letterSpacing: 2,
-          trioRole: "heading",
-          face: { assetId: headingId },
-        },
-      },
+      metric: { family: "Segoe UI", weight: "300" },
       body: {
-        name: "Body",
-        value: {
-          family: "Inter",
-          size: 14,
-          weight: 400,
-          trioRole: "body",
-          face: { assetId: bodyId },
-        },
+        family: "Inter",
+        weight: 400,
+        face: { assetId: bodyId },
       },
-      custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+      custom: { family: "Georgia" },
       mono: {
-        name: "Mono — Fira Code",
-        value: {
-          family: "Fira Code",
-          size: 14,
-          weight: 400,
-          face: { assetId: monoId },
-          trioRole: "mono",
-        },
+        family: "Fira Code",
+        weight: 400,
+        face: { assetId: monoId },
       },
     });
   });
 
-  it("leaves presets with no role untouched", () => {
-    const custom = { name: "Only", value: { family: "Georgia", size: 19 } };
+  it("leaves tokens with no role untouched", () => {
+    const custom = { family: "Georgia" };
     const result = applyFontTrio(
       {
-        heading: {
-          name: "Heading",
-          value: { family: "Segoe UI", size: 32, trioRole: "heading" },
-        },
-        body: {
-          name: "Body",
-          value: { family: "Segoe UI", size: 14, trioRole: "body" },
-        },
-        mono: {
-          name: "Code",
-          value: { family: "Segoe UI", size: 12, trioRole: "mono" },
-        },
+        heading: { family: "Segoe UI", weight: "500" },
+        body: { family: "Segoe UI" },
+        mono: { family: "Segoe UI", weight: "700" },
         only: custom,
       },
       trio,
@@ -140,49 +87,54 @@ describe("applyFontTrio", () => {
     expect(result.only).toEqual(custom);
   });
 
-  it("creates each missing role at its own size without overwriting a taken id", () => {
-    const authored = {
-      name: "Authored mono",
-      value: { family: "Georgia", size: 19 },
-    };
-    const result = applyFontTrio({ mono: authored }, trio);
+  it("creates each missing role without overwriting a taken id", () => {
+    const authored = { family: "Georgia" };
+    const result = applyFontTrio({ other: authored }, trio);
 
-    expect(result.mono).toEqual(authored);
-    expect(result.heading?.value.size).toBe(46);
-    expect(result.body?.value.size).toBe(24);
-    expect(result["mono-2"]).toEqual({
-      name: "Mono — Fira Code",
-      value: {
-        family: "Fira Code",
-        size: 14,
-        weight: 400,
-        face: { assetId: monoId },
-        trioRole: "mono",
-      },
+    expect(result.other).toEqual(authored);
+    expect(result.heading).toEqual({
+      family: "Manrope",
+      weight: 700,
+      face: { assetId: headingId },
+    });
+    expect(result.body).toEqual({
+      family: "Inter",
+      weight: 400,
+      face: { assetId: bodyId },
+    });
+    expect(result.mono).toEqual({
+      family: "Fira Code",
+      weight: 400,
+      face: { assetId: monoId },
     });
   });
 
-  it("keeps a preset keyed __proto__", () => {
+  it("keeps a token keyed __proto__", () => {
     // A literal `{ "__proto__": … }` sets the prototype, so the fixture has to
     // be parsed: JSON.parse defines `__proto__` as an own key, which is the
     // shape a schema-valid theme file can carry.
     const presets = JSON.parse(
-      '{"__proto__":{"name":"Proto","value":{"family":"Georgia","size":19,"trioRole":"heading"}}}',
-    ) as TypePresets;
+      '{"__proto__":{"family":"Georgia","weight":"400"}}',
+    ) as TypeTokens;
     const result = applyFontTrio(presets, trio);
 
     expect(Object.hasOwn(result, "__proto__")).toBe(true);
     expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
-    expect(result["__proto__"]).toEqual({
-      name: "Proto",
-      value: {
-        family: "Manrope",
-        size: 19,
-        weight: 700,
-        face: { assetId: headingId },
-        trioRole: "heading",
-      },
-    });
+    expect(result["__proto__"]).toEqual({ family: "Georgia", weight: "400" });
+  });
+});
+
+describe("freePresetId", () => {
+  it("mints an unroled id, never a role suffix", () => {
+    // A role is the token's id, so `heading-2` would be an unroled token whose
+    // computed name reads as a second heading.
+    expect(freePresetId({ heading: {}, body: {}, mono: {} })).toBe("type");
+  });
+
+  it("skips ids an authored token already holds", () => {
+    expect(freePresetId({ type: {}, heading: {} }, { "type-2": {} })).toBe(
+      "type-3",
+    );
   });
 });
 
@@ -203,15 +155,12 @@ describe("cut weight", () => {
     const body = { ...trio.roles.body!, weight: "400" };
     const result = applyFontTrio(
       {
-        body: {
-          name: "Body",
-          value: { family: "Segoe UI", size: 14, trioRole: "body" },
-        },
+        body: { family: "Segoe UI" },
       },
       { ...trio, roles: { body } },
     );
 
-    expect(result.body?.value.weight).toBe(400);
-    expect(typeof result.body?.value.weight).toBe("number");
+    expect(result.body?.weight).toBe(400);
+    expect(typeof result.body?.weight).toBe("number");
   });
 });

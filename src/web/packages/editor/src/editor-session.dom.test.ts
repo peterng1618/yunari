@@ -87,7 +87,7 @@ vi.mock("./palette-manager/index.js", async (importOriginal) => {
 /** The panel's two ports are held so a test can drive a rename the way the
  *  panel's own field does — the panel is a double here, so nothing else
  *  reaches `EditorDocument.setTypes`. */
-const typePresetPortMock = vi.hoisted(() => ({
+const typeTokenPortMock = vi.hoisted(() => ({
   change: undefined as ((presets: Record<string, unknown>) => void) | undefined,
   remove: undefined as ((id: string, replacement: string) => void) | undefined,
 }));
@@ -95,16 +95,16 @@ vi.mock("./type-preset-manager/index.js", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("./type-preset-manager/index.js")>();
   return {
-    // Only the panel is doubled. `reassignTypePresetToken` is the document's
+    // Only the panel is doubled. `reassignTypeToken` is the document's
     // delete path and stays the real one, so a delete case exercises it.
     ...actual,
-    createTypePresetPanel: (
+    createTypeTokenPanel: (
       _host: unknown,
       change: (presets: Record<string, unknown>) => void,
       remove: (id: string, replacement: string) => void,
     ) => {
-      typePresetPortMock.change = change;
-      typePresetPortMock.remove = remove;
+      typeTokenPortMock.change = change;
+      typeTokenPortMock.remove = remove;
       return panel();
     },
   };
@@ -660,7 +660,7 @@ describe("EditorSession", () => {
     extensions.destroy();
   });
 
-  it("adopts a trio and replaces every assigned preset face", async () => {
+  it("adopts a trio, replacing every role token and leaving a non-role alone", async () => {
     const fetch = vi.fn(async () => new Response(new Uint8Array([1, 2, 3])));
     vi.stubGlobal("fetch", fetch);
     const onAssetCountChange = vi.fn();
@@ -694,26 +694,10 @@ describe("EditorSession", () => {
       envelope: {
         ...envelope,
         globals: {
-          typePresets: {
-            heading: {
-              name: "Heading",
-              value: {
-                family: "Segoe UI",
-                size: 32,
-                weight: "500",
-                trioRole: "heading",
-              },
-            },
-            metric: {
-              name: "Metric",
-              value: {
-                family: "Segoe UI",
-                size: 70,
-                weight: "300",
-                trioRole: "heading",
-              },
-            },
-            custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+          typeTokens: {
+            heading: { family: "Segoe UI", weight: "500" },
+            metric: { family: "Segoe UI", weight: "300" },
+            custom: { family: "Georgia" },
           },
         },
       },
@@ -741,24 +725,14 @@ describe("EditorSession", () => {
     const heading = fontTrio("minimal")!.faces[0]!;
 
     expect(fetch).toHaveBeenCalledTimes(3);
-    expect(result.globals?.typePresets).toMatchObject({
+    expect(result.globals?.typeTokens).toMatchObject({
       heading: {
-        value: {
-          family: heading.family,
-          size: 32,
-          weight: heading.weight,
-          face: { assetId: heading.id },
-        },
+        family: heading.family,
+        weight: heading.weight,
+        face: { assetId: heading.id },
       },
-      metric: {
-        value: {
-          family: heading.family,
-          size: 70,
-          weight: heading.weight,
-          face: { assetId: heading.id },
-        },
-      },
-      custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+      metric: { family: "Segoe UI", weight: "300" },
+      custom: { family: "Georgia" },
     });
     expect(result.assets).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: heading.id })]),
@@ -803,16 +777,11 @@ describe("EditorSession", () => {
       envelope: {
         ...envelope,
         globals: {
-          typePresets: {
+          typeTokens: {
             heading: {
-              name: "Heading",
-              value: {
-                family: "Segoe UI",
-                size: 32,
-                weight: "700",
-                trioRole: "heading",
-                face: { assetId: fontTrio("minimal")!.faces[0]!.id },
-              },
+              family: "Segoe UI",
+              weight: "700",
+              face: { assetId: fontTrio("minimal")!.faces[0]!.id },
             },
           },
         },
@@ -831,15 +800,11 @@ describe("EditorSession", () => {
 
     const result = await extensions.applyPresetFace("heading", body);
 
-    expect(result.globals?.typePresets).toMatchObject({
+    expect(result.globals?.typeTokens).toMatchObject({
       heading: {
-        value: {
-          family: body.family,
-          size: 32,
-          weight: body.weight,
-          trioRole: "heading",
-          face: { assetId: body.id },
-        },
+        family: body.family,
+        weight: body.weight,
+        face: { assetId: body.id },
       },
     });
     expect(result.assets).toEqual(
@@ -982,11 +947,8 @@ describe("EditorSession", () => {
       envelope: {
         ...envelope,
         globals: {
-          typePresets: {
-            heading: {
-              name: "Heading",
-              value: { family: "Segoe UI", size: 32, trioRole: "heading" },
-            },
+          typeTokens: {
+            heading: { family: "Segoe UI", weight: "500" },
           },
         },
       },
@@ -1003,11 +965,8 @@ describe("EditorSession", () => {
     });
 
     await expect(extensions.applyFontTrio("minimal")).rejects.toThrow("404");
-    expect(extensions.envelope.globals?.typePresets).toEqual({
-      heading: {
-        name: "Heading",
-        value: { family: "Segoe UI", size: 32, trioRole: "heading" },
-      },
+    expect(extensions.envelope.globals?.typeTokens).toEqual({
+      heading: { family: "Segoe UI", weight: "500" },
     });
     expect(shell.editor.historyManager.saveState).not.toHaveBeenCalled();
     extensions.destroy();
@@ -1074,23 +1033,23 @@ describe("EditorSession", () => {
     hydrate.mockRestore();
   });
 
-  it("reaches every globals consumer when a type preset is renamed, so the inspector follows", () => {
+  it("reaches every globals consumer when a type token's face changes, so the inspector follows", () => {
     // vg-232. The receivers were listed inline once per setter and the lists
     // disagreed: `setTypes` told three, never the inspector. The inspector
-    // reads a preset's name out of `context.globals`, and `setGlobals` is the
-    // only thing that updates it, so a rename left the surface printing the old
-    // name until an unrelated `object:modified` re-rendered it. This reads the
-    // surface the author reads rather than counting the calls.
+    // reads a token's computed name out of `context.globals`, and `setGlobals`
+    // is the only thing that updates it, so a face edit left the surface
+    // printing the old name until an unrelated `object:modified` re-rendered
+    // it. This reads the surface the author reads rather than counting calls.
     //
     // **It read the Spends line until 2026-10-15.** Item 17 removed that
-    // section, so the surface is the run editor's own preset control — which
-    // names its presets out of the same `context.globals`, through the same
+    // section, so the surface is the run editor's own token control — which
+    // names its tokens out of the same `context.globals`, through the same
     // `selection.setGlobals` this row's fix introduced. The claim is unchanged;
     // only the element that prints it moved.
     const text = new IText("Hi", { left: 0, top: 0 });
     text.set({
       yunariText: {
-        runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+        runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
       },
     });
     const selectionHost = document.createElement("div");
@@ -1106,6 +1065,9 @@ describe("EditorSession", () => {
           requestRenderAll: vi.fn(),
           fire: vi.fn(),
         },
+        // The run editor reads the artboard for a role default size; this is
+        // the frame the fixture's envelope declares.
+        artboard: () => ({ width: 100, height: 100 }),
         clipboardManager: { setImageImporter: vi.fn(), setBindings: vi.fn() },
         textManager: {
           addText: vi.fn(),
@@ -1123,14 +1085,16 @@ describe("EditorSession", () => {
       setGlobals: vi.fn(),
       refreshGlass: vi.fn(),
     };
-    const presets = (name: string) => ({
-      body: { name, value: { family: "Inter", size: 16, weight: "600" } },
+    // The family is the only part of the computed name that moves: a token has
+    // no stored name to rename, and the id is the role.
+    const presets = (family: string) => ({
+      body: { family, weight: "600" },
     });
     const extensions = new EditorSession({
       assetManager: new AssetManager(),
       shell: shell as never,
       source: {} as never,
-      envelope: { ...envelope, globals: { typePresets: presets("Body") } },
+      envelope: { ...envelope, globals: { typeTokens: presets("Inter") } },
       panelHosts: {
         add: document.body,
         assets: document.body,
@@ -1148,12 +1112,13 @@ describe("EditorSession", () => {
         .querySelector('[data-yunari-run-preset="0"] [data-yunari-value]')
         ?.textContent?.trim() ?? "";
 
-    expect(printed()).toBe("Body");
+    // The trigger prints the computed name, role first: the id is the role.
+    expect(printed()).toBe("[Body] Inter 600");
 
-    // The panel's own field writes the whole map, which is what a rename is.
-    typePresetPortMock.change?.(presets("Body Renamed"));
+    // The panel's own field writes the whole map, which is what a face edit is.
+    typeTokenPortMock.change?.(presets("Manrope"));
 
-    expect(printed()).toBe("Body Renamed");
+    expect(printed()).toBe("[Body] Manrope 600");
     extensions.destroy();
   });
 
@@ -1166,8 +1131,8 @@ describe("EditorSession", () => {
     document.body.append(selectionHost);
     const tokenSelection = new TokenSelectionStore(new SelectionStore());
     const presets = {
-      body: { name: "Body", value: { family: "Inter", size: 16 } },
-      caption: { name: "Caption", value: { family: "Inter", size: 12 } },
+      body: { family: "Inter" },
+      caption: { family: "Inter" },
     };
     const paints = {
       background: {
@@ -1212,7 +1177,7 @@ describe("EditorSession", () => {
       source: {} as never,
       envelope: {
         ...envelope,
-        globals: { typePresets: presets, palette: paints },
+        globals: { typeTokens: presets, palette: paints },
       },
       panelHosts: {
         add: document.body,
@@ -1240,17 +1205,18 @@ describe("EditorSession", () => {
     tokenSelection.set({ kind: "preset", id: "body" });
     expect(objectColumn?.style.display).toBe("none");
     expect(
-      tokenColumn?.querySelector("[data-yunari-token-name]"),
+      tokenColumn?.querySelector("[data-yunari-token-family]"),
     ).not.toBeNull();
 
     tokenSelection.clear();
     expect(objectColumn?.style.display).toBe("");
     expect(tokenColumn?.textContent).toBe("");
 
-    // Deleting the preset the token names clears the token too: the column must
-    // show the object selection again rather than staying suppressed over a
-    // preset the document no longer has. The replacement is the other preset.
-    tokenSelection.set({ kind: "preset", id: "body" });
+    // Deleting the token the selection names clears the token too: the column
+    // must show the object selection again rather than staying suppressed over
+    // a token the document no longer has. The replacement is the other token,
+    // and the deleted one is unroled because a role cannot be deleted.
+    tokenSelection.set({ kind: "preset", id: "caption" });
     expect(objectColumn?.style.display).toBe("none");
     // A plain click: the token panel renders through `flushSync`, so the
     // document write and the suppression it causes land synchronously. Wrapping
@@ -1283,12 +1249,12 @@ describe("EditorSession", () => {
     // A held ref there would keep the object column suppressed over a blank
     // section, so the render drops the ref when the document no longer declares
     // the token — once per kind.
-    tokenSelection.set({ kind: "preset", id: "caption" });
+    tokenSelection.set({ kind: "preset", id: "body" });
     expect(objectColumn?.style.display).toBe("none");
     expect(
-      tokenColumn?.querySelector("[data-yunari-token-name]"),
+      tokenColumn?.querySelector("[data-yunari-token-family]"),
     ).not.toBeNull();
-    typePresetPortMock.change?.({});
+    typeTokenPortMock.change?.({});
     // The document batches a task's announcements into one flush, so the
     // re-render that drops the ref arrives on the microtask.
     await Promise.resolve();
@@ -2119,8 +2085,8 @@ describe("a save that carries only what changed", () => {
       envelope: {
         ...opened,
         globals: {
-          typePresets: {
-            heading: { name: "Heading", value: { family: "Inter" } },
+          typeTokens: {
+            heading: { family: "Inter" },
           },
         },
         assets: [
@@ -2880,11 +2846,13 @@ describe("the local font import", () => {
     await extensions.actionFacade().savePackage();
     const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
     const presets =
-      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typePresets ??
+      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens ??
       {};
     expect(Object.values(presets)).toHaveLength(1);
     expect(Object.values(presets)[0]).toMatchObject({
-      value: { family: "Inter", weight: 700, face: { assetId: "Inter-Bold" } },
+      family: "Inter",
+      weight: 700,
+      face: { assetId: "Inter-Bold" },
     });
     expect(saveMock).toHaveBeenLastCalledWith(
       expect.anything(),
@@ -2931,7 +2899,7 @@ describe("the local font import", () => {
     await extensions.actionFacade().savePackage();
     const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
     expect(
-      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typePresets,
+      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens,
     ).toBeUndefined();
     expect(saved?.[3]).toBeUndefined();
 
@@ -3023,11 +2991,11 @@ describe("the local font import", () => {
     await extensions.actionFacade().savePackage();
     const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
     const presets =
-      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typePresets ??
+      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens ??
       {};
     expect(Object.values(presets)).toHaveLength(1);
     expect(Object.values(presets)[0]).toMatchObject({
-      value: { face: { assetId: face.id } },
+      face: { assetId: face.id },
     });
     const shipped = saved?.[3] as
       | { readonly entries: readonly ThemeCreditsEntry[] }
@@ -3049,11 +3017,8 @@ describe("arming a text placement from every surface", () => {
     palette: {
       ink: { name: "Ink", value: { kind: "solid" as const, color: "#102030" } },
     },
-    typePresets: {
-      body: {
-        name: "Body",
-        value: { family: "Inter", size: 16, weight: "600" },
-      },
+    typeTokens: {
+      body: { family: "Inter", size: 16, weight: "600" },
     },
   };
   const withGlobals = { ...envelope, globals };

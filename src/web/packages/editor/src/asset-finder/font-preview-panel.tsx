@@ -1,7 +1,7 @@
 import type { AssetResult, FontCut, FontTrioInfo } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { TypePresets } from "../type-preset-manager/panel.js";
+import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
 
 /** The trio's roles, in the order the card reads them: a trio that omits a
@@ -19,16 +19,16 @@ export type FontResult = AssetResult & {
   };
 };
 
-/** One preset entry, named as the scope row needs it. */
-type RolePreset = TypePresets[string];
+/** One token, in the shape the scope row needs it. */
+type RolePreset = TypeTokens[string];
 
 function rolePresets(
-  presets: TypePresets,
+  presets: TypeTokens,
   role: FontRole,
 ): readonly RolePreset[] {
-  return Object.values(presets).filter(
-    (entry) => entry.value.trioRole === role,
-  );
+  return Object.entries(presets)
+    .filter(([id]) => id === role)
+    .map(([, token]) => token);
 }
 
 export function cutsOf(selected: FontResult): readonly FontCut[] {
@@ -63,20 +63,16 @@ export function leadCutOf(selected: {
   return cuts.find((cut) => cut.id === entryId) ?? cuts[0];
 }
 
-/** The faces an import brings with the chosen cut: every weight and style of
- *  the family's lead subset, so the preset's weight field has a face to draw at
- *  each weight, plus the chosen cut when the author picked another subset. */
+/** The faces an import brings with the chosen cut: every published cut of the
+ *  family — all weights, subsets and styles — so the preset's weight field has
+ *  a face at each weight and a Vietnamese glyph has a file to resolve to. The
+ *  chosen cut is included even when the result's own list omits it. */
 export function familyCutsOf(
   selected: FontResult,
   chosen: FontCut,
 ): readonly FontCut[] {
-  const lead = leadCutOf(selected) ?? chosen;
-  const sameSubset = selected.font.cuts.filter(
-    (cut) => cut.family === lead.family && cut.subset === lead.subset,
-  );
-  return sameSubset.some((cut) => cut.id === chosen.id)
-    ? sameSubset
-    : [...sameSubset, chosen];
+  const cuts = selected.font.cuts.filter((cut) => cut.family === chosen.family);
+  return cuts.some((cut) => cut.id === chosen.id) ? cuts : [...cuts, chosen];
 }
 
 export function faceStyle(cut: FontCut | undefined): React.CSSProperties {
@@ -140,7 +136,7 @@ export function FontPreviewPanel({
   onApplyToSelected,
 }: {
   readonly selected: FontResult;
-  readonly presets: TypePresets;
+  readonly presets: TypeTokens;
   readonly onApplyTrio: ((trio: FontTrioInfo) => void) | undefined;
   readonly onAddTrioPresets: ((trio: FontTrioInfo) => void) | undefined;
   readonly onAddPreset:
@@ -294,6 +290,7 @@ export function FontPreviewPanel({
                 {copy.newPresetSummary(
                   copy.role[role],
                   selectedCut?.family ?? selected.name,
+                  presets[role] !== undefined,
                 )}
               </span>
             </span>
@@ -315,6 +312,18 @@ export function FontPreviewPanel({
               </select>
             </label>
           </div>
+
+          {/* A chosen role is the token's id, so adding to a role the theme
+              already has replaces that token's face. Said where the Add button
+              is, because the promise and the write must not disagree. */}
+          {presets[role] === undefined ? null : (
+            <p
+              data-yunari-font-role-replaces=""
+              className="m-0 text-[10px] text-faint"
+            >
+              {copy.replacesRole(copy.role[role])}
+            </p>
+          )}
 
           <div className="flex items-center gap-[var(--space-6)]">
             {onAddPreset === undefined || selectedCut === undefined ? null : (
@@ -424,8 +433,8 @@ export function FontPreviewPanel({
                       className="font-mono text-[10px] text-muted"
                     >
                       {copy.change(
-                        first.name,
-                        first.value.weight,
+                        first.family,
+                        first.weight,
                         after.family,
                         after.weight,
                       )}

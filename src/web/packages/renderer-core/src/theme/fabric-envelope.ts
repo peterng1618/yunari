@@ -78,7 +78,7 @@ export interface FabricPaletteEntry {
 
 export type FabricPalette = Readonly<Record<string, FabricPaletteEntry>>;
 /** Development v2 has one global owner for paint and one for typography. */
-export type FabricGlobals = Pick<Globals, "typePresets"> & {
+export type FabricGlobals = Pick<Globals, "typeTokens"> & {
   readonly palette?: FabricPalette;
 };
 

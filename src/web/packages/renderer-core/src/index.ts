@@ -351,7 +351,7 @@ export type {
   TextRun,
   ThemeMetadata,
   ThemeRemix,
-  TypePreset,
+  TypeToken,
   WidgetProvenance,
 } from "./theme/document.js";
 export {
@@ -362,6 +362,7 @@ export {
   FONT_ASSET_FORMATS,
   GLOBAL_GROUPS,
   isSemanticVersion,
+  isTypeTokenRole,
   MAX_ARTBOARD_DIMENSION,
   MAX_BACKGROUND_OFFSET,
   MAX_NODE_COUNT,
@@ -371,6 +372,7 @@ export {
   NODE_TYPES,
   STABLE_ID_PATTERN,
   TAG_PATTERN,
+  TYPE_TOKEN_ROLES,
 } from "./theme/document.js";
 export { envelopeKeysFor } from "./theme/envelope-keys.js";
 export type {
@@ -439,6 +441,7 @@ export type { PaletteTokenOption } from "./theme/palette-tokens.js";
 export { paletteTokenOptions } from "./theme/palette-tokens.js";
 export type { PerformanceCost } from "./theme/performance-cost.js";
 export { performanceCostsOf } from "./theme/performance-cost.js";
+export { defaultTypeSize } from "./theme/type-size.js";
 export type { WidgetIssue } from "./theme/widget.js";
 export { createWidgetIdAllocator } from "./theme/widget.js";
 export type {

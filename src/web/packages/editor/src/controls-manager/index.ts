@@ -222,7 +222,10 @@ let applied = false;
  * The text pass then runs, so the object agrees with its box on the frame the
  * author lets go rather than at the next telemetry tick.
  */
-function withTextboxHeightControls(controls: Record<string, Control>): void {
+function withTextboxHeightControls(
+  controls: Record<string, Control>,
+  artboardHeight: (() => number) | undefined,
+): void {
   // Shared by both edges, as the controls themselves are: one pointer, one drag.
   let atPress: number | undefined;
 
@@ -260,7 +263,11 @@ function withTextboxHeightControls(controls: Record<string, Control>): void {
       // No globals: the run editor's own writes repaint the same way, and a
       // value run keeps its authored placeholder either way.
       if (canvas === undefined) return false;
-      applyAuthoredText(canvas, undefined);
+      applyAuthoredText(canvas, undefined, {
+        ...(artboardHeight === undefined
+          ? {}
+          : { artboardHeight: artboardHeight() }),
+      });
       canvas.requestRenderAll();
       return false;
     };
@@ -271,8 +278,12 @@ function withTextboxHeightControls(controls: Record<string, Control>): void {
  * Fabric reads `ownDefaults` when an object is constructed, so this runs before
  * the canvas exists. Excludes the fork's ActiveSelection bounds patch and its
  * Textbox width-control wrapping; neither has a Yunari type to serve.
+ *
+ * `artboardHeight` is read on release, when the artboard exists: the repaint
+ * that follows a height drag must paint a run's role default rather than wait
+ * for the next runtime tick.
  */
-export function applyEditorControls(): void {
+export function applyEditorControls(artboardHeight?: () => number): void {
   if (applied) return;
   applied = true;
 
@@ -282,7 +293,7 @@ export function applyEditorControls(): void {
 
   const textboxControls = controlsUtils.createTextboxDefaultControls();
   applyOverrides(textboxControls);
-  withTextboxHeightControls(textboxControls);
+  withTextboxHeightControls(textboxControls, artboardHeight);
   Textbox.ownDefaults.controls = textboxControls;
 
   // A text has no authored box, so a width or height drag has nowhere to write.

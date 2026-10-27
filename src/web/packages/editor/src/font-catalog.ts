@@ -1,4 +1,4 @@
-import type { TypePreset } from "@yunari/renderer-core";
+import { isTypeTokenRole, type TypeToken } from "@yunari/renderer-core";
 import { GENERATED_FACES, GENERATED_TRIOS } from "./font-trios.generated.js";
 
 export type FontTrioRole = "heading" | "body" | "mono";
@@ -75,28 +75,24 @@ export function faceForRole(
     )[0];
 }
 
-/** Replaces only the face treatment of presets assigned to a trio role. */
-export function applyFontTrio<
-  T extends Readonly<
-    Record<string, { readonly name: string; readonly value: TypePreset }>
-  >,
->(presets: T, trio: FontTrio): T {
+/** Replaces only the face treatment of tokens whose id is a trio role. */
+export function applyFontTrio<T extends Readonly<Record<string, TypeToken>>>(
+  presets: T,
+  trio: FontTrio,
+): T {
   return Object.fromEntries(
     Object.entries(presets).map(([id, preset]) => {
-      const role = preset.value.trioRole;
+      const role = isTypeTokenRole(id) ? id : undefined;
       if (role === undefined) return [id, preset];
-      const face = faceForRole(trio, role, Number(preset.value.weight ?? 400));
+      const face = faceForRole(trio, role, Number(preset.weight ?? 400));
       if (face === undefined) return [id, preset];
       return [
         id,
         {
           ...preset,
-          value: {
-            ...preset.value,
-            family: face.family,
-            weight: face.weight,
-            face: { assetId: face.id },
-          },
+          family: face.family,
+          weight: face.weight,
+          face: { assetId: face.id },
         },
       ];
     }),

@@ -116,6 +116,7 @@ function setup(active: unknown) {
     historyManager: history,
     errorManager: { warn: vi.fn(), error: vi.fn() },
     cropManager: idleCrop(),
+    artboard: () => ({ width: 1920, height: 1080 }),
   };
   const inspector = createSelectionInspector(host, {
     editor: editor as never,

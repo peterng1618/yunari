@@ -61,6 +61,7 @@ function setup(objects: readonly object[] = []) {
     cropManager: crop,
     historyManager: { attachGlobals: () => {}, saveState },
     errorManager: { warn: vi.fn(), error: vi.fn() },
+    artboard: () => ({ width: 1920, height: 1080 }),
   };
   const host = document.createElement("div");
   const inspector = createSelectionInspector(host, {

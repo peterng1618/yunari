@@ -1,6 +1,7 @@
 import {
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
+  FONT_ASSET_FORMATS,
   type FontCut,
   type SampleSource,
   SEMANTIC_KEYS,
@@ -30,6 +31,7 @@ import {
 } from "./asset-finder/icon-shape.js";
 import { WallpaperEngineBody } from "./asset-finder/wallpaper-engine-body.js";
 import {
+  ASSET_FILE_EXTENSIONS,
   type AssetImportMetadata,
   type AssetManager,
   mimeOf,
@@ -40,6 +42,7 @@ import {
   stepFor,
 } from "./canvas-nudge.js";
 import { ChartManager } from "./chart-manager/index.js";
+import { openFontImportDialog } from "./components/font-import-dialog.js";
 import { EditorDocument } from "./editor-document.js";
 import type { EditorActionFacade } from "./editor-shell/session-facade.js";
 import type {
@@ -73,12 +76,14 @@ import {
   createAssetsPane,
   type FontCommitInput,
 } from "./panes/assets/assets-pane.js";
+import { fontMetadataFromFilename } from "./panes/assets/font-metadata-form.js";
 import type { VideoImportStep } from "./panes/assets/import-video-modal.js";
-import type { PresetSelection } from "./panes/tokens/preset-list.js";
 import {
   createTokenInspectorPanel,
   type TokenInspectorPanel,
 } from "./panes/tokens/token-inspector.js";
+import type { PresetSelection } from "./panes/tokens/token-list.js";
+import { weightChoices } from "./panes/tokens/weight-choices.js";
 import {
   createSelectionInspector,
   type SelectionInspector,
@@ -88,10 +93,10 @@ import { ShortcutManager } from "./shortcut-manager/index.js";
 import { createSnapManager, type SnapManager } from "./snap-manager/index.js";
 import type { ThemeLibraryClient } from "./theme-library-client.js";
 import {
-  createTypePresetPanel,
-  type TypePresetFontActions,
-  type TypePresetPanel,
-  type TypePresets,
+  createTypeTokenPanel,
+  type TypeTokenFontActions,
+  type TypeTokenPanel,
+  type TypeTokens,
 } from "./type-preset-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
 import { requestNormalizedVideo } from "./video-normalizer.js";
@@ -110,6 +115,15 @@ import {
  *  says nothing about the frame it lands on; this is the one share every
  *  imported icon gets, which also makes two sources' glyphs comparable. */
 const IMPORTED_ICON_SHARE = 0.12;
+
+/** The font formats the manager packages, so the picker offers no file the
+ *  importer refuses. A `font/*` pattern would offer `.ttc` and every other face
+ *  format the package cannot carry. */
+const FONT_FILE_ACCEPT = ASSET_FILE_EXTENSIONS.filter((extension) =>
+  (FONT_ASSET_FORMATS as readonly string[]).includes(extension),
+)
+  .map((extension) => `.${extension}`)
+  .join(",");
 
 interface EditorPanelHosts {
   /** Text and chart creation, and the card library. */
@@ -221,7 +235,7 @@ export class EditorSession {
   readonly #runtime: LiveRuntime;
   readonly #artboard: ArtboardPanel;
   readonly #palette: PalettePanel;
-  readonly #types: TypePresetPanel;
+  readonly #types: TypeTokenPanel;
   readonly #newObjects: NewObjectPanel;
   readonly #assetsPanel: { destroy(): void };
   readonly #selection: SelectionInspector;
@@ -378,7 +392,7 @@ export class EditorSession {
     // session for them: the Tokens pane's own controls and the selection
     // inspector's face field are the same owner answering the same question
     // (`vg-268`), so neither re-implements a face or trio write.
-    const fontActions: TypePresetFontActions = {
+    const fontActions: TypeTokenFontActions = {
       applyFace: async (id, face) => {
         await this.#document.runFontAction(() =>
           this.applyPresetFace(id, face),
@@ -388,7 +402,7 @@ export class EditorSession {
         await this.#document.runFontAction(() => this.applyFontTrio(id));
       },
     };
-    this.#types = createTypePresetPanel(
+    this.#types = createTypeTokenPanel(
       options.panelHosts.tokens,
       (presets) => this.#document.setTypes(presets),
       (id, replacement) => this.#deleteType(id, replacement),
@@ -401,7 +415,7 @@ export class EditorSession {
       options.tokenSelection,
     );
     this.#types.render(
-      this.#document.envelope.globals?.typePresets as TypePresets | undefined,
+      this.#document.envelope.globals?.typeTokens as TypeTokens | undefined,
     );
     // The chart owner, built before the inspector that renders its fields: the
     // inspector is published with both halves of the port at construction, so
@@ -463,9 +477,17 @@ export class EditorSession {
       ...(options.favoritesClient === undefined
         ? {}
         : { favoritesClient: options.favoritesClient }),
+      // Both finder ports are the shell's one port: the face field's row and the
+      // run row's action entry open the same finder. The import opens Task 4.2's
+      // dialog and names its token back so the run that asked can point itself
+      // at it.
       ...(options.onFindFontPicker === undefined
         ? {}
-        : { onOpenFontPicker: options.onFindFontPicker }),
+        : {
+            onOpenFontPicker: options.onFindFontPicker,
+            openFontFinder: options.onFindFontPicker,
+          }),
+      importLocalFont: (onImported) => this.#pickFontFile(onImported),
     });
     this.#selection.setLocale(this.#document.envelope.metadata?.themeLanguage);
     // Selecting the background row is a shell selection with no Fabric object:
@@ -488,24 +510,36 @@ export class EditorSession {
         // The same port the preset library is handed: one delete route, so the
         // reference reassignment and the token clear cannot disagree.
         onDelete: (id, replacement) => this.#deleteType(id, replacement),
-        setRole: (id, role) => this.#document.setPresetRole(id, role),
         unbindFace: (id) => this.#document.unbindPresetFace(id),
         // The package's own faces, so a bound preset's weight is chosen from
-        // what it holds rather than typed into a fallback.
+        // what it holds rather than typed into a fallback. A packaged family
+        // declares one face per subset, so the list collapses each
+        // weight-and-style group to one entry before the control sees it. The
+        // family is compared case-insensitively, as `familiesOf` deduplicates
+        // it: a token kept as `inter` is still on the declared `Inter`.
         facesOf: (family) =>
-          options.assetManager.declarations.flatMap((asset) =>
-            asset.kind === "font" &&
-            "family" in asset &&
-            asset.family === family
-              ? [
-                  {
-                    assetId: asset.id,
-                    weight: asset.weight,
-                    style: asset.style,
-                  },
-                ]
-              : [],
+          weightChoices(
+            options.assetManager.declarations.flatMap((asset) =>
+              asset.kind === "font" &&
+              "family" in asset &&
+              asset.family.toLowerCase() === family.toLowerCase()
+                ? [
+                    {
+                      assetId: asset.id,
+                      weight: asset.weight,
+                      style: asset.style,
+                    },
+                  ]
+                : [],
+            ),
           ),
+        // The package's families for the family list, and the two action rows:
+        // each is drawn only where its port exists.
+        familiesOf: () => declaredFamilies(options.assetManager.declarations),
+        importLocalFont: () => this.#pickFontFile(),
+        ...(options.onFindFontPicker === undefined
+          ? {}
+          : { openFontFinder: options.onFindFontPicker }),
         // The paint half: the selected paint token's fields write through the
         // same document and history ports as the pane's rows once did.
         paints: {
@@ -530,7 +564,7 @@ export class EditorSession {
       this.#selection.setSuppressed(token !== undefined);
       this.#tokenInspector.render(
         token,
-        (this.#document.envelope.globals?.typePresets ?? {}) as TypePresets,
+        (this.#document.envelope.globals?.typeTokens ?? {}) as TypeTokens,
         this.#document.envelope.globals,
       );
     };
@@ -600,6 +634,7 @@ export class EditorSession {
         ? {}
         : { themeLanguage: this.#document.envelope.metadata.themeLanguage }),
       descriptors,
+      artboardHeight: () => options.shell.editor.artboard().height,
     });
     // A pasted image must be a declared asset, not a blob URL: the half-only
     // path saves a document whose image is a handle into this session's memory
@@ -898,7 +933,7 @@ export class EditorSession {
   async #commitFont(
     input: FontCommitInput,
   ): Promise<
-    | { readonly ok: true; readonly message: string }
+    | { readonly ok: true; readonly message: string; readonly tokenId?: string }
     | { readonly ok: false; readonly message: string }
   > {
     const { source, metadata, role, withPreset } = input;
@@ -935,7 +970,7 @@ export class EditorSession {
         "file" in source
           ? await this.#assets.importFont(source.file, metadata)
           : this.#assets.amendFont(source.assetId, metadata);
-      this.#document.addTypePresetFromLocalFont(asset, role);
+      const tokenId = this.#document.addTypeTokenFromLocalFont(asset, role);
       this.#document.addCredit({ ...credit, assetId: asset.id });
       this.#declarationsChanged();
       // Only a fresh import is an import; amending a declared face writes the
@@ -943,10 +978,65 @@ export class EditorSession {
       return {
         ok: true,
         message: "file" in source ? uiCopy.panels.assetDeclaredFont : "",
+        // The token this commit created or adopted, so a caller that asked for
+        // the import can point its own reference at it.
+        tokenId,
       };
     } catch (error) {
       return { ok: false, message: messageOf(error) };
     }
+  }
+
+  /**
+   * The import row: the OS picker, then the metadata dialog.
+   *
+   * A dismissed picker declares nothing, and the input is removed either way so
+   * a second press starts from an empty pick. `onImported` is the run row's:
+   * the dialog names the token its commit produced, and that caller acts on it.
+   */
+  #pickFontFile(onImported?: (tokenId: string) => void): void {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.hidden = true;
+    input.accept = FONT_FILE_ACCEPT;
+    input.dataset["yunariTokenFontImport"] = "";
+    const dispose = (): void => input.remove();
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      dispose();
+      if (file !== undefined) this.#openFontImport(file, onImported);
+    });
+    // Fired by a browser that reports a cancelled picker; without it the input
+    // would stay on the body until the next pick.
+    input.addEventListener("cancel", dispose);
+    document.body.append(input);
+    input.click();
+  }
+
+  /**
+   * The dialog answers with the same two commits the Assets pane makes, minus
+   * the role: this import may never rewrite a role token.
+   */
+  #openFontImport(file: File, onImported?: (tokenId: string) => void): void {
+    void openFontImportDialog({
+      filename: file.name,
+      initial: fontMetadataFromFilename(file.name),
+      onCommit: (metadata) =>
+        this.#commitFont({
+          source: { file },
+          metadata,
+          role: null,
+          withPreset: true,
+        }),
+      onCancel: (metadata) =>
+        this.#commitFont({
+          source: { file },
+          metadata,
+          role: null,
+          withPreset: false,
+        }),
+      ...(onImported === undefined ? {} : { onCommitted: onImported }),
+    });
   }
 
   /**
@@ -993,16 +1083,23 @@ export class EditorSession {
   /**
    * The finder's Fonts body with the preview panel's actions wired. Every
    * action is the document's write; the panel only reports a press. Apply to
-   * selected preset travels only when the shell's own projection names a
-   * preset, because the panel draws that button on the callback's presence
-   * (R9).
+   * selected token travels only when a store names a type token, because the
+   * panel draws that button on the callback's presence (R9). The inspector's
+   * token wins, else the shell's canvas projection; a paint is not a type
+   * target. Read when the body is built and closed over until the next build:
+   * safe because the finder is modal and nothing can move either store while
+   * it is open — a non-modal finder would need the read moved into the action.
    */
   #fontPickerBody(): ReactElement {
     const document = this.#document;
-    const presets = document.envelope.globals?.typePresets as
-      | TypePresets
+    const presets = document.envelope.globals?.typeTokens as
+      | TypeTokens
       | undefined;
-    const selected = this.#options.selection?.get().selectionPresetId;
+    const token = this.#options.tokenSelection?.get();
+    const selected =
+      token?.kind === "preset"
+        ? token.id
+        : this.#options.selection?.get().selectionPresetId;
     const run = (action: () => Promise<unknown>): void => {
       void document.runFontAction(async () => {
         await action();
@@ -1017,10 +1114,10 @@ export class EditorSession {
         run(() => document.applyFontTrio(trio));
       },
       onAddTrioPresets: (trio) => {
-        run(() => document.addTypePresetsFromTrio(trio));
+        run(() => document.addTypeTokensFromTrio(trio));
       },
       onAddPreset: (cut, role, family) => {
-        run(() => document.addTypePresetFromCut(cut, role, family));
+        run(() => document.addTypeTokenFromCut(cut, role, family));
       },
       ...(selected === undefined
         ? {}
@@ -1274,8 +1371,8 @@ export class EditorSession {
    */
   #tokenExists(token: TokenRef): boolean {
     if (token.kind === "preset") {
-      const presets = (this.#document.envelope.globals?.typePresets ??
-        {}) as TypePresets;
+      const presets = (this.#document.envelope.globals?.typeTokens ??
+        {}) as TypeTokens;
       return presets[token.id] !== undefined;
     }
     return this.#document.envelope.globals?.palette?.[token.id] !== undefined;
@@ -1370,4 +1467,23 @@ async function normalizeWallpaperVideo(
 /** A refusal's own words, or the value itself when it was not an `Error`. */
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * The package's declared font families, one entry per family, sorted the way a
+ * reader scans a list rather than the order the files arrived in. A family
+ * differing only in case is the same family, so the first spelling is kept.
+ */
+function declaredFamilies(
+  declarations: AssetManager["declarations"],
+): readonly string[] {
+  const held = new Map<string, string>();
+  for (const asset of declarations) {
+    if (asset.kind !== "font" || !("family" in asset)) continue;
+    const key = asset.family.toLowerCase();
+    if (!held.has(key)) held.set(key, asset.family);
+  }
+  return [...held.values()].sort((left, right) =>
+    left.localeCompare(right, "en", { sensitivity: "base" }),
+  );
 }

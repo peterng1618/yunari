@@ -34,11 +34,10 @@ function paint(): Record<string, unknown> {
         value: { kind: "solid", color: SNAPPING_ACCENT },
       },
     },
-    typePresets: {
-      body: {
-        name: "Body",
-        value: { family: "Segoe UI, sans-serif", size: 32 },
-      },
+    typeTokens: {
+      heading: { family: "Segoe UI, sans-serif", weight: "600" },
+      body: { family: "Segoe UI, sans-serif", weight: "400" },
+      mono: { family: "ui-monospace, monospace", weight: "400" },
     },
   };
 }
@@ -86,8 +85,11 @@ function source(
           {
             kind: "literal",
             text: "TEXT",
-            typePreset: "typePresets.body",
-            style: { color: { ref: "palette.accent" } },
+            typeToken: "typeTokens.body",
+            style: {
+              color: { ref: "palette.accent" },
+              fontSize: { value: 32 },
+            },
           },
         ],
       },

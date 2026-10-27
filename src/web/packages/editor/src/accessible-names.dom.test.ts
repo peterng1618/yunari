@@ -19,7 +19,7 @@ import { createPalettePanel } from "./palette-manager/panel.js";
 import { createAssetsPane } from "./panes/assets/assets-pane.js";
 import { createTokenInspectorPanel } from "./panes/tokens/token-inspector.js";
 import { createSelectionInspector } from "./selection-inspector/index.js";
-import { createTypePresetPanel } from "./type-preset-manager/panel.js";
+import { createTypeTokenPanel } from "./type-preset-manager/panel.js";
 import { uiCopy } from "./ui-copy.js";
 
 // jsdom has never had a `PointerEvent`, and Base UI re-dispatches a click
@@ -91,8 +91,9 @@ const FIELDS = "input,select,textarea";
  *
  * A carrier is hidden by `clip-path`, not by `[hidden]`, so it is in the markup
  * and in no accessibility tree: unfocusable and unannounced, exactly what the
- * file pickers are. The Tokens pane's five selects — the palette's three and the
- * token inspector's role and reassignment choosers — the run
+ * file pickers are. The Tokens pane's five selects — the paint section's kind
+ * and reassignment, and the selected type token's family, weight and
+ * reassignment choosers — the run
  * editor's five — its
  * four selects and its swatch, which is `SelectControl` with an adornment — the
  * inspector's three paint selects and its three toggles are what this exclusion is
@@ -240,11 +241,12 @@ describe("editor panels", () => {
       "INPUT[type=][aria-hidden]", // Ratio
       "INPUT[type=][aria-hidden]", // Orientation
       "INPUT[type=][aria-hidden]", // Resolution
-      // The selected preset's token inspector, mounted after the palette pane:
-      // its role and reassignment choosers, each a `ControlSelect`'s value
-      // carrier. The palette's own chooser is gone with the field set it
+      // The selected type token's inspector, mounted after the palette pane:
+      // its family, weight and reassignment choosers, each a `ControlSelect`'s
+      // value carrier. The palette's own chooser is gone with the field set it
       // browsed, so the Tokens pane contributes none of these any more.
-      "INPUT[type=][aria-hidden]", // Role (token)
+      "INPUT[type=][aria-hidden]", // Family (token)
+      "INPUT[type=][aria-hidden]", // Weight (token)
       "INPUT[type=][aria-hidden]", // Reassign (token)
       // The paint section of the same inspector, after the preset section: its
       // kind switch, the gradient editor's fifteen preset rows (each a Base UI
@@ -270,7 +272,7 @@ describe("editor panels", () => {
       // The run editor's five: four `ControlSelect`s and one `ControlSwatch`,
       // which is `SelectControl` with an adornment — each a Base UI select's
       // value carrier.
-      "INPUT[type=][aria-hidden]", // Type preset (run)
+      "INPUT[type=][aria-hidden]", // Type token (run)
       "INPUT[type=][aria-hidden]", // Colour (ControlSwatch)
       "INPUT[type=][aria-hidden]", // Reads
       "INPUT[type=][aria-hidden]", // Unit display
@@ -371,17 +373,16 @@ describe("editor panels", () => {
   it("mounts the token inspector, so the fields it adds are audited", () => {
     // An entry in `mountPanels` that renders nothing is the same vacuity the
     // file's header warns about, so this reads the controls back rather than
-    // trusting the mount: a free preset renders name, role, family, weight,
-    // size, line height, letter spacing, the reassignment select and Delete.
-    // This is the preset section; `mountPanels` mounts the paint section as a
-    // second inspector, after it.
+    // trusting the mount: an unroled token renders family, weight, the
+    // reassignment select and Delete. This is the token section; `mountPanels`
+    // mounts the paint section as a second inspector, after it.
     const { root } = mountPanels();
     const inspector = root.querySelector("[data-yunari-token-inspector]");
     expect(inspector).not.toBeNull();
     const controls = Array.from(
       inspector?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [],
     ).filter(reached);
-    expect(controls).toHaveLength(9);
+    expect(controls).toHaveLength(4);
     expect(controls.map((control) => accessibleName(control))).not.toContain(
       "",
     );
@@ -446,7 +447,7 @@ function mountPanels(): { root: HTMLElement } {
     },
   });
 
-  createTypePresetPanel(
+  createTypeTokenPanel(
     root,
     () => undefined,
     () => undefined,
@@ -455,27 +456,27 @@ function mountPanels(): { root: HTMLElement } {
       applyTrio: async () => undefined,
     },
   ).render({
-    body: { name: "Body", value: { family: "Inter", size: 16 } },
-    caption: { name: "Caption", value: { family: "Inter", size: 12 } },
+    body: { family: "Inter" },
+    caption: { family: "Inter" },
   });
 
-  // The selected token's own column. A free preset, because the editable
-  // family and weight are the controls its bound form replaces with Unbind; the
-  // face branch's one button is named by its own text either way.
+  // The selected token's own column. An unroled token, because its editable
+  // family and weight are the controls a bound form replaces with Unbind, and
+  // the role rows draw no reassignment-and-delete pair.
   const tokenPresets = {
-    body: {
-      name: "Body",
-      value: { family: "Inter", size: 16, trioRole: "body" as const },
-    },
+    body: { family: "Inter" },
+    caption: { family: "Inter" },
   };
   createTokenInspectorPanel(root, {
     onChange: () => undefined,
     onDelete: () => undefined,
-    setRole: () => undefined,
     unbindFace: () => undefined,
+    // A declared face, so the weight row is the select the session's own
+    // `facesOf` draws rather than the read-only fallback.
+    facesOf: () => [{ assetId: "inter-400", weight: 400, style: "normal" }],
     paints: undefined,
-  }).render({ kind: "preset", id: "body" }, tokenPresets, {
-    typePresets: tokenPresets,
+  }).render({ kind: "preset", id: "caption" }, tokenPresets, {
+    typeTokens: tokenPresets,
   });
 
   // The paint half of the token inspector, in its own section: the gradient
@@ -498,7 +499,6 @@ function mountPanels(): { root: HTMLElement } {
   createTokenInspectorPanel(root, {
     onChange: () => undefined,
     onDelete: () => undefined,
-    setRole: () => undefined,
     unbindFace: () => undefined,
     paints: {
       palette: () => paintPalette,
@@ -702,12 +702,13 @@ function mountSelectionInspector(root: HTMLElement): void {
       historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       errorManager: { warn: vi.fn(), error: vi.fn() },
       cropManager: { active: false, target: undefined },
+      artboard: () => ({ width: 1920, height: 1080 }),
     };
     const globals = {
       palette: {
         ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
       },
-      typePresets: {
+      typeTokens: {
         body: { name: "Body", value: { family: "Inter", size: 16 } },
       },
     };

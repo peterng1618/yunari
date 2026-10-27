@@ -8,6 +8,7 @@ import type { SampleSource } from "../data/source.js";
 import { emptySampleSource } from "../data/source.js";
 import { SampleStore } from "../data/store.js";
 import type { Artboard, Binding, Globals, TextRun } from "../theme/document.js";
+import { isTypeTokenRole, TYPE_TOKEN_ROLES } from "../theme/document.js";
 import { defaultGaugeSettings, type Sample } from "../types.js";
 import {
   buildChartPlan,
@@ -111,25 +112,15 @@ describe("artboard", () => {
   });
 });
 
-describe("type presets", () => {
-  it("resolves each text run through its own preset and palette token", () => {
+describe("type tokens", () => {
+  it("resolves each text run through its own token and its own style", () => {
+    // A token names the face; how the run is worn is the run's own style, and
+    // the style spreads after the token so the authored values win.
     const globals: Globals = {
       palette: { ink: { name: "Ink", value: "#ffffff" } },
-      typePresets: {
-        label: {
-          name: "Label",
-          value: {
-            family: "Inter",
-            size: 14,
-            weight: 500,
-            letterSpacing: 1.2,
-            lineHeight: 1.1,
-          },
-        },
-        value: {
-          name: "Value",
-          value: { family: "Inter", size: 32, weight: 700 },
-        },
+      typeTokens: {
+        label: { family: "Inter", weight: 500 },
+        value: { family: "Inter", weight: 700 },
       },
     };
 
@@ -139,10 +130,20 @@ describe("type presets", () => {
         {
           kind: "literal",
           text: "CPU ",
-          typePreset: "typePresets.label",
-          style: { color: { ref: "palette.ink" } },
+          typeToken: "typeTokens.label",
+          style: {
+            color: { ref: "palette.ink" },
+            fontSize: { value: 14 },
+            lineHeight: { value: 1.1 },
+            letterSpacing: { value: 1.2 },
+          },
         },
-        { kind: "literal", text: "48%", typePreset: "typePresets.value" },
+        {
+          kind: "literal",
+          text: "48%",
+          typeToken: "typeTokens.value",
+          style: { fontSize: { value: 32 } },
+        },
       ],
       [],
       { source: emptySampleSource },
@@ -167,6 +168,79 @@ describe("type presets", () => {
         style: { fontFamily: "Inter", fontSize: 32, fontWeight: 700 },
       },
     ]);
+  });
+});
+
+describe("default type size", () => {
+  function fontSizeOf(
+    run: TextRun,
+    artboardHeight: number,
+    globals: Globals = {},
+  ): unknown {
+    return resolveTextSegments(
+      "t",
+      [run],
+      [],
+      { source: emptySampleSource, artboardHeight },
+      globals,
+      [],
+    )[0]!.style["fontSize"];
+  }
+
+  const heading: Globals = { typeTokens: { heading: { family: "Inter" } } };
+  const mono: Globals = { typeTokens: { mono: { family: "Consolas" } } };
+  const unroled: Globals = { typeTokens: { custom: { family: "Inter" } } };
+  const literal = (typeToken?: `typeTokens.${string}`): TextRun => ({
+    kind: "literal",
+    text: "CPU",
+    ...(typeToken === undefined ? {} : { typeToken }),
+  });
+
+  it("gives a heading run the artboard's heading size when it authors none", () => {
+    expect(fontSizeOf(literal("typeTokens.heading"), 1080, heading)).toBe(72);
+  });
+
+  it("lets an authored size win over the role default", () => {
+    expect(
+      fontSizeOf(
+        {
+          ...literal("typeTokens.heading"),
+          style: { fontSize: { value: 40 } },
+        },
+        1080,
+        heading,
+      ),
+    ).toBe(40);
+  });
+
+  it("scales the default with the artboard", () => {
+    expect(fontSizeOf(literal("typeTokens.heading"), 2160, heading)).toBe(144);
+  });
+
+  it("gives a mono run its own ratio", () => {
+    expect(fontSizeOf(literal("typeTokens.mono"), 1080, mono)).toBe(14);
+  });
+
+  it("gives an unroled token, or no token, the body ratio", () => {
+    expect(fontSizeOf(literal("typeTokens.custom"), 1080, unroled)).toBe(16);
+    expect(fontSizeOf(literal(), 1080, unroled)).toBe(16);
+  });
+});
+
+describe("type token roles", () => {
+  it("names exactly the three roles", () => {
+    expect(TYPE_TOKEN_ROLES).toEqual(["heading", "body", "mono"]);
+  });
+
+  it("recognises a role id and nothing else", () => {
+    for (const role of TYPE_TOKEN_ROLES) {
+      expect(isTypeTokenRole(role)).toBe(true);
+    }
+    // A role is the whole id: a derived id, a prefix or a case variant is not
+    // a role, because the id is what a run's reference names.
+    for (const id of ["heading-2", "body16", "Heading", "", "custom"]) {
+      expect(isTypeTokenRole(id)).toBe(false);
+    }
   });
 });
 
@@ -721,17 +795,27 @@ describe("text (§89)", () => {
 
   it("resolves per-run styles independently", () => {
     const globals: Globals = {
-      typePresets: {
-        small: { name: "Small", value: { family: "Inter", size: 12 } },
-        large: { name: "Large", value: { family: "Inter", size: 48 } },
+      typeTokens: {
+        small: { family: "Inter" },
+        large: { family: "Inter" },
       },
     };
 
     const result = resolveTextSegments(
       "t",
       [
-        { kind: "literal", text: "a", typePreset: "typePresets.small" },
-        { kind: "literal", text: "b", typePreset: "typePresets.large" },
+        {
+          kind: "literal",
+          text: "a",
+          typeToken: "typeTokens.small",
+          style: { fontSize: { value: 12 } },
+        },
+        {
+          kind: "literal",
+          text: "b",
+          typeToken: "typeTokens.large",
+          style: { fontSize: { value: 48 } },
+        },
       ],
       [],
       { source: emptySampleSource },

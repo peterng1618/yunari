@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 
-import { IText, Textbox } from "fabric/es";
+import { Canvas, IText, Textbox } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import { applyEditorControls } from "./index.js";
+
+/** The artboard every drag in this file is made against. */
+const ARTBOARD_HEIGHT = 1080;
 
 /**
  * A textbox's vertical edge, dragged.
@@ -28,7 +31,9 @@ function textbox(height: number): Textbox {
 
 /** Presses `key`, drags the edge to `to`, and lets go — the whole gesture. */
 function drag(object: Textbox, key: string, to: number): void {
-  applyEditorControls();
+  // The first call installs the controls; later calls are no-ops, so the
+  // artboard getter is fixed for the module by this one.
+  applyEditorControls(() => ARTBOARD_HEIGHT);
   const control = Textbox.ownDefaults.controls?.[key];
   if (control === undefined) throw new Error(`${key} is not a control`);
   const transform = { target: object } as never;
@@ -39,7 +44,7 @@ function drag(object: Textbox, key: string, to: number): void {
 
 /** The same gesture without the move, which is not a resize. */
 function press(object: Textbox, key: string): void {
-  applyEditorControls();
+  applyEditorControls(() => ARTBOARD_HEIGHT);
   const control = Textbox.ownDefaults.controls?.[key];
   const transform = { target: object } as never;
   control?.mouseDownHandler?.({} as never, transform, 0, 0);
@@ -122,6 +127,28 @@ describe("a textbox's vertical edge writes the authored box", () => {
     press(object, "mb");
 
     expect(boxOf(object)).toMatchObject({ width: 140, height: 27 });
+  });
+});
+
+describe("the release repaint carries the artboard height", () => {
+  it("paints a run's role default when it authored no size", () => {
+    const object = new Textbox("CPU", {
+      id: "label",
+      width: 140,
+      fontSize: 90,
+    });
+    object.set("yunariText", {
+      runs: [{ kind: "literal", text: "CPU", typeToken: "typeTokens.heading" }],
+      box: { width: 140, height: 27 },
+    });
+    const canvas = new Canvas(document.createElement("canvas"));
+    canvas.add(object);
+
+    drag(object, "mb", 130);
+
+    // Heading at 1080 is 72. Without the artboard height on this pass the
+    // object keeps the 90 it was built at until the next runtime tick.
+    expect(object.fontSize).toBe(72);
   });
 });
 

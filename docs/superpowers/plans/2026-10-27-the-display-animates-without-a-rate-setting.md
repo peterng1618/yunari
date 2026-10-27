@@ -43,7 +43,7 @@
 - Modify: `src/web/packages/editor/src/chart-manager/index.ts`
 - Modify: `src/web/packages/editor/src/editor-session.ts`
 - Modify: `src/web/packages/editor/src/editor-main.ts`
-- Create: `docs/decisions/0128-a-transition-blits-its-own-frames.md`
+- Create: `docs/decisions/0129-a-transition-blits-its-own-frames.md`
 
 **Interfaces:**
 - Consumes: `ChartFamily` from `@yunari/renderer-core`.
@@ -71,7 +71,7 @@ Expected: FAIL — `chartAnimationFor` takes two arguments / returns false for a
 
 - [ ] **Step 3: Implement** `chartAnimationFor(family: ChartFamily): boolean` as `family !== "line"`; update its docblock: the line's motion is the data-clock jump, every other family's is the engine's transition. Update the two call sites to `chartAnimationFor(family)`, delete `#refreshRate` and its constructor option from `ChartManager`, and delete the `refreshRate` option and passing from `EditorSession`/`editor-main`.
 
-- [ ] **Step 4: Write the decision note** `docs/decisions/0128-a-transition-blits-its-own-frames.md` claiming `scene-fabric/src/chart-object.ts` and `host/src/server.ts`. Rungs: (1) Yunari — `_onEngineRendered` marks dirty only (vg-107); (2) ECharts — `finished` fires from zrender's `rendered` only when `zr.animation.isFinished()`, so arming before `setOption` and disarming on `finished` is exact; (3) platform — RAF is the only frame clock; (4) ecosystem — ECharts' own transition pump is `animationDurationUpdate`; (5) comparison — permanent render loop (rejected, vg-107), per-frame blit only during a transition (chosen), no blit (rejected: invisible motion); (6) probe — the Task 2 test; (7) build — no dependency.
+- [ ] **Step 4: Write the decision note** `docs/decisions/0129-a-transition-blits-its-own-frames.md` claiming `scene-fabric/src/chart-object.ts` and `host/src/server.ts`. Rungs: (1) Yunari — `_onEngineRendered` marks dirty only (vg-107); (2) ECharts — `finished` fires from zrender's `rendered` only when `zr.animation.isFinished()`, so arming before `setOption` and disarming on `finished` is exact; (3) platform — RAF is the only frame clock; (4) ecosystem — ECharts' own transition pump is `animationDurationUpdate`; (5) comparison — permanent render loop (rejected, vg-107), per-frame blit only during a transition (chosen), no blit (rejected: invisible motion); (6) probe — the Task 2 test; (7) build — no dependency.
 
 - [ ] **Step 5: Run the tests and the typecheck**
 
@@ -82,7 +82,7 @@ Expected: exit 0.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add docs/decisions/0128-a-transition-blits-its-own-frames.md STATUS.md \
+git add docs/decisions/0129-a-transition-blits-its-own-frames.md STATUS.md \
   src/web/packages/scene-fabric/src/chart-animation.ts \
   src/web/packages/scene-fabric/src/chart-animation.test.ts \
   src/web/packages/player/src/main.ts \
@@ -380,7 +380,7 @@ git commit -m "refactor(scene): one fixed refresh cadence"
 
 ### Task 7: Evidence and the merge
 
-- [ ] **Step 1: Update the spec's status** to `implemented 2026-10-27` and note in the decision note 0128 what the probe measured.
+- [ ] **Step 1: Update the spec's status** to `implemented 2026-10-27` and note in the decision note 0129 what the probe measured.
 
 - [ ] **Step 2: Run the full gate**
 
@@ -391,7 +391,7 @@ Expected: `exit=0`; report the unit and worker counts from the log.
 
 ```bash
 git add docs/superpowers/specs/2026-10-27-the-display-animates-without-a-rate-setting-design.md \
-  docs/decisions/0128-a-transition-blits-its-own-frames.md STATUS.md
+  docs/decisions/0129-a-transition-blits-its-own-frames.md STATUS.md
 git commit -m "docs(specs): the rate removal is implemented"
 ```
 

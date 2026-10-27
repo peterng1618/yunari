@@ -163,6 +163,26 @@ export const HOST_SETTINGS_DIR = path.join(HOST_APP_DIR, "settings");
 export const CLOCK_NODE_ID = "clock";
 export const TEMPERATURE_NODE_ID = "temperature";
 
+/**
+ * The three role tokens every seeded theme carries.
+ *
+ * A role is a token id and a token names only a face; size, leading and tracking
+ * belong to the run. The body face is the one the old caption preset named, so a
+ * run that used it keeps its appearance.
+ */
+const HOST_ROLE_TOKENS = {
+  heading: { family: "system-ui, sans-serif", weight: "600" },
+  body: { family: "system-ui, sans-serif", weight: "400" },
+  mono: { family: "ui-monospace, monospace", weight: "400" },
+} as const;
+
+/** The grouped-glass fixture made the packaged Inter face a token's family. */
+const GLASS_ROLE_TOKENS = {
+  heading: { family: "Inter, system-ui, sans-serif", weight: "600" },
+  body: { family: "Inter, system-ui, sans-serif", weight: "400" },
+  mono: { family: "ui-monospace, monospace", weight: "400" },
+} as const;
+
 /** The one bound reading is what separates the seeded themes: a disk key makes
  * the theme raise a question, a clock key does not, and a temperature key is
  * the only one a display's measurement preference can change. */
@@ -192,12 +212,7 @@ const envelopeFor = (
       ink: { name: "Ink", value: { kind: "solid" as const, color: "#e8ecf3" } },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
     },
-    typePresets: {
-      "11-400": {
-        name: "Caption",
-        value: { family: "system-ui, sans-serif", size: 22, weight: "400" },
-      },
-    },
+    typeTokens: HOST_ROLE_TOKENS,
   },
   assets: [
     {
@@ -259,8 +274,11 @@ const envelopeFor = (
           runs: [
             {
               text: "Hosted theme from the real host",
-              typePreset: "typePresets.11-400",
-              style: { color: { ref: "palette.ink" } },
+              typeToken: "typeTokens.body",
+              style: {
+                color: { ref: "palette.ink" },
+                fontSize: { value: 22 },
+              },
             },
           ],
         },
@@ -287,8 +305,11 @@ const envelopeFor = (
             {
               kind: "value",
               bindingId: "bound-value",
-              typePreset: "typePresets.11-400",
-              style: { color: { ref: "palette.ink" } },
+              typeToken: "typeTokens.body",
+              style: {
+                color: { ref: "palette.ink" },
+                fontSize: { value: 22 },
+              },
             },
           ],
         },
@@ -316,8 +337,11 @@ const envelopeFor = (
             {
               kind: "value",
               bindingId: "bound-value",
-              typePreset: "typePresets.11-400",
-              style: { color: { ref: "palette.ink" } },
+              typeToken: "typeTokens.body",
+              style: {
+                color: { ref: "palette.ink" },
+                fontSize: { value: 22 },
+              },
             },
           ],
         },
@@ -360,7 +384,7 @@ const chartEnvelope = {
       },
       ink: { name: "Ink", value: { kind: "solid" as const, color: "#e8ecf3" } },
     },
-    typePresets: {},
+    typeTokens: HOST_ROLE_TOKENS,
   },
   assets: [],
   scene: {
@@ -480,7 +504,7 @@ const mediaEnvelope = {
       },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
     },
-    typePresets: {},
+    typeTokens: HOST_ROLE_TOKENS,
   },
   assets: [
     {
@@ -537,7 +561,7 @@ const backgroundLayerEnvelope = {
         value: { kind: "solid" as const, color: "rgba(255, 255, 255, 0.35)" },
       },
     },
-    typePresets: {},
+    typeTokens: HOST_ROLE_TOKENS,
   },
   assets: [
     {
@@ -612,7 +636,7 @@ const backgroundEdgeEnvelope = {
       },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
     },
-    typePresets: {},
+    typeTokens: HOST_ROLE_TOKENS,
   },
   assets: [
     {
@@ -672,7 +696,7 @@ const backgroundFlipEnvelope = {
         value: { kind: "solid" as const, color: "rgba(255, 255, 255, 0.35)" },
       },
     },
-    typePresets: {},
+    typeTokens: HOST_ROLE_TOKENS,
   },
   assets: [
     {
@@ -736,7 +760,7 @@ const twoToneThemeBoundsEnvelope = {
       },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
     },
-    typePresets: {},
+    typeTokens: HOST_ROLE_TOKENS,
   },
   assets: [
     {
@@ -791,7 +815,7 @@ const twoToneDisplayBoundsEnvelope = {
         value: { kind: "solid" as const, color: "rgba(255, 255, 255, 0.35)" },
       },
     },
-    typePresets: {},
+    typeTokens: HOST_ROLE_TOKENS,
   },
   assets: [
     {
@@ -877,7 +901,7 @@ const glassTwoToneEnvelope = {
         value: { kind: "solid" as const, color: "rgba(255, 255, 255, 0.35)" },
       },
     },
-    typePresets: {},
+    typeTokens: HOST_ROLE_TOKENS,
   },
   assets: [
     {
@@ -988,7 +1012,7 @@ const videoEnvelope = {
       },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
     },
-    typePresets: {},
+    typeTokens: HOST_ROLE_TOKENS,
   },
   assets: [
     {
@@ -1022,7 +1046,7 @@ const overhangEnvelope = {
       ink: { name: "Ink", value: { kind: "solid" as const, color: "#e8ecf3" } },
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
     },
-    typePresets: {},
+    typeTokens: HOST_ROLE_TOKENS,
   },
   assets: [],
   scene: {
@@ -1169,16 +1193,7 @@ const groupedGlassEnvelope = {
       tag: { name: "Tag", value: { kind: "solid" as const, color: "#2f6f4f" } },
       ink: { name: "Ink", value: { kind: "solid" as const, color: "#e8ecf3" } },
     },
-    typePresets: {
-      "11-400": {
-        name: "Caption",
-        value: {
-          family: "Inter, system-ui, sans-serif",
-          size: 22,
-          weight: "400",
-        },
-      },
-    },
+    typeTokens: GLASS_ROLE_TOKENS,
   },
   assets: [
     {
@@ -1317,8 +1332,11 @@ const groupedGlassEnvelope = {
             {
               kind: "value",
               bindingId: "bound-value",
-              typePreset: "typePresets.11-400",
-              style: { color: { ref: "palette.ink" } },
+              typeToken: "typeTokens.body",
+              style: {
+                color: { ref: "palette.ink" },
+                fontSize: { value: 22 },
+              },
             },
           ],
         },
@@ -1394,24 +1412,13 @@ async function fontBytes(): Promise<Uint8Array> {
   }
 }
 
-/** Writes the packages the host serves. `writeThemePackage` owns validation, so
- * the fixture cannot drift into an envelope the player would reject. */
-export async function seedHostTheme(): Promise<void> {
-  const assets = {
-    "assets/badge.svg": new TextEncoder().encode(badge),
-    "assets/backdrop.svg": new TextEncoder().encode(backdrop),
-    "assets/edge.svg": new TextEncoder().encode(edgeSource),
-    "assets/flipward.svg": new TextEncoder().encode(flipward),
-    "assets/two-tone.svg": new TextEncoder().encode(twoTone),
-    "assets/inter-400.woff2": await fontBytes(),
-    // Declared by the video theme and never decoded by any test: the host's
-    // warning table reads the declaration, and the library writer refuses a
-    // declaration with no file beside it. Four bytes of EBML header stand in
-    // for a recording nothing plays.
-    "assets/loop.webm": new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]),
-  };
-
-  const themes = [
+/**
+ * The envelopes every seeded host theme is written from. Exported so a test
+ * can validate each one through the same reader the host uses, rather than
+ * reading a prior run’s generated folder.
+ */
+export function hostThemeEnvelopes() {
+  return [
     envelopeFor(HOST_THEME_ID, "E2E hosted", CLOCK_NODE_ID, {
       semanticKey: "time.now",
       format: "HH:mm:ss",
@@ -1477,8 +1484,11 @@ export async function seedHostTheme(): Promise<void> {
                 {
                   kind: "value",
                   bindingId: "bound-value",
-                  typePreset: "typePresets.11-400",
-                  style: { color: { ref: "palette.ink" } },
+                  typeToken: "typeTokens.body",
+                  style: {
+                    color: { ref: "palette.ink" },
+                    fontSize: { value: 22 },
+                  },
                 },
               ],
             },
@@ -1487,6 +1497,28 @@ export async function seedHostTheme(): Promise<void> {
       },
     },
   ];
+}
+
+/** Writes the packages the host serves. `writeThemePackage` owns validation, so
+ * the fixture cannot drift into an envelope the player would reject. */
+export async function seedHostTheme(): Promise<void> {
+  const themes = hostThemeEnvelopes();
+  const assets = {
+    "assets/badge.svg": new TextEncoder().encode(badge),
+    "assets/backdrop.svg": new TextEncoder().encode(backdrop),
+    "assets/edge.svg": new TextEncoder().encode(edgeSource),
+    "assets/flipward.svg": new TextEncoder().encode(flipward),
+    // Three envelopes declare this one, and `writeThemePackage` refuses a
+    // declaration with no file beside it — without this line the host fixture
+    // cannot be seeded at all.
+    "assets/two-tone.svg": new TextEncoder().encode(twoTone),
+    "assets/inter-400.woff2": await fontBytes(),
+    // Declared by the video theme and never decoded by any test: the host's
+    // warning table reads the declaration, and the library writer refuses a
+    // declaration with no file beside it. Four bytes of EBML header stand in
+    // for a recording nothing plays.
+    "assets/loop.webm": new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]),
+  };
 
   rmSync(HOST_APP_DIR, { recursive: true, force: true });
   mkdirSync(HOST_THEMES_DIR, { recursive: true });

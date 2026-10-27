@@ -56,17 +56,14 @@ const KNOWN_KEYS = {
     "weight",
     "style",
     "format",
+    // Font-only, refused on other kinds by the validator: the cut a packaged
+    // face came from.
+    "subset",
   ],
   globalEntry: ["name", "value"],
-  typePreset: [
-    "family",
-    "size",
-    "weight",
-    "letterSpacing",
-    "lineHeight",
-    "face",
-    "trioRole",
-  ],
+  // A token names a face only. Size, leading, tracking and role belong to the
+  // run that wears it (docs/decisions/0128).
+  typeToken: ["family", "weight", "face"],
   fontFaceReference: ["assetId"],
 } as const satisfies Record<string, readonly string[]>;
 
@@ -102,7 +99,7 @@ const ENVELOPE_KEYS = {
     "editorMetadata",
     "scene",
   ],
-  globals: ["palette", "typePresets"],
+  globals: ["palette", "typeTokens"],
   background: ["color", "media"],
   backgroundMedia: [
     "assetId",

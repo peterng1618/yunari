@@ -10,12 +10,14 @@ import {
   CHART_FAMILIES,
   type ChartFamily,
   isSemanticVersion,
+  isTypeTokenRole,
   MAX_ARTBOARD_DIMENSION,
   MAX_NODE_COUNT,
   MAX_NODE_DEPTH,
   MAX_TAGS,
   STABLE_ID_PATTERN,
   TAG_PATTERN,
+  TYPE_TOKEN_ROLES,
 } from "./document.js";
 import { envelopeKeysFor, knownKeysFor } from "./envelope-keys.js";
 import {
@@ -319,8 +321,10 @@ function fontPresetFaces(
   requireTrioRoles: boolean,
   issues: ValidationIssue[],
 ): void {
-  if (!isRecord(globals) || !isRecord(globals["typePresets"])) return;
-  const presets = globals["typePresets"];
+  const presets =
+    isRecord(globals) && isRecord(globals["typeTokens"])
+      ? globals["typeTokens"]
+      : undefined;
   const fontAssets = new Map<string, Record<string, unknown>>();
   if (Array.isArray(assets)) {
     for (const asset of assets) {
@@ -332,22 +336,11 @@ function fontPresetFaces(
         fontAssets.set(asset["id"], asset);
     }
   }
-  const roles = new Set<string>();
-  for (const [id, entry] of Object.entries(presets)) {
-    const value =
-      isRecord(entry) && isRecord(entry["value"]) ? entry["value"] : undefined;
+  for (const [id, entry] of Object.entries(presets ?? {})) {
+    const value = isRecord(entry) ? entry : undefined;
     if (value === undefined) continue;
-    if (typeof value["trioRole"] === "string") roles.add(value["trioRole"]);
     const face = isRecord(value["face"]) ? value["face"] : undefined;
     if (face === undefined) {
-      if (requireTrioRoles)
-        issues.push(
-          issue(
-            "missing-field",
-            `/globals/typePresets/${id}/value/face`,
-            "New theme type presets need a declared packaged font face.",
-          ),
-        );
       continue;
     }
     const assetId = face["assetId"];
@@ -361,27 +354,30 @@ function fontPresetFaces(
       issues.push(
         issue(
           "unresolved-asset-ref",
-          `/globals/typePresets/${id}/value/face/assetId`,
-          "A type preset face must reference a declared matching font asset.",
+          `/globals/typeTokens/${id}/face/assetId`,
+          "A type token face must reference a declared matching font asset.",
         ),
       );
     }
   }
-  if (
-    requireTrioRoles &&
-    !["heading", "body", "mono"].every((role) => roles.has(role))
-  ) {
-    issues.push(
-      issue(
-        "missing-field",
-        "/globals/typePresets",
-        "New themes need heading, body and mono type-preset roles.",
-      ),
-    );
+  if (requireTrioRoles) {
+    // An absent or malformed bag has no roles either, so it is refused the same
+    // way an empty one is rather than skipping the requirement.
+    const roles = new Set(Object.keys(presets ?? {}).filter(isTypeTokenRole));
+    for (const role of TYPE_TOKEN_ROLES) {
+      if (roles.has(role)) continue;
+      issues.push(
+        issue(
+          "missing-field",
+          `/globals/typeTokens/${role}`,
+          `A theme needs a "${role}" type token; a role is a token id.`,
+        ),
+      );
+    }
   }
 }
 
-/** Fabric text font properties are resolved cache; runs own their type-preset references. */
+/** Fabric text font properties are resolved cache; runs own their type-token references. */
 function sceneTypeReferences(
   scene: unknown,
   globals: unknown,
@@ -389,8 +385,8 @@ function sceneTypeReferences(
 ): void {
   if (!isRecord(scene) || !Array.isArray(scene["objects"])) return;
   const presets =
-    isRecord(globals) && isRecord(globals["typePresets"])
-      ? globals["typePresets"]
+    isRecord(globals) && isRecord(globals["typeTokens"])
+      ? globals["typeTokens"]
       : undefined;
   const palette =
     isRecord(globals) && isRecord(globals["palette"])
@@ -412,22 +408,22 @@ function sceneTypeReferences(
           issue(
             "unresolved-global-ref",
             `${path}/yunariText`,
-            "Text objects need authored runs with typePreset and palette references.",
+            "Text objects need authored runs with typeToken and palette references.",
           ),
         );
       } else {
         for (const [index, run] of runs.entries()) {
-          const ref = isRecord(run) ? run["typePreset"] : undefined;
+          const ref = isRecord(run) ? run["typeToken"] : undefined;
           const preset =
-            typeof ref === "string" && ref.startsWith("typePresets.")
-              ? presets?.[ref.slice("typePresets.".length)]
+            typeof ref === "string" && ref.startsWith("typeTokens.")
+              ? presets?.[ref.slice("typeTokens.".length)]
               : undefined;
-          if (!isRecord(preset) || !isRecord(preset["value"])) {
+          if (!isRecord(preset)) {
             issues.push(
               issue(
                 "unresolved-global-ref",
-                `${path}/yunariText/runs/${index}/typePreset`,
-                "Text runs must reference an existing type preset.",
+                `${path}/yunariText/runs/${index}/typeToken`,
+                "Text runs must reference an existing type token.",
               ),
             );
           }
@@ -449,10 +445,31 @@ function sceneTypeReferences(
             unknownKeys(
               style,
               `${path}/yunariText/runs/${index}/style`,
-              ["color"],
+              ["color", "fontSize", "lineHeight", "letterSpacing"],
               "A text run style",
               issues,
             );
+          const fontSize = style?.["fontSize"];
+          if (fontSize !== undefined) {
+            const size = isRecord(fontSize) ? fontSize["value"] : undefined;
+            if (typeof size !== "number" || !Number.isFinite(size)) {
+              issues.push(
+                issue(
+                  "wrong-type",
+                  `${path}/yunariText/runs/${index}/style/fontSize`,
+                  "A text run's fontSize must be a finite number.",
+                ),
+              );
+            } else if (size <= 0) {
+              issues.push(
+                issue(
+                  "out-of-range",
+                  `${path}/yunariText/runs/${index}/style/fontSize`,
+                  "A text run's fontSize must be above 0.",
+                ),
+              );
+            }
+          }
           const color = style?.["color"];
           const colorRef = isRecord(color) ? color["ref"] : undefined;
           if (
@@ -540,7 +557,7 @@ function textBox(
   }
 }
 
-/** v2 removes legacy global groups; palette and type presets own authored style. */
+/** v2 removes legacy global groups; palette and type tokens own authored style. */
 function v2Globals(value: unknown, issues: ValidationIssue[]): void {
   if (value === undefined) return;
   if (!isRecord(value)) {

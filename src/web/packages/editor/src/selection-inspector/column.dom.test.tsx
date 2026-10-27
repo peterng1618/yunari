@@ -61,6 +61,9 @@ const runs: RunEdits = {
   setRunText: () => false,
   setRunPreset: () => false,
   setRunColour: () => false,
+  setRunSize: () => false,
+  setRunLineHeight: () => false,
+  setRunTracking: () => false,
   setUnitDisplay: () => false,
   setSource: () => false,
   setFormat: () => false,
@@ -113,6 +116,7 @@ function context(): ColumnContext {
       historyManager: { attachGlobals: () => {}, saveState: () => {} },
       errorManager: { warn: () => {}, error: () => {} },
       cropManager: idleCrop(),
+      artboard: () => ({ width: 1920, height: 1080 }),
     } as never,
     globals: undefined,
     locale: undefined,
@@ -222,7 +226,7 @@ describe("SelectionColumn", () => {
     const text = new IText("", { left: 0, top: 0 });
     text.set({
       yunariText: {
-        runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+        runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
       },
     });
     const view = viewOf(text);
@@ -275,7 +279,7 @@ describe("SelectionColumn", () => {
 
   it("marks the Size halves read-only for a text, and editable for a text box", () => {
     const runs = {
-      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
     };
     const auto = new IText("Hi", { left: 0, top: 0 });
     auto.set("yunariText", runs);
@@ -305,7 +309,7 @@ describe("SelectionColumn", () => {
   it("renders the Size halves as read-only inputs for a text", () => {
     const text = new IText("Hi", { left: 0, top: 0 });
     text.set("yunariText", {
-      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
     });
     renderedSections(viewOf(text));
 
@@ -484,7 +488,7 @@ describe("SelectionColumn", () => {
     const text = new IText("", { left: 0, top: 0 });
     text.set({
       yunariText: {
-        runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+        runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
       },
     });
 

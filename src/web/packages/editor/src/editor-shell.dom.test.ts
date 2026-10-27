@@ -6,7 +6,11 @@ import {
   type Background,
   objectName,
 } from "@yunari/renderer-core";
-import { isLocked, serialiseScene } from "@yunari/scene-fabric";
+import {
+  isLocked,
+  serialiseScene,
+  YUNARI_TEXT_PROPERTY,
+} from "@yunari/scene-fabric";
 import {
   FabricImage,
   type FabricObject,
@@ -108,6 +112,14 @@ function sceneIds(scene: { objects: readonly unknown[] }): readonly string[] {
   return sceneNodes(scene.objects as readonly Record<string, unknown>[]).map(
     (object) => String(object.id),
   );
+}
+
+/** Each authored run's stored size, in order, as the object carries it. */
+function runSizesOf(object: FabricObject): readonly unknown[] {
+  const authored = object.get(YUNARI_TEXT_PROPERTY) as
+    | { runs?: readonly { style?: Record<string, unknown> }[] }
+    | undefined;
+  return (authored?.runs ?? []).map((run) => run.style?.["fontSize"]);
 }
 
 describe("a binding cannot outlive its object", () => {
@@ -406,6 +418,75 @@ describe("native editor shell", () => {
     expect(revived?.left).toBe(5);
   });
 
+  it("records a scale gesture as one entry, so one undo restores size and scale", async () => {
+    // The shell's own `object:modified` save must run after the text manager's
+    // commit: registered first, it recorded the interim scaled state, and one
+    // undo landed on runs the gesture never pinned.
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+
+    const shell = await mount({
+      host,
+      artboard: { width: 1080, height: 1080 },
+    });
+    const text = shell.editor.textManager.addText({
+      text: "CPU",
+      yunariText: {
+        runs: [
+          {
+            kind: "literal",
+            text: "CPU",
+            style: { fontSize: { value: 46 } },
+          },
+        ],
+      },
+    });
+
+    text.set({ scaleX: 1.5, scaleY: 1.5 });
+    shell.editor.canvas.fire("object:modified", { target: text });
+
+    expect(runSizesOf(text)).toEqual([{ value: 69 }]);
+    expect([text.scaleX, text.scaleY]).toEqual([1, 1]);
+
+    await shell.editor.historyManager.undo();
+
+    const revived = shell.editor.canvas
+      .getObjects()
+      .find((object) => object.get("id") === text.get("id"));
+    if (revived === undefined) throw new Error("undo removed the text");
+    expect(runSizesOf(revived)).toEqual([{ value: 46 }]);
+    expect([revived.scaleX, revived.scaleY]).toEqual([1, 1]);
+  });
+
+  it("takes a role default from the artboard, not the viewport", async () => {
+    // A 540-high board against a 300-high viewport: the body ratio is 8, not
+    // the 4 the canvas height would have given, doubled by the gesture.
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+
+    const shell = await mount({
+      host,
+      artboard: { width: 1080, height: 540 },
+    });
+    const text = shell.editor.textManager.addText({
+      text: "CPU",
+      yunariText: {
+        runs: [{ kind: "literal", text: "CPU", typeToken: "typeTokens.body" }],
+      },
+    });
+
+    text.set({ scaleX: 2, scaleY: 2 });
+    shell.editor.canvas.fire("object:modified", { target: text });
+
+    expect(runSizesOf(text)).toEqual([{ value: 16 }]);
+  });
+
   it("opens a legacy Text as IText, and undo revives it editable again", async () => {
     // Fabric serialises its display-only `FabricText` as `type: "Text"`; the
     // player renders it, the editor cannot type into it. Mount and undo go
@@ -604,11 +685,8 @@ function legacyTextEnvelope(): NonNullable<
         none: { name: "None", value: { kind: "solid", color: "transparent" } },
         ink: { name: "Ink", value: { kind: "solid", color: "#112233" } },
       },
-      typePresets: {
-        body: {
-          name: "Body",
-          value: { family: "Inter", size: 24, weight: 400, lineHeight: 1.2 },
-        },
+      typeTokens: {
+        body: { family: "Inter", weight: 400 },
       },
     },
     metadata: { themeLanguage: "en" },
@@ -626,7 +704,7 @@ function legacyTextEnvelope(): NonNullable<
               {
                 kind: "literal",
                 text: "CPU 48%",
-                typePreset: "typePresets.body",
+                typeToken: "typeTokens.body",
                 style: { color: { ref: "palette.ink" } },
               },
             ],

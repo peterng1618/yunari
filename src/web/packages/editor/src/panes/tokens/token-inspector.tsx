@@ -1,20 +1,27 @@
 import type {
   FabricGlobals,
   FabricPalette,
-  TypePreset,
+  TypeToken,
 } from "@yunari/renderer-core";
+import { isTypeTokenRole } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { ControlNumber } from "../../components/ui/control-number.js";
-import { ControlSelect } from "../../components/ui/control-select.js";
-import { ControlText } from "../../components/ui/control-text.js";
+import {
+  type ControlOption,
+  ControlSelect,
+} from "../../components/ui/control-select.js";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
 import type { TokenRef } from "../../editor-shell/shell-stores.js";
 import type { PaletteTokenUse } from "../../palette-manager/panel.js";
-import { FONT_ROLES, type FontTrioRole } from "../../type-preset-apply.js";
-import type { TypePresets } from "../../type-preset-manager/panel.js";
+import type { TypeTokens } from "../../type-preset-manager/panel.js";
+import {
+  FONT_FINDER_ID,
+  fontActionOptions,
+  IMPORT_LOCAL_FONT_ID,
+} from "../../type-token-manager/font-actions.js";
+import { orderedTokens, tokenName } from "../../type-token-manager/name.js";
 import { uiCopy } from "../../ui-copy.js";
 import { PaintFields } from "./paint-fields.js";
 
@@ -32,9 +39,15 @@ import { PaintFields } from "./paint-fields.js";
  * token is set and this section draws nothing when none is, so the two never
  * claim the column at once.
  *
- * **The specimen never loads bytes.** `Aa` is set in the preset's own family;
+ * **The specimen never loads bytes.** `Aa` is set in the token's own family;
  * packaged faces are already in `document.fonts`, and a remote face was
  * `font-preview.ts`'s job, which is gone (ruling 5).
+ *
+ * **A role token is not removable.** Its id is the role, and the validator
+ * requires all three in every theme, so the reassignment-and-delete row is
+ * drawn only for an unroled token. The name is computed and read-only; the
+ * editable name, role select and the old size/leading/tracking fields are gone
+ * with the stored fields (ruling 0128).
  *
  * **Usage is not here yet.** The spec lists a preset's usage, but no counter
  * exists and the reference walk is Task 17's — this file does not invent one.
@@ -44,7 +57,7 @@ export interface TokenInspectorPanel {
   readonly root: HTMLElement;
   render(
     ref: TokenRef | undefined,
-    presets: TypePresets,
+    presets: TypeTokens,
     globals: FabricGlobals | undefined,
   ): void;
   /** Unmounts the React tree, then removes the section. A React root
@@ -60,15 +73,38 @@ export interface FaceChoice {
   readonly style: string;
 }
 
+/** The unheld weight reading's option id. Namespaced for the same reason the
+ *  family sentinels are: an id shared with a declared face would make the
+ *  trigger and a press disagree about which entry they mean. */
+const WEIGHT_READING_ID = "@yunari:weight-not-in-package:";
+
+/** Runs an action row. Answers false for a family, which the caller writes. */
+function runFontAction(id: string, actions: TokenInspectorActions): boolean {
+  if (id === IMPORT_LOCAL_FONT_ID) {
+    actions.importLocalFont?.();
+    return true;
+  }
+  if (id === FONT_FINDER_ID) {
+    actions.openFontFinder?.();
+    return true;
+  }
+  return false;
+}
+
 export interface TokenInspectorActions {
-  readonly onChange: (presets: TypePresets) => void;
+  readonly onChange: (presets: TypeTokens) => void;
   readonly onDelete: (id: string, replacement: string) => void;
-  readonly setRole: (id: string, role: FontTrioRole | null) => void;
   readonly unbindFace: (id: string) => void;
   /** Every declared face of a family, so a bound preset's weight is a list of
    *  the weights the package actually holds rather than free text that would
    *  fall back to the browser font. */
   readonly facesOf?: (family: string) => readonly FaceChoice[];
+  /** The package's declared families, in the order the list offers them. */
+  readonly familiesOf?: () => readonly string[];
+  /** Declares a picked file as a token's family. Drawn only when supplied. */
+  readonly importLocalFont?: () => void;
+  /** Opens the font finder. Drawn only when supplied, like the picker above. */
+  readonly openFontFinder?: () => void;
   /** The paint half: the palette the ref names, its document writes and its
    *  users walk. Absent when the mount has no palette behind it. */
   readonly paints:
@@ -98,7 +134,7 @@ export function createTokenInspectorPanel(
   const reactRoot: Root = createRoot(root);
   const draw = (
     ref: TokenRef | undefined,
-    presets: TypePresets,
+    presets: TypeTokens,
     _globals: FabricGlobals | undefined,
   ): void => {
     flushSync(() => {
@@ -121,7 +157,7 @@ export function createTokenInspectorPanel(
 
 function TokenInspector(props: {
   readonly tokenRef: TokenRef | undefined;
-  readonly presets: TypePresets;
+  readonly presets: TypeTokens;
   readonly actions: TokenInspectorActions;
 }): React.JSX.Element | null {
   const { tokenRef, presets, actions } = props;
@@ -155,7 +191,7 @@ function TokenInspector(props: {
     /* Keyed by the preset: every field edits this one record, so switching
        tokens rebuilds the field set rather than reconciling the next preset
        onto the previous one's half-typed draft. */
-    <PresetFields
+    <TokenFields
       key={tokenRef.id}
       id={tokenRef.id}
       entry={entry}
@@ -165,30 +201,28 @@ function TokenInspector(props: {
   );
 }
 
-function PresetFields(props: {
+function TokenFields(props: {
   readonly id: string;
-  readonly entry: { readonly name: string; readonly value: TypePreset };
-  readonly presets: TypePresets;
+  readonly entry: TypeToken;
+  readonly presets: TypeTokens;
   readonly actions: TokenInspectorActions;
 }): React.JSX.Element {
   const { id, entry, presets, actions } = props;
-  const value = entry.value;
-  const put = (next: TypePreset, name = entry.name): void => {
-    actions.onChange({ ...presets, [id]: { name, value: next } });
+  const value = entry;
+  const put = (next: TypeToken): void => {
+    actions.onChange({ ...presets, [id]: next });
   };
-  // Lightest first: a weight list reads 400, 500, 700, not declaration order.
-  const faces =
-    value.face === undefined
-      ? []
-      : [...(actions.facesOf?.(value.family) ?? [])].sort(
-          (a, b) =>
-            Number(a.weight) - Number(b.weight) ||
-            a.style.localeCompare(b.style),
-        );
-  const selectedFaceId =
-    faces.find((face) => face.assetId === value.face?.assetId)?.assetId ??
-    faces[0]?.assetId ??
-    "";
+  // The producer owns the order: `facesOf` answers one entry per weight and
+  // style, lightest first. Re-sorting here would put `italic` before `normal`
+  // at the same weight and discard that. Both branches read the same list: an
+  // unbound token's family can hold faces too, and a weight it does not hold
+  // would draw in the browser fallback.
+  const faces = actions.facesOf?.(value.family) ?? [];
+  // One write, one history entry: a weight without its face would draw from a
+  // file the family may not hold.
+  const chooseWeight = (face: FaceChoice): void => {
+    put({ ...value, weight: face.weight, face: { assetId: face.assetId } });
+  };
 
   return (
     <div
@@ -196,8 +230,15 @@ function PresetFields(props: {
       className="flex flex-col gap-[var(--space-8)]"
     >
       <h2 className="text-xs font-semibold tracking-[0.11em] text-muted uppercase">
-        {uiCopy.panels.typePreset}
+        {uiCopy.panels.typeToken}
       </h2>
+      {/* Computed, never stored: a role reads `[Heading] Segoe UI 600`, an
+          unroled token `Manrope 600`. The field is a reading, not a well. */}
+      <ReadOnlyPair
+        label={uiCopy.inspectorFields.name}
+        value={tokenName(id, value)}
+        valueData={{ "data-yunari-token-name": "" }}
+      />
       <span
         data-yunari-token-specimen=""
         aria-hidden="true"
@@ -206,54 +247,25 @@ function PresetFields(props: {
       >
         Aa
       </span>
-      <ControlText
-        label={uiCopy.panels.name}
-        data={{ "data-yunari-token-name": "" }}
-        value={entry.name}
-        onCommit={(next) => {
-          const trimmed = next.trim();
-          if (trimmed === "") return;
-          put(value, trimmed);
-        }}
-      />
-      <ControlSelect
-        label={uiCopy.assets.fontPreview.roleLabel}
-        data={{ "data-yunari-token-role": "" }}
-        value={value.trioRole ?? ""}
-        options={[
-          { id: "", name: uiCopy.panels.none },
-          ...FONT_ROLES.map((role) => ({
-            id: role,
-            name: uiCopy.assets.fontPreview.role[role],
-          })),
-        ]}
-        onChange={(next) =>
-          actions.setRole(id, next === "" ? null : (next as FontTrioRole))
-        }
-      />
       {value.face === undefined ? (
         <>
-          <ControlText
+          <ControlSelect
             label={uiCopy.panels.family}
             data={{ "data-yunari-token-family": "" }}
             value={value.family}
-            onCommit={(next) => {
-              const trimmed = next.trim();
+            options={familyOptions(value.family, actions)}
+            onChange={(id) => {
+              if (runFontAction(id, actions)) return;
+              const trimmed = id.trim();
               if (trimmed === "") return;
               put({ ...value, family: trimmed });
             }}
           />
-          <ControlText
-            label={uiCopy.panels.weight}
-            data={{ "data-yunari-token-weight": "" }}
-            value={String(value.weight ?? "")}
-            onCommit={(next) => {
-              // An emptied optional field removes its key: an empty string is a
-              // weight the renderer cannot use.
-              const { weight: _weight, ...rest } = value;
-              const trimmed = next.trim();
-              put(trimmed === "" ? rest : { ...rest, weight: trimmed });
-            }}
+          <WeightField
+            faces={faces}
+            weight={value.weight}
+            boundAssetId={undefined}
+            onChoose={chooseWeight}
           />
         </>
       ) : (
@@ -263,37 +275,12 @@ function PresetFields(props: {
         >
           <p className="m-0 text-xs text-muted">{uiCopy.panels.fontBound}</p>
           <ReadOnlyPair label={uiCopy.panels.family} value={value.family} />
-          {/* The face owns the family, but not the weight: the package may hold
-              several, and a weight it does not hold would draw in the browser
-              fallback. Absent a declared face list, the bound weight stays
-              read-only rather than inventing one. */}
-          {faces.length === 0 ? (
-            <ReadOnlyPair
-              label={uiCopy.panels.weight}
-              value={String(value.weight ?? "")}
-            />
-          ) : (
-            <ControlSelect
-              label={uiCopy.panels.weight}
-              data={{ "data-yunari-token-weight": "" }}
-              value={selectedFaceId}
-              options={faces.map((face) => ({
-                id: face.assetId,
-                name: `${face.weight}${face.style === "italic" ? " italic" : ""}`,
-              }))}
-              onChange={(assetId) => {
-                const face = faces.find(
-                  (candidate) => candidate.assetId === assetId,
-                );
-                if (face === undefined) return;
-                put({
-                  ...value,
-                  weight: face.weight,
-                  face: { assetId: face.assetId },
-                });
-              }}
-            />
-          )}
+          <WeightField
+            faces={faces}
+            weight={value.weight}
+            boundAssetId={value.face.assetId}
+            onChoose={chooseWeight}
+          />
           <button
             type="button"
             data-yunari-token-unbind=""
@@ -302,79 +289,200 @@ function PresetFields(props: {
           >
             {uiCopy.panels.unbindFont}
           </button>
+          {/* The face owns the family, so there is no family list to hold these
+              rows; they stay the same two actions, as buttons. */}
+          <FontActionRows actions={actions} />
         </div>
       )}
-      <ControlNumber
-        label={uiCopy.panels.size}
-        data={{ "data-yunari-token-size": "" }}
-        value={value.size}
-        onCommit={(size) => {
-          // A preset's size cannot be zero or negative; `ControlNumber` refuses
-          // a non-number, and this refuses the number it lets through.
-          if (!Number.isFinite(size) || size <= 0) return;
-          put({ ...value, size });
-        }}
-      />
-      <ControlNumber
-        label={uiCopy.panels.lineHeight}
-        data={{ "data-yunari-token-line-height": "" }}
-        value={value.lineHeight}
-        onClear={() => {
-          const { lineHeight: _lineHeight, ...rest } = value;
-          put(rest);
-        }}
-        onCommit={(lineHeight) => {
-          if (!Number.isFinite(lineHeight) || lineHeight <= 0) return;
-          put({ ...value, lineHeight });
-        }}
-      />
-      <ControlNumber
-        label={uiCopy.panels.letterSpacing}
-        data={{ "data-yunari-token-letter-spacing": "" }}
-        value={value.letterSpacing}
-        onClear={() => {
-          const { letterSpacing: _letterSpacing, ...rest } = value;
-          put(rest);
-        }}
-        onCommit={(letterSpacing) => {
-          if (!Number.isFinite(letterSpacing)) return;
-          put({ ...value, letterSpacing });
-        }}
-      />
-      <Deletion id={id} presets={presets} actions={actions} />
+      {isTypeTokenRole(id) ? null : (
+        <Deletion id={id} presets={presets} actions={actions} />
+      )}
     </div>
+  );
+}
+
+/**
+ * The weight row, drawn the same way on both branches: the family's declared
+ * faces as a list, or a reading when the package declares none. There is no
+ * free-text weight — a typed weight the package does not hold would draw in the
+ * browser fallback, which the token model exists to stop.
+ *
+ * The list shows the bound face when there is one, else the face whose weight
+ * the token already names, so an unbound token opens on its own weight. A
+ * weight the family does not hold — reachable by changing family, which keeps
+ * the weight — is offered as a disabled reading, as the family list draws a
+ * family the package does not declare, rather than pretending the lightest
+ * face is the choice.
+ */
+function WeightField(props: {
+  readonly faces: readonly FaceChoice[];
+  readonly weight: string | number | undefined;
+  readonly boundAssetId: string | undefined;
+  readonly onChoose: (face: FaceChoice) => void;
+}): React.JSX.Element {
+  if (props.faces.length === 0) {
+    return (
+      <ReadOnlyPair
+        label={uiCopy.panels.weight}
+        value={String(props.weight ?? "")}
+        valueData={{ "data-yunari-token-weight": "" }}
+      />
+    );
+  }
+  const heldAssetId =
+    props.faces.find((face) => face.assetId === props.boundAssetId)?.assetId ??
+    props.faces.find((face) => String(face.weight) === String(props.weight))
+      ?.assetId;
+  const missingWeight =
+    heldAssetId === undefined &&
+    props.weight !== undefined &&
+    String(props.weight).trim() !== ""
+      ? String(props.weight)
+      : undefined;
+  // Namespaced, never the weight itself: a declared face's asset id can equal a
+  // weight (a local `300.woff2`), and two options sharing an id let Base UI
+  // resolve the trigger to the wrong label and a press write that face.
+  const missingWeightId =
+    missingWeight === undefined
+      ? undefined
+      : `${WEIGHT_READING_ID}${missingWeight}`;
+  const selected =
+    heldAssetId ?? missingWeightId ?? props.faces[0]?.assetId ?? "";
+  return (
+    <ControlSelect
+      label={uiCopy.panels.weight}
+      data={{ "data-yunari-token-weight": "" }}
+      value={selected}
+      options={[
+        ...props.faces.map((face) => ({
+          id: face.assetId,
+          name: `${face.weight}${face.style === "italic" ? " italic" : ""}`,
+        })),
+        ...(missingWeight === undefined || missingWeightId === undefined
+          ? []
+          : [
+              {
+                id: missingWeightId,
+                name: `${missingWeight} ${uiCopy.panels.notInPackage}`,
+                disabled: true,
+              },
+            ]),
+      ]}
+      onChange={(assetId) => {
+        const face = props.faces.find(
+          (candidate) => candidate.assetId === assetId,
+        );
+        if (face !== undefined) props.onChoose(face);
+      }}
+    />
+  );
+}
+
+/**
+ * The family list: the package's declared families in the producer's order, the
+ * token's own family appended as a reading when the package does not declare it,
+ * then the action rows.
+ *
+ * The current family is `disabled` rather than omitted, so it still prints as
+ * the trigger's value while staying out of the keyboard model. The comparison is
+ * case-insensitive because the producer deduplicates that way: `inter` and
+ * `Inter` are one family, and appending both would put the same family twice in
+ * the list. A family literally equal to a sentinel id is appended as neither a
+ * choice nor a reading — that id belongs to an action row.
+ */
+function familyOptions(
+  family: string,
+  actions: TokenInspectorActions,
+): readonly ControlOption[] {
+  const declared = (actions.familiesOf?.() ?? []).filter((candidate) => {
+    const name = candidate.trim();
+    return name !== IMPORT_LOCAL_FONT_ID && name !== FONT_FINDER_ID;
+  });
+  const trimmed = family.trim();
+  const wanted = trimmed.toLowerCase();
+  const isActionId =
+    trimmed === IMPORT_LOCAL_FONT_ID || trimmed === FONT_FINDER_ID;
+  const held = declared.some(
+    (candidate) => candidate.trim().toLowerCase() === wanted,
+  );
+  return [
+    ...declared.map((candidate) => ({ id: candidate, name: candidate })),
+    ...(held || isActionId
+      ? []
+      : [
+          {
+            id: family,
+            name: `${family} ${uiCopy.panels.notInPackage}`,
+            disabled: true,
+          },
+        ]),
+    ...fontActionOptions(actions),
+  ];
+}
+
+/** The two action rows where no family list exists to carry them. */
+function FontActionRows(props: {
+  readonly actions: TokenInspectorActions;
+}): React.JSX.Element | null {
+  const options = fontActionOptions(props.actions);
+  if (options.length === 0) return null;
+  return (
+    <>
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          data-yunari-token-action={option.id}
+          onClick={() => {
+            runFontAction(option.id, props.actions);
+          }}
+          className={plainButtonClasses}
+        >
+          {option.name}
+        </button>
+      ))}
+    </>
   );
 }
 
 function ReadOnlyPair(props: {
   readonly label: string;
   readonly value: string;
+  /** A hook for the reading itself, where a surface names it. */
+  readonly valueData?: Readonly<Record<`data-${string}`, string>>;
 }): React.JSX.Element {
   return (
     <div className="flex items-baseline gap-[var(--space-8)]">
       <span className="text-xs text-muted">{props.label}</span>
-      <span className="ml-auto font-mono text-xs text-text">{props.value}</span>
+      <span
+        {...props.valueData}
+        className="ml-auto font-mono text-xs text-text"
+      >
+        {props.value}
+      </span>
     </div>
   );
 }
 
 /**
- * The reassignment-on-delete row: the preset this one's references move to, and
+ * The reassignment-on-delete row: the token this one's references move to, and
  * the deletion itself. The delete is refused when there is nothing to move them
- * to, because deleting the last preset would strand every reference to it.
- * Ported from `preset-list.tsx`'s `DeletionControls` (`7fd5d9b7`), which Task 14
- * removed with the field set.
+ * to, because deleting the last unroled token would strand every reference to
+ * it. Drawn for an unroled token only: a role id is required by the validator.
  */
 function Deletion(props: {
   readonly id: string;
-  readonly presets: TypePresets;
+  readonly presets: TypeTokens;
   readonly actions: TokenInspectorActions;
 }): React.JSX.Element {
   const { id, presets, actions } = props;
   const [picked, setPicked] = useState<string | undefined>(undefined);
-  const options = Object.entries(presets)
-    .filter(([candidate]) => candidate !== id)
-    .map(([candidate, entry]) => ({ id: candidate, name: entry.name }));
+  const options = orderedTokens({ typeTokens: presets })
+    .filter((candidate) => candidate.id !== id)
+    .map(({ id: candidate, token }) => ({
+      id: candidate,
+      name: tokenName(candidate, token),
+    }));
   const replacement =
     picked !== undefined && picked !== id && presets[picked] !== undefined
       ? picked

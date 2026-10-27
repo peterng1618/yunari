@@ -97,6 +97,7 @@ function setup(active: unknown, others: readonly unknown[] = []) {
     historyManager: history,
     errorManager: { warn: vi.fn(), error: vi.fn() },
     cropManager: idleCrop(),
+    artboard: () => ({ width: 1920, height: 1080 }),
   };
   const inspector = createSelectionInspector(host, {
     editor: editor as never,
@@ -635,6 +636,7 @@ describe("panel fields in the selection inspector", () => {
         historyManager: { attachGlobals: () => {}, saveState },
         errorManager: { warn: vi.fn(), error: vi.fn() },
         cropManager: idleCrop(),
+        artboard: () => ({ width: 1920, height: 1080 }),
       } as never,
       globals,
       refreshGlass: vi.fn(),

@@ -255,7 +255,7 @@ it("prints every menu row in sentence case", () => {
 
 /**
  * The digit arm of the first-word rule, on the shapes that reach it. A menu row
- * may begin with a number (`30 FPS` did until the chart rate row went, 0128),
+ * may begin with a number (`30 FPS` did until the chart rate row went, 0129),
  * and `^[A-Z0-9]` alone admitted any such row — `3d view` included, which is
  * how `2d mode` would have slipped through a sentence-case net unnoticed.
  */

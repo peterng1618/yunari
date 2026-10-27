@@ -97,6 +97,7 @@ async function runReadingNote(
   const runs = projectRuns(object as never, "clock-label", {
     globals: undefined,
     locale: undefined,
+    artboardHeight: 1080,
     nodeBindings: () => bindings,
     // Nothing has arrived for the `unmapped` case; the `undeclared` case never
     // asks, because the run names a binding the object does not hold.
@@ -115,6 +116,9 @@ async function runReadingNote(
     setRunText: () => true,
     setRunPreset: () => true,
     setRunColour: () => true,
+    setRunSize: () => true,
+    setRunLineHeight: () => true,
+    setRunTracking: () => true,
     setUnitDisplay: () => true,
     setSource: () => true,
     setFormat: () => true,
@@ -303,7 +307,7 @@ it("states a missing reading as a gap rather than a zero or a dash", async () =>
  * asserted by `diagnostic-message.dom.test.tsx`.
  *
  * **One reading, proven.** The View menu carries `dataSource`, and the chart
- * rate row is gone with the setting itself (0128). `shell-layout.dom.test.tsx`
+ * rate row is gone with the setting itself (0129). `shell-layout.dom.test.tsx`
  * opens the submenu, picks the other value and asserts the owner was called, so
  * this case does not open the menu again
  * (50–90s per jsdom open, `vg-135`). The value-runs setting is gone: a value

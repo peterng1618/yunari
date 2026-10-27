@@ -866,8 +866,8 @@ describe("the units a display paints with", () => {
       artboard: { width: 1920, height: 1080 },
       metadata: { themeLanguage: "en" },
       globals: {
-        typePresets: {
-          body: { name: "Body", value: { family: "Inter", size: 24 } },
+        typeTokens: {
+          body: { family: "Inter" },
         },
         palette: {
           none: {
@@ -896,7 +896,7 @@ describe("the units a display paints with", () => {
                 {
                   kind: "value",
                   bindingId: "clock",
-                  typePreset: "typePresets.body",
+                  typeToken: "typeTokens.body",
                   style: { color: { ref: "palette.ink" } },
                 },
               ],
@@ -976,7 +976,7 @@ describe("an image reading on the display", () => {
           },
           ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
         },
-        typePresets: {},
+        typeTokens: {},
       },
       bindings: {
         artwork: [{ id: "image", semanticKey: "media.artwork" }],
@@ -1137,7 +1137,7 @@ function lineEnvelope(): unknown {
         none: { name: "None", value: { kind: "solid", color: "transparent" } },
         ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
       },
-      typePresets: {},
+      typeTokens: {},
     },
     bindings: { line: [{ id: "l", semanticKey: "cpu.load.total" }] },
     scene: {
@@ -1174,8 +1174,8 @@ function textOnlyEnvelope(): unknown {
         none: { name: "None", value: { kind: "solid", color: "transparent" } },
         ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
       },
-      typePresets: {
-        body: { name: "Body", value: { family: "Inter", size: 24 } },
+      typeTokens: {
+        body: { family: "Inter" },
       },
     },
     bindings: {
@@ -1197,7 +1197,7 @@ function textOnlyEnvelope(): unknown {
               {
                 kind: "value",
                 bindingId: "t",
-                typePreset: "typePresets.body",
+                typeToken: "typeTokens.body",
                 style: { color: { ref: "palette.ink" } },
               },
             ],
@@ -1788,8 +1788,8 @@ describe("the work one refresh frame does", () => {
           },
           ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
         },
-        typePresets: {
-          body: { name: "Body", value: { family: "Inter", size: 24 } },
+        typeTokens: {
+          body: { family: "Inter" },
         },
       },
       bindings: {
@@ -1837,7 +1837,7 @@ describe("the work one refresh frame does", () => {
                 {
                   kind: "value",
                   bindingId: "t",
-                  typePreset: "typePresets.body",
+                  typeToken: "typeTokens.body",
                   style: { color: { ref: "palette.ink" } },
                 },
               ],

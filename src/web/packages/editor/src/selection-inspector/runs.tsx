@@ -6,6 +6,7 @@ import type {
   TextRun,
 } from "@yunari/renderer-core";
 import {
+  defaultTypeSize,
   describeSemanticKey,
   formatInstant,
   groupDescriptorsByFamily,
@@ -17,6 +18,7 @@ import {
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useState } from "react";
+import { ControlNumber } from "../components/ui/control-number.js";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlSelect } from "../components/ui/control-select.js";
 import { ControlSwatch } from "../components/ui/control-swatch.js";
@@ -27,6 +29,12 @@ import {
   useControlIds,
 } from "../components/ui/control-well.js";
 import { Glyph, PLUS_GLYPH } from "../editor-shell/icons.js";
+import {
+  FONT_FINDER_ID,
+  fontActionOptions,
+  IMPORT_LOCAL_FONT_ID,
+} from "../type-token-manager/font-actions.js";
+import { orderedTokens, tokenName } from "../type-token-manager/name.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   authoredContentOf,
@@ -39,7 +47,7 @@ import type { RunEdits, RunOptionView, RunRowView, RunsView } from "./view.js";
 /**
  * Styled runs of a text object (§89): a value, its unit and its label may each
  * carry a different preset and colour. The model already represents this — a
- * run has its own `typePreset` and `style` map — so this is the authoring
+ * run has its own `typeToken` and `style` map — so this is the authoring
  * surface, not a format change.
  *
  * React renders a projected `RunsView` and writes through `RunEdits`; it holds
@@ -52,6 +60,12 @@ import type { RunEdits, RunOptionView, RunRowView, RunsView } from "./view.js";
 interface RunsProjection {
   readonly globals: FabricGlobals | undefined;
   readonly locale: string | undefined;
+  /**
+   * The height of the artboard this object is drawn on. A run that authors no
+   * size takes the role default, which is a share of this figure — the same one
+   * the canvas paints from.
+   */
+  readonly artboardHeight: number;
   readonly nodeBindings: ((nodeId: string) => readonly Binding[]) | undefined;
   readonly sampleSource: (() => SampleSource) | undefined;
   /**
@@ -93,7 +107,7 @@ function describeRun(run: TextRun): string {
  * The palette tokens a run's colour may reference, each under its stored
  * reference and the name its author gave it.
  *
- * The name, not the id, for the reason `presetOptions` gives: the palette panel,
+ * The name, not the id, for the reason `tokenOptions` gives: the palette panel,
  * `panel.ts` and `chart-manager` all print the authored name, and printing `cpu`
  * here put the same tokens in the run editor under a second vocabulary.
  */
@@ -108,58 +122,74 @@ function paletteOptions(globals: FabricGlobals | undefined): readonly {
 }
 
 /**
- * The type presets a run may reference, each under its stored reference and the
- * name its author gave it.
+ * The type tokens a run may reference, each under its stored reference and the
+ * computed name the Tokens pane and the token inspector also print.
  *
- * The name, not the id, because every other reference picker in the editor names
- * what it offers — printing `24-400` here put thirteen presets in the inspector
- * under one vocabulary and the same thirteen, one field lower, under another.
+ * The order is `orderedTokens`' — the three roles first, then the unroled by
+ * computed name — because a second ordering here is a second answer to the same
+ * question.
  */
-function presetOptions(
+function tokenOptions(
   globals: FabricGlobals | undefined,
 ): readonly RunOptionView[] {
-  return Object.entries(globals?.typePresets ?? {}).map(([id, entry]) => ({
-    id: `typePresets.${id}`,
-    name: entry.name,
-  }));
+  return orderedTokens({ typeTokens: globals?.typeTokens ?? {} }).map(
+    ({ id, token }) => ({
+      id: `typeTokens.${id}`,
+      name: tokenName(id, token),
+    }),
+  );
 }
 
 /**
  * The runs whose tracking the object cannot carry separately.
  *
- * Fabric measures spacing once, from the object, so only the first run's preset
+ * Fabric measures spacing once, from the object, so only the first run's style
  * reaches the screen. A later run asking for the *same* value loses nothing, so
  * it is not a gap — matching the model rather than "any letterSpacing" is what
- * keeps this from warning about a run that is already painted as asked.
+ * keeps this from warning about a run that is already painted as asked. The
+ * note names the run, because tracking is the run's own value now and a token
+ * carries none.
  */
-function presetGaps(
-  globals: FabricGlobals | undefined,
-  runs: readonly TextRun[],
-): readonly string[] {
-  const painted = letterSpacingOf(globals, runs[0]?.typePreset);
-  const gaps = new Set<string>();
+function presetGaps(runs: readonly TextRun[]): readonly string[] {
+  const spacingOf = (run: TextRun): number =>
+    styleNumber(run, "letterSpacing") ?? 0;
+  const first = runs[0];
+  const painted = first === undefined ? 0 : spacingOf(first);
+  const gaps: string[] = [];
+  // Deduped by the run, not by the note: two later runs may say the same text
+  // and are still two runs the object cannot carry separately.
+  const seen = new Set<TextRun>();
   for (const run of runs.slice(1)) {
-    const spacing = letterSpacingOf(globals, run.typePreset);
-    if (spacing === undefined || spacing === painted) continue;
-    gaps.add(
-      uiCopy.inspectorFields.runTrackingNotSeparate(run.typePreset ?? ""),
-    );
+    if (seen.has(run) || spacingOf(run) === painted) continue;
+    seen.add(run);
+    gaps.push(uiCopy.inspectorFields.runTrackingNotSeparate(describeRun(run)));
   }
-  return [...gaps];
+  return gaps;
 }
 
-/** A preset's authored tracking, or undefined when it asks for none. */
-function letterSpacingOf(
-  globals: FabricGlobals | undefined,
-  ref: `typePresets.${string}` | undefined,
+/**
+ * A numeric literal a run authored under one style key, or undefined when it
+ * authored none. A reference or a non-finite value is not a number the row can
+ * show, so it reads as absent rather than as `NaN`.
+ */
+function styleNumber(
+  run: TextRun,
+  key: "fontSize" | "lineHeight" | "letterSpacing",
 ): number | undefined {
-  const id = ref?.slice("typePresets.".length);
-  const value: unknown = (
-    globals?.typePresets?.[id ?? ""]?.value as
-      | { readonly letterSpacing?: unknown }
-      | undefined
-  )?.letterSpacing;
-  return typeof value === "number" ? value : undefined;
+  const authored = run.style?.[key];
+  if (authored === undefined || !("value" in authored)) return undefined;
+  const value = authored.value;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+/** The type token's id, which is what carries the role. No token — or one that
+ *  is not a reference — takes the body ratio, as the renderer's own reader does. */
+function tokenIdOf(ref: string): string {
+  return ref.startsWith("typeTokens.")
+    ? ref.slice("typeTokens.".length)
+    : "body";
 }
 
 /**
@@ -209,7 +239,7 @@ export function projectRuns(
   if (content === undefined) return undefined;
 
   const runs = textRunsOf(object);
-  const presets = presetOptions(context.globals);
+  const presets = tokenOptions(context.globals);
   const palettes = paletteOptions(context.globals);
   const bindable = nodeId.length > 0;
   const bindings = bindable ? (context.nodeBindings?.(nodeId) ?? []) : [];
@@ -230,8 +260,11 @@ export function projectRuns(
       kind: "literal" | "value";
       label: string;
       text: string;
-      typePreset: string;
+      typeToken: string;
       colour: string;
+      size: number;
+      lineHeight: number | undefined;
+      tracking: number | undefined;
       bindingId: string;
       sourceKey: string;
       unitDisplay: string;
@@ -249,8 +282,16 @@ export function projectRuns(
       kind: run.kind,
       label: describeRun(run),
       text: run.kind === "literal" ? run.text : "",
-      typePreset: run.typePreset ?? presets[0]?.id ?? "",
+      typeToken: run.typeToken ?? presets[0]?.id ?? "",
       colour,
+      // The run's own values, never the token's: size, leading and tracking
+      // left the token with the type-token split. A run that authored no size
+      // shows the role default the canvas would paint it at.
+      size:
+        styleNumber(run, "fontSize") ??
+        defaultTypeSize(tokenIdOf(run.typeToken ?? ""), context.artboardHeight),
+      lineHeight: styleNumber(run, "lineHeight"),
+      tracking: styleNumber(run, "letterSpacing"),
       // The binding the run names, as the note's own hook carried it before the
       // column was React (`run.bindingId`, not the row's ordinal): the ordinal
       // is `index` and rides `data-yunari-run`.
@@ -350,7 +391,7 @@ export function projectRuns(
     bindable,
     removable: runs.length > 1,
     locale: context.locale,
-    notes: presetGaps(context.globals, runs),
+    notes: presetGaps(runs),
   };
 }
 
@@ -493,6 +534,26 @@ function RunRow(props: {
   const { row, view, edits, onRemove } = props;
   const index = row.index;
 
+  /**
+   * Picking a token writes that run; picking an action row runs it instead.
+   * Neither action writes the run's reference by itself — the import points the
+   * run only once its commit names the token it produced, and the finder writes
+   * its own target.
+   */
+  const chooseToken = (ref: string): void => {
+    if (ref === IMPORT_LOCAL_FONT_ID) {
+      edits.importLocalFont?.((tokenId) =>
+        edits.setRunPreset(index, `typeTokens.${tokenId}`),
+      );
+      return;
+    }
+    if (ref === FONT_FINDER_ID) {
+      edits.openFontFinder?.();
+      return;
+    }
+    edits.setRunPreset(index, ref);
+  };
+
   return (
     // A row group, not a `<section>`: the inspector's section rule sets
     // `display: block` on every section in the panel and would flatten the gap.
@@ -512,11 +573,43 @@ function RunRow(props: {
       ) : null}
 
       <ControlSelect
-        label={uiCopy.inspectorFields.runPreset}
+        label={uiCopy.inspectorFields.runToken}
         data={{ "data-yunari-run-preset": String(index) }}
-        value={row.typePreset}
-        options={view.presets}
-        onChange={(ref) => edits.setRunPreset(index, ref)}
+        value={row.typeToken}
+        options={[...view.presets, ...fontActionOptions(edits)]}
+        onChange={chooseToken}
+      />
+
+      {/* The run's own type values, in the order a reader sets them. Clearing a
+          row removes the key: size returns to the role default, and leading and
+          tracking return to no value, because neither has a role fallback. */}
+      <ControlNumber
+        label={uiCopy.inspectorFields.runSize}
+        data={{ "data-yunari-run-size": String(index) }}
+        value={row.size}
+        min={1}
+        onCommit={(value) => edits.setRunSize(index, value)}
+        onClear={() => edits.setRunSize(index, undefined)}
+      />
+
+      <ControlNumber
+        label={uiCopy.panels.lineHeight}
+        data={{ "data-yunari-run-line-height": String(index) }}
+        value={row.lineHeight}
+        // The writer rounds to two decimals, so 0.01 is the smallest multiplier
+        // it can store; the control refuses a smaller draft rather than dropping
+        // it, and the writer refuses it again.
+        min={0.01}
+        onCommit={(value) => edits.setRunLineHeight(index, value)}
+        onClear={() => edits.setRunLineHeight(index, undefined)}
+      />
+
+      <ControlNumber
+        label={uiCopy.panels.letterSpacing}
+        data={{ "data-yunari-run-letter-spacing": String(index) }}
+        value={row.tracking}
+        onCommit={(value) => edits.setRunTracking(index, value)}
+        onClear={() => edits.setRunTracking(index, undefined)}
       />
 
       <ControlSwatch

@@ -239,8 +239,18 @@ export interface RunRowView {
   /** What the row is called: a reading's key, or the prose it says. */
   readonly label: string;
   readonly text: string;
-  readonly typePreset: string;
+  readonly typeToken: string;
   readonly colour: string;
+  /**
+   * The run's own size, or the role default when it authors none. The fallback
+   * is `defaultTypeSize`'s, computed against the artboard the object is drawn
+   * on, so the box and the canvas show one number.
+   */
+  readonly size: number;
+  /** The run's own leading and tracking; absent means it authors neither, and
+      has no role default to fall back to. */
+  readonly lineHeight: number | undefined;
+  readonly tracking: number | undefined;
   /**
    * The binding this run names, for the note's `data-yunari-run-binding` — the
    * key `run.bindingId` carried before the column was React, and what a spec
@@ -321,13 +331,13 @@ export interface CropEdits {
  *
  * A text object's face is not the object's own — a run names a preset and the
  * preset carries the face — so the field writes to the preset the object is set
- * in (`typePresetOf`, the one owner of that reading) rather than to the object.
+ * in (`typeTokenOf`, the one owner of that reading) rather than to the object.
  * That is also why the field carries the preset and nothing else: the catalogue,
  * the author's favourites and the specimen cache are the control's own, and
  * `favorites` in particular is asynchronous, which a projected value cannot be.
  */
 export interface FontFaceView {
-  /** The preset id, without the `typePresets.` prefix the writer takes off. */
+  /** The preset id, without the `typeTokens.` prefix the writer takes off. */
   readonly presetId: string;
 }
 
@@ -380,6 +390,16 @@ export interface RunEdits {
   readonly setRunText: (index: number, text: string) => boolean;
   readonly setRunPreset: (index: number, ref: string) => boolean;
   readonly setRunColour: (index: number, ref: string) => boolean;
+  /** The run's own size, leading and tracking. `undefined` clears the key. */
+  readonly setRunSize: (index: number, value: number | undefined) => boolean;
+  readonly setRunLineHeight: (
+    index: number,
+    value: number | undefined,
+  ) => boolean;
+  readonly setRunTracking: (
+    index: number,
+    value: number | undefined,
+  ) => boolean;
   readonly setUnitDisplay: (index: number, value: string) => boolean;
   readonly setSource: (index: number, semanticKey: string) => boolean;
   readonly setFormat: (index: number, format: string) => boolean;
@@ -387,6 +407,14 @@ export interface RunEdits {
   readonly writeLayout: (patch: TextLayoutPatch) => boolean;
   readonly addRun: () => boolean;
   readonly removeRun: (index: number) => boolean;
+  /**
+   * The two action rows the token list ends with. Neither is a run write: the
+   * finder writes wherever its own target says, and the import hands back the
+   * token it produced so the row can point its own run at it. Absent where the
+   * column has no catalogue behind it, and the row is then not drawn.
+   */
+  readonly openFontFinder?: () => void;
+  readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
 }
 
 /** The text layout keys the run editor writes, whichever are present. */

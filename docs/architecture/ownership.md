@@ -77,7 +77,7 @@ two apart is the judgement the map cannot make for itself.
 | Scene undo/redo history | `editor/src/history-manager/` |
 | Editor session composition and disposal | `editor/src/editor-session.ts` |
 | **The document a session edits** — the authored theme envelope, every write to it and the fan-out each write makes, the picture a save ships, and the package's own file protocol: new, open, save, release and replacement | `editor/src/editor-document.ts` |
-| **A globals edit reaching every consumer** — the one `#globalsChanged` fan-out every palette and type-preset setter and deleter goes through, so a consumer cannot be dropped by not being edited | `editor/src/editor-document.ts` |
+| **A globals edit reaching every consumer** — the one `#globalsChanged` fan-out every palette and type-token setter and deleter goes through, so a consumer cannot be dropped by not being edited | `editor/src/editor-document.ts` |
 | Product shortcuts | `editor/src/shortcut-manager/` |
 | Theme download | `editor/src/persistence-manager/` |
 | **The stored-document base and the library save protocol** — what a save carries, and the conflict it can be refused on | `editor/src/theme-library-manager/` |
@@ -102,7 +102,7 @@ two apart is the judgement the map cannot make for itself.
 | Frosted-glass control (enable, blur radius), and which subjects are offered one at all | `editor/src/selection-inspector/glass.ts` |
 | Glass lifecycle re-resolve, asked for by that control | `editor/src/editor-shell.ts` (`EditorShell.refreshGlass`) |
 | **Which bindings resolve** — the ones whose source has left the document, dropped on load | `editor/src/editor-shell.ts` (`dropDanglingBindings`) |
-| Type-preset authoring and reference reassignment | `editor/src/type-preset-manager/` |
+| Type-token authoring and reference reassignment | `editor/src/type-preset-manager/` (the directory that holds token authoring) |
 | **The editor-local colour and gradient preset library** — its storage key, seed-once rule, validation, de-duplication and add/delete API; the asset finder calls into it and never writes the key itself | `editor/src/preset-library/` |
 | **The finder's `colour` category surface** — the Colours tab, its palette/gradient kind filter, and its preset previews and Add action | `editor/src/asset-finder/` |
 | Open-package asset bytes and controls | `editor/src/asset-manager/` (`index.ts` bytes), `editor/src/panes/add/file-section.tsx` (the pane) |
@@ -176,9 +176,9 @@ and ignored.
 
 ### Packaged fonts
 
-`renderer-core/src/theme/` owns font-face declarations and preset validation;
+`renderer-core/src/theme/` owns font-face declarations and token validation;
 `editor/src/font-catalog.ts` and `editor/src/font-preview.ts` own curated
-metadata and transient previews; the existing type-preset/asset boundaries own
+metadata and transient previews; the existing type-token/asset boundaries own
 adoption; `scene-fabric/src/font-assets.ts` owns loaded-face lifecycle. The UI
 adapter does not own catalog, preview or adoption semantics.
 

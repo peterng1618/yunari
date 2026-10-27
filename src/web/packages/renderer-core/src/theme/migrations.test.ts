@@ -205,11 +205,8 @@ describe("readFabricThemeEnvelope", () => {
     const noRoles = {
       ...envelope(),
       globals: {
-        typePresets: {
-          body: {
-            name: "Body",
-            value: { family: "Inter", size: 16 },
-          },
+        typeTokens: {
+          body: { family: "Inter" },
         },
       },
     };

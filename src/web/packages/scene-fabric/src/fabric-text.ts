@@ -5,6 +5,7 @@ import type {
   PlanNode,
   PlanTextLayout,
   PlanTextSegment,
+  ResolvedStyle,
   SampleSource,
   SemanticKeyDescriptor,
   TextContent,
@@ -314,11 +315,44 @@ interface ApplyAuthoredTextOptions {
   ) => readonly PlanTextSegment[];
   readonly bindings?: Readonly<Record<string, readonly Binding[]>>;
   /**
+   * The artboard height, when the caller knows it. A run that authored no size
+   * takes the role default it implies, which is the same number the player and
+   * the inspector derive.
+   */
+  readonly artboardHeight?: number;
+  /**
    * Narrows the pass to the objects it admits. The editor seeds one object's
    * authoring view on the way into inline editing, and repainting the whole
    * canvas for that would flash every other token for a frame.
    */
   readonly only?: (object: object) => boolean;
+}
+
+/**
+ * The object's own typography is its first run's, resolved.
+ *
+ * `fontFamily`, `fontSize` and `fontWeight` also reach Fabric per grapheme, but
+ * `charSpacing` and `lineHeight` are whole-object properties Fabric measures
+ * once, so a run's tracking can only arrive here. A run that authored no
+ * tracking clears the object's, the way the old token field did.
+ */
+function runTypePaint(
+  style: ResolvedStyle | undefined,
+): Readonly<Record<string, unknown>> {
+  const paint = paintFor(style ?? {}, "text");
+  return {
+    ...(paint["fontFamily"] === undefined
+      ? {}
+      : { fontFamily: paint["fontFamily"] }),
+    ...(paint["fontSize"] === undefined ? {} : { fontSize: paint["fontSize"] }),
+    ...(paint["fontWeight"] === undefined
+      ? {}
+      : { fontWeight: paint["fontWeight"] }),
+    ...(paint["lineHeight"] === undefined
+      ? {}
+      : { lineHeight: paint["lineHeight"] }),
+    charSpacing: paint["charSpacing"] ?? 0,
+  };
 }
 
 export function applyAuthoredText(
@@ -352,7 +386,12 @@ export function applyAuthoredText(
             id,
             authored.runs,
             options.bindings?.[id] ?? [],
-            { source: emptySampleSource },
+            {
+              source: emptySampleSource,
+              ...(options.artboardHeight === undefined
+                ? {}
+                : { artboardHeight: options.artboardHeight }),
+            },
             globals ?? {},
             [],
           );
@@ -380,6 +419,7 @@ export function applyAuthoredText(
           // document thirty times a second, so it was one wasted measure per
           // object per pass for the whole of an idle editor.
           object.set({
+            ...runTypePaint(segments[0]?.style),
             text: shape.text,
             styles: shape.styles,
             ...(authored.align === undefined
@@ -411,6 +451,7 @@ export function refreshBoundText(
   units?: UnitPreferences,
   themeLanguage?: string,
   descriptors?: readonly SemanticKeyDescriptor[],
+  artboardHeight?: number,
 ): void {
   let changed = false;
   const refresh = (objects: readonly object[]): void => {
@@ -435,6 +476,7 @@ export function refreshBoundText(
               ...(units === undefined ? {} : { units }),
               ...(themeLanguage === undefined ? {} : { themeLanguage }),
               ...(descriptors === undefined ? {} : { descriptors }),
+              ...(artboardHeight === undefined ? {} : { artboardHeight }),
             },
             globals ?? {},
             [],
@@ -453,6 +495,7 @@ export function refreshBoundText(
           // Measured by the `set` itself, for the reason given in
           // `applyAuthoredText` above.
           object.set({
+            ...runTypePaint(segments[0]?.style),
             text: shape.text,
             styles: shape.styles,
             ...(authored.align === undefined

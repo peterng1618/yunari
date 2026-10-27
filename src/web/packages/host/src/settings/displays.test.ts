@@ -478,7 +478,7 @@ describe("createDisplayStore", () => {
   });
 
   it("loads a record written before the rate setting existed", async () => {
-    // The setting is gone (0128); a file the owner already has must still load
+    // The setting is gone (0129); a file the owner already has must still load
     // and play, with the field ignored rather than carried or refused.
     const record = await store.create("Kitchen tablet", "tok");
     await writeFile(

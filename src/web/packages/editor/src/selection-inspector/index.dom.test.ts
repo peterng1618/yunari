@@ -5,6 +5,7 @@ import type {
   Binding,
   ChartContent,
   ChartFamily,
+  FabricGlobals,
 } from "@yunari/renderer-core";
 import {
   defaultGaugeSettings,
@@ -36,6 +37,7 @@ import {
   chartContentView,
   chartPaintView,
 } from "../chart-manager/panel.js";
+import { createNewTextDefaults } from "../new-object-defaults.js";
 import { createObjectLockManager } from "../object-lock-manager/index.js";
 import { uiCopy } from "../ui-copy.js";
 import { idleCrop } from "./idle-crop.test-stage.js";
@@ -48,7 +50,7 @@ import {
   type SelectionKind,
   selectionKindOf,
 } from "./per-kind-column.js";
-import { click, slide } from "./runs.test-stage.js";
+import { blur, choose, click, slide, typeInto } from "./runs.test-stage.js";
 
 // jsdom has never had a `PointerEvent`, and Base UI re-dispatches a click
 // through one to carry modifier state; a toggle click throws without it.
@@ -121,8 +123,15 @@ function setup(
     readonly background?: () => Background | undefined;
     readonly assets?: () => readonly AssetReference[];
     readonly onBackgroundChange?: (next: Background | undefined) => void;
+    /** The run row's import port, so the selection-moved guard can be driven. */
+    readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
+    /** Overrides the fixture's globals, which predate the type-token split. */
+    readonly globals?: FabricGlobals;
+    /** The artboard the run rows' unauthored size falls back from. */
+    readonly artboardHeight?: number;
   } = {},
 ) {
+  const { artboardHeight = 1080, ...inspectorOptions } = options;
   const history = { saveState: vi.fn() };
   // Attached: nothing is focusable while it is detached, and a plan-1 control
   // commits on blur — which jsdom fires only for an element that can hold
@@ -134,6 +143,7 @@ function setup(
     historyManager: history,
     errorManager: { warn: vi.fn(), error: vi.fn() },
     cropManager: idleCrop(),
+    artboard: () => ({ width: 1920, height: artboardHeight }),
   };
   const inspector = createSelectionInspector(host, {
     editor: editor as never,
@@ -141,7 +151,7 @@ function setup(
       palette: {
         ink: { name: "Ink", value: { kind: "solid", color: "#e8ecf3" } },
       },
-      typePresets: {
+      typeTokens: {
         body: {
           name: "Body",
           value: { family: "Inter", size: 16, weight: "600" },
@@ -149,7 +159,7 @@ function setup(
       },
     } as never,
     refreshGlass: vi.fn(),
-    ...options,
+    ...inspectorOptions,
   });
   return { inspector, host, history, editor };
 }
@@ -808,6 +818,7 @@ describe("the selection inspector", () => {
         historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
         cropManager: idleCrop(),
+        artboard: () => ({ width: 1920, height: 1080 }),
       } as never,
       refreshGlass: vi.fn(),
     });
@@ -900,8 +911,8 @@ describe("the run editor's tab selection", () => {
     text.set({
       yunariText: {
         runs: [
-          { kind: "literal", text: "A", typePreset: "typePresets.body" },
-          { kind: "literal", text: "B", typePreset: "typePresets.body" },
+          { kind: "literal", text: "A", typeToken: "typeTokens.body" },
+          { kind: "literal", text: "B", typeToken: "typeTokens.body" },
         ],
       },
     });
@@ -938,6 +949,7 @@ describe("the arrange actions the column leads with", () => {
         historyManager: history,
         errorManager: { warn: vi.fn(), error: vi.fn() },
         cropManager: idleCrop(),
+        artboard: () => ({ width: 1920, height: 1080 }),
       } as never,
       refreshGlass: vi.fn(),
     });
@@ -1383,6 +1395,7 @@ describe("the column's sections", () => {
       historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       errorManager: { warn: vi.fn(), error: vi.fn() },
       cropManager: idleCrop(),
+      artboard: () => ({ width: 1920, height: 1080 }),
     };
     const sections = perKindColumn(rect, {
       editor: editor as never,
@@ -1445,6 +1458,7 @@ describe("the column's sections", () => {
         historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
         cropManager: idleCrop(),
+        artboard: () => ({ width: 1920, height: 1080 }),
       } as never,
       globals: undefined,
       locale: undefined,
@@ -1511,7 +1525,7 @@ describe("the size of a text object", () => {
           {
             kind: "literal",
             text: "AMD Ryzen 7 7800X3D",
-            typePreset: "typePresets.body",
+            typeToken: "typeTokens.body",
           },
         ],
       },
@@ -1724,7 +1738,7 @@ describe("the class the inspector states", () => {
     const text = new IText("Hi", { left: 0, top: 0, id });
     text.set({
       yunariText: {
-        runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+        runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
       },
     });
     return text;
@@ -1735,7 +1749,7 @@ describe("the class the inspector states", () => {
     const text = new Textbox("Hi", { left: 0, top: 0, width: 120, id });
     text.set({
       yunariText: {
-        runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+        runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
       },
     });
     return text;
@@ -1813,6 +1827,228 @@ describe("the class the inspector states", () => {
   });
 });
 
+describe("the token a run is set in", () => {
+  /** A text box with one authored run, so the token picker is present. */
+  function labelled(): Textbox {
+    const text = new Textbox("Hi", { left: 0, top: 0, width: 40, id: "run-1" });
+    text.set("yunariText", {
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
+    });
+    return text;
+  }
+
+  it("records exactly one history entry and changes no token record", async () => {
+    const text = labelled();
+    const typeTokens = {
+      heading: { family: "Manrope", weight: 600 },
+      body: { family: "Inter", weight: 400 },
+    };
+    const before = JSON.stringify(typeTokens);
+    const { host, history } = setup(text, {
+      globals: { typeTokens } as FabricGlobals,
+    });
+
+    await choose(host, 'data-yunari-run-preset="0"', "[Heading] Manrope 600");
+
+    const authored = text.get("yunariText") as {
+      readonly runs: readonly { readonly typeToken?: string }[];
+    };
+    // The run names the token; the token table itself is not written.
+    expect(authored.runs[0]?.typeToken).toBe("typeTokens.heading");
+    expect(history.saveState).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(typeTokens)).toBe(before);
+  });
+
+  it("points the run at the imported token when the selection stayed", async () => {
+    const text = labelled();
+    let report: ((tokenId: string) => void) | undefined;
+    const { host, history } = setup(text, {
+      globals: {
+        typeTokens: {
+          heading: { family: "Manrope", weight: 600 },
+          body: { family: "Inter", weight: 400 },
+        },
+      } as FabricGlobals,
+      importLocalFont: (onImported) => {
+        report = onImported;
+      },
+    });
+
+    await choose(
+      host,
+      'data-yunari-run-preset="0"',
+      uiCopy.panels.importLocalFont,
+    );
+    expect(history.saveState).not.toHaveBeenCalled();
+
+    // The commit answered with the token it created; the object that asked is
+    // still the described one, so its run takes the reference.
+    await act(async () => {
+      report?.("heading");
+    });
+
+    const authored = text.get("yunariText") as {
+      readonly runs: readonly { readonly typeToken?: string }[];
+    };
+    expect(authored.runs[0]?.typeToken).toBe("typeTokens.heading");
+    expect(history.saveState).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses the token when the selection moved before the import answered", async () => {
+    const first = labelled();
+    const second = new Textbox("Hi", {
+      left: 0,
+      top: 0,
+      width: 40,
+      id: "run-2",
+    });
+    second.set("yunariText", {
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
+    });
+    let active: FabricObject = first;
+    let report: ((tokenId: string) => void) | undefined;
+    const { host, inspector } = setup(() => active, {
+      globals: {
+        typeTokens: {
+          heading: { family: "Manrope", weight: 600 },
+          body: { family: "Inter", weight: 400 },
+        },
+      } as FabricGlobals,
+      importLocalFont: (onImported) => {
+        report = onImported;
+      },
+    });
+
+    await choose(
+      host,
+      'data-yunari-run-preset="0"',
+      uiCopy.panels.importLocalFont,
+    );
+    // The dialog's modal is unlikely to lose the selection, not unable to: the
+    // index it would write names a run on the object that asked, so another
+    // object must not receive it.
+    active = second;
+    inspector.render();
+    await act(async () => {
+      report?.("heading");
+    });
+
+    const runOf = (text: FabricObject): string | undefined =>
+      (
+        text.get("yunariText") as {
+          readonly runs: readonly { readonly typeToken?: string }[];
+        }
+      ).runs[0]?.typeToken;
+    expect(runOf(second)).toBe("typeTokens.body");
+    expect(runOf(first)).toBe("typeTokens.body");
+  });
+});
+
+describe("the size a run is set in", () => {
+  it("records exactly one history entry and changes no token record", async () => {
+    const text = new Textbox("Hi", {
+      left: 0,
+      top: 0,
+      width: 40,
+      id: "run-1",
+    });
+    text.set("yunariText", {
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
+    });
+    const typeTokens = {
+      heading: { family: "Manrope", weight: 600 },
+      body: { family: "Inter", weight: 400 },
+    };
+    const before = JSON.stringify(typeTokens);
+    const { host, history } = setup(text, {
+      globals: { typeTokens } as FabricGlobals,
+    });
+
+    const size = host.querySelector<HTMLInputElement>(
+      '[data-yunari-run-size="0"]',
+    );
+    expect(size).not.toBeNull();
+    await typeInto(size!, "40");
+    await blur(size!);
+
+    const authored = text.get("yunariText") as {
+      readonly runs: readonly {
+        readonly style?: Readonly<Record<string, unknown>>;
+      }[];
+    };
+    // The run carries its own size; the token table itself is not written.
+    expect(authored.runs[0]?.style?.["fontSize"]).toEqual({ value: 40 });
+    expect(history.saveState).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(typeTokens)).toBe(before);
+  });
+
+  it("shows the role default for a created heading that authors no size", () => {
+    // A text created from the defaults has no authored size: the run carries a
+    // token and no `fontSize`, and the role default is what the row shows.
+    const globals = {
+      palette: {
+        ink: {
+          name: "Ink",
+          value: { kind: "solid" as const, color: "#e8ecf3" },
+        },
+      },
+      typeTokens: { heading: { family: "Inter", weight: 600 } },
+    };
+    const defaults = createNewTextDefaults(
+      globals,
+      "Hi",
+      { left: 0, top: 0 },
+      { width: 240, height: 96 },
+    );
+    const text = new Textbox("Hi", {
+      ...defaults,
+      id: "created-heading",
+    } as never);
+    const { host } = setup(text, {
+      globals: globals as FabricGlobals,
+      artboardHeight: 1080,
+    });
+
+    // Nothing at insert time carries a size…
+    expect(defaults).not.toHaveProperty("fontSize");
+    expect(defaults).not.toHaveProperty("lineHeight");
+    // …and the run's own style still has none, while the row shows the default.
+    const authored = text.get("yunariText") as {
+      readonly runs: readonly {
+        readonly style?: Readonly<Record<string, unknown>>;
+      }[];
+    };
+    expect(authored.runs[0]?.style).not.toHaveProperty("fontSize");
+    expect(
+      host.querySelector<HTMLInputElement>('[data-yunari-run-size="0"]')?.value,
+    ).toBe("72");
+  });
+
+  it("shows the default from the artboard the editor is drawing on", () => {
+    // The projection must read the editor's artboard, not a fixed 1080: a
+    // heading is 144 on a 2160 artboard, and the canvas paints the same rule.
+    const text = new Textbox("Hi", {
+      left: 0,
+      top: 0,
+      width: 40,
+      id: "run-2",
+    });
+    text.set("yunariText", {
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.heading" }],
+    });
+    const { host } = setup(text, {
+      globals: {
+        typeTokens: { heading: { family: "Inter" } },
+      } as FabricGlobals,
+      artboardHeight: 2160,
+    });
+
+    expect(
+      host.querySelector<HTMLInputElement>('[data-yunari-run-size="0"]')?.value,
+    ).toBe("144");
+  });
+});
+
 describe("the column a kind gets", () => {
   /** A shape that carries a paint reference, so a container built from it has
       something for its own appearance question to read. */
@@ -1831,7 +2067,7 @@ describe("the column a kind gets", () => {
       id: "label-1",
     });
     text.set("yunariText", {
-      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.body" }],
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
     });
     return text;
   }

@@ -303,7 +303,9 @@ export const uiCopy = {
     notSet: "not set",
     unresolved: "no longer resolves",
     runs: "Runs",
-    runPreset: "Type preset",
+    runToken: "Type token",
+    /** A run's own size; the shared `panels.size` names the artboard's instead. */
+    runSize: "Size",
     /** What one run says, for a run that is prose. Distinct from the Add pane's
         "Text" button, which inserts an object rather than naming a field. */
     runText: "Run text",
@@ -327,9 +329,10 @@ export const uiCopy = {
     removeRun: (position: number) => `Remove run ${position}`,
     /** Shown when a run after the first asks for tracking the object cannot
         carry: Fabric measures spacing once, from the object. The interpolation
-        is the run's own preset reference, as the run list above names it. */
-    runTrackingNotSeparate: (preset: string) =>
-      `Tracking on "${preset}" is not shown separately — a text object carries one tracking value, from its first run.`,
+        is the run's own description, because tracking is the run's and a token
+        carries none. */
+    runTrackingNotSeparate: (run: string) =>
+      `Tracking on "${run}" is not shown separately — a text object carries one tracking value, from its first run.`,
     runColour: "Colour",
     runSource: "Reads",
     staticText: "Static text",
@@ -1195,7 +1198,7 @@ export const uiCopy = {
       local: "Wallpaper Engine",
     } satisfies Record<ListingCategory, string>,
     action: {
-      font: "Apply to preset",
+      font: "Apply to token",
       icon: "Place on canvas",
       image: "Set as background",
       video: "Set as background",
@@ -1255,10 +1258,10 @@ export const uiCopy = {
       roleLabel: "Role",
       role: { heading: "Heading", body: "Body", mono: "Mono" },
       roleCount: (count: number): string =>
-        `${count} ${count === 1 ? "preset" : "presets"}`,
+        `${count} ${count === 1 ? "token" : "tokens"}`,
       scopeCount: (role: string, count: number): string => `${role} × ${count}`,
       willBeCreated: "will be created",
-      /** `Clock 108 · 300 → Manrope 700`: the preset's own name and weight
+      /** `Yaldevi · 300 → Manrope 700`: the token's own family and weight
        *  before the trio's family and weight after. */
       change: (
         name: string,
@@ -1270,9 +1273,9 @@ export const uiCopy = {
           ? `${name} → ${family} ${newWeight}`
           : `${name} · ${weight} → ${family} ${newWeight}`,
       rolelessReason:
-        "No preset carries a role, so Apply to theme has nothing to rewrite.",
+        "No token carries a role, so Apply to theme has nothing to rewrite.",
       applyToTheme: "Apply to theme",
-      addThreePresets: "Add 3 presets",
+      addThreePresets: "Add 3 tokens",
       cuts: "Cuts",
       /** `400 · latin`: the subset is named only when it is what tells two cuts
        *  apart, since weight and style alone can repeat across subsets. */
@@ -1284,13 +1287,26 @@ export const uiCopy = {
         const face = italic ? `${weight} italic` : String(weight);
         return subset === undefined ? face : `${face} · ${subset}`;
       },
-      newPreset: "New type preset",
-      newPresetSummary: (role: string, family: string): string =>
-        `${role} — ${family} · adds one`,
-      addAsPreset: "Add as type preset",
-      applyToSelected: "Apply to selected preset",
+      newPreset: "New type token",
+      /** The detail beside the role chooser. It says what the press does to the
+       *  chosen role — the same answer `replacesRole` gives — because one press
+       *  reading "adds one" on the row and "replaces" underneath it is two
+       *  promises about one write. */
+      newPresetSummary: (
+        role: string,
+        family: string,
+        replaces: boolean,
+      ): string =>
+        `${role} — ${family} · ${replaces ? "replaces its face" : "adds one"}`,
+      addAsPreset: "Add as type token",
+      /** A chosen role is the token's id, so adding to a role the theme already
+       *  has rewrites that token's face rather than creating a second id. Said
+       *  beside the Add button when that is what the press will do. */
+      replacesRole: (role: string): string =>
+        `Replaces the ${role} token's face.`,
+      applyToSelected: "Apply to selected token",
       trioNote:
-        "Apply rewrites every role preset and adds any role the theme does not have. Add 3 presets leaves the theme as it is.",
+        "Apply rewrites every role token and adds any role the theme does not have. Add 3 tokens leaves the theme as it is.",
       familyNote:
         "Cuts are fetched when you add or apply one. A family you only look at costs nothing.",
     },
@@ -1315,14 +1331,14 @@ export const uiCopy = {
       /** The caption's verb, without a measurement this build could not read. */
       fit: "fit",
       statusUnused:
-        "A local file. No object, background or type preset refers to it.",
+        "A local file. No object, background or type token refers to it.",
       statusUsed:
-        "The artboard's background, an object on the canvas, or a type preset refers to it.",
+        "The artboard's background, an object on the canvas, or a type token refers to it.",
       usedByNothing: "Used by nothing",
       /** The drawing says `Used by N objects`; the manager's reachability
        *  answer is a boolean, so the line names the routes rather than a count
        *  nobody measured. */
-      usedBySome: "Used by the artboard background, an object or a type preset",
+      usedBySome: "Used by the artboard background, an object or a type token",
       recycleNote: "Remove goes to the Recycle Bin on save",
       /** The two commands the card's words do not fit: its Replace and Remove
        *  are reused, and these are the one-word forms the 2×2 foot draws. */
@@ -1448,9 +1464,9 @@ export const uiCopy = {
       image: "not on the canvas",
       svg: "not on the canvas",
       video: "not the background",
-      font: "no type preset refers to it",
+      font: "no type token refers to it",
     } satisfies Record<LocalAssetReference["kind"], string>,
-    note: "Nothing on the canvas, the background, or a type preset refers to these files. Their attribution goes with them.",
+    note: "Nothing on the canvas, the background, or a type token refers to these files. Their attribution goes with them.",
     removeAfterSave: (count: number): string =>
       `Remove these ${count} ${count === 1 ? "file" : "files"} after saving`,
     warning:
@@ -1794,7 +1810,7 @@ export const uiCopy = {
       preview: "Preview",
       replace: "Replace",
       remove: "Remove",
-      createTypePreset: "Create type preset",
+      createTypeToken: "Create type token",
     },
     /** The inline form a chosen font expands to: the facts the file cannot
      *  answer for itself, and the one write that binds it to a preset. */
@@ -1882,7 +1898,7 @@ export const uiCopy = {
     /** Each pane's own chooser, named by what it lists rather than by the pane
      * it sits in — the section heading already says Palette or Type presets. */
     colourToken: "Colour token",
-    typePreset: "Type preset",
+    typeToken: "Type token",
     /** What the Tokens pane says the *selection* is set in, as against what its
      *  chooser is browsing. The five cases must each read their own way: a
      *  default that looks like an answer is `vg-094`, a dangling reference is a
@@ -1892,8 +1908,8 @@ export const uiCopy = {
     selectionSetTo: (name: string) => `The selection is set to ${name}.`,
     selectionUnresolved: (ref: string) =>
       `The selection is set to ${ref}, which no longer resolves.`,
-    selectionChildrenTypes: "The selection's type presets are its children's.",
-    selectionNoType: "The selection carries no type preset.",
+    selectionChildrenTypes: "The selection's type tokens are its children's.",
+    selectionNoType: "The selection carries no type token.",
     selectionEmpty: "Nothing selected.",
     paint: "Paint",
     addColour: "Add colour",
@@ -1901,7 +1917,7 @@ export const uiCopy = {
     removeStop: "Remove stop",
     deleteColour: "Delete colour",
     reassign: "Reassign to",
-    typePresets: "Type presets",
+    typeTokens: "Type tokens",
     addType: "Add type",
     deleteType: "Delete type",
     previewFont: "Preview font",
@@ -1983,6 +1999,13 @@ export const uiCopy = {
     colourUnpaintable: (value: string) =>
       `Not a colour the browser can paint: "${value}". Hex, rgb(), hsl() or a CSS colour name.`,
     family: "Family",
+    /** The family list's trailing action rows: the two ways into the package
+        without leaving the token. */
+    importLocalFont: "Import local font…",
+    fontFinder: "Font finder…",
+    /** The reading for a family the package does not declare, appended to the
+        family list as a choice the control will not commit. */
+    notInPackage: "(not in package)",
     /** The font form's own label; the panel vocabulary had no style word. */
     style: "Style",
     cancel: "Cancel",

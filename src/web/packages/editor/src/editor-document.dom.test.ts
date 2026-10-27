@@ -19,7 +19,7 @@ import { createNewFabricTheme } from "./new-fabric-theme.js";
 import { serializeThemePackage } from "./persist.js";
 import { PersistenceManager } from "./persistence-manager/index.js";
 import { fontAssetId } from "./type-preset-apply.js";
-import type { TypePresets } from "./type-preset-manager/index.js";
+import type { TypeTokens } from "./type-preset-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
 
 /** The host's byte and trash routes, mocked: no document test reaches a real
@@ -840,7 +840,7 @@ describe("EditorDocument undo", () => {
     // A type-preset edit records an entry, so undo restores the whole bag: the
     // envelope would hold the old presets while the pane still drew the new.
     const presets = { heading: { name: "Heading", value: {} } } as never;
-    port.write({ typePresets: presets });
+    port.write({ typeTokens: presets });
 
     expect(typesRender).toHaveBeenCalledWith(presets);
     document.destroy();
@@ -849,7 +849,7 @@ describe("EditorDocument undo", () => {
 
 /** A document whose only state is its type presets, with stubs for the fan-out
  *  `setTypes` performs. */
-function presetDocument(presets: TypePresets): {
+function presetDocument(presets: TypeTokens): {
   readonly document: EditorDocument;
   readonly onError: ReturnType<typeof vi.fn>;
   readonly saveState: ReturnType<typeof vi.fn>;
@@ -868,7 +868,7 @@ function presetDocument(presets: TypePresets): {
       } as unknown as EditorShell,
       envelope: {
         ...createNewFabricTheme(),
-        globals: { typePresets: presets },
+        globals: { typeTokens: presets },
       } as unknown as FabricThemeEnvelopeInput,
       assetManager: new AssetManager(),
       onNew: async () => {},
@@ -919,22 +919,16 @@ const trio: FontTrioInfo = {
   },
 };
 
-function presetsOf(document: EditorDocument): TypePresets {
-  return document.snapshot().globals?.typePresets as TypePresets;
+function presetsOf(document: EditorDocument): TypeTokens {
+  return document.snapshot().globals?.typeTokens as TypeTokens;
 }
 
 describe("EditorDocument preset actions", () => {
-  it("apply rewrites role presets, keeps size and creates a missing role", async () => {
-    const authored: TypePresets = {
-      heading: {
-        name: "Heading",
-        value: { family: "Segoe UI", size: 32, trioRole: "heading" },
-      },
-      body: {
-        name: "Body",
-        value: { family: "Segoe UI", size: 14, trioRole: "body" },
-      },
-      custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+  it("apply rewrites role tokens, keeps an unroled token and creates a missing role", async () => {
+    const authored: TypeTokens = {
+      heading: { family: "Segoe UI" },
+      body: { family: "Segoe UI" },
+      custom: { family: "Georgia" },
     };
     const { document } = presetDocument(authored);
     assetBytesMock.mockResolvedValue({
@@ -945,29 +939,23 @@ describe("EditorDocument preset actions", () => {
     await document.applyFontTrio(trio);
 
     const written = presetsOf(document);
-    // An authored size survives the rewrite; a missing role is created at the
-    // starter size, and an untagged preset is not touched.
-    expect(written.heading?.value).toMatchObject({
+    // A role token is rewritten to the trio's face; a token whose id is not a
+    // role is not touched.
+    expect(written.heading).toEqual({
       family: "Manrope",
       weight: 700,
-      size: 32,
       face: { assetId: fontAssetId(trio.roles.heading!) },
     });
-    expect(written.body?.value).toMatchObject({
+    expect(written.body).toEqual({
       family: "Inter",
       weight: 400,
-      size: 14,
+      face: { assetId: fontAssetId(trio.roles.body!) },
     });
     expect(written.custom).toEqual(authored.custom);
     expect(written.mono).toEqual({
-      name: "Mono — Fira Code",
-      value: {
-        family: "Fira Code",
-        size: 14,
-        weight: 400,
-        face: { assetId: fontAssetId(trio.roles.mono!) },
-        trioRole: "mono",
-      },
+      family: "Fira Code",
+      weight: 400,
+      face: { assetId: fontAssetId(trio.roles.mono!) },
     });
     // Bytes are addressed by the cut's source and id, never the trio's.
     expect(assetBytesMock).toHaveBeenCalledWith(
@@ -977,93 +965,130 @@ describe("EditorDocument preset actions", () => {
     document.destroy();
   });
 
-  it("add three creates Heading — X, Body — Y and Mono — Z without touching existing", async () => {
-    const existing: TypePresets = {
-      heading: {
-        name: "Heading",
-        value: { family: "Segoe UI", size: 32, trioRole: "heading" },
-      },
-      custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
+  it("add three creates the missing role tokens and leaves an existing role alone", async () => {
+    const existing: TypeTokens = {
+      heading: { family: "Segoe UI" },
+      custom: { family: "Georgia" },
     };
     const { document } = presetDocument(existing);
+    assetBytesMock.mockClear();
     assetBytesMock.mockResolvedValue({
       bytes: new Uint8Array([1]),
       filename: "face.woff2",
     });
 
-    await document.addTypePresetsFromTrio(trio);
+    await document.addTypeTokensFromTrio(trio);
 
     const written = presetsOf(document);
+    // A role is the token's id: the heading already exists, so there is no
+    // second id to mint and no `heading-2` unroled token.
     expect(written.heading).toEqual(existing.heading);
+    expect(written["heading-2"]).toBeUndefined();
     expect(written.custom).toEqual(existing.custom);
-    expect(written["heading-2"]).toEqual({
-      name: "Heading — Manrope",
-      value: {
-        family: "Manrope",
-        size: 46,
-        weight: 700,
-        face: { assetId: fontAssetId(trio.roles.heading!) },
-        trioRole: "heading",
-      },
+    expect(written.body).toEqual({
+      family: "Inter",
+      weight: 400,
+      face: { assetId: fontAssetId(trio.roles.body!) },
     });
-    expect(written.body?.name).toBe("Body — Inter");
-    expect(written.mono?.name).toBe("Mono — Fira Code");
+    expect(written.mono).toEqual({
+      family: "Fira Code",
+      weight: 400,
+      face: { assetId: fontAssetId(trio.roles.mono!) },
+    });
+    // Only the missing roles' cuts are adopted; reading the heading's bytes
+    // would leave an unreferenced declaration behind.
+    expect(assetBytesMock).toHaveBeenCalledTimes(2);
     document.destroy();
   });
 
-  it("a single cut creates a role-first preset", async () => {
+  it("add three declares nothing when the theme already has all three roles", async () => {
+    const existing: TypeTokens = {
+      heading: { family: "Segoe UI" },
+      body: { family: "Segoe UI" },
+      mono: { family: "Consolas" },
+    };
+    const { document, saveState } = presetDocument(existing);
+    assetBytesMock.mockClear();
+    saveState.mockClear();
+
+    await document.addTypeTokensFromTrio(trio);
+
+    // The copy promises Add 3 leaves the theme as it is: no face is adopted (so
+    // the cleanup sheet cannot flag one), and no history entry is written.
+    expect(presetsOf(document)).toEqual(existing);
+    expect(assetBytesMock).not.toHaveBeenCalled();
+    expect(saveState).not.toHaveBeenCalled();
+    document.destroy();
+  });
+
+  it("a single cut creates a role-first token", async () => {
     const { document } = presetDocument({});
     assetBytesMock.mockResolvedValue({
       bytes: new Uint8Array([1]),
       filename: "code.woff2",
     });
 
-    const id = await document.addTypePresetFromCut(
+    const id = await document.addTypeTokenFromCut(
       cutFor("mono", "Fira Code", 400),
       "mono",
     );
 
     expect(id).toBe("mono");
     expect(presetsOf(document).mono).toEqual({
-      name: "Mono — Fira Code",
-      value: {
-        family: "Fira Code",
-        size: 14,
-        weight: 400,
-        face: { assetId: fontAssetId(trio.roles.mono!) },
-        trioRole: "mono",
-      },
+      family: "Fira Code",
+      weight: 400,
+      face: { assetId: fontAssetId(trio.roles.mono!) },
     });
     expect(assetBytesMock).toHaveBeenCalledWith("google-fonts", "cut:mono-400");
     document.destroy();
   });
 
-  it("a cut with no role takes the Body name and size but no role tag", async () => {
+  it("a cut with no role takes a free unroled id", async () => {
     const { document } = presetDocument({});
     assetBytesMock.mockResolvedValue({
       bytes: new Uint8Array([1]),
       filename: "body.woff2",
     });
 
-    const id = await document.addTypePresetFromCut(
+    const id = await document.addTypeTokenFromCut(
       cutFor("body", "Inter", 400),
       null,
     );
 
+    // No role chosen means no role id: `body` is the Body token, and minting a
+    // second `body-2` would read as a second role.
+    expect(id).toBe("type");
+    const value = presetsOf(document).type;
+    expect(value).toMatchObject({ family: "Inter", weight: 400 });
+    document.destroy();
+  });
+
+  it("points at an existing face instead of adding a duplicate token", async () => {
+    const authored: TypeTokens = {
+      body: { family: "Inter", weight: 400 },
+    };
+    const { document, saveState } = presetDocument(authored);
+    saveState.mockClear();
+    assetBytesMock.mockClear();
+
+    const id = await document.addTypeTokenFromCut(
+      cutFor("body", "Inter", 400),
+      null,
+    );
+
+    // Two tokens with the same family and weight would compute one name, so
+    // the add is refused and the existing token is the answer. Nothing is
+    // written and no bytes are adopted.
     expect(id).toBe("body");
-    const value = presetsOf(document).body?.value;
-    expect(presetsOf(document).body?.name).toBe("Body — Inter");
-    expect(value).toMatchObject({ family: "Inter", size: 24, weight: 400 });
-    expect(value === undefined ? true : "trioRole" in value).toBe(false);
+    expect(presetsOf(document)).toEqual(authored);
+    expect(saveState).not.toHaveBeenCalled();
+    expect(assetBytesMock).not.toHaveBeenCalled();
     document.destroy();
   });
 
   it("a failed host bytes read writes nothing and reports the failure", async () => {
-    const authored: TypePresets = {
-      body: {
-        name: "Body",
-        value: { family: "Segoe UI", size: 14, trioRole: "body" },
-      },
+    const authored: TypeTokens = {
+      body: { family: "Segoe UI" },
     };
     const { document, onError } = presetDocument(authored);
     const before = document.snapshot();
@@ -1086,19 +1111,9 @@ describe("EditorDocument preset actions", () => {
     document.destroy();
   });
 
-  it("applies a cut to the selected preset and keeps its authored spacing", async () => {
-    const authored: TypePresets = {
-      metric: {
-        name: "Metric",
-        value: {
-          family: "Segoe UI",
-          size: 32,
-          weight: "500",
-          lineHeight: 1.2,
-          letterSpacing: 2,
-          trioRole: "heading",
-        },
-      },
+  it("applies a cut to the selected token and keeps the rest of it", async () => {
+    const authored: TypeTokens = {
+      metric: { family: "Segoe UI", weight: "500" },
     };
     const { document, saveState } = presetDocument(authored);
     saveState.mockClear();
@@ -1112,12 +1127,9 @@ describe("EditorDocument preset actions", () => {
 
     // The explicit target keeps what the author set; only the face treatment
     // moves, and the write is one history entry.
-    expect(presetsOf(document).metric?.value).toMatchObject({
+    expect(presetsOf(document).metric).toEqual({
       family: "Manrope",
       weight: 700,
-      size: 32,
-      lineHeight: 1.2,
-      letterSpacing: 2,
       face: { assetId: fontAssetId(cut) },
     });
     expect(saveState).toHaveBeenCalledTimes(1);
@@ -1125,16 +1137,8 @@ describe("EditorDocument preset actions", () => {
   });
 
   it("brings the family's other weights with the chosen cut", async () => {
-    const authored: TypePresets = {
-      metric: {
-        name: "Metric",
-        value: {
-          family: "Segoe UI",
-          size: 32,
-          weight: "500",
-          trioRole: "body",
-        },
-      },
+    const authored: TypeTokens = {
+      metric: { family: "Segoe UI", weight: "500" },
     };
     const { document } = presetDocument(authored);
     const light = cutFor("body", "Manrope", 400);
@@ -1149,7 +1153,7 @@ describe("EditorDocument preset actions", () => {
     // Both faces are declared, so the preset's weight field can draw either;
     // the preset itself keeps the weight the author picked.
     expect(assetBytesMock).toHaveBeenCalledTimes(2);
-    expect(presetsOf(document).metric?.value).toMatchObject({
+    expect(presetsOf(document).metric).toMatchObject({
       family: "Manrope",
       weight: 400,
     });
@@ -1160,39 +1164,86 @@ describe("EditorDocument preset actions", () => {
     document.destroy();
   });
 
+  it("one apply declares every weight and subset of the family, once", async () => {
+    const authored: TypeTokens = {
+      metric: { family: "Segoe UI", weight: "500" },
+    };
+    const { document } = presetDocument(authored);
+    const family = [400, 700, 900].flatMap((weight) =>
+      ["latin", "vietnamese"].map((subset) => ({
+        ...cutFor("body", "Manrope", weight),
+        id: `cut:manrope-${subset}-${weight}`,
+        subset,
+      })),
+    );
+    assetBytesMock.mockResolvedValue({
+      bytes: new Uint8Array([7]),
+      filename: "manrope.woff2",
+    });
+
+    await document.applyCutToPreset("metric", family[0]!, family);
+
+    // Three weights × two subsets: every face the family published, each read
+    // once, so the weight field and the Vietnamese subset both resolve.
+    expect(assetBytesMock).toHaveBeenCalledTimes(6);
+    expect(assetBytesMock.mock.calls.map((call) => call[1])).toEqual(
+      family.map((entry) => entry.id),
+    );
+    expect((document.snapshot().assets ?? []).map((asset) => asset.id)).toEqual(
+      family.map((entry) => fontAssetId(entry)),
+    );
+
+    // The declarations are the only dedupe: a second apply from the same
+    // family asks the host for nothing.
+    assetBytesMock.mockClear();
+    await document.applyCutToPreset("metric", family[3]!, family);
+    expect(assetBytesMock).not.toHaveBeenCalled();
+    document.destroy();
+  });
+
+  it("a family read the host drops declares nothing", async () => {
+    const authored: TypeTokens = {
+      metric: { family: "Segoe UI", weight: "500" },
+    };
+    const { document, onError } = presetDocument(authored);
+    const before = document.snapshot();
+    const family = [400, 700].map((weight) => ({
+      ...cutFor("body", "Manrope", weight),
+      id: `cut:manrope-latin-${weight}`,
+    }));
+    // The first read succeeds and the second is the one the host drops: no
+    // adoption may survive that, even though the first bytes already arrived.
+    assetBytesMock
+      .mockResolvedValueOnce({
+        bytes: new Uint8Array([7]),
+        filename: "a.woff2",
+      })
+      .mockResolvedValueOnce(undefined);
+
+    await document.runFontAction(() =>
+      document.applyCutToPreset("metric", family[0]!, family),
+    );
+
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining("Manrope"));
+    expect(presetsOf(document)).toEqual(authored);
+    expect(document.snapshot().assets).toEqual(before.assets);
+    document.destroy();
+  });
+
   it("unbinding leaves family and weight editable", async () => {
     const { document } = presetDocument({
       heading: {
-        name: "Heading",
-        value: {
-          family: "Manrope",
-          size: 46,
-          weight: 700,
-          face: { assetId: "face-id" },
-          trioRole: "heading",
-        },
+        family: "Manrope",
+        weight: 700,
+        face: { assetId: "face-id" },
       },
     });
 
     document.unbindPresetFace("heading");
 
-    const value = presetsOf(document).heading?.value;
+    const value = presetsOf(document).heading;
     expect(value === undefined ? true : "face" in value).toBe(false);
     expect(value).toMatchObject({ family: "Manrope", weight: 700 });
-    document.destroy();
-  });
-
-  it("sets and clears a preset's role", () => {
-    const { document } = presetDocument({
-      custom: { name: "Custom", value: { family: "Georgia", size: 19 } },
-    });
-
-    document.setPresetRole("custom", "heading");
-    expect(presetsOf(document).custom?.value.trioRole).toBe("heading");
-
-    document.setPresetRole("custom", null);
-    const value = presetsOf(document).custom?.value;
-    expect(value === undefined ? true : "trioRole" in value).toBe(false);
     document.destroy();
   });
 });

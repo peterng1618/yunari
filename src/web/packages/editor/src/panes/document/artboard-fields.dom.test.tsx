@@ -34,7 +34,7 @@ import {
 import { uiCopy } from "../../ui-copy.js";
 
 // Base UI's popups need three browser APIs jsdom has none of — the same three
-// `preset-list.dom.test.tsx` supplies, for the same reason.
+// `token-list.dom.test.tsx` supplies, for the same reason.
 globalThis.ResizeObserver ??= class {
   observe(): void {}
   unobserve(): void {}

@@ -43,9 +43,9 @@ export function authoredRunsOf(object: ObjectWithText): readonly TextRun[] {
 }
 
 /** The parts of a run that say how it looks, whichever kind it is. */
-export function lookOfRun(run: TextRun): Pick<TextRun, "typePreset" | "style"> {
+export function lookOfRun(run: TextRun): Pick<TextRun, "typeToken" | "style"> {
   return {
-    ...(run.typePreset === undefined ? {} : { typePreset: run.typePreset }),
+    ...(run.typeToken === undefined ? {} : { typeToken: run.typeToken }),
     ...(run.style === undefined ? {} : { style: run.style }),
   };
 }

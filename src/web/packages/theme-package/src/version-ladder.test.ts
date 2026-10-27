@@ -290,11 +290,11 @@ describe("classifyThemeChange — globals", () => {
     name: "Accent",
     value: { kind: "solid", color: "#fff" },
   } as const;
-  const heading = { name: "Heading", value: { family: "Inter", size: 32 } };
+  const heading = { family: "Inter", weight: 600 };
   it("is minor when a palette token is added or removed", () => {
-    const empty = base({ globals: { typePresets: {}, palette: {} } });
+    const empty = base({ globals: { typeTokens: {}, palette: {} } });
     const withToken = base({
-      globals: { typePresets: {}, palette: { accent } },
+      globals: { typeTokens: {}, palette: { accent } },
     });
     expect(classifyThemeChange(empty, withToken)).toEqual({
       level: "minor",
@@ -306,8 +306,8 @@ describe("classifyThemeChange — globals", () => {
     });
   });
   it("is minor when a type preset is added or removed", () => {
-    const empty = base({ globals: { typePresets: {} } });
-    const withPreset = base({ globals: { typePresets: { heading } } });
+    const empty = base({ globals: { typeTokens: {} } });
+    const withPreset = base({ globals: { typeTokens: { heading } } });
     expect(classifyThemeChange(empty, withPreset)).toEqual({
       level: "minor",
       reasons: ["structure"],
@@ -321,7 +321,7 @@ describe("classifyThemeChange — globals", () => {
     // `globals` itself is optional, so the group can be absent on one side.
     const withoutGlobals = base();
     const withPalette = base({
-      globals: { typePresets: {}, palette: { accent } },
+      globals: { typeTokens: {}, palette: { accent } },
     });
     expect(classifyThemeChange(withoutGlobals, withPalette)).toEqual({
       level: "minor",
@@ -333,10 +333,10 @@ describe("classifyThemeChange — globals", () => {
     });
   });
   it("is patch when a kept palette token's value changes", () => {
-    const before = base({ globals: { typePresets: {}, palette: { accent } } });
+    const before = base({ globals: { typeTokens: {}, palette: { accent } } });
     const after = base({
       globals: {
-        typePresets: {},
+        typeTokens: {},
         palette: {
           accent: { ...accent, value: { kind: "solid", color: "#000" } },
         },

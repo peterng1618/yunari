@@ -1,4 +1,13 @@
 import type { AssetReference } from "@yunari/renderer-core";
+import { unicodeRangeForSubset } from "./subset-unicode-range.js";
+
+/** An asset narrowed to the metadata a font declaration may carry. */
+type DeclaredFont = AssetReference & {
+  readonly family?: unknown;
+  readonly weight?: unknown;
+  readonly style?: unknown;
+  readonly subset?: unknown;
+};
 
 interface LoadedFontFace {
   readonly load: () => Promise<unknown>;
@@ -44,15 +53,10 @@ function registryFor(fonts: FontSet): Map<string, SharedFace> {
   return registry;
 }
 
-function registrationKey(
-  asset: AssetReference,
-  face: {
-    readonly family?: unknown;
-    readonly weight?: unknown;
-    readonly style?: unknown;
-  },
-): string {
-  return [asset.path, face.family, String(face.weight), face.style].join("|");
+function registrationKey(asset: DeclaredFont): string {
+  return [asset.path, asset.family, String(asset.weight), asset.style].join(
+    "|",
+  );
 }
 
 /** Registers packaged faces before Fabric measures text and returns their isolated release handle. */
@@ -66,14 +70,21 @@ export async function loadFontAssets(
   }
   const registry = registryFor(fonts);
   const held: SharedFace[] = [];
-  for (const asset of options.assets) {
-    if (asset.kind !== "font") continue;
-    const face = asset as AssetReference & {
-      readonly family?: unknown;
-      readonly weight?: unknown;
-      readonly style?: unknown;
-    };
-    const bytes = options.bytes[asset.path];
+  const declared = options.assets.filter(
+    (asset): asset is DeclaredFont => asset.kind === "font",
+  );
+  // A rangeless face covers every codepoint and shadows the ranged faces of
+  // its family, and manually added faces are matched in insertion order, so
+  // ranged faces register first (ADR 0128, rung 3).
+  const ranged = declared.filter(
+    (asset) => unicodeRangeForSubset(asset.subset) !== undefined,
+  );
+  const rangeless = declared.filter(
+    (asset) => unicodeRangeForSubset(asset.subset) === undefined,
+  );
+  const seenRangeless = new Set<string>();
+  for (const face of [...ranged, ...rangeless]) {
+    const bytes = options.bytes[face.path];
     if (
       bytes === undefined ||
       typeof face.family !== "string" ||
@@ -81,11 +92,11 @@ export async function loadFontAssets(
       (face.style !== "normal" && face.style !== "italic")
     ) {
       options.onError(
-        `Could not load packaged font "${asset.id}": declared bytes or metadata are missing`,
+        `Could not load packaged font "${face.id}": declared bytes or metadata are missing`,
       );
       continue;
     }
-    const key = registrationKey(asset, face);
+    const key = registrationKey(face);
     const existing = registry.get(key);
 
     if (existing !== undefined) {
@@ -94,16 +105,33 @@ export async function loadFontAssets(
       continue;
     }
 
+    const unicodeRange = unicodeRangeForSubset(face.subset);
+    const rangelessKey =
+      unicodeRange === undefined
+        ? [face.family, String(face.weight), face.style].join("|")
+        : undefined;
+    // A second rangeless face for the same family, weight and style would only
+    // shadow the first, so it is skipped rather than registered.
+    if (rangelessKey !== undefined && seenRangeless.has(rangelessKey)) {
+      continue;
+    }
+
+    const descriptors: FontFaceDescriptors = {
+      weight: String(face.weight),
+      style: face.style as "normal" | "italic",
+    };
+    if (unicodeRange !== undefined) descriptors.unicodeRange = unicodeRange;
     const shared: SharedFace = {
       face: (async () => {
         const created = (
           options.createFontFace ??
           ((family, source, descriptors) =>
             new FontFace(family, source, descriptors))
-        )(face.family as string, Uint8Array.from(bytes).buffer as ArrayBuffer, {
-          weight: String(face.weight),
-          style: face.style as "normal" | "italic",
-        });
+        )(
+          face.family as string,
+          Uint8Array.from(bytes).buffer as ArrayBuffer,
+          descriptors,
+        );
         await created.load();
         fonts.add(created);
         return created;
@@ -116,13 +144,14 @@ export async function loadFontAssets(
 
     try {
       shared.registered = await shared.face;
+      if (rangelessKey !== undefined) seenRangeless.add(rangelessKey);
     } catch (error) {
       // A failed registration must not be cached, or a later mount would await
       // a rejected promise it never started.
       registry.delete(key);
       held.pop();
       options.onError(
-        `Could not load packaged font "${asset.id}": ${error instanceof Error ? error.message : String(error)}`,
+        `Could not load packaged font "${face.id}": ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

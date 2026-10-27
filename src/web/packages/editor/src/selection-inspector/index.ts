@@ -24,7 +24,7 @@ import {
   objectAction,
 } from "../object-actions.js";
 import { OBJECT_LOCK_CHANGED_EVENT } from "../object-lock-manager/index.js";
-import type { TypePresetFontActions } from "../type-preset-manager/panel.js";
+import type { TypeTokenFontActions } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
 import { backgroundColumn, writeBackgroundField } from "./background-column.js";
 import { createSelectionColumnRoot } from "./column.js";
@@ -48,6 +48,7 @@ import {
   writeRunColour,
   writeRunPreset,
   writeRunSource,
+  writeRunStyle,
   writeRunText,
   writeTextLayout,
   writeUnitDisplay,
@@ -174,7 +175,7 @@ interface SelectionInspectorOptions {
    * field being absent, so the column is told the capability rather than handed
    * a port that swallows it.
    */
-  readonly fontActions?: TypePresetFontActions;
+  readonly fontActions?: TypeTokenFontActions;
   /**
    * The author's favourite trios, which the host keeps rather than the document.
    * Absent reads as none and stores none, which is the standalone editor's own
@@ -200,6 +201,14 @@ interface SelectionInspectorOptions {
   /** Opens the finder on Fonts, where the catalogue now lives. Absent in a
    *  panel built without the shell's finder. */
   readonly onOpenFontPicker?: () => void;
+  /** Opens that same finder from a run's token list. The session passes the
+   *  same shell port as `onOpenFontPicker`; two ports because the two surfaces
+   *  ask separately, not because the answers differ. */
+  readonly openFontFinder?: () => void;
+  /** Imports a local font and hands back the token the commit produced or
+   *  adopted, so the run that asked can point itself at it. Absent where the
+   *  session has no import dialog behind the column. */
+  readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
 }
 
 /** The geometry keys the funnel writes directly; every other id is a shape's
@@ -397,7 +406,9 @@ export function createSelectionInspector(
             "width",
             dimension / scaleOf(object.scaleX),
           );
-          applyAuthoredText(editor.canvas, globals);
+          applyAuthoredText(editor.canvas, globals, {
+            artboardHeight: editor.artboard().height,
+          });
           break;
         }
         // Scale rather than resize: a chart's own width is its raster size.
@@ -417,7 +428,9 @@ export function createSelectionInspector(
             "height",
             dimension / scaleOf(object.scaleY),
           );
-          applyAuthoredText(editor.canvas, globals);
+          applyAuthoredText(editor.canvas, globals, {
+            artboardHeight: editor.artboard().height,
+          });
           break;
         }
         const next = dimension / (object.height <= 0 ? 1 : object.height);
@@ -718,7 +731,9 @@ export function createSelectionInspector(
       render();
       return false;
     }
-    applyAuthoredText(editor.canvas, globals);
+    applyAuthoredText(editor.canvas, globals, {
+      artboardHeight: editor.artboard().height,
+    });
     commit();
     render();
     return true;
@@ -758,6 +773,12 @@ export function createSelectionInspector(
     setRunText: (index, text) => runEdit((t) => writeRunText(t, index, text)),
     setRunPreset: (index, ref) => runEdit((t) => writeRunPreset(t, index, ref)),
     setRunColour: (index, ref) => runEdit((t) => writeRunColour(t, index, ref)),
+    setRunSize: (index, value) =>
+      runEdit((t) => writeRunStyle(t, index, "fontSize", value)),
+    setRunLineHeight: (index, value) =>
+      runEdit((t) => writeRunStyle(t, index, "lineHeight", value)),
+    setRunTracking: (index, value) =>
+      runEdit((t) => writeRunStyle(t, index, "letterSpacing", value)),
     setUnitDisplay: (index, value) =>
       runEdit((t) => writeUnitDisplay(t, index, value)),
     setSource: (index, key) => runEdit((t) => writeRunSource(t, index, key)),
@@ -767,6 +788,24 @@ export function createSelectionInspector(
     writeLayout: (patch) => runEdit((t) => writeTextLayout(t, patch)),
     addRun: () => runEdit(appendRun),
     removeRun: (index) => runEdit((t) => dropRun(t, index)),
+    ...(options.openFontFinder === undefined
+      ? {}
+      : { openFontFinder: options.openFontFinder }),
+    ...(options.importLocalFont === undefined
+      ? {}
+      : {
+          importLocalFont: (onImported) => {
+            // The object that opened the dialog, not whichever one happens to be
+            // selected when its commit answers: a run index means nothing on
+            // another object, so a selection that moved means the token goes
+            // nowhere rather than into the wrong run.
+            const opened = described;
+            options.importLocalFont?.((tokenId) => {
+              if (opened === undefined || described !== opened) return;
+              onImported(tokenId);
+            });
+          },
+        }),
   };
 
   /**

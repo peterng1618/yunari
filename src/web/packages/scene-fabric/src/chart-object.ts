@@ -273,7 +273,7 @@ export class YunariChart extends FabricObject {
    * refresh loop driving `setOption` that was every chart, every frame (vg-107).
    * `set` is what propagates the invalidation to an enclosing group's cache.
    *
-   * The one exception is a transition the reader should see (0128): while one
+   * The one exception is a transition the reader should see (0129): while one
    * is running, each frame is blitted — at most one per `TRANSITION_FRAME_MS` —
    * because an option's transition paints frames the `setOption` call cannot.
    */

@@ -28,8 +28,9 @@ import type {
   StyleValue,
   TextContent,
   TextRun,
-  TypePreset,
+  TypeToken,
 } from "../theme/document.js";
+import { defaultTypeSize } from "../theme/type-size.js";
 import type { Sample, SensorStatus } from "../types.js";
 import { formatInstant } from "./datetime/format.js";
 import {
@@ -167,6 +168,12 @@ export interface PlanInputs {
    */
   readonly descriptors?: readonly SemanticKeyDescriptor[];
   /**
+   * The artboard height, when the caller knows it. A run that authors no
+   * `fontSize` takes the role default it implies; absent means the caller has
+   * not measured it, and no default is invented.
+   */
+  readonly artboardHeight?: number;
+  /**
    * The language the theme's text is written in. A runtime input like
    * `longUnits`, never persisted scene state: the theme's own `metadata` owns it.
    */
@@ -236,6 +243,7 @@ export function resolveTextSegments(
     | "longUnits"
     | "measurement"
     | "units"
+    | "artboardHeight"
     | "themeLanguage"
     | "descriptors"
   >,
@@ -243,9 +251,11 @@ export function resolveTextSegments(
   issues: PlanIssue[],
 ): PlanTextSegment[] {
   return runs.map((run) => {
+    const authored = resolveStyleMap(run.style, globals, nodeId, issues);
     const style = {
-      ...resolveTypePreset(run.typePreset, globals, nodeId, issues),
-      ...resolveStyleMap(run.style, globals, nodeId, issues),
+      ...defaultRunTypeSize(run, context.artboardHeight, authored),
+      ...resolveTypeToken(run.typeToken, globals, nodeId, issues),
+      ...authored,
     };
 
     if (run.kind === "literal") {
@@ -812,58 +822,64 @@ export function resolveStyleValue(
     return undefined;
   }
 
-  const palette = entry.value;
+  const palette = "value" in entry ? entry.value : undefined;
   return isSolidPalettePaint(palette) ? palette.color : palette;
 }
 
-/** Presets are resolved per run so label, value and unit never inherit one text-object preset. */
-function resolveTypePreset(
-  ref: TextRun["typePreset"],
+/**
+ * The role default for a run that authored no size, so the editor and the
+ * player derive the same number from the artboard.
+ *
+ * The role comes from the token's id, not its contents: an unroled id — or no
+ * token at all — takes the body ratio. An authored size is left alone, and a
+ * caller that has not measured the artboard gets no default rather than a
+ * guessed one.
+ */
+function defaultRunTypeSize(
+  run: TextRun,
+  artboardHeight: number | undefined,
+  authored: ResolvedStyle,
+): ResolvedStyle {
+  if (artboardHeight === undefined || authored["fontSize"] !== undefined) {
+    return {};
+  }
+  const id = run.typeToken?.slice("typeTokens.".length) ?? "body";
+  return { fontSize: defaultTypeSize(id, artboardHeight) };
+}
+
+/** Tokens are resolved per run so label, value and unit never inherit one text-object token. */
+function resolveTypeToken(
+  ref: TextRun["typeToken"],
   globals: Globals,
   nodeId: string,
   issues: PlanIssue[],
 ): ResolvedStyle {
   if (ref === undefined) return {};
-  const id = ref.slice("typePresets.".length);
-  const value = globals.typePresets?.[id]?.value;
-  if (!isTypePreset(value)) {
+  const id = ref.slice("typeTokens.".length);
+  const value = globals.typeTokens?.[id];
+  if (!isTypeToken(value)) {
     issues.push({
       code: "unresolved-global",
       nodeId,
-      detail: `Type preset "${ref}" is not defined or invalid.`,
+      detail: `Type token "${ref}" is not defined or invalid.`,
     });
     return {};
   }
   return {
     fontFamily: value.family,
-    fontSize: value.size,
     ...(value.weight === undefined ? {} : { fontWeight: value.weight }),
-    ...(value.letterSpacing === undefined
-      ? {}
-      : { letterSpacing: value.letterSpacing }),
-    ...(value.lineHeight === undefined ? {} : { lineHeight: value.lineHeight }),
   };
 }
 
-function isTypePreset(value: unknown): value is TypePreset {
+function isTypeToken(value: unknown): value is TypeToken {
   if (typeof value !== "object" || value === null) return false;
-  const preset = value as Record<string, unknown>;
+  const token = value as Record<string, unknown>;
   return (
-    typeof preset["family"] === "string" &&
-    preset["family"].length > 0 &&
-    typeof preset["size"] === "number" &&
-    Number.isFinite(preset["size"]) &&
-    preset["size"] > 0 &&
-    (preset["weight"] === undefined ||
-      typeof preset["weight"] === "string" ||
-      typeof preset["weight"] === "number") &&
-    (preset["letterSpacing"] === undefined ||
-      (typeof preset["letterSpacing"] === "number" &&
-        Number.isFinite(preset["letterSpacing"]))) &&
-    (preset["lineHeight"] === undefined ||
-      (typeof preset["lineHeight"] === "number" &&
-        Number.isFinite(preset["lineHeight"]) &&
-        preset["lineHeight"] > 0))
+    typeof token["family"] === "string" &&
+    token["family"].length > 0 &&
+    (token["weight"] === undefined ||
+      typeof token["weight"] === "string" ||
+      typeof token["weight"] === "number")
   );
 }
 

@@ -8,10 +8,10 @@
 import type { FabricGlobals } from "@yunari/renderer-core";
 
 export const RUN_GLOBALS = {
-  typePresets: {
-    plain: { name: "Plain", value: { family: "Inter", size: 16 } },
-    caption: { name: "Caption", value: { family: "Inter", size: 12 } },
-    title: { name: "Title", value: { family: "Inter", size: 24 } },
+  typeTokens: {
+    plain: { family: "Inter" },
+    caption: { family: "Inter" },
+    title: { family: "Inter" },
   },
   palette: {
     text: { name: "Text", value: { kind: "solid", color: "#fff" } },

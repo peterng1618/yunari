@@ -31,7 +31,7 @@ const globals = {
   palette: {
     ink: { name: "Ink", value: { kind: "solid", color: "#e8ecf3" } },
   },
-  typePresets: {
+  typeTokens: {
     body: { name: "Body", value: { family: "Inter", size: 16, weight: "600" } },
   },
 } as unknown as FabricGlobals;

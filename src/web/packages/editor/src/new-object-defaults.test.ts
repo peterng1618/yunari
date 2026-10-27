@@ -41,11 +41,8 @@ const globals = {
     },
     ink: { name: "Ink", value: { kind: "solid" as const, color: "#102030" } },
   },
-  typePresets: {
-    body: {
-      name: "Body",
-      value: { family: "Inter", size: 16, weight: 500, lineHeight: 1.2 },
-    },
+  typeTokens: {
+    body: { family: "Inter", weight: 500 },
   },
 };
 
@@ -161,26 +158,59 @@ describe("new object defaults", () => {
     expect(defaults).toMatchObject({ originX: "left", originY: "top" });
   });
 
-  it("derives per-run palette and type-preset references for new text", () => {
+  it("derives per-run palette and type-token references for new text", () => {
     const defaults = createNewTextDefaults(globals, "New text", placement);
 
     expect(defaults).toMatchObject({
       fill: "#102030",
       fontFamily: "Inter",
-      fontSize: 16,
       fontWeight: 500,
-      lineHeight: 1.2,
       [YUNARI_PAINT_PROPERTY]: { fill: "palette.ink" },
       [YUNARI_TEXT_PROPERTY]: {
         runs: [
           {
             text: "New text",
-            typePreset: "typePresets.body",
+            typeToken: "typeTokens.body",
             style: { color: { ref: "palette.ink" } },
           },
         ],
       },
     });
+    // The token names the face; the run wears the size, and an unauthored one
+    // takes the renderer's role default rather than a value baked into the
+    // scene at insert time.
+    expect(defaults).not.toHaveProperty("fontSize");
+    expect(defaults).not.toHaveProperty("lineHeight");
+  });
+
+  it("omits a weight the chosen token does not carry", () => {
+    const defaults = createNewTextDefaults(
+      { ...globals, typeTokens: { body: { family: "Inter" } } },
+      "New text",
+      placement,
+    );
+
+    expect(defaults).not.toHaveProperty("fontWeight");
+    expect(defaults.fontFamily).toBe("Inter");
+  });
+
+  it("takes the first type token in insertion order, not a body token", () => {
+    // The producer orders the roles, and the first entry is the editor's
+    // default face. A lookup that preferred `body` by name would pass every
+    // body-first fixture while ignoring the document's own order.
+    const defaults = createNewTextDefaults(
+      {
+        ...globals,
+        typeTokens: {
+          mono: { family: "Consolas" },
+          body: { family: "Inter", weight: 500 },
+        },
+      },
+      "New text",
+      placement,
+    );
+
+    expect(defaults.fontFamily).toBe("Consolas");
   });
 
   it("refuses to invent local paint or type values when references are unavailable", () => {
@@ -191,7 +221,7 @@ describe("new object defaults", () => {
         "New text",
         placement,
       ),
-    ).toThrow("type preset");
+    ).toThrow("type token");
   });
 
   it.each(["gauge", "line", "bar", "pie", "radar", "polarBar"] as const)(

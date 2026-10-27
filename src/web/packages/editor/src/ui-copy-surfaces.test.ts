@@ -807,12 +807,13 @@ async function mountLandedSurfaces(): Promise<{
         historyManager: { attachGlobals: () => {}, saveState: () => undefined },
         errorManager: { warn: () => undefined, error: () => undefined },
         cropManager: { active: false, target: undefined },
+        artboard: () => ({ width: 1920, height: 1080 }),
       } as never,
       globals: {
         palette: {
           ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
         },
-        typePresets: {
+        typeTokens: {
           body: { name: "Body", value: { family: "Inter", size: 16 } },
         },
       } as never,

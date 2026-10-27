@@ -40,7 +40,7 @@
     "src/web/packages/editor/src/panes/add/card-diagrams.tsx",
     "src/web/packages/editor/src/panes/tokens/tokens-pane.tsx",
     "src/web/packages/editor/src/panes/tokens/paint-list.tsx",
-    "src/web/packages/editor/src/panes/tokens/preset-list.tsx",
+    "src/web/packages/editor/src/panes/tokens/token-list.tsx",
     "src/web/packages/editor/src/panes/document/document-pane.tsx",
     "src/web/packages/editor/src/panes/document/metadata-fields.tsx",
     "src/web/packages/editor/src/panes/document/artboard-fields.tsx",

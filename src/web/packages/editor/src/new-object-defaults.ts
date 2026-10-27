@@ -8,7 +8,7 @@ import {
   defaultPolarBarSettings,
   defaultRadarSettings,
   type FabricGlobals,
-  type TypePreset,
+  type TypeToken,
 } from "@yunari/renderer-core";
 import {
   Arc,
@@ -50,15 +50,13 @@ interface NewTextDefaults extends NewPaintDefaults {
   readonly originX: "left";
   readonly originY: "top";
   readonly fontFamily: string;
-  readonly fontSize: number;
   readonly fontWeight?: string | number;
-  readonly lineHeight?: number;
   readonly [YUNARI_TEXT_PROPERTY]: {
     readonly runs: readonly [
       {
         readonly kind: "literal";
         readonly text: string;
-        readonly typePreset: `typePresets.${string}`;
+        readonly typeToken: `typeTokens.${string}`;
         readonly style: {
           readonly color: { readonly ref: `palette.${string}` };
         };
@@ -540,8 +538,8 @@ export function createNewTextDefaults(
   box?: { readonly width: number; readonly height: number },
 ): NewTextDefaults {
   const paint = createNewPaintDefaults(globals);
-  const [id, preset] = firstTypePreset(globals);
-  const typePreset = `typePresets.${id}` as const;
+  const [id, preset] = firstTypeToken(globals);
+  const typeToken = `typeTokens.${id}` as const;
   const color = paint[YUNARI_PAINT_PROPERTY].fill;
 
   if (color === undefined)
@@ -556,14 +554,10 @@ export function createNewTextDefaults(
     ...placed(placement),
     ...(box === undefined ? {} : { box }),
     fontFamily: preset.family,
-    fontSize: preset.size,
     ...(preset.weight === undefined ? {} : { fontWeight: preset.weight }),
-    ...(preset.lineHeight === undefined
-      ? {}
-      : { lineHeight: preset.lineHeight }),
     [YUNARI_TEXT_PROPERTY]: {
       runs: [
-        { kind: "literal", text, typePreset, style: { color: { ref: color } } },
+        { kind: "literal", text, typeToken, style: { color: { ref: color } } },
       ],
     },
   };
@@ -764,48 +758,22 @@ function firstPalette(
 }
 
 /**
- * The preset a new text object uses. Not simply the first entry: presets are
- * conventionally ordered smallest first, so the first is usually a caption too
- * small to inspect comfortably.
+ * The token a new text object takes: the first entry, in insertion order.
  *
- * A body-role preset is preferred, the largest of them, with the largest
- * remaining preset as the fallback. Heading presets are excluded: a 70px clock
- * face is not a sensible default for a fresh text object.
+ * The producer orders the roles body first, so the first token is the editor's
+ * default face. A new text carries no size of its own — size, leading and
+ * tracking are the run's `style`, and an unauthored one takes the renderer's
+ * role default (`defaultTypeSize`). A document with no tokens has no face to
+ * write, so insertion refuses by name.
  */
-function firstTypePreset(
+function firstTypeToken(
   globals: FabricGlobals | undefined,
-): readonly [string, TypePreset] {
-  let body: readonly [string, TypePreset] | undefined;
-  let largest: readonly [string, TypePreset] | undefined;
+): readonly [string, TypeToken] {
+  const first = Object.entries(globals?.typeTokens ?? {})[0];
 
-  for (const [id, entry] of Object.entries(globals?.typePresets ?? {})) {
-    if (!isTypePreset(entry.value)) continue;
-
-    if (largest === undefined || entry.value.size > largest[1].size) {
-      largest = [id, entry.value];
-    }
-
-    if (entry.value.trioRole !== "body") continue;
-
-    if (body === undefined || entry.value.size > body[1].size) {
-      body = [id, entry.value];
-    }
+  if (first === undefined) {
+    throw new Error("New text requires a type token.");
   }
 
-  const chosen = body ?? largest;
-
-  if (chosen === undefined) {
-    throw new Error("New text requires a type preset.");
-  }
-
-  return chosen;
-}
-
-function isTypePreset(value: unknown): value is TypePreset {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as Record<string, unknown>)["family"] === "string" &&
-    typeof (value as Record<string, unknown>)["size"] === "number"
-  );
+  return first;
 }

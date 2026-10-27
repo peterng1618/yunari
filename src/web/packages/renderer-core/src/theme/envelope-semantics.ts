@@ -286,6 +286,12 @@ function validateGlobals(issues: Issues, value: unknown): Set<string> {
         continue;
       }
 
+      if (groupName === "typeTokens") {
+        validateTypeToken(issues, entry, entryPath);
+        keys.add(`${groupName}.${entryId}`);
+        continue;
+      }
+
       issues.unknownKeys(
         entry,
         entryPath,
@@ -307,10 +313,6 @@ function validateGlobals(issues: Issues, value: unknown): Set<string> {
           `${entryPath}/value`,
           "A global entry needs a value.",
         );
-      }
-
-      if (groupName === "typePresets") {
-        validateTypePreset(issues, entry["value"], `${entryPath}/value`);
       }
 
       keys.add(`${groupName}.${entryId}`);
@@ -402,13 +404,9 @@ function validateBackground(
   }
 }
 
-function validateTypePreset(
-  issues: Issues,
-  value: unknown,
-  path: string,
-): void {
-  if (!issues.object(value, path, "A type preset")) return;
-  issues.unknownKeys(value, path, knownKeysFor("typePreset"), "A type preset");
+function validateTypeToken(issues: Issues, value: unknown, path: string): void {
+  if (!issues.object(value, path, "A type token")) return;
+  issues.unknownKeys(value, path, knownKeysFor("typeToken"), "A type token");
   if (
     typeof value["family"] !== "string" ||
     value["family"].trim().length === 0
@@ -416,17 +414,7 @@ function validateTypePreset(
     issues.add(
       "missing-field",
       `${path}/family`,
-      "A type preset needs a font family.",
-    );
-  }
-  if (
-    !issues.finiteNumber(value["size"], `${path}/size`, "size") ||
-    (value["size"] as number) <= 0
-  ) {
-    issues.add(
-      "out-of-range",
-      `${path}/size`,
-      "A type preset size must be above 0.",
+      "A type token needs a font family.",
     );
   }
   const weight = value["weight"];
@@ -438,20 +426,8 @@ function validateTypePreset(
     issues.add(
       "wrong-type",
       `${path}/weight`,
-      "A type preset weight must be a string or finite number.",
+      "A type token weight must be a string or finite number.",
     );
-  }
-  for (const key of ["letterSpacing", "lineHeight"] as const) {
-    const raw = value[key];
-    if (raw !== undefined && !issues.finiteNumber(raw, `${path}/${key}`, key))
-      continue;
-    if (key === "lineHeight" && raw !== undefined && (raw as number) <= 0) {
-      issues.add(
-        "out-of-range",
-        `${path}/${key}`,
-        "A type preset lineHeight must be above 0.",
-      );
-    }
   }
   const face = value["face"];
   if (face !== undefined) {
@@ -466,14 +442,6 @@ function validateTypePreset(
       face["assetId"],
       `${path}/face/assetId`,
       "A font face asset id",
-    );
-  }
-  if (value["trioRole"] !== undefined) {
-    issues.enumValue(
-      value["trioRole"],
-      ["heading", "body", "mono"] as const,
-      `${path}/trioRole`,
-      "A trio role",
     );
   }
 }
@@ -527,6 +495,15 @@ function validateAssets(issues: Issues, value: unknown): Set<string> {
     validateAssetPath(issues, asset["kind"], asset["path"], `${path}/path`);
 
     if (asset["kind"] === "font") validateFontAsset(issues, asset, path);
+    else if ("subset" in asset) {
+      // The key list is shared by every kind, so the font-only key needs its
+      // own refusal here rather than reaching the unknown-key check.
+      issues.add(
+        "unknown-field",
+        `${path}/subset`,
+        'An asset reference has no "subset" property.',
+      );
+    }
 
     if (
       asset["sha256"] !== undefined &&
@@ -646,6 +623,16 @@ function validateFontAsset(
       "invalid-asset-path",
       `${path}/path`,
       "A font asset path's extension must equal its format.",
+    );
+  }
+  if (
+    asset["subset"] !== undefined &&
+    (typeof asset["subset"] !== "string" || asset["subset"].trim().length === 0)
+  ) {
+    issues.add(
+      "wrong-type",
+      `${path}/subset`,
+      "A font asset subset must be a non-empty string.",
     );
   }
   if (

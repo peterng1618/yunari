@@ -6,7 +6,9 @@ import {
   SEMANTIC_KEYS,
   type SemanticKeyDescriptor,
 } from "@yunari/renderer-core";
+import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { uiCopy } from "../ui-copy.js";
 import {
   blur,
   choose,
@@ -33,23 +35,22 @@ const literalClock: readonly TextRun[] = [
   {
     kind: "literal",
     text: "07:24",
-    typePreset: "typePresets.70-300",
+    typeToken: "typeTokens.70-300",
     style: { color: { ref: "palette.text" } },
   },
 ];
 
-const TRACKING_GLOBALS = {
-  typePresets: {
-    tracked: {
-      name: "Tracked",
-      value: { family: "Inter", size: 32, letterSpacing: 4 },
-    },
-    plain: {
-      name: "Plain",
-      value: { family: "Inter", size: 32 },
-    },
-  },
-} as unknown as FabricGlobals;
+/** A literal run whose own style carries tracking, or none when it authors none. */
+function trackedRun(text: string, tracking?: number): TextRun {
+  return {
+    kind: "literal",
+    text,
+    typeToken: "typeTokens.plain",
+    ...(tracking === undefined
+      ? {}
+      : { style: { letterSpacing: { value: tracking } } }),
+  };
+}
 
 describe("binding a text run to a sensor", () => {
   it("turns a literal run into a reading, keeping how it looks", async () => {
@@ -66,7 +67,7 @@ describe("binding a text run to a sensor", () => {
     expect(box.runs()[0]).toMatchObject({
       kind: "value",
       bindingId: binding?.id,
-      typePreset: "typePresets.70-300",
+      typeToken: "typeTokens.70-300",
       style: { color: { ref: "palette.text" } },
     });
     return box.dispose();
@@ -408,7 +409,7 @@ describe("binding a text run to a sensor", () => {
     expect(box.stored()).toEqual([]);
     expect(box.runs()[0]).toMatchObject({
       kind: "literal",
-      typePreset: "typePresets.70-300",
+      typeToken: "typeTokens.70-300",
     });
     return box.dispose();
   });
@@ -416,31 +417,29 @@ describe("binding a text run to a sensor", () => {
 
 describe("what a run cannot carry", () => {
   const mixedRuns: readonly TextRun[] = [
-    { kind: "literal", text: "CPU ", typePreset: "typePresets.plain" },
-    { kind: "literal", text: "42%", typePreset: "typePresets.tracked" },
+    trackedRun("CPU "),
+    trackedRun("42%", 4),
   ];
 
   it("says a second run's tracking is not shown separately", async () => {
-    // The defect this covers is a control that does nothing: the author picks a
-    // tracked preset for the value run, and the object keeps the first run's
-    // tracking with nothing on screen to say so.
-    const box = mountRunEditor({ runs: mixedRuns, globals: TRACKING_GLOBALS });
+    // The defect this covers is a control that does nothing: the author sets
+    // tracking on the value run, and the object keeps the first run's with
+    // nothing on screen to say so.
+    const box = mountRunEditor({ runs: mixedRuns });
 
     expect(box.notes()).toHaveLength(1);
-    expect(box.notes()[0]).toContain("typePresets.tracked");
+    // The note names the run, because tracking is the run's own and a token
+    // carries none.
+    expect(box.notes()[0]).toContain("42%");
+    expect(box.notes()[0]).not.toContain("typeTokens.");
     expect(box.notes()[0]).toContain("one tracking value");
     return box.dispose();
   });
 
   it("says nothing when only the first run tracks", async () => {
-    // The counter-case: a single-run object carries its preset's tracking, so a
+    // The counter-case: a single-run object carries its own tracking, so a
     // note here would train the author to ignore the ones that matter.
-    const box = mountRunEditor({
-      runs: [
-        { kind: "literal", text: "YUNARI", typePreset: "typePresets.tracked" },
-      ],
-      globals: TRACKING_GLOBALS,
-    });
+    const box = mountRunEditor({ runs: [trackedRun("YUNARI", 4)] });
 
     expect(box.notes()).toEqual([]);
     return box.dispose();
@@ -450,20 +449,8 @@ describe("what a run cannot carry", () => {
     // The panel has to match the model, which reports on *inequality*. A second
     // run asking for the value the object already carries loses nothing, and
     // warning about it would teach the author to ignore the note.
-    const same = {
-      typePresets: {
-        tracked: {
-          name: "Tracked",
-          value: { family: "Inter", size: 32, letterSpacing: 4 },
-        },
-      },
-    } as unknown as FabricGlobals;
     const box = mountRunEditor({
-      runs: [
-        { kind: "literal", text: "CPU ", typePreset: "typePresets.tracked" },
-        { kind: "literal", text: "42%", typePreset: "typePresets.tracked" },
-      ],
-      globals: same,
+      runs: [trackedRun("CPU ", 4), trackedRun("42%", 4)],
     });
 
     expect(box.notes()).toEqual([]);
@@ -475,37 +462,30 @@ describe("what a run cannot carry", () => {
     // run asking for tracking is a gap like any other. Distinct from the first
     // case above only in what the object ends up painting, and the note is the
     // same one.
-    const box = mountRunEditor({ runs: mixedRuns, globals: TRACKING_GLOBALS });
+    const box = mountRunEditor({ runs: mixedRuns });
 
     expect(box.notes()).toHaveLength(1);
-    expect(box.notes()[0]).toContain("typePresets.tracked");
+    expect(box.notes()[0]).toContain("42%");
     return box.dispose();
   });
 
-  it("reports a mismatching preset once however many runs share it", async () => {
-    // The round that removed a duplicate in scene-fabric added one here, so the
-    // three-run shape is now covered once, in the place that renders it.
+  it("names each run whose tracking the object cannot carry", async () => {
+    // Deduped by the run, not by the note: two later runs saying the same text
+    // are still two runs the object cannot carry separately.
     const box = mountRunEditor({
-      runs: [
-        { kind: "literal", text: "CPU ", typePreset: "typePresets.plain" },
-        { kind: "literal", text: "48", typePreset: "typePresets.tracked" },
-        { kind: "literal", text: " %", typePreset: "typePresets.tracked" },
-      ],
-      globals: TRACKING_GLOBALS,
+      runs: [trackedRun("CPU "), trackedRun("42%", 4), trackedRun("42%", 4)],
     });
 
-    // Two runs name the same mismatching preset, so one note says it once.
-    expect(box.notes()).toHaveLength(1);
+    const notes = box.notes();
+    expect(notes).toHaveLength(2);
+    expect(notes[0]).toContain("42%");
+    expect(notes[1]).toContain("42%");
     return box.dispose();
   });
 
   it("says nothing when no run tracks", async () => {
     const box = mountRunEditor({
-      runs: [
-        { kind: "literal", text: "CPU ", typePreset: "typePresets.plain" },
-        { kind: "literal", text: "42%", typePreset: "typePresets.plain" },
-      ],
-      globals: TRACKING_GLOBALS,
+      runs: [trackedRun("CPU "), trackedRun("42%")],
     });
 
     expect(box.notes()).toEqual([]);
@@ -513,9 +493,137 @@ describe("what a run cannot carry", () => {
   });
 });
 
+describe("a run's own size", () => {
+  const roles = {
+    typeTokens: {
+      heading: { family: "Inter" },
+      body: { family: "Inter" },
+    },
+  } as unknown as FabricGlobals;
+
+  it("shows the role default when the run authors no size", async () => {
+    // The composition's heading is 72 at a 1080 artboard; the row must read the
+    // same rule the canvas paints from, not a second copy of the ratio.
+    const box = mountRunEditor({
+      runs: [
+        { kind: "literal", text: "Title", typeToken: "typeTokens.heading" },
+      ],
+      globals: roles,
+      artboardHeight: 1080,
+    });
+
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-size="0"]').value).toBe(
+      "72",
+    );
+    return box.dispose();
+  });
+
+  it("shows the size the run authors", async () => {
+    const box = mountRunEditor({
+      runs: [
+        {
+          kind: "literal",
+          text: "Title",
+          typeToken: "typeTokens.heading",
+          style: { fontSize: { value: 46 } },
+        },
+      ],
+      globals: roles,
+      artboardHeight: 1080,
+    });
+
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-size="0"]').value).toBe(
+      "46",
+    );
+    return box.dispose();
+  });
+});
+
+describe("a run's own leading and tracking", () => {
+  it("shows a blank leading and tracking when the run authors neither, then writes them", async () => {
+    const box = mountRunEditor({ runs: [trackedRun("Hi")] });
+
+    const leading = box.pick<HTMLInputElement>(
+      '[data-yunari-run-line-height="0"]',
+    );
+    const tracking = box.pick<HTMLInputElement>(
+      '[data-yunari-run-letter-spacing="0"]',
+    );
+    expect(leading.value).toBe("");
+    expect(tracking.value).toBe("");
+
+    // The starter theme's own leading survives: it is a multiplier, not a size.
+    await typeInto(leading, "1.18");
+    await blur(leading);
+    expect(box.runs()[0]?.style?.["lineHeight"]).toEqual({ value: 1.18 });
+
+    // Negative tracking tightens and is a value the row takes.
+    await typeInto(tracking, "-0.5");
+    await blur(tracking);
+    expect(box.runs()[0]?.style?.["letterSpacing"]).toEqual({ value: -0.5 });
+    return box.dispose();
+  });
+
+  it("shows the row's own refusal for a leading at or below zero", async () => {
+    const box = mountRunEditor({ runs: [trackedRun("Hi")] });
+
+    const leading = box.pick<HTMLInputElement>(
+      '[data-yunari-run-line-height="0"]',
+    );
+    await typeInto(leading, "0");
+    await blur(leading);
+
+    // The author sees why, rather than the draft vanishing on blur.
+    expect(leading.getAttribute("aria-invalid")).toBe("true");
+    expect(box.host.textContent).toContain(uiCopy.controls.atLeast(0.01));
+    expect(box.runs()[0]?.style?.["lineHeight"]).toBeUndefined();
+    return box.dispose();
+  });
+
+  it("clears a leading and a tracking back to blank", async () => {
+    const box = mountRunEditor({
+      runs: [
+        {
+          kind: "literal",
+          text: "Hi",
+          typeToken: "typeTokens.plain",
+          style: {
+            lineHeight: { value: 1.18 },
+            letterSpacing: { value: -0.5 },
+          },
+        },
+      ],
+    });
+
+    const leading = box.pick<HTMLInputElement>(
+      '[data-yunari-run-line-height="0"]',
+    );
+    // Shown as authored, not as a rounded copy.
+    expect(leading.value).toBe("1.18");
+    await typeInto(leading, "");
+    await blur(leading);
+    expect(box.runs()[0]?.style?.["lineHeight"]).toBeUndefined();
+
+    const tracking = box.pick<HTMLInputElement>(
+      '[data-yunari-run-letter-spacing="0"]',
+    );
+    await typeInto(tracking, "");
+    await blur(tracking);
+    expect(box.runs()[0]?.style?.["letterSpacing"]).toBeUndefined();
+
+    expect(
+      box.pick<HTMLInputElement>('[data-yunari-run-line-height="0"]').value,
+    ).toBe("");
+    expect(
+      box.pick<HTMLInputElement>('[data-yunari-run-letter-spacing="0"]').value,
+    ).toBe("");
+    return box.dispose();
+  });
+});
+
 describe("how many runs a text object has", () => {
   const globals = {
-    typePresets: {
+    typeTokens: {
       "60-600": { name: "Reading", value: { family: "Inter", size: 60 } },
       "20-400": { name: "Unit", value: { family: "Inter", size: 20 } },
     },
@@ -525,8 +633,8 @@ describe("how many runs a text object has", () => {
   } as unknown as FabricGlobals;
 
   const readingAndUnit: readonly TextRun[] = [
-    { kind: "value", bindingId: "load", typePreset: "typePresets.60-600" },
-    { kind: "literal", text: "%", typePreset: "typePresets.20-400" },
+    { kind: "value", bindingId: "load", typeToken: "typeTokens.60-600" },
+    { kind: "literal", text: "%", typeToken: "typeTokens.20-400" },
   ];
 
   it("appends a run that looks the way the one before it does", async () => {
@@ -540,7 +648,7 @@ describe("how many runs a text object has", () => {
     expect(box.runs()[1]).toMatchObject({
       kind: "literal",
       text: "",
-      typePreset: "typePresets.70-300",
+      typeToken: "typeTokens.70-300",
     });
     return box.dispose();
   });
@@ -596,7 +704,7 @@ describe("how many runs a text object has", () => {
     const box = mountRunEditor({
       runs: [
         ...readingAndUnit,
-        { kind: "literal", text: " of 4", typePreset: "typePresets.20-400" },
+        { kind: "literal", text: " of 4", typeToken: "typeTokens.20-400" },
       ],
       globals,
       arrived: ["cpu.load"],
@@ -620,58 +728,170 @@ describe("how many runs a text object has", () => {
 
 describe("which type preset a run is set in", () => {
   const globals = {
-    typePresets: {
-      "24-400": { name: "Card title", value: { family: "Inter", size: 24 } },
-      "46-600": { name: "Ring unit", value: { family: "Inter", size: 46 } },
-      mono: { name: "Mono", value: { family: "Inter", size: 14 } },
+    typeTokens: {
+      "24-400": { family: "Inter", weight: 400 },
+      "46-600": { family: "Inter", weight: 600 },
+      mono: { family: "Fira Code" },
     },
     palette: {
       text: { name: "Text", value: { kind: "solid", color: "#fff" } },
     },
   } as unknown as FabricGlobals;
 
-  it("lists each preset under the name the type preset panel lists it by", async () => {
+  it("lists each token under the name the token inspector shows", async () => {
     // Two dropdowns, thirteen presets, one document — and the run editor printed
     // the ids (`24-400`) where every other reference picker in the editor prints
-    // the authored name (`Card title`). An author who read one could not find the
-    // same preset in the other, a field apart.
+    // the token's own name (`Inter 400`). A role token carries its role in that
+    // name, which is why `mono` here reads `[Mono] Fira Code` and sorts first.
     const box = mountRunEditor({
-      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.24-400" }],
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.24-400" }],
       globals,
     });
 
     expect(await optionsOf(box.host, 'data-yunari-run-preset="0"')).toEqual([
-      "Card title",
-      "Ring unit",
-      "Mono",
+      "[Mono] Fira Code",
+      "Inter 400",
+      "Inter 600",
     ]);
     return box.dispose();
   });
 
   it("stores the reference, not the name it shows", async () => {
     const box = mountRunEditor({
-      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.24-400" }],
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.24-400" }],
       globals,
     });
 
-    await choose(box.host, 'data-yunari-run-preset="0"', "Ring unit");
+    await choose(box.host, 'data-yunari-run-preset="0"', "Inter 600");
 
     // The label is display; the value is what persists. Changing the first must
     // not change the second.
-    expect(box.runs()[0]?.typePreset).toBe("typePresets.46-600");
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.46-600");
     return box.dispose();
   });
 
   it("shows the preset the run is actually set in", async () => {
     const box = mountRunEditor({
-      runs: [{ kind: "literal", text: "Hi", typePreset: "typePresets.46-600" }],
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.46-600" }],
       globals,
     });
 
     // The control was never mis-bound — it holds the stored reference, which is
     // what the run carries. What an author could not do was read the option it
     // had landed on and match it against the list beside it.
-    expect(valueText(box.host, 'data-yunari-run-preset="0"')).toBe("Ring unit");
+    expect(valueText(box.host, 'data-yunari-run-preset="0"')).toBe("Inter 600");
+    return box.dispose();
+  });
+});
+
+describe("the token list's roles and action rows", () => {
+  const trio = {
+    typeTokens: {
+      mono: { family: "Fira Code" },
+      "24-400": { family: "Inter", weight: 400 },
+      heading: { family: "Manrope", weight: 600 },
+      "20-300": { family: "IBM Plex Sans", weight: 300 },
+      body: { family: "Inter", weight: 400 },
+    },
+  } as unknown as FabricGlobals;
+
+  const onHeading: readonly TextRun[] = [
+    { kind: "literal", text: "Hi", typeToken: "typeTokens.heading" },
+  ];
+
+  it("offers the roles first, then the unroled tokens, then the two actions", async () => {
+    const box = mountRunEditor({
+      runs: onHeading,
+      globals: trio,
+      openFontFinder: () => {},
+      importLocalFont: () => {},
+    });
+
+    expect(await optionsOf(box.host, 'data-yunari-run-preset="0"')).toEqual([
+      "[Heading] Manrope 600",
+      "[Body] Inter 400",
+      "[Mono] Fira Code",
+      "IBM Plex Sans 300",
+      "Inter 400",
+      uiCopy.panels.importLocalFont,
+      uiCopy.panels.fontFinder,
+    ]);
+    return box.dispose();
+  });
+
+  it("rewrites only the run's token, leaving the token records alone", async () => {
+    const before = JSON.stringify(trio);
+    const box = mountRunEditor({ runs: onHeading, globals: trio });
+
+    await choose(box.host, 'data-yunari-run-preset="0"', "IBM Plex Sans 300");
+
+    // The reference is the run's own; the token table it names is not edited.
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.20-300");
+    expect(box.runs()[0]).toMatchObject({ kind: "literal", text: "Hi" });
+    expect(JSON.stringify(trio)).toBe(before);
+    return box.dispose();
+  });
+
+  it("opens the finder once and changes no token", async () => {
+    const openFontFinder = vi.fn();
+    const box = mountRunEditor({
+      runs: onHeading,
+      globals: trio,
+      openFontFinder,
+    });
+
+    await choose(
+      box.host,
+      'data-yunari-run-preset="0"',
+      uiCopy.panels.fontFinder,
+    );
+
+    expect(openFontFinder).toHaveBeenCalledTimes(1);
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.heading");
+    return box.dispose();
+  });
+
+  it("points the run at the token an import reports", async () => {
+    let imported: ((tokenId: string) => void) | undefined;
+    const box = mountRunEditor({
+      runs: onHeading,
+      globals: trio,
+      importLocalFont: (onImported) => {
+        imported = onImported;
+      },
+    });
+
+    await choose(
+      box.host,
+      'data-yunari-run-preset="0"',
+      uiCopy.panels.importLocalFont,
+    );
+    // Choosing the row asks for the import; it does not move the run itself.
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.heading");
+
+    await act(async () => {
+      imported?.("20-300");
+    });
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.20-300");
+    return box.dispose();
+  });
+
+  it("leaves the run alone when the import reports no token", async () => {
+    const box = mountRunEditor({
+      runs: onHeading,
+      globals: trio,
+      // The commit that answers with no token — a cancelled import — calls
+      // nothing, so the run keeps the reference it had.
+      importLocalFont: () => {},
+    });
+
+    await choose(
+      box.host,
+      'data-yunari-run-preset="0"',
+      uiCopy.panels.importLocalFont,
+    );
+
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.heading");
     return box.dispose();
   });
 });
@@ -725,7 +945,7 @@ describe("which palette token a run's colour is set in", () => {
 
 describe("which binding a value run carries", () => {
   const bound: readonly TextRun[] = [
-    { kind: "value", bindingId: "load", typePreset: "typePresets.60-600" },
+    { kind: "value", bindingId: "load", typeToken: "typeTokens.60-600" },
   ];
 
   it("names the key, and says nothing is missing, when a reading has arrived", async () => {
@@ -771,7 +991,7 @@ describe("which binding a value run carries", () => {
         {
           kind: "literal",
           text: "Free space",
-          typePreset: "typePresets.60-600",
+          typeToken: "typeTokens.60-600",
         },
         { kind: "value", bindingId: "disk.free" },
       ],

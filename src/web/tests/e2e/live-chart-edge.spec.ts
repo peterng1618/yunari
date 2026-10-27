@@ -227,7 +227,7 @@ test.describe("the live line chart's edge", () => {
     const themeId = await saveStarterThroughTheHost(page);
     // `this-pc`: the host refuses to mint a record for this PC, so this is the
     // display the page is served as. The scene cadence is the same 30 fps for
-    // every display now (0128), so the rate no longer decides what is measured
+    // every display now (0129), so the rate no longer decides what is measured
     // here — the line's edge does.
     await page.goto(`${HOST}/?theme=${themeId}&data=live`);
     await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible();

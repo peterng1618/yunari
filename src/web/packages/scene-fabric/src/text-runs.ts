@@ -28,8 +28,9 @@ type GraphemeSplitter = (value: string) => readonly string[];
  *
  * `charSpacing` is deliberately absent: Fabric measures it once from the
  * object, so a per-character entry would be accepted and then ignored. The
- * object's own tracking is applied by `object-type.ts`, and a run that asks for
- * a different value is reported through `unsupported` below.
+ * object's own tracking is applied by `applyAuthoredText`/`refreshBoundText`
+ * from the first run's resolved style, and a run that asks for a different
+ * value is reported through `unsupported` below.
  */
 const PER_RUN_PAINT_SOURCES: Readonly<Record<string, readonly string[]>> = {
   fill: ["color", "fill"],

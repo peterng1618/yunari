@@ -202,7 +202,6 @@ describe("the palette panel's and token inspector's React roots", () => {
     const inspector = createTokenInspectorPanel(mountHost(), {
       onChange: () => undefined,
       onDelete: () => undefined,
-      setRole: () => undefined,
       unbindFace: () => undefined,
       paints: {
         palette: () => palette,
@@ -235,7 +234,6 @@ describe("the palette panel's and token inspector's React roots", () => {
     const inspector = createTokenInspectorPanel(host, {
       onChange: () => undefined,
       onDelete: () => undefined,
-      setRole: () => undefined,
       unbindFace: () => undefined,
       paints: {
         palette: () => paletteWithOneSolidToken,

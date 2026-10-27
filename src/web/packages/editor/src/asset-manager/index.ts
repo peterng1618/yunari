@@ -226,6 +226,7 @@ export class AssetManager {
       weight: face.weight,
       style: face.style,
       format: face.format,
+      subset: face.subset,
       sourceUrl: face.sourceUrl,
       license: face.license,
     };

@@ -204,7 +204,7 @@ describe("a card a theme with its own vocabulary cannot name", () => {
       editorOf(canvas, errors),
       {
         palette: BLANK.globals?.palette ?? {},
-        typePresets: BLANK.globals?.typePresets ?? {},
+        typeTokens: BLANK.globals?.typeTokens ?? {},
       },
       {
         addText: vi.fn(),

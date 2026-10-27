@@ -85,15 +85,10 @@ const envelope = {
       bar: { name: "Bar", value: { kind: "solid" as const, color: "#101318" } },
       ink: { name: "Ink", value: { kind: "solid" as const, color: "#e8ecf3" } },
     },
-    typePresets: {
-      "20-400": {
-        name: "Value",
-        value: {
-          family: "system-ui, sans-serif",
-          size: 20,
-          weight: "400",
-        },
-      },
+    typeTokens: {
+      heading: { family: "system-ui, sans-serif", weight: "600" },
+      body: { family: "system-ui, sans-serif", weight: "400" },
+      mono: { family: "ui-monospace, monospace", weight: "400" },
     },
   },
   assets: [],
@@ -120,8 +115,11 @@ const envelope = {
             {
               kind: "value" as const,
               bindingId: "read",
-              typePreset: "typePresets.20-400",
-              style: { color: { ref: "palette.ink" as const } },
+              typeToken: "typeTokens.body",
+              style: {
+                color: { ref: "palette.ink" as const },
+                fontSize: { value: 20 },
+              },
             },
           ],
         },

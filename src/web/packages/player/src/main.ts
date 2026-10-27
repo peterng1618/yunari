@@ -302,6 +302,7 @@ async function startHostedTheme(
   // would keep whatever geometry the save happened to carry.
   applyAuthoredText(handle.canvas, theme.globals, {
     ...(theme.bindings === undefined ? {} : { bindings: theme.bindings }),
+    artboardHeight: theme.artboard.height,
   });
   // What the last frame drew. Bound text, bound images and the availability
   // notice only change when a sample arrives, and an accepted ingest is the
@@ -350,6 +351,7 @@ async function startHostedTheme(
         units,
         theme.metadata?.themeLanguage,
         descriptors,
+        theme.artboard.height,
       );
       // Refreshed here because a provider's reason exists only once data has
       // arrived. The notice owns its own lifetime from there: it removes itself

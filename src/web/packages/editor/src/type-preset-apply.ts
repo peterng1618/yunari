@@ -1,27 +1,20 @@
-import type { FontCut, FontTrioInfo, TypePreset } from "@yunari/renderer-core";
-import type { TypePresets } from "./type-preset-manager/index.js";
+import {
+  type FontCut,
+  type FontTrioInfo,
+  isTypeTokenRole,
+  type TypeToken,
+} from "@yunari/renderer-core";
+import type { TypeTokens } from "./type-preset-manager/index.js";
 
 export type FontTrioRole = "heading" | "body" | "mono";
 
 /** The trio's roles, in the order a theme reads them. */
 export const FONT_ROLES: readonly FontTrioRole[] = ["heading", "body", "mono"];
 
-/** The starter scale's size for a role a theme has no preset for yet. */
-export const ROLE_SIZES: Readonly<Record<FontTrioRole, number>> = {
-  heading: 46,
-  body: 24,
-  mono: 14,
-};
-
 export const ROLE_NAMES: Readonly<Record<FontTrioRole, string>> = {
   heading: "Heading",
   body: "Body",
   mono: "Mono",
-};
-
-export type TypePresetEntry = {
-  readonly name: string;
-  readonly value: TypePreset;
 };
 
 /**
@@ -61,92 +54,76 @@ export function fontWeight(cut: FontCut): number {
   return weight;
 }
 
-/** The preset a role is created at: a role-first name, the role's starter size,
- *  and the role tagged unless the author asked for none. The face is the
- *  caller's — a provider cut and a local file name it differently. */
-export function presetForRole(
-  role: FontTrioRole | null,
-  family: string,
-  weight: number,
-): TypePresetEntry {
-  const named = role ?? "body";
-  return {
-    name: `${ROLE_NAMES[named]} — ${family}`,
-    value: {
-      family,
-      size: ROLE_SIZES[named],
-      weight,
-      ...(role === null ? {} : { trioRole: role }),
-    },
-  };
+/** The token a role is created at: the family and weight the caller names.
+ *  The role is the token's own id. */
+export function presetForRole(family: string, weight: number): TypeToken {
+  return { family, weight };
 }
 
-/** The preset a provider cut is adopted at, bound to the packaged face. */
-export function rolePreset(
-  role: FontTrioRole | null,
-  cut: FontCut,
-): TypePresetEntry {
-  const entry = presetForRole(role, cut.family, fontWeight(cut));
+/** The token a provider cut is adopted at, bound to the packaged face. */
+export function rolePreset(cut: FontCut): TypeToken {
   return {
-    ...entry,
-    value: { ...entry.value, face: { assetId: fontAssetId(cut) } },
+    ...presetForRole(cut.family, fontWeight(cut)),
+    face: { assetId: fontAssetId(cut) },
   };
 }
 
 /**
- * Replaces only the face treatment of presets assigned to a trio role, and
- * creates a preset for any role the theme has none of. Size, line-height and
- * tracking are authored values, so the spread keeps them.
+ * Replaces only the face treatment of tokens whose id is a role, and creates a
+ * token for any role the theme has none of. Size, line-height and tracking are
+ * authored on the run, so nothing here reads them.
  */
 export function applyFontTrio(
-  presets: TypePresets,
+  presets: TypeTokens,
   trio: FontTrioInfo,
-): TypePresets {
-  // `fromEntries`, not assignment: `__proto__` is a legal, schema-valid preset
+): TypeTokens {
+  // `fromEntries`, not assignment: `__proto__` is a legal, schema-valid token
   // id, and `rewritten["__proto__"] = preset` would reach the prototype setter
-  // and lose the preset.
-  const entries: [string, TypePresetEntry][] = [];
-  for (const [id, preset] of Object.entries(presets)) {
-    const role = preset.value.trioRole;
+  // and lose the token.
+  const entries: [string, TypeToken][] = [];
+  for (const [id, token] of Object.entries(presets)) {
+    const role = isTypeTokenRole(id) ? id : undefined;
     const cut = role === undefined ? undefined : trio.roles[role];
     entries.push([
       id,
       cut === undefined
-        ? preset
+        ? token
         : {
-            ...preset,
-            value: {
-              ...preset.value,
-              family: cut.family,
-              weight: fontWeight(cut),
-              face: { assetId: fontAssetId(cut) },
-            },
+            ...token,
+            family: cut.family,
+            weight: fontWeight(cut),
+            face: { assetId: fontAssetId(cut) },
           },
     ]);
   }
   const rewritten = Object.fromEntries(entries);
 
-  const present = new Set(
-    Object.values(rewritten).map((preset) => preset.value.trioRole),
-  );
-  const created: Record<string, TypePresetEntry> = {};
+  const present = new Set(Object.keys(rewritten).filter(isTypeTokenRole));
+  const created: Record<string, TypeToken> = {};
   for (const role of FONT_ROLES) {
     const cut = trio.roles[role];
     if (cut === undefined || present.has(role)) continue;
-    created[freePresetId(role, rewritten, created)] = rolePreset(role, cut);
+    // The role is the id, and `present` has just shown it is free: a suffixed
+    // id would be an unroled token whose computed name reads as a role.
+    created[role] = rolePreset(cut);
   }
 
   return { ...rewritten, ...created };
 }
 
-/** A role id, suffixed when a preset already holds it — an untagged preset at
- *  `mono` is authored content, and creating the role must not overwrite it. */
+/**
+ * The first free id an unroled token takes: `type`, `type-2`, …
+ *
+ * A role id is never minted here. A role is the token's id, so `heading-2`
+ * would be an unroled token whose computed name reads as a second heading;
+ * callers adding a role use the role id itself, and a caller adding an unroled
+ * token always goes through this.
+ */
 export function freePresetId(
-  role: FontTrioRole,
   ...taken: readonly Record<string, unknown>[]
 ): string {
   for (let index = 1; ; index += 1) {
-    const id = index === 1 ? role : `${role}-${index}`;
+    const id = index === 1 ? "type" : `type-${index}`;
     if (taken.every((record) => record[id] === undefined)) return id;
   }
 }

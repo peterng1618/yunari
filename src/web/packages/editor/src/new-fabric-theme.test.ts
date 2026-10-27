@@ -112,6 +112,24 @@ const literalText = (theme: ReturnType<typeof createNewFabricTheme>): string =>
     .filter((text): text is string => typeof text === "string")
     .join("\n");
 
+type AuthoredRun = Readonly<Record<string, unknown>>;
+
+const runsOf = (object: ObjectJson): readonly AuthoredRun[] =>
+  (
+    object["yunariText"] as
+      | { readonly runs?: readonly AuthoredRun[] }
+      | undefined
+  )?.runs ?? [];
+
+/** A run's own authored tracking, in px, or undefined when it asks for none. */
+const trackingOf = (run: AuthoredRun | undefined): number | undefined => {
+  const style = run?.["style"] as
+    | { readonly letterSpacing?: { readonly value?: unknown } }
+    | undefined;
+  const value = style?.letterSpacing?.value;
+  return typeof value === "number" ? value : undefined;
+};
+
 /** Fabric objects at any depth, so a revived starter is read whole. */
 const fabricObjectsOf = (canvas: StaticCanvas): readonly FabricObject[] => {
   const walk = (list: readonly FabricObject[]): readonly FabricObject[] =>
@@ -131,14 +149,40 @@ describe("the new Fabric document", () => {
       ok: true,
       envelope: document_,
     });
+    // A role is a token id, so the trio is complete with no role tag anywhere.
+    expect(
+      validateFabricThemeEnvelope(document_, { requireTrioRoles: true }).ok,
+    ).toBe(true);
     expect(document_.artboard).toMatchObject(ARTBOARD);
     expect(document_.metadata?.themeLanguage).toBe("en");
-    expect(document_.globals?.typePresets).toMatchObject({
-      "36-500": { value: { trioRole: "heading" } },
-      "90-600": { value: { trioRole: "heading" } },
-      "24-400": { value: { trioRole: "body" } },
-      mono: { value: { trioRole: "mono" } },
+    expect(Object.keys(document_.globals?.typeTokens ?? {})).toEqual([
+      "body",
+      "heading",
+      "mono",
+    ]);
+    expect(document_.globals?.typeTokens).toMatchObject({
+      body: { family: "Segoe UI, sans-serif", weight: "400" },
+      heading: { family: "Segoe UI, sans-serif", weight: "600" },
+      mono: { family: "Consolas, monospace", weight: "400" },
     });
+    // Every run carries its own size; a run without one would fall to the
+    // artboard default, which is not what the reference measured.
+    for (const run of nodesOf(document_).flatMap(
+      (object) =>
+        (
+          object["yunariText"] as
+            | { readonly runs?: ReadonlyArray<Record<string, unknown>> }
+            | undefined
+        )?.runs ?? [],
+    )) {
+      const style = run["style"] as Record<string, unknown> | undefined;
+      const fontSize = (style?.["fontSize"] as { readonly value?: unknown })
+        ?.value;
+      expect(
+        typeof fontSize === "number" && fontSize > 0,
+        `run ${String(run["typeToken"])} has a size`,
+      ).toBe(true);
+    }
     // **The backdrop is a declared media asset, and nothing paints over it.**
     // The gradient plate it replaced was a scene object sitting on the canvas
     // and an opaque artboard paint behind it, so the media layer mounted below
@@ -563,40 +607,31 @@ describe("the new Fabric document", () => {
     // a clock or a reading: a numeral's advance is a grid cell, and opening it up
     // breaks the column it sits in.
     const theme = createNewFabricTheme();
-    const presets = theme.globals?.typePresets as Record<
-      string,
-      { value: Readonly<Record<string, unknown>> }
-    >;
-    const spacingOf = (id: string): number | undefined => {
-      const value = presets[id]?.value["letterSpacing"];
-      return typeof value === "number" ? value : undefined;
-    };
+    const trackedObjects = nodesOf(theme).filter(
+      (object) => trackingOf(runsOf(object)[0]) !== undefined,
+    );
 
     // Tracked: the wordmark and the overline under it. Both values are measured
-    // off the reference image rather than judged by eye — see the presets.
-    expect(spacingOf("36-500"), "wordmark").toBeGreaterThan(0);
-    expect(spacingOf("17-400"), "strapline").toBeGreaterThan(0);
-
-    // Untracked: every other preset, including all the readings.
-    for (const id of Object.keys(presets)) {
-      if (id === "36-500" || id === "17-400") continue;
-      expect(spacingOf(id) ?? 0, id).toBe(0);
-    }
+    // off the reference image — see `starterTracking`.
+    expect(trackedObjects.map((object) => object["id"])).toEqual([
+      "wordmark",
+      "strapline",
+    ]);
+    expect(trackingOf(runsOf(objectById(theme, "wordmark"))[0])).toBe(28);
+    expect(trackingOf(runsOf(objectById(theme, "strapline"))[0])).toBe(6);
 
     const canvas = new StaticCanvas(undefined, {
       width: theme.artboard.width,
       height: theme.artboard.height,
     });
     await reviveThemeEnvelope(canvas, theme);
-    // Keyed off each object's own run reference, not its id: an object id is
-    // `ram-value` and the preset it uses is `60-600`.
+    // Keyed off each object's own run style, not its id: an object id is
+    // `ram-value` and the role token it names is `body`.
     const tracked = fabricObjectsOf(canvas).filter((object) => {
       const authored = object.get("yunariText") as
-        | { readonly runs?: ReadonlyArray<{ typePreset?: string }> }
+        | { readonly runs?: readonly AuthoredRun[] }
         | undefined;
-      const ref = authored?.runs?.[0]?.typePreset;
-      const preset = ref?.slice("typePresets.".length);
-      return preset !== undefined && spacingOf(preset) !== undefined;
+      return trackingOf(authored?.runs?.[0]) !== undefined;
     });
     // The fit check first, so an overflow is reported as an overflow rather than
     // as "the tracked set changed".
@@ -614,16 +649,27 @@ describe("the new Fabric document", () => {
     await canvas.dispose();
   });
 
+  it("resolves the clock through the heading token at its authored size", () => {
+    const clock = objectById(createNewFabricTheme(), "time");
+    expect(runsOf(clock)[0]).toMatchObject({
+      typeToken: "typeTokens.heading",
+      style: { fontSize: { value: 108 } },
+    });
+    // The 300-weight clock wears the heading face now; the weight is the
+    // token's, not an element property.
+    expect(clock).toMatchObject({
+      fontFamily: "Segoe UI, sans-serif",
+      fontSize: 108,
+      fontWeight: "600",
+    });
+  });
+
   it("writes the resolved tracking into every tracked object's own JSON", async () => {
-    // Every other preset-derived Fabric field is written into the object, so the
-    // starter would declare five of a preset's six and omit the sixth. Not a
-    // live bug — the editor applies presets at mount — but the starter is the
+    // Every other run-derived Fabric field is written into the object, so the
+    // starter would declare five of a run's six and omit the sixth. Not a live
+    // bug — the editor applies the style at mount — but the starter is the
     // document every other task copies from.
     const theme = createNewFabricTheme();
-    const presets = theme.globals?.typePresets as Record<
-      string,
-      { value: Readonly<Record<string, unknown>> }
-    >;
     const canvas = new StaticCanvas(undefined, {
       width: theme.artboard.width,
       height: theme.artboard.height,
@@ -634,14 +680,9 @@ describe("the new Fabric document", () => {
     const absent: string[] = [];
     for (const object of fabricObjectsOf(canvas)) {
       const authored = object.get("yunariText") as
-        | { readonly runs?: ReadonlyArray<{ typePreset?: string }> }
+        | { readonly runs?: readonly AuthoredRun[] }
         | undefined;
-      const presetId = authored?.runs?.[0]?.typePreset?.slice(
-        "typePresets.".length,
-      );
-      if (presetId === undefined) continue;
-      if (typeof presets[presetId]?.value["letterSpacing"] !== "number")
-        continue;
+      if (trackingOf(authored?.runs?.[0]) === undefined) continue;
       const id = String(object.get("id"));
       const writtenValue = object.get("charSpacing") as number;
       if (typeof writtenValue === "number" && writtenValue !== 0)

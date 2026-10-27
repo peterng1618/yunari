@@ -10,6 +10,7 @@ import {
   type FontAssetReference,
   type FontCut,
   type FontTrioInfo,
+  isTypeTokenRole,
 } from "@yunari/renderer-core";
 import {
   checkDeclaredAssets,
@@ -67,10 +68,11 @@ import {
   rolePreset,
 } from "./type-preset-apply.js";
 import {
-  reassignTypePresetToken,
-  type TypePresetPanel,
-  type TypePresets,
+  reassignTypeToken,
+  type TypeTokenPanel,
+  type TypeTokens,
 } from "./type-preset-manager/index.js";
+import { tokenIdOfFace } from "./type-token-manager/name.js";
 import { uiCopy } from "./ui-copy.js";
 
 /** Whether a save may go on. `message` is a host refusal the author must
@@ -135,7 +137,7 @@ interface EditorDocumentConsumers {
   readonly newObjects: () => NewObjectPanel;
   readonly artboard: () => ArtboardPanel;
   readonly palette: () => PalettePanel;
-  readonly types: () => TypePresetPanel;
+  readonly types: () => TypeTokenPanel;
   readonly selection: () => SelectionInspector;
 }
 
@@ -571,11 +573,11 @@ export class EditorDocument {
    */
   holdsAsset(assetId: string): boolean {
     if (this.#envelope.background?.media?.assetId === assetId) return true;
-    const presets = this.#envelope.globals?.typePresets as
-      | TypePresets
+    const presets = this.#envelope.globals?.typeTokens as
+      | TypeTokens
       | undefined;
     return Object.values(presets ?? {}).some(
-      (preset) => preset.value.face?.assetId === assetId,
+      (preset) => preset.face?.assetId === assetId,
     );
   }
 
@@ -859,7 +861,7 @@ export class EditorDocument {
     this.#consumers.palette().render(globals?.palette);
     this.#consumers
       .types()
-      .render(globals?.typePresets as TypePresets | undefined);
+      .render(globals?.typeTokens as TypeTokens | undefined);
   }
 
   setPalette(palette: FabricPalette): void {
@@ -899,13 +901,13 @@ export class EditorDocument {
     this.#shell.editor.historyManager.saveState();
   }
 
-  setTypes(typePresets: TypePresets): void {
+  setTypes(typeTokens: TypeTokens): void {
     this.#writeEnvelope({
       ...this.#envelope,
-      globals: { ...this.#envelope.globals, typePresets },
+      globals: { ...this.#envelope.globals, typeTokens },
     });
     this.#globalsChanged();
-    this.#consumers.types().render(typePresets);
+    this.#consumers.types().render(typeTokens);
     // Every type-preset field edit arrives here, and each is discrete: no drag
     // publishes samples. Recording at the commit is what makes the edit its own
     // undo step rather than something the next undo silently reverts.
@@ -914,24 +916,24 @@ export class EditorDocument {
 
   deleteType(id: string, replacement: string): void {
     if (id === replacement) return;
-    const typePresets = reassignTypePresetToken(
+    const typeTokens = reassignTypeToken(
       this.#shell.editor.canvas,
-      (this.#envelope.globals?.typePresets ?? {}) as TypePresets,
+      (this.#envelope.globals?.typeTokens ?? {}) as TypeTokens,
       id,
       replacement,
     );
     this.#writeEnvelope({
       ...this.#envelope,
-      globals: { ...this.#envelope.globals, typePresets },
+      globals: { ...this.#envelope.globals, typeTokens },
     });
     this.#globalsChanged();
-    this.#consumers.types().render(typePresets);
+    this.#consumers.types().render(typeTokens);
     this.#shell.editor.historyManager.saveState();
   }
 
   /** The theme's type presets, or none before the first one is written. */
-  #typePresets(): TypePresets {
-    return (this.#envelope.globals?.typePresets ?? {}) as TypePresets;
+  #typeTokens(): TypeTokens {
+    return (this.#envelope.globals?.typeTokens ?? {}) as TypeTokens;
   }
 
   /** The cuts a trio names, in reading order. */
@@ -996,160 +998,160 @@ export class EditorDocument {
       for (const [index, face] of trio.faces.entries()) {
         await this.#assets.adoptFont(face, bytes[index]!);
       }
-      const presets = this.#envelope.globals?.typePresets as
-        | TypePresets
+      const presets = this.#envelope.globals?.typeTokens as
+        | TypeTokens
         | undefined;
       if (presets !== undefined) this.setTypes(applyCatalogTrio(presets, trio));
       return this.snapshot();
     }
 
     await this.#adoptCuts(this.#trioCuts(source));
-    this.setTypes(applyTrioPresets(this.#typePresets(), source));
+    this.setTypes(applyTrioPresets(this.#typeTokens(), source));
   }
 
-  /** The three role presets a trio names, created beside whatever the theme
-   *  already has rather than rewriting it. */
-  async addTypePresetsFromTrio(trio: FontTrioInfo): Promise<void> {
-    const entries = this.#trioCuts(trio);
+  /** The three role tokens a trio names, created beside whatever the theme
+   *  already has rather than rewriting it. A role already present keeps its
+   *  authored face and its cuts are not adopted: creating the role is the only
+   *  reason to read those bytes, and the copy promises Add 3 leaves an existing
+   *  theme unchanged. */
+  async addTypeTokensFromTrio(trio: FontTrioInfo): Promise<void> {
+    const presets = this.#typeTokens();
+    const entries = this.#trioCuts(trio).filter(
+      ({ role }) => presets[role] === undefined,
+    );
+    // Nothing missing is nothing to write: an empty add must not record a
+    // history entry for a theme it did not change.
+    if (entries.length === 0) return;
     await this.#adoptCuts(entries);
-    let presets = this.#typePresets();
+    let next = presets;
     for (const { cut, role } of entries) {
-      presets = {
-        ...presets,
-        [freePresetId(role, presets)]: rolePreset(role, cut),
-      };
+      next = { ...next, [role]: rolePreset(cut) };
     }
-    this.setTypes(presets);
+    this.setTypes(next);
   }
 
-  /** One preset from one cut, named role-first and sized by its role. `null`
-   *  means the author chose no role: the name and size still follow Body. */
-  async addTypePresetFromCut(
+  /** One token from one cut. A chosen role rewrites that role's token — the
+   *  role is the id. With no role chosen the token is unroled, and a face the
+   *  theme already carries is pointed at rather than duplicated. */
+  async addTypeTokenFromCut(
     cut: FontCut,
     role: FontTrioRole | null,
     /** The family's other faces to bring with it — every weight of the subset
-     *  — so the preset's weight field has a face to draw. */
+     *  — so the token's weight field has a face to draw. */
     family: readonly FontCut[] = [],
   ): Promise<string> {
+    const presets = this.#typeTokens();
+    if (role === null) {
+      const existing = tokenIdOfFace(presets, cut.family, fontWeight(cut));
+      if (existing !== undefined) return existing;
+    }
     await this.#adoptCuts([
       { cut, role: role ?? "body" },
       ...family
         .filter((other) => other.id !== cut.id)
         .map((other) => ({ cut: other, role: role ?? "body" })),
     ]);
-    const presets = this.#typePresets();
-    const id = freePresetId(role ?? "body", presets);
-    this.setTypes({ ...presets, [id]: rolePreset(role, cut) });
+    if (role !== null) {
+      this.setTypes({ ...presets, [role]: rolePreset(cut) });
+      return role;
+    }
+    const id = freePresetId(presets);
+    this.setTypes({ ...presets, [id]: rolePreset(cut) });
     return id;
   }
 
   /**
-   * One preset from a local file already declared in the package.
+   * One token from a local file already declared in the package.
    *
-   * Not routed through `addTypePresetFromCut`: that path reads the cut's bytes
+   * Not routed through `addTypeTokenFromCut`: that path reads the cut's bytes
    * from the host and throws for a local source, while the bytes here are
    * already the manager's.
    */
-  addTypePresetFromLocalFont(
+  addTypeTokenFromLocalFont(
     asset: FontAssetReference,
     role: FontTrioRole | null,
   ): string {
     const weight = Number(asset.weight);
     if (!Number.isFinite(weight) || weight <= 0)
       throw new Error(`"${asset.family}" has no usable font weight.`);
-    const entry = presetForRole(role, asset.family, weight);
-    const presets = this.#typePresets();
-    const id = freePresetId(role ?? "body", presets);
+    const entry = presetForRole(asset.family, weight);
+    const presets = this.#typeTokens();
+    if (role !== null) {
+      this.setTypes({
+        ...presets,
+        [role]: { ...entry, face: { assetId: asset.id } },
+      });
+      return role;
+    }
+    const existing = tokenIdOfFace(presets, asset.family, weight);
+    if (existing !== undefined) return existing;
+    const id = freePresetId(presets);
     this.setTypes({
       ...presets,
-      [id]: {
-        ...entry,
-        value: { ...entry.value, face: { assetId: asset.id } },
-      },
+      [id]: { ...entry, face: { assetId: asset.id } },
     });
     return id;
   }
 
-  /** Rewrites one named preset with a finder cut — the explicit target the
-   *  Apply to selected preset action names. */
+  /** Rewrites one named token with a finder cut — the explicit target the
+   *  Apply to selected token action names. */
   async applyCutToPreset(
     id: string,
     cut: FontCut,
     family: readonly FontCut[] = [],
   ): Promise<void> {
-    const presets = this.#typePresets();
+    const presets = this.#typeTokens();
     const preset = presets[id];
-    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
-    const role = preset.value.trioRole ?? "body";
+    if (preset === undefined) throw new Error(`Unknown type token "${id}".`);
+    const role = isTypeTokenRole(id) ? id : "body";
     await this.#adoptCuts([
       { cut, role },
       ...family
         .filter((other) => other.id !== cut.id)
         .map((other) => ({ cut: other, role })),
     ]);
-    const latest = this.#typePresets();
+    const latest = this.#typeTokens();
     const current = latest[id] ?? preset;
     this.setTypes({
       ...latest,
       [id]: {
         ...current,
-        value: {
-          ...current.value,
-          family: cut.family,
-          weight: fontWeight(cut),
-          face: { assetId: fontAssetId(cut) },
-        },
+        family: cut.family,
+        weight: fontWeight(cut),
+        face: { assetId: fontAssetId(cut) },
       },
     });
   }
 
-  /** Sets or clears the role a preset participates in. */
-  setPresetRole(id: string, role: FontTrioRole | null): void {
-    const presets = this.#typePresets();
-    const preset = presets[id];
-    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
-    const { trioRole: _previous, ...value } = preset.value;
-    this.setTypes({
-      ...presets,
-      [id]: {
-        ...preset,
-        value: role === null ? value : { ...value, trioRole: role },
-      },
-    });
-  }
-
-  /** Releases a preset's packaged face. Family and weight stay as authored and
+  /** Releases a token's packaged face. Family and weight stay as authored and
    *  become editable again (R10). */
   unbindPresetFace(id: string): void {
-    const presets = this.#typePresets();
+    const presets = this.#typeTokens();
     const preset = presets[id];
-    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
-    if (preset.value.face === undefined) return;
-    const { face: _face, ...value } = preset.value;
-    this.setTypes({ ...presets, [id]: { ...preset, value } });
+    if (preset === undefined) throw new Error(`Unknown type token "${id}".`);
+    if (preset.face === undefined) return;
+    const { face: _face, ...value } = preset;
+    this.setTypes({ ...presets, [id]: value });
   }
 
   async applyPresetFace(
     id: string,
     face: CuratedFontFace,
   ): Promise<FabricThemeEnvelope> {
-    const presets = this.#envelope.globals?.typePresets as
-      | TypePresets
+    const presets = this.#envelope.globals?.typeTokens as
+      | TypeTokens
       | undefined;
     const preset = presets?.[id];
-    if (preset === undefined) throw new Error(`Unknown type preset "${id}".`);
+    if (preset === undefined) throw new Error(`Unknown type token "${id}".`);
     const bytes = await this.#downloadFace(face);
     await this.#assets.adoptFont(face, bytes);
     this.setTypes({
       ...presets,
       [id]: {
         ...preset,
-        value: {
-          ...preset.value,
-          family: face.family,
-          weight: face.weight,
-          face: { assetId: face.id },
-        },
+        family: face.family,
+        weight: face.weight,
+        face: { assetId: face.id },
       },
     });
     return this.snapshot();

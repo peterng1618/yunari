@@ -136,8 +136,11 @@ function textBox(
         {
           kind: "literal" as const,
           text: TEXT,
-          typePreset: "typePresets.40-400",
-          style: { color: { ref: "palette.ink" } },
+          typeToken: "typeTokens.body",
+          style: {
+            color: { ref: "palette.ink" },
+            fontSize: { value: FONT_SIZE },
+          },
         },
       ],
       box: { width: box.width, height: box.height },
@@ -159,15 +162,10 @@ const ENVELOPE = {
   background: { color: { ref: "palette.bar" as const } },
   globals: {
     palette: PALETTE,
-    typePresets: {
-      "40-400": {
-        name: "Measure",
-        value: {
-          family: "Segoe UI, system-ui, sans-serif",
-          size: FONT_SIZE,
-          weight: "400",
-        },
-      },
+    typeTokens: {
+      heading: { family: "Segoe UI, system-ui, sans-serif", weight: "600" },
+      body: { family: "Segoe UI, system-ui, sans-serif", weight: "400" },
+      mono: { family: "ui-monospace, monospace", weight: "400" },
     },
   },
   assets: [

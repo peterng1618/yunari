@@ -165,14 +165,10 @@ function createValidPackage(
                 value: { kind: "solid" as const, color: "#e8ecf3" },
               },
             },
-            typePresets: {
+            typeTokens: {
               "11-400": {
-                name: "Caption",
-                value: {
-                  family: "system-ui, sans-serif",
-                  size: 22,
-                  weight: "400",
-                },
+                family: "system-ui, sans-serif",
+                weight: "400",
               },
             },
           },
@@ -198,7 +194,7 @@ function createValidPackage(
                     {
                       kind: "value" as const,
                       bindingId: "readout-value",
-                      typePreset: "typePresets.11-400" as const,
+                      typeToken: "typeTokens.11-400" as const,
                       style: { color: { ref: "palette.ink" as const } },
                     },
                   ],

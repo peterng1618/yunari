@@ -39,7 +39,8 @@ import { createPalettePanel } from "./palette-manager/panel.js";
 import { createTokenInspectorPanel } from "./panes/tokens/token-inspector.js";
 import { projectRuns, RunEditor } from "./selection-inspector/runs.js";
 import type { RunEdits } from "./selection-inspector/view.js";
-import { createTypePresetPanel } from "./type-preset-manager/panel.js";
+import { createTypeTokenPanel } from "./type-preset-manager/panel.js";
+import { uiCopy } from "./ui-copy.js";
 import { copy, spokenText } from "./ui-copy-readers.js";
 
 /** A run-editor write port that records nothing: this file reads copy, not writes. */
@@ -48,6 +49,9 @@ function runEdits(): RunEdits {
     setRunText: () => true,
     setRunPreset: () => true,
     setRunColour: () => true,
+    setRunSize: () => true,
+    setRunLineHeight: () => true,
+    setRunTracking: () => true,
     setUnitDisplay: () => true,
     setSource: () => true,
     setFormat: () => true,
@@ -113,7 +117,6 @@ it("leaves the mounted panels with no copy of their own", async () => {
   createTokenInspectorPanel(root, {
     onChange: () => undefined,
     onDelete: () => undefined,
-    setRole: () => undefined,
     unbindFace: () => undefined,
     paints: {
       palette: () => palette,
@@ -122,7 +125,7 @@ it("leaves the mounted panels with no copy of their own", async () => {
       usage: undefined,
     },
   }).render({ kind: "paint", id: "glow" }, {}, undefined);
-  createTypePresetPanel(
+  createTypeTokenPanel(
     root,
     () => undefined,
     () => undefined,
@@ -131,38 +134,35 @@ it("leaves the mounted panels with no copy of their own", async () => {
       applyTrio: async () => undefined,
     },
   ).render({
-    body: {
-      name: "Body",
-      value: { family: "Inter", size: 16, trioRole: "heading" },
-    },
-    caption: { name: "Caption", value: { family: "Inter", size: 12 } },
+    body: { family: "Inter" },
+    caption: { family: "Inter" },
   });
 
   // The selected token's column is the Tokens pane's other half, and it is
   // where the field set's labels moved. Its select triggers print values and are
   // excluded from the button net; the labels and Delete are copy and are read.
   const tokenPresets = {
-    body: {
-      name: "Body",
-      value: { family: "Inter", size: 16, trioRole: "heading" as const },
-    },
+    body: { family: "Inter" },
+    caption: { family: "Inter" },
   };
   createTokenInspectorPanel(root, {
     onChange: () => undefined,
     onDelete: () => undefined,
-    setRole: () => undefined,
     unbindFace: () => undefined,
+    // A declared face, so the weight row is a labelled select rather than the
+    // read-only fallback.
+    facesOf: () => [{ assetId: "inter-400", weight: 400, style: "normal" }],
     paints: undefined,
-  }).render({ kind: "preset", id: "body" }, tokenPresets, {
-    typePresets: tokenPresets,
+  }).render({ kind: "preset", id: "caption" }, tokenPresets, {
+    typeTokens: tokenPresets,
   });
   // The fourth mount, non-vacuous with a number: a panel that rendered nothing
-  // would leave the net passing without reading one of its words. Eight is the
-  // labels a free preset renders — name, role, family, weight, size, line
-  // height, letter spacing and reassignment; Delete is a button, read below.
+  // would leave the net passing without reading one of its words. Three is the
+  // labels a free token renders — family, weight and reassignment; Delete is a
+  // button, read below.
   expect(
     root.querySelectorAll("[data-yunari-token-fields] label"),
-  ).toHaveLength(8);
+  ).toHaveLength(3);
 
   // The palette's paint kinds, which are copy. They live in a Base UI popup that
   // exists only while it is open, so they are read the way an author reads them.
@@ -179,11 +179,16 @@ it("leaves the mounted panels with no copy of their own", async () => {
   // what the pane offers (`solid`, `gradient`), read off the opened list.
   expect(paintKinds).toHaveLength(2);
   const owned = new Set(copy());
-  // The badge route below reads nothing when no fixture preset carries a role, so
-  // the count is said out loud: the fixture declares one `trioRole`, and a net
-  // that measured zero badges would pass without covering the word at all.
-  const roleBadges = root.querySelectorAll("[data-yunari-type-preset-role]");
-  expect(roleBadges).toHaveLength(1);
+  // The role word is copy (Heading/Body/Mono), carried inside a role token's
+  // computed name. The row around it prints the face, which is data, so the
+  // word is read where it is drawn rather than feeding the net below.
+  const roleWord = uiCopy.assets.fontPreview.role.body;
+  expect(
+    Array.from(
+      root.querySelectorAll("[data-yunari-type-preset-row]"),
+      (row) => row.textContent ?? "",
+    ).some((text) => text.includes(roleWord)),
+  ).toBe(true);
   const spoken = [
     ...Array.from(root.querySelectorAll("label"), (label) => label.textContent),
     // The gradient editor's stop marks are `role="slider"` divs, not labels or
@@ -196,13 +201,13 @@ it("leaves the mounted panels with no copy of their own", async () => {
       (stop) => stop.getAttribute("aria-label"),
     ),
     // Two kinds of button are excluded, both because their text is data. A token
-    // well prints the document's own token name and usage figure; a type-preset
-    // row prints the preset's own name and resolution — its role badge is copy
-    // and is read on its own below. A select's trigger prints the chosen value,
-    // which on every panel here is a token's name, a preset's, a unit's or a
-    // locale's — the chevron beside it is decoration. The words a select
-    // *offers* are copy and are read from its open list, so excluding the
-    // closed control loses nothing.
+    // well prints the document's own token name and usage figure; a type-token
+    // row prints the token's own computed name and resolution — the role word
+    // inside that name is copy and is read on its own above. A select's trigger
+    // prints the chosen value, which on every panel here is a token's name, a
+    // preset's, a unit's or a locale's — the chevron beside it is decoration. The
+    // words a select *offers* are copy and are read from its open list, so
+    // excluding the closed control loses nothing.
     ...Array.from(root.querySelectorAll("button"))
       .filter(
         (button) =>
@@ -211,12 +216,6 @@ it("leaves the mounted panels with no copy of their own", async () => {
           button.querySelector("[data-yunari-value]") === null,
       )
       .map((button) => spokenText(button)),
-    // The preset row's role badge prints a copy word (Heading/Body/Mono), not
-    // data, so it goes through the net even though the row around it does not.
-    ...Array.from(
-      root.querySelectorAll("[data-yunari-type-preset-role]"),
-      (badge) => spokenText(badge),
-    ),
     ...paintKinds,
   ]
     .map((text) => text?.trim() ?? "")
@@ -370,6 +369,7 @@ async function runUnitDisplayOptions(root: HTMLElement): Promise<string[]> {
   const runs = projectRuns(object as never, "clock-label", {
     globals: undefined,
     locale: undefined,
+    artboardHeight: 1080,
     nodeBindings: () => bindings,
     sampleSource: () => ({
       revision: 0,

@@ -1,4 +1,4 @@
-# 0128 — A transition blits its own frames
+# 0129 — A transition blits its own frames
 
 - **Date:** 2026-10-27
 - **Status:** accepted 2026-10-27

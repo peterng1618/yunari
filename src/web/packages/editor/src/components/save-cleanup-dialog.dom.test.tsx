@@ -143,7 +143,7 @@ describe("the save cleanup sheet", () => {
     );
     expect(rows).toHaveLength(FILES.length);
     expect(rows[0]).toContain("Manrope-Variable.woff2");
-    expect(rows[0]).toContain("Font · 34 KB · no type preset refers to it");
+    expect(rows[0]).toContain("Font · 34 KB · no type token refers to it");
     expect(rows[1]).toContain("studio.png");
     expect(rows[1]).toContain("Image · 840 KB · not on the canvas");
     expect(rows[2]).toContain("loop-alt.webm");

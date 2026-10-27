@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import {
   expect,
   type Locator,
@@ -7,10 +8,16 @@ import {
 } from "@playwright/test";
 import { type FabricThemeEnvelope, facetRecordOf } from "@yunari/renderer-core";
 import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
+import {
+  FONT_FINDER_ID,
+  IMPORT_LOCAL_FONT_ID,
+} from "../../packages/editor/src/type-token-manager/font-actions.js";
+import { uiCopy } from "../../packages/editor/src/ui-copy.js";
 import { installFixedClock } from "./clock.js";
 import {
   choiceOf,
   chooseIn,
+  optionPairs,
   optionsOf,
   sectionExpanded,
   typeIntoControl,
@@ -87,6 +94,16 @@ async function insertShape(page: Page, name: string): Promise<void> {
 }
 
 const EDITOR = "http://127.0.0.1:4174/";
+
+/**
+ * The one real face the suite keeps on disk, cached by the host fixture before
+ * any worker starts (`global-setup.ts` → `seedHostTheme` → `fontBytes`). The
+ * token inspector's import refuses bytes the browser cannot parse, so a
+ * synthetic buffer is not a stand-in here.
+ */
+const FONT_FIXTURE = fileURLToPath(
+  new URL("../../.e2e-font-cache/inter-400.woff2", import.meta.url),
+);
 
 /**
  * The starter scene's artboard width. Every helper that turns a scene x into a
@@ -1121,7 +1138,7 @@ test.describe("Fabric editor route", () => {
           yunariText?: {
             runs: Array<{
               text?: string;
-              typePreset?: string;
+              typeToken?: string;
               style?: { color?: { ref?: string } };
             }>;
           };
@@ -1139,11 +1156,10 @@ test.describe("Fabric editor route", () => {
       yunariText: {
         runs: [
           {
-            // The largest body-role preset, which is what the editor's new-text
-            // defaults pick — not the first entry, and not a caption too small
-            // to inspect comfortably. At the reference's artboard that is the
-            // 32px date face.
-            typePreset: "typePresets.32-400",
+            // The body role, which is what the editor's new-text defaults
+            // pick — not the first entry, and not a caption too small to
+            // inspect comfortably. Its size comes from the role default.
+            typeToken: "typeTokens.body",
             style: { color: { ref: "palette.text" } },
           },
         ],
@@ -2167,60 +2183,86 @@ test.describe("Fabric editor route", () => {
     ).toEqual({ ref: "palette.bars" });
   });
 
-  test("edits a global type preset through the property surface", async ({
+  test("edits a global type token through the property surface", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    // The type-preset library is a list now; a row press hands the preset to
+    // The type-token library is a list now; a row press hands the token to
     // the token inspector, which is the field set's new home (spec, Tokens
-    // pane). `36-500` is the starter theme's "Wordmark".
+    // pane). `heading` is the starter theme's wordmark face.
     await openPane(page, "Tokens");
-    await page.locator('[data-yunari-type-preset-row="36-500"]').click();
-    const size = page.locator("[data-yunari-token-size]");
-    await size.fill("34");
-    await size.press("Tab");
-    await expect(size).toHaveValue("34");
-    const letterSpacing = page.locator("[data-yunari-token-letter-spacing]");
-    await letterSpacing.fill("0.25");
-    await letterSpacing.press("Tab");
+    await page.locator('[data-yunari-type-preset-row="heading"]').click();
+    const family = page.locator("[data-yunari-token-family]");
+    await expect(family).toBeVisible();
+
+    // A token's family is a list, not a field. The starter theme declares no
+    // font asset, so the token's own family is a disabled reading and the two
+    // action rows are the only pressable entries. The labels are the control's
+    // own copy, read from the app rather than restated here.
+    expect(await optionPairs(page, family)).toEqual([
+      {
+        id: "Segoe UI, sans-serif",
+        label: "Segoe UI, sans-serif (not in package)",
+      },
+      { id: IMPORT_LOCAL_FONT_ID, label: uiCopy.panels.importLocalFont },
+      { id: FONT_FINDER_ID, label: uiCopy.panels.fontFinder },
+    ]);
+
+    // Declaring a face is the one route that gives the list a real choice, and
+    // the import is where it lives. The dialog's family field is written before
+    // Create because the fixture's file name would declare it `inter`.
+    const chooser = page.waitForEvent("filechooser");
+    await chooseIn(page, family, IMPORT_LOCAL_FONT_ID);
+    await (await chooser).setFiles(FONT_FIXTURE);
+    const fontFamily = page.locator("[data-yunari-font-family]");
+    await fontFamily.fill("Inter");
+    await fontFamily.press("Tab");
+    await page.locator("[data-yunari-font-create]").click();
+    await expect(page.locator("[data-yunari-font-create]")).toHaveCount(0);
+
+    // The declared family is a choice now; the token's own family stays a
+    // reading until one is picked.
+    await chooseIn(page, family, "Inter");
+    expect(await choiceOf(family)).toBe("Inter");
+
+    // The imported face is 400 and the token keeps its 600, so the weight is a
+    // list whose shown value is a disabled reading: a family change keeps the
+    // weight rather than adopting the lightest face.
+    const weight = page.locator("[data-yunari-token-weight]");
+    expect(await choiceOf(weight)).toBe("600 (not in package)");
 
     const saved = await savePackage(page);
     await openThemeFromStore(page, storedThemeOfPackage(saved.bytes));
     // Reopening a package remounts the shell, so the pane is shut again.
     await openPane(page, "Tokens");
-    await page.locator('[data-yunari-type-preset-row="36-500"]').click();
+    await page.locator('[data-yunari-type-preset-row="heading"]').click();
     const reopened = (await saveEnvelope(page)) as {
       globals: {
-        typePresets: {
-          "36-500": {
-            value: {
-              size: number;
-              letterSpacing: number;
-              trioRole: string;
-            };
-          };
+        typeTokens: {
+          heading: { family: string; weight: string | number };
         };
       };
     };
-    expect(reopened.globals.typePresets["36-500"].value).toMatchObject({
-      size: 34,
-      letterSpacing: 0.25,
-      trioRole: "heading",
+    expect(reopened.globals.typeTokens["heading"]).toMatchObject({
+      family: "Inter",
+      weight: "600",
     });
-    await page
-      .locator("[data-yunari-token-letter-spacing]")
-      .scrollIntoViewIfNeeded();
+    // The declaration survives the package: the reopened list prints the plain
+    // family, not the not-in-package reading.
+    expect(await choiceOf(page.locator("[data-yunari-token-family]"))).toBe(
+      "Inter",
+    );
     await captureVisualReview(page, testInfo, "editor-type-preset");
   });
 
-  test("paints a preset's tracking into the rendered wordmark", async ({
+  test("paints a run's tracking into the rendered wordmark", async ({
     page,
   }, testInfo) => {
     // The one assertion the unit tests cannot make: that ink actually moves.
-    // `applyObjectTypePresets` could set `charSpacing` correctly and the canvas
-    // could still not show it.
+    // The runtime could set `charSpacing` correctly and the canvas could still
+    // not show it.
     //
     // Measured as pixels rather than as the object's `width`, because the
     // wordmark is a `Textbox` — its width is the authored box, which tracking
@@ -2228,9 +2270,12 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    await openPane(page, "Tokens");
-    await page.locator('[data-yunari-type-preset-row="36-500"]').click();
-    const tracking = page.locator("[data-yunari-token-letter-spacing]");
+    // Tracking is the run's own value (0128), not the token's: the row lives in
+    // the selection inspector's runs section, so the case selects the object
+    // that wears it. The wordmark is the starter's first run.
+    await selectLayer(page, "wordmark");
+    const tracking = page.locator('[data-yunari-run-letter-spacing="0"]');
+    await expect(tracking).toBeVisible();
 
     await tracking.fill("0");
     await tracking.press("Tab");
@@ -2247,41 +2292,57 @@ test.describe("Fabric editor route", () => {
     expect(tracked - untracked).toBeGreaterThan(8);
   });
 
-  test("reassigns text type presets before deleting one", async ({
+  test("reassigns text type tokens before deleting an unroled one", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
     await openPane(page, "Tokens");
-    await page.locator('[data-yunari-type-preset-row="20-400"]').click();
-    await chooseIn(page, "[data-yunari-token-replacement]", "24-400");
+    // A role token is not deletable and the validator requires all three, so
+    // the case creates the unroled token it will delete. The add's seeded face
+    // is one no starter role carries.
+    await page.locator("[data-yunari-type-preset-add]").click();
+    const added = page.locator('[data-yunari-type-preset-row="type"]');
+    await expect(added).toHaveCount(1);
+
+    // Give a run a reference to it, so the reassignment has something to move.
+    await selectLayer(page, "CPU");
+    await chooseIn(page, '[data-yunari-run-preset="0"]', "typeTokens.type");
+
+    await openPane(page, "Tokens");
+    await added.click();
+    await chooseIn(page, "[data-yunari-token-replacement]", "heading");
     await page.locator("[data-yunari-token-delete]").scrollIntoViewIfNeeded();
     await captureVisualReview(page, testInfo, "editor-type-reassignment");
     await page.locator("[data-yunari-token-delete]").click();
-    // The row is the preset's own row in the list, so a deletion takes the
+    // The row is the token's own row in the list, so a deletion takes the
     // whole row with it.
     await expect(
-      page.locator('[data-yunari-type-preset-row="20-400"]'),
+      page.locator('[data-yunari-type-preset-row="type"]'),
     ).toHaveCount(0);
 
     const envelope = (await saveEnvelope(page)) as {
-      globals: { typePresets: Record<string, unknown> };
+      globals: { typeTokens: Record<string, unknown> };
       scene: {
         objects: Array<{
           id?: string;
-          yunariText?: { runs: Array<{ typePreset?: string }> };
+          yunariText?: { runs: Array<{ typeToken?: string }> };
         }>;
       };
     };
-    expect(envelope.globals.typePresets["20-400"]).toBeUndefined();
+    expect(envelope.globals.typeTokens["type"]).toBeUndefined();
+    // The three roles survive: they are the ids the theme must always carry.
+    for (const role of ["heading", "body", "mono"]) {
+      expect(envelope.globals.typeTokens[role]).toBeDefined();
+    }
     expect(
       (
         sceneObject(envelope, "cpu-card-title")?.["yunariText"] as
-          | { runs: ReadonlyArray<{ typePreset?: string }> }
+          | { runs: ReadonlyArray<{ typeToken?: string }> }
           | undefined
-      )?.runs[0]?.typePreset,
-    ).toBe("typePresets.24-400");
+      )?.runs[0]?.typeToken,
+    ).toBe("typeTokens.heading");
   });
 
   test("captures dirty document replacement confirmation for visual review", async ({
@@ -2682,8 +2743,8 @@ test.describe("Fabric editor route", () => {
           },
           ink: { name: "Ink", value: { kind: "solid", color: ACCENT_PAINT } },
         },
-        typePresets: {
-          body: { name: "Body", value: { family: "sans-serif", size: 16 } },
+        typeTokens: {
+          body: { family: "sans-serif" },
         },
       },
       bindings: {
@@ -2708,13 +2769,13 @@ test.describe("Fabric editor route", () => {
                 {
                   kind: "literal",
                   text: "CPU ",
-                  typePreset: "typePresets.body",
+                  typeToken: "typeTokens.body",
                   style: { color: { ref: "palette.ink" } },
                 },
                 {
                   kind: "value",
                   bindingId: "load",
-                  typePreset: "typePresets.body",
+                  typeToken: "typeTokens.body",
                   style: { color: { ref: "palette.ink" } },
                 },
               ],
@@ -3849,7 +3910,11 @@ test.describe("Fabric editor route", () => {
             value: { kind: "solid" as const, color: INK_PAINT },
           },
         },
-        typePresets: {},
+        typeTokens: {
+          heading: { family: "system-ui, sans-serif", weight: "600" },
+          body: { family: "system-ui, sans-serif", weight: "400" },
+          mono: { family: "ui-monospace, monospace", weight: "400" },
+        },
       },
       bindings: {},
       scene: {

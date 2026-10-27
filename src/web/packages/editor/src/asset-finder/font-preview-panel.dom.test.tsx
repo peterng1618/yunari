@@ -2,13 +2,14 @@
 import type { AssetResult, FontCut, FontTrioInfo } from "@yunari/renderer-core";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, it, vi } from "vitest";
-import type { TypePresets } from "../type-preset-manager/panel.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   FontPreviewPanel,
   type FontResult,
   type FontRole,
+  familyCutsOf,
 } from "./font-preview-panel.js";
 
 (
@@ -64,37 +65,14 @@ const family: AssetResult & { font: { cuts: FontCut[] } } = {
   font: { cuts: [cut("Manrope", 400), cut("Manrope", 700)] },
 };
 
-const starter: TypePresets = {
-  clock108: {
-    name: "Clock 108",
-    value: { family: "Yaldevi", size: 108, weight: 300, trioRole: "heading" },
-  },
-  clock72: {
-    name: "Clock 72",
-    value: { family: "Yaldevi", size: 72, weight: 600, trioRole: "heading" },
-  },
-  body16: {
-    name: "Body 16",
-    value: {
-      family: "Libre Franklin",
-      size: 16,
-      weight: 400,
-      trioRole: "body",
-    },
-  },
-  mono14: {
-    name: "Mono 14",
-    value: {
-      family: "Spline Sans Mono",
-      size: 14,
-      weight: 400,
-      trioRole: "mono",
-    },
-  },
+const starter: TypeTokens = {
+  heading: { family: "Yaldevi", weight: 300 },
+  body: { family: "Libre Franklin", weight: 400 },
+  mono: { family: "Spline Sans Mono", weight: 400 },
 };
 
-const roleless: TypePresets = {
-  plain: { name: "Plain", value: { family: "Segoe UI", size: 14 } },
+const roleless: TypeTokens = {
+  plain: { family: "Segoe UI" },
 };
 
 let root: HTMLDivElement | undefined;
@@ -146,7 +124,7 @@ function stubFonts(load: () => Promise<unknown> = async () => undefined) {
 
 function panel(props: {
   readonly selected: FontResult;
-  readonly presets?: TypePresets;
+  readonly presets?: TypeTokens;
   readonly onApplyTrio?: (value: FontTrioInfo) => void;
   readonly onAddTrioPresets?: (value: FontTrioInfo) => void;
   readonly onAddPreset?: (value: FontCut, role: FontRole) => void;
@@ -222,17 +200,17 @@ it("names the apply scope and each before→after row", () => {
   mount(panel({ selected: trio, onApplyTrio, onAddTrioPresets }));
 
   expect(document.querySelector("[data-yunari-font-scope]")?.textContent).toBe(
-    "Heading × 2 · Body × 1 · Mono × 1",
+    "Heading × 1 · Body × 1 · Mono × 1",
   );
   expect(
     document.querySelector('[data-yunari-font-change="heading"]')?.textContent,
-  ).toBe("Clock 108 · 300 → Manrope 700");
+  ).toBe("Yaldevi · 300 → Manrope 700");
   expect(
     document.querySelector('[data-yunari-font-change="body"]')?.textContent,
-  ).toBe("Body 16 · 400 → IBM Plex Sans 400");
+  ).toBe("Libre Franklin · 400 → IBM Plex Sans 400");
   expect(
     document.querySelector('[data-yunari-font-change="mono"]')?.textContent,
-  ).toBe("Mono 14 · 400 → IBM Plex Mono 400");
+  ).toBe("Spline Sans Mono · 400 → IBM Plex Mono 400");
 
   act(() => {
     button("[data-yunari-font-add-presets]").click();
@@ -275,6 +253,11 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
     "[data-yunari-font-role]",
   );
   expect(role?.value).toBe("body");
+  // The starter token it would rewrite is named: the press replaces a face
+  // rather than adding a second token.
+  expect(document.body.textContent).toContain(
+    uiCopy.assets.fontPreview.replacesRole(uiCopy.assets.fontPreview.role.body),
+  );
 
   act(() => {
     chips[1]?.click();
@@ -288,7 +271,14 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
     role?.dispatchEvent(new Event("change", { bubbles: true }));
   });
   expect(role?.value).toBe("heading");
-  expect(document.body.textContent).toContain("Heading — Manrope · adds one");
+  expect(document.body.textContent).toContain(
+    uiCopy.assets.fontPreview.replacesRole(
+      uiCopy.assets.fontPreview.role.heading,
+    ),
+  );
+  expect(document.body.textContent).toContain(
+    "Heading — Manrope · replaces its face",
+  );
   act(() => {
     button("[data-yunari-font-add-preset]").click();
   });
@@ -304,6 +294,47 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
     family.font.cuts[1],
   ]);
   expect(chips[1]?.getAttribute("aria-pressed")).toBe("true");
+});
+
+it("draws no role-replacement hint when the theme has no such role", () => {
+  // Nothing is replaced: the press creates the role, which is the other honest
+  // answer and must not be dressed as a rewrite.
+  mount(panel({ selected: family, presets: roleless, onAddPreset: vi.fn() }));
+
+  expect(document.querySelector("[data-yunari-font-role-replaces]")).toBeNull();
+});
+
+it("gates the hint on the chosen role, not on any role existing", () => {
+  // Only `heading` exists here: a condition keyed on "the theme has some role"
+  // would draw the hint under Body too and promise a rewrite that cannot happen.
+  const headingOnly: TypeTokens = {
+    heading: { family: "Yaldevi", weight: 300 },
+  };
+  mount(
+    panel({ selected: family, presets: headingOnly, onAddPreset: vi.fn() }),
+  );
+
+  expect(document.querySelector("[data-yunari-font-role-replaces]")).toBeNull();
+  expect(document.body.textContent).toContain("Body — Manrope · adds one");
+
+  const role = document.querySelector<HTMLSelectElement>(
+    "[data-yunari-font-role]",
+  );
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLSelectElement.prototype,
+    "value",
+  )?.set;
+  act(() => {
+    setter?.call(role, "heading");
+    role?.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  expect(
+    document.querySelector("[data-yunari-font-role-replaces]"),
+  ).not.toBeNull();
+  expect(document.body.textContent).toContain(
+    "Heading — Manrope · replaces its face",
+  );
 });
 
 it("applies the face the family's id names, not the first cut listed", () => {
@@ -359,9 +390,9 @@ it("names the subset when cuts share a weight, rather than drawing three 400s", 
   }
 });
 
-it("brings the lead subset's weights, not another subset's faces", () => {
-  // Applying a Latin face must give the preset every Latin weight; a
-  // Vietnamese cut is a different face and is not imported unasked.
+it("brings every subset's faces with the chosen cut", () => {
+  // A family lists every weight × subset: the lead subset's weights alone left
+  // a Vietnamese glyph with no file, so one apply brings the whole family.
   const latin400 = cut("Manrope", 400);
   const latin700 = cut("Manrope", 700);
   const vietnamese = {
@@ -382,9 +413,47 @@ it("brings the lead subset's weights, not another subset's faces", () => {
   });
 
   expect(onApplyToSelected).toHaveBeenCalledWith(latin400, [
+    vietnamese,
     latin400,
     latin700,
   ]);
+});
+
+describe("familyCutsOf", () => {
+  const lead = cut("Manrope", 400);
+  const bold = cut("Manrope", 700);
+  const vietnamese = {
+    ...cut("Manrope", 400),
+    id: "cut:manrope-vietnamese",
+    subset: "vietnamese",
+  };
+  const selected = (cuts: readonly FontCut[]): FontResult => ({
+    ...family,
+    id: `google-fonts:${lead.id}`,
+    font: { cuts: [...cuts] },
+  });
+
+  it("returns every cut when the chosen face is the lead's", () => {
+    expect(familyCutsOf(selected([lead, bold, vietnamese]), lead)).toEqual([
+      lead,
+      bold,
+      vietnamese,
+    ]);
+  });
+
+  it("returns every cut when the chosen face is another subset's", () => {
+    expect(
+      familyCutsOf(selected([lead, bold, vietnamese]), vietnamese),
+    ).toEqual([lead, bold, vietnamese]);
+  });
+
+  it("appends the chosen face when the result's own list omits it", () => {
+    expect(familyCutsOf(selected([lead, bold]), vietnamese)).toEqual([
+      lead,
+      bold,
+      vietnamese,
+    ]);
+  });
 });
 
 it("releases every face it added when the panel unmounts", () => {

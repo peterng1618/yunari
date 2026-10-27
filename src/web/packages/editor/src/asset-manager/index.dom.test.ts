@@ -183,7 +183,15 @@ describe("AssetManager", () => {
       family: face.family,
       weight: face.weight,
       format: "woff2",
+      subset: face.subset,
     });
+    // The subset is a fact about the file the author chose, so it survives the
+    // package JSON that carries the declaration into the saved theme.
+    const packaged = JSON.parse(JSON.stringify(asset)) as Record<
+      string,
+      unknown
+    >;
+    expect(packaged["subset"]).toBe(face.subset);
     expect(manager.assets[`assets/${face.id}.woff2`]).toEqual(
       new Uint8Array([0, 1, 2]),
     );
@@ -230,6 +238,12 @@ describe("AssetManager", () => {
     });
     // A local file names no origin; an absent URL is not an empty one.
     expect(asset.sourceUrl).toBeUndefined();
+    // A local import came from no published subset, so the key is absent
+    // rather than present and empty.
+    expect("subset" in asset).toBe(false);
+    expect("subset" in (JSON.parse(JSON.stringify(asset)) as object)).toBe(
+      false,
+    );
     expect(manager.assets["assets/Inter-Bold.ttf"]).toEqual(
       new Uint8Array([0, 1, 2]),
     );
