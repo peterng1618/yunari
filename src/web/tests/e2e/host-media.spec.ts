@@ -519,9 +519,10 @@ async function recordPerFrameWebm(page: Page): Promise<Uint8Array> {
  *
  * The **player** is different, and this is the measurement rather than the
  * expectation. It starts `startSceneRefresh(tick)` on `requestAnimationFrame`,
- * so it already repaints on every animation frame the compositor offers — and a video frame is presented *as* an animation frame,
- * so the callback's `requestRenderAll` lands in a frame that already has one
- * and Fabric coalesces the two into a single render. Counted over three
+ * so it wakes on every animation frame the compositor offers, and it asks the
+ * canvas to render when a reading moved — a video frame is presented *as* an
+ * animation frame, so the callback's `requestRenderAll` lands in the same frame
+ * and Fabric coalesces the requests into a single render. Counted over three
  * seconds on this machine, against the per-frame clip above:
  *
  * ```

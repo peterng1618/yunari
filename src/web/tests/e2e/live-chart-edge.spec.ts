@@ -34,9 +34,6 @@ import { HOST_PORT } from "./host-theme.js";
  *   npx playwright test --project=phone-host live-chart-edge.spec.ts
  * ```
  *
- * The reading is `this-pc` at 1 fps, which is what that display's kind pins it
- * to.
- *
  * The file name is relative to `testDir`, not to the repository root. And run
  * `@playwright/test`'s own CLI: `@playwright/mcp`'s `playwright` dependency
  * hoists a different minor over `node_modules/.bin/playwright`, and the alpha

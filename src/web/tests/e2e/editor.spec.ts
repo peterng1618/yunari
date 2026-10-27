@@ -1061,52 +1061,6 @@ test.describe("Fabric editor route", () => {
     await expect(page.locator("#status-message")).toHaveText("Editor ready");
   });
 
-  test("switches chart refresh between 30 and 1 FPS", async ({
-    page,
-  }, testInfo) => {
-    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-
-    await page.goto(EDITOR);
-    // The View menu owns chart refresh; the panel select is gone.
-    await page.getByRole("button", { name: "View", exact: true }).click();
-    await expect(
-      page.getByRole("menuitem", { name: /Chart refresh: 30 FPS/ }).first(),
-    ).toBeVisible();
-    // **Pick the rate, rather than re-opening the menu and hoping.** The View
-    // menu's `Chart refresh` entry is a submenu trigger, so clicking it opens
-    // the rates and changes nothing. The old body clicked the trigger a second
-    // time and asserted the trigger now read `1 FPS` — an assertion that could
-    // only pass if something else had changed the rate, and nothing did, so it
-    // was red from the day the entry became a submenu.
-    await page
-      .getByRole("menuitem", { name: /Chart refresh: 30 FPS/ })
-      .first()
-      .click();
-    await page.getByRole("menuitemradio", { name: "1 FPS" }).click();
-
-    // **Read the trigger in the menu that is already open. Do not re-open it.**
-    //
-    // This was the flake: measured 3 failures in 12 and 3 in 24 on an unmodified
-    // tree, every one of them `element(s) not found` waiting for
-    // `Chart refresh: 1 FPS`. The re-open was the defect. Picking a radio in
-    // this submenu does **not** close the menu — measured after the click, the
-    // View trigger is still `aria-expanded="true"` and the menu already lists
-    // `Chart refresh: 1 FPS` — so the second `View` click TOGGLED the open menu
-    // SHUT, and the assertion then waited out its five seconds looking inside a
-    // menu that was no longer there. Whether the label had committed by then was
-    // the race, and the re-open is what made it matter.
-    //
-    // Two earlier attempts are the reason the wait is not simply a longer one.
-    // Asserting the popup left the DOM failed 24 of 48, because Base UI keeps a
-    // closed popup mounted and only drops `data-open`. Asserting
-    // `aria-expanded === "false"` failed 24 of 48 for the same reason in the
-    // other direction: the menu never closes, so it never becomes false. Both
-    // were fixing a race that was never the problem.
-    await expect(
-      page.getByRole("menuitem", { name: /Chart refresh: 1 FPS/ }).first(),
-    ).toBeVisible();
-  });
-
   test("anchors a menubar menu to its trigger rather than to its centre", async ({
     page,
   }, testInfo) => {
@@ -1136,12 +1090,14 @@ test.describe("Fabric editor route", () => {
     // The View menu's settings are submenus and take the same rule: beside the
     // item and lined up with its top, rather than centred on it.
     const submenuTrigger = page
-      .getByRole("menuitem", { name: /Chart refresh: 30 FPS/ })
+      .getByRole("menuitem", { name: /Readings from: The theme's sensors/ })
       .first();
     await submenuTrigger.click();
     const submenuBox = await page
       .locator('[role="menu"]:visible')
-      .filter({ has: page.getByRole("menuitemradio", { name: "30 FPS" }) })
+      .filter({
+        has: page.getByRole("menuitemradio", { name: "This machine" }),
+      })
       .boundingBox();
     const itemBox = await submenuTrigger.boundingBox();
     if (!itemBox || !submenuBox)
@@ -1798,7 +1754,7 @@ test.describe("Fabric editor route", () => {
     // zoom menu also satisfies `:visible`, so a popup-agnostic locator would let
     // the positive control pass while measuring the wrong menu.
     await expect(
-      popup.getByRole("menuitem", { name: /Chart refresh/ }),
+      popup.getByRole("menuitem", { name: /Readings from/ }),
     ).toBeVisible();
     await expect.poll(() => injectedTransition(popup)).toBe("0.2s");
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -1810,7 +1766,7 @@ test.describe("Fabric editor route", () => {
     // line is its only suppression. Without this assertion, adding a transition
     // to a menu row and deleting the `*` lines leaves the suite green under
     // `reduce`.
-    const menuItem = popup.getByRole("menuitem", { name: /Chart refresh/ });
+    const menuItem = popup.getByRole("menuitem", { name: /Readings from/ });
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await expect.poll(() => injectedTransition(menuItem)).toBe("0.2s");
     await page.emulateMedia({ reducedMotion: "reduce" });

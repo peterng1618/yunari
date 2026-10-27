@@ -254,10 +254,10 @@ it("prints every menu row in sentence case", () => {
 });
 
 /**
- * The digit arm of the first-word rule, on the shapes that reach it. This menu
- * already prints `30 FPS` and `1 FPS`, so a digit-led row is one edit away —
- * and `^[A-Z0-9]` alone admitted any of them, `3d view` included, which is how
- * `2d mode` would have slipped through a sentence-case net unnoticed.
+ * The digit arm of the first-word rule, on the shapes that reach it. A menu row
+ * may begin with a number (`30 FPS` did until the chart rate row went, 0128),
+ * and `^[A-Z0-9]` alone admitted any such row — `3d view` included, which is
+ * how `2d mode` would have slipped through a sentence-case net unnoticed.
  */
 it("reads the first letter of the first word, not its first character", () => {
   expect(isSentenceCase("30 FPS")).toBe(true);
@@ -310,7 +310,7 @@ function menuRows(): string[] {
  *  The capital is read off the first token's first **letter**, so a leading
  *  digit is not a licence: `30 FPS` and `1 FPS` pass because their first token
  *  carries no letter at all, `3D view` passes on the `D`, and `3d view` — the
- *  shape `2d mode` would have in this very menu — fails. A row leading with a
+ *  shape `2d mode` would have in a menu row — fails. A row leading with a
  *  non-alphanumeric still fails, which is a loud false positive rather than a
  *  silent pass; nothing produces that shape. */
 function isSentenceCase(row: string): boolean {
