@@ -242,6 +242,16 @@ export interface RunRowView {
   readonly typeToken: string;
   readonly colour: string;
   /**
+   * The run's own size, or the role default when it authors none. The fallback
+   * is `defaultTypeSize`'s, computed against the artboard the object is drawn
+   * on, so the box and the canvas show one number.
+   */
+  readonly size: number;
+  /** The run's own leading and tracking; absent means it authors neither, and
+      has no role default to fall back to. */
+  readonly lineHeight: number | undefined;
+  readonly tracking: number | undefined;
+  /**
    * The binding this run names, for the note's `data-yunari-run-binding` — the
    * key `run.bindingId` carried before the column was React, and what a spec
    * reads to learn *which* binding a value run failed to resolve. `""` for
@@ -380,6 +390,16 @@ export interface RunEdits {
   readonly setRunText: (index: number, text: string) => boolean;
   readonly setRunPreset: (index: number, ref: string) => boolean;
   readonly setRunColour: (index: number, ref: string) => boolean;
+  /** The run's own size, leading and tracking. `undefined` clears the key. */
+  readonly setRunSize: (index: number, value: number | undefined) => boolean;
+  readonly setRunLineHeight: (
+    index: number,
+    value: number | undefined,
+  ) => boolean;
+  readonly setRunTracking: (
+    index: number,
+    value: number | undefined,
+  ) => boolean;
   readonly setUnitDisplay: (index: number, value: string) => boolean;
   readonly setSource: (index: number, semanticKey: string) => boolean;
   readonly setFormat: (index: number, format: string) => boolean;

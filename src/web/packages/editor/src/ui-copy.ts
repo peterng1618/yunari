@@ -304,6 +304,8 @@ export const uiCopy = {
     unresolved: "no longer resolves",
     runs: "Runs",
     runToken: "Type token",
+    /** A run's own size; the shared `panels.size` names the artboard's instead. */
+    runSize: "Size",
     /** What one run says, for a run that is prose. Distinct from the Add pane's
         "Text" button, which inserts an object rather than naming a field. */
     runText: "Run text",
@@ -327,9 +329,10 @@ export const uiCopy = {
     removeRun: (position: number) => `Remove run ${position}`,
     /** Shown when a run after the first asks for tracking the object cannot
         carry: Fabric measures spacing once, from the object. The interpolation
-        is the run's own preset reference, as the run list above names it. */
-    runTrackingNotSeparate: (preset: string) =>
-      `Tracking on "${preset}" is not shown separately — a text object carries one tracking value, from its first run.`,
+        is the run's own description, because tracking is the run's and a token
+        carries none. */
+    runTrackingNotSeparate: (run: string) =>
+      `Tracking on "${run}" is not shown separately — a text object carries one tracking value, from its first run.`,
     runColour: "Colour",
     runSource: "Reads",
     staticText: "Static text",

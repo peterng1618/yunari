@@ -48,6 +48,7 @@ import {
   writeRunColour,
   writeRunPreset,
   writeRunSource,
+  writeRunStyle,
   writeRunText,
   writeTextLayout,
   writeUnitDisplay,
@@ -772,6 +773,12 @@ export function createSelectionInspector(
     setRunText: (index, text) => runEdit((t) => writeRunText(t, index, text)),
     setRunPreset: (index, ref) => runEdit((t) => writeRunPreset(t, index, ref)),
     setRunColour: (index, ref) => runEdit((t) => writeRunColour(t, index, ref)),
+    setRunSize: (index, value) =>
+      runEdit((t) => writeRunStyle(t, index, "fontSize", value)),
+    setRunLineHeight: (index, value) =>
+      runEdit((t) => writeRunStyle(t, index, "lineHeight", value)),
+    setRunTracking: (index, value) =>
+      runEdit((t) => writeRunStyle(t, index, "letterSpacing", value)),
     setUnitDisplay: (index, value) =>
       runEdit((t) => writeUnitDisplay(t, index, value)),
     setSource: (index, key) => runEdit((t) => writeRunSource(t, index, key)),

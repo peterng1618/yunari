@@ -414,6 +414,9 @@ function contentBody(
     {
       globals: context.globals,
       locale: context.locale,
+      // The figure the canvas paints an unauthored size from, so the row and the
+      // object cannot disagree about the role default.
+      artboardHeight: context.editor.artboard().height,
       nodeBindings: context.nodeBindings,
       sampleSource: context.sampleSource,
       // The live class, not authored content: it is the width-mode owner.

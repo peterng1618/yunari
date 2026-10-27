@@ -49,7 +49,7 @@ import {
   type SelectionKind,
   selectionKindOf,
 } from "./per-kind-column.js";
-import { choose, click, slide } from "./runs.test-stage.js";
+import { blur, choose, click, slide, typeInto } from "./runs.test-stage.js";
 
 // jsdom has never had a `PointerEvent`, and Base UI re-dispatches a click
 // through one to carry modifier state; a toggle click throws without it.
@@ -814,6 +814,7 @@ describe("the selection inspector", () => {
         historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
         cropManager: idleCrop(),
+        artboard: () => ({ width: 1920, height: 1080 }),
       } as never,
       refreshGlass: vi.fn(),
     });
@@ -944,6 +945,7 @@ describe("the arrange actions the column leads with", () => {
         historyManager: history,
         errorManager: { warn: vi.fn(), error: vi.fn() },
         cropManager: idleCrop(),
+        artboard: () => ({ width: 1920, height: 1080 }),
       } as never,
       refreshGlass: vi.fn(),
     });
@@ -1389,6 +1391,7 @@ describe("the column's sections", () => {
       historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       errorManager: { warn: vi.fn(), error: vi.fn() },
       cropManager: idleCrop(),
+      artboard: () => ({ width: 1920, height: 1080 }),
     };
     const sections = perKindColumn(rect, {
       editor: editor as never,
@@ -1451,6 +1454,7 @@ describe("the column's sections", () => {
         historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
         cropManager: idleCrop(),
+        artboard: () => ({ width: 1920, height: 1080 }),
       } as never,
       globals: undefined,
       locale: undefined,
@@ -1933,6 +1937,45 @@ describe("the token a run is set in", () => {
       ).runs[0]?.typeToken;
     expect(runOf(second)).toBe("typeTokens.body");
     expect(runOf(first)).toBe("typeTokens.body");
+  });
+});
+
+describe("the size a run is set in", () => {
+  it("records exactly one history entry and changes no token record", async () => {
+    const text = new Textbox("Hi", {
+      left: 0,
+      top: 0,
+      width: 40,
+      id: "run-1",
+    });
+    text.set("yunariText", {
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
+    });
+    const typeTokens = {
+      heading: { family: "Manrope", weight: 600 },
+      body: { family: "Inter", weight: 400 },
+    };
+    const before = JSON.stringify(typeTokens);
+    const { host, history } = setup(text, {
+      globals: { typeTokens } as FabricGlobals,
+    });
+
+    const size = host.querySelector<HTMLInputElement>(
+      '[data-yunari-run-size="0"]',
+    );
+    expect(size).not.toBeNull();
+    await typeInto(size!, "40");
+    await blur(size!);
+
+    const authored = text.get("yunariText") as {
+      readonly runs: readonly {
+        readonly style?: Readonly<Record<string, unknown>>;
+      }[];
+    };
+    // The run carries its own size; the token table itself is not written.
+    expect(authored.runs[0]?.style?.["fontSize"]).toEqual({ value: 40 });
+    expect(history.saveState).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(typeTokens)).toBe(before);
   });
 });
 

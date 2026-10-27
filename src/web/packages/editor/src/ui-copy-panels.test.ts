@@ -49,6 +49,9 @@ function runEdits(): RunEdits {
     setRunText: () => true,
     setRunPreset: () => true,
     setRunColour: () => true,
+    setRunSize: () => true,
+    setRunLineHeight: () => true,
+    setRunTracking: () => true,
     setUnitDisplay: () => true,
     setSource: () => true,
     setFormat: () => true,
@@ -366,6 +369,7 @@ async function runUnitDisplayOptions(root: HTMLElement): Promise<string[]> {
   const runs = projectRuns(object as never, "clock-label", {
     globals: undefined,
     locale: undefined,
+    artboardHeight: 1080,
     nodeBindings: () => bindings,
     sampleSource: () => ({
       revision: 0,

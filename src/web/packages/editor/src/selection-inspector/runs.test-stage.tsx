@@ -20,6 +20,7 @@ import {
   writeRunColour,
   writeRunPreset,
   writeRunSource,
+  writeRunStyle,
   writeRunText,
   writeTextLayout,
   writeUnitDisplay,
@@ -103,6 +104,8 @@ export function mountRunEditor(options: {
   readonly declared?: readonly Binding[];
   /** The Fabric class under test: `Textbox` wraps and `IText` does not. */
   readonly kind?: "text" | "textbox";
+  /** The artboard the run's unauthored size falls back from. */
+  readonly artboardHeight?: number;
   /** The catalogue the picker offers; absent keeps the built-in table. */
   readonly descriptors?: () => readonly SemanticKeyDescriptor[];
   /** The token list's action ports; absent leaves its action rows off. */
@@ -158,6 +161,7 @@ export function mountRunEditor(options: {
     const view = projectRuns(object, nodeId, {
       globals: options.globals,
       locale: options.locale,
+      artboardHeight: options.artboardHeight ?? 1080,
       nodeBindings: () => bindings,
       sampleSource,
       wraps: object instanceof Textbox,
@@ -185,6 +189,12 @@ export function mountRunEditor(options: {
     setRunText: (index, text) => apply((t) => writeRunText(t, index, text)),
     setRunPreset: (index, ref) => apply((t) => writeRunPreset(t, index, ref)),
     setRunColour: (index, ref) => apply((t) => writeRunColour(t, index, ref)),
+    setRunSize: (index, value) =>
+      apply((t) => writeRunStyle(t, index, "fontSize", value)),
+    setRunLineHeight: (index, value) =>
+      apply((t) => writeRunStyle(t, index, "lineHeight", value)),
+    setRunTracking: (index, value) =>
+      apply((t) => writeRunStyle(t, index, "letterSpacing", value)),
     setUnitDisplay: (index, value) =>
       apply((t) => writeUnitDisplay(t, index, value)),
     setSource: (index, key) => apply((t) => writeRunSource(t, index, key)),

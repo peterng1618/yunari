@@ -97,6 +97,7 @@ async function runReadingNote(
   const runs = projectRuns(object as never, "clock-label", {
     globals: undefined,
     locale: undefined,
+    artboardHeight: 1080,
     nodeBindings: () => bindings,
     // Nothing has arrived for the `unmapped` case; the `undeclared` case never
     // asks, because the run names a binding the object does not hold.
@@ -115,6 +116,9 @@ async function runReadingNote(
     setRunText: () => true,
     setRunPreset: () => true,
     setRunColour: () => true,
+    setRunSize: () => true,
+    setRunLineHeight: () => true,
+    setRunTracking: () => true,
     setUnitDisplay: () => true,
     setSource: () => true,
     setFormat: () => true,

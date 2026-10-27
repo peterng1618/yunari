@@ -81,6 +81,7 @@ function stageWith(object: Path, size = 80) {
       historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       errorManager: { warn: vi.fn(), error: vi.fn() },
       cropManager: idleCrop(),
+      artboard: () => ({ width: 1920, height: 1080 }),
     } as never,
     globals,
     refreshGlass: vi.fn(),

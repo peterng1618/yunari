@@ -702,6 +702,7 @@ function mountSelectionInspector(root: HTMLElement): void {
       historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
       errorManager: { warn: vi.fn(), error: vi.fn() },
       cropManager: { active: false, target: undefined },
+      artboard: () => ({ width: 1920, height: 1080 }),
     };
     const globals = {
       palette: {

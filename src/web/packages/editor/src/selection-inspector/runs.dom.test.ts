@@ -40,18 +40,17 @@ const literalClock: readonly TextRun[] = [
   },
 ];
 
-const TRACKING_GLOBALS = {
-  typeTokens: {
-    tracked: {
-      name: "Tracked",
-      value: { family: "Inter", size: 32, letterSpacing: 4 },
-    },
-    plain: {
-      name: "Plain",
-      value: { family: "Inter", size: 32 },
-    },
-  },
-} as unknown as FabricGlobals;
+/** A literal run whose own style carries tracking, or none when it authors none. */
+function trackedRun(text: string, tracking?: number): TextRun {
+  return {
+    kind: "literal",
+    text,
+    typeToken: "typeTokens.plain",
+    ...(tracking === undefined
+      ? {}
+      : { style: { letterSpacing: { value: tracking } } }),
+  };
+}
 
 describe("binding a text run to a sensor", () => {
   it("turns a literal run into a reading, keeping how it looks", async () => {
@@ -417,32 +416,27 @@ describe("binding a text run to a sensor", () => {
 });
 
 describe("what a run cannot carry", () => {
-  const mixedRuns: readonly TextRun[] = [
-    { kind: "literal", text: "CPU ", typeToken: "typeTokens.plain" },
-    { kind: "literal", text: "42%", typeToken: "typeTokens.tracked" },
-  ];
+  const mixedRuns: readonly TextRun[] = [trackedRun("CPU "), trackedRun("42%", 4)];
 
   it("says a second run's tracking is not shown separately", async () => {
-    // The defect this covers is a control that does nothing: the author picks a
-    // tracked preset for the value run, and the object keeps the first run's
-    // tracking with nothing on screen to say so.
-    const box = mountRunEditor({ runs: mixedRuns, globals: TRACKING_GLOBALS });
+    // The defect this covers is a control that does nothing: the author sets
+    // tracking on the value run, and the object keeps the first run's with
+    // nothing on screen to say so.
+    const box = mountRunEditor({ runs: mixedRuns });
 
     expect(box.notes()).toHaveLength(1);
-    expect(box.notes()[0]).toContain("typeTokens.tracked");
+    // The note names the run, because tracking is the run's own and a token
+    // carries none.
+    expect(box.notes()[0]).toContain("42%");
+    expect(box.notes()[0]).not.toContain("typeTokens.");
     expect(box.notes()[0]).toContain("one tracking value");
     return box.dispose();
   });
 
   it("says nothing when only the first run tracks", async () => {
-    // The counter-case: a single-run object carries its preset's tracking, so a
+    // The counter-case: a single-run object carries its own tracking, so a
     // note here would train the author to ignore the ones that matter.
-    const box = mountRunEditor({
-      runs: [
-        { kind: "literal", text: "YUNARI", typeToken: "typeTokens.tracked" },
-      ],
-      globals: TRACKING_GLOBALS,
-    });
+    const box = mountRunEditor({ runs: [trackedRun("YUNARI", 4)] });
 
     expect(box.notes()).toEqual([]);
     return box.dispose();
@@ -452,20 +446,8 @@ describe("what a run cannot carry", () => {
     // The panel has to match the model, which reports on *inequality*. A second
     // run asking for the value the object already carries loses nothing, and
     // warning about it would teach the author to ignore the note.
-    const same = {
-      typeTokens: {
-        tracked: {
-          name: "Tracked",
-          value: { family: "Inter", size: 32, letterSpacing: 4 },
-        },
-      },
-    } as unknown as FabricGlobals;
     const box = mountRunEditor({
-      runs: [
-        { kind: "literal", text: "CPU ", typeToken: "typeTokens.tracked" },
-        { kind: "literal", text: "42%", typeToken: "typeTokens.tracked" },
-      ],
-      globals: same,
+      runs: [trackedRun("CPU ", 4), trackedRun("42%", 4)],
     });
 
     expect(box.notes()).toEqual([]);
@@ -477,40 +459,75 @@ describe("what a run cannot carry", () => {
     // run asking for tracking is a gap like any other. Distinct from the first
     // case above only in what the object ends up painting, and the note is the
     // same one.
-    const box = mountRunEditor({ runs: mixedRuns, globals: TRACKING_GLOBALS });
+    const box = mountRunEditor({ runs: mixedRuns });
 
     expect(box.notes()).toHaveLength(1);
-    expect(box.notes()[0]).toContain("typeTokens.tracked");
+    expect(box.notes()[0]).toContain("42%");
     return box.dispose();
   });
 
-  it("reports a mismatching preset once however many runs share it", async () => {
-    // The round that removed a duplicate in scene-fabric added one here, so the
-    // three-run shape is now covered once, in the place that renders it.
+  it("names each run whose tracking the object cannot carry", async () => {
+    // The note used to name a preset, so two runs sharing one produced one
+    // note. It names the run now, so two tracked runs are two facts.
     const box = mountRunEditor({
-      runs: [
-        { kind: "literal", text: "CPU ", typeToken: "typeTokens.plain" },
-        { kind: "literal", text: "48", typeToken: "typeTokens.tracked" },
-        { kind: "literal", text: " %", typeToken: "typeTokens.tracked" },
-      ],
-      globals: TRACKING_GLOBALS,
+      runs: [trackedRun("CPU "), trackedRun("48", 4), trackedRun(" %", 4)],
     });
 
-    // Two runs name the same mismatching preset, so one note says it once.
-    expect(box.notes()).toHaveLength(1);
+    const notes = box.notes();
+    expect(notes).toHaveLength(2);
+    expect(notes[0]).toContain("48");
+    expect(notes[1]).toContain("%");
     return box.dispose();
   });
 
   it("says nothing when no run tracks", async () => {
-    const box = mountRunEditor({
-      runs: [
-        { kind: "literal", text: "CPU ", typeToken: "typeTokens.plain" },
-        { kind: "literal", text: "42%", typeToken: "typeTokens.plain" },
-      ],
-      globals: TRACKING_GLOBALS,
-    });
+    const box = mountRunEditor({ runs: [trackedRun("CPU "), trackedRun("42%")] });
 
     expect(box.notes()).toEqual([]);
+    return box.dispose();
+  });
+});
+
+describe("a run's own size", () => {
+  const roles = {
+    typeTokens: {
+      heading: { family: "Inter" },
+      body: { family: "Inter" },
+    },
+  } as unknown as FabricGlobals;
+
+  it("shows the role default when the run authors no size", async () => {
+    // The composition's heading is 72 at a 1080 artboard; the row must read the
+    // same rule the canvas paints from, not a second copy of the ratio.
+    const box = mountRunEditor({
+      runs: [{ kind: "literal", text: "Title", typeToken: "typeTokens.heading" }],
+      globals: roles,
+      artboardHeight: 1080,
+    });
+
+    expect(
+      box.pick<HTMLInputElement>('[data-yunari-run-size="0"]').value,
+    ).toBe("72");
+    return box.dispose();
+  });
+
+  it("shows the size the run authors", async () => {
+    const box = mountRunEditor({
+      runs: [
+        {
+          kind: "literal",
+          text: "Title",
+          typeToken: "typeTokens.heading",
+          style: { fontSize: { value: 46 } },
+        },
+      ],
+      globals: roles,
+      artboardHeight: 1080,
+    });
+
+    expect(
+      box.pick<HTMLInputElement>('[data-yunari-run-size="0"]').value,
+    ).toBe("46");
     return box.dispose();
   });
 });

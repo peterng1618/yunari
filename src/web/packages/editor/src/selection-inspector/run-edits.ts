@@ -114,6 +114,41 @@ export function writeRunPreset(
   }));
 }
 
+/** The numeric style keys a run carries. Tracking's style key is `letterSpacing`. */
+export type RunStyleKey = "fontSize" | "lineHeight" | "letterSpacing";
+
+/** The fewest units any one of the three may take: a zero-size run paints nothing. */
+const MIN_RUN_STYLE = 1;
+
+/**
+ * One of a run's own size, leading or tracking values, in the style map.
+ *
+ * `undefined` removes the key, which is how a row returns to its fallback —
+ * the role's default size, or no value at all for the other two. Anything else
+ * must be a finite number at least 1; a draft that is neither is refused rather
+ * than coerced, because `0` would make the run vanish and `NaN` would paint
+ * nothing while looking authored.
+ */
+export function writeRunStyle(
+  target: RunTarget,
+  index: number,
+  key: RunStyleKey,
+  value: number | undefined,
+): boolean {
+  if (
+    value !== undefined &&
+    (!Number.isFinite(value) || value < MIN_RUN_STYLE)
+  ) {
+    return false;
+  }
+  return rewriteRun(target, index, (run) => {
+    const style = { ...run.style };
+    if (value === undefined) delete style[key];
+    else style[key] = { value: Math.round(value) };
+    return { ...run, style };
+  });
+}
+
 /** The palette reference a run's colour is set to, in the style map. */
 export function writeRunColour(
   target: RunTarget,

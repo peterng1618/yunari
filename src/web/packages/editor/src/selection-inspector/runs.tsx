@@ -7,6 +7,7 @@ import type {
 } from "@yunari/renderer-core";
 import {
   describeSemanticKey,
+  defaultTypeSize,
   formatInstant,
   groupDescriptorsByFamily,
   instantIn,
@@ -17,6 +18,7 @@ import {
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useState } from "react";
+import { ControlNumber } from "../components/ui/control-number.js";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlSelect } from "../components/ui/control-select.js";
 import { ControlSwatch } from "../components/ui/control-swatch.js";
@@ -58,6 +60,12 @@ import type { RunEdits, RunOptionView, RunRowView, RunsView } from "./view.js";
 interface RunsProjection {
   readonly globals: FabricGlobals | undefined;
   readonly locale: string | undefined;
+  /**
+   * The height of the artboard this object is drawn on. A run that authors no
+   * size takes the role default, which is a share of this figure — the same one
+   * the canvas paints from.
+   */
+  readonly artboardHeight: number;
   readonly nodeBindings: ((nodeId: string) => readonly Binding[]) | undefined;
   readonly sampleSource: (() => SampleSource) | undefined;
   /**
@@ -135,35 +143,49 @@ function tokenOptions(
 /**
  * The runs whose tracking the object cannot carry separately.
  *
- * Fabric measures spacing once, from the object, so only the first run's preset
+ * Fabric measures spacing once, from the object, so only the first run's style
  * reaches the screen. A later run asking for the *same* value loses nothing, so
  * it is not a gap — matching the model rather than "any letterSpacing" is what
- * keeps this from warning about a run that is already painted as asked.
+ * keeps this from warning about a run that is already painted as asked. The
+ * note names the run, because tracking is the run's own value now and a token
+ * carries none.
  */
-function presetGaps(
-  globals: FabricGlobals | undefined,
-  runs: readonly TextRun[],
-): readonly string[] {
-  const painted = letterSpacingOf(globals, runs[0]?.typeToken);
+function presetGaps(runs: readonly TextRun[]): readonly string[] {
+  const spacingOf = (run: TextRun): number =>
+    styleNumber(run, "letterSpacing") ?? 0;
+  const first = runs[0];
+  const painted = first === undefined ? 0 : spacingOf(first);
   const gaps = new Set<string>();
   for (const run of runs.slice(1)) {
-    const spacing = letterSpacingOf(globals, run.typeToken);
-    if (spacing === undefined || spacing === painted) continue;
-    gaps.add(
-      uiCopy.inspectorFields.runTrackingNotSeparate(run.typeToken ?? ""),
-    );
+    if (spacingOf(run) === painted) continue;
+    gaps.add(uiCopy.inspectorFields.runTrackingNotSeparate(describeRun(run)));
   }
   return [...gaps];
 }
 
-/** A token's authored tracking, or undefined when it asks for none.
- *  ponytail: tracking left the token with the type-token split, so nothing is
- *  token-borne to compare until the run-style warning is rewritten. */
-function letterSpacingOf(
-  _globals: FabricGlobals | undefined,
-  _ref: `typeTokens.${string}` | undefined,
+/**
+ * A numeric literal a run authored under one style key, or undefined when it
+ * authored none. A reference or a non-finite value is not a number the row can
+ * show, so it reads as absent rather than as `NaN`.
+ */
+function styleNumber(
+  run: TextRun,
+  key: "fontSize" | "lineHeight" | "letterSpacing",
 ): number | undefined {
-  return undefined;
+  const authored = run.style?.[key];
+  if (authored === undefined || !("value" in authored)) return undefined;
+  const value = authored.value;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+/** The type token's id, which is what carries the role. No token — or one that
+ *  is not a reference — takes the body ratio, as the renderer's own reader does. */
+function tokenIdOf(ref: string): string {
+  return ref.startsWith("typeTokens.")
+    ? ref.slice("typeTokens.".length)
+    : "body";
 }
 
 /**
@@ -236,6 +258,9 @@ export function projectRuns(
       text: string;
       typeToken: string;
       colour: string;
+      size: number;
+      lineHeight: number | undefined;
+      tracking: number | undefined;
       bindingId: string;
       sourceKey: string;
       unitDisplay: string;
@@ -255,6 +280,17 @@ export function projectRuns(
       text: run.kind === "literal" ? run.text : "",
       typeToken: run.typeToken ?? presets[0]?.id ?? "",
       colour,
+      // The run's own values, never the token's: size, leading and tracking
+      // left the token with the type-token split. A run that authored no size
+      // shows the role default the canvas would paint it at.
+      size:
+        styleNumber(run, "fontSize") ??
+        defaultTypeSize(
+          tokenIdOf(run.typeToken ?? ""),
+          context.artboardHeight,
+        ),
+      lineHeight: styleNumber(run, "lineHeight"),
+      tracking: styleNumber(run, "letterSpacing"),
       // The binding the run names, as the note's own hook carried it before the
       // column was React (`run.bindingId`, not the row's ordinal): the ordinal
       // is `index` and rides `data-yunari-run`.
@@ -354,7 +390,7 @@ export function projectRuns(
     bindable,
     removable: runs.length > 1,
     locale: context.locale,
-    notes: presetGaps(context.globals, runs),
+    notes: presetGaps(runs),
   };
 }
 
@@ -541,6 +577,36 @@ function RunRow(props: {
         value={row.typeToken}
         options={[...view.presets, ...fontActionOptions(edits)]}
         onChange={chooseToken}
+      />
+
+      {/* The run's own type values, in the order a reader sets them. Clearing a
+          row removes the key: size returns to the role default, and leading and
+          tracking return to no value, because neither has a role fallback. */}
+      <ControlNumber
+        label={uiCopy.inspectorFields.runSize}
+        data={{ "data-yunari-run-size": String(index) }}
+        value={row.size}
+        min={1}
+        onCommit={(value) => edits.setRunSize(index, value)}
+        onClear={() => edits.setRunSize(index, undefined)}
+      />
+
+      <ControlNumber
+        label={uiCopy.panels.lineHeight}
+        data={{ "data-yunari-run-line-height": String(index) }}
+        value={row.lineHeight}
+        min={1}
+        onCommit={(value) => edits.setRunLineHeight(index, value)}
+        onClear={() => edits.setRunLineHeight(index, undefined)}
+      />
+
+      <ControlNumber
+        label={uiCopy.panels.letterSpacing}
+        data={{ "data-yunari-run-letter-spacing": String(index) }}
+        value={row.tracking}
+        min={1}
+        onCommit={(value) => edits.setRunTracking(index, value)}
+        onClear={() => edits.setRunTracking(index, undefined)}
       />
 
       <ControlSwatch
