@@ -17,10 +17,10 @@ Two plans are complete — the type-token model and the display's own motion —
 
 ## Last completed change
 
-- **`main` is merged into this branch twice:** the type-token work arrives whole at `7016f85`, and `d0e7a9b` adds only this file's own update; the remaining conflict is this file.
+- **`main` is merged into this branch twice:** the type-token work arrives whole at `7016f85`, and `d0e7a9b` adds only this file's own update; the conflicts were this file.
+- **The merge exposed a real regression, now fixed:** the skip-unchanged text guard ignored the run's resolved type, so the sample pass left a role default at 10px instead of 144px; the guard now compares the type paint and alignment too.
 - **Our decision note is `0129`:** main already owns `0128` for the type-token model, so every citation of the transition pump moved with it.
-- **Both plans' gate evidence is kept:** type-token `npm run gate` exit 0 at `79d5140b` (447 files / 6,890 passed); display animation exit 0 (437 files / 6,730 passed).
-- **Proof:** `npm run typecheck --workspaces`, `npm run status:check` and the display-animation suites re-run after the merge.
+- **Proof:** `npm run gate` exit 0 on the merged tree — 447 files / 6,884 passed + 1 skipped, browser 13 files / 130 passed.
 
 ## Next
 
