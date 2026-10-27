@@ -557,6 +557,22 @@ describe("a run's own leading and tracking", () => {
     return box.dispose();
   });
 
+  it("shows the row's own refusal for a leading at or below zero", async () => {
+    const box = mountRunEditor({ runs: [trackedRun("Hi")] });
+
+    const leading = box.pick<HTMLInputElement>(
+      '[data-yunari-run-line-height="0"]',
+    );
+    await typeInto(leading, "0");
+    await blur(leading);
+
+    // The author sees why, rather than the draft vanishing on blur.
+    expect(leading.getAttribute("aria-invalid")).toBe("true");
+    expect(box.host.textContent).toContain(uiCopy.controls.atLeast(0.01));
+    expect(box.runs()[0]?.style?.["lineHeight"]).toBeUndefined();
+    return box.dispose();
+  });
+
   it("clears a leading and a tracking back to blank", async () => {
     const box = mountRunEditor({
       runs: [

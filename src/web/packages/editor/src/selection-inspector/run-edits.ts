@@ -144,7 +144,10 @@ function acceptedStyleValue(
     return value < MIN_RUN_STYLE ? undefined : Math.round(value);
   }
   if (key === "lineHeight") {
-    return value > 0 ? round2(value) : undefined;
+    // Round before the bound: `0.004` would pass a `> 0` test and then round to
+    // the zero multiplier that collapses every line.
+    const rounded = round2(value);
+    return rounded > 0 ? rounded : undefined;
   }
   return round2(value);
 }

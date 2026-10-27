@@ -599,6 +599,10 @@ function RunRow(props: {
         label={uiCopy.panels.lineHeight}
         data={{ "data-yunari-run-line-height": String(index) }}
         value={row.lineHeight}
+        // The writer rounds to two decimals, so 0.01 is the smallest multiplier
+        // it can store; the control refuses a smaller draft rather than dropping
+        // it, and the writer refuses it again.
+        min={0.01}
         onCommit={(value) => edits.setRunLineHeight(index, value)}
         onClear={() => edits.setRunLineHeight(index, undefined)}
       />

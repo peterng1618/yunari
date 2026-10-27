@@ -76,6 +76,18 @@ describe("writing a run's own style", () => {
     expect(styleValue(leading.written(), "lineHeight")).toBe(1.18);
   });
 
+  it("refuses a leading that would round to zero, and keeps the smallest it can", () => {
+    const tiny = targetWith(PLAIN);
+    // 0.004 passes "> 0" and rounds to 0 — a multiplier that collapses the
+    // lines — so the rounded value is what must pass the bound.
+    expect(writeRunStyle(tiny.target, 0, "lineHeight", 0.004)).toBe(false);
+    expect(styleValue(tiny.written(), "lineHeight")).toBeUndefined();
+
+    const edge = targetWith(PLAIN);
+    expect(writeRunStyle(edge.target, 0, "lineHeight", 0.01)).toBe(true);
+    expect(styleValue(edge.written(), "lineHeight")).toBe(0.01);
+  });
+
   it("keeps tracking negative, rounded to two decimals", () => {
     const { target, written } = targetWith(PLAIN);
     expect(writeRunStyle(target, 0, "letterSpacing", -0.555)).toBe(true);
