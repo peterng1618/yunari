@@ -194,6 +194,25 @@ describe("new object defaults", () => {
     expect(defaults.fontFamily).toBe("Inter");
   });
 
+  it("takes the first type token in insertion order, not a body token", () => {
+    // The producer orders the roles, and the first entry is the editor's
+    // default face. A lookup that preferred `body` by name would pass every
+    // body-first fixture while ignoring the document's own order.
+    const defaults = createNewTextDefaults(
+      {
+        ...globals,
+        typeTokens: {
+          mono: { family: "Consolas" },
+          body: { family: "Inter", weight: 500 },
+        },
+      },
+      "New text",
+      placement,
+    );
+
+    expect(defaults.fontFamily).toBe("Consolas");
+  });
+
   it("refuses to invent local paint or type values when references are unavailable", () => {
     expect(() => createNewPaintDefaults(undefined)).toThrow("palette token");
     expect(() =>

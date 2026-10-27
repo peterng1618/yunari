@@ -12,7 +12,7 @@ import {
   instantIn,
   MAX_OBJECT_NAME_LENGTH,
 } from "@yunari/renderer-core";
-import { Wedge, YUNARI_TEXT_PROPERTY, YunariChart } from "@yunari/scene-fabric";
+import { Wedge, YunariChart } from "@yunari/scene-fabric";
 import {
   ActiveSelection,
   Canvas,
@@ -1983,10 +1983,8 @@ describe("the size a run is set in", () => {
   });
 
   it("shows the role default for a created heading that authors no size", () => {
-    // The pair Task 5.4 is about: `createNewTextDefaults` writes the face and
-    // the run's token, and no size at all — so the row reads the renderer's
-    // role default (72 for a heading at 1080) while the authored run stays
-    // sizeless.
+    // A text created from the defaults has no authored size: the run carries a
+    // token and no `fontSize`, and the role default is what the row shows.
     const globals = {
       palette: {
         ink: {
@@ -2006,7 +2004,6 @@ describe("the size a run is set in", () => {
       ...defaults,
       id: "created-heading",
     } as never);
-    text.set(YUNARI_TEXT_PROPERTY, defaults[YUNARI_TEXT_PROPERTY]);
     const { host } = setup(text, {
       globals: globals as FabricGlobals,
       artboardHeight: 1080,
@@ -2040,9 +2037,7 @@ describe("the size a run is set in", () => {
       runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.heading" }],
     });
     const { host } = setup(text, {
-      globals: {
-        typeTokens: { heading: { family: "Inter" } },
-      } as FabricGlobals,
+      globals: { typeTokens: { heading: { family: "Inter" } } } as FabricGlobals,
       artboardHeight: 2160,
     });
 
