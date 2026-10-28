@@ -296,14 +296,23 @@ deleted after a successful start, so the panel does not accumulate clips.
 
 ### Capture
 
-The rasteriser gains a transparent capture mode: PNG screenshot with a
-transparent default background, plus a page flag that hides the video element.
-The capture then holds only the UI, with alpha where the video shows through.
+The rasteriser gains `captureOverlay()`: a PNG of the same devtools page with a
+transparent default background, an injected style that hides the background-media
+layer, and the artboard host's inline paint cleared for the duration (the canvas
+paints nothing, so the board's fill — the thing that would cover the video —
+lives on the host and must be restored afterwards). The capture then holds only
+the UI, with alpha where the video shows through.
+
+This is a page edit from the devtools side, not a player flag and not a scene
+option: the player already isolates background media in its own DOM layer, so
+nothing above the rasteriser needs to know a capture is happening.
 
 The player uses the video's first frame as the glass texture, per the design
-ruling. It draws frame 0 to a canvas on `loadeddata`, so the browser player, the
-editor preview and the panel overlay all show the same glass. Glass is never a
-live backdrop over video.
+ruling, so the browser player, the editor preview and the panel overlay all show
+the same glass; glass is never a live backdrop over video. That glass behaviour
+comes from the Lian Li video seam (that worktree's `226acf66`) and is inherited
+when it merges — this plan ports the seam's interfaces and does not rebuild the
+still-frame path.
 
 ### Update
 
@@ -328,8 +337,8 @@ the controls route and modal, and the in-flight guard. This phase alone makes
 the panel a working Yunari display.
 
 **Phase 2 — video background.** Upload/start, transparent overlay capture,
-diff updates, glass first frame, fallback to static. It depends on Phase 1's
-transport and runner.
+diff updates, fallback to static. Glass first frame arrives with the Lian Li
+still-frame seam this phase ports. It depends on Phase 1's transport and runner.
 
 Each phase gets its own tasks in the implementation plan; the spec is not split.
 
@@ -381,6 +390,9 @@ Each phase gets its own tasks in the implementation plan; the spec is not split.
   warning is the only signal, and `1.88` is the only verified value.
 - Overlay colour is 4-bit per channel, so UI colours and antialiased text are
   coarser than the theme. This is a device limit.
+- A glass surface over a video keeps sampling the (hidden) media layer, so it may
+  put video pixels into the overlay instead of transparency; unverified until a
+  glass object is tried on a video theme.
 - The refresh cadence is bounded by the capture and the wire; the runner's
   one-second floor is the starting point, not a measured optimum for video.
 - The panel was probed while the vendor application was closed; the vendor app
@@ -409,7 +421,8 @@ Phase 2 is implemented when:
   updating over it.
 - Moving and removing overlay elements clears their old pixels.
 - Glass shows the video's first frame in the browser player, the editor and the
-  panel.
+  panel — verified once the Lian Li still-frame seam is merged; until then it is
+  inherited code, not verified here.
 - A video failure falls back to a static frame with one reported error.
 - The diff encoder's golden vectors and the transparent-capture browser test
   pass.

@@ -1130,86 +1130,82 @@ git add src/web/packages/host/src/panels/turzx-video.ts \
 git commit -m "feat(panels): upload and start a theme video on the panel"
 ```
 
-### Task 10: Transparent overlay capture and first-frame glass
+### Task 10: Transparent overlay capture
 
 **Files:**
 - Modify: `src/web/packages/host/src/panels/panel-raster.ts`
-- Modify: `src/web/packages/scene-fabric/src/background-media.ts`
-- Modify: `src/web/packages/scene-fabric/src/scene.ts`
-- Modify: `src/web/packages/player/src/main.ts`
-- Test: `src/web/packages/host/src/panels/panel-raster.test.ts`, `src/web/packages/scene-fabric/src/background-media.dom.test.ts` (create either if absent)
+- Test: `src/web/packages/host/src/panels/panel-raster.test.ts` (create if absent)
 
 **Interfaces:**
-- `Rasterizer` gains `captureOverlay(): Promise<Uint8Array>`: a PNG screenshot over a transparent default background, with the page flag that hides the video. `capture()` stays JPEG.
-- `BackgroundMediaOptions` gains `readonly visible?: boolean` and `readonly still?: boolean`; `still` pauses a video at time 0 and keeps it sampleable for glass, `visible: false` sets the layer's opacity to 0.
-- Scene options forward both as `mediaVisible` and `mediaStill`.
-- The player reads `panelOverlay=1` and passes them when mounting.
+- Produces: `Rasterizer.captureOverlay(): Promise<Uint8Array>` — a PNG of the page with
+  the background-media layer hidden and the artboard's paint cleared, so alpha
+  where the video shows through. `capture()` stays JPEG quality 85 and turns
+  overlay mode off first.
+- Produces: `screenshotParameters(format: "jpeg" | "png")` — the pure
+  `Page.captureScreenshot` format parameters; PNG carries no `quality`.
+- **No player, scene or background-media change.** The page is the player page
+  this rasteriser already drives; the overlay is a devtools-side edit of that
+  page (ported by interface from the Lian Li worktree, `c370829e`).
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the failing test**
 
 ```ts
-it("captures PNG only when the overlay mode asks for transparency", () => {
-  expect(screenshotParameters(true)).toEqual({ format: "png" });
-  expect(screenshotParameters(false)).toEqual({ format: "jpeg", quality: 85 });
+import { screenshotParameters } from "./panel-raster.js";
+
+it("asks for PNG with no quality for an overlay and JPEG 85 for a still", () => {
+  expect(screenshotParameters("png")).toEqual({ format: "png" });
+  expect(screenshotParameters("jpeg")).toEqual({ format: "jpeg", quality: 85 });
 });
 ```
 
-```ts
-it("holds a still video invisible in overlay mode", async () => {
-  const host = document.createElement("div");
-  document.body.append(host);
-  const handle = mountBackgroundMedia(host, {
-    // Whatever `scene.ts`'s mount already passes for a video asset, plus:
-    visible: false,
-    still: true,
-  });
-  const video = host.querySelector("video")!;
-  video.dispatchEvent(new Event("loadeddata"));
-  await Promise.resolve();
-
-  expect(video.paused).toBe(true);
-  expect(video.currentTime).toBe(0);
-  expect(handle.layer.style.opacity).toBe("0");
-});
-```
-Assert the layer on the element the handle already exposes for glass; if none is public, add `readonly layer: HTMLElement` to `BackgroundMediaHandle` rather than querying by a new attribute.
-
-- [ ] **Step 2: Run them and see them fail**
+- [ ] **Step 2: Run it and see it fail**
 
 ```bash
-npx vitest run packages/host/src/panels/panel-raster.test.ts packages/scene-fabric/src/background-media.dom.test.ts
+npx vitest run packages/host/src/panels/panel-raster.test.ts
 ```
-Expected: FAIL.
+Expected: FAIL — `screenshotParameters` is not exported.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Implement in `panel-raster.ts`**
 
-- `createRasterizer` sends `Emulation.setDefaultBackgroundColorOverride` with a transparent colour before navigation, and `captureOverlay()` captures PNG through the shared parameter function while `capture()` keeps JPEG.
-- `mountBackgroundMedia`: keep the layer's `opacity` at `"0"` when `visible === false`; when `still === true` and the media is a video, set `currentTime = 0` and pause on `loadeddata`, and never arm the frame loop.
-- `scene.ts` forwards `mediaVisible`/`mediaStill`; the player's `panelOverlay` flag supplies `false`/`true`.
+- `export function screenshotParameters(format: "jpeg" | "png")` returns
+  `{ format }` plus `quality: 85` only for JPEG; the clip and geometry stay at the
+  `Page.captureScreenshot` call site.
+- A module constant `OVERLAY_STYLE_ID = "yunari-panel-overlay"` and one CSS text:
+  hide `[data-yunari-background-media]`, clear `[data-yunari-display-disc]`, and
+  make `html, body` transparent.
+- `async function overlayMode(devtools: Devtools, on: boolean)`: a single
+  `Runtime.evaluate` that adds or removes the style element and, when entering
+  the mode, saves the artboard host's inline `background` on
+  `host.dataset["panelOverlayBackground"]` and sets it to `transparent`;
+  leaving the mode writes the saved value back and deletes the attribute. The
+  host is `document.querySelector('canvas[data-yunari="artboard"]')?.parentElement`
+  — its inline paint would otherwise cover the video, and an inline value needs
+  the round trip rather than a CSS override. Then send
+  `Emulation.setDefaultBackgroundColorOverride` with `{ r: 0, g: 0, b: 0, a: 0 }`
+  when on and `{}` when off.
+- `capture()` = `overlayMode(devtools, false)` then `shot("jpeg")`;
+  `captureOverlay()` = `overlayMode(devtools, true)` then `shot("png")`, where
+  `shot` is the existing capture body parameterised by `screenshotParameters`.
 
-- [ ] **Step 4: Run the tests and make them pass**
+- [ ] **Step 4: Run the test and make it pass**
 
 ```bash
-npx vitest run packages/host/src/panels/panel-raster.test.ts packages/scene-fabric/src/background-media.dom.test.ts
-npm run typecheck -w @yunari/host -w @yunari/scene-fabric -w @yunari/player
+npx vitest run packages/host/src/panels/panel-raster.test.ts
+npm run typecheck -w @yunari/host
 ```
 Expected: PASS; typecheck exit 0.
 
-- [ ] **Step 5: Browser evidence**
-
-Run the player with a video theme and `?panelOverlay=1`; capture a screenshot and confirm the video area is transparent and the UI is present. Record the artifact path in the commit message.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add src/web/packages/host/src/panels/panel-raster.ts \
-  src/web/packages/host/src/panels/panel-raster.test.ts \
-  src/web/packages/scene-fabric/src/background-media.ts \
-  src/web/packages/scene-fabric/src/background-media.dom.test.ts \
-  src/web/packages/scene-fabric/src/scene.ts \
-  src/web/packages/player/src/main.ts
+  src/web/packages/host/src/panels/panel-raster.test.ts
 git commit -m "feat(panels): capture a transparent UI overlay"
 ```
+
+The overlay's alpha on real pixels is proven in Task 12, where the runner gives
+the capture a live video theme; a still-frame proof here would need a second
+harness for one boolean.
 
 ### Task 11: Overlay diff encoder and `presentOverlay`
 
@@ -1445,7 +1441,7 @@ Expected: FAIL.
 - [ ] **Step 3: Implement the runner's video path and the manager's wiring**
 
 - Runner: split `tick` into `sendStill` and `sendOverlay`; the first tick with a source starts the video once (`start(bytes, placement)`); a failed start reports once, drops the source and uses the still path for the rest of the runner's life. The in-flight guard from Task 4 wraps whichever path runs.
-- Manager: at `run()`, ask `videoFor(displayId)`; when it answers and the device has `video`, pass it to `createPanelRunner` as `video`, and capture through a page URL carrying `panelOverlay=1`. `start` failure is handled by the runner, not here.
+- Manager: at `run()`, ask `videoFor(displayId)`; when it answers and the device has `video`, pass it to `createPanelRunner` as `video`. The page URL is unchanged: Task 10's capture mode is a devtools edit, not a player flag.
 - `stop()` calls `device.video.stop()` before `close()`, and `stop` is awaited by its callers — an unawaited close races the reopen.
 - `refresh` awaits `stop` then `start`; call it from `server.ts` after `activeTheme.write(key, id)` when `key` is a panel display.
 
@@ -1459,7 +1455,7 @@ Expected: PASS; typecheck exit 0.
 
 - [ ] **Step 5: Verify on the attached panel**
 
-Upload a short 800×480 clip through a theme with a video background; confirm it plays, the UI overlay draws, a moving element clears its old pixels, and glass shows frame 0. Then force a start failure (use a clip the device rejects) and confirm the panel falls back to a static frame with one console error. Record both observations in the commit message.
+Upload a short 800×480 clip through a theme with a video background; confirm it plays, the UI overlay draws, a moving element clears its old pixels, and glass shows frame 0. Then force a start failure (use a clip the device rejects) and confirm the panel falls back to a static frame with one console error. Record both observations in the commit message. Also look at a glass object over the video: a glass surface may repaint from the hidden media layer, putting video pixels into the overlay; if it does, file a register row rather than fixing it here.
 
 - [ ] **Step 6: Run the full gate and record its exit code**
 
