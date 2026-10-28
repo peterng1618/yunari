@@ -463,6 +463,19 @@ export const uiCopy = {
       adding: "Adding…",
       addPanel: (name: string): string => `Add ${name} as a display`,
       added: "Added the panel as a display.",
+      /** The hardware record a driver states for a panel, one fact per line. */
+      maker: (maker: string): string => `Maker ${maker}`,
+      revision: (revision: string): string => `Revision ${revision}`,
+      detectedFirmware: (firmware: string): string => `Firmware ${firmware}`,
+      supportedFirmware: (versions: readonly string[]): string =>
+        versions.length === 0
+          ? "No supported firmware is recorded yet."
+          : `Supported firmware ${versions.join(", ")}`,
+      updated: (date: string): string => `Recorded ${date}`,
+      /** The device answers a firmware the driver has not met. The warning a
+       *  person needs before asking why a feature does not work. */
+      mismatch: (detected: string, supported: readonly string[]): string =>
+        `Firmware ${detected} is not one this panel is known to take (${supported.join(", ")}).`,
     },
     devices: {
       heading: "Devices on this PC",

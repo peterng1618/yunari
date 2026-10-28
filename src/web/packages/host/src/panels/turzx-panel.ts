@@ -29,6 +29,22 @@ const LABEL = 'TURZX 5" Panel';
 /** Long enough for a 23-byte HELLO reply at 115200, short enough to probe many. */
 const PROBE_TIMEOUT_MS = 500;
 
+/** One panel this host is driving, by the port it holds.
+ *
+ * **The port a host drives cannot be opened again**, so discovery that only
+ * probes would report a running panel as absent. Recording the identity at open
+ * is what lets `attachedTurzxPanels` state the device it already knows about and
+ * skip the port it cannot reopen. */
+interface HeldPanel {
+  readonly vendorId: number;
+  readonly productId: number;
+  readonly serial: string;
+  readonly model: string;
+  readonly firmware: string;
+}
+
+const heldPanels = new Map<string, HeldPanel>();
+
 export interface TurzxOptions {
   readonly ports?: () => Promise<readonly SerialPortInfo[]>;
   readonly open?: (path: string) => Promise<SerialTransport>;
@@ -78,10 +94,20 @@ export async function attachedTurzxPanels(
 ): Promise<readonly PanelHint[]> {
   const ports = await (options.ports ?? listSerialPorts)();
   const open = options.open ?? openSerialPort;
-  const hints: PanelHint[] = [];
+  // A panel this host is driving is stated from what opening it already told
+  // us: its port cannot be reopened to ask again.
+  const hints: PanelHint[] = [...heldPanels.values()].map((panel) => ({
+    vendorId: panel.vendorId,
+    productId: panel.productId,
+    serial: panel.serial,
+    label: LABEL,
+    model: panel.model,
+    firmware: panel.firmware,
+  }));
 
   for (const port of ports) {
     if (!hasIds(port)) continue;
+    if (heldPanels.has(port.path)) continue;
 
     let transport: SerialTransport;
     try {
@@ -131,6 +157,8 @@ class TurzxPanel implements PanelDevice {
   constructor(
     private readonly transport: SerialTransport,
     private readonly decode: NonNullable<TurzxOptions["decode"]>,
+    /** The port recorded in `heldPanels`, released with the transport. */
+    private readonly path: string,
   ) {}
 
   /** Already opened by `openTurzxPanel`, which is the family's `open`. */
@@ -152,6 +180,10 @@ class TurzxPanel implements PanelDevice {
   }
 
   async close(): Promise<void> {
+    // Released even when the close itself throws: after a failed close the port
+    // is no longer this host's, and a stale entry would keep reporting a device
+    // nothing is driving.
+    heldPanels.delete(this.path);
     await this.transport.close();
   }
 
@@ -228,7 +260,15 @@ export async function openTurzxPanel(
       );
     }
 
-    return new TurzxPanel(transport, decode);
+    heldPanels.set(port.path, {
+      vendorId: port.vendorId,
+      productId: port.productId,
+      serial: port.serialNumber ?? "",
+      model: identity.model,
+      firmware: identity.firmware,
+    });
+
+    return new TurzxPanel(transport, decode, port.path);
   }
 
   if (held !== undefined) {

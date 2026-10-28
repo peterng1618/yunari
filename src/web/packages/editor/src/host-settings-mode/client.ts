@@ -178,6 +178,33 @@ export interface HostSettingsClient {
   addPanel(label: string, panel: PanelHardware): Promise<string>;
 }
 
+/** The commands a panel's control channel accepts. Spelled here rather than
+ *  imported: the editor has no dependency on the host package, the same reason
+ *  `PanelHardware` is a second declaration. */
+export type PanelCommandKind =
+  | "brightness"
+  | "screen"
+  | "restart"
+  | "status"
+  | "hello";
+
+const PANEL_COMMAND_KINDS: readonly PanelCommandKind[] = [
+  "brightness",
+  "screen",
+  "restart",
+  "status",
+  "hello",
+];
+
+/** What the host's family table records about a panel it drives. */
+export interface PanelSupport {
+  readonly maker: string;
+  readonly hardwareRevision: string;
+  readonly supportedFirmware: readonly string[];
+  /** ISO date, `YYYY-MM-DD`: the last day the driver met this hardware. */
+  readonly updatedAt: string;
+}
+
 /** One attached panel, as the host enumerates it. `vendorId`/`productId` are
  *  what the record stores, so they travel back on the add. */
 export interface PanelHint {
@@ -189,6 +216,17 @@ export interface PanelHint {
    *  it holds both lists; a client cannot derive it, since the display map
    *  carries no hardware. */
   readonly held: boolean;
+  /** The record driving this device, when one does: the display whose row this
+   *  device's hardware record belongs to. */
+  readonly heldId?: string;
+  /** The support record this host's driver states, when a driver claims it. */
+  readonly support?: PanelSupport;
+  /** The model string the firmware reports, when it reports one. */
+  readonly model?: string;
+  /** The firmware version the device answers, when it answers one. */
+  readonly firmware?: string;
+  /** The commands this host can send it; empty for a picture-only panel. */
+  readonly commands: readonly PanelCommandKind[];
 }
 
 /** The device fields a record holds. `model` is deliberately absent: the host
@@ -198,6 +236,42 @@ export interface PanelHardware {
   readonly vendorId: number;
   readonly productId: number;
   readonly serial: string;
+}
+
+/** The support record this build can print, or nothing when the host's answer
+ *  is not that shape: a half-read record would state a hardware fact the host
+ *  never made. */
+function readSupport(input: unknown): PanelSupport | undefined {
+  if (typeof input !== "object" || input === null) return undefined;
+
+  const record = input as {
+    readonly maker?: unknown;
+    readonly hardwareRevision?: unknown;
+    readonly supportedFirmware?: unknown;
+    readonly updatedAt?: unknown;
+  };
+  const { maker, hardwareRevision, supportedFirmware, updatedAt } = record;
+
+  if (
+    typeof maker !== "string" ||
+    typeof hardwareRevision !== "string" ||
+    typeof updatedAt !== "string" ||
+    !Array.isArray(supportedFirmware) ||
+    !supportedFirmware.every((version) => typeof version === "string")
+  ) {
+    return undefined;
+  }
+
+  return {
+    maker,
+    hardwareRevision,
+    supportedFirmware: supportedFirmware as readonly string[],
+    updatedAt,
+  };
+}
+
+function isPanelCommandKind(value: unknown): value is PanelCommandKind {
+  return (PANEL_COMMAND_KINDS as readonly unknown[]).includes(value);
 }
 
 /** The attached panels worth offering. An entry is kept only where it carries
@@ -211,7 +285,14 @@ function readPanelHints(input: unknown): readonly PanelHint[] {
       readonly serial?: unknown;
       readonly label?: unknown;
       readonly held?: unknown;
+      readonly heldId?: unknown;
+      readonly support?: unknown;
+      readonly model?: unknown;
+      readonly firmware?: unknown;
+      readonly commands?: unknown;
     };
+
+    const support = readSupport(panel?.support);
 
     return typeof panel?.vendorId === "number" &&
       typeof panel.productId === "number" &&
@@ -229,6 +310,19 @@ function readPanelHints(input: unknown): readonly PanelHint[] {
             // it as not held so the offer still appears, which the route's own
             // 409 can still refuse honestly.
             held: panel.held === true,
+            ...(typeof panel.heldId === "string"
+              ? { heldId: panel.heldId }
+              : {}),
+            ...(support === undefined ? {} : { support }),
+            ...(typeof panel.model === "string" ? { model: panel.model } : {}),
+            ...(typeof panel.firmware === "string"
+              ? { firmware: panel.firmware }
+              : {}),
+            // An older host names no commands: read it as a picture-only panel,
+            // which is what the host before the field could drive.
+            commands: Array.isArray(panel.commands)
+              ? panel.commands.filter(isPanelCommandKind)
+              : [],
           },
         ]
       : [];

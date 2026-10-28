@@ -5,6 +5,54 @@ import type { PanelHardware, PanelHint } from "./client.js";
 import { Group } from "./section-group.js";
 
 /**
+ * The hardware record a driver states for one panel, and the warning when the
+ * device answers a firmware that record does not name. Nothing is drawn for a
+ * device no driver claims: an empty record is not a fact about the panel.
+ */
+function PanelFacts(props: {
+  readonly panel: PanelHint;
+}): React.JSX.Element | null {
+  const copy = uiCopy.hostSettings.panels;
+  const support = props.panel.support;
+
+  if (support === undefined) return null;
+
+  const detected = props.panel.firmware;
+  const mismatch =
+    detected !== undefined &&
+    support.supportedFirmware.length > 0 &&
+    !support.supportedFirmware.includes(detected);
+
+  return (
+    <span
+      data-yunari-panel-facts=""
+      className="flex flex-col gap-[var(--space-2)] text-2xs text-muted"
+    >
+      <span>
+        {[
+          copy.maker(support.maker),
+          copy.revision(support.hardwareRevision),
+        ].join(" · ")}
+      </span>
+      <span>
+        {[
+          detected === undefined ? undefined : copy.detectedFirmware(detected),
+          copy.supportedFirmware(support.supportedFirmware),
+          copy.updated(support.updatedAt),
+        ]
+          .filter((part): part is string => part !== undefined)
+          .join(" · ")}
+      </span>
+      {mismatch ? (
+        <span data-yunari-panel-mismatch="" className="text-warn">
+          {copy.mismatch(detected, support.supportedFirmware)}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
  * The USB panels attached to this PC, and the button that adds one.
  *
  * **A panel is found, not paired.** It has no URL and no credential, so there is
@@ -20,6 +68,9 @@ import { Group } from "./section-group.js";
  */
 export function PanelsSection(props: {
   readonly attached: readonly PanelHint[];
+  /** The panel behind the display the region has chosen, when that display is
+   *  a panel. It is already held, so it is stated here rather than offered. */
+  readonly chosen?: PanelHint | undefined;
   readonly adding: boolean;
   readonly onAdd: (panel: PanelHint) => void;
 }): React.JSX.Element {
@@ -52,8 +103,9 @@ export function PanelsSection(props: {
                 data-yunari-panel={key}
                 className="flex items-center gap-[var(--space-12)] rounded-lg border border-edge bg-panel-2 px-[var(--space-10)] py-[var(--space-8)]"
               >
-                <span className="min-w-0 flex-1 text-xs text-text">
+                <span className="flex min-w-0 flex-1 flex-col text-xs text-text">
                   {panel.label}
+                  <PanelFacts panel={panel} />
                 </span>
                 <button
                   type="button"
@@ -68,6 +120,18 @@ export function PanelsSection(props: {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* The display the region is showing for, when it is a panel: its own
+          hardware record, which is what a firmware mismatch is about. */}
+      {props.chosen === undefined ? null : (
+        <div
+          data-yunari-panel-current={props.chosen.heldId}
+          className="flex flex-col gap-[var(--space-2)] rounded-lg border border-edge bg-panel-2 px-[var(--space-10)] py-[var(--space-8)] text-xs text-text"
+        >
+          {props.chosen.label}
+          <PanelFacts panel={props.chosen} />
         </div>
       )}
     </Group>

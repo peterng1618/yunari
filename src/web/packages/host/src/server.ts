@@ -2231,15 +2231,30 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // ids: that is the rule `createPanel` refuses by, and a surface that
         // used a different one would offer a device the write then rejects.
         const known = displays === undefined ? [] : await displays.list();
-        const hardware = known.flatMap((record) =>
-          record.panel === undefined ? [] : [record.panel],
-        );
 
         sendJson(response, 200, {
-          panels: (await panelsAttached()).map((panel) => ({
-            ...panel,
-            held: hardware.some((taken) => samePanel(taken, panel)),
-          })),
+          // One scan answers both questions: `held` is whether a record drives
+          // this device, `heldId` is which record. A second lookup for the id
+          // could disagree with the `held` beside it.
+          panels: (await panelsAttached()).map((panel) => {
+            const holder = known.find(
+              (record) =>
+                record.panel !== undefined && samePanel(record.panel, panel),
+            );
+            // The family table is what the support record and the command list
+            // are read from, so a surface renders what this host can actually
+            // do rather than a list the caller supplied. A device no row claims
+            // keeps its hint and gets the honest empty command list.
+            const family = familyFor(panel.vendorId, panel.productId);
+
+            return {
+              ...panel,
+              held: holder !== undefined,
+              ...(holder === undefined ? {} : { heldId: holder.id }),
+              ...(family === undefined ? {} : { support: family.support }),
+              commands: family?.commands ?? [],
+            };
+          }),
         });
         return;
       }

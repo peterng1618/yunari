@@ -1901,6 +1901,7 @@ const ONE_PANEL: Fixture = {
       serial: "PANEL0001",
       label: 'Lian Li 9.2" LCD',
       held: false,
+      commands: [],
     },
   ],
 };
@@ -1943,6 +1944,58 @@ it("does not offer a panel that is already a display", async () => {
     "an already-added panel is still offered",
   ).toBeNull();
   expect(container.textContent).toContain(uiCopy.hostSettings.panels.allAdded);
+});
+
+it("states the chosen panel's hardware record and warns on a firmware mismatch", async () => {
+  // The record is the driver's statement about this hardware; a device
+  // answering a firmware it does not name is the fact a person needs before
+  // wondering why a control does nothing.
+  const { container } = await mountHost({
+    fallback: null,
+    displays: [
+      {
+        id: "panel-1",
+        label: 'TURZX 5" Panel',
+        theme: null,
+        shape: "rect",
+        rotation: 0,
+      },
+    ],
+    panels: [
+      {
+        vendorId: 0x1d6b,
+        productId: 0x0106,
+        serial: "PANEL0002",
+        label: 'TURZX 5" Panel',
+        held: true,
+        heldId: "panel-1",
+        support: {
+          maker: "TURZX",
+          hardwareRevision: "Rev C",
+          supportedFirmware: ["1.88"],
+          updatedAt: "2026-10-29",
+        },
+        firmware: "1.90",
+        commands: ["brightness", "screen", "restart", "status", "hello"],
+      },
+    ],
+  });
+
+  const current = must(
+    container.querySelector<HTMLElement>("[data-yunari-panel-current]"),
+    "the chosen panel's hardware record",
+  );
+  const copy = uiCopy.hostSettings.panels;
+
+  expect(current.textContent).toContain(copy.maker("TURZX"));
+  expect(current.textContent).toContain(copy.revision("Rev C"));
+
+  const warning = must(
+    current.querySelector<HTMLElement>("[data-yunari-panel-mismatch]"),
+    "the firmware mismatch warning",
+  );
+  expect(warning.textContent).toContain("1.90");
+  expect(warning.textContent).toContain("1.88");
 });
 
 it("leaves the panel addable when the host refuses it", async () => {

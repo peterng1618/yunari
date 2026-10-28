@@ -4968,7 +4968,19 @@ describe("A local monitor is specified rather than paired", () => {
         );
         expect(attached.status).toBe(200);
         expect(attached.json()).toEqual({
-          panels: [{ ...ATTACHED_PANEL, held: false }],
+          panels: [
+            {
+              ...ATTACHED_PANEL,
+              held: false,
+              commands: [],
+              support: {
+                maker: "Lian Li",
+                hardwareRevision: '9.2"',
+                supportedFirmware: [],
+                updatedAt: "2026-10-28",
+              },
+            },
+          ],
         });
 
         const added = await request(
@@ -4993,7 +5005,20 @@ describe("A local monitor is specified rather than paired", () => {
           "/api/displays/panels",
         );
         expect(after.json()).toEqual({
-          panels: [{ ...ATTACHED_PANEL, held: true }],
+          panels: [
+            {
+              ...ATTACHED_PANEL,
+              held: true,
+              heldId: "strip",
+              commands: [],
+              support: {
+                maker: "Lian Li",
+                hardwareRevision: '9.2"',
+                supportedFirmware: [],
+                updatedAt: "2026-10-28",
+              },
+            },
+          ],
         });
       } finally {
         await hosting.close();

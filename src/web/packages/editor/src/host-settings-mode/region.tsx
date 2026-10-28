@@ -330,6 +330,11 @@ function HostSettings(props: {
   const displays = map?.displays ?? [];
   const selected = chosen ?? displays[0]?.id;
   const selectedRow = displays.find((display) => display.id === selected);
+  /** The attached panel behind the chosen display, when that display is a
+   *  panel: the section states its hardware record rather than offering it. */
+  const chosenPanel = panels?.find(
+    (panel) => panel.heldId !== undefined && panel.heldId === selected,
+  );
   const fallback = map?.default ?? null;
   const showing = shownTheme(selectedRow, fallback);
 
@@ -532,15 +537,17 @@ function HostSettings(props: {
         if (mounted.current) {
           setMap(refreshed);
           setChosen(id);
-          // The panel is a display now, so the host would answer `held` for it
-          // on the next read; the local copy says so at once, because a row
-          // that stayed addable after a successful add invites a second claim.
+          // The panel is a display now, so the host would answer `held` and
+          // `heldId` for it on the next read; the local copy says so at once,
+          // because a row that stayed addable after a successful add invites a
+          // second claim, and the chosen row's hardware record is what the
+          // section states from here on.
           setPanels((current) =>
             (current ?? []).map((entry) =>
               entry.vendorId === panel.vendorId &&
               entry.productId === panel.productId &&
               entry.serial === panel.serial
-                ? { ...entry, held: true }
+                ? { ...entry, held: true, heldId: id }
                 : entry,
             ),
           );
@@ -637,6 +644,7 @@ function HostSettings(props: {
           {panels === undefined ? null : (
             <PanelsSection
               attached={panels}
+              chosen={chosenPanel}
               adding={addingPanel}
               onAdd={addPanel}
             />
