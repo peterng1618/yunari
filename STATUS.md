@@ -9,17 +9,17 @@ The asset finder's UI/UX overhaul is complete. Next: the same audit across the r
 
 ## Active work
 
-- **Plan complete:** `docs/superpowers/plans/2026-10-28-asset-finder-unification.md`; nothing is in flight.
+- **Plan complete and reviewed:** `docs/superpowers/plans/2026-10-28-asset-finder-unification.md`; nothing is in flight.
 - **The finder is one surface:** one frame, card, skeleton, control set and state vocabulary across every tab.
 - **DESIGN.md owns the rules:** §5's "Asset finder tabs" is the checklist for every tab added later.
 
 ## Last completed change
 
-- **One frame for every tab:** fixed tab order, one toolbar search, one card, one animated skeleton, one footer status line.
-- **Browse on open, append on scroll:** Unsplash browses its Editorial feed with no term; pages append and the pager is gone.
-- **Fonts, Images and Wallpaper Engine are panes:** their filters, selections and writes use the shared frame via `fontActions()` and `wallpaperActions()`.
-- **Media preview:** a double-click or the footer's Preview button opens a photo or wallpaper result over the finder; Escape returns to the card.
-- **Proof:** 32 finder browser tests (1 skipped), four red proofs failed first, `npm run gate` exit 0 (453 files, 6906 tests).
+- **Review close-out:** one fresh whole-branch review found no Critical; its four state-wiring defects and two spec drifts are fixed, each RED→GREEN.
+- **Keys and Connections:** Connections follows any keyed source's failure, and a missing key's body offers Connections instead of a dead Retry.
+- **Tab and mark state:** a Colours kind filter no longer clears the next tab's rows; the failed mark stays on the card that failed.
+- **Card and footer:** a photo or font states its own licence, and the footer's primary action is the accented one.
+- **Proof:** 148 finder DOM tests, 28 desktop + 2 phone browser tests, `npm run gate` exit 0 (453 files, 6911 tests).
 
 ## Next
 

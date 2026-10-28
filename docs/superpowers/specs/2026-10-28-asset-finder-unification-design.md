@@ -125,8 +125,9 @@ add a region, move the search field, or draw its own grid frame.
   underline. Focus: §5 rule 4's accent boundary.
 - Selected styling keys off Base UI's `data-active`. Today's `data-[selected]`
   is dead: Base UI 1.9 emits `data-active`, so no tab has ever looked selected.
-- The close × occupies a fixed 28px slot at the right; the tab list scrolls
-  under it with matching right padding, so the two never collide.
+- The close × occupies a fixed 28px slot at the right; the rail reserves that
+  room with matching right padding, and the five tabs shipped here fit a 412px
+  window without scrolling (measured in the `phone-chromium` project).
 
 ### The toolbar
 
@@ -150,8 +151,8 @@ add a region, move the search field, or draw its own grid frame.
   `--radius-md`, `CONNECTIONS_GLYPH`, `aria-label` and `title` "Connections".
   It is drawn only when the active tab has a source that declares `requires`
   and is either blocked with `needs-credential` or has failed. A healthy keyed
-  source, or a tab with no keyed source, draws no button. Its slot is reserved
-  so the row does not jump when it appears.
+  source, or a tab with no keyed source, draws no button. It joins the row's
+  end only while it is needed; it draws no empty slot while healthy.
 
 ### The content region
 
@@ -186,7 +187,8 @@ One `FinderCard`; the preview renderer is the only variation.
 
 - Preview well: `aspect-ratio: 4 / 3`, `--bg` fill, `--radius-sm`, clipped.
 - Title row: name (`--text-sm`, truncate) and the source mark at the right.
-- Meta row: subtitle and licence (`--text-xs`, `--faint`/`--muted`), truncate.
+- Meta row: subtitle and the item's own licence (`--text-xs`, `--faint`/`--muted`),
+  truncate. An icon library's single licence stays on its source mark.
 - Previews:
   - **Image** — `object-cover`, `loading="lazy"`, `decoding="async"`. Full
     bleed. Today's `object-contain` letterboxes every photo inside a 96px box.
@@ -329,8 +331,8 @@ Fonts) wins, as today.
 ### Appending and infinite scroll
 
 - A sentinel after the last row is observed by one `IntersectionObserver`,
-  rooted at the content scroller, 400px early. It fires only when idle and a
-  source still has a page.
+  rooted at the content scroller, half a viewport early (`50%` root margin). It
+  fires only when idle and a source still has a page.
 - The request asks page `asked + 1` of every source with more, then appends the
   answer through `interleave`; earlier rows never reorder.
 - While appending, four skeleton cards follow the last row. Nothing already
@@ -407,8 +409,8 @@ One state component, drawn inside the content region, never in the footer:
 ## The Connections button
 
 - One icon button in the toolbar's right group, drawn only when the active tab
-  has a keyed source in trouble, as R5 states. It occupies a reserved 28px slot
-  so the row does not reflow.
+  has a keyed source in trouble, as R5 states. It joins the row's end only
+  while it is needed.
 - "In trouble" is decided from the tab's own state: a source that declares
   `requires` and whose latest answer is `needs-credential`, or whose latest
   answer failed at all. A keyed source that fails on the network may be a key
@@ -569,7 +571,7 @@ still takes the ladder:
 | First-load skeleton | 12 cards |
 | Appending skeleton | 4 cards |
 | Search debounce | 200ms |
-| Append root margin | 400px |
+| Append root margin | 50% (half a viewport) |
 | Connections button | 28×28 |
 | Preview modal | the existing `--asset-preview-width/height` box (1132×852 cap) |
 

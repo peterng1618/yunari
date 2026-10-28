@@ -99,6 +99,29 @@ it("draws a palette as vertical flex bars in catalogue order", () => {
   expect(bars[0]?.parentElement?.className).not.toContain("grid");
 });
 
+it("states a photo's own licence, which an icon library's uniform one need not", () => {
+  mount(
+    <FinderCard
+      model={cardModelOf(imageResult, "Unsplash")}
+      selected={false}
+      busy={false}
+      failed={false}
+      done={false}
+      tabStop
+      onSelect={() => {}}
+      onKeyDown={() => {}}
+      focus={() => {}}
+    />,
+  );
+
+  expect(
+    document.querySelector("[data-yunari-asset-licence]")?.textContent,
+  ).toBe("Unsplash");
+  // One library's licence is the source's, not each icon's: it stays off the
+  // card and off a hundred identical tiles.
+  expect(cardModelOf(iconResult, "Lucide").licence).toBeUndefined();
+});
+
 it("crops an image and marks the card selected", () => {
   mount(
     <FinderCard

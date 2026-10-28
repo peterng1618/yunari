@@ -1250,6 +1250,11 @@ export const uiCopy = {
     nothingToBrowse: "Nothing to browse here yet. Try a word.",
     emptyAfterFailure:
       "This tab's sources returned nothing. Retry, or try another word.",
+    /** The body state for a tab whose sources all refused for want of a key.
+     *  Retrying cannot install one, so the body names the control that can; the
+     *  footer already carries the diagnosis, and this sentence never repeats it. */
+    needsKeyBody:
+      "Add the key this tab needs in Connections, then search again.",
     working: "Working…",
     retry: "Retry",
     connections: "Connections",

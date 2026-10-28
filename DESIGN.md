@@ -620,8 +620,9 @@ never a provider**, and it fills the frame rather than drawing its own.
    and draws the answer; a source that cannot answer an empty term says why in
    the content region. A blank tab is a defect.
 4. **One card anatomy:** a 4:3 preview well, then name and source mark, then
-   meta and licence. The preview renderer is the only permitted variation
-   between kinds (`finder-card.tsx`).
+   meta and the item's own licence — an icon library's single licence stays on
+   its source. The preview renderer is the only permitted variation between
+   kinds (`finder-card.tsx`).
 5. **Every control defines rest, hover, focus, selected or disabled, busy and
    outcome.** Hover raises `--edge` to `--muted`; nothing moves or scales.
 6. **One animated skeleton for every wait**, drawn as cards in the grid;

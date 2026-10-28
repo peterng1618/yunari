@@ -283,6 +283,14 @@ function rowIds(): string[] {
   );
 }
 
+function card(id: string): HTMLElement {
+  const found = document.querySelector<HTMLElement>(
+    `[data-yunari-finder-card="${id}"]`,
+  );
+  if (found === null) throw new Error(`no ${id} card.`);
+  return found;
+}
+
 function footerAction(): HTMLButtonElement {
   const found = document.querySelector<HTMLButtonElement>(
     "[data-yunari-asset-action]",
@@ -865,6 +873,49 @@ describe("AssetFinder's Colours tab", () => {
     expect(kindButton("gradient").getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("keeps the next tab's rows when the Colours filter sends the author away", async () => {
+    searchAssets.mockImplementation(async (request) =>
+      request.enabled.includes("lucide")
+        ? { pages: [page("lucide", [result("lucide:house")])] }
+        : {
+            pages: [
+              ...(request.enabled.includes("colorhunt")
+                ? [page("colorhunt", [result("colorhunt:palette")])]
+                : []),
+              ...(request.enabled.includes("uigradients")
+                ? [page("uigradients", [result("uigradients:strip")])]
+                : []),
+            ],
+          },
+    );
+
+    await render([lucide, colorhunt, uigradients]);
+    await settle();
+
+    await act(async () => tab("colour").click());
+    await settle();
+    await act(async () => kindButton("gradient").click());
+    await settle();
+    expect(rowIds()).toEqual(["uigradients:strip"]);
+
+    const asked = searchAssets.mock.calls.length;
+    await act(async () => tab("icon").click());
+    await settle();
+
+    // The Icons tab's answer is still on screen and was not asked again: a
+    // filter on Colours is not a question about icons.
+    expect(searchAssets.mock.calls.length).toBe(asked);
+    expect(rowIds()).toEqual(["lucide:house"]);
+
+    await act(async () => tab("colour").click());
+    await settle();
+
+    // Returning re-asks Colours with every source, so the "All" chip and the
+    // rows agree instead of the chip claiming a filter the rows never had.
+    expect(kindButton("all").getAttribute("aria-pressed")).toBe("true");
+    expect(rowIds()).toEqual(["colorhunt:palette", "uigradients:strip"]);
+  });
+
   it("draws a palette as swatches and a gradient as a strip", async () => {
     const palette: AssetResult = {
       id: "colorhunt:aabbccddeeff112233445566",
@@ -1246,6 +1297,25 @@ describe("AssetFinder search", () => {
     expect(rowIds()).toEqual(["fontawesome-free:house"]);
   });
 
+  it("offers Connections when a keyed source fails for any reason", async () => {
+    // A refused key can reach the host as a plain failure; the control that
+    // fixes it must not depend on which of the two a source reports.
+    searchAssets.mockResolvedValue({
+      pages: [
+        page("unsplash", [], {
+          failure: { reason: "failed", message: "Unsplash answered 401." },
+        }),
+      ],
+    });
+
+    await render([unsplash]);
+    await settle();
+
+    expect(
+      document.querySelector("[data-yunari-asset-connections]"),
+    ).not.toBeNull();
+  });
+
   it("offers Connections instead of rows when a source needs a key", async () => {
     searchAssets.mockResolvedValue({
       pages: [
@@ -1268,6 +1338,29 @@ describe("AssetFinder search", () => {
     // tooltipped; the sentence beside the rows says what is missing.
     expect(link.getAttribute("aria-label")).toBe(uiCopy.assets.connections);
     await act(async () => link.click());
+    expect(onOpenConnections).toHaveBeenCalledTimes(1);
+  });
+
+  it("blames the missing key, not the query, when a keyed source has none", async () => {
+    searchAssets.mockResolvedValue({
+      pages: [
+        page("unsplash", [], {
+          failure: { reason: "needs-credential", credential: "unsplash" },
+        }),
+      ],
+    });
+    const onOpenConnections = vi.fn();
+
+    await render([unsplash], { onOpenConnections });
+    await settle();
+
+    const body = document.querySelector("[data-yunari-asset-needs-key]");
+    expect(body?.textContent).toContain(uiCopy.assets.needsKeyBody);
+    // Retry cannot install a key; the body offers the control that can.
+    expect(document.querySelector("[data-yunari-asset-retry]")).toBeNull();
+    const open = body?.querySelector<HTMLButtonElement>("button");
+    if (open === null || open === undefined) throw new Error("no key control.");
+    await act(async () => open.click());
     expect(onOpenConnections).toHaveBeenCalledTimes(1);
   });
 
@@ -1421,6 +1514,9 @@ describe("AssetFinder footer", () => {
       "[data-yunari-asset-place]",
     );
     expect(place?.textContent).toBe(uiCopy.assets.placeOnCanvas);
+    // The primary is the accented one: placing is the secondary beside it.
+    expect(footerAction().classList.contains("border-accent")).toBe(true);
+    expect(place?.classList.contains("border-accent")).toBe(false);
 
     await act(async () => place?.click());
     await settle();
@@ -1430,6 +1526,35 @@ describe("AssetFinder footer", () => {
       expect.objectContaining({ id: "unsplash:photo" }),
       "place",
     );
+  });
+
+  it("keeps the failed mark on the card that failed after another is chosen", async () => {
+    searchAssets.mockResolvedValue({
+      pages: [page("lucide", [result("lucide:a"), result("lucide:b")])],
+    });
+    const onAction = vi.fn(
+      async () => ({ ok: false, message: "Nope." }) as const,
+    );
+
+    await render([lucide], { onAction });
+    await settle();
+
+    await act(async () => card("lucide:a").click());
+    await act(async () => footerAction().click());
+    await settle();
+
+    const failed = (): string | undefined =>
+      document
+        .querySelector("[data-yunari-finder-card-failed]")
+        ?.closest("[data-yunari-finder-card]")
+        ?.getAttribute("data-yunari-finder-card") ?? undefined;
+    expect(failed()).toBe("lucide:a");
+
+    await act(async () => card("lucide:b").click());
+
+    // The mark answers the write, not the choice: a new selection must not
+    // inherit the failure of the one before it.
+    expect(failed()).toBe("lucide:a");
   });
 });
 

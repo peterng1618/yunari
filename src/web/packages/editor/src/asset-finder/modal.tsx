@@ -88,8 +88,14 @@ interface TabView {
   readonly browsed: boolean;
   readonly loading: "first" | "more" | undefined;
   readonly selection: FinderRow | undefined;
+  /** `failedId` names the result the sentence answers, so a later choice does
+   *  not inherit its mark. */
   readonly message:
-    | { readonly text: string; readonly tone: "ok" | "failed" }
+    | {
+        readonly text: string;
+        readonly tone: "ok" | "failed";
+        readonly failedId?: string;
+      }
     | undefined;
 }
 
@@ -120,7 +126,11 @@ interface LocalView {
   readonly selection: WallpaperEngineItem | undefined;
   readonly done: ReadonlySet<string>;
   readonly message:
-    | { readonly text: string; readonly tone: "ok" | "failed" }
+    | {
+        readonly text: string;
+        readonly tone: "ok" | "failed";
+        readonly failedId?: string;
+      }
     | undefined;
 }
 
@@ -535,6 +545,7 @@ export function AssetFinder({
       message: {
         text: outcome.message ?? uiCopy.assets.done[category],
         tone: outcome.ok ? "ok" : "failed",
+        ...(outcome.ok ? {} : { failedId: row.result.id }),
       },
     }));
     return outcome;
@@ -607,10 +618,13 @@ export function AssetFinder({
   const shown = active === "font" ? fontRows(rows, fontFilter) : rows;
   const more = isGrid && hasMore(view.data, enabled);
   const failures = [...view.data.failures.values()];
-  /** A key that is missing or refused is the one reason to offer Connections:
-   *  a control that cannot help is not an availability. */
+  /** A keyed source in trouble is the one reason to offer Connections: a
+   *  refused key can reach the host as a plain failure, so the control follows
+   *  the source's declaration, not the reason it reports. */
   const needsConnections = failures.some(
-    (page) => page.failure?.reason === "needs-credential",
+    (page) =>
+      page.failure?.reason === "needs-credential" ||
+      (sourceOf(page.source)?.requires ?? null) !== null,
   );
   const pendingFirst = !view.browsed || view.loading === "first";
   const kindSourcesOff = visibleSources.length > 0 && enabled.length === 0;
@@ -621,10 +635,7 @@ export function AssetFinder({
       : `${view.selection.page.source}:${view.selection.result.id}`;
   const busyId =
     busy && view.selection !== undefined ? view.selection.result.id : undefined;
-  const failedId =
-    view.message?.tone === "failed" && view.selection !== undefined
-      ? view.selection.result.id
-      : undefined;
+  const failedId = view.message?.failedId;
 
   const failureSentence = (page: AssetPage): React.ReactNode => {
     const failure = page.failure;
@@ -699,7 +710,7 @@ export function AssetFinder({
       id: "apply",
       label: uiCopy.assets.action[active],
       busyLabel: uiCopy.assets.busy[active],
-      tone: "plain",
+      tone: "accent",
       disabled: row === undefined || busy,
       run: run(active === "image" ? "background" : undefined),
     };
@@ -730,6 +741,7 @@ export function AssetFinder({
 
   const runFontAction = (action: FinderAction): void => {
     setRunning(action.id);
+    const rowId = view.selection?.result.id;
     const outcome = action.run();
     void Promise.resolve(outcome).then((result) => {
       setRunning(undefined);
@@ -742,6 +754,7 @@ export function AssetFinder({
               : uiCopy.assets.done.font
             : result.message,
           tone: result.ok ? "ok" : "failed",
+          ...(result.ok || rowId === undefined ? {} : { failedId: rowId }),
         },
       }));
     });
@@ -768,6 +781,9 @@ export function AssetFinder({
         message: {
           text: result.message ?? uiCopy.assets.done.local,
           tone: result.ok ? "ok" : "failed",
+          ...(result.ok || item === undefined
+            ? {}
+            : { failedId: item.workshopId }),
         },
       }));
     });
@@ -871,6 +887,28 @@ export function AssetFinder({
         </div>
       );
     }
+    // A missing key is not the query's fault, and retrying cannot install one:
+    // the body offers the control that can.
+    if (
+      failures.length > 0 &&
+      failures.every((page) => page.failure?.reason === "needs-credential")
+    ) {
+      return (
+        <div data-yunari-asset-needs-key="">
+          <FinderState
+            message={uiCopy.assets.needsKeyBody}
+            {...(onOpenConnections === undefined
+              ? {}
+              : {
+                  action: {
+                    label: uiCopy.assets.connectionsAction,
+                    onClick: onOpenConnections,
+                  },
+                })}
+          />
+        </div>
+      );
+    }
     if (failures.length > 0) {
       return (
         <div data-yunari-asset-failed="">
@@ -930,12 +968,12 @@ export function AssetFinder({
         }))}
         active={active}
         onTabChange={(category) => {
-          // A filter belongs to the tab that drew it: the next tab starts at
-          // "all", and if this one's filter had narrowed the sources its stored
-          // rows answer a question it no longer asks.
+          // The kind filter belongs to the Colours tab: it neither follows the
+          // author to the next tab nor leaves Colours' rows answering a
+          // narrower question than the chip will show on the way back.
           if (presetFilter !== "all") {
             setPresetFilter("all");
-            askNew(category, views[category].data.query);
+            askNew("colour", views.colour.data.query);
           }
           setActive(category);
         }}
@@ -1175,10 +1213,9 @@ export function AssetFinder({
                 {...(localRunning === undefined || local.selection === undefined
                   ? {}
                   : { busyId: local.selection.workshopId })}
-                {...(local.message?.tone === "failed" &&
-                local.selection !== undefined
-                  ? { failedId: local.selection.workshopId }
-                  : {})}
+                {...(local.message?.failedId === undefined
+                  ? {}
+                  : { failedId: local.message.failedId })}
                 {...(local.done.size === 0 ? {} : { doneIds: local.done })}
                 onSelect={selectLocal}
                 onPreview={(card) => {

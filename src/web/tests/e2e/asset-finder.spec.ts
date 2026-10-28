@@ -689,6 +689,12 @@ test("the Images tab says a key is missing instead of drawing an empty grid", as
   await expect(dialog.locator("[data-yunari-asset-status]")).toContainText(
     "needs a key",
   );
+  // R3's acceptance is the body: a missing key is not a query to retry, so the
+  // grid's place offers Connections and no dead Retry.
+  await expect(dialog.locator("[data-yunari-asset-needs-key]")).toContainText(
+    "Connections",
+  );
+  await expect(dialog.locator("[data-yunari-asset-retry]")).toHaveCount(0);
   await expect(dialog.locator("[data-yunari-asset-connections]")).toBeVisible();
 });
 
@@ -1122,6 +1128,30 @@ test("a phone viewport gives the finder the whole window", async ({
   expect(box.width).toBe(viewport.width);
   expect(box.height).toBe(viewport.height);
   await expect(dialog.getByRole("button", { name: "Close" })).toBeVisible();
+});
+
+test("a phone viewport keeps every category tab reachable", async ({
+  page,
+}, testInfo) => {
+  test.skip(isDesktopSurface(testInfo), "the phone project owns this reading");
+
+  await stubAssets(page, {
+    sources: [curatedFonts, lucide, unsplash, colorSwoop],
+    answer: () => ({ pages: [] }),
+  });
+  const dialog = await openFinder(page);
+  // Fonts, Icons, Images, Colours and Wallpaper Engine: every tab the editor
+  // offers today sits in the rail the phone has to fit.
+  await expect(dialog.locator("[data-yunari-asset-tab]")).toHaveCount(5);
+  const last = dialog.locator("[data-yunari-asset-tab]").last();
+  await last.scrollIntoViewIfNeeded();
+
+  const box = await last.boundingBox();
+  const frame = await dialog.boundingBox();
+  if (box === null || frame === null) throw new Error("no box.");
+  // The rail keeps the way out at its right end; a tab drawn under it cannot
+  // be pressed by a finger.
+  expect(box.x + box.width).toBeLessThanOrEqual(frame.x + frame.width - 32);
 });
 
 test("a card raises its edge on hover and the chosen card is accented", async ({

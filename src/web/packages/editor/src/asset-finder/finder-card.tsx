@@ -42,9 +42,14 @@ export function cardModelOf(
     id: result.id,
     name: result.name,
     meta: result.subtitle ?? "",
-    // A preset's licence is the only one the grid shows: its source reports
-    // `unknown` where an icon or photo's licence is already on the source card.
-    licence: result.preset === undefined ? undefined : result.licence,
+    // An icon library states one licence for its whole catalogue, so it stays
+    // on the source; a photo, font or preset carries per-item terms.
+    licence:
+      result.kind === "image" ||
+      result.kind === "font" ||
+      result.preset !== undefined
+        ? result.licence
+        : undefined,
     sourceId: sourceIdOf(result.id),
     sourceLabel,
     preview: <CardPreview result={result} />,
