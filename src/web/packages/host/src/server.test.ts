@@ -4937,7 +4937,7 @@ describe("A local monitor is specified rather than paired", () => {
           started.push(id);
           return Promise.resolve();
         },
-        stop: (id) => {
+        stop: async (id) => {
           stopped.push(id);
         },
         reconcile: () => Promise.resolve(),
@@ -5085,6 +5085,64 @@ describe("A local monitor is specified rather than paired", () => {
             .status,
         ).toBe(200);
         expect(stopped).toEqual(["strip"]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("answers a removal only once the device is released", async () => {
+      // The release is what the next claim waits for: a route that answered
+      // before it settled let a restart reopen the panel too early and fail
+      // with "failed to open device (error 5)".
+      let release: () => void = () => {};
+      const stopped: Promise<void>[] = [];
+      const hosting = host({
+        panels: {
+          start: () => Promise.resolve(),
+          stop: () => {
+            const settled = new Promise<void>((resolve) => {
+              release = resolve;
+            });
+            stopped.push(settled);
+            return settled;
+          },
+          reconcile: () => Promise.resolve(),
+          running: () => [],
+          stopAll: () => Promise.resolve(),
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+
+        const removal = request(
+          hosting.server,
+          "DELETE",
+          "/api/displays/strip",
+        );
+        let answered = false;
+        void removal.then(
+          () => {
+            answered = true;
+          },
+          () => {
+            answered = true;
+          },
+        );
+
+        // One turn is enough for the handler to reach the stop, which is where
+        // an unawaited close would already have answered.
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(stopped).toHaveLength(1);
+        expect(answered).toBe(false);
+
+        release();
+        expect((await removal).status).toBe(200);
       } finally {
         await hosting.close();
       }

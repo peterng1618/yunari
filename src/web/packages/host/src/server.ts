@@ -2200,7 +2200,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // runner is stopped, because a record nothing points at is a panel
         // still showing a theme nobody assigned it.
         options.launcher?.close(id);
-        options.panels?.stop(id);
+        await options.panels?.stop(id);
 
         sendJson(response, 200, { ok: true });
         return;
@@ -3978,9 +3978,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // A panel's runner chooses its video when it starts, so a new theme is
         // a new thing for the device to play. Restarting is the whole update:
         // the still path would pick the page change up on its own, but a video
-        // the panel started is not the one the page now shows.
+        // the panel started is not the one the page now shows. The stop is
+        // awaited because the device has to be released before it is claimed
+        // again — an unawaited close is a reopen that fails with error 5.
         if (options.panels !== undefined) {
-          options.panels.stop(key);
+          await options.panels.stop(key);
           await options.panels.start(key);
         }
 
