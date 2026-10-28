@@ -31,4 +31,4 @@ The asset finder's UI/UX overhaul is complete. Next: the same audit across the r
 
 - **Preview port 4174 is held by the `fix-font-trio` worktree:** run browser proofs with `YUNARI_EDITOR_URL` against a private preview port.
 - **`npx playwright` is broken by `@playwright/mcp`'s alpha Playwright** (`vg-774`); run `node node_modules/@playwright/test/cli.js`.
-- **Open rows:** `vg-773` (the rest of the app's UI/UX audit), `vg-774`.
+- **Open rows:** `vg-773`, `vg-774`, and `vg-776`–`vg-779` filed from the final review.
