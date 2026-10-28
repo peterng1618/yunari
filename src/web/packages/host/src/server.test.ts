@@ -28,7 +28,10 @@ import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
 import { type ListenableServer, listenWithFallback } from "./cli/net.js";
-import type { PanelManager } from "./panels/panel-manager.js";
+import {
+  type PanelManager,
+  PanelNotRunningError,
+} from "./panels/panel-manager.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { MAX_BOX_ART_BYTES } from "./providers/game/box-art.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
@@ -4928,6 +4931,7 @@ describe("A local monitor is specified rather than paired", () => {
       label: 'Lian Li 9.2" LCD',
     };
     const ATTACHED_PANELS = [ATTACHED_PANEL];
+    const COMMAND = "/api/displays/strip/panel/command";
 
     /** A manager that starts and stops records without opening anything: what
      *  these cases need is which routes reach it. */
@@ -5247,6 +5251,252 @@ describe("A local monitor is specified rather than paired", () => {
         );
       } finally {
         logged.mockRestore();
+        await hosting.close();
+      }
+    });
+
+    it("sends a command and returns the panel's reply", async () => {
+      const called: unknown[] = [];
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], []),
+          command: (id, command) => {
+            called.push({ id, command });
+            return Promise.resolve("ok");
+          },
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          COMMAND,
+          json({ kind: "brightness", level: 50 }),
+        );
+        expect(answer.status).toBe(200);
+        expect(answer.json()).toEqual({ ok: true, reply: "ok" });
+        expect(called).toEqual([
+          { id: "strip", command: { kind: "brightness", level: 50 } },
+        ]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("answers the empty reply a silent panel gave", async () => {
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: managerOver([], []),
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          COMMAND,
+          json({ kind: "status" }),
+        );
+        expect(answer.status).toBe(200);
+        expect(answer.json()).toEqual({ ok: true, reply: "" });
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it.each([
+      ["an out-of-range level", { kind: "brightness", level: 101 }],
+      ["a negative level", { kind: "brightness", level: -1 }],
+      ["a fractional level", { kind: "brightness", level: 50.5 }],
+      ["a string level", { kind: "brightness", level: "50" }],
+      ["a missing level", { kind: "brightness" }],
+      ["an unknown kind", { kind: "reboot" }],
+      ["a missing kind", {}],
+      ["a missing on", { kind: "screen" }],
+      ["a non-boolean on", { kind: "screen", on: "true" }],
+    ])("refuses %s with 400 and sends nothing", async (_name, body) => {
+      const command = vi.fn();
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: { ...managerOver([], []), command },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          COMMAND,
+          json(body),
+        );
+        expect(answer.status).toBe(400);
+        expect(command).not.toHaveBeenCalled();
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("answers 400 for a non-panel record and 404 for an unknown one", async () => {
+      const hosting = host({ panels: managerOver([], []) });
+
+      try {
+        // The fixture seeds no record, so a local one is added to be the
+        // non-panel this case refuses.
+        const added = await request(
+          hosting.server,
+          "POST",
+          "/api/displays",
+          json({
+            label: "Left screen",
+            monitor: { deviceName: "\\\\.\\DISPLAY2" },
+          }),
+        );
+        expect(added.status).toBe(201);
+        const local = (added.json() as { display: { id: string } }).display;
+
+        const notPanel = await request(
+          hosting.server,
+          "POST",
+          `/api/displays/${local.id}/panel/command`,
+          json({ kind: "status" }),
+        );
+        expect(notPanel.status).toBe(400);
+
+        const unknown = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/nope/panel/command",
+          json({ kind: "status" }),
+        );
+        expect(unknown.status).toBe(404);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("answers 409 when the runner is not holding the device", async () => {
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], []),
+          command: () =>
+            Promise.reject(
+              new PanelNotRunningError("Panel display strip is not running."),
+            ),
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          COMMAND,
+          json({ kind: "status" }),
+        );
+        expect(answer.status).toBe(409);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("answers 409 when the port fails under the command", async () => {
+      // A stop that is queued but has not begun leaves the runner `running`,
+      // so the write reaches a port on its way down and rejects with an OS
+      // error. That is the same "no device now" as a stopped runner.
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], []),
+          command: () =>
+            Promise.reject(
+              Object.assign(new Error("Writing to COM5 failed"), {
+                code: "EIO",
+              }),
+            ),
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          COMMAND,
+          json({ kind: "status" }),
+        );
+        expect(answer.status).toBe(409);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("answers 500 with the message for an unexpected failure", async () => {
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], []),
+          command: () =>
+            Promise.reject(new Error("the control surface fell over")),
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          COMMAND,
+          json({ kind: "status" }),
+        );
+        expect(answer.status).toBe(500);
+        expect(answer.text()).toBe("the control surface fell over");
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("answers 405 for another method on a command path", async () => {
+      const hosting = panelHost();
+
+      try {
+        const answer = await request(hosting.server, "GET", COMMAND);
+        expect(answer.status).toBe(405);
+        expect(answer.text()).toBe("This path supports POST.");
+      } finally {
         await hosting.close();
       }
     });

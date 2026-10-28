@@ -25,9 +25,12 @@ import { handleSubmitRoute } from "./catalogue/submit.js";
 import { DEFAULT_THEMES_DIR } from "./cli/args.js";
 import type { HostBinding } from "./cli/hosting.js";
 import type { ListenableServer } from "./cli/net.js";
-import type { PanelHint } from "./panels/panel-device.js";
+import type { PanelControlCommand, PanelHint } from "./panels/panel-device.js";
 import { attachedDevices, familyFor } from "./panels/panel-families.js";
-import type { PanelManager } from "./panels/panel-manager.js";
+import {
+  type PanelManager,
+  PanelNotRunningError,
+} from "./panels/panel-manager.js";
 import type {
   CustomSourceStatus,
   SourceTestResult,
@@ -898,6 +901,80 @@ async function readBytes(
   }
 
   return new Uint8Array(Buffer.concat(chunks));
+}
+
+/**
+ * One command from a request body, refusing what the adapter would refuse.
+ *
+ * The adapter's own checks stay: this one is what makes a bad value a 400
+ * rather than a 500 from a driver that has already been asked to write. The
+ * recognised kinds are the `PanelControlCommand` union, so a new command is an
+ * edit here as well as there rather than a silent pass-through.
+ */
+function panelCommand(body: unknown): PanelControlCommand {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new Error("That is not a panel command.");
+  }
+
+  const { kind, level, on } = body as {
+    readonly kind?: unknown;
+    readonly level?: unknown;
+    readonly on?: unknown;
+  };
+
+  if (kind === "brightness") {
+    // A string "50" is not a level: coercing it would write a value the caller
+    // did not ask for, and a fraction would be rounded behind their back.
+    if (
+      typeof level !== "number" ||
+      !Number.isInteger(level) ||
+      level < 0 ||
+      level > 100
+    ) {
+      throw new Error("The brightness must be a whole percent from 0 to 100.");
+    }
+
+    return { kind: "brightness", level };
+  }
+
+  if (kind === "screen") {
+    if (typeof on !== "boolean") {
+      throw new Error("The screen command needs on to be true or false.");
+    }
+
+    return { kind: "screen", on };
+  }
+
+  if (kind === "restart" || kind === "status" || kind === "hello") {
+    return { kind };
+  }
+
+  throw new Error("That is not a command this panel accepts.");
+}
+
+/**
+ * Whether a failed control is the transport rather than the host's own bug.
+ *
+ * A runner that is stopping still reports `running` until its stop begins, so
+ * the command reaches a port that is already on its way down; that rejects with
+ * an OS error carrying a `code` (or serialport's closed-port message), while
+ * the adapter's own refusals and this host's bugs are plain errors with none.
+ */
+function isPortFailure(error: unknown): boolean {
+  if (error instanceof PanelNotRunningError) return true;
+  if (typeof error !== "object" || error === null) return false;
+
+  const { code, disconnected, message } = error as {
+    readonly code?: unknown;
+    readonly disconnected?: unknown;
+    readonly message?: unknown;
+  };
+
+  return (
+    typeof code === "string" ||
+    disconnected === true ||
+    message === "Port is not open"
+  );
 }
 
 function sendJson(
@@ -2376,6 +2453,95 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
+      // One hardware control aimed at a display's running device. The body is
+      // refused before the manager is called: the adapter refuses the same
+      // values, but by then the caller has already been answered a 500 for a
+      // typo, which is the wrong side of the protocol.
+      const commandMatch = url.pathname.match(
+        /^\/api\/displays\/([^/]+)\/panel\/command$/,
+      );
+
+      if (commandMatch !== null && request.method === "POST") {
+        if (options.panels === undefined) {
+          sendText(
+            response,
+            404,
+            "Panel management is not enabled on this host.",
+          );
+          return;
+        }
+
+        const commandId = decodeURIComponent(commandMatch[1] ?? "");
+        const display = await displays.find(commandId);
+
+        if (display === undefined) {
+          sendText(response, 404, "No such display.");
+          return;
+        }
+
+        // A panel record is what a control is for; a paired client or a local
+        // monitor has no device behind it and no command to send.
+        if (display.kind !== "panel") {
+          sendText(response, 400, "That display is not a panel.");
+          return;
+        }
+
+        let parsed: unknown;
+
+        try {
+          parsed = JSON.parse(await readBody(request));
+        } catch (error) {
+          sendText(
+            response,
+            400,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+
+        let command: PanelControlCommand;
+
+        try {
+          command = panelCommand(parsed);
+        } catch (error) {
+          sendText(
+            response,
+            400,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+
+        let reply: string;
+
+        try {
+          reply = await options.panels.command(commandId, command);
+        } catch (error) {
+          // A runner that is stopping, or a port that failed mid-write, has no
+          // device to send to now: the command conflicts with what the host is
+          // doing rather than being the host's fault. Anything else is a real
+          // failure and keeps its message.
+          if (isPortFailure(error)) {
+            sendText(
+              response,
+              409,
+              error instanceof Error ? error.message : String(error),
+            );
+            return;
+          }
+
+          sendText(
+            response,
+            500,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+
+        sendJson(response, 200, { ok: true, reply });
+        return;
+      }
+
       // Named by the path it answered rather than by the block: a caller told
       // that GET is supported on a path without it is told nothing true.
       const supported =
@@ -2387,9 +2553,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
               ? "GET and POST"
               : url.pathname === "/api/displays"
                 ? "POST"
-                : id === undefined
-                  ? undefined
-                  : "PATCH and DELETE";
+                : commandMatch !== null
+                  ? "POST"
+                  : id === undefined
+                    ? undefined
+                    : "PATCH and DELETE";
 
       if (supported !== undefined) {
         sendText(response, 405, `This path supports ${supported}.`);
