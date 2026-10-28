@@ -296,6 +296,11 @@ deleted after a successful start, so the panel does not accumulate clips.
 
 ### Capture
 
+A still is captured in the format the device consumes, stated by the device the
+way it already states its refresh floor: PNG for a panel sent raw pixels (the
+TURZX adapter), JPEG for a family that streams JPEG to its own decoder. The JPEG
+intermediate bought nothing for the TURZX panel and cost sharpness.
+
 The rasteriser gains `captureOverlay()`: a PNG of the same devtools page with a
 transparent default background, an injected style that hides the background-media
 layer, and the artboard host's inline paint cleared for the duration (the canvas

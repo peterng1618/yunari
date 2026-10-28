@@ -1130,46 +1130,71 @@ git add src/web/packages/host/src/panels/turzx-video.ts \
 git commit -m "feat(panels): upload and start a theme video on the panel"
 ```
 
-### Task 10: Transparent overlay capture
+### Task 10: Lossless stills and a transparent overlay capture
 
 **Files:**
 - Modify: `src/web/packages/host/src/panels/panel-raster.ts`
-- Test: `src/web/packages/host/src/panels/panel-raster.test.ts` (create if absent)
+- Modify: `src/web/packages/host/src/panels/panel-device.ts`
+- Modify: `src/web/packages/host/src/panels/turzx-panel.ts`
+- Modify: `src/web/packages/host/src/panels/panel-manager.ts`
+- Test: `src/web/packages/host/src/panels/panel-raster.test.ts` (create if absent),
+  `src/web/packages/host/src/panels/turzx-panel.test.ts`
 
 **Interfaces:**
-- Produces: `Rasterizer.captureOverlay(): Promise<Uint8Array>` — a PNG of the page with
-  the background-media layer hidden and the artboard's paint cleared, so alpha
-  where the video shows through. `capture()` stays JPEG quality 85 and turns
-  overlay mode off first.
+- `PanelDevice` gains `readonly stillFormat?: "jpeg" | "png"`; absent means
+  `"jpeg"`. The device states it, the way it already states
+  `minimumIntervalMs`, because the format is the one the device consumes.
+- `RasterOptions` gains `readonly stillFormat?: "jpeg" | "png"`; `capture()`
+  captures in it. `panel-manager` passes `device.stillFormat`.
+- Produces: `Rasterizer.captureOverlay(): Promise<Uint8Array>` — a PNG of the page
+  with the background-media layer hidden and the artboard's paint cleared, so
+  alpha where the video shows through. `capture()` turns overlay mode off first.
 - Produces: `screenshotParameters(format: "jpeg" | "png")` — the pure
   `Page.captureScreenshot` format parameters; PNG carries no `quality`.
+- TURZX declares `stillFormat: "png"`: it decodes the still to raw BGRA, so the
+  JPEG intermediate was lossy for nothing (register `vg-788`).
 - **No player, scene or background-media change.** The page is the player page
   this rasteriser already drives; the overlay is a devtools-side edit of that
   page (ported by interface from the Lian Li worktree, `c370829e`).
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
 ```ts
 import { screenshotParameters } from "./panel-raster.js";
 
-it("asks for PNG with no quality for an overlay and JPEG 85 for a still", () => {
+it("asks for PNG with no quality and JPEG 85 with one", () => {
   expect(screenshotParameters("png")).toEqual({ format: "png" });
   expect(screenshotParameters("jpeg")).toEqual({ format: "jpeg", quality: 85 });
 });
 ```
 
-- [ ] **Step 2: Run it and see it fail**
+```ts
+// turzx-panel.test.ts, beside the other openTurzxPanel cases
+it("asks for a lossless still because it is decoded, not streamed", async () => {
+  const device = await opened(fakeTransport("chs_5inch.dev1_rom1.88").transport);
+  try {
+    expect(device.stillFormat).toBe("png");
+  } finally {
+    await device.close();
+  }
+});
+```
+
+- [ ] **Step 2: Run them and see them fail**
 
 ```bash
-npx vitest run packages/host/src/panels/panel-raster.test.ts
+npx vitest run packages/host/src/panels/panel-raster.test.ts packages/host/src/panels/turzx-panel.test.ts
 ```
-Expected: FAIL — `screenshotParameters` is not exported.
+Expected: FAIL — `screenshotParameters` is not exported, and `stillFormat` is absent.
 
-- [ ] **Step 3: Implement in `panel-raster.ts`**
+- [ ] **Step 3: Implement**
 
 - `export function screenshotParameters(format: "jpeg" | "png")` returns
   `{ format }` plus `quality: 85` only for JPEG; the clip and geometry stay at the
   `Page.captureScreenshot` call site.
+- `RasterOptions.stillFormat` (default `"jpeg"`) feeds that helper from
+  `capture()`; `TurzxPanel` declares `readonly stillFormat = "png"`, and `run()`
+  in `panel-manager.ts` passes it into `createRasterizer`.
 - A module constant `OVERLAY_STYLE_ID = "yunari-panel-overlay"` and one CSS text:
   hide `[data-yunari-background-media]`, clear `[data-yunari-display-disc]`, and
   make `html, body` transparent.
@@ -1183,14 +1208,14 @@ Expected: FAIL — `screenshotParameters` is not exported.
   the round trip rather than a CSS override. Then send
   `Emulation.setDefaultBackgroundColorOverride` with `{ r: 0, g: 0, b: 0, a: 0 }`
   when on and `{}` when off.
-- `capture()` = `overlayMode(devtools, false)` then `shot("jpeg")`;
+- `capture()` = `overlayMode(devtools, false)` then `shot(stillFormat)`;
   `captureOverlay()` = `overlayMode(devtools, true)` then `shot("png")`, where
   `shot` is the existing capture body parameterised by `screenshotParameters`.
 
-- [ ] **Step 4: Run the test and make it pass**
+- [ ] **Step 4: Run the tests and make them pass**
 
 ```bash
-npx vitest run packages/host/src/panels/panel-raster.test.ts
+npx vitest run packages/host/src/panels/panel-raster.test.ts packages/host/src/panels/turzx-panel.test.ts
 npm run typecheck -w @yunari/host
 ```
 Expected: PASS; typecheck exit 0.
@@ -1199,13 +1224,18 @@ Expected: PASS; typecheck exit 0.
 
 ```bash
 git add src/web/packages/host/src/panels/panel-raster.ts \
-  src/web/packages/host/src/panels/panel-raster.test.ts
-git commit -m "feat(panels): capture a transparent UI overlay"
+  src/web/packages/host/src/panels/panel-raster.test.ts \
+  src/web/packages/host/src/panels/panel-device.ts \
+  src/web/packages/host/src/panels/turzx-panel.ts \
+  src/web/packages/host/src/panels/turzx-panel.test.ts \
+  src/web/packages/host/src/panels/panel-manager.ts
+git commit -m "feat(panels): capture a lossless still and a transparent overlay"
 ```
 
 The overlay's alpha on real pixels is proven in Task 12, where the runner gives
-the capture a live video theme; a still-frame proof here would need a second
-harness for one boolean.
+the capture a live video theme; the sharper still is observable on the panel at
+the same time. Record `vg-788`'s check and this commit's sha on the register row
+in that task's commit, not here.
 
 ### Task 11: Overlay diff encoder and `presentOverlay`
 
