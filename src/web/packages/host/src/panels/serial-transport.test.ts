@@ -160,17 +160,41 @@ describe("the serial transport's read", () => {
     expect(decode(transport.drainPending())).toBe("needReSend:0|renderCnt:0");
     expect(Date.now() - started).toBeLessThan(40);
 
+    // The drain's discard window ends on a quiet gap; the command's write and
+    // the device's answer come after it.
+    await pause(SETTLED_MS);
     port.emit("data", Buffer.from("needReSend:0|renderCnt:1"));
     expect(decode(await transport.read(1000))).toBe("needReSend:0|renderCnt:1");
   });
 
-  it("drains a burst still arriving when no read is waiting", async () => {
+  it("drops the rest of a burst drained mid-arrival", async () => {
     const port = new FakePort();
     const transport = transportOver(port);
 
     port.emit("data", Buffer.from("stal"));
     expect(decode(transport.drainPending())).toBe("stal");
+
+    // The same burst's tail arrives after the drain; read on its own it would
+    // seal 50 ms later and be served as the next command's answer.
+    port.emit("data", Buffer.from("e"));
+    await pause(SETTLED_MS);
+
     expect((await transport.read(30)).length).toBe(0);
+  });
+
+  it("drops a chunk just after the drain and reads the answer that follows", async () => {
+    const port = new FakePort();
+    const transport = transportOver(port);
+
+    transport.drainPending();
+    await pause(10);
+    port.emit("data", Buffer.from("tail"));
+    await pause(SETTLED_MS);
+
+    const reading = transport.read(1000);
+    port.emit("data", Buffer.from("needReSend:0|renderCnt:1"));
+
+    expect(decode(await reading)).toBe("needReSend:0|renderCnt:1");
   });
 
   it("drains nothing when the wire has been silent", () => {

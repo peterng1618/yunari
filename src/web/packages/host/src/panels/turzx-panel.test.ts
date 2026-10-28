@@ -315,7 +315,9 @@ describe("openTurzxPanel", () => {
 describe("a panel's controls", () => {
   /** The command's bytes, then zero fill to the wire's 250-byte frame. */
   function expectCommand(write: Uint8Array, command: readonly number[]): void {
-    expect(write.length % 250).toBe(0);
+    // Exactly one frame: a two-frame write would mean the command and a body
+    // were torn apart or doubled.
+    expect(write.length).toBe(250);
     expect([...write.slice(0, command.length)]).toEqual([...command]);
     expect(write.slice(command.length).every((byte) => byte === 0)).toBe(true);
   }
@@ -423,10 +425,12 @@ describe("a panel's controls", () => {
     }
   });
 
-  it("writes HELLO, discards the open-time status and returns the identity", async () => {
+  it("writes HELLO, discards an older HELLO-shaped reply and returns the fresh one", async () => {
     const fake = fakeTransport(
       "chs_5inch.dev1_rom1.88", // HELLO at open
-      "needReSend:0|renderCnt:1", // the status reply open left unread: drained
+      // Another identity: the shape check alone would accept it, so only the
+      // drain can keep it from being returned as this command's answer.
+      "chs_5inch.dev1_rom1.87",
       "chs_5inch.dev1_rom1.88", // the answer to this command
     );
     const panel = await opened(fake.transport);

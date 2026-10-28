@@ -26,6 +26,12 @@ export interface SerialTransport {
    * A command that reads for an answer of its own must not be handed a reply
    * from before it — the panel answers HELLO and QUERY_STATUS even when nothing
    * asked. This never waits, so it is not a substitute for `read`.
+   *
+   * **Two contracts, split by whether a read is waiting.** With one, it returns
+   * only sealed replies: a burst in progress belongs to that read. With none, it
+   * also returns a partial burst **and** discards the rest of it until the wire
+   * goes quiet, so the tail of a stale reply cannot be read as the next
+   * command's answer.
    */
   drainPending(): Uint8Array;
   close(): Promise<void>;
@@ -128,6 +134,8 @@ class OpenSerialPort implements SerialTransport {
   private burst: Buffer[] = [];
   /** Seals `burst` after the wire has been quiet long enough. */
   private quiet: ReturnType<typeof setTimeout> | undefined;
+  /** After a drain: incoming chunks are a stale reply's tail, not an answer. */
+  private discarding = false;
   /** The one read waiting for a reply; the adapter reads sequentially. */
   private waiting:
     | {
@@ -140,7 +148,9 @@ class OpenSerialPort implements SerialTransport {
   private closed = false;
 
   private readonly onData = (chunk: Buffer): void => {
-    this.burst.push(chunk);
+    // The rest of a drained reply's burst seals later and would otherwise be
+    // served to the next read as that command's answer.
+    if (!this.discarding) this.burst.push(chunk);
     this.armQuiet();
   };
 
@@ -151,6 +161,7 @@ class OpenSerialPort implements SerialTransport {
    * disconnection itself — a cabled gadget that vanished is not a reply.
    */
   private readonly onPortError = (): void => {
+    this.discarding = false;
     if (this.quiet !== undefined) {
       clearTimeout(this.quiet);
       this.quiet = undefined;
@@ -215,10 +226,10 @@ class OpenSerialPort implements SerialTransport {
       parts.push(...this.burst.map((chunk) => Uint8Array.from(chunk)));
       this.burst = [];
 
-      if (this.quiet !== undefined) {
-        clearTimeout(this.quiet);
-        this.quiet = undefined;
-      }
+      // The rest of that burst can still be on the wire; everything until the
+      // next quiet gap is its tail, not an answer to what we send next.
+      this.discarding = true;
+      this.armQuiet();
     }
 
     const bytes = new Uint8Array(
@@ -278,6 +289,7 @@ class OpenSerialPort implements SerialTransport {
 
   async close(): Promise<void> {
     this.closed = true;
+    this.discarding = false;
     this.port.off("data", this.onData);
     this.port.off("error", this.onPortError);
     if (this.quiet !== undefined) {
@@ -304,6 +316,8 @@ class OpenSerialPort implements SerialTransport {
 
     this.quiet = setTimeout(() => {
       this.quiet = undefined;
+      // The gap ends the discarded tail: anything from here is a new reply.
+      this.discarding = false;
       this.seal();
     }, READ_QUIET_MS);
   }
