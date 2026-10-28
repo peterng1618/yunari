@@ -12,6 +12,8 @@
 
 **Phase map:** Plan Phases 1–2 implement the spec's Phase 1 (static panel, registry, controls). Plan Phase 3 implements the spec's Phase 2 (video overlay). One plan, three plan phases of four tasks.
 
+**Execution order (ruled 2026-10-29, user request):** Task 5, then Phase 3 (Tasks 9–12), then Tasks 6–8. The human wanted the demo theme's video background on the panel before the controls surface; the video path does not depend on Tasks 6–8.
+
 **Execution prerequisite:** `STATUS.md` names this plan as the active plan before Task 1 starts, and no other incomplete plan is active.
 
 ## Global Constraints
@@ -223,8 +225,16 @@ export interface PanelControls {
   readonly commands: readonly PanelControlCommand["kind"][];
   run(command: PanelControlCommand): Promise<string>;
 }
+export interface PanelVideoPlacement {
+  readonly offsetX: number;
+  readonly offsetY: number;
+}
+export interface PanelVideoSource {
+  readonly bytes: Uint8Array;
+  readonly placement: PanelVideoPlacement;
+}
 export interface PanelVideo {
-  start(mp4: Uint8Array): Promise<void>;
+  start(mp4: Uint8Array, placement: PanelVideoPlacement): Promise<void>;
   presentOverlay(png: Uint8Array): Promise<void>;
   stop(): Promise<void>;
 }
@@ -1022,7 +1032,7 @@ git commit -m "feat(panels): add the hardware controls dialog"
 
 ## Plan Phase 3 — Video overlay
 
-**External dependency:** the Lian Li worktree is implementing the shared video-background seam — deciding whether a display's theme video reaches a panel and how the runner switches mode. Before Task 9, merge that work and read its interfaces. Reuse its seam; implement here only the TURZX-specific pieces (transcode/upload/start, transparent capture flag, overlay diff encoding) and its adapter wiring. Where this plan and that seam name the same thing differently, keep the landed names and update Tasks 9, 10 and 12 accordingly; do not build a second video-mode path. If the seam has not landed by the time Phase 3 starts, Task 12's `videoFor`/`mode` design is the fallback, not the default.
+**External dependency:** the Lian Li worktree landed the shared video-background seam (`c370829e`, `b37d9286`). **Port its interfaces; do not merge it** — its `tur-usb-panel` video path is a USB block feed, and its `panel-device.ts`/`panel-runner.ts` edits conflict with the control types and in-flight guard this plan already landed. The ported names are `PanelVideoPlacement`, `PanelVideoSource`, `PanelVideo.start(video, placement)`, `Rasterizer.captureOverlay()`, `PanelRunnerOptions.video` and `PanelManagerOptions.videoFor`. Implement here only the TURZX pieces (transcode/upload/start, the overlay diff encoder) and the wiring.
 
 ### Task 9: Transcode, upload and start a theme video
 
@@ -1047,7 +1057,7 @@ export async function transcodeForPanel(
 ): Promise<TranscodeResult>;
 ```
 - The TURZX device gains `video` implementing Task 2's `PanelVideo`:
-  - `start(mp4)` transcodes, uploads when the device size differs, starts playback, initializes the transparent overlay, waits ≥1500 ms, and records the remote path.
+  - `start(mp4, placement)` transcodes, uploads when the device size differs, starts playback, initializes the transparent overlay, waits ≥1500 ms, and records the remote path. The placement pans the cover crop: `crop=800:480` offsets by `offsetX * (scaledWidth - 800)` and likewise for y. TURZX ignores it when the aspect already matches.
   - `stop()` writes STOP_VIDEO.
 - `TurzxOptions` gains `readonly transcode?: (bytes: Uint8Array) => Promise<TranscodeResult>`, defaulting to `transcodeForPanel`, so the upload path is testable without spawning ffmpeg.
 - Consumes: Task 1's codec and commands, Task 2's `PanelVideo`.
@@ -1130,7 +1140,7 @@ git commit -m "feat(panels): upload and start a theme video on the panel"
 - Test: `src/web/packages/host/src/panels/panel-raster.test.ts`, `src/web/packages/scene-fabric/src/background-media.dom.test.ts` (create either if absent)
 
 **Interfaces:**
-- `RasterOptions` gains `readonly transparent?: boolean`; when true, `capture()` returns PNG from a transparent-background screenshot.
+- `Rasterizer` gains `captureOverlay(): Promise<Uint8Array>`: a PNG screenshot over a transparent default background, with the page flag that hides the video. `capture()` stays JPEG.
 - `BackgroundMediaOptions` gains `readonly visible?: boolean` and `readonly still?: boolean`; `still` pauses a video at time 0 and keeps it sampleable for glass, `visible: false` sets the layer's opacity to 0.
 - Scene options forward both as `mediaVisible` and `mediaStill`.
 - The player reads `panelOverlay=1` and passes them when mounting.
@@ -1173,7 +1183,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement**
 
-- `createRasterizer` sends `Emulation.setDefaultBackgroundColorOverride` with a transparent colour before navigation when `transparent`, and `capture()` uses the shared parameter function.
+- `createRasterizer` sends `Emulation.setDefaultBackgroundColorOverride` with a transparent colour before navigation, and `captureOverlay()` captures PNG through the shared parameter function while `capture()` keeps JPEG.
 - `mountBackgroundMedia`: keep the layer's `opacity` at `"0"` when `visible === false`; when `still === true` and the media is a video, set `currentTime = 0` and pause on `loadeddata`, and never arm the frame loop.
 - `scene.ts` forwards `mediaVisible`/`mediaStill`; the player's `panelOverlay` flag supplies `false`/`true`.
 
@@ -1331,30 +1341,63 @@ git commit -m "feat(panels): send overlay diff updates to the panel"
 - Test: `src/web/packages/host/src/panels/panel-runner.test.ts`, `src/web/packages/host/src/server.test.ts`
 
 **Interfaces:**
-- `PanelRunnerOptions` gains `readonly mode?: "still" | "overlay"`; in `"overlay"` the runner captures and calls `device.video!.presentOverlay(capture)`.
-- `PanelManagerOptions` gains `readonly videoFor?: (displayId: string) => Promise<Uint8Array | undefined>`.
-- `PanelManager` gains `refresh(displayId: string): Promise<void>` (stop, then start), called after an active-theme write for a panel display.
+- `PanelRunnerOptions` gains `readonly video?: PanelVideoSource | undefined`. When the device has `video` and a source is given, the runner starts it once and each tick sends `rasterizer.captureOverlay()` through `device.video.presentOverlay`; a failed start drops to the still path and reports once. The runner keeps the in-flight guard from Task 4.
+- `Rasterizer` gains `captureOverlay()` (Task 10).
+- `PanelManagerOptions` gains `readonly videoFor?: (displayId: string) => Promise<PanelVideoSource | undefined>`, read once per start.
+- `PanelManager` gains `refresh(displayId: string): Promise<void>`: `await stop`, then `start`; called after an active-theme write for a panel display, because a panel that started a video keeps playing that clip until its runner restarts.
 - Consumes: Tasks 9–11.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-it("sends overlay captures through presentOverlay in overlay mode", async () => {
+const SOURCE = { bytes: Uint8Array.of(7), placement: { offsetX: 0, offsetY: 0 } };
+
+it("sends overlay captures through presentOverlay when a video source is given", async () => {
   const presentOverlay = vi.fn(async () => {});
+  const present = vi.fn(async () => {});
+  const start = vi.fn(async () => {});
+  const device: PanelDevice = {
+    geometry: { width: 4, height: 4 },
+    open: async () => {}, present, close: async () => {},
+    video: { start, presentOverlay, stop: async () => {} },
+  };
+  const rasterizer = {
+    capture: vi.fn(async () => Uint8Array.of(1)),
+    captureOverlay: vi.fn(async () => Uint8Array.of(2)),
+    close: async () => {},
+  };
+
+  const runner = createPanelRunner({ device, rasterizer, video: SOURCE });
+  await expect(runner.tick()).resolves.toBe(true);
+
+  expect(start).toHaveBeenCalledWith(SOURCE.bytes, SOURCE.placement);
+  expect(presentOverlay).toHaveBeenCalledWith(Uint8Array.of(2));
+  expect(present).not.toHaveBeenCalled();
+});
+
+it("falls back to still frames when the video will not start, once", async () => {
+  const onError = vi.fn();
   const present = vi.fn(async () => {});
   const device: PanelDevice = {
     geometry: { width: 4, height: 4 },
     open: async () => {}, present, close: async () => {},
-    video: { start: async () => {}, presentOverlay, stop: async () => {} },
+    video: {
+      start: async () => { throw new Error("no"); },
+      presentOverlay: async () => {},
+      stop: async () => {},
+    },
   };
   const rasterizer = { capture: vi.fn(async () => Uint8Array.of(1)), close: async () => {} };
-  const runner = createPanelRunner({ device, rasterizer, mode: "overlay" });
-  await expect(runner.tick()).resolves.toBe(true);
-  expect(presentOverlay).toHaveBeenCalledTimes(1);
-  expect(present).not.toHaveBeenCalled();
+
+  const runner = createPanelRunner({ device, rasterizer, video: SOURCE, onError });
+  await runner.tick();
+  await runner.tick();
+
+  expect(present).toHaveBeenCalledTimes(2);
+  expect(onError).toHaveBeenCalledTimes(1);
 });
 
-it("leaves the still mode as the default", async () => {
+it("keeps the still path when no video source is given", async () => {
   const present = vi.fn(async () => {});
   const presentOverlay = vi.fn(async () => {});
   const device: PanelDevice = {
@@ -1370,8 +1413,7 @@ it("leaves the still mode as the default", async () => {
   expect(presentOverlay).not.toHaveBeenCalled();
 });
 ```
-
-The fallback from a failed video start is verified on the panel (Step 5), because reaching it needs the manager to open a real device; a unit seam for that would exist only for the test.
+A capture that is byte-identical does not resend; give each case distinct bytes or clear `last` by using separate runners.
 
 Add the route case to `server.test.ts`'s `a USB panel` block. `managerOver` gains `refresh: (id) => { refreshed.push(id); return Promise.resolve(); }`:
 ```ts
@@ -1400,12 +1442,12 @@ npx vitest run packages/host/src/panels/panel-runner.test.ts packages/host/src/s
 ```
 Expected: FAIL.
 
-- [ ] **Step 3: Implement the runner mode and the manager's video path**
+- [ ] **Step 3: Implement the runner's video path and the manager's wiring**
 
-- Runner: branch on `mode` in `tick`; the byte comparison still uses the capture.
-- Manager: at `run()`, ask `videoFor(displayId)`; when it answers and the device has `video`, `await device.video.start(bytes)`, build the rasterizer with `transparent: true` and a URL carrying `panelOverlay=1`, and create the runner with `mode: "overlay"`. If `start` throws, report once and build the static runner instead.
-- `stop()` calls `device.video.stop()` before `close()`.
-- `refresh` stops and starts the display; call it from `server.ts` after `activeTheme.write(key, id)` when `key` is a panel display.
+- Runner: split `tick` into `sendStill` and `sendOverlay`; the first tick with a source starts the video once (`start(bytes, placement)`); a failed start reports once, drops the source and uses the still path for the rest of the runner's life. The in-flight guard from Task 4 wraps whichever path runs.
+- Manager: at `run()`, ask `videoFor(displayId)`; when it answers and the device has `video`, pass it to `createPanelRunner` as `video`, and capture through a page URL carrying `panelOverlay=1`. `start` failure is handled by the runner, not here.
+- `stop()` calls `device.video.stop()` before `close()`, and `stop` is awaited by its callers — an unawaited close races the reopen.
+- `refresh` awaits `stop` then `start`; call it from `server.ts` after `activeTheme.write(key, id)` when `key` is a panel display.
 
 - [ ] **Step 4: Run the tests and make them pass**
 
