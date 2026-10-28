@@ -30,7 +30,7 @@ licensing, asset import, presets and every host route keep their owners.
 
 ## Rulings taken 2026-10-28
 
-Provenance: R1–R7 are the user's decisions in the session that produced this
+Provenance: R1–R8 are the user's decisions in the session that produced this
 document; the request opened with "unify the UI/UX language & behaviors".
 
 **R1 — One UI/UX language across every tab.** The user's list named the
@@ -71,6 +71,13 @@ skeleton, paging slot, selection and tab order.
 
 **R7 — The rest of the app receives the same audit next.** Queued behind this
 change and filed as `vg-773`; the `DESIGN.md` rules are its checklist.
+
+**R8 — Double-clicking a media card opens a preview modal.** The user's words:
+"add a double click on grid item to open photo/video preview modal". It applies
+to image results and Wallpaper Engine items; a palette, icon, gradient or font
+card has nothing to enlarge and keeps its single-press selection. The preview
+carries the same actions as the finder, and a footer **Preview** button gives the
+same modal a keyboard-reachable route.
 
 ## The surface
 
@@ -167,6 +174,9 @@ add a region, move the search field, or draw its own grid frame.
 - Right: the action area. Secondary first, primary last, always in that slot.
   Buttons reuse the dialog vocabulary (`ACTION_BUTTON` / `ActionBox`, tone
   `accent` for the primary), so no filled accent and no new button shape.
+- A previewable selection also draws a 28px icon button, `PREVIEW_GLYPH`, before
+  the text actions; it opens the preview modal and is the keyboard route to the
+  same thing a double-click does.
 - With no selection both actions are disabled; disabled is never the only
   signal, because the grid's selection state is what the author reads.
 
@@ -201,6 +211,9 @@ One `FinderCard`; the preview renderer is the only variation.
 - Every card is one focus stop in a roving listbox: arrows move by one and by a
   row, Home/End jump, Enter applies the primary action. The grid owns the
   keyboard model; the card owns the press.
+- Double-clicking a previewable card (an image result or a Wallpaper Engine
+  item) opens the preview modal without changing the selection. Other kinds
+  have no double-click gesture, so nothing is a dead press.
 
 ## Selection and action states
 
@@ -218,6 +231,28 @@ One `FinderCard`; the preview renderer is the only variation.
   4. Failure → footer shows the sentence in `--hot`, the card shows the error
      mark, and the actions return so the author can retry.
 - The outcome is announced once through the footer's `role="status"`.
+
+## The preview modal
+
+- Opened by double-clicking a previewable card, or by the footer's Preview
+  button. It is a viewer, so it never changes the selection and never writes on
+  open.
+- It reuses `Dialog` and the `.editor-shell-dialog--asset-preview` box — the
+  centred stage and metadata panel the Assets pane's viewer already draws — so
+  the app has one picture-viewing shape rather than two.
+- Stage: the result's `preview` at `object-contain` on `--asset-preview-stage`.
+  A video-kind result draws `<video controls muted loop>` when a playable URL
+  exists; no finder source exposes one today, so a video result shows its poster
+  and the panel says it is a poster rather than implying playback.
+- Panel: name, author or photographer, licence, source URL, and the tab's own
+  actions with the same labels and the same busy/success/failure states as the
+  footer. For a Wallpaper Engine item: title, kind, size, tags, workshop URL and
+  the item's action.
+- Escape closes the preview before the finder; closing returns focus to the card
+  that was previewed.
+- It is a separate component from `panes/assets/preview-modal.tsx`: that modal's
+  subject is a declared local file with remove/replace and package usage, and
+  forcing a remote result into its contract would give one modal two owners.
 
 ## Per-tab content
 
@@ -245,6 +280,8 @@ One `FinderCard`; the preview renderer is the only variation.
   group. Per-card done badges survive for the session.
 - **Videos** has no source in the registry today; the tab is absent rather than
   empty. The layout supports it unchanged when a source arrives.
+- Images and Wallpaper Engine are the previewable tabs; the other three have no
+  picture to enlarge.
 
 ## Data flow
 
@@ -396,6 +433,8 @@ One state component, drawn inside the content region, never in the footer:
   faces.
 - `asset-finder/finder-state.tsx` — the empty/error/credential/list state
   bodies.
+- `asset-finder/preview-modal.tsx` — the media viewer opened by a double-click or
+  the footer's Preview button.
 - `asset-finder/skeleton.tsx` — the one card skeleton.
 - `asset-finder/tab-data.ts` — the pure accumulation and page arithmetic.
 - `asset-finder/modal.tsx` — the dialog, per-tab state, the tab adapters (font,
@@ -502,6 +541,10 @@ still takes the ladder:
   skeleton cards without replacing rows.
 - Every action button reaches disabled → busy → success/failure, announced in
   the footer; the card shows busy and failed marks.
+- Double-clicking an image or Wallpaper Engine card opens the preview modal; the
+  footer's Preview button opens the same modal; Escape closes it back to the
+  grid with focus on the card; no other kind has the gesture, and the modal
+  performs no write without a press.
 - Every source failure is a sentence in the footer and a dot on its chip; the
   Retry path re-asks.
 - The Connections button appears exactly when a keyed source is missing or
@@ -528,6 +571,7 @@ still takes the ladder:
 | Search debounce | 200ms |
 | Append root margin | 400px |
 | Connections button | 28×28 |
+| Preview modal | the existing `--asset-preview-width/height` box (1132×852 cap) |
 
 ## Non-goals
 
@@ -536,5 +580,7 @@ still takes the ladder:
 - No redesign of the Assets pane, the store, the Settings modal or the
   wallpaper-engine import flow; those receive R7's audit later.
 - No virtualisation, drag-and-drop, multi-select or cross-source ranking.
+- No zoom, pan, slideshow or filmstrip in the preview modal; no video playback
+  until a finder source exposes a playable URL.
 - No compatibility shim for the old finder markup; the browser and DOM tests are
   updated with the surface, and the finder is pre-release internal UI.
