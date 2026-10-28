@@ -41,6 +41,7 @@ are provenance, not notice rows.
 | `undici` | 7.30.1 | MIT | host: pins the DNS address checked by a custom source's policy to the connection that fetches it (decision 0116) |
 | `usb` | 3.2.1 | MIT | host: opens the bulk endpoint a USB panel is driven over (decision 0130). Native module with per-platform prebuilt binaries and no runtime dependencies |
 | `node-hid` | 3.4.0 | MIT OR X11 | host: writes the 64-byte control reports a Kraken Z's LCD takes (decision 0131); MIT is the one taken. The Lian Li panels use `usb` alone; this one is only for the HID interface Windows owns, which libusb cannot claim. Native module, prebuilt per platform |
+| `serialport` | 13.0.0 | MIT | host: the TURZX 5" panel's serial transport (decision 0133). Native binding, prebuilt per platform |
 | `qr` | 0.7.2 | MIT OR Apache-2.0 | QR symbol for the display link (no dependencies of its own) |
 | `class-variance-authority` | 0.7.1 | Apache-2.0 | editor component variants |
 | `clsx` | 2.1.1 | MIT | editor class-name joins |

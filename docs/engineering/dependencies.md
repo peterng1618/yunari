@@ -35,6 +35,7 @@ declares. The closure half is this file's own **Release rule** below.
 | `undici` | 7.30.1 | MIT | host: pins the address a custom source's policy checked to the connection that fetches it; already present transitively, now declared directly |
 | `usb` | 3.2.1 | MIT | host: drives a USB panel's bulk endpoint; native module, prebuilt per platform, no dependencies of its own (decision 0130) |
 | `node-hid` | 3.4.0 | MIT (of `MIT OR X11`) | host: the HID control reports the NZXT Kraken Z LCD takes; Windows owns that interface so libusb cannot claim it, and libusb cannot reach its interrupt endpoints either — measured, decision 0131. Native module, prebuilt per platform |
+| `serialport` | 13.0.0 | MIT | host: serial transport for the TURZX 5" panel; the framing is Yunari's own, this package only opens the port (decision 0133). Native binding, prebuilt per platform |
 | `qr` | 0.7.2 | MIT OR Apache-2.0 | QR symbol for the display link |
 | `jsqr` | 1.4.0 | Apache-2.0 | devDependency: decodes the QR round-trip |
 | `@google/design.md` | 0.4.0 | Apache-2.0 | devDependency: lints `DESIGN.md` in the design gate |
