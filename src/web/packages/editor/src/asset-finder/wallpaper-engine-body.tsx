@@ -13,7 +13,7 @@ import {
   type WallpaperEngineItem,
 } from "../wallpaper-engine/client.js";
 import type { ImportOutcome } from "./actions.js";
-import { CardGridSkeleton } from "./skeleton.js";
+import { FinderSkeleton } from "./skeleton.js";
 import {
   WallpaperEngineCard,
   type WallpaperEngineCardState,
@@ -203,7 +203,7 @@ export function WallpaperEngineBody(props: {
   if (answer === undefined) {
     // The wait is the grid that is coming; the guide and the `.mpkg` import
     // need no library, so they stay reachable while the host answers.
-    listing = <CardGridSkeleton />;
+    listing = <FinderSkeleton />;
   } else if (answer.available === false) {
     listing = (
       <p

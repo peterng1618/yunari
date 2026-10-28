@@ -3,7 +3,7 @@ import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it } from "vitest";
 import { uiCopy } from "../ui-copy.js";
-import { CardGridSkeleton, TextSkeleton } from "./skeleton.js";
+import { FinderSkeleton } from "./skeleton.js";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -41,52 +41,34 @@ function focusables(region: HTMLElement): readonly Element[] {
   ];
 }
 
-it("draws card-shaped placeholders with one hidden sentence and no focusable element", () => {
-  const rendered = mount(<CardGridSkeleton count={6} />);
+it("draws card-shaped placeholders and says it is loading once", () => {
+  const rendered = mount(<FinderSkeleton count={4} />);
   const region = rendered.querySelector<HTMLElement>(
     "[data-yunari-skeleton-grid]",
   );
-  expect(region?.getAttribute("aria-busy")).toBe("true");
-  expect(region?.querySelectorAll("[data-yunari-skeleton-card]")).toHaveLength(
-    6,
-  );
-
-  // The shapes are decorative; exactly one sentence is read, and it is hidden.
-  expect(region?.querySelectorAll(".sr-only")).toHaveLength(1);
-  expect(region?.textContent).toBe(uiCopy.assets.skeletonLoading);
-  expect(focusables(region ?? rendered)).toEqual([]);
-});
-
-it("pulses each card and stops when the user prefers reduced motion", () => {
-  const rendered = mount(<CardGridSkeleton count={2} />);
-  const cards = [
-    ...rendered.querySelectorAll<HTMLElement>("[data-yunari-skeleton-card]"),
-  ];
-  expect(cards).toHaveLength(2);
-  for (const card of cards) {
-    expect(card.className).toContain("animate-pulse");
-    expect(card.className).toContain("motion-reduce:animate-none");
-    expect(card.getAttribute("aria-hidden")).toBe("true");
-  }
-});
-
-it("draws a text skeleton with one hidden sentence and no focusable element", () => {
-  const rendered = mount(<TextSkeleton />);
-  const region = rendered.querySelector<HTMLElement>(
-    "[data-yunari-skeleton-text]",
-  );
-  expect(region?.getAttribute("aria-busy")).toBe("true");
+  expect(
+    region?.querySelectorAll("[data-yunari-skeleton-card]"),
+  ).toHaveLength(4);
   expect(region?.querySelectorAll("[data-yunari-skeleton-line]")).toHaveLength(
-    3,
+    8,
   );
+  const firstCard = region?.querySelector<HTMLElement>(
+    "[data-yunari-skeleton-card]",
+  );
+  expect(firstCard?.firstElementChild?.className).toContain("aspect-[4/3]");
+  expect(region?.getAttribute("aria-busy")).toBe("true");
   expect(region?.querySelectorAll(".sr-only")).toHaveLength(1);
   expect(region?.textContent).toBe(uiCopy.assets.skeletonLoading);
   expect(focusables(region ?? rendered)).toEqual([]);
+});
 
-  for (const line of region?.querySelectorAll<HTMLElement>(
-    "[data-yunari-skeleton-line]",
-  ) ?? []) {
-    expect(line.className).toContain("animate-pulse");
-    expect(line.className).toContain("motion-reduce:animate-none");
+it("pulses each shape and stops when the user prefers reduced motion", () => {
+  const rendered = mount(<FinderSkeleton count={2} />);
+  const shapes = [...rendered.querySelectorAll<HTMLElement>(".animate-pulse")];
+  // One preview and two lines per card.
+  expect(shapes).toHaveLength(6);
+  for (const shape of shapes) {
+    expect(shape.className).toContain("animate-pulse");
+    expect(shape.className).toContain("motion-reduce:animate-none");
   }
 });

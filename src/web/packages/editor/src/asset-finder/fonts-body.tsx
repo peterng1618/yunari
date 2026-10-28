@@ -17,7 +17,7 @@ import {
   type FontRole,
 } from "./font-preview-panel.js";
 import { SEARCH_DEBOUNCE_MS } from "./modal.js";
-import { TextSkeleton } from "./skeleton.js";
+import { FinderSkeleton } from "./skeleton.js";
 
 /** R5's three-way filter: it narrows what is drawn and never what is asked. */
 type FontFilter = "all" | "trio" | "family";
@@ -391,7 +391,7 @@ export function FontsBody(props: {
           // Nothing drawn yet: a skeleton says the question is out rather than
           // drawing an empty listbox that reads as a broken body. Rows already
           // drawn stay up.
-          <TextSkeleton />
+          <FinderSkeleton />
         ) : empty ? (
           <p data-yunari-font-no-matches="" className="text-sm text-muted">
             {copy.noResults}

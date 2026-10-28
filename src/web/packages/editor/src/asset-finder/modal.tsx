@@ -21,7 +21,7 @@ import { type AssetPlacement } from "./actions.js";
 import { type ClientOptions, listSources, searchAssets } from "./client.js";
 import { cardModelOf, FinderCard } from "./finder-card.js";
 import { interleave } from "./interleave.js";
-import { CardGridSkeleton } from "./skeleton.js";
+import { FinderSkeleton } from "./skeleton.js";
 
 /** How long a keystroke settles before it is the query. */
 export const SEARCH_DEBOUNCE_MS = 200;
@@ -474,7 +474,7 @@ export function AssetFinder({
           data-yunari-asset-listing-skeleton=""
           className="min-h-0 flex-1 overflow-y-auto p-[var(--space-16)]"
         >
-          <CardGridSkeleton />
+          <FinderSkeleton />
         </div>
       ) : null}
       {active === undefined ? null : (
@@ -712,7 +712,7 @@ export function AssetFinder({
                       data-yunari-asset-loading=""
                       className="min-h-0 flex-1 overflow-y-auto"
                     >
-                      <CardGridSkeleton />
+                      <FinderSkeleton />
                     </div>
                   ) : empty ? (
                     <p

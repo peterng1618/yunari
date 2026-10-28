@@ -464,7 +464,7 @@ it("draws a text skeleton while the first search is out, then its results", asyn
   });
 
   expect(document.querySelector("[data-yunari-font-grid]")).toBeNull();
-  expect(document.querySelector("[data-yunari-skeleton-text]")).not.toBeNull();
+  expect(document.querySelector("[data-yunari-skeleton-grid]")).not.toBeNull();
 
   await act(async () => {
     void answer.resolve({
@@ -477,7 +477,7 @@ it("draws a text skeleton while the first search is out, then its results", asyn
     await Promise.resolve();
   });
 
-  expect(document.querySelector("[data-yunari-skeleton-text]")).toBeNull();
+  expect(document.querySelector("[data-yunari-skeleton-grid]")).toBeNull();
   expect(document.querySelector("[data-yunari-font-grid]")).not.toBeNull();
   expect(tiles()).toHaveLength(2);
 });
@@ -495,7 +495,7 @@ it("says the first search is out rather than drawing an empty grid", async () =>
   });
 
   expect(document.querySelector("[data-yunari-font-grid]")).toBeNull();
-  expect(document.querySelector("[data-yunari-skeleton-text]")).not.toBeNull();
+  expect(document.querySelector("[data-yunari-skeleton-grid]")).not.toBeNull();
 
   // Every source failed: the failure lines are the answer, and neither an
   // empty listbox nor "no results" is drawn.
@@ -515,7 +515,7 @@ it("says the first search is out rather than drawing an empty grid", async () =>
   });
 
   expect(document.querySelector("[data-yunari-font-grid]")).toBeNull();
-  expect(document.querySelector("[data-yunari-skeleton-text]")).toBeNull();
+  expect(document.querySelector("[data-yunari-skeleton-grid]")).toBeNull();
   expect(document.querySelectorAll("[data-yunari-font-failure]")).toHaveLength(
     2,
   );
