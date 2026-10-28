@@ -90,16 +90,46 @@ export function transportOver(port: SerialPortLike): SerialTransport {
  * A write resolves after `drain` rather than after `write`: `write` only hands
  * the bytes to the OS, and a panel ignores a frame that arrives half-sent.
  *
- * A read settles a short quiet gap after the last byte, because the wire has no
- * frame end: waiting out the whole timeout would charge every reply its full
- * cap, and one video start reads five. `timeoutMs` is still the hard ceiling
- * for a device that never answers.
+ * **The data listener belongs to the port, not to a read.** A reply can arrive
+ * while the caller is still writing — the panel acknowledges an upload before
+ * the last chunk is drained — and a listener attached only for the duration of
+ * `read` would drop exactly those bytes. So one listener runs for the port's
+ * life, and reads drain what it collected.
+ *
+ * A reply is a burst: everything the device sends, sealed by a quiet gap of
+ * `READ_QUIET_MS`. Sealing happens whether or not a read is waiting, and the
+ * wire has no frame end, so two replies separated by more than that gap come
+ * back as two reads in arrival order; a single reply split by more than the
+ * same gap comes back as two reads, because the transport cannot tell that
+ * apart from two replies and does not guess. A reply that already arrived is
+ * answered at once. `timeoutMs` is the hard ceiling, after which a read answers
+ * whatever it holds — empty for a device that never speaks.
  */
 class OpenSerialPort implements SerialTransport {
+  /** Whole replies the device sent while no read was waiting. */
+  private readonly queued: Uint8Array[] = [];
+  /** The burst still arriving, not yet sealed by the quiet gap. */
+  private burst: Buffer[] = [];
+  /** Seals `burst` after the wire has been quiet long enough. */
+  private quiet: ReturnType<typeof setTimeout> | undefined;
+  /** The one read waiting for a reply; the adapter reads sequentially. */
+  private waiting:
+    | {
+        readonly resolve: (bytes: Uint8Array) => void;
+        readonly timer: ReturnType<typeof setTimeout>;
+      }
+    | undefined;
+
+  private readonly onData = (chunk: Buffer): void => {
+    this.burst.push(chunk);
+    this.armQuiet();
+  };
+
   constructor(private readonly port: SerialPort) {
     // A port that disconnects emits `error`; without a listener Node throws.
     // The disconnect still surfaces through the next write or an empty read.
     this.port.on("error", () => {});
+    this.port.on("data", this.onData);
   }
 
   write(bytes: Uint8Array): Promise<void> {
@@ -124,40 +154,89 @@ class OpenSerialPort implements SerialTransport {
 
   read(timeoutMs: number): Promise<Uint8Array> {
     return new Promise((resolve) => {
-      const chunks: Buffer[] = [];
-      let quiet: ReturnType<typeof setTimeout> | undefined;
-      let settled = false;
+      // A reply that arrived before this read is already whole.
+      const ready = this.queued.shift();
+      if (ready !== undefined) {
+        resolve(ready);
+        return;
+      }
 
-      const finish = () => {
-        if (settled) return;
-        settled = true;
+      const timer = setTimeout(() => {
+        if (this.waiting === undefined) return;
 
-        clearTimeout(timer);
-        if (quiet !== undefined) clearTimeout(quiet);
-        this.port.off("data", collect);
-        this.port.off("error", finish);
-        resolve(Uint8Array.from(Buffer.concat(chunks)));
-      };
+        // The cap is the ceiling, not a discard: what arrived is still a
+        // reply, and an empty burst is the honest answer to silence.
+        this.waiting = undefined;
+        if (this.quiet !== undefined) {
+          clearTimeout(this.quiet);
+          this.quiet = undefined;
+        }
 
-      const collect = (chunk: Buffer) => {
-        chunks.push(chunk);
-        if (quiet !== undefined) clearTimeout(quiet);
-        quiet = setTimeout(finish, READ_QUIET_MS);
-      };
+        const reply =
+          this.burst.length === 0
+            ? new Uint8Array()
+            : Uint8Array.from(Buffer.concat(this.burst));
+        this.burst = [];
+        resolve(reply);
+      }, timeoutMs);
 
-      const timer = setTimeout(finish, timeoutMs);
+      this.waiting = { resolve, timer };
 
-      this.port.on("data", collect);
-      this.port.on("error", finish);
+      // Bytes already arriving belong to this read; their seal timer is
+      // running. One that was starting anyway must not be re-armed from here,
+      // or a chunk arriving mid-read would restart a gap the burst had
+      // already waited out.
+      if (this.burst.length > 0 && this.quiet === undefined) this.armQuiet();
     });
   }
 
   async close(): Promise<void> {
+    this.port.off("data", this.onData);
+    if (this.quiet !== undefined) {
+      clearTimeout(this.quiet);
+      this.quiet = undefined;
+    }
+    if (this.waiting !== undefined) {
+      clearTimeout(this.waiting.timer);
+      // A read left hanging on a closed port would never settle, and the
+      // caller has nothing left to wait for.
+      this.waiting.resolve(new Uint8Array());
+      this.waiting = undefined;
+    }
+
     if (!this.port.isOpen) return;
 
     await new Promise<void>((resolve) => {
       this.port.close(() => resolve());
     });
+  }
+
+  /** Restarts the quiet gap that ends the burst in progress. */
+  private armQuiet(): void {
+    if (this.quiet !== undefined) clearTimeout(this.quiet);
+
+    this.quiet = setTimeout(() => {
+      this.quiet = undefined;
+      this.seal();
+    }, READ_QUIET_MS);
+  }
+
+  /** Ends the burst: hands it to the waiting read, or parks it for the next. */
+  private seal(): void {
+    if (this.burst.length === 0) return;
+
+    const reply = Uint8Array.from(Buffer.concat(this.burst));
+    this.burst = [];
+
+    const waiting = this.waiting;
+    if (waiting !== undefined) {
+      this.waiting = undefined;
+      clearTimeout(waiting.timer);
+      waiting.resolve(reply);
+      return;
+    }
+
+    this.queued.push(reply);
   }
 }
 
