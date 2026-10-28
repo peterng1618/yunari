@@ -18,7 +18,7 @@ import { pageNumbers } from "../store-mode/pager.js";
 import { uiCopy } from "../ui-copy.js";
 import { type AssetPlacement } from "./actions.js";
 import { type ClientOptions, listSources, searchAssets } from "./client.js";
-import { cardModelOf, FinderCard } from "./finder-card.js";
+import { cardModelOf, type FinderCardModel } from "./finder-card.js";
 import {
   ConnectionsButton,
   type FinderAction,
@@ -27,6 +27,7 @@ import {
   FinderSegmented,
 } from "./finder-controls.js";
 import { FinderFrame } from "./finder-frame.js";
+import { FinderGrid } from "./finder-grid.js";
 import { interleave } from "./interleave.js";
 import { FinderSkeleton } from "./skeleton.js";
 
@@ -475,20 +476,24 @@ export function AssetFinder({
         ? "font-picker"
         : "wallpaper-engine");
 
-  const runAction = async (
+  const runRow = async (
+    row: Row,
     placement?: AssetPlacement,
   ): Promise<ActionOutcome> => {
-    if (selected === undefined) {
-      return { ok: false, message: "" };
-    }
-
     setBusy(true);
-    const outcome = await onAction(selected.page, selected.result, placement);
+    const outcome = await onAction(row.page, row.result, placement);
     setBusy(false);
     setMessage(outcome.message);
     setMessageTone(outcome.ok ? "ok" : "failed");
     return outcome;
   };
+
+  const runAction = async (
+    placement?: AssetPlacement,
+  ): Promise<ActionOutcome> =>
+    selected === undefined
+      ? { ok: false, message: "" }
+      : runRow(selected, placement);
 
   if (listing !== "ok") {
     return (
@@ -577,6 +582,15 @@ export function AssetFinder({
     disabled: selected === undefined || busy,
     run: () => runAction(active === "image" ? "background" : undefined),
   };
+
+  const cards: readonly FinderCardModel[] = rows.map(({ page, result }) =>
+    cardModelOf(result, sourceOf(page.source)?.label ?? page.source),
+  );
+  const rowOfCard = (card: FinderCardModel): Row | undefined =>
+    rows.find(
+      ({ page, result }) =>
+        result.id === card.id && page.source === card.sourceId,
+    );
 
   return (
     <FinderFrame
@@ -785,32 +799,40 @@ export function AssetFinder({
             </p>
           ) : (
             <div
-              className="grid min-h-0 flex-1 content-start grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-[var(--space-8)] overflow-y-auto"
               data-yunari-asset-grid=""
-              role="listbox"
-              aria-label={uiCopy.assets.category[active]}
               aria-busy={searching ? "true" : undefined}
+              className="flex min-h-0 flex-1 flex-col"
             >
-              {rows.map(({ page, result }) => (
-                <FinderCard
-                  key={`${page.source}:${result.id}`}
-                  model={cardModelOf(
-                    result,
-                    sourceOf(page.source)?.label ?? page.source,
-                  )}
-                  selected={
-                    selected?.result.id === result.id &&
-                    selected.page.source === page.source
-                  }
-                  busy={false}
-                  failed={false}
-                  done={false}
-                  tabStop
-                  focus={() => {}}
-                  onSelect={() => setSelected({ page, result })}
-                  onKeyDown={() => {}}
-                />
-              ))}
+              <FinderGrid
+                label={uiCopy.assets.category[active]}
+                cards={cards}
+                selectedId={
+                  selected === undefined
+                    ? undefined
+                    : `${selected.page.source}:${selected.result.id}`
+                }
+                onSelect={(card) => {
+                  const row = rowOfCard(card);
+                  if (row !== undefined) setSelected(row);
+                }}
+                onPreview={() => {
+                  // The preview modal lands in Task 4.2.
+                }}
+                onApply={(card) => {
+                  const row = rowOfCard(card);
+                  if (row === undefined) return;
+                  setSelected(row);
+                  void runRow(
+                    row,
+                    active === "image" ? "background" : undefined,
+                  );
+                }}
+                onNeedMore={() => {
+                  // The append path lands in Task 2.3.
+                }}
+                canLoadMore={false}
+                appending={false}
+              />
             </div>
           )}
         </>

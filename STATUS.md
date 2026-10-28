@@ -15,10 +15,9 @@ The asset finder's UI/UX overhaul: one shell, one card, one skeleton and one con
 
 ## Last completed change
 
-- **One frame for every tab:** `FinderFrame` owns the rail (fixed order), toolbar (search, filters, sources, pager, tools), content and footer; `FinderSearch`, `FinderSegmented`, `FinderChip`, `FinderActionButton` and `ConnectionsButton` are the shared controls.
-- **Connections is drawn only while a keyed source reports a missing or refused key**, and is the toolbar's icon rather than an inline link.
-- **A pane that owns its own search or footer draws neither**, so the font catalogue and Wallpaper Engine keep their own field.
-- **Proof:** asset-finder unit files 13 / 135 passed; `asset-finder.spec.ts` 18 passed + 1 skipped against a private preview; `npm run gate` exit 0.
+- **One grid:** `FinderGrid` owns the listbox, the roving tab stop, arrow-key movement by the measured column count, Enter to apply, and an append sentinel rooted on the scroller.
+- **The modal draws it:** cards come from `cardModelOf`, selection is keyed by source + id, and `onNeedMore`/`appending` wait for the shell's append path in Task 2.3.
+- **Proof:** asset-finder unit files 14 / 144 passed; `asset-finder.spec.ts` 18 passed + 1 skipped against a private preview.
 
 ## Next
 

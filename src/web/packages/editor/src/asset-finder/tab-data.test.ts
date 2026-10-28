@@ -84,7 +84,10 @@ it("keeps rows when a page fails and retries only the failed source", () => {
   expect(rowsOf(failed, ["a"]).map((row) => row.result.id)).toEqual(["a:1"]);
   expect(nextPages(failed, ["a"])).toEqual({});
   expect(retryPages(failed, ["a"])).toEqual({ a: 2 });
-  expect(failed.failures.get("a")?.failure?.message).toBe("down");
+  const failure = failed.failures.get("a")?.failure;
+  expect(failure?.reason === "failed" ? failure.message : undefined).toBe(
+    "down",
+  );
 });
 
 it("drops a source's rows and place when the question resets", () => {
