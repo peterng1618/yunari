@@ -18,7 +18,7 @@ describe("frame", () => {
   });
 
   it("pads the bitmap start with 0x2c", () => {
-    const bytes = frame(TURZX_COMMAND.startBitmap, "bitmap");
+    const bytes = frame(Uint8Array.of(0x2c), "bitmap");
     expect(bytes.length).toBe(250);
     expect([...bytes].every((byte) => byte === 0x2c)).toBe(true);
   });

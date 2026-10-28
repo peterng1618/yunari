@@ -107,6 +107,18 @@ Probed on the attached Rev C panel at `COM5` (USB `1D6B:0106`, Windows serial
 - Overlay colour is 4 bits per channel with 4 bits alpha; the offset is
   `y * 800 + x`.
 
+## Rung 7 — build
+
+What is built, and where it lives. The build is the hand-written codec the
+Rung 5 table chose: `frame`, `parseHello`, `bgraPayload` and the verified command
+table in `turzx-protocol.ts`. It is pure and has no imports — no DOM, no Fabric,
+no `serialport` — because its callers are the adapter, the routes and the diff
+encoder, and all three must be testable against golden vectors without hardware.
+The codec lives in the host's own panel module rather than a dependency because
+the bytes are this panel's probe: a library would own a wire format only Yunari
+has verified, and the transport it would also drag in is the one part Rung 2
+already supplies.
+
 ## Decision
 
 **Reuse `serialport` for the transport and hand-write the codec.**
