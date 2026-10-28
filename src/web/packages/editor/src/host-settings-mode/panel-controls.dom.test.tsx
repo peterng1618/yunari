@@ -188,6 +188,8 @@ it("sends brightness as a whole percent and shows the reply", async () => {
   await click(buttonNamed(/apply/i));
   expect(onCommand).toHaveBeenCalledWith({ kind: "brightness", level: 50 });
   expect(replyText()).toBe("ok");
+  // The label is what distinguishes device words from the host's own.
+  expect(document.body.textContent).toContain("Panel reply");
 });
 
 it("shows a host confirmation, not a reply, for a write-only command", async () => {
@@ -207,6 +209,7 @@ it("shows a host confirmation, not a reply, for a write-only command", async () 
   await click(buttonNamed(/apply/i));
   expect(onCommand).toHaveBeenCalledWith({ kind: "brightness", level: 50 });
   expect(replyText()).toBe("Sent");
+  expect(document.body.textContent).toContain("Last command");
 });
 
 it("blocks a level above 100 without calling the host", async () => {

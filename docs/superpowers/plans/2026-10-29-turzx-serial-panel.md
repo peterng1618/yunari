@@ -234,7 +234,7 @@ export interface PanelVideoSource {
   readonly placement: PanelVideoPlacement;
 }
 export interface PanelVideo {
-  start(mp4: Uint8Array, placement: PanelVideoPlacement): Promise<void>;
+  start(video: Uint8Array, placement: PanelVideoPlacement): Promise<void>;
   presentOverlay(png: Uint8Array): Promise<void>;
   stop(): Promise<void>;
 }
@@ -1057,7 +1057,7 @@ export async function transcodeForPanel(
 ): Promise<TranscodeResult>;
 ```
 - The TURZX device gains `video` implementing Task 2's `PanelVideo`:
-  - `start(mp4, placement)` transcodes, uploads when the device size differs, starts playback, initializes the transparent overlay, waits ≥1500 ms, and records the remote path. The placement is applied by `placement()` from `@yunari/scene-fabric` — the same function the player places the layer with — and the crop is read off its `left`/`top`, so the panel and the player frame a clip identically, including the zoom that keeps a requested pan reachable.
+  - `start(video, placement)` transcodes, uploads when the device size differs, starts playback, initializes the transparent overlay, waits ≥1500 ms, and records the remote path. The placement is applied by `placement()` from `@yunari/scene-fabric` — the same function the player places the layer with — and the crop is read off its `left`/`top`, so the panel and the player frame a clip identically, including the zoom that keeps a requested pan reachable.
   - `stop()` writes STOP_VIDEO.
 - `TurzxOptions` gains `readonly transcode?: (bytes: Uint8Array) => Promise<TranscodeResult>`, defaulting to `transcodeForPanel`, so the upload path is testable without spawning ffmpeg.
 - Consumes: Task 1's codec and commands, Task 2's `PanelVideo`.
@@ -1262,7 +1262,7 @@ export function overlayUpdate(
   geometry: { readonly width: number; readonly height: number },
 ): OverlayUpdate;
 ```
-`overlayTrailer` owns the device's alignment quirk in one testable place: below 250 bytes it is `ef 69` and `extra: 0`; at 0, 248 or 249 modulo 250 above 250 it is `00 00 00 01 00 00 ef 69` and `extra: 7`.
+`overlayTrailer` owns the device's alignment quirk in one testable place: at or below 250 bytes it is `ef 69` and `extra: 0`; strictly above 250 with a length at 0, 248 or 249 modulo 250 it is `00 00 00 01 00 00 ef 69` and `extra: 7`.
 
 - `presentOverlay(png)` decodes, builds an update against the stored previous overlay, frames `UPDATE_BITMAP` + the body, sends both, then stores the current frame.
 - Consumes: Task 9's `video` state.
