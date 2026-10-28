@@ -69,7 +69,10 @@ import {
   createPairingCodeStore,
   type PairingCodeStore,
 } from "./session/pairing-code.js";
-import type { ActiveThemeStore } from "./settings/active-theme.js";
+import {
+  type ActiveThemeStore,
+  assignedThemeFor,
+} from "./settings/active-theme.js";
 import { type CredentialStore, hintOf } from "./settings/credentials.js";
 import {
   type CredentialRow,
@@ -1382,10 +1385,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     const chosen =
       activeTheme === undefined
         ? undefined
-        : ((await activeTheme.read(display, async () => true)) ??
-          (display === DEFAULT_DISPLAY
-            ? undefined
-            : await activeTheme.read(DEFAULT_DISPLAY, async () => true)));
+        : await assignedThemeFor(activeTheme, display, async () => true);
     // Global answers describe this PC; a theme may override one for itself.
     // Only where a theme differs is an answer stored, so a consumer who set the
     // system disk once is not asked again by every theme that reads a disk.
@@ -1468,7 +1468,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
    * local display's resolution is a write, and paying for it twice per poll is
    * a cost this signature exists not to have.
    */
-  async function assignedThemeFor(
+  async function assignedThemeForDisplay(
     display: string,
     exists: (id: string) => Promise<boolean>,
   ): Promise<string | undefined> {
@@ -1476,14 +1476,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return undefined;
     }
 
-    const own = await activeTheme.read(display, exists);
-
-    return (
-      own ??
-      (display === DEFAULT_DISPLAY
-        ? undefined
-        : await activeTheme.read(DEFAULT_DISPLAY, exists))
-    );
+    return assignedThemeFor(activeTheme, display, exists);
   }
 
   /**
@@ -2200,7 +2193,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // runner is stopped, because a record nothing points at is a panel
         // still showing a theme nobody assigned it.
         options.launcher?.close(id);
-        options.panels?.stop(id);
+        void options.panels?.stop(id);
 
         sendJson(response, 200, { ok: true });
         return;
@@ -2724,8 +2717,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // no listing for an answer it discards.
       if (!url.searchParams.has("theme")) {
         theme =
-          (await assignedThemeFor(display, (id) => themeStore.exists(id))) ??
-          null;
+          (await assignedThemeForDisplay(display, (id) =>
+            themeStore.exists(id),
+          )) ?? null;
       }
 
       sendJson(response, 200, {
@@ -3989,6 +3983,18 @@ export function createHostServer(options: HostServerOptions): HostServer {
         }
 
         await activeTheme.write(key, id);
+
+        // A panel plays its theme itself, so a new assignment is a new clip and
+        // nothing re-reads it while the old runner is alive. The restart is what
+        // makes the assignment visible on the glass.
+        const panels = options.panels;
+        const assigned =
+          panels === undefined ? undefined : await displays?.find(key);
+
+        if (panels !== undefined && assigned?.kind === "panel") {
+          await panels.refresh(key);
+        }
+
         sendJson(response, 200, {
           ok: true,
           ...(await activeThemeMap(activeTheme, available)),
@@ -4841,7 +4847,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         available.some((entry) => entry.id === id);
       const stored =
         requested === null
-          ? await assignedThemeFor(
+          ? await assignedThemeForDisplay(
               await displayKeyFor(request, url, displays),
               exists,
             )

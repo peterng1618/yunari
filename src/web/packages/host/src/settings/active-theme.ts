@@ -41,6 +41,28 @@ const FILE = "active-theme.json";
 const THEME_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
+ * The theme a display shows: its own choice, else the default's.
+ *
+ * One function rather than a rule per caller, because the fallback is the whole
+ * definition of "assigned" — the player, a panel's video lookup and the display
+ * map must not disagree about which theme a display holds.
+ */
+export async function assignedThemeFor(
+  store: ActiveThemeStore,
+  display: string,
+  exists: (id: string) => Promise<boolean>,
+): Promise<string | undefined> {
+  const own = await store.read(display, exists);
+
+  return (
+    own ??
+    (display === DEFAULT_DISPLAY
+      ? undefined
+      : await store.read(DEFAULT_DISPLAY, exists))
+  );
+}
+
+/**
  * The map a parsed file holds, or undefined when it holds something else.
  *
  * The single-theme file this replaced, `{ "id": "<theme>" }`, is read as the

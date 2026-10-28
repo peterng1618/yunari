@@ -27,6 +27,10 @@ function fakes(frames: readonly Uint8Array[]) {
 
 const RED = Uint8Array.of(1, 2, 3);
 const BLUE = Uint8Array.of(1, 2, 4);
+const SOURCE = {
+  bytes: Uint8Array.of(7),
+  placement: { offsetX: 0, offsetY: 0 },
+};
 
 describe("createPanelRunner", () => {
   it("sends the first frame", async () => {
@@ -172,5 +176,95 @@ describe("createPanelRunner", () => {
 
     expect(close).toHaveBeenCalledTimes(1);
     expect(device.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends overlay captures through presentOverlay when a video source is given", async () => {
+    const presentOverlay = vi.fn(async () => {});
+    const present = vi.fn(async () => {});
+    const start = vi.fn(async () => {});
+    const stopVideo = vi.fn(async () => {});
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present,
+      close: async () => {},
+      video: { start, presentOverlay, stop: stopVideo },
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of(1)),
+      captureOverlay: vi.fn(async () => Uint8Array.of(2)),
+      close: async () => {},
+    };
+
+    const runner = createPanelRunner({ device, rasterizer, video: SOURCE });
+    await expect(runner.tick()).resolves.toBe(true);
+
+    expect(start).toHaveBeenCalledWith(SOURCE.bytes, SOURCE.placement);
+    expect(presentOverlay).toHaveBeenCalledWith(Uint8Array.of(2));
+    expect(present).not.toHaveBeenCalled();
+
+    // The clip is the device's once started, so it is released with it.
+    await runner.stop();
+    expect(stopVideo).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to still frames when the video will not start, once", async () => {
+    const onError = vi.fn();
+    const present = vi.fn(async () => {});
+    let frame = 0;
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present,
+      close: async () => {},
+      video: {
+        start: async () => {
+          throw new Error("no");
+        },
+        presentOverlay: async () => {},
+        stop: async () => {},
+      },
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of((frame += 1))),
+      captureOverlay: vi.fn(async () => Uint8Array.of(9)),
+      close: async () => {},
+    };
+
+    const runner = createPanelRunner({
+      device,
+      rasterizer,
+      video: SOURCE,
+      onError,
+    });
+    await runner.tick();
+    await runner.tick();
+
+    // The retry is the point: a refused clip is reported once, then the panel
+    // shows stills rather than spinning on an upload that already failed.
+    expect(present).toHaveBeenCalledTimes(2);
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the still path when no video source is given", async () => {
+    const present = vi.fn(async () => {});
+    const presentOverlay = vi.fn(async () => {});
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present,
+      close: async () => {},
+      video: { start: async () => {}, presentOverlay, stop: async () => {} },
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of(1)),
+      captureOverlay: vi.fn(async () => Uint8Array.of(2)),
+      close: async () => {},
+    };
+
+    await createPanelRunner({ device, rasterizer }).tick();
+
+    expect(present).toHaveBeenCalledTimes(1);
+    expect(presentOverlay).not.toHaveBeenCalled();
   });
 });

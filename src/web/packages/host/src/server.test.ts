@@ -4931,7 +4931,11 @@ describe("A local monitor is specified rather than paired", () => {
 
     /** A manager that starts and stops records without opening anything: what
      *  these cases need is which routes reach it. */
-    function managerOver(started: string[], stopped: string[]): PanelManager {
+    function managerOver(
+      started: string[],
+      stopped: string[],
+      refreshed: string[] = [],
+    ): PanelManager {
       return {
         start: (id) => {
           started.push(id);
@@ -4939,6 +4943,11 @@ describe("A local monitor is specified rather than paired", () => {
         },
         stop: (id) => {
           stopped.push(id);
+          return Promise.resolve();
+        },
+        refresh: (id) => {
+          refreshed.push(id);
+          return Promise.resolve();
         },
         reconcile: () => Promise.resolve(),
         running: () => [],
@@ -5110,6 +5119,43 @@ describe("A local monitor is specified rather than paired", () => {
             .status,
         ).toBe(200);
         expect(stopped).toEqual(["strip"]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("restarts the runner when a different theme is assigned", async () => {
+      const refreshed: string[] = [];
+      const themes = createThemeStore(dir);
+      await themes.write("night", createValidPackage("night", "Night"));
+      const hosting = host({
+        themeStore: themes,
+        activeTheme: createActiveThemeStore(dir),
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: managerOver([], [], refreshed),
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+
+        // A panel started a clip that keeps playing until its runner is
+        // replaced, so the assignment is what has to restart it.
+        expect(
+          (
+            await request(
+              hosting.server,
+              "PUT",
+              "/api/themes/active",
+              json({ display: "strip", id: "night" }),
+            )
+          ).status,
+        ).toBe(200);
+        expect(refreshed).toEqual(["strip"]);
       } finally {
         await hosting.close();
       }

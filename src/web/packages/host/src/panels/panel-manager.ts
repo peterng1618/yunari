@@ -1,5 +1,6 @@
 import { findBrowser } from "../serve/display-launcher.js";
 import type { DisplayRecord, DisplayStore } from "../settings/displays.js";
+import type { PanelVideoSource } from "./panel-device.js";
 import { familyFor } from "./panel-families.js";
 import { createRasterizer } from "./panel-raster.js";
 import { createPanelRunner, type PanelRunner } from "./panel-runner.js";
@@ -24,6 +25,11 @@ export interface PanelManagerOptions {
   readonly displays: DisplayStore;
   /** The player page a display is shown at, including its credential. */
   readonly pageFor: (displayId: string) => string;
+  /** The clip the display's theme plays itself, or undefined for a still theme.
+   *  Read once per start: a changed assignment is a restart, not a re-read. */
+  readonly videoFor?: (
+    displayId: string,
+  ) => Promise<PanelVideoSource | undefined>;
   readonly onError?: (displayId: string, message: string) => void;
   /** The browser to rasterise with; the launcher's own discovery by default. */
   readonly browser?: string | undefined;
@@ -32,8 +38,12 @@ export interface PanelManagerOptions {
 export interface PanelManager {
   /** Starts a panel's runner, or does nothing when one is already running. */
   start(displayId: string): Promise<void>;
-  /** Stops a panel's runner. A record removed without this leaves it driving. */
-  stop(displayId: string): void;
+  /** Stops a panel's runner, answering once the device is released. A record
+   *  removed without this leaves it driving. */
+  stop(displayId: string): Promise<void>;
+  /** Restarts a panel's runner so it reads its theme again. A panel that
+   *  started a video keeps playing that clip until its runner is replaced. */
+  refresh(displayId: string): Promise<void>;
   /** Every attached panel that has a record and no runner yet. */
   reconcile(): Promise<void>;
   /** What the manager holds, for a surface that reports it. */
@@ -114,6 +124,18 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     }
 
     const device = await family.open();
+
+    // A clip the device plays itself, when this display's theme has one. A
+    // theme that cannot be read is a still panel, not a failed one.
+    let video: PanelVideoSource | undefined;
+    if (device.video !== undefined && options.videoFor !== undefined) {
+      try {
+        video = await options.videoFor(displayId);
+      } catch (error) {
+        report(displayId, messageOf(error));
+      }
+    }
+
     let rasterizer: Awaited<ReturnType<typeof createRasterizer>>;
 
     try {
@@ -135,6 +157,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     const runner = createPanelRunner({
       device,
       rasterizer,
+      ...(video === undefined ? {} : { video }),
       // A panel that uploads to its own memory pays an upload per frame, so its
       // floor wins over the streaming default. The device states the floor
       // rather than this file guessing at one family's cost.
@@ -164,19 +187,35 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     entry.timer.unref();
   };
 
-  const stop = (displayId: string): void => {
+  const stop = async (displayId: string): Promise<void> => {
     const entry = entries.get(displayId);
     if (entry === undefined) return;
 
     entries.delete(displayId);
     if (entry.timer !== undefined) clearInterval(entry.timer);
-    void entry.runner?.stop();
+    // A start still opening has not set `runner` yet. Waiting for it is what
+    // makes the release before a restart real rather than a race the reopen
+    // loses.
+    await entry.starting;
+    await entry.runner?.stop();
   };
 
   return {
     start,
 
     stop,
+
+    async refresh(displayId: string): Promise<void> {
+      try {
+        await stop(displayId);
+      } catch (error) {
+        // A device that would not close still has to be driven again: the
+        // theme changed, and a panel left on the old clip is the worse failure.
+        report(displayId, messageOf(error));
+      }
+
+      await start(displayId);
+    },
 
     async reconcile(): Promise<void> {
       if (stopping) return;
@@ -194,7 +233,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       // deleted by hand.
       const live = new Set(records.map((record) => record.id));
       for (const displayId of entries.keys()) {
-        if (!live.has(displayId)) stop(displayId);
+        if (!live.has(displayId)) await stop(displayId);
       }
     },
 

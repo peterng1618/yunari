@@ -38,7 +38,10 @@ import {
 import { createHostAutostart, hostEntry } from "./serve/host-autostart.js";
 import { CA_CERTIFICATE_PATH, createHostServer } from "./server.js";
 import { createPairingCodeStore } from "./session/pairing-code.js";
-import { createActiveThemeStore } from "./settings/active-theme.js";
+import {
+  assignedThemeFor,
+  createActiveThemeStore,
+} from "./settings/active-theme.js";
 import { createCredentialStore } from "./settings/credentials.js";
 import { createDeviceSettingsStore } from "./settings/devices.js";
 import { createDisplaySettingsStore } from "./settings/display.js";
@@ -344,6 +347,10 @@ export async function run(argv: readonly string[]): Promise<number> {
   // same reason `launcher` is.
   let panels: PanelManager | undefined;
 
+  // One store for the routes and the panels: a panel's clip is the same theme
+  // the player would show, read from the library the host serves.
+  const themeStore = createThemeStore(themesDir);
+
   // The tray, once it exists. The stop path closes it first, so a click on Exit
   // does not leave an icon behind; undefined until the server is reachable.
   let tray: TrayController | undefined;
@@ -390,7 +397,7 @@ export async function run(argv: readonly string[]): Promise<number> {
       // Served from source: the settings page has no build step.
       admin: path.join(packagesDir, "host", "public"),
     },
-    themeStore: createThemeStore(themesDir),
+    themeStore,
     // The Steam library on this PC, read on demand: the install is located per
     // listing, because a library can appear while the editor is open.
     wallpaperEngine: createWallpaperEngineSource(),
@@ -501,6 +508,33 @@ export async function run(argv: readonly string[]): Promise<number> {
     displays,
     pageFor: (displayId) =>
       `http://127.0.0.1:${bound}/?display=${encodeURIComponent(displayId)}`,
+    // The clip a panel plays itself, resolved the way the player resolves its
+    // theme: the display's own choice, else the default's. Anything that cannot
+    // be resolved — no theme, no media, an image rather than a video, a missing
+    // asset — is a still panel, so this answers undefined rather than throwing.
+    videoFor: async (displayId) => {
+      const themeId = await assignedThemeFor(activeTheme, displayId, (id) =>
+        themeStore.exists(id),
+      );
+      if (themeId === undefined) return undefined;
+
+      const envelope = await themeStore.readEnvelope(themeId);
+      const media = envelope?.background?.media;
+      if (envelope === undefined || media === undefined) return undefined;
+
+      const declared = (envelope.assets ?? []).find(
+        (asset) => asset.id === media.assetId,
+      );
+      if (declared === undefined || declared.kind !== "video") return undefined;
+
+      const asset = await themeStore.readAsset(themeId, declared.path);
+      if (asset === undefined) return undefined;
+
+      return {
+        bytes: asset.bytes,
+        placement: { offsetX: media.offsetX ?? 0, offsetY: media.offsetY ?? 0 },
+      };
+    },
     onError: (displayId, message) => {
       console.error(`Panel ${displayId}: ${message}`);
     },
