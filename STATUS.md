@@ -32,5 +32,5 @@ Drive the TURZX/Turing 5" serial panel (Rev C, 800×480 landscape, COM5) through
 - **COM5 is wedged:** a replug or power-cycle is required; without it no hardware step can run.
 - **No control is hardware-verified:** brightness, screen, status, restart and identify were never sent to the device; the dialog is proven by tests only.
 - **Overlay alpha and glass over video are unverified on pixels:** the device accepted every frame, but no capture proof exists.
-- **A gate flake is open:** `server.test.ts` theme-assignment ordering fails only under full-load (`vg-637` class); it passes alone and with the panel suite.
+- **The gate is green once under load:** the last full run was `EXIT=0`; `server.test.ts`'s theme-assignment ordering flaked under earlier load and passes alone (`vg-637` class).
 - **Only firmware `1.88` is verified:** a newer ROM may change the protocol silently, and the vendor apps reclaim COM5 when reopened.
