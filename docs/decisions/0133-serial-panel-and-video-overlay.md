@@ -98,6 +98,9 @@ Probed on the attached Rev C panel at `COM5` (USB `1D6B:0106`, Windows serial
 - A 12-byte HELLO is ignored; padded to 250 it replies 23 bytes,
   `chs_5inch.dev1_rom1.88\0`.
 - `START_DISPLAY_BITMAP` is 250 bytes of `0x2c`; every other frame pads `0x00`.
+- `DISPLAY_BITMAP_5INCH` is `c8 ef 69 00 17 70 0e 10`: the six-byte prefix plus
+  `480*480/64 = 3600` as a big-endian two-byte field. Sending the six bytes alone
+  makes the panel drop the frame (found on hardware, 2026-10-29).
 - A full static frame is PRE_UPDATE, START_DISPLAY_BITMAP, DISPLAY_BITMAP_5INCH,
   then the BGRA payload — **1,542,250 bytes on the wire**, which is exactly
   `ceil(800*480*4 / 249)` chunks, their `0x00` joins, padded to 250.

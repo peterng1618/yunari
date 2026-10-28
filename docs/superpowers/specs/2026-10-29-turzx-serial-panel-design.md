@@ -56,7 +56,7 @@ Probed on the attached Rev C panel at `COM5` (USB `1D6B:0106`, Windows serial
 | Restart | `84 ef 69 00 00 00 01` |
 | PRE_UPDATE | `86 ef 69 00 00 00 01` |
 | START_DISPLAY_BITMAP | 250 × `2c` |
-| DISPLAY_BITMAP_5INCH | `c8 ef 69 00 17 70` |
+| DISPLAY_BITMAP_5INCH | `c8 ef 69 00 17 70 0e 10` |
 | DISPLAY_BITMAP_ON_VIDEO | `ca ef 69 00 17 70` |
 | INIT_VIDEO_OVERLAY | `d0 ef 69 00 00 00` + one payload byte `02` |
 | QUERY_STATUS | `cf ef 69 00 00 00 01` |
@@ -68,6 +68,11 @@ Probed on the attached Rev C panel at `COM5` (USB `1D6B:0106`, Windows serial
 
 HELLO replies 23 bytes: `chs_5inch.dev1_rom1.88\0`. The model string is the
 identity; the `rom` field is the firmware.
+
+`DISPLAY_BITMAP_5INCH` carries a trailing two-byte length, `480*480/64 = 3600`
+(`0e 10`, big-endian), taken from the reference's `_send_command` call. Sending
+the six-byte prefix alone makes the panel drop the frame; a 250-byte frame with
+a zero length renders a black screen (found on hardware, 2026-10-29).
 
 ### Geometry
 
