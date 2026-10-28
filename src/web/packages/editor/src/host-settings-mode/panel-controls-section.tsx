@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   plainButtonClasses,
   wellClasses,
@@ -17,6 +17,9 @@ import { Group } from "./section-group.js";
 /** The input's id, spelled here because the label's `htmlFor` and the field's
  *  `id` are one decision and two literals drift. */
 const BRIGHTNESS_ID = "yunari-panel-brightness";
+
+/** Where the field's own refusal lives, for `aria-describedby` to name. */
+const LEVEL_ERROR_ID = "yunari-panel-brightness-error";
 
 /**
  * The commands a display's panel accepts, behind a door.
@@ -47,8 +50,22 @@ export function PanelControlsSection(props: {
    *  non-number are both states the person is in, and neither is zero. */
   const [level, setLevel] = useState("");
   const [reply, setReply] = useState<string | undefined>(undefined);
-  const [error, setError] = useState<string | undefined>(undefined);
+  /** The field's own refusal, drawn beside the field it is about. */
+  const [levelError, setLevelError] = useState<string | undefined>(undefined);
+  /** The host's or the panel's own words, drawn at the dialog's foot. */
+  const [failure, setFailure] = useState<string | undefined>(undefined);
   const [confirmingRestart, setConfirmingRestart] = useState(false);
+  /** True while a command runs. A second press would be a second command, and
+   *  two answers settling out of order would leave the earlier one standing. */
+  const [inFlight, setInFlight] = useState(false);
+
+  /** The newest command's number. A reply carrying an older number belongs to
+   *  a command something has overtaken, or to one this dialog abandoned, and is
+   *  dropped rather than shown as the last reply. */
+  const latest = useRef(0);
+  /** The same guard as `inFlight` in a form an event can read: two clicks in
+   *  one frame would both see the state as it was before the first. */
+  const busy = useRef(false);
 
   if (
     props.panel.heldId !== props.displayId ||
@@ -57,18 +74,45 @@ export function PanelControlsSection(props: {
     return null;
   }
 
+  /** **Closing abandons what the visit showed.** The draft, the last reply and
+   *  a refusal are this dialog's, not the panel's, so the door must not reopen
+   *  holding an answer some other visit asked for. A command still in flight is
+   *  orphaned by bumping `latest`. */
+  const changeOpen = (next: boolean): void => {
+    setOpen(next);
+    if (next) return;
+    latest.current += 1;
+    busy.current = false;
+    setInFlight(false);
+    setLevel("");
+    setLevelError(undefined);
+    setFailure(undefined);
+    setReply(undefined);
+    setConfirmingRestart(false);
+  };
+
   const holds = (kind: PanelCommandKind): boolean =>
     props.panel.commands.includes(kind);
 
   const send = (command: EditorPanelCommand): void => {
-    setError(undefined);
+    if (busy.current) return;
+    busy.current = true;
+    const ticket = ++latest.current;
+    setInFlight(true);
+    setFailure(undefined);
     setReply(undefined);
     void props.onCommand(command).then(
       (answer) => {
+        if (ticket !== latest.current) return;
+        busy.current = false;
+        setInFlight(false);
         setReply(answer);
       },
       (reason: unknown) => {
-        setError(
+        if (ticket !== latest.current) return;
+        busy.current = false;
+        setInFlight(false);
+        setFailure(
           copy.failed(
             reason instanceof Error ? reason.message : String(reason),
           ),
@@ -86,9 +130,10 @@ export function PanelControlsSection(props: {
       parsed < 0 ||
       parsed > 100
     ) {
-      setError(copy.brightnessRange);
+      setLevelError(copy.brightnessRange);
       return;
     }
+    setLevelError(undefined);
     send({ kind: "brightness", level: parsed });
   };
 
@@ -103,13 +148,13 @@ export function PanelControlsSection(props: {
         data-yunari-panel-controls={props.displayId}
         aria-expanded={open}
         className={plainButtonClasses}
-        onClick={() => setOpen(true)}
+        onClick={() => changeOpen(true)}
       >
         {copy.open}
       </button>
       <Dialog
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={changeOpen}
         label={copy.dialogTitle(props.panel.label)}
         closeLabel={copy.close}
       >
@@ -129,18 +174,38 @@ export function PanelControlsSection(props: {
                     max={100}
                     step={1}
                     value={level}
-                    onChange={(event) => setLevel(event.target.value)}
+                    onChange={(event) => {
+                      setLevel(event.target.value);
+                      setLevelError(undefined);
+                    }}
+                    aria-invalid={levelError === undefined ? undefined : true}
+                    {...(levelError === undefined
+                      ? {}
+                      : { "aria-describedby": LEVEL_ERROR_ID })}
                     className="h-full w-full min-w-0 bg-transparent text-xs text-text outline-none"
                   />
                 </div>
                 <button
                   type="button"
                   className={ACTION_BUTTON}
+                  disabled={inFlight}
                   onClick={applyLevel}
                 >
                   {copy.apply}
                 </button>
               </div>
+              {/* Beside the field, because the refusal is about the value
+                  typed in it: a sentence at the dialog's foot would be read
+                  after every other control. */}
+              {levelError === undefined ? null : (
+                <p
+                  id={LEVEL_ERROR_ID}
+                  role="alert"
+                  className="m-0 text-xs text-warn"
+                >
+                  {levelError}
+                </p>
+              )}
             </div>
           ) : null}
 
@@ -149,6 +214,7 @@ export function PanelControlsSection(props: {
               <button
                 type="button"
                 className={ACTION_BUTTON}
+                disabled={inFlight}
                 onClick={() => send({ kind: "screen", on: true })}
               >
                 {copy.screenOn}
@@ -156,6 +222,7 @@ export function PanelControlsSection(props: {
               <button
                 type="button"
                 className={ACTION_BUTTON}
+                disabled={inFlight}
                 onClick={() => send({ kind: "screen", on: false })}
               >
                 {copy.screenOff}
@@ -171,6 +238,7 @@ export function PanelControlsSection(props: {
                   <button
                     type="button"
                     className={ACTION_BUTTON}
+                    disabled={inFlight}
                     onClick={() => {
                       setConfirmingRestart(false);
                       send({ kind: "restart" });
@@ -204,6 +272,7 @@ export function PanelControlsSection(props: {
                 <button
                   type="button"
                   className={ACTION_BUTTON}
+                  disabled={inFlight}
                   onClick={() => send({ kind: "status" })}
                 >
                   {copy.status}
@@ -213,6 +282,7 @@ export function PanelControlsSection(props: {
                 <button
                   type="button"
                   className={ACTION_BUTTON}
+                  disabled={inFlight}
                   onClick={() => send({ kind: "hello" })}
                 >
                   {copy.hello}
@@ -235,9 +305,9 @@ export function PanelControlsSection(props: {
             </p>
           </div>
 
-          {error === undefined ? null : (
+          {failure === undefined ? null : (
             <p role="alert" className="m-0 text-xs text-warn">
-              {error}
+              {failure}
             </p>
           )}
         </div>

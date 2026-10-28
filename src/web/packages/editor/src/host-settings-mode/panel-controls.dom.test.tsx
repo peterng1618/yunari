@@ -92,6 +92,16 @@ async function mount(element: ReactElement): Promise<HTMLDivElement> {
   return container;
 }
 
+/** A second render at the same element position, which is what selecting
+ *  another display does before the region's own `key` replaces it. */
+async function rerender(element: ReactElement): Promise<void> {
+  const mounted = root;
+  if (mounted === undefined) throw new Error("nothing mounted to rerender");
+  await act(async () => {
+    mounted.render(element);
+  });
+}
+
 /** A missing control is a defect this file names, rather than a `null` a later
  *  assertion reports as a wrong value. */
 function must<T extends Element>(found: T | null, what: string): T {
@@ -141,6 +151,18 @@ function replyText(): string | null {
   );
 }
 
+/** A promise the test settles by hand, so a command can be held in flight. */
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  resolve(value: T): void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 it("renders nothing for a panel another display holds", async () => {
   const container = await mount(
     <PanelControlsSection
@@ -183,6 +205,14 @@ it("blocks a level above 100 without calling the host", async () => {
   expect(onCommand).not.toHaveBeenCalled();
   const alert = must(document.querySelector('[role="alert"]'), "alert");
   expect(alert.textContent).toMatch(/0 to 100/);
+  // The refusal is the field's, so the field carries it: a screen reader
+  // reaches the sentence through the input rather than as loose text below.
+  const field = brightnessField();
+  expect(field.getAttribute("aria-invalid")).toBe("true");
+  expect(field.getAttribute("aria-describedby")).toBe(
+    "yunari-panel-brightness-error",
+  );
+  expect(alert.getAttribute("id")).toBe("yunari-panel-brightness-error");
 });
 
 it("asks before restarting", async () => {
@@ -202,6 +232,102 @@ it("asks before restarting", async () => {
   expect(onCommand).not.toHaveBeenCalled();
   await click(buttonNamed(/^confirm restart$/i));
   expect(onCommand).toHaveBeenCalledWith({ kind: "restart" });
+});
+
+it("shows nothing from a previous panel after the dialog is closed", async () => {
+  const onCommand = vi.fn(async () => "ok");
+  await mount(
+    <PanelControlsSection
+      displayId="panel-1"
+      panel={CONTROLLABLE}
+      onCommand={onCommand}
+    />,
+  );
+  await click(buttonNamed(/controls/i));
+  await click(buttonNamed(/query status/i));
+  expect(replyText()).toBe("ok");
+  await click(buttonNamed(/^close$/i));
+
+  // The region keys the section by display, so selecting another one replaces
+  // this tree; this renders the same position with a new panel to prove the
+  // reopened dialog is clean either way.
+  const second: PanelHint = {
+    ...CONTROLLABLE,
+    serial: "S2",
+    label: "Second panel",
+    heldId: "panel-2",
+  };
+  await rerender(
+    <PanelControlsSection
+      displayId="panel-2"
+      panel={second}
+      onCommand={onCommand}
+    />,
+  );
+  await click(buttonNamed(/controls/i));
+  expect(replyText()).toBe("");
+  expect(brightnessField().value).toBe("");
+});
+
+it("ignores a second press while a command is in flight", async () => {
+  const pending = deferred<string>();
+  const onCommand = vi.fn(() => pending.promise);
+  await mount(
+    <PanelControlsSection
+      displayId="panel-1"
+      panel={CONTROLLABLE}
+      onCommand={onCommand}
+    />,
+  );
+  await click(buttonNamed(/controls/i));
+  await typeInto(brightnessField(), "50");
+  const apply = buttonNamed(/apply/i);
+  await click(apply);
+  await click(apply);
+  expect(onCommand).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    pending.resolve("ok");
+  });
+  expect(replyText()).toBe("ok");
+});
+
+it("drops a reply to a command the closed dialog abandoned", async () => {
+  const pending = deferred<string>();
+  const onCommand = vi.fn(() => pending.promise);
+  await mount(
+    <PanelControlsSection
+      displayId="panel-1"
+      panel={CONTROLLABLE}
+      onCommand={onCommand}
+    />,
+  );
+  await click(buttonNamed(/controls/i));
+  await typeInto(brightnessField(), "50");
+  await click(buttonNamed(/apply/i));
+  await click(buttonNamed(/^close$/i));
+  await click(buttonNamed(/controls/i));
+  await act(async () => {
+    pending.resolve("late answer");
+  });
+  expect(replyText()).toBe("");
+});
+
+it("shows the host's refusal in the dialog, in its words", async () => {
+  const onCommand = vi.fn(async () => {
+    throw new Error("Panel display strip is not running.");
+  });
+  await mount(
+    <PanelControlsSection
+      displayId="panel-1"
+      panel={CONTROLLABLE}
+      onCommand={onCommand}
+    />,
+  );
+  await click(buttonNamed(/controls/i));
+  await typeInto(brightnessField(), "50");
+  await click(buttonNamed(/apply/i));
+  const alert = must(document.querySelector('[role="alert"]'), "alert");
+  expect(alert.textContent).toContain("Panel display strip is not running.");
 });
 
 it("returns focus to its trigger when the dialog closes", async () => {

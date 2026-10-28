@@ -646,6 +646,10 @@ function HostSettings(props: {
               chosen display's hardware rather than what it shows. */}
           {selected === undefined || selectedPanel === undefined ? null : (
             <PanelControlsSection
+              // Keyed by the display, so selecting another one is a different
+              // dialog: the draft, last reply and refusal are this panel's
+              // visit, never the previous display's.
+              key={selected}
               displayId={selected}
               panel={selectedPanel}
               onCommand={(command) => settings.panelCommand(selected, command)}

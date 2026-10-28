@@ -367,3 +367,39 @@ it("reads a panel's hardware record, dropping what it cannot print", async () =>
   expect(panels[1]?.support).toBeUndefined();
   expect(panels[2]?.commands).toEqual([]);
 });
+
+it("posts a panel command as the route's own body and answers its reply", async () => {
+  let sent: RequestInit | undefined;
+  const { fetch, calls } = host((_url, init) => {
+    sent = init;
+    return json({ ok: true, reply: "Brightness set to 50%." });
+  });
+
+  const reply = await createHostSettingsClient({ fetch }).panelCommand(
+    "strip",
+    { kind: "brightness", level: 50 },
+  );
+
+  expect(calls).toEqual(["POST /api/displays/strip/panel/command"]);
+  // The body is the command itself rather than a wrapper around it: that is
+  // what the route parses.
+  expect(JSON.parse(String(sent?.body))).toEqual({
+    kind: "brightness",
+    level: 50,
+  });
+  expect(reply).toBe("Brightness set to 50%.");
+});
+
+it("answers a panel command refusal with the host's plain-text words", async () => {
+  // Every failure answer on this route is text, not JSON — a closed port is a
+  // 409 whose sentence is the only thing that tells the person what happened.
+  const { fetch } = host(
+    () => new Response("Panel display strip is not running.", { status: 409 }),
+  );
+
+  await expect(
+    createHostSettingsClient({ fetch }).panelCommand("strip", {
+      kind: "status",
+    }),
+  ).rejects.toThrow("Panel display strip is not running.");
+});
