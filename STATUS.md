@@ -15,14 +15,14 @@ The asset finder's UI/UX overhaul: one shell, one card, one skeleton and one con
 
 ## Last completed change
 
-- **Editorial feed:** an empty term now browses `GET /photos` with the same key, instead of answering an empty page.
-- **Page count:** the feed's `Link` header names the last page; a `next` link means one more, and a header-less page is judged by whether it came back full.
-- **Proof:** `unsplash.test.ts` 12 passed, watched failing first.
+- **Images proved end to end:** the tab draws photos on open with an empty term, and the request proves the browse is a real host call.
+- **Its two other states:** a missing key shows the footer sentence and the Connections button, and an empty feed shows "nothing to browse", never "no results".
+- **Proof:** the first test failed with browse-on-open disabled, then passed restored.
 
 ## Next
 
-1. Execute Task 3.2: the Images tab's browser proof.
-2. Then Task 3.3: the Fonts pane facade, then Phase 4.
+1. Execute Task 3.3: the Fonts pane facade.
+2. Then Phase 4: Wallpaper Engine, the preview modal and the DESIGN.md rules.
 
 ## Blockers / unverified
 

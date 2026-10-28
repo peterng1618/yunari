@@ -578,6 +578,87 @@ test("a pending search says it is searching before it counts results", async ({
   await expect(status).toContainText("1 result");
 });
 
+test("the Images tab draws photos on open and asks with no term", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  const { searches } = await stubAssets(page, {
+    sources: [unsplash],
+    answer: () => ({
+      pages: [
+        answered(
+          "unsplash",
+          [
+            {
+              ...result("unsplash:photo-1"),
+              kind: "image",
+              name: "A photo",
+              preview: "https://images.example/1.jpg",
+              subtitle: "A Photographer",
+              licence: "Unsplash License",
+              sourceUrl: "https://unsplash.com/p/1",
+            },
+          ],
+          4,
+        ),
+      ],
+    }),
+  });
+  const dialog = await openFinder(page);
+  await dialog.locator('[data-yunari-asset-tab="image"]').click();
+
+  await expect.poll(() => rowIds(page)).toEqual(["unsplash:photo-1"]);
+  expect(await page.locator("[data-yunari-asset-search]").inputValue()).toBe(
+    "",
+  );
+  // The browse is a real request: it is the host's feed, asked with no term.
+  expect(searches.at(-1)?.query).toBe("");
+});
+
+test("the Images tab says a key is missing instead of drawing an empty grid", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await stubAssets(page, {
+    sources: [unsplash],
+    answer: () => ({
+      pages: [
+        {
+          source: "unsplash",
+          results: [],
+          totalPages: undefined,
+          failure: { reason: "needs-credential", credential: "unsplash" },
+        },
+      ],
+    }),
+  });
+  const dialog = await openFinder(page);
+  await dialog.locator('[data-yunari-asset-tab="image"]').click();
+
+  await expect(dialog.locator("[data-yunari-asset-status]")).toContainText(
+    "needs a key",
+  );
+  await expect(dialog.locator("[data-yunari-asset-connections]")).toBeVisible();
+});
+
+test("a source with nothing to browse says so, not 'no results'", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await stubAssets(page, {
+    sources: [unsplash],
+    answer: () => ({ pages: [answered("unsplash", [], 1)] }),
+  });
+  const dialog = await openFinder(page);
+  await dialog.locator('[data-yunari-asset-tab="image"]').click();
+
+  await expect(dialog.locator("[data-yunari-asset-nothing]")).toBeVisible();
+  await expect(dialog.locator("[data-yunari-asset-empty]")).toHaveCount(0);
+});
+
 test("the first search names the host once, and the second does not", async ({
   page,
 }, testInfo) => {
