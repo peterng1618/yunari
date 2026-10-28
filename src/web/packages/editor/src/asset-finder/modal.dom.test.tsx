@@ -217,11 +217,11 @@ function finder(
     <AssetFinder
       open
       onOpenChange={() => {}}
-      bodies={{
-        "font-picker": <p data-yunari-asset-body="font-picker">faces</p>,
-        "wallpaper-engine": (
-          <p data-yunari-asset-body="wallpaper-engine">scenes</p>
-        ),
+      font={{
+        onApplyTrio: () => {},
+        onAddTrioPresets: () => {},
+        onAddPreset: () => {},
+        onApplyToSelected: () => {},
       }}
       onAction={async () => ({ ok: true })}
       {...props}
@@ -336,9 +336,7 @@ describe("AssetFinder tabs", () => {
     await settle();
 
     expect(tab("font").getAttribute("aria-selected")).toBe("true");
-    expect(
-      document.querySelector('[data-yunari-asset-body="font-picker"]'),
-    ).not.toBeNull();
+    expect(document.querySelector("[data-yunari-font-filter]")).not.toBeNull();
   });
 
   it("reopens on the category a caller asks for, after an earlier open", async () => {
@@ -363,13 +361,13 @@ describe("AssetFinder tabs", () => {
     ).toContain(uiCopy.assets.hostUnavailable);
   });
 
-  it("renders a body-only category's body and no chips", async () => {
-    await render([curatedFonts]);
+  it("says a category has no pane rather than drawing a blank dialog", async () => {
+    await render([wallpaperEngine]);
     await settle();
 
     expect(
-      document.querySelector('[data-yunari-asset-body="font-picker"]'),
-    ).not.toBeNull();
+      document.querySelector('[data-yunari-asset-body="local"]')?.textContent,
+    ).toContain(uiCopy.assets.noSource);
     expect(document.querySelector("[data-yunari-asset-chip]")).toBeNull();
     expect(searchAssets).not.toHaveBeenCalled();
   });

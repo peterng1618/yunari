@@ -22,6 +22,19 @@ import {
 import { FinderFrame } from "./finder-frame.js";
 import { FinderGrid } from "./finder-grid.js";
 import { FinderState } from "./finder-state.js";
+import {
+  FontPreviewPanel,
+  type FontResult,
+  type FontRole,
+} from "./font-preview-panel.js";
+import {
+  type FontActions,
+  type FontFilterState,
+  type FontPreviewState,
+  FontsFilter,
+  fontActionsOf,
+  fontRows,
+} from "./fonts.js";
 import { FinderSkeleton } from "./skeleton.js";
 import {
   appendAnswer,
@@ -87,10 +100,9 @@ export type ActionOutcome =
 export interface FinderProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  /** The category whose body is a component, never a grid. */
-  readonly bodies: Readonly<
-    Record<"font-picker" | "wallpaper-engine", React.ReactNode>
-  >;
+  /** The Fonts tab's session writes and role presets. Absent until the shell
+   *  wires them; every font action is drawn from what this offers. */
+  readonly font?: FontActions;
   /** One row's action. `placement` names a second action — an image can be set
    *  as the theme's background or placed on the canvas — and is absent for the
    *  kind's own default. */
@@ -126,8 +138,13 @@ function gridSourcesOf(
   sources: readonly AssetSourceListing[],
   category: ListingCategory,
 ): readonly AssetSourceListing[] {
+  // A font source searches through the same grid; its request body differs, not
+  // its place in the window (spec R5).
   return sources.filter(
-    (source) => source.category === category && source.body === "grid",
+    (source) =>
+      source.category === category &&
+      (source.body === "grid" ||
+        (category === "font" && source.body === "font-picker")),
   );
 }
 
@@ -160,7 +177,7 @@ function bodyOf(category: ListingCategory): "grid" | "font-picker" {
 export function AssetFinder({
   open,
   onOpenChange,
-  bodies,
+  font,
   onAction,
   onOpenConnections,
   initialCategory,
@@ -183,20 +200,29 @@ export function AssetFinder({
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const announced = useRef(false);
   const [busy, setBusy] = useState(false);
+  /** The footer action whose write is out, so one spinner is not every one. */
+  const [running, setRunning] = useState<string | undefined>(undefined);
+  /** The Fonts tab's own filter and preview choices. Filtering and sorting
+   *  narrow what is drawn; they never change what was asked. */
+  const [fontFilter, setFontFilter] = useState<FontFilterState>({
+    kind: "all",
+    sort: "name",
+  });
+  const [fontPreview, setFontPreview] = useState<FontPreviewState>({
+    sample: uiCopy.assets.fontPreview.sampleDefault,
+    cutId: undefined,
+    role: "body" as FontRole,
+  });
   const tickets = useRef(new Map<ListingCategory, number>());
 
-  /** A category a body owns: no listing names it, and no source is searched. */
-  const bodyKinds: Partial<Record<ListingCategory, React.ReactNode>> = {
-    font: bodies["font-picker"],
-    local: bodies["wallpaper-engine"],
-  };
-
+  /** A font category exists when the registry lists one, or when the session
+   *  offers the writes a pane needs. */
   const present = (
     category: ListingCategory,
     listing: readonly AssetSourceListing[],
   ): boolean =>
     listing.some((source) => source.category === category) ||
-    bodyKinds[category] != null;
+    (category === "font" && font !== undefined);
 
   useEffect(() => {
     if (!open) return;
@@ -222,17 +248,14 @@ export function AssetFinder({
           return initialCategory;
         }
         if (current !== undefined && present(current, listed)) return current;
-        return (
-          listed[0]?.category ?? (bodyKinds.font != null ? "font" : "local")
-        );
+        return listed[0]?.category ?? (font !== undefined ? "font" : "local");
       });
     });
     return () => {
       live = false;
     };
-    // `bodyKinds` is read for presence only; its nodes are React state the
-    // effect must not restart on.
-  }, [open, client, initialCategory]);
+    // `font` is read for presence only; its callbacks are the session's.
+  }, [open, client, initialCategory, font === undefined]);
 
   useEffect(() => {
     // A browser that refuses storage keeps the choice for this session only;
@@ -251,8 +274,8 @@ export function AssetFinder({
       presentCategories.push(source.category);
     }
   }
-  for (const category of ["font", "local"] as const) {
-    if (bodyKinds[category] != null && !presentCategories.includes(category)) {
+  for (const category of ["font"] as const) {
+    if (font !== undefined && !presentCategories.includes(category)) {
       presentCategories.push(category);
     }
   }
@@ -494,6 +517,9 @@ export function AssetFinder({
 
   const isGrid = gridSources.length > 0;
   const rows = rowsOf(view.data, enabled);
+  /** What the grid draws: the tab's own filter can narrow a font answer
+   *  without touching what was asked or kept. */
+  const shown = active === "font" ? fontRows(rows, fontFilter) : rows;
   const more = isGrid && hasMore(view.data, enabled);
   const failures = [...view.data.failures.values()];
   /** A key that is missing or refused is the one reason to offer Connections:
@@ -550,10 +576,10 @@ export function AssetFinder({
           </button>
         ) : null}
       </>
-    ) : rows.length > 0 ? (
+    ) : shown.length > 0 ? (
       `${uiCopy.assets.results(
-        rows.length,
-        new Set(rows.map((row) => sourceIdOf(row.result))).size,
+        shown.length,
+        new Set(shown.map((row) => sourceIdOf(row.result))).size,
       )}${more ? "" : ` · ${uiCopy.assets.endOfResults}`}`
     ) : undefined
   ) : undefined;
@@ -587,14 +613,45 @@ export function AssetFinder({
     },
   };
 
-  const cards: readonly FinderCardModel[] = rows.map(({ page, result }) =>
+  const cards: readonly FinderCardModel[] = shown.map(({ page, result }) =>
     cardModelOf(result, sourceOf(page.source)?.label ?? page.source),
   );
   const rowOfCard = (card: FinderCardModel): FinderRow | undefined =>
-    rows.find(
+    shown.find(
       ({ page, result }) =>
         result.id === card.id && page.source === card.sourceId,
     );
+
+  /** The Fonts tab's footer actions, built from the chosen result and the
+   *  column's own choices. Actions are the session's; a callback it does not
+   *  wire drops its button. */
+  const fontFooter: readonly FinderAction[] =
+    active === "font" && view.selection !== undefined
+      ? fontActionsOf(view.selection, fontFilter, fontPreview, font)
+      : [];
+  const fontSelection: FontResult | undefined =
+    active === "font" && view.selection?.result.font !== undefined
+      ? (view.selection.result as FontResult)
+      : undefined;
+
+  const runFontAction = (action: FinderAction): void => {
+    setRunning(action.id);
+    const outcome = action.run();
+    void Promise.resolve(outcome).then((result) => {
+      setRunning(undefined);
+      patch(active, (current) => ({
+        ...current,
+        message: {
+          text: result.ok
+            ? action.id.startsWith("add")
+              ? uiCopy.assets.done.colour
+              : uiCopy.assets.done.font
+            : result.message,
+          tone: result.ok ? "ok" : "failed",
+        },
+      }));
+    });
+  };
 
   const emptyState = (): React.ReactNode => {
     if (kindSourcesOff) {
@@ -621,6 +678,15 @@ export function AssetFinder({
             message={uiCopy.assets.emptyAfterFailure}
             action={{ label: uiCopy.assets.retry, onClick: retry }}
           />
+        </div>
+      );
+    }
+    // The tab's filter can hide every row an answer did bring; that is not a
+    // failed question, so the query is not offered for clearing.
+    if (rows.length > 0) {
+      return (
+        <div data-yunari-asset-empty="">
+          <FinderState message={uiCopy.assets.noResults} />
         </div>
       );
     }
@@ -675,7 +741,14 @@ export function AssetFinder({
           }
         : {})}
       filters={
-        active === "colour" && kinds.length > 1 ? (
+        active === "font" ? (
+          <FontsFilter
+            filter={fontFilter}
+            onChange={(next) => {
+              setFontFilter(next);
+            }}
+          />
+        ) : active === "colour" && kinds.length > 1 ? (
           <FinderSegmented
             label={uiCopy.assets.kindFilterLabel}
             value={presetFilter}
@@ -740,28 +813,58 @@ export function AssetFinder({
       }
       status={statusNode}
       {...(statusTone === undefined ? {} : { statusTone })}
+      {...(fontSelection === undefined
+        ? {}
+        : {
+            detail: (
+              <FontPreviewPanel
+                selected={fontSelection}
+                presets={font?.presets ?? {}}
+                state={fontPreview}
+                onChange={setFontPreview}
+              />
+            ),
+          })}
       actions={
         isGrid ? (
-          <>
-            {active === "image" ? (
+          active === "font" ? (
+            <>
+              {fontFooter.map((action) => (
+                <FinderActionButton
+                  key={action.id}
+                  action={action}
+                  busy={running === action.id}
+                  onRun={() => runFontAction(action)}
+                  data={
+                    action.tone === "accent"
+                      ? { "data-yunari-asset-action": "" }
+                      : { "data-yunari-font-action": action.id }
+                  }
+                />
+              ))}
+            </>
+          ) : (
+            <>
+              {active === "image" ? (
+                <FinderActionButton
+                  action={placeAction}
+                  busy={busy}
+                  onRun={() => {
+                    void placeAction.run();
+                  }}
+                  data={{ "data-yunari-asset-place": "" }}
+                />
+              ) : null}
               <FinderActionButton
-                action={placeAction}
+                action={mainAction}
                 busy={busy}
                 onRun={() => {
-                  void placeAction.run();
+                  void mainAction.run();
                 }}
-                data={{ "data-yunari-asset-place": "" }}
+                data={{ "data-yunari-asset-action": "" }}
               />
-            ) : null}
-            <FinderActionButton
-              action={mainAction}
-              busy={busy}
-              onRun={() => {
-                void mainAction.run();
-              }}
-              data={{ "data-yunari-asset-action": "" }}
-            />
-          </>
+            </>
+          )
         ) : undefined
       }
     >
@@ -770,8 +873,7 @@ export function AssetFinder({
           className="min-h-0 flex-1 overflow-y-auto"
           data-yunari-asset-body={active}
         >
-          {bodies[active === "font" ? "font-picker" : "wallpaper-engine"] ??
-            uiCopy.assets.noSource}
+          <FinderState message={uiCopy.assets.noSource} />
         </div>
       ) : (
         <>
@@ -781,7 +883,7 @@ export function AssetFinder({
             </p>
           )}
 
-          {rows.length === 0 ? (
+          {shown.length === 0 ? (
             emptyState()
           ) : (
             <div
@@ -805,6 +907,13 @@ export function AssetFinder({
                       ...current,
                       selection: row,
                     }));
+                    // A cut belongs to the family that listed it.
+                    if (active === "font") {
+                      setFontPreview((current) => ({
+                        ...current,
+                        cutId: undefined,
+                      }));
+                    }
                   }
                 }}
                 onPreview={() => {
@@ -814,6 +923,16 @@ export function AssetFinder({
                   const row = rowOfCard(card);
                   if (row === undefined) return;
                   patch(active, (current) => ({ ...current, selection: row }));
+                  if (active === "font") {
+                    const first = fontActionsOf(
+                      row,
+                      fontFilter,
+                      fontPreview,
+                      font,
+                    )[0];
+                    if (first !== undefined) runFontAction(first);
+                    return;
+                  }
                   void runRow(
                     active,
                     row,

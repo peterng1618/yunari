@@ -7,6 +7,7 @@ import type {
 import type * as React from "react";
 import type { ArrangeAction } from "../arrange.js";
 import type { AssetPlacement, ImportOutcome } from "../asset-finder/actions.js";
+import type { FontActions } from "../asset-finder/fonts.js";
 import type { ShapeKind } from "../new-object-defaults.js";
 
 /** Document-level editor actions the shell dispatches. Every method delegates to
@@ -21,9 +22,9 @@ export interface EditorActionFacade {
   savePackage(): Promise<void>;
   releasePackage(): Promise<void>;
   openLibrary(): Promise<void>;
-  /** The finder's Fonts body. The catalogue's data, the favourites and both
-   *  writes are the session's; the shell only has somewhere to put it. */
-  fontPickerBody?(): React.ReactNode;
+  /** The finder's Fonts pane: the role presets and the writes a chosen result
+   *  offers. The shell draws the buttons; the session owns their effects. */
+  fontActions?(): FontActions;
   /** The finder's Wallpaper Engine body: this PC's library, and the session's
    *  three writes a card offers — a video's background, a scene's local project
    *  and a picked `.mpkg`. */

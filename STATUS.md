@@ -9,20 +9,21 @@ The asset finder's UI/UX overhaul: one shell, one card, one skeleton and one con
 
 ## Active work
 
-- **Plan is running:** `docs/superpowers/plans/2026-10-28-asset-finder-unification.md`, Phase 3.
+- **Plan is running:** `docs/superpowers/plans/2026-10-28-asset-finder-unification.md`, Phase 4.
 - **Phase 2 is complete:** each tab accumulates its own question, rows and selection; the grid appends on scroll and the pager is deleted.
-- **Phase 3 in progress:** the Unsplash Editorial feed has landed; the Images browser proof is next.
+- **Phase 3 is complete:** the Unsplash Editorial feed and both browser panes (Images, Fonts) draw through the shared frame and card.
 
 ## Last completed change
 
-- **Images proved end to end:** the tab draws photos on open with an empty term, and the request proves the browse is a real host call.
-- **Its two other states:** a missing key shows the footer sentence and the Connections button, and an empty feed shows "nothing to browse", never "no results".
-- **Proof:** the first test failed with browse-on-open disabled, then passed restored.
+- **Fonts is a pane, not a body:** the same search, grid, skeleton and empty/error states; its filters, selection and preview live in the tab's own state.
+- **One footer and one detail column:** `fontActionsOf` declares a trio's and a family's outcomes, and the preview panel is controlled by the shell.
+- **Facade swap:** `fontActions()` replaces `fontPickerBody()`; `fonts-body.tsx` and `font-grid.tsx` are deleted with their tests.
+- **Proof:** 62 focused DOM tests, 27 browser tests (1 skipped) and `npm run gate` exit 0.
 
 ## Next
 
-1. Execute Task 3.3: the Fonts pane facade.
-2. Then Phase 4: Wallpaper Engine, the preview modal and the DESIGN.md rules.
+1. Execute Task 4.1: the Wallpaper Engine pane.
+2. Then Task 4.2 (the double-click preview modal) and Task 4.3 (DESIGN.md rules and the phase close).
 
 ## Blockers / unverified
 

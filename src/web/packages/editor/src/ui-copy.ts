@@ -1268,6 +1268,13 @@ export const uiCopy = {
     /** The Fonts body's own search and filter row (spec R5). The old picker's
      *  facet vocabulary and rule sentence die with it in Task 13. */
     fontSearch: "Search trios and font names",
+    /** The Fonts footer's two outcomes (spec R5, R6). The preview column's own
+     *  Apply/Add controls moved here, so the label and the write agree. */
+    fontApplyTrio: "Apply trio",
+    fontAddPresets: "Add to presets",
+    fontApplyToken: "Apply to token",
+    fontApplyBusy: "Applying…",
+    fontAddBusy: "Adding…",
     fontResults: "Font results",
     fontFilterLabel: "Filter results",
     fontFilter: { all: "All", trio: "Trios", family: "Fonts" },

@@ -708,9 +708,33 @@ test("the font field opens the finder on Fonts", async ({ page }, testInfo) => {
     "aria-selected",
     "true",
   );
-  // The font finder asks once there is a term; the grid is what it draws.
-  await page.locator("[data-yunari-font-search]").fill("inter");
-  await expect(page.locator("[data-yunari-font-grid]")).toBeVisible();
+  // The Fonts pane browses on open: the grid is what it draws, no term needed.
+  await expect(page.locator("[data-yunari-asset-grid]")).toBeVisible();
+  await expect(
+    page.locator(`[data-yunari-finder-card="${fontResult.id}"]`),
+  ).toBeVisible();
+});
+
+test("the Fonts tab draws a trio grid on open", async ({ page }, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await stubAssets(page, {
+    sources: [curatedFonts],
+    answer: () => ({
+      pages: [answered("curated-fonts", [interTrio, fontResult])],
+    }),
+  });
+  await openFinder(page);
+  await page.locator('[data-yunari-asset-tab="font"]').click();
+
+  // Nothing is typed: selecting the tab is an empty-term browse, and every
+  // answer is one shared card.
+  await expect(page.locator("[data-yunari-asset-search]")).toHaveValue("");
+  await expect(page.locator("[data-yunari-asset-grid]")).toBeVisible();
+  await expect(page.locator("[data-yunari-finder-card]")).toHaveCount(2);
+  await expect(
+    page.locator(`[data-yunari-finder-card="${interTrio.id}"]`),
+  ).toBeVisible();
 });
 
 test("draws a font card's specimen rows in the result's own faces", async ({
@@ -726,13 +750,17 @@ test("draws a font card's specimen rows in the result's own faces", async ({
   });
   await openFinder(page);
   await page.locator('[data-yunari-asset-tab="font"]').click();
-  await page.locator("[data-yunari-font-search]").fill("inter");
-  await expect(page.locator("[data-yunari-font-grid]")).toBeVisible();
+  await expect(page.locator("[data-yunari-asset-grid]")).toBeVisible();
 
   const trioRows = page.locator(
-    `[data-yunari-font-tile="${interTrio.id}"] [data-yunari-font-specimen] > span`,
+    `[data-yunari-finder-card="${interTrio.id}"] [data-yunari-asset-preview="font"] > span`,
   );
-  await expect(trioRows).toHaveText(["Inter", "Poppins", "Fira Code"]);
+  await expect(trioRows).toHaveCount(3);
+  await expect(trioRows).toHaveText([
+    interTrio.name,
+    interTrio.name,
+    interTrio.name,
+  ]);
   // Heading, body and mono are drawn at descending sizes, which is what makes
   // the thumbnail read as the hierarchy the trio itself makes.
   const sizes = await trioRows.evaluateAll((rows) =>
@@ -742,7 +770,7 @@ test("draws a font card's specimen rows in the result's own faces", async ({
   expect(sizes[1]!).toBeGreaterThan(sizes[2]!);
 
   const familyRows = page.locator(
-    `[data-yunari-font-tile="${fontResult.id}"] [data-yunari-font-specimen] > span`,
+    `[data-yunari-finder-card="${fontResult.id}"] [data-yunari-asset-preview="font"] > span`,
   );
   await expect(familyRows).toHaveText(["Inter"]);
 });
@@ -756,8 +784,7 @@ test("captures the finder on Fonts", async ({ page }, testInfo) => {
   });
   await openFinder(page);
   await page.locator('[data-yunari-asset-tab="font"]').click();
-  await page.locator("[data-yunari-font-search]").fill("inter");
-  await expect(page.locator("[data-yunari-font-grid]")).toBeVisible();
+  await expect(page.locator("[data-yunari-asset-grid]")).toBeVisible();
 
   await captureVisualReview(page, testInfo, "editor-finder-fonts");
 });

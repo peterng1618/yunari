@@ -348,6 +348,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
     const sheetOpen = useSheet(sheet);
     const finderState = useFinder(finder);
     const finderOpen = finderState.open;
+    const fontActions = store.bridge?.session.fontActions?.();
     /** Re-frame on the panel toggle, once the viewport has the new width.
      *
      * A resize does not need this any more: the viewport derives whether the
@@ -648,11 +649,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
             <AssetFinder
               open={finderOpen}
               onOpenChange={(next) => finder.set(next)}
-              bodies={{
-                "font-picker": store.bridge?.session.fontPickerBody?.() ?? null,
-                "wallpaper-engine":
-                  store.bridge?.session.wallpaperEngineBody?.() ?? null,
-              }}
+              {...(fontActions === undefined ? {} : { font: fontActions })}
               {...(finderState.category === undefined
                 ? {}
                 : { initialCategory: finderState.category })}
