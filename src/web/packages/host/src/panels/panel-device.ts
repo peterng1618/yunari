@@ -31,7 +31,7 @@ export interface PanelHint {
 }
 
 /** A command a panel's control channel accepts. */
-export type PanelCommand =
+export type PanelControlCommand =
   | { readonly kind: "brightness"; readonly level: number }
   | { readonly kind: "screen"; readonly on: boolean }
   | { readonly kind: "restart" }
@@ -45,8 +45,8 @@ export type PanelCommand =
  * entry point, so a surface does not learn a protocol to dim a screen.
  */
 export interface PanelControls {
-  readonly commands: readonly PanelCommand["kind"][];
-  run(command: PanelCommand): Promise<string>;
+  readonly commands: readonly PanelControlCommand["kind"][];
+  run(command: PanelControlCommand): Promise<string>;
 }
 
 /** The video half of a panel that takes frames rather than stills. */
@@ -108,7 +108,7 @@ export interface PanelFamily {
   /** True when `present` writes to the device rather than streaming a frame. */
   readonly stores: boolean;
   readonly support: PanelSupport;
-  readonly commands: readonly PanelCommand["kind"][];
+  readonly commands: readonly PanelControlCommand["kind"][];
   /** Panels of this family attached right now, as record hints. */
   readonly attached: () => Promise<readonly PanelHint[]>;
   readonly open: () => Promise<PanelDevice>;

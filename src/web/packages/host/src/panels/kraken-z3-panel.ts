@@ -475,7 +475,7 @@ export const KRAKEN_FAMILIES: readonly PanelFamily[] = [
     stores: true,
     support: {
       maker: "NZXT",
-      hardwareRevision: "Z73",
+      hardwareRevision: "Z53/Z63/Z73",
       supportedFirmware: [],
       updatedAt: "2026-10-28",
     },
