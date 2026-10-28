@@ -1,7 +1,7 @@
 # The asset finder, unified — one frame, one card, one state vocabulary
 
 - **Date:** 2026-10-28
-- **Status:** approved 2026-10-28. Plan: [`2026-10-28-asset-finder-unification.md`](../plans/2026-10-28-asset-finder-unification.md).
+- **Status:** implemented. Plan: [`2026-10-28-asset-finder-unification.md`](../plans/2026-10-28-asset-finder-unification.md).
 - **Supersedes in part:**
   - [`2026-10-21-asset-finder-design.md`](2026-10-21-asset-finder-design.md) §1:
     the numbered pager and the single mixed grid's layout paragraph do not

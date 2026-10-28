@@ -5,25 +5,27 @@ Branch: `peterng1618/asset-finder-hub` (worktree `asset-finder-hub`)
 
 ## Current objective
 
-The asset finder's UI/UX overhaul: one shell, one card, one skeleton and one control set across every tab, then the Unsplash feed, the font and Wallpaper Engine panes, the preview modal and the DESIGN.md rules.
+The asset finder's UI/UX overhaul is complete. Next: the same audit across the rest of the app (`vg-773`).
 
 ## Active work
 
-- **Plan is running:** `docs/superpowers/plans/2026-10-28-asset-finder-unification.md`, Phase 4.
-- **Phase 2 is complete:** each tab accumulates its own question, rows and selection; the grid appends on scroll and the pager is deleted.
-- **Phase 3 is complete:** the Unsplash Editorial feed and both browser panes (Images, Fonts) draw through the shared frame and card.
-- **Phase 4 in progress:** the Wallpaper Engine library and the media preview are panes of the same frame; the DESIGN.md rules remain.
+- **Plan complete:** `docs/superpowers/plans/2026-10-28-asset-finder-unification.md`; nothing is in flight.
+- **The finder is one surface:** one frame, card, skeleton, control set and state vocabulary across every tab.
+- **DESIGN.md owns the rules:** §5's "Asset finder tabs" is the checklist for every tab added later.
 
 ## Last completed change
 
-- **A media preview over the finder:** double-clicking a photo or Wallpaper Engine item opens the enlarged result, with its facts and the tab's own actions.
-- **Two routes, one surface:** the footer's Preview icon button opens the same modal for a previewable selection.
-- **Escape closes the preview, not the finder:** the finder refuses to close while the preview is over it, and focus returns to the card.
-- **Proof:** 54 DOM tests, 32 finder browser tests (1 skipped), `npm run gate` exit 0; both red proofs failed first.
+- **One frame for every tab:** fixed tab order, one toolbar search, one card, one animated skeleton, one footer status line.
+- **Browse on open, append on scroll:** Unsplash browses its Editorial feed with no term; pages append and the pager is gone.
+- **Fonts, Images and Wallpaper Engine are panes:** their filters, selections and writes use the shared frame via `fontActions()` and `wallpaperActions()`.
+- **Media preview:** a double-click or the footer's Preview button opens a photo or wallpaper result over the finder; Escape returns to the card.
+- **Proof:** 32 finder browser tests (1 skipped), four red proofs failed first, `npm run gate` exit 0 (453 files, 6906 tests).
 
 ## Next
 
-1. Execute Task 4.3: the DESIGN.md rules and the phase close.
+1. Apply the same audit to the rest of the app (`vg-773`).
+2. Drain the backlog: a reproduction pass first, not a fix pass.
+3. The queued multi-device display objective.
 
 ## Blockers / unverified
 
