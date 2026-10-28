@@ -63,11 +63,14 @@ describe("bgraPayload", () => {
 
   it("puts one 0x00 after each 249-byte chunk and pads the tail", () => {
     // Three chunks: 249 bytes, a 0x00 join, 249 bytes, a 0x00 join, 249 bytes,
-    // then zero padding to the next 250-byte multiple.
-    const payload = bgraPayload(new Uint8Array(249 * 3));
+    // then zero padding to the next 250-byte multiple. Filled with 0xff so a
+    // missing join cannot read as an expected zero.
+    const payload = bgraPayload(new Uint8Array(249 * 3).fill(0xff));
     expect(payload.length).toBe(750);
+    expect(payload[248]).toBe(0xff);
     expect(payload[249]).toBe(0);
     expect(payload[499]).toBe(0);
+    expect(payload[500]).toBe(0xff);
     expect([...payload.slice(749)].every((byte) => byte === 0)).toBe(true);
   });
 
