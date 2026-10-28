@@ -540,7 +540,13 @@ function hostingServing(): HostingStore {
   // by identity and re-renders forever on a fresh object each call.
   const answer: HostingSnapshot = {
     kind: "known",
-    answer: { lan: true, address: "192.168.1.5", port: 4174, refusal: null },
+    answer: {
+      lan: true,
+      address: "192.168.1.5",
+      name: null,
+      port: 4174,
+      refusal: null,
+    },
     pairing: undefined,
     reason: undefined,
     pending: undefined,

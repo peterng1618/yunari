@@ -452,6 +452,18 @@ export const uiCopy = {
         "This PC's screen has no shape or rotation to set. Pair a display to choose its glass and mounting angle.",
       savedPresentation: "Saved the display's shape and rotation.",
     },
+    panels: {
+      heading: "USB panels",
+      hint: "A panel is a small screen plugged into this PC. Adding one makes it a display, and this PC draws for it.",
+      /** Nothing attached: the ordinary case on a machine without a panel. */
+      none: "No USB panel is attached to this PC.",
+      /** Every attached panel is already a display. */
+      allAdded: "Every attached panel is already a display.",
+      add: "Add",
+      adding: "Adding…",
+      addPanel: (name: string): string => `Add ${name} as a display`,
+      added: "Added the panel as a display.",
+    },
     devices: {
       heading: "Devices on this PC",
       hint: "Which hardware this PC reports. These apply to every theme, unless a theme asks for something different.",
@@ -1598,11 +1610,15 @@ export const uiCopy = {
     /** The one-time code, printed beside the address because the symbol that
      *  carries it needs a camera and the device may not have one. */
     code: "Pairing code",
-    /** The one step that makes an address change invisible, said here because
-     *  the card is the only moment the owner is thinking about it (spec §
-     *  "Finding the host after its address changes"). */
+    /** Why the symbol and the line above it disagree in spelling: a dotted quad
+     *  is what an IP change breaks, and the name is what it does not. Said here
+     *  because the card is the only moment the owner is thinking about it (spec
+     *  § "Finding the host after its address changes"). The last clause is not
+     *  hedging — Android 11 and earlier and a device on Private DNS cannot
+     *  resolve the name, and then the address is what it types
+     *  (`docs/decisions/0132`). */
     reserveAddress:
-      "Reserve this address in your router, or give this PC a name, and the display's URL never breaks.",
+      "The address breaks if this PC's IP changes; the name above survives it, where your device can resolve it.",
     warning:
       "Plain HTTP on your own network — trusted networks only, never the internet.",
     copy: "Copy link",

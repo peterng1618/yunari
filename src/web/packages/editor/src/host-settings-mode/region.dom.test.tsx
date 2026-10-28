@@ -37,6 +37,7 @@ import {
   type DisplayPreferences,
   type DisplayPreferencesWrite,
   type HostSettingsClient,
+  type PanelHint,
   type ThemeAnswers,
   type WeatherPlace,
   type WeatherRead,
@@ -153,6 +154,11 @@ interface Fixture {
   readonly sourceRemoval?: RemovalAnswer;
   /** The sentence a presentation write fails with, or `undefined`. */
   readonly refusePresentation?: string;
+  /** What the host enumerates as attached panels. Absent is a machine with
+   *  none, which is the ordinary case. */
+  readonly panels?: readonly PanelHint[];
+  /** The sentence an add fails with, or `undefined` for a landed add. */
+  readonly refusePanel?: string;
   /** The sentence a delete fails with, or `undefined` for a landed delete. */
   readonly sourceRemoveFailure?: string;
 }
@@ -175,6 +181,12 @@ interface Written {
   readonly presentation: {
     readonly id: string;
     readonly next: { readonly shape: DisplayShape; readonly rotation: number };
+  }[];
+  /** The panels an add sent, in order: what the request carried. */
+  readonly panels: {
+    readonly vendorId: number;
+    readonly productId: number;
+    readonly serial: string;
   }[];
 }
 
@@ -218,6 +230,7 @@ function hostSettings(
     weather: [],
     searches: [],
     presentation: [],
+    panels: [],
   };
   const devices: DeviceSettings = fixture.devices ?? {
     available: { gpus: [], disks: [] },
@@ -285,6 +298,17 @@ function hostSettings(
           shape: next.shape,
           rotation: next.shape === "rect" ? 180 : 45,
         };
+      },
+      // No panel attached is the ordinary machine, so the default fixture
+      // answers an empty list rather than inventing one. A case that needs the
+      // section sets `fixture.panels`.
+      listPanels: async () => fixture.panels ?? [],
+      addPanel: async (_label, panel) => {
+        wrote.panels.push(panel);
+        if (fixture.refusePanel !== undefined) {
+          throw new Error(fixture.refusePanel);
+        }
+        return "lian-li-9-2";
       },
     },
   };
@@ -1851,4 +1875,113 @@ it("reports a failed delete with the delete's own sentence", async () => {
 
   expect(statusLine(published).status).toBe(SOURCES_COPY.deleteFailed(failure));
   expect(statusLine(published).status).not.toContain("Could not save");
+});
+
+/**
+ * A USB panel is **found, not paired**: the host enumerates what is plugged in
+ * and the owner adds one. This is the only section of the mode that creates a
+ * display, so the cases below are about the offer and the write rather than
+ * about a control editing a record that already exists.
+ */
+const ONE_PANEL: Fixture = {
+  fallback: null,
+  displays: [
+    {
+      id: "this-pc",
+      label: "This PC",
+      theme: null,
+      shape: "rect",
+      rotation: 0,
+    },
+  ],
+  panels: [
+    {
+      vendorId: 0x1cbe,
+      productId: 0xa092,
+      serial: "PANEL0001",
+      label: 'Lian Li 9.2" LCD',
+      held: false,
+    },
+  ],
+};
+
+it("offers an attached panel and adds it", async () => {
+  const { container, wrote } = await mountHost(ONE_PANEL);
+
+  const add = must(
+    container.querySelector<HTMLButtonElement>(
+      '[data-yunari-panel-add="7358:41106:PANEL0001"]',
+    ),
+    "the add button for the attached panel",
+  );
+
+  await act(async () => add.click());
+
+  // What the request carried: the three fields a record keys on. `model` is
+  // deliberately absent — the host writes the model its family table names, so
+  // a caller cannot add a record whose driver disagrees with it.
+  expect(wrote.panels).toEqual([
+    { vendorId: 0x1cbe, productId: 0xa092, serial: "PANEL0001" },
+  ]);
+});
+
+it("does not offer a panel that is already a display", async () => {
+  // The route refuses a second record for one device, so offering it would be
+  // a button whose only outcome is a refusal. The host answers `held` because
+  // it holds both lists; the client cannot derive it, since the display map
+  // carries no hardware.
+  const { container } = await mountHost({
+    ...ONE_PANEL,
+    panels: (ONE_PANEL.panels ?? []).map((panel) => ({
+      ...panel,
+      held: true,
+    })),
+  });
+
+  expect(
+    container.querySelector("[data-yunari-panel-add]"),
+    "an already-added panel is still offered",
+  ).toBeNull();
+  expect(container.textContent).toContain(uiCopy.hostSettings.panels.allAdded);
+});
+
+it("leaves the panel addable when the host refuses it", async () => {
+  // The flag that disables the button is the handler's own, so a refusal has to
+  // release it too: a button left disabled after a refusal is a panel the owner
+  // cannot add again without reloading the page.
+  const refusal = "A panel display already holds that device.";
+  const { container, published } = await mountHost({
+    ...ONE_PANEL,
+    refusePanel: refusal,
+  });
+
+  const add = must(
+    container.querySelector<HTMLButtonElement>(
+      '[data-yunari-panel-add="7358:41106:PANEL0001"]',
+    ),
+    "the add button for the attached panel",
+  );
+
+  await act(async () => add.click());
+
+  expect(
+    statusLine(published).status,
+    "the host's refusal did not reach the person",
+  ).toBe(uiCopy.hostSettings.status.failed(refusal));
+  expect(
+    must(
+      container.querySelector<HTMLButtonElement>("[data-yunari-panel-add]"),
+      "the add button is gone after a refusal",
+    ).disabled,
+    "the add button stayed disabled after a refusal",
+  ).toBe(false);
+});
+
+it("says a machine with no panel is a machine with no panel", async () => {
+  // Not an error: a desktop with no panel is the ordinary case, and the
+  // sentence has to read as a fact rather than as a failure.
+  const { container } = await mountHost(TWO_DISPLAYS);
+
+  expect(container.textContent).toContain(uiCopy.hostSettings.panels.none);
+  expect(container.querySelector("[data-yunari-panel-add]")).toBeNull();
 });

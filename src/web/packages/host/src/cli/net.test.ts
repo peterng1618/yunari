@@ -1,13 +1,15 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import os, { type NetworkInterfaceInfo } from "node:os";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type LanSource,
   lanAddress,
+  localNames,
   openCommand,
   openTarget,
   rankLanAddresses,
   readLanSource,
+  stableName,
   VIRTUAL_ADAPTER_PATTERNS,
 } from "./net.js";
 
@@ -217,6 +219,62 @@ describe("lanAddress", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe("stableName", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("names this machine the way mDNS does, which is what a display dials", () => {
+    vi.spyOn(os, "hostname").mockReturnValue("study-pc");
+
+    // Not a dotted quad: a display's cookie and storage are scoped to the origin
+    // it paired on, and the address is the half that DHCP moves
+    // (`docs/decisions/0132`).
+    expect(stableName()).toBe("study-pc.local");
+  });
+
+  it("does not double the suffix on a platform that already answers with it", () => {
+    // Linux and macOS `gethostname()` normally do not carry `.local`, but a
+    // configuration that sets one would otherwise produce `pc.local.local` —
+    // a name nothing answers, which is worse than no name at all.
+    vi.spyOn(os, "hostname").mockReturnValue("study-pc.local");
+
+    expect(stableName()).toBe("study-pc.local");
+  });
+
+  it("has no name to offer when the platform gives no hostname", () => {
+    vi.spyOn(os, "hostname").mockReturnValue("   ");
+
+    // `.local` alone is a name no host answers to, and a reader that dialled it
+    // would fail on a phone with nothing on screen to explain why.
+    expect(stableName()).toBeNull();
+  });
+});
+
+describe("localNames", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("covers the name a display dials, as well as the address it falls back to", () => {
+    vi.spyOn(os, "hostname").mockReturnValue("study-pc");
+    vi.spyOn(os, "networkInterfaces").mockReturnValue({
+      Ethernet: [ipv4("192.168.2.56")],
+    } as ReturnType<typeof os.networkInterfaces>);
+
+    const names = localNames();
+
+    // The leaf's SANs are built from exactly this list (`tls/authority.ts`), so
+    // an https dial by the name is a name mismatch the owner cannot tell from a
+    // root they had not installed — the trap `0070` exists to remove. Asserted
+    // here rather than through a certificate because this is the whole of the
+    // host's half; the leaf is `authority.test.ts`'s.
+    expect(names).toContain("study-pc.local");
+    expect(names).toContain("192.168.2.56");
+    expect(names).toContain("localhost");
   });
 });
 

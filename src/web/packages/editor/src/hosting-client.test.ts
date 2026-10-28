@@ -23,9 +23,23 @@ describe("readHosting", () => {
     expect(read).toEqual({
       lan: true,
       address: "192.168.1.42",
+      name: null,
       port: 5227,
       refusal: null,
     });
+  });
+
+  it("reads the name the host offers, and has one when it does", async () => {
+    const read = await readHosting(
+      answer("/api/hosting", {
+        lan: true,
+        address: "192.168.1.42",
+        name: "study-pc.local",
+        port: 5227,
+        sessions: [],
+      }),
+    );
+    expect(read?.name).toBe("study-pc.local");
   });
 
   it("reads a refusal the host recorded against its last move", async () => {
@@ -105,8 +119,18 @@ describe("displayUrl", () => {
   it("opens the page a camera-less display would have typed at, code and all", () => {
     // https, which is the origin the display is a secure context at — the wake
     // lock and fullscreen are gated on it (`docs/decisions/0076`).
-    expect(displayUrl({ address: "192.168.1.42", port: 5227 }, "ABC234")).toBe(
+    expect(displayUrl("192.168.1.42", 5227, "ABC234")).toBe(
       "https://192.168.1.42:5227/pair?code=ABC234",
+    );
+  });
+
+  it("dials the stable name when the host named one, because an address moves", () => {
+    // The credential and the storage a display keeps are scoped to the origin it
+    // paired on, so a symbol that carried a dotted quad would make every DHCP
+    // lease a re-pair (`docs/decisions/0132`). The host decides which host is
+    // dialled; this only refuses to put the address back.
+    expect(displayUrl("study-pc.local", 5227, "ABC234")).toBe(
+      "https://study-pc.local:5227/pair?code=ABC234",
     );
   });
 });

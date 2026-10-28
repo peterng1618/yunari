@@ -138,9 +138,21 @@ export function PublishControl({
   // LAN is on, so turning it off takes the URL off the screen rather than leaving
   // a stale one behind — and it is drawn whether or not a code has been read,
   // because the address is what a display has to reach.
+  //
+  // **The name is dialled where the host has one**, because a display's cookie
+  // and storage are scoped to the origin it paired on: a dotted quad that DHCP
+  // moves is a phone that has to pair again, while the name does not move
+  // (`docs/decisions/0132`). The address is still what gates this block and is
+  // still printed, because a device that cannot resolve the name — Android 11
+  // and earlier, or one on Private DNS — is exactly the device an address is
+  // for.
   const shown =
     open && answer.address !== null && answer.port !== null
-      ? { address: answer.address, port: answer.port }
+      ? {
+          host: answer.name ?? answer.address,
+          address: answer.address,
+          port: answer.port,
+        }
       : undefined;
   const code = known.pairing;
   const label = open
@@ -249,7 +261,7 @@ export function PublishControl({
                 <span className="editor-shell-publish-label">
                   {uiCopy.publish.address}
                 </span>
-                <code className="editor-shell-publish-url">{`https://${shown.address}:${shown.port}`}</code>
+                <code className="editor-shell-publish-url">{`https://${shown.host}:${shown.port}`}</code>
                 {/* https is what makes the display a secure context — the wake
                     lock and fullscreen are gated on it — so it is the address
                     printed. The plain one is what a device that has not
@@ -279,7 +291,7 @@ export function PublishControl({
                         so a phone with a camera pairs in one scan and the
                         credential never appears in a URL. */}
                     <QrCode
-                      text={displayUrl(shown, code.code)}
+                      text={displayUrl(shown.host, shown.port, code.code)}
                       modulePitch={5}
                     />
                   </>

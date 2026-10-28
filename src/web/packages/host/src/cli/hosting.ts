@@ -1,6 +1,6 @@
 import type { HostingState } from "../server.js";
 import { isLoopbackHost } from "./args.js";
-import { type ListenableServer, lanAddress } from "./net.js";
+import { type ListenableServer, lanAddress, stableName } from "./net.js";
 
 /**
  * The one listener, and the two addresses it can be told to sit on.
@@ -57,6 +57,10 @@ export function createHostBinding(
   const state = async (): Promise<HostingState> => ({
     lan: !isLoopbackHost(host),
     address: isLoopbackHost(host) ? null : ((await lanAddress()) ?? null),
+    // Reported whether or not the LAN is open: the name is a fact about this
+    // machine, and the certificate covers it either way. A display only has
+    // something to dial once `lan` is true, which is the reader's question.
+    name: stableName(),
     port,
     refusal,
   });
