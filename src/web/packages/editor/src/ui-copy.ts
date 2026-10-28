@@ -292,6 +292,9 @@ export const uiCopy = {
     /** The frosted-glass treatment and its one parameter. */
     glassEnabled: "Frosted glass",
     glassBlur: "Glass blur",
+    glassSampling: "Glass sampling",
+    glassSamplingDynamic: "Dynamic",
+    glassSamplingStatic: "Static",
     opacity: "Opacity %",
     /** A picture layer's two paint-time mirrors. */
     flipX: "Flip horizontally",
@@ -2035,6 +2038,9 @@ export const uiCopy = {
     backgroundOffset: "Offset",
     backgroundFlipX: "Flip horizontally",
     backgroundFlipY: "Flip vertically",
+    /** The frame a video background shows where it cannot play, and the still
+        the glass material samples (`0135`). */
+    backgroundFallbackFrame: "Fallback frame",
     /** A paint's own colour, as against the token it is chosen from. */
     colour: "Colour",
     /** The channels the picker's controls announce, as accessible names.

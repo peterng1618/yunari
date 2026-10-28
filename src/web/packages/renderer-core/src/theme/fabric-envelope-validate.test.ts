@@ -172,6 +172,55 @@ describe("Fabric theme envelope validation", () => {
     ).toMatchObject({ ok: true });
   });
 
+  it("accepts a whole frame on a video and refuses it anywhere else", () => {
+    const clip = [{ id: "clip", kind: "video", path: "assets/clip.mp4" }];
+    expect(
+      validateFabricThemeEnvelope({
+        ...envelope(),
+        background: {
+          media: { assetId: "clip", bounds: "theme", fallbackFrame: 30 },
+        },
+        assets: clip,
+      }),
+    ).toMatchObject({ ok: true });
+
+    // A frame has no index between two, and none before the first.
+    for (const fallbackFrame of [1.5, -1]) {
+      expect(
+        validateFabricThemeEnvelope({
+          ...envelope(),
+          background: {
+            media: { assetId: "clip", bounds: "theme", fallbackFrame },
+          },
+          assets: clip,
+        }),
+      ).toMatchObject({
+        ok: false,
+        issues: expect.arrayContaining([
+          expect.objectContaining({ path: "/background/media/fallbackFrame" }),
+        ]),
+      });
+    }
+
+    expect(
+      validateFabricThemeEnvelope({
+        ...envelope(),
+        background: {
+          media: { assetId: "still", bounds: "theme", fallbackFrame: 0 },
+        },
+        assets: [{ id: "still", kind: "image", path: "assets/still.png" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          path: "/background/media/fallbackFrame",
+          code: "wrong-type",
+        }),
+      ]),
+    });
+  });
+
   it("rejects malformed versions and invalid background-media references", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),
@@ -1569,6 +1618,41 @@ describe("authored glass treatment", () => {
           }),
         ]),
       });
+    }
+  });
+
+  it("accepts either sampling and refuses any other name", () => {
+    expect(
+      validateFabricThemeEnvelope(
+        withObjects([
+          { type: "Rect", id: "live", yunariGlass: { blurRadius: 12 } },
+          {
+            type: "Rect",
+            id: "still",
+            yunariGlass: { blurRadius: 12, sampling: "static" },
+          },
+          {
+            type: "Rect",
+            id: "again",
+            yunariGlass: { blurRadius: 12, sampling: "dynamic" },
+          },
+        ]),
+      ).ok,
+    ).toBe(true);
+
+    for (const sampling of ["live", "live ", 1, null]) {
+      expect(
+        validateFabricThemeEnvelope(
+          withObjects([
+            {
+              type: "Rect",
+              id: "panel",
+              yunariGlass: { blurRadius: 12, sampling },
+            },
+          ]),
+        ),
+        JSON.stringify(sampling),
+      ).toMatchObject({ ok: false });
     }
   });
 

@@ -183,6 +183,14 @@ export function mountBackgroundMedia(
   let frames: FrameFollower | undefined;
   let stopDecoded: (() => void) | undefined;
   let stopIntrinsic: (() => void) | undefined;
+  /** The declared frame of this video, once extracted (`0135`). It replaces the
+   *  live picture for the glass sampler, and stands in for the video when it
+   *  cannot play. */
+  let fallback: HTMLCanvasElement | undefined;
+  let stopFallback: (() => void) | undefined;
+  /** The video refused to load or play; the still takes the element's place as
+   *  soon as it exists. */
+  let failed = false;
   // Both gates are the layer's own: a panel appears or leaves, and the page is
   // shown or hidden. The frame chain is re-armed only when both allow it.
   let glassSurfaces = options.glassSurfaces ?? 1;
@@ -247,6 +255,31 @@ export function mountBackgroundMedia(
     stopDecoded = undefined;
     stopIntrinsic?.();
     stopIntrinsic = undefined;
+    stopFallback?.();
+    stopFallback = undefined;
+    fallback = undefined;
+    failed = false;
+  };
+
+  /**
+   * Puts the extracted still where the video was. A display that cannot play
+   * the clip shows the frame the author chose rather than the bare board
+   * (`0135`); the placement, pan and flips are the same as the video's.
+   */
+  const showFallback = (): void => {
+    const canvas = fallback;
+    const video = element;
+    if (canvas === undefined) return;
+    if (!(video instanceof HTMLVideoElement)) return;
+
+    const image = document.createElement("img");
+    image.src = canvas.toDataURL();
+    image.alt = "";
+    image.style.cssText = video.style.cssText;
+    video.replaceWith(image);
+    element = image;
+    place();
+    onFrame?.();
   };
 
   /** Resolves and mounts one media, reporting rather than dropping a refusal. */
@@ -281,10 +314,6 @@ export function mountBackgroundMedia(
     // stylesheet) applies `img, video { max-width: 100%; height: auto }`, which
     // capped the placed rect's width at the layer's while the inline height
     // stayed — the picture stretched, and an x offset could not widen it.
-    // `max-width:none` is load-bearing: Tailwind's preflight (the editor's
-    // stylesheet) applies `img, video { max-width: 100%; height: auto }`, which
-    // capped the placed rect's width at the layer's while the inline height
-    // stayed — the picture stretched, and an x offset could not widen it.
     child.style.cssText =
       "display:block;position:absolute;max-width:none;max-height:none;";
     if (child instanceof HTMLVideoElement) {
@@ -299,6 +328,34 @@ export function mountBackgroundMedia(
     element = child;
     mountedAssetId = asset.id;
     layer.append(child);
+
+    const frame = media.fallbackFrame;
+
+    if (child instanceof HTMLVideoElement) {
+      child.addEventListener("error", () => {
+        failed = true;
+        showFallback();
+      });
+
+      if (frame !== undefined) {
+        // An autoplay refusal is a display without video, not an error: the
+        // still is what it shows instead.
+        void child.play()?.catch(() => {
+          failed = true;
+          showFallback();
+        });
+        stopFallback = extractFrame(child, frame, layer, (canvas) => {
+          if (element !== child) return;
+          fallback = canvas;
+          if (failed) showFallback();
+          // A static panel now has a picture where it had none.
+          onFrame?.();
+        });
+      }
+    }
+
+    // Whether anything follows the frames is the surface count's answer, not
+    // this layer's: a declared still is only read when a panel asks for it.
     frames = followFrames(child, onFrame, wanted);
     syncFrames();
     // Re-place before the decode repaint: the glass sample the repaint takes
@@ -389,11 +446,18 @@ export function mountBackgroundMedia(
         rect,
         ...(angle === undefined ? {} : { angle }),
         ...(display === undefined ? {} : { screenRect: display }),
-        paint(ctx, region, device) {
-          const source = intrinsic(mounted);
+        paint(ctx, region, device, sampling) {
+          // A static panel stands on the declared frame — the picture an image
+          // background or a paint would give it (`0135`). With none there is
+          // nothing static, so the layer paints nothing and the paint behind it
+          // shows through.
+          const drawSource: CanvasImageSource | undefined =
+            sampling === "static" ? fallback : mounted;
+          if (drawSource === undefined) return false;
+          const source = intrinsic(drawSource);
           // Sizing and drawing have different preconditions: metadata sizes the
           // rect, a frame is what `drawImage` accepts.
-          if (source === undefined || !drawable(mounted)) return false;
+          if (source === undefined || !drawable(drawSource)) return false;
           const media = background?.media;
           // The child is placed inside this rect, the layer's box in artboard
           // units; the glass maps that box onto the device rect it samples, so
@@ -422,10 +486,10 @@ export function mountBackgroundMedia(
               media.flipX === true ? -1 : 1,
               media.flipY === true ? -1 : 1,
             );
-            ctx.drawImage(mounted, -width / 2, -height / 2, width, height);
+            ctx.drawImage(drawSource, -width / 2, -height / 2, width, height);
             ctx.restore();
           } else {
-            ctx.drawImage(mounted, left, top, width, height);
+            ctx.drawImage(drawSource, left, top, width, height);
           }
           return true;
         },
@@ -536,6 +600,150 @@ function notifyOnIntrinsic(
   };
 }
 
+/** The largest edge of the extracted still, in pixels. The glass blurs it and a
+ *  display shows at most a few hundred wide, so a full-resolution frame would be
+ *  decode memory spent on a source no sampler resolves. */
+const FRAME_MAX_EDGE = 1280;
+
+/** A probe that has not produced a frame by now is not going to. */
+const FRAME_PROBE_TIMEOUT_MS = 10_000;
+
+/**
+ * A video's declared frame, drawn into a canvas (`0135`).
+ *
+ * A frame has no index to seek to: `currentTime = frame / fps` is the only
+ * address, so the clip's frame rate is measured from two consecutive
+ * `requestVideoFrameCallback` `mediaTime`s rather than assumed. A second element
+ * probes rather than the playing one, because measuring pauses it. Every step is
+ * best-effort — no callback API, a decode error, a refused `play`, or no frame
+ * within the deadline abandons the probe with no still, and the live video stays
+ * the picture.
+ *
+ * Returns the cancel, for a remount that outlives it.
+ */
+function extractFrame(
+  video: HTMLVideoElement,
+  frame: number,
+  host: HTMLElement,
+  done: (canvas: HTMLCanvasElement) => void,
+): () => void {
+  const probe = document.createElement("video");
+  probe.muted = true;
+  probe.playsInline = true;
+  probe.preload = "auto";
+  probe.style.cssText =
+    "position:absolute;width:0;height:0;opacity:0;pointer-events:none;";
+  let settled = false;
+  let pending: number | undefined;
+  let firstMediaTime: number | undefined;
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+
+  const release = (): void => {
+    settled = true;
+    if (deadline !== undefined) clearTimeout(deadline);
+    if (pending !== undefined) probe.cancelVideoFrameCallback(pending);
+    probe.pause();
+    probe.removeAttribute("src");
+    probe.remove();
+  };
+
+  const giveUp = (): void => {
+    if (settled) return;
+    release();
+  };
+
+  const capture = (): void => {
+    if (settled) return;
+    const width = probe.videoWidth;
+    const height = probe.videoHeight;
+    const context = (() => {
+      const scale = Math.min(1, FRAME_MAX_EDGE / Math.max(width, height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(width * scale));
+      canvas.height = Math.max(1, Math.round(height * scale));
+      return { canvas, ctx: canvas.getContext("2d") };
+    })();
+    if (width === 0 || height === 0 || context.ctx === null) {
+      giveUp();
+      return;
+    }
+    try {
+      context.ctx.drawImage(
+        probe,
+        0,
+        0,
+        context.canvas.width,
+        context.canvas.height,
+      );
+    } catch {
+      giveUp();
+      return;
+    }
+    release();
+    done(context.canvas);
+  };
+
+  const seek = (fps: number): void => {
+    probe.pause();
+    const duration = Number.isFinite(probe.duration) ? probe.duration : 0;
+    const target = Math.min(frame / fps, Math.max(0, duration - 0.001));
+    probe.currentTime = target;
+    probe.addEventListener("seeked", capture, { once: true });
+    // A seek to where the playhead already sits delivers no `seeked`.
+    if (
+      Math.abs(probe.currentTime - target) < 1e-4 &&
+      probe.readyState >= HAVE_CURRENT_DATA
+    ) {
+      capture();
+    }
+  };
+
+  const measure = (
+    _now: number,
+    metadata: VideoFrameCallbackMetadata,
+  ): void => {
+    pending = undefined;
+    if (settled) return;
+    if (firstMediaTime === undefined) {
+      firstMediaTime = metadata.mediaTime;
+      pending = probe.requestVideoFrameCallback(measure);
+      return;
+    }
+    const delta = metadata.mediaTime - firstMediaTime;
+    if (!(delta > 0)) {
+      firstMediaTime = metadata.mediaTime;
+      pending = probe.requestVideoFrameCallback(measure);
+      return;
+    }
+    const fps = 1 / delta;
+    if (!Number.isFinite(fps) || fps < 1 || fps > 240) {
+      giveUp();
+      return;
+    }
+    seek(fps);
+  };
+
+  probe.addEventListener("error", giveUp, { once: true });
+  probe.addEventListener(
+    "loadedmetadata",
+    () => {
+      if (settled) return;
+      if (typeof probe.requestVideoFrameCallback !== "function") {
+        giveUp();
+        return;
+      }
+      const playing: Promise<void> | undefined = probe.play();
+      void playing?.catch(giveUp);
+      pending = probe.requestVideoFrameCallback(measure);
+    },
+    { once: true },
+  );
+  probe.src = video.currentSrc !== "" ? video.currentSrc : video.src;
+  host.append(probe);
+  deadline = setTimeout(giveUp, FRAME_PROBE_TIMEOUT_MS);
+  return giveUp;
+}
+
 /** `HTMLMediaElement`'s ready states, as numbers: enough metadata to know the
  *  video's own size, and a decoded frame to draw. */
 const HAVE_METADATA = 1;
@@ -550,8 +758,12 @@ const HAVE_CURRENT_DATA = 2;
  * placed rect. Only drawing needs a frame; sizing does not.
  */
 function intrinsic(
-  element: HTMLImageElement | HTMLVideoElement,
+  element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement,
 ): { readonly width: number; readonly height: number } | undefined {
+  if (element instanceof HTMLCanvasElement) {
+    if (element.width === 0 || element.height === 0) return undefined;
+    return { width: element.width, height: element.height };
+  }
   if (element instanceof HTMLVideoElement) {
     if (element.readyState < HAVE_METADATA) return undefined;
     if (element.videoWidth === 0 || element.videoHeight === 0) return undefined;
@@ -563,7 +775,10 @@ function intrinsic(
 
 /** Whether there is a frame `drawImage` will accept. A video below
  *  HAVE_CURRENT_DATA — including every loop wrap — has a size but no pixels. */
-function drawable(element: HTMLImageElement | HTMLVideoElement): boolean {
+function drawable(
+  element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement,
+): boolean {
+  if (element instanceof HTMLCanvasElement) return true;
   if (!(element instanceof HTMLVideoElement)) return true;
   return element.readyState >= HAVE_CURRENT_DATA;
 }

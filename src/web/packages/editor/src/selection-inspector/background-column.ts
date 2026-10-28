@@ -161,6 +161,29 @@ function offsetField(media: BackgroundMedia | undefined): FieldView {
   };
 }
 
+/** The frame a video stands on when motion is unavailable, and the still the
+    glass material samples. Only a video has frames, so the row exists only for
+    one (`0135`). */
+function fallbackFrameField(media: BackgroundMedia | undefined): FieldView {
+  return {
+    id: "background.fallbackFrame",
+    control: "number",
+    label: uiCopy.panels.backgroundFallbackFrame,
+    value: media?.fallbackFrame ?? 0,
+    min: 0,
+    integer: true,
+    data: { "data-yunari-background-fallback-frame": "" },
+  };
+}
+
+/** The kind of the selected media, which decides whether a frame row exists. */
+function mediaKind(
+  media: BackgroundMedia | undefined,
+  assets: readonly AssetReference[],
+): string | undefined {
+  return assets.find((asset) => asset.id === media?.assetId)?.kind;
+}
+
 export function backgroundColumn(input: {
   readonly background: Background | undefined;
   readonly assets: readonly AssetReference[];
@@ -171,6 +194,9 @@ export function backgroundColumn(input: {
     sectionView("content", [
       colourField(input.background, input.globals),
       mediaField(media, input.assets),
+      ...(mediaKind(media, input.assets) === "video"
+        ? [fallbackFrameField(media)]
+        : []),
     ]),
     sectionView("position", [
       boundsField(media),
@@ -196,6 +222,7 @@ export function writeBackgroundField(
   background: Background | undefined,
   fieldId: string,
   value: string | number | boolean,
+  assets: readonly AssetReference[] = [],
 ): Background | undefined {
   const current = background ?? {};
   const media = current.media;
@@ -218,10 +245,20 @@ export function writeBackgroundField(
         return withoutMedia;
       }
       // A new picture keeps the box and transform the author set for the last
-      // one: changing which picture is shown is not a reset of how.
+      // one: changing which picture is shown is not a reset of how. Its frame
+      // is the one exception — only a video has frames (`0135`).
+      const carried: BackgroundMedia = media ?? {
+        assetId: value,
+        bounds: "theme",
+      };
+      const { fallbackFrame: _frame, ...withoutFrame } = carried;
+      const nextKind = assets.find((asset) => asset.id === value)?.kind;
       return {
         ...current,
-        media: { ...(media ?? { bounds: "theme" }), assetId: value },
+        media: {
+          ...(nextKind === "video" ? carried : withoutFrame),
+          assetId: value,
+        },
       };
     }
     case "background.bounds": {
@@ -239,6 +276,16 @@ export function writeBackgroundField(
       // key a later read would have to interpret.
       const { [axis]: _off, ...without } = media;
       return { ...current, media: without };
+    }
+    case "background.fallbackFrame": {
+      if (
+        media === undefined ||
+        typeof value !== "number" ||
+        !Number.isInteger(value) ||
+        value < 0
+      )
+        return undefined;
+      return { ...current, media: { ...media, fallbackFrame: value } };
     }
     case "background.offsetX": {
       if (

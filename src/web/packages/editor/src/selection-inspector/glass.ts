@@ -85,14 +85,14 @@ function clearTreatment(object: FabricObject): void {
  */
 function writeTreatment(
   object: FabricObject,
-  next: number | undefined,
+  next: GlassTreatment | undefined,
 ): boolean {
   const before = object.get(YUNARI_GLASS_PROPERTY);
   if (next === undefined) {
     clearTreatment(object);
     return true;
   }
-  object.set(YUNARI_GLASS_PROPERTY, { blurRadius: next });
+  object.set(YUNARI_GLASS_PROPERTY, next);
   if (treatmentOf(object) !== undefined) return true;
   if (before === undefined) clearTreatment(object);
   else object.set(YUNARI_GLASS_PROPERTY, before);
@@ -171,6 +171,20 @@ export function glassFields(object: FabricObject): readonly FieldView[] {
       integer: true,
       data: { "data-yunari-glass-blur": "" },
     });
+    // Always offered, whatever the background is today: a theme may swap the
+    // media for a video later, and a row that appeared only for one background
+    // would have to be re-read on every media change.
+    fields.push({
+      id: "glass-sampling",
+      control: "segmented",
+      label: uiCopy.inspectorFields.glassSampling,
+      value: treatment.sampling ?? "dynamic",
+      options: [
+        { id: "dynamic", name: uiCopy.inspectorFields.glassSamplingDynamic },
+        { id: "static", name: uiCopy.inspectorFields.glassSamplingStatic },
+      ],
+      data: { "data-yunari-glass-sampling": "" },
+    });
   }
 
   return fields;
@@ -197,7 +211,8 @@ export function writeGlassField(
   if (fieldId === "glass-enabled") {
     if (!supportsGlassControl(object)) return false;
     if (value === true) {
-      if (!writeTreatment(object, DEFAULT_GLASS_BLUR_RADIUS)) return false;
+      if (!writeTreatment(object, { blurRadius: DEFAULT_GLASS_BLUR_RADIUS }))
+        return false;
       frostTheSurface(context, object);
       return true;
     }
@@ -208,10 +223,21 @@ export function writeGlassField(
   }
 
   if (fieldId === "glass-blur" && typeof value === "number") {
-    return writeTreatment(
-      object,
-      Math.min(Math.max(value, 0), MAX_GLASS_BLUR_RADIUS),
-    );
+    const current = treatmentOf(object);
+    if (current === undefined) return false;
+    return writeTreatment(object, {
+      ...current,
+      blurRadius: Math.min(Math.max(value, 0), MAX_GLASS_BLUR_RADIUS),
+    });
+  }
+
+  if (
+    fieldId === "glass-sampling" &&
+    (value === "static" || value === "dynamic")
+  ) {
+    const current = treatmentOf(object);
+    if (current === undefined) return false;
+    return writeTreatment(object, { ...current, sampling: value });
   }
 
   return false;

@@ -1,4 +1,8 @@
-import type { Background, FabricGlobals } from "@yunari/renderer-core";
+import type {
+  AssetReference,
+  Background,
+  FabricGlobals,
+} from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import { backgroundColumn, writeBackgroundField } from "./background-column.js";
 
@@ -129,6 +133,36 @@ describe("backgroundColumn", () => {
     });
   });
 
+  it("offers a fallback frame only while the picture is a video", () => {
+    const video = backgroundColumn({
+      background: {
+        media: { assetId: "loop", bounds: "theme", fallbackFrame: 42 },
+      },
+      assets: [{ id: "loop", kind: "video", path: "assets/loop.mp4" }],
+      globals: undefined,
+    });
+    expect(video[0]?.fields.map((field) => field.id)).toEqual([
+      "background.color",
+      "background.media",
+      "background.fallbackFrame",
+    ]);
+    expect(video[0]?.fields.at(-1)).toMatchObject({
+      control: "number",
+      value: 42,
+      min: 0,
+      integer: true,
+    });
+
+    const image = backgroundColumn({
+      background: { media: { assetId: "photo", bounds: "theme" } },
+      assets: [{ id: "photo", kind: "image", path: "assets/photo.png" }],
+      globals: undefined,
+    });
+    expect(image[0]?.fields.map((field) => field.id)).not.toContain(
+      "background.fallbackFrame",
+    );
+  });
+
   it("offers only the assets a background can be", () => {
     const sections = backgroundColumn({
       background: undefined,
@@ -200,5 +234,57 @@ describe("writeBackgroundField", () => {
     expect(
       writeBackgroundField(background, "background.flipX", "yes"),
     ).toBeUndefined();
+  });
+
+  it("writes a whole frame number and refuses anything else", () => {
+    const video: Background = {
+      media: { assetId: "loop", bounds: "theme" },
+    };
+    expect(
+      writeBackgroundField(video, "background.fallbackFrame", 24),
+    ).toMatchObject({ media: { fallbackFrame: 24 } });
+    // A frame has no index between two, and none before the first.
+    for (const value of [-1, 1.5, Number.NaN]) {
+      expect(
+        writeBackgroundField(video, "background.fallbackFrame", value),
+      ).toBeUndefined();
+    }
+    // Nothing to carry a frame until a picture is chosen.
+    expect(
+      writeBackgroundField({}, "background.fallbackFrame", 0),
+    ).toBeUndefined();
+  });
+
+  it("drops the frame when the picture stops being a video", () => {
+    const assets: readonly AssetReference[] = [
+      { id: "loop", kind: "video", path: "assets/loop.mp4" },
+      { id: "other", kind: "video", path: "assets/other.mp4" },
+      { id: "photo", kind: "image", path: "assets/photo.png" },
+    ];
+    const framed: Background = {
+      media: {
+        assetId: "loop",
+        bounds: "theme",
+        fallbackFrame: 5,
+        offsetX: 0.2,
+      },
+    };
+
+    // Both directions of a video change keep the frame and the pan.
+    expect(
+      writeBackgroundField(framed, "background.media", "other", assets),
+    ).toMatchObject({ media: { fallbackFrame: 5, offsetX: 0.2 } });
+
+    const still = writeBackgroundField(
+      framed,
+      "background.media",
+      "photo",
+      assets,
+    )?.media;
+    expect(still, "only a video has frames").toMatchObject({
+      assetId: "photo",
+      offsetX: 0.2,
+    });
+    expect(still).not.toHaveProperty("fallbackFrame");
   });
 });

@@ -108,6 +108,7 @@ const ENVELOPE_KEYS = {
     "offsetY",
     "flipX",
     "flipY",
+    "fallbackFrame",
   ],
 } as const;
 

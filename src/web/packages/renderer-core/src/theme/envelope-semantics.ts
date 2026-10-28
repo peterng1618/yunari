@@ -402,6 +402,29 @@ function validateBackground(
       "The background media must reference a declared image, SVG or video asset.",
     );
   }
+
+  const fallback = media["fallbackFrame"];
+  if (fallback !== undefined) {
+    const path = "/background/media/fallbackFrame";
+    if (issues.finiteNumber(fallback, path, "fallbackFrame")) {
+      if (!Number.isInteger(fallback) || fallback < 0) {
+        issues.add(
+          "out-of-range",
+          path,
+          "fallbackFrame must be a whole frame number from 0.",
+        );
+      }
+    }
+    // A still has no frame to stand for, so the key is refused rather than
+    // stored and ignored (0135).
+    if (isRecord(asset) && asset["kind"] !== "video") {
+      issues.add(
+        "wrong-type",
+        path,
+        "fallbackFrame is only for a video background.",
+      );
+    }
+  }
 }
 
 function validateTypeToken(issues: Issues, value: unknown, path: string): void {
