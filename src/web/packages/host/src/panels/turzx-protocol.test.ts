@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   bgraPayload,
   frame,
+  overlayTrailer,
+  overlayUpdate,
   parseHello,
   TURZX_COMMAND,
   TURZX_GEOMETRY,
@@ -76,5 +78,84 @@ describe("bgraPayload", () => {
 
   it("states the panel geometry", () => {
     expect(TURZX_GEOMETRY).toEqual({ width: 800, height: 480 });
+  });
+});
+
+function blank(width: number, height: number): Uint8Array {
+  return new Uint8Array(width * height * 4);
+}
+
+function red(
+  width: number,
+  height: number,
+  rect: { x: number; y: number; w: number; h: number },
+): Uint8Array {
+  const pixels = blank(width, height);
+  for (let y = rect.y; y < rect.y + rect.h; y += 1) {
+    for (let x = rect.x; x < rect.x + rect.w; x += 1) {
+      const i = (y * width + x) * 4;
+      pixels[i] = 255;
+      pixels[i + 2] = 0;
+      pixels[i + 3] = 255;
+    }
+  }
+  return pixels;
+}
+
+describe("overlayUpdate", () => {
+  it("encodes a new rectangle as its pixels plus a visible segment", () => {
+    const update = overlayUpdate(
+      blank(4, 2),
+      red(4, 2, { x: 1, y: 0, w: 2, h: 1 }),
+      { width: 4, height: 2 },
+    );
+    // One row-0 changed segment: offset 3 bytes, width 2, then 2 pixels of 3 bytes.
+    expect([...update.body.slice(0, 5)]).toEqual([0, 0, 1, 0, 2]);
+    // A fully opaque red pixel: blue 0, green 0, red 15, alpha 15, split across
+    // three bytes as b<<4|a_hi, g<<4|a_lo, r<<4.
+    expect([...update.body.slice(5, 11)]).toEqual([
+      0x03, 0x03, 0xf0, 0x03, 0x03, 0xf0,
+    ]);
+    // The visible list repeats that segment after the changed pixels.
+    expect([...update.body.slice(11, 16)]).toEqual([0, 0, 1, 0, 2]);
+    expect(update.visibleBytes).toBe(5);
+    expect(update.imageSize).toBe(5 + 6 + 5 + 2);
+  });
+
+  it("drops the old position from the visible list", () => {
+    const update = overlayUpdate(
+      red(4, 2, { x: 0, y: 0, w: 2, h: 1 }),
+      red(4, 2, { x: 2, y: 0, w: 2, h: 1 }),
+      { width: 4, height: 2 },
+    );
+    // A cleared pixel is not re-sent: only the new rectangle appears, and the
+    // visible list names x=2 alone, which is what clears x=0.
+    expect([...update.body.slice(0, 5)]).toEqual([0, 0, 2, 0, 2]);
+    expect([...update.body.slice(11, 16)]).toEqual([0, 0, 2, 0, 2]);
+  });
+
+  it("refuses a frame that is not the geometry's RGBA size", () => {
+    expect(() =>
+      overlayUpdate(new Uint8Array(3), blank(4, 2), { width: 4, height: 2 }),
+    ).toThrow(/previous overlay is 3 bytes/);
+    expect(() =>
+      overlayUpdate(blank(4, 2), new Uint8Array(3), { width: 4, height: 2 }),
+    ).toThrow(/decoded overlay is 3 bytes/);
+  });
+});
+
+describe("overlayTrailer", () => {
+  it.each([
+    [250, 2, 0],
+    [251, 2, 0],
+    [300, 2, 0],
+    [500, 8, 7],
+    [498, 8, 7],
+    [499, 8, 7],
+  ])("aligns a %i-byte payload", (length, size, extra) => {
+    const trailer = overlayTrailer(length);
+    expect(trailer.bytes.length).toBe(size);
+    expect(trailer.extra).toBe(extra);
+    expect([...trailer.bytes.slice(-2)]).toEqual([0xef, 0x69]);
   });
 });

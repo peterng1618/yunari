@@ -17,6 +17,8 @@ import {
   bgraPayload,
   FRAME_SIZE,
   frame,
+  overlayHeader,
+  overlayUpdate,
   parseHello,
   TURZX_COMMAND,
   TURZX_GEOMETRY,
@@ -187,6 +189,8 @@ class TurzxPanel implements PanelDevice {
   private queue: Promise<unknown> = Promise.resolve();
   /** The transparent overlay sent at init; the diff encoder updates from it. */
   private previousOverlay: Uint8Array | undefined;
+  /** UPDATE_BITMAP's count field, which the panel expects to climb from one. */
+  private overlayCount = 0;
   /** The clip most recently started; a different one deletes it. */
   private previousVideoPath: string | undefined;
 
@@ -200,12 +204,7 @@ class TurzxPanel implements PanelDevice {
   ) {
     this.video = {
       start: (mp4, placement) => this.startVideo(mp4, placement),
-      // The diff encoder lands in Task 11; until then an overlay update is a
-      // wiring mistake, not a frame this adapter can send.
-      presentOverlay: () =>
-        Promise.reject(
-          new Error("The TURZX overlay encoder is not wired yet."),
-        ),
+      presentOverlay: (png) => this.presentOverlay(png),
       stop: () => this.enqueue(() => this.send(TURZX_COMMAND.stopVideo)),
     };
   }
@@ -286,6 +285,36 @@ class TurzxPanel implements PanelDevice {
         );
       }
       this.previousVideoPath = remotePath;
+    });
+  }
+
+  /**
+   * Sends one overlay diff over the playing video: the UPDATE_BITMAP header and
+   * its body in one queue slot, so no control command lands between them, then
+   * keeps the frame as the base for the next diff.
+   */
+  private async presentOverlay(png: Uint8Array): Promise<void> {
+    await this.enqueue(async () => {
+      const previous = this.previousOverlay;
+      if (previous === undefined) {
+        throw new Error(
+          "The panel's overlay is not initialized; start the video before sending an update.",
+        );
+      }
+
+      const current = await this.decode(
+        png,
+        this.geometry.width,
+        this.geometry.height,
+      );
+      const update = overlayUpdate(previous, current.rgba, this.geometry);
+
+      this.overlayCount += 1;
+      await this.send(
+        overlayHeader(update.imageSize, this.overlayCount, update.visibleBytes),
+      );
+      await this.send(update.body);
+      this.previousOverlay = current.rgba;
     });
   }
 

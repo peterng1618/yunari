@@ -207,3 +207,90 @@ describe("openTurzxPanel", () => {
     expect(writes[writes.length - 1]!.length % 250).toBe(0);
   });
 });
+
+describe("a panel's overlay", () => {
+  /** A panel whose video is playing and whose overlay was initialized. */
+  async function playing(rgba: Uint8Array) {
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO
+      "0", // GET_FILE_SIZE: nothing stored yet
+      "create_success", // UPLOAD_FILE
+      "play_video_success", // START_VIDEO
+      "seq_png_init_sucessneedReSend:0|renderCnt:1", // INIT_VIDEO_OVERLAY
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+      decode: async (_bytes, width, height) => ({ width, height, rgba }),
+    });
+    await panel.video!.start(Uint8Array.of(1, 2, 3), {
+      offsetX: 0,
+      offsetY: 0,
+    });
+
+    return { panel, writes: fake.writes };
+  }
+
+  it("sends the update header and body, then diffs from the stored frame", async () => {
+    // One opaque red pixel at (0,0); every other pixel transparent, as the
+    // init frame was.
+    const pixels = new Uint8Array(800 * 480 * 4);
+    pixels[0] = 255;
+    pixels[3] = 255;
+    const { panel, writes } = await playing(pixels);
+
+    try {
+      await panel.video!.presentOverlay(Uint8Array.of(1));
+
+      const header = writes[writes.length - 2]!;
+      const body = writes[writes.length - 1]!;
+      expect(header.length).toBe(250);
+      // cc ef 69 00, imageSize 15 (3 BE), three zeros, count 1, visible bytes 5.
+      expect([...header.slice(0, 18)]).toEqual([
+        0xcc, 0xef, 0x69, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x01, 0x00, 0x00, 0x00, 0x05,
+      ]);
+      // The changed span [offset 0, width 1], its pixel, the visible span,
+      // then the terminator.
+      expect([...body.slice(0, 15)]).toEqual([
+        0x00, 0x00, 0x00, 0x00, 0x01, 0x03, 0x03, 0xf0, 0x00, 0x00, 0x00, 0x00,
+        0x01, 0xef, 0x69,
+      ]);
+
+      // The same frame again has nothing changed: only the visible span is
+      // re-sent, and the count climbs.
+      await panel.video!.presentOverlay(Uint8Array.of(2));
+      const second = writes[writes.length - 2]!;
+      expect([...second.slice(0, 7)]).toEqual([
+        0xcc, 0xef, 0x69, 0x00, 0x00, 0x00, 0x07,
+      ]);
+      expect([...second.slice(10, 14)]).toEqual([0x00, 0x00, 0x00, 0x02]);
+      expect([...writes[writes.length - 1]!.slice(0, 7)]).toEqual([
+        0x00, 0x00, 0x00, 0x00, 0x01, 0xef, 0x69,
+      ]);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("refuses an update before the video initialized the overlay", async () => {
+    const panel = await opened(
+      fakeTransport("chs_5inch.dev1_rom1.88").transport,
+      {
+        decode: async (_bytes, width, height) => ({
+          width,
+          height,
+          rgba: new Uint8Array(width * height * 4),
+        }),
+      },
+    );
+
+    try {
+      await expect(
+        panel.video!.presentOverlay(Uint8Array.of(1)),
+      ).rejects.toThrow(/not initialized/);
+    } finally {
+      await panel.close();
+    }
+  });
+});

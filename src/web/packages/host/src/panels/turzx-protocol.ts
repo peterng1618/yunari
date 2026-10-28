@@ -83,22 +83,27 @@ export function bgraPayload(rgba: Uint8Array): Uint8Array {
 
   // One separator between chunks; the last chunk needs none, because the
   // padding that follows it already reaches the next frame boundary.
-  const chunks = Math.ceil(bgra.length / PAYLOAD_CHUNK);
-  const joined = new Uint8Array(bgra.length + Math.max(0, chunks - 1));
+  return frame(joinChunks(bgra, PAYLOAD_CHUNK));
+}
+
+/** `bytes` split at `size`, with one `0x00` between each pair of chunks. */
+function joinChunks(bytes: Uint8Array, size: number): Uint8Array {
+  const chunks = Math.ceil(bytes.length / size);
+  const joined = new Uint8Array(bytes.length + Math.max(0, chunks - 1));
   let offset = 0;
 
-  for (let start = 0; start < bgra.length; start += PAYLOAD_CHUNK) {
+  for (let start = 0; start < bytes.length; start += size) {
     if (start > 0) {
       joined[offset] = 0x00;
       offset += 1;
     }
 
-    const end = Math.min(start + PAYLOAD_CHUNK, bgra.length);
-    joined.set(bgra.subarray(start, end), offset);
+    const end = Math.min(start + size, bytes.length);
+    joined.set(bytes.subarray(start, end), offset);
     offset += end - start;
   }
 
-  return frame(joined);
+  return joined;
 }
 
 /**
@@ -151,7 +156,244 @@ export const TURZX_COMMAND = {
   initVideoOverlay: Uint8Array.of(0xd0, 0xef, 0x69, 0x00, 0x00, 0x00, 0x02),
   /** The raw trailer every overlay payload closes with. */
   overlayTerminate: Uint8Array.of(0xef, 0x69),
+  /** UPDATE_BITMAP's prefix; the encoder appends the size, count and visible fields. */
+  updateBitmap: Uint8Array.of(0xcc, 0xef, 0x69, 0x00),
   uploadFile: Uint8Array.of(0x6f, 0xef, 0x69, 0x00, 0x00, 0x00),
   getFileSize: Uint8Array.of(0x6e, 0xef, 0x69, 0x00, 0x00, 0x00),
   deleteFile: Uint8Array.of(0x66, 0xef, 0x69, 0x00, 0x00, 0x00),
 } as const;
+
+/**
+ * The seven-byte form an update's trailer takes when the padded payload ends
+ * flush: the panel's own re-clear marker, then the ordinary terminator.
+ */
+const ALIGNED_TRAILER = Uint8Array.of(
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0xef,
+  0x69,
+);
+
+/** A visible span of one row, as the reference's segment walk finds it. */
+interface OverlaySegment {
+  /** Pixel index, `y * width + x`. */
+  readonly offset: number;
+  readonly width: number;
+  /** Byte index of the span's first pixel in an RGBA frame. */
+  readonly at: number;
+}
+
+/** One overlay update, ready to frame. */
+export interface OverlayUpdate {
+  /** The value the header's imageSize field carries. */
+  readonly imageSize: number;
+  /** The value the header's visiblePixels field carries. */
+  readonly visibleBytes: number;
+  /** The unframed payload, including its alignment trailer. */
+  readonly body: Uint8Array;
+}
+
+/**
+ * The trailer an unframed payload of `unframedLength` bytes closes with, and
+ * how many bytes `imageSize` adds beyond the terminator's own two.
+ *
+ * The device re-clears a region whose padded tail ends flush, so a body with
+ * no room left after the two-byte terminator carries the wider form instead.
+ * 250 itself is not "flush": the payload below the frame size is the plain one.
+ */
+export function overlayTrailer(unframedLength: number): {
+  readonly bytes: Uint8Array;
+  readonly extra: number;
+} {
+  const remainder = unframedLength % FRAME_SIZE;
+
+  if (
+    unframedLength > FRAME_SIZE &&
+    (remainder === 0 ||
+      remainder === FRAME_SIZE - 2 ||
+      remainder === FRAME_SIZE - 1)
+  ) {
+    return { bytes: ALIGNED_TRAILER, extra: 7 };
+  }
+
+  return { bytes: TURZX_COMMAND.overlayTerminate, extra: 0 };
+}
+
+/** `value` as three big-endian bytes at `at`; a DataView has no 24-bit setter. */
+function writeUint24(bytes: Uint8Array, at: number, value: number): void {
+  bytes[at] = (value >>> 16) & 0xff;
+  bytes[at + 1] = (value >>> 8) & 0xff;
+  bytes[at + 2] = value & 0xff;
+}
+
+/**
+ * The 18-byte UPDATE_BITMAP header, unframed: the command prefix, the body's
+ * image size (3 bytes BE), three zero bytes, the update count and the visible
+ * list's size (4 bytes BE each).
+ */
+export function overlayHeader(
+  imageSize: number,
+  count: number,
+  visibleBytes: number,
+): Uint8Array {
+  const header = new Uint8Array(18);
+  header.set(TURZX_COMMAND.updateBitmap);
+  writeUint24(header, 4, imageSize);
+  const view = new DataView(header.buffer);
+  view.setUint32(10, count);
+  view.setUint32(14, visibleBytes);
+
+  return header;
+}
+
+/** Whether the four RGBA bytes at `at` differ between the two frames. */
+function changedAt(
+  previous: Uint8Array,
+  current: Uint8Array,
+  at: number,
+): boolean {
+  return (
+    previous[at] !== current[at] ||
+    previous[at + 1] !== current[at + 1] ||
+    previous[at + 2] !== current[at + 2] ||
+    previous[at + 3] !== current[at + 3]
+  );
+}
+
+/**
+ * The reference's `_get_visible_segments_numba` walk, literally: a span starts
+ * where `alpha > 0` and keeps extending while the next pixel is opaque **or the
+ * pixel after it is**, so a one-pixel gap inside a run is kept.
+ */
+function segmentsInRow(
+  width: number,
+  alpha: (x: number) => number,
+): readonly { readonly x: number; readonly width: number }[] {
+  const segments: { readonly x: number; readonly width: number }[] = [];
+  let i = 0;
+
+  while (i < width) {
+    if (alpha(i) > 0) {
+      const x = i;
+      let j = i + 1;
+      while (
+        j < width &&
+        (alpha(j) > 0 || (j + 1 < width && alpha(j + 1) > 0))
+      ) {
+        j += 1;
+      }
+      segments.push({ x, width: j - x });
+      i = j;
+    }
+    i += 1;
+  }
+
+  return segments;
+}
+
+/**
+ * The per-frame UPDATE_BITMAP payload: the pixels that changed since
+ * `previous`, then the spans that are visible at all.
+ *
+ * A cleared pixel is not re-sent — it leaves the changed list and its absence
+ * from the visible list is what the device erases. Segments, pixel packing and
+ * the alignment trailer are the probe's, ported byte for byte.
+ */
+export function overlayUpdate(
+  previous: Uint8Array,
+  current: Uint8Array,
+  geometry: { readonly width: number; readonly height: number },
+): OverlayUpdate {
+  const { width, height } = geometry;
+  const expected = width * height * 4;
+
+  if (previous.length !== expected) {
+    throw new Error(
+      `The previous overlay is ${previous.length} bytes; a ${width}x${height} RGBA frame is ${expected}.`,
+    );
+  }
+  if (current.length !== expected) {
+    throw new Error(
+      `The decoded overlay is ${current.length} bytes; a ${width}x${height} RGBA frame is ${expected}.`,
+    );
+  }
+
+  const changed: OverlaySegment[] = [];
+  const visible: OverlaySegment[] = [];
+
+  for (let y = 0; y < height; y += 1) {
+    const rowStart = y * width * 4;
+
+    for (const segment of segmentsInRow(width, (x) => {
+      const at = rowStart + x * 4;
+      return changedAt(previous, current, at) ? (current[at + 3] ?? 0) : 0;
+    })) {
+      changed.push({
+        offset: y * width + segment.x,
+        width: segment.width,
+        at: rowStart + segment.x * 4,
+      });
+    }
+
+    for (const segment of segmentsInRow(
+      width,
+      (x) => current[rowStart + x * 4 + 3] ?? 0,
+    )) {
+      visible.push({
+        offset: y * width + segment.x,
+        width: segment.width,
+        at: rowStart + segment.x * 4,
+      });
+    }
+  }
+
+  const message = new Uint8Array(
+    changed.reduce((total, segment) => total + 5 + segment.width * 3, 0) +
+      visible.length * 5,
+  );
+  let at = 0;
+  const view = new DataView(message.buffer);
+
+  for (const segment of changed) {
+    writeUint24(message, at, segment.offset);
+    view.setUint16(at + 3, segment.width);
+    at += 5;
+
+    for (let pixel = 0; pixel < segment.width; pixel += 1) {
+      const index = segment.at + pixel * 4;
+      const red = current[index] ?? 0;
+      const green = current[index + 1] ?? 0;
+      const blue = current[index + 2] ?? 0;
+      const alpha = Math.floor(((current[index + 3] ?? 0) / 255) * 15);
+
+      message[at] = (Math.floor((blue / 255) * 15) << 4) | ((alpha & 0xc) >> 2);
+      message[at + 1] = (Math.floor((green / 255) * 15) << 4) | (alpha & 0x3);
+      message[at + 2] = Math.floor((red / 255) * 15) << 4;
+      at += 3;
+    }
+  }
+
+  for (const segment of visible) {
+    writeUint24(message, at, segment.offset);
+    view.setUint16(at + 3, segment.width);
+    at += 5;
+  }
+
+  const payload =
+    message.length > FRAME_SIZE ? joinChunks(message, PAYLOAD_CHUNK) : message;
+  const trailer = overlayTrailer(payload.length);
+  const body = new Uint8Array(payload.length + trailer.bytes.length);
+  body.set(payload);
+  body.set(trailer.bytes, payload.length);
+
+  return {
+    // The size field counts the message before chunk separators, not the body.
+    imageSize: message.length + 2 + trailer.extra,
+    visibleBytes: visible.length * 5 + (trailer.extra === 0 ? 0 : 5),
+    body,
+  };
+}
