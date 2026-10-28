@@ -9,22 +9,23 @@ Drive the TURZX/Turing 5" serial panel (Rev C, 800×480 landscape, COM5) through
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-29-turzx-serial-panel.md` (3 phases / 12 tasks); all 12 tasks done; whole-branch review and branch finish remain.
+- **Active plan:** `docs/superpowers/plans/2026-10-29-turzx-serial-panel.md` (3 phases / 12 tasks); all tasks done, final review clean, awaiting integration choice.
 - **Video works on the panel:** the demo theme's clip uploads, plays, and the UI overlay updates over it; a start failure falls back to stills.
 - **The panel is wedged after a host kill:** COM5 answers "Access denied" to every open with no host running, so a replug or power-cycle is needed before the next hardware run.
 - **Device reclaim is designed, not planned:** per-adapter holder names plus one host service, kill + manual guide in one dialog; queued behind this plan.
 
 ## Last completed change
 
-- **Task 8 — the Controls dialog:** brightness (field-level 0–100 refusal), screen on/off, restart behind a two-step confirm, status/identify, the support/firmware line with a mismatch warning, last reply and inline errors.
-- **Commands are serialised in the dialog:** one in flight at a time, a stale reply is dropped, and the dialog resets on close and across panels.
-- **Refusal path pinned:** `panelCommand` throws the host's plain-text 409 body, and the dialog shows it as an alert.
-- **Gate:** exit 1 on the known `server.test.ts` theme-assignment load flake only (passes alone, 403/403); every panel and editor suite green.
+- **Final review found two device-visible defects, both fixed:** a clip started but not acked is now stopped when a later step throws; the transport no longer drops the reply to the command sent right after a drain.
+- **Write-only controls no longer fake a device reply:** they return an empty reply and the dialog says "Sent" under "Last command"; device text shows under "Panel reply".
+- **Overlay count now starts at 0 to match the verified probe**, and the spec and plan match the code (interface names, trailer threshold, reply meaning).
+- **Eight deferred findings filed as `vg-789`–`vg-796`**, so they survive the merge the gitignored ledger did not.
+- **Gate green:** `npm run gate` `EXIT=0` (7145 passed, 1 skipped) on the fix round, including the polled replacement for the branch's own flaky test.
 
 ## Next
 
-1. Whole-branch review on the most capable model, then finish the branch.
-2. Replug the panel and prove the controls and the video overlay on hardware.
+1. Choose how to integrate the branch (merge to `develop`, PR, or hold).
+2. Replug the panel and run `vg-791`'s hardware session: controls, video, overlay alpha, glass over video, and a stop that leaves no clip looping.
 3. Reclaim-device spec — designed, awaiting the user's approval of the shape.
 
 ## Blockers / unverified
@@ -32,5 +33,4 @@ Drive the TURZX/Turing 5" serial panel (Rev C, 800×480 landscape, COM5) through
 - **COM5 is wedged:** a replug or power-cycle is required; without it no hardware step can run.
 - **No control is hardware-verified:** brightness, screen, status, restart and identify were never sent to the device; the dialog is proven by tests only.
 - **Overlay alpha and glass over video are unverified on pixels:** the device accepted every frame, but no capture proof exists.
-- **The gate is green once under load:** the last full run was `EXIT=0`; `server.test.ts`'s theme-assignment ordering flaked under earlier load and passes alone (`vg-637` class).
 - **Only firmware `1.88` is verified:** a newer ROM may change the protocol silently, and the vendor apps reclaim COM5 when reopened.
