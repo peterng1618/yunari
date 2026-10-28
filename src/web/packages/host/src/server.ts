@@ -26,8 +26,8 @@ import { DEFAULT_THEMES_DIR } from "./cli/args.js";
 import type { HostBinding } from "./cli/hosting.js";
 import type { ListenableServer } from "./cli/net.js";
 import type { PanelHint } from "./panels/panel-device.js";
+import { attachedDevices, familyFor } from "./panels/panel-families.js";
 import type { PanelManager } from "./panels/panel-manager.js";
-import { attachedPanels, panelModelFor } from "./panels/tur-usb-panel.js";
 import type {
   CustomSourceStatus,
   SourceTestResult,
@@ -1289,7 +1289,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   let lastUnmapped: readonly string[] = [];
   const displays = options.displays;
   const monitors = options.monitors ?? listMonitors;
-  const panelsAttached = options.attachedPanels ?? attachedPanels;
+  const panelsAttached = options.attachedPanels ?? attachedDevices;
   const pairingCodes = options.pairingCodes ?? createPairingCodeStore();
   const saved = options.rememberLan;
   const devices = options.devices;
@@ -2273,9 +2273,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // A model this host has no driver for is the caller's to fix, and it is
         // refused *before* the write: a record nothing can open would be a row
         // in the list that never shows anything and cannot say why.
-        const model = panelModelFor(panel.vendorId, panel.productId);
+        const family = familyFor(panel.vendorId, panel.productId);
 
-        if (model === undefined) {
+        if (family === undefined) {
           sendText(
             response,
             400,
@@ -2283,6 +2283,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
           );
           return;
         }
+
+        // The record carries the model the family names, rather than whatever
+        // the caller wrote: the table is the one owner of which model an id is,
+        // and a record that disagreed with it would be a row nothing can open.
+        const hardware = { ...panel, model: family.id };
 
         let presentation: DisplayPresentation;
 
@@ -2301,7 +2306,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
         let display: DisplayRecord;
 
         try {
-          display = await displays.createPanel(body.label, panel, presentation);
+          display = await displays.createPanel(
+            body.label,
+            hardware,
+            presentation,
+          );
         } catch (error) {
           if (error instanceof PanelAlreadyHeldError) {
             sendText(response, 409, error.message);

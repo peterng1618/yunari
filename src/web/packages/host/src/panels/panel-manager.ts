@@ -1,8 +1,8 @@
 import { findBrowser } from "../serve/display-launcher.js";
 import type { DisplayRecord, DisplayStore } from "../settings/displays.js";
+import { familyFor } from "./panel-families.js";
 import { createRasterizer } from "./panel-raster.js";
 import { createPanelRunner, type PanelRunner } from "./panel-runner.js";
-import { openPanel, panelModelFor } from "./tur-usb-panel.js";
 
 /**
  * Every panel this host drives, one runner each.
@@ -14,8 +14,10 @@ import { openPanel, panelModelFor } from "./tur-usb-panel.js";
  *
  * The manager is deliberately thin. It reads the records, opens what is
  * attached, and owns one interval per panel; everything a panel *is* lives
- * behind `PanelDevice` and everything a scene is lives in the rasteriser. A
- * second panel family is a row in `PANEL_MODELS` and nothing here changes.
+ * behind `PanelDevice`, and *which* driver claims a device is `panel-families`'
+ * table. A second panel family is a row there and nothing here changes — which
+ * is what adding the Kraken, a family with a different transport and a
+ * different content mechanism, was able to prove.
  */
 
 export interface PanelManagerOptions {
@@ -97,8 +99,8 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       throw new Error("The panel record names no device.");
     }
 
-    const model = panelModelFor(hardware.vendorId, hardware.productId);
-    if (model === undefined) {
+    const family = familyFor(hardware.vendorId, hardware.productId);
+    if (family === undefined) {
       throw new Error(
         `No driver on this host claims ${hex(hardware.vendorId)}:${hex(hardware.productId)}.`,
       );
@@ -111,7 +113,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       );
     }
 
-    const device = await openPanel(model);
+    const device = await family.open();
     let rasterizer: Awaited<ReturnType<typeof createRasterizer>>;
 
     try {
@@ -128,12 +130,18 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     const runner = createPanelRunner({
       device,
       rasterizer,
+      // A panel that uploads to its own memory pays an upload per frame, so its
+      // floor wins over the streaming default. The device states the floor
+      // rather than this file guessing at one family's cost.
+      ...(device.minimumIntervalMs === undefined
+        ? {}
+        : { intervalMs: device.minimumIntervalMs }),
       // One line per frame that changed: a panel that is quiet is either a
       // still theme — which is free — or a pipeline that stopped, and an owner
       // reading a console cannot tell those apart without being told.
       onFrame: () =>
         console.log(
-          `Panel ${displayId}: sent a ${device.geometry.width}x${device.geometry.height} frame.`,
+          `Panel ${displayId}: showed a ${device.geometry.width}x${device.geometry.height} image.`,
         ),
       onError: (message) => report(displayId, message),
     });
