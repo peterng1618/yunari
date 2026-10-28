@@ -17,16 +17,18 @@ USB panel support behind a `PanelDevice` port: a Lian Li 9.2" LCD (`1CBE:A092`) 
 
 ## Last completed change
 
-- **A display whose credential is gone is sent to the pairing page**, not handed a text 403 with no way back — the dead end that made one phone pair four times; an API call still gets the refusal.
-- **`vg-774` filed:** every failed display save leaves a `.tmp` file in the settings folder, never pruned.
+- **A display pairs on the host's mDNS name**, not a dotted quad: the leaf now carries `hostname.local`, and the publish card, its QR and the console banner dial it while printing the address beside it (`decisions/0132`).
+- **`lanAddress()` is unchanged** — the name is a second fact on the wire (`HostingState.name`), so a device that cannot resolve `.local` still has an address to type.
 
 ## Next
 
 1. Look at the glass and confirm the picture and its orientation.
-2. Resume the backlog-drain plan at Phase 0.
+2. Re-pair one phone against the printed `.local` link and confirm it survives a host restart.
+3. Resume the backlog-drain plan at Phase 0.
 
 ## Blockers / unverified
 
 - **The glass is unverified:** frames flow, but no eye has confirmed the picture or that rotation 90 reads upright on the strip.
 - **No Kraken upload has run:** the panel is a working cooler, and a wrong bucket setup is a documented route to firmware bootloader, so the write path stays unexercised until it is accepted deliberately.
 - **L-Connect must stay stopped:** it relaunches on boot and holds the interface; the host reports the "another program holding it" message when it wins the race.
+- **The `.local` dial is unverified on a phone:** the leaf was measured on this box (`ERR_TLS_CERT_ALTNAME_INVALID` for a control name, 200 for the real one), but no phone has paired by the name yet.

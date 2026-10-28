@@ -1550,11 +1550,15 @@ export const uiCopy = {
     /** The one-time code, printed beside the address because the symbol that
      *  carries it needs a camera and the device may not have one. */
     code: "Pairing code",
-    /** The one step that makes an address change invisible, said here because
-     *  the card is the only moment the owner is thinking about it (spec §
-     *  "Finding the host after its address changes"). */
+    /** Why the symbol and the line above it disagree in spelling: a dotted quad
+     *  is what an IP change breaks, and the name is what it does not. Said here
+     *  because the card is the only moment the owner is thinking about it (spec
+     *  § "Finding the host after its address changes"). The last clause is not
+     *  hedging — Android 11 and earlier and a device on Private DNS cannot
+     *  resolve the name, and then the address is what it types
+     *  (`docs/decisions/0132`). */
     reserveAddress:
-      "Reserve this address in your router, or give this PC a name, and the display's URL never breaks.",
+      "The address breaks if this PC's IP changes; the name above survives it, where your device can resolve it.",
     warning:
       "Plain HTTP on your own network — trusted networks only, never the internet.",
     copy: "Copy link",

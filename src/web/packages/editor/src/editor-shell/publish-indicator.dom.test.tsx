@@ -21,7 +21,13 @@ function stubStore(snapshot: HostingSnapshot): HostingStore {
 /** The host's answer with the LAN on, which is the one fact the mark reads. */
 const live: HostingSnapshot = {
   kind: "known",
-  answer: { lan: true, address: "192.168.1.5", port: 4174, refusal: null },
+  answer: {
+    lan: true,
+    address: "192.168.1.5",
+    name: null,
+    port: 4174,
+    refusal: null,
+  },
   pairing: undefined,
   reason: undefined,
   pending: undefined,
@@ -30,7 +36,7 @@ const live: HostingSnapshot = {
 /** The host's answer with the LAN off: a *reported* state, and not live. */
 const off: HostingSnapshot = {
   kind: "known",
-  answer: { lan: false, address: null, port: null, refusal: null },
+  answer: { lan: false, address: null, name: null, port: null, refusal: null },
   pairing: undefined,
   reason: undefined,
   pending: undefined,

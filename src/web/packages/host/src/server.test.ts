@@ -3820,6 +3820,7 @@ describe("Host theme routes", () => {
           state: async () => ({
             lan: false,
             address: null,
+            name: null,
             port: 1,
             refusal: null,
           }),
@@ -8640,6 +8641,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
       hosting: stillBinding({
         lan: true,
         address: "192.168.1.42",
+        name: null,
         port: 5227,
         refusal: null,
       }),
@@ -8651,6 +8653,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     expect(answered.json()).toEqual({
       lan: true,
       address: "192.168.1.42",
+      name: null,
       port: 5227,
       refusal: null,
       sessions: [],
@@ -8676,6 +8679,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
       hosting: stillBinding({
         lan: true,
         address: "192.168.1.42",
+        name: null,
         port: 5227,
         refusal: null,
       }),
@@ -8698,6 +8702,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     expect(answered.json()).toEqual({
       lan: false,
       address: null,
+      name: null,
       port: null,
       refusal: null,
       sessions: [],
@@ -8712,6 +8717,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
         state: async () => ({
           lan,
           address: lan ? "192.168.1.42" : null,
+          name: null,
           port: 5227,
           refusal: null,
         }),
@@ -8741,6 +8747,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     expect(answered.json()).toEqual({
       lan: false,
       address: null,
+      name: null,
       port: 5227,
       refusal: null,
       sessions: [],
@@ -8755,7 +8762,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     let moved = false;
     build({
       hosting: stillBinding(
-        { lan: false, address: null, port: 5227, refusal: null },
+        { lan: false, address: null, name: null, port: 5227, refusal: null },
         async () => {
           moved = true;
           return { ok: true };
@@ -8780,7 +8787,13 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     let remembered = false;
     build({
       hosting: {
-        state: async () => ({ lan: false, address: null, port: 5227, refusal }),
+        state: async () => ({
+          lan: false,
+          address: null,
+          name: null,
+          port: 5227,
+          refusal,
+        }),
         isLan: () => false,
         setLan: async () => {
           refusal = "Port 5227 is not free on 0.0.0.0: EADDRINUSE";
@@ -8828,6 +8841,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
         state: async () => ({
           lan: true,
           address: "192.168.1.42",
+          name: null,
           port: 5227,
           refusal: null,
         }),

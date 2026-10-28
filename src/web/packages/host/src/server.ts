@@ -393,6 +393,12 @@ export interface HostingState {
   readonly lan: boolean;
   /** The address a phone should use, or null when there is none. */
   readonly address: string | null;
+  /** The mDNS name a phone should dial, or null when the platform gives no
+   *  hostname. **Beside the address, not instead of it**: a device that cannot
+   *  resolve `.local` still has a dotted quad to type, and an owner has one to
+   *  read aloud. The name is what survives a DHCP lease, which is why the
+   *  pairing symbol dials it (`docs/decisions/0132`). */
+  readonly name: string | null;
   /** The port this host is bound to, or null when it is not bound. */
   readonly port: number | null;
   /** The last move the host refused, in its own words, or null. A refusal can
@@ -409,6 +415,7 @@ export type HostingPeer = Omit<DisplayRecord, "tokenHash">;
 const NO_HOSTING: HostingState = {
   lan: false,
   address: null,
+  name: null,
   port: null,
   refusal: null,
 };

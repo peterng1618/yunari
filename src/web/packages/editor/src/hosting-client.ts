@@ -19,6 +19,10 @@
 export interface HostingAnswer {
   readonly lan: boolean;
   readonly address: string | null;
+  /** The host's mDNS name, which is what a pairing symbol dials: it survives a
+   *  DHCP lease where the address does not (`docs/decisions/0132`). `null` when
+   *  the host has no name to offer, and then `address` is all there is. */
+  readonly name: string | null;
   readonly port: number | null;
   /** The last move the host refused, in its own words, or null. A refusal
    *  cannot come back in the answer to the PUT that asked for the move — the
@@ -46,6 +50,9 @@ export async function readHosting(
     return {
       lan: body["lan"],
       address: body["address"] === null ? null : (body["address"] as string),
+      // A host from before this field answered none, and the reader falls back
+      // to the address rather than showing a name nobody published.
+      name: isString(body["name"]) ? body["name"] : null,
       port: body["port"] === null ? null : (body["port"] as number),
       // A host that says nothing about a refusal has not refused anything this
       // reader can act on, so it reads as none rather than as unreadable.
@@ -155,14 +162,18 @@ export async function setLan(
  *  code it would otherwise have to type already in it. A code and not a
  *  credential, so the URL is worth reading over a shoulder exactly once.
  *
+ *  **`host` is the stable name when the host has one**, and that choice is what
+ *  makes a pairing survive a DHCP lease: the credential and the storage a
+ *  display keeps are scoped to this origin, so dialling a dotted quad is what
+ *  turns a moved address into a phone that must pair again
+ *  (`docs/decisions/0132`). The caller decides the host, because it also prints
+ *  the address beside this symbol for a device that cannot resolve the name.
+ *
  *  **https, because a display is a secure context only there** — that is what
  *  the wake lock and arbitrary-element fullscreen are gated on, and the host
  *  serves it on this same port from its own root (`docs/decisions/0076`). A
  *  device that has not installed the root is warned and carries on; the plain
  *  address is printed beside this one for it. */
-export function displayUrl(
-  answer: { readonly address: string; readonly port: number },
-  code: string,
-): string {
-  return `https://${answer.address}:${answer.port}/pair?code=${encodeURIComponent(code)}`;
+export function displayUrl(host: string, port: number, code: string): string {
+  return `https://${host}:${port}/pair?code=${encodeURIComponent(code)}`;
 }

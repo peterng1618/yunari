@@ -9,6 +9,7 @@ import {
   listenWithFallback,
   localNames,
   openBrowser,
+  stableName,
   waitUntilReachable,
 } from "./cli/net.js";
 import {
@@ -518,6 +519,9 @@ export async function run(argv: readonly string[]): Promise<number> {
   /** The address a display would use, whether or not the LAN is open — the
    *  certificate covers it either way, and the console names it. */
   const lan = await lanAddress();
+  /** And the name it dials instead where the platform answers one: it survives
+   *  a DHCP lease where the address does not (`docs/decisions/0132`). */
+  const name = stableName();
 
   console.log(`\nYunari v${VERSION}`);
 
@@ -605,7 +609,13 @@ export async function run(argv: readonly string[]): Promise<number> {
 
   if (!isLoopbackHost(initialHost)) {
     const hostPart = lan === undefined ? displayHost : lan;
-    const networkSecure = `https://${hostPart}:${bound}`;
+    // **The name where there is one**, because this is the link a display
+    // pairs on and the origin its cookie and storage are then scoped to: a
+    // dotted quad there is a phone that must pair again the moment DHCP moves
+    // the host (`docs/decisions/0132`). The address is printed beside it, for a
+    // device that cannot resolve the name and for the one without the root.
+    const dial = name ?? hostPart;
+    const networkSecure = `https://${dial}:${bound}`;
     const networkPlain = `http://${hostPart}:${bound}`;
 
     console.log(

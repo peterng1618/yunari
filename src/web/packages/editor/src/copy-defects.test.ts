@@ -325,6 +325,7 @@ it("maps the publish surface's capability strings to controls that can run them"
           answer: {
             lan: true,
             address: "192.168.1.5",
+            name: null,
             port: 4174,
             refusal: null,
           },
