@@ -179,6 +179,9 @@ class TurzxPanel implements PanelDevice {
     height: TURZX_GEOMETRY.height,
   };
 
+  /** The still is decoded to BGRA, so a lossy intermediate is loss for nothing. */
+  readonly stillFormat = "png";
+
   readonly video: PanelVideo;
 
   private queue: Promise<unknown> = Promise.resolve();

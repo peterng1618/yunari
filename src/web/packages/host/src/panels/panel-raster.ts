@@ -6,7 +6,7 @@ import type { PanelGeometry } from "./panel-device.js";
 
 /**
  * The rasteriser: a hidden Chromium showing the real player page, asked for a
- * JPEG of the artboard.
+ * still of the artboard.
  *
  * **It renders the product's own player rather than a second scene tree.** That
  * is the whole decision (`0130`): glass sampling a video backdrop, ECharts
@@ -31,18 +31,43 @@ export interface RasterOptions {
   /** The player page for a display, including its session. */
   readonly url: string;
   readonly geometry: PanelGeometry;
+  /** The still encoding the device consumes; JPEG when it states none. */
+  readonly stillFormat?: "jpeg" | "png";
 }
 
 export interface Rasterizer {
   /**
-   * One JPEG of the artboard, in `geometry`.
+   * One still of the artboard, in `geometry`.
    *
    * Refused rather than blank when the page did not render: a panel showing the
    * previous theme is honest, and one showing black is a display that looks
    * broken.
    */
   capture(): Promise<Uint8Array>;
+  /**
+   * The UI alone, as a PNG with alpha, with the theme's background media
+   * hidden — the layer a panel composites over a video it plays itself.
+   *
+   * A transparent background is asked of the browser rather than keyed out
+   * afterwards: the player draws the media in a sibling layer, so hiding that
+   * layer is the whole difference between "the theme" and "the theme without
+   * its picture".
+   */
+  captureOverlay(): Promise<Uint8Array>;
   close(): Promise<void>;
+}
+
+/**
+ * The `Page.captureScreenshot` format parameters for a still, in `format`.
+ *
+ * PNG carries no `quality`: the protocol refuses one, and the mode exists to be
+ * lossless for a device that decodes the still rather than showing it as-is.
+ */
+export function screenshotParameters(format: "jpeg" | "png"): {
+  readonly format: "jpeg" | "png";
+  readonly quality?: number;
+} {
+  return format === "jpeg" ? { format, quality: 85 } : { format };
 }
 
 interface CdpReply {
@@ -219,33 +244,46 @@ export async function createRasterizer(
 
   let closed = false;
 
+  const live = (): Devtools => {
+    if (closed || devtools === undefined) {
+      throw new Error("The rasteriser is closed.");
+    }
+
+    return devtools;
+  };
+
+  const shot = async (format: "jpeg" | "png"): Promise<Uint8Array> => {
+    const reply = await live().send("Page.captureScreenshot", {
+      ...screenshotParameters(format),
+      clip: {
+        x: 0,
+        y: 0,
+        width: options.geometry.width,
+        height: options.geometry.height,
+        scale: 1,
+      },
+      // The page is exactly the clip size, so nothing here is off-screen; the
+      // flag keeps a shorter page from producing a short image.
+      captureBeyondViewport: false,
+    });
+
+    const data = reply.result?.["data"];
+    if (typeof data !== "string") {
+      throw new Error("The browser returned no image.");
+    }
+
+    return new Uint8Array(Buffer.from(data, "base64"));
+  };
+
   return {
     async capture(): Promise<Uint8Array> {
-      if (closed || devtools === undefined) {
-        throw new Error("The rasteriser is closed.");
-      }
+      await overlayMode(live(), false);
+      return shot(options.stillFormat ?? "jpeg");
+    },
 
-      const reply = await devtools.send("Page.captureScreenshot", {
-        format: "jpeg",
-        quality: 85,
-        clip: {
-          x: 0,
-          y: 0,
-          width: options.geometry.width,
-          height: options.geometry.height,
-          scale: 1,
-        },
-        // The page is exactly the clip size, so nothing here is off-screen; the
-        // flag keeps a shorter page from producing a short image.
-        captureBeyondViewport: false,
-      });
-
-      const data = reply.result?.["data"];
-      if (typeof data !== "string") {
-        throw new Error("The browser returned no image.");
-      }
-
-      return new Uint8Array(Buffer.from(data, "base64"));
+    async captureOverlay(): Promise<Uint8Array> {
+      await overlayMode(live(), true);
+      return shot("png");
     },
 
     async close(): Promise<void> {
@@ -257,6 +295,54 @@ export async function createRasterizer(
       await rm(profile, { recursive: true, force: true }).catch(() => {});
     },
   };
+}
+
+const OVERLAY_STYLE_ID = "yunari-panel-overlay";
+
+/**
+ * Switches the page between "the theme" and "the theme without its picture".
+ *
+ * Hiding the media layer is not enough: the artboard's paint is an **inline**
+ * `background` on the scene host, which would cover the video, and no stylesheet
+ * can outrank an inline value without `!important` leaking into a still capture.
+ * So the host's own paint is saved on the element and restored on the way out.
+ */
+async function overlayMode(devtools: Devtools, on: boolean): Promise<void> {
+  await devtools.send("Runtime.evaluate", {
+    expression: `(() => {
+      const id = ${JSON.stringify(OVERLAY_STYLE_ID)};
+      const style = document.getElementById(id);
+      const host = document.querySelector('canvas[data-yunari="artboard"]')?.parentElement;
+      if (${on ? "true" : "false"}) {
+        if (style === null) {
+          const made = document.createElement("style");
+          made.id = id;
+          made.textContent =
+            "[data-yunari-background-media]{display:none !important}" +
+            "[data-yunari-display-disc]{background:transparent !important}" +
+            "html,body{background:transparent !important}";
+          document.head.append(made);
+        }
+        if (host !== null && host.dataset["panelOverlayBackground"] === undefined) {
+          host.dataset["panelOverlayBackground"] = host.style.background;
+          host.style.background = "transparent";
+        }
+      } else {
+        style?.remove();
+        if (host !== null && host.dataset["panelOverlayBackground"] !== undefined) {
+          host.style.background = host.dataset["panelOverlayBackground"];
+          delete host.dataset["panelOverlayBackground"];
+        }
+      }
+      return true;
+    })()`,
+    returnByValue: true,
+  });
+
+  await devtools.send(
+    "Emulation.setDefaultBackgroundColorOverride",
+    on ? { color: { r: 0, g: 0, b: 0, a: 0 } } : {},
+  );
 }
 
 /**

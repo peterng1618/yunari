@@ -121,6 +121,11 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
         browser,
         url: options.pageFor(displayId),
         geometry: device.geometry,
+        // The device says which still it consumes; a panel that decodes to raw
+        // pixels takes PNG rather than paying for a lossy intermediate.
+        ...(device.stillFormat === undefined
+          ? {}
+          : { stillFormat: device.stillFormat }),
       });
     } catch (error) {
       await device.close();

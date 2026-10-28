@@ -19,6 +19,7 @@ function fakes(frames: readonly Uint8Array[]) {
       index += 1;
       return frame ?? new Uint8Array();
     }),
+    captureOverlay: vi.fn(async () => new Uint8Array()),
     close,
   };
   return { device, rasterizer, present, close };
@@ -54,7 +55,11 @@ describe("createPanelRunner", () => {
     };
     const runner = createPanelRunner({
       device,
-      rasterizer: { capture, close: async () => {} },
+      rasterizer: {
+        capture,
+        captureOverlay: async () => new Uint8Array(),
+        close: async () => {},
+      },
     });
 
     const first = runner.tick();
@@ -113,6 +118,7 @@ describe("createPanelRunner", () => {
       capture: vi.fn(async () => {
         throw new Error("the browser went away");
       }),
+      captureOverlay: vi.fn(async () => new Uint8Array()),
       close: vi.fn(async () => {}),
     };
     const runner = createPanelRunner({

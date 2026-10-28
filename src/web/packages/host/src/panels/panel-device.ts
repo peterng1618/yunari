@@ -81,12 +81,22 @@ export interface PanelDevice {
   /**
    * Puts one image on the glass.
    *
-   * **A JPEG, because that is the one encoding every panel family takes.** A
-   * streaming panel sends those bytes down its wire; a panel with storage
-   * decodes them and writes pixels once, then shows them with no host attached.
-   * The caller passes a frame and does not decide which of those happened.
+   * **A JPEG by default, because that is the one encoding every panel family
+   * takes.** A device that decodes the still itself states `stillFormat` and
+   * receives that encoding instead. A streaming panel sends those bytes down its
+   * wire; a panel with storage decodes them and writes pixels once, then shows
+   * them with no host attached. The caller passes a frame and does not decide
+   * which of those happened.
    */
   present(jpeg: Uint8Array): Promise<void>;
+  /**
+   * The still encoding this device consumes, when it is not a JPEG.
+   *
+   * The device states it, the way it states `minimumIntervalMs`, because the
+   * encoding is what its own decoder takes: a panel that decodes the still to
+   * raw pixels pays JPEG artifacts for nothing.
+   */
+  readonly stillFormat?: "jpeg" | "png";
   /**
    * The floor on how often a frame is worth sending, when the device has one.
    *

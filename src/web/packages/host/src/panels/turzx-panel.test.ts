@@ -164,6 +164,17 @@ describe("a panel this host is driving", () => {
 });
 
 describe("openTurzxPanel", () => {
+  it("asks for a lossless still because it is decoded, not streamed", async () => {
+    const device = await opened(
+      fakeTransport("chs_5inch.dev1_rom1.88").transport,
+    );
+    try {
+      expect(device.stillFormat).toBe("png");
+    } finally {
+      await device.close();
+    }
+  });
+
   it("opens with HELLO, stops video and media, then presents a full frame", async () => {
     const { writes, transport } = fakeTransport("chs_5inch.dev1_rom1.88");
     const panel = await openTurzxPanel({
