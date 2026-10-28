@@ -1,6 +1,6 @@
 # TURZX 5" serial panel: transport, support record, controls, video overlay
 
-- **Status:** draft
+- **Status:** approved and implemented
 - **Date:** 2026-10-29
 - **Area:** host panel subsystem, Host settings, rasteriser and player
 
@@ -109,7 +109,8 @@ payload: BGRA bytes, chunked 249 bytes and joined with `0x00`, padded to a
   (`offset` 3 bytes + `width` 2 bytes + 3 bytes of 4-bit BGRA each), then the
   visible segments of the current overlay. The hex string is chunked 249 bytes
   and joined with `0x00`. The trailer is `ef 69`, with the reference's alignment
-  fix when the payload length is 0, 248 or 249 modulo 250.
+  fix only when the payload is longer than 250 bytes and its length modulo 250
+  is 0, 248 or 249; 250 itself takes the plain trailer.
 - **The visible list replaces the visible set.** Moving a rectangle from one
   position to another cleared the old one without any explicit clear command.
   Pixels that become transparent are cleared by their absence from the list.
@@ -134,9 +135,14 @@ seam:
 interface SerialTransport {
   write(bytes: Uint8Array): Promise<void>;
   read(timeoutMs: number): Promise<Uint8Array>;
+  drainPending(): Uint8Array;
   close(): Promise<void>;
 }
 ```
+
+`drainPending()` never waits: it returns what the device already sent and drops
+the rest of an in-flight burst until the wire goes quiet or the next write
+begins, so a stale reply's tail cannot be read as the next command's answer.
 
 The seam exists so the TURZX adapter is unit-testable with a fake transport and
 so the dependency is not imported by anything above the adapter. Adding the
@@ -177,12 +183,24 @@ are added:
 
 ```ts
 interface PanelControls {
-  readonly commands: readonly PanelCommand["kind"][];
-  run(command: PanelCommand): Promise<string>;
+  readonly commands: readonly PanelControlCommand["kind"][];
+  run(command: PanelControlCommand): Promise<string>;
+}
+
+type PanelControlCommand =
+  | { readonly kind: "brightness"; readonly level: number }
+  | { readonly kind: "screen"; readonly on: boolean }
+  | { readonly kind: "restart" }
+  | { readonly kind: "status" }
+  | { readonly kind: "hello" };
+
+interface PanelVideoPlacement {
+  readonly offsetX: number;
+  readonly offsetY: number;
 }
 
 interface PanelVideo {
-  start(mp4: Uint8Array): Promise<void>;
+  start(video: Uint8Array, placement: PanelVideoPlacement): Promise<void>;
   presentOverlay(png: Uint8Array): Promise<void>;
   stop(): Promise<void>;
 }
@@ -193,6 +211,9 @@ interface PanelDevice {
   readonly video?: PanelVideo;
 }
 ```
+
+`run` answers the device's own reply text, empty when the device says nothing
+(a write-only command). A surface must not present a host sentence as a reply.
 
 Absence is the capability: a panel without controls has no Controls surface, and
 a panel without video falls back to static frames. The manager and runner never
@@ -250,7 +271,8 @@ are recoverable; firmware-update commands stay out of scope.
 - 409 the record is a panel but its runner is not holding the device.
 - 400 an unsupported `kind`, a `level` that is not an integer in 0–100, or a
   missing `on`.
-- 200 `{ ok: true, reply }`, where `reply` is the device's text (may be empty).
+- 200 `{ ok: true, reply }`, where `reply` is the device's text — empty for a
+  write-only command, because the host composes no sentence of its own.
 
 The host refuses invalid numeric input rather than coercing it.
 
@@ -275,7 +297,9 @@ The Controls surface is a `PanelControlsSection` below
 attached panel with `commands` non-empty. It opens the existing Base UI `Dialog`
 primitive: identity and firmware line with the mismatch warning, brightness
 slider/number and Apply, screen on/off, restart with confirmation, query
-status/identify with the raw reply, and inline errors.
+status/identify with the device's own reply text, and inline errors. A
+write-only command has no device reply, so the surface shows a host
+confirmation ("Sent") under a label that does not call that sentence a reply.
 
 ## Video background (phase 2)
 

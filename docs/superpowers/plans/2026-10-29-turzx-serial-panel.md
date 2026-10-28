@@ -993,7 +993,7 @@ Expected: FAIL — the component does not exist.
 - [ ] **Step 3: Implement**
 
 - Add `panelCommand` to `client.ts` (POST, parse `{ reply }`, throw `refusal` on failure).
-- Build the section: a `Group` with a "Controls" button that opens the shared `Dialog`; the dialog holds brightness (number input, Apply), screen on/off, restart with a two-step confirm, status/identify buttons, the support/firmware line with the mismatch warning, the last reply, and inline errors.
+- Build the section: a `Group` with a "Controls" button that opens the shared `Dialog`; the dialog holds brightness (number input, Apply), screen on/off, restart with a two-step confirm, status/identify buttons, the support/firmware line with the mismatch warning, the last command's device reply (or the host's "Sent" confirmation when the device said nothing), and inline errors.
 - Render it in `region.tsx` under `DisplayPresentationSection` when the selected display matches an attached panel with non-empty `commands`.
 - Add the copy under `uiCopy.hostSettings.panels.controls`.
 
@@ -1338,8 +1338,10 @@ Expected: FAIL.
 
 The verified reference is `C:\Users\peter\.claude\scratch\turzx-overlay-diff.cjs` —
 the probe that updated the attached panel, ported from the Python reference's
-`LcdCommRevC.RefreshVideoOverlay`. Read it; the rules below are its contract, and
-every value in them is what the device accepted.
+`LcdCommRevC.RefreshVideoOverlay`. Read it; the rules below are its contract,
+and every value in them is what the probe sent to the device. The overlay count
+starts at 0 because that is the value the verified probe sent; whether the field
+matters is Task 12's observation.
 
 - Input is RGBA from `decodeStill`; the wire is 4-bit **BGRA**, the same channel
   order `bgraPayload` uses for full frames. For pixel `i`: blue = `current[i+2]`,
@@ -1367,7 +1369,7 @@ every value in them is what the device accepted.
 - `presentOverlay` frames `cc ef 69 00` + `imageSize` (3 bytes BE) + `00 00 00` +
   `count` (4 bytes BE) + `visibleBytes` (4 bytes BE), pads that header to 250,
   sends the padded body, then stores `current` as the previous overlay. `count`
-  starts at 1 and increments per update.
+  starts at 0, the value the verified probe sent, and increments per update.
 - Throw when either frame's length is not `width * height * 4`; a short decode must
   not be indexed as a full frame.
 
