@@ -646,7 +646,12 @@ export function createSelectionInspector(
     fieldId: string,
     value: string | number | boolean,
   ): boolean => {
-    const next = writeBackgroundField(options.background?.(), fieldId, value);
+    const next = writeBackgroundField(
+      options.background?.(),
+      fieldId,
+      value,
+      options.assets?.() ?? [],
+    );
     if (next === undefined || options.onBackgroundChange === undefined)
       return false;
     options.onBackgroundChange(next);

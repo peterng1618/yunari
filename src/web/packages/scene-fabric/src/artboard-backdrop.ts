@@ -72,7 +72,7 @@ export function artboardBackdrop(
     ...(surface === undefined
       ? {}
       : { plate: surfacePlate(surface, background) }),
-    paint(ctx, region, device) {
+    paint(ctx, region, device, sampling) {
       // The media first and the paint **underneath** it, so a frame the media
       // could not paint is left where it was (0079): clearing to the colour
       // first would throw away the one frame the reader would otherwise keep.
@@ -83,6 +83,7 @@ export function artboardBackdrop(
           screenRect === undefined
             ? mediaDevice(device, board, media.rect)
             : device,
+          sampling,
         );
       // **A display surface paints the paint, not this paint** (0125). The plate
       // is the host/disc box a panel actually sees, and it must not be turned

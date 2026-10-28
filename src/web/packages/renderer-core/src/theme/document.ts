@@ -210,6 +210,13 @@ export interface BackgroundMedia {
   /** A paint-time mirror about the placed rect's centre; absent means false. */
   readonly flipX?: boolean;
   readonly flipY?: boolean;
+  /**
+   * The 0-based frame, at the clip's own frame rate, that stands for this video
+   * when motion is unavailable or unhelpful (`0135`). Written only for a video
+   * asset: it is the picture a display without video support shows, and the
+   * still the glass material samples instead of a blur per video frame.
+   */
+  readonly fallbackFrame?: number;
 }
 
 /**

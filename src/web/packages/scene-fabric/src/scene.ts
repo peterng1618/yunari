@@ -203,7 +203,7 @@ export function mountFabricScene(
       // Nothing has rendered, so no panel has a surface yet. Passing the count
       // rather than syncing after the mount keeps a panel that arrives later
       // from costing one frame callback before it exists.
-      glassSurfaces: glass.liveSurfaces(),
+      glassSurfaces: glass.samplingSurfaces(),
       // The video is not a Fabric object, so nothing else would repaint — but
       // only a glass panel reads the backdrop. The media layer already gates
       // *arming* (see `syncGlassSurfaces`); this is the per-frame half, for a
@@ -221,7 +221,7 @@ export function mountFabricScene(
    *  where the count changes. The mount's own render is the first opportunity,
    *  which is why this is not a decision taken at mount time. */
   const syncGlassSurfaces = (): void => {
-    media?.setGlassSurfaces(glass.liveSurfaces());
+    media?.setGlassSurfaces(glass.samplingSurfaces());
   };
   canvas.on("after:render", syncGlassSurfaces);
 

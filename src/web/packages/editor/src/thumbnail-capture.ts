@@ -71,6 +71,8 @@ export function captureCanvas(
       width: backdrop.rect.width * view[0] * scale,
       height: backdrop.rect.height * view[3] * scale,
     },
+    // An export is one instant, so it takes the picture the scene shows then.
+    "dynamic",
   );
   // Media down first, the scene over it: a media layer that is not in the
   // picture at all is the gap this closes.

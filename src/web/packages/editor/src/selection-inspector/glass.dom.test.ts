@@ -27,7 +27,7 @@ import {
   Triangle,
 } from "fabric/es";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { supportsGlassControl, writeGlassField } from "./glass.js";
+import { glassFields, supportsGlassControl, writeGlassField } from "./glass.js";
 import { idleCrop } from "./idle-crop.test-stage.js";
 import { createSelectionInspector } from "./index.js";
 // The shared React drivers: the converted glass and material controls are plan-1
@@ -332,6 +332,18 @@ describe("the glass control in the selection inspector", () => {
     const { host } = setup(rect);
 
     expect(blurField(host).value).toBe("24");
+  });
+
+  it("offers the sampling beside the blur, whatever the background is", () => {
+    const rect = panel();
+    rect.set("yunariGlass", { blurRadius: 24 });
+    const { host } = setup(rect);
+
+    const segments = [...host.querySelectorAll("[data-yunari-glass-sampling]")];
+    expect(segments.map((segment) => segment.textContent)).toEqual([
+      "Dynamic",
+      "Static",
+    ]);
   });
 
   it("offers the blur as a slider bounded by the published maximum", () => {
@@ -700,5 +712,50 @@ describe("the glass control in the selection inspector", () => {
         type,
       ).toBeNull();
     }
+  });
+});
+
+describe("glass sampling", () => {
+  const samplingOf = (object: Rect) =>
+    glassFields(object).find((field) => field.id === "glass-sampling");
+
+  it("offers the sampling beside the blur, defaulting to dynamic", () => {
+    const rect = new Rect({
+      width: 40,
+      height: 40,
+      yunariGlass: { blurRadius: 8 },
+    });
+    expect(samplingOf(rect)).toMatchObject({
+      control: "segmented",
+      value: "dynamic",
+      options: [
+        { id: "dynamic", name: "Dynamic" },
+        { id: "static", name: "Static" },
+      ],
+    });
+  });
+
+  it("writes the chosen sampling and keeps the radius", () => {
+    const rect = new Rect({
+      width: 40,
+      height: 40,
+      yunariGlass: { blurRadius: 8 },
+    });
+    // The context is only read when the treatment is enabled, so it is absent.
+    const context = undefined as never;
+    expect(writeGlassField(rect, context, "glass-sampling", "static")).toBe(
+      true,
+    );
+    expect(rect.get("yunariGlass")).toEqual({
+      blurRadius: 8,
+      sampling: "static",
+    });
+    expect(samplingOf(rect)).toMatchObject({ value: "static" });
+
+    // Only the two names are a sampling.
+    expect(writeGlassField(rect, context, "glass-sampling", "live")).toBe(
+      false,
+    );
+    expect(samplingOf(rect)).toMatchObject({ value: "static" });
   });
 });
