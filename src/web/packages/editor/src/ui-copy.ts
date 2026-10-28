@@ -481,6 +481,38 @@ export const uiCopy = {
        *  person needs before asking why a feature does not work. */
       mismatch: (detected: string, supported: readonly string[]): string =>
         `Firmware ${detected} is not one this panel is known to take (${supported.join(", ")}).`,
+      /** The controls one display's panel accepts over its own cable. The
+       *  section opens a dialog rather than drawing the commands in the page:
+       *  a restart is one press that makes the panel drop, and it belongs
+       *  behind a door rather than beside the display list. */
+      controls: {
+        heading: "Panel controls",
+        hint: "Send a command to the panel this display drives.",
+        open: "Controls",
+        dialogTitle: (panel: string): string => `Controls — ${panel}`,
+        close: "Close",
+        brightness: "Brightness",
+        brightnessHint: "A whole percent from 0 to 100.",
+        apply: "Apply",
+        /** The level is refused here rather than by the host, so a bad value
+         *  costs no round trip. The range is the panel's own: a percent. */
+        brightnessRange: "Brightness must be a whole percent from 0 to 100.",
+        screenOn: "Turn the screen on",
+        screenOff: "Turn the screen off",
+        restart: "Restart",
+        confirmRestart: "Confirm restart",
+        cancel: "Cancel",
+        /** Asked before the press that drops the panel. */
+        restartWarning:
+          "The panel goes away for about 15 seconds and comes back on its own.",
+        status: "Query status",
+        hello: "Identify",
+        lastReply: "Last reply",
+        /** The host's or the panel's own words, shown inline: a refusal caused
+         *  by a closing port is the reason a person needs, not a generic lead. */
+        failed: (reason: string): string =>
+          `The panel did not take that: ${reason}`,
+      },
     },
     devices: {
       heading: "Devices on this PC",

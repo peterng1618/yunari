@@ -8,8 +8,12 @@ import { Group } from "./section-group.js";
  * The hardware record a driver states for one panel, and the warning when the
  * device answers a firmware that record does not name. Nothing is drawn for a
  * device no driver claims: an empty record is not a fact about the panel.
+ *
+ * Exported because the controls section states the same record beside its own
+ * commands: a second copy of this rule is a second place the warning can go
+ * missing.
  */
-function PanelFacts(props: {
+export function PanelFacts(props: {
   readonly panel: PanelHint;
 }): React.JSX.Element | null {
   const copy = uiCopy.hostSettings.panels;

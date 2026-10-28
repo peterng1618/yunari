@@ -176,7 +176,20 @@ export interface HostSettingsClient {
   /** Adds the chosen panel as a display and starts driving it. Answers the id
    *  the host minted, which is what the row above selects afterwards. */
   addPanel(label: string, panel: PanelHardware): Promise<string>;
+  /** Sends one control command over a panel's control channel and answers the
+   *  panel's own reply. A refusal is thrown in the host's words, which is the
+   *  only way a stopped or closed port reaches the person. */
+  panelCommand(id: string, command: EditorPanelCommand): Promise<string>;
 }
+
+/** One command the editor can send a panel, spelled as the host's route takes
+ *  it: the body is the command itself rather than a wrapper around it. */
+export type EditorPanelCommand =
+  | { readonly kind: "brightness"; readonly level: number }
+  | { readonly kind: "screen"; readonly on: boolean }
+  | { readonly kind: "restart" }
+  | { readonly kind: "status" }
+  | { readonly kind: "hello" };
 
 /** The commands a panel's control channel accepts. Spelled here rather than
  *  imported: the editor has no dependency on the host package, the same reason
@@ -743,6 +756,24 @@ export function createHostSettingsClient(options?: {
       const body = (await response.json()) as { readonly display?: unknown };
       const added = body?.display as { readonly id?: unknown } | undefined;
       return typeof added?.id === "string" ? added.id : "";
+    },
+
+    async panelCommand(id, command) {
+      const response = await fetcher(
+        `${baseUrl}/api/displays/${encodeURIComponent(id)}/panel/command`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(command),
+        },
+      );
+      if (!response.ok) {
+        // Every failure is a plain-text body, and `refusal` already throws its
+        // words: a 409's "port is closing" must reach the person verbatim.
+        throw await refusal(response, "Could not send the panel command");
+      }
+      const body = (await response.json()) as { readonly reply?: unknown };
+      return typeof body?.reply === "string" ? body.reply : "";
     },
   };
 }

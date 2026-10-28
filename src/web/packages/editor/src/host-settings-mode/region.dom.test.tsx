@@ -310,6 +310,9 @@ function hostSettings(
         }
         return "lian-li-9-2";
       },
+      // The controls section has its own test file; no case here sends a
+      // command, so this answers the empty reply a silent panel gives.
+      panelCommand: async () => "",
     },
   };
 }

@@ -1,0 +1,251 @@
+// @vitest-environment jsdom
+/**
+ * The controls a display's panel accepts: the section's own contract, mounted
+ * without the region.
+ *
+ * **What this file owns.** That the section draws nothing for a panel another
+ * display drives; that brightness travels as a whole percent and the panel's
+ * answer is shown; that a level outside the range is refused here, before the
+ * host is asked; that a restart costs two presses; and that a firmware the
+ * driver has not met is warned about, with both versions readable.
+ *
+ * **The harness is the region's**: this workspace does not depend on
+ * `@testing-library/react`, so the tree is mounted with `createRoot` and the
+ * interactions are real DOM events. Base UI's popup needs the same two browser
+ * APIs jsdom lacks.
+ */
+import { act, type ReactElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, expect, it, vi } from "vitest";
+import type { PanelHint } from "./client.js";
+import { PanelControlsSection } from "./panel-controls-section.js";
+
+const CONTROLLABLE: PanelHint = {
+  vendorId: 0x1d6b,
+  productId: 0x0106,
+  serial: "S1",
+  label: 'TURZX 5" Panel',
+  held: true,
+  heldId: "panel-1",
+  commands: ["brightness", "screen", "restart", "status", "hello"],
+  model: "chs_5inch",
+  firmware: "1.88",
+  support: {
+    maker: "TURZX",
+    hardwareRevision: "Rev C",
+    supportedFirmware: ["1.88"],
+    updatedAt: "2026-10-29",
+  },
+};
+
+globalThis.ResizeObserver ??= class {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+} as never;
+Element.prototype.getAnimations ??= (): never[] => [];
+window.PointerEvent ??= MouseEvent as never;
+
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
+// jsdom's selector engine cannot answer `:modal`/`:popover-open`, and floating-ui
+// asks for both on every position — each unanswerable call costs about 0.5s of
+// selector parsing, which is what turns one popup into a timeout.
+beforeAll(() => {
+  const matches = Element.prototype.matches;
+  Element.prototype.matches = Object.assign(function (
+    this: Element,
+    selector: string,
+  ): boolean {
+    if (selector === ":modal" || selector === ":popover-open") return false;
+    return matches.call(this, selector);
+  }, matches);
+});
+
+let root: Root | undefined;
+let host: HTMLDivElement | undefined;
+
+async function unmount(): Promise<void> {
+  const mounted = root;
+  root = undefined;
+  host?.remove();
+  host = undefined;
+  if (mounted !== undefined) await act(async () => mounted.unmount());
+}
+
+afterEach(async () => {
+  await unmount();
+});
+
+async function mount(element: ReactElement): Promise<HTMLDivElement> {
+  await unmount();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const mounted = createRoot(container);
+  root = mounted;
+  host = container;
+  await act(async () => {
+    mounted.render(element);
+  });
+  return container;
+}
+
+/** A missing control is a defect this file names, rather than a `null` a later
+ *  assertion reports as a wrong value. */
+function must<T extends Element>(found: T | null, what: string): T {
+  if (found === null) throw new Error(`the section rendered no ${what}`);
+  return found;
+}
+
+/** The button whose visible words match, and none of the dialog's other
+ *  buttons: a role query by accessible name, done against the text a person
+ *  reads. */
+function buttonNamed(pattern: RegExp): HTMLButtonElement {
+  const found = [...document.querySelectorAll("button")].find((button) =>
+    pattern.test((button.textContent ?? "").trim()),
+  );
+  return must(found ?? null, `button matching ${String(pattern)}`);
+}
+
+async function click(button: HTMLButtonElement): Promise<void> {
+  await act(async () => {
+    button.click();
+  });
+}
+
+/** Types into a controlled input the way a person does: the native setter
+ *  bypasses React's value tracker, so the input event reads as a change. */
+async function typeInto(input: HTMLInputElement, value: string): Promise<void> {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  await act(async () => {
+    setter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+function brightnessField(): HTMLInputElement {
+  return must(
+    document.querySelector<HTMLInputElement>("#yunari-panel-brightness"),
+    "brightness field",
+  );
+}
+
+function replyText(): string | null {
+  return (
+    document.querySelector("[data-yunari-panel-reply]")?.textContent ?? null
+  );
+}
+
+it("renders nothing for a panel another display holds", async () => {
+  const container = await mount(
+    <PanelControlsSection
+      displayId="panel-2"
+      panel={CONTROLLABLE}
+      onCommand={async () => "ok"}
+    />,
+  );
+  expect(container.innerHTML).toBe("");
+});
+
+it("sends brightness as a whole percent and shows the reply", async () => {
+  const onCommand = vi.fn(async () => "ok");
+  await mount(
+    <PanelControlsSection
+      displayId="panel-1"
+      panel={CONTROLLABLE}
+      onCommand={onCommand}
+    />,
+  );
+  await click(buttonNamed(/controls/i));
+  await typeInto(brightnessField(), "50");
+  await click(buttonNamed(/apply/i));
+  expect(onCommand).toHaveBeenCalledWith({ kind: "brightness", level: 50 });
+  expect(replyText()).toBe("ok");
+});
+
+it("blocks a level above 100 without calling the host", async () => {
+  const onCommand = vi.fn(async () => "ok");
+  await mount(
+    <PanelControlsSection
+      displayId="panel-1"
+      panel={CONTROLLABLE}
+      onCommand={onCommand}
+    />,
+  );
+  await click(buttonNamed(/controls/i));
+  await typeInto(brightnessField(), "101");
+  await click(buttonNamed(/apply/i));
+  expect(onCommand).not.toHaveBeenCalled();
+  const alert = must(document.querySelector('[role="alert"]'), "alert");
+  expect(alert.textContent).toMatch(/0 to 100/);
+});
+
+it("asks before restarting", async () => {
+  const onCommand = vi.fn(
+    async () =>
+      "The panel is restarting; it will be unavailable for about 15 seconds.",
+  );
+  await mount(
+    <PanelControlsSection
+      displayId="panel-1"
+      panel={CONTROLLABLE}
+      onCommand={onCommand}
+    />,
+  );
+  await click(buttonNamed(/controls/i));
+  await click(buttonNamed(/^restart$/i));
+  expect(onCommand).not.toHaveBeenCalled();
+  await click(buttonNamed(/^confirm restart$/i));
+  expect(onCommand).toHaveBeenCalledWith({ kind: "restart" });
+});
+
+it("returns focus to its trigger when the dialog closes", async () => {
+  await mount(
+    <PanelControlsSection
+      displayId="panel-1"
+      panel={CONTROLLABLE}
+      onCommand={async () => "ok"}
+    />,
+  );
+  const trigger = buttonNamed(/controls/i);
+  // jsdom's `click()` does not focus the button the way a browser's does, so
+  // the trigger is focused first: the dialog's contract is to return focus to
+  // whatever had it, and this is the element a person pressed.
+  trigger.focus();
+  await click(trigger);
+  await click(buttonNamed(/^close$/i));
+  // Base UI hands focus back after the popup is gone, on a timer rather than
+  // in the click: a single tick is enough on an idle machine and not enough
+  // under the full gate's load, so this waits for the focus to arrive with a
+  // deadline rather than guessing the number of frames.
+  await act(async () => {
+    const deadline = Date.now() + 2000;
+    while (document.activeElement !== trigger && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  });
+  expect(document.activeElement).toBe(trigger);
+});
+
+it("warns when the firmware is outside the supported set", async () => {
+  const container = await mount(
+    <PanelControlsSection
+      displayId="panel-1"
+      panel={{ ...CONTROLLABLE, firmware: "1.90" }}
+      onCommand={async () => "ok"}
+    />,
+  );
+  expect(container.textContent).toMatch(/1\.90/);
+  expect(container.textContent).toMatch(/1\.88/);
+  expect(
+    must(
+      container.querySelector("[data-yunari-panel-mismatch]"),
+      "firmware warning",
+    ).textContent,
+  ).toMatch(/not one this panel is known to take/);
+});

@@ -33,6 +33,7 @@ import {
   type DisplayPresentation,
   DisplayPresentationSection,
 } from "./display-presentation-section.js";
+import { PanelControlsSection } from "./panel-controls-section.js";
 import { hardwareOf, PanelsSection } from "./panels-section.js";
 import { Group } from "./section-group.js";
 import { createSourcesClient, type SourcesClient } from "./sources-client.js";
@@ -332,6 +333,13 @@ function HostSettings(props: {
   const selectedRow = displays.find((display) => display.id === selected);
   const fallback = map?.default ?? null;
   const showing = shownTheme(selectedRow, fallback);
+  /** The attached panel this display drives, when the host says one does. The
+   *  section re-checks the match and the command list itself; this only decides
+   *  whether it is drawable at all. */
+  const selectedPanel =
+    selected === undefined
+      ? undefined
+      : panels?.find((panel) => panel.heldId === selected);
 
   /** **The mode's status line is published, not drawn**: §7.6's strip is the
    *  shell's and is the same strip in every mode, so the region hands it the two
@@ -633,6 +641,16 @@ function HostSettings(props: {
             save={settings.updateDisplayPresentation}
             onSaved={replacePresentation}
           />
+
+          {/* Beside the presentation section, because both edit what drives the
+              chosen display's hardware rather than what it shows. */}
+          {selected === undefined || selectedPanel === undefined ? null : (
+            <PanelControlsSection
+              displayId={selected}
+              panel={selectedPanel}
+              onCommand={(command) => settings.panelCommand(selected, command)}
+            />
+          )}
 
           {/* After the rows, because it *creates* one of them: a section above
               the list it appends to would read as a filter on it. */}
