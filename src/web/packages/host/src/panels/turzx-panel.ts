@@ -15,6 +15,7 @@ import {
 } from "./serial-transport.js";
 import {
   bgraPayload,
+  FRAME_SIZE,
   frame,
   parseHello,
   TURZX_COMMAND,
@@ -42,8 +43,6 @@ const FILE_TIMEOUT_MS = 10_000;
 const OVERLAY_SETTLE_MS = 1500;
 /** A 249-byte chunk plus its `0x00` pad is one frame. */
 const FILE_CHUNK_BYTES = 249;
-/** Every write is padded to a multiple of this many bytes. */
-const FRAME_BYTES = 250;
 /** Stale acks from earlier commands may sit ahead of the reply we want. */
 const FILE_REPLY_ATTEMPTS = 3;
 /** Storage the vendor firmware reads clips from. */
@@ -291,7 +290,10 @@ class TurzxPanel implements PanelDevice {
   private async fileSize(remotePath: string): Promise<number> {
     await this.send(fileHeader(TURZX_COMMAND.getFileSize, remotePath));
 
-    return this.readUntil("a file size", parseFileSizeText);
+    // ponytail: GET_FILE_SIZE's reply for a missing file is unverified; no
+    // numeral within the cap means unknown, so upload rather than strand the
+    // panel that is exactly the one needing the clip.
+    return (await this.readReplies(parseFileSizeText)).accepted ?? 0;
   }
 
   private async upload(remotePath: string, bytes: Uint8Array): Promise<void> {
@@ -306,7 +308,11 @@ class TurzxPanel implements PanelDevice {
     await this.readFor("create_success");
   }
 
-  /** The first reply carrying `phrase`; earlier stale acks are skipped. */
+  /**
+   * The first reply carrying `phrase`, within the three-attempt cap; earlier
+   * stale acks are skipped. Only init, query, start and create are recorded as
+   * text replies, so a phrase match is all this protocol can pin.
+   */
   private readFor(phrase: string): Promise<string> {
     return this.readUntil(`"${phrase}"`, (text) =>
       text.includes(phrase) ? text : undefined,
@@ -319,26 +325,37 @@ class TurzxPanel implements PanelDevice {
    * `openTurzxPanel` ends on QUERY_STATUS, so its text reply is buffered and is
    * the first bytes the next read returns; a DELETE_FILE acknowledgement may
    * trail a reply too. Accepting by content rather than by position tolerates
-   * any number of those, and the attempt cap keeps a silent or foreign device
-   * from hanging the queue.
+   * those, and the attempt cap keeps a silent or foreign device from hanging
+   * the queue.
    */
   private async readUntil<T>(
     wanted: string,
     accept: (text: string) => T | undefined,
   ): Promise<T> {
-    let last = "";
-
-    for (let attempt = 0; attempt < FILE_REPLY_ATTEMPTS; attempt += 1) {
-      last = decodeReply(await this.transport.read(FILE_TIMEOUT_MS));
-      const accepted = accept(last);
-      if (accepted !== undefined) return accepted;
-    }
+    const { accepted, last } = await this.readReplies(accept);
+    if (accepted !== undefined) return accepted;
 
     throw new Error(
       `The panel did not answer with ${wanted}; last reply: ${
         last === "" ? "no reply" : last
       }.`,
     );
+  }
+
+  /** Up to `FILE_REPLY_ATTEMPTS` reads; the last one's text is returned even
+   *  when nothing was accepted, so a caller can name it. */
+  private async readReplies<T>(
+    accept: (text: string) => T | undefined,
+  ): Promise<{ readonly accepted: T | undefined; readonly last: string }> {
+    let last = "";
+
+    for (let attempt = 0; attempt < FILE_REPLY_ATTEMPTS; attempt += 1) {
+      last = decodeReply(await this.transport.read(FILE_TIMEOUT_MS));
+      const accepted = accept(last);
+      if (accepted !== undefined) return { accepted, last };
+    }
+
+    return { accepted: undefined, last };
   }
 
   async close(): Promise<void> {
@@ -378,7 +395,7 @@ function fileHeader(
   const pathBytes = new TextEncoder().encode(remotePath);
   const length =
     command.length + 4 + pathBytes.length + (size === undefined ? 0 : 4);
-  if (length > FRAME_BYTES) {
+  if (length > FRAME_SIZE) {
     throw new Error(`The panel path is too long: ${remotePath}.`);
   }
 

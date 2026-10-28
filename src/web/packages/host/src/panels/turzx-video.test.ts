@@ -203,6 +203,35 @@ describe("a panel's video", () => {
     }
   });
 
+  it("treats a silent size reply as nothing stored and uploads", async () => {
+    // A fresh panel (or one whose cache was cleaned) may answer GET_FILE_SIZE
+    // with nothing; treating that as unknown must still upload the clip.
+    const { writes, transport } = fakeTransport(
+      "chs_5inch.dev1_rom1.88",
+      "", // GET_FILE_SIZE: three silent reads
+      "",
+      "",
+      "create_success",
+      "play_video_success",
+      "seq_png_init_sucessneedReSend:0|renderCnt:1",
+    );
+    const panel = await opened(transport, {
+      transcode: threeByteClip,
+      sleep: async () => {},
+    });
+
+    try {
+      await expect(
+        panel.video!.start(Uint8Array.of(1, 2, 3), still),
+      ).resolves.toBeUndefined();
+      expect(
+        writes.some((bytes) => bytes[0] === 0x6f && bytes[1] === 0xef),
+      ).toBe(true);
+    } finally {
+      await panel.close();
+    }
+  });
+
   it("reports a reply that never carries the wanted phrase", async () => {
     const { transport } = fakeTransport(
       "chs_5inch.dev1_rom1.88",
@@ -220,6 +249,28 @@ describe("a panel's video", () => {
       await expect(
         panel.video!.start(Uint8Array.of(1, 2, 3), still),
       ).rejects.toThrow(/still_not_it_3/);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("rejects when the overlay init reports a failure", async () => {
+    const { transport } = fakeTransport(
+      "chs_5inch.dev1_rom1.88",
+      "0",
+      "create_success",
+      "play_video_success",
+      "seq_png_init_failed", // INIT_VIDEO_OVERLAY refused
+    );
+    const panel = await opened(transport, {
+      transcode: threeByteClip,
+      sleep: async () => {},
+    });
+
+    try {
+      await expect(
+        panel.video!.start(Uint8Array.of(1, 2, 3), still),
+      ).rejects.toThrow(/seq_png_init_failed/);
     } finally {
       await panel.close();
     }

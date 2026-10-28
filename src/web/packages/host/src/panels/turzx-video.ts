@@ -31,6 +31,9 @@ const MAX_STDERR_BYTES = 4 * 1024 * 1024;
 // clip. Move it under the host's data directory when a start has to survive
 // temp cleanup.
 const CACHE_DIRECTORY = path.join(os.tmpdir(), "yunari-panel-video");
+/** Moves whenever the ffmpeg arguments or filter change: an output encoded by
+ *  an older transform is not this clip, so it must not be served. */
+const TRANSCODE_VERSION = "v1";
 
 export type TranscodeResult =
   | { readonly ok: true; readonly bytes: Uint8Array }
@@ -121,7 +124,7 @@ export async function transcodeForPanel(
 }
 
 function cached(key: string): string {
-  return path.join(CACHE_DIRECTORY, `${key}.mp4`);
+  return path.join(CACHE_DIRECTORY, `${TRANSCODE_VERSION}-${key}.mp4`);
 }
 
 function sha256(bytes: Uint8Array, placement: PanelVideoPlacement): string {

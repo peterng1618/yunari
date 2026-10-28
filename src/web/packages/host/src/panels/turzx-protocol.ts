@@ -8,7 +8,7 @@
  */
 
 /** The frame size every write is padded to; a shorter command is ignored. */
-const FRAME_SIZE = 250;
+export const FRAME_SIZE = 250;
 /** A 249-byte chunk plus its `0x00` join is exactly one frame. */
 const PAYLOAD_CHUNK = 249;
 
