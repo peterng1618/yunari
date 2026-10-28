@@ -17,8 +17,8 @@ USB panel support behind a `PanelDevice` port: a Lian Li 9.2" LCD (`1CBE:A092`) 
 
 ## Last completed change
 
-- **Host settings can add an attached USB panel**, and the panels route answers `held` by the store's own `samePanel` rule so an added device is never offered again.
-- **`PanelHint` gained `label`**, one owner (`KRAKEN_LABEL`) for what a family calls its device, so a surface and a driver cannot name it differently.
+- **A display whose credential is gone is sent to the pairing page**, not handed a text 403 with no way back — the dead end that made one phone pair four times; an API call still gets the refusal.
+- **`vg-774` filed:** every failed display save leaves a `.tmp` file in the settings folder, never pruned.
 
 ## Next
 

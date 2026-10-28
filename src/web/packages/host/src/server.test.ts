@@ -3226,6 +3226,104 @@ describe("Host theme routes", () => {
       expect(reopened.status).toBe(200);
     });
 
+    it("serves a phone that carries only its cookie, after the host restarts", async () => {
+      // The owner's report: a rebuilt host still lists the phone, but the phone
+      // cannot get in and has to pair again. The record surviving is not the
+      // claim under test — the *load* is. So this replays the phone: claim a
+      // code, exchange the token for a cookie, then load the display again
+      // carrying nothing but that cookie, and do it against a **second server
+      // over the same settings folder**, which is what a rebuild is.
+      const lan = { remoteAddress: "192.168.1.50" };
+      const token = await pair("phone");
+
+      const exchanged = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        JSON.stringify({ token }),
+        { ...lan, headers: JSON_HEADERS },
+      );
+      // The cookie the browser would keep: the value before the first `;`.
+      const cookie =
+        String(exchanged.headers["set-cookie"]).split(";")[0] ?? "";
+      expect(cookie).toContain("yunari_session=");
+
+      const reopened = createHostServer({
+        registry: new ProviderRegistry([]),
+        bundles: { player: lanDir, editor: lanDir },
+        themeStore: createThemeStore(lanDir),
+        display: createDisplaySettingsStore(lanDir),
+        fontFavorites: createFontFavoritesStore(lanDir),
+        displays,
+        host: { id: "lan-host", name: "Study PC" },
+      });
+
+      try {
+        // The document load, which is what a phone does when it is opened.
+        const page = await request(
+          reopened.server,
+          "GET",
+          "/?theme=default",
+          undefined,
+          {
+            ...lan,
+            headers: { cookie },
+          },
+        );
+
+        expect(page.status).not.toBe(403);
+
+        // **The dead end, and its way out.** A phone whose cookie is gone but
+        // whose stored token is stale reaches the root with `?session=` and
+        // nothing else. The exchange refuses a token no display holds and falls
+        // through, so this used to be a flat text 403: no page, so nothing on
+        // the device could reach the one exchange that pairs it, and every such
+        // dead end cost a new code — which is how one phone accumulated four
+        // records. A document load is now sent to the pairing page instead.
+        const stale = await request(
+          reopened.server,
+          "GET",
+          `/?session=${encodeURIComponent(`stale-${token}`)}`,
+          undefined,
+          lan,
+        );
+
+        expect(stale.status).toBe(302);
+        expect(stale.headers.location).toBe("/pair?reason=unpaired");
+
+        // **An API call still gets the refusal**, so no fetch is handed a page
+        // it cannot parse or a redirect it would follow into an HTML body.
+        const refused = await request(
+          reopened.server,
+          "GET",
+          "/api/themes/active",
+          undefined,
+          lan,
+        );
+
+        expect(refused.status).toBe(403);
+        expect(refused.text()).toBe(
+          "This display is not paired with the host.",
+        );
+
+        // And the poll it opens afterwards, which carries the same cookie.
+        const poll = await request(
+          reopened.server,
+          "GET",
+          "/api/published",
+          undefined,
+          {
+            ...lan,
+            headers: { cookie },
+          },
+        );
+
+        expect(poll.status).toBe(200);
+      } finally {
+        await reopened.close();
+      }
+    });
+
     it("adds Secure only on a TLS connection", async () => {
       const token = await pair();
       const lan = { remoteAddress: "192.168.1.50" };
@@ -9860,7 +9958,8 @@ describe("The root page resolves the display that asked", () => {
       undefined,
       LAN,
     );
-    expect(refused.status).toBe(403);
+    expect(refused.status).toBe(302);
+    expect(refused.headers.location).toBe("/pair?reason=unpaired");
 
     // And a paired one that names it is still served as itself.
     const token = await pair();

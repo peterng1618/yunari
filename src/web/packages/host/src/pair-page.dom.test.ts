@@ -88,6 +88,37 @@ describe("pairing a display", () => {
     expect(PAGE_KEY).toBe(PAIRING_STORAGE_KEY);
   });
 
+  it("says why it opened when the host sent the display here", async () => {
+    // The host redirects an unpaired document to `/pair?reason=unpaired`: a
+    // display whose credential was lost would otherwise have been handed a
+    // text 403 it could do nothing with. A person who did not ask to pair needs
+    // a sentence saying their display is not broken — and the message must not
+    // promise a theme survives, because a claim mints a new record and the
+    // assignment is keyed by the old id.
+    document.body.innerHTML = BODY_HTML;
+
+    await new AsyncFunction("fetch", "location", SCRIPT)(vi.fn(), {
+      search: "?reason=unpaired",
+      replace: () => undefined,
+    });
+
+    const status = document.querySelector<HTMLElement>("#status");
+    expect(status?.hidden).toBe(false);
+    expect(status?.textContent).toContain("no longer paired");
+    expect(status?.textContent).not.toContain("kept");
+  });
+
+  it("says nothing when it was opened to pair a new display", async () => {
+    document.body.innerHTML = BODY_HTML;
+
+    await new AsyncFunction("fetch", "location", SCRIPT)(vi.fn(), {
+      search: "",
+      replace: () => undefined,
+    });
+
+    expect(document.querySelector<HTMLElement>("#status")?.hidden).toBe(true);
+  });
+
   it("clears the token the pairing before it left in storage", async () => {
     localStorage.setItem(
       PAIRING_STORAGE_KEY,

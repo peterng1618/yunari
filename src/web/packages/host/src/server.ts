@@ -3561,6 +3561,29 @@ export function createHostServer(options: HostServerOptions): HostServer {
       !isLoopbackRemote(request.socket.remoteAddress) &&
       !(await allowed(request))
     ) {
+      // **A document load is answered the pairing page, not a bare refusal.**
+      // A display whose credential is gone — a cleared cookie on a phone, a
+      // retired record, a stale `?session=` — is a browser with no way back:
+      // a text 403 is not a page, so nothing on the device can take it to the
+      // one exchange that can pair it. Every such dead end was answered by
+      // claiming a new code, which is how one phone accumulated four records.
+      // Only a navigation is redirected this way; an API call still gets the
+      // refusal, so no fetch learns to follow a page it cannot parse. A host
+      // with no pairing page answers 404 there, which says more than a 403.
+      if (
+        request.method === "GET" &&
+        (request.headers["sec-fetch-dest"] === "document" ||
+          request.headers.accept?.includes("text/html") === true ||
+          url.pathname === "/")
+      ) {
+        response.writeHead(302, {
+          location: "/pair?reason=unpaired",
+          "cache-control": "no-store",
+        });
+        response.end();
+        return;
+      }
+
       sendText(response, 403, "This display is not paired with the host.");
       return;
     }

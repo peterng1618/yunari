@@ -220,6 +220,21 @@
         name.focus();
       }
 
+      // Why this page opened, when the host redirected a display here because
+      // its credential was gone. A person who did not ask to pair needs to know
+      // their display was not broken and what happened, or the page reads as
+      // the app having lost their settings.
+      //
+      // **It does not promise the theme carries over**, because it does not:
+      // a claim mints a new record with a new id, and an assignment is keyed by
+      // id. The older record and its assignment stay on the host until someone
+      // removes it there.
+      if (new URLSearchParams(location.search).get("reason") === "unpaired") {
+        say(
+          "This display is no longer paired with that host. Pair it again with a new code. The host keeps the old entry, which can be removed there.",
+        );
+      }
+
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         submit.disabled = true;
