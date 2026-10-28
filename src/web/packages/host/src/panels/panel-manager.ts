@@ -38,8 +38,10 @@ export interface PanelManagerOptions {
 export interface PanelManager {
   /** Starts a panel's runner, or does nothing when one is already running. */
   start(displayId: string): Promise<void>;
-  /** Stops a panel's runner. A record removed without this leaves it driving. */
-  stop(displayId: string): void;
+  /** Stops a panel's runner. A record removed without this leaves it driving.
+   *  The promise settles when the device has actually been released, which is
+   *  what a restart — same record, new theme — has to wait for. */
+  stop(displayId: string): Promise<void>;
   /** Every attached panel that has a record and no runner yet. */
   reconcile(): Promise<void>;
   /** What the manager holds, for a surface that reports it. */
@@ -173,13 +175,13 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     entry.timer.unref();
   };
 
-  const stop = (displayId: string): void => {
+  const stop = async (displayId: string): Promise<void> => {
     const entry = entries.get(displayId);
     if (entry === undefined) return;
 
     entries.delete(displayId);
     if (entry.timer !== undefined) clearInterval(entry.timer);
-    void entry.runner?.stop();
+    await entry.runner?.stop();
   };
 
   return {
@@ -202,9 +204,11 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       // nobody assigned it. `remove` stops its own, and this catches the record
       // deleted by hand.
       const live = new Set(records.map((record) => record.id));
-      for (const displayId of entries.keys()) {
-        if (!live.has(displayId)) stop(displayId);
-      }
+      await Promise.all(
+        [...entries.keys()]
+          .filter((displayId) => !live.has(displayId))
+          .map((displayId) => stop(displayId)),
+      );
     },
 
     running(): readonly string[] {
