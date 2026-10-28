@@ -498,7 +498,7 @@ export function AssetFinder({
                   key={category}
                   value={category}
                   data-yunari-asset-tab={category}
-                  className="rounded-t-[var(--radius-sm)] px-[var(--space-12)] py-[var(--space-8)] text-sm text-muted data-[selected]:bg-[var(--panel-2)] data-[selected]:text-text"
+                  className="border-b-2 border-transparent px-[var(--space-12)] py-[var(--space-8)] text-sm text-muted hover:text-text data-[active]:border-accent data-[active]:bg-[var(--panel-2)] data-[active]:text-text"
                 >
                   {uiCopy.assets.category[category]}
                 </Tabs.Tab>

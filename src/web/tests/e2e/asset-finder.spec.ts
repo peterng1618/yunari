@@ -734,7 +734,7 @@ test("captures the Connections tab's provider row", async ({
   await captureVisualReview(page, testInfo, "editor-finder-connections");
 });
 
-test("the finder leaves the header, the rail and the status bar in view", async ({
+test("the finder is centred and the chosen tab is drawn as chosen", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -744,16 +744,54 @@ test("the finder leaves the header, the rail and the status bar in view", async 
     answer: () => ({ pages: [answered("lucide", [result("lucide:house")])] }),
   });
   const dialog = await openFinder(page);
+  const viewport = page.viewportSize();
+  if (viewport === null) throw new Error("no viewport.");
+  const box = await dialog.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  });
+  expect(
+    Math.abs(box.x + box.width / 2 - viewport.width / 2),
+  ).toBeLessThanOrEqual(2);
+  expect(
+    Math.abs(box.y + box.height / 2 - viewport.height / 2),
+  ).toBeLessThanOrEqual(2);
+  // The 1px border is inside the box because every surface is border-box.
+  expect(Math.abs(box.width - Math.min(1180, viewport.width - 48))).toBeLessThanOrEqual(1);
+  expect(Math.abs(box.height - Math.min(800, viewport.height - 48))).toBeLessThanOrEqual(1);
+
+  const chosen = page.locator('[data-yunari-asset-tab="icon"]');
+  const other = page.locator('[data-yunari-asset-tab="font"]');
+  const chosenPaint = await chosen.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      background: style.backgroundColor,
+      underline: style.borderBottomColor,
+    };
+  });
+  const otherPaint = await other.evaluate((element) =>
+    getComputedStyle(element).backgroundColor,
+  );
+  expect(chosenPaint.background).not.toBe(otherPaint);
+  expect(chosenPaint.underline).not.toBe("rgba(0, 0, 0, 0)");
+});
+
+test("a phone viewport gives the finder the whole window", async ({
+  page,
+}, testInfo) => {
+  test.skip(isDesktopSurface(testInfo), "the phone project owns this reading");
+
+  await stubAssets(page, {
+    sources: [lucide],
+    answer: () => ({ pages: [answered("lucide", [result("lucide:house")])] }),
+  });
+  const dialog = await openFinder(page);
   const box = await dialog.boundingBox();
   const viewport = page.viewportSize();
-  if (box === null || viewport === null) throw new Error("no dialog box.");
-
-  // The chrome's own measurements: a 42px header, a 46px rail and a 26px
-  // status bar, with the rest left to the finder.
-  expect(box.y).toBeGreaterThanOrEqual(42);
-  expect(box.x).toBeGreaterThanOrEqual(46);
-  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height - 26);
-  expect(box.width).toBeGreaterThan(viewport.width * 0.9);
+  if (box === null || viewport === null) throw new Error("no box.");
+  expect(box.width).toBe(viewport.width);
+  expect(box.height).toBe(viewport.height);
+  await expect(dialog.getByRole("button", { name: "Close" })).toBeVisible();
 });
 
 test("the chosen row is drawn as chosen", async ({ page }, testInfo) => {
