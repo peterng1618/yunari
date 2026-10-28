@@ -10,6 +10,7 @@
     "src/web/packages/editor/src/asset-finder/finder-grid.tsx",
     "src/web/packages/editor/src/asset-finder/finder-state.tsx",
     "src/web/packages/editor/src/asset-finder/modal.tsx",
+    "src/web/packages/editor/src/asset-finder/preview-modal.tsx",
     "src/web/packages/editor/src/asset-finder/skeleton.tsx",
     "src/web/packages/editor/src/asset-finder/tab-data.ts",
     "src/web/packages/editor/src/asset-finder/wallpaper.tsx",

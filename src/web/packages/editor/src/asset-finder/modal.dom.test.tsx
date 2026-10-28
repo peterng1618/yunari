@@ -135,6 +135,17 @@ const result = (id: string): AssetResult => ({
   sourceUrl: "",
 });
 
+/** One photo: the only kind with something to enlarge. */
+const photo: AssetResult = {
+  id: "unsplash:photo-1",
+  name: "A quiet lake",
+  kind: "image",
+  preview: "https://images.example/1.jpg",
+  subtitle: "Lake · 2400×1600",
+  licence: "Unsplash License",
+  sourceUrl: "https://unsplash.com/photos/1",
+};
+
 const page = (
   source: string,
   results: readonly AssetResult[] = [],
@@ -479,6 +490,120 @@ describe("AssetFinder's Wallpaper Engine tab", () => {
     expect(
       document.querySelector("[data-yunari-asset-message]")?.textContent,
     ).toContain("My Projects");
+  });
+});
+
+describe("AssetFinder's media preview", () => {
+  async function openImages(
+    props: Partial<Parameters<typeof AssetFinder>[0]> = {},
+  ): Promise<void> {
+    searchAssets.mockResolvedValue({ pages: [page("unsplash", [photo])] });
+    await render([unsplash], props);
+    await settle();
+  }
+
+  function photoCard(): HTMLElement {
+    const card = document.querySelector<HTMLElement>(
+      '[data-yunari-finder-card="unsplash:photo-1"]',
+    );
+    if (card === null) throw new Error("no photo card.");
+    return card;
+  }
+
+  it("opens on a double-click and closes before the finder", async () => {
+    const onOpenChange = vi.fn();
+    await openImages({ onOpenChange });
+
+    act(() => {
+      photoCard().dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    });
+    await settle();
+
+    const modal = document.querySelector("[data-yunari-asset-preview-modal]");
+    expect(modal).not.toBeNull();
+    expect(modal?.querySelector("img")?.getAttribute("src")).toBe(
+      "https://images.example/1.jpg",
+    );
+    expect(modal?.textContent).toContain("Unsplash License");
+
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    await settle();
+
+    expect(
+      document.querySelector("[data-yunari-asset-preview-modal]"),
+    ).toBeNull();
+    // The finder stayed open: the preview is what Escape closed.
+    expect(
+      document.querySelector('[data-yunari-asset-tab="image"]'),
+    ).not.toBeNull();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("opens from the footer button, the keyboard route to the double-click", async () => {
+    await openImages();
+
+    act(() => photoCard().click());
+    await settle();
+    const open = document.querySelector<HTMLElement>(
+      "[data-yunari-asset-preview-open]",
+    );
+    expect(open).not.toBeNull();
+
+    act(() => open?.click());
+    await settle();
+    expect(
+      document.querySelector("[data-yunari-asset-preview-modal]"),
+    ).not.toBeNull();
+  });
+
+  it("runs the tab's own action from inside the preview", async () => {
+    const onAction = vi.fn(async () => ({ ok: true }) as const);
+    await openImages({ onAction });
+
+    act(() => photoCard().click());
+    await settle();
+    act(() => {
+      document
+        .querySelector<HTMLElement>("[data-yunari-asset-preview-open]")
+        ?.click();
+    });
+    await settle();
+
+    const action = document.querySelector<HTMLButtonElement>(
+      '[data-yunari-asset-preview-action="apply"]',
+    );
+    expect(action?.textContent).toBe("Set as background");
+    act(() => action?.click());
+    await settle();
+
+    expect(onAction).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "unsplash" }),
+      photo,
+      "background",
+    );
+  });
+
+  it("draws no Preview button for a kind with nothing to enlarge", async () => {
+    searchAssets.mockResolvedValue({
+      pages: [page("lucide", [result("lucide:house")])],
+    });
+    await render([lucide]);
+    await settle();
+
+    act(() => {
+      document
+        .querySelector<HTMLElement>('[data-yunari-finder-card="lucide:house"]')
+        ?.click();
+    });
+    await settle();
+
+    expect(
+      document.querySelector("[data-yunari-asset-preview-open]"),
+    ).toBeNull();
   });
 });
 

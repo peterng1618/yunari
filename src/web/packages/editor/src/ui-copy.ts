@@ -1227,6 +1227,14 @@ export const uiCopy = {
       colour: "Adding…",
       local: "Opening…",
     } satisfies Record<ListingCategory, string>,
+    /** The finder's double-click preview (R8): one result, enlarged, with the
+     *  same actions the footer offers. A video result carries a poster only —
+     *  no source serves a playable URL yet. */
+    previewModal: {
+      posterOnly: "A video result shows its poster until it is imported.",
+      licence: "Licence",
+      source: "Source",
+    },
     /** What the footer says when an action succeeds without words of its own. */
     done: {
       font: "Applied to token.",
@@ -1237,6 +1245,8 @@ export const uiCopy = {
       local: "Opened in Wallpaper Engine.",
     } satisfies Record<ListingCategory, string>,
     endOfResults: "End of results",
+    /** The footer's icon button that opens the same preview a double-click does. */
+    previewOpen: "Preview",
     nothingToBrowse: "Nothing to browse here yet. Try a word.",
     emptyAfterFailure:
       "This tab's sources returned nothing. Retry, or try another word.",

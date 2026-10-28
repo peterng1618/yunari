@@ -616,6 +616,55 @@ test("the Images tab draws photos on open and asks with no term", async ({
   expect(searches.at(-1)?.query).toBe("");
 });
 
+test("double-clicking a photo opens the preview and Escape returns to the grid", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await stubAssets(page, {
+    sources: [unsplash],
+    answer: () => ({
+      pages: [
+        answered("unsplash", [
+          {
+            ...result("unsplash:photo-1"),
+            kind: "image",
+            name: "A photo",
+            preview: "https://images.example/1.jpg",
+            subtitle: "A Photographer",
+            licence: "Unsplash License",
+            sourceUrl: "https://unsplash.com/p/1",
+          },
+        ]),
+      ],
+    }),
+  });
+  const dialog = await openFinder(page);
+  await dialog.locator('[data-yunari-asset-tab="image"]').click();
+  const card = page.locator('[data-yunari-finder-card="unsplash:photo-1"]');
+  await expect(card).toBeVisible();
+
+  await card.dblclick();
+  const preview = page.locator("[data-yunari-asset-preview-modal]");
+  await expect(preview).toBeVisible();
+  await expect(preview.locator("img")).toHaveAttribute(
+    "src",
+    "https://images.example/1.jpg",
+  );
+
+  // Escape closes the preview, not the finder behind it, and hands the focus
+  // back to the card it came from.
+  await page.keyboard.press("Escape");
+  await expect(preview).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await expect(card).toBeFocused();
+
+  // The footer's Preview button is the keyboard route to the same surface.
+  await card.click();
+  await page.locator("[data-yunari-asset-preview-open]").click();
+  await expect(page.locator("[data-yunari-asset-preview-modal]")).toBeVisible();
+});
+
 test("the Images tab says a key is missing instead of drawing an empty grid", async ({
   page,
 }, testInfo) => {

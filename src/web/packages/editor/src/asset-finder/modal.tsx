@@ -7,7 +7,9 @@ import type {
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import { Dialog } from "../components/ui/dialog.js";
+import { Glyph, PREVIEW_GLYPH } from "../editor-shell/icons.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   fetchWallpaperEngine,
@@ -40,6 +42,7 @@ import {
   fontActionsOf,
   fontRows,
 } from "./fonts.js";
+import { type FinderPreview, FinderPreviewModal } from "./preview-modal.js";
 import { FinderSkeleton } from "./skeleton.js";
 import {
   appendAnswer,
@@ -128,6 +131,12 @@ const EMPTY_LOCAL: LocalView = {
   done: new Set(),
   message: undefined,
 };
+
+/** What the double-clicked card was: a search grid's row or a library item.
+ *  The preview carries that target's own actions, not the footer's selection. */
+type PreviewTarget =
+  | { readonly kind: "asset"; readonly row: FinderRow }
+  | { readonly kind: "local"; readonly item: WallpaperEngineItem };
 
 export interface FinderProps {
   readonly open: boolean;
@@ -254,6 +263,10 @@ export function AssetFinder({
   const [library, setLibrary] = useState<WallpaperEngineAnswer | undefined>();
   const [local, setLocal] = useState<LocalView>(EMPTY_LOCAL);
   const [localRunning, setLocalRunning] = useState<string | undefined>();
+  /** The result the preview modal is showing, and the asset action it is
+   *  running. The preview is a second surface over the finder, not a tab. */
+  const [previewing, setPreviewing] = useState<PreviewTarget | undefined>();
+  const [runningAsset, setRunningAsset] = useState<string | undefined>();
   const tickets = useRef(new Map<ListingCategory, number>());
 
   /** A category exists when the registry lists one, or when the session offers
@@ -663,32 +676,36 @@ export function AssetFinder({
     ? local.message?.tone
     : (view.message?.tone ?? (failures.length > 0 ? "failed" : undefined));
 
-  const placeAction: FinderAction = {
-    id: "place",
-    label: uiCopy.assets.placeOnCanvas,
-    busyLabel: uiCopy.assets.busy.icon,
-    tone: "plain",
-    disabled: view.selection === undefined || busy,
-    run: () => {
-      const row = view.selection;
-      return row === undefined
-        ? Promise.resolve({ ok: false, message: uiCopy.assets.noSelection })
-        : runRow(active, row, "place");
-    },
+  /** The same two actions, built for whichever row they are about: the footer's
+   *  selection, or a card the author double-clicked. */
+  const assetActionsFor = (
+    row: FinderRow | undefined,
+  ): readonly FinderAction[] => {
+    const run =
+      (placement?: AssetPlacement): FinderAction["run"] =>
+      () =>
+        row === undefined
+          ? Promise.resolve({ ok: false, message: uiCopy.assets.noSelection })
+          : runRow(active, row, placement);
+    const place: FinderAction = {
+      id: "place",
+      label: uiCopy.assets.placeOnCanvas,
+      busyLabel: uiCopy.assets.busy.icon,
+      tone: "plain",
+      disabled: row === undefined || busy,
+      run: run("place"),
+    };
+    const main: FinderAction = {
+      id: "apply",
+      label: uiCopy.assets.action[active],
+      busyLabel: uiCopy.assets.busy[active],
+      tone: "plain",
+      disabled: row === undefined || busy,
+      run: run(active === "image" ? "background" : undefined),
+    };
+    return active === "image" ? [place, main] : [main];
   };
-  const mainAction: FinderAction = {
-    id: "apply",
-    label: uiCopy.assets.action[active],
-    busyLabel: uiCopy.assets.busy[active],
-    tone: "plain",
-    disabled: view.selection === undefined || busy,
-    run: () => {
-      const row = view.selection;
-      return row === undefined
-        ? Promise.resolve({ ok: false, message: uiCopy.assets.noSelection })
-        : runRow(active, row, active === "image" ? "background" : undefined);
-    },
-  };
+  const footerAsset = assetActionsFor(view.selection);
 
   const cards: readonly FinderCardModel[] = shown.map(({ page, result }) =>
     cardModelOf(result, sourceOf(page.source)?.label ?? page.source),
@@ -761,6 +778,81 @@ export function AssetFinder({
       setLocal((current) => ({ ...current, selection: item }));
   };
 
+  /** Only a picture has something to enlarge: an icon, palette, gradient or
+   *  face keeps its single-press selection and no Preview button. */
+  const previewableSelection = isLocal
+    ? local.selection !== undefined
+    : active !== "font" && view.selection?.result.kind === "image";
+
+  const openSelectionPreview = (): void => {
+    if (isLocal) {
+      if (local.selection !== undefined) {
+        setPreviewing({ kind: "local", item: local.selection });
+      }
+      return;
+    }
+    const row = view.selection;
+    if (row !== undefined && row.result.kind === "image") {
+      setPreviewing({ kind: "asset", row });
+    }
+  };
+
+  const previewModel = (target: PreviewTarget): FinderPreview => {
+    if (target.kind === "local") {
+      const copy = uiCopy.assets.wallpaperEngine;
+      return {
+        id: target.item.workshopId,
+        name: target.item.title,
+        meta: `${copy.kind[target.item.kind]} · ${copy.size(target.item.filesize)}`,
+        licence: "unknown",
+        sourceUrl: target.item.attribution?.workshopUrl ?? "",
+        imageUrl: target.item.previewUrl,
+        posterOnly: target.item.kind === "video",
+      };
+    }
+    const result = target.row.result;
+    return {
+      id: result.id,
+      name: result.name,
+      meta: result.subtitle ?? "",
+      licence: result.licence,
+      sourceUrl: result.sourceUrl,
+      imageUrl: result.preview === "" ? undefined : result.preview,
+      posterOnly: result.kind === "video",
+    };
+  };
+
+  const previewActions: readonly FinderAction[] =
+    previewing === undefined
+      ? []
+      : previewing.kind === "local"
+        ? wallpaperActionsOf(previewing.item, wallpaper)
+        : assetActionsFor(previewing.row);
+  const previewMessage =
+    previewing === undefined
+      ? undefined
+      : previewing.kind === "local"
+        ? local.message
+        : view.message;
+  const previewBusy =
+    previewing === undefined
+      ? undefined
+      : previewing.kind === "local"
+        ? localRunning
+        : runningAsset;
+
+  const runPreviewAction = (action: FinderAction): void => {
+    if (previewing === undefined) return;
+    if (previewing.kind === "local") {
+      runLocalAction(action, previewing.item);
+      return;
+    }
+    setRunningAsset(action.id);
+    void Promise.resolve(action.run()).finally(() => {
+      setRunningAsset(undefined);
+    });
+  };
+
   const emptyState = (): React.ReactNode => {
     if (kindSourcesOff) {
       return (
@@ -820,358 +912,392 @@ export function AssetFinder({
   };
 
   return (
-    <FinderFrame
-      open={open}
-      onOpenChange={onOpenChange}
-      label={uiCopy.assets.title}
-      closeLabel={uiCopy.assets.close}
-      className="editor-shell-dialog--finder"
-      tabs={categories.map((category) => ({
-        id: category,
-        label: uiCopy.assets.category[category],
-      }))}
-      active={active}
-      onTabChange={(category) => {
-        // A filter belongs to the tab that drew it: the next tab starts at
-        // "all", and if this one's filter had narrowed the sources its stored
-        // rows answer a question it no longer asks.
-        if (presetFilter !== "all") {
-          setPresetFilter("all");
-          askNew(category, views[category].data.query);
-        }
-        setActive(category);
-      }}
-      {...(isGrid
-        ? isLocal
-          ? {
-              query: local.query,
-              searchPlaceholder: uiCopy.assets.search[active],
-              onQueryChange: (value: string) => {
-                setLocal((current) => ({ ...current, query: value }));
-              },
-            }
-          : {
-              query: view.data.query,
-              searchPlaceholder: uiCopy.assets.search[active],
-              onQueryChange: (value: string) => askNew(active, value),
-            }
-        : {})}
-      filters={
-        active === "font" ? (
-          <FontsFilter
-            filter={fontFilter}
-            onChange={(next) => {
-              setFontFilter(next);
-            }}
-          />
-        ) : isLocal ? (
-          <FinderSegmented
-            label={uiCopy.assets.wallpaperEngine.filterKind}
-            value={local.kind}
-            options={(["all", "video", "scene"] as const).map((kind) => ({
-              id: kind,
-              label:
-                kind === "all"
-                  ? uiCopy.assets.wallpaperEngine.filterAll
-                  : uiCopy.assets.wallpaperEngine.kind[kind],
-              data: { "data-yunari-wallpaper-engine-kind-filter": kind },
-            }))}
-            onChange={(kind) => {
-              setLocal((current) => ({ ...current, kind }));
-            }}
-          />
-        ) : active === "colour" && kinds.length > 1 ? (
-          <FinderSegmented
-            label={uiCopy.assets.kindFilterLabel}
-            value={presetFilter}
-            options={kindOptions.map((kind) => ({
-              id: kind,
-              label: uiCopy.assets.kindFilter[kind],
-              data: { "data-yunari-asset-kind": kind },
-            }))}
-            onChange={(kind) => {
-              setPresetFilter(kind);
-              askNew(active, view.data.query);
-            }}
-          />
-        ) : undefined
-      }
-      sources={
-        visibleSources.length > 1 ? (
-          <>
-            {visibleSources.map((source) => {
-              const off = disabled.has(source.id);
-              const failed = view.data.failures.has(source.id);
-              return (
-                <FinderChip
-                  key={source.id}
-                  label={source.label}
-                  pressed={!off}
-                  failed={failed}
-                  disabled={!source.configurable}
-                  data={
-                    off
-                      ? {
-                          "data-yunari-asset-chip": source.id,
-                          "data-disabled": "",
-                        }
-                      : { "data-yunari-asset-chip": source.id }
-                  }
-                  onToggle={() => {
-                    setDisabled((current) => {
-                      const next = new Set(current);
-                      if (next.has(source.id)) next.delete(source.id);
-                      else if (
-                        enabled.length > 1 ||
-                        !visibleSources.some((entry) => !next.has(entry.id))
-                      ) {
-                        next.add(source.id);
-                      }
-                      return next;
-                    });
-                    askNew(active, view.data.query);
-                  }}
-                />
-              );
-            })}
-          </>
-        ) : undefined
-      }
-      tools={
-        <>
-          {isLocal ? (
-            <WallpaperTools
-              onImportPackage={wallpaper?.onImportPackage}
-              onStatus={(message) => {
-                setLocal((current) => ({
-                  ...current,
-                  message: { text: message, tone: "ok" },
-                }));
-              }}
-            />
-          ) : null}
-          <ConnectionsButton
-            needs={needsConnections}
-            onOpen={() => onOpenConnections?.()}
-          />
-        </>
-      }
-      status={statusNode}
-      {...(statusTone === undefined ? {} : { statusTone })}
-      {...(fontSelection === undefined
-        ? {}
-        : {
-            detail: (
-              <FontPreviewPanel
-                selected={fontSelection}
-                presets={font?.presets ?? {}}
-                state={fontPreview}
-                onChange={setFontPreview}
-              />
-            ),
-          })}
-      actions={
-        isGrid ? (
-          isLocal ? (
-            <>
-              {localFooter.map((action) => (
-                <FinderActionButton
-                  key={action.id}
-                  action={action}
-                  busy={localRunning === action.id}
-                  onRun={() => runLocalAction(action)}
-                  data={{ "data-yunari-asset-action": "" }}
-                />
-              ))}
-            </>
-          ) : active === "font" ? (
-            <>
-              {fontFooter.map((action) => (
-                <FinderActionButton
-                  key={action.id}
-                  action={action}
-                  busy={running === action.id}
-                  onRun={() => runFontAction(action)}
-                  data={
-                    action.tone === "accent"
-                      ? { "data-yunari-asset-action": "" }
-                      : { "data-yunari-font-action": action.id }
-                  }
-                />
-              ))}
-            </>
-          ) : (
-            <>
-              {active === "image" ? (
-                <FinderActionButton
-                  action={placeAction}
-                  busy={busy}
-                  onRun={() => {
-                    void placeAction.run();
-                  }}
-                  data={{ "data-yunari-asset-place": "" }}
-                />
-              ) : null}
-              <FinderActionButton
-                action={mainAction}
-                busy={busy}
-                onRun={() => {
-                  void mainAction.run();
-                }}
-                data={{ "data-yunari-asset-action": "" }}
-              />
-            </>
-          )
-        ) : undefined
-      }
-    >
-      {!isGrid ? (
-        <div
-          className="min-h-0 flex-1 overflow-y-auto"
-          data-yunari-asset-body={active}
-        >
-          <FinderState message={uiCopy.assets.noSource} />
-        </div>
-      ) : isLocal ? (
-        localUnavailable !== undefined ? (
-          <div
-            data-yunari-wallpaper-engine-unavailable=""
-            className="min-h-0 flex-1 overflow-y-auto"
-          >
-            <FinderState message={localUnavailable} />
-          </div>
-        ) : library === undefined ? (
-          <div
-            data-yunari-asset-loading=""
-            className="min-h-0 flex-1 overflow-y-auto"
-          >
-            <FinderSkeleton />
-          </div>
-        ) : libraryItems.length === 0 ? (
-          <div
-            data-yunari-wallpaper-engine-empty=""
-            className="min-h-0 flex-1 overflow-y-auto"
-          >
-            <FinderState message={uiCopy.assets.wallpaperEngine.empty} />
-          </div>
-        ) : localShown.length === 0 ? (
-          <div
-            data-yunari-wallpaper-engine-no-matches=""
-            className="min-h-0 flex-1 overflow-y-auto"
-          >
-            <FinderState message={uiCopy.assets.wallpaperEngine.noMatches} />
-          </div>
-        ) : (
-          <div
-            data-yunari-asset-grid=""
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            <FinderGrid
-              label={uiCopy.assets.category.local}
-              cards={wallpaperCards(localShown)}
-              selectedId={
-                local.selection === undefined
-                  ? undefined
-                  : `wallpaper-engine:${local.selection.workshopId}`
+    <>
+      <FinderFrame
+        open={open}
+        onOpenChange={(next) => {
+          // While the preview is over the finder, the preview is what a close
+          // closes: the finder would otherwise go with it.
+          if (!next && previewing !== undefined) return;
+          onOpenChange(next);
+        }}
+        label={uiCopy.assets.title}
+        closeLabel={uiCopy.assets.close}
+        className="editor-shell-dialog--finder"
+        tabs={categories.map((category) => ({
+          id: category,
+          label: uiCopy.assets.category[category],
+        }))}
+        active={active}
+        onTabChange={(category) => {
+          // A filter belongs to the tab that drew it: the next tab starts at
+          // "all", and if this one's filter had narrowed the sources its stored
+          // rows answer a question it no longer asks.
+          if (presetFilter !== "all") {
+            setPresetFilter("all");
+            askNew(category, views[category].data.query);
+          }
+          setActive(category);
+        }}
+        {...(isGrid
+          ? isLocal
+            ? {
+                query: local.query,
+                searchPlaceholder: uiCopy.assets.search[active],
+                onQueryChange: (value: string) => {
+                  setLocal((current) => ({ ...current, query: value }));
+                },
               }
-              {...(localRunning === undefined || local.selection === undefined
-                ? {}
-                : { busyId: local.selection.workshopId })}
-              {...(local.message?.tone === "failed" &&
-              local.selection !== undefined
-                ? { failedId: local.selection.workshopId }
-                : {})}
-              {...(local.done.size === 0 ? {} : { doneIds: local.done })}
-              onSelect={selectLocal}
-              onPreview={() => {
-                // The preview modal lands in Task 4.2.
+            : {
+                query: view.data.query,
+                searchPlaceholder: uiCopy.assets.search[active],
+                onQueryChange: (value: string) => askNew(active, value),
+              }
+          : {})}
+        filters={
+          active === "font" ? (
+            <FontsFilter
+              filter={fontFilter}
+              onChange={(next) => {
+                setFontFilter(next);
               }}
-              onApply={(card) => {
-                const item = localShown.find(
-                  (entry) => entry.workshopId === card.id,
-                );
-                setLocal((current) => ({ ...current, selection: item }));
-                const first = wallpaperActionsOf(item, wallpaper)[0];
-                if (first !== undefined) runLocalAction(first, item);
-              }}
-              onNeedMore={() => {}}
-              canLoadMore={false}
-              appending={false}
             />
+          ) : isLocal ? (
+            <FinderSegmented
+              label={uiCopy.assets.wallpaperEngine.filterKind}
+              value={local.kind}
+              options={(["all", "video", "scene"] as const).map((kind) => ({
+                id: kind,
+                label:
+                  kind === "all"
+                    ? uiCopy.assets.wallpaperEngine.filterAll
+                    : uiCopy.assets.wallpaperEngine.kind[kind],
+                data: { "data-yunari-wallpaper-engine-kind-filter": kind },
+              }))}
+              onChange={(kind) => {
+                setLocal((current) => ({ ...current, kind }));
+              }}
+            />
+          ) : active === "colour" && kinds.length > 1 ? (
+            <FinderSegmented
+              label={uiCopy.assets.kindFilterLabel}
+              value={presetFilter}
+              options={kindOptions.map((kind) => ({
+                id: kind,
+                label: uiCopy.assets.kindFilter[kind],
+                data: { "data-yunari-asset-kind": kind },
+              }))}
+              onChange={(kind) => {
+                setPresetFilter(kind);
+                askNew(active, view.data.query);
+              }}
+            />
+          ) : undefined
+        }
+        sources={
+          visibleSources.length > 1 ? (
+            <>
+              {visibleSources.map((source) => {
+                const off = disabled.has(source.id);
+                const failed = view.data.failures.has(source.id);
+                return (
+                  <FinderChip
+                    key={source.id}
+                    label={source.label}
+                    pressed={!off}
+                    failed={failed}
+                    disabled={!source.configurable}
+                    data={
+                      off
+                        ? {
+                            "data-yunari-asset-chip": source.id,
+                            "data-disabled": "",
+                          }
+                        : { "data-yunari-asset-chip": source.id }
+                    }
+                    onToggle={() => {
+                      setDisabled((current) => {
+                        const next = new Set(current);
+                        if (next.has(source.id)) next.delete(source.id);
+                        else if (
+                          enabled.length > 1 ||
+                          !visibleSources.some((entry) => !next.has(entry.id))
+                        ) {
+                          next.add(source.id);
+                        }
+                        return next;
+                      });
+                      askNew(active, view.data.query);
+                    }}
+                  />
+                );
+              })}
+            </>
+          ) : undefined
+        }
+        tools={
+          <>
+            {isLocal ? (
+              <WallpaperTools
+                onImportPackage={wallpaper?.onImportPackage}
+                onStatus={(message) => {
+                  setLocal((current) => ({
+                    ...current,
+                    message: { text: message, tone: "ok" },
+                  }));
+                }}
+              />
+            ) : null}
+            <ConnectionsButton
+              needs={needsConnections}
+              onOpen={() => onOpenConnections?.()}
+            />
+          </>
+        }
+        status={statusNode}
+        {...(statusTone === undefined ? {} : { statusTone })}
+        {...(fontSelection === undefined
+          ? {}
+          : {
+              detail: (
+                <FontPreviewPanel
+                  selected={fontSelection}
+                  presets={font?.presets ?? {}}
+                  state={fontPreview}
+                  onChange={setFontPreview}
+                />
+              ),
+            })}
+        actions={
+          isGrid ? (
+            <>
+              {previewableSelection ? (
+                <ControlIconButton
+                  label={uiCopy.assets.previewOpen}
+                  data={{ "data-yunari-asset-preview-open": "" }}
+                  onClick={openSelectionPreview}
+                >
+                  <Glyph icon={PREVIEW_GLYPH} size={14} />
+                </ControlIconButton>
+              ) : null}
+              {isLocal
+                ? localFooter.map((action) => (
+                    <FinderActionButton
+                      key={action.id}
+                      action={action}
+                      busy={localRunning === action.id}
+                      onRun={() => runLocalAction(action)}
+                      data={{ "data-yunari-asset-action": "" }}
+                    />
+                  ))
+                : active === "font"
+                  ? fontFooter.map((action) => (
+                      <FinderActionButton
+                        key={action.id}
+                        action={action}
+                        busy={running === action.id}
+                        onRun={() => runFontAction(action)}
+                        data={
+                          action.tone === "accent"
+                            ? { "data-yunari-asset-action": "" }
+                            : { "data-yunari-font-action": action.id }
+                        }
+                      />
+                    ))
+                  : footerAsset.map((action) => (
+                      <FinderActionButton
+                        key={action.id}
+                        action={action}
+                        busy={busy}
+                        onRun={() => {
+                          void action.run();
+                        }}
+                        data={
+                          action.id === "place"
+                            ? { "data-yunari-asset-place": "" }
+                            : { "data-yunari-asset-action": "" }
+                        }
+                      />
+                    ))}
+            </>
+          ) : undefined
+        }
+      >
+        {!isGrid ? (
+          <div
+            className="min-h-0 flex-1 overflow-y-auto"
+            data-yunari-asset-body={active}
+          >
+            <FinderState message={uiCopy.assets.noSource} />
           </div>
-        )
-      ) : (
-        <>
-          {notice === undefined ? null : (
-            <p className="text-xs text-muted" data-yunari-asset-host-notice="">
-              {uiCopy.assets.remoteHostNotice(notice)}
-            </p>
-          )}
-
-          {shown.length === 0 ? (
-            emptyState()
+        ) : isLocal ? (
+          localUnavailable !== undefined ? (
+            <div
+              data-yunari-wallpaper-engine-unavailable=""
+              className="min-h-0 flex-1 overflow-y-auto"
+            >
+              <FinderState message={localUnavailable} />
+            </div>
+          ) : library === undefined ? (
+            <div
+              data-yunari-asset-loading=""
+              className="min-h-0 flex-1 overflow-y-auto"
+            >
+              <FinderSkeleton />
+            </div>
+          ) : libraryItems.length === 0 ? (
+            <div
+              data-yunari-wallpaper-engine-empty=""
+              className="min-h-0 flex-1 overflow-y-auto"
+            >
+              <FinderState message={uiCopy.assets.wallpaperEngine.empty} />
+            </div>
+          ) : localShown.length === 0 ? (
+            <div
+              data-yunari-wallpaper-engine-no-matches=""
+              className="min-h-0 flex-1 overflow-y-auto"
+            >
+              <FinderState message={uiCopy.assets.wallpaperEngine.noMatches} />
+            </div>
           ) : (
             <div
               data-yunari-asset-grid=""
-              aria-busy={view.loading !== undefined ? "true" : undefined}
               className="flex min-h-0 flex-1 flex-col"
             >
               <FinderGrid
-                // A question or a tab is a new grid: the scroll starts at the
-                // top and the roving focus at the first card.
-                key={`${active}:${view.data.query}`}
-                label={uiCopy.assets.category[active]}
-                cards={cards}
-                selectedId={selectionId}
-                {...(busyId === undefined ? {} : { busyId })}
-                {...(failedId === undefined ? {} : { failedId })}
-                onSelect={(card) => {
-                  const row = rowOfCard(card);
-                  if (row !== undefined) {
+                label={uiCopy.assets.category.local}
+                cards={wallpaperCards(localShown)}
+                selectedId={
+                  local.selection === undefined
+                    ? undefined
+                    : `wallpaper-engine:${local.selection.workshopId}`
+                }
+                {...(localRunning === undefined || local.selection === undefined
+                  ? {}
+                  : { busyId: local.selection.workshopId })}
+                {...(local.message?.tone === "failed" &&
+                local.selection !== undefined
+                  ? { failedId: local.selection.workshopId }
+                  : {})}
+                {...(local.done.size === 0 ? {} : { doneIds: local.done })}
+                onSelect={selectLocal}
+                onPreview={(card) => {
+                  const item = localShown.find(
+                    (entry) => entry.workshopId === card.id,
+                  );
+                  if (item !== undefined)
+                    setPreviewing({ kind: "local", item });
+                }}
+                onApply={(card) => {
+                  const item = localShown.find(
+                    (entry) => entry.workshopId === card.id,
+                  );
+                  setLocal((current) => ({ ...current, selection: item }));
+                  const first = wallpaperActionsOf(item, wallpaper)[0];
+                  if (first !== undefined) runLocalAction(first, item);
+                }}
+                onNeedMore={() => {}}
+                canLoadMore={false}
+                appending={false}
+              />
+            </div>
+          )
+        ) : (
+          <>
+            {notice === undefined ? null : (
+              <p
+                className="text-xs text-muted"
+                data-yunari-asset-host-notice=""
+              >
+                {uiCopy.assets.remoteHostNotice(notice)}
+              </p>
+            )}
+
+            {shown.length === 0 ? (
+              emptyState()
+            ) : (
+              <div
+                data-yunari-asset-grid=""
+                aria-busy={view.loading !== undefined ? "true" : undefined}
+                className="flex min-h-0 flex-1 flex-col"
+              >
+                <FinderGrid
+                  // A question or a tab is a new grid: the scroll starts at the
+                  // top and the roving focus at the first card.
+                  key={`${active}:${view.data.query}`}
+                  label={uiCopy.assets.category[active]}
+                  cards={cards}
+                  selectedId={selectionId}
+                  {...(busyId === undefined ? {} : { busyId })}
+                  {...(failedId === undefined ? {} : { failedId })}
+                  onSelect={(card) => {
+                    const row = rowOfCard(card);
+                    if (row !== undefined) {
+                      patch(active, (current) => ({
+                        ...current,
+                        selection: row,
+                      }));
+                      // A cut belongs to the family that listed it.
+                      if (active === "font") {
+                        setFontPreview((current) => ({
+                          ...current,
+                          cutId: undefined,
+                        }));
+                      }
+                    }
+                  }}
+                  onPreview={(card) => {
+                    // Double-click enlarges a picture; every other kind has no
+                    // larger form and keeps its single-press selection.
+                    const row = rowOfCard(card);
+                    if (row !== undefined && row.result.kind === "image") {
+                      setPreviewing({ kind: "asset", row });
+                    }
+                  }}
+                  onApply={(card) => {
+                    const row = rowOfCard(card);
+                    if (row === undefined) return;
                     patch(active, (current) => ({
                       ...current,
                       selection: row,
                     }));
-                    // A cut belongs to the family that listed it.
                     if (active === "font") {
-                      setFontPreview((current) => ({
-                        ...current,
-                        cutId: undefined,
-                      }));
+                      const first = fontActionsOf(
+                        row,
+                        fontFilter,
+                        fontPreview,
+                        font,
+                      )[0];
+                      if (first !== undefined) runFontAction(first);
+                      return;
                     }
-                  }
-                }}
-                onPreview={() => {
-                  // The preview modal lands in Task 4.2.
-                }}
-                onApply={(card) => {
-                  const row = rowOfCard(card);
-                  if (row === undefined) return;
-                  patch(active, (current) => ({ ...current, selection: row }));
-                  if (active === "font") {
-                    const first = fontActionsOf(
+                    void runRow(
+                      active,
                       row,
-                      fontFilter,
-                      fontPreview,
-                      font,
-                    )[0];
-                    if (first !== undefined) runFontAction(first);
-                    return;
-                  }
-                  void runRow(
-                    active,
-                    row,
-                    active === "image" ? "background" : undefined,
-                  );
-                }}
-                onNeedMore={loadMore}
-                canLoadMore={more && view.loading === undefined}
-                appending={view.loading === "more"}
-              />
-            </div>
-          )}
-        </>
-      )}
-    </FinderFrame>
+                      active === "image" ? "background" : undefined,
+                    );
+                  }}
+                  onNeedMore={loadMore}
+                  canLoadMore={more && view.loading === undefined}
+                  appending={view.loading === "more"}
+                />
+              </div>
+            )}
+          </>
+        )}
+      </FinderFrame>
+      <FinderPreviewModal
+        preview={
+          previewing === undefined ? undefined : previewModel(previewing)
+        }
+        actions={previewActions}
+        busyActionId={previewBusy}
+        message={previewMessage}
+        onRun={runPreviewAction}
+        onClose={() => {
+          setPreviewing(undefined);
+        }}
+      />
+    </>
   );
 }
