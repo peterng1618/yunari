@@ -22,6 +22,15 @@ describe("frame", () => {
     expect(bytes.length).toBe(250);
     expect([...bytes].every((byte) => byte === 0x2c)).toBe(true);
   });
+
+  it("carries the bitmap length field the reference driver sends", () => {
+    // The reference sends DISPLAY_BITMAP_5INCH followed by a big-endian
+    // width^2/64 field (480x480/64 = 3600): the frame is 8 bytes, not 6. The
+    // panel ignores a full-image send whose field is zero.
+    expect([...TURZX_COMMAND.displayBitmap]).toEqual([
+      0xc8, 0xef, 0x69, 0x00, 0x17, 0x70, 0x0e, 0x10,
+    ]);
+  });
 });
 
 describe("parseHello", () => {
@@ -50,6 +59,16 @@ describe("bgraPayload", () => {
     const payload = bgraPayload(rgba);
     expect(payload.length % 250).toBe(0);
     expect([...payload.slice(0, 8)]).toEqual([0, 0, 255, 255, 255, 0, 0, 255]);
+  });
+
+  it("puts one 0x00 after each 249-byte chunk and pads the tail", () => {
+    // Three chunks: 249 bytes, a 0x00 join, 249 bytes, a 0x00 join, 249 bytes,
+    // then zero padding to the next 250-byte multiple.
+    const payload = bgraPayload(new Uint8Array(249 * 3));
+    expect(payload.length).toBe(750);
+    expect(payload[249]).toBe(0);
+    expect(payload[499]).toBe(0);
+    expect([...payload.slice(749)].every((byte) => byte === 0)).toBe(true);
   });
 
   it("states the panel geometry", () => {
