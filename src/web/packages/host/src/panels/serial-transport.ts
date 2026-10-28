@@ -100,7 +100,7 @@ export interface SerialPortLike {
  *
  * The fake seam is deliberately narrower than `serialport`'s overloaded
  * `write`, which no structural fake reproduces; production passes the real
- * `SerialPort`, tests pass an emitter, and only `read` reaches the port itself.
+ * `SerialPort`, tests pass an emitter, and only `read`/`write` reach the port itself.
  * A write after `close()` is refused before the port is touched, so that guard
  * is testable through this seam too.
  */

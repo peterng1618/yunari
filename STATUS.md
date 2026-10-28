@@ -9,21 +9,21 @@ Drive the TURZX/Turing 5" serial panel (Rev C, 800×480 landscape, COM5) through
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-29-turzx-serial-panel.md` (3 phases / 12 tasks); tasks 1–5, 9–12 done; tasks 6–8 (controls, route, dialog) remain.
+- **Active plan:** `docs/superpowers/plans/2026-10-29-turzx-serial-panel.md` (3 phases / 12 tasks); tasks 1–7 done; task 8 (Controls dialog) remains.
 - **Video works on the panel:** the demo theme's clip uploads, plays, and the UI overlay updates over it; a start failure falls back to stills.
 - **The panel is wedged after a host kill:** COM5 answers "Access denied" to every open with no host running, so a replug or power-cycle is needed before the next hardware run.
 - **Device reclaim is designed, not planned:** per-adapter holder names plus one host service, kill + manual guide in one dialog; queued behind this plan.
 
 ## Last completed change
 
-- **Task 12 — video mode on the panel:** the runner starts the clip once, sends transparent overlay diffs, falls back to stills on a failed start or overlay, and stops the clip before closing.
-- **Lifecycle hardened over four review rounds:** one chain per display, retryable close, bounded shutdown, replies buffered at the transport instead of per read.
-- **Transport defect found on hardware:** replies arriving while the upload still writes were dropped; the probe kept one listener for the session.
-- **Register:** `vg-788` (JPEG-compressed stills) closed as verified; commits `4231658d`, `0909562c`.
+- **Task 7 — the hardware command route:** `POST /api/displays/:id/panel/command` refuses an invalid level/kind before writing, answers 400/404/409/500 by cause and returns the device's reply.
+- **A closing port can no longer hang a control:** `SerialTransport.write` rejects once `close()` began, so the route answers 409 instead of waiting on `serialport`'s queued-on-`open` write.
+- **Port-failure classification is an allowlist:** `EIO`, `EBADF`, `ENXIO`, `ERR_SERIAL_PORT_*`, `disconnected`, `Port is not open`; a local `ENOENT` stays a 500.
+- **Reviewed over two rounds:** exact-argument tests for `screen`/`restart`/`status`/`hello`, malformed JSON → 400, red proofs for the guard and the classifier.
 
 ## Next
 
-1. Tasks 6–8 — controls in the adapter, the command route, the Controls dialog.
+1. Task 8 — the Controls dialog over the command route.
 2. Whole-branch review on the most capable model, then finish the branch.
 3. Replug the panel and repeat the video proof, including glass over video.
 
