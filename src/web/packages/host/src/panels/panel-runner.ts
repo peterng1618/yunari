@@ -59,10 +59,14 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
   const report = options.onError ?? (() => {});
   let last: Uint8Array | undefined;
   let running = true;
-  let inFlight = false;
-  /** Dropped once the device refused the clip: a failure is not retried. */
+  /** The tick in flight, so a stop can wait for it before closing the device. */
+  let inFlight: Promise<boolean> | undefined;
+  /** Not yet uploaded; dropped once the device has seen it or refused it. */
   let source = options.video;
-  let videoStarted = false;
+  /** The device is playing the clip, so stop releases it. */
+  let playing = false;
+  /** The overlay path still works; a refused overlay drops the panel to stills. */
+  let overlay = false;
 
   /**
    * One capture and one send, if the pixels moved.
@@ -75,6 +79,7 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
   const send = async (
     capture: () => Promise<Uint8Array>,
     present: (frame: Uint8Array) => Promise<void>,
+    presentFailed?: () => void,
   ): Promise<boolean> => {
     let frame: Uint8Array;
 
@@ -93,12 +98,51 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
       // A send that failed did not put these pixels on the panel, so the last
       // frame is not this one: keeping it would suppress the retry.
       report(exactly(error));
+      presentFailed?.();
       return false;
     }
 
     last = frame;
     options.onFrame?.();
     return true;
+  };
+
+  const runTick = async (): Promise<boolean> => {
+    const video = options.device.video;
+
+    if (source !== undefined && video !== undefined) {
+      try {
+        await video.start(source.bytes, source.placement);
+        playing = true;
+        overlay = true;
+      } catch (error) {
+        // A clip this device will not play is a mode it does not have: the
+        // panel falls back to stills for the rest of its life rather than
+        // retrying an upload that already failed.
+        report(exactly(error));
+      }
+
+      // Started or refused, the upload is not repeated.
+      source = undefined;
+    }
+
+    if (overlay && video !== undefined) {
+      return await send(
+        () => options.rasterizer.captureOverlay(),
+        (frame) => video.presentOverlay(frame),
+        () => {
+          // An overlay the device will not take is a video mode it cannot
+          // compose. Stills are the honest fallback, and the clip keeps playing
+          // underneath until stop releases it.
+          overlay = false;
+        },
+      );
+    }
+
+    return await send(
+      () => options.rasterizer.capture(),
+      (frame) => options.device.present(frame),
+    );
   };
 
   return {
@@ -108,55 +152,34 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
 
     intervalMs,
 
-    async tick(): Promise<boolean> {
-      if (!running) return false;
+    tick(): Promise<boolean> {
+      // A tick asked for after the stop began must not open a capture: the
+      // device is on its way to closed.
+      if (!running) return Promise.resolve(false);
       // A capture that is slow enough to still be running when the timer
       // fires again is not a reason to start a second one: two sends racing
       // for the same wire is worse than a skipped frame.
-      if (inFlight) return false;
-      inFlight = true;
+      if (inFlight !== undefined) return Promise.resolve(false);
 
-      try {
-        const video = options.device.video;
-
-        if (source !== undefined && video !== undefined) {
-          if (!videoStarted) {
-            try {
-              await video.start(source.bytes, source.placement);
-              videoStarted = true;
-            } catch (error) {
-              // A clip this device will not play is a mode it does not have:
-              // the panel falls back to stills for the rest of its life rather
-              // than retrying an upload that already failed.
-              report(exactly(error));
-              source = undefined;
-            }
-          }
-
-          if (videoStarted) {
-            return await send(
-              () => options.rasterizer.captureOverlay(),
-              (frame) => video.presentOverlay(frame),
-            );
-          }
-        }
-
-        return await send(
-          () => options.rasterizer.capture(),
-          (frame) => options.device.present(frame),
-        );
-      } finally {
-        inFlight = false;
-      }
+      const tick = runTick().finally(() => {
+        if (inFlight === tick) inFlight = undefined;
+      });
+      inFlight = tick;
+      return tick;
     },
 
     async stop(): Promise<void> {
       if (!running) return;
       running = false;
 
+      // A tick already inside `video.start` or a capture must finish first:
+      // closing the port under it would make the start fail against a dead
+      // device, and its result could land after this stop read it.
+      await inFlight;
+
       // The clip belongs to the device once started, so it is stopped with it
       // rather than left playing behind a port the next runner wants.
-      if (videoStarted) await options.device.video?.stop();
+      if (playing) await options.device.video?.stop();
       await options.rasterizer.close();
       await options.device.close();
     },

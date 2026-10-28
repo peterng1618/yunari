@@ -267,4 +267,171 @@ describe("createPanelRunner", () => {
     expect(present).toHaveBeenCalledTimes(1);
     expect(presentOverlay).not.toHaveBeenCalled();
   });
+
+  it("keeps stills when the device has no video, whatever source it is given", async () => {
+    const present = vi.fn(async () => {});
+    const overlay = vi.fn(async () => Uint8Array.of(2));
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present,
+      close: async () => {},
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of(1)),
+      captureOverlay: overlay,
+      close: async () => {},
+    };
+
+    await createPanelRunner({ device, rasterizer, video: SOURCE }).tick();
+
+    expect(present).toHaveBeenCalledTimes(1);
+    expect(overlay).not.toHaveBeenCalled();
+  });
+
+  it("starts the clip once across many ticks", async () => {
+    const start = vi.fn(async () => {});
+    let frame = 0;
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present: vi.fn(async () => {}),
+      close: async () => {},
+      video: {
+        start,
+        presentOverlay: vi.fn(async () => {}),
+        stop: async () => {},
+      },
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of(1)),
+      captureOverlay: vi.fn(async () => Uint8Array.of(1, (frame += 1))),
+      close: async () => {},
+    };
+
+    const runner = createPanelRunner({ device, rasterizer, video: SOURCE });
+    await runner.tick();
+    await runner.tick();
+
+    expect(start).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops the clip before closing the device", async () => {
+    const order: string[] = [];
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present: vi.fn(async () => {}),
+      close: async () => {
+        order.push("close");
+      },
+      video: {
+        start: async () => {},
+        presentOverlay: async () => {},
+        stop: async () => {
+          order.push("stop");
+        },
+      },
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of(1)),
+      captureOverlay: vi.fn(async () => Uint8Array.of(2)),
+      close: async () => {},
+    };
+
+    const runner = createPanelRunner({ device, rasterizer, video: SOURCE });
+    await runner.tick();
+    await runner.stop();
+
+    expect(order).toEqual(["stop", "close"]);
+  });
+
+  it("waits for a tick already inside the clip before closing", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const order: string[] = [];
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present: vi.fn(async () => {}),
+      close: async () => {
+        order.push("close");
+      },
+      video: {
+        start: async () => {
+          order.push("start");
+        },
+        presentOverlay: async () => {
+          await gate;
+          order.push("overlay");
+        },
+        stop: async () => {
+          order.push("stop");
+        },
+      },
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of(1)),
+      captureOverlay: vi.fn(async () => Uint8Array.of(2)),
+      close: async () => {},
+    };
+
+    const runner = createPanelRunner({ device, rasterizer, video: SOURCE });
+    const ticking = runner.tick();
+    // Let `video.start` resolve so the tick is inside `presentOverlay`.
+    await Promise.resolve();
+
+    const stopping = runner.stop();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(order).toEqual(["start"]);
+
+    release();
+    await Promise.all([ticking, stopping]);
+
+    expect(order).toEqual(["start", "overlay", "stop", "close"]);
+  });
+
+  it("falls back to stills when the overlay is refused after the clip started", async () => {
+    const errors: string[] = [];
+    const present = vi.fn(async () => {});
+    let overlayCalls = 0;
+    const presentOverlay = vi.fn(async () => {
+      overlayCalls += 1;
+      if (overlayCalls === 3) throw new Error("overlay refused");
+    });
+    const start = vi.fn(async () => {});
+    let overlayFrame = 0;
+    let stillFrame = 0;
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present,
+      close: async () => {},
+      video: { start, presentOverlay, stop: async () => {} },
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of(10, (stillFrame += 1))),
+      captureOverlay: vi.fn(async () => Uint8Array.of(1, (overlayFrame += 1))),
+      close: async () => {},
+    };
+
+    const runner = createPanelRunner({
+      device,
+      rasterizer,
+      video: SOURCE,
+      onError: (message) => errors.push(message),
+    });
+    await runner.tick();
+    await runner.tick();
+    await expect(runner.tick()).resolves.toBe(false);
+    await expect(runner.tick()).resolves.toBe(true);
+
+    // Refused once, then stills for the rest of the runner's life.
+    expect(presentOverlay).toHaveBeenCalledTimes(3);
+    expect(present).toHaveBeenCalledTimes(1);
+    expect(errors).toEqual(["overlay refused"]);
+    expect(start).toHaveBeenCalledTimes(1);
+  });
 });

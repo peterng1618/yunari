@@ -2193,7 +2193,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // runner is stopped, because a record nothing points at is a panel
         // still showing a theme nobody assigned it.
         options.launcher?.close(id);
-        void options.panels?.stop(id);
+        // A panel that cannot release its port — unplugged mid-stop — must not
+        // become an unhandled rejection at the process level. The record is
+        // gone either way, so the failure is reported and not answered.
+        void options.panels?.stop(id).catch((error: unknown) => {
+          console.error(
+            `Panel ${id}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
 
         sendJson(response, 200, { ok: true });
         return;

@@ -5161,6 +5161,95 @@ describe("A local monitor is specified rather than paired", () => {
       }
     });
 
+    it("waits for the panel restart before answering a theme assignment", async () => {
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const refreshed: string[] = [];
+      const themes = createThemeStore(dir);
+      await themes.write("night", createValidPackage("night", "Night"));
+      const hosting = host({
+        themeStore: themes,
+        activeTheme: createActiveThemeStore(dir),
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], []),
+          refresh: async (id) => {
+            refreshed.push(id);
+            await held;
+          },
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+
+        let answered = false;
+        const put = request(
+          hosting.server,
+          "PUT",
+          "/api/themes/active",
+          json({ display: "strip", id: "night" }),
+        ).then((answer) => {
+          answered = true;
+          return answer;
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        // The restart reached the manager, and the answer is not on the wire
+        // until the runner it asked for has been replaced.
+        expect(refreshed).toEqual(["strip"]);
+        expect(answered).toBe(false);
+
+        release();
+        expect((await put).status).toBe(200);
+      } finally {
+        release();
+        await hosting.close();
+      }
+    });
+
+    it("reports a panel stop that rejects instead of rejecting the request", async () => {
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], []),
+          stop: () => Promise.reject(new Error("the port would not close")),
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+
+        expect(
+          (await request(hosting.server, "DELETE", "/api/displays/strip"))
+            .status,
+        ).toBe(200);
+
+        // The record is gone; the refusal is reported, not thrown at the
+        // process as an unhandled rejection.
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(logged).toHaveBeenCalledWith(
+          expect.stringContaining("the port would not close"),
+        );
+      } finally {
+        logged.mockRestore();
+        await hosting.close();
+      }
+    });
+
     it("is absent from a host with no panel manager", async () => {
       // Omitted means this host drives no panels, so naming one is not a
       // request it can honour — and it says so rather than enumerating USB.

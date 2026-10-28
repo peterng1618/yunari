@@ -741,12 +741,22 @@ export async function run(argv: readonly string[]): Promise<number> {
         // The windows close with the host: one left behind is one the next run
         // cannot see, and it would put a second window on that monitor.
         launcher?.stop();
-        // And the panels: a browser left running has nothing to capture, and a
-        // claimed interface outlives the host that claimed it.
-        void panels?.stopAll();
       } finally {
         // A throwing stop must not leave the server listening with no tray.
-        void hosted.close().then(resolve, resolve);
+        void (async () => {
+          // The panels before the server: a runner still opening has to be
+          // awaited, or its device and STOP_VIDEO outlive the host that owned
+          // them. A refusal is logged and the close continues.
+          try {
+            await panels?.stopAll();
+          } catch (error) {
+            console.error(
+              `The panels could not close: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+
+          await hosted.close().then(resolve, resolve);
+        })();
       }
     };
 

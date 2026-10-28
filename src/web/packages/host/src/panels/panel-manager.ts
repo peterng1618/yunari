@@ -62,9 +62,38 @@ interface Entry {
 export function createPanelManager(options: PanelManagerOptions): PanelManager {
   const entries = new Map<string, Entry>();
   const report = options.onError ?? (() => {});
+  /**
+   * One promise chain per display: start, stop and refresh never overlap.
+   *
+   * Opening a device while the previous one's close is still draining is how a
+   * second start lands on a port the first has not released, and a late start
+   * failure could delete the entry a newer start had just installed. The serial
+   * port has no lock of its own, so this queue is the lock.
+   */
+  const chains = new Map<string, Promise<unknown>>();
   let stopping = false;
 
-  const start = async (displayId: string): Promise<void> => {
+  const trim = (displayId: string, settled: Promise<unknown>): void => {
+    if (chains.get(displayId) === settled) chains.delete(displayId);
+  };
+
+  const enqueue = <T>(
+    displayId: string,
+    work: () => Promise<T>,
+  ): Promise<T> => {
+    const previous = chains.get(displayId) ?? Promise.resolve();
+    const next = previous.then(work, work);
+    chains.set(displayId, next);
+    // Its own chain, not `finally`: a rejected tail is the caller's to see,
+    // and a derived rejection here would be one nobody handles.
+    void next.then(
+      () => trim(displayId, next),
+      () => trim(displayId, next),
+    );
+    return next;
+  };
+
+  const startNow = async (displayId: string): Promise<void> => {
     if (stopping) return;
 
     const existing = entries.get(displayId);
@@ -83,13 +112,15 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
         const record = await options.displays.find(displayId);
 
         if (record === undefined || record.kind !== "panel") {
-          entries.delete(displayId);
+          if (entries.get(displayId) === entry) entries.delete(displayId);
           return;
         }
 
         await run(displayId, record, entry);
       } catch (error) {
-        entries.delete(displayId);
+        // Only this entry's own failure may remove it: a newer start for the
+        // same display owns whatever entry is there now.
+        if (entries.get(displayId) === entry) entries.delete(displayId);
         report(displayId, messageOf(error));
       } finally {
         entry.starting = undefined;
@@ -174,6 +205,13 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       onError: (message) => report(displayId, message),
     });
 
+    // Shutdown, or a stop queued before this open finished, owns the device
+    // now: nothing would ever tick or close this runner if it were installed.
+    if (stopping || entries.get(displayId) !== entry) {
+      await runner.stop();
+      return;
+    }
+
     entry.runner = runner;
     // The panel's first frame is sent at once rather than after an interval: a
     // record the owner just added is a panel showing whatever was there before.
@@ -187,35 +225,56 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     entry.timer.unref();
   };
 
-  const stop = async (displayId: string): Promise<void> => {
+  /**
+   * Stops one display, throwing when the device would not release.
+   *
+   * A failure leaves the entry in place: the runner and the port it failed to
+   * give up are still there, and removing the entry would strand them with
+   * nothing pointing at them.
+   */
+  const stopNow = async (displayId: string): Promise<void> => {
     const entry = entries.get(displayId);
     if (entry === undefined) return;
 
-    entries.delete(displayId);
-    if (entry.timer !== undefined) clearInterval(entry.timer);
-    // A start still opening has not set `runner` yet. Waiting for it is what
-    // makes the release before a restart real rather than a race the reopen
-    // loses.
+    // The timer first: a tick while the port is closing races the close.
+    if (entry.timer !== undefined) {
+      clearInterval(entry.timer);
+      entry.timer = undefined;
+    }
+
+    // A start still opening has not set `runner` yet; waiting for it is what
+    // makes the release before a restart real rather than a race.
     await entry.starting;
+    if (entry.timer !== undefined) {
+      clearInterval(entry.timer);
+      entry.timer = undefined;
+    }
+
     await entry.runner?.stop();
+
+    if (entries.get(displayId) === entry) entries.delete(displayId);
+  };
+
+  /** Refreshes one display; a stop that failed never reaches the open. */
+  const refreshNow = async (displayId: string): Promise<void> => {
+    try {
+      await stopNow(displayId);
+    } catch (error) {
+      // The port is still held, so opening again would land on a device that is
+      // not there. The entry was left in place for the next change to retry.
+      report(displayId, messageOf(error));
+      return;
+    }
+
+    await startNow(displayId);
   };
 
   return {
-    start,
+    start: (displayId) => enqueue(displayId, () => startNow(displayId)),
 
-    stop,
+    stop: (displayId) => enqueue(displayId, () => stopNow(displayId)),
 
-    async refresh(displayId: string): Promise<void> {
-      try {
-        await stop(displayId);
-      } catch (error) {
-        // A device that would not close still has to be driven again: the
-        // theme changed, and a panel left on the old clip is the worse failure.
-        report(displayId, messageOf(error));
-      }
-
-      await start(displayId);
-    },
+    refresh: (displayId) => enqueue(displayId, () => refreshNow(displayId)),
 
     async reconcile(): Promise<void> {
       if (stopping) return;
@@ -225,15 +284,21 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       for (const record of records) {
         if (record.kind !== "panel") continue;
         if (entries.get(record.id)?.runner !== undefined) continue;
-        await start(record.id);
+        await enqueue(record.id, () => startNow(record.id));
       }
 
       // A runner whose record went away is a panel still being fed a theme
       // nobody assigned it. `remove` stops its own, and this catches the record
-      // deleted by hand.
+      // deleted by hand. A refusal is reported and left for the next pass.
       const live = new Set(records.map((record) => record.id));
-      for (const displayId of entries.keys()) {
-        if (!live.has(displayId)) await stop(displayId);
+      for (const displayId of [...entries.keys()]) {
+        if (live.has(displayId)) continue;
+
+        await enqueue(displayId, () => stopNow(displayId)).catch(
+          (error: unknown) => {
+            report(displayId, messageOf(error));
+          },
+        );
       }
     },
 
@@ -245,14 +310,38 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
     async stopAll(): Promise<void> {
       stopping = true;
-      const runners = [...entries.values()];
 
-      for (const entry of entries.values()) {
-        if (entry.timer !== undefined) clearInterval(entry.timer);
+      // Work already queued still has to settle first: a start that began
+      // before shutdown would otherwise open a port after this returns.
+      await Promise.allSettled([...chains.values()]);
+
+      const held = [...entries.entries()];
+
+      for (const [, entry] of held) {
+        if (entry.timer !== undefined) {
+          clearInterval(entry.timer);
+          entry.timer = undefined;
+        }
       }
-      entries.clear();
 
-      await Promise.all(runners.map((entry) => entry.runner?.stop()));
+      await Promise.all(
+        held.map(async ([displayId, entry]) => {
+          try {
+            // A start that was mid-open is awaited so its runner is stopped
+            // too; `stopping` keeps it from installing a timer.
+            await entry.starting;
+            if (entry.timer !== undefined) {
+              clearInterval(entry.timer);
+              entry.timer = undefined;
+            }
+            await entry.runner?.stop();
+          } catch (error) {
+            report(displayId, messageOf(error));
+          }
+        }),
+      );
+
+      entries.clear();
     },
   };
 }
