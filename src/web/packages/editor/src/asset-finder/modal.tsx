@@ -1,7 +1,6 @@
 import type {
   AssetPage,
   AssetResult,
-  AssetSearchAnswer,
   AssetSourceListing,
   ListingCategory,
   PresetKind,
@@ -9,12 +8,6 @@ import type {
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { Dialog } from "../components/ui/dialog.js";
-import {
-  Glyph,
-  NEXT_PAGE_GLYPH,
-  PREVIOUS_PAGE_GLYPH,
-} from "../editor-shell/icons.js";
-import { pageNumbers } from "../store-mode/pager.js";
 import { uiCopy } from "../ui-copy.js";
 import { type AssetPlacement } from "./actions.js";
 import { type ClientOptions, listSources, searchAssets } from "./client.js";
@@ -28,8 +21,19 @@ import {
 } from "./finder-controls.js";
 import { FinderFrame } from "./finder-frame.js";
 import { FinderGrid } from "./finder-grid.js";
-import { interleave } from "./interleave.js";
+import { FinderState } from "./finder-state.js";
 import { FinderSkeleton } from "./skeleton.js";
+import {
+  appendAnswer,
+  EMPTY_TAB,
+  type FinderRow,
+  hasMore,
+  nextPages,
+  resetForQuestion,
+  retryPages,
+  rowsOf,
+  type TabData,
+} from "./tab-data.js";
 
 /** How long a keystroke settles before it is the query. */
 export const SEARCH_DEBOUNCE_MS = 200;
@@ -49,6 +53,32 @@ const CATEGORY_ORDER: readonly ListingCategory[] = [
   "colour",
   "local",
 ];
+
+/** One tab's accumulation and its own UI state, so switching tabs restores the
+ *  question, the rows and the selection instead of resetting them. */
+interface TabView {
+  readonly data: TabData;
+  readonly browsed: boolean;
+  readonly loading: "first" | "more" | undefined;
+  readonly selection: FinderRow | undefined;
+  readonly message:
+    | { readonly text: string; readonly tone: "ok" | "failed" }
+    | undefined;
+}
+
+const EMPTY_VIEW: TabView = {
+  data: EMPTY_TAB,
+  browsed: false,
+  loading: undefined,
+  selection: undefined,
+  message: undefined,
+};
+
+function emptyViews(): Record<ListingCategory, TabView> {
+  const views = {} as Record<ListingCategory, TabView>;
+  for (const category of CATEGORY_ORDER) views[category] = EMPTY_VIEW;
+  return views;
+}
 
 export type ActionOutcome =
   | { readonly ok: true; readonly message?: string }
@@ -107,117 +137,25 @@ function sourceIdOf(result: AssetResult): string {
   return at === -1 ? result.id : result.id.slice(0, at);
 }
 
-type Row = { readonly page: AssetPage; readonly result: AssetResult };
-
-/** The interleaved rows, each still paired with the page it answered on, so a
- *  row's action and its source mark need no second lookup. */
-function rowsIn(pages: readonly AssetPage[]): readonly Row[] {
-  const pagesOf = new Map<AssetResult, AssetPage>();
-  for (const page of pages) {
-    for (const result of page.results) pagesOf.set(result, page);
-  }
-
-  return interleave(pages, []).flatMap((result) => {
-    const page = pagesOf.get(result);
-    return page === undefined ? [] : [{ page, result }];
-  });
-}
-
-/** How many pages the answer has: the furthest its sources reach. A source that
- *  cannot say — Unsplash on a blank term — leaves the count at what it was. */
-function totalPagesOf(pages: readonly AssetPage[]): number {
-  let total = 1;
-  for (const page of pages) {
-    if (page.totalPages !== undefined) total = Math.max(total, page.totalPages);
-  }
-  return total;
-}
-
-/** The numbered pages, the theme store's own numerals and window. */
-function FinderPager({
-  page,
-  total,
-  onPage,
-}: {
-  readonly page: number;
-  readonly total: number;
-  readonly onPage: (page: number) => void;
-}): React.JSX.Element {
-  const step =
-    "inline-flex size-[26px] flex-none items-center justify-center rounded-md border border-transparent text-sm disabled:text-faint";
-  return (
-    <nav
-      aria-label={uiCopy.assets.pager.pages}
-      data-yunari-asset-pager=""
-      className="flex items-center gap-[var(--space-4)]"
-    >
-      <button
-        type="button"
-        aria-label={uiCopy.assets.pager.previous}
-        data-yunari-asset-page-previous=""
-        disabled={page <= 1}
-        onClick={() => onPage(page - 1)}
-        className={`${step} text-muted hover:border-edge`}
-      >
-        <Glyph icon={PREVIOUS_PAGE_GLYPH} size={14} />
-      </button>
-      {pageNumbers(page, total).map((entry, at) =>
-        entry === "gap" ? (
-          <span
-            // The index is the key: two gaps can be drawn at once and neither is
-            // a page the pager could name.
-            key={`gap-${at}`}
-            aria-hidden="true"
-            data-yunari-asset-page-gap=""
-            className="inline-flex size-[26px] flex-none items-center justify-center text-sm text-muted"
-          >
-            …
-          </span>
-        ) : (
-          <button
-            key={entry}
-            type="button"
-            aria-label={uiCopy.assets.pager.page(entry)}
-            aria-current={entry === page ? "page" : undefined}
-            data-yunari-asset-page={entry}
-            onClick={() => onPage(entry)}
-            className={`${step} font-mono ${
-              entry === page
-                ? "[background:var(--stage)] font-medium text-text"
-                : "text-muted hover:border-edge"
-            }`}
-          >
-            {entry}
-          </button>
-        ),
-      )}
-      <button
-        type="button"
-        aria-label={uiCopy.assets.pager.next}
-        data-yunari-asset-page-next=""
-        disabled={page >= total}
-        onClick={() => onPage(page + 1)}
-        className={`${step} text-muted hover:border-edge`}
-      >
-        <Glyph icon={NEXT_PAGE_GLYPH} size={14} />
-      </button>
-    </nav>
-  );
+/** The request field that says which editor body asks; the grid is the default
+ *  and is spelled out so the host never has to infer it. */
+function bodyOf(category: ListingCategory): "grid" | "font-picker" {
+  return category === "font" ? "font-picker" : "grid";
 }
 
 /**
  * The finder: one modal, tabs derived from the registry's categories, one
  * mixed grid per grid category and a body per category that owns a component.
  *
- * **One page at a time, numbered like the store's catalogue.** Every source is
- * asked for the same page, the grid shows exactly that page, and the pager's
- * count is the furthest source's — a source that ends sooner simply stops
- * contributing. A question — a term, a chip, a tab — returns to page one,
- * because a page the new question never had is not a page.
+ * **Browse on open and append as the author scrolls.** Each tab owns its own
+ * question, rows, page cursor and selection; opening it asks page one of every
+ * enabled source, and reaching the grid's end asks the next page of the
+ * sources that say they have one. The grid only ever grows.
  *
  * A late answer is dropped by comparing a ticket on resolve; an abort alone
  * does not stop a response already in flight, so two searches racing would
- * otherwise leave the older one on screen.
+ * otherwise leave the older one on screen. The ticket is per category, so a
+ * tab's answer still lands while another tab is being read.
  */
 export function AssetFinder({
   open,
@@ -233,32 +171,19 @@ export function AssetFinder({
     "loading",
   );
   const [active, setActive] = useState<ListingCategory | undefined>(undefined);
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
-  const [answer, setAnswer] = useState<AssetSearchAnswer | undefined>(
-    undefined,
-  );
+  const [views, setViews] =
+    useState<Record<ListingCategory, TabView>>(emptyViews);
   const [disabled, setDisabled] = useState<ReadonlySet<string>>(storedDisabled);
   /** The Colours tab's kind filter. A palette and a gradient are different
    *  presets, so a question about one must not be answered with the other. */
   const [presetFilter, setPresetFilter] = useState<KindFilter>("all");
-  const [selected, setSelected] = useState<Row | undefined>(undefined);
-  /** The sources that failed on this page, with their own sentence. */
-  const [failures, setFailures] = useState<readonly AssetPage[]>([]);
   /** The hosts the first host-contacting search reached, shown once (spec §5).
    *  A search that reached none is not the disclosure: a person is told before
    *  the term leaves, not after. */
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const announced = useRef(false);
-  const [message, setMessage] = useState<string | undefined>(undefined);
-  const [messageTone, setMessageTone] = useState<"ok" | "failed" | undefined>(
-    undefined,
-  );
   const [busy, setBusy] = useState(false);
-  /** A question is out and its answer has not landed. With results already on
-   *  screen this marks the grid busy; without any it shows the skeleton. */
-  const [searching, setSearching] = useState(false);
-  const ticket = useRef(0);
+  const tickets = useRef(new Map<ListingCategory, number>());
 
   /** A category a body owns: no listing names it, and no source is searched. */
   const bodyKinds: Partial<Record<ListingCategory, React.ReactNode>> = {
@@ -340,6 +265,7 @@ export function AssetFinder({
       .sort(),
   ];
 
+  const view = active === undefined ? EMPTY_VIEW : views[active];
   const gridSources =
     active === undefined ? [] : gridSourcesOf(sources, active);
   /** The kinds the tab's sources actually yield, never a fixed list. */
@@ -360,51 +286,60 @@ export function AssetFinder({
   const enabledSources = visibleSources.filter(
     (source) => !disabled.has(source.id),
   );
-  const enabledKey = enabledSources.map((source) => source.id).join("|");
+  const enabled = enabledSources.map((source) => source.id);
+  const enabledKey = enabled.join("|");
+
+  const bump = (category: ListingCategory): number => {
+    const next = (tickets.current.get(category) ?? 0) + 1;
+    tickets.current.set(category, next);
+    return next;
+  };
+  const ticketOf = (category: ListingCategory): number =>
+    tickets.current.get(category) ?? 0;
+  const patch = (
+    category: ListingCategory,
+    update: (current: TabView) => TabView,
+  ): void => {
+    setViews((current) => ({
+      ...current,
+      [category]: update(current[category]),
+    }));
+  };
+
+  /** A new question: what was shown answered the old one, so it leaves at the
+   *  press that asked, and an answer already in flight is no longer wanted. */
+  const askNew = (category: ListingCategory, query: string): void => {
+    bump(category);
+    patch(category, (current) => ({
+      ...current,
+      data: resetForQuestion(query),
+      browsed: false,
+      loading: undefined,
+      selection: undefined,
+      message: undefined,
+    }));
+  };
 
   useEffect(() => {
-    // Any change of question discards an answer already in flight, before the
-    // debounce would: a chip switched off mid-flight must not land its late page.
-    ticket.current += 1;
+    if (!open || active === undefined) return undefined;
+    // A body category draws its own component, and a tab whose sources are all
+    // switched off has no question to ask.
+    if (visibleSources.length === 0 || enabled.length === 0) return undefined;
+    if (views[active].browsed) return undefined;
 
-    // Body categories draw a component, not a search; a kind whose every
-    // source is switched off has no question to ask either.
-    if (
-      !open ||
-      active === undefined ||
-      visibleSources.length === 0 ||
-      enabledSources.length === 0
-    ) {
-      setSearching(false);
-      setAnswer(undefined);
-      setFailures([]);
-      return;
-    }
+    const category = active;
+    const question = views[category].data.query;
+    const pages = nextPages(views[category].data, enabled);
+    if (Object.keys(pages).length === 0) return undefined;
+    const issued = bump(category);
+    patch(category, (current) => ({ ...current, loading: "first" }));
 
-    setSearching(true);
-    const enabled = enabledSources.map((source) => source.id);
-    const issued = ticket.current;
     const timer = setTimeout(() => {
       void searchAssets(
-        {
-          query,
-          enabled,
-          pages: Object.fromEntries(enabled.map((id) => [id, page])),
-        },
+        { query: question, enabled, pages, body: bodyOf(category) },
         client,
       ).then((next) => {
-        if (issued !== ticket.current) return;
-        setSearching(false);
-        setAnswer(next);
-        setFailures(next.pages.filter((page) => page.failure !== undefined));
-        // A page past the end is the answer's own: land on the last page it
-        // does have rather than leave an empty grid under a numeral nothing
-        // reaches.
-        const total = totalPagesOf(next.pages);
-        if (page > total) {
-          setPage(total);
-          return;
-        }
+        if (issued !== ticketOf(category)) return;
         const reached = [
           ...new Set(
             enabledSources
@@ -419,81 +354,97 @@ export function AssetFinder({
         } else if (announced.current) {
           setNotice(undefined);
         }
-        setSelected(undefined);
+        patch(category, (current) => ({
+          ...current,
+          data: appendAnswer(current.data, next.pages, pages),
+          loading: undefined,
+          browsed: true,
+        }));
       });
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-    // `enabledKey` stands for the enabled list; `enabledSources` is a new array
-    // every render and would restart the timer on unrelated state.
-  }, [open, active, query, enabledKey, sources.length, client, page]);
+    // `enabledKey` and `question` stand for the source list and the query:
+    // `enabledSources` is a new array every render and would restart the timer.
+  }, [open, active, view.browsed, view.data.query, enabledKey, client]);
 
-  // A source switched off after its answer left the host is dropped from the
-  // grid at once, not on the next round trip.
-  const enabledIds = new Set(enabledSources.map((source) => source.id));
-  const rows =
-    answer === undefined
-      ? []
-      : rowsIn(answer.pages.filter((page) => enabledIds.has(page.source)));
-  const total =
-    answer === undefined
-      ? 1
-      : totalPagesOf(
-          answer.pages.filter((page) => enabledIds.has(page.source)),
-        );
-  // An empty page with more pages behind it is not "no results": the author is
-  // looking at a slice, and the pager is how they leave it.
-  const empty =
-    answer !== undefined &&
-    failures.length === 0 &&
-    rows.length === 0 &&
-    total <= 1;
-  /** A kind filter can leave every one of its sources switched off. The chips
-   *  are the only writer of that choice, so the panel says how to undo it
-   *  rather than giving no-results advice no query could fix. */
-  const kindSourcesOff =
-    visibleSources.length > 0 && enabledSources.length === 0;
+  const loadMore = (): void => {
+    if (active === undefined) return;
+    const category = active;
+    const current = views[category];
+    if (current.loading !== undefined || !current.browsed) return;
+    const pages = nextPages(current.data, enabled);
+    if (Object.keys(pages).length === 0) return;
 
-  /** A change of question returns to page one, at the press that made it. A
-   *  success sentence answers the question that was asked, so it leaves with it. */
-  const reask = (): void => {
-    setPage(1);
-    setSelected(undefined);
-    setMessage(undefined);
-    setMessageTone(undefined);
+    const issued = bump(category);
+    patch(category, (view) => ({ ...view, loading: "more" }));
+    void searchAssets(
+      {
+        query: current.data.query,
+        enabled,
+        pages,
+        body: bodyOf(category),
+      },
+      client,
+    ).then((next) => {
+      if (issued !== ticketOf(category)) return;
+      patch(category, (view) => ({
+        ...view,
+        data: appendAnswer(view.data, next.pages, pages),
+        loading: undefined,
+      }));
+    });
+  };
+
+  /** Ask again the page each refused source failed on. A success clears that
+   *  source's failure in `appendAnswer`, so the sentence leaves with the rows. */
+  const retry = (): void => {
+    if (active === undefined) return;
+    const category = active;
+    const pages = retryPages(views[category].data, enabled);
+    if (Object.keys(pages).length === 0) return;
+
+    const issued = bump(category);
+    patch(category, (view) => ({ ...view, loading: "first" }));
+    void searchAssets(
+      {
+        query: views[category].data.query,
+        enabled,
+        pages,
+        body: bodyOf(category),
+      },
+      client,
+    ).then((next) => {
+      if (issued !== ticketOf(category)) return;
+      patch(category, (view) => ({
+        ...view,
+        data: appendAnswer(view.data, next.pages, pages),
+        loading: undefined,
+        browsed: true,
+      }));
+    });
   };
 
   const sourceOf = (id: string): AssetSourceListing | undefined =>
     sources.find((source) => source.id === id);
 
-  const bodyOf = (
-    category: ListingCategory,
-  ): AssetSourceListing["body"] | undefined =>
-    sources.find((source) => source.category === category)?.body ??
-    (bodyKinds[category] == null
-      ? undefined
-      : category === "font"
-        ? "font-picker"
-        : "wallpaper-engine");
-
   const runRow = async (
-    row: Row,
+    category: ListingCategory,
+    row: FinderRow,
     placement?: AssetPlacement,
   ): Promise<ActionOutcome> => {
     setBusy(true);
     const outcome = await onAction(row.page, row.result, placement);
     setBusy(false);
-    setMessage(outcome.message);
-    setMessageTone(outcome.ok ? "ok" : "failed");
+    patch(category, (current) => ({
+      ...current,
+      message: {
+        text: outcome.message ?? uiCopy.assets.done[category],
+        tone: outcome.ok ? "ok" : "failed",
+      },
+    }));
     return outcome;
   };
-
-  const runAction = async (
-    placement?: AssetPlacement,
-  ): Promise<ActionOutcome> =>
-    selected === undefined
-      ? { ok: false, message: "" }
-      : runRow(selected, placement);
 
   if (listing !== "ok") {
     return (
@@ -541,56 +492,158 @@ export function AssetFinder({
     );
   }
 
+  const isGrid = gridSources.length > 0;
+  const rows = rowsOf(view.data, enabled);
+  const more = isGrid && hasMore(view.data, enabled);
+  const failures = [...view.data.failures.values()];
   /** A key that is missing or refused is the one reason to offer Connections:
    *  a control that cannot help is not an availability. */
   const needsConnections = failures.some(
     (page) => page.failure?.reason === "needs-credential",
   );
-  const isGrid = gridSources.length > 0;
+  const pendingFirst = !view.browsed || view.loading === "first";
+  const kindSourcesOff = visibleSources.length > 0 && enabled.length === 0;
 
-  const status = isGrid ? (
-    <>
-      <span data-yunari-asset-count="">
-        {answer === undefined
-          ? ""
-          : uiCopy.assets.results(
-              rows.length,
-              new Set(rows.map((row) => sourceIdOf(row.result))).size,
-            )}
+  const selectionId =
+    view.selection === undefined
+      ? undefined
+      : `${view.selection.page.source}:${view.selection.result.id}`;
+  const busyId =
+    busy && view.selection !== undefined ? view.selection.result.id : undefined;
+  const failedId =
+    view.message?.tone === "failed" && view.selection !== undefined
+      ? view.selection.result.id
+      : undefined;
+
+  const failureSentence = (page: AssetPage): React.ReactNode => {
+    const failure = page.failure;
+    if (failure === undefined) return null;
+    const label = sourceOf(page.source)?.label ?? page.source;
+    return failure.reason === "needs-credential" ? (
+      <span key={page.source} data-yunari-asset-needs-credential={page.source}>
+        {uiCopy.assets.needsCredential(label)}{" "}
       </span>
-      {message === undefined ? null : (
-        <span className="ml-[var(--space-8)]" data-yunari-asset-message="">
-          {message}
-        </span>
-      )}
-    </>
+    ) : (
+      <span key={page.source} data-yunari-asset-failure={page.source}>
+        {uiCopy.assets.sourceFailed(label, failure.message)}{" "}
+      </span>
+    );
+  };
+
+  /** One line, in the spec's priority order. */
+  const statusNode: React.ReactNode = isGrid ? (
+    view.message !== undefined ? (
+      <span data-yunari-asset-message="">{view.message.text}</span>
+    ) : view.loading !== undefined ? (
+      uiCopy.assets.searching(enabled.length)
+    ) : failures.length > 0 ? (
+      <>
+        {failures.map(failureSentence)}
+        {failures.some((page) => page.failure?.reason === "failed") ? (
+          <button
+            type="button"
+            data-yunari-asset-retry=""
+            onClick={retry}
+            className="underline"
+          >
+            {uiCopy.assets.retry}
+          </button>
+        ) : null}
+      </>
+    ) : rows.length > 0 ? (
+      `${uiCopy.assets.results(
+        rows.length,
+        new Set(rows.map((row) => sourceIdOf(row.result))).size,
+      )}${more ? "" : ` · ${uiCopy.assets.endOfResults}`}`
+    ) : undefined
   ) : undefined;
+  const statusTone: "ok" | "failed" | undefined =
+    view.message?.tone ?? (failures.length > 0 ? "failed" : undefined);
 
   const placeAction: FinderAction = {
     id: "place",
     label: uiCopy.assets.placeOnCanvas,
-    busyLabel: uiCopy.assets.working,
+    busyLabel: uiCopy.assets.busy.icon,
     tone: "plain",
-    disabled: selected === undefined || busy,
-    run: () => runAction("place"),
+    disabled: view.selection === undefined || busy,
+    run: () => {
+      const row = view.selection;
+      return row === undefined
+        ? Promise.resolve({ ok: false, message: uiCopy.assets.noSelection })
+        : runRow(active, row, "place");
+    },
   };
   const mainAction: FinderAction = {
     id: "apply",
     label: uiCopy.assets.action[active],
-    busyLabel: uiCopy.assets.working,
+    busyLabel: uiCopy.assets.busy[active],
     tone: "plain",
-    disabled: selected === undefined || busy,
-    run: () => runAction(active === "image" ? "background" : undefined),
+    disabled: view.selection === undefined || busy,
+    run: () => {
+      const row = view.selection;
+      return row === undefined
+        ? Promise.resolve({ ok: false, message: uiCopy.assets.noSelection })
+        : runRow(active, row, active === "image" ? "background" : undefined);
+    },
   };
 
   const cards: readonly FinderCardModel[] = rows.map(({ page, result }) =>
     cardModelOf(result, sourceOf(page.source)?.label ?? page.source),
   );
-  const rowOfCard = (card: FinderCardModel): Row | undefined =>
+  const rowOfCard = (card: FinderCardModel): FinderRow | undefined =>
     rows.find(
       ({ page, result }) =>
         result.id === card.id && page.source === card.sourceId,
     );
+
+  const emptyState = (): React.ReactNode => {
+    if (kindSourcesOff) {
+      return (
+        <div data-yunari-asset-kind-off="">
+          <FinderState message={uiCopy.assets.kindSourcesOff} />
+        </div>
+      );
+    }
+    if (pendingFirst) {
+      return (
+        <div
+          data-yunari-asset-loading=""
+          className="min-h-0 flex-1 overflow-y-auto"
+        >
+          <FinderSkeleton />
+        </div>
+      );
+    }
+    if (failures.length > 0) {
+      return (
+        <div data-yunari-asset-failed="">
+          <FinderState
+            message={uiCopy.assets.emptyAfterFailure}
+            action={{ label: uiCopy.assets.retry, onClick: retry }}
+          />
+        </div>
+      );
+    }
+    if (view.data.query === "") {
+      return (
+        <div data-yunari-asset-nothing="">
+          <FinderState message={uiCopy.assets.nothingToBrowse} />
+        </div>
+      );
+    }
+    return (
+      <div data-yunari-asset-empty="">
+        <FinderState
+          message={uiCopy.assets.noResults}
+          action={{
+            label: uiCopy.assets.clearQuery,
+            onClick: () => askNew(active, ""),
+            data: { "data-yunari-asset-clear-query": "" },
+          }}
+        />
+      </div>
+    );
+  };
 
   return (
     <FinderFrame
@@ -605,20 +658,20 @@ export function AssetFinder({
       }))}
       active={active}
       onTabChange={(category) => {
+        // A filter belongs to the tab that drew it: the next tab starts at
+        // "all", and if this one's filter had narrowed the sources its stored
+        // rows answer a question it no longer asks.
+        if (presetFilter !== "all") {
+          setPresetFilter("all");
+          askNew(category, views[category].data.query);
+        }
         setActive(category);
-        // A tab is a new question, so a filter from the last tab is not an
-        // answer about this one.
-        setPresetFilter("all");
-        reask();
       }}
       {...(isGrid
         ? {
-            query,
+            query: view.data.query,
             searchPlaceholder: uiCopy.assets.search[active],
-            onQueryChange: (value: string) => {
-              setQuery(value);
-              reask();
-            },
+            onQueryChange: (value: string) => askNew(active, value),
           }
         : {})}
       filters={
@@ -633,7 +686,7 @@ export function AssetFinder({
             }))}
             onChange={(kind) => {
               setPresetFilter(kind);
-              reask();
+              askNew(active, view.data.query);
             }}
           />
         ) : undefined
@@ -643,10 +696,7 @@ export function AssetFinder({
           <>
             {visibleSources.map((source) => {
               const off = disabled.has(source.id);
-              const failed = failures.some(
-                (page) =>
-                  page.source === source.id && page.failure !== undefined,
-              );
+              const failed = view.data.failures.has(source.id);
               return (
                 <FinderChip
                   key={source.id}
@@ -667,14 +717,14 @@ export function AssetFinder({
                       const next = new Set(current);
                       if (next.has(source.id)) next.delete(source.id);
                       else if (
-                        enabledSources.length > 1 ||
+                        enabled.length > 1 ||
                         !visibleSources.some((entry) => !next.has(entry.id))
                       ) {
                         next.add(source.id);
                       }
                       return next;
                     });
-                    reask();
+                    askNew(active, view.data.query);
                   }}
                 />
               );
@@ -683,20 +733,13 @@ export function AssetFinder({
         ) : undefined
       }
       tools={
-        <>
-          {isGrid && answer !== undefined && total > 1 ? (
-            <FinderPager page={page} total={total} onPage={setPage} />
-          ) : null}
-          <ConnectionsButton
-            needs={needsConnections}
-            onOpen={() => onOpenConnections?.()}
-          />
-        </>
+        <ConnectionsButton
+          needs={needsConnections}
+          onOpen={() => onOpenConnections?.()}
+        />
       }
-      status={status}
-      {...(message === undefined || messageTone === undefined
-        ? {}
-        : { statusTone: messageTone })}
+      status={statusNode}
+      {...(statusTone === undefined ? {} : { statusTone })}
       actions={
         isGrid ? (
           <>
@@ -725,13 +768,10 @@ export function AssetFinder({
       {!isGrid ? (
         <div
           className="min-h-0 flex-1 overflow-y-auto"
-          data-yunari-asset-body={bodyOf(active)}
+          data-yunari-asset-body={active}
         >
-          {bodyOf(active) === "font-picker"
-            ? bodies["font-picker"]
-            : bodyOf(active) === "wallpaper-engine"
-              ? bodies["wallpaper-engine"]
-              : uiCopy.assets.noSource}
+          {bodies[active === "font" ? "font-picker" : "wallpaper-engine"] ??
+            uiCopy.assets.noSource}
         </div>
       ) : (
         <>
@@ -741,79 +781,31 @@ export function AssetFinder({
             </p>
           )}
 
-          {failures.map((page) => {
-            const source = sourceOf(page.source);
-            const label = source?.label ?? page.source;
-            const failure = page.failure;
-            if (failure === undefined) return null;
-
-            return failure.reason === "needs-credential" ? (
-              <p
-                key={page.source}
-                className="text-sm"
-                data-yunari-asset-needs-credential={page.source}
-              >
-                {uiCopy.assets.needsCredential(label)}
-              </p>
-            ) : (
-              <p
-                key={page.source}
-                className="text-sm"
-                data-yunari-asset-failure={page.source}
-              >
-                {uiCopy.assets.sourceFailed(label, failure.message)}
-              </p>
-            );
-          })}
-
-          {kindSourcesOff ? (
-            <p className="text-sm text-muted" data-yunari-asset-kind-off="">
-              {uiCopy.assets.kindSourcesOff}
-            </p>
-          ) : answer === undefined || (empty && searching) ? (
-            // Nothing to keep, or the kept answer says "nothing" and a new
-            // question is out: the wait is the grid that is coming.
-            <div
-              data-yunari-asset-loading=""
-              className="min-h-0 flex-1 overflow-y-auto"
-            >
-              <FinderSkeleton />
-            </div>
-          ) : empty ? (
-            <p
-              className="flex flex-col items-start gap-[var(--space-8)] text-sm text-muted"
-              data-yunari-asset-empty=""
-            >
-              {uiCopy.assets.noResults}
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery("");
-                  reask();
-                }}
-                data-yunari-asset-clear-query=""
-                className="underline"
-              >
-                {uiCopy.assets.clearQuery}
-              </button>
-            </p>
+          {rows.length === 0 ? (
+            emptyState()
           ) : (
             <div
               data-yunari-asset-grid=""
-              aria-busy={searching ? "true" : undefined}
+              aria-busy={view.loading !== undefined ? "true" : undefined}
               className="flex min-h-0 flex-1 flex-col"
             >
               <FinderGrid
+                // A question or a tab is a new grid: the scroll starts at the
+                // top and the roving focus at the first card.
+                key={`${active}:${view.data.query}`}
                 label={uiCopy.assets.category[active]}
                 cards={cards}
-                selectedId={
-                  selected === undefined
-                    ? undefined
-                    : `${selected.page.source}:${selected.result.id}`
-                }
+                selectedId={selectionId}
+                {...(busyId === undefined ? {} : { busyId })}
+                {...(failedId === undefined ? {} : { failedId })}
                 onSelect={(card) => {
                   const row = rowOfCard(card);
-                  if (row !== undefined) setSelected(row);
+                  if (row !== undefined) {
+                    patch(active, (current) => ({
+                      ...current,
+                      selection: row,
+                    }));
+                  }
                 }}
                 onPreview={() => {
                   // The preview modal lands in Task 4.2.
@@ -821,17 +813,16 @@ export function AssetFinder({
                 onApply={(card) => {
                   const row = rowOfCard(card);
                   if (row === undefined) return;
-                  setSelected(row);
+                  patch(active, (current) => ({ ...current, selection: row }));
                   void runRow(
+                    active,
                     row,
                     active === "image" ? "background" : undefined,
                   );
                 }}
-                onNeedMore={() => {
-                  // The append path lands in Task 2.3.
-                }}
-                canLoadMore={false}
-                appending={false}
+                onNeedMore={loadMore}
+                canLoadMore={more && view.loading === undefined}
+                appending={view.loading === "more"}
               />
             </div>
           )}

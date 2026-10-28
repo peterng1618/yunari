@@ -1,6 +1,6 @@
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
-import { type FinderCardModel, FinderCard } from "./finder-card.js";
+import { FinderCard, type FinderCardModel } from "./finder-card.js";
 import { SkeletonCard } from "./skeleton.js";
 
 /** Where a key moves the roving focus: one step, one row, or either end,
@@ -108,7 +108,9 @@ export function FinderGrid(props: {
           needMore.current();
         }
       },
-      { root: scroller.current, rootMargin: "400px", threshold: 0 },
+      // Half a viewport early: the next page is in flight before the reader
+      // reaches the last row, without fetching every page on open.
+      { root: scroller.current, rootMargin: "0px 0px 50% 0px", threshold: 0 },
     );
     observer.observe(node);
     return () => {
@@ -141,7 +143,7 @@ export function FinderGrid(props: {
     >
       <div
         ref={grid}
-        className="grid content-start grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-[var(--space-12)]"
+        className="grid content-start grid-cols-[repeat(auto-fill,minmax(var(--finder-card-min-width),1fr))] gap-[var(--space-12)]"
       >
         {props.cards.map((card, index) => (
           <FinderCard

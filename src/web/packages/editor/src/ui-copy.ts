@@ -1217,7 +1217,29 @@ export const uiCopy = {
     } satisfies Record<ListingCategory, string>,
     searching: (sources: number): string =>
       `Searching ${sources} ${sources === 1 ? "source" : "sources"}…`,
+    /** The pressed action's own word while it is out, so the footer never says
+     *  the same "Working…" for a placement and a preset write. */
+    busy: {
+      font: "Applying…",
+      icon: "Placing…",
+      image: "Setting…",
+      video: "Setting…",
+      colour: "Adding…",
+      local: "Opening…",
+    } satisfies Record<ListingCategory, string>,
+    /** What the footer says when an action succeeds without words of its own. */
+    done: {
+      font: "Applied to token.",
+      icon: "Placed on canvas.",
+      image: "Set as background.",
+      video: "Set as background.",
+      colour: "Added to presets.",
+      local: "Opened in Wallpaper Engine.",
+    } satisfies Record<ListingCategory, string>,
     endOfResults: "End of results",
+    nothingToBrowse: "Nothing to browse here yet. Try a word.",
+    emptyAfterFailure:
+      "This tab's sources returned nothing. Retry, or try another word.",
     working: "Working…",
     retry: "Retry",
     connections: "Connections",
@@ -1233,6 +1255,7 @@ export const uiCopy = {
       "Every source for this kind is switched off. Turn one on above.",
     clearQuery: "Clear query",
     noSource: "No source serves this category.",
+    noSelection: "Choose a result first.",
     /** The shared skeleton's one spoken line; its shapes are hidden, so this is
      *  all a screen reader hears while a body is still loading. */
     skeletonLoading: "Loading assets…",

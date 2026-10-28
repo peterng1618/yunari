@@ -264,7 +264,7 @@ export function WallpaperEngineBody(props: {
         ) : (
           <div
             data-yunari-asset-grid=""
-            className="grid content-start grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-[var(--space-8)]"
+            className="grid content-start grid-cols-[repeat(auto-fill,minmax(var(--finder-card-min-width),1fr))] gap-[var(--space-8)]"
           >
             {shown.map((item) => {
               const card = cards.get(item.workshopId);

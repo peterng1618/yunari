@@ -4,7 +4,11 @@ import type * as React from "react";
  *  and, when there is a way forward, one underlined action. */
 export function FinderState(props: {
   readonly message: string;
-  readonly action?: { readonly label: string; readonly onClick: () => void };
+  readonly action?: {
+    readonly label: string;
+    readonly onClick: () => void;
+    readonly data?: Readonly<Record<`data-${string}`, string>>;
+  };
 }): React.JSX.Element {
   return (
     <div
@@ -14,6 +18,7 @@ export function FinderState(props: {
       <p className="m-0">{props.message}</p>
       {props.action === undefined ? null : (
         <button
+          {...props.action.data}
           type="button"
           data-yunari-asset-state-action=""
           onClick={props.action.onClick}

@@ -9,21 +9,22 @@ The asset finder's UI/UX overhaul: one shell, one card, one skeleton and one con
 
 ## Active work
 
-- **Plan is running:** `docs/superpowers/plans/2026-10-28-asset-finder-unification.md`, Phase 1.
-- **Phase 1 is complete:** the window, the card, the skeleton/state vocabulary, and the frame with its controls have landed.
-- **Phase 2 next:** accumulated tab data, `FinderGrid` and the shell's append path replace paging.
+- **Plan is running:** `docs/superpowers/plans/2026-10-28-asset-finder-unification.md`, Phase 3 next.
+- **Phase 2 is complete:** each tab accumulates its own question, rows and selection; the grid appends on scroll and the pager is deleted.
+- **Phase 3 next:** the Unsplash Editorial feed and its Images proof.
 
 ## Last completed change
 
-- **One grid:** `FinderGrid` owns the listbox, the roving tab stop, arrow-key movement by the measured column count, Enter to apply, and an append sentinel rooted on the scroller.
-- **The modal draws it:** cards come from `cardModelOf`, selection is keyed by source + id, and `onNeedMore`/`appending` wait for the shell's append path in Task 2.3.
-- **Proof:** asset-finder unit files 14 / 144 passed; `asset-finder.spec.ts` 18 passed + 1 skipped against a private preview.
+- **Per-tab data:** each category owns a `TabView` (question, accumulated rows, loading, selection, message), so switching tabs restores rather than resets.
+- **Append on scroll:** opening a tab asks page one of every enabled source; the grid's sentinel asks the next page of sources that have one, and the footer's pager is gone.
+- **One status line:** outcome → "Searching N sources…" → failure/credential sentence with Retry → count → "End of results", and empty/error states use `FinderState`.
+- **Proof:** asset-finder units 15 files / 146 passed; `asset-finder.spec.ts` 23 passed + 1 skipped against a private preview.
 
 ## Next
 
-1. Execute Phase 2 of the plan: `TabData`, `FinderGrid`, then the shell's append path.
-2. Then Phase 3: the Unsplash Editorial feed and the Images proof.
-3. Then Phase 4: fonts, Wallpaper Engine, the preview modal and the DESIGN.md rules.
+1. Execute Phase 3: the Unsplash Editorial feed and the Images browser proof.
+2. Then Phase 4: fonts, Wallpaper Engine, the preview modal and the DESIGN.md rules.
+3. Then the final whole-branch review and the branch finish.
 
 ## Blockers / unverified
 

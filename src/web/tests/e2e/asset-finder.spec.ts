@@ -318,7 +318,7 @@ test("a failed source leaves the other's rows and names itself", async ({
   await expect(dialog.locator("[data-yunari-asset-empty]")).toHaveCount(0);
 });
 
-test("a failed source and an empty answer are not read as 'no results'", async ({
+test("an empty answer for a term reads as 'no results'", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -330,6 +330,7 @@ test("a failed source and an empty answer are not read as 'no results'", async (
     }),
   });
   const dialog = await openFinder(page);
+  await page.locator("[data-yunari-asset-search]").fill("zzz");
 
   await expect(dialog.locator("[data-yunari-asset-empty]")).toBeVisible();
   await expect(dialog.locator("[data-yunari-asset-empty]")).toContainText(
@@ -337,42 +338,89 @@ test("a failed source and an empty answer are not read as 'no results'", async (
   );
 });
 
-test("the pager shows one page at a time and asks for the page it numbers", async ({
+test("scrolling to the end appends the next page and no pager exists", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   const { searches } = await stubAssets(page, {
-    sources: [lucide, fontAwesome],
-    answer: (request) => ({
-      pages: [
-        answered(
-          "lucide",
-          [result(`lucide:${request.pages["lucide"] ?? 1}`)],
-          2,
-        ),
-        answered(
-          "fontawesome-free",
-          [result(`fontawesome-free:${request.pages["lucide"] ?? 1}`)],
-          2,
-        ),
-      ],
-    }),
+    sources: [lucide],
+    answer: (request) => {
+      const pageNo = request.pages["lucide"] ?? 1;
+      return {
+        pages: [
+          answered(
+            "lucide",
+            Array.from({ length: 40 }, (_, at) =>
+              result(`lucide:${pageNo}-${at}`),
+            ),
+            2,
+          ),
+        ],
+      };
+    },
   });
-  await openFinder(page);
-  await expect
-    .poll(() => rowIds(page))
-    .toEqual(["lucide:1", "fontawesome-free:1"]);
-
-  await page.locator('[data-yunari-asset-page="2"]').click();
-
-  await expect
-    .poll(() => rowIds(page))
-    .toEqual(["lucide:2", "fontawesome-free:2"]);
-  expect(searches.at(-1)?.pages).toEqual({
-    lucide: 2,
-    "fontawesome-free": 2,
+  const dialog = await openFinder(page);
+  // The feed says it has two pages; the first answer's rows are on screen and
+  // the second page is not asked for until the reader reaches the sentinel.
+  await expect.poll(() => rowIds(page)).toContain("lucide:1-0");
+  await expect(dialog.locator("[data-yunari-asset-pager]")).toHaveCount(0);
+  await dialog.locator("[data-yunari-finder-grid]").evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
   });
+  await expect.poll(() => rowIds(page)).toHaveLength(80);
+  expect(searches.at(-1)?.pages).toEqual({ lucide: 2 });
+  // An appended page adds to the answer; it never replaces it.
+  expect(await rowIds(page)).toContain("lucide:1-0");
+});
+
+test("a keyed source's failure names itself and offers Connections while the other source answers", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  const keyedIcons: AssetSourceListing = {
+    ...lucide,
+    id: "keyed-icons",
+    label: "Keyed Icons",
+    requires: "unsplash",
+  };
+  await stubAssets(page, {
+    sources: [lucide, keyedIcons, colorSwoop],
+    answer: (request) =>
+      request.enabled.includes("colorswoop")
+        ? { pages: [answered("colorswoop", [])] }
+        : {
+            pages: [
+              answered("lucide", [result("lucide:house")]),
+              {
+                source: "keyed-icons",
+                results: [],
+                totalPages: undefined,
+                failure: { reason: "needs-credential", credential: "unsplash" },
+              },
+            ],
+          },
+  });
+  const dialog = await openFinder(page);
+
+  await expect.poll(() => rowIds(page)).toEqual(["lucide:house"]);
+  await expect(dialog.locator("[data-yunari-asset-status]")).toContainText(
+    "needs a key",
+  );
+  await expect(
+    dialog.locator(
+      '[data-yunari-asset-chip="keyed-icons"] [data-yunari-asset-chip-failed]',
+    ),
+  ).toHaveCount(1);
+  await expect(dialog.locator("[data-yunari-asset-connections]")).toBeVisible();
+
+  // A tab whose sources need no key has nothing Connections could fix.
+  await page.locator('[data-yunari-asset-tab="colour"]').click();
+  await expect.poll(() => rowIds(page)).toEqual([]);
+  await expect(dialog.locator("[data-yunari-asset-connections]")).toHaveCount(
+    0,
+  );
 });
 
 test("a later search never shows an earlier answer that arrives last", async ({
@@ -407,6 +455,127 @@ test("a later search never shows an earlier answer that arrives last", async ({
   // the newer one.
   await page.waitForTimeout(1200);
   expect(await rowIds(page)).toEqual(["lucide:newer"]);
+});
+
+test("a late answer never lands in the tab that was left", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  const { searches } = await stubAssets(page, {
+    sources: [lucide, colorSwoop],
+    answer: async (request) => {
+      if (request.enabled.includes("colorswoop")) {
+        return { pages: [answered("colorswoop", [])] };
+      }
+      if (request.query === "a") {
+        await new Promise((settle) => setTimeout(settle, 900));
+        return { pages: [answered("lucide", [result("lucide:older")])] };
+      }
+      return { pages: [answered("lucide", [result("lucide:newer")])] };
+    },
+  });
+  await openFinder(page);
+  const search = page.locator("[data-yunari-asset-search]");
+  await search.fill("a");
+  await expect.poll(() => searches.length).toBe(1);
+
+  // Leave the tab while its answer is still out, then come back and ask a new
+  // question: the abandoned answer belongs to neither.
+  await page.locator('[data-yunari-asset-tab="colour"]').click();
+  await expect.poll(() => searches.length).toBe(2);
+  await page.locator('[data-yunari-asset-tab="icon"]').click();
+  await search.fill("ab");
+  await expect.poll(() => searches.length).toBe(3);
+
+  await expect.poll(() => rowIds(page)).toEqual(["lucide:newer"]);
+  await page.waitForTimeout(1200);
+  expect(await rowIds(page)).toEqual(["lucide:newer"]);
+});
+
+test("an action reaches busy and then its outcome", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await page.route("**/api/assets/bytes*", async (route) => {
+    await new Promise((settle) => setTimeout(settle, 500));
+    await route.fulfill({
+      status: 200,
+      body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10 12 3l9 7"/></svg>',
+      headers: { "content-type": "image/svg+xml" },
+    });
+  });
+  await stubAssets(page, {
+    sources: [lucide],
+    answer: () => ({
+      pages: [answered("lucide", [result("lucide:house")])],
+    }),
+  });
+  const dialog = await openFinder(page);
+  await page.locator("[data-yunari-finder-card]").first().click();
+  const primary = dialog.locator("[data-yunari-asset-action]");
+  await primary.click();
+
+  await expect(primary).toHaveAttribute("data-yunari-asset-action-busy", "");
+  await expect(primary).toContainText("Placing…");
+  await expect(primary).toBeDisabled();
+  await expect(dialog.locator("[data-yunari-asset-status]")).toHaveAttribute(
+    "data-tone",
+    "ok",
+  );
+  await expect(primary).not.toHaveAttribute(
+    "data-yunari-asset-action-busy",
+    "",
+  );
+  await expect(primary).toBeEnabled();
+});
+
+test("a failed action says so in the status line and returns the button", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await page.route("**/api/assets/bytes*", (route) =>
+    route.fulfill({ status: 500 }),
+  );
+  await stubAssets(page, {
+    sources: [lucide],
+    answer: () => ({
+      pages: [answered("lucide", [result("lucide:house")])],
+    }),
+  });
+  const dialog = await openFinder(page);
+  await page.locator("[data-yunari-finder-card]").first().click();
+  const primary = dialog.locator("[data-yunari-asset-action]");
+  await primary.click();
+
+  await expect(dialog.locator("[data-yunari-asset-status]")).toHaveAttribute(
+    "data-tone",
+    "failed",
+  );
+  await expect(dialog.locator("[data-yunari-asset-status]")).toContainText(
+    "did not send",
+  );
+  await expect(primary).toBeEnabled();
+});
+
+test("a pending search says it is searching before it counts results", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await stubAssets(page, {
+    sources: [lucide],
+    answer: async () => {
+      await new Promise((settle) => setTimeout(settle, 400));
+      return { pages: [answered("lucide", [result("lucide:house")])] };
+    },
+  });
+  const dialog = await openFinder(page);
+  const status = dialog.locator("[data-yunari-asset-status]");
+  await expect(status).toContainText("Searching");
+  await expect(status).toContainText("1 result");
 });
 
 test("the first search names the host once, and the second does not", async ({
@@ -585,7 +754,7 @@ test("the footer's action imports the selected row, asking for its namespaced id
   expect(decodeURIComponent(asked[0] ?? "")).toContain("id=lucide:house");
   // A refusal would print the reason beside the count; a successful import
   // leaves none.
-  await expect(dialog.locator("[data-yunari-asset-count]")).not.toContainText(
+  await expect(dialog.locator("[data-yunari-asset-status]")).not.toContainText(
     "did not send",
   );
   // An icon is geometry, not a picture: a Fabric image cannot take the theme's

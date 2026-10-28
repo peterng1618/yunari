@@ -271,12 +271,21 @@ function footerAction(): HTMLButtonElement {
   return found;
 }
 
-function pageButton(page: number): HTMLButtonElement {
-  const found = document.querySelector<HTMLButtonElement>(
-    `[data-yunari-asset-page="${page}"]`,
-  );
-  if (found === null) throw new Error(`no page ${page}.`);
-  return found;
+/** jsdom has no observer. This one reports the sentinel as visible the moment
+ *  it is watched, which is the append a real scroll to the end would make. */
+function appendOnSight(): void {
+  class Observer {
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+    observe(): void {
+      this.callback(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        this as unknown as IntersectionObserver,
+      );
+    }
+    disconnect(): void {}
+    unobserve(): void {}
+  }
+  vi.stubGlobal("IntersectionObserver", Observer);
 }
 
 function kindButton(kind: string): HTMLButtonElement {
@@ -301,6 +310,7 @@ afterEach(async () => {
   root = undefined;
   container = undefined;
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -484,32 +494,25 @@ describe("AssetFinder's Colours tab", () => {
     expect(document.querySelector("[data-yunari-asset-empty]")).toBeNull();
   });
 
-  it("advances a lone palette source to the page the feed says exists", async () => {
-    // Color Hunt cannot say how many pages there are, but a full page does prove
-    // the next one exists; without a second source the pager is still the way
-    // there.
-    searchAssets.mockResolvedValue({
-      pages: [
-        page(
-          "colorhunt",
-          Array.from({ length: 40 }, (_, at) => result(`colorhunt:${at}`)),
-          { totalPages: 2 },
-        ),
-      ],
-    });
+  it("appends the next page of a lone palette source instead of paging", async () => {
+    appendOnSight();
+    searchAssets
+      .mockResolvedValueOnce({
+        pages: [page("colorhunt", [result("colorhunt:a")], { totalPages: 2 })],
+      })
+      .mockResolvedValueOnce({
+        pages: [page("colorhunt", [result("colorhunt:b")], { totalPages: 2 })],
+      });
 
     await render([colorhunt]);
     await settle();
-
-    expect(
-      document.querySelector("[data-yunari-asset-page-next]"),
-    ).not.toBeNull();
-    await act(async () => pageButton(2).click());
     await settle();
 
-    expect(searchAssets.mock.calls.at(-1)?.[0]?.pages).toEqual({
-      colorhunt: 2,
-    });
+    expect(searchAssets.mock.calls[0]?.[0]?.pages).toEqual({ colorhunt: 1 });
+    expect(searchAssets.mock.calls[1]?.[0]?.pages).toEqual({ colorhunt: 2 });
+    // An appended page adds to the answer; it never replaces it.
+    expect(rowIds()).toEqual(["colorhunt:a", "colorhunt:b"]);
+    expect(document.querySelector("[data-yunari-asset-pager]")).toBeNull();
   });
 
   it("draws no palette chip while the Gradients filter is active", async () => {
@@ -807,7 +810,8 @@ describe("AssetFinder search", () => {
     ).toContain("api.unsplash.com");
   });
 
-  it("asks every enabled source for the page the pager shows", async () => {
+  it("appends the next page of every source that has one", async () => {
+    appendOnSight();
     searchAssets
       .mockResolvedValueOnce({
         pages: [
@@ -828,41 +832,150 @@ describe("AssetFinder search", () => {
 
     await render([lucide, fontAwesome]);
     await settle();
+    await settle();
 
     expect(searchAssets.mock.calls[0]?.[0]?.pages).toEqual({
       lucide: 1,
       "fontawesome-free": 1,
     });
-
-    await act(async () => pageButton(2).click());
-    await settle();
-
     expect(searchAssets.mock.calls[1]?.[0]?.pages).toEqual({
       lucide: 2,
       "fontawesome-free": 2,
     });
-    // A page replaces the one before it: the grid never shows two pages at once.
-    expect(rowIds()).toEqual(["lucide:c", "fontawesome-free:d"]);
+    // The grid grows: the first page's rows are still there, interleaved with
+    // the new ones in the same source order.
+    expect(rowIds()).toEqual([
+      "lucide:a",
+      "fontawesome-free:b",
+      "lucide:c",
+      "fontawesome-free:d",
+    ]);
   });
 
-  it("returns to the first page when the question changes", async () => {
-    searchAssets.mockResolvedValue({
-      pages: [page("lucide", [result("lucide:a")], { totalPages: 3 })],
+  it("keeps each tab's own question and rows", async () => {
+    searchAssets.mockImplementation(async (request) =>
+      request.enabled.includes("unsplash")
+        ? { pages: [page("unsplash", [result("unsplash:sun")])] }
+        : {
+            pages: [
+              page("lucide", [
+                result(request.query === "cat" ? "lucide:cat" : "lucide:house"),
+              ]),
+            ],
+          },
+    );
+
+    await render([lucide, unsplash]);
+    await settle();
+    await type("cat");
+    await settle();
+    expect(rowIds()).toEqual(["lucide:cat"]);
+
+    await act(async () => tab("image").click());
+    await settle();
+    expect(input().value).toBe("");
+    await type("sun");
+    await settle();
+    expect(rowIds()).toEqual(["unsplash:sun"]);
+
+    await act(async () => tab("icon").click());
+    await settle();
+    // The icon tab still answers its own question: switching back neither
+    // clears nor re-asks it.
+    expect(input().value).toBe("cat");
+    expect(rowIds()).toEqual(["lucide:cat"]);
+    expect(
+      searchAssets.mock.calls.filter((call) =>
+        call[0]?.enabled.includes("lucide"),
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("retries only the source that failed, and drops its sentence", async () => {
+    searchAssets
+      .mockResolvedValueOnce({
+        pages: [
+          page("lucide", [], {
+            failure: { reason: "failed", message: "down" },
+          }),
+          page("fontawesome-free", [result("fontawesome-free:house")]),
+        ],
+      })
+      .mockResolvedValueOnce({
+        pages: [page("lucide", [result("lucide:house")])],
+      });
+
+    await render([lucide, fontAwesome]);
+    await settle();
+    expect(
+      document.querySelector("[data-yunari-asset-failure]"),
+    ).not.toBeNull();
+
+    const retry = document.querySelector<HTMLButtonElement>(
+      "[data-yunari-asset-retry]",
+    );
+    if (retry === null) throw new Error("no retry control.");
+    await act(async () => retry.click());
+    await settle();
+
+    // The survivor is not asked again: only the refused source is retried.
+    expect(searchAssets.mock.calls.at(-1)?.[0]?.pages).toEqual({ lucide: 1 });
+    expect(rowIds()).toContain("lucide:house");
+    expect(document.querySelector("[data-yunari-asset-failure]")).toBeNull();
+  });
+
+  it("says it is searching before it counts, and names the end of the feed", async () => {
+    const pending = deferred<AssetSearchAnswer>();
+    searchAssets.mockReturnValueOnce(pending.promise);
+
+    await render([lucide]);
+    expect(
+      document.querySelector("[data-yunari-asset-status]")?.textContent,
+    ).toContain("Searching 1 source");
+
+    await act(async () => {
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
+      await Promise.resolve();
     });
+    await act(async () => {
+      void pending.resolve({
+        pages: [page("lucide", [result("lucide:house")])],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const status = document.querySelector("[data-yunari-asset-status]");
+    expect(status?.textContent).toContain("1 result · 1 source");
+    // The feed has no next page, so the count says so once.
+    expect(status?.textContent).toContain(uiCopy.assets.endOfResults);
+  });
+
+  it("returns a new question to page one and drops the old rows", async () => {
+    appendOnSight();
+    searchAssets
+      .mockResolvedValueOnce({
+        pages: [page("lucide", [result("lucide:a")], { totalPages: 2 })],
+      })
+      .mockResolvedValueOnce({
+        pages: [page("lucide", [result("lucide:b")], { totalPages: 2 })],
+      })
+      .mockResolvedValueOnce({
+        pages: [page("lucide", [result("lucide:house")])],
+      });
 
     await render([lucide]);
     await settle();
-    await act(async () => pageButton(3).click());
     await settle();
-
-    expect(document.querySelector("[aria-current='page']")?.textContent).toBe(
-      "3",
-    );
+    expect(rowIds()).toEqual(["lucide:a", "lucide:b"]);
 
     await type("house");
     await settle();
 
     expect(searchAssets.mock.calls.at(-1)?.[0]?.pages).toEqual({ lucide: 1 });
+    expect(searchAssets.mock.calls.at(-1)?.[0]?.query).toBe("house");
+    // The appended rows answered the old question; they leave with it.
+    expect(rowIds()).toEqual(["lucide:house"]);
   });
 
   it("prints the result's own second word, which distinguishes a style or an author", async () => {
@@ -984,35 +1097,6 @@ describe("AssetFinder's mixed grid", () => {
     await settle();
 
     expect(rowIds()).toEqual(["lucide:x", "fontawesome-free:x"]);
-  });
-
-  it("clamps a page the answer no longer reaches", async () => {
-    // Page one says there are two pages; page two's own answer says one. Rather
-    // than leave an empty grid under a numeral nothing reaches, the pager lands
-    // on the last page the answer has.
-    searchAssets.mockImplementation(async (request) =>
-      request.pages["lucide"] === 2
-        ? {
-            pages: [page("lucide", [result("lucide:only")], { totalPages: 1 })],
-          }
-        : { pages: [page("lucide", [result("lucide:a")], { totalPages: 2 })] },
-    );
-
-    await render([lucide]);
-    await settle();
-    await act(async () => pageButton(2).click());
-    await settle();
-    // The clamp's own answer is a second request, after React flushes the page
-    // it moved to.
-    await settle();
-
-    // It lands back on page one and asks for it, rather than sitting on a page
-    // no answer has.
-    expect(document.querySelector("[aria-current='page']")?.textContent).toBe(
-      "1",
-    );
-    expect(rowIds()).toEqual(["lucide:a"]);
-    expect(searchAssets.mock.calls.at(-1)?.[0]?.pages).toEqual({ lucide: 1 });
   });
 
   it("names the host once, on the first search only", async () => {
@@ -1204,6 +1288,8 @@ describe("AssetFinder's own controls", () => {
     searchAssets.mockResolvedValue({ pages: [page("lucide", [])] });
     await render([lucide]);
     await settle();
+    await type("zzz");
+    await settle();
     expect(document.querySelector("[data-yunari-asset-empty]")).not.toBeNull();
 
     const pending = deferred<AssetSearchAnswer>();
@@ -1233,33 +1319,29 @@ describe("AssetFinder's own controls", () => {
     expect(rowIds()).toEqual(["lucide:house"]);
   });
 
-  it("keeps the results on screen and marks the grid busy while another page loads", async () => {
-    searchAssets.mockResolvedValue({
+  it("keeps the results on screen and shows the appending skeletons", async () => {
+    appendOnSight();
+    searchAssets.mockResolvedValueOnce({
       pages: [page("lucide", [result("lucide:house")], { totalPages: 2 })],
     });
+    const pending = deferred<AssetSearchAnswer>();
+    searchAssets.mockReturnValueOnce(pending.promise);
+
     await render([lucide]);
     await settle();
     expect(rowIds()).toEqual(["lucide:house"]);
 
-    const pending = deferred<AssetSearchAnswer>();
-    searchAssets.mockReturnValueOnce(pending.promise);
-    await act(async () => pageButton(2).click());
-
-    // The page's own rows stay: pagination is a slice of an answer, not a
-    // first load, so only the region says it is busy.
+    // The appended page is out: the answer stays, and the grid says more rows
+    // are coming rather than replacing what the author is reading.
     expect(rowIds()).toEqual(["lucide:house"]);
+    expect(
+      document.querySelectorAll("[data-yunari-skeleton-card]"),
+    ).toHaveLength(4);
     expect(
       document
         .querySelector("[data-yunari-asset-grid]")
         ?.getAttribute("aria-busy"),
     ).toBe("true");
-    expect(document.querySelector("[data-yunari-skeleton-grid]")).toBeNull();
-
-    // Let the debounce fire, so the page's request is the pending one.
-    await act(async () => {
-      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
-      await Promise.resolve();
-    });
 
     await act(async () => {
       void pending.resolve({
@@ -1269,7 +1351,10 @@ describe("AssetFinder's own controls", () => {
       await Promise.resolve();
     });
 
-    expect(rowIds()).toEqual(["lucide:star"]);
+    expect(rowIds()).toEqual(["lucide:house", "lucide:star"]);
+    expect(
+      document.querySelectorAll("[data-yunari-skeleton-card]"),
+    ).toHaveLength(0);
     expect(
       document
         .querySelector("[data-yunari-asset-grid]")
