@@ -81,6 +81,14 @@ export interface PanelHardware {
   readonly serial?: string;
 }
 
+/** What a panel is identified by: the fields `samePanel` compares, so a hint
+ *  enumerated from hardware can be compared without inventing a model. */
+export interface PanelIdentity {
+  readonly vendorId: number;
+  readonly productId: number;
+  readonly serial?: string;
+}
+
 export interface DisplayRecord {
   readonly id: string;
   readonly label: string;
@@ -324,8 +332,16 @@ function isUsbId(value: unknown): value is number {
 
 /** Whether two hardware identities name the same panel, by the monitor rule:
  *  the serial is the identity when both ends have one — a panel moved to another
- *  port keeps its serial — and the IDs are all either end has otherwise. */
-function samePanel(first: PanelHardware, second: PanelHardware): boolean {
+ *  port keeps its serial — and the IDs are all either end has otherwise.
+ *
+ *  Exported because the route that lists attached panels needs the *same*
+ *  answer: a looser comparison there offers a panel whose only outcome is the
+ *  refusal below. The parameter is the three fields it reads, not
+ *  `PanelHardware`, because a hint from the family table has no model yet. */
+export function samePanel(
+  first: PanelIdentity,
+  second: PanelIdentity,
+): boolean {
   const serial = reportedSerial(first.serial);
   const other = reportedSerial(second.serial);
 

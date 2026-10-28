@@ -4822,9 +4822,13 @@ describe("A local monitor is specified rather than paired", () => {
 
   describe("a USB panel", () => {
     const STRIP = { vendorId: 0x1cbe, productId: 0xa092, model: "lianli-9-2" };
-    const ATTACHED_PANELS = [
-      { vendorId: 0x1cbe, productId: 0xa092, serial: "PANEL0001" },
-    ];
+    const ATTACHED_PANEL = {
+      vendorId: 0x1cbe,
+      productId: 0xa092,
+      serial: "PANEL0001",
+      label: 'Lian Li 9.2" LCD',
+    };
+    const ATTACHED_PANELS = [ATTACHED_PANEL];
 
     /** A manager that starts and stops records without opening anything: what
      *  these cases need is which routes reach it. */
@@ -4864,7 +4868,9 @@ describe("A local monitor is specified rather than paired", () => {
           "/api/displays/panels",
         );
         expect(attached.status).toBe(200);
-        expect(attached.json()).toEqual({ panels: ATTACHED_PANELS });
+        expect(attached.json()).toEqual({
+          panels: [{ ...ATTACHED_PANEL, held: false }],
+        });
 
         const added = await request(
           hosting.server,
@@ -4879,6 +4885,17 @@ describe("A local monitor is specified rather than paired", () => {
         // Driven now, not on the next reconcile: the first frame is the whole
         // difference between a configured panel and a black one.
         expect(started).toEqual(["strip"]);
+
+        // And the list now says the device is held, which is what stops a
+        // surface offering it again for a write that could only be refused.
+        const after = await request(
+          hosting.server,
+          "GET",
+          "/api/displays/panels",
+        );
+        expect(after.json()).toEqual({
+          panels: [{ ...ATTACHED_PANEL, held: true }],
+        });
       } finally {
         await hosting.close();
       }
@@ -9833,7 +9850,9 @@ describe("The root page resolves the display that asked", () => {
     await activeTheme.write("left-screen", "studio");
 
     // Naming a display is not a way to become one: an unpaired caller from the
-    // LAN never reaches the resolution at all.
+    // LAN never reaches the resolution at all. A document load is sent to the
+    // pairing page rather than handed a text 403 — the id still resolves
+    // nothing, and the caller is given the one surface that can pair it.
     const refused = await request(
       hosted.server,
       "GET",

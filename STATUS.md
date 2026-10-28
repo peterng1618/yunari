@@ -17,15 +17,13 @@ USB panel support behind a `PanelDevice` port: a Lian Li 9.2" LCD (`1CBE:A092`) 
 
 ## Last completed change
 
-- **A second family proved the port and broke the registry:** adding the Kraken found `panel-manager.ts` importing the TUR driver, so `panel-families.ts` is the fix and a red-proven test holds it.
-- **`PanelDevice` gained one optional member**, `minimumIntervalMs`, so a storing panel states its own cadence rather than the runner guessing a family's flash cost.
-- **liquidctl's source found three defects in the first Kraken draft** — the table was read after the delete, the header was counted as 12 bytes where the wire carries 20, and a delete was answered by a stray status report — each now pinned by a test.
+- **Host settings can add an attached USB panel**, and the panels route answers `held` by the store's own `samePanel` rule so an added device is never offered again.
+- **`PanelHint` gained `label`**, one owner (`KRAKEN_LABEL`) for what a family calls its device, so a surface and a driver cannot name it differently.
 
 ## Next
 
 1. Look at the glass and confirm the picture and its orientation.
-2. Add the Host settings surface for choosing an attached panel.
-3. Resume the backlog-drain plan at Phase 0.
+2. Resume the backlog-drain plan at Phase 0.
 
 ## Blockers / unverified
 

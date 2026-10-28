@@ -105,6 +105,7 @@ import {
   normalizePanel,
   normalizePatch,
   PanelAlreadyHeldError,
+  samePanel,
 } from "./settings/displays.js";
 import type { FontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
@@ -2211,7 +2212,28 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
-        sendJson(response, 200, { panels: await panelsAttached() });
+        // **`held` is answered here because this is where both lists are.** A
+        // surface offering a panel that already has a record would be offering
+        // a choice whose only outcome is the 409 below — and the client cannot
+        // work it out, since the display map carries no hardware. An attached
+        // panel stays in the list with `held` true rather than disappearing:
+        // a device the owner can see is plugged in, and told is already added,
+        // is a different fact from one they cannot see at all.
+        //
+        // The comparison is the store's own `samePanel`, not an equality on the
+        // ids: that is the rule `createPanel` refuses by, and a surface that
+        // used a different one would offer a device the write then rejects.
+        const known = displays === undefined ? [] : await displays.list();
+        const hardware = known.flatMap((record) =>
+          record.panel === undefined ? [] : [record.panel],
+        );
+
+        sendJson(response, 200, {
+          panels: (await panelsAttached()).map((panel) => ({
+            ...panel,
+            held: hardware.some((taken) => samePanel(taken, panel)),
+          })),
+        });
         return;
       }
       // A USB panel: driven by this host rather than served a page, so it is

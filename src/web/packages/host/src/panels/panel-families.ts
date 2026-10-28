@@ -1,4 +1,8 @@
-import { attachedKrakens, openKraken } from "./kraken-z3-panel.js";
+import {
+  attachedKrakens,
+  KRAKEN_LABEL,
+  openKraken,
+} from "./kraken-z3-panel.js";
 import type { PanelDevice, PanelHint } from "./panel-device.js";
 import { attachedPanels, openPanel, panelModelFor } from "./tur-usb-panel.js";
 
@@ -65,7 +69,7 @@ const TUR_FAMILY: readonly PanelFamily[] = [
 const KRAKEN_FAMILY: readonly PanelFamily[] = [
   {
     id: "kraken-z3",
-    label: "NZXT Kraken Z (Z53/Z63/Z73)",
+    label: KRAKEN_LABEL,
     vendorId: 0x1e71,
     productId: 0x3008,
     stores: true,

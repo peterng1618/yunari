@@ -113,6 +113,7 @@ describe("attached hints", () => {
       vendorId: 0x1e71,
       productId: 0x3008,
       serial: "344A35613131",
+      label: "NZXT Kraken Z (Z53/Z63/Z73)",
     };
 
     expect(familyFor(hint.vendorId, hint.productId)).toBeDefined();

@@ -21,6 +21,9 @@ export interface PanelHint {
   readonly productId: number;
   /** Empty when the firmware reports none — the address is then all there is. */
   readonly serial: string;
+  /** What the family calls this device, for a surface choosing between them.
+   *  A model's name, not the record's label: the label is the owner's. */
+  readonly label: string;
 }
 
 export interface PanelDevice {

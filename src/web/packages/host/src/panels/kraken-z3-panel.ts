@@ -63,6 +63,10 @@ export interface KrakenHint extends PanelHint {
   readonly model: "kraken-z3";
 }
 
+/** What the family calls this device. One owner: the hint and the family row
+ *  both read it, so a surface and a driver cannot name it differently. */
+export const KRAKEN_LABEL = "NZXT Kraken Z (Z53/Z63/Z73)";
+
 interface HidReply {
   readonly report: Uint8Array;
 }
@@ -414,6 +418,7 @@ export function krakenHint(
     vendorId: VENDOR_ID,
     productId: PRODUCT_ID,
     serial: reportedSerial(device.serialNumber) ?? "",
+    label: KRAKEN_LABEL,
     model: "kraken-z3",
   };
 }
