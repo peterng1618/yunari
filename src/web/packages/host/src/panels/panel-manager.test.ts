@@ -223,6 +223,34 @@ describe("createPanelManager", () => {
     expect(manager.running()).toEqual([]);
   });
 
+  it("gives up on a close that never answers and reports the display", async () => {
+    const errors: string[] = [];
+
+    h.family = familyOver(async () => ({
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present: vi.fn(async () => {}),
+      // The wedge the bound exists for: a device that never calls back.
+      close: () => new Promise<void>(() => {}),
+    }));
+
+    const manager = managerOver({
+      shutdownGraceMs: 20,
+      onError: (displayId, message) => errors.push(`${displayId}: ${message}`),
+    });
+
+    await manager.start("strip");
+
+    const started = Date.now();
+    await manager.stopAll();
+
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(errors).toEqual([
+      "strip: Shutdown waited 0.02s for this panel's close and is closing anyway.",
+    ]);
+    expect(manager.running()).toEqual([]);
+  });
+
   it("reads videoFor once per start, and undefined leaves stills", async () => {
     const present = vi.fn(async () => {});
     const presentOverlay = vi.fn(async () => {});

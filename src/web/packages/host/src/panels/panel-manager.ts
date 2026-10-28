@@ -33,6 +33,8 @@ export interface PanelManagerOptions {
   readonly onError?: (displayId: string, message: string) => void;
   /** The browser to rasterise with; the launcher's own discovery by default. */
   readonly browser?: string | undefined;
+  /** How long shutdown waits for one display before abandoning it. */
+  readonly shutdownGraceMs?: number;
 }
 
 export interface PanelManager {
@@ -316,6 +318,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
     async stopAll(): Promise<void> {
       stopping = true;
+      const grace = options.shutdownGraceMs ?? SHUTDOWN_GRACE_MS;
 
       // Work already queued still has to settle first: a start that began
       // before shutdown would otherwise open a port after this returns. A
@@ -324,28 +327,36 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       const stalled = new Set<string>();
       await Promise.all(
         [...chains.entries()].map(async ([displayId, chain]) => {
-          if (await within(chain, SHUTDOWN_GRACE_MS)) return;
+          if (await within(chain, grace)) return;
 
           stalled.add(displayId);
           report(
             displayId,
-            `Shutdown waited ${SHUTDOWN_GRACE_MS / 1000}s for this panel and is closing anyway.`,
+            `Shutdown waited ${grace / 1000}s for this panel and is closing anyway.`,
           );
         }),
       );
 
       // Every stop goes through the display's own chain, so a DELETE that
-      // arrived first is not raced by a second close.
+      // arrived first is not raced by a second close. The stop itself is as
+      // boundable as a queued one: a close that never calls back would
+      // otherwise keep shutdown here and never release the host.
       await Promise.all(
         [...entries.keys()]
           .filter((displayId) => !stalled.has(displayId))
-          .map((displayId) =>
-            enqueue(displayId, () => stopNow(displayId)).catch(
+          .map(async (displayId) => {
+            const stop = enqueue(displayId, () => stopNow(displayId)).catch(
               (error: unknown) => {
                 report(displayId, messageOf(error));
               },
-            ),
-          ),
+            );
+            if (await within(stop, grace)) return;
+
+            report(
+              displayId,
+              `Shutdown waited ${grace / 1000}s for this panel's close and is closing anyway.`,
+            );
+          }),
       );
 
       entries.clear();

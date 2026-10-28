@@ -51,7 +51,13 @@ const FILE_CHUNK_BYTES = 249;
  * start writes three commands whose acks can all sit ahead of the reply.
  */
 const FILE_REPLY_DEADLINE_MS = 30_000;
-/** The overlay init's two answers; the bare prefix is not one of them. */
+/**
+ * The overlay init's two answers; the bare prefix is not one of them.
+ *
+ * ponytail: `seq_png_init_sucess` was observed on hardware; the `_failed`
+ * phrase is inherited from the vendor protocol's spelling and has never been
+ * captured. A hardware run that sees a refusal must record its exact text.
+ */
 const OVERLAY_INIT_OK = "seq_png_init_sucess";
 const OVERLAY_INIT_FAILED = "seq_png_init_failed";
 /** Storage the vendor firmware reads clips from. */
@@ -362,10 +368,10 @@ class TurzxPanel implements PanelDevice {
   }
 
   /**
-   * The first reply carrying `phrase`; earlier stale acks are skipped and
-   * silence or the deadline ends the wait. Only init, query, start and create
-   * are recorded as text replies, so a phrase match is all this protocol can
-   * pin.
+   * The first reply carrying `phrase`; earlier stale acks are skipped and an
+   * empty read or the deadline ends the wait. Only init, query, start and
+   * create are recorded as text replies, so a phrase match is all this protocol
+   * can pin.
    */
   private readFor(phrase: string): Promise<string> {
     return this.readUntil(`"${phrase}"`, (text) =>
@@ -379,8 +385,8 @@ class TurzxPanel implements PanelDevice {
    * `openTurzxPanel` ends on QUERY_STATUS, so its text reply is buffered and is
    * the first bytes the next read returns; a DELETE_FILE acknowledgement may
    * trail a reply too. Accepting by content rather than by position tolerates
-   * those, and silence or the deadline keeps a foreign device from hanging the
-   * queue.
+   * those, and an empty read or the deadline keeps a foreign device from
+   * hanging the queue.
    */
   private async readUntil<T>(
     wanted: string,
@@ -397,13 +403,15 @@ class TurzxPanel implements PanelDevice {
   }
 
   /**
-   * Reads until `accept` answers, the wire goes silent, or the deadline.
+   * Reads until `accept` answers, an empty read ends the wait, or the deadline.
    *
    * A non-empty reply that does not match is a stale ack from an earlier
    * command — the port retains them now — and is skipped rather than spending
-   * the one attempt the reply was supposed to get. Silence ends the read at
-   * once: a device that has said nothing will not say it later. The last reply
-   * is returned even when nothing was accepted, so the caller can name it.
+   * the one attempt the reply was supposed to get. An empty read is the
+   * transport's 10 s cap for a device that said nothing, so the trade is a fast
+   * answer for a `GET_FILE_SIZE` the device never acknowledges rather than a
+   * full 30 s wait. The last non-empty reply is returned even when nothing was
+   * accepted, so the caller can name it.
    */
   private async readReplies<T>(
     accept: (text: string) => T | undefined,

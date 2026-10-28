@@ -65,7 +65,8 @@ const READ_QUIET_MS = 50;
 
 /**
  * Replies held for a later read. A device that chatters while nothing reads is
- * a device whose older replies nobody wants; the list keeps the newest.
+ * a device whose older replies matter least: the cap keeps the newest 64 and
+ * drops the oldest sealed reply, matching reply or not.
  */
 const MAX_QUEUED_REPLIES = 64;
 
@@ -292,7 +293,8 @@ class OpenSerialPort implements SerialTransport {
 
     this.queued.push(reply);
     // A device that talks faster than the host reads must not grow this
-    // process: the oldest replies are the ones a start has already moved past.
+    // process. The oldest goes first and may be one this read wanted; the
+    // alternative is unbounded memory for chatter nobody may ever read.
     if (this.queued.length > MAX_QUEUED_REPLIES) this.queued.shift();
   }
 

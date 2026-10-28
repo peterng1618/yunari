@@ -260,8 +260,8 @@ describe("openTurzxPanel", () => {
     }
   });
 
-  it("ends a reply wait on silence rather than the 30 s deadline", async () => {
-    const fake = fakeTransport("chs_5inch.dev1_rom1.88"); // HELLO, then silence
+  it("ends a reply wait on an empty read rather than the 30 s deadline", async () => {
+    const fake = fakeTransport("chs_5inch.dev1_rom1.88"); // HELLO, then an empty read
     const panel = await opened(fake.transport, {
       transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
       sleep: async () => {},
