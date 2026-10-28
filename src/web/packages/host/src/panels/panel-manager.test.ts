@@ -406,6 +406,35 @@ describe("createPanelManager", () => {
     ).rejects.toBeInstanceOf(PanelNotRunningError);
   });
 
+  it("refuses a command when the entry's runner is no longer running", async () => {
+    const run = vi.fn(async () => "needReSend:0|renderCnt:1");
+    let closes = 0;
+    const close = vi.fn(async () => {
+      closes += 1;
+      if (closes === 1) throw new Error("close failed");
+    });
+
+    h.family = familyOver(async () => ({
+      ...deviceOver(),
+      close,
+      controls: { commands: ["status"], run },
+    }));
+
+    const manager = managerOver();
+    await manager.start("strip");
+    await pause(2 * SETTLE_MS);
+
+    // A failed close leaves the entry holding a runner whose port is on its way
+    // down; its `running` flag is already false.
+    await expect(manager.stop("strip")).rejects.toThrow("close failed");
+    await expect(
+      manager.command("strip", { kind: "status" }),
+    ).rejects.toBeInstanceOf(PanelNotRunningError);
+    expect(run).not.toHaveBeenCalled();
+
+    await manager.stop("strip");
+  });
+
   it("leaves the next start its own entry after a failed one", async () => {
     const errors: string[] = [];
     let opens = 0;

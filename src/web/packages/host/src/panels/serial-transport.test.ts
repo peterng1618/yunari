@@ -147,6 +147,38 @@ describe("the serial transport's read", () => {
     expect(Date.now() - started).toBeLessThan(40);
   });
 
+  it("drains what arrived unread, then reads the answer that follows", async () => {
+    const port = new FakePort();
+    const transport = transportOver(port);
+
+    // A reply that arrived with nothing reading is exactly the open-time
+    // QUERY_STATUS text a `status` command must not mistake for its answer.
+    port.emit("data", Buffer.from("needReSend:0|renderCnt:0"));
+    await pause(SETTLED_MS);
+
+    const started = Date.now();
+    expect(decode(transport.drainPending())).toBe("needReSend:0|renderCnt:0");
+    expect(Date.now() - started).toBeLessThan(40);
+
+    port.emit("data", Buffer.from("needReSend:0|renderCnt:1"));
+    expect(decode(await transport.read(1000))).toBe("needReSend:0|renderCnt:1");
+  });
+
+  it("drains a burst still arriving when no read is waiting", async () => {
+    const port = new FakePort();
+    const transport = transportOver(port);
+
+    port.emit("data", Buffer.from("stal"));
+    expect(decode(transport.drainPending())).toBe("stal");
+    expect((await transport.read(30)).length).toBe(0);
+  });
+
+  it("drains nothing when the wire has been silent", () => {
+    const transport = transportOver(new FakePort());
+
+    expect(transport.drainPending().length).toBe(0);
+  });
+
   it("runs two concurrent reads one at a time, in order", async () => {
     const port = new FakePort();
     const transport = transportOver(port);

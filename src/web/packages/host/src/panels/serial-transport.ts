@@ -19,6 +19,15 @@ export interface SerialPortInfo {
 export interface SerialTransport {
   write(bytes: Uint8Array): Promise<void>;
   read(timeoutMs: number): Promise<Uint8Array>;
+  /**
+   * Everything the device has already sent and nobody has read, dropped out of
+   * the queue and returned; empty when nothing is pending.
+   *
+   * A command that reads for an answer of its own must not be handed a reply
+   * from before it — the panel answers HELLO and QUERY_STATUS even when nothing
+   * asked. This never waits, so it is not a substitute for `read`.
+   */
+  drainPending(): Uint8Array;
   close(): Promise<void>;
 }
 
@@ -195,6 +204,33 @@ class OpenSerialPort implements SerialTransport {
       () => undefined,
     );
     return next;
+  }
+
+  drainPending(): Uint8Array {
+    const parts = this.queued.splice(0);
+
+    // A burst still arriving may belong to a read already waiting for it, so
+    // it is only dropped when nobody is reading.
+    if (this.waiting === undefined) {
+      parts.push(...this.burst.map((chunk) => Uint8Array.from(chunk)));
+      this.burst = [];
+
+      if (this.quiet !== undefined) {
+        clearTimeout(this.quiet);
+        this.quiet = undefined;
+      }
+    }
+
+    const bytes = new Uint8Array(
+      parts.reduce((total, part) => total + part.length, 0),
+    );
+    let at = 0;
+    for (const part of parts) {
+      bytes.set(part, at);
+      at += part.length;
+    }
+
+    return bytes;
   }
 
   private readOnce(timeoutMs: number): Promise<Uint8Array> {

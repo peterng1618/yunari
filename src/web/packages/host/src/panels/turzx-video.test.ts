@@ -25,6 +25,7 @@ function fakeTransport(...replies: string[]) {
         next < replies.length
           ? new TextEncoder().encode(`${replies[next++]}\0`)
           : new Uint8Array(),
+      drainPending: () => new Uint8Array(),
       close: async () => {},
     } satisfies SerialTransport,
   };

@@ -473,16 +473,24 @@ class TurzxPanel implements PanelDevice {
           return `The panel's brightness is now ${level}%.`;
         });
       }
-      case "screen":
+      case "screen": {
+        const on = command.on;
+        // A route that lost the field would otherwise read as "off": blanking
+        // the panel is a state change nobody asked for.
+        if (typeof on !== "boolean") {
+          throw new Error("The screen command needs on to be true or false.");
+        }
+
         return await this.enqueue(async () => {
           await this.send(
-            command.on ? TURZX_COMMAND.screenOn : TURZX_COMMAND.screenOff,
+            on ? TURZX_COMMAND.screenOn : TURZX_COMMAND.screenOff,
           );
 
-          return command.on
+          return on
             ? "The panel's screen is on."
             : "The panel's screen is off.";
         });
+      }
       case "restart":
         return await this.enqueue(async () => {
           await this.send(TURZX_COMMAND.restart);
@@ -493,16 +501,25 @@ class TurzxPanel implements PanelDevice {
         });
       case "status":
         return await this.enqueue(async () => {
+          // The open-time QUERY_STATUS answer and any earlier ack are not this
+          // command's reply; dropping them is what makes one read one answer.
+          this.transport.drainPending();
           await this.send(TURZX_COMMAND.queryStatus);
 
-          return await this.readUntil('"QUERY_STATUS"', (text) => text);
+          // ponytail: sending QUERY_STATUS while a video overlay is playing is
+          // unverified on hardware; the class doc says a query is never
+          // appended after a frame. A hardware run is owed before Task 8 ships
+          // a status action during video.
+          return await this.readUntil('"QUERY_STATUS"', (text) =>
+            isStatusText(text) ? text : undefined,
+          );
         });
       case "hello":
         return await this.enqueue(async () => {
+          this.transport.drainPending();
           await this.send(TURZX_COMMAND.hello);
 
-          // Only the HELLO shape is an answer; the status reply left buffered by
-          // `openTurzxPanel` is skipped.
+          // Only the HELLO shape is an answer; anything earlier was drained.
           return await this.readUntil('"HELLO"', (text) =>
             parseHelloText(text) === undefined ? undefined : text,
           );
@@ -572,6 +589,11 @@ function sha256(bytes: Uint8Array): string {
 
 function decodeReply(reply: Uint8Array): string {
   return new TextDecoder("latin1").decode(reply).replace(/[\0\s]+$/, "");
+}
+
+/** A QUERY_STATUS answer: the panel names its own counters in the reply. */
+function isStatusText(text: string): boolean {
+  return text.includes("needReSend") || text.includes("renderCnt");
 }
 
 function parseFileSizeText(text: string): number | undefined {

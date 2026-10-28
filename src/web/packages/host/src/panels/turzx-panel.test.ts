@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PanelDevice } from "./panel-device.js";
+import type { PanelControlCommand, PanelDevice } from "./panel-device.js";
 import type { SerialTransport } from "./serial-transport.js";
 import {
   attachedTurzxPanels,
@@ -16,6 +16,10 @@ import {
 function fakeTransport(...replies: string[]) {
   const writes: Uint8Array[] = [];
   let next = 0;
+  const take = (): Uint8Array =>
+    next < replies.length
+      ? new TextEncoder().encode(`${replies[next++]}\0`)
+      : new Uint8Array();
 
   return {
     writes,
@@ -23,10 +27,10 @@ function fakeTransport(...replies: string[]) {
       write: async (bytes: Uint8Array) => {
         writes.push(Uint8Array.from(bytes));
       },
-      read: async () =>
-        next < replies.length
-          ? new TextEncoder().encode(`${replies[next++]}\0`)
-          : new Uint8Array(),
+      read: async () => take(),
+      // Every scripted reply is already on the wire, so the next one is what a
+      // drain discards: a control test scripts the stale reply first.
+      drainPending: take,
       close: async () => {},
     } satisfies SerialTransport,
   };
@@ -309,6 +313,17 @@ describe("openTurzxPanel", () => {
 });
 
 describe("a panel's controls", () => {
+  /** The command's bytes, then zero fill to the wire's 250-byte frame. */
+  function expectCommand(write: Uint8Array, command: readonly number[]): void {
+    expect(write.length % 250).toBe(0);
+    expect([...write.slice(0, command.length)]).toEqual([...command]);
+    expect(write.slice(command.length).every((byte) => byte === 0)).toBe(true);
+  }
+
+  const BRIGHTNESS = [0x7b, 0xef, 0x69, 0, 0, 0, 1, 0, 0, 0];
+  const STATUS = [0xcf, 0xef, 0x69, 0, 0, 0, 1];
+  const HELLO = [0x01, 0xef, 0x69, 0, 0, 0, 1, 0, 0, 0, 0xc5, 0xd3];
+
   it("maps percent brightness to the panel's 0-255 byte", async () => {
     const { writes, transport } = fakeTransport("chs_5inch.dev1_rom1.88");
     const panel = await opened(transport);
@@ -317,10 +332,22 @@ describe("a panel's controls", () => {
       await panel.controls!.run({ kind: "brightness", level: 50 });
 
       const last = writes[writes.length - 1]!;
-      expect([...last.slice(0, 10)]).toEqual([
-        0x7b, 0xef, 0x69, 0, 0, 0, 1, 0, 0, 0,
-      ]);
-      expect(last[10]).toBe(128);
+      expectCommand(last, [...BRIGHTNESS, 128]);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("maps the ends of the range to 0 and 255", async () => {
+    const { writes, transport } = fakeTransport("chs_5inch.dev1_rom1.88");
+    const panel = await opened(transport);
+
+    try {
+      await panel.controls!.run({ kind: "brightness", level: 0 });
+      expectCommand(writes[writes.length - 1]!, [...BRIGHTNESS, 0]);
+
+      await panel.controls!.run({ kind: "brightness", level: 100 });
+      expectCommand(writes[writes.length - 1]!, [...BRIGHTNESS, 255]);
     } finally {
       await panel.close();
     }
@@ -344,10 +371,11 @@ describe("a panel's controls", () => {
     }
   });
 
-  it("returns the status reply as text", async () => {
+  it("writes QUERY_STATUS, discards the open-time reply and returns the fresh one", async () => {
     const fake = fakeTransport(
-      "chs_5inch.dev1_rom1.88",
-      "needReSend:0|renderCnt:1",
+      "chs_5inch.dev1_rom1.88", // HELLO at open
+      "needReSend:0|renderCnt:0", // the status open left unread: drained
+      "needReSend:0|renderCnt:1", // the answer to this command
     );
     const panel = await opened(fake.transport);
 
@@ -355,16 +383,51 @@ describe("a panel's controls", () => {
       await expect(panel.controls!.run({ kind: "status" })).resolves.toBe(
         "needReSend:0|renderCnt:1",
       );
+      expectCommand(fake.writes[fake.writes.length - 1]!, STATUS);
     } finally {
       await panel.close();
     }
   });
 
-  it("skips the buffered status reply ahead of the HELLO answer", async () => {
+  it("skips a stale ack between the command and its status reply", async () => {
     const fake = fakeTransport(
       "chs_5inch.dev1_rom1.88", // HELLO at open
-      "needReSend:0|renderCnt:1", // the status reply open left buffered
-      "chs_5inch.dev1_rom1.88", // the answer to the control's HELLO
+      "needReSend:0|renderCnt:0", // drained
+      "play_video_success", // an earlier command's ack, not a status
+      "needReSend:0|renderCnt:5", // the status answer
+    );
+    const panel = await opened(fake.transport);
+
+    try {
+      await expect(panel.controls!.run({ kind: "status" })).resolves.toBe(
+        "needReSend:0|renderCnt:5",
+      );
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("ends a status wait on silence with the named error", async () => {
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88",
+      "needReSend:0|renderCnt:0", // drained; nothing answers the command
+    );
+    const panel = await opened(fake.transport);
+
+    try {
+      await expect(panel.controls!.run({ kind: "status" })).rejects.toThrow(
+        /QUERY_STATUS/,
+      );
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("writes HELLO, discards the open-time status and returns the identity", async () => {
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO at open
+      "needReSend:0|renderCnt:1", // the status reply open left unread: drained
+      "chs_5inch.dev1_rom1.88", // the answer to this command
     );
     const panel = await opened(fake.transport);
 
@@ -372,6 +435,7 @@ describe("a panel's controls", () => {
       await expect(panel.controls!.run({ kind: "hello" })).resolves.toBe(
         "chs_5inch.dev1_rom1.88",
       );
+      expectCommand(fake.writes[fake.writes.length - 1]!, HELLO);
     } finally {
       await panel.close();
     }
@@ -383,14 +447,33 @@ describe("a panel's controls", () => {
 
     try {
       await panel.controls!.run({ kind: "screen", on: true });
-      expect([...fake.writes[fake.writes.length - 1]!.slice(0, 7)]).toEqual([
-        0x83, 0xef, 0x69, 0, 0, 0, 0,
-      ]);
+      expectCommand(
+        fake.writes[fake.writes.length - 1]!,
+        [0x83, 0xef, 0x69, 0, 0, 0, 0],
+      );
 
       await panel.controls!.run({ kind: "screen", on: false });
-      expect([...fake.writes[fake.writes.length - 1]!.slice(0, 7)]).toEqual([
-        0x83, 0xef, 0x69, 0, 0, 0, 1,
-      ]);
+      expectCommand(
+        fake.writes[fake.writes.length - 1]!,
+        [0x83, 0xef, 0x69, 0, 0, 0, 1],
+      );
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("refuses a screen command with no on rather than writing off", async () => {
+    const { writes, transport } = fakeTransport("chs_5inch.dev1_rom1.88");
+    const panel = await opened(transport);
+    const sent = writes.length;
+
+    try {
+      await expect(
+        panel.controls!.run({
+          kind: "screen",
+        } as unknown as PanelControlCommand),
+      ).rejects.toThrow(/needs on/);
+      expect(writes.length).toBe(sent);
     } finally {
       await panel.close();
     }
@@ -406,9 +489,10 @@ describe("a panel's controls", () => {
       await expect(panel.controls!.run({ kind: "restart" })).resolves.toBe(
         "The panel is restarting; it will be unavailable for about 15 seconds.",
       );
-      expect([...fake.writes[fake.writes.length - 1]!.slice(0, 7)]).toEqual([
-        0x84, 0xef, 0x69, 0, 0, 0, 1,
-      ]);
+      expectCommand(
+        fake.writes[fake.writes.length - 1]!,
+        [0x84, 0xef, 0x69, 0, 0, 0, 1],
+      );
     } finally {
       await panel.close();
     }
