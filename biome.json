@@ -2,6 +2,7 @@
   "$schema": "./src/web/node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
+    "maxSize": 2097152,
     "includes": [
       "src/web/**/*.ts",
       "src/web/**/*.tsx",

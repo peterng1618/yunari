@@ -22,12 +22,14 @@ import { fontAssetId } from "./type-preset-apply.js";
 import type { TypeTokens } from "./type-preset-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
 
-/** The host's byte and trash routes, mocked: no document test reaches a real
- *  host. */
+/** The host's byte, family-cuts and trash routes, mocked: no document test
+ *  reaches a real host. */
 const assetBytesMock = vi.hoisted(() => vi.fn());
+const familyCutsMock = vi.hoisted(() => vi.fn());
 const trashAssetsMock = vi.hoisted(() => vi.fn());
 vi.mock("./asset-finder/client.js", () => ({
   assetBytes: assetBytesMock,
+  familyCuts: familyCutsMock,
   trashAssets: trashAssetsMock,
 }));
 
@@ -924,6 +926,13 @@ function presetsOf(document: EditorDocument): TypeTokens {
 }
 
 describe("EditorDocument preset actions", () => {
+  beforeEach(() => {
+    // `restoreMocks` does not clear a hoisted `vi.fn`'s implementation here,
+    // so a test that teaches the source a family ladder would otherwise teach
+    // the next one too.
+    familyCutsMock.mockReset();
+  });
+
   it("apply rewrites role tokens, keeps an unroled token and creates a missing role", async () => {
     const authored: TypeTokens = {
       heading: { family: "Segoe UI" },
@@ -957,11 +966,55 @@ describe("EditorDocument preset actions", () => {
       weight: 400,
       face: { assetId: fontAssetId(trio.roles.mono!) },
     });
-    // Bytes are addressed by the cut's source and id, never the trio's.
+    // Bytes are addressed by the cut's source and id, never the trio's. The
+    // host cannot enumerate this source's families here, so the three role
+    // cuts are the import.
+    expect(assetBytesMock).toHaveBeenCalledTimes(3);
     expect(assetBytesMock).toHaveBeenCalledWith(
       "google-fonts",
       "cut:heading-700",
     );
+    document.destroy();
+  });
+
+  it("apply imports every weight of the trio's three families", async () => {
+    const { document } = presetDocument({});
+    familyCutsMock.mockImplementation(
+      async (_source: string, family: string) => {
+        if (family === "Manrope") {
+          return [
+            cutFor("heading", "Manrope", 700),
+            cutFor("heading", "Manrope", 800),
+          ];
+        }
+        if (family === "Inter") {
+          return [cutFor("body", "Inter", 400), cutFor("body", "Inter", 600)];
+        }
+        return [cutFor("mono", "Fira Code", 400)];
+      },
+    );
+    assetBytesMock.mockResolvedValue({
+      bytes: new Uint8Array([1]),
+      filename: "face.woff2",
+    });
+
+    await document.applyFontTrio(trio);
+
+    // Every weight of every family the trio names, each read once.
+    expect(assetBytesMock.mock.calls.map((call) => call[1])).toEqual([
+      "cut:heading-700",
+      "cut:heading-800",
+      "cut:body-400",
+      "cut:body-600",
+      "cut:mono-400",
+    ]);
+    // The extra weights widen the weight field; they do not move the token off
+    // the trio's recommended cut.
+    expect(presetsOf(document).heading).toEqual({
+      family: "Manrope",
+      weight: 700,
+      face: { assetId: fontAssetId(trio.roles.heading!) },
+    });
     document.destroy();
   });
 
@@ -998,6 +1051,43 @@ describe("EditorDocument preset actions", () => {
     // Only the missing roles' cuts are adopted; reading the heading's bytes
     // would leave an unreferenced declaration behind.
     expect(assetBytesMock).toHaveBeenCalledTimes(2);
+    document.destroy();
+  });
+
+  it("add three imports every weight of the roles it creates, and no other family", async () => {
+    const existing: TypeTokens = {
+      heading: { family: "Segoe UI" },
+      custom: { family: "Georgia" },
+    };
+    const { document } = presetDocument(existing);
+    familyCutsMock.mockImplementation(
+      async (_source: string, family: string) => {
+        if (family === "Manrope") {
+          return [
+            cutFor("heading", "Manrope", 700),
+            cutFor("heading", "Manrope", 800),
+          ];
+        }
+        if (family === "Inter") {
+          return [cutFor("body", "Inter", 400), cutFor("body", "Inter", 600)];
+        }
+        return [cutFor("mono", "Fira Code", 400)];
+      },
+    );
+    assetBytesMock.mockResolvedValue({
+      bytes: new Uint8Array([1]),
+      filename: "face.woff2",
+    });
+
+    await document.addTypeTokensFromTrio(trio);
+
+    // Heading exists, so its family's ladder is not read: creating a role is
+    // the only reason to adopt a face.
+    expect(assetBytesMock.mock.calls.map((call) => call[1])).toEqual([
+      "cut:body-400",
+      "cut:body-600",
+      "cut:mono-400",
+    ]);
     document.destroy();
   });
 

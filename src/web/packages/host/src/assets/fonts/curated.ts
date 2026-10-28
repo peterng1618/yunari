@@ -39,6 +39,10 @@ const FAMILIES: CuratedFamily[] = [];
   }
 }
 
+/** Exact family name, as the wire's cuts spell it: a token's `family` came
+ *  from a cut, so the lookup does not fold. */
+const FAMILY_BY_NAME = new Map(FAMILIES.map((family) => [family.name, family]));
+
 function resultOfTrio(trio: CuratedTrio): AssetResult {
   // Position 0 is the heading face; the catalogue's shape test pins it.
   const heading = trio.faces[0];
@@ -117,6 +121,11 @@ export const curatedFontSource: AssetSource = {
       contentType: "font/woff2",
       filename: `${face.id}.woff2`,
     };
+  },
+
+  /** The catalogue is in memory, so no fetch and no context is needed. */
+  familyCuts(family) {
+    return FAMILY_BY_NAME.get(family)?.faces.map(toFontCut);
   },
 };
 

@@ -19,7 +19,7 @@ import {
   type ThemeCreditsEntry,
 } from "@yunari/theme-package";
 import type { ArtboardPanel } from "./artboard-panel.js";
-import { assetBytes, trashAssets } from "./asset-finder/client.js";
+import { assetBytes, familyCuts, trashAssets } from "./asset-finder/client.js";
 import {
   type AssetManager,
   assetFileName,
@@ -947,6 +947,34 @@ export class EditorDocument {
   }
 
   /**
+   * Every cut a trio's three families publish, stamped with the role of the
+   * family it belongs to. The trio result itself carries only the three role
+   * cuts, so the rest is asked for by family at import time; a source that
+   * cannot enumerate — or a host that predates the route — answers nothing and
+   * the role cuts are the import, as before.
+   */
+  async #trioFamilyCuts(
+    trio: FontTrioInfo,
+  ): Promise<{ readonly cut: FontCut; readonly role: FontTrioRole }[]> {
+    const roleCuts = this.#trioCuts(trio);
+    const entries = new Map<
+      string,
+      { readonly cut: FontCut; readonly role: FontTrioRole }
+    >();
+    for (const { cut, role } of roleCuts) {
+      const family = (await familyCuts(cut.source, cut.family)) ?? [];
+      for (const other of family) {
+        entries.set(`${other.source}:${other.id}`, { cut: other, role });
+      }
+    }
+    // A role cut the source did not list is still one the trio names.
+    for (const entry of roleCuts) {
+      entries.set(`${entry.cut.source}:${entry.cut.id}`, entry);
+    }
+    return [...entries.values()];
+  }
+
+  /**
    * Reads every cut's bytes from the host and declares them. Every read and
    * every conversion finishes before the first adoption, so a host that
    * answered nothing leaves the theme untouched rather than half-imported.
@@ -1005,7 +1033,7 @@ export class EditorDocument {
       return this.snapshot();
     }
 
-    await this.#adoptCuts(this.#trioCuts(source));
+    await this.#adoptCuts(await this.#trioFamilyCuts(source));
     this.setTypes(applyTrioPresets(this.#typeTokens(), source));
   }
 
@@ -1013,19 +1041,30 @@ export class EditorDocument {
    *  already has rather than rewriting it. A role already present keeps its
    *  authored face and its cuts are not adopted: creating the role is the only
    *  reason to read those bytes, and the copy promises Add 3 leaves an existing
-   *  theme unchanged. */
+   *  theme unchanged. A created role brings every weight of its family, so the
+   *  token's weight field has the same ladder an import gives it. */
   async addTypeTokensFromTrio(trio: FontTrioInfo): Promise<void> {
     const presets = this.#typeTokens();
-    const entries = this.#trioCuts(trio).filter(
-      ({ role }) => presets[role] === undefined,
-    );
+    const missing = FONT_ROLES.filter((role) => presets[role] === undefined);
     // Nothing missing is nothing to write: an empty add must not record a
-    // history entry for a theme it did not change.
+    // history entry for a theme it did not change, and it must not ask the
+    // host for cuts it will not adopt.
+    if (missing.length === 0) return;
+    const families = new Set(
+      missing.flatMap((role) => {
+        const cut = trio.roles[role];
+        return cut === undefined ? [] : [cut.family];
+      }),
+    );
+    const entries = (await this.#trioFamilyCuts(trio)).filter(({ cut }) =>
+      families.has(cut.family),
+    );
     if (entries.length === 0) return;
     await this.#adoptCuts(entries);
     let next = presets;
-    for (const { cut, role } of entries) {
-      next = { ...next, [role]: rolePreset(cut) };
+    for (const role of missing) {
+      const cut = trio.roles[role];
+      if (cut !== undefined) next = { ...next, [role]: rolePreset(cut) };
     }
     this.setTypes(next);
   }

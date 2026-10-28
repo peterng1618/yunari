@@ -1,5 +1,6 @@
 import type {
   AssetResult,
+  FontCut,
   ListingCategory,
   PresetKind,
 } from "@yunari/renderer-core";
@@ -53,4 +54,12 @@ export interface AssetSource {
     resultId: string,
     ctx: SourceContext,
   ): Promise<SourceBytes | undefined>;
+  /**
+   * Every cut a family publishes, when this source can enumerate them. A trio
+   * result carries only its three role cuts, so import asks by family instead:
+   * sending every family's cuts inside each of 379 results is the duplication
+   * this port avoids. Absent means the source cannot answer, and the caller
+   * falls back to the cuts it already has.
+   */
+  familyCuts?(family: string): readonly FontCut[] | undefined;
 }

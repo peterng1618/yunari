@@ -3,6 +3,7 @@ import type {
   AssetSearchAnswer,
   AssetSearchRequest,
   AssetSourceListing,
+  FontCut,
 } from "@yunari/renderer-core";
 import { base64Of } from "../video-normalizer.js";
 
@@ -122,6 +123,35 @@ export async function assetBytes(
       bytes: new Uint8Array(await response.arrayBuffer()),
       filename: response.headers.get("x-yunari-filename") ?? id,
     };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Every cut a family publishes, or `undefined` when the host cannot answer.
+ * The caller falls back to the cuts it already has, so an older host or a
+ * source that cannot enumerate leaves import behaving as it did.
+ */
+export async function familyCuts(
+  source: string,
+  family: string,
+  options?: ClientOptions,
+): Promise<readonly FontCut[] | undefined> {
+  const { fetcher, url } = request(options);
+
+  try {
+    const response = await fetcher(
+      url(
+        `/api/assets/family-cuts?source=${encodeURIComponent(source)}&family=${encodeURIComponent(family)}`,
+      ),
+    );
+    if (!response.ok) return undefined;
+
+    const body = (await response.json()) as { cuts?: unknown };
+    return Array.isArray(body.cuts)
+      ? (body.cuts as readonly FontCut[])
+      : undefined;
   } catch {
     return undefined;
   }

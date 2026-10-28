@@ -5,11 +5,11 @@ Branch: `peterng1618/fix-font-trio` (worktree `fix-font-trio`)
 
 ## Current objective
 
-Two plans are complete — the type-token model and the display's own motion — and local `main` at `1d0b9b9` carries both; next is the backlog drain.
+Every published weight of a curated family is importable: trio and family imports package the family's full weight list, and the token weight field offers it ([`0131`](docs/decisions/0131-the-catalogue-carries-every-published-weight.md)).
 
 ## Active work
 
-- **No plan is running:** the type-token plan's six phases and the display-animation plan's seven tasks are done; `main` (at `b3a2b98`) is merged in here, and local `main` now points at this branch's tip.
+- **No plan is running:** [`2026-10-28-font-family-weights`](docs/superpowers/plans/archive/2026-10-28-font-family-weights.md) is complete and archived; the backlog drain is next.
 - **The Design Tokens pane is redesigned** (`0130`): painted like the paint list, a usage figure and a linked users list on both token kinds, headings Paint tokens / Type tokens, the rail says Design tokens, and Delete takes two presses against an empty reassignment box.
 - **The type-token model is in:** a token names a face whereas size, line height and tracking belong to each run (`0128`).
 - **Display motion is in:** one fixed 30 fps `startSceneRefresh` loop, a transition pump in `YunariChart`, skip-unchanged bound text, and no chart-rate setting anywhere (`0129`).
@@ -18,17 +18,16 @@ Two plans are complete — the type-token model and the display's own motion —
 
 ## Last completed change
 
-- **Type rows now read like paint rows:** the redundant family/weight line is gone, leaving the specimen, the computed name and a usage figure; the paint heading says Paint tokens and the type one Type tokens.
-- **One walk per token kind:** `objectTypeTokenReferences` sits beside the paint walk behind one shared `TokenUsage`, so a row's figure and the inspector's users list cannot disagree.
-- **A user is a link:** each layer in the inspector shows Composition and selects that layer, through `PaneRequestStore.show("composition")` and the session's `onRevealLayer`.
-- **Delete is a confirmation:** the reassignment select appears only on the first press, starts empty rather than on a token, and the second press is refused until one is chosen (`0130`).
-- **Proof:** `npm run gate` exit 0 — 6,892 unit tests passed plus 1 skipped; browser green for panel labels, the rail, the four reassignment cases, the pane capture and the first rebuild case; five unrelated reds filed `vg-773`–`vg-777`.
+- **The curated catalogue carries every published weight:** 1,003 latin/normal faces across 174 families (was 261), with `role`/`clamped` moved onto a trio-only face subtype (`0131`).
+- **A family's cuts are askable:** `AssetSource.familyCuts` and `GET /api/assets/family-cuts` answer a family's ladder, so trio import reads the weights it needs instead of every trio result carrying them.
+- **Trio import brings them all:** `applyFontTrio` and `addTypeTokensFromTrio` adopt every weight of the roles' families and leave the token on the trio's recommended cut.
+- **Proof:** gate exit 0; the new browser case applies `inter-poppins` and reads nine Inter weights with 700 selected.
 
 ## Next
 
-1. Resume the backlog-drain plan at Phase 0, a reproduction pass over the register.
-2. Owner test of a gauge mid-transition on a real display.
-3. Triage `vg-773`–`vg-777`, which are the browser cases already red on this tree.
+1. Owner test: apply a trio on a real display and switch a role's weight by eye.
+2. Resume the backlog-drain plan afterwards, starting with a reproduction pass.
+3. Triage `vg-773`–`vg-777`, the browser cases already red on this tree.
 
 ## Blockers / unverified
 

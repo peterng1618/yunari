@@ -6,6 +6,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   assetBytes,
+  familyCuts,
   listSources,
   searchAssets,
   trashAssets,
@@ -139,6 +140,30 @@ describe("assetBytes", () => {
 
     expect(
       await assetBytes("lucide", "missing", { fetch: fetcher }),
+    ).toBeUndefined();
+  });
+});
+
+describe("familyCuts", () => {
+  it("names the source and the family, and answers its cuts", async () => {
+    const cuts = [{ id: "cut:fira-code-400", family: "Fira Code" }];
+    const { fetcher, calls } = stub(
+      () => new Response(JSON.stringify({ cuts }), { status: 200 }),
+    );
+
+    expect(
+      await familyCuts("curated-fonts", "Fira Code", { fetch: fetcher }),
+    ).toEqual(cuts);
+    expect(calls[0]?.url).toBe(
+      "/api/assets/family-cuts?source=curated-fonts&family=Fira%20Code",
+    );
+  });
+
+  it("answers undefined when the host cannot enumerate, so import falls back", async () => {
+    const { fetcher } = stub(() => new Response("", { status: 404 }));
+
+    expect(
+      await familyCuts("lucide", "Inter", { fetch: fetcher }),
     ).toBeUndefined();
   });
 });

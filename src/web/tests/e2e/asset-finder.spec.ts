@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type {
   AssetPage,
@@ -7,7 +9,9 @@ import type {
   AssetSourceListing,
   FontCut,
 } from "@yunari/renderer-core";
+import { choiceOf, optionPairs } from "./control-set.js";
 import { captureVisualReview } from "./editor-canvas.js";
+import { openPane } from "./editor-rail.js";
 import { placeText, readScene } from "./rebuild-driver.js";
 import { isDesktopSurface } from "./surface.js";
 
@@ -495,6 +499,74 @@ test("draws a font card's specimen rows in the result's own faces", async ({
     `[data-yunari-font-tile="${fontResult.id}"] [data-yunari-font-specimen] > span`,
   );
   await expect(familyRows).toHaveText(["Inter"]);
+});
+
+test("importing a trio offers every weight its role families publish", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  // The real face the suite caches, served for every cut: the editor refuses
+  // bytes the browser cannot parse before it declares a face.
+  const faceBytes = readFileSync(
+    fileURLToPath(
+      new URL("../../.e2e-font-cache/inter-400.woff2", import.meta.url),
+    ),
+  );
+  const ladder: Record<string, readonly number[]> = {
+    Inter: [100, 200, 300, 400, 500, 600, 700, 800, 900],
+    Poppins: [300, 400, 500],
+    "Fira Code": [400],
+  };
+  await page.route("**/api/assets/family-cuts*", (route) => {
+    const family =
+      new URL(route.request().url()).searchParams.get("family") ?? "";
+    return route.fulfill({
+      json: {
+        cuts: (ladder[family] ?? []).map((weight) => fontCut(family, weight)),
+      },
+    });
+  });
+  await page.route("**/api/assets/bytes*", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: { "content-type": "font/woff2" },
+      body: faceBytes,
+    }),
+  );
+  await stubAssets(page, {
+    sources: [curatedFonts],
+    answer: () => ({ pages: [answered("curated-fonts", [interTrio])] }),
+  });
+
+  const dialog = await openFinder(page);
+  await page.locator('[data-yunari-asset-tab="font"]').click();
+  await page.locator("[data-yunari-font-search]").fill("inter");
+  await page.locator(`[data-yunari-font-tile="${interTrio.id}"]`).click();
+  await page.locator("[data-yunari-font-trio-apply]").click();
+
+  // The apply is asynchronous; the heading row's specimen changing family is
+  // the token write landing, and the modal has to be out of the way first.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await openPane(page, "Design tokens");
+  const headingRow = page.locator('[data-yunari-type-preset-row="heading"]');
+  await expect
+    .poll(() =>
+      headingRow
+        .locator("[data-yunari-type-preset-specimen]")
+        .evaluate((node) => (node as HTMLElement).style.fontFamily),
+    )
+    .toBe("Inter");
+
+  await headingRow.click();
+  const weight = page.locator("[data-yunari-token-weight]");
+  // The recommended cut is still the one the token names; the rest of the
+  // family's ladder is what the import added.
+  await expect.poll(() => choiceOf(weight)).toBe("700");
+  expect(
+    await optionPairs(page, weight).then((pairs) => pairs.map((p) => p.label)),
+  ).toEqual(ladder["Inter"]!.map(String));
 });
 
 test("captures the finder on Fonts", async ({ page }, testInfo) => {

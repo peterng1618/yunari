@@ -180,24 +180,69 @@ const metadata = await jsonAll(
 );
 const families = new Map(familyIds.map((id, index) => [id, metadata[index]]));
 
-const faceCache = new Map();
-
-function faceFor(pairing, role, familyId) {
+/**
+ * Every integer weight a family publishes, validated once per family. The
+ * licence check has to be here rather than per emitted face: `Object.hasOwn`,
+ * never a truthiness test, because `LICENSES["constructor"]` is `Object`, so a
+ * plain guard would pass and JSON.stringify would then drop the function,
+ * emitting faces with no licence at all.
+ */
+function weightsOf(familyId) {
   const meta = families.get(familyId);
-  if (!meta) throw new Error(`${pairing.name}: Fontsource does not know ${familyId}.`);
+  if (!meta) throw new Error(`Fontsource does not know ${familyId}.`);
   if (!meta.subsets.includes("latin")) {
-    throw new Error(`${pairing.name}: ${meta.family} has no latin subset.`);
+    throw new Error(`${meta.family} has no latin subset.`);
   }
-  // Object.hasOwn, never a truthiness test: `LICENSES["constructor"]` is
-  // `Object`, so a plain guard would pass and JSON.stringify would then drop
-  // the function, emitting faces with no licence at all — the one outcome
-  // this table exists to make impossible.
   if (!Object.hasOwn(LICENSES, meta.license)) {
     throw new Error(`${meta.id}: unmapped licence "${meta.license}".`);
   }
-  const license = LICENSES[meta.license];
+  const weights = (Array.isArray(meta.weights) ? meta.weights : [meta.weights])
+    .filter((weight) => Number.isInteger(weight))
+    .sort((a, b) => a - b);
+  if (weights.length === 0) {
+    throw new Error(`${meta.id} publishes no integer weight.`);
+  }
+  return weights;
+}
 
-  const weights = Array.isArray(meta.weights) ? meta.weights : [meta.weights];
+const faceCache = new Map();
+
+/** One latin/normal face per published weight, cached by face id. The cache is
+ *  keyed on the face and never on the pairing: 1,003 faces serve 379 trios. */
+function faceForFamily(familyId, weight) {
+  const meta = families.get(familyId);
+  const id = `${meta.id}-${weight}`;
+  if (!faceCache.has(id)) {
+    faceCache.set(id, {
+      id,
+      fontId: meta.id,
+      family: meta.family,
+      weight,
+      style: "normal",
+      format: "woff2",
+      subset: "latin",
+      sourceUrl: `https://cdn.jsdelivr.net/fontsource/fonts/${meta.id}@${meta.npmVersion}/latin-${weight}-normal.woff2`,
+      license: LICENSES[meta.license],
+    });
+  }
+  return faceCache.get(id);
+}
+
+// Every published weight of every family the pairings name, so a family row
+// offers the whole ladder rather than only the cuts a pairing happened to pick.
+for (const familyId of familyIds) {
+  for (const weight of weightsOf(familyId)) faceForFamily(familyId, weight);
+}
+
+/**
+ * A trio face: the family face plus this pairing's own request. `role` and
+ * `clamped` live here and not on `CuratedFace`, because one face can serve
+ * more than one role and the same `(family, weight)` is a clamp for a pairing
+ * that recommends a weight the family does not ship and not a clamp for one
+ * that recommends the weight it does.
+ */
+function roleFaceFor(pairing, role, familyId) {
+  const weights = weightsOf(familyId);
   // Every body and mono family publishes 400, so only headings ever clamp.
   // A body or mono face that cannot serve 400 is an upstream change worth
   // seeing, not something to record as `clamped: false`.
@@ -205,36 +250,11 @@ function faceFor(pairing, role, familyId) {
   const weight = nearest(weights, recommended);
   if (role !== "heading" && weight !== 400) {
     throw new Error(
-      `${meta.id} has no 400 for ${role}; weights ${JSON.stringify(weights)}.`,
+      `${familyId} has no 400 for ${role}; weights ${JSON.stringify(weights)}.`,
     );
   }
-
-  const id = `${meta.id}-${weight}`;
-  if (!faceCache.has(id)) {
-    faceCache.set(id, {
-      id,
-      fontId: meta.id,
-      family: meta.family,
-      role,
-      weight,
-      style: "normal",
-      format: "woff2",
-      subset: "latin",
-      sourceUrl: `https://cdn.jsdelivr.net/fontsource/fonts/${meta.id}@${meta.npmVersion}/latin-${weight}-normal.woff2`,
-      license,
-      clamped: role === "heading" && weight !== recommended,
-    });
-  }
-  // Both `role` and `clamped` describe *this* pairing's request rather than
-  // the face: one face can serve more than one role, and the same
-  // `(family, weight)` is a clamp for a pairing that recommends a weight the
-  // family does not ship and not a clamp for one that recommends the weight
-  // it does. The cached record keeps whichever pairing reached the face
-  // first, so both are re-stamped here. A cached value puts the wrong flag on
-  // nine of the 379 trios, in both directions — that count is what a
-  // first-touch cache would produce today, not a historical tally.
   return {
-    ...faceCache.get(id),
+    ...faceForFamily(familyId, weight),
     role,
     clamped: role === "heading" && weight !== recommended,
   };
@@ -244,7 +264,7 @@ const trios = [];
 for (const { entry, index } of resolvedPairings) {
   const pairing = pairings[index];
   const faces = ROLES.map((role, at) =>
-    faceFor(pairing, role, roleFamilies[index][at]),
+    roleFaceFor(pairing, role, roleFamilies[index][at]),
   );
   trios.push({
     id: entry.name,
@@ -273,13 +293,13 @@ const module = `// Generated by \`npm run fonts:generate\`. Do not edit by hand.
 // Yellowtail. A heading weight is clamped to the nearest the family ships, and
 // \`clamped\` records when that happened.
 //
-// Read \`role\` and \`clamped\` off a trio's faces, never off a standalone face in
-// \`CURATED_FACES\`. Both describe a pairing's request rather than the face:
-// a standalone entry carries whichever pairing reached that face first, and
-// the same \`(family, weight)\` is a clamp for one pairing and not for another.
+// Every family lists every published latin/normal weight, so a family row
+// offers the whole ladder and an import can bring it. \`role\` and \`clamped\`
+// live on trio faces only: both describe a pairing's request rather than the
+// face.
 //
 // Deliberately past the 800-line stop in AGENTS.md, and the exception is
-// recorded rather than assumed: 807 KB raw is 28.5 KB brotli, the file is
+// recorded rather than assumed: 1.1 MB raw is 31 KB brotli, the file is
 // read once and never hand-edited, and \`npm run size\` gates the player
 // rather than the host. See docs/decisions/0024.
 
@@ -289,13 +309,17 @@ export interface CuratedFace {
   readonly id: string;
   readonly fontId: string;
   readonly family: string;
-  readonly role: CuratedTrioRole;
   readonly weight: number;
   readonly style: "normal";
   readonly format: "woff2";
   readonly subset: "latin";
   readonly sourceUrl: string;
   readonly license: { readonly name: string; readonly url: string };
+}
+
+/** A trio's face: the family face plus this pairing's own request. */
+export interface CuratedRoleFace extends CuratedFace {
+  readonly role: CuratedTrioRole;
   readonly clamped: boolean;
 }
 
@@ -307,7 +331,7 @@ export interface CuratedTrio {
   readonly mood: readonly string[];
   readonly useCase: readonly string[];
   readonly superfamily: string;
-  readonly faces: readonly [CuratedFace, CuratedFace, CuratedFace];
+  readonly faces: readonly [CuratedRoleFace, CuratedRoleFace, CuratedRoleFace];
 }
 
 export const CURATED_SOURCE_REVISION = ${JSON.stringify(COMMIT)};

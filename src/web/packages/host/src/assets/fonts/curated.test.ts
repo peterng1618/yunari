@@ -29,14 +29,28 @@ const LICENSE_URLS = {
 } as const;
 
 /**
- * Role and `clamped` are properties of a pairing's *request*, so every
- * assertion about them reads a trio, where position is the role and the flag
- * was computed against this pairing's own recommendation. A standalone face in
- * `CURATED_FACES` carries whichever pairing reached it first and is not safe to
- * ask either question of.
+ * Role and `clamped` are properties of a pairing's *request*, so they live on
+ * a trio's faces and nowhere else: a standalone face in `CURATED_FACES` is the
+ * family's own weight ladder and answers neither question.
  */
 function trioById(id: string) {
   return CURATED_TRIOS.find((trio) => trio.id === id);
+}
+
+/** Every catalogued face, grouped by family. */
+function facesByFamily(): Map<string, readonly number[]> {
+  const byFamily = new Map<string, number[]>();
+  for (const face of CURATED_FACES) {
+    const weights = byFamily.get(face.family) ?? [];
+    weights.push(face.weight);
+    byFamily.set(face.family, weights);
+  }
+  return new Map(
+    [...byFamily].map(([family, weights]) => [
+      family,
+      weights.sort((a, b) => a - b),
+    ]),
+  );
 }
 
 /**
@@ -125,12 +139,36 @@ describe("curated font catalogue", () => {
     expect(new Set(CURATED_FACES.map((face) => face.id)).size).toBe(
       CURATED_FACES.length,
     );
-    // 261, not the design doc's measured 238. That count came from clamping
-    // every heading to a uniform 700, which discards the pairing's own `h1`
-    // recommendation for 141 of the 379 pairings and then marks the result
-    // `clamped` when it is in fact the author's choice. Clamping to the
-    // recommendation keeps the extra faces and mislabels fewer.
-    expect(CURATED_FACES).toHaveLength(261);
+    // Every published latin/normal weight of the 174 families the pairings
+    // name: 1,003 at the pinned revision. The old catalogue kept only each
+    // role's recommended cut (261), so a family offered one to three weights
+    // and the token weight field could not reach the rest.
+    expect(CURATED_FACES).toHaveLength(1003);
+  });
+
+  it("gives every family an ascending, duplicate-free weight ladder", () => {
+    const families = facesByFamily();
+    expect(families.size).toBe(174);
+    for (const [family, weights] of families) {
+      expect(weights.length, family).toBeGreaterThan(0);
+      expect(new Set(weights).size, family).toBe(weights.length);
+      expect(weights, family).toEqual([...weights].sort((a, b) => a - b));
+    }
+    // A family is not limited to its three role weights: the widest families
+    // publish nine, and that ladder is what an import now brings.
+    expect(Math.max(...[...families.values()].map((w) => w.length))).toBe(9);
+  });
+
+  it("carries every trio role cut inside its family's ladder", () => {
+    const faces = new Map(CURATED_FACES.map((face) => [face.id, face]));
+    for (const trio of CURATED_TRIOS) {
+      for (const roleFace of trio.faces) {
+        expect(faces.has(roleFace.id), `${trio.id} ${roleFace.role}`).toBe(
+          true,
+        );
+        expect(faces.get(roleFace.id)?.weight).toBe(roleFace.weight);
+      }
+    }
   });
 
   it("records a heading's clamp per pairing, not per face", () => {
@@ -238,7 +276,7 @@ describe("curatedFontSource", () => {
     expect(page.totalPages).toBeUndefined();
   });
 
-  it("finds a family by name and carries its cuts", async () => {
+  it("finds a family by name and carries its whole weight ladder", async () => {
     const page = await curatedFontSource.search(
       "Manrope",
       1,
@@ -247,12 +285,24 @@ describe("curatedFontSource", () => {
 
     const family = page.results.find((entry) => entry.font?.trio === undefined);
     expect(family?.name).toBe("Manrope");
-    expect(family?.id).toBe("cut:manrope-400");
-    expect(family?.font?.cuts.map((cut) => cut.id)).toEqual([
-      "cut:manrope-400",
-      "cut:manrope-600",
-      "cut:manrope-700",
+    expect(family?.id).toBe("cut:manrope-200");
+    const weights = facesByFamily().get("Manrope") ?? [];
+    expect(weights.length).toBeGreaterThan(3);
+    expect(family?.font?.cuts.map((cut) => cut.id)).toEqual(
+      weights.map((weight) => `cut:manrope-${weight}`),
+    );
+  });
+
+  it("answers a family's cuts by name, for import to ask", () => {
+    const cuts = curatedFontSource.familyCuts?.("Fira Code") ?? [];
+    expect(cuts.map((cut) => cut.id)).toEqual([
+      "cut:fira-code-300",
+      "cut:fira-code-400",
+      "cut:fira-code-500",
+      "cut:fira-code-600",
+      "cut:fira-code-700",
     ]);
+    expect(curatedFontSource.familyCuts?.("No Such Family")).toBeUndefined();
   });
 
   it("finds a trio by its own title", async () => {
@@ -337,7 +387,7 @@ describe("curatedFontSource", () => {
     expect(page.results.length).toBeGreaterThan(0);
     expect(
       page.results.find((entry) => entry.name === "Manrope")?.font?.cuts,
-    ).toHaveLength(3);
+    ).toHaveLength((facesByFamily().get("Manrope") ?? []).length);
   });
 
   it("answers nothing for an id that names no cut or trio", async () => {

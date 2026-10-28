@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { curatedFontSource } from "./fonts/curated.js";
 import { lucideSource } from "./icons/lucide.js";
 import {
   type AssetRouteOptions,
@@ -537,6 +538,94 @@ describe("the asset routes", () => {
 
       expect((await fetch(`${base}/api/assets/trash`)).status).toBe(405);
     });
+  });
+});
+
+describe("the asset family-cuts route", () => {
+  /** A source that answers searches but cannot enumerate a family. */
+  const silentSource: AssetSource = {
+    id: "silent",
+    label: "Silent",
+    category: "colour",
+    body: "grid",
+    requires: undefined,
+    configurable: false,
+    search: async () => ({ results: [], totalPages: undefined }),
+    bytesOf: async () => undefined,
+  };
+
+  async function cutsOf(base: string, query: string) {
+    const response = await fetch(`${base}/api/assets/family-cuts?${query}`);
+    const body = (await response.json()) as { cuts: { id: string }[] };
+    return { status: response.status, cuts: body.cuts };
+  }
+
+  it("answers a family's whole ladder from the source that holds it", async () => {
+    const base = await start({ sources: [curatedFontSource] });
+
+    const answer = await cutsOf(base, "source=curated-fonts&family=Fira+Code");
+
+    expect(answer.status).toBe(200);
+    expect(answer.cuts.map((cut) => cut.id)).toEqual([
+      "cut:fira-code-300",
+      "cut:fira-code-400",
+      "cut:fira-code-500",
+      "cut:fira-code-600",
+      "cut:fira-code-700",
+    ]);
+  });
+
+  it("answers an empty list for a source that cannot enumerate", async () => {
+    // "No more cuts than you have" is an answer, not a failure: import falls
+    // back to the cuts the result already carries.
+    const base = await start({ sources: [silentSource] });
+
+    const answer = await cutsOf(base, "source=silent&family=Inter");
+
+    expect(answer.status).toBe(200);
+    expect(answer.cuts).toEqual([]);
+  });
+
+  it("answers an empty list for a family it does not know", async () => {
+    const base = await start({ sources: [curatedFontSource] });
+
+    expect(
+      (await cutsOf(base, "source=curated-fonts&family=No+Such")).cuts,
+    ).toEqual([]);
+  });
+
+  it("refuses a request with no source or no family", async () => {
+    const base = await start({ sources: [curatedFontSource] });
+
+    expect((await fetch(`${base}/api/assets/family-cuts`)).status).toBe(400);
+    expect(
+      (await fetch(`${base}/api/assets/family-cuts?source=curated-fonts`))
+        .status,
+    ).toBe(400);
+  });
+
+  it("answers 404 for a source this host does not serve", async () => {
+    const base = await start({ sources: [curatedFontSource] });
+
+    expect(
+      (
+        await fetch(
+          `${base}/api/assets/family-cuts?source=nope&family=Fira+Code`,
+        )
+      ).status,
+    ).toBe(404);
+  });
+
+  it("refuses a method other than GET", async () => {
+    const base = await start({ sources: [curatedFontSource] });
+
+    expect(
+      (
+        await fetch(`${base}/api/assets/family-cuts?source=nope&family=x`, {
+          method: "POST",
+        })
+      ).status,
+    ).toBe(405);
   });
 });
 

@@ -341,7 +341,7 @@ async function credentialReader(
 }
 
 /**
- * The asset finder's four routes.
+ * The asset finder's five routes.
  *
  * Mounted for every `/api/assets` path, whether or not this host serves
  * sources, so a build without them says so rather than falling through to the
@@ -355,11 +355,13 @@ export async function handleAssetRoutes(
   const sourcesPath = "/api/assets/sources";
   const searchPath = "/api/assets/search";
   const bytesPath = "/api/assets/bytes";
+  const familyCutsPath = "/api/assets/family-cuts";
 
   if (
     url.pathname !== sourcesPath &&
     url.pathname !== searchPath &&
     url.pathname !== bytesPath &&
+    url.pathname !== familyCutsPath &&
     url.pathname !== TRASH_PATH
   ) {
     return false;
@@ -446,6 +448,31 @@ export async function handleAssetRoutes(
     } finally {
       request.off("aborted", abort);
     }
+    return true;
+  }
+
+  if (url.pathname === familyCutsPath) {
+    if (request.method !== "GET") {
+      text(response, 405, "Only GET is supported.");
+      return true;
+    }
+
+    const sourceId = url.searchParams.get("source");
+    const family = url.searchParams.get("family");
+    if (sourceId === null || family === null) {
+      text(response, 400, "A source and a family are required.");
+      return true;
+    }
+
+    const source = sources.find((entry) => entry.id === sourceId);
+    if (source === undefined) {
+      text(response, 404, "No such asset source.");
+      return true;
+    }
+
+    // An empty list is an answer: a source that cannot enumerate its families
+    // and a family it does not know both mean "no more cuts than you have".
+    json(response, 200, { cuts: source.familyCuts?.(family) ?? [] });
     return true;
   }
 
