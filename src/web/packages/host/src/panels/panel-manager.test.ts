@@ -8,6 +8,7 @@ import type {
 import {
   createPanelManager,
   type PanelManagerOptions,
+  PanelNotRunningError,
 } from "./panel-manager.js";
 
 /**
@@ -372,6 +373,37 @@ describe("createPanelManager", () => {
     expect(opens).toBe(1);
     expect(errors).toEqual(["the port would not close"]);
     expect(manager.running()).toEqual(["strip"]);
+  });
+
+  it("refuses a command for a display with no running runner", async () => {
+    h.family = familyOver(async () => deviceOver());
+    const manager = managerOver();
+
+    await expect(
+      manager.command("strip", { kind: "status" }),
+    ).rejects.toBeInstanceOf(PanelNotRunningError);
+  });
+
+  it("sends a command to the running device's controls", async () => {
+    const run = vi.fn(async () => "needReSend:0|renderCnt:1");
+    h.family = familyOver(async () => ({
+      ...deviceOver(),
+      controls: { commands: ["status"], run },
+    }));
+
+    const manager = managerOver();
+    await manager.start("strip");
+
+    await expect(manager.command("strip", { kind: "status" })).resolves.toBe(
+      "needReSend:0|renderCnt:1",
+    );
+    expect(run).toHaveBeenCalledWith({ kind: "status" });
+
+    await manager.stop("strip");
+    // The entry is gone with the runner: the device is not driven any more.
+    await expect(
+      manager.command("strip", { kind: "status" }),
+    ).rejects.toBeInstanceOf(PanelNotRunningError);
   });
 
   it("leaves the next start its own entry after a failed one", async () => {

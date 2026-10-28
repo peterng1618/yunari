@@ -1,6 +1,10 @@
 import { findBrowser } from "../serve/display-launcher.js";
 import type { DisplayRecord, DisplayStore } from "../settings/displays.js";
-import type { PanelVideoSource } from "./panel-device.js";
+import type {
+  PanelControlCommand,
+  PanelDevice,
+  PanelVideoSource,
+} from "./panel-device.js";
 import { familyFor } from "./panel-families.js";
 import { createRasterizer } from "./panel-raster.js";
 import { createPanelRunner, type PanelRunner } from "./panel-runner.js";
@@ -37,9 +41,20 @@ export interface PanelManagerOptions {
   readonly shutdownGraceMs?: number;
 }
 
+/** A command aimed at a display whose device is not being driven now. */
+export class PanelNotRunningError extends Error {}
+
 export interface PanelManager {
   /** Starts a panel's runner, or does nothing when one is already running. */
   start(displayId: string): Promise<void>;
+  /**
+   * Sends one hardware command to a display's running device.
+   *
+   * A display with no runner is refused rather than opened or queued for
+   * later: starting a panel is the owner's decision, and a command that waited
+   * for a start could reach hardware the caller never asked to drive.
+   */
+  command(displayId: string, command: PanelControlCommand): Promise<string>;
   /** Stops a panel's runner, answering once the device is released. A record
    *  removed without this leaves it driving. */
   stop(displayId: string): Promise<void>;
@@ -56,6 +71,8 @@ export interface PanelManager {
 /** One running panel, and the promise its first start produced. */
 interface Entry {
   runner: PanelRunner | undefined;
+  /** The device `runner` drives, kept so a control can reach its `controls`. */
+  device: PanelDevice | undefined;
   timer: ReturnType<typeof setInterval> | undefined;
   /** Set while `open()` runs, so two calls cannot open the interface twice. */
   starting: Promise<void> | undefined;
@@ -110,6 +127,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
     const entry: Entry = {
       runner: undefined,
+      device: undefined,
       timer: undefined,
       starting: undefined,
     };
@@ -221,6 +239,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     }
 
     entry.runner = runner;
+    entry.device = device;
     // The panel's first frame is sent at once rather than after an interval: a
     // record the owner just added is a panel showing whatever was there before.
     void runner.tick();
@@ -263,6 +282,40 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     if (entries.get(displayId) === entry) entries.delete(displayId);
   };
 
+  /**
+   * Sends one control to the device running now, or refuses.
+   *
+   * Deliberately not on the display's chain: waiting there would queue the
+   * command behind a start that has not opened a device yet, which is exactly
+   * the "later" a control must not be deferred to. The adapter's own queue
+   * orders the write behind any frame already in flight.
+   */
+  const commandNow = async (
+    displayId: string,
+    command: PanelControlCommand,
+  ): Promise<string> => {
+    const entry = entries.get(displayId);
+    const device = entry?.device;
+    const runner = entry?.runner;
+
+    // A runner whose stop already began is `running === false`: its port is on
+    // the way down, so a write now is a race with the close.
+    if (runner === undefined || device === undefined || !runner.running) {
+      throw new PanelNotRunningError(
+        `Panel display ${displayId} is not running; start it before sending a command.`,
+      );
+    }
+
+    const controls = device.controls;
+    if (controls === undefined) {
+      throw new PanelNotRunningError(
+        `Panel display ${displayId} does not accept commands.`,
+      );
+    }
+
+    return controls.run(command);
+  };
+
   /** Refreshes one display; a stop that failed never reaches the open. */
   const refreshNow = async (displayId: string): Promise<void> => {
     try {
@@ -279,6 +332,8 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
   return {
     start: (displayId) => enqueue(displayId, () => startNow(displayId)),
+
+    command: (displayId, command) => commandNow(displayId, command),
 
     stop: (displayId) => enqueue(displayId, () => stopNow(displayId)),
 

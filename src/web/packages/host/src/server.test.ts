@@ -4941,6 +4941,7 @@ describe("A local monitor is specified rather than paired", () => {
           started.push(id);
           return Promise.resolve();
         },
+        command: () => Promise.resolve(""),
         stop: (id) => {
           stopped.push(id);
           return Promise.resolve();

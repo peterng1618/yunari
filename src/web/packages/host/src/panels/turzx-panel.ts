@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
+  PanelControlCommand,
+  PanelControls,
   PanelDevice,
   PanelFamily,
   PanelHint,
@@ -20,6 +22,7 @@ import {
   overlayHeader,
   overlayUpdate,
   parseHello,
+  parseHelloText,
   TURZX_COMMAND,
   TURZX_GEOMETRY,
   type TurzxIdentity,
@@ -198,6 +201,12 @@ class TurzxPanel implements PanelDevice {
   readonly stillFormat = "png";
 
   readonly video: PanelVideo;
+
+  /** Hardware controls, percent in and the byte mapping kept here. */
+  readonly controls: PanelControls = {
+    commands: ["brightness", "screen", "restart", "status", "hello"],
+    run: (command) => this.runControl(command),
+  };
 
   private queue: Promise<unknown> = Promise.resolve();
   /** The transparent overlay sent at init; the diff encoder updates from it. */
@@ -430,6 +439,75 @@ class TurzxPanel implements PanelDevice {
     }
 
     return { accepted: undefined, last };
+  }
+
+  /**
+   * One control on the same queue as the frames, so a write cannot land inside
+   * a frame or between an overlay header and its body.
+   *
+   * A brightness the panel cannot take is refused before it reaches the wire;
+   * so is a fraction, rather than rounded into a value the owner did not ask
+   * for.
+   */
+  private async runControl(command: PanelControlCommand): Promise<string> {
+    switch (command.kind) {
+      case "brightness": {
+        const level = command.level;
+        if (!Number.isInteger(level)) {
+          throw new Error(
+            `The brightness must be a whole percent; received ${level}.`,
+          );
+        }
+        if (level < 0 || level > 100) {
+          throw new Error(
+            `The brightness must be from 0 to 100; received ${level}.`,
+          );
+        }
+
+        return await this.enqueue(async () => {
+          const weight = Math.round((level / 100) * 255);
+          await this.send(
+            frame(Uint8Array.of(...TURZX_COMMAND.brightness, weight)),
+          );
+
+          return `The panel's brightness is now ${level}%.`;
+        });
+      }
+      case "screen":
+        return await this.enqueue(async () => {
+          await this.send(
+            command.on ? TURZX_COMMAND.screenOn : TURZX_COMMAND.screenOff,
+          );
+
+          return command.on
+            ? "The panel's screen is on."
+            : "The panel's screen is off.";
+        });
+      case "restart":
+        return await this.enqueue(async () => {
+          await this.send(TURZX_COMMAND.restart);
+
+          // The interface drops for ~15 s, so no reply is read: waiting on the
+          // queue here would wedge every later command behind it.
+          return "The panel is restarting; it will be unavailable for about 15 seconds.";
+        });
+      case "status":
+        return await this.enqueue(async () => {
+          await this.send(TURZX_COMMAND.queryStatus);
+
+          return await this.readUntil('"QUERY_STATUS"', (text) => text);
+        });
+      case "hello":
+        return await this.enqueue(async () => {
+          await this.send(TURZX_COMMAND.hello);
+
+          // Only the HELLO shape is an answer; the status reply left buffered by
+          // `openTurzxPanel` is skipped.
+          return await this.readUntil('"HELLO"', (text) =>
+            parseHelloText(text) === undefined ? undefined : text,
+          );
+        });
+    }
   }
 
   async close(): Promise<void> {

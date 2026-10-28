@@ -308,6 +308,113 @@ describe("openTurzxPanel", () => {
   });
 });
 
+describe("a panel's controls", () => {
+  it("maps percent brightness to the panel's 0-255 byte", async () => {
+    const { writes, transport } = fakeTransport("chs_5inch.dev1_rom1.88");
+    const panel = await opened(transport);
+
+    try {
+      await panel.controls!.run({ kind: "brightness", level: 50 });
+
+      const last = writes[writes.length - 1]!;
+      expect([...last.slice(0, 10)]).toEqual([
+        0x7b, 0xef, 0x69, 0, 0, 0, 1, 0, 0, 0,
+      ]);
+      expect(last[10]).toBe(128);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("refuses a level outside 0-100 or a fraction without writing", async () => {
+    const { writes, transport } = fakeTransport("chs_5inch.dev1_rom1.88");
+    const panel = await opened(transport);
+    const sent = writes.length;
+
+    try {
+      await expect(
+        panel.controls!.run({ kind: "brightness", level: 101 }),
+      ).rejects.toThrow(/0 to 100/);
+      await expect(
+        panel.controls!.run({ kind: "brightness", level: 50.5 }),
+      ).rejects.toThrow(/whole/);
+      expect(writes.length).toBe(sent);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("returns the status reply as text", async () => {
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88",
+      "needReSend:0|renderCnt:1",
+    );
+    const panel = await opened(fake.transport);
+
+    try {
+      await expect(panel.controls!.run({ kind: "status" })).resolves.toBe(
+        "needReSend:0|renderCnt:1",
+      );
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("skips the buffered status reply ahead of the HELLO answer", async () => {
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO at open
+      "needReSend:0|renderCnt:1", // the status reply open left buffered
+      "chs_5inch.dev1_rom1.88", // the answer to the control's HELLO
+    );
+    const panel = await opened(fake.transport);
+
+    try {
+      await expect(panel.controls!.run({ kind: "hello" })).resolves.toBe(
+        "chs_5inch.dev1_rom1.88",
+      );
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("writes the screen state without waiting for a reply", async () => {
+    const fake = fakeTransport("chs_5inch.dev1_rom1.88");
+    const panel = await opened(fake.transport);
+
+    try {
+      await panel.controls!.run({ kind: "screen", on: true });
+      expect([...fake.writes[fake.writes.length - 1]!.slice(0, 7)]).toEqual([
+        0x83, 0xef, 0x69, 0, 0, 0, 0,
+      ]);
+
+      await panel.controls!.run({ kind: "screen", on: false });
+      expect([...fake.writes[fake.writes.length - 1]!.slice(0, 7)]).toEqual([
+        0x83, 0xef, 0x69, 0, 0, 0, 1,
+      ]);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("answers a restart with the recovery sentence and reads no reply", async () => {
+    // Nothing is scripted after HELLO: resolving proves the restart did not
+    // wait for a reply the dropped interface cannot send.
+    const fake = fakeTransport("chs_5inch.dev1_rom1.88");
+    const panel = await opened(fake.transport);
+
+    try {
+      await expect(panel.controls!.run({ kind: "restart" })).resolves.toBe(
+        "The panel is restarting; it will be unavailable for about 15 seconds.",
+      );
+      expect([...fake.writes[fake.writes.length - 1]!.slice(0, 7)]).toEqual([
+        0x84, 0xef, 0x69, 0, 0, 0, 1,
+      ]);
+    } finally {
+      await panel.close();
+    }
+  });
+});
+
 describe("a panel's overlay", () => {
   /** A panel whose video is playing and whose overlay was initialized. */
   async function playing(rgba: Uint8Array) {

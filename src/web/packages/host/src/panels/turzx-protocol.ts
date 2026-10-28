@@ -46,7 +46,13 @@ export function frame(
 
 /** The identity a HELLO reply carries, or `undefined` for any other answer. */
 export function parseHello(reply: Uint8Array): TurzxIdentity | undefined {
-  const text = new TextDecoder("latin1").decode(reply).replace(/[\0\s]+$/, "");
+  return parseHelloText(
+    new TextDecoder("latin1").decode(reply).replace(/[\0\s]+$/, ""),
+  );
+}
+
+/** The identity an already-decoded HELLO answer carries, or `undefined`. */
+export function parseHelloText(text: string): TurzxIdentity | undefined {
   const match = HELLO.exec(text);
 
   if (match === null) return undefined;
