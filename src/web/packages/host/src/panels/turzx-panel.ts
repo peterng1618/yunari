@@ -211,7 +211,7 @@ class TurzxPanel implements PanelDevice {
   private queue: Promise<unknown> = Promise.resolve();
   /** The transparent overlay sent at init; the diff encoder updates from it. */
   private previousOverlay: Uint8Array | undefined;
-  /** UPDATE_BITMAP's count field, which the panel expects to climb from one. */
+  /** UPDATE_BITMAP's count field: the verified probe sent 0 first. */
   private overlayCount = 0;
   /** The clip most recently started; a different one deletes it. */
   private previousVideoPath: string | undefined;
@@ -272,51 +272,69 @@ class TurzxPanel implements PanelDevice {
       }
 
       await this.send(fileHeader(TURZX_COMMAND.startVideo, remotePath));
-      await this.readFor("play_video_success");
 
-      await this.send(TURZX_COMMAND.preUpdate);
-      await this.send(TURZX_COMMAND.startBitmap);
-      await this.send(TURZX_COMMAND.displayOnVideo);
+      // **The panel is looping the clip from this point.** The runner only
+      // marks the clip playing once this method resolves, so a failure here —
+      // the start's own ack timing out, the overlay's init refused, an earlier
+      // clip's delete — would leave it running with no host behind it. Stop it
+      // before rethrowing, and keep the original error when the stop fails too:
+      // that failure is the reason the caller must hear.
+      try {
+        await this.readFor("play_video_success");
 
-      // The overlay starts fully transparent: every pixel the UI does not
-      // paint shows the playing video underneath.
-      const transparent = new Uint8Array(
-        this.geometry.width * this.geometry.height * 4,
-      );
-      await this.send(bgraPayload(transparent));
-      await this.send(frame(TURZX_COMMAND.initVideoOverlay));
-      await this.send(frame(TURZX_COMMAND.overlayTerminate));
+        await this.send(TURZX_COMMAND.preUpdate);
+        await this.send(TURZX_COMMAND.startBitmap);
+        await this.send(TURZX_COMMAND.displayOnVideo);
 
-      // Init answers `seq_png_init_sucessneedReSend:0|renderCnt:N`; the first
-      // update must wait out the panel's settle. A failed init says so in the
-      // same territory and must not be treated as a ready overlay. The full
-      // word is matched: a reply split after the shared prefix is not an
-      // answer either way.
-      const init = await this.readUntil('"seq_png_init_"', (text) =>
-        text.includes(OVERLAY_INIT_OK) || text.includes(OVERLAY_INIT_FAILED)
-          ? text
-          : undefined,
-      );
-      if (init.includes(OVERLAY_INIT_FAILED)) {
-        throw new Error(`The panel could not initialize its overlay: ${init}.`);
-      }
-      await this.sleep(OVERLAY_SETTLE_MS);
-      await this.send(TURZX_COMMAND.queryStatus);
-
-      this.previousOverlay = transparent;
-      // A fresh init re-renders from scratch, so a count carried over from the
-      // last session is meaningless. The probe sent 0 first and the panel took
-      // it, so the field's meaning is unverified; Task 12 observes it.
-      this.overlayCount = 0;
-      if (
-        this.previousVideoPath !== undefined &&
-        this.previousVideoPath !== remotePath
-      ) {
-        await this.send(
-          fileHeader(TURZX_COMMAND.deleteFile, this.previousVideoPath),
+        // The overlay starts fully transparent: every pixel the UI does not
+        // paint shows the playing video underneath.
+        const transparent = new Uint8Array(
+          this.geometry.width * this.geometry.height * 4,
         );
+        await this.send(bgraPayload(transparent));
+        await this.send(frame(TURZX_COMMAND.initVideoOverlay));
+        await this.send(frame(TURZX_COMMAND.overlayTerminate));
+
+        // Init answers `seq_png_init_sucessneedReSend:0|renderCnt:N`; the first
+        // update must wait out the panel's settle. A failed init says so in the
+        // same territory and must not be treated as a ready overlay. The full
+        // word is matched: a reply split after the shared prefix is not an
+        // answer either way.
+        const init = await this.readUntil('"seq_png_init_"', (text) =>
+          text.includes(OVERLAY_INIT_OK) || text.includes(OVERLAY_INIT_FAILED)
+            ? text
+            : undefined,
+        );
+        if (init.includes(OVERLAY_INIT_FAILED)) {
+          throw new Error(
+            `The panel could not initialize its overlay: ${init}.`,
+          );
+        }
+        await this.sleep(OVERLAY_SETTLE_MS);
+        await this.send(TURZX_COMMAND.queryStatus);
+
+        this.previousOverlay = transparent;
+        // A fresh init re-renders from scratch, so a count carried over from the
+        // last session is meaningless. The probe sent 0 first and the panel took
+        // it, so the field's meaning is unverified; Task 12 observes it.
+        this.overlayCount = 0;
+        if (
+          this.previousVideoPath !== undefined &&
+          this.previousVideoPath !== remotePath
+        ) {
+          await this.send(
+            fileHeader(TURZX_COMMAND.deleteFile, this.previousVideoPath),
+          );
+        }
+        this.previousVideoPath = remotePath;
+      } catch (error) {
+        try {
+          await this.send(TURZX_COMMAND.stopVideo);
+        } catch {
+          // The clip's stop is best-effort; the original failure is the answer.
+        }
+        throw error;
       }
-      this.previousVideoPath = remotePath;
     });
   }
 
@@ -341,15 +359,15 @@ class TurzxPanel implements PanelDevice {
       );
       const update = overlayUpdate(previous, current.rgba, this.geometry);
 
-      const count = this.overlayCount + 1;
+      const count = this.overlayCount;
       await this.send(
         overlayHeader(update.imageSize, count, update.visibleBytes),
       );
       await this.send(update.body);
       // Advance only once both writes landed, so a failed update does not skip
-      // a number. The probe sent 0 first and the panel accepted the field, so
-      // whether the count matters is Task 12's observation.
-      this.overlayCount = count;
+      // a number. The first update carries 0, the value the verified probe
+      // sent; whether the count matters is Task 12's observation.
+      this.overlayCount = count + 1;
       this.previousOverlay = current.rgba;
     });
   }
@@ -470,7 +488,9 @@ class TurzxPanel implements PanelDevice {
             frame(Uint8Array.of(...TURZX_COMMAND.brightness, weight)),
           );
 
-          return `The panel's brightness is now ${level}%.`;
+          // Write-only: the device answers nothing, and a host sentence here
+          // would be shown as the panel's reply.
+          return "";
         });
       }
       case "screen": {
@@ -486,9 +506,8 @@ class TurzxPanel implements PanelDevice {
             on ? TURZX_COMMAND.screenOn : TURZX_COMMAND.screenOff,
           );
 
-          return on
-            ? "The panel's screen is on."
-            : "The panel's screen is off.";
+          // Write-only: the device answers nothing.
+          return "";
         });
       }
       case "restart":
@@ -496,8 +515,9 @@ class TurzxPanel implements PanelDevice {
           await this.send(TURZX_COMMAND.restart);
 
           // The interface drops for ~15 s, so no reply is read: waiting on the
-          // queue here would wedge every later command behind it.
-          return "The panel is restarting; it will be unavailable for about 15 seconds.";
+          // queue here would wedge every later command behind it. The device
+          // says nothing, so the reply is empty rather than a host sentence.
+          return "";
         });
       case "status":
         return await this.enqueue(async () => {

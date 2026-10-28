@@ -285,6 +285,80 @@ describe("openTurzxPanel", () => {
     }
   });
 
+  it("stops a clip it started when the start fails afterwards", async () => {
+    // The ack after START_VIDEO never arrives: the panel is already looping
+    // and the start throws, so the clip must be stopped before the host lets
+    // go of the device.
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO at open
+      "0", // GET_FILE_SIZE: nothing stored
+      "create_success", // UPLOAD_FILE
+      // START_VIDEO is written; no play_video_success follows.
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+    });
+
+    try {
+      await expect(
+        panel.video!.start(Uint8Array.of(1, 2, 3), {
+          offsetX: 0,
+          offsetY: 0,
+        }),
+      ).rejects.toThrow(/play_video_success/);
+
+      const started = fake.writes.findIndex(
+        (bytes) => bytes[0] === 0x78 && bytes[1] === 0xef,
+      );
+      expect(started, "START_VIDEO was never written").toBeGreaterThanOrEqual(
+        0,
+      );
+      // The last write is the stop that followed it.
+      expect([...fake.writes[fake.writes.length - 1]!.slice(0, 7)]).toEqual([
+        0x79, 0xef, 0x69, 0x00, 0x00, 0x00, 0x01,
+      ]);
+      expect(fake.writes.length - 1).toBeGreaterThan(started);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("reports the start failure even when stopping the clip also fails", async () => {
+    const replies = ["chs_5inch.dev1_rom1.88", "0", "create_success"];
+    let next = 0;
+    let started = false;
+    const transport: SerialTransport = {
+      write: async (bytes) => {
+        if (bytes[0] === 0x78) started = true; // START_VIDEO
+        // The stop that follows a started clip is refused, as a port on its
+        // way out would be; the open-time stop before it must succeed.
+        if (started && bytes[0] === 0x79) throw new Error("the port went away");
+      },
+      read: async () =>
+        next < replies.length
+          ? new TextEncoder().encode(`${replies[next++]}\0`)
+          : new Uint8Array(),
+      drainPending: () => new Uint8Array(),
+      close: async () => {},
+    };
+    const panel = await opened(transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+    });
+
+    try {
+      await expect(
+        panel.video!.start(Uint8Array.of(1, 2, 3), {
+          offsetX: 0,
+          offsetY: 0,
+        }),
+      ).rejects.toThrow(/play_video_success/);
+    } finally {
+      await panel.close();
+    }
+  });
+
   it("does not accept the bare overlay-init prefix as an answer", async () => {
     const fake = fakeTransport(
       "chs_5inch.dev1_rom1.88", // HELLO
@@ -331,7 +405,10 @@ describe("a panel's controls", () => {
     const panel = await opened(transport);
 
     try {
-      await panel.controls!.run({ kind: "brightness", level: 50 });
+      // Write-only: the device's reply is empty, never a host sentence.
+      await expect(
+        panel.controls!.run({ kind: "brightness", level: 50 }),
+      ).resolves.toBe("");
 
       const last = writes[writes.length - 1]!;
       expectCommand(last, [...BRIGHTNESS, 128]);
@@ -450,13 +527,17 @@ describe("a panel's controls", () => {
     const panel = await opened(fake.transport);
 
     try {
-      await panel.controls!.run({ kind: "screen", on: true });
+      await expect(
+        panel.controls!.run({ kind: "screen", on: true }),
+      ).resolves.toBe("");
       expectCommand(
         fake.writes[fake.writes.length - 1]!,
         [0x83, 0xef, 0x69, 0, 0, 0, 0],
       );
 
-      await panel.controls!.run({ kind: "screen", on: false });
+      await expect(
+        panel.controls!.run({ kind: "screen", on: false }),
+      ).resolves.toBe("");
       expectCommand(
         fake.writes[fake.writes.length - 1]!,
         [0x83, 0xef, 0x69, 0, 0, 0, 1],
@@ -483,16 +564,15 @@ describe("a panel's controls", () => {
     }
   });
 
-  it("answers a restart with the recovery sentence and reads no reply", async () => {
+  it("answers a restart with an empty reply and reads nothing", async () => {
     // Nothing is scripted after HELLO: resolving proves the restart did not
-    // wait for a reply the dropped interface cannot send.
+    // wait for a reply the dropped interface cannot send. The device says
+    // nothing, so the reply is empty rather than a host sentence.
     const fake = fakeTransport("chs_5inch.dev1_rom1.88");
     const panel = await opened(fake.transport);
 
     try {
-      await expect(panel.controls!.run({ kind: "restart" })).resolves.toBe(
-        "The panel is restarting; it will be unavailable for about 15 seconds.",
-      );
+      await expect(panel.controls!.run({ kind: "restart" })).resolves.toBe("");
       expectCommand(
         fake.writes[fake.writes.length - 1]!,
         [0x84, 0xef, 0x69, 0, 0, 0, 1],
@@ -540,10 +620,10 @@ describe("a panel's overlay", () => {
       const header = writes[writes.length - 2]!;
       const body = writes[writes.length - 1]!;
       expect(header.length).toBe(250);
-      // cc ef 69 00, imageSize 15 (3 BE), three zeros, count 1, visible bytes 5.
+      // cc ef 69 00, imageSize 15 (3 BE), three zeros, count 0, visible bytes 5.
       expect([...header.slice(0, 18)]).toEqual([
         0xcc, 0xef, 0x69, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x01, 0x00, 0x00, 0x00, 0x05,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x05,
       ]);
       // The changed span [offset 0, width 1], its pixel, the visible span,
       // then the terminator.
@@ -559,7 +639,7 @@ describe("a panel's overlay", () => {
       expect([...second.slice(0, 7)]).toEqual([
         0xcc, 0xef, 0x69, 0x00, 0x00, 0x00, 0x07,
       ]);
-      expect([...second.slice(10, 14)]).toEqual([0x00, 0x00, 0x00, 0x02]);
+      expect([...second.slice(10, 14)]).toEqual([0x00, 0x00, 0x00, 0x01]);
       expect([...writes[writes.length - 1]!.slice(0, 7)]).toEqual([
         0x00, 0x00, 0x00, 0x00, 0x01, 0xef, 0x69,
       ]);
@@ -626,7 +706,7 @@ describe("a panel's overlay", () => {
       await panel.video!.presentOverlay(Uint8Array.of(2));
 
       const header = fake.writes[fake.writes.length - 2]!;
-      expect([...header.slice(10, 14)]).toEqual([0x00, 0x00, 0x00, 0x01]);
+      expect([...header.slice(10, 14)]).toEqual([0x00, 0x00, 0x00, 0x00]);
     } finally {
       await panel.close();
     }

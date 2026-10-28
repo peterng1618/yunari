@@ -42,7 +42,9 @@ export type PanelControlCommand =
  * What a panel beyond its picture can do, when it can do more.
  *
  * `commands` is the declared set the control surface renders; `run` is the one
- * entry point, so a surface does not learn a protocol to dim a screen.
+ * entry point, so a surface does not learn a protocol to dim a screen. `run`
+ * answers **the device's own reply text**, empty when the device says nothing
+ * (a write-only command); a surface must not read a host sentence as a reply.
  */
 export interface PanelControls {
   readonly commands: readonly PanelControlCommand["kind"][];
