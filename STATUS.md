@@ -9,27 +9,28 @@ Drive the TURZX/Turing 5" serial panel (Rev C, 800×480 landscape, COM5) through
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-29-turzx-serial-panel.md` (3 phases / 12 tasks); Phase 1 tasks 1–5 done, video pulled forward (9 done, 10 next), then 11, 12, then 6–8.
-- **The TURZX panel is attached on COM5** (`1D6B:0106`, Windows serial `6&E9576A&5&0000`) and answers HELLO as `chs_5inch.dev1_rom1.88`.
-- **The panel shows a Yunari theme:** static frames reach the glass upright; a theme video uploads and starts (`884d1c1e`), overlay updates are Task 11.
+- **Active plan:** `docs/superpowers/plans/2026-10-29-turzx-serial-panel.md` (3 phases / 12 tasks); tasks 1–5, 9–12 done; tasks 6–8 (controls, route, dialog) remain.
+- **Video works on the panel:** the demo theme's clip uploads, plays, and the UI overlay updates over it; a start failure falls back to stills.
+- **The panel is wedged after a host kill:** COM5 answers "Access denied" to every open with no host running, so a replug or power-cycle is needed before the next hardware run.
 - **Device reclaim is designed, not planned:** per-adapter holder names plus one host service, kill + manual guide in one dialog; queued behind this plan.
-- **Task 10 is host-only:** a devtools-side transparent capture; no player flag or scene option.
 
 ## Last completed change
 
-- **Docs — overlay capture is a devtools edit:** `captureOverlay()` hides the media layer and clears the artboard host's inline paint, which the canvas leaves to the host.
-- **Glass first frame is inherited:** the Lian Li still-frame seam (`226acf66`) supplies it at merge; this plan ports interfaces only.
-- **Spec and plan amended** (Capture, phasing, glass acceptance, Task 10/12); glass-over-video risk recorded for Task 12.
+- **Task 12 — video mode on the panel:** the runner starts the clip once, sends transparent overlay diffs, falls back to stills on a failed start or overlay, and stops the clip before closing.
+- **Lifecycle hardened over four review rounds:** one chain per display, retryable close, bounded shutdown, replies buffered at the transport instead of per read.
+- **Transport defect found on hardware:** replies arriving while the upload still writes were dropped; the probe kept one listener for the session.
+- **Register:** `vg-788` (JPEG-compressed stills) closed as verified; commits `4231658d`, `0909562c`.
 
 ## Next
 
-1. Task 10 — transparent overlay capture (devtools only).
-2. Task 11 — diff encoder and `presentOverlay`; Task 12 — video mode, fallback, hardware proof.
-3. Tasks 6–8 — controls, route, dialog; then the reclaim spec and plan.
+1. Tasks 6–8 — controls in the adapter, the command route, the Controls dialog.
+2. Whole-branch review on the most capable model, then finish the branch.
+3. Replug the panel and repeat the video proof, including glass over video.
 
 ## Blockers / unverified
 
-- **Only firmware `1.88` is verified:** a newer ROM may change the protocol, and the mismatch warning is the only signal.
-- **A replug invalidates the open serial handle:** the runner keeps logging success against a dead port; no reconnect logic exists yet.
-- **The vendor apps were stopped by us:** `TURZX.exe` and `Jungle Leopard Display.exe` are closed and will reclaim COM5 when reopened.
-- **The video seam's glass behaviour is unverified here:** it arrives with the Lian Li work; a glass object over video may carry video pixels into the overlay.
+- **COM5 is wedged:** a replug or power-cycle is required; without it no hardware step can run.
+- **Overlay alpha and glass over video are unverified on pixels:** the device accepted every frame, but no capture proof exists.
+- **A gate flake is open:** `server.test.ts` theme-assignment ordering fails only under full-load (`vg-637` class); it passes alone and with the panel suite.
+- **The vendor apps stay closed:** `TURZX.exe` and `Jungle Leopard Display.exe` will reclaim COM5 when reopened.
+- **Only firmware `1.88` is verified:** a newer ROM may change the protocol silently.
