@@ -1,5 +1,6 @@
 import HID from "node-hid";
 import { usb } from "usb";
+import { reportedSerial } from "../settings/displays.js";
 import type { PanelDevice, PanelGeometry, PanelHint } from "./panel-device.js";
 import { decodeStill } from "./panel-image.js";
 
@@ -386,29 +387,42 @@ function toArgb(rgba: Uint8Array): Uint8Array {
   return argb;
 }
 
+/** One enumerated HID device, in the fields a hint reads. */
+export interface KrakenDescriptor {
+  readonly vendorId: number;
+  readonly productId: number;
+  /** Absent when the firmware reports none, as node-hid itself reports it. */
+  readonly serialNumber?: string | undefined;
+}
+
+/**
+ * A device's hint, or nothing when it is not a Kraken.
+ *
+ * `serialNumber` is the unit's own string, the same one libusb enumerates and a
+ * record stores. **The HID path is not** — its `#8&1ebeab3b&0&0000#` segment is
+ * this boot's bus instance and moves on replug, so a record keyed by it reads
+ * as detached forever after the next enumeration.
+ */
+export function krakenHint(
+  device: KrakenDescriptor,
+): (PanelHint & { readonly model: "kraken-z3" }) | undefined {
+  if (device.vendorId !== VENDOR_ID || device.productId !== PRODUCT_ID) {
+    return undefined;
+  }
+
+  return {
+    vendorId: VENDOR_ID,
+    productId: PRODUCT_ID,
+    serial: reportedSerial(device.serialNumber) ?? "",
+    model: "kraken-z3",
+  };
+}
+
 /** The attached Kraken, as a hint a display record can hold. */
 export function attachedKrakens(): readonly KrakenHint[] {
   return HID.devices()
-    .filter(
-      (device) =>
-        device.vendorId === VENDOR_ID && device.productId === PRODUCT_ID,
-    )
-    .map((device) => ({
-      vendorId: VENDOR_ID,
-      productId: PRODUCT_ID,
-      // A Kraken's HID path carries the unit serial; `serialNumber` on the
-      // libusb side is the same string, but the HID path is what enumerated.
-      serial: serialFrom(device.path),
-      model: "kraken-z3" as const,
-    }));
-}
-
-/** The unit serial embedded in a Windows HID path, or empty. */
-function serialFrom(path: string | undefined): string {
-  if (path === undefined) return "";
-
-  const match = /#([0-9A-F]{8,})#/i.exec(path);
-  return match?.[1] ?? "";
+    .map((device) => krakenHint(device))
+    .filter((hint): hint is KrakenHint => hint !== undefined);
 }
 
 /** Opens the attached Kraken, or refuses with the reason it could not. */
