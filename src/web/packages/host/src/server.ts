@@ -959,6 +959,8 @@ function panelCommand(body: unknown): PanelControlCommand {
  * the command reaches a port that is already on its way down; that rejects with
  * an OS error carrying a `code` (or serialport's closed-port message), while
  * the adapter's own refusals and this host's bugs are plain errors with none.
+ * The codes are an allowlist rather than any string: an `ENOENT` from a future
+ * local-I/O control path is that path's failure, not a port conflict.
  */
 function isPortFailure(error: unknown): boolean {
   if (error instanceof PanelNotRunningError) return true;
@@ -971,9 +973,13 @@ function isPortFailure(error: unknown): boolean {
   };
 
   return (
-    typeof code === "string" ||
     disconnected === true ||
-    message === "Port is not open"
+    message === "Port is not open" ||
+    (typeof code === "string" &&
+      (code === "EIO" ||
+        code === "EBADF" ||
+        code === "ENXIO" ||
+        code.startsWith("ERR_SERIAL_PORT_")))
   );
 }
 

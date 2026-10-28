@@ -5317,6 +5317,102 @@ describe("A local monitor is specified rather than paired", () => {
       }
     });
 
+    it("passes a screen command through unchanged", async () => {
+      const called: unknown[] = [];
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], []),
+          command: (_id, command) => {
+            called.push(command);
+            return Promise.resolve("The panel's screen is off.");
+          },
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          COMMAND,
+          json({ kind: "screen", on: true }),
+        );
+        expect(answer.status).toBe(200);
+        expect(called).toEqual([{ kind: "screen", on: true }]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it.each([{ kind: "restart" }, { kind: "status" }, { kind: "hello" }])(
+      "passes $kind through unchanged",
+      async (body) => {
+        const called: unknown[] = [];
+        const hosting = host({
+          attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+          panels: {
+            ...managerOver([], []),
+            command: (_id, command) => {
+              called.push(command);
+              return Promise.resolve("");
+            },
+          },
+        });
+
+        try {
+          await request(
+            hosting.server,
+            "POST",
+            "/api/displays/panels",
+            json({ label: "Strip", panel: STRIP }),
+          );
+          const answer = await request(
+            hosting.server,
+            "POST",
+            COMMAND,
+            json(body),
+          );
+          expect(answer.status).toBe(200);
+          expect(called).toEqual([body]);
+        } finally {
+          await hosting.close();
+        }
+      },
+    );
+
+    it("answers 400 for a body that is not JSON", async () => {
+      const command = vi.fn();
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: { ...managerOver([], []), command },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          COMMAND,
+          "{ not json",
+        );
+        expect(answer.status).toBe(400);
+        expect(command).not.toHaveBeenCalled();
+      } finally {
+        await hosting.close();
+      }
+    });
+
     it.each([
       ["an out-of-range level", { kind: "brightness", level: 101 }],
       ["a negative level", { kind: "brightness", level: -1 }],
@@ -5484,6 +5580,39 @@ describe("A local monitor is specified rather than paired", () => {
         );
         expect(answer.status).toBe(500);
         expect(answer.text()).toBe("the control surface fell over");
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("answers 500 for an errno the port does not own", async () => {
+      // Only the port's own codes are a conflict; a local-I/O errno from a
+      // future control path is that path's failure, not a missing device.
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], []),
+          command: () =>
+            Promise.reject(
+              Object.assign(new Error("no such file"), { code: "ENOENT" }),
+            ),
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          COMMAND,
+          json({ kind: "status" }),
+        );
+        expect(answer.status).toBe(500);
       } finally {
         await hosting.close();
       }

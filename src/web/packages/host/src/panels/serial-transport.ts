@@ -100,7 +100,9 @@ export interface SerialPortLike {
  *
  * The fake seam is deliberately narrower than `serialport`'s overloaded
  * `write`, which no structural fake reproduces; production passes the real
- * `SerialPort`, tests pass an emitter, and only `read` is exercised through it.
+ * `SerialPort`, tests pass an emitter, and only `read` reaches the port itself.
+ * A write after `close()` is refused before the port is touched, so that guard
+ * is testable through this seam too.
  */
 export function transportOver(port: SerialPortLike): SerialTransport {
   return new OpenSerialPort(port as unknown as SerialPort);
@@ -183,6 +185,18 @@ class OpenSerialPort implements SerialTransport {
   }
 
   write(bytes: Uint8Array): Promise<void> {
+    // A close that has begun owns the port: the binding queues a write on a
+    // closed handle until the next `open` event, so a command racing a stop
+    // would hang forever instead of failing. `closed` is set before the
+    // asynchronous close, so this covers a stop already in progress too.
+    if (this.closed) {
+      return Promise.reject(
+        Object.assign(new Error("The serial port is closed."), {
+          code: "ERR_SERIAL_PORT_CLOSED",
+        }),
+      );
+    }
+
     return new Promise((resolve, reject) => {
       this.port.write(Buffer.from(bytes), (error) => {
         if (error !== null && error !== undefined) {

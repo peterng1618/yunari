@@ -10,6 +10,19 @@ class FakePort extends EventEmitter implements SerialPortLike {
     this.isOpen = false;
     callback?.(null);
   }
+
+  /** `serialport` queues a write on a closed handle until the next `open`,
+   *  which never comes: a fake that called back would hide the hang the
+   *  transport's own guard exists to prevent. */
+  write(_bytes: Uint8Array, callback: (error?: Error | null) => void): void {
+    if (!this.isOpen) return;
+    callback(null);
+  }
+
+  drain(callback: (error?: Error | null) => void): void {
+    if (!this.isOpen) return;
+    callback(null);
+  }
 }
 
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
@@ -218,5 +231,28 @@ describe("the serial transport's read", () => {
     // delivered to a promise nobody is left to answer.
     expect(decode(await first)).toBe("one");
     expect(decode(await second)).toBe("two");
+  });
+});
+
+describe("the serial transport's write", () => {
+  it("resolves a write while the port is open", async () => {
+    const port = new FakePort();
+    const transport = transportOver(port);
+
+    await expect(transport.write(Uint8Array.of(1))).resolves.toBeUndefined();
+  });
+
+  it("refuses a write once close has begun instead of queueing it forever", async () => {
+    const port = new FakePort();
+    const transport = transportOver(port);
+    await transport.close();
+
+    // A command racing a stop reaches a handle the binding queues on `open`
+    // forever; the transport must refuse it so the route can answer.
+    const started = Date.now();
+    await expect(transport.write(Uint8Array.of(1))).rejects.toMatchObject({
+      code: "ERR_SERIAL_PORT_CLOSED",
+    });
+    expect(Date.now() - started).toBeLessThan(1000);
   });
 });
