@@ -1,8 +1,9 @@
+import { placement } from "@yunari/scene-fabric";
 import { describe, expect, it } from "vitest";
 import type { PanelDevice } from "./panel-device.js";
 import type { SerialTransport } from "./serial-transport.js";
 import { openTurzxPanel, type TurzxOptions } from "./turzx-panel.js";
-import { transcodeForPanel } from "./turzx-video.js";
+import { panelCrop, transcodeForPanel } from "./turzx-video.js";
 
 /**
  * A transport whose every read answers the next scripted reply, then nothing.
@@ -41,6 +42,14 @@ function opened(
   });
 }
 
+/** A clip that transcodes to three bytes, without spawning ffmpeg. */
+const threeByteClip = async () => ({
+  ok: true as const,
+  bytes: Uint8Array.of(9, 9, 9),
+});
+
+const still = { offsetX: 0, offsetY: 0 };
+
 describe("transcodeForPanel", () => {
   it("refuses a transcode the encoder failed", async () => {
     const result = await transcodeForPanel(Uint8Array.of(1), {
@@ -48,6 +57,35 @@ describe("transcodeForPanel", () => {
       verifyForTest: true,
     });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("panelCrop", () => {
+  it("crops to the same edge the player places", () => {
+    // An ultrawide source leaves an overhang the offset pans through without
+    // the pan floor taking over, so the placed rect's edge is not the box edge.
+    const source = { width: 2560, height: 1080 };
+    const rect = placement({
+      box: { width: 800, height: 480 },
+      source,
+      offsetX: 0.1,
+      offsetY: 0,
+    });
+    const crop = panelCrop(source, 0.1, 0);
+
+    // The scaled crop edge is the placed rect's left edge, expressed in source
+    // pixels; the same pan the player composes is what the panel encodes.
+    const scale = rect.width / source.width;
+    expect(Math.round(crop.x * scale)).toBe(Math.round(-rect.left));
+    expect(crop).toEqual({ x: 200, y: 0, width: 1800, height: 1080 });
+    expect(crop.x + crop.width).toBeLessThanOrEqual(source.width);
+  });
+
+  it("treats a non-finite offset as centred", () => {
+    const source = { width: 1920, height: 1080 };
+    expect(panelCrop(source, Number.NaN, Number.POSITIVE_INFINITY)).toEqual(
+      panelCrop(source, 0, 0),
+    );
   });
 });
 
@@ -61,34 +99,129 @@ describe("a panel's video", () => {
       "seq_png_init_sucessneedReSend:0|renderCnt:1", // INIT_VIDEO_OVERLAY
     );
     const panel = await opened(transport, {
-      transcode: async () => ({ ok: true, bytes: Uint8Array.of(9, 9, 9) }),
+      transcode: threeByteClip,
       sleep: async () => {},
     });
 
-    await panel.video!.start(Uint8Array.of(1, 2, 3), {
-      offsetX: 0,
-      offsetY: 0,
+    try {
+      await panel.video!.start(Uint8Array.of(1, 2, 3), still);
+
+      const upload = writes.find(
+        (bytes) => bytes[0] === 0x6f && bytes[1] === 0xef,
+      );
+      expect(upload).toBeDefined();
+      expect(
+        writes.some((bytes) => bytes[0] === 0x78 && bytes[1] === 0xef),
+      ).toBe(true);
+      expect(
+        writes.some((bytes) => bytes[0] === 0xd0 && bytes[1] === 0xef),
+      ).toBe(true);
+      expect(writes.every((bytes) => bytes.length % 250 === 0)).toBe(true);
+      // A three-byte clip is one 250-byte chunk carrying those bytes.
+      const chunks = writes.filter(
+        (bytes) =>
+          bytes.length === 250 &&
+          bytes[0] === 9 &&
+          bytes[1] === 9 &&
+          bytes[2] === 9,
+      );
+      expect(chunks).toHaveLength(1);
+    } finally {
+      await panel.close();
+    }
+
+    // The stored size already matches the transcoded clip: no upload write.
+    const same = fakeTransport(
+      "chs_5inch.dev1_rom1.88",
+      "3", // GET_FILE_SIZE: this clip is already stored
+      "play_video_success",
+      "seq_png_init_sucessneedReSend:0|renderCnt:1",
+    );
+    const second = await opened(same.transport, {
+      transcode: threeByteClip,
+      sleep: async () => {},
     });
 
-    const upload = writes.find(
-      (bytes) => bytes[0] === 0x6f && bytes[1] === 0xef,
+    try {
+      await second.video!.start(Uint8Array.of(1, 2, 3), still);
+      expect(
+        same.writes.some((bytes) => bytes[0] === 0x6f && bytes[1] === 0xef),
+      ).toBe(false);
+    } finally {
+      await second.close();
+    }
+  });
+
+  it("skips the buffered status reply before the stored size", async () => {
+    const { writes, transport } = fakeTransport(
+      "chs_5inch.dev1_rom1.88",
+      "status: ready", // QUERY_STATUS reply buffered by openTurzxPanel
+      "0", // GET_FILE_SIZE
+      "create_success",
+      "play_video_success",
+      "seq_png_init_sucessneedReSend:0|renderCnt:1",
     );
-    expect(upload).toBeDefined();
-    expect(writes.some((bytes) => bytes[0] === 0x78 && bytes[1] === 0xef)).toBe(
-      true,
+    const panel = await opened(transport, {
+      transcode: threeByteClip,
+      sleep: async () => {},
+    });
+
+    try {
+      await panel.video!.start(Uint8Array.of(1, 2, 3), still);
+
+      // If the size reader had consumed `create_success` the upload would have
+      // failed; reaching the start proves it stopped at the size.
+      expect(
+        writes.some((bytes) => bytes[0] === 0x6f && bytes[1] === 0xef),
+      ).toBe(true);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("skips a second stale ack before the upload reply", async () => {
+    const { transport } = fakeTransport(
+      "chs_5inch.dev1_rom1.88",
+      "status: ready", // QUERY_STATUS
+      "0", // GET_FILE_SIZE
+      "delete_success", // DELETE_FILE acknowledgement, late
+      "create_success",
+      "play_video_success",
+      "seq_png_init_sucessneedReSend:0|renderCnt:1",
     );
-    expect(writes.some((bytes) => bytes[0] === 0xd0 && bytes[1] === 0xef)).toBe(
-      true,
+    const panel = await opened(transport, {
+      transcode: threeByteClip,
+      sleep: async () => {},
+    });
+
+    try {
+      await expect(
+        panel.video!.start(Uint8Array.of(1, 2, 3), still),
+      ).resolves.toBeUndefined();
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("reports a reply that never carries the wanted phrase", async () => {
+    const { transport } = fakeTransport(
+      "chs_5inch.dev1_rom1.88",
+      "0", // GET_FILE_SIZE
+      "still_not_it", // three replies with no create_success
+      "still_not_it_2",
+      "still_not_it_3",
     );
-    expect(writes.every((bytes) => bytes.length % 250 === 0)).toBe(true);
-    // A three-byte clip is one 250-byte chunk carrying those bytes.
-    const chunks = writes.filter(
-      (bytes) =>
-        bytes.length === 250 &&
-        bytes[0] === 9 &&
-        bytes[1] === 9 &&
-        bytes[2] === 9,
-    );
-    expect(chunks).toHaveLength(1);
+    const panel = await opened(transport, {
+      transcode: threeByteClip,
+      sleep: async () => {},
+    });
+
+    try {
+      await expect(
+        panel.video!.start(Uint8Array.of(1, 2, 3), still),
+      ).rejects.toThrow(/still_not_it_3/);
+    } finally {
+      await panel.close();
+    }
   });
 });

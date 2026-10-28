@@ -42,6 +42,10 @@ const FILE_TIMEOUT_MS = 10_000;
 const OVERLAY_SETTLE_MS = 1500;
 /** A 249-byte chunk plus its `0x00` pad is one frame. */
 const FILE_CHUNK_BYTES = 249;
+/** Every write is padded to a multiple of this many bytes. */
+const FRAME_BYTES = 250;
+/** Stale acks from earlier commands may sit ahead of the reply we want. */
+const FILE_REPLY_ATTEMPTS = 3;
 /** Storage the vendor firmware reads clips from. */
 const VIDEO_DIRECTORY = "/mnt/SDCARD/video";
 
@@ -245,7 +249,7 @@ class TurzxPanel implements PanelDevice {
       }
 
       await this.send(fileHeader(TURZX_COMMAND.startVideo, remotePath));
-      this.expect("play_video_success", await this.reply(), "start playback");
+      await this.readFor("play_video_success");
 
       await this.send(TURZX_COMMAND.preUpdate);
       await this.send(TURZX_COMMAND.startBitmap);
@@ -257,14 +261,16 @@ class TurzxPanel implements PanelDevice {
         this.geometry.width * this.geometry.height * 4,
       );
       await this.send(bgraPayload(transparent));
-      await this.send(
-        frame(Uint8Array.of(0xd0, 0xef, 0x69, 0x00, 0x00, 0x00, 0x02)),
-      );
-      await this.send(frame(Uint8Array.of(0xef, 0x69)));
+      await this.send(frame(TURZX_COMMAND.initVideoOverlay));
+      await this.send(frame(TURZX_COMMAND.overlayTerminate));
 
       // Init answers `seq_png_init_sucessneedReSend:0|renderCnt:N`; the first
-      // update must wait out the panel's settle.
-      await this.reply();
+      // update must wait out the panel's settle. A failed init says so in the
+      // same phrase and must not be treated as a ready overlay.
+      const init = await this.readFor("seq_png_init_");
+      if (init.includes("seq_png_init_failed")) {
+        throw new Error(`The panel could not initialize its overlay: ${init}.`);
+      }
       await this.sleep(OVERLAY_SETTLE_MS);
       await this.send(TURZX_COMMAND.queryStatus);
 
@@ -285,14 +291,7 @@ class TurzxPanel implements PanelDevice {
   private async fileSize(remotePath: string): Promise<number> {
     await this.send(fileHeader(TURZX_COMMAND.getFileSize, remotePath));
 
-    let size = parseFileSize(await this.reply());
-    if (size === undefined) {
-      // `openTurzxPanel` ends on QUERY_STATUS, whose text reply is buffered and
-      // is what this first read returns. The size answer is behind it.
-      size = parseFileSize(await this.reply());
-    }
-
-    return size ?? 0;
+    return this.readUntil("a file size", parseFileSizeText);
   }
 
   private async upload(remotePath: string, bytes: Uint8Array): Promise<void> {
@@ -304,20 +303,42 @@ class TurzxPanel implements PanelDevice {
       await this.send(frame(bytes.subarray(start, start + FILE_CHUNK_BYTES)));
     }
 
-    this.expect("create_success", await this.reply(), "accept the video file");
+    await this.readFor("create_success");
   }
 
-  private reply(): Promise<Uint8Array> {
-    return this.transport.read(FILE_TIMEOUT_MS);
+  /** The first reply carrying `phrase`; earlier stale acks are skipped. */
+  private readFor(phrase: string): Promise<string> {
+    return this.readUntil(`"${phrase}"`, (text) =>
+      text.includes(phrase) ? text : undefined,
+    );
   }
 
-  private expect(phrase: string, reply: Uint8Array, action: string): void {
-    const text = decodeReply(reply);
-    if (!text.includes(phrase)) {
-      throw new Error(
-        `The panel did not ${action}: ${text === "" ? "no reply" : text}.`,
-      );
+  /**
+   * Reads until `accept` answers, then returns that answer.
+   *
+   * `openTurzxPanel` ends on QUERY_STATUS, so its text reply is buffered and is
+   * the first bytes the next read returns; a DELETE_FILE acknowledgement may
+   * trail a reply too. Accepting by content rather than by position tolerates
+   * any number of those, and the attempt cap keeps a silent or foreign device
+   * from hanging the queue.
+   */
+  private async readUntil<T>(
+    wanted: string,
+    accept: (text: string) => T | undefined,
+  ): Promise<T> {
+    let last = "";
+
+    for (let attempt = 0; attempt < FILE_REPLY_ATTEMPTS; attempt += 1) {
+      last = decodeReply(await this.transport.read(FILE_TIMEOUT_MS));
+      const accepted = accept(last);
+      if (accepted !== undefined) return accepted;
     }
+
+    throw new Error(
+      `The panel did not answer with ${wanted}; last reply: ${
+        last === "" ? "no reply" : last
+      }.`,
+    );
   }
 
   async close(): Promise<void> {
@@ -355,13 +376,13 @@ function fileHeader(
   size?: number,
 ): Uint8Array {
   const pathBytes = new TextEncoder().encode(remotePath);
-  if (pathBytes.length > 255) {
+  const length =
+    command.length + 4 + pathBytes.length + (size === undefined ? 0 : 4);
+  if (length > FRAME_BYTES) {
     throw new Error(`The panel path is too long: ${remotePath}.`);
   }
 
-  const header = new Uint8Array(
-    command.length + 4 + pathBytes.length + (size === undefined ? 0 : 4),
-  );
+  const header = new Uint8Array(length);
   header.set(command);
   header[command.length] = pathBytes.length;
   header.set(pathBytes, command.length + 4);
@@ -384,10 +405,10 @@ function decodeReply(reply: Uint8Array): string {
   return new TextDecoder("latin1").decode(reply).replace(/[\0\s]+$/, "");
 }
 
-function parseFileSize(reply: Uint8Array): number | undefined {
-  const text = decodeReply(reply).trim();
+function parseFileSizeText(text: string): number | undefined {
+  const trimmed = text.trim();
 
-  return /^\d+$/.test(text) ? Number.parseInt(text, 10) : undefined;
+  return /^\d+$/.test(trimmed) ? Number.parseInt(trimmed, 10) : undefined;
 }
 
 function wait(ms: number): Promise<void> {

@@ -4,6 +4,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { placement } from "@yunari/scene-fabric";
+import { readVideoFacts } from "@yunari/theme-package";
 import ffmpegStatic from "ffmpeg-static";
 import ffmpegHashes from "../../../../../../ffmpeg-static-hashes.json";
 import { verifyFfmpeg } from "../themes/ffmpeg-hash.mjs";
@@ -87,7 +89,7 @@ export async function transcodeForPanel(
     await writeFile(input, bytes);
 
     const outcome = await (options.run ?? runFfmpeg(executable))(
-      encodeArgs(input, output, placement),
+      encodeArgs(input, output, panelFilter(bytes, placement)),
     );
     if (outcome.code !== 0) {
       return {
@@ -130,29 +132,87 @@ function sha256(bytes: Uint8Array, placement: PanelVideoPlacement): string {
 }
 
 /**
- * Cover 800×480, then pan the crop the way the theme authored it.
+ * The source-pixel window the panel's 800×480 box sees, from the one placement
+ * owner `scene-fabric` uses.
  *
- * Scaling to cover leaves an overhang on one axis; the authored offset moves
- * through it, and a source whose aspect already matches has no overhang, so the
- * offset is clipped away. `force_divisible_by=2` keeps the H.264 frame even.
+ * The player scales the source to `placement()`'s rect and clips it to the box;
+ * a crop of the same window in source pixels, scaled to the box, shows the same
+ * picture. Deriving it here rather than re-stating the pan formula is what keeps
+ * the panel and the player on the same edge.
  */
-function encodeArgs(
-  input: string,
-  output: string,
+export interface PanelCrop {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+const BOX = { width: 800, height: 480 } as const;
+
+export function panelCrop(
+  source: { readonly width: number; readonly height: number },
+  offsetX: number,
+  offsetY: number,
+): PanelCrop {
+  const rect = placement({
+    box: BOX,
+    source,
+    offsetX: Number.isFinite(offsetX) ? offsetX : 0,
+    offsetY: Number.isFinite(offsetY) ? offsetY : 0,
+  });
+
+  const scaleX = rect.width / source.width;
+  const scaleY = rect.height / source.height;
+  const width = Math.max(1, Math.round(BOX.width / scaleX));
+  const height = Math.max(1, Math.round(BOX.height / scaleY));
+
+  return {
+    x: clamp(
+      Math.round(-rect.left / scaleX),
+      0,
+      Math.max(0, source.width - width),
+    ),
+    y: clamp(
+      Math.round(-rect.top / scaleY),
+      0,
+      Math.max(0, source.height - height),
+    ),
+    width,
+    height,
+  };
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.max(low, Math.min(high, value));
+}
+
+/**
+ * The decode-and-fit filter: the authored pan when the source size is known,
+ * centred cover when the facts cannot be read.
+ */
+function panelFilter(
+  bytes: Uint8Array,
   placement: PanelVideoPlacement,
-): string[] {
-  const offsetX = Number.isFinite(placement.offsetX) ? placement.offsetX : 0;
-  const offsetY = Number.isFinite(placement.offsetY) ? placement.offsetY : 0;
+): string {
+  const facts = readVideoFacts(bytes);
 
-  const pan =
-    offsetX === 0 && offsetY === 0
-      ? "crop=800:480"
-      : "crop=800:480:" +
-        `x='clip((in_w-800)*(0.5-(${offsetX})),0,in_w-800)':` +
-        `y='clip((in_h-480)*(0.5-(${offsetY})),0,in_h-480)'`;
+  if (facts === undefined || facts.width <= 0 || facts.height <= 0) {
+    return "scale=800:480:force_original_aspect_ratio=increase:force_divisible_by=2,crop=800:480";
+  }
 
+  const crop = panelCrop(
+    { width: facts.width, height: facts.height },
+    placement.offsetX,
+    placement.offsetY,
+  );
+
+  return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=800:480`;
+}
+
+function encodeArgs(input: string, output: string, filter: string): string[] {
   return [
     "-hide_banner",
+    "-nostdin",
     "-loglevel",
     "error",
     "-y",
@@ -160,7 +220,7 @@ function encodeArgs(
     input,
     "-an",
     "-vf",
-    `scale=800:480:force_original_aspect_ratio=increase:force_divisible_by=2,${pan}`,
+    filter,
     "-r",
     "30",
     "-c:v",

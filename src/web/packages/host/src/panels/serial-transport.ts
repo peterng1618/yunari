@@ -60,13 +60,40 @@ export async function listSerialPorts(): Promise<readonly SerialPortInfo[]> {
   return ports;
 }
 
+/** A reply that has gone quiet this long is complete; the wire has no frame end. */
+const READ_QUIET_MS = 50;
+
+/** The slice of `serialport`'s `SerialPort` the read seam needs, for a fake. */
+export interface SerialPortLike {
+  readonly isOpen: boolean;
+  close(callback?: (error: Error | null | undefined) => void): unknown;
+  on(event: "data", listener: (chunk: Buffer) => void): unknown;
+  on(event: "error", listener: (error: Error) => void): unknown;
+  off(event: "data", listener: (chunk: Buffer) => void): unknown;
+  off(event: "error", listener: (error: Error) => void): unknown;
+}
+
+/**
+ * A transport over a `SerialPort`-shaped object.
+ *
+ * The fake seam is deliberately narrower than `serialport`'s overloaded
+ * `write`, which no structural fake reproduces; production passes the real
+ * `SerialPort`, tests pass an emitter, and only `read` is exercised through it.
+ */
+export function transportOver(port: SerialPortLike): SerialTransport {
+  return new OpenSerialPort(port as unknown as SerialPort);
+}
+
 /**
  * One open port, with the two shapes the adapter needs.
  *
  * A write resolves after `drain` rather than after `write`: `write` only hands
  * the bytes to the OS, and a panel ignores a frame that arrives half-sent.
- * A read settles at the timeout with whatever arrived — a device that stays
- * quiet is the normal case for a command, not an error.
+ *
+ * A read settles a short quiet gap after the last byte, because the wire has no
+ * frame end: waiting out the whole timeout would charge every reply its full
+ * cap, and one video start reads five. `timeoutMs` is still the hard ceiling
+ * for a device that never answers.
  */
 class OpenSerialPort implements SerialTransport {
   constructor(private readonly port: SerialPort) {
@@ -98,15 +125,26 @@ class OpenSerialPort implements SerialTransport {
   read(timeoutMs: number): Promise<Uint8Array> {
     return new Promise((resolve) => {
       const chunks: Buffer[] = [];
+      let quiet: ReturnType<typeof setTimeout> | undefined;
+      let settled = false;
+
       const finish = () => {
+        if (settled) return;
+        settled = true;
+
         clearTimeout(timer);
+        if (quiet !== undefined) clearTimeout(quiet);
         this.port.off("data", collect);
         this.port.off("error", finish);
         resolve(Uint8Array.from(Buffer.concat(chunks)));
       };
+
       const collect = (chunk: Buffer) => {
         chunks.push(chunk);
+        if (quiet !== undefined) clearTimeout(quiet);
+        quiet = setTimeout(finish, READ_QUIET_MS);
       };
+
       const timer = setTimeout(finish, timeoutMs);
 
       this.port.on("data", collect);
