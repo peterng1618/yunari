@@ -1291,6 +1291,9 @@ it("encodes a new rectangle as its pixels plus a visible segment", () => {
   });
   // One row-0 changed segment: offset 3 bytes, width 2, then 2 pixels of 3 bytes.
   expect([...update.body.slice(0, 5)]).toEqual([0, 0, 1, 0, 2]);
+  // A fully opaque red pixel: blue 0, green 0, red 15, alpha 15, split across
+  // three bytes as b<<4|a_hi, g<<4|a_lo, r<<4.
+  expect([...update.body.slice(5, 11)]).toEqual([0x03, 0x03, 0xf0, 0x03, 0x03, 0xf0]);
   // The visible list repeats that segment after the changed pixels.
   expect([...update.body.slice(11, 16)]).toEqual([0, 0, 1, 0, 2]);
   expect(update.visibleBytes).toBe(5);
@@ -1333,7 +1336,40 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement the encoder**
 
-Port the verified algorithm: per row, changed non-transparent segments encode `offset(3) + width(2) + 3 bytes of 4-bit BGRA`; then the current overlay's visible segments encode `offset(3) + width(2)`; the hex string is chunked at 249 bytes with a `0x00` between chunks, and only when it exceeds 500 hex characters; the trailer comes from `overlayTrailer`. `imageSize` is the unframed length plus `trailer.extra`; when `trailer.extra` is 7, `visibleBytes` gains 5 as well. Use `geometry.width` as the row stride. Throw when either frame's length is not `width * height * 4`; a short decode must not be indexed as a full frame.
+The verified reference is `C:\Users\peter\.claude\scratch\turzx-overlay-diff.cjs` —
+the probe that updated the attached panel, ported from the Python reference's
+`LcdCommRevC.RefreshVideoOverlay`. Read it; the rules below are its contract, and
+every value in them is what the device accepted.
+
+- Input is RGBA from `decodeStill`; the wire is 4-bit **BGRA**, the same channel
+  order `bgraPayload` uses for full frames. For pixel `i`: blue = `current[i+2]`,
+  green = `current[i+1]`, red = `current[i]`, and
+  `alpha = floor(current[i+3] / 255 * 15)`.
+- A pixel is **changed** when any of its four bytes differs from `previous`.
+- Segments run over a row with the reference's predicate: begin where `alpha > 0`,
+  then keep extending while the next pixel has `alpha > 0` **or the pixel after
+  it does** (its lookahead step — a one-pixel transparent gap inside a run is
+  included). For each changed row segment write `offset` (3 bytes,
+  `y * width + x`, big-endian) + `width` (2 bytes BE), then per pixel three bytes:
+  `(b4 << 4) | ((alpha & 0xc) >> 2)`, `(g4 << 4) | (alpha & 0x3)`, `r4 << 4`,
+  where `b4 = floor(blue / 255 * 15)` and likewise for g and r.
+- After a row's changed segments, the same segments over the whole **current** row
+  (transparency, not change) append to the visible list as `offset(3) + width(2)`
+  and nothing else.
+- The message is the hex text of the changed bytes followed by the hex text of the
+  visible list. Above 500 hex characters it is chunked at 249 raw bytes with one
+  `0x00` between chunks; at or below, it is raw.
+- Trailer: when the chunked length is above 250 and its remainder mod 250 is 0,
+  248 or 249, the body ends `00 00 00 01 00 00 ef 69`, `imageSize = rawLength + 7`
+  and `visibleBytes += 5`; otherwise it ends `ef 69` and
+  `imageSize = rawLength + 2`. `rawLength` is the message's hex length / 2 —
+  before chunk separators and before the trailer.
+- `presentOverlay` frames `cc ef 69 00` + `imageSize` (3 bytes BE) + `00 00 00` +
+  `count` (4 bytes BE) + `visibleBytes` (4 bytes BE), pads that header to 250,
+  sends the padded body, then stores `current` as the previous overlay. `count`
+  starts at 1 and increments per update.
+- Throw when either frame's length is not `width * height * 4`; a short decode must
+  not be indexed as a full frame.
 
 - [ ] **Step 4: Implement `presentOverlay`**
 
