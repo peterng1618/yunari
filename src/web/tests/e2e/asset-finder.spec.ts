@@ -222,9 +222,9 @@ async function openFinder(page: Page): Promise<Locator> {
 
 function rowIds(page: Page): Promise<string[]> {
   return page
-    .locator("[data-yunari-asset-row]")
+    .locator("[data-yunari-finder-card]")
     .evaluateAll((rows) =>
-      rows.map((row) => row.getAttribute("data-yunari-asset-row") ?? ""),
+      rows.map((row) => row.getAttribute("data-yunari-finder-card") ?? ""),
     );
 }
 
@@ -249,7 +249,7 @@ test("one search with both icon sources answers rows from both, and no id is sha
     .toEqual(["lucide:house", "fontawesome-free:house"]);
   // Each row names its own source, and the two answers' ids never collide
   // because the host namespaces them by source.
-  const rows = page.locator("[data-yunari-asset-row]");
+  const rows = page.locator("[data-yunari-finder-card]");
   // Each row names its source with the source's own mark, not a licence word.
   await expect(
     rows.nth(0).locator('[data-yunari-asset-source="lucide"]'),
@@ -284,7 +284,7 @@ test("disabling a source removes its rows and asks for nothing from it", async (
 
   await page.locator('[data-yunari-asset-chip="fontawesome-free"]').click();
 
-  await expect(page.locator("[data-yunari-asset-row]")).toHaveCount(1);
+  await expect(page.locator("[data-yunari-finder-card]")).toHaveCount(1);
   expect(await rowIds(page)).toEqual(["lucide:house"]);
   await expect.poll(() => searches.at(-1)?.enabled ?? []).toEqual(["lucide"]);
 });
@@ -528,7 +528,7 @@ test("captures the finder's mixed icon grid", async ({ page }, testInfo) => {
     }),
   });
   await openFinder(page);
-  await expect(page.locator("[data-yunari-asset-row]")).toHaveCount(4);
+  await expect(page.locator("[data-yunari-finder-card]")).toHaveCount(4);
 
   await captureVisualReview(page, testInfo, "editor-finder-icons");
 });
@@ -577,7 +577,7 @@ test("the footer's action imports the selected row, asking for its namespaced id
     }),
   });
   const dialog = await openFinder(page);
-  await page.locator("[data-yunari-asset-row]").first().click();
+  await page.locator("[data-yunari-finder-card]").first().click();
   await page.locator("[data-yunari-asset-action]").click();
 
   // The grid's id is `<source>:<entry>`, which is what the host must accept.
@@ -649,7 +649,7 @@ test("the Colours tab adds a palette to the presets", async ({
     .poll(() => searches.at(-1)?.enabled ?? [])
     .toEqual(["colorswoop"]);
 
-  const row = page.locator('[data-yunari-asset-row="colorswoop:one"]');
+  const row = page.locator('[data-yunari-finder-card="colorswoop:one"]');
   await expect(row).toBeVisible();
   await row.click();
   await page.locator('[data-yunari-asset-action=""]').click();
@@ -794,7 +794,9 @@ test("a phone viewport gives the finder the whole window", async ({
   await expect(dialog.getByRole("button", { name: "Close" })).toBeVisible();
 });
 
-test("the chosen row is drawn as chosen", async ({ page }, testInfo) => {
+test("a card raises its edge on hover and the chosen card is accented", async ({
+  page,
+}, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   await stubAssets(page, {
@@ -806,11 +808,17 @@ test("the chosen row is drawn as chosen", async ({ page }, testInfo) => {
     }),
   });
   await openFinder(page);
-  const row = page.locator('[data-yunari-asset-row="lucide:house"]');
-  const other = page.locator('[data-yunari-asset-row="lucide:star"]');
+  const card = page.locator('[data-yunari-finder-card="lucide:house"]');
+  const other = page.locator('[data-yunari-finder-card="lucide:star"]');
+  const borderColour = () =>
+    card.evaluate((node) => getComputedStyle(node).borderColor);
 
-  await row.click();
+  const resting = await borderColour();
+  await card.hover();
+  await expect.poll(borderColour).not.toBe(resting);
 
-  await expect(row).toHaveClass(/border-accent/);
+  await card.click();
+  await expect(card).toHaveAttribute("aria-selected", "true");
+  await expect(card).toHaveClass(/border-accent/);
   await expect(other).not.toHaveClass(/border-accent/);
 });

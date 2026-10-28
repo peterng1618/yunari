@@ -258,8 +258,8 @@ async function type(value: string): Promise<void> {
 }
 
 function rowIds(): string[] {
-  return [...document.querySelectorAll("[data-yunari-asset-row]")].map(
-    (row) => row.getAttribute("data-yunari-asset-row") ?? "",
+  return [...document.querySelectorAll("[data-yunari-finder-card]")].map(
+    (row) => row.getAttribute("data-yunari-finder-card") ?? "",
   );
 }
 
@@ -550,11 +550,11 @@ describe("AssetFinder's Colours tab", () => {
     await settle();
 
     const licence = document.querySelector(
-      '[data-yunari-asset-row="colorhunt:abc"] [data-yunari-asset-licence]',
+      '[data-yunari-finder-card="colorhunt:abc"] [data-yunari-asset-licence]',
     );
     expect(licence?.textContent).toBe("unknown");
     expect(
-      document.querySelector('[data-yunari-asset-row="colorhunt:abc"]')
+      document.querySelector('[data-yunari-finder-card="colorhunt:abc"]')
         ?.textContent,
     ).toContain("50 likes · unknown");
 
@@ -563,11 +563,11 @@ describe("AssetFinder's Colours tab", () => {
 
     expect(
       document.querySelector(
-        '[data-yunari-asset-row="lucide:house"] [data-yunari-asset-licence]',
+        '[data-yunari-finder-card="lucide:house"] [data-yunari-asset-licence]',
       ),
     ).toBeNull();
     expect(
-      document.querySelector('[data-yunari-asset-row="lucide:house"]')
+      document.querySelector('[data-yunari-finder-card="lucide:house"]')
         ?.textContent,
     ).not.toContain("ISC");
   });
@@ -593,7 +593,7 @@ describe("AssetFinder's Colours tab", () => {
     await settle();
 
     const row = document.querySelector<HTMLElement>(
-      '[data-yunari-asset-row="colorhunt:abc"]',
+      '[data-yunari-finder-card="colorhunt:abc"]',
     );
     await act(async () => row?.click());
     await act(async () => footerAction().click());
@@ -694,22 +694,22 @@ describe("AssetFinder's Colours tab", () => {
     await settle();
 
     const paletteRow = document.querySelector(
-      '[data-yunari-asset-row="colorhunt:aabbccddeeff112233445566"]',
+      '[data-yunari-finder-card="colorhunt:aabbccddeeff112233445566"]',
     );
     expect(paletteRow?.querySelectorAll("[data-yunari-swatch]")).toHaveLength(
       4,
     );
-    // A fifth colour is stored with the preset but not drawn: the preview is
-    // always the same 2×2 block.
+    // The bars are vertical, so a fifth colour draws as a fifth bar rather
+    // than being dropped to keep a block shape.
     const fiveColourRow = document.querySelector(
-      '[data-yunari-asset-row="colorhunt:112233445566778899aabbcc"]',
+      '[data-yunari-finder-card="colorhunt:112233445566778899aabbcc"]',
     );
     expect(
       fiveColourRow?.querySelectorAll("[data-yunari-swatch]"),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
 
     const strip = document.querySelector<HTMLElement>(
-      '[data-yunari-asset-row="uigradients:3"] [data-yunari-asset-preview="gradient"]',
+      '[data-yunari-finder-card="uigradients:3"] [data-yunari-asset-preview="gradient"]',
     );
     expect(strip).not.toBeNull();
     // jsdom may keep the shorthand as an attribute rather than a parsed
@@ -876,7 +876,7 @@ describe("AssetFinder search", () => {
     await settle();
 
     expect(
-      document.querySelector("[data-yunari-asset-row]")?.textContent,
+      document.querySelector("[data-yunari-finder-card]")?.textContent,
     ).toContain("solid");
   });
 
@@ -961,7 +961,7 @@ describe("AssetFinder's mixed grid", () => {
     // The source is a mark, named for a screen reader and never a licence word.
     expect(
       document
-        .querySelector('[data-yunari-asset-row="fontawesome-free:b"]')
+        .querySelector('[data-yunari-finder-card="fontawesome-free:b"]')
         ?.querySelector('[data-yunari-asset-source="fontawesome-free"]')
         ?.getAttribute("aria-label"),
     ).toBe("Font Awesome Free");
@@ -1093,7 +1093,7 @@ describe("AssetFinder footer", () => {
     await settle();
 
     const row = document.querySelector<HTMLElement>(
-      '[data-yunari-asset-row="unsplash:photo"]',
+      '[data-yunari-finder-card="unsplash:photo"]',
     );
     await act(async () => row?.click());
 
@@ -1129,7 +1129,7 @@ describe("AssetFinder's own controls", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("marks the chosen row, not only the press that chose it", async () => {
+  it("marks the chosen card, not only the press that chose it", async () => {
     await render([lucide]);
     searchAssets.mockResolvedValue({
       pages: [page("lucide", [result("lucide:house"), result("lucide:cat")])],
@@ -1137,16 +1137,17 @@ describe("AssetFinder's own controls", () => {
     await settle();
 
     const house = document.querySelector<HTMLElement>(
-      '[data-yunari-asset-row="lucide:house"]',
+      '[data-yunari-finder-card="lucide:house"]',
     );
     const cat = document.querySelector<HTMLElement>(
-      '[data-yunari-asset-row="lucide:cat"]',
+      '[data-yunari-finder-card="lucide:cat"]',
     );
     expect(house?.className).not.toContain("border-accent");
 
     await act(async () => house?.click());
 
-    expect(house?.getAttribute("aria-pressed")).toBe("true");
+    // A card is an option in the grid's listbox, so the choice is `aria-selected`.
+    expect(house?.getAttribute("aria-selected")).toBe("true");
     expect(house?.className).toContain("border-accent");
     expect(cat?.className).not.toContain("border-accent");
   });
@@ -1288,11 +1289,11 @@ describe("AssetFinder's own controls", () => {
 
     expect(
       document.querySelector(
-        '[data-yunari-asset-row="lucide:house"] [data-yunari-asset-preview="icon"]',
+        '[data-yunari-finder-card="lucide:house"] [data-yunari-asset-preview="icon"]',
       ),
     ).not.toBeNull();
     expect(
-      document.querySelector('[data-yunari-asset-row="lucide:house"] img'),
+      document.querySelector('[data-yunari-finder-card="lucide:house"] img'),
     ).toBeNull();
 
     // The Images tab's own answer: a photo is a picture, never a mask.
@@ -1311,7 +1312,7 @@ describe("AssetFinder's own controls", () => {
     await settle();
 
     expect(
-      document.querySelector('[data-yunari-asset-row="unsplash:photo"] img'),
+      document.querySelector('[data-yunari-finder-card="unsplash:photo"] img'),
     ).not.toBeNull();
   });
 });

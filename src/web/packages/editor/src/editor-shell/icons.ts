@@ -172,6 +172,8 @@ export const SET_BACKGROUND_GLYPH: LucideIcon = Wallpaper;
 export const CONVERTED_GLYPH: LucideIcon = Check;
 export const SETTING_GLYPH: LucideIcon = LoaderCircle;
 export const ACTION_FAILED_GLYPH: LucideIcon = TriangleAlert;
+/** A card's work in flight: the one sweep the finder spins while it waits. */
+export const BUSY_GLYPH: LucideIcon = LoaderCircle;
 
 /** The six chart families the document can name. */
 export const CHART_GAUGE_GLYPH: LucideIcon = Gauge;

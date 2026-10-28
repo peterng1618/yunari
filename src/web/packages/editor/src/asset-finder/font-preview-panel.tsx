@@ -8,7 +8,7 @@ import { uiCopy } from "../ui-copy.js";
  *  role still draws heading, body, mono. */
 export type FontRole = "heading" | "body" | "mono";
 
-const ROLES = ["heading", "body", "mono"] as const;
+export const ROLES = ["heading", "body", "mono"] as const;
 
 /** A result with the font data the panel draws. `AssetResult.font` is optional
  *  on the wire; the finder selects only results that carry one. */

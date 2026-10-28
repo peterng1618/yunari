@@ -19,8 +19,8 @@ import { pageNumbers } from "../store-mode/pager.js";
 import { uiCopy } from "../ui-copy.js";
 import { type AssetPlacement } from "./actions.js";
 import { type ClientOptions, listSources, searchAssets } from "./client.js";
+import { cardModelOf, FinderCard } from "./finder-card.js";
 import { interleave } from "./interleave.js";
-import { AssetRow } from "./row.js";
 import { CardGridSkeleton } from "./skeleton.js";
 
 /** How long a keystroke settles before it is the query. */
@@ -736,21 +736,28 @@ export function AssetFinder({
                     <div
                       className="grid min-h-0 flex-1 content-start grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-[var(--space-8)] overflow-y-auto"
                       data-yunari-asset-grid=""
+                      role="listbox"
+                      aria-label={uiCopy.assets.category[active]}
                       aria-busy={searching ? "true" : undefined}
                     >
                       {rows.map(({ page, result }) => (
-                        <AssetRow
+                        <FinderCard
                           key={`${page.source}:${result.id}`}
-                          result={result}
-                          sourceId={page.source}
-                          sourceLabel={
-                            sourceOf(page.source)?.label ?? page.source
-                          }
+                          model={cardModelOf(
+                            result,
+                            sourceOf(page.source)?.label ?? page.source,
+                          )}
                           selected={
                             selected?.result.id === result.id &&
                             selected.page.source === page.source
                           }
+                          busy={false}
+                          failed={false}
+                          done={false}
+                          tabStop
+                          focus={() => {}}
                           onSelect={() => setSelected({ page, result })}
+                          onKeyDown={() => {}}
                         />
                       ))}
                     </div>
