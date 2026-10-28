@@ -276,6 +276,10 @@ class TurzxPanel implements PanelDevice {
       await this.send(TURZX_COMMAND.queryStatus);
 
       this.previousOverlay = transparent;
+      // A fresh init re-renders from scratch, so a count carried over from the
+      // last session is meaningless. The probe sent 0 first and the panel took
+      // it, so the field's meaning is unverified; Task 12 observes it.
+      this.overlayCount = 0;
       if (
         this.previousVideoPath !== undefined &&
         this.previousVideoPath !== remotePath
@@ -309,11 +313,15 @@ class TurzxPanel implements PanelDevice {
       );
       const update = overlayUpdate(previous, current.rgba, this.geometry);
 
-      this.overlayCount += 1;
+      const count = this.overlayCount + 1;
       await this.send(
-        overlayHeader(update.imageSize, this.overlayCount, update.visibleBytes),
+        overlayHeader(update.imageSize, count, update.visibleBytes),
       );
       await this.send(update.body);
+      // Advance only once both writes landed, so a failed update does not skip
+      // a number. The probe sent 0 first and the panel accepted the field, so
+      // whether the count matters is Task 12's observation.
+      this.overlayCount = count;
       this.previousOverlay = current.rgba;
     });
   }

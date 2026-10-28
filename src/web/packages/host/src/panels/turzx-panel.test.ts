@@ -293,4 +293,47 @@ describe("a panel's overlay", () => {
       await panel.close();
     }
   });
+
+  it("restarts the update count when the video re-initializes the overlay", async () => {
+    const pixels = new Uint8Array(800 * 480 * 4);
+    pixels[0] = 255;
+    pixels[3] = 255;
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO
+      "0", // GET_FILE_SIZE: nothing stored yet
+      "create_success",
+      "play_video_success",
+      "seq_png_init_sucessneedReSend:0|renderCnt:1",
+      "1", // a second init: the one-byte clip is already stored
+      "play_video_success",
+      "seq_png_init_sucessneedReSend:0|renderCnt:1",
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+      decode: async (_bytes, width, height) => ({
+        width,
+        height,
+        rgba: pixels,
+      }),
+    });
+
+    try {
+      await panel.video!.start(Uint8Array.of(1, 2, 3), {
+        offsetX: 0,
+        offsetY: 0,
+      });
+      await panel.video!.presentOverlay(Uint8Array.of(1));
+      await panel.video!.start(Uint8Array.of(1, 2, 3), {
+        offsetX: 0,
+        offsetY: 0,
+      });
+      await panel.video!.presentOverlay(Uint8Array.of(2));
+
+      const header = fake.writes[fake.writes.length - 2]!;
+      expect([...header.slice(10, 14)]).toEqual([0x00, 0x00, 0x00, 0x01]);
+    } finally {
+      await panel.close();
+    }
+  });
 });

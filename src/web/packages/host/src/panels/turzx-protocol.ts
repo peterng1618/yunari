@@ -199,11 +199,13 @@ export interface OverlayUpdate {
 
 /**
  * The trailer an unframed payload of `unframedLength` bytes closes with, and
- * how many bytes `imageSize` adds beyond the terminator's own two.
+ * the aligned form's addition to `imageSize`.
  *
  * The device re-clears a region whose padded tail ends flush, so a body with
  * no room left after the two-byte terminator carries the wider form instead.
  * 250 itself is not "flush": the payload below the frame size is the plain one.
+ * The aligned `extra` is 7 — the number the reference adds to `imageSize` —
+ * even though the trailer it appends is eight bytes long.
  */
 export function overlayTrailer(unframedLength: number): {
   readonly bytes: Uint8Array;
@@ -217,10 +219,10 @@ export function overlayTrailer(unframedLength: number): {
       remainder === FRAME_SIZE - 2 ||
       remainder === FRAME_SIZE - 1)
   ) {
-    return { bytes: ALIGNED_TRAILER, extra: 7 };
+    return { bytes: Uint8Array.from(ALIGNED_TRAILER), extra: 7 };
   }
 
-  return { bytes: TURZX_COMMAND.overlayTerminate, extra: 0 };
+  return { bytes: Uint8Array.from(TURZX_COMMAND.overlayTerminate), extra: 0 };
 }
 
 /** `value` as three big-endian bytes at `at`; a DataView has no 24-bit setter. */
@@ -391,8 +393,9 @@ export function overlayUpdate(
   body.set(trailer.bytes, payload.length);
 
   return {
-    // The size field counts the message before chunk separators, not the body.
-    imageSize: message.length + 2 + trailer.extra,
+    // The size field counts the message before chunk separators, not the body;
+    // the aligned form reports +7 even though its trailer is eight bytes.
+    imageSize: message.length + (trailer.extra === 0 ? 2 : 7),
     visibleBytes: visible.length * 5 + (trailer.extra === 0 ? 0 : 5),
     body,
   };

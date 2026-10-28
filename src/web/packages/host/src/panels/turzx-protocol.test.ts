@@ -142,6 +142,106 @@ describe("overlayUpdate", () => {
       overlayUpdate(blank(4, 2), new Uint8Array(3), { width: 4, height: 2 }),
     ).toThrow(/decoded overlay is 3 bytes/);
   });
+
+  it("chunks a large message and reports the aligned image size", () => {
+    const update = overlayUpdate(
+      blank(800, 480),
+      red(800, 480, { x: 0, y: 0, w: 800, h: 221 }),
+      { width: 800, height: 480 },
+    );
+    // 221 rows of 5 + 800*3 changed bytes plus 221 visible spans of 5 is a
+    // 532610-byte message; joined at 249 with a 0x00 between chunks it is
+    // 534748 bytes, and 534748 % 250 === 248, which is the aligned form.
+    expect(update.imageSize).toBe(532610 + 7);
+    expect(update.visibleBytes).toBe(221 * 5 + 5);
+    expect(update.body.length).toBe(534748 + 8);
+    expect(update.body[249]).toBe(0x00);
+    expect(update.body[499]).toBe(0x00);
+    expect([...update.body.slice(-8)]).toEqual([
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0xef, 0x69,
+    ]);
+  });
+
+  it("leaves a message of exactly 250 bytes unchunked", () => {
+    const update = overlayUpdate(
+      blank(800, 480),
+      red(800, 480, { x: 0, y: 0, w: 80, h: 1 }),
+      { width: 800, height: 480 },
+    );
+    // One row of 80 opaque pixels: 5 + 80*3 changed bytes + 5 visible = 250.
+    // Chunking it would add a separator and a byte, so the body would be 253.
+    expect(update.imageSize).toBe(252);
+    expect(update.body.length).toBe(252);
+    expect([...update.body.slice(245)]).toEqual([
+      0x00, 0x00, 0x00, 0x00, 0x50, 0xef, 0x69,
+    ]);
+  });
+
+  it("writes the offset and width big-endian", () => {
+    const update = overlayUpdate(
+      blank(800, 1),
+      red(800, 1, { x: 300, y: 0, w: 260, h: 1 }),
+      { width: 800, height: 1 },
+    );
+    // Offset 300 = 0x00012c, width 260 = 0x0104; each carries a byte above ff.
+    expect([...update.body.slice(0, 5)]).toEqual([
+      0x00, 0x01, 0x2c, 0x01, 0x04,
+    ]);
+  });
+
+  it("keeps a one-pixel transparent gap through the lookahead", () => {
+    const current = blank(4, 2);
+    for (const x of [0, 2]) {
+      const i = x * 4;
+      current[i] = 255;
+      current[i + 3] = 255;
+    }
+    const update = overlayUpdate(blank(4, 2), current, {
+      width: 4,
+      height: 2,
+    });
+
+    // One changed span of width 3: the gap's three transparent bytes are sent
+    // because the pixel after it is opaque.
+    expect([...update.body.slice(0, 5)]).toEqual([0, 0, 0, 0, 3]);
+    expect([...update.body.slice(5, 14)]).toEqual([
+      0x03, 0x03, 0xf0, 0x00, 0x00, 0x00, 0x03, 0x03, 0xf0,
+    ]);
+    // The visible list carries spans only: offset and width, no pixel bytes.
+    expect([...update.body.slice(14, 19)]).toEqual([0, 0, 0, 0, 3]);
+    expect(update.body.length).toBe(19 + 2);
+    expect(update.visibleBytes).toBe(5);
+  });
+
+  it("does not look past the end of a row", () => {
+    const current = blank(4, 2);
+    // Opaque at row 0's last pixel, and at row 1's first pixel.
+    for (const i of [3 * 4, 4 * 4]) {
+      current[i] = 255;
+      current[i + 3] = 255;
+    }
+    const update = overlayUpdate(blank(4, 2), current, {
+      width: 4,
+      height: 2,
+    });
+
+    // Row 0's span is x=3 alone, not a lookahead into row 1's pixel.
+    expect([...update.body.slice(0, 5)]).toEqual([0, 0, 3, 0, 1]);
+    expect([...update.body.slice(8, 13)]).toEqual([0, 0, 4, 0, 1]);
+    expect([...update.body.slice(16, 21)]).toEqual([0, 0, 3, 0, 1]);
+    expect([...update.body.slice(21, 26)]).toEqual([0, 0, 4, 0, 1]);
+    expect(update.body.length).toBe(26 + 2);
+  });
+
+  it("uses the row stride in a segment's offset", () => {
+    const update = overlayUpdate(
+      blank(4, 4),
+      red(4, 4, { x: 1, y: 2, w: 1, h: 1 }),
+      { width: 4, height: 4 },
+    );
+    // Pixel (1,2) is offset 2 * 4 + 1 = 9.
+    expect([...update.body.slice(0, 5)]).toEqual([0, 0, 9, 0, 1]);
+  });
 });
 
 describe("overlayTrailer", () => {
@@ -157,5 +257,10 @@ describe("overlayTrailer", () => {
     expect(trailer.bytes.length).toBe(size);
     expect(trailer.extra).toBe(extra);
     expect([...trailer.bytes.slice(-2)]).toEqual([0xef, 0x69]);
+  });
+
+  it("returns fresh bytes rather than a shared module array", () => {
+    expect(overlayTrailer(10).bytes).not.toBe(overlayTrailer(10).bytes);
+    expect(overlayTrailer(500).bytes).not.toBe(overlayTrailer(500).bytes);
   });
 });
