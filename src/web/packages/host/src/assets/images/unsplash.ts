@@ -73,6 +73,25 @@ function pageOf(page: number): number {
   return Number.isInteger(page) && page >= 1 ? page : 1;
 }
 
+/** The next page the Editorial feed claims. Its count is in the `Link` header
+ *  rather than the body: a named `last` page wins, a `next` page means one
+ *  more, and a header-less feed is judged by whether its page came back full. */
+function feedPages(link: string | null, page: number, served: number): number {
+  const entries = (link ?? "").split(",");
+  const pageIn = (entry: string): number | undefined => {
+    const match = /[?&]page=(\d+)/.exec(entry);
+    return match?.[1] === undefined ? undefined : Number(match[1]);
+  };
+
+  for (const entry of entries) {
+    if (!/rel="last"/.test(entry)) continue;
+    const last = pageIn(entry);
+    if (last !== undefined) return last;
+  }
+  if (entries.some((entry) => /rel="next"/.test(entry))) return page + 1;
+  return served >= PER_PAGE ? page + 1 : page;
+}
+
 /** The API's own words for a refusal, which name the fault a status cannot:
  *  a bad key, a missing parameter, a rate limit. Never the request's key. */
 async function detailOf(response: Response): Promise<string> {
@@ -135,12 +154,42 @@ export const unsplashSource: AssetSource = {
   host: "api.unsplash.com",
 
   async search(query, asked, ctx): Promise<SearchPage> {
-    // The finder opens with an empty term, and `query` is the endpoint's one
-    // required parameter: Unsplash answers its absence with 400.
-    if (query.trim() === "") return { results: [], totalPages: undefined };
-
     const key = keyOf(ctx);
     const page = pageOf(asked);
+
+    // An empty term browses the Editorial feed (`GET /photos`); it needs the
+    // same key, and it is what the Images tab shows on open (spec R3).
+    if (query.trim() === "") {
+      const url = new URL("photos", API);
+      url.searchParams.set("page", String(page));
+      url.searchParams.set("per_page", String(PER_PAGE));
+      const response = await ctx.fetch(url.toString(), {
+        headers: auth(key),
+        signal: ctx.signal,
+      });
+      const answer = await jsonOf(response, "feed");
+      const served = Array.isArray(answer) ? answer : [];
+
+      const results: AssetResult[] = [];
+      for (const entry of served) {
+        const photo = entry as UnsplashPhoto;
+        if (!isFree(photo)) continue;
+        const result = resultOf(photo);
+        if (result !== undefined) results.push(result);
+      }
+
+      return {
+        results,
+        // A filtered page can be shorter than the one Unsplash served; the
+        // page's own length, not the free results', is what proves another.
+        totalPages: feedPages(
+          response.headers.get("link"),
+          page,
+          served.length,
+        ),
+      };
+    }
+
     const url = new URL("search/photos", API);
     url.searchParams.set("query", query);
     url.searchParams.set("page", String(page));
