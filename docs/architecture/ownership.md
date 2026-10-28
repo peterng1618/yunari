@@ -282,7 +282,7 @@ adapter does not own catalog, preview or adoption semantics.
 | Tray menu, controller and platform adapters | `host/src/tray/` |
 | Sign-in entry and its legacy-task migration | `host/src/serve/host-autostart.ts` |
 | **Which USB panel a display record drives** — the hardware hint that finds the panel again, and the refusal of a second record for one device | `host/src/settings/displays.ts` (`createPanel`, `normalizePanel`) |
-| **Driving a USB panel** — the TUR packet layout and its encryption, the wire transport, the rasteriser that screenshots the host's own player, and the runner's frame cadence | `host/src/panels/` |
+| **Driving a USB panel** — each family's packet layout and transport, the family table that answers which driver claims a device, the rasteriser that screenshots the host's own player, and the runner's frame cadence | `host/src/panels/` (`panel-families.ts` names the families; each driver owns its own protocol) |
 | External-program presence, status and Start | `host/src/tray/external-apps.ts` |
 
 ## Known ownership gaps

@@ -5,21 +5,21 @@ Branch: `peterng1618/lian-li-9.2-monitor-support` (worktree `lian-li-9.2-monitor
 
 ## Current objective
 
-USB panel support: a Lian Li 9.2" LCD (`1CBE:A092`) driven by the host from the product's own player page, behind a `PanelDevice` port so another panel is a table row (decision `0130`).
+USB panel support behind a `PanelDevice` port: a Lian Li 9.2" LCD (`1CBE:A092`) streamed from the product's own player page, and an NZXT Kraken Z73 (`1E71:3008`) written into its own memory, from one family table (decisions `0130`, `0131`).
 
 ## Active work
 
-- **Panel support lands in this worktree, not on `main`:** the protocol, `usb` transport, devtools rasteriser, frame runner and panel manager live in `host/src/panels/`, plus a `"panel"` display kind.
-- **The panel record is live in the real app folder:** `lian-li-9-2` on `1CBE:A092` with `rotation: 90`, showing the starter theme `27c605ef`, written through the host's own API.
-- **Rotation 90 is the reading orientation**, chosen from a rendered A/B: the starter is 16:9 and the wire is 1:4 portrait, so upright fills ~92% of the glass and 0 fills 14%.
-- **The renderer is the real player**, not a second scene tree: a hidden Chrome screenshots the player page over the devtools protocol with no added dependency.
-- **The panel is live again after the reboot:** with L-Connect stopped the interface was claimed and 32 frames went out in ~35s with zero `Cancelled` lines, so the wedge cleared (`vg-773` still records the unexplained cause).
-- **The glass is still unverified:** the expected picture is `C:\tmp\yunari-render\expected-panel.jpg`, the rotation-90 render at exactly 464×1920.
+- **Two families, one seam:** `panel-families.ts` maps ids to a driver, and neither `panel-manager.ts` nor `server.ts` imports a driver now — a source-text test holds that.
+- **The panel record is live:** `lian-li-9-2` on `1CBE:A092` with `rotation: 90`, showing starter theme `27c605ef`, written through the host's own API.
+- **The panel is live after the reboot:** with L-Connect stopped the interface was claimed and 32 frames went out in ~35s with zero `Cancelled` lines (`vg-773` keeps the unexplained cause).
+- **The Kraken driver runs no upload yet:** HID control, bulk transfer, slot arithmetic and bucket placement are written and tested against measured values, but nothing has been sent to the device.
+- **The glass is unverified:** the expected picture is `C:\tmp\yunari-render\expected-panel.jpg`, the rotation-90 render at 464×1920.
 
 ## Last completed change
 
-- **The panel routes are tested:** `GET/POST /api/displays/panels` — attached list, add-and-start, unknown model refused before the write, duplicate hardware 409, delete stops the runner, and 404 on a host with no manager.
-- **A host with no panel manager refuses the route:** it would otherwise write a record nothing can drive, and `attachedPanels` is injectable so a case holds a fixture rather than this machine's USB.
+- **A second family proved the port and broke the registry:** adding the Kraken found `panel-manager.ts` importing the TUR driver, so `panel-families.ts` is the fix and a red-proven test holds it.
+- **`PanelDevice` gained one optional member**, `minimumIntervalMs`, so a storing panel states its own cadence rather than the runner guessing a family's flash cost.
+- **liquidctl's source found three defects in the first Kraken draft** — the table was read after the delete, the header was counted as 12 bytes where the wire carries 20, and a delete was answered by a stray status report — each now pinned by a test.
 
 ## Next
 
@@ -29,6 +29,6 @@ USB panel support: a Lian Li 9.2" LCD (`1CBE:A092`) driven by the host from the 
 
 ## Blockers / unverified
 
-- **The glass is unverified:** frames flow, but no eye has confirmed the picture or that rotation 90 reads upright on the physical strip.
-- **Panel cost is unmeasured:** one frame is ~10 KB and one capture ~45 ms, but no sustained run was profiled.
+- **The glass is unverified:** frames flow, but no eye has confirmed the picture or that rotation 90 reads upright on the strip.
+- **No Kraken upload has run:** the panel is a working cooler, and a wrong bucket setup is a documented route to firmware bootloader, so the write path stays unexercised until it is accepted deliberately.
 - **L-Connect must stay stopped:** it relaunches on boot and holds the interface; the host reports the "another program holding it" message when it wins the race.
