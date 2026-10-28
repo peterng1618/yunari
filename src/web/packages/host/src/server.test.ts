@@ -28,6 +28,7 @@ import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
 import { type ListenableServer, listenWithFallback } from "./cli/net.js";
+import type { PanelManager } from "./panels/panel-manager.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { MAX_BOX_ART_BYTES } from "./providers/game/box-art.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
@@ -3225,6 +3226,104 @@ describe("Host theme routes", () => {
       expect(reopened.status).toBe(200);
     });
 
+    it("serves a phone that carries only its cookie, after the host restarts", async () => {
+      // The owner's report: a rebuilt host still lists the phone, but the phone
+      // cannot get in and has to pair again. The record surviving is not the
+      // claim under test — the *load* is. So this replays the phone: claim a
+      // code, exchange the token for a cookie, then load the display again
+      // carrying nothing but that cookie, and do it against a **second server
+      // over the same settings folder**, which is what a rebuild is.
+      const lan = { remoteAddress: "192.168.1.50" };
+      const token = await pair("phone");
+
+      const exchanged = await request(
+        paired.server,
+        "POST",
+        "/api/session",
+        JSON.stringify({ token }),
+        { ...lan, headers: JSON_HEADERS },
+      );
+      // The cookie the browser would keep: the value before the first `;`.
+      const cookie =
+        String(exchanged.headers["set-cookie"]).split(";")[0] ?? "";
+      expect(cookie).toContain("yunari_session=");
+
+      const reopened = createHostServer({
+        registry: new ProviderRegistry([]),
+        bundles: { player: lanDir, editor: lanDir },
+        themeStore: createThemeStore(lanDir),
+        display: createDisplaySettingsStore(lanDir),
+        fontFavorites: createFontFavoritesStore(lanDir),
+        displays,
+        host: { id: "lan-host", name: "Study PC" },
+      });
+
+      try {
+        // The document load, which is what a phone does when it is opened.
+        const page = await request(
+          reopened.server,
+          "GET",
+          "/?theme=default",
+          undefined,
+          {
+            ...lan,
+            headers: { cookie },
+          },
+        );
+
+        expect(page.status).not.toBe(403);
+
+        // **The dead end, and its way out.** A phone whose cookie is gone but
+        // whose stored token is stale reaches the root with `?session=` and
+        // nothing else. The exchange refuses a token no display holds and falls
+        // through, so this used to be a flat text 403: no page, so nothing on
+        // the device could reach the one exchange that pairs it, and every such
+        // dead end cost a new code — which is how one phone accumulated four
+        // records. A document load is now sent to the pairing page instead.
+        const stale = await request(
+          reopened.server,
+          "GET",
+          `/?session=${encodeURIComponent(`stale-${token}`)}`,
+          undefined,
+          lan,
+        );
+
+        expect(stale.status).toBe(302);
+        expect(stale.headers.location).toBe("/pair?reason=unpaired");
+
+        // **An API call still gets the refusal**, so no fetch is handed a page
+        // it cannot parse or a redirect it would follow into an HTML body.
+        const refused = await request(
+          reopened.server,
+          "GET",
+          "/api/themes/active",
+          undefined,
+          lan,
+        );
+
+        expect(refused.status).toBe(403);
+        expect(refused.text()).toBe(
+          "This display is not paired with the host.",
+        );
+
+        // And the poll it opens afterwards, which carries the same cookie.
+        const poll = await request(
+          reopened.server,
+          "GET",
+          "/api/published",
+          undefined,
+          {
+            ...lan,
+            headers: { cookie },
+          },
+        );
+
+        expect(poll.status).toBe(200);
+      } finally {
+        await reopened.close();
+      }
+    });
+
     it("adds Secure only on a TLS connection", async () => {
       const token = await pair();
       const lan = { remoteAddress: "192.168.1.50" };
@@ -3721,6 +3820,7 @@ describe("Host theme routes", () => {
           state: async () => ({
             lan: false,
             address: null,
+            name: null,
             port: 1,
             refusal: null,
           }),
@@ -4817,6 +4917,203 @@ describe("A local monitor is specified rather than paired", () => {
     );
     expect(autostart.status).toBe(405);
     expect(autostart.text()).toBe("This path supports POST.");
+  });
+
+  describe("a USB panel", () => {
+    const STRIP = { vendorId: 0x1cbe, productId: 0xa092, model: "lianli-9-2" };
+    const ATTACHED_PANEL = {
+      vendorId: 0x1cbe,
+      productId: 0xa092,
+      serial: "PANEL0001",
+      label: 'Lian Li 9.2" LCD',
+    };
+    const ATTACHED_PANELS = [ATTACHED_PANEL];
+
+    /** A manager that starts and stops records without opening anything: what
+     *  these cases need is which routes reach it. */
+    function managerOver(started: string[], stopped: string[]): PanelManager {
+      return {
+        start: (id) => {
+          started.push(id);
+          return Promise.resolve();
+        },
+        stop: (id) => {
+          stopped.push(id);
+        },
+        reconcile: () => Promise.resolve(),
+        running: () => [],
+        stopAll: () => Promise.resolve(),
+      };
+    }
+
+    function panelHost(
+      started: string[] = [],
+      stopped: string[] = [],
+    ): ReturnType<typeof host> {
+      return host({
+        panels: managerOver(started, stopped),
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+      });
+    }
+
+    it("answers what is attached, and adds one the host drives", async () => {
+      const started: string[] = [];
+      const hosting = panelHost(started);
+
+      try {
+        const attached = await request(
+          hosting.server,
+          "GET",
+          "/api/displays/panels",
+        );
+        expect(attached.status).toBe(200);
+        expect(attached.json()).toEqual({
+          panels: [{ ...ATTACHED_PANEL, held: false }],
+        });
+
+        const added = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        expect(added.status).toBe(201);
+        expect(await listed(hosting)).toEqual([
+          expect.objectContaining({ id: "strip", kind: "panel", panel: STRIP }),
+        ]);
+        // Driven now, not on the next reconcile: the first frame is the whole
+        // difference between a configured panel and a black one.
+        expect(started).toEqual(["strip"]);
+
+        // And the list now says the device is held, which is what stops a
+        // surface offering it again for a write that could only be refused.
+        const after = await request(
+          hosting.server,
+          "GET",
+          "/api/displays/panels",
+        );
+        expect(after.json()).toEqual({
+          panels: [{ ...ATTACHED_PANEL, held: true }],
+        });
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("refuses a model no driver claims, before writing a record", async () => {
+      // A record nothing can open would be a row in the list that never shows
+      // anything and cannot say why.
+      const hosting = panelHost();
+
+      try {
+        const refused = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({
+            label: "Strip",
+            panel: { vendorId: 0x1c8e, productId: 0xa092, model: "lianli-9-2" },
+          }),
+        );
+        expect(refused.status).toBe(400);
+        expect(refused.text()).toBe("No driver on this host claims 1c8e:a092.");
+        expect(await listed(hosting)).toEqual([]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("refuses a body with no usable hardware", async () => {
+      const hosting = panelHost();
+
+      try {
+        const refused = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: { vendorId: 0, productId: 0xa092 } }),
+        );
+        expect(refused.status).toBe(400);
+        expect(refused.text()).toBe(
+          "A panel display needs the device it drives.",
+        );
+        expect(await listed(hosting)).toEqual([]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("refuses a second display for a panel one already holds", async () => {
+      const hosting = panelHost();
+
+      try {
+        const first = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        expect(first.status).toBe(201);
+
+        const second = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip again", panel: STRIP }),
+        );
+        expect(second.status).toBe(409);
+        expect(second.text()).toMatch(/already holds/);
+        expect(await listed(hosting)).toHaveLength(1);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("stops a panel's runner when its record is removed", async () => {
+      const stopped: string[] = [];
+      const hosting = panelHost([], stopped);
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        expect(
+          (await request(hosting.server, "DELETE", "/api/displays/strip"))
+            .status,
+        ).toBe(200);
+        expect(stopped).toEqual(["strip"]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("is absent from a host with no panel manager", async () => {
+      // Omitted means this host drives no panels, so naming one is not a
+      // request it can honour — and it says so rather than enumerating USB.
+      const answer = await request(
+        hosted.server,
+        "GET",
+        "/api/displays/panels",
+      );
+      expect(answer.status).toBe(404);
+      expect(answer.text()).toBe(
+        "Panel management is not enabled on this host.",
+      );
+      expect(
+        (
+          await request(
+            hosted.server,
+            "POST",
+            "/api/displays/panels",
+            json({ label: "Strip", panel: STRIP }),
+          )
+        ).status,
+      ).toBe(404);
+      expect(await listed()).toEqual([]);
+    });
   });
 
   it("refuses a second local display for a monitor one already holds", async () => {
@@ -8344,6 +8641,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
       hosting: stillBinding({
         lan: true,
         address: "192.168.1.42",
+        name: null,
         port: 5227,
         refusal: null,
       }),
@@ -8355,6 +8653,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     expect(answered.json()).toEqual({
       lan: true,
       address: "192.168.1.42",
+      name: null,
       port: 5227,
       refusal: null,
       sessions: [],
@@ -8380,6 +8679,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
       hosting: stillBinding({
         lan: true,
         address: "192.168.1.42",
+        name: null,
         port: 5227,
         refusal: null,
       }),
@@ -8402,6 +8702,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     expect(answered.json()).toEqual({
       lan: false,
       address: null,
+      name: null,
       port: null,
       refusal: null,
       sessions: [],
@@ -8416,6 +8717,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
         state: async () => ({
           lan,
           address: lan ? "192.168.1.42" : null,
+          name: null,
           port: 5227,
           refusal: null,
         }),
@@ -8445,6 +8747,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     expect(answered.json()).toEqual({
       lan: false,
       address: null,
+      name: null,
       port: 5227,
       refusal: null,
       sessions: [],
@@ -8459,7 +8762,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     let moved = false;
     build({
       hosting: stillBinding(
-        { lan: false, address: null, port: 5227, refusal: null },
+        { lan: false, address: null, name: null, port: 5227, refusal: null },
         async () => {
           moved = true;
           return { ok: true };
@@ -8484,7 +8787,13 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     let remembered = false;
     build({
       hosting: {
-        state: async () => ({ lan: false, address: null, port: 5227, refusal }),
+        state: async () => ({
+          lan: false,
+          address: null,
+          name: null,
+          port: 5227,
+          refusal,
+        }),
         isLan: () => false,
         setLan: async () => {
           refusal = "Port 5227 is not free on 0.0.0.0: EADDRINUSE";
@@ -8532,6 +8841,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
         state: async () => ({
           lan: true,
           address: "192.168.1.42",
+          name: null,
           port: 5227,
           refusal: null,
         }),
@@ -9652,7 +9962,9 @@ describe("The root page resolves the display that asked", () => {
     await activeTheme.write("left-screen", "studio");
 
     // Naming a display is not a way to become one: an unpaired caller from the
-    // LAN never reaches the resolution at all.
+    // LAN never reaches the resolution at all. A document load is sent to the
+    // pairing page rather than handed a text 403 — the id still resolves
+    // nothing, and the caller is given the one surface that can pair it.
     const refused = await request(
       hosted.server,
       "GET",
@@ -9660,7 +9972,8 @@ describe("The root page resolves the display that asked", () => {
       undefined,
       LAN,
     );
-    expect(refused.status).toBe(403);
+    expect(refused.status).toBe(302);
+    expect(refused.headers.location).toBe("/pair?reason=unpaired");
 
     // And a paired one that names it is still served as itself.
     const token = await pair();

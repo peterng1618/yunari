@@ -180,9 +180,16 @@ test.describe("the header's publish surface", () => {
     await expect(facts.locator("code")).toBeVisible({ timeout: 30_000 });
 
     const shown = await facts.locator("code").textContent();
-    // https, the origin a display is a secure context at; the popup prints the
-    // plain address beside it as the fallback (`docs/decisions/0076`).
-    expect(shown).toMatch(/^https:\/\/\d+\.\d+\.\d+\.\d+:\d+$/);
+    // https, the origin a display is a secure context at, and **by the host's
+    // own name**: a display's cookie and storage are scoped to the origin it
+    // pairs on, so a dotted quad there is a phone that must pair again the
+    // moment DHCP moves the host (`docs/decisions/0132`). The plain address the
+    // popup prints beside it is the fallback, and it is a dotted quad — a device
+    // that cannot resolve the name is what it exists for (`docs/decisions/0076`).
+    expect(shown).toMatch(/^https:\/\/[^:\s]+\.local:\d+$/);
+    expect(
+      await facts.locator(".editor-shell-publish-note").first().textContent(),
+    ).toMatch(/^Fallback http:\/\/\d+\.\d+\.\d+\.\d+:\d+$/);
 
     const qr = facts.locator("[data-yunari-qr]");
     const box = await qr.boundingBox();

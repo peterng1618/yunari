@@ -25,6 +25,7 @@ import {
   type DeviceSettings,
   type DisplayPreferences,
   type HostSettingsClient,
+  type PanelHint,
   type ThemeAnswers,
 } from "./client.js";
 import { DeviceNameRow } from "./device-name-row.js";
@@ -32,6 +33,7 @@ import {
   type DisplayPresentation,
   DisplayPresentationSection,
 } from "./display-presentation-section.js";
+import { hardwareOf, PanelsSection } from "./panels-section.js";
 import { Group } from "./section-group.js";
 import { createSourcesClient, type SourcesClient } from "./sources-client.js";
 import { SourcesSection } from "./sources-section.js";
@@ -248,6 +250,15 @@ function HostSettings(props: {
   /** The display the questions below speak for. The route always answers This PC
    *  first, so the region opens on it rather than on nothing. */
   const [chosen, setChosen] = useState<string | undefined>(undefined);
+  /** The USB panels attached right now, or `undefined` until the read answers.
+   *  Absent is a section not drawn, never an empty list: a machine whose probe
+   *  failed is not a machine with no panel. */
+  const [panels, setPanels] = useState<readonly PanelHint[] | undefined>(
+    undefined,
+  );
+  /** True while an add is in flight, so the button cannot be pressed twice and
+   *  a second claim for one device cannot race the first. */
+  const [addingPanel, setAddingPanel] = useState(false);
   /** The last thing that happened, or `undefined` for the resting sentence. */
   const [status, setStatus] = useState<string | undefined>(undefined);
 
@@ -283,6 +294,16 @@ function HostSettings(props: {
       () => {
         // The ids are printable, so a missing name is not a failure worth a
         // sentence.
+      },
+    );
+    settings.listPanels().then(
+      (attached) => {
+        if (live) setPanels(attached);
+      },
+      () => {
+        // A host that cannot enumerate says so through the section being
+        // absent. A sentence here would report a probe failure as the machine
+        // having no panel, which are different facts.
       },
     );
     settings.readDevices().then(
@@ -493,6 +514,47 @@ function HostSettings(props: {
     );
   };
 
+  /** Adds one attached panel as a display, then re-reads the map so the new row
+   *  is the one selected.
+   *
+   * **The map is re-read rather than appended to.** A panel's row carries a
+   * theme and a shape this component has no answer for — the host resolves both
+   * — so a row built here would be a guess at what the host already knows, and
+   * the one thing worse than a slow row is a wrong one.
+   */
+  const addPanel = (panel: PanelHint): void => {
+    if (addingPanel) return;
+    setAddingPanel(true);
+    write(async () => {
+      try {
+        const id = await settings.addPanel(panel.label, hardwareOf(panel));
+        const refreshed = await client.listDisplays();
+        if (mounted.current) {
+          setMap(refreshed);
+          setChosen(id);
+          // The panel is a display now, so the host would answer `held` for it
+          // on the next read; the local copy says so at once, because a row
+          // that stayed addable after a successful add invites a second claim.
+          setPanels((current) =>
+            (current ?? []).map((entry) =>
+              entry.vendorId === panel.vendorId &&
+              entry.productId === panel.productId &&
+              entry.serial === panel.serial
+                ? { ...entry, held: true }
+                : entry,
+            ),
+          );
+        }
+        return uiCopy.hostSettings.panels.added;
+      } finally {
+        // The flag is this handler's own, so it clears here whether the add
+        // succeeded or the host refused it — a button left disabled after a
+        // refusal is a panel the owner cannot add again.
+        if (mounted.current) setAddingPanel(false);
+      }
+    });
+  };
+
   return (
     // **No status strip of its own.** §7.6's bar is the shell's, drawn once as a
     // sibling of every mode's region, and this mode's line reaches it through
@@ -569,6 +631,16 @@ function HostSettings(props: {
             save={settings.updateDisplayPresentation}
             onSaved={replacePresentation}
           />
+
+          {/* After the rows, because it *creates* one of them: a section above
+              the list it appends to would read as a filter on it. */}
+          {panels === undefined ? null : (
+            <PanelsSection
+              attached={panels}
+              adding={addingPanel}
+              onAdd={addPanel}
+            />
+          )}
 
           <Group
             testId="devices"

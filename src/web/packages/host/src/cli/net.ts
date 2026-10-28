@@ -272,6 +272,25 @@ export async function lanAddress(
   return choice.address;
 }
 
+/** The name this machine answers to over mDNS, as a display dials it.
+ *
+ *  **The name survives a DHCP lease; an address does not.** A browser scopes a
+ *  display's cookie and storage to an origin, so a host whose address moved
+ *  leaves a paired phone holding a credential for nobody — the defect
+ *  `docs/decisions/0132` rules on. The name is not ours to publish: the OS
+ *  responder already answers it, and `host-refind.ts` already prefers it.
+ *
+ *  Absent when the platform gives no hostname, because `.local` alone is a name
+ *  no host answers to. */
+export function stableName(): string | null {
+  const host = os
+    .hostname()
+    .trim()
+    .replace(/\.local$/i, "");
+
+  return host === "" ? null : `${host}.local`;
+}
+
 /** Every address and name this machine answers to, for a certificate's SANs.
  *
  *  **All of them, not the one in use**, because the host can be moved onto the
@@ -284,6 +303,13 @@ export async function lanAddress(
  *  already installed stays valid, so nothing has to be installed again. */
 export function localNames(): readonly string[] {
   const names = new Set<string>(["localhost", os.hostname()]);
+
+  // The mDNS form the re-find ladder already prefers (`host-refind.ts`) and the
+  // one the editor's QR dials (`docs/decisions/0132`). Without it here the leaf
+  // covers the bare hostname but not `hostname.local`, so https by the name is
+  // a mismatch the owner cannot tell from a root they had not installed.
+  const stable = stableName();
+  if (stable !== null) names.add(stable);
 
   for (const interfaces of Object.values(os.networkInterfaces())) {
     for (const candidate of interfaces ?? []) {

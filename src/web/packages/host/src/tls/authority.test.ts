@@ -58,7 +58,12 @@ afterEach(async () => {
 });
 
 /** The names a host on this box would ask for, loopback included. */
-const NAMES = ["localhost", "127.0.0.1", "192.168.2.56"] as const;
+const NAMES = [
+  "localhost",
+  "127.0.0.1",
+  "192.168.2.56",
+  "study-pc.local",
+] as const;
 
 /** The origin this machine would create, or re-use, from `directory`. */
 const open = (store: SecretStore = secrets) =>
@@ -222,6 +227,11 @@ describe("the host's own certificate authority", () => {
     // loopback would fail on — as a name mismatch the owner cannot tell from a
     // root they had not installed.
     expect(leaf.checkIP("192.168.2.56")).toBe("192.168.2.56");
+    // **And the name a display dials**, which is the form that survives a DHCP
+    // lease (`docs/decisions/0132`). It is a DNS SAN rather than an IP one, so
+    // it is checked as a host; a leaf covering only the bare hostname fails
+    // here, and the owner reads that failure as a root they had not installed.
+    expect(leaf.checkHost("study-pc.local")).toBe("study-pc.local");
   });
 
   it("keeps the root and re-issues the leaf on the next start", async () => {

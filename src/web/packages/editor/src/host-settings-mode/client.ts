@@ -169,6 +169,70 @@ export interface HostSettingsClient {
     id: string,
     next: { readonly shape: DisplayShape; readonly rotation: number },
   ): Promise<{ readonly shape: DisplayShape; readonly rotation: number }>;
+  /** The USB panels attached to this PC right now, as the hardware reports
+   *  them. A panel is *found* rather than admitted, so this is a list to choose
+   *  from and implies no record. */
+  listPanels(): Promise<readonly PanelHint[]>;
+  /** Adds the chosen panel as a display and starts driving it. Answers the id
+   *  the host minted, which is what the row above selects afterwards. */
+  addPanel(label: string, panel: PanelHardware): Promise<string>;
+}
+
+/** One attached panel, as the host enumerates it. `vendorId`/`productId` are
+ *  what the record stores, so they travel back on the add. */
+export interface PanelHint {
+  readonly vendorId: number;
+  readonly productId: number;
+  readonly serial: string;
+  readonly label: string;
+  /** True when a record already drives this device. The host answers it because
+   *  it holds both lists; a client cannot derive it, since the display map
+   *  carries no hardware. */
+  readonly held: boolean;
+}
+
+/** The device fields a record holds. `model` is deliberately absent: the host
+ *  writes the model its own family table names, so a caller cannot add a record
+ *  whose model disagrees with the driver that claims it. */
+export interface PanelHardware {
+  readonly vendorId: number;
+  readonly productId: number;
+  readonly serial: string;
+}
+
+/** The attached panels worth offering. An entry is kept only where it carries
+ *  the ids a record needs — a row the add route would refuse is not a choice. */
+function readPanelHints(input: unknown): readonly PanelHint[] {
+  if (!Array.isArray(input)) return [];
+  return input.flatMap((entry) => {
+    const panel = entry as {
+      readonly vendorId?: unknown;
+      readonly productId?: unknown;
+      readonly serial?: unknown;
+      readonly label?: unknown;
+      readonly held?: unknown;
+    };
+
+    return typeof panel?.vendorId === "number" &&
+      typeof panel.productId === "number" &&
+      typeof panel.serial === "string"
+      ? [
+          {
+            vendorId: panel.vendorId,
+            productId: panel.productId,
+            serial: panel.serial,
+            label:
+              typeof panel.label === "string" && panel.label.length > 0
+                ? panel.label
+                : `${panel.vendorId.toString(16)}:${panel.productId.toString(16)}`,
+            // A host that does not answer `held` is one before this field: read
+            // it as not held so the offer still appears, which the route's own
+            // 409 can still refuse honestly.
+            held: panel.held === true,
+          },
+        ]
+      : [];
+  });
 }
 
 /** A device a provider reported, kept only where it has the shape one reads. */
@@ -562,6 +626,29 @@ export function createHostSettingsClient(options?: {
         readonly rotation?: unknown;
       };
       return readDisplayPresentation(body?.shape, body?.rotation);
+    },
+
+    async listPanels() {
+      const response = await fetcher(`${baseUrl}/api/displays/panels`);
+      if (!response.ok) {
+        throw await refusal(response, "Could not list the attached panels");
+      }
+      const body = (await response.json()) as { readonly panels?: unknown };
+      return readPanelHints(body?.panels);
+    },
+
+    async addPanel(label, panel) {
+      const response = await fetcher(`${baseUrl}/api/displays/panels`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ label, panel }),
+      });
+      if (!response.ok) {
+        throw await refusal(response, "Could not add that panel");
+      }
+      const body = (await response.json()) as { readonly display?: unknown };
+      const added = body?.display as { readonly id?: unknown } | undefined;
+      return typeof added?.id === "string" ? added.id : "";
     },
   };
 }

@@ -25,6 +25,9 @@ import { handleSubmitRoute } from "./catalogue/submit.js";
 import { DEFAULT_THEMES_DIR } from "./cli/args.js";
 import type { HostBinding } from "./cli/hosting.js";
 import type { ListenableServer } from "./cli/net.js";
+import type { PanelHint } from "./panels/panel-device.js";
+import { attachedDevices, familyFor } from "./panels/panel-families.js";
+import type { PanelManager } from "./panels/panel-manager.js";
 import type {
   CustomSourceStatus,
   SourceTestResult,
@@ -99,7 +102,10 @@ import {
   MonitorAlreadyHeldError,
   mintedDisplayId,
   normalizeMonitor,
+  normalizePanel,
   normalizePatch,
+  PanelAlreadyHeldError,
+  samePanel,
 } from "./settings/displays.js";
 import type { FontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
@@ -322,6 +328,16 @@ export interface HostServerOptions {
    *  actually took, so `main` hands over a getter read per request — the same
    *  reason `hosting` is one. */
   readonly launcher?: Launcher | undefined;
+  /** The USB panels this host drives. Omitted when this host drives none: the
+   *  `panels` routes are then 404, and a panel record is written without a
+   *  runner rather than with one nothing owns. **Included as `undefined`
+   *  explicitly** for the reason `launcher` is: the panel's page is the port
+   *  its own socket took, so `main` hands over a manager built per request. */
+  readonly panels?: PanelManager | undefined;
+  /** The panels attached right now, for the owner to pick from. Omitted uses
+   *  the real USB enumeration; supplied so a case can hold a fixture rather
+   *  than this machine's hardware. */
+  readonly attachedPanels?: () => Promise<readonly PanelHint[]>;
   /** Registers this host to start at sign-in, so every local monitor comes back
    *  after a reboot. Omitted when this host cannot register itself: the route
    *  then says so rather than reporting a registration that did not happen. */
@@ -377,6 +393,12 @@ export interface HostingState {
   readonly lan: boolean;
   /** The address a phone should use, or null when there is none. */
   readonly address: string | null;
+  /** The mDNS name a phone should dial, or null when the platform gives no
+   *  hostname. **Beside the address, not instead of it**: a device that cannot
+   *  resolve `.local` still has a dotted quad to type, and an owner has one to
+   *  read aloud. The name is what survives a DHCP lease, which is why the
+   *  pairing symbol dials it (`docs/decisions/0132`). */
+  readonly name: string | null;
   /** The port this host is bound to, or null when it is not bound. */
   readonly port: number | null;
   /** The last move the host refused, in its own words, or null. A refusal can
@@ -393,6 +415,7 @@ export type HostingPeer = Omit<DisplayRecord, "tokenHash">;
 const NO_HOSTING: HostingState = {
   lan: false,
   address: null,
+  name: null,
   port: null,
   refusal: null,
 };
@@ -653,6 +676,11 @@ function peerOf(record: DisplayRecord): HostingPeer {
   return peer;
 }
 
+/** A USB id as the form every device tool prints it, for a refusal's message. */
+function usbId(value: number): string {
+  return value.toString(16).padStart(4, "0");
+}
+
 /**
  * The display a request is, or `undefined` when it is not one — the single place
  * a request becomes a display, so the credential is checked once.
@@ -726,7 +754,13 @@ export async function displayKeyFor(
     const named = url.searchParams.get("display");
     const record = named === null ? undefined : await displays?.find(named);
 
-    if (record !== undefined && record.kind === "local") {
+    // A credentialless display: the host's own monitor, or a panel the host
+    // drives. Both are reached only from this PC, which is what makes naming one
+    // an admin act rather than a client claiming an identity.
+    if (
+      record !== undefined &&
+      (record.kind === "local" || record.kind === "panel")
+    ) {
       // A refused write is dropped, as it is in `displayFor`: bookkeeping must
       // not fail the request it rode in on.
       await displays
@@ -1263,6 +1297,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   let lastUnmapped: readonly string[] = [];
   const displays = options.displays;
   const monitors = options.monitors ?? listMonitors;
+  const panelsAttached = options.attachedPanels ?? attachedDevices;
   const pairingCodes = options.pairingCodes ?? createPairingCodeStore();
   const saved = options.rememberLan;
   const devices = options.devices;
@@ -2161,10 +2196,168 @@ export function createHostServer(options: HostServerOptions): HostServer {
         await activeTheme?.clear(id);
 
         // The window goes with the record, and only a window this host opened
-        // is the host's to close.
+        // is the host's to close. A panel is the same act one layer down: its
+        // runner is stopped, because a record nothing points at is a panel
+        // still showing a theme nobody assigned it.
         options.launcher?.close(id);
+        options.panels?.stop(id);
 
         sendJson(response, 200, { ok: true });
+        return;
+      }
+
+      // The panels attached right now, for the owner to pick from. A panel is
+      // found rather than admitted, so this is the same shape as `monitors`:
+      // what the hardware says is here, and no record implied by it.
+      if (url.pathname === "/api/displays/panels" && request.method === "GET") {
+        if (options.panels === undefined) {
+          sendText(
+            response,
+            404,
+            "Panel management is not enabled on this host.",
+          );
+          return;
+        }
+
+        // **`held` is answered here because this is where both lists are.** A
+        // surface offering a panel that already has a record would be offering
+        // a choice whose only outcome is the 409 below — and the client cannot
+        // work it out, since the display map carries no hardware. An attached
+        // panel stays in the list with `held` true rather than disappearing:
+        // a device the owner can see is plugged in, and told is already added,
+        // is a different fact from one they cannot see at all.
+        //
+        // The comparison is the store's own `samePanel`, not an equality on the
+        // ids: that is the rule `createPanel` refuses by, and a surface that
+        // used a different one would offer a device the write then rejects.
+        const known = displays === undefined ? [] : await displays.list();
+        const hardware = known.flatMap((record) =>
+          record.panel === undefined ? [] : [record.panel],
+        );
+
+        sendJson(response, 200, {
+          panels: (await panelsAttached()).map((panel) => ({
+            ...panel,
+            held: hardware.some((taken) => samePanel(taken, panel)),
+          })),
+        });
+        return;
+      }
+      // A USB panel: driven by this host rather than served a page, so it is
+      // specified like a local monitor and has no credential either.
+      if (
+        url.pathname === "/api/displays/panels" &&
+        request.method === "POST"
+      ) {
+        // Refused before the body is read: a host with no panel manager would
+        // write a record nothing can drive, which is a row in the list that
+        // never shows anything and cannot say why.
+        if (options.panels === undefined) {
+          sendText(
+            response,
+            404,
+            "Panel management is not enabled on this host.",
+          );
+          return;
+        }
+
+        let body: {
+          readonly label: string;
+          readonly panel: unknown;
+          readonly shape?: unknown;
+          readonly rotation?: unknown;
+        };
+
+        try {
+          const parsed: unknown = JSON.parse(await readBody(request));
+          if (
+            typeof parsed !== "object" ||
+            parsed === null ||
+            Array.isArray(parsed)
+          ) {
+            throw new Error("That is not a display setting.");
+          }
+          body = parsed as typeof body;
+        } catch (error) {
+          sendText(
+            response,
+            400,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+
+        // The record's own rule, from the store that has to read it back.
+        const panel = normalizePanel(body.panel);
+
+        if (panel === undefined) {
+          sendText(
+            response,
+            400,
+            "A panel display needs the device it drives.",
+          );
+          return;
+        }
+
+        // A model this host has no driver for is the caller's to fix, and it is
+        // refused *before* the write: a record nothing can open would be a row
+        // in the list that never shows anything and cannot say why.
+        const family = familyFor(panel.vendorId, panel.productId);
+
+        if (family === undefined) {
+          sendText(
+            response,
+            400,
+            `No driver on this host claims ${usbId(panel.vendorId)}:${usbId(panel.productId)}.`,
+          );
+          return;
+        }
+
+        // The record carries the model the family names, rather than whatever
+        // the caller wrote: the table is the one owner of which model an id is,
+        // and a record that disagreed with it would be a row nothing can open.
+        const hardware = { ...panel, model: family.id };
+
+        let presentation: DisplayPresentation;
+
+        try {
+          mintedDisplayId(body.label);
+          presentation = normalizePresentation(body.shape, body.rotation);
+        } catch (error) {
+          sendText(
+            response,
+            400,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+
+        let display: DisplayRecord;
+
+        try {
+          display = await displays.createPanel(
+            body.label,
+            hardware,
+            presentation,
+          );
+        } catch (error) {
+          if (error instanceof PanelAlreadyHeldError) {
+            sendText(response, 409, error.message);
+            return;
+          }
+
+          console.error(error);
+          sendText(response, 500, "The host could not add that display.");
+          return;
+        }
+
+        // The panel is driven now rather than on the next reconcile: a display
+        // the owner just added is the one case a background pass cannot speak
+        // for, because its first frame is the whole difference between a
+        // configured panel and a black screen.
+        await options.panels?.start(display.id);
+
+        sendJson(response, 201, { display: peerOf(display) });
         return;
       }
 
@@ -2175,11 +2368,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
           ? "GET"
           : url.pathname === "/api/displays/autostart"
             ? "POST"
-            : url.pathname === "/api/displays"
-              ? "POST"
-              : id === undefined
-                ? undefined
-                : "PATCH and DELETE";
+            : url.pathname === "/api/displays/panels"
+              ? "GET and POST"
+              : url.pathname === "/api/displays"
+                ? "POST"
+                : id === undefined
+                  ? undefined
+                  : "PATCH and DELETE";
 
       if (supported !== undefined) {
         sendText(response, 405, `This path supports ${supported}.`);
@@ -3373,6 +3568,29 @@ export function createHostServer(options: HostServerOptions): HostServer {
       !isLoopbackRemote(request.socket.remoteAddress) &&
       !(await allowed(request))
     ) {
+      // **A document load is answered the pairing page, not a bare refusal.**
+      // A display whose credential is gone — a cleared cookie on a phone, a
+      // retired record, a stale `?session=` — is a browser with no way back:
+      // a text 403 is not a page, so nothing on the device can take it to the
+      // one exchange that can pair it. Every such dead end was answered by
+      // claiming a new code, which is how one phone accumulated four records.
+      // Only a navigation is redirected this way; an API call still gets the
+      // refusal, so no fetch learns to follow a page it cannot parse. A host
+      // with no pairing page answers 404 there, which says more than a 403.
+      if (
+        request.method === "GET" &&
+        (request.headers["sec-fetch-dest"] === "document" ||
+          request.headers.accept?.includes("text/html") === true ||
+          url.pathname === "/")
+      ) {
+        response.writeHead(302, {
+          location: "/pair?reason=unpaired",
+          "cache-control": "no-store",
+        });
+        response.end();
+        return;
+      }
+
       sendText(response, 403, "This display is not paired with the host.");
       return;
     }
@@ -3756,6 +3974,16 @@ export function createHostServer(options: HostServerOptions): HostServer {
         }
 
         await activeTheme.write(key, id);
+
+        // A panel's runner chooses its video when it starts, so a new theme is
+        // a new thing for the device to play. Restarting is the whole update:
+        // the still path would pick the page change up on its own, but a video
+        // the panel started is not the one the page now shows.
+        if (options.panels !== undefined) {
+          options.panels.stop(key);
+          await options.panels.start(key);
+        }
+
         sendJson(response, 200, {
           ok: true,
           ...(await activeThemeMap(activeTheme, available)),

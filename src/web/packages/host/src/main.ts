@@ -9,8 +9,14 @@ import {
   listenWithFallback,
   localNames,
   openBrowser,
+  stableName,
   waitUntilReachable,
 } from "./cli/net.js";
+import type { PanelVideoSource } from "./panels/panel-device.js";
+import {
+  createPanelManager,
+  type PanelManager,
+} from "./panels/panel-manager.js";
 import { ClockSensorProvider } from "./providers/clock.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { presentMonAdapter } from "./providers/frame/presentmon.js";
@@ -334,6 +340,11 @@ export async function run(argv: readonly string[]): Promise<number> {
   // `hosting` is one.
   let launcher: Launcher | undefined;
 
+  // The USB panels this host drives. The page a panel renders is this host's
+  // player at the port the socket actually took, so this is a getter for the
+  // same reason `launcher` is.
+  let panels: PanelManager | undefined;
+
   // The tray, once it exists. The stop path closes it first, so a click on Exit
   // does not leave an icon behind; undefined until the server is reachable.
   let tray: TrayController | undefined;
@@ -342,6 +353,10 @@ export async function run(argv: readonly string[]): Promise<number> {
   // later. The tray's "Auto start" toggle drives the same owner (Task 9).
   const autostart = createHostAutostart();
   const entry = hostEntry(argv, here);
+
+  // Named because two owners read it: the server serves themes, and a panel
+  // resolves its assigned theme's video asset to play it itself.
+  const themeStore = createThemeStore(themesDir);
 
   const hosted = createHostServer({
     registry,
@@ -357,6 +372,10 @@ export async function run(argv: readonly string[]): Promise<number> {
     // The host's own windows on its local monitors (§ "The host's own monitors").
     get launcher() {
       return launcher;
+    },
+    // The USB panels, for the same reason: a panel's page names the port.
+    get panels() {
+      return panels;
     },
     // One entry at sign-in covers every local monitor, including one added
     // later. Registering writes the hidden entry, so this only ever asks; a
@@ -376,7 +395,7 @@ export async function run(argv: readonly string[]): Promise<number> {
       // Served from source: the settings page has no build step.
       admin: path.join(packagesDir, "host", "public"),
     },
-    themeStore: createThemeStore(themesDir),
+    themeStore,
     // The Steam library on this PC, read on demand: the install is located per
     // listing, because a library can appear while the editor is open.
     wallpaperEngine: createWallpaperEngineSource(),
@@ -478,6 +497,50 @@ export async function run(argv: readonly string[]): Promise<number> {
   launcher = createDisplayLauncher({ displays, port: bound });
   await launcher.reconcile();
 
+  // After the server answers for the same reason, and per panel: the page a
+  // panel renders is this host's own player, so there is nothing to show until
+  // the socket is listening. A panel that cannot be opened — L-Connect holding
+  // it is the usual one — is reported and left out rather than taking the host
+  // down with it.
+  panels = createPanelManager({
+    displays,
+    pageFor: (displayId) =>
+      `http://127.0.0.1:${bound}/?display=${encodeURIComponent(displayId)}`,
+    // A video theme is one the panel can play itself. Absent means the still
+    // path, which is also what a theme with a picture background wants.
+    videoFor: async (displayId): Promise<PanelVideoSource | undefined> => {
+      const id = await activeTheme.read(displayId, (theme) =>
+        themeStore.exists(theme),
+      );
+      if (id === undefined) return undefined;
+
+      const record = await themeStore.read(id).catch(() => undefined);
+      const media = record?.envelope.background?.media;
+      if (record === undefined || media === undefined) return undefined;
+
+      const asset = record.envelope.assets?.find(
+        (candidate) => candidate.id === media.assetId,
+      );
+      if (asset === undefined || asset.kind !== "video") return undefined;
+
+      const bytes = record.assets[asset.path];
+      if (bytes === undefined) return undefined;
+
+      // The device composes the frame, so the authored pan travels with it.
+      return {
+        bytes,
+        placement: {
+          offsetX: media.offsetX ?? 0,
+          offsetY: media.offsetY ?? 0,
+        },
+      };
+    },
+    onError: (displayId, message) => {
+      console.error(`Panel ${displayId}: ${message}`);
+    },
+  });
+  await panels.reconcile();
+
   const displayHost =
     initialHost === "0.0.0.0" || initialHost === "::"
       ? "localhost"
@@ -490,6 +553,9 @@ export async function run(argv: readonly string[]): Promise<number> {
   /** The address a display would use, whether or not the LAN is open — the
    *  certificate covers it either way, and the console names it. */
   const lan = await lanAddress();
+  /** And the name it dials instead where the platform answers one: it survives
+   *  a DHCP lease where the address does not (`docs/decisions/0132`). */
+  const name = stableName();
 
   console.log(`\nYunari v${VERSION}`);
 
@@ -577,7 +643,13 @@ export async function run(argv: readonly string[]): Promise<number> {
 
   if (!isLoopbackHost(initialHost)) {
     const hostPart = lan === undefined ? displayHost : lan;
-    const networkSecure = `https://${hostPart}:${bound}`;
+    // **The name where there is one**, because this is the link a display
+    // pairs on and the origin its cookie and storage are then scoped to: a
+    // dotted quad there is a phone that must pair again the moment DHCP moves
+    // the host (`docs/decisions/0132`). The address is printed beside it, for a
+    // device that cannot resolve the name and for the one without the root.
+    const dial = name ?? hostPart;
+    const networkSecure = `https://${dial}:${bound}`;
     const networkPlain = `http://${hostPart}:${bound}`;
 
     console.log(
@@ -669,6 +741,9 @@ export async function run(argv: readonly string[]): Promise<number> {
         // The windows close with the host: one left behind is one the next run
         // cannot see, and it would put a second window on that monitor.
         launcher?.stop();
+        // And the panels: a browser left running has nothing to capture, and a
+        // claimed interface outlives the host that claimed it.
+        void panels?.stopAll();
       } finally {
         // A throwing stop must not leave the server listening with no tray.
         void hosted.close().then(resolve, resolve);

@@ -137,6 +137,9 @@ const publishStub = {
 function hostServing(options: {
   readonly lan: boolean;
   readonly address?: string;
+  /** The stable name the host offers, or none — which is what a host on a
+   *  platform with no mDNS name answers. */
+  readonly name?: string;
   readonly port?: number;
   /** Refuse the PUT itself, in the host's own words. */
   readonly refuse?: string;
@@ -146,6 +149,7 @@ function hostServing(options: {
   readonly refusalAfterPut?: string;
 }): { readonly putCalls: () => number } {
   const where = options.address ?? ADDRESS;
+  const named = options.name ?? null;
   const at = options.port ?? PORT;
   let lan = options.lan;
   let refusal: string | null = null;
@@ -182,6 +186,7 @@ function hostServing(options: {
         JSON.stringify({
           lan,
           address: lan ? where : null,
+          name: named,
           port: lan ? at : null,
           refusal,
           sessions: [],
@@ -520,6 +525,40 @@ it("takes the address apart again when the host answers with a new one", async (
   );
   expect(popupText()).not.toContain(`https://${ADDRESS}:${PORT}`);
   expect(popupText()).not.toContain(`http://${ADDRESS}:${PORT}`);
+});
+
+it("dials the host's stable name, and prints the address beside it", async () => {
+  hostServing({ lan: true, name: "study-pc.local" });
+  const container = await mount();
+  await openSurface(container);
+
+  await vi.waitFor(() =>
+    expect(popupText()).toContain(`https://study-pc.local:${PORT}`),
+  );
+  // **Both, because they are two different facts.** The symbol and the line above
+  // it carry the origin a display pairs on — the name, because a display's cookie
+  // and storage are scoped to the origin and the address is the half DHCP moves
+  // (`docs/decisions/0132`). The address survives as what a device that cannot
+  // resolve the name types: Android 11 and earlier, and any device on Private
+  // DNS, fail on `.local` and need it.
+  expect(popupText()).toContain(`http://${ADDRESS}:${PORT}`);
+  expect(
+    document.querySelector("[data-yunari-qr]")?.getAttribute("aria-label"),
+  ).toBe(`QR code: https://study-pc.local:${PORT}/pair?code=${CODE}`);
+});
+
+it("falls back to the address when the host has no name to offer", async () => {
+  // Not a hypothetical: `stableName()` answers null on a platform with no
+  // hostname, and a card that printed `https://null:5227` would be worse than
+  // the address it replaced.
+  hostServing({ lan: true });
+  const container = await mount();
+  await openSurface(container);
+
+  await vi.waitFor(() =>
+    expect(popupText()).toContain(`https://${ADDRESS}:${PORT}`),
+  );
+  expect(popupText()).not.toContain("null");
 });
 
 it("names the document a display is showing, because a live overlay is invisible", async () => {
