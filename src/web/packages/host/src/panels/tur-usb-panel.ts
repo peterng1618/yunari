@@ -1,5 +1,5 @@
 import { usb } from "usb";
-import type { PanelDevice, PanelHint } from "./panel-device.js";
+import type { PanelDevice, PanelFamily, PanelHint } from "./panel-device.js";
 import { commandPacket, type PanelCommand } from "./panel-protocol.js";
 
 /**
@@ -64,6 +64,50 @@ export function panelModelFor(
     (model) => model.vendorId === vendorId && model.productId === productId,
   );
 }
+
+/** The Lian Li screens: one bulk endpoint, one JPEG per frame. */
+export const TUR_FAMILIES: readonly PanelFamily[] = [
+  {
+    id: "lianli-9-2",
+    label: 'Lian Li 9.2" LCD',
+    vendorId: 0x1cbe,
+    productId: 0xa092,
+    stores: false,
+    support: {
+      maker: "Lian Li",
+      hardwareRevision: '9.2"',
+      supportedFirmware: [],
+      updatedAt: "2026-10-28",
+    },
+    commands: [],
+    attached: () => attachedPanels(),
+    open: () => {
+      const model = panelModelFor(0x1cbe, 0xa092);
+      if (model === undefined) throw new Error('The 9.2" model is not listed.');
+      return openPanel(model);
+    },
+  },
+  {
+    id: "lianli-8-8",
+    label: 'Lian Li Universal Screen 8.8"',
+    vendorId: 0x1cbe,
+    productId: 0xa088,
+    stores: false,
+    support: {
+      maker: "Lian Li",
+      hardwareRevision: '8.8"',
+      supportedFirmware: [],
+      updatedAt: "2026-10-28",
+    },
+    commands: [],
+    attached: () => attachedPanels(),
+    open: () => {
+      const model = panelModelFor(0x1cbe, 0xa088);
+      if (model === undefined) throw new Error('The 8.8" model is not listed.');
+      return openPanel(model);
+    },
+  },
+];
 
 /** The panels attached right now, as hints a record can hold. */
 export async function attachedPanels(): Promise<

@@ -1,10 +1,6 @@
-import {
-  attachedKrakens,
-  KRAKEN_LABEL,
-  openKraken,
-} from "./kraken-z3-panel.js";
-import type { PanelDevice, PanelHint } from "./panel-device.js";
-import { attachedPanels, openPanel, panelModelFor } from "./tur-usb-panel.js";
+import { KRAKEN_FAMILIES } from "./kraken-z3-panel.js";
+import type { PanelFamily, PanelHint } from "./panel-device.js";
+import { TUR_FAMILIES } from "./tur-usb-panel.js";
 
 /**
  * Every panel family this host can drive, in one table.
@@ -17,70 +13,13 @@ import { attachedPanels, openPanel, panelModelFor } from "./tur-usb-panel.js";
  * *which model a device is* and *how to open one*, and that pair is what a row
  * here supplies.
  *
- * A row is deliberately not a class hierarchy. The two families share no
- * packet, no endpoint and no notion of a frame; the only thing they share is
- * what `PanelDevice` says, so a row is a lookup and a constructor.
+ * Each driver module owns its own rows and exports them; this file only gathers
+ * them, so a new family is a new driver and one spread, not an edit here.
  */
 
-export interface PanelFamily {
-  /** The model id a display record carries, e.g. `lianli-9-2`. */
-  readonly id: string;
-  readonly label: string;
-  readonly vendorId: number;
-  readonly productId: number;
-  /** True when `present` writes to the device rather than streaming a frame. */
-  readonly stores: boolean;
-  /** Panels of this family attached right now, as record hints. */
-  readonly attached: () => Promise<readonly PanelHint[]>;
-  readonly open: () => Promise<PanelDevice>;
-}
-
-/** The Lian Li screens: one bulk endpoint, one JPEG per frame. */
-const TUR_FAMILY: readonly PanelFamily[] = [
-  {
-    id: "lianli-9-2",
-    label: 'Lian Li 9.2" LCD',
-    vendorId: 0x1cbe,
-    productId: 0xa092,
-    stores: false,
-    attached: () => attachedPanels(),
-    open: () => {
-      const model = panelModelFor(0x1cbe, 0xa092);
-      if (model === undefined) throw new Error('The 9.2" model is not listed.');
-      return openPanel(model);
-    },
-  },
-  {
-    id: "lianli-8-8",
-    label: 'Lian Li Universal Screen 8.8"',
-    vendorId: 0x1cbe,
-    productId: 0xa088,
-    stores: false,
-    attached: () => attachedPanels(),
-    open: () => {
-      const model = panelModelFor(0x1cbe, 0xa088);
-      if (model === undefined) throw new Error('The 8.8" model is not listed.');
-      return openPanel(model);
-    },
-  },
-];
-
-/** The Kraken Z: HID control, bulk data, and content that outlives the host. */
-const KRAKEN_FAMILY: readonly PanelFamily[] = [
-  {
-    id: "kraken-z3",
-    label: KRAKEN_LABEL,
-    vendorId: 0x1e71,
-    productId: 0x3008,
-    stores: true,
-    attached: () => Promise.resolve(attachedKrakens()),
-    open: () => openKraken("The NZXT Kraken"),
-  },
-];
-
 export const PANEL_FAMILIES: readonly PanelFamily[] = [
-  ...TUR_FAMILY,
-  ...KRAKEN_FAMILY,
+  ...TUR_FAMILIES,
+  ...KRAKEN_FAMILIES,
 ];
 
 /** The family claiming a pair of USB ids, if any. */

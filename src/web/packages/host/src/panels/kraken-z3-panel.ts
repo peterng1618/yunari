@@ -1,7 +1,12 @@
 import HID from "node-hid";
 import { usb } from "usb";
 import { reportedSerial } from "../settings/displays.js";
-import type { PanelDevice, PanelGeometry, PanelHint } from "./panel-device.js";
+import type {
+  PanelDevice,
+  PanelFamily,
+  PanelGeometry,
+  PanelHint,
+} from "./panel-device.js";
 import { decodeStill } from "./panel-image.js";
 
 /**
@@ -459,3 +464,23 @@ export async function openKraken(label: string): Promise<PanelDevice> {
 
   return panel;
 }
+
+/** The Kraken Z: HID control, bulk data, and content that outlives the host. */
+export const KRAKEN_FAMILIES: readonly PanelFamily[] = [
+  {
+    id: "kraken-z3",
+    label: KRAKEN_LABEL,
+    vendorId: VENDOR_ID,
+    productId: PRODUCT_ID,
+    stores: true,
+    support: {
+      maker: "NZXT",
+      hardwareRevision: "Z73",
+      supportedFirmware: [],
+      updatedAt: "2026-10-28",
+    },
+    commands: [],
+    attached: () => Promise.resolve(attachedKrakens()),
+    open: () => openKraken("The NZXT Kraken"),
+  },
+];

@@ -11,11 +11,19 @@ import { familyFor, PANEL_FAMILIES } from "./panel-families.js";
  */
 
 describe("PANEL_FAMILIES", () => {
-  it("claims both attached families by their real ids", () => {
-    // The ids are the devices on this desk, measured, not invented.
-    expect(familyFor(0x1cbe, 0xa092)?.id).toBe("lianli-9-2");
-    expect(familyFor(0x1cbe, 0xa088)?.id).toBe("lianli-8-8");
-    expect(familyFor(0x1e71, 0x3008)?.id).toBe("kraken-z3");
+  it("carries a support record for every family", () => {
+    for (const family of PANEL_FAMILIES) {
+      expect(family.support.maker.length).toBeGreaterThan(0);
+      expect(family.support.hardwareRevision.length).toBeGreaterThan(0);
+      expect(family.support.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(Array.isArray(family.support.supportedFirmware)).toBe(true);
+    }
+  });
+
+  it("declares no controls for the rows that have none", () => {
+    expect(familyFor(0x1cbe, 0xa092)?.commands).toEqual([]);
+    expect(familyFor(0x1cbe, 0xa088)?.commands).toEqual([]);
+    expect(familyFor(0x1e71, 0x3008)?.commands).toEqual([]);
   });
 
   it("answers nothing for a device no driver claims", () => {

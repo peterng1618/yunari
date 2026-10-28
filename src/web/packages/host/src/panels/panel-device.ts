@@ -2,8 +2,8 @@
  * The boundary between what a panel *is* and how it is driven.
  *
  * Everything above this file — the panel manager, the record, the settings
- * surface — knows only these members. A second panel family is a second
- * implementation plus its own row in `panel-families.ts`; nothing above changes.
+ * surface — knows only these members. A second panel family is a second driver
+ * module exporting its own rows; nothing above changes.
  */
 
 /** A panel's own raster size, in the orientation the wire expects. */
@@ -24,6 +24,36 @@ export interface PanelHint {
   /** What the family calls this device, for a surface choosing between them.
    *  A model's name, not the record's label: the label is the owner's. */
   readonly label: string;
+  /** The model string the firmware reports, when it reports one. */
+  readonly model?: string;
+  /** The firmware version the device answers, when it answers one. */
+  readonly firmware?: string;
+}
+
+/** A command a panel's control channel accepts. */
+export type PanelCommand =
+  | { readonly kind: "brightness"; readonly level: number }
+  | { readonly kind: "screen"; readonly on: boolean }
+  | { readonly kind: "restart" }
+  | { readonly kind: "status" }
+  | { readonly kind: "hello" };
+
+/**
+ * What a panel beyond its picture can do, when it can do more.
+ *
+ * `commands` is the declared set the control surface renders; `run` is the one
+ * entry point, so a surface does not learn a protocol to dim a screen.
+ */
+export interface PanelControls {
+  readonly commands: readonly PanelCommand["kind"][];
+  run(command: PanelCommand): Promise<string>;
+}
+
+/** The video half of a panel that takes frames rather than stills. */
+export interface PanelVideo {
+  start(mp4: Uint8Array): Promise<void>;
+  presentOverlay(png: Uint8Array): Promise<void>;
+  stop(): Promise<void>;
 }
 
 export interface PanelDevice {
@@ -47,5 +77,39 @@ export interface PanelDevice {
    * every second. A streaming panel has no such floor and leaves this absent.
    */
   readonly minimumIntervalMs?: number;
+  /** Present when the device accepts commands beyond the picture. */
+  readonly controls?: PanelControls;
+  /** Present when the device takes video as well as stills. */
+  readonly video?: PanelVideo;
   close(): Promise<void>;
+}
+
+/** What a family states about its hardware and the firmware it supports. */
+export interface PanelSupport {
+  readonly maker: string;
+  readonly hardwareRevision: string;
+  readonly supportedFirmware: readonly string[];
+  /** ISO date, `YYYY-MM-DD`: the last day the driver met this hardware. */
+  readonly updatedAt: string;
+}
+
+/**
+ * One row of the panel registry: what a family is and how to reach it.
+ *
+ * A row is a lookup and a constructor, not a class hierarchy — the families
+ * share no packet, so the only thing they share is what `PanelDevice` says.
+ */
+export interface PanelFamily {
+  /** The model id a display record carries, e.g. `lianli-9-2`. */
+  readonly id: string;
+  readonly label: string;
+  readonly vendorId: number;
+  readonly productId: number;
+  /** True when `present` writes to the device rather than streaming a frame. */
+  readonly stores: boolean;
+  readonly support: PanelSupport;
+  readonly commands: readonly PanelCommand["kind"][];
+  /** Panels of this family attached right now, as record hints. */
+  readonly attached: () => Promise<readonly PanelHint[]>;
+  readonly open: () => Promise<PanelDevice>;
 }
