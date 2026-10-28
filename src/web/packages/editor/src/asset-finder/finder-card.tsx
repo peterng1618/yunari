@@ -82,7 +82,7 @@ function FontCardPreview({
         data-yunari-asset-preview="font"
         className="flex h-full w-full items-center justify-center overflow-hidden px-[var(--space-8)]"
       >
-        <span style={faceStyle(cuts[0])} className="truncate text-[16px]">
+        <span style={faceStyle(cuts[0])} className="truncate text-base">
           {result.name}
         </span>
       </span>
@@ -99,10 +99,10 @@ function FontCardPreview({
           style={faceStyle(trio.roles[role])}
           className={
             role === "heading"
-              ? "truncate text-[20px] leading-[1.1]"
+              ? "truncate text-xl leading-[1.1]"
               : role === "body"
-                ? "truncate text-[15px] leading-[1.2] text-muted"
-                : "truncate font-mono text-[12px] leading-[1.2]"
+                ? "truncate text-sm leading-[1.2] text-muted"
+                : "truncate font-mono text-xs leading-[1.2]"
           }
         >
           {result.name}
@@ -243,7 +243,10 @@ export function FinderCard(props: {
       <span className="flex min-w-0 items-center gap-[var(--space-6)]">
         <span className="truncate text-sm">{model.name}</span>
         {done ? (
-          <span data-yunari-finder-card-done="" className="flex-none text-accent">
+          <span
+            data-yunari-finder-card-done=""
+            className="flex-none text-accent"
+          >
             <Glyph icon={CHECK_GLYPH} size={12} />
           </span>
         ) : null}

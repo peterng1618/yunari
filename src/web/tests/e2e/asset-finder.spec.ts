@@ -757,8 +757,12 @@ test("the finder is centred and the chosen tab is drawn as chosen", async ({
     Math.abs(box.y + box.height / 2 - viewport.height / 2),
   ).toBeLessThanOrEqual(2);
   // The 1px border is inside the box because every surface is border-box.
-  expect(Math.abs(box.width - Math.min(1180, viewport.width - 48))).toBeLessThanOrEqual(1);
-  expect(Math.abs(box.height - Math.min(800, viewport.height - 48))).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(box.width - Math.min(1180, viewport.width - 48)),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(box.height - Math.min(800, viewport.height - 48)),
+  ).toBeLessThanOrEqual(1);
 
   const chosen = page.locator('[data-yunari-asset-tab="icon"]');
   const other = page.locator('[data-yunari-asset-tab="font"]');
@@ -769,8 +773,8 @@ test("the finder is centred and the chosen tab is drawn as chosen", async ({
       underline: style.borderBottomColor,
     };
   });
-  const otherPaint = await other.evaluate((element) =>
-    getComputedStyle(element).backgroundColor,
+  const otherPaint = await other.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
   );
   expect(chosenPaint.background).not.toBe(otherPaint);
   expect(chosenPaint.underline).not.toBe("rgba(0, 0, 0, 0)");

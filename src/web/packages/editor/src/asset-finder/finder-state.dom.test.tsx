@@ -55,7 +55,5 @@ it("renders a sentence alone when there is nothing to do", () => {
   expect(document.querySelector("[data-yunari-asset-state]")?.textContent).toBe(
     "That source did not answer.",
   );
-  expect(
-    document.querySelector("[data-yunari-asset-state-action]"),
-  ).toBeNull();
+  expect(document.querySelector("[data-yunari-asset-state-action]")).toBeNull();
 });

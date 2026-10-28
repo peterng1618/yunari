@@ -1,39 +1,33 @@
 # Yunari status
 
-Updated: 2026-10-27
-Branch: `peterng1618/fix-font-trio` (worktree `fix-font-trio`)
+Updated: 2026-10-28
+Branch: `peterng1618/asset-finder-hub` (worktree `asset-finder-hub`)
 
 ## Current objective
 
-Two plans are complete — the type-token model and the display's own motion — and local `main` at `1d0b9b9` carries both; next is the backlog drain.
+The asset finder's UI/UX overhaul: one shell, one card, one skeleton and one control set across every tab, then the Unsplash feed, the font and Wallpaper Engine panes, the preview modal and the DESIGN.md rules.
 
 ## Active work
 
-- **No plan is running:** the type-token plan's six phases and the display-animation plan's seven tasks are done; `main` (at `b3a2b98`) is merged in here, and local `main` now points at this branch's tip.
-- **The type-token model is in:** a token names a face whereas size, line height and tracking belong to each run (`0128`).
-- **Display motion is in:** one fixed 30 fps `startSceneRefresh` loop, a transition pump in `YunariChart`, skip-unchanged bound text, and no chart-rate setting anywhere (`0129`).
-- **The type-token final review is discharged:** its one blocking defect is fixed and re-reviewed FIXED (`a84f7d90`), and its should-fix is filed as `vg-772`.
-- **Preview lens and display presentation landed:** scene-anchored box, letterbox, guide frame, circle lens, ratio catalogue, per-record shape and rotation.
-- **The live line is placed by its data:** axis at its newest reading, no delay or hold, missing readings skipped, sample frames queued at the transport (0124).
+- **Plan is running:** `docs/superpowers/plans/2026-10-28-asset-finder-unification.md`, Phase 1.
+- **Phase 1 is complete:** the window, the card, the skeleton/state vocabulary, and the frame with its controls have landed.
+- **Phase 2 next:** accumulated tab data, `FinderGrid` and the shell's append path replace paging.
 
 ## Last completed change
 
-- **`main` (b3a2b98) is merged into this branch:** its 13 commits bring the display animation, and this file was the only conflict.
-- **A new text now paints its role default before the first edit:** `addText` paints through the session's authoring-view port, so the canvas shows 16 (body at 1080) rather than Fabric's 40 for the whole first edit (`a84f7d90`).
-- **Red-proved 40 → 16:** the paint is a no-op for objects with no authored runs and for a manager with no port installed.
-- **The final review's should-fix is filed, not fixed:** a whole-family import binds one face, so save-cleanup offers the other declared weights and subsets for removal (`vg-772`).
-- **Proof:** `npm run gate` exit 0 on the merged tree — 447 files / 6,885 passed + 1 skipped, browser 13 files / 130 passed.
+- **One frame for every tab:** `FinderFrame` owns the rail (fixed order), toolbar (search, filters, sources, pager, tools), content and footer; `FinderSearch`, `FinderSegmented`, `FinderChip`, `FinderActionButton` and `ConnectionsButton` are the shared controls.
+- **Connections is drawn only while a keyed source reports a missing or refused key**, and is the toolbar's icon rather than an inline link.
+- **A pane that owns its own search or footer draws neither**, so the font catalogue and Wallpaper Engine keep their own field.
+- **Proof:** asset-finder unit files 13 / 135 passed; `asset-finder.spec.ts` 18 passed + 1 skipped against a private preview; `npm run gate` exit 0.
 
 ## Next
 
-1. Resume the backlog-drain plan at Phase 0, a reproduction pass over the register.
-2. Verify the retargeted `editor.spec.ts` cases when preview port 4174 frees.
-3. Owner test of a gauge mid-transition on a real display.
+1. Execute Phase 2 of the plan: `TabData`, `FinderGrid`, then the shell's append path.
+2. Then Phase 3: the Unsplash Editorial feed and the Images proof.
+3. Then Phase 4: fonts, Wallpaper Engine, the preview modal and the DESIGN.md rules.
 
 ## Blockers / unverified
 
-- **Browser arm unverified for both plans:** port 4174 is held by `background-media-becomes-a-layer`'s preview; nothing was killed and no port was moved.
-- **The transition pump is unit-proven only:** no capture shows a gauge mid-transition on a real display.
-- **The import flow has never run in a real browser on the type-token branch:** its chooser, dialog and Create steps match the dom test only.
-- **Open rows:** `vg-770`, `vg-762`, `vg-771`, `vg-772`; starter role weights stay read-only while `Segoe UI` and `Consolas` are undeclared.
-- **`vg-756` and the store-worker token handoff:** run specs via `node node_modules/@playwright/test/cli.js`, and closing `return-page.ts` needs a nonce or pinned-port decision.
+- **Preview port 4174 is held by the `fix-font-trio` worktree:** run browser proofs with `YUNARI_EDITOR_URL` against a private preview port.
+- **`npx playwright` is broken by `@playwright/mcp`'s alpha Playwright** (`vg-774`); run `node node_modules/@playwright/test/cli.js`.
+- **Open rows:** `vg-773` (the rest of the app's UI/UX audit), `vg-774`.

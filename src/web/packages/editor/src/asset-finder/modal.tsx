@@ -1,4 +1,3 @@
-import { Tabs } from "@base-ui/react/tabs";
 import type {
   AssetPage,
   AssetResult,
@@ -20,6 +19,14 @@ import { uiCopy } from "../ui-copy.js";
 import { type AssetPlacement } from "./actions.js";
 import { type ClientOptions, listSources, searchAssets } from "./client.js";
 import { cardModelOf, FinderCard } from "./finder-card.js";
+import {
+  ConnectionsButton,
+  type FinderAction,
+  FinderActionButton,
+  FinderChip,
+  FinderSegmented,
+} from "./finder-controls.js";
+import { FinderFrame } from "./finder-frame.js";
 import { interleave } from "./interleave.js";
 import { FinderSkeleton } from "./skeleton.js";
 
@@ -30,6 +37,17 @@ const DISABLED_KEY = "yunari.asset-finder.disabled";
 
 /** The kind filter's own value: every source, or one preset kind. */
 type KindFilter = "all" | PresetKind;
+
+/** The rail's fixed order (spec R1). A category the registry adds later that
+ *  this list does not name appends alphabetically rather than disappearing. */
+const CATEGORY_ORDER: readonly ListingCategory[] = [
+  "font",
+  "icon",
+  "image",
+  "video",
+  "colour",
+  "local",
+];
 
 export type ActionOutcome =
   | { readonly ok: true; readonly message?: string }
@@ -232,6 +250,9 @@ export function AssetFinder({
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const announced = useRef(false);
   const [message, setMessage] = useState<string | undefined>(undefined);
+  const [messageTone, setMessageTone] = useState<"ok" | "failed" | undefined>(
+    undefined,
+  );
   const [busy, setBusy] = useState(false);
   /** A question is out and its answer has not landed. With results already on
    *  screen this marks the grid busy; without any it shows the skeleton. */
@@ -298,15 +319,25 @@ export function AssetFinder({
     }
   }, [disabled]);
 
-  const categories: ListingCategory[] = [];
+  const presentCategories: ListingCategory[] = [];
   for (const source of sources) {
-    if (!categories.includes(source.category)) categories.push(source.category);
-  }
-  for (const category of ["font", "local"] as const) {
-    if (bodyKinds[category] != null && !categories.includes(category)) {
-      categories.push(category);
+    if (!presentCategories.includes(source.category)) {
+      presentCategories.push(source.category);
     }
   }
+  for (const category of ["font", "local"] as const) {
+    if (bodyKinds[category] != null && !presentCategories.includes(category)) {
+      presentCategories.push(category);
+    }
+  }
+  const categories: ListingCategory[] = [
+    ...CATEGORY_ORDER.filter((category) =>
+      presentCategories.includes(category),
+    ),
+    ...presentCategories
+      .filter((category) => !CATEGORY_ORDER.includes(category))
+      .sort(),
+  ];
 
   const gridSources =
     active === undefined ? [] : gridSourcesOf(sources, active);
@@ -428,6 +459,7 @@ export function AssetFinder({
     setPage(1);
     setSelected(undefined);
     setMessage(undefined);
+    setMessageTone(undefined);
   };
 
   const sourceOf = (id: string): AssetSourceListing | undefined =>
@@ -443,331 +475,346 @@ export function AssetFinder({
         ? "font-picker"
         : "wallpaper-engine");
 
-  const runAction = async (placement?: AssetPlacement): Promise<void> => {
-    if (selected === undefined) return;
+  const runAction = async (
+    placement?: AssetPlacement,
+  ): Promise<ActionOutcome> => {
+    if (selected === undefined) {
+      return { ok: false, message: "" };
+    }
 
     setBusy(true);
     const outcome = await onAction(selected.page, selected.result, placement);
     setBusy(false);
     setMessage(outcome.message);
+    setMessageTone(outcome.ok ? "ok" : "failed");
+    return outcome;
+  };
+
+  if (listing !== "ok") {
+    return (
+      <Dialog
+        open={open}
+        onOpenChange={onOpenChange}
+        label={uiCopy.assets.title}
+        closeLabel={uiCopy.assets.close}
+        closeIcon
+        className="editor-shell-dialog--finder"
+      >
+        {listing === "failed" ? (
+          <p
+            className="p-[var(--space-16)] text-sm text-muted"
+            data-yunari-asset-host-failure=""
+          >
+            {uiCopy.assets.hostUnavailable}
+          </p>
+        ) : (
+          <div
+            data-yunari-asset-listing-skeleton=""
+            className="min-h-0 flex-1 overflow-y-auto p-[var(--space-16)]"
+          >
+            <FinderSkeleton />
+          </div>
+        )}
+      </Dialog>
+    );
+  }
+
+  if (active === undefined) {
+    return (
+      <Dialog
+        open={open}
+        onOpenChange={onOpenChange}
+        label={uiCopy.assets.title}
+        closeLabel={uiCopy.assets.close}
+        closeIcon
+        className="editor-shell-dialog--finder"
+      >
+        <p className="p-[var(--space-16)] text-sm text-muted">
+          {uiCopy.assets.noSource}
+        </p>
+      </Dialog>
+    );
+  }
+
+  /** A key that is missing or refused is the one reason to offer Connections:
+   *  a control that cannot help is not an availability. */
+  const needsConnections = failures.some(
+    (page) => page.failure?.reason === "needs-credential",
+  );
+  const isGrid = gridSources.length > 0;
+
+  const status = isGrid ? (
+    <>
+      <span data-yunari-asset-count="">
+        {answer === undefined
+          ? ""
+          : uiCopy.assets.results(
+              rows.length,
+              new Set(rows.map((row) => sourceIdOf(row.result))).size,
+            )}
+      </span>
+      {message === undefined ? null : (
+        <span className="ml-[var(--space-8)]" data-yunari-asset-message="">
+          {message}
+        </span>
+      )}
+    </>
+  ) : undefined;
+
+  const placeAction: FinderAction = {
+    id: "place",
+    label: uiCopy.assets.placeOnCanvas,
+    busyLabel: uiCopy.assets.working,
+    tone: "plain",
+    disabled: selected === undefined || busy,
+    run: () => runAction("place"),
+  };
+  const mainAction: FinderAction = {
+    id: "apply",
+    label: uiCopy.assets.action[active],
+    busyLabel: uiCopy.assets.working,
+    tone: "plain",
+    disabled: selected === undefined || busy,
+    run: () => runAction(active === "image" ? "background" : undefined),
   };
 
   return (
-    <Dialog
+    <FinderFrame
       open={open}
       onOpenChange={onOpenChange}
       label={uiCopy.assets.title}
       closeLabel={uiCopy.assets.close}
-      closeIcon
       className="editor-shell-dialog--finder"
+      tabs={categories.map((category) => ({
+        id: category,
+        label: uiCopy.assets.category[category],
+      }))}
+      active={active}
+      onTabChange={(category) => {
+        setActive(category);
+        // A tab is a new question, so a filter from the last tab is not an
+        // answer about this one.
+        setPresetFilter("all");
+        reask();
+      }}
+      {...(isGrid
+        ? {
+            query,
+            searchPlaceholder: uiCopy.assets.search[active],
+            onQueryChange: (value: string) => {
+              setQuery(value);
+              reask();
+            },
+          }
+        : {})}
+      filters={
+        active === "colour" && kinds.length > 1 ? (
+          <FinderSegmented
+            label={uiCopy.assets.kindFilterLabel}
+            value={presetFilter}
+            options={kindOptions.map((kind) => ({
+              id: kind,
+              label: uiCopy.assets.kindFilter[kind],
+              data: { "data-yunari-asset-kind": kind },
+            }))}
+            onChange={(kind) => {
+              setPresetFilter(kind);
+              reask();
+            }}
+          />
+        ) : undefined
+      }
+      sources={
+        visibleSources.length > 1 ? (
+          <>
+            {visibleSources.map((source) => {
+              const off = disabled.has(source.id);
+              const failed = failures.some(
+                (page) =>
+                  page.source === source.id && page.failure !== undefined,
+              );
+              return (
+                <FinderChip
+                  key={source.id}
+                  label={source.label}
+                  pressed={!off}
+                  failed={failed}
+                  disabled={!source.configurable}
+                  data={
+                    off
+                      ? {
+                          "data-yunari-asset-chip": source.id,
+                          "data-disabled": "",
+                        }
+                      : { "data-yunari-asset-chip": source.id }
+                  }
+                  onToggle={() => {
+                    setDisabled((current) => {
+                      const next = new Set(current);
+                      if (next.has(source.id)) next.delete(source.id);
+                      else if (
+                        enabledSources.length > 1 ||
+                        !visibleSources.some((entry) => !next.has(entry.id))
+                      ) {
+                        next.add(source.id);
+                      }
+                      return next;
+                    });
+                    reask();
+                  }}
+                />
+              );
+            })}
+          </>
+        ) : undefined
+      }
+      tools={
+        <>
+          {isGrid && answer !== undefined && total > 1 ? (
+            <FinderPager page={page} total={total} onPage={setPage} />
+          ) : null}
+          <ConnectionsButton
+            needs={needsConnections}
+            onOpen={() => onOpenConnections?.()}
+          />
+        </>
+      }
+      status={status}
+      {...(message === undefined || messageTone === undefined
+        ? {}
+        : { statusTone: messageTone })}
+      actions={
+        isGrid ? (
+          <>
+            {active === "image" ? (
+              <FinderActionButton
+                action={placeAction}
+                busy={busy}
+                onRun={() => {
+                  void placeAction.run();
+                }}
+                data={{ "data-yunari-asset-place": "" }}
+              />
+            ) : null}
+            <FinderActionButton
+              action={mainAction}
+              busy={busy}
+              onRun={() => {
+                void mainAction.run();
+              }}
+              data={{ "data-yunari-asset-action": "" }}
+            />
+          </>
+        ) : undefined
+      }
     >
-      {listing === "failed" ? (
-        <p
-          className="p-[var(--space-16)] text-sm text-muted"
-          data-yunari-asset-host-failure=""
-        >
-          {uiCopy.assets.hostUnavailable}
-        </p>
-      ) : null}
-      {listing === "loading" ? (
+      {!isGrid ? (
         <div
-          data-yunari-asset-listing-skeleton=""
-          className="min-h-0 flex-1 overflow-y-auto p-[var(--space-16)]"
+          className="min-h-0 flex-1 overflow-y-auto"
+          data-yunari-asset-body={bodyOf(active)}
         >
-          <FinderSkeleton />
+          {bodyOf(active) === "font-picker"
+            ? bodies["font-picker"]
+            : bodyOf(active) === "wallpaper-engine"
+              ? bodies["wallpaper-engine"]
+              : uiCopy.assets.noSource}
         </div>
-      ) : null}
-      {active === undefined ? null : (
-        <Tabs.Root
-          value={active}
-          onValueChange={(value) => {
-            setActive(value as ListingCategory);
-            // A tab is a new question, so a filter from the last tab is not an
-            // answer about this one.
-            setPresetFilter("all");
-            reask();
-          }}
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          {/* The tabs and the search share one bar, and the window's own way out
-              owns the corner the bar leaves for it. */}
-          <div className="flex items-center gap-[var(--space-12)] border-b border-edge px-[var(--space-16)] pr-[calc(var(--space-32)+var(--space-4))] pt-[var(--space-12)]">
-            <Tabs.List className="flex gap-[var(--space-4)]">
-              {categories.map((category) => (
-                <Tabs.Tab
-                  key={category}
-                  value={category}
-                  data-yunari-asset-tab={category}
-                  className="border-b-2 border-transparent px-[var(--space-12)] py-[var(--space-8)] text-sm text-muted hover:text-text data-[active]:border-accent data-[active]:bg-[var(--panel-2)] data-[active]:text-text"
-                >
-                  {uiCopy.assets.category[category]}
-                </Tabs.Tab>
-              ))}
-            </Tabs.List>
-            {gridSources.length === 0 ? null : (
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
+      ) : (
+        <>
+          {notice === undefined ? null : (
+            <p className="text-xs text-muted" data-yunari-asset-host-notice="">
+              {uiCopy.assets.remoteHostNotice(notice)}
+            </p>
+          )}
+
+          {failures.map((page) => {
+            const source = sourceOf(page.source);
+            const label = source?.label ?? page.source;
+            const failure = page.failure;
+            if (failure === undefined) return null;
+
+            return failure.reason === "needs-credential" ? (
+              <p
+                key={page.source}
+                className="text-sm"
+                data-yunari-asset-needs-credential={page.source}
+              >
+                {uiCopy.assets.needsCredential(label)}
+              </p>
+            ) : (
+              <p
+                key={page.source}
+                className="text-sm"
+                data-yunari-asset-failure={page.source}
+              >
+                {uiCopy.assets.sourceFailed(label, failure.message)}
+              </p>
+            );
+          })}
+
+          {kindSourcesOff ? (
+            <p className="text-sm text-muted" data-yunari-asset-kind-off="">
+              {uiCopy.assets.kindSourcesOff}
+            </p>
+          ) : answer === undefined || (empty && searching) ? (
+            // Nothing to keep, or the kept answer says "nothing" and a new
+            // question is out: the wait is the grid that is coming.
+            <div
+              data-yunari-asset-loading=""
+              className="min-h-0 flex-1 overflow-y-auto"
+            >
+              <FinderSkeleton />
+            </div>
+          ) : empty ? (
+            <p
+              className="flex flex-col items-start gap-[var(--space-8)] text-sm text-muted"
+              data-yunari-asset-empty=""
+            >
+              {uiCopy.assets.noResults}
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
                   reask();
                 }}
-                placeholder={uiCopy.assets.searchPlaceholder}
-                aria-label={uiCopy.assets.searchPlaceholder}
-                data-yunari-asset-search=""
-                className="ml-auto w-64 rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-10)] py-[var(--space-6)] text-sm"
-              />
-            )}
-          </div>
-
-          {active === undefined ? null : (
-            <Tabs.Panel
-              value={active}
-              className="flex min-h-0 flex-1 flex-col gap-[var(--space-12)] p-[var(--space-16)]"
+                data-yunari-asset-clear-query=""
+                className="underline"
+              >
+                {uiCopy.assets.clearQuery}
+              </button>
+            </p>
+          ) : (
+            <div
+              className="grid min-h-0 flex-1 content-start grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-[var(--space-8)] overflow-y-auto"
+              data-yunari-asset-grid=""
+              role="listbox"
+              aria-label={uiCopy.assets.category[active]}
+              aria-busy={searching ? "true" : undefined}
             >
-              {gridSources.length === 0 ? (
-                <div
-                  className="min-h-0 flex-1 overflow-y-auto"
-                  data-yunari-asset-body={bodyOf(active)}
-                >
-                  {bodyOf(active) === "font-picker"
-                    ? bodies["font-picker"]
-                    : bodyOf(active) === "wallpaper-engine"
-                      ? bodies["wallpaper-engine"]
-                      : uiCopy.assets.noSource}
-                </div>
-              ) : (
-                <>
-                  {/* The bar: what is being searched, what came back, and the
-                      two presses that move through it. */}
-                  <div className="flex flex-wrap items-center gap-[var(--space-8)] text-sm">
-                    {active === "colour" && kinds.length > 1 ? (
-                      <div
-                        role="group"
-                        aria-label={uiCopy.assets.kindFilterLabel}
-                        className="flex items-center gap-[var(--space-4)]"
-                      >
-                        {kindOptions.map((kind) => (
-                          <button
-                            key={kind}
-                            type="button"
-                            aria-pressed={presetFilter === kind}
-                            data-yunari-asset-kind={kind}
-                            onClick={() => {
-                              setPresetFilter(kind);
-                              reask();
-                            }}
-                            className="rounded-full border border-edge px-[var(--space-10)] py-[var(--space-4)] text-xs aria-pressed:border-accent aria-pressed:text-accent"
-                          >
-                            {uiCopy.assets.kindFilter[kind]}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {visibleSources.length > 1
-                      ? visibleSources.map((source) => {
-                          const off = disabled.has(source.id);
-                          return (
-                            <button
-                              key={source.id}
-                              type="button"
-                              aria-pressed={!off}
-                              data-yunari-asset-chip={source.id}
-                              data-disabled={off ? "" : undefined}
-                              disabled={!source.configurable}
-                              onClick={() => {
-                                setDisabled((current) => {
-                                  const next = new Set(current);
-                                  if (next.has(source.id))
-                                    next.delete(source.id);
-                                  else if (
-                                    enabledSources.length > 1 ||
-                                    !visibleSources.some(
-                                      (entry) => !next.has(entry.id),
-                                    )
-                                  ) {
-                                    next.add(source.id);
-                                  }
-                                  return next;
-                                });
-                                reask();
-                              }}
-                              className="rounded-full border border-edge px-[var(--space-10)] py-[var(--space-4)] text-xs aria-pressed:border-accent aria-pressed:text-accent data-[disabled]:text-faint"
-                            >
-                              {source.label}
-                            </button>
-                          );
-                        })
-                      : null}
-
-                    <span
-                      className="text-xs text-muted"
-                      data-yunari-asset-count=""
-                    >
-                      {answer === undefined
-                        ? ""
-                        : uiCopy.assets.results(
-                            rows.length,
-                            new Set(rows.map((row) => sourceIdOf(row.result)))
-                              .size,
-                          )}
-                      {message === undefined ? null : (
-                        <span
-                          className="ml-[var(--space-8)]"
-                          data-yunari-asset-message=""
-                        >
-                          {message}
-                        </span>
-                      )}
-                    </span>
-
-                    <span className="flex-1" />
-
-                    {answer === undefined || total <= 1 ? null : (
-                      <FinderPager page={page} total={total} onPage={setPage} />
-                    )}
-
-                    <div className="flex items-center gap-[var(--space-8)]">
-                      {active === "image" ? (
-                        <button
-                          type="button"
-                          disabled={selected === undefined || busy}
-                          onClick={() => void runAction("place")}
-                          data-yunari-asset-place=""
-                          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-12)] py-[var(--space-6)] disabled:text-faint"
-                        >
-                          {uiCopy.assets.placeOnCanvas}
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        disabled={selected === undefined || busy}
-                        onClick={() =>
-                          void runAction(
-                            active === "image" ? "background" : undefined,
-                          )
-                        }
-                        data-yunari-asset-action=""
-                        className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-12)] py-[var(--space-6)] disabled:text-faint"
-                      >
-                        {uiCopy.assets.action[active]}
-                      </button>
-                    </div>
-                  </div>
-
-                  {notice === undefined ? null : (
-                    <p
-                      className="text-xs text-muted"
-                      data-yunari-asset-host-notice=""
-                    >
-                      {uiCopy.assets.remoteHostNotice(notice)}
-                    </p>
+              {rows.map(({ page, result }) => (
+                <FinderCard
+                  key={`${page.source}:${result.id}`}
+                  model={cardModelOf(
+                    result,
+                    sourceOf(page.source)?.label ?? page.source,
                   )}
-
-                  {failures.map((page) => {
-                    const source = sourceOf(page.source);
-                    const label = source?.label ?? page.source;
-                    const failure = page.failure;
-                    if (failure === undefined) return null;
-
-                    return failure.reason === "needs-credential" ? (
-                      <p
-                        key={page.source}
-                        className="flex items-center gap-[var(--space-8)] text-sm"
-                        data-yunari-asset-needs-credential={page.source}
-                      >
-                        {uiCopy.assets.needsCredential(label)}
-                        <button
-                          type="button"
-                          onClick={() => onOpenConnections?.()}
-                          data-yunari-asset-connections=""
-                          className="underline"
-                        >
-                          {uiCopy.assets.connectionsAction}
-                        </button>
-                      </p>
-                    ) : (
-                      <p
-                        key={page.source}
-                        className="text-sm"
-                        data-yunari-asset-failure={page.source}
-                      >
-                        {uiCopy.assets.sourceFailed(label, failure.message)}
-                      </p>
-                    );
-                  })}
-
-                  {kindSourcesOff ? (
-                    <p
-                      className="text-sm text-muted"
-                      data-yunari-asset-kind-off=""
-                    >
-                      {uiCopy.assets.kindSourcesOff}
-                    </p>
-                  ) : answer === undefined || (empty && searching) ? (
-                    // Nothing to keep, or the kept answer says "nothing" and a
-                    // new question is out: the wait is the grid that is coming.
-                    <div
-                      data-yunari-asset-loading=""
-                      className="min-h-0 flex-1 overflow-y-auto"
-                    >
-                      <FinderSkeleton />
-                    </div>
-                  ) : empty ? (
-                    <p
-                      className="flex flex-col items-start gap-[var(--space-8)] text-sm text-muted"
-                      data-yunari-asset-empty=""
-                    >
-                      {uiCopy.assets.noResults}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setQuery("");
-                          reask();
-                        }}
-                        data-yunari-asset-clear-query=""
-                        className="underline"
-                      >
-                        {uiCopy.assets.clearQuery}
-                      </button>
-                    </p>
-                  ) : (
-                    <div
-                      className="grid min-h-0 flex-1 content-start grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-[var(--space-8)] overflow-y-auto"
-                      data-yunari-asset-grid=""
-                      role="listbox"
-                      aria-label={uiCopy.assets.category[active]}
-                      aria-busy={searching ? "true" : undefined}
-                    >
-                      {rows.map(({ page, result }) => (
-                        <FinderCard
-                          key={`${page.source}:${result.id}`}
-                          model={cardModelOf(
-                            result,
-                            sourceOf(page.source)?.label ?? page.source,
-                          )}
-                          selected={
-                            selected?.result.id === result.id &&
-                            selected.page.source === page.source
-                          }
-                          busy={false}
-                          failed={false}
-                          done={false}
-                          tabStop
-                          focus={() => {}}
-                          onSelect={() => setSelected({ page, result })}
-                          onKeyDown={() => {}}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </Tabs.Panel>
+                  selected={
+                    selected?.result.id === result.id &&
+                    selected.page.source === page.source
+                  }
+                  busy={false}
+                  failed={false}
+                  done={false}
+                  tabStop
+                  focus={() => {}}
+                  onSelect={() => setSelected({ page, result })}
+                  onKeyDown={() => {}}
+                />
+              ))}
+            </div>
           )}
-        </Tabs.Root>
+        </>
       )}
-    </Dialog>
+    </FinderFrame>
   );
 }

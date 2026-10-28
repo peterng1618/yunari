@@ -34,7 +34,7 @@ export function FinderSkeleton({
     <div
       data-yunari-skeleton-grid=""
       aria-busy="true"
-      className="grid content-start grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-[var(--space-12)]"
+      className="grid content-start grid-cols-[repeat(auto-fill,minmax(var(--finder-card-min-width),1fr))] gap-[var(--space-12)]"
     >
       <span className="sr-only">{uiCopy.assets.skeletonLoading}</span>
       {Array.from({ length: count }, (_, at) => (

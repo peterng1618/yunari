@@ -523,6 +523,14 @@ body,
   --header-height: 42px;
   --menu-min-width: 190px;
   --asset-preview-max-height: 120px;
+  /* The finder's window (spec R1): a centred 1180 x 800 box over the whole
+     viewport, and the width below which it becomes the whole window. */
+  --finder-width: 1180px;
+  --finder-height: 800px;
+  --finder-compact-width: 720px;
+  --finder-footer-height: 52px;
+  /* The narrowest card the grid draws; a 4:3 well needs this width to read. */
+  --finder-card-min-width: 168px;
   /* The asset preview's box and right panel are the drawing's own
      (`assets-preview.html`): the finder's inset-24 size, a 270px facts column,
      and a fixed stage ground a picture is judged against under every palette.
@@ -1757,8 +1765,8 @@ body,
   left: 50%;
   right: auto;
   bottom: auto;
-  width: min(1180px, calc(100vw - 2 * var(--space-24)));
-  height: min(800px, calc(100vh - 2 * var(--space-24)));
+  width: min(var(--finder-width), calc(100vw - 2 * var(--space-24)));
+  height: min(var(--finder-height), calc(100vh - 2 * var(--space-24)));
   max-width: none;
   max-height: none;
   transform: translate(-50%, -50%);
@@ -1768,7 +1776,8 @@ body,
   overflow: hidden;
 }
 
-@media (max-width: 720px) {
+/* 45rem is the same 720px; a media query cannot read a custom property. */
+@media (max-width: 45rem) {
   .editor-shell-dialog--finder {
     width: 100vw;
     height: 100vh;

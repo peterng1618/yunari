@@ -87,14 +87,14 @@ it("draws a palette as vertical flex bars in catalogue order", () => {
   );
   const bars = document.querySelectorAll("[data-yunari-swatch]");
   expect(bars).toHaveLength(4);
-  expect(
-    [...bars].map((bar) => (bar as HTMLElement).style.background),
-  ).toEqual([
-    "rgb(17, 34, 51)",
-    "rgb(68, 85, 102)",
-    "rgb(119, 136, 153)",
-    "rgb(170, 187, 204)",
-  ]);
+  expect([...bars].map((bar) => (bar as HTMLElement).style.background)).toEqual(
+    [
+      "rgb(17, 34, 51)",
+      "rgb(68, 85, 102)",
+      "rgb(119, 136, 153)",
+      "rgb(170, 187, 204)",
+    ],
+  );
   expect(bars[0]?.parentElement?.className).toContain("flex");
   expect(bars[0]?.parentElement?.className).not.toContain("grid");
 });
@@ -117,7 +117,9 @@ it("crops an image and marks the card selected", () => {
   const image = document.querySelector("img");
   expect(image?.className).toContain("object-cover");
   expect(image?.getAttribute("loading")).toBe("lazy");
-  expect(document.querySelector("[data-yunari-finder-card-check]")).not.toBeNull();
+  expect(
+    document.querySelector("[data-yunari-finder-card-check]"),
+  ).not.toBeNull();
   expect(
     document
       .querySelector("[data-yunari-finder-card]")

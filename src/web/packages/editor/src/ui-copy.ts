@@ -1206,6 +1206,21 @@ export const uiCopy = {
       local: "Open in Wallpaper Engine",
     } satisfies Record<ListingCategory, string>,
     searchPlaceholder: "Search assets…",
+    /** Each tab's own field, so the words name what is searched. */
+    search: {
+      font: "Search fonts…",
+      icon: "Search icons…",
+      image: "Search photos…",
+      video: "Search videos…",
+      colour: "Search colours…",
+      local: "Search this PC…",
+    } satisfies Record<ListingCategory, string>,
+    searching: (sources: number): string =>
+      `Searching ${sources} ${sources === 1 ? "source" : "sources"}…`,
+    endOfResults: "End of results",
+    working: "Working…",
+    retry: "Retry",
+    connections: "Connections",
     /** The kind filter the Colours tab draws when its sources disagree about
      *  what they yield. The options derive from the sources' own
      *  `presetKind`, so only `all` is a fixed word. */

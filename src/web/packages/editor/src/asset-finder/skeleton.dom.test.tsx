@@ -46,9 +46,9 @@ it("draws card-shaped placeholders and says it is loading once", () => {
   const region = rendered.querySelector<HTMLElement>(
     "[data-yunari-skeleton-grid]",
   );
-  expect(
-    region?.querySelectorAll("[data-yunari-skeleton-card]"),
-  ).toHaveLength(4);
+  expect(region?.querySelectorAll("[data-yunari-skeleton-card]")).toHaveLength(
+    4,
+  );
   expect(region?.querySelectorAll("[data-yunari-skeleton-line]")).toHaveLength(
     8,
   );

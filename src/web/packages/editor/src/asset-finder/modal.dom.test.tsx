@@ -312,7 +312,9 @@ describe("AssetFinder tabs", () => {
     const tabs = [...document.querySelectorAll("[data-yunari-asset-tab]")].map(
       (element) => element.getAttribute("data-yunari-asset-tab"),
     );
-    expect(tabs).toEqual(["icon", "font", "local"]);
+    // The rail's fixed order, not the listing's: Fonts before Icons before the
+    // pane-backed Wallpaper Engine.
+    expect(tabs).toEqual(["font", "icon", "local"]);
     expect(tab("icon").textContent).toContain(uiCopy.assets.category.icon);
     expect(tab("local").textContent).toContain(uiCopy.assets.category.local);
   });
@@ -917,7 +919,9 @@ describe("AssetFinder search", () => {
       "[data-yunari-asset-connections]",
     );
     if (link === null) throw new Error("no Connections link.");
-    expect(link.textContent).toContain(uiCopy.assets.connectionsAction);
+    // The control is the toolbar's icon, named for a screen reader and
+    // tooltipped; the sentence beside the rows says what is missing.
+    expect(link.getAttribute("aria-label")).toBe(uiCopy.assets.connections);
     await act(async () => link.click());
     expect(onOpenConnections).toHaveBeenCalledTimes(1);
   });
