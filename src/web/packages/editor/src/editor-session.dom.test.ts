@@ -15,6 +15,73 @@ import { uiCopy } from "./ui-copy.js";
 
 installReadableFile();
 
+// Base UI's popups need the browser APIs jsdom has none of — the same supply
+// `token-inspector.dom.test.ts` makes, for the same reason.
+globalThis.ResizeObserver ??= class {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+} as never;
+Element.prototype.getAnimations ??= (): never[] => [];
+Element.prototype.setPointerCapture ??= () => undefined;
+Element.prototype.releasePointerCapture ??= () => undefined;
+window.PointerEvent ??= MouseEvent as never;
+{
+  // jsdom has no `:modal` or `:popover-open`; Base UI asks both while opening a
+  // popup, and an unpatched `matches` throws where the library expects a
+  // boolean.
+  const matches = Element.prototype.matches;
+  Element.prototype.matches = Object.assign(function (
+    this: Element,
+    selector: string,
+  ): boolean {
+    if (selector === ":modal" || selector === ":popover-open") return false;
+    return matches.call(this, selector);
+  }, matches);
+}
+
+/** Three macrotasks: React and floating-ui schedule outside the event, so a
+ *  popup is flushed with macrotasks rather than one. */
+async function flushPopups(): Promise<void> {
+  for (let round = 0; round < 3; round += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+/**
+ * A token's two-press delete: the first press reveals the reassignment list,
+ * the choice names where the references go, and the second press deletes.
+ *
+ * Base UI commits a list item only when the press that precedes the click
+ * started on it, so the press is part of the interaction.
+ */
+async function deleteToken(
+  column: HTMLElement,
+  selectHook: string,
+  buttonHook: string,
+  target: string,
+): Promise<void> {
+  column.querySelector<HTMLButtonElement>(buttonHook)?.click();
+  await flushPopups();
+  column.querySelector<HTMLElement>(selectHook)?.click();
+  await flushPopups();
+  const option = document.querySelector<HTMLElement>(
+    `[role="option"][data-yunari-option="${target}"]`,
+  );
+  if (option === null) throw new Error(`no reassignment option ${target}`);
+  option.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      pointerType: "mouse",
+      button: 0,
+    }),
+  );
+  option.click();
+  await flushPopups();
+  column.querySelector<HTMLButtonElement>(buttonHook)?.click();
+}
+
 const saveMock = vi.hoisted(() => vi.fn(async () => {}));
 const markSavedMock = vi.hoisted(() => vi.fn());
 /** Shared, so a test can recover the registered `(id, handler)` pairs. */
@@ -1215,16 +1282,20 @@ describe("EditorSession", () => {
     // Deleting the token the selection names clears the token too: the column
     // must show the object selection again rather than staying suppressed over
     // a token the document no longer has. The replacement is the other token,
-    // and the deleted one is unroled because a role cannot be deleted.
+    // and the deleted one is unroled because a role cannot be deleted. Delete
+    // takes two presses — one to open the reassignment, one to commit it.
     tokenSelection.set({ kind: "preset", id: "caption" });
     expect(objectColumn?.style.display).toBe("none");
     // A plain click: the token panel renders through `flushSync`, so the
     // document write and the suppression it causes land synchronously. Wrapping
     // it in `act` would need `IS_REACT_ACT_ENVIRONMENT`, which this suite does
     // not set, and React warns once per run when it is missing.
-    tokenColumn
-      ?.querySelector<HTMLButtonElement>("[data-yunari-token-delete]")
-      ?.click();
+    await deleteToken(
+      tokenColumn!,
+      "[data-yunari-token-replacement]",
+      "[data-yunari-token-delete]",
+      "body",
+    );
     expect(tokenSelection.get()).toBeUndefined();
     expect(objectColumn?.style.display).toBe("");
     expect(tokenColumn?.textContent).toBe("");
@@ -1237,9 +1308,12 @@ describe("EditorSession", () => {
     expect(
       tokenColumn?.querySelector("[data-yunari-palette-name]"),
     ).not.toBeNull();
-    tokenColumn
-      ?.querySelector<HTMLButtonElement>("[data-yunari-palette-delete]")
-      ?.click();
+    await deleteToken(
+      tokenColumn!,
+      "[data-yunari-palette-replacement]",
+      "[data-yunari-palette-delete]",
+      "accent",
+    );
     expect(tokenSelection.get()).toBeUndefined();
     expect(objectColumn?.style.display).toBe("");
     expect(tokenColumn?.textContent).toBe("");

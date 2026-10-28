@@ -39,7 +39,7 @@ async function openTokens(page: Page): Promise<void> {
   await expect(
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
-  await openPane(page, "Tokens");
+  await openPane(page, "Design tokens");
 }
 
 /** The picker's one trigger; its popover holds the exact-value field. */
@@ -309,7 +309,7 @@ test.describe("the colour picker and the gradient track", () => {
         () => (window as unknown as KeyRecorder).yunariStopKeys ?? [],
       );
 
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     await page.locator('[data-yunari-palette-token-row="background"]').click();
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
     // Three stops, so Delete has one to remove while the two-stop floor holds.
@@ -398,7 +398,7 @@ test.describe("the colour picker and the gradient track", () => {
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     await page.locator('[data-yunari-palette-token-row="background"]').click();
     await openPicker(page);
 
@@ -425,7 +425,7 @@ test.describe("the colour picker and the gradient track", () => {
 
     for (const palette of PALETTES) {
       await choosePalette(page, palette);
-      await openPane(page, "Tokens");
+      await openPane(page, "Design tokens");
       await page
         .locator('[data-yunari-palette-token-row="background"]')
         .click();

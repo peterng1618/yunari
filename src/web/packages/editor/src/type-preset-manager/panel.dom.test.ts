@@ -8,7 +8,6 @@ import {
   newTypeToken,
   starterTypeTokens,
 } from "../new-fabric-theme-globals.js";
-import { resolveTypeToken } from "../selection-inspector/appearance.js";
 import { uiCopy } from "../ui-copy.js";
 import { createTypeTokenPanel } from "./panel.js";
 
@@ -36,16 +35,22 @@ describe("type token panel", () => {
     );
   });
 
-  it("renders a row and a resolution line for each preset", () => {
-    const panel = createTypeTokenPanel(document.body, vi.fn());
+  it("renders a row and a usage figure for each preset", () => {
+    const panel = createTypeTokenPanel(
+      document.body,
+      vi.fn(),
+      undefined,
+      undefined,
+      undefined,
+      () => ({ body: [{ objectId: "a", name: "Title" }], caption: [] }),
+    );
     panel.render(presets);
 
-    // The value is `resolveTypeToken`'s own answer, read from the same record
-    // the panel is given — never a copy of the "family weight sizepx" rule.
     expect(
-      panel.root.querySelector('[data-yunari-type-preset-row="body"]')
-        ?.textContent,
-    ).toContain(resolveTypeToken({ typeTokens: presets }, "typeTokens.body"));
+      panel.root.querySelector(
+        '[data-yunari-type-preset-row="body"] [data-yunari-type-preset-usage]',
+      )?.textContent,
+    ).toBe("1");
     expect(
       panel.root.querySelector('[data-yunari-type-preset-row="caption"]'),
     ).not.toBeNull();
@@ -102,7 +107,6 @@ describe("type token panel", () => {
     const panel = createTypeTokenPanel(
       document.body,
       change,
-      undefined,
       undefined,
       undefined,
       tokenSelection,

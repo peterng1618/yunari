@@ -46,6 +46,7 @@ import { openFontImportDialog } from "./components/font-import-dialog.js";
 import { EditorDocument } from "./editor-document.js";
 import type { EditorActionFacade } from "./editor-shell/session-facade.js";
 import type {
+  PresetSelection,
   TokenRef,
   TokenSelectionStore,
 } from "./editor-shell/shell-stores.js";
@@ -69,7 +70,6 @@ import {
 import {
   createPalettePanel,
   type PalettePanel,
-  type PaletteTokenUse,
   paletteTokenUsage,
 } from "./palette-manager/index.js";
 import {
@@ -82,7 +82,7 @@ import {
   createTokenInspectorPanel,
   type TokenInspectorPanel,
 } from "./panes/tokens/token-inspector.js";
-import type { PresetSelection } from "./panes/tokens/token-list.js";
+import type { TokenUse } from "./panes/tokens/token-use.js";
 import { weightChoices } from "./panes/tokens/weight-choices.js";
 import {
   createSelectionInspector,
@@ -97,6 +97,7 @@ import {
   type TypeTokenFontActions,
   type TypeTokenPanel,
   type TypeTokens,
+  typeTokenUsage,
 } from "./type-preset-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
 import { requestNormalizedVideo } from "./video-normalizer.js";
@@ -208,6 +209,11 @@ interface EditorSessionOptions {
   /** The shell's token selection, handed to the preset list so a row press
    *  reaches the store the inspector reads. Optional, like `selection`. */
   readonly tokenSelection?: TokenSelectionStore;
+  /** Brings one layer into view: the inspector's user list is a set of links,
+   *  and the shell owns both the pane column and the canvas selection. Optional
+   *  so a session built without chrome draws plain names rather than dead
+   *  links. */
+  readonly onRevealLayer?: (objectId: string) => void;
   /** The Assets pane's title count. The store is the shell chrome's, so the
    *  session reports the manager's declaration count rather than the shell
    *  reaching for a manager it does not hold. */
@@ -365,9 +371,7 @@ export class EditorSession {
     );
     // The one walk behind both the figure beside a token and the users list in
     // the inspector, so the two cannot disagree about the scene.
-    const paletteUsage = (): Readonly<
-      Record<string, readonly PaletteTokenUse[]>
-    > =>
+    const paletteUsage = (): Readonly<Record<string, readonly TokenUse[]>> =>
       paletteTokenUsage(
         options.shell.editor.canvas,
         this.#document.envelope.globals?.palette ?? {},
@@ -402,17 +406,22 @@ export class EditorSession {
         await this.#document.runFontAction(() => this.applyFontTrio(id));
       },
     };
+    // The same one walk for type tokens: the figure beside a row and the users
+    // list in the inspector read it, and the delete's reassignment walk is the
+    // write half of the same traversal.
+    const typeUsage = (): Readonly<Record<string, readonly TokenUse[]>> =>
+      typeTokenUsage(
+        options.shell.editor.canvas,
+        this.#document.envelope.globals?.typeTokens ?? {},
+      );
     this.#types = createTypeTokenPanel(
       options.panelHosts.tokens,
       (presets) => this.#document.setTypes(presets),
       (id, replacement) => this.#deleteType(id, replacement),
       fontActions,
-      // The shell's own selection projection, so the list says what the canvas
-      // selection is set in. Pulled from the live snapshot rather than a copy
-      // held here, because the selection is Fabric's.
-      options.selection,
       // The token a row press selects, which the inspector will read.
       options.tokenSelection,
+      typeUsage,
     );
     this.#types.render(
       this.#document.envelope.globals?.typeTokens as TypeTokens | undefined,
@@ -549,6 +558,12 @@ export class EditorSession {
           onDelete: (id, replacement) => this.#deletePalette(id, replacement),
           usage: paletteUsage,
         },
+        // The type half: the same one walk, so the users list under the preset
+        // fields agrees with the figure beside the pane's row.
+        typeUsage,
+        ...(options.onRevealLayer === undefined
+          ? {}
+          : { onRevealLayer: options.onRevealLayer }),
       },
     );
     const renderTokenInspector = (): void => {

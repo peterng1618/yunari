@@ -1027,7 +1027,7 @@ test.describe("Fabric editor route", () => {
     await expect(page.locator("#status-message")).toHaveText("Editor ready");
     // "Add colour" is the palette panel's control, and the palette is the
     // Tokens pane's.
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     await page.getByRole("button", { name: "Add colour" }).click();
     // The pane carries one trigger and no field of its own; the exact-value
     // field is the picker's, portalled from the popover.
@@ -1409,10 +1409,13 @@ test.describe("Fabric editor route", () => {
     expect(await choiceOf(shadow)).toBe("Text");
     // `text` is the token the new panel's border and shadow now point at. The
     // palette panel is the Tokens pane's, so it is in the Tokens pane.
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     // The Tokens pane's rows are selectors now; a press hands the token to the
     // inspector, where the reassignment row lives.
     await page.locator('[data-yunari-palette-token-row="text"]').click();
+    // Delete takes two presses: the first reveals the reassignment list, the
+    // choice names where the references go, the second deletes.
+    await page.locator("[data-yunari-palette-delete]").click();
     await chooseIn(page, "[data-yunari-palette-replacement]", "dim");
     await page.locator("[data-yunari-palette-delete]").click();
 
@@ -2095,7 +2098,7 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     // The palette panel is the Tokens pane's, so it is in the Tokens pane.
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     await page.locator('[data-yunari-palette-token-row="background"]').click();
     // The exact-value field is the popover's, so the trigger opens it first.
     await page.locator("[data-yunari-palette-picker]").click();
@@ -2131,8 +2134,9 @@ test.describe("Fabric editor route", () => {
     await chooseIn(page, "[data-yunari-background]", "palette.bars");
     // The palette panel is the Tokens pane's, so it is in the Tokens pane; a row
     // press hands the token to the inspector, where the delete row lives.
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     await page.locator('[data-yunari-palette-token-row="bars"]').click();
+    await page.locator("[data-yunari-palette-delete]").click();
     await chooseIn(page, "[data-yunari-palette-replacement]", "panel");
     await captureVisualReview(page, testInfo, "editor-palette-reassignment");
     await page.locator("[data-yunari-palette-delete]").click();
@@ -2159,8 +2163,9 @@ test.describe("Fabric editor route", () => {
     await page.goto(EDITOR);
     // The palette panel is the Tokens pane's, so it is in the Tokens pane; a row
     // press hands the token to the inspector, where the delete row lives.
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     await page.locator('[data-yunari-palette-token-row="chartTrack"]').click();
+    await page.locator("[data-yunari-palette-delete]").click();
     await chooseIn(page, "[data-yunari-palette-replacement]", "bars");
     await page.locator("[data-yunari-palette-delete]").click();
 
@@ -2192,7 +2197,7 @@ test.describe("Fabric editor route", () => {
     // The type-token library is a list now; a row press hands the token to
     // the token inspector, which is the field set's new home (spec, Tokens
     // pane). `heading` is the starter theme's wordmark face.
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     await page.locator('[data-yunari-type-preset-row="heading"]').click();
     const family = page.locator("[data-yunari-token-family]");
     await expect(family).toBeVisible();
@@ -2236,7 +2241,7 @@ test.describe("Fabric editor route", () => {
     const saved = await savePackage(page);
     await openThemeFromStore(page, storedThemeOfPackage(saved.bytes));
     // Reopening a package remounts the shell, so the pane is shut again.
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     await page.locator('[data-yunari-type-preset-row="heading"]').click();
     const reopened = (await saveEnvelope(page)) as {
       globals: {
@@ -2298,7 +2303,7 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     // A role token is not deletable and the validator requires all three, so
     // the case creates the unroled token it will delete. The add's seeded face
     // is one no starter role carries.
@@ -2307,13 +2312,16 @@ test.describe("Fabric editor route", () => {
     await expect(added).toHaveCount(1);
 
     // Give a run a reference to it, so the reassignment has something to move.
-    await selectLayer(page, "CPU");
+    // `wordmark` is a top-level text layer, which the tree selects directly: a
+    // row inside a card group selects the group, and a group carries no runs.
+    await selectLayer(page, "wordmark");
     await chooseIn(page, '[data-yunari-run-preset="0"]', "typeTokens.type");
 
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     await added.click();
-    await chooseIn(page, "[data-yunari-token-replacement]", "heading");
     await page.locator("[data-yunari-token-delete]").scrollIntoViewIfNeeded();
+    await page.locator("[data-yunari-token-delete]").click();
+    await chooseIn(page, "[data-yunari-token-replacement]", "heading");
     await captureVisualReview(page, testInfo, "editor-type-reassignment");
     await page.locator("[data-yunari-token-delete]").click();
     // The row is the token's own row in the list, so a deletion takes the
@@ -2338,7 +2346,7 @@ test.describe("Fabric editor route", () => {
     }
     expect(
       (
-        sceneObject(envelope, "cpu-card-title")?.["yunariText"] as
+        sceneObject(envelope, "wordmark")?.["yunariText"] as
           | { runs: ReadonlyArray<{ typeToken?: string }> }
           | undefined
       )?.runs[0]?.typeToken,

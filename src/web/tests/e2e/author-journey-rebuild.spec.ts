@@ -96,7 +96,7 @@ test.describe("the reference composition, built from blank", () => {
     // measured rather than assumed. **This read the Document pane's resolved
     // references until item 17 removed that section** (`vg-474`): the pane no
     // longer offers a read of what the document references.
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     // The same two sets the removed section resolved — the theme's own palette
     // and its own tokens — read from the lists that own them. A populated
     // palette is the claim; its size is an inventory and moves on its own.

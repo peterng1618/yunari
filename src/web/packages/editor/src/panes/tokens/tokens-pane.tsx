@@ -22,7 +22,7 @@ export function TokensPane(props: PaintListProps): React.JSX.Element {
   return (
     <div className="flex flex-col gap-[var(--space-8)]">
       <h2 className="text-xs font-semibold tracking-[0.11em] text-muted uppercase">
-        {uiCopy.panels.palette}
+        {uiCopy.panels.paintTokens}
       </h2>
       <PaintList {...props} />
     </div>

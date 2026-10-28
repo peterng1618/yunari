@@ -306,7 +306,7 @@ test("captures each pane of the four-slot rail in the design language", async ({
   const panes = [
     { slot: "Composition", panel: "layers" },
     { slot: "Add", panel: "add" },
-    { slot: "Tokens", panel: "tokens" },
+    { slot: "Design tokens", panel: "tokens" },
     { slot: "Document", panel: "document" },
   ] as const;
 

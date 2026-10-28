@@ -3,14 +3,8 @@ import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import type { TokenSelectionStore } from "../editor-shell/shell-stores.js";
+import type { TokenUsage } from "../panes/tokens/token-use.js";
 import { TokensPane } from "../panes/tokens/tokens-pane.js";
-
-/** An object a token is linked to. The name is what the pane shows; the id is
-    the stable key the layer list and every binding use (§75). */
-export interface PaletteTokenUse {
-  readonly objectId: string;
-  readonly name: string;
-}
 
 export interface PalettePanelOptions {
   /**
@@ -23,7 +17,7 @@ export interface PalettePanelOptions {
    * deleted come from this one source, so a token is never reported unused
    * while an object is painted with it.
    */
-  readonly usage?: () => Readonly<Record<string, readonly PaletteTokenUse[]>>;
+  readonly usage?: () => TokenUsage;
   /**
    * The settled boundary of the one discrete edit the pane still makes: adding
    * a token. Without the entry a later undo's globals restore silently removes

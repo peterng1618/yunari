@@ -61,9 +61,14 @@ export function optionRuns<T extends { readonly group?: string }>(
  */
 export function ControlSelect(
   props: ControlProps & {
+    /** The empty string states that nothing is chosen yet — a list that opens
+     *  empty and forces a choice rather than starting on its first entry. */
     readonly value: string;
     readonly options: readonly ControlOption[];
     readonly onChange: (id: string) => void;
+    /** What the trigger prints while `value` is empty. Absent reads as blank,
+     *  which is what a select whose value is always a real id wants. */
+    readonly placeholder?: string;
     /** The row's shape, where the surface's drawing draws this picker as
      *  something other than the labelled row — the Add pane's asset picker is
      *  `headed` (`shell.html:128-132`). */
@@ -84,6 +89,7 @@ export function SelectControl(
     readonly options: readonly ControlOption[];
     readonly onChange: (id: string) => void;
     readonly adornment?: React.ReactNode;
+    readonly placeholder?: string;
     readonly shape?: ControlShape;
   },
 ): React.JSX.Element {
@@ -101,6 +107,7 @@ export function SelectControl(
     options,
     onChange,
     adornment,
+    placeholder,
   } = props;
   const ids = useControlIds(id);
   const blocked = isBlocked({ disabled, refused });
@@ -156,6 +163,10 @@ export function SelectControl(
           )}
           <Select.Value
             className="flex-1 truncate text-left font-mono"
+            // The primitive's own empty state: an empty value is "nothing
+            // chosen", so the trigger says what to do rather than nothing at
+            // all.
+            placeholder={placeholder}
             // The chosen id, on the element that prints the label. A driver
             // reads the value it must not guess at, and reads it by a hook
             // rather than by the `font-mono` beside it — a presentation class

@@ -54,11 +54,13 @@ import { parseShellEntry } from "./shell-entry.js";
 import { ShellMenuBar } from "./shell-menu-bar.js";
 import {
   FinderStore,
+  PaneRequestStore,
   PublishSurfaceStore,
   SelectionStore,
   SheetStore,
   TokenSelectionStore,
   useFinder,
+  usePaneRequest,
   useSelection,
   useSheet,
 } from "./shell-stores.js";
@@ -207,6 +209,10 @@ export interface ShellLayout {
    *  than through a second publish path, and it moves no host state: the switch
    *  inside the surface is the only control that does. */
   showPublishing(): void;
+  /** Shows the Composition pane. The token inspector's layer links arrive here:
+   *  they select the layer through the bridge and then ask to see it, which is
+   *  a *show* and never a toggle — a link cannot close the pane it points at. */
+  showLayers(): void;
   destroy(): void;
 }
 
@@ -296,6 +302,10 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
   const sheet = new SheetStore();
   const publishSurface = new PublishSurfaceStore();
   const finder = new FinderStore();
+  // A pane a surface inside the editor asked to see — the token inspector's
+  // layer links. The slot itself stays `Shell`'s state, because the pane's
+  // scroll offsets and the canvas refit belong to the gesture that moves it.
+  const paneRequests = new PaneRequestStore();
   const hosting = new HostingStore();
   const getView = (): EditorViewControls | undefined => view;
 
@@ -400,6 +410,25 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
       });
     }, [following]);
 
+    /** Opens `id` without the toggle below, for a caller that meant "show me
+     *  this": the rail's own press is what decides a close, and a link that
+     *  selects a layer must never close the pane the layer lives in. */
+    const openSlot = (id: RailSlot): void => {
+      setSlot(id);
+      setCollapsed(false);
+      const restore = scrollOf.current.get(id) ?? 0;
+      // After the pane's own content is laid out, or the offset lands on
+      // whatever height it has at that moment.
+      requestAnimationFrame(() => {
+        if (paneBody.current !== null) paneBody.current.scrollTop = restore;
+        // Only when the panel is coming back. A swap between two open panes
+        // changes which pane shows, not how wide the panel is, so nothing
+        // resizes and no change event ever arrives — the listener would sit
+        // armed until the author's next pan or zoom, and that gesture is the one
+        // it ate, snapping the view back to fit.
+        if (collapsed) refitOnViewportChange();
+      });
+    };
     /** The slot already showing closes the pane; any other slot — and the
      *  closed one itself — shows it. The canvas is what an author works in, so
      *  the chrome around it is allowed to get out of the way. */
@@ -420,21 +449,28 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
         refitOnViewportChange();
         return;
       }
-      setSlot(id);
-      setCollapsed(false);
-      const restore = scrollOf.current.get(id) ?? 0;
-      // After the pane's own content is laid out, or the offset lands on
-      // whatever height it has at that moment.
-      requestAnimationFrame(() => {
-        if (paneBody.current !== null) paneBody.current.scrollTop = restore;
-        // Only when the panel is coming back. A swap between two open panes
-        // changes which pane shows, not how wide the panel is, so nothing
-        // resizes and no change event ever arrives — the listener would sit
-        // armed until the author's next pan or zoom, and that gesture is the one
-        // it ate, snapping the view back to fit.
-        if (collapsed) refitOnViewportChange();
-      });
+      openSlot(id);
     };
+    /** A pane another surface asked to see: the token inspector's layer links
+     *  are the one caller. The offset is saved first, as the rail's press does,
+     *  so swapping away from an open pane keeps its place; the nonce is what
+     *  says the request is new, because the same slot may be asked for twice. */
+    const handledPaneRequest = useRef(0);
+    const paneRequest = usePaneRequest(paneRequests);
+    useEffect(() => {
+      if (
+        paneRequest === undefined ||
+        handledPaneRequest.current === paneRequest.nonce
+      ) {
+        return;
+      }
+      handledPaneRequest.current = paneRequest.nonce;
+      if (!collapsed && paneBody.current !== null) {
+        scrollOf.current.set(slot, paneBody.current.scrollTop);
+      }
+      if (!collapsed && slot === paneRequest.slot) return;
+      openSlot(paneRequest.slot);
+    }, [paneRequest]);
 
     return (
       <div className="editor-shell">
@@ -884,6 +920,12 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
       // open flag, exactly as a press on the header control does: the chord
       // reveals the surface and touches nothing the host is doing.
       flushSync(() => publishSurface.set(true));
+    },
+    showLayers() {
+      // No `flushSync`, unlike the two above: this one is called from a pane's
+      // own React event, so the request belongs to that render's batch. The
+      // shell's effect applies it and the pane is showing by the next commit.
+      paneRequests.show("composition");
     },
     destroy() {
       store.bridge?.destroy();

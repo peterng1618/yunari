@@ -342,7 +342,7 @@ test("each pane long enough to scroll comes back to the offset it was left at", 
   await openEveryGroup(page);
 
   const measured: Record<string, number> = {};
-  for (const slot of ["Composition", "Tokens", "Document"]) {
+  for (const slot of ["Composition", "Design tokens", "Document"]) {
     await openPane(page, slot);
     const body = paneBody(page);
     await expect(body, `${slot} is the pane showing`).toHaveCount(1);
@@ -486,7 +486,7 @@ test("every pane's title bar sits at the same top offset", async ({
   ).toBeVisible();
 
   const tops: [string, number][] = [];
-  for (const slot of ["Composition", "Add", "Tokens", "Document"]) {
+  for (const slot of ["Composition", "Add", "Design tokens", "Document"]) {
     await openPane(page, slot);
     const title = page.locator(
       ".editor-shell-pane:not([hidden]) > .editor-shell-pane-title",
@@ -532,7 +532,7 @@ test("no pane's column scrolls sideways", async ({ page }, testInfo) => {
   ).toBeVisible();
 
   const overflow: [string, number][] = [];
-  for (const slot of ["Composition", "Add", "Tokens", "Document"]) {
+  for (const slot of ["Composition", "Add", "Design tokens", "Document"]) {
     await openPane(page, slot);
     const body = paneBody(page);
     await expect(body, `${slot}'s body is showing`).toHaveCount(1);
@@ -774,7 +774,7 @@ test("every pane's title bar carries the count of its own list, and Document car
   await expect(titleCount("add")).toHaveText(`${cards} units`);
 
   // Tokens: the theme's paints, which is the rows the pane draws.
-  await openPane(page, "Tokens");
+  await openPane(page, "Design tokens");
   const tokens = await page
     .locator('[data-yunari-panel="tokens"] [data-yunari-palette-token-row]')
     .count();

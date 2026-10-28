@@ -336,6 +336,12 @@ async function start(): Promise<void> {
       // The shell's token selection, so a preset row's press reaches the
       // store the inspector will read.
       tokenSelection: layout.tokenSelection,
+      // A token's layer link: show the pane the layer lives in, then select it,
+      // so the inspector the link is standing in gives way to the layer's own.
+      onRevealLayer: (objectId: string) => {
+        layout.showLayers();
+        layout.selection.bridge?.selectLayer(objectId);
+      },
       // The Assets pane's count is the session's manager's list, and the title
       // bar is the shell's, so the reading crosses back through the store that
       // already carries the document's own facts.

@@ -4,7 +4,7 @@ import {
   reassignObjectPaletteReferences,
 } from "@yunari/scene-fabric";
 import type { Canvas } from "fabric/es";
-import type { PaletteTokenUse } from "./panel.js";
+import type { TokenUse } from "../panes/tokens/token-use.js";
 
 export interface PaletteTokenReassignment {
   readonly from: `palette.${string}`;
@@ -25,9 +25,9 @@ export interface PaletteTokenReassignment {
 export function paletteTokenUsage(
   canvas: Canvas,
   palette: FabricPalette,
-): Record<string, readonly PaletteTokenUse[]> {
+): Record<string, readonly TokenUse[]> {
   const objects = canvas.getObjects();
-  const usage: Record<string, readonly PaletteTokenUse[]> = {};
+  const usage: Record<string, readonly TokenUse[]> = {};
   for (const id of Object.keys(palette)) {
     usage[id] = objectPaletteReferences(
       objects,
@@ -64,5 +64,4 @@ export {
   createPalettePanel,
   type PalettePanel,
   type PalettePanelOptions,
-  type PaletteTokenUse,
 } from "./panel.js";

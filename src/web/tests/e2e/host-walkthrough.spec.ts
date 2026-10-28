@@ -238,7 +238,7 @@ test.describe("the shell, reached by keyboard alone", () => {
   }) => {
     await openWalkthrough(page);
     await openDocumentByKeyboard(page);
-    await chooseRailPane(page, "Tokens");
+    await chooseRailPane(page, "Design tokens");
 
     await expect(
       page.locator('[data-yunari-panel="tokens"]'),
@@ -541,7 +541,7 @@ test.describe("the shell, reached by keyboard alone", () => {
     await watchEditCommits(page);
 
     // 2. Choose a rail pane, and leave the walk on the one step 3 goes through.
-    await chooseRailPane(page, "Tokens");
+    await chooseRailPane(page, "Design tokens");
     await expect(
       page.locator('[data-yunari-panel="tokens"]'),
       "the Tokens pane after the rail choice",

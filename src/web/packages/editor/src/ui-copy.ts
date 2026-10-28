@@ -108,7 +108,7 @@ export const uiCopy = {
       add: "Add",
       /** Every declared file, its import and placement, and the finder link. */
       assets: "Assets",
-      tokens: "Tokens",
+      tokens: "Design tokens",
       /** The artboard, background, metadata and reference panels — one pane,
        *  because they are the document's own settings. */
       document: "Document",
@@ -1882,7 +1882,7 @@ export const uiCopy = {
     /** Shown by a numeric field when an edit is refused, whether it could not be
         read as a number or fell outside the field's range. */
     invalidNumber: "That value cannot be applied. Enter a number in range.",
-    palette: "Palette",
+    paintTokens: "Paint tokens",
     /** A palette token's own two paint kinds, as the Paint chooser names them.
      * `linearGradient` is not the `gradient` it is stored as. */
     paintKinds: { solid: "Solid", gradient: "Linear gradient" },
@@ -1896,27 +1896,21 @@ export const uiCopy = {
     newColour: "New colour",
     newType: "New type",
     /** Each pane's own chooser, named by what it lists rather than by the pane
-     * it sits in — the section heading already says Palette or Type presets. */
+     * it sits in — the section heading already says Paint tokens or Type
+     * tokens. */
     colourToken: "Colour token",
     typeToken: "Type token",
-    /** What the Tokens pane says the *selection* is set in, as against what its
-     *  chooser is browsing. The five cases must each read their own way: a
-     *  default that looks like an answer is `vg-094`, a dangling reference is a
-     *  third answer that collapses into neither empty one, and a group or
-     *  multi-selection is a fourth — one whose own presets are its children's,
-     *  which is what `selection-inspector` says for it too. */
-    selectionSetTo: (name: string) => `The selection is set to ${name}.`,
-    selectionUnresolved: (ref: string) =>
-      `The selection is set to ${ref}, which no longer resolves.`,
-    selectionChildrenTypes: "The selection's type tokens are its children's.",
-    selectionNoType: "The selection carries no type token.",
-    selectionEmpty: "Nothing selected.",
     paint: "Paint",
     addColour: "Add colour",
     addStop: "Add stop",
     removeStop: "Remove stop",
     deleteColour: "Delete colour",
     reassign: "Reassign to",
+    /** What the reassignment select says before a target is chosen. The delete
+     *  route defaults to *no* target, so this is the only thing the box says
+     *  before the author has made the choice — never a token they might miss
+     *  and keep by accident. */
+    reassignPlaceholder: "Choose a token",
     typeTokens: "Type tokens",
     addType: "Add type",
     deleteType: "Delete type",

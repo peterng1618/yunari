@@ -159,7 +159,7 @@ it("draws rows with a swatch, a name and a usage figure and no fields", async ()
     "[data-yunari-palette-picker]",
     "[data-yunari-palette-replacement]",
     "[data-yunari-palette-delete]",
-    "[data-yunari-palette-users]",
+    "[data-yunari-token-users]",
   ]) {
     expect(host.querySelector(selector), selector).toBeNull();
   }
@@ -237,5 +237,5 @@ it("states a missing reading rather than fabricating a zero when there is no sce
   expect(usageFigure(host, "background")).not.toBe("0");
   // With no scene there is no list of users either, and the list never draws
   // one: that is the inspector's, read from the same getter.
-  expect(host.querySelector("[data-yunari-palette-users]")).toBeNull();
+  expect(host.querySelector("[data-yunari-token-users]")).toBeNull();
 });

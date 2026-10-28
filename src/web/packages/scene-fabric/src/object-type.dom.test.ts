@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import type { TypeToken } from "@yunari/renderer-core";
-import { type FabricObject, StaticCanvas, Textbox } from "fabric/es";
+import { type FabricObject, Group, StaticCanvas, Textbox } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import { YUNARI_TEXT_PROPERTY } from "./fabric-text.js";
 import {
   applyObjectTypeTokens,
+  objectTypeTokenReferences,
   reassignObjectTypeTokenReferences,
 } from "./object-type.js";
 import { reviveScene, serialiseScene } from "./persist.js";
@@ -93,6 +94,96 @@ describe("token reassignment", () => {
     );
 
     expect(object).toMatchObject({ fontFamily: "Inter", fontWeight: 600 });
+  });
+});
+
+const REF = "typeTokens.tracked" as const;
+
+/** The ids the same walk reports, sorted so order is never the assertion. */
+function referencedBy(objects: readonly FabricObject[]): readonly string[] {
+  return objectTypeTokenReferences(objects, REF)
+    .map((use) => use.objectId)
+    .sort();
+}
+
+describe("where a type token is referenced", () => {
+  it("reports one object per object, however many runs name it", () => {
+    // Three runs, one object. The number an author reads is the object, so
+    // three must not print as 3.
+    const object = textbox("metric", [
+      literal(REF),
+      literal(REF),
+      literal(REF),
+    ]);
+
+    expect(objectTypeTokenReferences([object], REF)).toHaveLength(1);
+  });
+
+  it("reports nothing for a token no object carries", () => {
+    expect(referencedBy([textbox("a", [literal("typeTokens.other")])])).toEqual(
+      [],
+    );
+    expect(
+      objectTypeTokenReferences(
+        [textbox("a", [literal(REF)])],
+        "typeTokens.unused",
+      ),
+    ).toEqual([]);
+    // A run with no token at all is not a reference to any of them.
+    expect(
+      objectTypeTokenReferences(
+        [textbox("a", [{ kind: "literal", text: "CPU" }])],
+        REF,
+      ),
+    ).toEqual([]);
+  });
+
+  it("finds an object inside a group, where a root-only walk finds nothing", () => {
+    const grouped = new Group([textbox("inner", [literal(REF)])]);
+
+    expect(referencedBy([grouped])).toEqual(["inner"]);
+  });
+
+  it("finds a group nested two deep", () => {
+    const outer = new Group([new Group([textbox("deep", [literal(REF)])])]);
+
+    expect(referencedBy([outer])).toEqual(["deep"]);
+  });
+
+  it("names the runs that carry the token", () => {
+    const object = textbox("text", [literal("typeTokens.other"), literal(REF)]);
+
+    expect(objectTypeTokenReferences([object], REF)).toEqual([
+      { objectId: "text", name: "text", runs: [1] },
+    ]);
+  });
+
+  it("reads the name the author gave an object, and falls back to its id", () => {
+    const named = textbox("metric-1", [literal(REF)]);
+    named.set("name", "Card title");
+
+    expect(objectTypeTokenReferences([named], REF)).toEqual([
+      { objectId: "metric-1", name: "Card title", runs: [0] },
+    ]);
+  });
+
+  it("reports what the delete path will rewrite", () => {
+    const objects = [
+      textbox("metric", [literal(REF)]),
+      new Group([textbox("inner", [literal(REF)])]),
+      textbox("other", [literal("typeTokens.kept")]),
+    ];
+
+    expect(referencedBy(objects)).toEqual(["inner", "metric"]);
+
+    const changed = reassignObjectTypeTokenReferences(
+      { getObjects: () => objects } as never,
+      REF,
+      "typeTokens.replacement",
+    );
+
+    expect(changed).toBe(2);
+    expect(referencedBy(objects)).toEqual([]);
   });
 });
 

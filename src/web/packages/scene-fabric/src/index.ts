@@ -84,7 +84,9 @@ export {
 } from "./object-paint.js";
 export {
   applyObjectTypeTokens,
+  objectTypeTokenReferences,
   reassignObjectTypeTokenReferences,
+  type TypeTokenReference,
 } from "./object-type.js";
 export {
   objectPaletteReferences,

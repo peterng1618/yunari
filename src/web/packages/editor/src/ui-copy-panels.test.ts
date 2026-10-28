@@ -157,12 +157,13 @@ it("leaves the mounted panels with no copy of their own", async () => {
     typeTokens: tokenPresets,
   });
   // The fourth mount, non-vacuous with a number: a panel that rendered nothing
-  // would leave the net passing without reading one of its words. Three is the
-  // labels a free token renders — family, weight and reassignment; Delete is a
-  // button, read below.
+  // would leave the net passing without reading one of its words. Two is the
+  // labels a free token renders — family and weight; Delete is a button, read
+  // below, and the reassignment select's label arrives only after a Delete
+  // press, so the mount above cannot see it.
   expect(
     root.querySelectorAll("[data-yunari-token-fields] label"),
-  ).toHaveLength(3);
+  ).toHaveLength(2);
 
   // The palette's paint kinds, which are copy. They live in a Base UI popup that
   // exists only while it is open, so they are read the way an author reads them.

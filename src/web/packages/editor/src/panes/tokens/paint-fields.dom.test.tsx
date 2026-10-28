@@ -659,18 +659,43 @@ it("keeps the fraction the stop's own percent well types", async () => {
   });
 });
 
-it("carries a replacement into the delete, and deletes through the port", async () => {
+it("reveals the reassignment on the first delete press and deletes on the second", async () => {
   const remove = vi.fn();
   const { host } = await mount(PAINT_LIST_PALETTE, "background", {
     onDelete: remove,
   });
 
+  // Nothing is destroyed by a press alone, and the replacement box is not on
+  // screen until the author asks to delete: it is a confirmation, not a field.
+  expect(host.querySelector("[data-yunari-palette-replacement]")).toBeNull();
+
+  const button = host.querySelector<HTMLButtonElement>(
+    "[data-yunari-palette-delete]",
+  )!;
+  await click(button);
+  expect(remove).not.toHaveBeenCalled();
+
   await chooseIn("[data-yunari-palette-replacement]", "accent");
-  await click(
-    host.querySelector<HTMLButtonElement>("[data-yunari-palette-delete]")!,
-  );
+  await click(button);
 
   expect(remove).toHaveBeenCalledWith("background", "accent");
+});
+
+it("refuses the second press until a replacement is chosen", async () => {
+  const remove = vi.fn();
+  const { host } = await mount(PAINT_LIST_PALETTE, "background", {
+    onDelete: remove,
+  });
+
+  const button = host.querySelector<HTMLButtonElement>(
+    "[data-yunari-palette-delete]",
+  )!;
+  await click(button);
+  await click(button);
+
+  // The box starts empty rather than on "None", so there is no default token
+  // to be deleted into: the author has to name one.
+  expect(remove).not.toHaveBeenCalled();
 });
 
 it("names the objects a token is used by", async () => {
@@ -681,6 +706,6 @@ it("names the objects a token is used by", async () => {
   });
 
   expect(
-    host.querySelector("[data-yunari-palette-users]")?.textContent,
+    host.querySelector("[data-yunari-token-users]")?.textContent,
   ).toContain("Card title");
 });

@@ -587,6 +587,47 @@ it("a refused select cannot be changed by pointer or keyboard", async () => {
   expect(applied).toHaveBeenCalledWith("mem.used");
 });
 
+/**
+ * An empty value is "nothing chosen", and the trigger says so.
+ *
+ * The delete rows open on no target on purpose: the author has to choose what
+ * their references move to before anything is destroyed. That state is the
+ * primitive's own — `hasSelectedValue` is false for `""` — so the placeholder
+ * is drawn by Base UI rather than simulated with a synthetic "None" option.
+ * This is the probe that keeps it true: if the primitive ever treats `""` as a
+ * selection, the trigger would print the empty string and the row would look
+ * chosen when it is not.
+ */
+it("prints a placeholder while nothing is chosen, and the value once one is", async () => {
+  await mount(
+    <ControlSelect
+      label="Reassign to"
+      value=""
+      options={SHOWS}
+      onChange={vi.fn()}
+      placeholder="Choose a token"
+    />,
+  );
+  expect(labelled("Reassign to").textContent).toContain("Choose a token");
+  expect(
+    document.querySelector("[data-placeholder]"),
+    "the primitive did not enter its empty state, so the placeholder proves nothing",
+  ).not.toBeNull();
+
+  await mount(
+    <ControlSelect
+      label="Reassign to"
+      value="cpu.load"
+      options={SHOWS}
+      onChange={vi.fn()}
+      placeholder="Choose a token"
+    />,
+  );
+  expect(labelled("Reassign to").textContent).toContain("CPU load");
+  expect(labelled("Reassign to").textContent).not.toContain("Choose a token");
+  expect(document.querySelector("[data-placeholder]")).toBeNull();
+});
+
 it("a refused segmented choice cannot be changed by pointer or arrow keys", async () => {
   const refused = vi.fn();
   await mount(

@@ -5,7 +5,6 @@ import type {
 } from "@yunari/renderer-core";
 import { isTypeTokenRole } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -14,7 +13,6 @@ import {
 } from "../../components/ui/control-select.js";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
 import type { TokenRef } from "../../editor-shell/shell-stores.js";
-import type { PaletteTokenUse } from "../../palette-manager/panel.js";
 import type { TypeTokens } from "../../type-preset-manager/panel.js";
 import {
   FONT_FINDER_ID,
@@ -23,7 +21,10 @@ import {
 } from "../../type-token-manager/font-actions.js";
 import { orderedTokens, tokenName } from "../../type-token-manager/name.js";
 import { uiCopy } from "../../ui-copy.js";
+import { LayerUses } from "./layer-uses.js";
 import { PaintFields } from "./paint-fields.js";
+import { TokenDelete } from "./token-delete.js";
+import type { TokenUsage } from "./token-use.js";
 
 /**
  * The selected token's own properties, in the right column — the half of the
@@ -49,9 +50,9 @@ import { PaintFields } from "./paint-fields.js";
  * editable name, role select and the old size/leading/tracking fields are gone
  * with the stored fields (ruling 0128).
  *
- * **Usage is not here yet.** The spec lists a preset's usage, but no counter
- * exists and the reference walk is Task 17's — this file does not invent one.
- * A paint's users list already has its walk, through the paint port's `usage`.
+ * **Usage is listed for both kinds.** Each reads a live walk of the scene
+ * (`paletteTokenUsage` / `typeTokenUsage`) through the port below, so the layers
+ * a token is used by and the figure beside its row cannot disagree.
  */
 export interface TokenInspectorPanel {
   readonly root: HTMLElement;
@@ -105,6 +106,13 @@ export interface TokenInspectorActions {
   readonly importLocalFont?: () => void;
   /** Opens the font finder. Drawn only when supplied, like the picker above. */
   readonly openFontFinder?: () => void;
+  /** The objects each type token is linked to, or `undefined` when the mount has
+   *  no scene. Re-read per draw, as the paint half's `usage` is. */
+  readonly typeUsage?: (() => TokenUsage) | undefined;
+  /** Selects one of those objects on the canvas and shows the Composition pane.
+   *  Absent where the mount has no shell, and a layer entry is then a reading
+   *  rather than a link. */
+  readonly onRevealLayer?: ((objectId: string) => void) | undefined;
   /** The paint half: the palette the ref names, its document writes and its
    *  users walk. Absent when the mount has no palette behind it. */
   readonly paints:
@@ -116,9 +124,7 @@ export interface TokenInspectorActions {
           | ((id: string, replacement: string) => void)
           | undefined;
         /** The objects each token is linked to; re-read per draw, as today. */
-        readonly usage:
-          | (() => Readonly<Record<string, readonly PaletteTokenUse[]>>)
-          | undefined;
+        readonly usage: (() => TokenUsage) | undefined;
       }
     | undefined;
 }
@@ -179,6 +185,7 @@ function TokenInspector(props: {
         entry={entry}
         palette={palette}
         usage={paints.usage}
+        onRevealLayer={actions.onRevealLayer}
         onChange={paints.onChange}
         onSettled={paints.onSettled}
         onDelete={paints.onDelete}
@@ -209,6 +216,9 @@ function TokenFields(props: {
 }): React.JSX.Element {
   const { id, entry, presets, actions } = props;
   const value = entry;
+  // The same live walk the list's figures read, so the layers named here and
+  // the count beside the row are one answer about one scene.
+  const uses = actions.typeUsage?.();
   const put = (next: TypeToken): void => {
     actions.onChange({ ...presets, [id]: next });
   };
@@ -296,6 +306,12 @@ function TokenFields(props: {
       )}
       {isTypeTokenRole(id) ? null : (
         <Deletion id={id} presets={presets} actions={actions} />
+      )}
+      {uses === undefined ? null : (
+        <LayerUses
+          uses={uses[id] ?? []}
+          onRevealLayer={actions.onRevealLayer}
+        />
       )}
     </div>
   );
@@ -465,10 +481,10 @@ function ReadOnlyPair(props: {
 }
 
 /**
- * The reassignment-on-delete row: the token this one's references move to, and
- * the deletion itself. The delete is refused when there is nothing to move them
- * to, because deleting the last unroled token would strand every reference to
- * it. Drawn for an unroled token only: a role id is required by the validator.
+ * The deletion row: the reassignment this token's references move to, and the
+ * deletion itself. Drawn for an unroled token only — a role id is required by
+ * the validator — and the reassignment opens on the press, empty, because
+ * deleting the last unroled token would strand every reference to it.
  */
 function Deletion(props: {
   readonly id: string;
@@ -476,37 +492,19 @@ function Deletion(props: {
   readonly actions: TokenInspectorActions;
 }): React.JSX.Element {
   const { id, presets, actions } = props;
-  const [picked, setPicked] = useState<string | undefined>(undefined);
   const options = orderedTokens({ typeTokens: presets })
     .filter((candidate) => candidate.id !== id)
     .map(({ id: candidate, token }) => ({
       id: candidate,
       name: tokenName(candidate, token),
     }));
-  const replacement =
-    picked !== undefined && picked !== id && presets[picked] !== undefined
-      ? picked
-      : options[0]?.id;
   return (
-    <>
-      <ControlSelect
-        label={uiCopy.panels.reassign}
-        data={{ "data-yunari-token-replacement": "" }}
-        value={replacement ?? ""}
-        options={options}
-        onChange={setPicked}
-      />
-      <button
-        type="button"
-        data-yunari-token-delete=""
-        disabled={replacement === undefined}
-        onClick={() => {
-          if (replacement !== undefined) actions.onDelete(id, replacement);
-        }}
-        className={`${plainButtonClasses} text-hot disabled:text-faint`}
-      >
-        {uiCopy.panels.deleteType}
-      </button>
-    </>
+    <TokenDelete
+      options={options}
+      label={uiCopy.panels.deleteType}
+      selectData={{ "data-yunari-token-replacement": "" }}
+      buttonData={{ "data-yunari-token-delete": "" }}
+      onDelete={(replacement) => actions.onDelete(id, replacement)}
+    />
   );
 }

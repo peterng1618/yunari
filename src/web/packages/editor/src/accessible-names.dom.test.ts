@@ -242,16 +242,16 @@ describe("editor panels", () => {
       "INPUT[type=][aria-hidden]", // Orientation
       "INPUT[type=][aria-hidden]", // Resolution
       // The selected type token's inspector, mounted after the palette pane:
-      // its family, weight and reassignment choosers, each a `ControlSelect`'s
-      // value carrier. The palette's own chooser is gone with the field set it
-      // browsed, so the Tokens pane contributes none of these any more.
+      // its family and weight choosers, each a `ControlSelect`'s value carrier.
+      // Its reassignment chooser is not here because it is not on screen: the
+      // box is revealed by the first Delete press and starts empty
+      // (`decisions/0130`), so nothing before that point can reach it.
       "INPUT[type=][aria-hidden]", // Family (token)
       "INPUT[type=][aria-hidden]", // Weight (token)
-      "INPUT[type=][aria-hidden]", // Reassign (token)
       // The paint section of the same inspector, after the preset section: its
-      // kind switch, the gradient editor's fifteen preset rows (each a Base UI
-      // `Radio`'s value carrier, mounted because `glow` is a gradient), and its
-      // reassignment chooser.
+      // kind switch, and the gradient editor's fifteen preset rows (each a Base
+      // UI `Radio`'s value carrier, mounted because `glow` is a gradient). Its
+      // reassignment chooser waits for a Delete press the same way.
       "INPUT[type=][aria-hidden]", // Paint kind
       "INPUT[type=radio][aria-hidden]", // Vital Ocean
       "INPUT[type=radio][aria-hidden]", // Kale Salad
@@ -268,7 +268,6 @@ describe("editor panels", () => {
       "INPUT[type=radio][aria-hidden]", // Aqua Spray
       "INPUT[type=radio][aria-hidden]", // Mello Yellow
       "INPUT[type=radio][aria-hidden]", // Dusty Cactus
-      "INPUT[type=][aria-hidden]", // Reassign (paint)
       // The run editor's five: four `ControlSelect`s and one `ControlSwatch`,
       // which is `SelectControl` with an adornment — each a Base UI select's
       // value carrier.
@@ -373,16 +372,17 @@ describe("editor panels", () => {
   it("mounts the token inspector, so the fields it adds are audited", () => {
     // An entry in `mountPanels` that renders nothing is the same vacuity the
     // file's header warns about, so this reads the controls back rather than
-    // trusting the mount: an unroled token renders family, weight, the
-    // reassignment select and Delete. This is the token section; `mountPanels`
-    // mounts the paint section as a second inspector, after it.
+    // trusting the mount: an unroled token renders family, weight and Delete —
+    // the reassignment select arrives only after a Delete press. This is the
+    // token section; `mountPanels` mounts the paint section as a second
+    // inspector, after it.
     const { root } = mountPanels();
     const inspector = root.querySelector("[data-yunari-token-inspector]");
     expect(inspector).not.toBeNull();
     const controls = Array.from(
       inspector?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [],
     ).filter(reached);
-    expect(controls).toHaveLength(4);
+    expect(controls).toHaveLength(3);
     expect(controls.map((control) => accessibleName(control))).not.toContain(
       "",
     );

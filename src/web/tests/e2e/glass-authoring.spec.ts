@@ -396,7 +396,7 @@ test.describe("authoring frosted glass through the inspector", () => {
     // then have nothing to show. Changing the outline is a palette edit the
     // treatment has to survive, with the backdrop still visible behind it. The
     // palette panel is the Tokens pane's, so it is in the Tokens pane.
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     await page.locator('[data-yunari-palette-token-row="edge"]').click();
     // The pane has one trigger and the exact-value field lives in its popover.
     await page.locator("[data-yunari-palette-picker]").click();

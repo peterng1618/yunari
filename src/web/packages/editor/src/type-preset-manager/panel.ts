@@ -5,7 +5,8 @@ import { createRoot, type Root } from "react-dom/client";
 import type { TokenSelectionStore } from "../editor-shell/shell-stores.js";
 import type { CuratedFontFace } from "../font-catalog.js";
 import { newTypeToken } from "../new-fabric-theme-globals.js";
-import { type PresetSelection, TokenList } from "../panes/tokens/token-list.js";
+import { TokenList } from "../panes/tokens/token-list.js";
+import type { TokenUsage } from "../panes/tokens/token-use.js";
 import { freePresetId } from "../type-preset-apply.js";
 import { tokenIdOfFace } from "../type-token-manager/name.js";
 
@@ -39,11 +40,11 @@ export interface TypeTokenFontActions {
  * section of the palette panel's under the same Tokens-pane host (R36) — it
  * builds its own section and never reaches into the palette's tree.
  *
- * `selection` is the shell's own projection of the selection, handed in so the
- * list can say what the canvas selection is set in (`vg-094`); `tokenSelection`
- * is the shell's, handed in so a row press selects the token the inspector will
- * edit and so an add that duplicates an existing face can point at it. Both are
- * optional, and a panel built without them reads as nothing selected.
+ * `tokenSelection` is the shell's, handed in so a row press selects the token
+ * the inspector will edit and so an add that duplicates an existing face can
+ * point at it; `usage` is the live scene walk that puts a figure beside each
+ * row. All are optional, and a panel built without them selects nothing and
+ * says the scene is not set rather than inventing a count.
  *
  * `onDelete` and `fontActions` stay on the signature even though the list no
  * longer renders a control for either: the session builds `fontActions` for the
@@ -56,8 +57,8 @@ export function createTypeTokenPanel(
   onChange: (presets: TypeTokens) => void,
   onDelete?: (id: string, replacement: string) => void,
   fontActions?: TypeTokenFontActions,
-  selection?: PresetSelection,
   tokenSelection?: TokenSelectionStore,
+  usage?: () => TokenUsage,
 ): TypeTokenPanel {
   const root = document.createElement("section");
   // No `data-yunari-panel` and no title here: `Pane` owns the identity and the
@@ -93,8 +94,8 @@ export function createTypeTokenPanel(
               [freePresetId(current)]: newTypeToken,
             });
           },
-          selection,
           tokenSelection,
+          usage,
         }),
       );
     });

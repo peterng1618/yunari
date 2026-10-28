@@ -1,5 +1,5 @@
-import type { Globals } from "@yunari/renderer-core";
-import { Group, type StaticCanvas } from "fabric/es";
+import { type Globals, objectName } from "@yunari/renderer-core";
+import { type FabricObject, Group, type StaticCanvas } from "fabric/es";
 import { YUNARI_TEXT_PROPERTY } from "./fabric-text.js";
 
 /**
@@ -23,6 +23,55 @@ export function applyObjectTypeTokens(
     return;
   applyTypes(canvas.getObjects(), globals);
   canvas.requestRenderAll();
+}
+
+/** One object that names a type token, and where. */
+export interface TypeTokenReference {
+  /** The object's authored id — the key the layer list and bindings use. */
+  readonly objectId: string;
+  /** The name the author reads, or its id when the object carries none (§75). */
+  readonly name: string;
+  /** Zero-based run indexes that name the token. */
+  readonly runs: readonly number[];
+}
+
+/**
+ * Every object naming `ref`, at any depth.
+ *
+ * The read side of the same walk `reassignObjectTypeTokenReferences` performs.
+ * The two must stay one traversal: a panel reading "3 uses" while a delete
+ * guard counts something else is how a token is removed from under a live
+ * object, and the grouped case is the one that regresses — a root-only walk
+ * cannot see inside a group, so it calls a token unused while a grouped object
+ * is set in it.
+ *
+ * One entry per **object**, not per run: a panel whose runs all name the token
+ * is one object the author has to look at.
+ */
+export function objectTypeTokenReferences(
+  objects: readonly FabricObject[],
+  ref: `typeTokens.${string}`,
+): readonly TypeTokenReference[] {
+  const found: TypeTokenReference[] = [];
+  const visit = (candidates: readonly FabricObject[]): void => {
+    for (const object of candidates) {
+      const runs: number[] = [];
+      const text = object.get(YUNARI_TEXT_PROPERTY);
+      if (isAuthoredText(text)) {
+        text.runs.forEach((run, index) => {
+          if (run.typeToken === ref) runs.push(index);
+        });
+      }
+      if (runs.length > 0) {
+        const objectId = object.get("id");
+        const id = typeof objectId === "string" ? objectId : "";
+        found.push({ objectId: id, name: objectName(object) ?? id, runs });
+      }
+      if (object instanceof Group) visit(object.getObjects());
+    }
+  };
+  visit(objects);
+  return found;
 }
 
 /** Rewrite persisted text-run preset references before a preset is removed. */

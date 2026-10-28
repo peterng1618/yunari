@@ -16,10 +16,10 @@ import { AssetManager } from "./asset-manager/index.js";
 import { EditorDocument } from "./editor-document.js";
 import { EditorSession } from "./editor-session.js";
 import {
+  type PresetSelection,
   SelectionStore,
   TokenSelectionStore,
 } from "./editor-shell/shell-stores.js";
-import type { PresetSelection } from "./panes/tokens/token-list.js";
 import { idleCrop } from "./selection-inspector/idle-crop.test-stage.js";
 import { fontAssetId } from "./type-preset-apply.js";
 

@@ -22,7 +22,7 @@ import { isDesktopSurface } from "./surface.js";
 
 const EDITOR = "http://127.0.0.1:4174/";
 
-const PANELS = ["Theme settings", "Palette", "Type presets"];
+const PANELS = ["Theme settings", "Paint tokens", "Type tokens"];
 
 /** The Tokens pane's paint controls, in the states that render them all.
  *
@@ -165,7 +165,7 @@ test.describe("the settings panels name every control", () => {
     // live in the left column, hidden until their slot is asked for — not
     // behind a tab in the inspector. This opens the pane most cases read; a
     // case that needs the Document pane opens it itself.
-    await openPane(page, "Tokens");
+    await openPane(page, "Design tokens");
     // The gradient and delete branches render controls a solid token does not,
     // so the audit has to open the same branches an author opens. The pane is
     // lists-only: a row press selects the token, and its fields — the kind
@@ -174,6 +174,10 @@ test.describe("the settings panels name every control", () => {
     // The gradient branch renders the track, its marks and its two wells, which
     // a solid token does not, so the audit opens the branch an author opens.
     await chooseIn(page, "[data-yunari-palette-kind]", "gradient");
+    // The reassignment select is a confirmation rather than an always-visible
+    // field, so the audit presses Delete once to reveal it. A second press is
+    // what deletes, and the audit never makes one.
+    await page.locator("[data-yunari-palette-delete]").click();
   });
 
   test("no control is unnamed", async ({ page }) => {
@@ -210,6 +214,8 @@ test.describe("the settings panels name every control", () => {
     const presetRow = page.locator('[data-yunari-type-preset-row="type"]');
     await expect(presetRow).toBeVisible();
     await presetRow.click();
+    // Revealed rather than always drawn, exactly as the paint section's is.
+    await page.locator("[data-yunari-token-delete]").click();
     await audit(PRESET_CONTROLS);
     // The weight is drawn as a reading in this scenario, not skipped: the fresh
     // theme declares no faces for the minted token's family, so the row prints

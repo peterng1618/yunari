@@ -487,7 +487,7 @@ export async function addColour(
 ): Promise<void> {
   // The palette panel is the Tokens pane's, so it lives in the Tokens pane
   // and is hidden until the slot is asked for.
-  await openPane(page, "Tokens");
+  await openPane(page, "Design tokens");
   await page.getByRole("button", { name: "Add colour", exact: true }).click();
   await fill(page, "[data-yunari-palette-name]", name);
   // The exact-value field is the picker's, in the popover's portal: the pane

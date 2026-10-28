@@ -6,9 +6,9 @@ import {
   useTokenSelection,
 } from "../../editor-shell/shell-stores.js";
 import { newTokenPaint } from "../../new-fabric-theme-globals.js";
-import type { PaletteTokenUse } from "../../palette-manager/panel.js";
 import { paletteTokenIds } from "../../palette-manager/token-list.js";
 import { uiCopy } from "../../ui-copy.js";
+import { type TokenUsage, usageFigure } from "./token-use.js";
 
 /**
  * The Tokens pane's paint library as a list: every token as one pressable row,
@@ -38,9 +38,7 @@ export interface PaintListProps {
   /** The objects each token is linked to, or `undefined` when the pane has no
    *  scene to read. A function, not a record: the scene changes under the pane,
    *  so the figure is re-read on every draw rather than frozen at construction. */
-  readonly usage:
-    | (() => Readonly<Record<string, readonly PaletteTokenUse[]>>)
-    | undefined;
+  readonly usage: (() => TokenUsage) | undefined;
   readonly onChange: (palette: FabricPalette) => void;
   /** The settled boundary of the one discrete edit left in the pane: adding a
    *  token has no gesture to settle behind it, and without the entry a later
@@ -105,7 +103,7 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
                   data-yunari-palette-usage=""
                   className="ml-auto flex-none text-xs text-muted tabular-nums"
                 >
-                  {figureFor(id, uses)}
+                  {usageFigure(uses, id)}
                 </span>
               </button>
             </li>
@@ -122,16 +120,6 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
       </button>
     </div>
   );
-}
-
-/** The figure beside a token. A missing reading is stated, never a default: with
- *  no scene to read the pane says so rather than fabricating a zero (§97). */
-function figureFor(
-  id: string,
-  uses: Readonly<Record<string, readonly PaletteTokenUse[]>> | undefined,
-): string {
-  if (uses === undefined) return uiCopy.panels.notSet;
-  return String((uses[id] ?? []).length);
 }
 
 /** The paint as a CSS background: the colour itself, or the sweep a gradient

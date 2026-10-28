@@ -1,6 +1,11 @@
 import type { ListingCategory } from "@yunari/renderer-core";
 import { useCallback, useSyncExternalStore } from "react";
-import type { EditorShellBridge, EditorShellSnapshot } from "./bridge.js";
+import type {
+  ActiveKind,
+  EditorShellBridge,
+  EditorShellSnapshot,
+} from "./bridge.js";
+import type { RailSlot } from "./rail.js";
 
 /** The shell snapshot as external mutable state — the selection, which Fabric
  * owns, and the document's identity, which the session does — so every reader
@@ -10,6 +15,22 @@ export interface SelectionSnapshot extends EditorShellSnapshot {
    *  shell's, so the session reports it; `undefined` means no document, which
    *  must not read as "0 files". */
   readonly assetCount: number | undefined;
+}
+
+/**
+ * The selection as a caller outside the shell reads it: which type token the
+ * canvas selection is set in, and whether anything is selected at all.
+ *
+ * Narrower than `SelectionStore` on purpose, so a caller that only asks about
+ * the selection — the session's font picker — does not need a bridge behind it.
+ */
+export interface PresetSelection {
+  subscribe(listener: () => void): () => void;
+  get(): {
+    readonly selectedCount: number;
+    readonly activeKind: ActiveKind;
+    readonly selectionPresetId: string | undefined;
+  };
 }
 
 export class SelectionStore {
@@ -226,6 +247,48 @@ export class FinderStore {
 }
 
 export function useFinder(store: FinderStore): FinderState {
+  return useSyncExternalStore(store.subscribe, store.get, store.get);
+}
+
+/** A pane a caller outside React asked to see.
+ *
+ *  The nonce is what makes two requests for the same slot two requests: the
+ *  store compares nothing but identity, so a second press after a manual close
+ *  still reaches the shell. */
+export interface PaneRequest {
+  readonly slot: RailSlot;
+  readonly nonce: number;
+}
+
+/**
+ * Showing a rail slot from outside React, as external state.
+ *
+ * The rail's slot is `Shell`'s own `useState`, because the pane column, its
+ * scroll offsets and the canvas refit are one gesture (`choosePane`). A link
+ * inside the token inspector is outside that component, so it asks through a
+ * store — the shape `FinderStore` and `SheetStore` already use — and `Shell`
+ * turns the request into a *show*, never a toggle: "let me see this layer"
+ * must not close the pane the layer lives in.
+ */
+export class PaneRequestStore {
+  #request: PaneRequest | undefined;
+  #nonce = 0;
+  readonly #listeners = new Set<() => void>();
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  };
+  readonly get = (): PaneRequest | undefined => this.#request;
+  show(slot: RailSlot): void {
+    this.#nonce += 1;
+    this.#request = { slot, nonce: this.#nonce };
+    for (const listener of this.#listeners) listener();
+  }
+}
+
+export function usePaneRequest(
+  store: PaneRequestStore,
+): PaneRequest | undefined {
   return useSyncExternalStore(store.subscribe, store.get, store.get);
 }
 

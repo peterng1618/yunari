@@ -802,24 +802,61 @@ describe("token inspector", () => {
       typeTokens: PRESETS,
     });
 
-    // The replacement names the remaining tokens in role-first order — the
-    // token being deleted is not a place its references can go — and defaults
-    // to the first, which is the choice Delete commits. `body` is a role, and
-    // roles sort first.
-    const replacement = panel.root.querySelector(
-      "[data-yunari-token-replacement]",
-    ) as HTMLElement;
+    // The replacement box is not on the panel until the author asks to delete,
+    // and it starts at nothing rather than at a default token.
     expect(
-      replacement
-        .querySelector("[data-yunari-value]")
-        ?.getAttribute("data-yunari-value"),
-    ).toBe("body");
+      panel.root.querySelector("[data-yunari-token-replacement]"),
+    ).toBeNull();
 
     const remove = panel.root.querySelector(
       "[data-yunari-token-delete]",
     ) as HTMLButtonElement;
     await click(remove);
+    expect(write.onDelete).not.toHaveBeenCalled();
+
+    // The list names the remaining tokens in role-first order — the token being
+    // deleted is not a place its references can go. `body` is a role, and roles
+    // sort first.
+    expect(valueOf(panel.root, "[data-yunari-token-replacement]")).toBe("");
+    await chooseIn(panel.root, "[data-yunari-token-replacement]", "body");
+    await click(remove);
     expect(write.onDelete).toHaveBeenCalledWith("caption", "body");
+    panel.destroy();
+  });
+
+  it("lists the layers a preset is set in, each one a link to the layer", async () => {
+    const reveal = vi.fn<(objectId: string) => void>();
+    const panel = createTokenInspectorPanel(document.body, {
+      ...actions(),
+      typeUsage: () => ({
+        caption: [{ objectId: "title", name: "Card title" }],
+      }),
+      onRevealLayer: reveal,
+    });
+    panel.render({ kind: "preset", id: "caption" }, PRESETS, {
+      typeTokens: PRESETS,
+    });
+
+    const users = panel.root.querySelector("[data-yunari-token-users]");
+    expect(users?.textContent).toContain("Card title");
+    const link = users?.querySelector<HTMLButtonElement>(
+      "[data-yunari-token-user='title']",
+    );
+    expect(link?.tagName).toBe("BUTTON");
+    await click(link!);
+    expect(reveal).toHaveBeenCalledWith("title");
+    panel.destroy();
+  });
+
+  it("draws no users list when the scene is unknown", () => {
+    // A pane built without a scene has no reading; an empty list would claim a
+    // measured zero.
+    const panel = createTokenInspectorPanel(document.body, actions());
+    panel.render({ kind: "preset", id: "caption" }, PRESETS, {
+      typeTokens: PRESETS,
+    });
+
+    expect(panel.root.querySelector("[data-yunari-token-users]")).toBeNull();
     panel.destroy();
   });
 
@@ -879,13 +916,21 @@ describe("the paint section", () => {
       typeTokens: PRESETS,
     });
 
-    // The replacement names the other paints only, and defaults to the first.
-    expect(valueOf(panel.root, "[data-yunari-palette-replacement]")).toBe(
-      "accent",
-    );
-    await click(
-      panel.root.querySelector("[data-yunari-palette-delete]") as HTMLElement,
-    );
+    // Same two-press route as the preset section: the box is revealed by the
+    // first press, empty, and names only the other paints.
+    expect(
+      panel.root.querySelector("[data-yunari-palette-replacement]"),
+    ).toBeNull();
+
+    const remove = panel.root.querySelector(
+      "[data-yunari-palette-delete]",
+    ) as HTMLElement;
+    await click(remove);
+    expect(paints.onDelete).not.toHaveBeenCalled();
+    expect(valueOf(panel.root, "[data-yunari-palette-replacement]")).toBe("");
+
+    await chooseIn(panel.root, "[data-yunari-palette-replacement]", "accent");
+    await click(remove);
     expect(paints.onDelete).toHaveBeenCalledWith("background", "accent");
     panel.destroy();
   });
@@ -900,7 +945,7 @@ describe("the paint section", () => {
     });
 
     expect(
-      panel.root.querySelector("[data-yunari-palette-users]")?.textContent,
+      panel.root.querySelector("[data-yunari-token-users]")?.textContent,
     ).toContain("Card title");
 
     // With no scene, the reading is absent rather than an empty list: an empty
@@ -912,7 +957,7 @@ describe("the paint section", () => {
     bare.render({ kind: "paint", id: "background" }, PRESETS, {
       typeTokens: PRESETS,
     });
-    expect(bare.root.querySelector("[data-yunari-palette-users]")).toBeNull();
+    expect(bare.root.querySelector("[data-yunari-token-users]")).toBeNull();
     panel.destroy();
     bare.destroy();
   });

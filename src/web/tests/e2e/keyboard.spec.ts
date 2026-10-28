@@ -487,7 +487,7 @@ test("the palette picker lands beside its trigger, and its tracks answer the arr
   // The palette panel is the Tokens pane's, so it is in the Tokens pane, and
   // the picker belongs to a **solid** token — a gradient's editor is a different
   // surface, which is why the token is named rather than left at the default.
-  await openPane(page, "Tokens");
+  await openPane(page, "Design tokens");
   await page.locator('[data-yunari-palette-token-row="background"]').click();
 
   const trigger = page.getByTestId("picker-trigger");

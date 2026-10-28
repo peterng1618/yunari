@@ -4,13 +4,13 @@
  * The Tokens pane's type-token list.
  *
  * **A row is a selector, not a control.** Pressing it selects the token for the
- * inspector; nothing in the list edits the document, so the cases that drove
- * the removed fields went with them. What a row shows is the specimen `Aa` in
- * the token's own family, its computed name, and its resolution line.
+ * inspector; nothing in the list edits the document. What a row shows is the
+ * specimen `Aa` in the token's own family, its computed name, and its usage
+ * figure — the same three readings the paint list's rows carry.
  *
- * **The resolver is the owner, so the expectation is its answer.** The line's
- * value is `resolveTypeToken`'s own output, never a copy of the "family weight"
- * rule this file would otherwise restate.
+ * **The name is the whole reading.** The token's name is computed from family
+ * and weight, so no second line restates them; the canvas-binding readout that
+ * used to sit above the list went with the rest of the pane's selection copy.
  *
  * `Harness` is the session's half of the contract: an add comes back as a new
  * `presets` prop, exactly as `editor-session`'s `render()` hands one back.
@@ -27,12 +27,12 @@ import {
   TokenSelectionStore,
 } from "../../editor-shell/shell-stores.js";
 import { newTypeToken } from "../../new-fabric-theme-globals.js";
-import { resolveTypeToken } from "../../selection-inspector/appearance.js";
 import { freePresetId } from "../../type-preset-apply.js";
 import type { TypeTokens } from "../../type-preset-manager/panel.js";
 import { tokenName } from "../../type-token-manager/name.js";
 import { uiCopy } from "../../ui-copy.js";
 import { TokenList, type TokenListProps } from "./token-list.js";
+import type { TokenUsage } from "./token-use.js";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -88,8 +88,8 @@ function canvas(initial: {
  *  props. */
 function Harness(props: {
   readonly initial: TypeTokens;
-  readonly selection: TokenListProps["selection"];
   readonly tokenSelection: TokenListProps["tokenSelection"];
+  readonly usage: TokenListProps["usage"];
   readonly change: (presets: TypeTokens) => void;
 }): React.JSX.Element {
   const [presets, setPresets] = useState(props.initial);
@@ -108,60 +108,17 @@ function Harness(props: {
           [freePresetId(presets)]: newTypeToken,
         })
       }
-      selection={props.selection}
       tokenSelection={props.tokenSelection}
+      usage={props.usage}
     />
   );
-}
-
-/**
- * A selection the test drives, shaped like the shell's `SelectionStore`: the
- * snapshot is cached and returned as one object, because
- * `useSyncExternalStore` compares snapshots by identity and a fresh object per
- * read would loop.
- */
-function stage(): {
-  readonly source: NonNullable<TokenListProps["selection"]>;
-  set(
-    presetId: string | undefined,
-    hasSelection: boolean,
-    activeKind?: ActiveKind,
-  ): void;
-} {
-  // A plain object, not a one-object selection: `activeKind` is what tells the
-  // pane a container apart, and "object" is the case that has no children.
-  let snapshot = {
-    selectedCount: 0,
-    activeKind: "object" as ActiveKind,
-    selectionPresetId: undefined as string | undefined,
-  };
-  const listeners = new Set<() => void>();
-  return {
-    source: {
-      subscribe: (listener: () => void) => {
-        listeners.add(listener);
-        return () => {
-          listeners.delete(listener);
-        };
-      },
-      get: () => snapshot,
-    },
-    set(presetId, hasSelection, activeKind = hasSelection ? "object" : "none") {
-      snapshot = {
-        selectedCount: hasSelection ? 1 : 0,
-        activeKind,
-        selectionPresetId: presetId,
-      };
-      for (const listener of listeners) listener();
-    },
-  };
 }
 
 async function mount(
   initial: TypeTokens,
   options: {
-    readonly selection?: TokenListProps["selection"];
     readonly tokenSelection?: TokenListProps["tokenSelection"];
+    readonly usage?: TokenListProps["usage"];
   } = {},
 ): Promise<{
   readonly host: HTMLElement;
@@ -179,8 +136,8 @@ async function mount(
     mounted.render(
       <Harness
         initial={initial}
-        selection={options.selection}
         tokenSelection={options.tokenSelection}
+        usage={options.usage}
         change={change}
       />,
     );
@@ -196,22 +153,13 @@ async function click(target: Element): Promise<void> {
   });
 }
 
-/** A token's resolution value span, by the row that carries the token's id. */
-function resolutionLine(host: HTMLElement, id: string): HTMLElement {
+/** A row's usage figure, by the token id the row carries. */
+function figure(host: HTMLElement, id: string): HTMLElement {
   const value = host.querySelector<HTMLElement>(
-    `[data-yunari-type-preset-row="${id}"] [data-yunari-type-preset-resolution]`,
+    `[data-yunari-type-preset-row="${id}"] [data-yunari-type-preset-usage]`,
   );
-  if (value === null) throw new Error(`no resolution line for ${id}`);
+  if (value === null) throw new Error(`no usage figure for ${id}`);
   return value;
-}
-
-/** The readout the pane states its answer in, as against the list below it. */
-function binding(host: HTMLElement): HTMLElement {
-  const found = host.querySelector<HTMLElement>(
-    "[data-yunari-type-preset-binding]",
-  );
-  if (found === null) throw new Error("the list states no binding");
-  return found;
 }
 
 /** The rows in the order the list draws them. */
@@ -236,16 +184,7 @@ const withRoles: TypeTokens = {
   plain: { family: "Inter" },
 };
 
-/** A library whose *first declared* key is also the one the selection is set
- *  in, so restoring the `Object.keys(presets)[0]` default cannot pass the
- *  "nothing is selected" case by naming some other token. */
-const withNumbers: TypeTokens = {
-  "24-400": { family: "Inter", weight: 400 },
-  body: { family: "Inter" },
-};
-const firstDeclaredPresetId = Object.keys(withNumbers)[0]!;
-
-it("draws each token as a row with a specimen and a resolution, and no input controls", async () => {
+it("draws each token as a row with a specimen and its computed name, and no input controls", async () => {
   // DESIGN.md §5.1–§5.3: a row with a well would read as editable. This row is
   // a selector — one pressable line, nothing to type in.
   const { host } = await mount(withRoles);
@@ -265,21 +204,12 @@ it("draws each token as a row with a specimen and a resolution, and no input con
   expect(specimen?.textContent).toBe("Aa");
   expect(specimen?.style.fontFamily).toBe("Inter");
 
-  // The computed name carries the role word, so no separate badge is drawn.
+  // The computed name carries the role word, so no separate badge is drawn,
+  // and it is the only reading of family and weight on the row.
   expect(row.textContent).toContain(tokenName("heading", withRoles.heading!));
   expect(row.querySelector("[data-yunari-type-preset-role]")).toBeNull();
 
-  const expected = resolveTypeToken(
-    { typeTokens: withRoles },
-    "typeTokens.heading",
-  );
-  expect(resolutionLine(host, "heading").textContent).toBe(expected);
-  expect(resolutionLine(host, "heading").textContent).not.toBe("");
-
   expect(row.querySelector("input, select, textarea")).toBeNull();
-  // The pane is a list: the chooser that browsed it for the deleted field set
-  // is gone with the fields.
-  expect(host.querySelector("[data-yunari-type-preset]")).toBeNull();
 });
 
 it("lists the roles first in heading/body/mono order, then by name", async () => {
@@ -322,106 +252,32 @@ it("selects a token when a row is pressed, and clears the canvas selection", asy
   ).toBe("false");
 });
 
-it("says nothing is selected rather than showing the first declared token", async () => {
-  // The `vg-094` case, first, because it is the whole row: restoring the
-  // `Object.keys(presets)[0]` default must fail here and only here. The readout
-  // is the pane's *answer*, and a default that reads like one is the defect.
-  const selection = stage();
-  const { host } = await mount(withNumbers, { selection: selection.source });
+it("puts each token's usage figure at the end of its row", async () => {
+  // The same reading the paint list carries: how many layers are set in it.
+  const usage: TokenUsage = {
+    body: [
+      { objectId: "a", name: "Title" },
+      { objectId: "b", name: "Body copy" },
+    ],
+    caption: [],
+  };
+  const { host } = await mount(withWeight, { usage: () => usage });
 
-  await act(async () => selection.set(undefined, false));
-
-  const text = binding(host).textContent;
-  expect(text).not.toContain(
-    tokenName(firstDeclaredPresetId, withNumbers[firstDeclaredPresetId]!),
-  );
-  expect(text?.trim(), "an absent answer is stated, not left blank").not.toBe(
-    "",
-  );
+  expect(figure(host, "body").textContent).toBe("2");
+  expect(figure(host, "caption").textContent).toBe("0");
+  // The figure is the row's last reading, after the name.
+  const row = host.querySelector('[data-yunari-type-preset-row="body"]');
+  expect(
+    row?.lastElementChild?.getAttribute("data-yunari-type-preset-usage"),
+  ).not.toBeNull();
 });
 
-it("names the token the selected run is set in by its computed name", async () => {
-  // The binding reads what the shell's projection reports — never a second walk
-  // of the scene — and prints the token's computed name.
-  const selection = stage();
-  const { host } = await mount(withNumbers, { selection: selection.source });
+it("says the scene is not set rather than inventing a count when there is no usage", async () => {
+  // A pane with no scene has no answer — and `0` is an answer.
+  const { host } = await mount(withWeight);
 
-  await act(async () => selection.set("24-400", true));
-
-  const text = binding(host).textContent;
-  expect(text).toContain(tokenName("24-400", withNumbers["24-400"]!));
-  expect(text).not.toContain(uiCopy.panels.selectionEmpty);
-});
-
-it("says the selection carries no token when it carries none", async () => {
-  // A default and an answer must not read the same: these two lines differ.
-  const selection = stage();
-  const { host } = await mount(withNumbers, { selection: selection.source });
-
-  await act(async () => selection.set(undefined, true));
-  const carriesNone = binding(host).textContent;
-  await act(async () => selection.set(undefined, false));
-  const nothing = binding(host).textContent;
-
-  expect(carriesNone).not.toBe(nothing);
-  expect(carriesNone).toContain(uiCopy.panels.selectionNoType);
-  expect(nothing).toContain(uiCopy.panels.selectionEmpty);
-});
-
-it("reads a group or a multi-selection as its children's tokens, not as none", async () => {
-  // Two surfaces, one selection. `selection-inspector` reads a container's
-  // children for exactly this case (`per-kind-column`'s `childrenAppearance`),
-  // so a pane that told the author its selection "carries no type token" would
-  // contradict the column beside it. A container is not a failed lookup.
-  const selection = stage();
-  const { host } = await mount(withNumbers, { selection: selection.source });
-
-  await act(async () => selection.set(undefined, true, "group"));
-  const container = binding(host).textContent;
-
-  expect(container).toContain(uiCopy.panels.selectionChildrenTypes);
-  expect(container).not.toContain(uiCopy.panels.selectionNoType);
-  expect(container).not.toContain(uiCopy.panels.selectionEmpty);
-
-  // The branch is bounded to a container with no token to name: an ordinary
-  // object set in none still says so, and a container that *does* carry a
-  // reference still names it rather than folding into the container answer.
-  await act(async () => selection.set(undefined, true, "object"));
-  expect(binding(host).textContent).toContain(uiCopy.panels.selectionNoType);
-  await act(async () => selection.set("24-400", true, "group"));
-  expect(binding(host).textContent).toContain(
-    tokenName("24-400", withNumbers["24-400"]!),
-  );
-});
-
-it("reads a background selection as nothing selected, because it has no type", async () => {
-  // The background is a layer rather than a Fabric object: it carries no type
-  // token, and calling that a failed lookup would name a token the author never
-  // had. `target().kind` is "none" for it, which is the same answer.
-  const selection = stage();
-  const { host } = await mount(withNumbers, { selection: selection.source });
-
-  await act(async () => selection.set(undefined, true, "background"));
-
-  const text = binding(host).textContent;
-  expect(text).toContain(uiCopy.panels.selectionEmpty);
-  expect(text).not.toContain(uiCopy.panels.selectionNoType);
-});
-
-it("reads a dangling reference as unresolved, which is neither empty answer", async () => {
-  // A third answer: the author chose a token the document no longer declares,
-  // so the pane must not fold it into "carries none" or into "nothing
-  // selected" — both would erase the fact that a reference is broken.
-  const selection = stage();
-  const { host } = await mount(withNumbers, { selection: selection.source });
-
-  await act(async () => selection.set("gone", true));
-
-  const text = binding(host).textContent;
-  expect(text).toContain("typeTokens.gone");
-  expect(text).toContain(uiCopy.inspectorFields.unresolved);
-  expect(text).not.toContain(uiCopy.panels.selectionEmpty);
-  expect(text).not.toContain(uiCopy.panels.selectionNoType);
+  expect(figure(host, "body").textContent).toBe(uiCopy.panels.notSet);
+  expect(figure(host, "caption").textContent).not.toBe("0");
 });
 
 it("adds a token under the first free unroled id", async () => {

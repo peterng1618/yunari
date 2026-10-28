@@ -3,14 +3,15 @@ import type {
   FabricPaletteEntry,
   PalettePaint,
 } from "@yunari/renderer-core";
-import { useState } from "react";
 import { ColourPicker } from "../../components/ui/colour-picker.js";
 import { ControlSelect } from "../../components/ui/control-select.js";
 import { ControlText } from "../../components/ui/control-text.js";
 import { GradientEditor } from "../../components/ui/gradient-editor.js";
 import { newTokenPaint } from "../../new-fabric-theme-globals.js";
-import type { PaletteTokenUse } from "../../palette-manager/panel.js";
 import { uiCopy } from "../../ui-copy.js";
+import { LayerUses } from "./layer-uses.js";
+import { TokenDelete } from "./token-delete.js";
+import type { TokenUsage } from "./token-use.js";
 
 /**
  * A selected paint token's own properties, in the right column.
@@ -22,7 +23,8 @@ import { uiCopy } from "../../ui-copy.js";
  *
  * **The users list is a property, not a pane footer.** It reads the same
  * `usage` getter the rows' figures read, per draw, so the objects a token is
- * linked to and the count beside it cannot disagree about the scene.
+ * linked to and the count beside it cannot disagree about the scene. Each
+ * entry is a link to the layer, which is why the port is `onRevealLayer`.
  *
  * **The heading is the token's own name.** A paint has no role word to title the
  * section with the way a preset has "Type preset", and inventing a "Paint token"
@@ -35,9 +37,10 @@ export interface PaintFieldsProps {
   /** The objects each token is linked to, or `undefined` when there is no scene
    *  to read. A function, not a record: the scene changes under the inspector,
    *  so the list is re-read on every draw. */
-  readonly usage:
-    | (() => Readonly<Record<string, readonly PaletteTokenUse[]>>)
-    | undefined;
+  readonly usage: (() => TokenUsage) | undefined;
+  /** Selects one of those objects and shows the layers. Absent where the mount
+   *  has no shell, and the list is then a reading. */
+  readonly onRevealLayer?: ((objectId: string) => void) | undefined;
   readonly onChange: (palette: FabricPalette) => void;
   /** The settled boundary of one commit: a colour gesture's end, or a discrete
    *  edit — the rename, the kind switch. Without the latter they are
@@ -47,7 +50,16 @@ export interface PaintFieldsProps {
 }
 
 export function PaintFields(props: PaintFieldsProps): React.JSX.Element {
-  const { id, entry, palette, usage, onChange, onSettled, onDelete } = props;
+  const {
+    id,
+    entry,
+    palette,
+    usage,
+    onRevealLayer,
+    onChange,
+    onSettled,
+    onDelete,
+  } = props;
   const uses = usage?.();
   const commit = (next: FabricPaletteEntry): void => {
     onChange({ ...palette, [id]: next });
@@ -104,17 +116,7 @@ export function PaintFields(props: PaintFieldsProps): React.JSX.Element {
       )}
       <DeletionControls palette={palette} selected={id} onDelete={onDelete} />
       {uses === undefined ? null : (
-        <>
-          <h3 className="text-xs text-muted">{uiCopy.panels.layers}</h3>
-          <ul
-            data-yunari-palette-users=""
-            className="flex flex-col gap-[var(--space-4)] text-xs text-text"
-          >
-            {(uses[id] ?? []).map((use) => (
-              <li key={use.objectId}>{use.name}</li>
-            ))}
-          </ul>
-        </>
+        <LayerUses uses={uses[id] ?? []} onRevealLayer={onRevealLayer} />
       )}
     </div>
   );
@@ -182,36 +184,18 @@ function DeletionControls(props: {
   readonly onDelete: ((id: string, replacement: string) => void) | undefined;
 }): React.JSX.Element | null {
   const { palette, selected, onDelete } = props;
-  const [picked, setPicked] = useState<string | undefined>(undefined);
   if (onDelete === undefined) return null;
   const options = Object.entries(palette)
     .filter(([id]) => id !== selected)
     .map(([id, entry]) => ({ id, name: entry.name }));
-  const replacement =
-    picked !== undefined && picked !== selected && palette[picked] !== undefined
-      ? picked
-      : options[0]?.id;
   return (
-    <>
-      <ControlSelect
-        label={uiCopy.panels.reassign}
-        data={{ "data-yunari-palette-replacement": "" }}
-        value={replacement ?? ""}
-        options={options}
-        onChange={setPicked}
-      />
-      <button
-        type="button"
-        data-yunari-palette-delete=""
-        disabled={replacement === undefined}
-        onClick={() => {
-          if (replacement !== undefined) onDelete(selected, replacement);
-        }}
-        className="self-start rounded-md border border-edge bg-panel-2 px-[var(--space-6)] py-[var(--space-4)] text-sm text-hot hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:text-faint"
-      >
-        {uiCopy.panels.deleteColour}
-      </button>
-    </>
+    <TokenDelete
+      options={options}
+      label={uiCopy.panels.deleteColour}
+      selectData={{ "data-yunari-palette-replacement": "" }}
+      buttonData={{ "data-yunari-palette-delete": "" }}
+      onDelete={(replacement) => onDelete(selected, replacement)}
+    />
   );
 }
 
