@@ -1949,7 +1949,8 @@ it("does not offer a panel that is already a display", async () => {
 it("states the chosen panel's hardware record and warns on a firmware mismatch", async () => {
   // The record is the driver's statement about this hardware; a device
   // answering a firmware it does not name is the fact a person needs before
-  // wondering why a control does nothing.
+  // wondering why a control does nothing. The row stays even though it is
+  // held: the record is a fact about the device, not about being addable.
   const { container } = await mountHost({
     fallback: null,
     displays: [
@@ -1981,17 +1982,29 @@ it("states the chosen panel's hardware record and warns on a firmware mismatch",
     ],
   });
 
-  const current = must(
-    container.querySelector<HTMLElement>("[data-yunari-panel-current]"),
-    "the chosen panel's hardware record",
+  const row = must(
+    container.querySelector<HTMLElement>(
+      '[data-yunari-panel="7531:262:PANEL0002"]',
+    ),
+    "the held panel's row",
   );
   const copy = uiCopy.hostSettings.panels;
 
-  expect(current.textContent).toContain(copy.maker("TURZX"));
-  expect(current.textContent).toContain(copy.revision("Rev C"));
+  expect(row.textContent).toContain(copy.maker("TURZX"));
+  expect(row.textContent).toContain(copy.revision("Rev C"));
+  expect(
+    must(
+      row.querySelector<HTMLElement>('[data-yunari-panel-held="panel-1"]'),
+      "the row naming the display that holds the panel",
+    ).textContent,
+  ).toContain(copy.heldBy('TURZX 5" Panel'));
+  expect(
+    row.querySelector("[data-yunari-panel-add]"),
+    "a held panel is still offered",
+  ).toBeNull();
 
   const warning = must(
-    current.querySelector<HTMLElement>("[data-yunari-panel-mismatch]"),
+    row.querySelector<HTMLElement>("[data-yunari-panel-mismatch]"),
     "the firmware mismatch warning",
   );
   expect(warning.textContent).toContain("1.90");

@@ -61,16 +61,17 @@ function PanelFacts(props: {
  * Host mode that *creates* a display rather than editing one, which is why it
  * carries its own select and its own action rather than reusing the rows above.
  *
- * A panel that is already a display is left out: the route refuses a second
- * record for one device, so offering it would be a choice whose only outcome is
- * a refusal. The set is compared by the device's ids, which is what the record
- * keys it by.
+ * A panel that is already a display is left out of the offer: the route refuses
+ * a second record for one device, so an add button would be a choice whose only
+ * outcome is a refusal. The row stays, though — a device the owner can see
+ * plugged in is worth a line, and it is where its hardware record belongs. The
+ * set is compared by the device's ids, which is what the record keys it by.
  */
 export function PanelsSection(props: {
   readonly attached: readonly PanelHint[];
-  /** The panel behind the display the region has chosen, when that display is
-   *  a panel. It is already held, so it is stated here rather than offered. */
-  readonly chosen?: PanelHint | undefined;
+  /** What the display driving a held device is called, when this region knows
+   *  that display. Absent falls back to the sentence that it is one. */
+  readonly holderLabel?: ((heldId: string) => string | undefined) | undefined;
   readonly adding: boolean;
   readonly onAdd: (panel: PanelHint) => void;
 }): React.JSX.Element {
@@ -90,23 +91,39 @@ export function PanelsSection(props: {
 
   return (
     <Group testId="panels" name={copy.heading} hint={copy.hint}>
+      {/* **Every attached panel gets a row**, held or free: the hardware record
+          is a fact about the device, not about whether it can be added. */}
       {free.length === 0 ? (
         <p className="text-xs text-muted">{copy.allAdded}</p>
-      ) : (
-        <div className="flex flex-col gap-[var(--space-6)]">
-          {free.map((panel) => {
-            const key = `${panel.vendorId}:${panel.productId}:${panel.serial}`;
+      ) : null}
+      <div className="flex flex-col gap-[var(--space-6)]">
+        {props.attached.map((panel) => {
+          const key = `${panel.vendorId}:${panel.productId}:${panel.serial}`;
+          const holder =
+            panel.heldId === undefined
+              ? undefined
+              : props.holderLabel?.(panel.heldId);
 
-            return (
-              <div
-                key={key}
-                data-yunari-panel={key}
-                className="flex items-center gap-[var(--space-12)] rounded-lg border border-edge bg-panel-2 px-[var(--space-10)] py-[var(--space-8)]"
-              >
-                <span className="flex min-w-0 flex-1 flex-col text-xs text-text">
-                  {panel.label}
-                  <PanelFacts panel={panel} />
+          return (
+            <div
+              key={key}
+              data-yunari-panel={key}
+              className="flex items-center gap-[var(--space-12)] rounded-lg border border-edge bg-panel-2 px-[var(--space-10)] py-[var(--space-8)]"
+            >
+              <span className="flex min-w-0 flex-1 flex-col text-xs text-text">
+                {panel.label}
+                <PanelFacts panel={panel} />
+              </span>
+              {/* A held device says which display drives it instead of offering
+                  a second claim the route would refuse. */}
+              {panel.held ? (
+                <span
+                  data-yunari-panel-held={panel.heldId ?? ""}
+                  className="flex-none text-2xs text-faint"
+                >
+                  {holder === undefined ? copy.held : copy.heldBy(holder)}
                 </span>
+              ) : (
                 <button
                   type="button"
                   data-yunari-panel-add={key}
@@ -117,23 +134,11 @@ export function PanelsSection(props: {
                 >
                   {props.adding ? copy.adding : copy.add}
                 </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* The display the region is showing for, when it is a panel: its own
-          hardware record, which is what a firmware mismatch is about. */}
-      {props.chosen === undefined ? null : (
-        <div
-          data-yunari-panel-current={props.chosen.heldId}
-          className="flex flex-col gap-[var(--space-2)] rounded-lg border border-edge bg-panel-2 px-[var(--space-10)] py-[var(--space-8)] text-xs text-text"
-        >
-          {props.chosen.label}
-          <PanelFacts panel={props.chosen} />
-        </div>
-      )}
+              )}
+            </div>
+          );
+        })}
+      </div>
     </Group>
   );
 }

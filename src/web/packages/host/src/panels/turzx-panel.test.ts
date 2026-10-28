@@ -106,6 +106,63 @@ describe("attachedTurzxPanels", () => {
   });
 });
 
+describe("a panel this host is driving", () => {
+  it("is reported without reopening its port, and leaves the list when closed", async () => {
+    // A held port cannot be opened again, so a probe-only discovery would
+    // report a running panel as absent. The identity recorded at open is what
+    // keeps it in the list.
+    const ports = [
+      {
+        path: "COM5",
+        vendorId: 0x1d6b,
+        productId: 0x0106,
+        serialNumber: "S1",
+      },
+    ];
+    const panel = await openTurzxPanel({
+      ports: async () => ports,
+      open: async () => fakeTransport("chs_5inch.dev1_rom1.88").transport,
+    });
+
+    try {
+      const reopened: string[] = [];
+      const hints = await attachedTurzxPanels({
+        ports: async () => ports,
+        open: async (path) => {
+          reopened.push(path);
+          throw new Error("Access denied");
+        },
+      });
+
+      expect(hints).toEqual([
+        {
+          vendorId: 0x1d6b,
+          productId: 0x0106,
+          serial: "S1",
+          label: 'TURZX 5" Panel',
+          model: "chs_5inch",
+          firmware: "1.88",
+        },
+      ]);
+      expect(reopened, "the port the host holds was reopened").toEqual([]);
+
+      await panel.close();
+      expect(
+        await attachedTurzxPanels({
+          ports: async () => ports,
+          open: async () => {
+            throw new Error("Access denied");
+          },
+        }),
+      ).toEqual([]);
+    } finally {
+      // The map is module state: a case that left an entry would seed the
+      // next one with a panel no transport is driving.
+      await panel.close();
+    }
+  });
+});
+
 describe("openTurzxPanel", () => {
   it("opens with HELLO, stops video and media, then presents a full frame", async () => {
     const { writes, transport } = fakeTransport("chs_5inch.dev1_rom1.88");

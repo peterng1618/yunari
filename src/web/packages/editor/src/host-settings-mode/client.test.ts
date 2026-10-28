@@ -299,3 +299,71 @@ it("reads an upright display's absent rotation as zero", async () => {
     }),
   ).toEqual({ shape: "rect", rotation: 0 });
 });
+
+/**
+ * The panels route's own answer, read field by field: a hint's support record
+ * is what the surface prints as hardware facts, so a malformed one is dropped
+ * whole rather than rendered half-read, and a command this build cannot send
+ * never reaches a control.
+ */
+it("reads a panel's hardware record, dropping what it cannot print", async () => {
+  const { fetch, calls } = host(() =>
+    json({
+      panels: [
+        {
+          vendorId: 0x1d6b,
+          productId: 0x0106,
+          serial: "S1",
+          label: 'TURZX 5" Panel',
+          held: true,
+          heldId: "panel-1",
+          support: {
+            maker: "TURZX",
+            hardwareRevision: "Rev C",
+            supportedFirmware: ["1.88"],
+            updatedAt: "2026-10-29",
+          },
+          model: "chs_5inch",
+          firmware: "1.90",
+          commands: ["brightness", "startVideo", "status"],
+        },
+        {
+          vendorId: 0x1cbe,
+          productId: 0xa092,
+          serial: "S2",
+          label: 'Lian Li 9.2" LCD',
+          held: false,
+          // No revision and no date: a record this build would print as a
+          // hardware fact the host never stated.
+          support: { maker: "Lian Li", supportedFirmware: [] },
+          commands: [],
+        },
+        // A host before these fields: read as a picture-only panel.
+        { vendorId: 0x1cbe, productId: 0xa088, serial: "S3", held: false },
+      ],
+    }),
+  );
+
+  const panels = await createHostSettingsClient({ fetch }).listPanels();
+
+  expect(calls).toEqual(["GET /api/displays/panels"]);
+  expect(panels[0]).toEqual({
+    vendorId: 0x1d6b,
+    productId: 0x0106,
+    serial: "S1",
+    label: 'TURZX 5" Panel',
+    held: true,
+    heldId: "panel-1",
+    support: {
+      maker: "TURZX",
+      hardwareRevision: "Rev C",
+      supportedFirmware: ["1.88"],
+      updatedAt: "2026-10-29",
+    },
+    model: "chs_5inch",
+    firmware: "1.90",
+    commands: ["brightness", "status"],
+  });
+  expect(panels[1]?.support).toBeUndefined();
+  expect(panels[2]?.commands).toEqual([]);
+});

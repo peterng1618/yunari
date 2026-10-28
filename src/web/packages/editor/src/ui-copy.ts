@@ -459,6 +459,11 @@ export const uiCopy = {
       none: "No USB panel is attached to this PC.",
       /** Every attached panel is already a display. */
       allAdded: "Every attached panel is already a display.",
+      /** A held device's row names the display driving it, where the owner can
+       *  tell it apart from one they could still add. */
+      heldBy: (display: string): string => `Already a display: ${display}`,
+      /** A held device whose display this surface cannot name. */
+      held: "Already a display.",
       add: "Add",
       adding: "Adding…",
       addPanel: (name: string): string => `Add ${name} as a display`,

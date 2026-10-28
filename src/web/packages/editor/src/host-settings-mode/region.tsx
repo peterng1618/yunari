@@ -330,11 +330,6 @@ function HostSettings(props: {
   const displays = map?.displays ?? [];
   const selected = chosen ?? displays[0]?.id;
   const selectedRow = displays.find((display) => display.id === selected);
-  /** The attached panel behind the chosen display, when that display is a
-   *  panel: the section states its hardware record rather than offering it. */
-  const chosenPanel = panels?.find(
-    (panel) => panel.heldId !== undefined && panel.heldId === selected,
-  );
   const fallback = map?.default ?? null;
   const showing = shownTheme(selectedRow, fallback);
 
@@ -644,7 +639,11 @@ function HostSettings(props: {
           {panels === undefined ? null : (
             <PanelsSection
               attached={panels}
-              chosen={chosenPanel}
+              // The display map already carries the labels, so a held row names
+              // its display rather than repeating an id the owner never saw.
+              holderLabel={(heldId) =>
+                displays.find((display) => display.id === heldId)?.label
+              }
               adding={addingPanel}
               onAdd={addPanel}
             />
