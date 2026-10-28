@@ -99,17 +99,23 @@ async function openLibrary(page: Page): Promise<void> {
   const dialog = page.getByRole("dialog", { name: "Assets" });
   await expect(dialog).toBeVisible();
   await page.locator('[data-yunari-asset-tab="local"]').click();
-  await expect(page.locator("[data-yunari-wallpaper-engine-card]")).toHaveCount(
+  await expect(page.locator("[data-yunari-finder-card]")).toHaveCount(
     items.length,
   );
 }
 
 function card(page: Page, id: string) {
-  return page.locator(`[data-yunari-wallpaper-engine-card="${id}"]`);
+  return page.locator(`[data-yunari-finder-card="${id}"]`);
 }
 
-function action(page: Page, id: string) {
-  return card(page, id).locator("[data-yunari-wallpaper-engine-action]");
+/** The pane's one action is the footer's, so choosing a card is what makes it
+ *  name that card's own write. */
+async function actionOf(
+  page: Page,
+  id: string,
+): Promise<ReturnType<Page["locator"]>> {
+  await card(page, id).click();
+  return page.locator("[data-yunari-asset-action]");
 }
 
 test("each card offers the action it can actually take, and the kind filters narrow the grid", async ({
@@ -120,13 +126,9 @@ test("each card offers the action it can actually take, and the kind filters nar
   await stubLibrary(page);
   await openLibrary(page);
 
-  await expect(action(page, "102")).toHaveAttribute(
-    "aria-label",
-    "Set as background",
-  );
+  await expect(await actionOf(page, "102")).toHaveText("Set as background");
   for (const id of ["201", "202", "203"]) {
-    await expect(action(page, id)).toHaveAttribute(
-      "aria-label",
+    await expect(await actionOf(page, id)).toHaveText(
       "Convert to local project",
     );
   }
@@ -134,21 +136,17 @@ test("each card offers the action it can actually take, and the kind filters nar
   await page
     .locator('[data-yunari-wallpaper-engine-kind-filter="video"]')
     .click();
-  await expect(page.locator("[data-yunari-wallpaper-engine-card]")).toHaveCount(
-    1,
-  );
+  await expect(page.locator("[data-yunari-finder-card]")).toHaveCount(1);
 
   await page
     .locator('[data-yunari-wallpaper-engine-kind-filter="scene"]')
     .click();
-  await expect(page.locator("[data-yunari-wallpaper-engine-card]")).toHaveCount(
-    3,
-  );
+  await expect(page.locator("[data-yunari-finder-card]")).toHaveCount(3);
 
   await page
     .locator('[data-yunari-wallpaper-engine-kind-filter="all"]')
     .click();
-  await expect(page.locator("[data-yunari-wallpaper-engine-card]")).toHaveCount(
+  await expect(page.locator("[data-yunari-finder-card]")).toHaveCount(
     items.length,
   );
 });
@@ -178,19 +176,17 @@ test("reports a converted scene on the status line", async ({
 
   await stubLibrary(page);
   await openLibrary(page);
-  await expect(
-    page.locator("[data-yunari-wallpaper-engine-status]"),
-  ).toHaveText("");
+  await expect(page.locator("[data-yunari-asset-status]")).toHaveText("");
 
-  await action(page, "201").click();
+  await (await actionOf(page, "201")).click();
 
-  await expect(action(page, "201")).toHaveAttribute("aria-label", "Converted");
   await expect(
-    page.locator("[data-yunari-wallpaper-engine-status]"),
-  ).toContainText("201");
-  await expect(
-    page.locator("[data-yunari-wallpaper-engine-status]"),
-  ).toContainText("My Projects");
+    card(page, "201").locator("[data-yunari-finder-card-done]"),
+  ).toBeVisible();
+  await expect(page.locator("[data-yunari-asset-status]")).toContainText("201");
+  await expect(page.locator("[data-yunari-asset-status]")).toContainText(
+    "My Projects",
+  );
 });
 
 test("captures the finder on Wallpaper Engine", async ({ page }, testInfo) => {

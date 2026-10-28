@@ -523,6 +523,14 @@ body,
   --header-height: 42px;
   --menu-min-width: 190px;
   --asset-preview-max-height: 120px;
+  /* The finder's window (spec R1): a centred 1180 x 800 box over the whole
+     viewport, and the width below which it becomes the whole window. */
+  --finder-width: 1180px;
+  --finder-height: 800px;
+  --finder-compact-width: 720px;
+  --finder-footer-height: 52px;
+  /* The narrowest card the grid draws; a 4:3 well needs this width to read. */
+  --finder-card-min-width: 168px;
   /* The asset preview's box and right panel are the drawing's own
      (`assets-preview.html`): the finder's inset-24 size, a 270px facts column,
      and a fixed stage ground a picture is judged against under every palette.
@@ -1749,25 +1757,32 @@ body,
   box-shadow: var(--elev-3);
 }
 
-/* The asset finder's window: the editor's working area, less the shell's own
-   chrome. Its edges stop short of the 42px header, the 46px rail (§7.2) and
-   the 26px status bar, so the author can still see — and reach — the way back
-   out and where they are. The popup owns the size and clips; the grid inside
-   scrolls, so paging never moves the page. */
+/* The asset finder's window: a centred dialogue over the whole viewport, so the
+   four regions share one frame no matter which chrome sits behind it. Only the
+   content region scrolls; the rail, toolbar and footer stay put. */
 .editor-shell-dialog--finder {
-  top: calc(var(--header-height) + var(--space-8));
-  right: var(--space-8);
-  bottom: calc(26px + var(--space-8));
-  left: calc(46px + var(--space-8));
-  width: auto;
-  height: auto;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  width: min(var(--finder-width), calc(100vw - 2 * var(--space-24)));
+  height: min(var(--finder-height), calc(100vh - 2 * var(--space-24)));
   max-width: none;
   max-height: none;
-  transform: none;
+  transform: translate(-50%, -50%);
   padding: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* 45rem is the same 720px; a media query cannot read a custom property. */
+@media (max-width: 45rem) {
+  .editor-shell-dialog--finder {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+  }
 }
 
 /* The finder's way out is a mark in its own corner, the way a window's is: the

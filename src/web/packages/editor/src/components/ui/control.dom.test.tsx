@@ -142,12 +142,12 @@ const EXEMPT: readonly (readonly [string, string])[] = [
   ],
   ["store-mode/region.tsx", "the search well: a filter, not an authored value"],
   [
-    "asset-finder/modal.tsx",
+    "asset-finder/finder-controls.tsx",
     "the search field is a filter that re-runs on a debounce: nothing is authored to commit or cancel",
   ],
   [
-    "asset-finder/wallpaper-engine-body.tsx",
-    "the search field filters the in-memory listing: nothing is authored to commit or cancel",
+    "asset-finder/wallpaper.tsx",
+    'a hidden `type="file"` input, driven by its own toolbar button',
   ],
   [
     "editor-shell/settings.tsx",
@@ -156,10 +156,6 @@ const EXEMPT: readonly (readonly [string, string])[] = [
   [
     "host-settings-mode/source-form.tsx",
     "the source form's fields are committed by the form's own Save button, never on blur or Enter",
-  ],
-  [
-    "asset-finder/fonts-body.tsx",
-    "the type=search field filters the host's font listing as you type; nothing is authored to commit or cancel",
   ],
   [
     "asset-finder/font-preview-panel.tsx",

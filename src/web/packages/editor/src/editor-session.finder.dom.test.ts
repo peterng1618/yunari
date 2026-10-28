@@ -1,17 +1,16 @@
 // @vitest-environment jsdom
 
 /**
- * The finder's apply target. `fontPickerBody()` hands `FontsBody` its
+ * The finder's apply target. `fontActions()` hands the Fonts pane its
  * `onApplyToSelected` from whichever store names a type token — the
- * inspector's token first, the shell's canvas projection otherwise. The body
- * element is built directly, so its props are what the panel would receive;
- * the button's own drawing is `font-preview-panel.dom.test.tsx`'s case.
+ * inspector's token first, the shell's canvas projection otherwise. The
+ * actions are built directly, so the callbacks are what the footer would run;
+ * the button's own drawing is `fonts.dom.test.tsx`'s case.
  */
 
 import type { FabricThemeEnvelope, FontCut } from "@yunari/renderer-core";
-import { isValidElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import type { FontActions } from "./asset-finder/fonts.js";
 import { AssetManager } from "./asset-manager/index.js";
 import { EditorDocument } from "./editor-document.js";
 import { EditorSession } from "./editor-session.js";
@@ -157,19 +156,12 @@ function createSession(
   });
 }
 
-type FinderBodyProps = {
-  readonly onApplyToSelected?: (
-    cut: FontCut,
-    family: readonly FontCut[],
-  ) => void;
-};
-
-/** The props the finder's Fonts body is drawn with, read at this instant. */
-function bodyProps(session: EditorSession): FinderBodyProps {
-  const element = session.actionFacade().fontPickerBody?.();
-  if (!isValidElement<FinderBodyProps>(element))
-    throw new Error("the session drew no font body");
-  return element.props;
+/** The finder's font actions, read at this instant. */
+function fontActions(session: EditorSession): FontActions {
+  const actions = session.actionFacade().fontActions?.();
+  if (actions === undefined)
+    throw new Error("the session declared no font actions");
+  return actions;
 }
 
 async function flush(): Promise<void> {
@@ -187,7 +179,7 @@ describe("the finder's apply target", () => {
       .mockResolvedValue();
 
     tokenSelection.set({ kind: "preset", id: "caption" });
-    const props = bodyProps(session);
+    const props = fontActions(session);
     expect(props.onApplyToSelected).toBeTypeOf("function");
 
     props.onApplyToSelected?.(CUT, [CUT]);
@@ -211,11 +203,11 @@ describe("the finder's apply target", () => {
       .mockResolvedValue();
 
     tokenSelection.set({ kind: "preset", id: "caption" });
-    expect(bodyProps(session).onApplyToSelected).toBeTypeOf("function");
+    expect(fontActions(session).onApplyToSelected).toBeTypeOf("function");
 
     tokenSelection.clear();
     selection.pick("body");
-    bodyProps(session).onApplyToSelected?.(CUT, [CUT]);
+    fontActions(session).onApplyToSelected?.(CUT, [CUT]);
     expect(apply).toHaveBeenLastCalledWith("body", CUT, [CUT]);
 
     session.destroy();
@@ -231,10 +223,10 @@ describe("the finder's apply target", () => {
 
     tokenSelection.set({ kind: "paint", id: "accent" });
     // A paint is no type target: with no canvas selection there is no action.
-    expect(bodyProps(session).onApplyToSelected).toBeUndefined();
+    expect(fontActions(session).onApplyToSelected).toBeUndefined();
 
     selection.pick("caption");
-    const props = bodyProps(session);
+    const props = fontActions(session);
     const apply = vi
       .spyOn(EditorDocument.prototype, "applyCutToPreset")
       .mockResolvedValue();
@@ -272,7 +264,7 @@ describe("the finder's apply target", () => {
     });
 
     tokenSelection.set({ kind: "preset", id: "heading" });
-    bodyProps(session).onApplyToSelected?.(CUT, [CUT]);
+    fontActions(session).onApplyToSelected?.(CUT, [CUT]);
     await flush();
 
     expect(session.envelope.globals?.typeTokens?.["heading"]).toEqual({

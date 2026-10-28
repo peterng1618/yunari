@@ -1,14 +1,15 @@
 import type { AssetResult, FontCut, FontTrioInfo } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
+import type { FontPreviewState } from "./fonts.js";
 
 /** The trio's roles, in the order the card reads them: a trio that omits a
  *  role still draws heading, body, mono. */
 export type FontRole = "heading" | "body" | "mono";
 
-const ROLES = ["heading", "body", "mono"] as const;
+export const ROLES = ["heading", "body", "mono"] as const;
 
 /** A result with the font data the panel draws. `AssetResult.font` is optional
  *  on the wire; the finder selects only results that carry one. */
@@ -119,38 +120,29 @@ export function useSpecimens(cuts: readonly FontCut[]): void {
 
 /**
  * The finder's 336px preview column: the fixed specimen card, the author's
- * sample text, and the actions a chosen result makes available (spec R6, R7,
- * R9).
+ * sample text and the family's cut choice (spec R6, R7, R9).
  *
- * Presentational plus the sample line: it draws from the result and the role
- * presets it is handed, and reports a press. It never reads a document and
- * never decides a write. An action whose callback is absent is not drawn,
- * because a button that cannot act is not an availability.
+ * Controlled: the shell owns the sample, the cut and the role, because the
+ * footer's actions are built from them. It draws from the result and the role
+ * presets it is handed, and reports every change; it never reads a document and
+ * never decides a write.
  */
 export function FontPreviewPanel({
   selected,
   presets,
-  onApplyTrio,
-  onAddTrioPresets,
-  onAddPreset,
-  onApplyToSelected,
+  state,
+  onChange,
 }: {
   readonly selected: FontResult;
   readonly presets: TypeTokens;
-  readonly onApplyTrio: ((trio: FontTrioInfo) => void) | undefined;
-  readonly onAddTrioPresets: ((trio: FontTrioInfo) => void) | undefined;
-  readonly onAddPreset:
-    | ((cut: FontCut, role: FontRole, family: readonly FontCut[]) => void)
-    | undefined;
-  readonly onApplyToSelected:
-    | ((cut: FontCut, family: readonly FontCut[]) => void)
-    | undefined;
+  readonly state: FontPreviewState;
+  readonly onChange: (next: FontPreviewState) => void;
 }): React.JSX.Element {
   const copy = uiCopy.assets.fontPreview;
   const trio = selected.font.trio;
-  const [sample, setSample] = useState<string>(copy.sampleDefault);
-  const [cutId, setCutId] = useState<string | undefined>(undefined);
-  const [role, setRole] = useState<FontRole>("body");
+  const sample = state.sample;
+  const cutId = state.cutId;
+  const role = state.role;
 
   const cuts = useMemo(() => cutsOf(selected), [selected]);
   useSpecimens(cuts);
@@ -171,11 +163,6 @@ export function FontPreviewPanel({
 
   const selectedCut =
     selected.font.cuts.find((cut) => cut.id === cutId) ?? leadCutOf(selected);
-  // No role-tagged preset means Apply has nothing to rewrite; only trio panels
-  // draw that button, and only with it does the reason have a subject.
-  const roleless = ROLES.every(
-    (roleName) => rolePresets(presets, roleName).length === 0,
-  );
 
   return (
     <section
@@ -213,7 +200,7 @@ export function FontPreviewPanel({
           data-yunari-font-preview-sample=""
           value={sample}
           onChange={(event) => {
-            setSample(event.target.value);
+            onChange({ ...state, sample: event.target.value });
           }}
           className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-6)] py-[var(--space-4)] text-xs"
         />
@@ -221,7 +208,7 @@ export function FontPreviewPanel({
           type="button"
           data-yunari-font-preview-reset=""
           onClick={() => {
-            setSample(copy.sampleDefault);
+            onChange({ ...state, sample: copy.sampleDefault });
           }}
           className="text-[10px] text-faint"
         >
@@ -268,7 +255,7 @@ export function FontPreviewPanel({
                     aria-pressed={chosen}
                     data-yunari-font-cut={cut.id}
                     onClick={() => {
-                      setCutId(cut.id);
+                      onChange({ ...state, cutId: cut.id });
                     }}
                     className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-6)] py-[var(--space-2)] text-[10px] text-muted aria-pressed:border-accent aria-pressed:text-accent"
                   >
@@ -300,7 +287,10 @@ export function FontPreviewPanel({
                 data-yunari-font-role=""
                 value={role}
                 onChange={(event) => {
-                  setRole(event.target.value as FontRole);
+                  onChange({
+                    ...state,
+                    role: event.target.value as FontRole,
+                  });
                 }}
                 className="rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-4)] py-[var(--space-2)] text-[10px]"
               >
@@ -314,8 +304,8 @@ export function FontPreviewPanel({
           </div>
 
           {/* A chosen role is the token's id, so adding to a role the theme
-              already has replaces that token's face. Said where the Add button
-              is, because the promise and the write must not disagree. */}
+              already has replaces that token's face. The write is the footer's;
+              the note names what that write will do. */}
           {presets[role] === undefined ? null : (
             <p
               data-yunari-font-role-replaces=""
@@ -324,41 +314,6 @@ export function FontPreviewPanel({
               {copy.replacesRole(copy.role[role])}
             </p>
           )}
-
-          <div className="flex items-center gap-[var(--space-6)]">
-            {onAddPreset === undefined || selectedCut === undefined ? null : (
-              <button
-                type="button"
-                data-yunari-font-add-preset=""
-                onClick={() => {
-                  onAddPreset(
-                    selectedCut,
-                    role,
-                    familyCutsOf(selected, selectedCut),
-                  );
-                }}
-                className="rounded-[var(--radius-sm)] border border-accent px-[var(--space-12)] py-[var(--space-4)] text-xs text-accent"
-              >
-                {copy.addAsPreset}
-              </button>
-            )}
-            {onApplyToSelected === undefined ||
-            selectedCut === undefined ? null : (
-              <button
-                type="button"
-                data-yunari-font-apply=""
-                onClick={() => {
-                  onApplyToSelected(
-                    selectedCut,
-                    familyCutsOf(selected, selectedCut),
-                  );
-                }}
-                className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-12)] py-[var(--space-4)] text-xs text-muted"
-              >
-                {copy.applyToSelected}
-              </button>
-            )}
-          </div>
 
           <p className="text-[10px] leading-[1.45] text-faint">
             {copy.familyNote}
@@ -445,7 +400,9 @@ export function FontPreviewPanel({
             })}
           </div>
 
-          {onApplyTrio !== undefined && roleless ? (
+          {ROLES.every(
+            (roleName) => rolePresets(presets, roleName).length === 0,
+          ) ? (
             <p
               data-yunari-font-apply-reason=""
               className="text-[10px] leading-[1.45] text-faint"
@@ -453,35 +410,6 @@ export function FontPreviewPanel({
               {copy.rolelessReason}
             </p>
           ) : null}
-
-          <div className="flex flex-wrap items-center gap-[var(--space-6)]">
-            {onApplyTrio === undefined ? null : (
-              <button
-                type="button"
-                data-yunari-font-trio-apply=""
-                data-yunari-font-apply=""
-                disabled={roleless}
-                onClick={() => {
-                  onApplyTrio(trio);
-                }}
-                className="rounded-[var(--radius-sm)] bg-accent px-[var(--space-12)] py-[var(--space-4)] text-xs font-semibold text-[var(--bg)] disabled:opacity-50"
-              >
-                {copy.applyToTheme}
-              </button>
-            )}
-            {onAddTrioPresets === undefined ? null : (
-              <button
-                type="button"
-                data-yunari-font-add-presets=""
-                onClick={() => {
-                  onAddTrioPresets(trio);
-                }}
-                className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-12)] py-[var(--space-4)] text-xs"
-              >
-                {copy.addThreePresets}
-              </button>
-            )}
-          </div>
 
           <p className="text-[10px] leading-[1.45] text-faint">
             {copy.trioNote}

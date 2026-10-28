@@ -1206,6 +1206,58 @@ export const uiCopy = {
       local: "Open in Wallpaper Engine",
     } satisfies Record<ListingCategory, string>,
     searchPlaceholder: "Search assets…",
+    /** Each tab's own field, so the words name what is searched. */
+    search: {
+      font: "Search fonts…",
+      icon: "Search icons…",
+      image: "Search photos…",
+      video: "Search videos…",
+      colour: "Search colours…",
+      local: "Search this PC…",
+    } satisfies Record<ListingCategory, string>,
+    searching: (sources: number): string =>
+      `Searching ${sources} ${sources === 1 ? "source" : "sources"}…`,
+    /** The pressed action's own word while it is out, so the footer never says
+     *  the same "Working…" for a placement and a preset write. */
+    busy: {
+      font: "Applying…",
+      icon: "Placing…",
+      image: "Setting…",
+      video: "Setting…",
+      colour: "Adding…",
+      local: "Opening…",
+    } satisfies Record<ListingCategory, string>,
+    /** The finder's double-click preview (R8): one result, enlarged, with the
+     *  same actions the footer offers. A video result carries a poster only —
+     *  no source serves a playable URL yet. */
+    previewModal: {
+      posterOnly: "A video result shows its poster until it is imported.",
+      licence: "Licence",
+      source: "Source",
+    },
+    /** What the footer says when an action succeeds without words of its own. */
+    done: {
+      font: "Applied to token.",
+      icon: "Placed on canvas.",
+      image: "Set as background.",
+      video: "Set as background.",
+      colour: "Added to presets.",
+      local: "Opened in Wallpaper Engine.",
+    } satisfies Record<ListingCategory, string>,
+    endOfResults: "End of results",
+    /** The footer's icon button that opens the same preview a double-click does. */
+    previewOpen: "Preview",
+    nothingToBrowse: "Nothing to browse here yet. Try a word.",
+    emptyAfterFailure:
+      "This tab's sources returned nothing. Retry, or try another word.",
+    /** The body state for a tab whose sources all refused for want of a key.
+     *  Retrying cannot install one, so the body names the control that can; the
+     *  footer already carries the diagnosis, and this sentence never repeats it. */
+    needsKeyBody:
+      "Add the key this tab needs in Connections, then search again.",
+    working: "Working…",
+    retry: "Retry",
+    connections: "Connections",
     /** The kind filter the Colours tab draws when its sources disagree about
      *  what they yield. The options derive from the sources' own
      *  `presetKind`, so only `all` is a fixed word. */
@@ -1218,6 +1270,7 @@ export const uiCopy = {
       "Every source for this kind is switched off. Turn one on above.",
     clearQuery: "Clear query",
     noSource: "No source serves this category.",
+    noSelection: "Choose a result first.",
     /** The shared skeleton's one spoken line; its shapes are hidden, so this is
      *  all a screen reader hears while a body is still loading. */
     skeletonLoading: "Loading assets…",
@@ -1230,6 +1283,13 @@ export const uiCopy = {
     /** The Fonts body's own search and filter row (spec R5). The old picker's
      *  facet vocabulary and rule sentence die with it in Task 13. */
     fontSearch: "Search trios and font names",
+    /** The Fonts footer's two outcomes (spec R5, R6). The preview column's own
+     *  Apply/Add controls moved here, so the label and the write agree. */
+    fontApplyTrio: "Apply trio",
+    fontAddPresets: "Add to presets",
+    fontApplyToken: "Apply to token",
+    fontApplyBusy: "Applying…",
+    fontAddBusy: "Adding…",
     fontResults: "Font results",
     fontFilterLabel: "Filter results",
     fontFilter: { all: "All", trio: "Trios", family: "Fonts" },

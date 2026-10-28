@@ -604,6 +604,48 @@ draw (`padding:4px 6px`) and what `wellClasses` writes.
 6. **Hover raises `--edge` to `--muted`.** On a control that carries a resting `--edge` — the well, the toggle — the border brightens. On a glyph-only control with no resting border — the icon button — it is the border it acquires on hover. Nothing moves, nothing scales.
 7. **A set too large for `Segmented` is a list of choice rows, each a radio in one labelled `radiogroup`.** The row is the whole target, the group owns which one is chosen, and the group's own keyboard model walks the rows in reading order — a multi-column layout changes the grid and never the arrow keys. **A swatch library is the same set drawn as preset chips**: the swatch alone, the name as the control's programmatic label, wrapped in reading order, with the group's arrow keys unchanged.
 
+### Asset finder tabs
+
+The finder is one surface with one vocabulary. **A tab is a category of asset,
+never a provider**, and it fills the frame rather than drawing its own.
+
+1. **One frame, in this order:** tab rail, toolbar, content, footer. A tab may
+   add filters, a card preview, a detail column and its actions; it never adds a
+   region or moves a control the other tabs share (`finder-frame.tsx`).
+2. **Search is the toolbar's first control**, 256px wide (`w-64`, capped by the
+   toolbar) and the same in every tab that has one; its placeholder names the
+   tab ("Search photos…"). A tab with nothing to search draws no field, and no
+   other control takes its place.
+3. **Every tab browses on open.** Selecting a tab asks its sources an empty term
+   and draws the answer; a source that cannot answer an empty term says why in
+   the content region. A blank tab is a defect.
+4. **One card anatomy:** a 4:3 preview well, then name and source mark, then
+   meta and the item's own licence — an icon library's single licence stays on
+   its source. The preview renderer is the only permitted variation between
+   kinds (`finder-card.tsx`).
+5. **Every control defines rest, hover, focus, selected or disabled, busy and
+   outcome.** Hover raises `--edge` to `--muted`; nothing moves or scales.
+6. **One animated skeleton for every wait**, drawn as cards in the grid;
+   an appended page adds skeleton cards rather than replacing the rows
+   (`skeleton.tsx`).
+7. **Append, don't page.** Reaching the grid's end asks the next page. A source
+   that can only page explicitly puts its control in the footer's status slot,
+   and that control keeps the same shape in every tab that needs one.
+8. **States live where they are read.** Empty, error and credential sentences
+   sit in the content region; an action's outcome sits in the footer's one
+   `role="status"` line. The status line never repeats a body sentence.
+9. **Selection is single.** The selected card takes the accent border, a ring
+   and a check; the footer carries its actions; a new question clears it, and
+   each tab keeps its own selection while the finder stays open.
+10. **Tab order is fixed:** Fonts, Icons, Images, Videos, Colours, Wallpaper
+    Engine. A category the registry adds later appends rather than inserts.
+11. **Double-click opens the media preview**, and the footer's Preview icon
+    button is the same surface's keyboard route. Only a result with something to
+    enlarge takes the gesture and the button; every other kind keeps its
+    single-press selection.
+12. **Finder controls come from `finder-controls.tsx`.** A new pill, button,
+    chip, pager or skeleton style is a change to this file, not to the tab.
+
 ### Editing and recovery
 
 - **Draft is not authored state.** Text and number fields retain the draft

@@ -62,6 +62,27 @@ function stubFetch(payload: { results: unknown[]; total_pages: number }) {
   return { fetcher, calls };
 }
 
+/** The Editorial feed: a bare photo array, with the page count in the Link
+ *  header rather than the body. */
+function stubFeed(photos: unknown[], link?: string) {
+  const calls: { url: string; init: RequestInit | undefined }[] = [];
+
+  const fetcher = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return new Response(JSON.stringify(photos), {
+        status: 200,
+        headers:
+          link === undefined
+            ? { "content-type": "application/json" }
+            : { "content-type": "application/json", link },
+      });
+    },
+  ) as unknown as typeof fetch;
+
+  return { fetcher, calls };
+}
+
 function context(fetcher: typeof fetch): SourceContext {
   return {
     credential: (id) => (id === "unsplash" ? KEY : undefined),
@@ -146,19 +167,58 @@ describe("unsplashSource", () => {
     ).toMatchObject({ totalPages: 3 });
   });
 
-  it("asks the API nothing when the term is blank", async () => {
-    const { fetcher, calls } = stubFetch({
-      results: [photo()],
-      total_pages: 1,
-    });
+  it("browses the Editorial feed when the term is empty", async () => {
+    // The feed's last page is five, and it says so in the Link header rather
+    // than in a JSON field.
+    const link =
+      '<https://api.unsplash.com/photos?page=1>; rel="first", <https://api.unsplash.com/photos?page=5>; rel="last", <https://api.unsplash.com/photos?page=2>; rel="next"';
+    const { fetcher, calls } = stubFeed([photo()], link);
 
-    // The finder opens with an empty query, and Unsplash answers a missing
-    // `query` with 400: a search the API cannot serve is not a failure.
-    expect(await unsplashSource.search("   ", 1, context(fetcher))).toEqual({
-      results: [],
-      totalPages: undefined,
+    const page = await unsplashSource.search("", 1, context(fetcher));
+
+    expect(calls[0]?.url).toBe(`${API}photos?page=1&per_page=30`);
+    expect(calls[0]?.init?.headers).toEqual({
+      Authorization: `Client-ID ${KEY}`,
     });
-    expect(calls).toHaveLength(0);
+    expect(page.results.map((entry) => entry.id)).toEqual(["p1"]);
+    expect(page.totalPages).toBe(5);
+  });
+
+  it("stops at the last page the feed names", async () => {
+    // On the last page there is no `rel="next"`, so the feed is finished even
+    // though the header still names a page.
+    const link = '<https://api.unsplash.com/photos?page=3>; rel="last"';
+    const { fetcher } = stubFeed([photo()], link);
+
+    const page = await unsplashSource.search("", 3, context(fetcher));
+
+    expect(page.totalPages).toBe(3);
+  });
+
+  it("falls back to a full page when the feed has no Link header", async () => {
+    const full = Array.from({ length: 30 }, (_, at) => photo({ id: `p${at}` }));
+    const short = full.slice(0, 29);
+
+    expect(
+      (await unsplashSource.search("", 1, context(stubFeed(full).fetcher)))
+        .totalPages,
+    ).toBe(2);
+    expect(
+      (await unsplashSource.search("", 1, context(stubFeed(short).fetcher)))
+        .totalPages,
+    ).toBe(1);
+  });
+
+  it("drops Unsplash+ content from the feed too", async () => {
+    const { fetcher } = stubFeed([
+      photo(),
+      photo({ id: "premium", premium: true }),
+      photo({ id: "hosted", smallHost: "plus.unsplash.com" }),
+    ]);
+
+    const page = await unsplashSource.search(" ", 1, context(fetcher));
+
+    expect(page.results.map((entry) => entry.id)).toEqual(["p1"]);
   });
 
   it("carries the API's own words beside the status", async () => {

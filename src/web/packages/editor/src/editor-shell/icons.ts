@@ -29,6 +29,7 @@ import {
   LogIn,
   LogOut,
   type LucideIcon,
+  Maximize2,
   Minus,
   Monitor,
   OctagonAlert,
@@ -172,6 +173,8 @@ export const SET_BACKGROUND_GLYPH: LucideIcon = Wallpaper;
 export const CONVERTED_GLYPH: LucideIcon = Check;
 export const SETTING_GLYPH: LucideIcon = LoaderCircle;
 export const ACTION_FAILED_GLYPH: LucideIcon = TriangleAlert;
+/** A card's work in flight: the one sweep the finder spins while it waits. */
+export const BUSY_GLYPH: LucideIcon = LoaderCircle;
 
 /** The six chart families the document can name. */
 export const CHART_GAUGE_GLYPH: LucideIcon = Gauge;
@@ -232,6 +235,8 @@ export const ENTER_GLYPH: LucideIcon = LogIn;
 export const LEAVE_GLYPH: LucideIcon = LogOut;
 export const VISIBLE_GLYPH: LucideIcon = Eye;
 export const HIDDEN_GLYPH: LucideIcon = EyeOff;
+/** The finder's footer button that opens the same preview a double-click does. */
+export const PREVIEW_GLYPH: LucideIcon = Maximize2;
 
 /** The Assets pane's two card actions that have no other surface: putting a
  *  file on the canvas, and swapping the bytes of the asset already chosen. The

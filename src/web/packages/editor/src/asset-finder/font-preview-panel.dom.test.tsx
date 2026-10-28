@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { AssetResult, FontCut, FontTrioInfo } from "@yunari/renderer-core";
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TypeTokens } from "../type-preset-manager/panel.js";
@@ -8,9 +8,9 @@ import { uiCopy } from "../ui-copy.js";
 import {
   FontPreviewPanel,
   type FontResult,
-  type FontRole,
   familyCutsOf,
 } from "./font-preview-panel.js";
+import type { FontPreviewState } from "./fonts.js";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -122,22 +122,41 @@ function stubFonts(load: () => Promise<unknown> = async () => undefined) {
   return fonts;
 }
 
+const resting: FontPreviewState = {
+  sample: uiCopy.assets.fontPreview.sampleDefault,
+  cutId: undefined,
+  role: "body",
+};
+
 function panel(props: {
   readonly selected: FontResult;
   readonly presets?: TypeTokens;
-  readonly onApplyTrio?: (value: FontTrioInfo) => void;
-  readonly onAddTrioPresets?: (value: FontTrioInfo) => void;
-  readonly onAddPreset?: (value: FontCut, role: FontRole) => void;
-  readonly onApplyToSelected?: (value: FontCut) => void;
+  readonly state?: FontPreviewState;
+  readonly onChange?: (next: FontPreviewState) => void;
 }): React.ReactElement {
   return (
     <FontPreviewPanel
       selected={props.selected}
       presets={props.presets ?? starter}
-      onApplyTrio={props.onApplyTrio}
-      onAddTrioPresets={props.onAddTrioPresets}
-      onAddPreset={props.onAddPreset}
-      onApplyToSelected={props.onApplyToSelected}
+      state={props.state ?? resting}
+      onChange={props.onChange ?? (() => {})}
+    />
+  );
+}
+
+/** The panel reports every change; this holds what it reported, so a case can
+ *  type and see the card follow. */
+function Editable(props: {
+  readonly selected: FontResult;
+  readonly presets?: TypeTokens;
+}): React.ReactElement {
+  const [state, setState] = useState(resting);
+  return (
+    <FontPreviewPanel
+      selected={props.selected}
+      presets={props.presets ?? starter}
+      state={state}
+      onChange={setState}
     />
   );
 }
@@ -148,12 +167,6 @@ function specimenRoles(): readonly HTMLElement[] {
       "[data-yunari-font-specimen-role]",
     ),
   ];
-}
-
-function button(selector: string): HTMLButtonElement {
-  const found = document.querySelector<HTMLButtonElement>(selector);
-  if (found === null) throw new Error(`no ${selector}.`);
-  return found;
 }
 
 it("renders heading, body and mono in the trio card", () => {
@@ -175,7 +188,7 @@ it("renders heading, body and mono in the trio card", () => {
 });
 
 it("edits the sample line and re-renders the card", () => {
-  mount(panel({ selected: trio }));
+  mount(<Editable selected={trio} />);
   const input = document.querySelector<HTMLInputElement>(
     "[data-yunari-font-preview-sample]",
   );
@@ -195,9 +208,7 @@ it("edits the sample line and re-renders the card", () => {
 });
 
 it("names the apply scope and each before→after row", () => {
-  const onApplyTrio = vi.fn();
-  const onAddTrioPresets = vi.fn();
-  mount(panel({ selected: trio, onApplyTrio, onAddTrioPresets }));
+  mount(panel({ selected: trio }));
 
   expect(document.querySelector("[data-yunari-font-scope]")?.textContent).toBe(
     "Heading × 1 · Body × 1 · Mono × 1",
@@ -211,27 +222,12 @@ it("names the apply scope and each before→after row", () => {
   expect(
     document.querySelector('[data-yunari-font-change="mono"]')?.textContent,
   ).toBe("Spline Sans Mono · 400 → IBM Plex Mono 400");
-
-  act(() => {
-    button("[data-yunari-font-add-presets]").click();
-  });
-  act(() => {
-    button("[data-yunari-font-trio-apply]").click();
-  });
-  expect(onAddTrioPresets).toHaveBeenCalledWith(trioCard);
-  expect(onApplyTrio).toHaveBeenCalledWith(trioCard);
 });
 
-it("disables Apply to theme with a reason when no preset carries a role", () => {
-  mount(
-    panel({
-      selected: trio,
-      presets: roleless,
-      onApplyTrio: () => {},
-    }),
-  );
+it("says why Apply has nothing to rewrite when no preset carries a role", () => {
+  mount(panel({ selected: trio, presets: roleless }));
 
-  expect(button("[data-yunari-font-trio-apply]").disabled).toBe(true);
+  // The Apply action is the footer's now; the column still names the reason.
   expect(document.body.textContent).toContain(
     uiCopy.assets.fontPreview.rolelessReason,
   );
@@ -241,9 +237,7 @@ it("disables Apply to theme with a reason when no preset carries a role", () => 
 });
 
 it("draws a family's cuts and a role choice defaulting to Body", () => {
-  const onAddPreset = vi.fn();
-  const onApplyToSelected = vi.fn();
-  mount(panel({ selected: family, onAddPreset, onApplyToSelected }));
+  mount(<Editable selected={family} />);
 
   const chips = [
     ...document.querySelectorAll<HTMLButtonElement>("[data-yunari-font-cut]"),
@@ -270,7 +264,6 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
     setter?.call(role, "heading");
     role?.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  expect(role?.value).toBe("heading");
   expect(document.body.textContent).toContain(
     uiCopy.assets.fontPreview.replacesRole(
       uiCopy.assets.fontPreview.role.heading,
@@ -279,27 +272,13 @@ it("draws a family's cuts and a role choice defaulting to Body", () => {
   expect(document.body.textContent).toContain(
     "Heading — Manrope · replaces its face",
   );
-  act(() => {
-    button("[data-yunari-font-add-preset]").click();
-  });
-  act(() => {
-    button("[data-yunari-font-apply]").click();
-  });
-  expect(onAddPreset).toHaveBeenCalledWith(family.font.cuts[1], "heading", [
-    family.font.cuts[0],
-    family.font.cuts[1],
-  ]);
-  expect(onApplyToSelected).toHaveBeenCalledWith(family.font.cuts[1], [
-    family.font.cuts[0],
-    family.font.cuts[1],
-  ]);
   expect(chips[1]?.getAttribute("aria-pressed")).toBe("true");
 });
 
 it("draws no role-replacement hint when the theme has no such role", () => {
   // Nothing is replaced: the press creates the role, which is the other honest
   // answer and must not be dressed as a rewrite.
-  mount(panel({ selected: family, presets: roleless, onAddPreset: vi.fn() }));
+  mount(panel({ selected: family, presets: roleless }));
 
   expect(document.querySelector("[data-yunari-font-role-replaces]")).toBeNull();
 });
@@ -310,9 +289,7 @@ it("gates the hint on the chosen role, not on any role existing", () => {
   const headingOnly: TypeTokens = {
     heading: { family: "Yaldevi", weight: 300 },
   };
-  mount(
-    panel({ selected: family, presets: headingOnly, onAddPreset: vi.fn() }),
-  );
+  mount(<Editable selected={family} presets={headingOnly} />);
 
   expect(document.querySelector("[data-yunari-font-role-replaces]")).toBeNull();
   expect(document.body.textContent).toContain("Body — Manrope · adds one");
@@ -337,29 +314,6 @@ it("gates the hint on the chosen role, not on any role existing", () => {
   );
 });
 
-it("applies the face the family's id names, not the first cut listed", () => {
-  // A family lists every weight × subset. Position 0 is often a subset with no
-  // Latin glyphs, and adopting it left the author's text in the browser
-  // fallback; the row's id names the lead face the host chose.
-  const listed = family.font.cuts[0]!;
-  const lead = family.font.cuts[1]!;
-  const reordered = {
-    ...family,
-    // Search namespaces the row (`<source>:<entry id>`), so the id it carries
-    // is the cut's own id behind the source prefix.
-    id: `google-fonts:${lead.id}`,
-    font: { cuts: [listed, lead] },
-  };
-  const onApplyToSelected = vi.fn();
-  mount(panel({ selected: reordered, onApplyToSelected }));
-
-  act(() => {
-    button("[data-yunari-font-apply]").click();
-  });
-
-  expect(onApplyToSelected).toHaveBeenCalledWith(lead, [listed, lead]);
-});
-
 it("names the subset when cuts share a weight, rather than drawing three 400s", () => {
   // Water Brush publishes 400 in three subsets: labelled by weight alone the
   // chips read as a mistake, and the subset is the only difference there is.
@@ -374,7 +328,7 @@ it("names the subset when cuts share a weight, rather than drawing three 400s", 
       cuts: [subset("vietnamese"), subset("latin-ext"), subset("latin")],
     },
   };
-  mount(panel({ selected: shared, onApplyToSelected: () => {} }));
+  mount(panel({ selected: shared }));
 
   expect(
     [...document.querySelectorAll<HTMLElement>("[data-yunari-font-cut]")].map(
@@ -388,35 +342,6 @@ it("names the subset when cuts share a weight, rather than drawing three 400s", 
   )) {
     expect(chip.style.fontFamily).toBe("");
   }
-});
-
-it("brings every subset's faces with the chosen cut", () => {
-  // A family lists every weight × subset: the lead subset's weights alone left
-  // a Vietnamese glyph with no file, so one apply brings the whole family.
-  const latin400 = cut("Manrope", 400);
-  const latin700 = cut("Manrope", 700);
-  const vietnamese = {
-    ...cut("Manrope", 400),
-    id: "cut:manrope-vietnamese",
-    subset: "vietnamese",
-  };
-  const withSubsets = {
-    ...family,
-    id: `google-fonts:${latin400.id}`,
-    font: { cuts: [vietnamese, latin400, latin700] },
-  };
-  const onApplyToSelected = vi.fn();
-  mount(panel({ selected: withSubsets, onApplyToSelected }));
-
-  act(() => {
-    button("[data-yunari-font-apply]").click();
-  });
-
-  expect(onApplyToSelected).toHaveBeenCalledWith(latin400, [
-    vietnamese,
-    latin400,
-    latin700,
-  ]);
 });
 
 describe("familyCutsOf", () => {
