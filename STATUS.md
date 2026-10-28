@@ -13,7 +13,8 @@ USB panel support: a Lian Li 9.2" LCD (`1CBE:A092`) driven by the host from the 
 - **The panel record is live in the real app folder:** `lian-li-9-2` on `1CBE:A092` with `rotation: 90`, showing the starter theme `27c605ef`, written through the host's own API.
 - **Rotation 90 is the reading orientation**, chosen from a rendered A/B: the starter is 16:9 and the wire is 1:4 portrait, so upright fills ~92% of the glass and 0 fills 14%.
 - **The renderer is the real player**, not a second scene tree: a hidden Chrome screenshots the player page over the devtools protocol with no added dependency.
-- **The panel is wedged until a reboot** (`vg-773`): the first frame was sent, then every tick reported `Cancelled` and no later process can claim the interface.
+- **The panel is live again after the reboot:** with L-Connect stopped the interface was claimed and 32 frames went out in ~35s with zero `Cancelled` lines, so the wedge cleared (`vg-773` still records the unexplained cause).
+- **The glass is still unverified:** the expected picture is `C:\tmp\yunari-render\expected-panel.jpg`, the rotation-90 render at exactly 464×1920.
 
 ## Last completed change
 
@@ -22,12 +23,12 @@ USB panel support: a Lian Li 9.2" LCD (`1CBE:A092`) driven by the host from the 
 
 ## Next
 
-1. Reboot, then start the host and look at the glass against `C:\tmp\yunari-render\expected-panel.jpg`.
+1. Look at the glass and confirm the picture and its orientation.
 2. Add the Host settings surface for choosing an attached panel.
 3. Resume the backlog-drain plan at Phase 0.
 
 ## Blockers / unverified
 
-- **The glass is unverified, and blocked on a reboot:** `pnputil /restart-device` answered "System reboot is needed", so the interface cannot be reclaimed until then (`vg-773`).
+- **The glass is unverified:** frames flow, but no eye has confirmed the picture or that rotation 90 reads upright on the physical strip.
 - **Panel cost is unmeasured:** one frame is ~10 KB and one capture ~45 ms, but no sustained run was profiled.
-- **L-Connect holds the panel:** it must be closed, or its services stopped, before the host can claim the device.
+- **L-Connect must stay stopped:** it relaunches on boot and holds the interface; the host reports the "another program holding it" message when it wins the race.
