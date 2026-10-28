@@ -213,15 +213,15 @@ export interface PanelSupport {
   readonly supportedFirmware: readonly string[];
   readonly updatedAt: string; // ISO date, YYYY-MM-DD
 }
-export type PanelCommand =
+export type PanelControlCommand =
   | { readonly kind: "brightness"; readonly level: number }
   | { readonly kind: "screen"; readonly on: boolean }
   | { readonly kind: "restart" }
   | { readonly kind: "status" }
   | { readonly kind: "hello" };
 export interface PanelControls {
-  readonly commands: readonly PanelCommand["kind"][];
-  run(command: PanelCommand): Promise<string>;
+  readonly commands: readonly PanelControlCommand["kind"][];
+  run(command: PanelControlCommand): Promise<string>;
 }
 export interface PanelVideo {
   start(mp4: Uint8Array): Promise<void>;
@@ -235,7 +235,7 @@ export interface PanelFamily {
   readonly productId: number;
   readonly stores: boolean;
   readonly support: PanelSupport;
-  readonly commands: readonly PanelCommand["kind"][];
+  readonly commands: readonly PanelControlCommand["kind"][];
   readonly attached: () => Promise<readonly PanelHint[]>;
   readonly open: () => Promise<PanelDevice>;
 }
@@ -243,7 +243,7 @@ export interface PanelFamily {
 - `PanelDevice` gains `readonly controls?: PanelControls;` and `readonly video?: PanelVideo;`.
 - `PanelHint` gains `readonly model?: string;` and `readonly firmware?: string;`.
 - `tur-usb-panel.ts` exports `TUR_FAMILIES: readonly PanelFamily[]`; `kraken-z3-panel.ts` exports `KRAKEN_FAMILIES`; `panel-families.ts` exports `[...TUR_FAMILIES, ...KRAKEN_FAMILIES]` plus the existing lookups.
-- Consumes: `PanelCommand` names used by Tasks 6, 7 and 9.
+- Consumes: `PanelControlCommand` names used by Tasks 6, 7 and 9.
 
 - [ ] **Step 1: Write the failing registry tests**
 
@@ -275,7 +275,7 @@ Expected: FAIL — `support` and `commands` are absent.
 
 - [ ] **Step 3: Move the type and the rows**
 
-- Move `PanelFamily` from `panel-families.ts` into `panel-device.ts` and add `support`, `commands`, `PanelSupport`, `PanelCommand`, `PanelControls` and `PanelVideo`.
+- Move `PanelFamily` from `panel-families.ts` into `panel-device.ts` and add `support`, `commands`, `PanelSupport`, `PanelControlCommand`, `PanelControls` and `PanelVideo`.
 - Move the two Lian Li rows into `tur-usb-panel.ts` as `TUR_FAMILIES`, and the Kraken row into `kraken-z3-panel.ts` as `KRAKEN_FAMILIES`.
 - Support values for the existing rows: maker `Lian Li`/`NZXT`, the product revision already in the label, `supportedFirmware: []`, and `updatedAt` taken from `git log -1 --format=%cs -- <that driver file>`.
 - Do not add the TURZX row here; Task 3 adds it with its adapter.
@@ -674,11 +674,11 @@ git commit -m "feat(panels): show the hardware support record and firmware misma
 ```ts
 {
   commands: ["brightness", "screen", "restart", "status", "hello"],
-  run(command: PanelCommand): Promise<string>
+  run(command: PanelControlCommand): Promise<string>
 }
 ```
-- `PanelManager` gains `command(displayId: string, command: PanelCommand): Promise<string>` and exports `class PanelNotRunningError extends Error`.
-- Consumes: Task 2's `PanelCommand`, `PanelControls`.
+- `PanelManager` gains `command(displayId: string, command: PanelControlCommand): Promise<string>` and exports `class PanelNotRunningError extends Error`.
+- Consumes: Task 2's `PanelControlCommand`, `PanelControls`.
 
 - [ ] **Step 1: Write the failing adapter tests**
 
