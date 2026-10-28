@@ -5206,10 +5206,19 @@ describe("A local monitor is specified rather than paired", () => {
           return answer;
         });
 
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        // The restart reached the manager, and the answer is not on the wire
-        // until the runner it asked for has been replaced.
+        // A bounded poll for the observable condition rather than a fixed
+        // sleep: under the full gate's load the PUT has not reached `refresh`
+        // after any single guessed interval, and a healthy host then fails.
+        const deadline = Date.now() + 5000;
+        while (refreshed.length === 0 && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        // The restart reached the manager and is still held, so the answer
+        // cannot be on the wire yet. The settle turn is what makes that
+        // falsifiable: a host that answered before awaiting the restart would
+        // have had its response delivered by now.
         expect(refreshed).toEqual(["strip"]);
+        await new Promise((resolve) => setTimeout(resolve, 50));
         expect(answered).toBe(false);
 
         release();
