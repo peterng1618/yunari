@@ -348,10 +348,7 @@ const OVERLAY_STYLE_ID = "yunari-panel-overlay";
  * can outrank an inline value without `!important` leaking into a still capture.
  * So the host's own paint is saved on the element and restored on the way out.
  */
-export async function overlayMode(
-  devtools: Devtools,
-  on: boolean,
-): Promise<void> {
+async function overlayMode(devtools: Devtools, on: boolean): Promise<void> {
   await devtools.send("Runtime.evaluate", {
     expression: `(() => {
       const id = ${JSON.stringify(OVERLAY_STYLE_ID)};

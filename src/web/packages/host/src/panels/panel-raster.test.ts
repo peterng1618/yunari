@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import type { PanelGeometry } from "./panel-device.js";
 import {
@@ -42,6 +43,13 @@ function request(sent: readonly Sent[], method: string): Sent {
 
 function expressionOf(sent: readonly Sent[]): string {
   return String(request(sent, "Runtime.evaluate").params["expression"]);
+}
+
+function lastExpressionOf(sent: readonly Sent[]): string {
+  const entries = sent.filter((entry) => entry.method === "Runtime.evaluate");
+  const last = entries[entries.length - 1];
+  if (last === undefined) throw new Error("no Runtime.evaluate was sent");
+  return String(last.params["expression"]);
 }
 
 function screenshotOf(sent: readonly Sent[]): Record<string, unknown> {
@@ -143,5 +151,51 @@ describe("captureOverlay", () => {
         "if (style === null)",
       );
     }
+  });
+
+  /**
+   * The string assertions above cannot tell the pre-fix script from the fixed
+   * one — both contain the same text. This executes the emitted script instead,
+   * so moving the clear back inside the dataset guard turns it red.
+   */
+  it("re-asserts the transparent paint after a fit repaints the host", async () => {
+    document.body.innerHTML = "";
+    const host = document.createElement("div");
+    host.style.background = "#123456";
+    const canvas = document.createElement("canvas");
+    canvas.dataset["yunari"] = "artboard";
+    host.append(canvas);
+
+    const media = document.createElement("div");
+    media.setAttribute("data-yunari-background-media", "");
+    const disc = document.createElement("div");
+    disc.setAttribute("data-yunari-display-disc", "");
+    document.body.append(host, media, disc);
+
+    const { devtools, sent } = fakeDevtools();
+
+    await captureOverlay(devtools, GEOMETRY);
+    const enter = new Function(expressionOf(sent)) as () => unknown;
+    enter();
+
+    expect(host.style.background).toBe("transparent");
+    expect(getComputedStyle(media).display).toBe("none");
+    const saved = host.dataset["panelOverlayBackground"];
+    expect(saved).toBeDefined();
+    expect(saved).not.toBe("transparent");
+
+    // A fit() re-applies the artboard's paint while the mode is still on.
+    host.style.background = "#abcdef";
+    enter();
+    expect(host.style.background).toBe("transparent");
+    expect(host.dataset["panelOverlayBackground"]).toBe(saved);
+
+    await captureStill(devtools, GEOMETRY, "jpeg");
+    const exit = new Function(lastExpressionOf(sent)) as () => unknown;
+    exit();
+
+    expect(host.style.background).toBe(saved);
+    expect(host.dataset["panelOverlayBackground"]).toBeUndefined();
+    expect(document.getElementById("yunari-panel-overlay")).toBeNull();
   });
 });
