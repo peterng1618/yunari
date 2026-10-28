@@ -36,6 +36,36 @@ describe("createPanelRunner", () => {
     expect(present).toHaveBeenCalledTimes(1);
   });
 
+  it("does not start a second capture while one is in flight", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const capture = vi.fn(async () => {
+      await gate;
+      return RED;
+    });
+    const present = vi.fn(async () => {});
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present,
+      close: async () => {},
+    };
+    const runner = createPanelRunner({
+      device,
+      rasterizer: { capture, close: async () => {} },
+    });
+
+    const first = runner.tick();
+    await expect(runner.tick()).resolves.toBe(false);
+    release?.();
+    await expect(first).resolves.toBe(true);
+
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect(present).toHaveBeenCalledTimes(1);
+  });
+
   it("does not send a frame identical to the one on the panel", async () => {
     const { device, rasterizer, present } = fakes([RED, RED, RED]);
     const runner = createPanelRunner({ device, rasterizer });

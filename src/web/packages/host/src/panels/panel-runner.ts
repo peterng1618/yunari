@@ -31,7 +31,11 @@ export interface PanelRunner {
   readonly running: boolean;
   /** How often `tick` should be called. */
   readonly intervalMs: number;
-  /** One capture, and one send only if the pixels moved. Answers whether they did. */
+  /**
+   * One capture, and one send only if the pixels moved. Answers whether a frame
+   * went out; a tick that found the previous one still running is skipped and
+   * answers `false` without starting a second capture.
+   */
   tick(): Promise<boolean>;
   stop(): Promise<void>;
 }
@@ -44,6 +48,7 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
   const report = options.onError ?? (() => {});
   let last: Uint8Array | undefined;
   let running = true;
+  let inFlight = false;
 
   return {
     get running(): boolean {
@@ -54,33 +59,42 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
 
     async tick(): Promise<boolean> {
       if (!running) return false;
-
-      let jpeg: Uint8Array;
-      try {
-        jpeg = await options.rasterizer.capture();
-      } catch (error) {
-        report(exactly(error));
-        return false;
-      }
-
-      // A frame identical to the one already on the panel is a frame that
-      // changes nothing. The comparison is on the bytes the wire would carry,
-      // so a capture that differs only in rounding noise still counts as a
-      // change — the honest choice, because that noise is real pixels.
-      if (last !== undefined && sameBytes(last, jpeg)) return false;
+      // A capture that is slow enough to still be running when the timer
+      // fires again is not a reason to start a second one: two sends racing
+      // for the same wire is worse than a skipped frame.
+      if (inFlight) return false;
+      inFlight = true;
 
       try {
-        await options.device.present(jpeg);
-      } catch (error) {
-        // A send that failed did not put these pixels on the panel, so the last
-        // frame is not this one: keeping it would suppress the retry.
-        report(exactly(error));
-        return false;
-      }
+        let jpeg: Uint8Array;
+        try {
+          jpeg = await options.rasterizer.capture();
+        } catch (error) {
+          report(exactly(error));
+          return false;
+        }
 
-      last = jpeg;
-      options.onFrame?.();
-      return true;
+        // A frame identical to the one already on the panel is a frame that
+        // changes nothing. The comparison is on the bytes the wire would carry,
+        // so a capture that differs only in rounding noise still counts as a
+        // change — the honest choice, because that noise is real pixels.
+        if (last !== undefined && sameBytes(last, jpeg)) return false;
+
+        try {
+          await options.device.present(jpeg);
+        } catch (error) {
+          // A send that failed did not put these pixels on the panel, so the last
+          // frame is not this one: keeping it would suppress the retry.
+          report(exactly(error));
+          return false;
+        }
+
+        last = jpeg;
+        options.onFrame?.();
+        return true;
+      } finally {
+        inFlight = false;
+      }
     },
 
     async stop(): Promise<void> {
