@@ -39,6 +39,13 @@ describe("PANEL_FAMILIES", () => {
     expect(familyFor(0x1cbe, 0xa088)?.stores).toBe(false);
   });
 
+  it("claims the TURZX serial family and its support record", () => {
+    expect(familyFor(0x1d6b, 0x0106)?.id).toBe("turzx-5");
+    expect(familyFor(0x1d6b, 0x0106)?.support.supportedFirmware).toEqual([
+      "1.88",
+    ]);
+  });
+
   it("keeps every family's ids unique", () => {
     const seen = new Set<string>();
 

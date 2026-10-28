@@ -1,6 +1,7 @@
 import { KRAKEN_FAMILIES } from "./kraken-z3-panel.js";
 import type { PanelFamily, PanelHint } from "./panel-device.js";
 import { TUR_FAMILIES } from "./tur-usb-panel.js";
+import { TURZX_FAMILIES } from "./turzx-panel.js";
 
 /**
  * Every panel family this host can drive, in one table.
@@ -20,6 +21,7 @@ import { TUR_FAMILIES } from "./tur-usb-panel.js";
 export const PANEL_FAMILIES: readonly PanelFamily[] = [
   ...TUR_FAMILIES,
   ...KRAKEN_FAMILIES,
+  ...TURZX_FAMILIES,
 ];
 
 /** The family claiming a pair of USB ids, if any. */
