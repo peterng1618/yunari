@@ -88,7 +88,7 @@ export interface PanelDevice {
    * them with no host attached. The caller passes a frame and does not decide
    * which of those happened.
    */
-  present(jpeg: Uint8Array): Promise<void>;
+  present(still: Uint8Array): Promise<void>;
   /**
    * The still encoding this device consumes, when it is not a JPEG.
    *

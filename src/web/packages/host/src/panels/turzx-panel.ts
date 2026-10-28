@@ -213,10 +213,10 @@ class TurzxPanel implements PanelDevice {
   /** Already opened by `openTurzxPanel`, which is the family's `open`. */
   async open(): Promise<void> {}
 
-  async present(jpeg: Uint8Array): Promise<void> {
+  async present(still: Uint8Array): Promise<void> {
     await this.enqueue(async () => {
       const raw = await this.decode(
-        jpeg,
+        still,
         this.geometry.width,
         this.geometry.height,
       );

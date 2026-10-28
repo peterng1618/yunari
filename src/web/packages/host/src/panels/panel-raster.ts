@@ -70,23 +70,33 @@ export function screenshotParameters(format: "jpeg" | "png"): {
   return format === "jpeg" ? { format, quality: 85 } : { format };
 }
 
-interface CdpReply {
+export interface CdpReply {
   readonly id?: number;
   readonly result?: Record<string, unknown>;
   readonly error?: { readonly message?: string };
 }
 
 /**
+ * What a capture needs from the devtools client.
+ *
+ * An interface rather than the browser-backed class so the capture paths can be
+ * exercised without a Chromium: the request sequence *is* the behaviour.
+ */
+export interface Devtools {
+  send(method: string, params?: Record<string, unknown>): Promise<CdpReply>;
+}
+
+/**
  * A minimal devtools client: one request in flight per id, and no event
  * handling beyond what a capture needs.
  */
-class Devtools {
+class BrowserDevtools implements Devtools {
   private constructor(
     private readonly socket: WebSocket,
     private nextId: number,
   ) {}
 
-  static async connect(url: string): Promise<Devtools> {
+  static async connect(url: string): Promise<BrowserDevtools> {
     const socket = new WebSocket(url);
     await new Promise<void>((resolve, reject) => {
       socket.addEventListener("open", () => resolve(), { once: true });
@@ -97,7 +107,7 @@ class Devtools {
       );
     });
 
-    return new Devtools(socket, 1);
+    return new BrowserDevtools(socket, 1);
   }
 
   send(
@@ -208,7 +218,7 @@ export async function createRasterizer(
     .replace(/^ws:\/\//, "http://")
     .replace(/\/devtools\/browser\/.*$/, "");
 
-  let devtools: Devtools | undefined;
+  let devtools: BrowserDevtools | undefined;
 
   try {
     const target = (await fetch(`${base}/json/new?about:blank`, {
@@ -221,7 +231,7 @@ export async function createRasterizer(
       throw new Error("the browser opened no page to render into");
     }
 
-    devtools = await Devtools.connect(target.webSocketDebuggerUrl);
+    devtools = await BrowserDevtools.connect(target.webSocketDebuggerUrl);
     await devtools.send("Page.enable");
 
     // The page is told its size rather than resized: a panel has one geometry,
@@ -252,38 +262,17 @@ export async function createRasterizer(
     return devtools;
   };
 
-  const shot = async (format: "jpeg" | "png"): Promise<Uint8Array> => {
-    const reply = await live().send("Page.captureScreenshot", {
-      ...screenshotParameters(format),
-      clip: {
-        x: 0,
-        y: 0,
-        width: options.geometry.width,
-        height: options.geometry.height,
-        scale: 1,
-      },
-      // The page is exactly the clip size, so nothing here is off-screen; the
-      // flag keeps a shorter page from producing a short image.
-      captureBeyondViewport: false,
-    });
-
-    const data = reply.result?.["data"];
-    if (typeof data !== "string") {
-      throw new Error("The browser returned no image.");
-    }
-
-    return new Uint8Array(Buffer.from(data, "base64"));
-  };
-
   return {
     async capture(): Promise<Uint8Array> {
-      await overlayMode(live(), false);
-      return shot(options.stillFormat ?? "jpeg");
+      return captureStill(
+        live(),
+        options.geometry,
+        options.stillFormat ?? "jpeg",
+      );
     },
 
     async captureOverlay(): Promise<Uint8Array> {
-      await overlayMode(live(), true);
-      return shot("png");
+      return captureOverlay(live(), options.geometry);
     },
 
     async close(): Promise<void> {
@@ -297,6 +286,58 @@ export async function createRasterizer(
   };
 }
 
+/** One `Page.captureScreenshot` of the whole page, decoded to bytes. */
+async function shot(
+  devtools: Devtools,
+  geometry: PanelGeometry,
+  format: "jpeg" | "png",
+): Promise<Uint8Array> {
+  const reply = await devtools.send("Page.captureScreenshot", {
+    ...screenshotParameters(format),
+    clip: {
+      x: 0,
+      y: 0,
+      width: geometry.width,
+      height: geometry.height,
+      scale: 1,
+    },
+    // The page is exactly the clip size, so nothing here is off-screen; the
+    // flag keeps a shorter page from producing a short image.
+    captureBeyondViewport: false,
+  });
+
+  const data = reply.result?.["data"];
+  if (typeof data !== "string") {
+    throw new Error("The browser returned no image.");
+  }
+
+  return new Uint8Array(Buffer.from(data, "base64"));
+}
+
+/**
+ * One still of the whole artboard, in the device's `stillFormat`.
+ *
+ * Overlay mode is turned off first: a JPEG has no alpha, and a transparent
+ * backdrop left over from the previous overlay would come out black.
+ */
+export async function captureStill(
+  devtools: Devtools,
+  geometry: PanelGeometry,
+  stillFormat: "jpeg" | "png",
+): Promise<Uint8Array> {
+  await overlayMode(devtools, false);
+  return shot(devtools, geometry, stillFormat);
+}
+
+/** The UI alone as an alpha PNG, over the still the device shows. */
+export async function captureOverlay(
+  devtools: Devtools,
+  geometry: PanelGeometry,
+): Promise<Uint8Array> {
+  await overlayMode(devtools, true);
+  return shot(devtools, geometry, "png");
+}
+
 const OVERLAY_STYLE_ID = "yunari-panel-overlay";
 
 /**
@@ -307,7 +348,10 @@ const OVERLAY_STYLE_ID = "yunari-panel-overlay";
  * can outrank an inline value without `!important` leaking into a still capture.
  * So the host's own paint is saved on the element and restored on the way out.
  */
-async function overlayMode(devtools: Devtools, on: boolean): Promise<void> {
+export async function overlayMode(
+  devtools: Devtools,
+  on: boolean,
+): Promise<void> {
   await devtools.send("Runtime.evaluate", {
     expression: `(() => {
       const id = ${JSON.stringify(OVERLAY_STYLE_ID)};
@@ -323,8 +367,10 @@ async function overlayMode(devtools: Devtools, on: boolean): Promise<void> {
             "html,body{background:transparent !important}";
           document.head.append(made);
         }
-        if (host !== null && host.dataset["panelOverlayBackground"] === undefined) {
-          host.dataset["panelOverlayBackground"] = host.style.background;
+        if (host !== null) {
+          if (host.dataset["panelOverlayBackground"] === undefined) {
+            host.dataset["panelOverlayBackground"] = host.style.background;
+          }
           host.style.background = "transparent";
         }
       } else {
