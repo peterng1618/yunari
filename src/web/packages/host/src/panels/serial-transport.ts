@@ -30,8 +30,8 @@ export interface SerialTransport {
    * **Two contracts, split by whether a read is waiting.** With one, it returns
    * only sealed replies: a burst in progress belongs to that read. With none, it
    * also returns a partial burst **and** discards the rest of it until the wire
-   * goes quiet, so the tail of a stale reply cannot be read as the next
-   * command's answer.
+   * goes quiet or the next write begins, so the tail of a stale reply cannot be
+   * read as the next command's answer.
    */
   drainPending(): Uint8Array;
   close(): Promise<void>;
@@ -196,6 +196,12 @@ class OpenSerialPort implements SerialTransport {
         }),
       );
     }
+
+    // A write is the boundary at which new bytes become the next reply: a
+    // USB-CDC write flushes in a millisecond or two, so the answer to the
+    // command just sent can arrive inside the drain's quiet window and must
+    // not be discarded with the stale reply's tail.
+    this.discarding = false;
 
     return new Promise((resolve, reject) => {
       this.port.write(Buffer.from(bytes), (error) => {

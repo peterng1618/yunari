@@ -210,6 +210,27 @@ describe("the serial transport's read", () => {
     expect(decode(await reading)).toBe("needReSend:0|renderCnt:1");
   });
 
+  it("reads the answer a write starts inside the drain's quiet window", async () => {
+    const port = new FakePort();
+    const transport = transportOver(port);
+
+    // The open-time status reply is drained with nothing reading, which arms
+    // the discard window; the command's own write follows immediately.
+    port.emit("data", Buffer.from("needReSend:0|renderCnt:0"));
+    await pause(SETTLED_MS);
+    expect(decode(transport.drainPending())).toBe("needReSend:0|renderCnt:0");
+
+    // A USB-CDC write flushes in about a millisecond, so the answer lands well
+    // inside the 50 ms quiet window the drain armed.
+    await transport.write(Uint8Array.of(1));
+    await pause(2);
+    port.emit("data", Buffer.from("needReSend:0|renderCnt:1"));
+
+    // The write is the boundary: those bytes are this read's answer, not the
+    // stale burst's tail.
+    expect(decode(await transport.read(1000))).toBe("needReSend:0|renderCnt:1");
+  });
+
   it("drains nothing when the wire has been silent", () => {
     const transport = transportOver(new FakePort());
 
