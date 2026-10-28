@@ -13,7 +13,6 @@ import {
   type ThemeCreditsEntry,
 } from "@yunari/theme-package";
 import { ActiveSelection, type FabricObject } from "fabric/es";
-import { createElement } from "react";
 import { applyArrange, canArrange } from "./arrange.js";
 import { type ArtboardPanel, createArtboardPanel } from "./artboard-panel.js";
 import {
@@ -29,7 +28,7 @@ import {
   iconShapes,
   placeIcon,
 } from "./asset-finder/icon-shape.js";
-import { WallpaperEngineBody } from "./asset-finder/wallpaper-engine-body.js";
+import type { WallpaperActions } from "./asset-finder/wallpaper.js";
 import {
   ASSET_FILE_EXTENSIONS,
   type AssetImportMetadata,
@@ -1129,6 +1128,20 @@ export class EditorSession {
     };
   }
 
+  /**
+   * The finder's Wallpaper Engine pane actions: one write per card kind, plus
+   * the `.mpkg` import. The pane owns the listing and the card states; each
+   * callback here is the session's existing import or project route.
+   */
+  #wallpaperActions(): WallpaperActions {
+    return {
+      onSetBackground: (item) => this.importWallpaperItem(item),
+      onConvert: (item) => startProject(item.workshopId),
+      onImportPackage: (file, onStep) =>
+        this.importPickedVideo(file, { package: true, onStep }),
+    };
+  }
+
   /** Reachability only: the shell menus dispatch through the existing owners,
    *  including the private document actions the panel section used to call. */
   actionFacade(): EditorActionFacade {
@@ -1147,17 +1160,11 @@ export class EditorSession {
       // presentational: every refusal reaches the author through
       // `runFontAction`, and the selection-to-preset projection is the shell's.
       fontActions: () => this.#fontActions(),
-      // The finder's Wallpaper Engine body. The listing is the body's own fetch
+      // The finder's Wallpaper Engine pane: the listing is the pane's own fetch
       // — it is a library, not a search — so the session owns only the writes a
       // card triggers: a video's background, a scene's local project, and a
       // picked `.mpkg` through the same one-call import the Assets pane uses.
-      wallpaperEngineBody: () =>
-        createElement(WallpaperEngineBody, {
-          onSetBackground: (item) => this.importWallpaperItem(item),
-          onConvert: (item) => startProject(item.workshopId),
-          onImportPackage: (file, onStep) =>
-            this.importPickedVideo(file, { package: true, onStep }),
-        }),
+      wallpaperActions: () => this.#wallpaperActions(),
       // One finder row's action. The bytes come from the host, the manager
       // keeps its caps and sanitising, and the credit is written before the
       // asset's own consequence runs — an import that places nothing still

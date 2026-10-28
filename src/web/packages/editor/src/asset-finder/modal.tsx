@@ -9,6 +9,11 @@ import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { Dialog } from "../components/ui/dialog.js";
 import { uiCopy } from "../ui-copy.js";
+import {
+  fetchWallpaperEngine,
+  type WallpaperEngineAnswer,
+  type WallpaperEngineItem,
+} from "../wallpaper-engine/client.js";
 import { type AssetPlacement } from "./actions.js";
 import { type ClientOptions, listSources, searchAssets } from "./client.js";
 import { cardModelOf, type FinderCardModel } from "./finder-card.js";
@@ -47,6 +52,12 @@ import {
   rowsOf,
   type TabData,
 } from "./tab-data.js";
+import {
+  type WallpaperActions,
+  WallpaperTools,
+  wallpaperActionsOf,
+  wallpaperCards,
+} from "./wallpaper.js";
 
 /** How long a keystroke settles before it is the query. */
 export const SEARCH_DEBOUNCE_MS = 200;
@@ -97,12 +108,36 @@ export type ActionOutcome =
   | { readonly ok: true; readonly message?: string }
   | { readonly ok: false; readonly message: string };
 
+/** The Wallpaper Engine tab: a library fetched once, narrowed in memory. It
+ *  has no page cursor and no request per keystroke, so it keeps its own small
+ *  state rather than the search tabs' `TabData`. */
+interface LocalView {
+  readonly query: string;
+  readonly kind: "all" | WallpaperEngineItem["kind"];
+  readonly selection: WallpaperEngineItem | undefined;
+  readonly done: ReadonlySet<string>;
+  readonly message:
+    | { readonly text: string; readonly tone: "ok" | "failed" }
+    | undefined;
+}
+
+const EMPTY_LOCAL: LocalView = {
+  query: "",
+  kind: "all",
+  selection: undefined,
+  done: new Set(),
+  message: undefined,
+};
+
 export interface FinderProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   /** The Fonts tab's session writes and role presets. Absent until the shell
    *  wires them; every font action is drawn from what this offers. */
   readonly font?: FontActions;
+  /** The Wallpaper Engine tab's session writes. Absent makes the library
+   *  read-only: the cards still draw and no action claims to run. */
+  readonly wallpaper?: WallpaperActions;
   /** One row's action. `placement` names a second action — an image can be set
    *  as the theme's background or placed on the canvas — and is absent for the
    *  kind's own default. */
@@ -178,6 +213,7 @@ export function AssetFinder({
   open,
   onOpenChange,
   font,
+  wallpaper,
   onAction,
   onOpenConnections,
   initialCategory,
@@ -213,16 +249,22 @@ export function AssetFinder({
     cutId: undefined,
     role: "body" as FontRole,
   });
+  /** The Wallpaper Engine library, fetched on the tab's first activation, and
+   *  the tab's own filter, selection and completed writes. */
+  const [library, setLibrary] = useState<WallpaperEngineAnswer | undefined>();
+  const [local, setLocal] = useState<LocalView>(EMPTY_LOCAL);
+  const [localRunning, setLocalRunning] = useState<string | undefined>();
   const tickets = useRef(new Map<ListingCategory, number>());
 
-  /** A font category exists when the registry lists one, or when the session
-   *  offers the writes a pane needs. */
+  /** A category exists when the registry lists one, or when the session offers
+   *  the writes a pane needs. */
   const present = (
     category: ListingCategory,
     listing: readonly AssetSourceListing[],
   ): boolean =>
     listing.some((source) => source.category === category) ||
-    (category === "font" && font !== undefined);
+    (category === "font" && font !== undefined) ||
+    (category === "local" && wallpaper !== undefined);
 
   useEffect(() => {
     if (!open) return;
@@ -274,8 +316,10 @@ export function AssetFinder({
       presentCategories.push(source.category);
     }
   }
-  for (const category of ["font"] as const) {
-    if (font !== undefined && !presentCategories.includes(category)) {
+  for (const category of ["font", "local"] as const) {
+    const offered =
+      category === "font" ? font !== undefined : wallpaper !== undefined;
+    if (offered && !presentCategories.includes(category)) {
       presentCategories.push(category);
     }
   }
@@ -390,6 +434,20 @@ export function AssetFinder({
     // `enabledKey` and `question` stand for the source list and the query:
     // `enabledSources` is a new array every render and would restart the timer.
   }, [open, active, view.browsed, view.data.query, enabledKey, client]);
+
+  /** The Wallpaper Engine tab reads this PC's library once, on its first
+   *  activation. It is not a search: nothing is asked again as the author
+   *  types, and the filter narrows what already landed. */
+  useEffect(() => {
+    if (!open || active !== "local" || library !== undefined) return undefined;
+    let live = true;
+    void fetchWallpaperEngine(client).then((next) => {
+      if (live) setLibrary(next);
+    });
+    return () => {
+      live = false;
+    };
+  }, [open, active, library, client]);
 
   const loadMore = (): void => {
     if (active === undefined) return;
@@ -515,7 +573,21 @@ export function AssetFinder({
     );
   }
 
-  const isGrid = gridSources.length > 0;
+  /** The Wallpaper Engine tab draws the same frame, card and grid, but its
+   *  content is a listing rather than an answer. */
+  const isLocal = active === "local";
+  const isGrid = isLocal || gridSources.length > 0;
+  const libraryItems = library?.available === true ? library.items : [];
+  const localUnavailable =
+    library !== undefined && library.available === false
+      ? uiCopy.assets.wallpaperEngine.reason[library.reason]
+      : undefined;
+  const localNeedle = local.query.trim().toLowerCase();
+  const localShown = libraryItems.filter(
+    (item) =>
+      (local.kind === "all" || item.kind === local.kind) &&
+      (localNeedle === "" || item.title.toLowerCase().includes(localNeedle)),
+  );
   const rows = rowsOf(view.data, enabled);
   /** What the grid draws: the tab's own filter can narrow a font answer
    *  without touching what was asked or kept. */
@@ -557,7 +629,11 @@ export function AssetFinder({
   };
 
   /** One line, in the spec's priority order. */
-  const statusNode: React.ReactNode = isGrid ? (
+  const statusNode: React.ReactNode = isLocal ? (
+    local.message === undefined ? undefined : (
+      <span data-yunari-asset-message="">{local.message.text}</span>
+    )
+  ) : isGrid ? (
     view.message !== undefined ? (
       <span data-yunari-asset-message="">{view.message.text}</span>
     ) : view.loading !== undefined ? (
@@ -583,8 +659,9 @@ export function AssetFinder({
       )}${more ? "" : ` · ${uiCopy.assets.endOfResults}`}`
     ) : undefined
   ) : undefined;
-  const statusTone: "ok" | "failed" | undefined =
-    view.message?.tone ?? (failures.length > 0 ? "failed" : undefined);
+  const statusTone: "ok" | "failed" | undefined = isLocal
+    ? local.message?.tone
+    : (view.message?.tone ?? (failures.length > 0 ? "failed" : undefined));
 
   const placeAction: FinderAction = {
     id: "place",
@@ -651,6 +728,37 @@ export function AssetFinder({
         },
       }));
     });
+  };
+
+  /** The Wallpaper Engine tab's footer, built from the chosen item, and the
+   *  write it runs. A success marks that card done for the modal session. */
+  const localFooter: readonly FinderAction[] = isLocal
+    ? wallpaperActionsOf(local.selection, wallpaper)
+    : [];
+  const runLocalAction = (
+    action: FinderAction,
+    item: WallpaperEngineItem | undefined = local.selection,
+  ): void => {
+    setLocalRunning(action.id);
+    void Promise.resolve(action.run()).then((result) => {
+      setLocalRunning(undefined);
+      setLocal((current) => ({
+        ...current,
+        done:
+          result.ok && item !== undefined
+            ? new Set([...current.done, item.workshopId])
+            : current.done,
+        message: {
+          text: result.message ?? uiCopy.assets.done.local,
+          tone: result.ok ? "ok" : "failed",
+        },
+      }));
+    });
+  };
+  const selectLocal = (card: FinderCardModel): void => {
+    const item = localShown.find((entry) => entry.workshopId === card.id);
+    if (item !== undefined)
+      setLocal((current) => ({ ...current, selection: item }));
   };
 
   const emptyState = (): React.ReactNode => {
@@ -734,11 +842,19 @@ export function AssetFinder({
         setActive(category);
       }}
       {...(isGrid
-        ? {
-            query: view.data.query,
-            searchPlaceholder: uiCopy.assets.search[active],
-            onQueryChange: (value: string) => askNew(active, value),
-          }
+        ? isLocal
+          ? {
+              query: local.query,
+              searchPlaceholder: uiCopy.assets.search[active],
+              onQueryChange: (value: string) => {
+                setLocal((current) => ({ ...current, query: value }));
+              },
+            }
+          : {
+              query: view.data.query,
+              searchPlaceholder: uiCopy.assets.search[active],
+              onQueryChange: (value: string) => askNew(active, value),
+            }
         : {})}
       filters={
         active === "font" ? (
@@ -746,6 +862,22 @@ export function AssetFinder({
             filter={fontFilter}
             onChange={(next) => {
               setFontFilter(next);
+            }}
+          />
+        ) : isLocal ? (
+          <FinderSegmented
+            label={uiCopy.assets.wallpaperEngine.filterKind}
+            value={local.kind}
+            options={(["all", "video", "scene"] as const).map((kind) => ({
+              id: kind,
+              label:
+                kind === "all"
+                  ? uiCopy.assets.wallpaperEngine.filterAll
+                  : uiCopy.assets.wallpaperEngine.kind[kind],
+              data: { "data-yunari-wallpaper-engine-kind-filter": kind },
+            }))}
+            onChange={(kind) => {
+              setLocal((current) => ({ ...current, kind }));
             }}
           />
         ) : active === "colour" && kinds.length > 1 ? (
@@ -806,10 +938,23 @@ export function AssetFinder({
         ) : undefined
       }
       tools={
-        <ConnectionsButton
-          needs={needsConnections}
-          onOpen={() => onOpenConnections?.()}
-        />
+        <>
+          {isLocal ? (
+            <WallpaperTools
+              onImportPackage={wallpaper?.onImportPackage}
+              onStatus={(message) => {
+                setLocal((current) => ({
+                  ...current,
+                  message: { text: message, tone: "ok" },
+                }));
+              }}
+            />
+          ) : null}
+          <ConnectionsButton
+            needs={needsConnections}
+            onOpen={() => onOpenConnections?.()}
+          />
+        </>
       }
       status={statusNode}
       {...(statusTone === undefined ? {} : { statusTone })}
@@ -827,7 +972,19 @@ export function AssetFinder({
           })}
       actions={
         isGrid ? (
-          active === "font" ? (
+          isLocal ? (
+            <>
+              {localFooter.map((action) => (
+                <FinderActionButton
+                  key={action.id}
+                  action={action}
+                  busy={localRunning === action.id}
+                  onRun={() => runLocalAction(action)}
+                  data={{ "data-yunari-asset-action": "" }}
+                />
+              ))}
+            </>
+          ) : active === "font" ? (
             <>
               {fontFooter.map((action) => (
                 <FinderActionButton
@@ -875,6 +1032,74 @@ export function AssetFinder({
         >
           <FinderState message={uiCopy.assets.noSource} />
         </div>
+      ) : isLocal ? (
+        localUnavailable !== undefined ? (
+          <div
+            data-yunari-wallpaper-engine-unavailable=""
+            className="min-h-0 flex-1 overflow-y-auto"
+          >
+            <FinderState message={localUnavailable} />
+          </div>
+        ) : library === undefined ? (
+          <div
+            data-yunari-asset-loading=""
+            className="min-h-0 flex-1 overflow-y-auto"
+          >
+            <FinderSkeleton />
+          </div>
+        ) : libraryItems.length === 0 ? (
+          <div
+            data-yunari-wallpaper-engine-empty=""
+            className="min-h-0 flex-1 overflow-y-auto"
+          >
+            <FinderState message={uiCopy.assets.wallpaperEngine.empty} />
+          </div>
+        ) : localShown.length === 0 ? (
+          <div
+            data-yunari-wallpaper-engine-no-matches=""
+            className="min-h-0 flex-1 overflow-y-auto"
+          >
+            <FinderState message={uiCopy.assets.wallpaperEngine.noMatches} />
+          </div>
+        ) : (
+          <div
+            data-yunari-asset-grid=""
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <FinderGrid
+              label={uiCopy.assets.category.local}
+              cards={wallpaperCards(localShown)}
+              selectedId={
+                local.selection === undefined
+                  ? undefined
+                  : `wallpaper-engine:${local.selection.workshopId}`
+              }
+              {...(localRunning === undefined || local.selection === undefined
+                ? {}
+                : { busyId: local.selection.workshopId })}
+              {...(local.message?.tone === "failed" &&
+              local.selection !== undefined
+                ? { failedId: local.selection.workshopId }
+                : {})}
+              {...(local.done.size === 0 ? {} : { doneIds: local.done })}
+              onSelect={selectLocal}
+              onPreview={() => {
+                // The preview modal lands in Task 4.2.
+              }}
+              onApply={(card) => {
+                const item = localShown.find(
+                  (entry) => entry.workshopId === card.id,
+                );
+                setLocal((current) => ({ ...current, selection: item }));
+                const first = wallpaperActionsOf(item, wallpaper)[0];
+                if (first !== undefined) runLocalAction(first, item);
+              }}
+              onNeedMore={() => {}}
+              canLoadMore={false}
+              appending={false}
+            />
+          </div>
+        )
       ) : (
         <>
           {notice === undefined ? null : (

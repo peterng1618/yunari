@@ -47,7 +47,8 @@ export function FinderGrid(props: {
   readonly selectedId: string | undefined;
   readonly busyId?: string;
   readonly failedId?: string;
-  readonly doneId?: string;
+  /** Every card whose write already succeeded: a tab may complete several. */
+  readonly doneIds?: ReadonlySet<string>;
   readonly onSelect: (card: FinderCardModel) => void;
   readonly onPreview: (card: FinderCardModel) => void;
   readonly onApply: (card: FinderCardModel) => void;
@@ -153,7 +154,7 @@ export function FinderGrid(props: {
             selected={`${card.sourceId}:${card.id}` === props.selectedId}
             busy={card.id === props.busyId}
             failed={card.id === props.failedId}
-            done={card.id === props.doneId}
+            done={props.doneIds?.has(card.id) ?? false}
             tabStop={index === at}
             focus={(node) => {
               nodes.current.set(index, node);

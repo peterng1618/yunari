@@ -223,6 +223,15 @@ function finder(
         onAddPreset: () => {},
         onApplyToSelected: () => {},
       }}
+      wallpaper={{
+        onSetBackground: async () => ({ ok: true }),
+        onConvert: async (item) => ({
+          ok: true,
+          name: item.workshopId,
+          reused: false,
+        }),
+        onImportPackage: async () => ({ ok: true }),
+      }}
       onAction={async () => ({ ok: true })}
       {...props}
     />
@@ -361,15 +370,115 @@ describe("AssetFinder tabs", () => {
     ).toContain(uiCopy.assets.hostUnavailable);
   });
 
-  it("says a category has no pane rather than drawing a blank dialog", async () => {
+  it("draws the Wallpaper Engine library as the shared grid", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              available: true,
+              install: "D:/Steam/wallpaper_engine",
+              items: [
+                {
+                  workshopId: "201",
+                  title: "Still lake",
+                  kind: "scene",
+                  filesize: 4096,
+                  tags: [],
+                },
+              ],
+              skipped: 0,
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
     await render([wallpaperEngine]);
     await settle();
 
     expect(
-      document.querySelector('[data-yunari-asset-body="local"]')?.textContent,
-    ).toContain(uiCopy.assets.noSource);
+      document.querySelector('[data-yunari-finder-card="201"]'),
+    ).not.toBeNull();
     expect(document.querySelector("[data-yunari-asset-chip]")).toBeNull();
     expect(searchAssets).not.toHaveBeenCalled();
+  });
+});
+
+describe("AssetFinder's Wallpaper Engine tab", () => {
+  function stubLibrary(): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              available: true,
+              install: "D:/Steam/wallpaper_engine",
+              items: [
+                {
+                  workshopId: "201",
+                  title: "Still lake",
+                  kind: "scene",
+                  filesize: 4096,
+                  tags: [],
+                },
+              ],
+              skipped: 0,
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+  }
+
+  it("reads the library once, on the tab's first activation", async () => {
+    stubLibrary();
+    await render([wallpaperEngine]);
+    await settle();
+    const fetcher = vi.mocked(globalThis.fetch);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    await act(async () => tab("font").click());
+    await settle();
+    await act(async () => tab("local").click());
+    await settle();
+
+    // The library is this PC's, not a question: returning to the tab never
+    // re-reads the disk.
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs the selected scene's conversion from the footer and marks the card", async () => {
+    stubLibrary();
+    await render([wallpaperEngine]);
+    await settle();
+
+    const card = document.querySelector<HTMLElement>(
+      '[data-yunari-finder-card="201"]',
+    );
+    await act(async () => card?.click());
+
+    const action = document.querySelector<HTMLButtonElement>(
+      "[data-yunari-asset-action]",
+    );
+    expect(action?.textContent).toContain(
+      uiCopy.assets.wallpaperEngine.action.scene.idle,
+    );
+
+    await act(async () => {
+      action?.click();
+    });
+    await settle();
+
+    expect(
+      document.querySelector(
+        '[data-yunari-finder-card="201"] [data-yunari-finder-card-done]',
+      ),
+    ).not.toBeNull();
+    expect(
+      document.querySelector("[data-yunari-asset-message]")?.textContent,
+    ).toContain("My Projects");
   });
 });
 

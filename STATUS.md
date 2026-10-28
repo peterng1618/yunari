@@ -12,18 +12,20 @@ The asset finder's UI/UX overhaul: one shell, one card, one skeleton and one con
 - **Plan is running:** `docs/superpowers/plans/2026-10-28-asset-finder-unification.md`, Phase 4.
 - **Phase 2 is complete:** each tab accumulates its own question, rows and selection; the grid appends on scroll and the pager is deleted.
 - **Phase 3 is complete:** the Unsplash Editorial feed and both browser panes (Images, Fonts) draw through the shared frame and card.
+- **Phase 4 in progress:** the Wallpaper Engine library is now a pane of the same frame; the preview modal and the DESIGN.md rules remain.
 
 ## Last completed change
 
-- **Fonts is a pane, not a body:** the same search, grid, skeleton and empty/error states; its filters, selection and preview live in the tab's own state.
-- **One footer and one detail column:** `fontActionsOf` declares a trio's and a family's outcomes, and the preview panel is controlled by the shell.
-- **Facade swap:** `fontActions()` replaces `fontPickerBody()`; `fonts-body.tsx` and `font-grid.tsx` are deleted with their tests.
-- **Proof:** 62 focused DOM tests, 27 browser tests (1 skipped) and `npm run gate` exit 0.
+- **Wallpaper Engine is a pane:** the library is fetched once, filtered in memory, and drawn by the shared grid; filters, search and tools use the one frame.
+- **One footer action per selection:** `wallpaperActionsOf` names a video's background or a scene's conversion, and a success marks that card done.
+- **Tools stay still:** the guide and `.mpkg` import sit in the toolbar, so a listing landing never remounts the import modal.
+- **Facade swap:** `wallpaperActions()` replaces `wallpaperEngineBody()`; the old body, card and body test are deleted.
+- **Proof:** 59 DOM tests in the touched files, 4 Wallpaper Engine and 27 finder browser tests (1 skipped), `npm run gate` exit 0.
 
 ## Next
 
-1. Execute Task 4.1: the Wallpaper Engine pane.
-2. Then Task 4.2 (the double-click preview modal) and Task 4.3 (DESIGN.md rules and the phase close).
+1. Execute Task 4.2: the double-click preview modal.
+2. Then Task 4.3: the DESIGN.md rules and the phase close.
 
 ## Blockers / unverified
 

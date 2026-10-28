@@ -146,8 +146,8 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     "the search field is a filter that re-runs on a debounce: nothing is authored to commit or cancel",
   ],
   [
-    "asset-finder/wallpaper-engine-body.tsx",
-    "the search field filters the in-memory listing: nothing is authored to commit or cancel",
+    "asset-finder/wallpaper.tsx",
+    'a hidden `type="file"` input, driven by its own toolbar button',
   ],
   [
     "editor-shell/settings.tsx",

@@ -349,6 +349,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
     const finderState = useFinder(finder);
     const finderOpen = finderState.open;
     const fontActions = store.bridge?.session.fontActions?.();
+    const wallpaperActions = store.bridge?.session.wallpaperActions?.();
     /** Re-frame on the panel toggle, once the viewport has the new width.
      *
      * A resize does not need this any more: the viewport derives whether the
@@ -650,6 +651,9 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
               open={finderOpen}
               onOpenChange={(next) => finder.set(next)}
               {...(fontActions === undefined ? {} : { font: fontActions })}
+              {...(wallpaperActions === undefined
+                ? {}
+                : { wallpaper: wallpaperActions })}
               {...(finderState.category === undefined
                 ? {}
                 : { initialCategory: finderState.category })}
