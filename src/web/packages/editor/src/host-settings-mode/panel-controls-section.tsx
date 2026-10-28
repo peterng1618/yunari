@@ -292,16 +292,22 @@ export function PanelControlsSection(props: {
           ) : null}
 
           {/* One live region that is always mounted: a node inserted with its
-              text announces nothing, and the panel's own answer is the one
-              thing here nobody can infer. */}
+              text announces nothing, and what the device says back is the one
+              thing here nobody can infer. A write-only command has no reply —
+              "Sent" is the host confirming the bytes went, not the panel
+              talking — so the label names which of the two is showing. */}
           <div className="flex flex-col gap-[var(--space-2)]">
-            <span className="text-2xs text-faint">{copy.lastReply}</span>
+            <span className="text-2xs text-faint">
+              {reply === undefined || reply === ""
+                ? copy.commandLabel
+                : copy.replyLabel}
+            </span>
             <p
               data-yunari-panel-reply=""
               aria-live="polite"
               className="m-0 text-xs text-text"
             >
-              {reply ?? ""}
+              {reply === undefined ? "" : reply === "" ? copy.sent : reply}
             </p>
           </div>
 

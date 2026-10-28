@@ -190,6 +190,25 @@ it("sends brightness as a whole percent and shows the reply", async () => {
   expect(replyText()).toBe("ok");
 });
 
+it("shows a host confirmation, not a reply, for a write-only command", async () => {
+  // A write-only command (brightness) has no device answer. The empty reply is
+  // the host confirming the command went, so the live region must not present
+  // it as the panel's words.
+  const onCommand = vi.fn(async () => "");
+  await mount(
+    <PanelControlsSection
+      displayId="panel-1"
+      panel={CONTROLLABLE}
+      onCommand={onCommand}
+    />,
+  );
+  await click(buttonNamed(/controls/i));
+  await typeInto(brightnessField(), "50");
+  await click(buttonNamed(/apply/i));
+  expect(onCommand).toHaveBeenCalledWith({ kind: "brightness", level: 50 });
+  expect(replyText()).toBe("Sent");
+});
+
 it("blocks a level above 100 without calling the host", async () => {
   const onCommand = vi.fn(async () => "ok");
   await mount(

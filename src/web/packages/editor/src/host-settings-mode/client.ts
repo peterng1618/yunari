@@ -177,7 +177,8 @@ export interface HostSettingsClient {
    *  the host minted, which is what the row above selects afterwards. */
   addPanel(label: string, panel: PanelHardware): Promise<string>;
   /** Sends one control command over a panel's control channel and answers the
-   *  panel's own reply. A refusal is thrown in the host's words, which is the
+   *  panel's own reply text; empty when the device said nothing, which is every
+   *  write-only command. A refusal is thrown in the host's words, which is the
    *  only way a stopped or closed port reaches the person. */
   panelCommand(id: string, command: EditorPanelCommand): Promise<string>;
 }

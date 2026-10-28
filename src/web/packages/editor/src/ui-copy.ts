@@ -478,9 +478,10 @@ export const uiCopy = {
           : `Supported firmware ${versions.join(", ")}`,
       updated: (date: string): string => `Recorded ${date}`,
       /** The device answers a firmware the driver has not met. The warning a
-       *  person needs before asking why a feature does not work. */
+       *  person needs before asking why a feature does not work: it names the
+       *  risk that the protocol may have changed, not just the numbers. */
       mismatch: (detected: string, supported: readonly string[]): string =>
-        `Firmware ${detected} is not one this panel is known to take (${supported.join(", ")}).`,
+        `Firmware ${detected} is not one this panel is known to take (${supported.join(", ")}). The panel's protocol may have changed, so a control may not work.`,
       /** The controls one display's panel accepts over its own cable. The
        *  section opens a dialog rather than drawing the commands in the page:
        *  a restart is one press that makes the panel drop, and it belongs
@@ -507,7 +508,12 @@ export const uiCopy = {
           "The panel goes away for about 15 seconds and comes back on its own.",
         status: "Query status",
         hello: "Identify",
-        lastReply: "Last reply",
+        /** The panel's own words, shown only when it answered. A write-only
+         *  command has an empty reply, so the host says the command was sent
+         *  instead, under a label that does not call that sentence a reply. */
+        replyLabel: "Panel reply",
+        commandLabel: "Last command",
+        sent: "Sent",
         /** The host's or the panel's own words, shown inline: a refusal caused
          *  by a closing port is the reason a person needs, not a generic lead. */
         failed: (reason: string): string =>
