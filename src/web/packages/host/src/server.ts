@@ -3974,6 +3974,16 @@ export function createHostServer(options: HostServerOptions): HostServer {
         }
 
         await activeTheme.write(key, id);
+
+        // A panel's runner chooses its video when it starts, so a new theme is
+        // a new thing for the device to play. Restarting is the whole update:
+        // the still path would pick the page change up on its own, but a video
+        // the panel started is not the one the page now shows.
+        if (options.panels !== undefined) {
+          options.panels.stop(key);
+          await options.panels.start(key);
+        }
+
         sendJson(response, 200, {
           ok: true,
           ...(await activeThemeMap(activeTheme, available)),

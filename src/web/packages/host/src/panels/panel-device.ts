@@ -26,8 +26,45 @@ export interface PanelHint {
   readonly label: string;
 }
 
+/**
+ * Where a theme's video background sits in its box, as a fraction of each axis
+ * (`BackgroundMedia.offsetX/offsetY`). The device composes the frame itself, so
+ * the authored pan has to travel with the bytes; without it the panel shows a
+ * centred cover while the editor shows the owner's composition.
+ */
+export interface PanelVideoPlacement {
+  readonly offsetX: number;
+  readonly offsetY: number;
+}
+
+/** A video background and the placement it was authored with. */
+export interface PanelVideoSource {
+  readonly bytes: Uint8Array;
+  readonly placement: PanelVideoPlacement;
+}
+
+/**
+ * A panel that decodes video itself, so a video background plays at the
+ * device's own frame rate instead of the host's capture cadence.
+ *
+ * Absence is the capability: a panel without this is driven by `present`
+ * alone. While video plays, the host sends only its UI, as a PNG with alpha
+ * over the picture — the same two-layer composition L-Connect uses.
+ */
+export interface PanelVideo {
+  /** Plays `video` (an MP4) on the panel. The adapter owns every conversion
+   *  the device needs, including orientation and the authored pan. */
+  start(video: Uint8Array, placement: PanelVideoPlacement): Promise<void>;
+  /** Replaces the transparent UI layer drawn over the playing video. */
+  presentOverlay(png: Uint8Array): Promise<void>;
+  /** Ends playback. The panel keeps showing its last frame. */
+  stop(): Promise<void>;
+}
+
 export interface PanelDevice {
   readonly geometry: PanelGeometry;
+  /** Present only on a device that decodes video. */
+  readonly video?: PanelVideo;
   /** Opens the device and claims it. Throws with the reason it could not. */
   open(): Promise<void>;
   /**

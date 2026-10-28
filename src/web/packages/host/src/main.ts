@@ -12,6 +12,7 @@ import {
   stableName,
   waitUntilReachable,
 } from "./cli/net.js";
+import type { PanelVideoSource } from "./panels/panel-device.js";
 import {
   createPanelManager,
   type PanelManager,
@@ -353,6 +354,10 @@ export async function run(argv: readonly string[]): Promise<number> {
   const autostart = createHostAutostart();
   const entry = hostEntry(argv, here);
 
+  // Named because two owners read it: the server serves themes, and a panel
+  // resolves its assigned theme's video asset to play it itself.
+  const themeStore = createThemeStore(themesDir);
+
   const hosted = createHostServer({
     registry,
     // The leaf, signed by the root a display installs once. In memory only:
@@ -390,7 +395,7 @@ export async function run(argv: readonly string[]): Promise<number> {
       // Served from source: the settings page has no build step.
       admin: path.join(packagesDir, "host", "public"),
     },
-    themeStore: createThemeStore(themesDir),
+    themeStore,
     // The Steam library on this PC, read on demand: the install is located per
     // listing, because a library can appear while the editor is open.
     wallpaperEngine: createWallpaperEngineSource(),
@@ -501,6 +506,35 @@ export async function run(argv: readonly string[]): Promise<number> {
     displays,
     pageFor: (displayId) =>
       `http://127.0.0.1:${bound}/?display=${encodeURIComponent(displayId)}`,
+    // A video theme is one the panel can play itself. Absent means the still
+    // path, which is also what a theme with a picture background wants.
+    videoFor: async (displayId): Promise<PanelVideoSource | undefined> => {
+      const id = await activeTheme.read(displayId, (theme) =>
+        themeStore.exists(theme),
+      );
+      if (id === undefined) return undefined;
+
+      const record = await themeStore.read(id).catch(() => undefined);
+      const media = record?.envelope.background?.media;
+      if (record === undefined || media === undefined) return undefined;
+
+      const asset = record.envelope.assets?.find(
+        (candidate) => candidate.id === media.assetId,
+      );
+      if (asset === undefined || asset.kind !== "video") return undefined;
+
+      const bytes = record.assets[asset.path];
+      if (bytes === undefined) return undefined;
+
+      // The device composes the frame, so the authored pan travels with it.
+      return {
+        bytes,
+        placement: {
+          offsetX: media.offsetX ?? 0,
+          offsetY: media.offsetY ?? 0,
+        },
+      };
+    },
     onError: (displayId, message) => {
       console.error(`Panel ${displayId}: ${message}`);
     },

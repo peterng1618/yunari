@@ -23,7 +23,12 @@ export type PanelCommand =
   | "version"
   | "brightness"
   | "frame-rate"
+  | "rotate"
   | "push-jpeg"
+  | "push-png"
+  | "overlay-layer"
+  | "play-block"
+  | "stop-play"
   | "buffer-level"
   | "clock";
 
@@ -33,7 +38,17 @@ export const OPCODE: Readonly<Record<PanelCommand, number>> = {
   version: 10,
   brightness: 14,
   "frame-rate": 15,
+  /** The panel's own quarter-turn state. It persists across power cycles, so
+   *  the adapter pins it rather than inheriting whatever the vendor app left. */
+  rotate: 13,
   "push-jpeg": 101,
+  "push-png": 102,
+  /** One block of an H.264 elementary stream the panel decodes itself. */
+  "play-block": 121,
+  /** L-Connect's FB1_State: parameter 1 shows the PNG layer, 0 hides it. */
+  "overlay-layer": 105,
+  /** Ends any playback still running on the panel before a pushed frame. */
+  "stop-play": 123,
   "buffer-level": 122,
   clock: 51,
 };
@@ -43,6 +58,10 @@ export interface CommandFields {
   readonly payloadLength?: number;
   /** One byte at offset 8, for brightness and frame rate. */
   readonly parameter?: number;
+  /** StartPlay's final-block flag, at offset 12. */
+  readonly lastBlock?: boolean;
+  /** StartPlay's play count, at offset 13. */
+  readonly playCount?: number;
 }
 
 /**
@@ -73,6 +92,9 @@ export function commandBlock(
   if (fields.parameter !== undefined) {
     block[8] = fields.parameter;
   }
+
+  if (fields.lastBlock !== undefined) block[12] = fields.lastBlock ? 1 : 0;
+  if (fields.playCount !== undefined) block[13] = fields.playCount;
 
   return block;
 }

@@ -1,5 +1,6 @@
 import { findBrowser } from "../serve/display-launcher.js";
 import type { DisplayRecord, DisplayStore } from "../settings/displays.js";
+import type { PanelVideoSource } from "./panel-device.js";
 import { familyFor } from "./panel-families.js";
 import { createRasterizer } from "./panel-raster.js";
 import { createPanelRunner, type PanelRunner } from "./panel-runner.js";
@@ -24,6 +25,11 @@ export interface PanelManagerOptions {
   readonly displays: DisplayStore;
   /** The player page a display is shown at, including its credential. */
   readonly pageFor: (displayId: string) => string;
+  /** The display's assigned theme's video background, when it has one. Read
+   *  once per start: a theme change restarts the runner, which re-reads it. */
+  readonly videoFor?: (
+    displayId: string,
+  ) => Promise<PanelVideoSource | undefined>;
   readonly onError?: (displayId: string, message: string) => void;
   /** The browser to rasterise with; the launcher's own discovery by default. */
   readonly browser?: string | undefined;
@@ -127,9 +133,17 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       throw error;
     }
 
+    // A video theme is read before the runner exists: a panel whose assignment
+    // cannot be read is a still panel, not a panel with no runner.
+    const video = await options.videoFor?.(displayId).catch((error) => {
+      report(displayId, `video: ${messageOf(error)}`);
+      return undefined;
+    });
+
     const runner = createPanelRunner({
       device,
       rasterizer,
+      ...(video === undefined ? {} : { video }),
       // A panel that uploads to its own memory pays an upload per frame, so its
       // floor wins over the streaming default. The device states the floor
       // rather than this file guessing at one family's cost.

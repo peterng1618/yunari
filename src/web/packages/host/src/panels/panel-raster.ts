@@ -24,6 +24,9 @@ import type { PanelGeometry } from "./panel-device.js";
 const MOUNT_TIMEOUT_MS = 20_000;
 /** Chrome's own log line is the only reliable signal that the port is up. */
 const START_TIMEOUT_MS = 20_000;
+/** A capture measures ~45 ms. A reply that never comes must free the loop that
+ *  is waiting for it, rather than leave the panel frozen with no message. */
+const REPLY_TIMEOUT_MS = 5_000;
 
 export interface RasterOptions {
   /** The browser executable, from `findBrowser`. */
@@ -42,6 +45,16 @@ export interface Rasterizer {
    * broken.
    */
   capture(): Promise<Uint8Array>;
+  /**
+   * The UI alone, as a PNG with alpha, with the theme's background media
+   * hidden — the layer a panel composites over a video it plays itself.
+   *
+   * A transparent background is asked of the browser rather than keyed out
+   * afterwards: the player draws the media in a sibling layer, so hiding that
+   * layer is the whole difference between "the theme" and "the theme without
+   * its picture".
+   */
+  captureOverlay(): Promise<Uint8Array>;
   close(): Promise<void>;
 }
 
@@ -56,10 +69,16 @@ interface CdpReply {
  * handling beyond what a capture needs.
  */
 class Devtools {
+  private closed = false;
+
   private constructor(
     private readonly socket: WebSocket,
     private nextId: number,
-  ) {}
+  ) {
+    this.socket.addEventListener("close", () => {
+      this.closed = true;
+    });
+  }
 
   static async connect(url: string): Promise<Devtools> {
     const socket = new WebSocket(url);
@@ -79,15 +98,34 @@ class Devtools {
     method: string,
     params: Record<string, unknown> = {},
   ): Promise<CdpReply> {
+    if (this.closed) {
+      return Promise.reject(
+        new Error(`the browser's devtools socket closed before ${method}`),
+      );
+    }
+
     const id = this.nextId;
     this.nextId += 1;
 
     return new Promise((resolve, reject) => {
+      // **A reply that never comes is the failure that froze a panel.** Without
+      // this the caller waits on a promise nothing will settle, and the tick
+      // that owns it never returns to try again.
+      const timer = setTimeout(() => {
+        this.socket.removeEventListener("message", onMessage);
+        reject(new Error(`${method} got no reply in ${REPLY_TIMEOUT_MS} ms`));
+      }, REPLY_TIMEOUT_MS);
+
+      const settle = (): void => {
+        clearTimeout(timer);
+        this.socket.removeEventListener("message", onMessage);
+      };
+
       const onMessage = (event: MessageEvent): void => {
         const message = JSON.parse(String(event.data)) as CdpReply;
         if (message.id !== id) return;
 
-        this.socket.removeEventListener("message", onMessage);
+        settle();
         if (message.error !== undefined) {
           reject(new Error(message.error.message ?? method));
           return;
@@ -97,7 +135,13 @@ class Devtools {
       };
 
       this.socket.addEventListener("message", onMessage);
-      this.socket.send(JSON.stringify({ id, method, params }));
+
+      try {
+        this.socket.send(JSON.stringify({ id, method, params }));
+      } catch (error) {
+        settle();
+        reject(error);
+      }
     });
   }
 
@@ -219,33 +263,47 @@ export async function createRasterizer(
 
   let closed = false;
 
+  const live = (): Devtools => {
+    if (closed || devtools === undefined) {
+      throw new Error("The rasteriser is closed.");
+    }
+
+    return devtools;
+  };
+
+  const shot = async (format: "jpeg" | "png"): Promise<Uint8Array> => {
+    const reply = await live().send("Page.captureScreenshot", {
+      format,
+      ...(format === "jpeg" ? { quality: 85 } : {}),
+      clip: {
+        x: 0,
+        y: 0,
+        width: options.geometry.width,
+        height: options.geometry.height,
+        scale: 1,
+      },
+      // The page is exactly the clip size, so nothing here is off-screen; the
+      // flag keeps a shorter page from producing a short image.
+      captureBeyondViewport: false,
+    });
+
+    const data = reply.result?.["data"];
+    if (typeof data !== "string") {
+      throw new Error("The browser returned no image.");
+    }
+
+    return new Uint8Array(Buffer.from(data, "base64"));
+  };
+
   return {
     async capture(): Promise<Uint8Array> {
-      if (closed || devtools === undefined) {
-        throw new Error("The rasteriser is closed.");
-      }
+      await overlayMode(live(), false);
+      return shot("jpeg");
+    },
 
-      const reply = await devtools.send("Page.captureScreenshot", {
-        format: "jpeg",
-        quality: 85,
-        clip: {
-          x: 0,
-          y: 0,
-          width: options.geometry.width,
-          height: options.geometry.height,
-          scale: 1,
-        },
-        // The page is exactly the clip size, so nothing here is off-screen; the
-        // flag keeps a shorter page from producing a short image.
-        captureBeyondViewport: false,
-      });
-
-      const data = reply.result?.["data"];
-      if (typeof data !== "string") {
-        throw new Error("The browser returned no image.");
-      }
-
-      return new Uint8Array(Buffer.from(data, "base64"));
+    async captureOverlay(): Promise<Uint8Array> {
+      await overlayMode(live(), true);
+      return shot("png");
     },
 
     async close(): Promise<void> {
@@ -257,6 +315,43 @@ export async function createRasterizer(
       await rm(profile, { recursive: true, force: true }).catch(() => {});
     },
   };
+}
+
+const OVERLAY_STYLE_ID = "yunari-panel-overlay";
+
+/**
+ * Switches the page between "the theme" and "the theme without its picture".
+ *
+ * The media lives in its own DOM layer, so hiding that layer and asking the
+ * browser for a transparent backdrop leaves exactly the UI a panel draws over
+ * the video it plays itself. The mode is turned back off before a still
+ * capture: a JPEG has no alpha, and the transparent backdrop would come out
+ * black.
+ */
+async function overlayMode(devtools: Devtools, on: boolean): Promise<void> {
+  await devtools.send("Runtime.evaluate", {
+    expression: `(() => {
+      const id = ${JSON.stringify(OVERLAY_STYLE_ID)};
+      const existing = document.getElementById(id);
+      if (${on ? "true" : "false"}) {
+        if (existing !== null) return true;
+        const style = document.createElement("style");
+        style.id = id;
+        style.textContent =
+          "[data-yunari-background-media]{display:none !important} html,body{background:transparent !important}";
+        document.head.append(style);
+      } else {
+        existing?.remove();
+      }
+      return true;
+    })()`,
+    returnByValue: true,
+  });
+
+  await devtools.send(
+    "Emulation.setDefaultBackgroundColorOverride",
+    on ? { color: { r: 0, g: 0, b: 0, a: 0 } } : {},
+  );
 }
 
 /**
