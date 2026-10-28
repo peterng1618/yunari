@@ -49,9 +49,27 @@ export interface PanelControls {
   run(command: PanelControlCommand): Promise<string>;
 }
 
+/**
+ * Where a theme's video background sits in its box, as a fraction of each axis.
+ * The device composes the frame itself, so the authored pan travels with the
+ * bytes; without it the panel shows a centred cover.
+ */
+export interface PanelVideoPlacement {
+  readonly offsetX: number;
+  readonly offsetY: number;
+}
+
+/** A video background and the placement it was authored with. */
+export interface PanelVideoSource {
+  readonly bytes: Uint8Array;
+  readonly placement: PanelVideoPlacement;
+}
+
 /** The video half of a panel that takes frames rather than stills. */
 export interface PanelVideo {
-  start(mp4: Uint8Array): Promise<void>;
+  /** Plays `video` (an MP4). The adapter owns every conversion the device
+   *  needs, including the authored pan. */
+  start(video: Uint8Array, placement: PanelVideoPlacement): Promise<void>;
   presentOverlay(png: Uint8Array): Promise<void>;
   stop(): Promise<void>;
 }

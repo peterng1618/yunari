@@ -1,4 +1,11 @@
-import type { PanelDevice, PanelFamily, PanelHint } from "./panel-device.js";
+import { createHash } from "node:crypto";
+import type {
+  PanelDevice,
+  PanelFamily,
+  PanelHint,
+  PanelVideo,
+  PanelVideoPlacement,
+} from "./panel-device.js";
 import { decodeStill, type RawFrame } from "./panel-image.js";
 import {
   listSerialPorts,
@@ -14,6 +21,7 @@ import {
   TURZX_GEOMETRY,
   type TurzxIdentity,
 } from "./turzx-protocol.js";
+import { type TranscodeResult, transcodeForPanel } from "./turzx-video.js";
 
 /**
  * The TURZX 5" serial panel: a USB CDC gadget that takes a full BGRA frame per
@@ -28,6 +36,20 @@ import {
 const LABEL = 'TURZX 5" Panel';
 /** Long enough for a 23-byte HELLO reply at 115200, short enough to probe many. */
 const PROBE_TIMEOUT_MS = 500;
+/** A file command's answer may follow a whole upload, not just its header. */
+const FILE_TIMEOUT_MS = 10_000;
+/** The panel dropped an overlay update sent 8 ms after init; 1.5 s worked. */
+const OVERLAY_SETTLE_MS = 1500;
+/** A 249-byte chunk plus its `0x00` pad is one frame. */
+const FILE_CHUNK_BYTES = 249;
+/** Storage the vendor firmware reads clips from. */
+const VIDEO_DIRECTORY = "/mnt/SDCARD/video";
+
+/** The transcode the adapter runs before it uploads; a test seam. */
+type Transcode = (
+  bytes: Uint8Array,
+  placement: PanelVideoPlacement,
+) => Promise<TranscodeResult>;
 
 /** One panel this host is driving, by the port it holds.
  *
@@ -55,6 +77,8 @@ export interface TurzxOptions {
   ) => Promise<RawFrame>;
   /** The settle interval a later video overlay waits out. */
   readonly sleep?: (ms: number) => Promise<void>;
+  /** Defaults to `transcodeForPanel`; the seam keeps uploads out of tests. */
+  readonly transcode?: Transcode;
 }
 
 /** A port whose listing carries the ids the family row claims. */
@@ -152,14 +176,33 @@ class TurzxPanel implements PanelDevice {
     height: TURZX_GEOMETRY.height,
   };
 
+  readonly video: PanelVideo;
+
   private queue: Promise<unknown> = Promise.resolve();
+  /** The transparent overlay sent at init; the diff encoder updates from it. */
+  private previousOverlay: Uint8Array | undefined;
+  /** The clip most recently started; a different one deletes it. */
+  private previousVideoPath: string | undefined;
 
   constructor(
     private readonly transport: SerialTransport,
     private readonly decode: NonNullable<TurzxOptions["decode"]>,
     /** The port recorded in `heldPanels`, released with the transport. */
     private readonly path: string,
-  ) {}
+    private readonly transcode: Transcode,
+    private readonly sleep: (ms: number) => Promise<void>,
+  ) {
+    this.video = {
+      start: (mp4, placement) => this.startVideo(mp4, placement),
+      // The diff encoder lands in Task 11; until then an overlay update is a
+      // wiring mistake, not a frame this adapter can send.
+      presentOverlay: () =>
+        Promise.reject(
+          new Error("The TURZX overlay encoder is not wired yet."),
+        ),
+      stop: () => this.enqueue(() => this.send(TURZX_COMMAND.stopVideo)),
+    };
+  }
 
   /** Already opened by `openTurzxPanel`, which is the family's `open`. */
   async open(): Promise<void> {}
@@ -177,6 +220,104 @@ class TurzxPanel implements PanelDevice {
       await this.send(TURZX_COMMAND.displayBitmap);
       await this.send(bgraPayload(raw.rgba));
     });
+  }
+
+  /**
+   * Transcodes, uploads a clip the panel does not already hold, plays it and
+   * initializes the transparent overlay a UI is drawn over.
+   */
+  private async startVideo(
+    mp4: Uint8Array,
+    placement: PanelVideoPlacement,
+  ): Promise<void> {
+    await this.enqueue(async () => {
+      const transcoded = await this.transcode(mp4, placement);
+      if (!transcoded.ok) throw new Error(transcoded.message);
+
+      const remotePath = `${VIDEO_DIRECTORY}/yunari-${sha256(transcoded.bytes).slice(0, 16)}.mp4`;
+      const stored = await this.fileSize(remotePath);
+
+      if (stored !== transcoded.bytes.length) {
+        if (stored > 0) {
+          await this.send(fileHeader(TURZX_COMMAND.deleteFile, remotePath));
+        }
+        await this.upload(remotePath, transcoded.bytes);
+      }
+
+      await this.send(fileHeader(TURZX_COMMAND.startVideo, remotePath));
+      this.expect("play_video_success", await this.reply(), "start playback");
+
+      await this.send(TURZX_COMMAND.preUpdate);
+      await this.send(TURZX_COMMAND.startBitmap);
+      await this.send(TURZX_COMMAND.displayOnVideo);
+
+      // The overlay starts fully transparent: every pixel the UI does not
+      // paint shows the playing video underneath.
+      const transparent = new Uint8Array(
+        this.geometry.width * this.geometry.height * 4,
+      );
+      await this.send(bgraPayload(transparent));
+      await this.send(
+        frame(Uint8Array.of(0xd0, 0xef, 0x69, 0x00, 0x00, 0x00, 0x02)),
+      );
+      await this.send(frame(Uint8Array.of(0xef, 0x69)));
+
+      // Init answers `seq_png_init_sucessneedReSend:0|renderCnt:N`; the first
+      // update must wait out the panel's settle.
+      await this.reply();
+      await this.sleep(OVERLAY_SETTLE_MS);
+      await this.send(TURZX_COMMAND.queryStatus);
+
+      this.previousOverlay = transparent;
+      if (
+        this.previousVideoPath !== undefined &&
+        this.previousVideoPath !== remotePath
+      ) {
+        await this.send(
+          fileHeader(TURZX_COMMAND.deleteFile, this.previousVideoPath),
+        );
+      }
+      this.previousVideoPath = remotePath;
+    });
+  }
+
+  /** The device's stored size for `remotePath`, or 0 when it holds nothing. */
+  private async fileSize(remotePath: string): Promise<number> {
+    await this.send(fileHeader(TURZX_COMMAND.getFileSize, remotePath));
+
+    let size = parseFileSize(await this.reply());
+    if (size === undefined) {
+      // `openTurzxPanel` ends on QUERY_STATUS, whose text reply is buffered and
+      // is what this first read returns. The size answer is behind it.
+      size = parseFileSize(await this.reply());
+    }
+
+    return size ?? 0;
+  }
+
+  private async upload(remotePath: string, bytes: Uint8Array): Promise<void> {
+    await this.send(
+      fileHeader(TURZX_COMMAND.uploadFile, remotePath, bytes.length),
+    );
+
+    for (let start = 0; start < bytes.length; start += FILE_CHUNK_BYTES) {
+      await this.send(frame(bytes.subarray(start, start + FILE_CHUNK_BYTES)));
+    }
+
+    this.expect("create_success", await this.reply(), "accept the video file");
+  }
+
+  private reply(): Promise<Uint8Array> {
+    return this.transport.read(FILE_TIMEOUT_MS);
+  }
+
+  private expect(phrase: string, reply: Uint8Array, action: string): void {
+    const text = decodeReply(reply);
+    if (!text.includes(phrase)) {
+      throw new Error(
+        `The panel did not ${action}: ${text === "" ? "no reply" : text}.`,
+      );
+    }
   }
 
   async close(): Promise<void> {
@@ -204,6 +345,56 @@ class TurzxPanel implements PanelDevice {
 }
 
 /**
+ * A path command: the six-byte command, a one-byte path length, three nulls,
+ * the ASCII path, and — for an upload — the file size as int32 little-endian.
+ * Framed separately, because every write the panel reads is 250 bytes.
+ */
+function fileHeader(
+  command: Uint8Array,
+  remotePath: string,
+  size?: number,
+): Uint8Array {
+  const pathBytes = new TextEncoder().encode(remotePath);
+  if (pathBytes.length > 255) {
+    throw new Error(`The panel path is too long: ${remotePath}.`);
+  }
+
+  const header = new Uint8Array(
+    command.length + 4 + pathBytes.length + (size === undefined ? 0 : 4),
+  );
+  header.set(command);
+  header[command.length] = pathBytes.length;
+  header.set(pathBytes, command.length + 4);
+  if (size !== undefined) {
+    new DataView(header.buffer).setInt32(
+      command.length + 4 + pathBytes.length,
+      size,
+      true,
+    );
+  }
+
+  return frame(header);
+}
+
+function sha256(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function decodeReply(reply: Uint8Array): string {
+  return new TextDecoder("latin1").decode(reply).replace(/[\0\s]+$/, "");
+}
+
+function parseFileSize(reply: Uint8Array): number | undefined {
+  const text = decodeReply(reply).trim();
+
+  return /^\d+$/.test(text) ? Number.parseInt(text, 10) : undefined;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * The first attached panel whose HELLO parses, with its video and media stopped.
  *
  * Refused with a sentence rather than a bare failure, because "not plugged in"
@@ -219,6 +410,10 @@ export async function openTurzxPanel(
     options.decode ??
     ((bytes: Uint8Array, width: number, height: number) =>
       decodeStill(bytes, width, height));
+  const transcode: Transcode =
+    options.transcode ??
+    ((bytes, placement) => transcodeForPanel(bytes, { placement }));
+  const sleep = options.sleep ?? wait;
 
   const candidates = ports.filter(hasIds);
 
@@ -268,7 +463,7 @@ export async function openTurzxPanel(
       firmware: identity.firmware,
     });
 
-    return new TurzxPanel(transport, decode, port.path);
+    return new TurzxPanel(transport, decode, port.path, transcode, sleep);
   }
 
   if (held !== undefined) {
