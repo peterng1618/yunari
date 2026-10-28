@@ -58,13 +58,20 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
   const intervalMs = options.intervalMs ?? DEFAULT_PANEL_INTERVAL_MS;
   const report = options.onError ?? (() => {});
   let last: Uint8Array | undefined;
+  /** True while ticks are allowed; cleared the moment a stop is asked for. */
   let running = true;
+  /** True once the device actually closed, so a failed close can be retried. */
+  let closed = false;
+  /** The stop in flight; concurrent callers share one attempt. */
+  let stopping: Promise<void> | undefined;
   /** The tick in flight, so a stop can wait for it before closing the device. */
   let inFlight: Promise<boolean> | undefined;
   /** Not yet uploaded; dropped once the device has seen it or refused it. */
   let source = options.video;
   /** The device is playing the clip, so stop releases it. */
   let playing = false;
+  /** Set once the clip was stopped, so a retried stop does not ask twice. */
+  let clipStopped = false;
   /** The overlay path still works; a refused overlay drops the panel to stills. */
   let overlay = false;
 
@@ -168,20 +175,33 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
       return tick;
     },
 
-    async stop(): Promise<void> {
-      if (!running) return;
+    stop(): Promise<void> {
       running = false;
+      if (stopping !== undefined) return stopping;
+      if (closed) return Promise.resolve();
 
-      // A tick already inside `video.start` or a capture must finish first:
-      // closing the port under it would make the start fail against a dead
-      // device, and its result could land after this stop read it.
-      await inFlight;
+      const attempt = (async () => {
+        // A tick already inside `video.start` or a capture must finish first:
+        // closing the port under it would make the start fail against a dead
+        // device, and its result could land after this stop read it.
+        await inFlight;
 
-      // The clip belongs to the device once started, so it is stopped with it
-      // rather than left playing behind a port the next runner wants.
-      if (playing) await options.device.video?.stop();
-      await options.rasterizer.close();
-      await options.device.close();
+        // The clip belongs to the device once started, so it is stopped with
+        // it rather than left playing behind a port the next runner wants.
+        if (playing && !clipStopped) {
+          await options.device.video?.stop();
+          clipStopped = true;
+        }
+
+        await options.rasterizer.close();
+        await options.device.close();
+        closed = true;
+      })().finally(() => {
+        if (stopping === attempt) stopping = undefined;
+      });
+
+      stopping = attempt;
+      return attempt;
     },
   };
 }

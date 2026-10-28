@@ -208,9 +208,7 @@ describe("a panel's video", () => {
     // with nothing; treating that as unknown must still upload the clip.
     const { writes, transport } = fakeTransport(
       "chs_5inch.dev1_rom1.88",
-      "", // GET_FILE_SIZE: three silent reads
-      "",
-      "",
+      "", // GET_FILE_SIZE: silence ends the reply wait at once
       "create_success",
       "play_video_success",
       "seq_png_init_sucessneedReSend:0|renderCnt:1",
@@ -236,7 +234,7 @@ describe("a panel's video", () => {
     const { transport } = fakeTransport(
       "chs_5inch.dev1_rom1.88",
       "0", // GET_FILE_SIZE
-      "still_not_it", // three replies with no create_success
+      "still_not_it", // stale replies with no create_success, then silence
       "still_not_it_2",
       "still_not_it_3",
     );

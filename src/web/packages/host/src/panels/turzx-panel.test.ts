@@ -206,6 +206,106 @@ describe("openTurzxPanel", () => {
     ]);
     expect(writes[writes.length - 1]!.length % 250).toBe(0);
   });
+
+  it("skips stale acks ahead of a stored size that matches", async () => {
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO
+      "create_success", // an ack left over from an earlier upload
+      "play_video_success",
+      "seq_png_init_", // a split reply, not an answer
+      "1", // GET_FILE_SIZE: the one-byte clip is already stored
+      "play_video_success", // START_VIDEO
+      "seq_png_init_sucessneedReSend:0|renderCnt:1", // INIT_VIDEO_OVERLAY
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+    });
+
+    try {
+      // No upload ack is scripted: resolving at all means the size was read
+      // past every stale ack and matched, so the clip was not re-uploaded.
+      await panel.video!.start(Uint8Array.of(1, 2, 3), {
+        offsetX: 0,
+        offsetY: 0,
+      });
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("skips stale acks ahead of an empty size and uploads", async () => {
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO
+      "play_video_success",
+      "create_success",
+      "seq_png_init_",
+      "0", // GET_FILE_SIZE: nothing stored
+      "create_success", // UPLOAD_FILE
+      "play_video_success", // START_VIDEO
+      "seq_png_init_sucessneedReSend:0|renderCnt:1", // INIT_VIDEO_OVERLAY
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+    });
+
+    try {
+      await panel.video!.start(Uint8Array.of(1, 2, 3), {
+        offsetX: 0,
+        offsetY: 0,
+      });
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("ends a reply wait on silence rather than the 30 s deadline", async () => {
+    const fake = fakeTransport("chs_5inch.dev1_rom1.88"); // HELLO, then silence
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+    });
+
+    try {
+      const started = Date.now();
+      await expect(
+        panel.video!.start(Uint8Array.of(1, 2, 3), {
+          offsetX: 0,
+          offsetY: 0,
+        }),
+      ).rejects.toThrow(/create_success/);
+      expect(Date.now() - started).toBeLessThan(1000);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("does not accept the bare overlay-init prefix as an answer", async () => {
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO
+      "0", // GET_FILE_SIZE
+      "create_success", // UPLOAD_FILE
+      "play_video_success", // START_VIDEO
+      "seq_png_init_", // split after the shared prefix: not an answer
+      "seq_png_init_failed", // the real one
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+    });
+
+    try {
+      await expect(
+        panel.video!.start(Uint8Array.of(1, 2, 3), {
+          offsetX: 0,
+          offsetY: 0,
+        }),
+      ).rejects.toThrow(/could not initialize its overlay/);
+    } finally {
+      await panel.close();
+    }
+  });
 });
 
 describe("a panel's overlay", () => {

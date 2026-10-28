@@ -45,8 +45,15 @@ const FILE_TIMEOUT_MS = 10_000;
 const OVERLAY_SETTLE_MS = 1500;
 /** A 249-byte chunk plus its `0x00` pad is one frame. */
 const FILE_CHUNK_BYTES = 249;
-/** Stale acks from earlier commands may sit ahead of the reply we want. */
-const FILE_REPLY_ATTEMPTS = 3;
+/**
+ * A file command's answer loop gives up after this long, not after a fixed
+ * number of reads: the transport now retains every ack the device sent, and a
+ * start writes three commands whose acks can all sit ahead of the reply.
+ */
+const FILE_REPLY_DEADLINE_MS = 30_000;
+/** The overlay init's two answers; the bare prefix is not one of them. */
+const OVERLAY_INIT_OK = "seq_png_init_sucess";
+const OVERLAY_INIT_FAILED = "seq_png_init_failed";
 /** Storage the vendor firmware reads clips from. */
 const VIDEO_DIRECTORY = "/mnt/SDCARD/video";
 
@@ -267,9 +274,15 @@ class TurzxPanel implements PanelDevice {
 
       // Init answers `seq_png_init_sucessneedReSend:0|renderCnt:N`; the first
       // update must wait out the panel's settle. A failed init says so in the
-      // same phrase and must not be treated as a ready overlay.
-      const init = await this.readFor("seq_png_init_");
-      if (init.includes("seq_png_init_failed")) {
+      // same territory and must not be treated as a ready overlay. The full
+      // word is matched: a reply split after the shared prefix is not an
+      // answer either way.
+      const init = await this.readUntil('"seq_png_init_"', (text) =>
+        text.includes(OVERLAY_INIT_OK) || text.includes(OVERLAY_INIT_FAILED)
+          ? text
+          : undefined,
+      );
+      if (init.includes(OVERLAY_INIT_FAILED)) {
         throw new Error(`The panel could not initialize its overlay: ${init}.`);
       }
       await this.sleep(OVERLAY_SETTLE_MS);
@@ -349,9 +362,10 @@ class TurzxPanel implements PanelDevice {
   }
 
   /**
-   * The first reply carrying `phrase`, within the three-attempt cap; earlier
-   * stale acks are skipped. Only init, query, start and create are recorded as
-   * text replies, so a phrase match is all this protocol can pin.
+   * The first reply carrying `phrase`; earlier stale acks are skipped and
+   * silence or the deadline ends the wait. Only init, query, start and create
+   * are recorded as text replies, so a phrase match is all this protocol can
+   * pin.
    */
   private readFor(phrase: string): Promise<string> {
     return this.readUntil(`"${phrase}"`, (text) =>
@@ -365,8 +379,8 @@ class TurzxPanel implements PanelDevice {
    * `openTurzxPanel` ends on QUERY_STATUS, so its text reply is buffered and is
    * the first bytes the next read returns; a DELETE_FILE acknowledgement may
    * trail a reply too. Accepting by content rather than by position tolerates
-   * those, and the attempt cap keeps a silent or foreign device from hanging
-   * the queue.
+   * those, and silence or the deadline keeps a foreign device from hanging the
+   * queue.
    */
   private async readUntil<T>(
     wanted: string,
@@ -382,17 +396,29 @@ class TurzxPanel implements PanelDevice {
     );
   }
 
-  /** Up to `FILE_REPLY_ATTEMPTS` reads; the last one's text is returned even
-   *  when nothing was accepted, so a caller can name it. */
+  /**
+   * Reads until `accept` answers, the wire goes silent, or the deadline.
+   *
+   * A non-empty reply that does not match is a stale ack from an earlier
+   * command — the port retains them now — and is skipped rather than spending
+   * the one attempt the reply was supposed to get. Silence ends the read at
+   * once: a device that has said nothing will not say it later. The last reply
+   * is returned even when nothing was accepted, so the caller can name it.
+   */
   private async readReplies<T>(
     accept: (text: string) => T | undefined,
   ): Promise<{ readonly accepted: T | undefined; readonly last: string }> {
     let last = "";
+    const deadline = Date.now() + FILE_REPLY_DEADLINE_MS;
 
-    for (let attempt = 0; attempt < FILE_REPLY_ATTEMPTS; attempt += 1) {
-      last = decodeReply(await this.transport.read(FILE_TIMEOUT_MS));
-      const accepted = accept(last);
-      if (accepted !== undefined) return { accepted, last };
+    while (Date.now() < deadline) {
+      const text = decodeReply(await this.transport.read(FILE_TIMEOUT_MS));
+      if (text === "") return { accepted: undefined, last };
+
+      const accepted = accept(text);
+      if (accepted !== undefined) return { accepted, last: text };
+
+      last = text;
     }
 
     return { accepted: undefined, last };

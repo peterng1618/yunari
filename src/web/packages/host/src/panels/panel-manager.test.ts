@@ -284,4 +284,88 @@ describe("createPanelManager", () => {
 
     await manager.stop("strip");
   });
+
+  it("retries a failed close on the next stop, then removes the entry", async () => {
+    let attempts = 0;
+    const close = vi.fn(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("close failed");
+    });
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present: vi.fn(async () => {}),
+      close,
+    };
+
+    h.family = familyOver(async () => device);
+    const manager = managerOver();
+
+    await manager.start("strip");
+    await pause(2 * SETTLE_MS);
+
+    await expect(manager.stop("strip")).rejects.toThrow("close failed");
+    // The entry survives the refusal: its port is still held.
+    expect(manager.running()).toEqual(["strip"]);
+
+    await manager.stop("strip");
+
+    expect(close).toHaveBeenCalledTimes(2);
+    expect(manager.running()).toEqual([]);
+  });
+
+  it("does not open again when a refresh's stop failed", async () => {
+    const errors: string[] = [];
+    let opens = 0;
+    const close = vi.fn(async () => {
+      throw new Error("the port would not close");
+    });
+
+    h.family = familyOver(async () => {
+      opens += 1;
+      return {
+        geometry: { width: 4, height: 4 },
+        open: async () => {},
+        present: vi.fn(async () => {}),
+        close,
+      };
+    });
+
+    const manager = managerOver({
+      onError: (_displayId, message) => errors.push(message),
+    });
+
+    await manager.start("strip");
+    await pause(2 * SETTLE_MS);
+    await manager.refresh("strip");
+
+    // Opening on a port that is still held would land dark, so it is not
+    // attempted; the panel stays where it was, and the refusal is reported.
+    expect(opens).toBe(1);
+    expect(errors).toEqual(["the port would not close"]);
+    expect(manager.running()).toEqual(["strip"]);
+  });
+
+  it("leaves the next start its own entry after a failed one", async () => {
+    const errors: string[] = [];
+    let opens = 0;
+
+    h.family = familyOver(async () => {
+      opens += 1;
+      if (opens === 1) throw new Error("no device");
+      return deviceOver();
+    });
+
+    const manager = managerOver({
+      onError: (_displayId, message) => errors.push(message),
+    });
+
+    await Promise.all([manager.start("strip"), manager.start("strip")]);
+
+    expect(opens).toBe(2);
+    expect(errors).toEqual(["no device"]);
+    expect(manager.running()).toEqual(["strip"]);
+
+    await manager.stop("strip");
+  });
 });

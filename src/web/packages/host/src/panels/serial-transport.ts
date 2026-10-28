@@ -63,6 +63,12 @@ export async function listSerialPorts(): Promise<readonly SerialPortInfo[]> {
 /** A reply that has gone quiet this long is complete; the wire has no frame end. */
 const READ_QUIET_MS = 50;
 
+/**
+ * Replies held for a later read. A device that chatters while nothing reads is
+ * a device whose older replies nobody wants; the list keeps the newest.
+ */
+const MAX_QUEUED_REPLIES = 64;
+
 /** The slice of `serialport`'s `SerialPort` the read seam needs, for a fake. */
 export interface SerialPortLike {
   readonly isOpen: boolean;
@@ -119,16 +125,39 @@ class OpenSerialPort implements SerialTransport {
         readonly timer: ReturnType<typeof setTimeout>;
       }
     | undefined;
+  /** Reads run one at a time: two callers must not share one waiter slot. */
+  private reading: Promise<unknown> = Promise.resolve();
+  private closed = false;
 
   private readonly onData = (chunk: Buffer): void => {
     this.burst.push(chunk);
     this.armQuiet();
   };
 
+  /**
+   * A disconnect mid-read must not wait out the read cap.
+   *
+   * What arrived is still handed over, and the next write or read surfaces the
+   * disconnection itself — a cabled gadget that vanished is not a reply.
+   */
+  private readonly onPortError = (): void => {
+    if (this.quiet !== undefined) {
+      clearTimeout(this.quiet);
+      this.quiet = undefined;
+    }
+
+    if (this.burst.length === 0) {
+      this.settle(new Uint8Array());
+      return;
+    }
+
+    this.seal();
+  };
+
   constructor(private readonly port: SerialPort) {
     // A port that disconnects emits `error`; without a listener Node throws.
     // The disconnect still surfaces through the next write or an empty read.
-    this.port.on("error", () => {});
+    this.port.on("error", this.onPortError);
     this.port.on("data", this.onData);
   }
 
@@ -153,7 +182,27 @@ class OpenSerialPort implements SerialTransport {
   }
 
   read(timeoutMs: number): Promise<Uint8Array> {
+    const next = this.reading.then(
+      () => this.readOnce(timeoutMs),
+      () => this.readOnce(timeoutMs),
+    );
+
+    // The chain only sequences; its own tail never rejects, so a second read
+    // queued behind a failed one still runs.
+    this.reading = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
+
+  private readOnce(timeoutMs: number): Promise<Uint8Array> {
     return new Promise((resolve) => {
+      if (this.closed) {
+        resolve(new Uint8Array());
+        return;
+      }
+
       // A reply that arrived before this read is already whole.
       const ready = this.queued.shift();
       if (ready !== undefined) {
@@ -191,18 +240,19 @@ class OpenSerialPort implements SerialTransport {
   }
 
   async close(): Promise<void> {
+    this.closed = true;
     this.port.off("data", this.onData);
+    this.port.off("error", this.onPortError);
     if (this.quiet !== undefined) {
       clearTimeout(this.quiet);
       this.quiet = undefined;
     }
-    if (this.waiting !== undefined) {
-      clearTimeout(this.waiting.timer);
-      // A read left hanging on a closed port would never settle, and the
-      // caller has nothing left to wait for.
-      this.waiting.resolve(new Uint8Array());
-      this.waiting = undefined;
-    }
+
+    // A read after close answers empty rather than waiting a cap for a device
+    // that is no longer there.
+    this.queued.length = 0;
+    this.burst = [];
+    this.settle(new Uint8Array());
 
     if (!this.port.isOpen) return;
 
@@ -227,7 +277,11 @@ class OpenSerialPort implements SerialTransport {
 
     const reply = Uint8Array.from(Buffer.concat(this.burst));
     this.burst = [];
+    this.deliver(reply);
+  }
 
+  /** Hands a reply to the read waiting for it, or holds it for the next one. */
+  private deliver(reply: Uint8Array): void {
     const waiting = this.waiting;
     if (waiting !== undefined) {
       this.waiting = undefined;
@@ -237,6 +291,19 @@ class OpenSerialPort implements SerialTransport {
     }
 
     this.queued.push(reply);
+    // A device that talks faster than the host reads must not grow this
+    // process: the oldest replies are the ones a start has already moved past.
+    if (this.queued.length > MAX_QUEUED_REPLIES) this.queued.shift();
+  }
+
+  /** Settles the waiting read with `reply`; no read waiting is not an error. */
+  private settle(reply: Uint8Array): void {
+    const waiting = this.waiting;
+    if (waiting === undefined) return;
+
+    this.waiting = undefined;
+    clearTimeout(waiting.timer);
+    waiting.resolve(reply);
   }
 }
 

@@ -59,6 +59,12 @@ interface Entry {
   starting: Promise<void> | undefined;
 }
 
+/**
+ * How long shutdown waits for work already in flight. A wedged device must not
+ * hold the process open: the OS closes the handle when the process exits.
+ */
+const SHUTDOWN_GRACE_MS = 10_000;
+
 export function createPanelManager(options: PanelManagerOptions): PanelManager {
   const entries = new Map<string, Entry>();
   const report = options.onError ?? (() => {});
@@ -312,38 +318,54 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       stopping = true;
 
       // Work already queued still has to settle first: a start that began
-      // before shutdown would otherwise open a port after this returns.
-      await Promise.allSettled([...chains.values()]);
-
-      const held = [...entries.entries()];
-
-      for (const [, entry] of held) {
-        if (entry.timer !== undefined) {
-          clearInterval(entry.timer);
-          entry.timer = undefined;
-        }
-      }
-
+      // before shutdown would otherwise open a port after this returns. A
+      // device that never answers is abandoned after the grace period, and the
+      // start that owns it closes itself once it sees `stopping`.
+      const stalled = new Set<string>();
       await Promise.all(
-        held.map(async ([displayId, entry]) => {
-          try {
-            // A start that was mid-open is awaited so its runner is stopped
-            // too; `stopping` keeps it from installing a timer.
-            await entry.starting;
-            if (entry.timer !== undefined) {
-              clearInterval(entry.timer);
-              entry.timer = undefined;
-            }
-            await entry.runner?.stop();
-          } catch (error) {
-            report(displayId, messageOf(error));
-          }
+        [...chains.entries()].map(async ([displayId, chain]) => {
+          if (await within(chain, SHUTDOWN_GRACE_MS)) return;
+
+          stalled.add(displayId);
+          report(
+            displayId,
+            `Shutdown waited ${SHUTDOWN_GRACE_MS / 1000}s for this panel and is closing anyway.`,
+          );
         }),
+      );
+
+      // Every stop goes through the display's own chain, so a DELETE that
+      // arrived first is not raced by a second close.
+      await Promise.all(
+        [...entries.keys()]
+          .filter((displayId) => !stalled.has(displayId))
+          .map((displayId) =>
+            enqueue(displayId, () => stopNow(displayId)).catch(
+              (error: unknown) => {
+                report(displayId, messageOf(error));
+              },
+            ),
+          ),
       );
 
       entries.clear();
     },
   };
+}
+
+/** Whether `work` settles within `ms`; a rejection counts as settled. */
+function within(work: Promise<unknown>, ms: number): Promise<boolean> {
+  return Promise.race([
+    work.then(
+      () => true,
+      () => true,
+    ),
+    new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(false), ms);
+      // The bound is not what keeps the process alive while it waits.
+      timer.unref();
+    }),
+  ]);
 }
 
 function messageOf(error: unknown): string {

@@ -106,4 +106,61 @@ describe("the serial transport's read", () => {
     expect(bytes.length).toBe(0);
     expect(Date.now() - started).toBeGreaterThanOrEqual(70);
   });
+
+  it("settles the waiting read when the port errors, with what arrived", async () => {
+    const port = new FakePort();
+    const transport = transportOver(port);
+
+    // Silence then an unplug: the read must not wait out the 10 s cap.
+    const started = Date.now();
+    const silent = transport.read(5000);
+    // The waiter is installed a microtask after the call.
+    await Promise.resolve();
+    port.emit("error", new Error("unplugged"));
+    expect((await silent).length).toBe(0);
+    expect(Date.now() - started).toBeLessThan(1000);
+
+    // And a half-arrived reply is handed over rather than dropped; the next
+    // write surfaces the disconnect.
+    const reading = transport.read(5000);
+    await Promise.resolve();
+    port.emit("data", Buffer.from("par"));
+    port.emit("error", new Error("unplugged"));
+    expect(decode(await reading)).toBe("par");
+  });
+
+  it("settles a waiting read on close and stops listening", async () => {
+    const port = new FakePort();
+    const transport = transportOver(port);
+    const reading = transport.read(5000);
+
+    await transport.close();
+
+    expect((await reading).length).toBe(0);
+    expect(port.listenerCount("data")).toBe(0);
+
+    // Nothing arrives from a port nobody listens to, and a read after close
+    // answers at once rather than waiting out its cap.
+    port.emit("data", Buffer.from("late"));
+    const started = Date.now();
+    expect((await transport.read(50)).length).toBe(0);
+    expect(Date.now() - started).toBeLessThan(40);
+  });
+
+  it("runs two concurrent reads one at a time, in order", async () => {
+    const port = new FakePort();
+    const transport = transportOver(port);
+
+    const first = transport.read(1000);
+    const second = transport.read(1000);
+
+    port.emit("data", Buffer.from("one"));
+    await pause(SETTLED_MS);
+    port.emit("data", Buffer.from("two"));
+
+    // The second read must not share the first one's waiter, or its reply is
+    // delivered to a promise nobody is left to answer.
+    expect(decode(await first)).toBe("one");
+    expect(decode(await second)).toBe("two");
+  });
 });
