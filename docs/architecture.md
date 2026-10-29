@@ -6,11 +6,11 @@ One long-lived Node process (the host) owns the machine-facing work: sensor
 polling, the theme library, host settings, TLS, HTTP/HTTPS serving and the sample
 stream. Everything a person sees is a built browser bundle served by that host:
 
-- `/` — player (display-only)
+- `/` — player (display-only). When themes exist and none is chosen, the host
+  serves its theme chooser at this address instead.
 - `/editor` — editor (localhost only)
 - `/settings` — settings page
 - `/pair` — display pairing page
-- `/library.html` — theme library page
 
 The editor and player can also run under `vite preview` for browser tests, but
 the host is the only real deployment.
@@ -26,7 +26,7 @@ the product version lives once in `src/web/package.json`.
 | `@yunari/scene-fabric` | Renders a scene plan onto Fabric; persistence and Fabric revival | renderer-core |
 | `@yunari/theme-package` | `.yunari-theme` ZIP read/write, validation, credits | renderer-core |
 | `@yunari/player` | Display-only bundle; live samples and theme rendering | renderer-core, scene-fabric |
-| `@yunari/editor` | Authoring shell, inspectors, panes, Fabric canvas | renderer-core, scene-fabric, theme-package, fake-source |
+| `@yunari/editor` | Authoring shell, inspectors, panes, Fabric canvas | renderer-core, scene-fabric, theme-package; fake-source as a devDependency |
 | `@yunari/host` | CLI, HTTP/HTTPS server, providers, SSE, stores, TLS | renderer-core, scene-fabric, theme-package |
 | `@yunari/store-worker` | Cloudflare Worker: catalogue, auth, uploads, R2 delivery | renderer-core, theme-package |
 | `@yunari/fake-source` | Deterministic synthetic samples for development and tests | renderer-core |
@@ -41,7 +41,8 @@ the product version lives once in `src/web/package.json`.
 - Import Fabric from `fabric/es`, never bare `fabric`; the bare entry is a
   pre-bundled file that tree-shaking cannot enter.
 - The player never imports editor code. `packages/player/src/boundaries.test.ts`
-  asserts that rule, the Fabric subpath, `StaticCanvas` and a gzip size budget.
+  asserts that rule, the Fabric subpath and `StaticCanvas`.
+  `packages/player/scripts/check-size.mjs` enforces the gzip size budget.
 - `fake-source` is a development dependency of the editor. A shipped bundle that
   contains it is reporting fabricated telemetry.
 
@@ -85,7 +86,7 @@ served at `/yunari-ca.crt` before every gate so a display can trust it.
 
 | Surface | Reachability |
 |---|---|
-| `/`, `/settings`, `/pair`, `/library.html`, `/api/health` | According to current LAN/hosting state |
+| `/`, `/settings`, `/pair`, `/api/health` | According to current LAN/hosting state |
 | `/editor` | Loopback only |
 | `/api/devices`, `PUT /api/display`, `/api/pairing/*` admin routes | Loopback only |
 | `POST /api/pairing/claim` | LAN, because an unpaired display must reach it |

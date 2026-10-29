@@ -55,9 +55,10 @@ audit is a separate CI job.
 - Browser tests preview **built** bundles. Run `npm run build` first; `dist/` is
   gitignored, so a fresh checkout has nothing to preview.
 - The main config previews the player on `4173`, the editor on `4174`, and boots
-  the real host on `HOST_PORT`. It runs the editor control fixture build as a
-  separate step (`build:fixture -w @yunari/editor`); the fixture must not enter
-  the production editor output.
+  the real host on `HOST_PORT`. The editor control fixture is a separate build
+  (`npm run build:fixture -w @yunari/editor`); CI runs it as its own step, not
+  through `npm run build`. Build it before a suite that opens the fixture page;
+  the fixture must not enter the production editor output.
 - Ports are fixed with `--strictPort`, and each config or own-host spec owns its
   port. Shared host state runs with `workers: 1`; preview projects keep full
   parallelism.

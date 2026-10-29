@@ -45,7 +45,7 @@ typography:         # --text-* with their stated line-height companions
     lineHeight: 1.2
 omitted:
   - section: colors
-    reason: The palette resolves per theme at runtime; one YAML value per role would be false. The roles and their per-theme values are normative in the Colors section below.
+    reason: The palette resolves per theme at runtime; one YAML value per role would be false. The role names are normative in the Colors section; their per-theme values live in the runtime palettes.
   - section: components
     reason: The control vocabulary is normative as prose and implemented in packages/editor/src/components/ui/; tokens would be a second owner of it.
 ---

@@ -56,8 +56,9 @@ Node support is `>=22`; Vitest 5 accepts `^22.12 || ^24 || >=26`. CI pins Node
   player uses `StaticCanvas`; only the editor constructs an interactive
   `Canvas`. Import Fabric from `fabric/es`, never the bare `fabric` entry.
 - **The player never imports editor code.** `packages/player/src/boundaries.test.ts`
-  enforces this, the `fabric/es` subpath, `StaticCanvas`, and the gzip bundle
-  budget.
+  enforces this, the `fabric/es` subpath and `StaticCanvas`. The gzip budget is
+  enforced separately by `packages/player/scripts/check-size.mjs` (`npm run
+  size`).
 - **The theme envelope is the only scene model.** Fabric JSON is persisted
   inside Yunari's versioned envelope; there is no second document format.
   Current schema is `2.0.0`. Major `2` is read; an older document without a

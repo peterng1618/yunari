@@ -24,9 +24,9 @@ The host also serves a settings page and a `/pair` page for displays.
 ## What it does
 
 - **Authoring.** Shapes, text, images/SVG, groups, layers, undo, snapping and
-  reusable card widgets on a Fabric canvas. Four chart families (pie/donut,
-  radial gauge, bars/progress, line/sparkline/area), rich text and typography
-  presets, paints and type tokens, and a frosted-glass treatment for shapes.
+  reusable card widgets on a Fabric canvas. Six chart families (gauge, line, bar,
+  pie, radar and polar bar), rich text and typography presets, paints and type
+  tokens, and a frosted-glass treatment for shapes.
 - **Theme library and store.** Themes are local first. The editor can browse a
   Cloudflare-hosted catalogue, install a package, sign in to submit a theme and
   see its own submissions.
