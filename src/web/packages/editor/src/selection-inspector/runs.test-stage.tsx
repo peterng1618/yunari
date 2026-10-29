@@ -408,6 +408,7 @@ export async function clickHook(
     (candidate) => (candidate.textContent ?? "").trim() === label,
   );
   if (button === undefined) throw new Error(`no segment reads "${label}"`);
+  await pointerDown(button);
   await click(button);
 }
 

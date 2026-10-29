@@ -527,6 +527,8 @@ const WRITABLE_FIELD_IDS: ReadonlyMap<string, WritableKind> = new Map([
   ["panel-shadow-offset", "integer"],
   ["glass-enabled", "boolean"],
   ["glass-blur", "integer"],
+  // The sampling is one of two names; `writeGlassField` refuses anything else.
+  ["glass-sampling", "text"],
   // A picture's paint-time mirrors. Fabric owns the property; the boundary only
   // holds its type, so a switch cannot smuggle a number into it.
   ["flipX", "boolean"],

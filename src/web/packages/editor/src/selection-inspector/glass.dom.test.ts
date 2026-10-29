@@ -32,7 +32,7 @@ import { idleCrop } from "./idle-crop.test-stage.js";
 import { createSelectionInspector } from "./index.js";
 // The shared React drivers: the converted glass and material controls are plan-1
 // controls, so a raw `change` event no longer commits them.
-import { click, slide, valueText } from "./runs.test-stage.js";
+import { click, segment, slide, valueText } from "./runs.test-stage.js";
 
 const globals = {
   palette: {
@@ -344,6 +344,21 @@ describe("the glass control in the selection inspector", () => {
       "Dynamic",
       "Static",
     ]);
+  });
+
+  it("flips the sampling to static on the panel it is attached to", async () => {
+    const rect = panel();
+    rect.set("yunariGlass", { blurRadius: 24 });
+    const { history, refreshGlass, host } = setup(rect);
+
+    await segment(host, "data-yunari-glass-sampling", "Static");
+
+    expect(rect.get("yunariGlass")).toEqual({
+      blurRadius: 24,
+      sampling: "static",
+    });
+    expect(refreshGlass).toHaveBeenCalledTimes(1);
+    expect(history.saveState).toHaveBeenCalledTimes(1);
   });
 
   it("offers the blur as a slider bounded by the published maximum", () => {
