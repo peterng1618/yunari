@@ -97,6 +97,10 @@ export interface GlassOptions {
   readonly canvas: StaticCanvas;
   /** Read per render: the media handle is replaced when the artboard changes. */
   readonly backdrop?: () => BackdropMedia | undefined;
+  /** The picture a panel samples when its treatment declares none. Absent is
+   *  `"dynamic"`; the host's panel page sets `"static"`, because it shows a
+   *  still-headed composition and never renders the live frames. */
+  readonly defaultSampling?: GlassSampling;
   /** Reports a panel that cannot be composited. Deduped per cause, because a
    *  panel that fails the same way on every frame must not flood the host. */
   readonly onGlassError?: (message: string) => void;
@@ -473,7 +477,7 @@ export function createGlass(options: GlassOptions): GlassHandle {
       region,
       options.backdrop?.(),
       plane,
-      treatment.sampling ?? "dynamic",
+      treatment.sampling ?? options.defaultSampling ?? "dynamic",
     );
     if (backdrop !== undefined) {
       scratchContext.drawImage(backdrop, 0, 0);

@@ -873,6 +873,38 @@ describe("glass composition", () => {
     ]);
   });
 
+  it("samples the declared still when a panel's treatment names no sampling", () => {
+    const s = stage({
+      backdrop: () => ({ paint: () => true }),
+      defaultSampling: "static",
+    });
+    s.canvas.add(panel());
+    s.canvas.renderAll();
+
+    expect(s.paints.at(-1)?.sampling).toBe("static");
+  });
+
+  it("lets an authored sampling win over the page's static default", () => {
+    const s = stage({
+      backdrop: () => ({ paint: () => true }),
+      defaultSampling: "static",
+    });
+    s.canvas.add(
+      panel({ yunariGlass: { blurRadius: 24, sampling: "dynamic" } }),
+    );
+    s.canvas.renderAll();
+
+    expect(s.paints.at(-1)?.sampling).toBe("dynamic");
+  });
+
+  it("keeps the live default when the page sets none", () => {
+    const s = stage({ backdrop: () => ({ paint: () => true }) });
+    s.canvas.add(panel());
+    s.canvas.renderAll();
+
+    expect(s.paints.at(-1)?.sampling).toBe("dynamic");
+  });
+
   it("reads the sampling again after a control changes it in place", () => {
     const s = stage({ backdrop: () => ({ paint: () => true }) });
     const glassed = panel();

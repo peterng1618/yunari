@@ -128,6 +128,8 @@ export function stage(options: {
         readonly paint: BackdropMedia["paint"];
       }
     | undefined;
+  /** The fallback a panel samples when its treatment declares none. */
+  readonly defaultSampling?: GlassSampling;
 }): Stage {
   const size = options.size ?? 200;
   const canvas = new StaticCanvas(undefined, { width: size, height: size });
@@ -225,6 +227,9 @@ export function stage(options: {
           },
         }),
     onGlassError: (message) => errors.push(message),
+    ...(options.defaultSampling === undefined
+      ? {}
+      : { defaultSampling: options.defaultSampling }),
   });
 
   const value: Stage = {

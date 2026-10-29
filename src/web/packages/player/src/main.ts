@@ -7,6 +7,7 @@ import {
   createLiveSource,
   type FabricPalette,
   type FabricThemeEnvelope,
+  type GlassSampling,
   type LiveSourceHandle,
   type PlanIssue,
   SAMPLE_STREAM_PATH,
@@ -38,6 +39,7 @@ import {
 } from "./host-refind.js";
 import { envelopePlan } from "./hosted-plan.js";
 import { showLoadFailure } from "./load-failure.js";
+import { panelGlassSampling } from "./panel-sampling.js";
 import { followPublished, reResolveUrl } from "./publish-follower.js";
 import { loadDisplayCatalogue } from "./sensor-catalogue.js";
 import { registerServiceWorker } from "./service-worker.js";
@@ -206,6 +208,7 @@ export async function start(
       await loadHostedTheme(requested, session.fetch),
       session,
       navigation,
+      panelGlassSampling(window.location.search),
     );
   } catch (error) {
     showLoadFailure(error);
@@ -244,6 +247,7 @@ async function startHostedTheme(
   theme: FabricThemeEnvelope,
   session: DisplaySessionToken,
   navigation: PageNavigation,
+  defaultSampling: GlassSampling | undefined,
 ): Promise<void> {
   const language = theme.metadata?.themeLanguage;
   declareDocumentLanguage(language);
@@ -283,6 +287,7 @@ async function startHostedTheme(
       return url === undefined ? undefined : { url: session.withToken(url) };
     },
     onGlassError: reportGlassError,
+    ...(defaultSampling === undefined ? {} : { defaultSampling }),
   });
   const releaseFonts = await loadFontAssets({
     assets: theme.assets ?? [],

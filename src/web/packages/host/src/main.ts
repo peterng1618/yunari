@@ -16,6 +16,7 @@ import {
   createPanelManager,
   type PanelManager,
 } from "./panels/panel-manager.js";
+import { panelPageUrl } from "./panels/panel-page.js";
 import { ClockSensorProvider } from "./providers/clock.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { presentMonAdapter } from "./providers/frame/presentmon.js";
@@ -506,8 +507,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   // down with it.
   panels = createPanelManager({
     displays,
-    pageFor: (displayId) =>
-      `http://127.0.0.1:${bound}/?display=${encodeURIComponent(displayId)}`,
+    pageFor: (displayId) => panelPageUrl(bound, displayId),
     // The clip a panel plays itself, resolved the way the player resolves its
     // theme: the display's own choice, else the default's. Anything that cannot
     // be resolved — no theme, no media, an image rather than a video, a missing

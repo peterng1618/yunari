@@ -6,6 +6,7 @@ import {
   computeArtboardTransform,
   type DisplayPresentation,
   type DisplayShape,
+  type GlassSampling,
   type SceneHandle,
   type ScenePlan,
 } from "@yunari/renderer-core";
@@ -62,6 +63,10 @@ export interface FabricSceneOptions
   /** Reports a glass panel this renderer cannot composite, such as a browser
    * without `ctx.filter` or a cross-origin asset that taints the surface. */
   readonly onGlassError?: (message: string) => void;
+  /** The sampling a glass panel gets when its treatment names none. Absent is
+   * `"dynamic"`; a hardware panel sets `"static"`, because the page it renders
+   * never shows the live frames its glass would otherwise follow. */
+  readonly defaultSampling?: GlassSampling;
   /** The display's shape and mounting angle. Absent is a rectangular, upright
    * display, which is the scene's behaviour before a record was known. */
   readonly presentation?: DisplayPresentation;
@@ -191,6 +196,9 @@ export function mountFabricScene(
     ...(options.onGlassError === undefined
       ? {}
       : { onGlassError: options.onGlassError }),
+    ...(options.defaultSampling === undefined
+      ? {}
+      : { defaultSampling: options.defaultSampling }),
   });
 
   if (options.resolveAsset !== undefined && currentArtboard !== undefined) {
