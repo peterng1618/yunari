@@ -82,11 +82,11 @@ jobs:
         run: npx vite build packages/editor
 
       - name: Build editor control fixture
-        # The design-language parity gate previews `packages/editor` and loads
-        # `/control-fixture.html`. `npm run build:fixture` is a second invocation
-        # into the same `dist` with `emptyOutDir: false` (vite.config.fixture.ts),
-        # so a fresh checkout needs it or the page SPA-falls back to `index.html`
-        # and the design-language specs fail at their `[data-fixture-root]` assert.
+        # The control fixture is a page on the editor's preview server
+        # (`/control-fixture.html`), built by a second invocation into the same
+        # `dist` with `emptyOutDir: false` (vite.config.fixture.ts). Without it
+        # the preview SPA-falls back to `index.html`, so the route would render
+        # the editor instead of the fixture.
         # Deliberately NOT chained into `npm run build` — the fixture must stay
         # out of the editor's production output.
         run: npm run build:fixture -w @yunari/editor

@@ -5,11 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <title>Yunari — control fixture</title>
-    <!-- The design-language parity fixture. It exists so
-         `tests/e2e/design-language.spec.ts` can mount the *built* control set
-         over the *built* stylesheet and assert the language in a real browser —
-         hit areas, contrast, forced colours and layout at 200% zoom, none of
-         which jsdom can carry. It is built by its own invocation
+    <!-- The design-language parity fixture: the *built* control set mounted
+         over the *built* stylesheet in a real browser — hit areas, contrast,
+         forced colours and layout at 200% zoom, none of which jsdom can carry.
+         It is built by its own invocation
          (`vite.config.fixture.ts`, `npm run build:fixture`) rather than by
          `npm run build`, so the shipped editor emits neither this page nor its
          bundle and `index.html` keeps the chunk graph it had before the fixture

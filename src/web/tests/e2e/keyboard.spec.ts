@@ -118,8 +118,8 @@ test("the Keyboard tab arms a row into the modal's trap, on a ring that clears c
   await captureVisualReview(page, testInfo, "keyboard-armed-row");
 });
 
-/** §5.4's boundary minimum, the same 3:1 `design-language.spec.ts` gates the
- *  control set's own focus boundaries at. */
+/** §5.4's boundary minimum: 3:1, the ratio the control set's own focus
+ *  boundaries are gated at. */
 const BOUNDARY_MIN = 3;
 
 type Rgba = readonly [number, number, number, number];
@@ -154,8 +154,8 @@ function contrast(a: Rgba, b: Rgba): number {
 
 /** The rendered pixels at each point, from one viewport screenshot.
  *
- * The same shape `design-language.spec.ts` measures the control set's rings
- * with: a computed colour cannot answer what a surface with alpha over a
+ * The shape a ring measurement needs: a computed colour cannot answer what a
+ * surface with alpha over a
  * backdrop paints, so the pixel is the evidence and the arithmetic is over two
  * of them. The points are viewport CSS pixels from `getBoundingClientRect`, and
  * the screenshot is scaled by its own ratio to the viewport so a device pixel

@@ -352,10 +352,10 @@ describe("shell token stylesheet", () => {
       "--text-2xs": "10px",
       "--text-lg": "15px",
       "--text-xl": "19px",
-      // §3's modal scrim. Pinned here and not only read from `:root` by
-      // `design-language.spec.ts`'s colour row: that row compares the token
-      // against the overlay and is green for whatever value the token holds, so
-      // this is the assertion that a changed scrim is a deliberate edit.
+      // §3's modal scrim. Pinned by a literal rather than read from `:root`:
+      // a comparison that reads the token on both sides is green for whatever
+      // value it holds, so this is the assertion that a changed scrim is a
+      // deliberate edit.
       "--elev-scrim": "#00000073",
     });
 
@@ -568,8 +568,7 @@ describe("shell token stylesheet", () => {
    *
    *  The ratio is read from the declared values rather than from the browser:
    *  both sides are literals in the palette block, so the arithmetic is the
-   *  same arithmetic and it can run beside the stylesheet. The rendered result
-   *  is `tests/e2e/design-language.spec.ts`'s. */
+   *  same arithmetic and it can run beside the stylesheet. */
   it("holds the primary button's text above §5's ratio in every palette", () => {
     /** A `#rgb`/`#rrggbb` literal, which is every value this pair declares. */
     const rgb = (value: string): readonly [number, number, number] => {

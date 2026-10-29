@@ -22,8 +22,10 @@ import "./editor-shell/editor-shell.css";
  * and renders the states the language is *made of* rather than the happy path
  * alone: a required label, a refusal with its reason, an invalid draft, a
  * checked toggle, a selected segment, a destructive action and a focused
- * target. `tests/e2e/design-language.spec.ts` drives the two states that need an
- * interaction (the invalid draft and the focus) and asserts the rest.
+ * target. It is a build entry of its own (`vite.config.fixture.ts`,
+ * `npm run build:fixture`), so the preview can load it as a page without the
+ * shipped editor emitting it; `react-root-disposal.dom.test.ts` excludes it
+ * among the harness pages whose root lives as long as the page.
  *
  * It is wrapped in `.editor-shell` on purpose, and neither the wrapper nor the
  * `bg-panel` columns are decoration: the shell owns the backdrop the chrome is

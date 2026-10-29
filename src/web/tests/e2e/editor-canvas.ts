@@ -382,8 +382,8 @@ export async function captureVisualReview(
 ): Promise<void> {
   if (process.env["YUNARI_CAPTURE"] === undefined) return;
   // The shipping default, not whatever Playwright's `colorScheme` happens to be,
-  // and the same move `design-language.spec.ts`'s "The drawing's own ground"
-  // capture already makes to pin graphite. A capture that chose through the
+  // and what the capture route does everywhere: pin graphite rather than
+  // inherit the machine. A capture that chose through the
   // Appearance tab keeps its ground: the stored choice disarms the OS listener,
   // so the emulation re-renders nothing. A palette set as a bare attribute — the
   // parity fixture's `setPalette`, which writes no storage — has no such

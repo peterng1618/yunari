@@ -1257,8 +1257,7 @@ describe("Previews", () => {
 
 /** §2's eyebrow and §5 rule 2's read-only row, read off the rendered modal
  *  rather than off the sheet: a value a rule states is a rendered outcome, and
- *  this is the half that reddens in `vitest` when the rule is reverted. The
- *  rendered half is the browser (`design-language.spec.ts`). */
+ *  this is the half that reddens in `vitest` when the rule is reverted. */
 describe("the modal's own language", () => {
   let injected: HTMLStyleElement;
 

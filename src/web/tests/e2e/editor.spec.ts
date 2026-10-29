@@ -2195,8 +2195,8 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     // The type-token library is a list now; a row press hands the token to
-    // the token inspector, which is the field set's new home (spec, Tokens
-    // pane). `heading` is the starter theme's wordmark face.
+    // the token inspector, which is the field set's new home. `heading` is the
+    // starter theme's wordmark face.
     await openPane(page, "Design tokens");
     await page.locator('[data-yunari-type-preset-row="heading"]').click();
     const family = page.locator("[data-yunari-token-family]");

@@ -598,7 +598,7 @@ test("the status bar is the window's full-width bottom edge", async ({
   });
 
   // The measurement is the report's evidence, so it is printed as well as
-  // asserted — the fixture-read pattern `design-language.spec.ts` uses.
+  // asserted — the number the assertion checks is printed as evidence.
   const measured = JSON.stringify(box);
   console.log(`status-bar ${measured}`);
   testInfo.annotations.push({ type: "status-bar", description: measured });
@@ -980,15 +980,15 @@ test("Tab and Shift+Tab stay inside the settings modal, and Escape returns focus
   //
   // DESIGN.md asks for "the full shell at 1280×720 and 1440×900 CSS pixels,
   // then at 200% browser zoom", with every control reachable through scrolling
-  // or compact composition. The two sizes are `design-language.spec.ts`'s loop;
-  // what was never taken is the modal under the zoom.
+  // or compact composition. The two sizes are read here; what was never taken
+  // is the modal under the zoom.
   //
   // **200% zoom is modelled as the CSS-pixel viewport it produces** — 640×360,
   // which is what a browser zoom does: it halves the layout viewport in CSS
   // pixels, and `80vh` and every other length in §7's modal then resolve
   // against the halved box, exactly as they do at a real 200%. CSS `zoom` on the
-  // root, which `design-language.spec.ts` uses for its own width assertions, is
-  // *not* faithful here and measurably so: it scales a `vh`-capped fixed dialog
+  // root, which is the cheap way to widen a capture, is *not* faithful here and
+  // measurably so: it scales a `vh`-capped fixed dialog
   // to twice its computed height while the window stays 720 device pixels, so
   // the modal runs off the screen at a size a real browser zoom never gives it.
   // What this still does not reproduce is the device scale factor, so text
@@ -3235,8 +3235,7 @@ async function settled(page: Page): Promise<void> {
  * **The store's `open` action loads a library theme as the editor's document**
  * (R134), from the cell and from the item's own footer alike — the label the
  * drawing gives it is *Open in editor* — while **the cell's own surface is what
- * opens the item's** (spec, "The item's own surface": *so a cell opens a
- * modal*).
+ * opens the item's**, so a cell opens a modal.
  *
  * **Nothing serves `/api/themes` at the editor preview**, so both routes are
  * stubbed here: the case proves the route the store takes, not the host's store,
