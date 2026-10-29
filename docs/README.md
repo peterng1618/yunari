@@ -5,7 +5,7 @@ artifacts and from Git history.
 
 | Need | Canonical source |
 |---|---|
-| Fresh-session handoff / current work | [`../STATUS.md`](../STATUS.md) |
+| In-flight work and dispatch state | Orca — durable Run/Task/Dispatch records; recover with `dispatch-show` and `task-list` |
 | Bugs, feedback and requests, and what is *verified* | [`product/backlog.jsonl`](product/backlog.jsonl) — the source of truth; [GitHub issues](https://github.com/peterng1618/yunari/issues) are an input surface |
 | Driving the product to find what's wrong with it | [`product/tester-runbook.md`](product/tester-runbook.md) — operating procedure; [`product/tester-brief.md`](product/tester-brief.md) — what to file; [`product/probe-notes.md`](product/probe-notes.md) — the instrument traps, with evidence; [`product/probes/`](product/probes/README.md) — the reusable scripts |
 | Product goals, constraints and stable requirements | [`product/requirements.md`](product/requirements.md) |
@@ -17,13 +17,17 @@ artifacts and from Git history.
 | Why major architecture choices were made | [`decisions/`](decisions/) — the live register, and the one `scripts/reuse-gate.mjs` enforces; the earlier set stopped at 0010 in [`adr/`](adr/) |
 | Active feature design/spec | [`superpowers/specs/`](superpowers/specs/) |
 | Superpowers implementation plans | [`superpowers/plans/`](superpowers/plans/) |
+| How Orca and Superpowers divide orchestration | [`engineering/orchestration.md`](engineering/orchestration.md) |
 | Non-obvious engineering traps | [`engineering/gotchas.md`](engineering/gotchas.md) |
 | Dependency/licence provenance | [`engineering/dependencies.md`](engineering/dependencies.md) |
 | Releasing the product — version bump, publish, npm and the winget deferral | [`engineering/releases.md`](engineering/releases.md) |
 | Rendered verification evidence | [`evidence/screenshots/`](evidence/screenshots/) |
 
-Implementation truth is always the code and tests. `STATUS.md` is a compact handoff, not history. Git stores chronology.
-`STATUS.md` names exactly one active execution plan. Other incomplete plans are queued until that plan closes; parallelism happens inside the active phase, not across plans.
+Implementation truth is always the code and tests. Git stores chronology.
+Work is orchestrated by Orca: it creates the worktrees, dispatches the workers and
+settles them, so several plans run at once. Each worktree owns one plan. An Orca
+Dispatch is what makes a plan active; Orca's Run is durable, so a fresh session
+resumes from it, not from a shared handoff file.
 Superpowers owns change-specific design/planning and its temporary
 `.superpowers/sdd/` execution ledger. Do not recreate a separate status,
 lessons, spec or plan system elsewhere.

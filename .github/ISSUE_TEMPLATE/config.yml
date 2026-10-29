@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Is this about an active plan, or a defect in shipped work?
-    url: https://github.com/peterng1618/yunari/blob/main/STATUS.md
+  - name: Is this about planned work, or a defect in shipped work?
+    url: https://github.com/peterng1618/yunari/blob/main/docs/README.md
     about: >-
-      STATUS.md names the one active plan and the queue behind it. A defect in
+      The documentation map names where plans and the register live. A defect in
       already-shipped work belongs in the bug form; planned work has an owner
       already.

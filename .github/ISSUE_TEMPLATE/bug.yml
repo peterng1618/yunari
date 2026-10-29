@@ -80,7 +80,7 @@ body:
         - More than one owner could fix it
         - The fix needs a design decision
         - It spans subsystems
-        - It blocks the active plan
+        - It blocks running work
         - It would need a spec, not a task
     validations:
       required: true

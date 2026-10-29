@@ -28,43 +28,6 @@
           }
         ]
       }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "shell": "powershell",
-            "timeout": 20,
-            "command": "$p = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD }; node \"$p/scripts/sdd-checkpoint.mjs\" snapshot"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "startup",
-        "hooks": [
-          {
-            "type": "command",
-            "shell": "powershell",
-            "timeout": 20,
-            "command": "$p = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD }; node \"$p/scripts/sdd-checkpoint.mjs\" start"
-          }
-        ]
-      },
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "shell": "powershell",
-            "timeout": 20,
-            "command": "$p = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD }; node \"$p/scripts/sdd-checkpoint.mjs\" resume"
-          }
-        ]
-      }
     ]
   }
 }

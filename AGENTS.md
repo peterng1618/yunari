@@ -1,9 +1,9 @@
 # AGENTS.md — Yunari
 
-Project-specific facts and guardrails for coding agents. **Superpowers is the
-sole development-process owner**: use its brainstorming, design/spec, planning,
-execution, review and verification workflows rather than creating a parallel
-Yunari process.
+Project-specific facts and guardrails for coding agents. **Orca orchestrates
+execution** — worktrees, dispatch, tracking and handoffs. **Superpowers owns the
+plan lifecycle** — brainstorm, spec, plan, per-task review, fix loop, finish —
+and the artifacts those steps produce; do not create a parallel Yunari process.
 
 ## Project
 
@@ -18,18 +18,41 @@ Yunari process.
 
 ## Process and documentation
 
-- **Start with `STATUS.md`** — a fresh session continues from it alone. Follow
-  its active Superpowers spec/plan/SDD links.
-- **Exactly one implementation plan is active.** `STATUS.md` names it; every
-  other incomplete plan is queued. Never execute two plans concurrently.
-  Parallel subagents work only inside the active plan and phase, on independent
-  scopes with non-overlapping ownership.
+- **Work runs in parallel Orca worktrees.** Each worktree owns one plan and may
+  execute it without waiting for another; never stage or commit another
+  worktree's files. Parallelism is across worktrees: inside one worktree the
+  plan's tasks still run one at a time, because they share a branch.
+- **Two layers, one dispatch authority.** Superpowers owns the plan lifecycle
+  and what happens inside a task — the brief, TDD, the per-task review gate, the
+  fix loop, the ledger. Orca owns the runtime — worktrees, worker dispatch,
+  durable Run/Task/Dispatch state, waits and settlement. When Orca orchestration
+  is available, a plan's implementer and reviewer are Orca workers
+  (`worker-start`), not harness subagents; never run both for one task.
+  `worker_done` settles a Dispatch but is not the Superpowers task review, so
+  ledger `Task N: complete` only after the review gate passes.
+  Do not fan one prompt across several agents to compare results and pick a
+  winner; a task has one implementer dispatch, chosen explicitly by model.
+- **Recovery is split, not duplicated.** The SDD ledger
+  (`<workspace>/progress.md`) records rulings and completions; Orca's
+  Run/Task/Dispatch records what is running. After compaction, trust `git log`
+  and the ledger for plan state, and `task-list` / `dispatch-show` for workers.
+  There is no separate dispatch-record file.
+- **Worktree creation and cleanup go through Orca.** When the runtime is
+  available, `orca worktree create` is the native worktree tool for
+  `superpowers:using-git-worktrees` Step 1a; do not also call `EnterWorktree` or
+  `git worktree add`. A worker already inside its worktree skips creation.
+  Merge and push choices stay with the human per
+  `superpowers:finishing-a-development-branch`; cleanup after a land is
+  `orca worktree rm`, not `git worktree remove`.
+  If Orca orchestration is unavailable (it is still experimental), fall back to
+  the harness subagent tool and the Superpowers workflow unchanged.
+  See `docs/engineering/orchestration.md` for the concept mapping.
 - **The agent environment is user-owned.** During product work, do not install,
   enable, disable, copy, edit or remove plugins, skills, hooks, MCP servers,
   Claude/Codex settings or `AGENTS.md` unless the user explicitly requests that
-  exact change. Superpowers owns the workflow and its artifacts: never build a
-  parallel Yunari process, a project workflow skill, an alternate spec/plan
-  directory, or a duplicate of its instructions elsewhere in the repo.
+  exact change. Superpowers owns the plan lifecycle and its artifacts: never
+  build a parallel Yunari process, a project workflow skill, an alternate
+  spec/plan directory, or a duplicate of its instructions elsewhere in the repo.
   Designs/specs live in `docs/superpowers/specs/`; executable plans in
   `docs/superpowers/plans/`; completed or superseded plans move to
   `docs/superpowers/plans/archive/` once no active or queued plan depends on them.
@@ -44,22 +67,17 @@ Yunari process.
   unless the item is itself a required invariant. A test count recorded as
   evidence that a case was collected is such an invariant; a count predicted
   before the code exists is not.
-- **The ledger records rulings and completions, never what is running.** Write
-  `<workspace>/dispatch-<agent id>.md` (plan, task, agent id, base sha, state)
-  when you dispatch; delete it on completion. Compaction cannot reconstruct an
-  unrecorded dispatch. `STATUS.md` owns which plan is active; these records only
-  say what is running inside it, so one under a queued plan is a dispatch against
-  the wrong plan (ADR-0010). A PreCompact hook snapshots git state and ledger
-  tails to `.superpowers/sdd/checkpoint/` and re-injects dispatch state after
-  compaction.
-- **Orca is an execution venue, not a second process owner.** An Orca worktree
-  runs inside the active plan, so the one-plan rule and the pulse cadence are
-  unchanged; Orca never licenses a second plan or a parallel register.
-  `.superpowers/` is gitignored, so each worktree has its own ledger: record a
-  dispatch in the worktree that runs the task and keep the card line current
-  with `orca worktree set --comment`, because the root's `.superpowers/` cannot
-  see a worker's. A worker's liveness is `orca worktree show` or
-  `terminal wait`, never an mtime alone. The register stays
+- **Orca is the project's orchestrator.** Supervise with a Run:
+  `orca orchestration run-create --objective "<goal>"`, `orca orchestration
+  worker-start --spec "<task>" --worktree current --agent <id>`, and `orca
+  orchestration check --wait --types "worker_done,escalation,question"`. A Task
+  has one authoritative Dispatch; release it only after an accepted settlement
+  (`orca orchestration worker-release`), and recover a lost one with
+  `dispatch-show` / `task-list`. `orca skills get orchestration` is
+  the full contract. `.superpowers/` is gitignored, so each worktree has its own
+  ledger: keep the card line current with `orca worktree set --comment`, because
+  the root's cannot see a worker's. A worker's liveness is `orca worktree show`
+  or `terminal wait`, never an mtime alone. The register stays
   `docs/product/backlog.jsonl`: Orca links issues and PRs to a worktree, it does
   not own a register, so link an existing issue rather than filing a row or an
   issue per worktree.
@@ -88,25 +106,16 @@ Yunari process.
   measurement: re-run it against a previous sample of the same commit before reporting it.
 - Keep the root session through one substantial usable outcome or active phase;
   start a fresh root only at a major phase boundary, when the user asks, or when
-  context is unreliable — `STATUS.md` is the handoff. In multi-agent mode the
-  root orchestrates, workers implement disjoint tasks, and an independent
-  reviewer checks contract and evidence, reporting findings to the root rather
-  than changing process or environment.
-- Before each completed task commit, **replace** `STATUS.md`'s "Last completed
-  change" with a 1–5 bullet summary of that commit; never append older ones.
-  Keep the file to current objective, active work, latest completed change, next
-  steps and blockers/unverified only; run `npm run status:check` from `src/web/`.
-  **The limit is bullet count, not line count** — 6/5/5/5 across active work,
-  last completed change, next and blockers — and **one item per line, never
-  wrapped**. A line cap was being gamed: each pass kept every fact and only
-  re-wrapped the prose, so the file grew into a diary while every edit wasted
-  tokens compressing it. Bullets bound how much there is to say; the one-line
-  rule bounds each item, and forces the choice of what to drop at the moment of
-  writing rather than in a rewrite pass.
+  context is unreliable — the SDD ledger and Orca's Run state are the handoff.
+  In multi-agent mode Orca orchestrates (one Run, a Task per plan task, a
+  Dispatch per attempt), workers
+  implement disjoint tasks, and an independent reviewer checks contract and
+  evidence, reporting findings to the coordinator rather than changing process
+  or environment.
 - Judge a defect's size when you observe it. **File a bug issue** when any of
   these holds: the cause is not established; more than one owner could fix it;
-  the fix needs a design decision; it spans subsystems; it blocks the active
-  plan; it would need a spec rather than a task. **Fix it on the fly** when all
+  the fix needs a design decision; it spans subsystems; it blocks running
+  work; it would need a spec rather than a task. **Fix it on the fly** when all
   of these hold: the cause is named with `file:line`, the fix sits inside one
   owner, the correct behaviour is already specified, a regression test is
   obvious, and no work is lost and no data misrepresented. Say which side you
@@ -157,7 +166,7 @@ Yunari process.
   owns it. An accepted request closes with a link to the spec, plan or row that
   now owns it; a declined one closes as `not planned` **and carries its reason in
   a closing comment** — the close reason alone says nothing, and a decision
-  nobody can read is a decision lost. `STATUS.md` alone decides acceptance, so the
+  nobody can read is a decision lost. The register alone decides acceptance, so the
   queue keeps one owner. When an
   issue waits on a named plan or an unanswered decision, set `blocked` and say
   what it waits on.

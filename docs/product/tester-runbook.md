@@ -85,8 +85,8 @@ and then re-run the gate: a duplicate id is almost always the harmless kind, but
 
 ### Recovering a crash
 
-A crash mid-session leaves the working tree dirty and the register uncommitted,
-which is the state `STATUS.md` warns about repeatedly. The order that worked:
+A crash mid-session leaves the working tree dirty and the register uncommitted.
+The order that worked:
 
 1. `git log --oneline -3` and `git status --short` — what actually landed.
 2. `node scripts/backlog-check.mjs` — this is what tells you the register is

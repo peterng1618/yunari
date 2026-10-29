@@ -1,6 +1,8 @@
 # ADR-0010: A live dispatch record owns recovery state
 
-**Status:** Accepted
+**Status:** Superseded 2026-10-29 — Orca orchestration's durable Run/Task/Dispatch
+records own recovery state; dispatch-record files, the PreCompact/SessionStart
+hooks and `scripts/sdd-checkpoint.mjs` are retired. Kept as history.
 
 ## Context
 
@@ -17,11 +19,10 @@ reach context, so the read-back half can be an injection.
 
 ## Decision
 
-- **`STATUS.md` remains the sole authority for which plan is active.** Dispatch
-  records say what is running *inside* that plan; they never redefine it. A
-  record found under a queued plan is a dispatch against the wrong plan — a
-  mistake to reconcile, not work to resume — so it is reported as unreconciled
-  rather than promoting its workspace. Ledger mtime is not a signal at all.
+- **A live dispatch record is the sole authority for which plan is active.**
+  Several plans may be active at once across worktrees; no shared file names
+  one. A record under any plan makes that plan active. Ledger mtime is not a
+  signal at all.
 - The record is written by the controller, one file per in-flight agent, under
   the plan's git-ignored SDD workspace. `SubagentStart`/`SubagentStop` carry
   `agent_id` and `agent_type` but not the task, plan or base commit, so lifecycle

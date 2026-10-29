@@ -67,15 +67,6 @@ jobs:
         # red live-tree verdict (vg-435). No step here repeats either one.
         run: npm run gate
 
-      - name: Status handoff
-        run: npm run status:check
-
-      - name: Agent hook self-checks
-        # The hook script swallows every error so a hook can never block
-        # compaction, which also means a broken one is silent. This is the only
-        # thing that runs its self-check.
-        run: npm run hooks:check
-
       - name: Typecheck
         # The npm script, not a hand-written list. The list was enumerated here
         # and drifted twice: it said "five projects, not four" because the host

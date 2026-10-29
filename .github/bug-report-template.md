@@ -50,7 +50,7 @@ choose is a valid answer. -->
   - more than one owner could fix it
   - the fix needs a design decision
   - it spans subsystems
-  - it blocks the active plan
+  - it blocks running work
   - it would need a spec, not a task
 All of them being false means it was small: cause named with file:line, the
 fix inside one owner, the correct behaviour already specified, an obvious

@@ -126,19 +126,6 @@ Non-obvious failure modes worth checking before repeating expensive investigatio
   executables run, so "the environment cannot execute binaries" is not a valid
   conclusion without comparing a control.
 
-## Machine-read handoff conventions
-
-Two handoff artefacts are read by exact-match parsers, so a reworded line fails
-silently — nothing red, a wrong banner:
-
-- **`STATUS.md`'s active plan** is read only from the bullet
-  ``- **Active plan:** `<path>` `` (`scripts/sdd-checkpoint.mjs`, and asserted by
-  `scripts/check-status.mjs`). Reword it and the compaction banner reports the
-  running plan as unowned and a live dispatch as stray.
-- **A plan ledger's task states** are read only from `Task <n>: <state>` lines
-  under a `## … Task status` heading. A prose heading gives a resumed controller
-  an empty status list.
-
 ## Environment overrides
 
 - **`YUNARI_STEAM_ROOT`** names the Steam install the host reads instead of the

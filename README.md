@@ -197,12 +197,11 @@ Run all npm commands from `src/web/`.
 npm install
 npm run build
 npm test            # Vitest unit suites
-npm run gate        # format/lint, self-tests, status and docs checks, typecheck, unit and Worker suites
+npm run gate        # format/lint, self-tests, docs checks, typecheck, unit and Worker suites
 ```
 
 `npm run gate` is the one command that means green. It is offline and must exit
-0. `npm run typecheck`, `npm run docs:check` and `npm run status:check` are also
-runnable alone.
+0. `npm run typecheck` and `npm run docs:check` are also runnable alone.
 
 Browser tests preview the built bundles, so build first and install Chromium:
 
@@ -228,7 +227,6 @@ rule, is [`docs/evidence/screenshots/README.md`](docs/evidence/screenshots/READM
 
 ## Docs and licence
 
-- [`STATUS.md`](STATUS.md) — current objective and the fresh-session handoff.
 - [`docs/README.md`](docs/README.md) — the documentation map.
 - [`docs/product/requirements.md`](docs/product/requirements.md) — product truth.
 - [`docs/architecture/README.md`](docs/architecture/README.md) — current

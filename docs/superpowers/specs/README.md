@@ -8,14 +8,15 @@ here; do not create a parallel `.agents/specs/` system.
 Every spec opens with a `- **Status:**` line. It states **where the spec stands,
 never what is left** — task counts, commit shas and "Task 4 open" all have a
 single owner already (the spec's Acceptance section, its plan, the ledger,
-`STATUS.md`), and repeating them here would be a second copy to keep in sync.
+`.superpowers/sdd/` dispatch records), and repeating them here would be a second
+copy to keep in sync.
 Keep it to one state plus, at most, a link to the plan.
 
 | Status | Means |
 |---|---|
 | `draft` | Written and reviewed, no plan yet, and not the active work |
-| `active` | Its plan is the one `STATUS.md` names |
-| `in progress` | Its plan exists but is not the active one |
+| `active` | Its plan holds a live Orca Dispatch |
+| `in progress` | Its plan exists but has no live dispatch record |
 | `implemented` | Every acceptance item is met or explicitly carried elsewhere |
 | `backlog` | Review notes, not accepted requirements — `2026-09-24-editor-behaviour-review.md` |
 
