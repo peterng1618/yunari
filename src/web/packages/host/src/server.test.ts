@@ -5172,10 +5172,17 @@ describe("A local monitor is specified rather than paired", () => {
           },
         );
 
-        // One turn is enough for the handler to reach the stop, which is where
-        // an unawaited close would already have answered.
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        // A bounded poll for the observable condition rather than a fixed
+        // sleep: under the full gate's load the DELETE has not reached `stop`
+        // after any single guessed interval, and a healthy host then fails.
+        const deadline = Date.now() + 5000;
+        while (stopped.length === 0 && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
         expect(stopped).toHaveLength(1);
+        // The stop is held and never settles, so the answer cannot be on the
+        // wire yet; the settle turn makes a host that answered early fail.
+        await new Promise((resolve) => setTimeout(resolve, 20));
         expect(answered).toBe(false);
 
         release();
