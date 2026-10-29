@@ -448,10 +448,9 @@ function pillClass(id: string): string {
 }
 
 /**
- * **The third group the spec names, and the pill that says its word is new**
- * (spec, "The facts are pills, not rows": *a style pill one tag, with a proposed
- * tag saying so on its own pill rather than being indistinguishable from a
- * settled one*).
+ * **The third group, and the pill that says its word is new**: *a style pill
+ * one tag, with a proposed tag saying so on its own pill rather than being
+ * indistinguishable from a settled one*.
  *
  * The vocabulary is the listing's and arrives as a prop, so this case hands the
  * set it is about rather than deriving one: what the modal owns is reading a tag
@@ -631,7 +630,7 @@ it("gives Delete the destructive marker and its R164 reason", async () => {
  * **The footer draws the four and only two of them run** (R164).
  *
  * Delete and Export package are drawn because the drawing draws them, and no
- * task in this plan and no phase in the spec's landing order owns either — so
+ * task in this plan and no phase owns either — so
  * they are disabled with their reason rather than answering a press with
  * nothing. Every button is read through `must`, because a case that passed by
  * finding nothing would prove nothing, and the two that run are pressed in the
@@ -706,9 +705,9 @@ it("draws no version and no separator for a theme that declares none", async () 
 
 /**
  * **The modal says where the item came from**, which is the one thing a cell's
- * badge cannot (spec, "Provenance": *a cell can say From the store and cannot
- * say from where*). It is one muted line under the pills rather than a group of
- * pills, and it names the catalogue item and the version this copy was installed
+ * badge cannot: *a cell can say From the store and cannot say from where*. It
+ * is one muted line under the pills rather than a group of pills, and it names
+ * the catalogue item and the version this copy was installed
  * from — the record's own strings, not the caption's document version.
  *
  * **A theme the host has no record for draws no line at all**, and the line

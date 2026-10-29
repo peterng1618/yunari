@@ -120,7 +120,7 @@ export function useSpecimens(cuts: readonly FontCut[]): void {
 
 /**
  * The finder's 336px preview column: the fixed specimen card, the author's
- * sample text and the family's cut choice (spec R6, R7, R9).
+ * sample text and the family's cut choice (R6, R7, R9).
  *
  * Controlled: the shell owns the sample, the cut and the role, because the
  * footer's actions are built from them. It draws from the result and the role

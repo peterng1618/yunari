@@ -269,7 +269,7 @@ export function createNewPanelDefaults(
  * fields all read it, so a shape is never described in two places.
  *
  * `arc` and `wedge` are the two Fabric 7 does **not** ship, and they are here
- * for the reason the spec gives: a quarter-disc is a basic compositional move
+ * because a quarter-disc is a basic compositional move
  * that could only be had by hand-authoring an SVG path. Neither needs new
  * geometry for the open sweep — `Circle` already carries both angles — so what
  * each one is really for is a `type` of its own, and `Wedge` additionally draws

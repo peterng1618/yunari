@@ -258,7 +258,7 @@ export async function fetchOpenMeteo(
   url.searchParams.set(
     "current",
     // `pressure_msl` is not in the recorded probe, but `weather.pressure` has no
-    // other source; see the task report's note on ruling 3.
+    // other source, so the probe was extended.
     "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,is_day,pressure_msl",
   );
   url.searchParams.set(

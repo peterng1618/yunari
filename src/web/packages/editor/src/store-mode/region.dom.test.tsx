@@ -226,9 +226,9 @@ it("keeps the facet row on one line and wraps rather than dropping a control", a
 /**
  * The two wells either side of the facets, and the sort that follows the half.
  *
- * The sort keys are per half and the two share no key (the spec's "The store
- * mode"): the catalogue knows when an item was published and how often it was
- * taken, and the host's own library knows only what the author wrote. Read as
+ * The sort keys are per half and the two share no key: the catalogue knows when
+ * an item was published and how often it was taken, and the host's own library
+ * knows only what the author wrote. Read as
  * the words the well prints, because the two halves' first keys are different
  * words — `Name` against `Updated` — so a sort that did not follow the half
  * would print the same thing twice.
@@ -600,7 +600,7 @@ async function type(query: string): Promise<void> {
 
 /**
  * The region lists the items, and **the cell's own surface is what opens the
- * item's** (spec, "The item's own surface": *so a cell opens a modal*).
+ * item's**.
  *
  * The gallery is the wiring's visible half: before A.6 the region's body was
  * empty, so a cell drawn at all is the source reaching the grid. The cell is
@@ -788,9 +788,9 @@ it("returns to page one when a filter changes", async () => {
 });
 
 /**
- * **Opening the item does not disturb what is underneath it** (spec, "The item,
- * and why `kind` is the seam"): the page, the query and the sort are where they
- * were when the modal closes, so a person comes back to the list they left.
+ * **Opening the item does not disturb what is underneath it**: the page, the
+ * query and the sort are where they were when the modal closes, so a person
+ * comes back to the list they left.
  */
 it("closes back onto the same page, filter and sort", async () => {
   await mountStore(listing(30));
@@ -933,8 +933,7 @@ it("gives an ungrouped run's rows the spacing it gives a grouped one's", async (
 
 /**
  * **The sensors are grouped by the family the vocabulary already files them
- * under**, which is the grouping the spec asks for and not a second reading of
- * the key here.
+ * under**, which is one grouping and not a second reading of the key here.
  *
  * A key this build does not know has no family, so it is offered under no
  * heading rather than under an invented one (§9) — and it is still offered,

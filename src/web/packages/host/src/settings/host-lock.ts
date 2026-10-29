@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
- * One app folder is one host (§ "Two hosts on one network").
+ * One app folder is one host.
  *
  * Two hosts started against one folder share `active-theme.json`,
  * `display-clients.json` and the device choices — the same display ids and

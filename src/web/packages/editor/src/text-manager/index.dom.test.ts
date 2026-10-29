@@ -879,8 +879,8 @@ describe("placing a text by click or drag", () => {
   });
 
   it("suppresses the canvas context menu for a non-primary press", () => {
-    // The spec's "a non-primary press does not also open the canvas context
-    // menu". The app's menu listener shares `upperCanvasEl` and is registered
+    // A non-primary press does not also open the canvas context menu. The app's
+    // menu listener shares `upperCanvasEl` and is registered
     // after this manager, so stopping immediate propagation here is the only
     // thing that keeps it closed.
     const { canvas, manager, port, save } = placementScene({ arm: false });

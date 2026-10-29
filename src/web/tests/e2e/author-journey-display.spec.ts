@@ -59,7 +59,7 @@ const THEMES_DIR = path.join(APP_DIR, "themes");
 /** Where the exported package is kept, so the import below can reopen it. */
 const EXPORTED = path.join(APP_DIR, "exported.yunari-theme");
 /** The folder this spec seeds the exported document under. The document mints
-    its own UUID, so the library folder name is the spec's choice, not the id. */
+    its own UUID, so the library folder name is a choice, not the id. */
 const THEME_ID = "e2e-author-journey";
 const HOST = `http://127.0.0.1:${HOST_PORT}`;
 

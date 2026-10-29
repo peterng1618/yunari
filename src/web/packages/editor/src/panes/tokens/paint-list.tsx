@@ -16,8 +16,8 @@ import { type TokenUsage, usageFigure } from "./token-use.js";
  *
  * **A row is a selector, not a control.** Pressing it selects the token for the
  * inspector, where the fields live; nothing here edits the document. The row's
- * shape is unchanged from the pane's field-set days — the spec keeps paint rows
- * as they were — and what left is the chooser, the fields and the users list.
+ * shape is unchanged from the pane's field-set days, when paint rows were the
+ * same, and what left is the chooser, the fields and the users list.
  *
  * **The membership is not re-derived here.** The list is `paletteTokenIds`,
  * which the pane's title-bar count also reads, so the rows drawn and the number

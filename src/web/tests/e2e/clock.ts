@@ -28,8 +28,7 @@ import type { Page } from "@playwright/test";
  * real time spent in `goto`, `screenshot()` and every CDP round trip — i.e. by
  * how loaded the machine is, which is why the failures moved between runs,
  * differed between the two projects sharing one preview server, and always
- * passed in isolation. `status.md` recorded a suite needing three attempts and
- * nobody could say why.
+ * passed in isolation. A suite needed three attempts and nobody could say why.
  *
  * With the clock genuinely paused, only `runFor` moves time, which is what
  * every one of these tests already believed.

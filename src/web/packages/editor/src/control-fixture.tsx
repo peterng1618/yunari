@@ -15,7 +15,7 @@ import { InspectorSection } from "./components/ui/inspector-section.js";
 import "./editor-shell/editor-shell.css";
 
 /**
- * The design-language parity fixture (spec §13.1).
+ * The design-language parity fixture.
  *
  * It mounts every control of DESIGN.md §5's vocabulary — alone and inside the
  * `InspectorSection` a surface composes them into — over the built stylesheet,

@@ -5,7 +5,7 @@ import { SkeletonCard } from "./skeleton.js";
 
 /** Where a key moves the roving focus: one step, one row, or either end,
  *  clamped so the grid never loses it. A key the grid does not use leaves the
- *  focus where it was (spec R2). */
+ *  focus where it was (R2). */
 export function moveInGrid(
   key: string,
   at: number,

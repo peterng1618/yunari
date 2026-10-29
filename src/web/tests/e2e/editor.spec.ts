@@ -1838,8 +1838,8 @@ test.describe("Fabric editor route", () => {
     // By id rather than by Fabric's class tag, and through the card rather than
     // around it: the starter's icons are paths *inside* their cards, so a search
     // of `getObjects()` never saw one and threw "the starter has no Path" for a
-    // shape the author can click. Entering the card is also the gesture the spec
-    // defines for reaching a part, and it opens the card in the layer tree on
+    // shape the author can click. Entering the card is also the gesture for
+    // reaching a part, and it opens the card in the layer tree on
     // the way — so the icon is selected the way an author selects it.
     await enterLayer(page, "group-cpu-card");
     await page.locator('[data-yunari-layer="cpu-card-icon"]').click();
@@ -5701,7 +5701,7 @@ async function clientOfStarterGauge(
 /**
  * Selects the RAM card's gauge, by entering the card and picking its row.
  *
- * **Two gestures, because the spec says they are two** (§3): a click *selects*
+ * **Two gestures, because they are two** (§3): a click *selects*
  * and gives the card's settings; entering gives the parts. The RAM gauge is a
  * part, so it is reached by entering — `bridge.selectLayer` takes
  * `owner ?? target`, so with the card merely open a click on the gauge's row

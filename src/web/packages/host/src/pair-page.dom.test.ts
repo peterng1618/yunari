@@ -166,8 +166,8 @@ describe("pairing a display", () => {
     shape.dispatchEvent(new Event("change"));
 
     // The field carries what the host validates, and the note keeps the number
-    // the author typed visible rather than losing it silently (spec § "Pairing
-    // and the pair page": the destructive part is named in the control).
+    // the author typed visible rather than losing it silently, and the
+    // destructive part is named in the control.
     expect(rotation.step).toBe("90");
     expect(rotation.value).toBe("90");
     expect(note.hidden).toBe(false);

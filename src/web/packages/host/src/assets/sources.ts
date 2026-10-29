@@ -15,7 +15,7 @@ import { wallpaperEngineSource } from "./wallpaper-engine.js";
  * The one registry: adding a source is one entry here plus its adapter.
  *
  * A source added here must not require a change under the editor's
- * `asset-finder/` except a category body it declares (spec R2).
+ * `asset-finder/` except a category body it declares (R2).
  */
 export const ASSET_SOURCES: readonly AssetSource[] = [
   lucideSource,

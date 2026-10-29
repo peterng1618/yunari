@@ -141,7 +141,7 @@ describe("the local half's items", () => {
 
   it("reads the ground off the listing and opens nothing", async () => {
     // The whole point of R114: one pass over the library. A source that opened
-    // each theme for the paint would be the second read the spec refuses, and
+    // each theme for the paint would be a second read, and
     // the client's `open` rejects, so any such call fails this case.
     const client = clientOf([envelope()], GROUND);
     const source = localThemeSource(client);
@@ -234,7 +234,7 @@ describe("narrowing by a facet", () => {
     const cpuOnly = await item(binding("cpu.load"));
     const both = await item(binding("cpu.load", "gpu.load"));
 
-    // The spec's own example: "Themes that use CPU and GPU" must not return a
+    // The example: "Themes that use CPU and GPU" must not return a
     // CPU-only theme.
     expect(matchesFacets(cpuOnly, { sensors: ["cpu.load", "gpu.load"] })).toBe(
       false,
@@ -338,7 +338,7 @@ describe("narrowing by a facet", () => {
     // A picture behind the board: the token is not what a viewer sees, so the
     // document carries no colour mode. `unclassified` is the absence of an
     // answer rather than one a person can ask for, so it is reachable by not
-    // asking and by nothing else (spec, "Finding a theme") — a selection naming
+    // asking and by nothing else — a selection naming
     // it must not be the one thing that finds it.
     const filmed = await item(
       envelope({
@@ -389,7 +389,7 @@ describe("narrowing by a facet", () => {
 
     // Two values in one facet are alternatives, so a theme carrying either
     // answers — where the same pair on Sensors asks for both, which is the one
-    // exception the spec calls out. `retro` binds `cpu.load` alone.
+    // exception. `retro` binds `cpu.load` alone.
     expect(matchesFacets(retro, { style: ["retro", "neon-2"] })).toBe(true);
     expect(matchesFacets(neon, { style: ["retro", "neon-2"] })).toBe(true);
     expect(matchesFacets(both, { style: ["retro", "neon-2"] })).toBe(true);

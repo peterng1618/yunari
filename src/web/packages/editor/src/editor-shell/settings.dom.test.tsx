@@ -475,7 +475,7 @@ afterEach(() => {
 });
 
 describe("Settings", () => {
-  it("opens the settings modal from the gear, and offers exactly the five tabs the spec names", async () => {
+  it("opens the settings modal from the gear, and offers exactly the five tabs", async () => {
     const host = mount();
     await press(gear(host));
 

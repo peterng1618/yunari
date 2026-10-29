@@ -665,7 +665,7 @@ export async function mountEditorShell({
       // starter is 1672 × 941 — 16:9 to the eye, not to an exact aspect — so an
       // exact comparison drew the guide on the default view. One unit is the
       // smallest authored distance, and a real mismatch (4:3, 19.5:9, a circle)
-      // is hundreds of units. The spec's ruling is a tolerance on the box, not
+      // is hundreds of units. The tolerance is on the box, not
       // an epsilon on its aspect.
       const ONE_ARTBOARD_UNIT = 1;
       const box =

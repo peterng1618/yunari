@@ -1190,7 +1190,7 @@ describe("EditorSession", () => {
   });
 
   it("gives the selected token its own column, and gives the object column back", async () => {
-    // The right column has one owner at a time (spec, Tokens pane). The session
+    // The right column has one owner at a time. The session
     // owns both halves — the token panel's mounts and the suppression — because
     // it already owns the document the token fields write through; a panel built
     // by `shell-layout` would need a second copy of it.

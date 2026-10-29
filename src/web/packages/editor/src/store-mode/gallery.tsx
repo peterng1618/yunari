@@ -127,8 +127,7 @@ function Cell(props: {
       data-yunari-store-cell={item.id}
       className="flex flex-col overflow-hidden rounded-lg border border-edge bg-panel-2"
     >
-      {/* **The cell's own surface is a control** (spec, "The item's own
-          surface": *so a cell opens a modal*). A button rather than a handler
+      {/* **The cell's own surface is a control**. A button rather than a handler
           on the `li`, because the item's modal must be reachable without a
           mouse (§5's keyboard section) — and because a press on one of the four
           actions below must not open the item as well.
@@ -205,7 +204,7 @@ function Cell(props: {
                 className="flex-none rounded-full border border-edge px-[var(--space-8)] py-[var(--space-4)] text-2xs font-medium text-muted"
               >
                 {/* A kind this build does not know prints its identifier, which
-                    is the spec's rule for a client older than the kind. */}
+                    is the rule for a client older than the kind. */}
                 {uiCopy.store.cell.kinds[item.kind] ?? item.kind}
               </span>
               <span

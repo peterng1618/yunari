@@ -87,7 +87,7 @@ export interface SemanticKeyDescriptor {
 const TEMPERATURE_UNITS = ["°C", "°F"] as const;
 const CLOCK_UNITS = ["MHz", "GHz"] as const;
 // Decimal and binary capacity labels, and both bit and byte rate prefixes:
-// a binding may pin any of these (spec, "Binding overrides").
+// a binding may pin any of these.
 const DATA_UNITS = ["MB", "GB", "TB", "MiB", "GiB", "TiB"] as const;
 const RATE_UNITS = ["kb/s", "Mb/s", "Gb/s", "kB/s", "MB/s", "GB/s"] as const;
 
@@ -1231,7 +1231,7 @@ const DYNAMIC_KEY_SHAPES: readonly DynamicKeyShape[] = [
     }),
   },
   {
-    // The spec's custom-key alphabet, not a slug: a source or field id may
+    // The custom-key alphabet, not a slug: a source or field id may
     // carry `_` and may start with one, and the key must stay legal because
     // the store validated the same ids before persisting them.
     pattern: /^custom\.([a-z0-9_-]{1,32})\.([A-Za-z0-9_-]{1,32})$/,

@@ -193,7 +193,7 @@ interface ActiveDisplay {
   readonly label: string;
   readonly kind: DisplayKind;
   readonly theme: string | null;
-  /** The glass and mounting angle; `this-pc` answers rect/0, as the spec says. */
+  /** The glass and mounting angle; `this-pc` answers rect/0. */
   readonly shape: DisplayShape;
   readonly rotation: number;
 }
@@ -322,7 +322,7 @@ export interface HostServerOptions {
     readonly gpus: readonly { readonly id: string; readonly name: string }[];
     readonly disks: readonly { readonly id: string; readonly name: string }[];
   }>;
-  /** What is attached to this PC right now (§ "The host's own monitors"), for
+  /** What is attached to this PC right now, for
    *  the owner to point a local display at. Omitted uses the real `graphics()`
    *  probe; supplied so a case can hold a fixture rather than this machine's
    *  screens, and so a host that enumerates its own way can say so. */
@@ -378,10 +378,10 @@ export interface HostServerOptions {
    *  a caller cannot get wrong is the pair it never supplies. `RootPem` rather
    *  than a string, so a chain or a leaf is a compile error here. */
   readonly caCertificate?: RootPem;
-  /** Which host this app folder is (§ "Finding the host after its address
-   *  changes"), answered by `GET /api/host`. Omitted when this host has no
-   *  identity: the route is then not registered at all, because an id minted to
-   *  fill the answer is one no display could have stored. */
+  /** Which host this app folder is, answered by `GET /api/host`. Omitted when
+   *  this host has no identity: the route is then not registered at all,
+   *  because an id minted to fill the answer is one no display could have
+   *  stored. */
   readonly host?: HostRecord;
 }
 
@@ -692,7 +692,7 @@ function usbId(value: number): string {
  * a request becomes a display, so the credential is checked once.
  *
  * **Loopback answers `undefined` on purpose.** It is trusted admin and never
- * paired, and the reserved `this-pc` has no record to return (spec § "One map"):
+ * paired, and the reserved `this-pc` has no record to return:
  * the *key* is minted where a key is needed, not fabricated here with a
  * `createdAt` nobody wrote. A credential matching no display is `undefined`
  * too, and the caller refuses it as it refuses a missing credential.
@@ -811,7 +811,7 @@ function streamLanguage(url: URL): string | undefined {
  * The glass and mounting angle of the display behind a key.
  *
  * `this-pc` and `default` are not records, so each answers the upright
- * rectangle the spec gives them, and every other key is a record whose own
+ * rectangle it is given, and every other key is a record whose own
  * presentation wins. A stored upright angle is answered as `0` because the
  * record omits it.
  */
@@ -1265,7 +1265,7 @@ const MAX_SOCKET_CONNECTIONS = 256;
  * **Plain http is a cost here, not a feature.** On a LAN it is an origin with
  * no wake lock and no service worker — the state `vg-580` exists to remove —
  * and it is kept only because the pairing link that points at it belongs to the
- * per-display-themes spec, which owns what that link should carry. A display
+ * per-display-themes work, which owns what that link should carry. A display
  * reaches the secure origin by typing `https` in front of the address until
  * then.
  */

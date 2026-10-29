@@ -322,10 +322,9 @@ export function createSelectionInspector(
 
   /**
    * The object to describe: the live selection, or the re-bound one across a
-   * history restore. **A deselect is neither**, and the column empties for it —
-   * `2026-10-03-dashboard-authoring-design.md:558`, "with nothing selected the
-   * right column is empty and names where to choose from", and its `:574` ruling
-   * that the column empties on deselect.
+   * history restore. **A deselect is neither**, and the column empties for it:
+   * with nothing selected the right column is empty and names where to choose
+   * from, and it empties on deselect.
    *
    * A crop session is the exception: it makes its own frame the active object,
    * so following the selection would describe that frame rather than the image

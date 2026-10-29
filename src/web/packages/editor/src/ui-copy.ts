@@ -393,7 +393,7 @@ export const uiCopy = {
    * §7.1). Each names the *surface* rather than the mechanism behind it.
    *
    * **The user chose `Editor · Themes · Host` on 2026-10-19** (SDD ruling R100),
-   * over the spec's draft names — *theme store*, *theme editor*, *host
+   * over the draft names — *theme store*, *theme editor*, *host
    * settings* — and over the drawings' `This PC`, which named the machine
    * rather than a peer of `Themes`. The key `thisPc` and the mode id `"this-pc"`
    * are unchanged: an id is never shown to anyone, so renaming one buys a
@@ -814,9 +814,9 @@ export const uiCopy = {
      *  product ships. `New` is the author's own blank document; this is the one
      *  they can open a copy of. */
     newFromStarter: "New from starter",
-    /** **Import package**, which is the store mode's own action (`2026-10-12-
-     *  theme-store-design.md`, "The store mode") and what the row does: the
-     *  package is written into the library and the open document is untouched.
+    /** **Import package**, which is the store mode's own action and what the
+     *  row does: the package is written into the library and the open document
+     *  is untouched.
      *  The row used to read *Open package* and open a document, which is the
      *  route A.7 removed — the store's `open` action is that route now. */
     importPackage: "Import package",
@@ -840,8 +840,7 @@ export const uiCopy = {
   },
   /**
    * The Themes mode's own words — the store surface, whose region's header row
-   * is its own rather than the shell's (`2026-10-12-theme-store-design.md`,
-   * "The store mode").
+   * is its own rather than the shell's.
    */
   store: {
     /** The store's two halves, which the region's own `Segmented` names. The
@@ -902,9 +901,9 @@ export const uiCopy = {
      *  a placeholder that could disagree with the name would be a second copy of
      *  one fact. What a query filters and pages is A.4's and A.5's. */
     search: "Search themes",
-    /** The five facets, in the order the row draws them — the spec's "Finding a
-     *  theme: the five facets". The values each offers are derived from the
-     *  items, so the only words here are the ones a value cannot carry itself. */
+    /** The five facets, in the order the row draws them. The values each
+     *  offers are derived from the items, so the only words here are the ones a
+     *  value cannot carry itself. */
     facets: {
       label: "Filter themes",
       author: "Author",
@@ -914,8 +913,7 @@ export const uiCopy = {
       style: "Style",
       /** The Sensors facet's headings: one per family the vocabulary files a
        *  semantic key under, so a person choosing values sees them grouped the
-       *  way `describeSemanticKey` groups them rather than in one flat list
-       *  (spec, "Finding a theme: the five facets").
+       *  way `describeSemanticKey` groups them rather than in one flat list.
        *
        *  Typed from `SemanticFamily`, so a family added to the vocabulary
        *  without a word fails to compile here rather than printing an identifier
@@ -952,7 +950,7 @@ export const uiCopy = {
      *
      *  **`unclassified` is deliberately absent.** It is the absence of an answer
      *  rather than one a person can ask for, so it is reachable under "any" and
-     *  under no other value (spec, "Finding a theme: the five facets", `R117`);
+     *  under no other value (R117);
      *  a chip for it would be a selection that matches nothing.
      *
      *  Typed from the record's own unions, so a colour mode or an orientation
@@ -1079,8 +1077,7 @@ export const uiCopy = {
       unexpectedState: (status: string): string =>
         `The store answered an unexpected state (${status}); try submitting again.`,
     },
-    /** The item's own surface (`2026-10-12-theme-store-design.md`, "The item,
-     *  and why `kind` is the seam"). */
+    /** The item's own surface. */
     item: {
       close: "Close",
       /** The four commands' short words, **for this surface only**: the panel
@@ -1116,7 +1113,7 @@ export const uiCopy = {
     /** The two empties, which are two sentences because they have two answers: a
      *  library with nothing in it is not a filter that matched nothing, and
      *  telling someone with forty themes to go and build one is a lie the
-     *  surface avoids by having both (spec, "The gallery, and paging"). */
+     *  surface avoids by having both. */
     empty: {
       library: "No themes are saved on this PC yet.",
       libraryHint: "Build one in the editor, or import a package.",
@@ -1141,9 +1138,9 @@ export const uiCopy = {
         favorites: "Favorites",
       },
     },
-    /** One cell of either gallery (`2026-10-12-theme-store-design.md`, "The store
-     *  mode"). The actions are keyed by `CellAction`, so an action added to the
-     *  cell without a word for it fails to compile rather than drawing an
+    /** One cell of either gallery. The actions are keyed by `CellAction`, so an
+     *  action added to the cell without a word for it fails to compile rather
+     *  than drawing an
      *  icon-only button nobody can name.
      *
      *  **The origin badge's word is not here**: the item's own surface says the
@@ -1154,7 +1151,7 @@ export const uiCopy = {
        *  gap's blank. */
       noAuthor: "No author",
       /** The four actions, as the drawing's facts band orders them. Spelled as
-       *  the spec does — **Open in editor**, **Assign to display**, **Export
+       *  the drawing does — **Open in editor**, **Assign to display**, **Export
        *  package** and **Delete** — because each names the operation the library
        *  already has rather than the mechanism behind it. */
       actions: {
@@ -1167,8 +1164,7 @@ export const uiCopy = {
        *  every cell four actions, so all four are drawn and the two no phase
        *  owns are disabled with this reason rather than answering a press with
        *  nothing (R164). It names no owner and promises no date, because the
-       *  only thing true of them is that no phase in the spec's landing order
-       *  has one. */
+       *  only thing true of them is that no phase has one. */
       unavailable: "Not available yet",
       /** The online half's three answers, keyed by `InstallState` less `none`
        *  — a library item has no catalogue to be installed from, so it draws
@@ -1181,8 +1177,8 @@ export const uiCopy = {
       /** What each kind is called, keyed by its wire identifier. The online
        *  cell draws this badge in its facts band, and the item's own surface
        *  draws the same word. A kind
-       *  this build does not know prints its own identifier, which is what the
-       *  spec requires of a client older than the kind. */
+       *  this build does not know prints its own identifier, which is what a
+       *  client older than the kind expects. */
       kinds: { [DASHBOARD_THEME_KIND]: "Theme" } as Readonly<
         Record<string, string>
       >,
@@ -1202,8 +1198,7 @@ export const uiCopy = {
       /** The way out of the choice, for a pointer or a touch screen reader. */
       close: "Close",
     },
-    /** The pager (`2026-10-12-theme-store-design.md`, "The gallery, and
-     *  paging"): the per-page well, the two steps and the numerals' names.
+    /** The pager: the per-page well, the two steps and the numerals' names.
      *
      *  **A numeral's name composes the concept around it**, the way
      *  `statusBar.objects` composes a count: a bare `6` is announced as a
@@ -1350,10 +1345,10 @@ export const uiCopy = {
       `${label} needs a key this host does not have.`,
     connectionsAction: "Open Connections",
     openFontPicker: "Browse the font catalogue",
-    /** The Fonts body's own search and filter row (spec R5). The old picker's
+    /** The Fonts body's own search and filter row (R5). The old picker's
      *  facet vocabulary and rule sentence die with it in Task 13. */
     fontSearch: "Search trios and font names",
-    /** The Fonts footer's two outcomes (spec R5, R6). The preview column's own
+    /** The Fonts footer's two outcomes (R5, R6). The preview column's own
      *  Apply/Add controls moved here, so the label and the write agree. */
     fontApplyTrio: "Apply trio",
     fontAddPresets: "Add to presets",
@@ -1372,7 +1367,7 @@ export const uiCopy = {
     fontFamilyMeta: (cuts: number): string =>
       `${cuts} ${cuts === 1 ? "cut" : "cuts"}`,
     fontLoadMore: "Load more",
-    /** The preview panel beside the grid (spec R6, R7, R9). The sample line is
+    /** The preview panel beside the grid (R6, R7, R9). The sample line is
      *  the author's own words, so its default is copy rather than a value the
      *  panel invents; the scope and change lines read the document's presets
      *  without the panel ever opening one. */
@@ -1670,9 +1665,8 @@ export const uiCopy = {
     code: "Pairing code",
     /** Why the symbol and the line above it disagree in spelling: a dotted quad
      *  is what an IP change breaks, and the name is what it does not. Said here
-     *  because the card is the only moment the owner is thinking about it (spec
-     *  § "Finding the host after its address changes"). The last clause is not
-     *  hedging — Android 11 and earlier and a device on Private DNS cannot
+     *  because the card is the only moment the owner is thinking about it. The
+     *  last clause is not hedging — Android 11 and earlier and a device on Private DNS cannot
      *  resolve the name, and then the address is what it types. */
     reserveAddress:
       "The address breaks if this PC's IP changes; the name above survives it, where your device can resolve it.",
@@ -2056,12 +2050,11 @@ export const uiCopy = {
     author: "Author",
     description: "Description",
     /** The style-tag field: the vocabulary an author picks from, and the one
-     *  path to a word it does not hold (spec, "Style tags are … picked, not
-     *  typed"). `tagsProposed` composes the pill a proposal is drawn as — the
-     *  drawing's own reading, `<tag> · proposed` on a dashed pill, so a reader
-     *  knows the word is new rather than that
-     *  the facet failed to match. Each refusal names the word it refused,
-     *  because the author has to see which one.
+     *  path to a word it does not hold. `tagsProposed` composes the pill a
+     *  proposal is drawn as — the drawing's own reading, `<tag> · proposed` on
+     *  a dashed pill, so a reader knows the word is new rather than that the
+     *  facet failed to match. Each refusal names the word it refused, because
+     *  the author has to see which one.
      *
      *  **`tagRefusedShape` reads its bound off the pattern it is handed**, which
      *  is `TAG_PATTERN`'s own source: a sentence that restated `1–24` is a

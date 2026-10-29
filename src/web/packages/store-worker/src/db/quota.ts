@@ -1,6 +1,6 @@
 /**
- * The author limits the spec sets to fit the free tier. They are defaults, not
- * measured against usage ("Security and abuse", open question 5). Exported
+ * The author limits set to fit the free tier. They are defaults, not measured
+ * against usage. Exported
  * because the route's reservation insert re-checks both ceilings as a fast
  * path; `createDraft`'s guarded insert is the item ceiling's atomic gate.
  */

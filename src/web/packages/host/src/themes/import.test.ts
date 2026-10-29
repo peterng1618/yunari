@@ -315,7 +315,7 @@ describe("importThemePackage", () => {
  * The id rule's own seam. The reader will not hand over a document whose id is
  * out of shape — the envelope validator refuses it — so that arm is reachable
  * here and not through a package, and it is kept because the id rule is the
- * spec's and the host's rather than another package's validator's.
+ * host's rather than another package's validator's.
  */
 describe("importIdCandidates", () => {
   it("takes the package's own id first when the library's shape admits it", () => {

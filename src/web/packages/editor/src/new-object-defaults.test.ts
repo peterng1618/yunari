@@ -714,7 +714,7 @@ describe("a swept angle through the persisted envelope", () => {
   it.each(SWEPT)(
     "a %s arrives at the quarter-disc the vocabulary could not say",
     (kind) => {
-      // The case from the spec: a quarter-disc used to be a hand-authored SVG
+      // The case: a quarter-disc used to be a hand-authored SVG
       // path. These two are what replaced that, and the default has to be the
       // move rather than something an author has to discover and re-angle.
       const shape = createNewShape(`shape-${kind}`, globals, kind, placement);

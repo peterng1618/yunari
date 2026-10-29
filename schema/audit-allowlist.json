@@ -2,7 +2,7 @@
   {
     "package": "node-forge",
     "advisory": "GHSA-86w9-cpqp-85rv",
-    "reason": "No patched release exists (affected <=1.4.0). packages/host/src/tls/authority.ts creates, signs and serialises certificates with node-forge's pki API; it never calls a node-forge verifier. Certificates are validated with node:crypto's X509Certificate.verify() in loadOrCreateAuthority and by the browser that accepts the chain. ADR 0070 records the alternatives weighed.",
+    "reason": "No patched release exists (affected <=1.4.0). packages/host/src/tls/authority.ts creates, signs and serialises certificates with node-forge's pki API; it never calls a node-forge verifier. Certificates are validated with node:crypto's X509Certificate.verify() in loadOrCreateAuthority and by the browser that accepts the chain.",
     "reviewed": "2026-10-26"
   },
   {

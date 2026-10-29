@@ -68,9 +68,8 @@ const LAYER_ROW_PADDING_PX = 4;
 
 /** The slot's own footprint with three controls: 6px of padding, three
  *  §3-rhythm 26px squares and two 4px gaps — the arm's reservation less the
- *  row's own padding. The four-control figures this replaces are the closed
- *  plan `2026-10-08-the-panes` report's, taken while the rename pen existed,
- *  and `vg-260` carries the measurement. */
+ *  row's own padding. The four-control figures this replaces were taken while
+ *  the rename pen existed, and `vg-260` carries the measurement. */
 const THREE_CONTROL_SLOT_PX =
   rulePx(THREE_CONTROL_ARM, "padding-right") - LAYER_ROW_PADDING_PX;
 
@@ -1246,7 +1245,7 @@ test("a group entered inside a large document", async ({ page }, testInfo) => {
       // whole would assert a defect as a pass condition, which is a red proof
       // against its own fix. **`vg-462` took 26px of the reservation away and
       // did not end the overrun**: the four-control figures this replaces are
-      // 122px on a 205px row, in the closed plan `2026-10-08-the-panes` report.
+      // 122px on a 205px row.
       rowWidth: Math.round(row.getBoundingClientRect().width),
       roomKept: Math.round(
         row.getBoundingClientRect().right - bound.getBoundingClientRect().right,

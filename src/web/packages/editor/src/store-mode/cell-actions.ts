@@ -6,7 +6,7 @@ import type { CellAction } from "./local-source.js";
  *
  * The drawing gives every cell four actions and the item's footer the same four,
  * so all four stay drawn (R164) — and the two **no task in this plan and no
- * phase in the spec's landing order owns** are disabled where they are drawn,
+ * phase owns** are disabled where they are drawn,
  * with their reason, rather than answering a press with nothing. One owner for
  * that fact, because the cell and the footer both draw the four and a second
  * list would be a second answer to "does this action run".

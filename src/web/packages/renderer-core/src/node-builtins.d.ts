@@ -24,7 +24,7 @@
  *   declaration claims is checked against the file rather than trusted, and
  *   hashing it to do so;
  * - walking `packages/editor/src` to assert the import-direction and file-size
- *   rules in `architecture.md` §4;
+ *   rules;
  * - walking `packages/renderer-core/src`, `scene-fabric/src` and `player/src`
  *   to assert §47's import boundary — that Fabric is only ever taken from
  *   `fabric/es`, that the interactive `Canvas` never reaches the display

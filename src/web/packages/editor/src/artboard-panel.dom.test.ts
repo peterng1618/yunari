@@ -367,7 +367,7 @@ describe("artboard panel", () => {
       themeLanguage: "vi",
     });
 
-    // The spec's "resolved names shown live": the author sees the words the
+    // The resolved names are shown live: the author sees the words the
     // language actually spells, not only its English label. Read after the
     // choice, because the sample follows the control rather than the render.
     const sample =

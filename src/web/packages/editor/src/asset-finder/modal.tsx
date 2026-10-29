@@ -70,7 +70,7 @@ const DISABLED_KEY = "yunari.asset-finder.disabled";
 /** The kind filter's own value: every source, or one preset kind. */
 type KindFilter = "all" | PresetKind;
 
-/** The rail's fixed order (spec R1). A category the registry adds later that
+/** The rail's fixed order (R1). A category the registry adds later that
  *  this list does not name appends alphabetically rather than disappearing. */
 const CATEGORY_ORDER: readonly ListingCategory[] = [
   "font",
@@ -193,7 +193,7 @@ function gridSourcesOf(
   category: ListingCategory,
 ): readonly AssetSourceListing[] {
   // A font source searches through the same grid; its request body differs, not
-  // its place in the window (spec R5).
+  // its place in the window (R5).
   return sources.filter(
     (source) =>
       source.category === category &&
@@ -249,7 +249,7 @@ export function AssetFinder({
   /** The Colours tab's kind filter. A palette and a gradient are different
    *  presets, so a question about one must not be answered with the other. */
   const [presetFilter, setPresetFilter] = useState<KindFilter>("all");
-  /** The hosts the first host-contacting search reached, shown once (spec §5).
+  /** The hosts the first host-contacting search reached, shown once (§5).
    *  A search that reached none is not the disclosure: a person is told before
    *  the term leaves, not after. */
   const [notice, setNotice] = useState<string | undefined>(undefined);
@@ -652,7 +652,7 @@ export function AssetFinder({
     );
   };
 
-  /** One line, in the spec's priority order. */
+  /** One line, in priority order. */
   const statusNode: React.ReactNode = isLocal ? (
     local.message === undefined ? undefined : (
       <span data-yunari-asset-message="">{local.message.text}</span>

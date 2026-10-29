@@ -253,9 +253,9 @@ export interface RunRowView {
   readonly tracking: number | undefined;
   /**
    * The binding this run names, for the note's `data-yunari-run-binding` — the
-   * key `run.bindingId` carried before the column was React, and what a spec
-   * reads to learn *which* binding a value run failed to resolve. `""` for
-   * prose, which names no binding. It is not the row's ordinal: that is
+   * key `run.bindingId` carried before the column was React, and what a
+   * consumer reads to learn *which* binding a value run failed to resolve. `""`
+   * for prose, which names no binding. It is not the row's ordinal: that is
    * `index`, and it rides the row's own `data-yunari-run` hook.
    */
   readonly bindingId: string;

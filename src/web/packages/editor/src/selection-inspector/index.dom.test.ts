@@ -706,7 +706,7 @@ describe("the selection inspector", () => {
   });
 
   /** The two ways a selection can go away, which the column must treat
-   *  differently — spec §541 and §552's "the right column empties on deselect".
+   *  differently — the right column empties on deselect.
    *
    *  The previous version of this test never dropped the selection, so it
    *  passed whichever branch `target()` took; these two fail if the branch is

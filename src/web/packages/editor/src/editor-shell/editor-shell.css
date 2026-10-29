@@ -523,7 +523,7 @@ body,
   --header-height: 42px;
   --menu-min-width: 190px;
   --asset-preview-max-height: 120px;
-  /* The finder's window (spec R1): a centred 1180 x 800 box over the whole
+  /* The finder's window (R1): a centred 1180 x 800 box over the whole
      viewport, and the width below which it becomes the whole window. */
   --finder-width: 1180px;
   --finder-height: 800px;
@@ -1953,15 +1953,13 @@ body,
    2px accent bar on its leading edge; the horizontal word strip this replaces is
    not drawn.
 
-   **The axis is the drawing's because DESIGN.md is silent about it, and §13
-   makes that the drawing's jurisdiction.** §5 opens the vocabulary with
+   **The axis is the drawing's because DESIGN.md is silent about it, which
+   makes it the drawing's jurisdiction.** §5 opens the vocabulary with
    "The vocabulary is closed. A control is one of these, or it is not a control."
    and no *tab* control is in it, so no rule requires the horizontal form; §7
-   fixes the three tabs and what each holds, never their direction; and spec §13
-   says "The mockup governs wherever the written rules are silent. Silence is not
-   permission — it is the drawing's jurisdiction", naming this very strip at
-   `:458-459` ("D1 kept a horizontal tab strip because '§7 fixes the three tabs
-   and what each holds, not their axis'"). The primitive stays Base UI's
+   fixes the three tabs and what each holds, never their direction; and silence
+   is not permission — it is the drawing's jurisdiction, which draws this very
+   strip horizontal. The primitive stays Base UI's
    and only its orientation and treatment change: `data-active` is still the
    primitive's own selected marker, not a second class to keep in step.
 
@@ -2552,7 +2550,7 @@ body,
 
    These words are the measured ones. In the 340px this panel shipped before
    the role existed, the short form costs the starter's names 4 of 60 against
-   2 with the role taken out, where the spec's illustrated `chart · line ×3` in
+   2 with the role taken out, where the illustrated `chart · line ×3` in
    place of `Line ×3` costs 7 of 60. So a chart says the family and the count,
    and does not repeat the word the family already carries. */
 .yunari-layer-role {

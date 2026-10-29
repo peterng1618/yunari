@@ -55,8 +55,8 @@ import {
  * ruling puts it in), a test for each interaction proved on its own page state,
  * and the **assembled walk** at the end — the nine interactions in §13.1's own
  * order, ending at the round trip, with both of §13.1's other invariants swept in
- * the state the walk leaves. That last test is what the spec's Acceptance item
- * for keyboard and contrast is read from.
+ * the state the walk leaves. That last test is what the Acceptance item for
+ * keyboard and contrast is read from.
  *
  * **The census was red, and the red was its result — not a broken test.** The
  * walk reached the rail, the pane and the stage and never the inspector, because

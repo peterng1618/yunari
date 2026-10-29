@@ -202,7 +202,7 @@ async function pixelsAt(
 test("the Keyboard tab's four states, and the sheet's chord mark that did not move", async ({
   page,
 }, testInfo) => {
-  // Spec §13.1: a screenshot proves one rendered state, not the behaviour behind
+  // A screenshot proves one rendered state, not the behaviour behind
   // it, and every surface owner also proves its applicable states. The armed
   // row is the one the `keyboard-armed-row` capture shows (the test above); the
   // four here are **driven**, and the capture is not read as proving any of

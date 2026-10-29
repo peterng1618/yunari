@@ -166,7 +166,7 @@ export const ERROR_GLYPH: LucideIcon = OctagonAlert;
 export const WARNING_GLYPH: LucideIcon = TriangleAlert;
 
 /** The Wallpaper Engine cards' one action per kind, and the states it wears
- *  (spec R5). `FolderInput` says the scene is taken into a local project, which
+ *  (R5). `FolderInput` says the scene is taken into a local project, which
  *  is an import rather than the store's plain `Folder` for opening one. */
 export const CONVERT_SCENE_GLYPH: LucideIcon = FolderInput;
 export const SET_BACKGROUND_GLYPH: LucideIcon = Wallpaper;

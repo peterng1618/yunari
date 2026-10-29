@@ -17,14 +17,13 @@ import { uiCopy } from "../../ui-copy.js";
  * The style tags a theme declares: **picked from the vocabulary, proposed only
  * when nothing in it fits.**
  *
- * That ordering is the whole mechanism (spec, "Style tags are … picked, not
- * typed"). Free text as the *first* affordance puts `sci-fi`, `scifi` and
- * `science fiction` into the catalogue as three tags with one theme each, so the
- * vocabulary is a row of toggle buttons and the propose field below it is the
- * only path to a word the vocabulary does not hold. A word that arrives that way
- * is drawn as a proposal rather than as a picked tag (a dashed
- * `retro-diner · proposed`), so a reader can tell
- * a new word from a facet that failed to match.
+ * That ordering is the whole mechanism. Free text as the *first* affordance puts
+ * `sci-fi`, `scifi` and `science fiction` into the catalogue as three tags with
+ * one theme each, so the vocabulary is a row of toggle buttons and the propose
+ * field below it is the only path to a word the vocabulary does not hold. A word
+ * that arrives that way is drawn as a proposal rather than as a picked tag (a
+ * dashed `retro-diner · proposed`), so a reader can tell a new word from a facet
+ * that failed to match.
  *
  * **A refusal never commits.** The value is checked against the same rule the
  * validator applies — `TAG_PATTERN` and `MAX_TAGS`, imported rather than

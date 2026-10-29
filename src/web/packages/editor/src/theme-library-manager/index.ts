@@ -86,7 +86,7 @@ function remixedEnvelope(
  * The same fields are **deleted, not blanked**, for the same reason: they
  * describe the stored copy, and a duplicate is a first version of its own. The
  * credit goes too: a source without a host origin may itself be a saved remix,
- * and the spec says a duplicate carries no credit.
+ * and a duplicate carries no credit.
  */
 function duplicatedEnvelope(stored: FabricThemeEnvelope): FabricThemeEnvelope {
   const kept: Record<string, unknown> = { ...(stored.metadata ?? {}) };
@@ -263,8 +263,8 @@ export class ThemeLibraryManager {
   /**
    * Opens one theme the library already holds, named rather than chosen.
    *
-   * **The store's own route** (spec, "The store mode": the cell's **Open in
-   * editor**): a surface that has already read the theme's name has no chooser
+   * **The store's own route**: the cell's **Open in editor**. A surface that has
+   * already read the theme's name has no chooser
    * to draw, and it replaces the open document just as the chooser's own answer
    * does — which is why the question and the base's bookkeeping are here rather
    * than only on the road through `open()`.

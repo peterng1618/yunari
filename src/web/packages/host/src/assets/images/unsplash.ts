@@ -150,7 +150,7 @@ export const unsplashSource: AssetSource = {
   body: "grid",
   requires: "unsplash",
   configurable: true,
-  // The one host that receives the term (spec §5).
+  // The one host that receives the term.
   host: "api.unsplash.com",
 
   async search(query, asked, ctx): Promise<SearchPage> {
@@ -158,7 +158,7 @@ export const unsplashSource: AssetSource = {
     const page = pageOf(asked);
 
     // An empty term browses the Editorial feed (`GET /photos`); it needs the
-    // same key, and it is what the Images tab shows on open (spec R3).
+    // same key, and it is what the Images tab shows on open (R3).
     if (query.trim() === "") {
       const url = new URL("photos", API);
       url.searchParams.set("page", String(page));

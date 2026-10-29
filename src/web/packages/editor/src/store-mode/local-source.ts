@@ -16,8 +16,8 @@ import { THEME_TAG_SEED } from "../theme-tag-seed.js";
  * The local half's items, behind the one hop that makes a second kind cheap.
  *
  * The gallery reads `ItemSource` and never `ThemeLibraryClient` or the host's
- * store, so a second kind is a second source rather than a rewrite of this tab
- * (`2026-10-12-theme-store-design.md`, "Adding a kind"). `ThemeLibraryClient`
+ * store, so a second kind is a second source rather than a rewrite of this tab.
+ * `ThemeLibraryClient`
  * gains nothing here: the source wraps it.
  */
 
@@ -32,8 +32,7 @@ import { THEME_TAG_SEED } from "../theme-tag-seed.js";
  * from the envelope it already parsed. `FacetRecord` carries no paint, and the
  * cell draws the ground in place of a picture a theme does not have, so it is
  * read here rather than resolved: a reader that opened every listed theme to
- * find one paint string would be the second pass over the library the spec
- * refuses.
+ * find one paint string would be a second pass over the library.
  */
 export interface StoreItem {
   readonly id: string;
@@ -150,8 +149,8 @@ export function localThemeSource(client: ThemeLibraryClient): ItemSource {
 
 /**
  * One facet's own rule, handed only the values chosen in that facet: the rules
- * differ per facet, and the difference is the spec's one deliberate exception
- * rather than a detail of the loop.
+ * differ per facet, and the difference is one deliberate exception rather than
+ * a detail of the loop.
  */
 type FacetMatcher = (item: StoreItem, chosen: readonly string[]) => boolean;
 
@@ -220,20 +219,18 @@ function matchesShape(item: StoreItem, chosen: readonly string[]): boolean {
  * One rule per facet, keyed by the facet ids the region's row draws.
  *
  * **Within a facet the values are OR, across facets they are AND — except
- * Sensors and Shape, where they are AND** (spec, "Finding a theme: the five
- * facets"). Two facets ask a question only *all* of a selection can answer: a
- * theme must read every sensor asked for, so "CPU and GPU" cannot answer with a
- * CPU-only theme, and it must have every shape property asked for, which
- * `matchesShape` holds a level down.
+ * Sensors and Shape, where they are AND**. Two facets ask a question only *all*
+ * of a selection can answer: a theme must read every sensor asked for, so "CPU
+ * and GPU" cannot answer with a CPU-only theme, and it must have every shape
+ * property asked for, which `matchesShape` holds a level down.
  */
 const FACET_MATCHERS: Readonly<Record<string, FacetMatcher>> = {
   author: (item, chosen) => chosen.some((value) => value === item.author),
   // **An unclassified theme carries no colour-mode value.** `unclassified` is
   // the absence of an answer rather than one a person can ask for — a mid-grey
   // ground, or a picture behind the board — so it is reachable under "any" and
-  // under no other value, including a selection naming it (spec, "Finding a
-  // theme"). Reading it as a value would let the facet hide a theme from
-  // someone who never asked it to.
+  // under no other value, including a selection naming it. Reading it as a
+  // value would let the facet hide a theme from someone who never asked it to.
   "colour-mode": (item, chosen) =>
     item.facets.colourMode !== "unclassified" &&
     chosen.includes(item.facets.colourMode),

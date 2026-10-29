@@ -22,8 +22,8 @@ const target = path.join(here, "..", "vendor", "lhm");
 
 /**
  * Files LHM's repository carries but its release archive omits, while the
- * archive bundles third-party binaries whose licences require the notices
- * (`.agents/dependency-licences.md`). Shipped alongside the binaries.
+ * archive bundles third-party binaries whose licences require the notices.
+ * Shipped alongside the binaries.
  */
 const NOTICE_FILES = [
   {
@@ -122,7 +122,7 @@ async function main() {
   console.log(`sha256 ${digest}`);
   console.log(
     "Release builds must extract the archive and ship its notices. " +
-      "Redistribution needs maintainer sign-off (.agents/dependency-licences.md).",
+      "Redistribution needs maintainer sign-off.",
   );
 }
 

@@ -6,7 +6,7 @@ import { DEVICE_ID_PATTERN } from "./devices.js";
 
 /**
  * Which host this app folder is: the id a display stores so a re-find matches
- * its own host and not another (§ "Finding the host after its address changes").
+ * its own host and not another.
  *
  * The id is unique, not secret. `GET /api/host` answers it to anyone who asks,
  * and what it defends is a display attaching to the wrong host on a shared

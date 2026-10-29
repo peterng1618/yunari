@@ -1946,15 +1946,15 @@ describe("a theme's style tags", () => {
     expect(
       validateFabricThemeEnvelope(withTags(["retro", "neon-2"])),
     ).toMatchObject({ ok: true });
-    // A duplicate is not a refusal: the facet deduplicates, and the spec makes the
-    // shape and the count the whole of what the format enforces.
+    // A duplicate is not a refusal: the facet deduplicates, and the shape and the
+    // count are the whole of what the format enforces.
     expect(validateFabricThemeEnvelope(withTags(["retro", "retro"])).ok).toBe(
       true,
     );
   });
 
   it("accepts a tag no vocabulary holds yet, which is the only way it can join one", () => {
-    // The spec's own sentence, as a case: a tag the vocabulary does not yet know
+    // The rule, as a case: a tag the vocabulary does not yet know
     // has to be writable before the vocabulary can grow to include it. This fails
     // the moment anyone adds an enum `dystopian` is not in.
     expect(validateFabricThemeEnvelope(withTags(["dystopian"]))).toMatchObject({

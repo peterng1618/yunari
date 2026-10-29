@@ -12,7 +12,7 @@ import type { ItemRow, VersionRow } from "../db/types.js";
  *
  * `packageUrl` is the absolute Worker URL; `thumbnailUrl` is the stored path
  * (`catalogue/<id>/thumbnail.png`), which the client joins with the origin — the
- * spec keeps the thumbnail repo-style, so no absolute thumbnail URL is stored.
+ * thumbnail stays repo-style, so no absolute thumbnail URL is stored.
  * `remixOf` comes from the stored envelope, because `item.remix_of_id` is only
  * the queryable id and the credit is the full `{ catalogueId, name, version }`.
  */

@@ -491,7 +491,7 @@ describe("text (§89)", () => {
     expect(result.issues).toEqual([]);
   });
 
-  it("reads a GHz conversion at the spec's precision", () => {
+  it("reads a GHz conversion at the stated precision", () => {
     const source = storeWith({
       "cpu.clock": ok(3845, "MHz", "cpu.clock"),
       "gpu.clock": ok(12000, "MHz", "gpu.clock"),

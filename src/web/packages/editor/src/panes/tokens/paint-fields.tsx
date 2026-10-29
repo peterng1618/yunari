@@ -17,7 +17,7 @@ import type { TokenUsage } from "./token-use.js";
  * A selected paint token's own properties, in the right column.
  *
  * **The fields moved here, unchanged.** They were the Tokens pane's inline field
- * set until the spec made the pane lists-only; their `data-yunari-palette-*`
+ * set until the pane became lists-only; their `data-yunari-palette-*`
  * selectors and their behaviour are the same, so every surface that addressed
  * them still does.
  *

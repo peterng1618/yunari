@@ -382,7 +382,7 @@ const DYNAMIC_BINDINGS: readonly LhmDynamicBinding[] = [
   {
     group: "cpu",
     type: "Load",
-    // The vocabulary's per-core Load sensor, named directly by the spec's table.
+    // The vocabulary's per-core Load sensor, named directly by the mapping table.
     pattern: /^CPU Core #(\d+)$/,
     key: (match) => `cpu.core.${match[1]}.load`,
   },

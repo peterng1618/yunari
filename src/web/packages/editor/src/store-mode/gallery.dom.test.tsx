@@ -420,8 +420,7 @@ it("draws its four actions, runs the two it has and disables the two it has not"
 /**
  * **The cell's own surface is what opens the item's**, and it is not one of the
  * four actions: the drawing's facts band draws those, and `open` among them
- * names the library operation its own label prints (spec, "The item's own
- * surface": *so a cell opens a modal*).
+ * names the library operation its own label prints.
  *
  * It is a button rather than a handler on the `li`, because a cell a person can
  * only reach with a mouse is a control the keyboard cannot use (§5's keyboard
@@ -496,7 +495,7 @@ it("writes the byline the drawing draws, and says so when there is no author", a
 
 /**
  * **The badge says where the theme came from**, and it is drawn only where the
- * host holds a record (spec, "Provenance"). The two cells are mounted together,
+ * host holds a record. The two cells are mounted together,
  * so the badge's absence on the second is a reading of that cell rather than a
  * case that never drew anything — a cell badging every theme, or one badging
  * none, fails here either way.
@@ -636,7 +635,7 @@ it("draws the kind badge and the download count for an online item, and neither 
 });
 
 /**
- * **A kind this build does not know prints its identifier** — the spec's rule
+ * **A kind this build does not know prints its identifier** — the rule
  * for a client older than the kind, and the only case that proves the badge
  * falls through to the wire value instead of naming `Theme` for every kind.
  */
@@ -666,7 +665,7 @@ it("prints the identifier of a kind this build does not know", async () => {
 });
 
 /**
- * **One owner of the decision**, and the cases the spec's word *newer* makes.
+ * **One owner of the decision**, and the cases the word *newer* makes.
  *
  * Update is offered only when the catalogue outranks the copy, so a held-newer
  * copy and a pair this file cannot order both read *Installed*: the press

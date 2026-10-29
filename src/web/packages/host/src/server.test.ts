@@ -4528,7 +4528,7 @@ describe("The pairing routes mint, rotate, rename and remove displays (ruling 12
 });
 
 /**
- * Spec § "The host's own monitors": a second kind of display, *specified* rather
+ * A local monitor is a second kind of display, *specified* rather
  * than paired. It is the host's own screen, so it carries no credential, and the
  * list it is chosen from is a probe of this PC rather than anything stored.
  */
@@ -5964,9 +5964,8 @@ describe("A local monitor is specified rather than paired", () => {
 });
 
 /**
- * The other route reachable unpaired (spec § "Pairing a display that has no
- * camera"): a device with no camera types the one-time code the host is showing
- * and gets a durable credential back.
+ * The other route reachable unpaired: a device with no camera types the one-time
+ * code the host is showing and gets a durable credential back.
  *
  * The code is the only short-lived secret in the exchange, so what these cases
  * pin is the window — one code at a time, a mismatch that never burns it, a
@@ -6551,8 +6550,7 @@ describe("The templates the host serves", () => {
  * with no entry of its own falls to.
  *
  * One route reads the map and writes one entry of it, and the write's authority
- * is derived from the caller rather than claimed in the body (spec § "A display
- * may change its own theme").
+ * is derived from the caller rather than claimed in the body.
  */
 describe("The display map", () => {
   let dir: string;
@@ -10393,7 +10391,7 @@ describe("The published overlay", () => {
 
 /**
  * Every display holds its own theme, so `/` has to answer the display that
- * asked rather than this PC (spec § "One map"). `?display=` names a local
+ * asked rather than this PC. `?display=` names a local
  * monitor, and that is the one caller loopback is trusted for.
  */
 describe("The root page resolves the display that asked", () => {

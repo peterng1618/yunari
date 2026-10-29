@@ -137,8 +137,8 @@ export async function run(argv: readonly string[]): Promise<number> {
     return outcome.ok ? 0 : 1;
   }
 
-  // One app folder is one host (§ "Two hosts on one network"), and the lock is
-  // taken before anything reads the folder: a second host against a held folder
+  // One app folder is one host, and the lock is taken before anything reads the
+  // folder: a second host against a held folder
   // would answer the same display ids and the same active theme as the first,
   // and the port fallback would let it start looking like a second machine.
   const held = await acquireHostLock(settingsDir, wanted);
@@ -303,7 +303,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   // Which host this app folder is, read or minted after the lock so a second
   // host cannot answer with the same identity: `GET /api/host` gives it to
   // anyone who asks, and it is what a display stores to re-find this host after
-  // its address changes (§ "Finding the host after its address changes").
+  // its address changes.
   const hostRecord = await readOrMintHostRecord(settingsDir);
 
   // The certificate is not optional, and the reason is the origin rather than
@@ -372,7 +372,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     caCertificate: origin.certificate,
     // Who this host is, so a display that has lost its address can ask.
     host: hostRecord,
-    // The host's own windows on its local monitors (§ "The host's own monitors").
+    // The host's own windows on its local monitors.
     get launcher() {
       return launcher;
     },

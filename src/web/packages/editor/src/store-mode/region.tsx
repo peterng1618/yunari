@@ -167,8 +167,8 @@ function colourModeOptions(
 
 /** The sensors the items bind, labelled by the record's own `label` — the
  *  descriptor's word and not the `key` the selection carries — and **grouped by
- *  the family the vocabulary already files each key under**, which is the
- *  grouping the spec asks for rather than a second reading of the key here.
+ *  the family the vocabulary already files each key under**, which is one
+ *  grouping rather than a second reading of the key here.
  *
  *  **One pass per family, so the count order cannot interleave two headings**,
  *  and the families come in the vocabulary's own order
@@ -258,9 +258,8 @@ function styleOptions(items: readonly StoreItem[]): readonly FacetOption[] {
 /**
  * The sizes the facet offers: **those more than one theme declares**, largest
  * first. A size exactly one theme declares is a theme wearing a filter's
- * clothes, and every other size is reachable under `Other` (spec, "Finding a
- * theme: the five facets"); the exact size is on the item's own modal either
- * way, which is what makes that acceptable.
+ * clothes, and every other size is reachable under `Other`; the exact size is on
+ * the item's own modal either way, which is what makes that acceptable.
  */
 function sizeOptions(items: readonly StoreItem[]): readonly FacetOption[] {
   const counts = new Map<
@@ -475,8 +474,7 @@ export function StoreModeRegion(props: {
  *  holds none of it: the half, the search, the sort and the facet selection are
  *  the surface's, and none of them is persisted — leaving the mode and coming
  *  back opens on the same row a fresh mount does. The **page size** is the one
- *  exception, because it is a view preference rather than a query (spec, "The
- *  gallery, and paging"). */
+ *  exception, because it is a view preference rather than a query. */
 function StoreRegion(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly onOpenTheme?: ((id: string) => void) | undefined;
@@ -599,7 +597,7 @@ function StoreRegion(props: {
    *
    * **`open` and `assign` are the two a build runs.** Export and delete are
    * drawn on every cell and in the item's footer and **no task in this plan and
-   * no phase in the spec's landing order owns either**, so they are drawn
+   * no phase owns either**, so they are drawn
    * disabled with their reason rather than reaching this callback at all
    * (`cell-actions.ts`, R164). A phase that takes one up moves it out of that
    * map, and wires it here in the same change.
